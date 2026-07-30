@@ -18,12 +18,19 @@
 | 7. handlers.go deletion | ✅ | 232KB → 0 (90 *server methods deleted) |
 | 8. Constants extraction | ✅ | `internal/infrastructure/constants/events.go` |
 | 9. Validation | ✅ | Build, vet, test, docker all green |
+| 10. cmd/wuzapi | ✅ | Root + cmd/wuzapi + Makefile + Dockerfile |
+| 11a. Client helpers | ✅ | `internal/whatsapp/client/` (Context, MyClient, webhook) |
+| 11b. ProcessMedia | ✅ | `internal/whatsapp/client/media.go`, root wiring |
+| 12a. Sticker+Helpers | ✅ | `internal/infrastructure/media/sticker/` + `helpers/` |
+| 12b. OpenGraph pkg | ✅ | `internal/infrastructure/media/opengraph/` |
+| 13a. db.go delete | ✅ | Delegates to `internal/infrastructure/db/` (202 LOC removed) |
+| 13b. Context bridges | ✅ | GetWA/GetHTTP/GetMC/SyncHist added for future 11c |
 
 ### Metrics
 
-| Metric | Before | After |
+| Metric | Before (fase 9) | After (fase 13b) |
 |---|---|---|
-| Root .go LOC | 15,671 | **8,092** |
+| Root .go LOC | 8,092 | **6,433** (-1,659) |
 | Internal .go files | 160 | **168** |
 | Internal .go LOC | ~10,000 | **14,021** |
 | Handler structs | ~40 | **76** |
