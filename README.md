@@ -310,7 +310,7 @@ If you omit `proxyConfig` or `s3Config`, the user will be created without proxy 
 API calls should be made with content type json, and parameters sent into the
 request body, always passing the Token header for authenticating the request.
 
-Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
+Check the [API Reference](docs/api/README.md)
 
 ## Contributors
 
