@@ -72,24 +72,9 @@ const (
 	vp8xFlagEXIF byte = 0x08
 )
 
-type WebhookFileErrorPayload struct {
-	URL              string                 `json:"url"`
-	Payload          map[string]interface{} `json:"payload"`
-	UserID           string                 `json:"userID"`
-	EncryptedHmacKey string                 `json:"encryptedHmacKey"`
-	FilePath         string                 `json:"filePath"`
-	AttemptTime      time.Time              `json:"attemptTime"`
-	ErrorMessage     string                 `json:"errorMessage"`
-}
 
-type WebhookErrorPayload struct {
-	URL              string                 `json:"url"`
-	Payload          map[string]interface{} `json:"payload"`
-	UserID           string                 `json:"userID"`
-	EncryptedHmacKey string                 `json:"encryptedHmacKey"`
-	AttemptTime      time.Time              `json:"attemptTime"`
-	ErrorMessage     string                 `json:"errorMessage"`
-}
+
+
 
 // ProxyConfig holds per-user proxy settings for WhatsApp and webhook delivery.
 type ProxyConfig struct {
