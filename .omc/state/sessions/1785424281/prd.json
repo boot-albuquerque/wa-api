@@ -20,7 +20,7 @@
     },
     {
       "id": "PHASE-2",
-      "name": "Fase 2: Bootstrap Thin (cmd/wuzapi + internal/app) (partial: types extracted, cmd/wuzapi deferred to post-handler-slicing)",
+      "name": "Fase 2: Bootstrap Thin (partial - internal/app types extracted)",
       "description": "Extrair bootstrap para cmd/wuzapi/main.go + internal/app/bootstrap.go; atualizar Makefile, Dockerfile; auditar CI",
       "acceptanceCriteria": [
         "cmd/wuzapi/main.go existe com func main() delegando para internal/app.Bootstrap() [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
@@ -63,7 +63,7 @@
     },
     {
       "id": "PHASE-3.5",
-      "name": "Fase 3.5: Extrair Helpers Compartilhados",
+      "name": "Fase 3.5: Helpers Compartilhados (done - 5 helpers extracted)",
       "description": "Extrair parseJID, getPlatformTypeEnum, validateMessageFields, respondWithJSON, jpegThumbnail, formatBlocklist para internal/interfaces/http/handlers/common.go",
       "acceptanceCriteria": [
         "internal/interfaces/http/handlers/common.go existe com 6 helpers exportados",
@@ -71,12 +71,12 @@
         "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde",
         "pacote main compil\u00e1vel sem refer\u00eancias \u00f3rf\u00e3s"
       ],
-      "passes": false,
+      "passes": true,
       "commits": 4
     },
     {
       "id": "PHASE-4",
-      "name": "Fase 4: Fatiar handlers.go (11 dom\u00ednios, paraleliz\u00e1vel)",
+      "name": "Fase 4: Fatiar handlers.go (in-progress - blocklist done, groups/downloads/misc pending)",
       "description": "Extrair 11 dom\u00ednios de handlers.go: webhook, session, media_download, send_media, send_interactive, send_text, user_presence, blocklist_privacy, groups, admin_users, newsletter_health",
       "acceptanceCriteria": [
         "11 novos arquivos em internal/interfaces/http/handlers/{dominio}_handler.go",

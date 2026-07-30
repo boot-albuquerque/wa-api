@@ -78,15 +78,16 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
-	Profile *customhttp.ProfileHandler
-	Message *MessageHandlers
-	Session *SessionHandlers
-	Webhook *WebhookHandlers
-	User    *handlers.UserHandlers
-	Group   *handlers.GroupHandlers
-	Storage   *handlers.StorageHandlers
-	Misc      *handlers.MiscHandlers
+	Profile  *customhttp.ProfileHandler
+	Message  *MessageHandlers
+	Session  *SessionHandlers
+	Webhook  *WebhookHandlers
+	User     *handlers.UserHandlers
+	Group    *handlers.GroupHandlers
+	Storage  *handlers.StorageHandlers
+	Misc     *handlers.MiscHandlers
 	Blocklist *handlers.BlocklistHandlers
+	Extended  *handlers.ExtendedHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -268,6 +269,23 @@ func initCustomHandlers(s *server) {
 		GetBlocklist: handlers.NewGetBlocklistHandler(getBlocklistUC),
 	}
 
+	// Extended Handlers (downloads, presence, user-info, react, mark-read)
+	extendedHandlers := &handlers.ExtendedHandlers{
+		DownloadImage:     handlers.NewDownloadImageHandler(usecase.NewDownloadImageUseCase(clientProvider, logger)),
+		DownloadVideo:     handlers.NewDownloadVideoHandler(usecase.NewDownloadVideoUseCase(clientProvider, logger)),
+		DownloadAudio:     handlers.NewDownloadAudioHandler(usecase.NewDownloadAudioUseCase(clientProvider, logger)),
+		DownloadDocument:  handlers.NewDownloadDocumentHandler(usecase.NewDownloadDocumentUseCase(clientProvider, logger)),
+		DownloadSticker:   handlers.NewDownloadStickerHandler(usecase.NewDownloadStickerUseCase(clientProvider, logger)),
+		SendPresence:      handlers.NewSendPresenceHandler(usecase.NewSendPresenceUseCase(clientProvider, log.Logger)),
+		SubscribePresence: handlers.NewSubscribePresenceHandler(usecase.NewSubscribePresenceUseCase(clientProvider, log.Logger)),
+		ChatPresence:      handlers.NewChatPresenceHandler(usecase.NewChatPresenceUseCase(clientProvider, log.Logger)),
+		MarkRead:          handlers.NewMarkReadHandler(usecase.NewMarkReadUseCase(clientProvider, log.Logger)),
+		React:             handlers.NewReactHandler(usecase.NewReactUseCase(clientProvider, log.Logger)),
+		GetAvatar:         handlers.NewGetAvatarHandler(usecase.NewGetAvatarUseCase(clientProvider, log.Logger)),
+		GetContacts:       handlers.NewGetContactsHandler(usecase.NewGetContactsUseCase(clientProvider, log.Logger)),
+		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
+	}
+
 	customHandlerSet = &customHandlers{
 		Profile:   profileHandler,
 		Message:   messageHandlers,
@@ -278,5 +296,6 @@ func initCustomHandlers(s *server) {
 		Storage:   storageHandlers,
 		Misc:      miscHandlers,
 		Blocklist: blocklistHandlers,
+		Extended:  extendedHandlers,
 	}
 }

@@ -105,6 +105,40 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 	// Blocklist route
 	registry.Register("/user/blocklist", customChain.Then(customHandlerSet.Blocklist.GetBlocklist), "GET")
 
+	// Download routes
+	registry.Register("/chat/downloadimage", customChain.Then(customHandlerSet.Extended.DownloadImage), "POST")
+	registry.Register("/chat/downloadvideo", customChain.Then(customHandlerSet.Extended.DownloadVideo), "POST")
+	registry.Register("/chat/downloadaudio", customChain.Then(customHandlerSet.Extended.DownloadAudio), "POST")
+	registry.Register("/chat/downloaddocument", customChain.Then(customHandlerSet.Extended.DownloadDocument), "POST")
+	registry.Register("/chat/downloadsticker", customChain.Then(customHandlerSet.Extended.DownloadSticker), "POST")
+
+	// Presence & Chat routes
+	registry.Register("/user/presence", customChain.Then(customHandlerSet.Extended.SendPresence), "POST")
+	registry.Register("/user/presence/subscribe", customChain.Then(customHandlerSet.Extended.SubscribePresence), "POST")
+	registry.Register("/chat/presence", customChain.Then(customHandlerSet.Extended.ChatPresence), "POST")
+	registry.Register("/chat/markread", customChain.Then(customHandlerSet.Extended.MarkRead), "POST")
+
+	// React route
+	registry.Register("/chat/react", customChain.Then(customHandlerSet.Extended.React), "POST")
+
+	// User info routes
+	registry.Register("/user/info", customChain.Then(customHandlerSet.Extended.GetUserInfo), "POST")
+	registry.Register("/user/avatar", customChain.Then(customHandlerSet.Extended.GetAvatar), "POST")
+	registry.Register("/user/contacts", customChain.Then(customHandlerSet.Extended.GetContacts), "GET")
+
+	// Misc routes (newsletter, privacy, call, archive)
+	registry.Register("/newsletter/list", customChain.Then(customHandlerSet.Misc.ListNewsletter), "GET")
+	registry.Register("/call/reject", customChain.Then(customHandlerSet.Misc.RejectCall), "POST")
+	registry.Register("/chat/archive", customChain.Then(customHandlerSet.Misc.ArchiveChat), "POST")
+	registry.Register("/chat/request-unavailable-message", customChain.Then(customHandlerSet.Misc.RequestUnavailableMessage), "POST")
+	registry.Register("/user/privacy", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			customHandlerSet.Misc.GetPrivacySettings.ServeHTTP(w, r)
+		} else {
+			customHandlerSet.Misc.SetPrivacySetting.ServeHTTP(w, r)
+		}
+	})), "GET", "POST")
+
 	// Health route (public, no auth chain needed)
 	registry.Register("/health", c.Then(http.HandlerFunc(s.GetHealth())), "GET")
 
