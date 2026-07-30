@@ -154,22 +154,22 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 		}
 	})), "GET", "POST")
 
-	// Health route (public, no auth chain needed)
-	registry.Register("/health", c.Then(http.HandlerFunc(s.GetHealth())), "GET")
+	// Health route via internal handler (no auth chain needed)
+	registry.Register("/health", c.Then(http.HandlerFunc(customHandlerSet.Misc.Health.ServeHTTP)), "GET")
 
-	// Remaining legacy routes (still using server methods; will be untangled in next phase)
-	registry.Register("/session/history", customChain.Then(s.SetHistory()), "POST")
-	registry.Register("/session/proxy", customChain.Then(s.SetProxy()), "POST")
+	// Legacy URL paths for storage/session — use same internal handlers
+	registry.Register("/session/history", customChain.Then(customHandlerSet.Storage.SetHistory), "POST")
+	registry.Register("/session/proxy", customChain.Then(customHandlerSet.Storage.SetProxy), "POST")
 	registry.Register("/session/s3/config", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" { s.ConfigureS3().ServeHTTP(w, r) } else if r.Method == "GET" { s.GetS3Config().ServeHTTP(w, r) } else { s.DeleteS3Config().ServeHTTP(w, r) }
+		if r.Method == "POST" { customHandlerSet.Storage.ConfigureS3.ServeHTTP(w, r) } else if r.Method == "GET" { customHandlerSet.Storage.GetS3Config.ServeHTTP(w, r) } else { customHandlerSet.Storage.DeleteS3Config.ServeHTTP(w, r) }
 	})), "POST", "GET", "DELETE")
-	registry.Register("/session/s3/test", customChain.Then(s.TestS3Connection()), "POST")
+	registry.Register("/session/s3/test", customChain.Then(customHandlerSet.Storage.TestS3Connection), "POST")
 	registry.Register("/session/hmac/config", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" { s.ConfigureHmac().ServeHTTP(w, r) } else if r.Method == "GET" { s.GetHmacConfig().ServeHTTP(w, r) } else { s.DeleteHmacConfig().ServeHTTP(w, r) }
+		if r.Method == "POST" { customHandlerSet.Storage.ConfigureHmac.ServeHTTP(w, r) } else if r.Method == "GET" { customHandlerSet.Storage.GetHmacConfig.ServeHTTP(w, r) } else { customHandlerSet.Storage.DeleteHmacConfig.ServeHTTP(w, r) }
 	})), "POST", "GET", "DELETE")
-	registry.Register("/chat/history", customChain.Then(s.GetHistory()), "GET")
-	registry.Register("/chat/delete", customChain.Then(s.DeleteMessage()), "POST")
-	registry.Register("/status/set/text", customChain.Then(s.SetStatusMessage()), "POST")
+	registry.Register("/chat/history", customChain.Then(customHandlerSet.Storage.GetHistory), "GET")
+	registry.Register("/chat/delete", customChain.Then(customHandlerSet.Message.DeleteMessage), "POST")
+	registry.Register("/status/set/text", customChain.Then(customHandlerSet.Session.SetStatusMessage), "POST")
 	// Static files — keep in routes.go only, not reregistered here
 
 	registry.Apply(s.router)
