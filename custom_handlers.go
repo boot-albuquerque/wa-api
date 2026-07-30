@@ -88,6 +88,7 @@ type customHandlers struct {
 	Misc     *handlers.MiscHandlers
 	Blocklist *handlers.BlocklistHandlers
 	Extended  *handlers.ExtendedHandlers
+	GroupMgmt *handlers.GroupManagementHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -269,6 +270,10 @@ func initCustomHandlers(s *server) {
 		GetBlocklist: handlers.NewGetBlocklistHandler(getBlocklistUC),
 	}
 
+	// Group Management UseCase + Handlers
+	groupMgmtUC := usecase.NewGroupManagementUseCase(clientProvider, logger)
+	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
+
 	// Extended Handlers (downloads, presence, user-info, react, mark-read)
 	extendedHandlers := &handlers.ExtendedHandlers{
 		DownloadImage:     handlers.NewDownloadImageHandler(usecase.NewDownloadImageUseCase(clientProvider, logger)),
@@ -297,5 +302,6 @@ func initCustomHandlers(s *server) {
 		Misc:      miscHandlers,
 		Blocklist: blocklistHandlers,
 		Extended:  extendedHandlers,
+		GroupMgmt: groupMgmtHandlers,
 	}
 }
