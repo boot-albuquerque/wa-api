@@ -1,0 +1,9 @@
+# Arquivos custom do disparazaap-wuzapi — nunca sobrescritos em merge upstream
+#
+# merge=ours faz o git preferir a versão local (disparazaap-wuzapi) em um merge,
+# então git pull upstream main nunca sobrescreve estes arquivos.
+# Rotas upstream (routes.go, handlers.go) ficam no default para merge inteligente.
+
+custom_routes.go merge=ours
+internal/** merge=ours
+docs/SYNC-UPSTREAM.md merge=ours

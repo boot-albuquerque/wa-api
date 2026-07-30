@@ -1,0 +1,25 @@
+# golangci-lint v2 configuration for disparazaap-wuzapi internal/ packages.
+# Only lints our custom code — upstream (package main) is not linted.
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocyclo
+
+linters-settings:
+  gocyclo:
+    min-complexity: 10
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+run:
+  timeout: 2m
+  tests: true
