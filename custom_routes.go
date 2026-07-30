@@ -1,4 +1,4 @@
-package main
+package wuzapi
 
 import (
 	"net/http"

@@ -9,7 +9,7 @@
 *.dll
 *.so
 *.dylib
-wuzapi
+/wuzapi
 /bin/
 /dist/
 /build/

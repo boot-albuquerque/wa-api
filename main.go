@@ -1,4 +1,4 @@
-package main
+package wuzapi
 
 import (
 	"context"
@@ -180,7 +180,7 @@ func isPrivateOrLoopback(ip net.IP) bool {
 	return false
 }
 
-func main() {
+func Main() {
 	for _, cidr := range []string{
 		"127.0.0.0/8",    // IPv4 loopback
 		"10.0.0.0/8",     // RFC1918

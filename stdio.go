@@ -1,4 +1,4 @@
-// Package main provides a JSON-RPC 2.0 server over stdin/stdout.
+// Package wuzapi provides a JSON-RPC 2.0 server over stdin/stdout.
 //
 // This file implements a stdio-based JSON-RPC 2.0 interface that bridges
 // to the existing HTTP API handlers. It enables programmatic access to
@@ -15,7 +15,7 @@
 // maps to POST /user/login). See JSON-RPC-API.md for available methods.
 //
 // Author: Alvaro Ramirez https://xenodium.com
-package main
+package wuzapi
 
 import (
 	"bufio"

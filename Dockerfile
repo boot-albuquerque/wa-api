@@ -19,7 +19,7 @@ RUN go mod download
 
 COPY . .
 ENV CGO_ENABLED=1
-RUN go build -o wuzapi
+RUN go build -o wuzapi ./cmd/wuzapi
 
 FROM debian:bookworm-slim
 
