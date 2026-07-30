@@ -11,7 +11,11 @@ import (
 	"testing"
 
 	"github.com/nfnt/resize"
+
+	"wuzapi/internal/interfaces/http/handlers"
 )
+
+var jpegThumbnail = handlers.JPEGThumbnail
 
 // TestJpegThumbnail covers the in-memory thumbnail encoding that replaced the
 // leaking temp-file path in SendImage: it must return decodable JPEG bytes

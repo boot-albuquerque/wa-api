@@ -398,6 +398,7 @@ func makeTestServer(t *testing.T) *server {
 		db:     db,
 		router: mux.NewRouter(),
 	}
+	initCustomHandlers(s)
 	s.routes()
 
 	return s

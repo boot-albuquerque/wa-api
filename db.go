@@ -120,7 +120,7 @@ type HistoryMessage struct {
 	DataJson        string    `json:"data_json" db:"datajson"`
 }
 
-func (s *server) saveMessageToHistory(userID, chatJID, senderJID, messageID, messageType, textContent, mediaLink, quotedMessageID, dataJson string) error {
+func saveMessageToHistory(db *sqlx.DB, userID, chatJID, senderJID, messageID, messageType, textContent, mediaLink, quotedMessageID, dataJson string) error {
 	// Idempotent insert: HistorySync batches (and reconnects) routinely redeliver
 	// messages already persisted via the live Message event. The (user_id, message_id)
 	// unique constraint makes those duplicates an expected condition, not an error,
@@ -128,20 +128,20 @@ func (s *server) saveMessageToHistory(userID, chatJID, senderJID, messageID, mes
 	// Rebind adapts the ? placeholders to the active driver ($1.. on Postgres,
 	// ? on SQLite), so the query is defined once. ON CONFLICT DO NOTHING is valid
 	// on both Postgres and modern SQLite.
-	query := s.db.Rebind(`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type, text_content, media_link, quoted_message_id, datajson)
+	query := db.Rebind(`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type, text_content, media_link, quoted_message_id, datajson)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT (user_id, message_id) DO NOTHING`)
-	_, err := s.db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson)
+	_, err := db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson)
 	if err != nil {
 		return fmt.Errorf("failed to save message to history: %w", err)
 	}
 	return nil
 }
 
-func (s *server) trimMessageHistory(userID, chatJID string, limit int) error {
+func trimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	var queryHistory, querySecrets string
 
-	if s.db.DriverName() == "postgres" {
+	if db.DriverName() == "postgres" {
 		queryHistory = `
             DELETE FROM message_history
             WHERE id IN (
@@ -179,13 +179,24 @@ func (s *server) trimMessageHistory(userID, chatJID string, limit int) error {
             )`
 	}
 
-	if _, err := s.db.Exec(querySecrets, userID, chatJID, limit); err != nil {
+	if _, err := db.Exec(querySecrets, userID, chatJID, limit); err != nil {
 		return fmt.Errorf("failed to trim message secrets: %w", err)
 	}
 
-	if _, err := s.db.Exec(queryHistory, userID, chatJID, limit); err != nil {
+	if _, err := db.Exec(queryHistory, userID, chatJID, limit); err != nil {
 		return fmt.Errorf("failed to trim message history: %w", err)
 	}
 
 	return nil
+}
+
+// setDisconnectedState marks a user disconnected. Event subscriptions are kept
+// by default and only reset when clearEvents is true (issue #305).
+func setDisconnectedState(db *sqlx.DB, txtid string, clearEvents bool) error {
+	if clearEvents {
+		_, err := db.Exec("UPDATE users SET connected=0,events=$1 WHERE id=$2", "", txtid)
+		return err
+	}
+	_, err := db.Exec("UPDATE users SET connected=0 WHERE id=$1", txtid)
+	return err
 }

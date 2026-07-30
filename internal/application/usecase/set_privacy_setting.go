@@ -29,7 +29,7 @@ func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, 
 		return nil, fmt.Errorf("no session")
 	}
 
-	if err := validatePrivacySetting(req.PrivacySetting, req.Value); err != nil {
+	if err := ValidatePrivacySetting(req.PrivacySetting, req.Value); err != nil {
 		return nil, err
 	}
 
@@ -45,16 +45,27 @@ func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, 
 	return settings, nil
 }
 
-// validatePrivacySetting validates privacy setting name and value
-func validatePrivacySetting(name, value string) error {
-	// Delegate to the existing validation function from handlers.go
-	// This will be implemented in handlers.go and imported
-	// For now, we'll keep it minimal and let it be called from there
-	if name == "" {
-		return fmt.Errorf("privacy setting name cannot be empty")
+var privacySettingValues = map[types.PrivacySettingType][]types.PrivacySetting{
+	types.PrivacySettingTypeGroupAdd:     {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeLastSeen:     {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeStatus:       {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeProfile:      {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeReadReceipts: {types.PrivacySettingAll, types.PrivacySettingNone},
+	types.PrivacySettingTypeOnline:       {types.PrivacySettingAll, types.PrivacySettingMatchLastSeen},
+	types.PrivacySettingTypeCallAdd:      {types.PrivacySettingAll, types.PrivacySettingKnown},
+}
+
+// ValidatePrivacySetting reports whether name is a supported privacy setting and
+// value is one of the values WhatsApp accepts for it. Exported for testing.
+func ValidatePrivacySetting(name, value string) error {
+	allowed, ok := privacySettingValues[types.PrivacySettingType(name)]
+	if !ok {
+		return fmt.Errorf("invalid privacy setting name %q", name)
 	}
-	if value == "" {
-		return fmt.Errorf("privacy setting value cannot be empty")
+	for _, v := range allowed {
+		if types.PrivacySetting(value) == v {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("invalid value %q for privacy setting %q", value, name)
 }

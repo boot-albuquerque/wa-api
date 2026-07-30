@@ -47,18 +47,19 @@ func (s *server) routes() {
 			Logger()
 	}
 
-	// Admin routes (still registered directly — not yet migrated to internal)
+	// Admin routes — authAdmin middleware (standalone in auth.go) validates the
+	// admin token. Internal handlers from customHandlerSet handle the logic.
 	adminRoutes := s.router.PathPrefix("/admin").Subrouter()
-	adminRoutes.Use(s.authadmin)
-	adminRoutes.Handle("/users", s.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users/{id}", s.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users", s.AddUser()).Methods("POST")
-	adminRoutes.Handle("/users/{id}", s.EditUser()).Methods("PUT")
-	adminRoutes.Handle("/users/{id}", s.DeleteUser()).Methods("DELETE")
-	adminRoutes.Handle("/users/{id}/full", s.DeleteUserComplete()).Methods("DELETE")
+	adminRoutes.Use(authAdmin(*adminToken))
+	adminRoutes.Handle("/users", customHandlerSet.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users/{id}", customHandlerSet.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users", customHandlerSet.User.AddUser()).Methods("POST")
+	adminRoutes.Handle("/users/{id}", customHandlerSet.User.EditUser()).Methods("PUT")
+	adminRoutes.Handle("/users/{id}", customHandlerSet.User.DeleteUser()).Methods("DELETE")
+	adminRoutes.Handle("/users/{id}/full", customHandlerSet.Misc.DeleteUserComplete).Methods("DELETE")
 
 	c := alice.New()
-	c = c.Append(s.authalice)
+	c = c.Append(authAlice(s.db.DB, userinfocache))
 	c = c.Append(hlog.NewHandler(routerLog))
 
 	c = c.Append(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {

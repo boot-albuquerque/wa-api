@@ -5,7 +5,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"wuzapi/internal/application/usecase"
 )
+
+var validatePrivacySetting = usecase.ValidatePrivacySetting
 
 // TestValidatePrivacySetting covers the input validation for POST /user/privacy:
 // a setting name must be one of the supported types and the value must be allowed

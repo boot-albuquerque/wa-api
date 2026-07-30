@@ -471,8 +471,8 @@ func main() {
 		exPath: exPath,
 		mode:   serverMode,
 	}
-	s.routes()
 	initCustomHandlers(s)
+	s.routes()
 
 	s.connectOnStartup()
 

@@ -164,12 +164,20 @@ func initCustomHandlers(s *server) {
 		RequestHistorySync: handlers.NewRequestHistorySyncHandler(requestHistorySyncUC),
 	}
 
-	// Webhook Handlers (MVP: wrappers around existing handlers.go functions)
+	// Webhook Handlers — standalone with direct DI, no longer delegate to *server.
+	whCtx := &handlers.WebhookHandlerContext{
+		DB:              s.db,
+		UserCache:       userinfocache,
+		SupportedEvents: supportedEventTypes,
+		FindInSlice:     Find,
+		UpdateUserInfo:  updateUserInfo,
+		RespondJSON:     respondJSON,
+	}
 	webhookHandlers := &WebhookHandlers{
-		GetWebhook:    handlers.NewGetWebhookHandler(s),
-		SetWebhook:    handlers.NewSetWebhookHandler(s),
-		UpdateWebhook: handlers.NewUpdateWebhookHandler(s),
-		DeleteWebhook: handlers.NewDeleteWebhookHandler(s),
+		GetWebhook:    handlers.NewGetWebhookHandler(whCtx),
+		SetWebhook:    handlers.NewSetWebhookHandler(whCtx),
+		UpdateWebhook: handlers.NewUpdateWebhookHandler(whCtx),
+		DeleteWebhook: handlers.NewDeleteWebhookHandler(whCtx),
 	}
 
 	// User UseCases

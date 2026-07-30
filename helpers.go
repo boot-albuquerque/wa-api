@@ -565,23 +565,6 @@ func callHookFileWithHmac(myurl string, payload map[string]string, userID string
 	return nil
 }
 
-func (s *server) respondWithJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	if err := enc.Encode(payload); err != nil {
-		log.Error().Err(err).Msg("Failed to encode JSON response")
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(statusCode)
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Error().Err(err).Msg("Failed to write response body")
-	}
-}
-
 // ProcessOutgoingMedia handles media processing for outgoing messages with S3 support
 func ProcessOutgoingMedia(userID string, contactJID string, messageID string, data []byte, mimeType string, fileName string, db *sqlx.DB) (map[string]interface{}, error) {
 	// Check if S3 is enabled for this user

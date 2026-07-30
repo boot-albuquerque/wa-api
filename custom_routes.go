@@ -58,26 +58,9 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 	registry.Register("/webhook", customChain.Then(customHandlerSet.Webhook.UpdateWebhook), "PUT")
 	registry.Register("/webhook", customChain.Then(customHandlerSet.Webhook.DeleteWebhook), "DELETE")
 
-	// User routes (admin)
-	registry.Register("/admin/users", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			customHandlerSet.User.ListUsers().ServeHTTP(w, r)
-		} else if r.Method == "POST" {
-			customHandlerSet.User.AddUser().ServeHTTP(w, r)
-		}
-	})), "GET", "POST")
-
-	registry.Register("/admin/users/{id}", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			customHandlerSet.User.GetUser().ServeHTTP(w, r)
-		} else if r.Method == "PUT" {
-			customHandlerSet.User.EditUser().ServeHTTP(w, r)
-		} else if r.Method == "DELETE" {
-			customHandlerSet.User.DeleteUser().ServeHTTP(w, r)
-		}
-	})), "GET", "PUT", "DELETE")
-
 	// User routes (user)
+	// Admin routes (/admin/users, /admin/users/{id}) are registered
+	// directly in routes.go with authAdmin middleware — see routes.go:51-58.
 	registry.Register("/user/check", customChain.Then(customHandlerSet.User.CheckUser()), "POST")
 	registry.Register("/user/block", customChain.Then(customHandlerSet.User.BlockUser()), "POST")
 	registry.Register("/user/unblock", customChain.Then(customHandlerSet.User.UnblockUser()), "POST")

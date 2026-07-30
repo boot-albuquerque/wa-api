@@ -43,7 +43,8 @@ type MyClient struct {
 	userID         string
 	token          string
 	db             *sqlx.DB
-	s              *server
+	notifyFn       func(method string, params map[string]interface{})
+	mode           ServerMode
 }
 
 // safeGo runs fn in a new goroutine with a defer recover so a panic inside
@@ -196,8 +197,10 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 	}
 
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
-	if mycli.s != nil && mycli.s.mode == Stdio {
-		mycli.s.SendNotification(eventType, postmap)
+	if mycli.mode == Stdio {
+		if mycli.notifyFn != nil {
+			mycli.notifyFn(eventType, postmap)
+		}
 		return
 	}
 
@@ -382,7 +385,8 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 		userID:         userID,
 		token:          token,
 		db:             s.db,
-		s:              s,
+		notifyFn:       s.SendNotification,
+		mode:           s.mode,
 	}
 	mycli.eventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
 
@@ -752,7 +756,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 					}
 
 					// Use the syncHistoryForChat function from handlers.go
-					err = mycli.s.syncHistoryForChat(context.Background(), mycli.userID, chatJID, count)
+					err = syncHistoryForChat(context.Background(), mycli.db, mycli.userID, chatJID, count)
 					if err != nil {
 						log.Warn().Err(err).Str("chatJID", chatJIDStr).Msg("Failed to sync history for chat")
 					} else {
@@ -1046,7 +1050,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 					evtJSON = []byte("{}")
 				}
 
-				err = mycli.s.saveMessageToHistory(
+				err = saveMessageToHistory(
+					mycli.db,
 					mycli.userID,
 					evt.Info.Chat.String(),
 					evt.Info.Sender.String(),
@@ -1060,7 +1065,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to save message to history")
 				} else {
-					err = mycli.s.trimMessageHistory(mycli.userID, evt.Info.Chat.String(), historyLimit)
+					err = trimMessageHistory(mycli.db, mycli.userID, evt.Info.Chat.String(), historyLimit)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to trim message history")
 					}
@@ -1342,7 +1347,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 						// Save message to history
 						// Only save if there's meaningful content
 						if textContent != "" || mediaLink != "" || (messageType != "text" && messageType != "reaction") {
-							err = mycli.s.saveMessageToHistory(
+							err = saveMessageToHistory(mycli.db,
 								mycli.userID,
 								chatJID.String(),
 								senderJID,

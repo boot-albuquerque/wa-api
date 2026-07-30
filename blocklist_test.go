@@ -6,8 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"wuzapi/internal/interfaces/http/handlers"
+
 	"go.mau.fi/whatsmeow/types"
 )
+
+var formatBlocklist = handlers.FormatBlocklist
 
 // TestFormatBlocklist covers the response shaping for GET /user/blocklist:
 // a nil blocklist yields an empty list (never null) and an empty dhash, and a

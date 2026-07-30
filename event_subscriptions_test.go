@@ -60,7 +60,7 @@ func TestSetDisconnectedState(t *testing.T) {
 	t.Run("default preserves events", func(t *testing.T) {
 		s := makeTestServer(t)
 		seed(t, s)
-		if err := s.setDisconnectedState(id, false); err != nil {
+		if err := setDisconnectedState(s.db, id, false); err != nil {
 			t.Fatalf("setDisconnectedState: %v", err)
 		}
 		events, connected := read(t, s)
@@ -75,7 +75,7 @@ func TestSetDisconnectedState(t *testing.T) {
 	t.Run("clear=true resets events", func(t *testing.T) {
 		s := makeTestServer(t)
 		seed(t, s)
-		if err := s.setDisconnectedState(id, true); err != nil {
+		if err := setDisconnectedState(s.db, id, true); err != nil {
 			t.Fatalf("setDisconnectedState: %v", err)
 		}
 		events, connected := read(t, s)
