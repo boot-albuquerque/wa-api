@@ -159,7 +159,7 @@ func (s *server) authalice(next http.Handler) http.Handler {
 			token = strings.Join(r.URL.Query()["token"], "")
 		}
 
-		myuserinfo, found := userinfocache.Get(token)
+		myuserinfo, found := appCtx.UserInfoCache.Get(token)
 		if !found {
 			log.Info().Msg("Looking for user information in DB")
 			// Checks DB from matching user and store user values in context
@@ -200,7 +200,7 @@ func (s *server) authalice(next http.Handler) http.Handler {
 					"MediaDelivery": mediaDelivery,
 				}}
 
-				userinfocache.Set(token, v, cache.NoExpiration)
+				appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 				log.Info().Str("name", name).Msg("User info name from DB")
 				ctx = context.WithValue(r.Context(), "userinfo", v)
 			}
@@ -295,7 +295,7 @@ func (s *server) Connect() http.HandlerFunc {
 			} else {
 				log.Info().Str("events", eventstring).Msg("Setting subscribed events")
 				v := updateUserInfo(r.Context().Value("userinfo"), "Events", eventstring)
-				userinfocache.Set(token, v, cache.NoExpiration)
+				appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 			}
 		} else {
 			log.Info().Str("events", eventstring).Msg("Preserving existing subscribed events")
@@ -357,7 +357,7 @@ func (s *server) Disconnect() http.HandlerFunc {
 				log.Info().Str("txtid", txtid).Bool("clearedEvents", clearEvents).Msg("Update DB on disconnection")
 				if clearEvents {
 					v := updateUserInfo(r.Context().Value("userinfo"), "Events", "")
-					userinfocache.Set(token, v, cache.NoExpiration)
+					appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 				}
 			}
 
@@ -442,7 +442,7 @@ func (s *server) DeleteWebhook() http.HandlerFunc {
 		// Update the user info cache
 		v := updateUserInfo(r.Context().Value("userinfo"), "Webhook", "")
 		v = updateUserInfo(v, "Events", "")
-		userinfocache.Set(token, v, cache.NoExpiration)
+		appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 
 		response := map[string]interface{}{"Details": "Webhook and events deleted successfully"}
 		responseJson, err := json.Marshal(response)
@@ -514,7 +514,7 @@ func (s *server) UpdateWebhook() http.HandlerFunc {
 
 		v := updateUserInfo(r.Context().Value("userinfo"), "Webhook", webhook)
 		v = updateUserInfo(v, "Events", eventstring)
-		userinfocache.Set(token, v, cache.NoExpiration)
+		appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 
 		response := map[string]interface{}{"webhook": webhook, "events": validEvents, "active": t.Active}
 		responseJson, err := json.Marshal(response)
@@ -582,7 +582,7 @@ func (s *server) SetWebhook() http.HandlerFunc {
 
 		v := updateUserInfo(r.Context().Value("userinfo"), "Webhook", webhook)
 		v = updateUserInfo(v, "Events", eventstring)
-		userinfocache.Set(token, v, cache.NoExpiration)
+		appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 
 		response := map[string]interface{}{"webhook": webhook}
 		responseJson, err := json.Marshal(response)
@@ -770,7 +770,7 @@ func (s *server) GetStatus() http.HandlerFunc {
 
 		// Safe defaults so the response always contains every config field.
 		proxyURL := ""
-		webhookUseProxy := *globalWebhookUseProxy
+		webhookUseProxy := appCtx.GlobalWebhookUseProxy
 		s3Config := map[string]interface{}{
 			"enabled":        false,
 			"endpoint":       "",
@@ -3007,7 +3007,7 @@ func (s *server) RequestHistorySync() http.HandlerFunc {
 
 		// Get or create MessageInfo from cache or query parameters
 		var info *types.MessageInfo
-		if cachedInfo, found := lastMessageCache.Get(txtid); found {
+		if cachedInfo, found := appCtx.LastMessageCache.Get(txtid); found {
 			info = cachedInfo.(*types.MessageInfo)
 		} else {
 			info = &types.MessageInfo{}
@@ -5773,7 +5773,7 @@ func (s *server) EditUser() http.HandlerFunc {
 			log.Error().Err(err).Str("userID", userID).Msg("Failed to get user token for cache update")
 		} else {
 			// Get current cached userinfo if it exists
-			if cachedUserInfo, found := userinfocache.Get(currentToken); found {
+			if cachedUserInfo, found := appCtx.UserInfoCache.Get(currentToken); found {
 				updatedUserInfo := cachedUserInfo.(Values)
 
 				// Update cache fields that were modified
@@ -5784,7 +5784,7 @@ func (s *server) EditUser() http.HandlerFunc {
 					// If token changed, we need to update the cache key
 					updatedUserInfo = updateUserInfo(updatedUserInfo, "Token", user.Token).(Values)
 					// Remove old cache entry and add new one with new token
-					userinfocache.Delete(currentToken)
+					appCtx.UserInfoCache.Delete(currentToken)
 					currentToken = user.Token
 				}
 				if user.Webhook != "" {
@@ -5805,7 +5805,7 @@ func (s *server) EditUser() http.HandlerFunc {
 				}
 
 				// Update the cache
-				userinfocache.Set(currentToken, updatedUserInfo, cache.NoExpiration)
+				appCtx.UserInfoCache.Set(currentToken, updatedUserInfo, cache.NoExpiration)
 				log.Info().Str("userID", userID).Msg("User info cache updated after edit")
 			}
 		}
@@ -5947,7 +5947,7 @@ func (s *server) DeleteUserComplete() http.HandlerFunc {
 		clientManager.DeleteWhatsmeowClient(id)
 		clientManager.DeleteMyClient(id)
 		clientManager.DeleteHTTPClient(id)
-		userinfocache.Delete(token)
+		appCtx.UserInfoCache.Delete(token)
 
 		// 5. Remove media files
 		userDirectory := filepath.Join(s.exPath, "files", id)
@@ -6062,11 +6062,11 @@ func (s *server) SetHistory() http.HandlerFunc {
 		}
 
 		token := r.Context().Value("userinfo").(Values).Get("Token")
-		if cachedUserInfo, found := userinfocache.Get(token); found {
+		if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 			updatedUserInfo := cachedUserInfo.(Values)
 			// Update history in cache
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "History", strconv.Itoa(t.History)).(Values)
-			userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 			log.Info().Str("userID", txtid).Msg("User info cache updated with History configuration")
 		}
 
@@ -6127,11 +6127,11 @@ func (s *server) SetProxy() http.HandlerFunc {
 			}
 
 			token := r.Context().Value("userinfo").(Values).Get("Token")
-			if cachedUserInfo, found := userinfocache.Get(token); found {
+			if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 				updatedUserInfo := cachedUserInfo.(Values)
 				// Update proxy in cache
 				updatedUserInfo = updateUserInfo(updatedUserInfo, "Proxy", "").(Values)
-				userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+				appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 				log.Info().Str("userID", txtid).Msg("User info cache updated with Proxy configuration")
 			}
 
@@ -6181,11 +6181,11 @@ func (s *server) SetProxy() http.HandlerFunc {
 		}
 
 		token := r.Context().Value("userinfo").(Values).Get("Token")
-		if cachedUserInfo, found := userinfocache.Get(token); found {
+		if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 			updatedUserInfo := cachedUserInfo.(Values)
 			// Update proxy in cache
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "Proxy", t.ProxyURL).(Values)
-			userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 			log.Info().Str("userID", txtid).Msg("User info cache updated with Proxy configuration")
 		}
 
@@ -6286,7 +6286,7 @@ func (s *server) ConfigureS3() http.HandlerFunc {
 
 		// Update userinfocache with S3 configuration
 		token := r.Context().Value("userinfo").(Values).Get("Token")
-		if cachedUserInfo, found := userinfocache.Get(token); found {
+		if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 			updatedUserInfo := cachedUserInfo.(Values)
 
 			// Update S3-related fields in cache
@@ -6301,7 +6301,7 @@ func (s *server) ConfigureS3() http.HandlerFunc {
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "MediaDelivery", t.MediaDelivery).(Values)
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "S3RetentionDays", strconv.Itoa(t.RetentionDays)).(Values)
 
-			userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 			log.Info().Str("userID", txtid).Msg("User info cache updated with S3 configuration")
 		}
 
@@ -6507,7 +6507,7 @@ func (s *server) GetHistory() http.HandlerFunc {
 			// Before returning error, try refreshing the cache in case the DB was updated
 			token := r.Context().Value("userinfo").(Values).Get("Token")
 			log.Info().Str("userId", txtid).Str("token", token).Msg("History is 0, invalidating cache and trying fresh DB lookup")
-			userinfocache.Delete(token)
+			appCtx.UserInfoCache.Delete(token)
 
 			// Re-fetch from database
 			var newHistoryValue sql.NullInt64
@@ -6805,12 +6805,12 @@ func (s *server) ConfigureHmac() http.HandlerFunc {
 			return
 		}
 
-		if cachedUserInfo, found := userinfocache.Get(token); found {
+		if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 			updatedUserInfo := cachedUserInfo.(Values)
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "HasHmac", "true").(Values)
 			hmacKeyEncrypted := base64.StdEncoding.EncodeToString(encryptedHmacKey)
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "HmacKeyEncrypted", hmacKeyEncrypted).(Values)
-			userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 			log.Info().Str("userID", txtid).Msg("User info cache updated with HMAC configuration")
 		}
 
@@ -6874,11 +6874,11 @@ func (s *server) DeleteHmacConfig() http.HandlerFunc {
 			return
 		}
 
-		if cachedUserInfo, found := userinfocache.Get(token); found {
+		if cachedUserInfo, found := appCtx.UserInfoCache.Get(token); found {
 			updatedUserInfo := cachedUserInfo.(Values)
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "HasHmac", "false").(Values)
 			updatedUserInfo = updateUserInfo(updatedUserInfo, "HmacKeyEncrypted", "").(Values)
-			userinfocache.Set(token, updatedUserInfo, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, updatedUserInfo, cache.NoExpiration)
 			log.Info().Str("userID", txtid).Msg("User info cache updated - HMAC configuration removed")
 		}
 
