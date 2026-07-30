@@ -25,14 +25,16 @@
 | 12b. OpenGraph pkg | ✅ | `internal/infrastructure/media/opengraph/` |
 | 13a. db.go delete | ✅ | Delegates to `internal/infrastructure/db/` (202 LOC removed) |
 | 13b. Context bridges | ✅ | GetWA/GetHTTP/GetMC/SyncHist added for future 11c |
+| 13c. rabbitmq.go delete | ✅ | Delegates to `internal/infrastructure/messaging/` (298 LOC removed) |
+| 14. main.go minimize | ✅ | Delegates to `internal/app/` (99 LOC removed) |
 
 ### Metrics
 
-| Metric | Before (fase 9) | After (fase 13b) |
+| Metric | Before (fase 9) | After (fase 14) |
 |---|---|---|
-| Root .go LOC | 8,092 | **6,433** (-1,659) |
-| Internal .go files | 160 | **168** |
-| Internal .go LOC | ~10,000 | **14,021** |
+| Root .go LOC | 8,092 | **6,046** (-2,046) |
+| Internal .go files | 160 | **183** (+23) |
+| Internal .go LOC | ~10,000 | **14,901** (+4,901) |
 | Handler structs | ~40 | **76** |
 | Routes via s.*() | 79 | **0** |
 | Globals without encapsulation | 15 | **0** |
@@ -48,9 +50,10 @@
 | stdio.go | SendNotification | JSON-RPC over stdout |
 | custom_routes.go | registerCustomRoutes | Route registration |
 
-## Architecture Diagram
+## Final Architecture Diagram
 
 ```
+cmd/wuzapi/main.go                     # 3 LOC, single entry point
 internal/
 ├── app/                                Server, KillChannel, AppContext, HTTP client
 ├── domain/                             JID, Group, Message, Session, etc.
@@ -58,20 +61,24 @@ internal/
 │   ├── port/                           ClientProvider, Logger, etc.
 │   └── usecase/                       74 usecases (1 per operation)
 ├── infrastructure/
-│   ├── constants/                     Event type definitions (NEW)
+│   ├── constants/                     Event type definitions
+│   ├── helpers/                       Find, IsHTTPURL, ExtractFirstURL (NEW)
 │   ├── whatsmeow/                     ClientManager, adapters, JID utils
 │   ├── messaging/                     Webhook hooks, RabbitMQ, webhook utils
 │   ├── storage/                       S3
-│   ├── db/                            Connection, migrations
-│   ├── media/                         Outgoing media, Base64, utils
+│   ├── db/                            Connection, migrations, message history
+│   ├── media/
+│   │   ├── opengraph/                 Open Graph fetching (NEW)
+│   │   └── sticker/                   WebP/Sticker/EXIF pipeline (NEW)
 │   ├── auth/                          Admin, authenticators
 │   ├── stdio/                         StdioServer
 │   └── adapter/                       (empty)
-└── interfaces/http/
-    ├── handlers/                      76 handler structs across 15 files
-    ├── middleware/                     Retry, Idempotency, HMAC
-    ├── response.go, registry.go        Response helpers, route registry
-    └── profile_handler.go             Profile handler (custom)
+├── interfaces/http/
+│   ├── handlers/                      76 handler structs across 15 files
+│   ├── middleware/                     Retry, Idempotency, HMAC
+│   ├── response.go, registry.go        Response helpers, route registry
+│   └── profile_handler.go             Profile handler (custom)
+└── whatsapp/client/                    WhatsApp client wrapper + webhook dispatch (NEW)
 ```
 
 ## Test coverage
