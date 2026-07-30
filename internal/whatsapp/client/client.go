@@ -41,6 +41,10 @@ type Context struct {
 
 	EnsureS3  func(uid string)
 	ProcessS3 func(ctx context.Context, uid, cjid, msgID string, data []byte, mime, fname string, incoming bool) (map[string]interface{}, error)
+	SetLastMsg func(uid string, v interface{})
+	S3Mgr     func() interface{ GetS3Manager() interface{ EnsureClientFromDB(uid string) } }
+	HTTP      interface{}  // *http.Client for media downloads
+	SyncHist  func(ctx context.Context, db *sqlx.DB, uid string, cjid types.JID, count int) error
 
 	SaveMsg func(db *sqlx.DB, uid, cjid, sjid, mid, mt, txt, ml, qid, json string) error
 	TrimMsg func(db *sqlx.DB, uid, cjid string, limit int) error
@@ -49,8 +53,13 @@ type Context struct {
 	SetPO    func(uid, mid string, opts []string)
 
 	SetWA func(uid string, c *whatsmeow.Client)
+	GetWA func(uid string) *whatsmeow.Client
 	DelWA func(uid string)
+	SetHTTP func(uid string, c interface{})
+	GetHTTP func(uid string) interface{}
+	DelHTTP func(uid string)
 	SetMC func(uid string, c *MyClient)
+	GetMC func(uid string) *MyClient
 	DelMC func(uid string)
 
 	KSig func(uid string)
