@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"
+
+	dbmig "wuzapi/internal/infrastructure/db"
 )
 
 func TestStdioHealthRequest(t *testing.T) {
@@ -390,7 +392,7 @@ func makeTestServer(t *testing.T) *server {
 	t.Cleanup(func() { db.Close() })
 
 	// Initialize schema using the same function as production
-	if err := initializeSchema(db); err != nil {
+	if err := dbmig.InitializeSchema(db); err != nil {
 		t.Fatalf("Failed to initialize schema: %v", err)
 	}
 

@@ -28,6 +28,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"wuzapi/internal/app"
+	dbmig "wuzapi/internal/infrastructure/db"
 )
 
 // ServerMode represents the server operating mode
@@ -451,7 +452,7 @@ func main() {
 	}
 
 	// Initialize the schema
-	if err = initializeSchema(db); err != nil {
+	if err = dbmig.InitializeSchema(db); err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize schema")
 		// Perform cleanup before exiting
 		if err := db.Close(); err != nil {
