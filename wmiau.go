@@ -34,7 +34,8 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"golang.org/x/net/proxy"
-)
+
+	"wuzapi/internal/infrastructure/storage")
 
 // db field declaration as *sqlx.DB
 type MyClient struct {
@@ -68,7 +69,7 @@ func safeGo(name string, fn func()) {
 
 // ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
 func ensureS3ClientForUser(userID string) {
-	GetS3Manager().EnsureClientFromDB(userID)
+	storage.GetS3Manager().EnsureClientFromDB(userID)
 }
 
 func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
@@ -315,7 +316,7 @@ func (s *server) connectOnStartup() {
 
 			// Initialize S3 client if configured
 			go func(userID string) {
-				GetS3Manager().EnsureClientFromDB(userID)
+				storage.GetS3Manager().EnsureClientFromDB(userID)
 			}(txtid)
 		}
 	}
@@ -450,7 +451,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	clientManager.SetHTTPClient(userID, webhookClient)
 
 	// Initialize S3 client if configured (needed when user reconnects after container restart - connectOnStartup only runs for connected=1)
-	GetS3Manager().EnsureClientFromDB(userID)
+	storage.GetS3Manager().EnsureClientFromDB(userID)
 
 	if client.Store.ID == nil {
 		// No ID stored, new login

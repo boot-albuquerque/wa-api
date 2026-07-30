@@ -9,7 +9,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
-)
+
+	"wuzapi/internal/infrastructure/storage")
 
 const (
 	downloadTimeoutImage    = 2 * time.Minute
@@ -70,7 +71,7 @@ func (mycli *MyClient) processMedia(
 	}()
 
 	if s3cfg.Enabled == "true" && (s3cfg.MediaDelivery == "s3" || s3cfg.MediaDelivery == "both") {
-		s3Data, err := GetS3Manager().ProcessMediaForS3(
+		s3Data, err := storage.GetS3Manager().ProcessMediaForS3(
 			ctx,
 			mycli.userID,
 			chatJID,

@@ -40,7 +40,8 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/rs/zerolog/log"
 	"github.com/vincent-petithory/dataurl"
-)
+
+	"wuzapi/internal/infrastructure/storage")
 
 const (
 	openGraphFetchTimeout    = 5 * time.Second
@@ -583,7 +584,7 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 	if s3Config.Enabled && (s3Config.MediaDelivery == "s3" || s3Config.MediaDelivery == "both") {
 		ensureS3ClientForUser(userID)
 		// Process S3 upload (outgoing messages are always in outbox)
-		s3Data, err := GetS3Manager().ProcessMediaForS3(
+		s3Data, err := storage.GetS3Manager().ProcessMediaForS3(
 			context.Background(),
 			userID,
 			contactJID,

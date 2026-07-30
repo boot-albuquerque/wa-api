@@ -29,6 +29,7 @@ import (
 
 	"wuzapi/internal/app"
 	dbmig "wuzapi/internal/infrastructure/db"
+	"wuzapi/internal/infrastructure/storage"
 )
 
 // ServerMode represents the server operating mode
@@ -425,7 +426,7 @@ func main() {
 	}()
 
 	// Set DB reference in S3Manager for lazy client initialization
-	GetS3Manager().SetDB(db)
+	storage.GetS3Manager().SetDB(db)
 
 	var dbLog waLog.Logger
 	if *waDebug != "" {
