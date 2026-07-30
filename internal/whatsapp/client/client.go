@@ -39,7 +39,8 @@ type Context struct {
 	CallHookFile func(url string, p map[string]string, uid, file string, hk []byte) error
 	Rabbit       func(jd []byte, token, uid string)
 
-	EnsureS3 func(uid string)
+	EnsureS3  func(uid string)
+	ProcessS3 func(ctx context.Context, uid, cjid, msgID string, data []byte, mime, fname string, incoming bool) (map[string]interface{}, error)
 
 	SaveMsg func(db *sqlx.DB, uid, cjid, sjid, mid, mt, txt, ml, qid, json string) error
 	TrimMsg func(db *sqlx.DB, uid, cjid string, limit int) error

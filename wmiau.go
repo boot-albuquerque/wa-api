@@ -9,16 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 
-	"wuzapi/internal/interfaces/http/handlers"
+	"wuzapi/internal/whatsapp/client"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
@@ -28,7 +26,6 @@ import (
 	"github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -52,20 +49,7 @@ type MyClient struct {
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
 // the whole process. Losing one delivery is preferable to taking wuzapi
 // down for every connected user.
-func safeGo(name string, fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Error().
-					Str("goroutine", name).
-					Interface("panic", r).
-					Str("stack", string(debug.Stack())).
-					Msg("panic recovered in goroutine")
-			}
-		}()
-		fn()
-	}()
-}
+var safeGo = client.SafeGo
 
 // ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
 func ensureS3ClientForUser(userID string) {
@@ -326,15 +310,8 @@ func (s *server) connectOnStartup() {
 	}
 }
 
-// parseJID delegates to the extracted handlers.ParseJID helper.
-func parseJID(arg string) (types.JID, bool) {
-	return handlers.ParseJID(arg)
-}
-
-// getPlatformTypeEnum delegates to the extracted handlers.GetPlatformTypeEnum.
-func getPlatformTypeEnum(platformType string) *waCompanionReg.DeviceProps_PlatformType {
-	return handlers.GetPlatformTypeEnum(platformType)
-}
+var parseJID = client.ParseJID
+var getPlatformTypeEnum = client.GetPlatformTypeEnum
 
 func (s *server) startClient(userID string, textjid string, token string, kill chan bool) {
 	log.Info().Str("userid", userID).Str("jid", textjid).Msg("Starting websocket connection to Whatsapp")
@@ -624,14 +601,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	appCtx.KillChannel.Delete(userID, kill)
 }
 
-func fileToBase64(filepath string) (string, string, error) {
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return "", "", err
-	}
-	mimeType := http.DetectContentType(data)
-	return base64.StdEncoding.EncodeToString(data), mimeType, nil
-}
+var fileToBase64 = client.FileToBase64
 
 func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	txtid := mycli.userID
