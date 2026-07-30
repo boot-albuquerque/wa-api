@@ -303,7 +303,7 @@ func (s *server) Connect() http.HandlerFunc {
 
 		log.Info().Str("jid", jid).Msg("Attempt to connect")
 		kill := make(chan bool, 1)
-		setKillChannel(txtid, kill)
+		appCtx.KillChannel.Set(txtid, kill)
 		go s.startClient(txtid, jid, token, kill)
 
 		if t.Immediate == false {
@@ -365,7 +365,7 @@ func (s *server) Disconnect() http.HandlerFunc {
 			responseJson, err := json.Marshal(response)
 
 			clientManager.DeleteWhatsmeowClient(txtid)
-			signalKill(txtid)
+			appCtx.KillChannel.Signal(txtid)
 
 			if err != nil {
 				s.Respond(w, r, http.StatusInternalServerError, err)
@@ -666,7 +666,7 @@ func (s *server) Logout() http.HandlerFunc {
 				} else {
 					log.Info().Str("jid", jid).Msg("Logged out")
 					clientManager.DeleteWhatsmeowClient(txtid)
-					signalKill(txtid)
+					appCtx.KillChannel.Signal(txtid)
 				}
 			} else {
 				if clientManager.GetWhatsmeowClient(txtid).IsConnected() == true {

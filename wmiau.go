@@ -307,7 +307,7 @@ func (s *server) connectOnStartup() {
 			eventstring := strings.Join(subscribedEvents, ",")
 			log.Info().Str("events", eventstring).Str("jid", jid).Msg("Attempt to connect")
 			kill := make(chan bool, 1)
-			setKillChannel(txtid, kill)
+			appCtx.KillChannel.Set(txtid, kill)
 			go s.startClient(txtid, jid, token, kill)
 
 			// Initialize S3 client if configured
@@ -519,7 +519,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					clientManager.DeleteWhatsmeowClient(userID)
 					clientManager.DeleteMyClient(userID)
 					clientManager.DeleteHTTPClient(userID)
-					signalKill(userID)
+					appCtx.KillChannel.Signal(userID)
 				} else if evt.Event == "success" {
 					log.Info().Msg("QR pairing ok!")
 					// Clear QR code after pairing
@@ -616,7 +616,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	if _, err := s.db.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {
 		log.Error().Err(err).Msg("failed to mark user disconnected on kill")
 	}
-	deleteKillChannel(userID, kill)
+	appCtx.KillChannel.Delete(userID, kill)
 }
 
 func fileToBase64(filepath string) (string, string, error) {
@@ -1383,7 +1383,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		log.Info().Str("reason", evt.Reason.String()).Msg("Logged out")
 		defer func() {
 			// Use a non-blocking send to prevent a deadlock if the receiver has already terminated.
-			signalKill(mycli.userID)
+			appCtx.KillChannel.Signal(mycli.userID)
 		}()
 		sqlStmt := `UPDATE users SET connected=0 WHERE id=$1`
 		_, err := mycli.db.Exec(sqlStmt, mycli.userID)

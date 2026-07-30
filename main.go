@@ -75,8 +75,6 @@ var (
 
 	container        *sqlstore.Container
 	clientManager    = NewClientManager()
-	killchannel      = make(map[string](chan bool))
-	killchannelMu    sync.Mutex
 	userinfocache    = cache.New(5*time.Minute, 10*time.Minute)
 	lastMessageCache = cache.New(24*time.Hour, 24*time.Hour)
 	globalHTTPClient = app.NewSafeHTTPClient()
@@ -91,52 +89,19 @@ var privateIPBlocks []*net.IPNet
 
 const version = app.Version
 
-// killchannel maps a userID to its session goroutine's kill channel. It is
-// accessed from HTTP request goroutines (Connect/Disconnect/logout/delete) and
-// from the per-session startClient goroutine, so every map operation must be
-// serialized through killchannelMu. The helpers below lock only around the map
-// access itself — never while sending on or receiving from a channel — so a
-// slow or absent receiver can never block another session.
+// killchannel helpers now delegate to appCtx.KillChannel (internal/app).
+// The raw sync.Mutex and map have been migrated to KillChannel struct.
 func setKillChannel(userID string, ch chan bool) {
-	killchannelMu.Lock()
-	killchannel[userID] = ch
-	killchannelMu.Unlock()
+	appCtx.KillChannel.Set(userID, ch)
 }
-
 func getKillChannel(userID string) (chan bool, bool) {
-	killchannelMu.Lock()
-	ch, ok := killchannel[userID]
-	killchannelMu.Unlock()
-	return ch, ok
+	return appCtx.KillChannel.Get(userID)
 }
-
-// deleteKillChannel removes userID's entry, but only if it still maps to ch.
-// A session goroutine passes the channel it captured at startup; if a newer
-// session has replaced the entry in the meantime (a reconnect for the same
-// user), the map holds a different channel and this is a no-op. That stops a
-// slow-cleanup goroutine from an old session deleting the live session's kill
-// channel and leaving the new session unkillable.
 func deleteKillChannel(userID string, ch chan bool) {
-	killchannelMu.Lock()
-	if current, ok := killchannel[userID]; ok && current == ch {
-		delete(killchannel, userID)
-	}
-	killchannelMu.Unlock()
+	appCtx.KillChannel.Delete(userID, ch)
 }
-
-// signalKill delivers a non-blocking kill signal to userID's session goroutine,
-// if one is registered. The channel is buffered (cap 1) so the send never
-// blocks; the default guards a full buffer or a missing entry.
 func signalKill(userID string) {
-	ch, ok := getKillChannel(userID)
-	if !ok {
-		log.Debug().Str("userID", userID).Msg("signalKill: no kill channel registered (already cleaned up?)")
-		return
-	}
-	select {
-	case ch <- true:
-	default:
-	}
+	appCtx.KillChannel.Signal(userID)
 }
 
 func newSafeHTTPClient() *http.Client {
