@@ -83,12 +83,27 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 	registry.Register("/user/unblock", customChain.Then(customHandlerSet.User.UnblockUser()), "POST")
 	registry.Register("/user/lid/{jid}", customChain.Then(customHandlerSet.User.GetUserLID()), "GET")
 
-	// Group routes
+	// Group routes (migrated from internal/)
 	registry.Register("/group/requestparticipants", customChain.Then(customHandlerSet.Group.GetGroupRequestParticipants), "GET")
 	registry.Register("/group/list", customChain.Then(customHandlerSet.Group.ListGroups), "POST")
 	registry.Register("/group/info", customChain.Then(customHandlerSet.Group.GetGroupInfo), "POST")
 	registry.Register("/group/invitelink", customChain.Then(customHandlerSet.Group.GetGroupInviteLink), "POST")
 	registry.Register("/group/inviteinfo", customChain.Then(customHandlerSet.Group.GetGroupInviteInfo), "POST")
+
+	// Group management routes (still using server methods as migration in-progress)
+	registry.Register("/group/create", customChain.Then(s.CreateGroup()), "POST")
+	registry.Register("/group/join", customChain.Then(s.GroupJoin()), "POST")
+	registry.Register("/group/leave", customChain.Then(s.GroupLeave()), "POST")
+	registry.Register("/group/name", customChain.Then(s.SetGroupName()), "POST")
+	registry.Register("/group/topic", customChain.Then(s.SetGroupTopic()), "POST")
+	registry.Register("/group/photo", customChain.Then(s.SetGroupPhoto()), "POST")
+	registry.Register("/group/photo/remove", customChain.Then(s.RemoveGroupPhoto()), "POST")
+	registry.Register("/group/announce", customChain.Then(s.SetGroupAnnounce()), "POST")
+	registry.Register("/group/locked", customChain.Then(s.SetGroupLocked()), "POST")
+	registry.Register("/group/ephemeral", customChain.Then(s.SetDisappearingTimer()), "POST")
+	registry.Register("/group/updateparticipants", customChain.Then(s.UpdateGroupParticipants()), "POST")
+	registry.Register("/group/updaterequestparticipants", customChain.Then(s.UpdateGroupRequestParticipants()), "POST")
+	registry.Register("/group/joinapprovalmode", customChain.Then(s.SetGroupJoinApprovalMode()), "POST")
 
 	// Storage routes (S3, HMAC, Proxy, History)
 	registry.Register("/s3/configure", customChain.Then(customHandlerSet.Storage.ConfigureS3), "POST")
@@ -141,6 +156,21 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 
 	// Health route (public, no auth chain needed)
 	registry.Register("/health", c.Then(http.HandlerFunc(s.GetHealth())), "GET")
+
+	// Remaining legacy routes (still using server methods; will be untangled in next phase)
+	registry.Register("/session/history", customChain.Then(s.SetHistory()), "POST")
+	registry.Register("/session/proxy", customChain.Then(s.SetProxy()), "POST")
+	registry.Register("/session/s3/config", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" { s.ConfigureS3().ServeHTTP(w, r) } else if r.Method == "GET" { s.GetS3Config().ServeHTTP(w, r) } else { s.DeleteS3Config().ServeHTTP(w, r) }
+	})), "POST", "GET", "DELETE")
+	registry.Register("/session/s3/test", customChain.Then(s.TestS3Connection()), "POST")
+	registry.Register("/session/hmac/config", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" { s.ConfigureHmac().ServeHTTP(w, r) } else if r.Method == "GET" { s.GetHmacConfig().ServeHTTP(w, r) } else { s.DeleteHmacConfig().ServeHTTP(w, r) }
+	})), "POST", "GET", "DELETE")
+	registry.Register("/chat/history", customChain.Then(s.GetHistory()), "GET")
+	registry.Register("/chat/delete", customChain.Then(s.DeleteMessage()), "POST")
+	registry.Register("/status/set/text", customChain.Then(s.SetStatusMessage()), "POST")
+	// Static files — keep in routes.go only, not reregistered here
 
 	registry.Apply(s.router)
 }
