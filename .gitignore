@@ -40,3 +40,11 @@ NEW_FEATS.md
 *.code-workspace
 **/*.code-workspace
 .vscode/workspaceStorage/
+# Build artifacts
+wuzapi
+coverage.out
+*.backup
+
+# Upstream metadata (not relevant for fork)
+contributors.html
+contributors.json
