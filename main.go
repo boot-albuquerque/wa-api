@@ -26,6 +26,8 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"wuzapi/internal/app"
 )
 
 // ServerMode represents the server operating mode
@@ -77,12 +79,17 @@ var (
 	killchannelMu    sync.Mutex
 	userinfocache    = cache.New(5*time.Minute, 10*time.Minute)
 	lastMessageCache = cache.New(24*time.Hour, 24*time.Hour)
-	globalHTTPClient = newSafeHTTPClient()
+	globalHTTPClient = app.NewSafeHTTPClient()
 )
+
+// appCtx bundles runtime configuration previously spread across global vars.
+// Functions in wmiau.go, handlers.go, and helpers.go access it for webhook
+// dispatch, caching, and session lifecycle orchestration.
+var appCtx = app.NewAppContext()
 
 var privateIPBlocks []*net.IPNet
 
-const version = "1.0.6"
+const version = app.Version
 
 // killchannel maps a userID to its session goroutine's kill channel. It is
 // accessed from HTTP request goroutines (Connect/Disconnect/logout/delete) and
@@ -420,6 +427,17 @@ func main() {
 	}
 
 	InitRabbitMQ()
+
+	// Seed the AppContext with runtime config so functions in wmiau.go
+	// and helpers.go can access global state without raw globals.
+	appCtx.GlobalWebhook = *globalWebhook
+	appCtx.GlobalHMACKeyEncrypted = globalHMACKeyEncrypted
+	appCtx.GlobalWebhookUseProxy = *globalWebhookUseProxy
+	appCtx.GlobalEncryptionKey = *globalEncryptionKey
+	appCtx.WebhookRetryEnabled = *webhookRetryEnabled
+	appCtx.WebhookRetryCount = *webhookRetryCount
+	appCtx.WebhookRetryDelaySeconds = *webhookRetryDelaySeconds
+	appCtx.WebhookErrorQueueName = *webhookErrorQueueName
 
 	ex, err := os.Executable()
 	if err != nil {

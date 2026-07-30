@@ -74,20 +74,20 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 	jsonDataStr := string(jsonData)
 
 	instance_name := ""
-	userinfo, found := userinfocache.Get(token)
+	userinfo, found := appCtx.UserInfoCache.Get(token)
 	if found {
 		instance_name = userinfo.(Values).Get("Name")
 	}
 
-	if *globalWebhook != "" {
-		log.Info().Str("url", *globalWebhook).Msg("Calling global webhook")
+	if appCtx.GlobalWebhook != "" {
+		log.Info().Str("url", appCtx.GlobalWebhook).Msg("Calling global webhook")
 		// Add extra information for the global webhook
 		globalData := map[string]string{
 			"jsonData":     jsonDataStr,
 			"userID":       userID,
 			"instanceName": instance_name,
 		}
-		callHookWithHmac(*globalWebhook, globalData, userID, globalHMACKeyEncrypted)
+		callHookWithHmac(appCtx.GlobalWebhook, globalData, userID, appCtx.GlobalHMACKeyEncrypted)
 	}
 }
 
@@ -98,7 +98,7 @@ func sendToUserWebHook(webhookurl string, path string, jsonData []byte, userID s
 func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
 
 	instance_name := ""
-	userinfo, found := userinfocache.Get(token)
+	userinfo, found := appCtx.UserInfoCache.Get(token)
 	if found {
 		instance_name = userinfo.(Values).Get("Name")
 	}
@@ -128,7 +128,7 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 	// Get updated events from cache/database
 	currentEvents := ""
-	userinfo2, found2 := userinfocache.Get(mycli.token)
+	userinfo2, found2 := appCtx.UserInfoCache.Get(mycli.token)
 	if found2 {
 		currentEvents = userinfo2.(Values).Get("Events")
 	} else {
@@ -158,7 +158,7 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 
 func getUserWebhookUrl(token string) string {
 	webhookurl := ""
-	myuserinfo, found := userinfocache.Get(token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(token)
 	if !found {
 		log.Warn().Str("token", token).Msg("Could not call webhook as there is no user for this token")
 	} else {
@@ -210,7 +210,7 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 
 	// Get HMAC key for this user
 	var encryptedHmacKey []byte
-	if userinfo, found := userinfocache.Get(mycli.token); found {
+	if userinfo, found := appCtx.UserInfoCache.Get(mycli.token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
 		if encryptedB64 != "" {
 			var err error
@@ -285,7 +285,7 @@ func (s *server) connectOnStartup() {
 				"History":          fmt.Sprintf("%d", history),
 				"HmacKeyEncrypted": hmacKeyEncrypted,
 			}}
-			userinfocache.Set(token, v, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 			// Gets and set subscription to webhook events
 			eventarray := strings.Split(events, ",")
 
@@ -407,7 +407,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	})
 
 	var proxyURL string
-	webhookUseProxy := *globalWebhookUseProxy
+	webhookUseProxy := appCtx.GlobalWebhookUseProxy
 	err = s.db.QueryRow(
 		"SELECT proxy_url, COALESCE(webhook_use_proxy, true) FROM users WHERE id=$1",
 		userID,
@@ -464,7 +464,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 				return
 			}
 
-			myuserinfo, found := userinfocache.Get(token)
+			myuserinfo, found := appCtx.UserInfoCache.Get(token)
 
 			for evt := range qrChan {
 				if evt.Event == "code" {
@@ -484,7 +484,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					} else {
 						if found {
 							v := updateUserInfo(myuserinfo, "Qrcode", base64qrcode)
-							userinfocache.Set(token, v, cache.NoExpiration)
+							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 							log.Info().Str("qrcode", base64qrcode).Msg("update cache userinfo with qr code")
 						}
 					}
@@ -512,7 +512,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					} else {
 						if found {
 							v := updateUserInfo(myuserinfo, "Qrcode", "")
-							userinfocache.Set(token, v, cache.NoExpiration)
+							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 						}
 					}
 					log.Warn().Msg("QR timeout killing channel")
@@ -530,7 +530,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					} else {
 						if found {
 							v := updateUserInfo(myuserinfo, "Qrcode", "")
-							userinfocache.Set(token, v, cache.NoExpiration)
+							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 						}
 					}
 				} else {
@@ -678,14 +678,14 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		postmap["type"] = "PairSuccess"
 		dowebhook = 1
 
-		myuserinfo, found := userinfocache.Get(mycli.token)
+		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.token)
 		if !found {
 			log.Warn().Msg("No user info cached on pairing?")
 		} else {
 			txtid = myuserinfo.(Values).Get("Id")
 			token := myuserinfo.(Values).Get("Token")
 			v := updateUserInfo(myuserinfo, "Jid", fmt.Sprintf("%s", jid))
-			userinfocache.Set(token, v, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 			log.Info().Str("jid", jid.String()).Str("userid", txtid).Str("token", token).Msg("User information set")
 		}
 
@@ -780,8 +780,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			MediaDelivery string `db:"media_delivery"`
 		}
 
-		lastMessageCache.Set(mycli.userID, &evt.Info, cache.DefaultExpiration)
-		myuserinfo, found := userinfocache.Get(mycli.token)
+		appCtx.LastMessageCache.Set(mycli.userID, &evt.Info, cache.DefaultExpiration)
+		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.token)
 		if !found {
 			err := mycli.db.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
 			if err != nil {
@@ -932,7 +932,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Save message to history regardless of skipMedia setting
 		// Get user's history setting from cache
 		var historyLimit int
-		userinfo, found := userinfocache.Get(mycli.token)
+		userinfo, found := appCtx.UserInfoCache.Get(mycli.token)
 		if found {
 			historyStr := userinfo.(Values).Get("History")
 			historyLimit, _ = strconv.Atoi(historyStr)
