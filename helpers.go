@@ -103,7 +103,7 @@ func resolveWebhookUseProxy(perUser *bool) bool {
 	if perUser != nil {
 		return *perUser
 	}
-	return *globalWebhookUseProxy
+	return appCtx.GlobalWebhookUseProxy
 }
 
 func proxyConfigResponse(proxyURL string, webhookUseProxy bool) map[string]interface{} {
@@ -271,11 +271,11 @@ func getOpenGraphData(ctx context.Context, urlStr string, userID string) openGra
 func updateUserInfo(values interface{}, field string, value string) interface{} {
 	log.Debug().Str("field", field).Str("value", value).Msg("User info updated")
 	// Copy-on-write: the map inside Values is shared — it lives in
-	// userinfocache and is handed to request goroutines via the request
+	// appCtx.UserInfoCache and is handed to request goroutines via the request
 	// context. Mutating it in place races with concurrent readers (Values.Get)
 	// and can crash the process with "concurrent map read and map write".
 	// Build a fresh map and return a new Values; callers persist it via
-	// userinfocache.Set. Use a comma-ok assertion so a nil or unexpected value
+	// appCtx.UserInfoCache.Set. Use a comma-ok assertion so a nil or unexpected value
 	// can't panic — it falls back to the zero Values (nil map), handled below.
 	old, _ := values.(Values)
 	m := make(map[string]string, len(old.m)+1)
@@ -303,8 +303,8 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 
 	// Retry settings
 	maxRetries := 1
-	if *webhookRetryEnabled {
-		maxRetries = *webhookRetryCount
+	if appCtx.WebhookRetryEnabled {
+		maxRetries = appCtx.WebhookRetryCount
 	}
 
 	var lastError error
@@ -317,7 +317,7 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 			backoffFactor := 1 << uint(attempt-1)
 
 			// Calculate the final delay.
-			delayDuration := time.Duration(*webhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
+			delayDuration := time.Duration(appCtx.WebhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
 
 			log.Warn().
 				Int("attempt", attempt+1).
@@ -405,7 +405,7 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 				Str("url", myurl).
 				Msg("Webhook failed due to non-2xx status code")
 
-			if !*webhookRetryEnabled {
+			if !appCtx.WebhookRetryEnabled {
 				break
 			}
 			continue
@@ -458,8 +458,8 @@ func callHookFileWithHmac(myurl string, payload map[string]string, userID string
 	}
 
 	maxRetries := 1
-	if *webhookRetryEnabled {
-		maxRetries = *webhookRetryCount
+	if appCtx.WebhookRetryEnabled {
+		maxRetries = appCtx.WebhookRetryCount
 	}
 
 	var lastError error
@@ -475,7 +475,7 @@ func callHookFileWithHmac(myurl string, payload map[string]string, userID string
 		if attempt > 0 {
 			backoffFactor := 1 << uint(attempt-1)
 
-			delayDuration := time.Duration(*webhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
+			delayDuration := time.Duration(appCtx.WebhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
 
 			log.Warn().
 				Int("attempt", attempt+1).
@@ -529,7 +529,7 @@ func callHookFileWithHmac(myurl string, payload map[string]string, userID string
 				Str("url", myurl).
 				Msg("File webhook failed due to non-2xx status code")
 
-			if !*webhookRetryEnabled {
+			if !appCtx.WebhookRetryEnabled {
 				break
 			}
 			continue
@@ -641,11 +641,11 @@ func generateHmacSignature(payload []byte, encryptedHmacKey []byte) (string, err
 }
 
 func encryptHMACKey(plainText string) ([]byte, error) {
-	if *globalEncryptionKey == "" {
+	if appCtx.GlobalEncryptionKey == "" {
 		return nil, fmt.Errorf("encryption key not configured")
 	}
 
-	block, err := aes.NewCipher([]byte(*globalEncryptionKey))
+	block, err := aes.NewCipher([]byte(appCtx.GlobalEncryptionKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
@@ -666,11 +666,11 @@ func encryptHMACKey(plainText string) ([]byte, error) {
 
 // decryptHMACKey decrypts HMAC key using AES-GCM
 func decryptHMACKey(encryptedData []byte) (string, error) {
-	if *globalEncryptionKey == "" {
+	if appCtx.GlobalEncryptionKey == "" {
 		return "", fmt.Errorf("encryption key not configured")
 	}
 
-	block, err := aes.NewCipher([]byte(*globalEncryptionKey))
+	block, err := aes.NewCipher([]byte(appCtx.GlobalEncryptionKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
