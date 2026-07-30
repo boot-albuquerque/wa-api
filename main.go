@@ -472,6 +472,7 @@ func main() {
 		mode:   serverMode,
 	}
 	s.routes()
+	initCustomHandlers(s)
 
 	s.connectOnStartup()
 
