@@ -114,3 +114,22 @@ func (cm *ClientManager) GetPollOptions(userID, msgID string) []string {
 	}
 	return nil
 }
+
+// GetWhatsmeowClientsCount returns the number of registered WhatsApp clients.
+func (cm *ClientManager) GetWhatsmeowClientsCount() int {
+	cm.RLock()
+	defer cm.RUnlock()
+	return len(cm.whatsmeowClients)
+}
+
+// IterateWhatsmeowClients safely iterates over all whatsmeow clients with a
+// callback. Iteration stops when callback returns false.
+func (cm *ClientManager) IterateWhatsmeowClients(callback func(*whatsmeow.Client) bool) {
+	cm.RLock()
+	defer cm.RUnlock()
+	for _, client := range cm.whatsmeowClients {
+		if !callback(client) {
+			break
+		}
+	}
+}
