@@ -1,50 +1,243 @@
-dbdata/
-files/
-wuzapi
-.env
-.tool-versions
+# =============================================================================
+# DisparaZap — .gitignore
+# =============================================================================
 
-# Added by Claude Task Master
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
-# Dependency directories
+# --- Go ---
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+wuzapi
+/bin/
+/dist/
+/build/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of `go coverage`
+*.out
+coverage.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# --- Dependencies ---
 node_modules/
-# Environment variables
-# Editor directories and files
-.idea
-.vscode
+vendor/
+
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials.*
+*_credentials.*
+.service_account.json
+
+# --- OS ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# --- Editors & IDEs ---
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.vscode/workspaceStorage/
+*.code-workspace
+**/*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim
+*.sw?
+*.swo
+*.swn
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+*~
+tags
+tags.lock
+tags.temp
+
+# Emacs
+*~
+\#*\#
+.\#*
+*~
+*.elc
+auto-save-list
+tramp
+.\#*
+.dir-locals.el
+TAGS
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Eclipse / STS
+.classpath
+.project
+.settings/
+.springBeans
+
+# Visual Studio
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-# OS specific
-.DS_Store
 
-# Task files
-tasks.json
-tasks/ 
-scripts/
-.roo/
+# --- LLM & Agent Tools (anti-LLM) ---
+# Cursor AI
 .cursor/
+.cursorrules
+.cursorignore
+
+# Claude / Anthropic
+.claude/
+!.claude/settings.json
+!.claude/settings.local.json
+!.claude/keybindings.json
+.claude/*
+.claude/*/
+.claude/**/*.md
+
+# Roo Code / Roo Cline
+.roo/
+.rooignore
 .roomodes
-.taskmasterconfig
+
+# Windsurf
 .windsurfrules
-NEW_FEATS.md
+.windsurf/
 
-*.code-workspace
-**/*.code-workspace
-.vscode/workspaceStorage/
-# Build artifacts
-wuzapi
-coverage.out
+# GitHub Copilot
+.github/copilot-instructions.md
+.copilot/
+
+# Codeium
+.codeium/
+
+# TabNine
+.tabnine/
+
+# Amazon Q / CodeWhisperer
+.amazonq/
+
+# Continue.dev
+.continue/
+
+# Open Interpreter
+.open-interpreter/
+
+# Cody (Sourcegraph)
+.cody/
+
+# Aider
+.aider.conf.yml
+.aider/
+
+# GPT Engineer
+.gpt-engineer/
+.gpteng/
+
+# Task Master
+.taskmasterconfig
+tasks.json
+tasks/
+
+# CrewAI / autogen / other agent frameworks
+.agent/
+.agents/
+crewai/
+autogen/
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+
+# --- Database & Data ---
+dbdata/
+files/
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+# --- Docker ---
+docker-compose.override.yml
+.dockerignore
+
+# --- Backup & Temp ---
 *.backup
+*.bak
+*.tmp
+*.temp
+*.swp
+*.orig
 
-# Upstream metadata (not relevant for fork)
+# --- Misc ---
+*.tool-versions
+.asdf/
+.mise/
+NEW_FEATS.md
 contributors.html
 contributors.json
+
+# --- OMC (oh-my-claudecode operational state) ---
+.omc/
+!.omc/skills/
+!.omc/skills/**
