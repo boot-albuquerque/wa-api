@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/jpeg"
+	_ "image/jpeg"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/nfnt/resize"
+	_ "github.com/nfnt/resize"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 	"github.com/vincent-petithory/dataurl"
@@ -36,6 +36,8 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+
+	"wuzapi/internal/interfaces/http/handlers"
 )
 
 type Values struct {
@@ -1216,19 +1218,9 @@ func (s *server) SendAudio() http.HandlerFunc {
 }
 
 // jpegThumbnail resizes img to fit within width x height (preserving aspect
-// ratio) and returns it JPEG-encoded. It encodes in memory, so there is no temp
-// file to leak.
-func jpegThumbnail(img image.Image, width, height uint) ([]byte, error) {
-	if img == nil {
-		return nil, errors.New("cannot create thumbnail from a nil image")
+	func jpegThumbnail(img image.Image, width, height uint) ([]byte, error) {
+		return handlers.JPEGThumbnail(img, width, height)
 	}
-	thumb := resize.Thumbnail(width, height, img, resize.Lanczos3)
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, thumb, nil); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
 
 // Sends an Image message
 func (s *server) SendImage() http.HandlerFunc {
@@ -3748,23 +3740,10 @@ func (s *server) UnblockUser() http.HandlerFunc {
 }
 
 // formatBlocklist converts a whatsmeow blocklist into the JSON-friendly shape
-// returned by the blocklist endpoints: the blocked JIDs as strings plus the
-// dhash. A nil blocklist yields an empty list (never null) and an empty dhash.
-func formatBlocklist(blocklist *types.Blocklist) map[string]interface{} {
-	jids := []string{}
-	dhash := ""
-	if blocklist != nil {
-		jids = make([]string, len(blocklist.JIDs))
-		for i, blockedJID := range blocklist.JIDs {
-			jids[i] = blockedJID.String()
-		}
-		dhash = blocklist.DHash
+	// formatBlocklist delegates to handlers.FormatBlocklist.
+	func formatBlocklist(blocklist *types.Blocklist) map[string]interface{} {
+		return handlers.FormatBlocklist(blocklist)
 	}
-	return map[string]interface{}{
-		"Blocklist": jids,
-		"DHash":     dhash,
-	}
-}
 
 // GetBlocklist returns the current list of blocked users.
 func (s *server) GetBlocklist() http.HandlerFunc {
@@ -6040,27 +6019,10 @@ func (s *server) Respond(w http.ResponseWriter, r *http.Request, status int, dat
 }
 
 // Validate message fields
-func validateMessageFields(phone string, stanzaid *string, participant *string) (types.JID, error) {
-
-	recipient, ok := parseJID(phone)
-	if !ok {
-		return types.NewJID("", types.DefaultUserServer), errors.New("could not parse Phone")
+	// validateMessageFields delegates to handlers.ValidateMessageFields.
+	func validateMessageFields(phone string, stanzaid *string, participant *string) (types.JID, error) {
+		return handlers.ValidateMessageFields(phone, stanzaid, participant)
 	}
-
-	if stanzaid != nil {
-		if participant == nil {
-			return types.NewJID("", types.DefaultUserServer), errors.New("missing Participant in ContextInfo")
-		}
-	}
-
-	if participant != nil {
-		if stanzaid == nil {
-			return types.NewJID("", types.DefaultUserServer), errors.New("missing StanzaID in ContextInfo")
-		}
-	}
-
-	return recipient, nil
-}
 
 // Set history
 func (s *server) SetHistory() http.HandlerFunc {

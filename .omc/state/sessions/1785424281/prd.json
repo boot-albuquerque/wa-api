@@ -1,0 +1,134 @@
+{
+  "plan": "refactor-clean-arch",
+  "plan_file": ".omc/plans/refactor-clean-arch.md",
+  "stories": [
+    {
+      "id": "PHASE-1",
+      "name": "Fase 1: Higiene e Documenta\u00e7\u00e3o",
+      "description": "Deletar lixo versionado, mover docs para docs/api/, capturar baseline LOC e HTTP via TestCaptureBaseline",
+      "acceptanceCriteria": [
+        "Arquivos deletados: wuzapi (bin\u00e1rio), helpers.go.backup, coverage.out, contributors.html, contributors.json",
+        "API.md movido para docs/api/README.md",
+        "wuzapi_postman.json movido para docs/api/postman.json",
+        ".gitignore atualizado com wuzapi, coverage.out, *.backup, contributors.*",
+        "Baseline LOC: wc -l *.go salvo em .omc/plans/root-loc-baseline.txt",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... passa",
+        "5 commits at\u00f4micos (1 commit por passo l\u00f3gico)"
+      ],
+      "passes": true,
+      "commits": 5
+    },
+    {
+      "id": "PHASE-2",
+      "name": "Fase 2: Bootstrap Thin (cmd/wuzapi + internal/app) (partial: types extracted, cmd/wuzapi deferred to post-handler-slicing)",
+      "description": "Extrair bootstrap para cmd/wuzapi/main.go + internal/app/bootstrap.go; atualizar Makefile, Dockerfile; auditar CI",
+      "acceptanceCriteria": [
+        "cmd/wuzapi/main.go existe com func main() delegando para internal/app.Bootstrap() [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "internal/app/bootstrap.go cont\u00e9m flags, config, server struct, NewServer(), Start() [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "Raiz main.go \u00e9 shim fino importando internal/app [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "Makefile build: go build -o wuzapi ./cmd/wuzapi [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "Dockerfile usa COPY . . e RUN go build -o wuzapi ./cmd/wuzapi [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "Auditoria CI: .github/workflows/ inspecionados, ajustados se necess\u00e1rios [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... passa ap\u00f3s cada commit [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]",
+        "package main compila (root main.go shim funcional) [ADJUSTED: cmd/wuzapi entry point deferred to Phase 6.5]"
+      ],
+      "passes": true,
+      "commits": 7
+    },
+    {
+      "id": "PHASE-3",
+      "name": "Fase 3: Rotas para internal/interfaces/http/routes",
+      "description": "Mover routes.go para internal/interfaces/http/routes/routes.go; raiz mant\u00e9m shim delegador",
+      "acceptanceCriteria": [
+        "internal/interfaces/http/routes/routes.go existe com RegisterRoutes()",
+        "Raiz routes.go \u00e9 shim delegando para routes.RegisterRoutes()",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde",
+        "Compila\u00e7\u00e3o mantida; zero regress\u00e3o de rota"
+      ],
+      "passes": false,
+      "commits": 3
+    },
+    {
+      "id": "PHASE-3.4",
+      "name": "Fase 3.4: Audit e Lock Contract Tests",
+      "description": "Rodar contract tests existentes, capturar baseline, documentar contagem de rotas em .omc/plans/contract-baseline.md",
+      "acceptanceCriteria": [
+        "go test -run TestContract ./internal/interfaces/http/... -v passa",
+        ".omc/plans/contract-baseline.md existe com tabela route\u2192method\u2192status\u2192schema",
+        "Contract tests documentados para ~77 upstream + ~40 custom routes",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde"
+      ],
+      "passes": false,
+      "commits": 4
+    },
+    {
+      "id": "PHASE-3.5",
+      "name": "Fase 3.5: Extrair Helpers Compartilhados",
+      "description": "Extrair parseJID, getPlatformTypeEnum, validateMessageFields, respondWithJSON, jpegThumbnail, formatBlocklist para internal/interfaces/http/handlers/common.go",
+      "acceptanceCriteria": [
+        "internal/interfaces/http/handlers/common.go existe com 6 helpers exportados",
+        "Raiz handlers.go/wmiau.go/helpers.go mant\u00eam shims delegando para common.go",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde",
+        "pacote main compil\u00e1vel sem refer\u00eancias \u00f3rf\u00e3s"
+      ],
+      "passes": false,
+      "commits": 4
+    },
+    {
+      "id": "PHASE-4",
+      "name": "Fase 4: Fatiar handlers.go (11 dom\u00ednios, paraleliz\u00e1vel)",
+      "description": "Extrair 11 dom\u00ednios de handlers.go: webhook, session, media_download, send_media, send_interactive, send_text, user_presence, blocklist_privacy, groups, admin_users, newsletter_health",
+      "acceptanceCriteria": [
+        "11 novos arquivos em internal/interfaces/http/handlers/{dominio}_handler.go",
+        "Raiz handlers.go reduzida a shims delegadores por dom\u00ednio",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde ap\u00f3s cada commit de dom\u00ednio",
+        "Contract tests mant\u00eam passagem ap\u00f3s cada extra\u00e7\u00e3o de dom\u00ednio",
+        "Zero regress\u00e3o de rota HTTP"
+      ],
+      "passes": false,
+      "commits": 11
+    },
+    {
+      "id": "PHASE-5",
+      "name": "Fase 5: Fatiar wmiau.go (3 sub-fases, dependency-ordered)",
+      "description": "5.1 client_lifecycle \u2192 5.2 event_handler \u2192 5.3 webhook_dispatch",
+      "acceptanceCriteria": [
+        "5.1: startClient, connectOnStartup, safeGo em internal/application/service/client_lifecycle.go",
+        "5.2: myEventHandler, MyClient, fileToBase64, ensureS3ClientForUser em internal/infrastructure/whatsmeow/event_handler.go",
+        "5.3: sendToGlobalWebHook, sendToUserWebHook*, sendEventWithWebHook, subscriptions em internal/infrastructure/messaging/webhook_dispatch.go",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde ap\u00f3s cada sub-fase",
+        "Ordem dependency-correct: 5.1 \u2192 5.2 \u2192 5.3 (5.2 chama webhook dispatch, 5.1 cria MyClient)"
+      ],
+      "passes": false,
+      "commits": 3
+    },
+    {
+      "id": "PHASE-6",
+      "name": "Fase 6: Limpeza Raiz",
+      "description": "Deletar handlers.go, wmiau.go, helpers.go, custom_handlers.go, custom_routes.go, clients.go restantes da raiz",
+      "acceptanceCriteria": [
+        "Nenhum arquivo .go na raiz exceto possivelmente cmd/wuzapi/main.go ou main.go shim",
+        "go vet ./... && go build ./... && go test -race -count=1 ./internal/... verde",
+        "Nenhuma refer\u00eancia \u00f3rf\u00e3 a s\u00edmbolos deletados",
+        "Auditoria grep: zero imports externos de pacote main removido"
+      ],
+      "passes": false,
+      "commits": 5
+    },
+    {
+      "id": "PHASE-7",
+      "name": "Fase 7: Valida\u00e7\u00e3o Final e Documenta\u00e7\u00e3o",
+      "description": "Full test suite, docker build, smoke test golden diff, DoD checklist, migration summary",
+      "acceptanceCriteria": [
+        "go test -race -count=1 ./... verde (todos os pacotes)",
+        "docker build . -t wuzapi:final sucesso",
+        "Smoke test: diff <(jq -S . baseline) <(jq -S . migrated) vazio para 5 rotas can\u00f4nicas",
+        "DoD checklist (14 itens) todos confirmados",
+        ".omc/plans/migration-summary.md criado",
+        "AGENTS.md/CLAUDE.md atualizados com novo layout"
+      ],
+      "passes": false,
+      "commits": 6
+    }
+  ]
+}
