@@ -119,3 +119,14 @@ type HistoryMessage struct {
 	QuotedMessageID string    `json:"quoted_message_id,omitempty" db:"quoted_message_id"`
 	DataJson        string    `json:"data_json" db:"datajson"`
 }
+
+// SetDisconnectedState marks a user disconnected. Events kept by default;
+// reset only when clearEvents is true (issue #305).
+func SetDisconnectedState(db *sqlx.DB, txtid string, clearEvents bool) error {
+	if clearEvents {
+		_, err := db.Exec("UPDATE users SET connected=0,events=$1 WHERE id=$2", "", txtid)
+		return err
+	}
+	_, err := db.Exec("UPDATE users SET connected=0 WHERE id=$1", txtid)
+	return err
+}
