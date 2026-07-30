@@ -102,6 +102,9 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 	registry.Register("/webhook/history", customChain.Then(customHandlerSet.Storage.SetHistory), "POST")
 	registry.Register("/webhook/history", customChain.Then(customHandlerSet.Storage.GetHistory), "GET")
 
+	// Blocklist route
+	registry.Register("/user/blocklist", customChain.Then(customHandlerSet.Blocklist.GetBlocklist), "GET")
+
 	// Health route (public, no auth chain needed)
 	registry.Register("/health", c.Then(http.HandlerFunc(s.GetHealth())), "GET")
 

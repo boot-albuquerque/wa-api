@@ -84,8 +84,9 @@ type customHandlers struct {
 	Webhook *WebhookHandlers
 	User    *handlers.UserHandlers
 	Group   *handlers.GroupHandlers
-	Storage *handlers.StorageHandlers
-	Misc    *handlers.MiscHandlers
+	Storage   *handlers.StorageHandlers
+	Misc      *handlers.MiscHandlers
+	Blocklist *handlers.BlocklistHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -180,6 +181,7 @@ func initCustomHandlers(s *server) {
 	getUserLIDUC := usecase.NewGetUserLIDUseCase(clientProvider, zerologLogger)
 	blockUserUC := usecase.NewBlockUserUseCase(clientProvider, zerologLogger)
 	unblockUserUC := usecase.NewUnblockUserUseCase(clientProvider, zerologLogger)
+	getBlocklistUC := usecase.NewGetBlocklistUseCase(clientProvider, zerologLogger)
 
 	// User Handlers
 	userHandlers := handlers.NewUserHandlers(
@@ -261,14 +263,20 @@ func initCustomHandlers(s *server) {
 		GetHistory:       handlers.NewGetHistoryHandler(getHistoryUC),
 	}
 
+	// Blocklist Handlers
+	blocklistHandlers := &handlers.BlocklistHandlers{
+		GetBlocklist: handlers.NewGetBlocklistHandler(getBlocklistUC),
+	}
+
 	customHandlerSet = &customHandlers{
-		Profile: profileHandler,
-		Message: messageHandlers,
-		Session: sessionHandlers,
-		Webhook: webhookHandlers,
-		User:    userHandlers,
-		Group:   groupHandlers,
-		Storage: storageHandlers,
-		Misc:    miscHandlers,
+		Profile:   profileHandler,
+		Message:   messageHandlers,
+		Session:   sessionHandlers,
+		Webhook:   webhookHandlers,
+		User:      userHandlers,
+		Group:     groupHandlers,
+		Storage:   storageHandlers,
+		Misc:      miscHandlers,
+		Blocklist: blocklistHandlers,
 	}
 }
