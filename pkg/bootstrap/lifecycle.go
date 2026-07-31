@@ -1,13 +1,12 @@
 package bootstrap
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -26,7 +25,8 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"golang.org/x/net/proxy"
 
-	"wa-api/pkg/infra/storage")
+	"wa-api/pkg/infra/storage"
+)
 
 // db field declaration as *sqlx.DB
 type MyClient struct {
@@ -46,170 +46,8 @@ type MyClient struct {
 var safeGo = client.SafeGo
 
 // ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
-func ensureS3ClientForUser(userID string) {
-	storage.GetS3Manager().EnsureClientFromDB(userID)
-}
 
-func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
-	jsonDataStr := string(jsonData)
-
-	instance_name := ""
-	userinfo, found := appCtx.UserInfoCache.Get(token)
-	if found {
-		instance_name = userinfo.(Values).Get("Name")
-	}
-
-	if appCtx.GlobalWebhook != "" {
-		log.Info().Str("url", appCtx.GlobalWebhook).Msg("Calling global webhook")
-		// Add extra information for the global webhook
-		globalData := map[string]string{
-			"jsonData":     jsonDataStr,
-			"userID":       userID,
-			"instanceName": instance_name,
-		}
-		callHookWithHmac(appCtx.GlobalWebhook, globalData, userID, appCtx.GlobalHMACKeyEncrypted)
-	}
-}
-
-func sendToUserWebHook(webhookurl string, path string, jsonData []byte, userID string, token string) {
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, userID, token, nil)
-}
-
-func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
-
-	instance_name := ""
-	userinfo, found := appCtx.UserInfoCache.Get(token)
-	if found {
-		instance_name = userinfo.(Values).Get("Name")
-	}
-	data := map[string]string{
-		"jsonData":     string(jsonData),
-		"userID":       userID,
-		"instanceName": instance_name,
-	}
-
-	log.Debug().Interface("webhookData", data).Msg("Data being sent to webhook")
-
-	if webhookurl != "" {
-		log.Info().Str("url", webhookurl).Msg("Calling user webhook")
-
-		if path == "" {
-			safeGo("callHookWithHmac", func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
-		} else {
-			if err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey); err != nil {
-				log.Error().Err(err).Msg("Error calling hook file")
-			}
-		}
-	} else {
-		log.Warn().Str("userid", userID).Msg("No webhook set for user")
-	}
-}
-
-func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
-	// Get updated events from cache/database
-	currentEvents := ""
-	userinfo2, found2 := appCtx.UserInfoCache.Get(mycli.Token)
-	if found2 {
-		currentEvents = userinfo2.(Values).Get("Events")
-	} else {
-		// If not in cache, get from database
-		if err := mycli.DB.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.UserID); err != nil {
-			log.Warn().Err(err).Str("userID", mycli.UserID).Msg("Could not get events from DB")
-			return nil, err // Propagate the error
-		}
-	}
-
-	// Update client subscriptions if changed
-	eventarray := strings.Split(currentEvents, ",")
-	var subscribedEvents []string
-	if len(eventarray) == 1 && eventarray[0] == "" {
-		subscribedEvents = []string{}
-	} else {
-		for _, arg := range eventarray {
-			arg = strings.TrimSpace(arg)
-			if arg != "" && Find(supportedEventTypes, arg) {
-				subscribedEvents = append(subscribedEvents, arg)
-			}
-		}
-	}
-
-	return subscribedEvents, nil
-}
-
-func getUserWebhookUrl(token string) string {
-	webhookurl := ""
-	myuserinfo, found := appCtx.UserInfoCache.Get(token)
-	if !found {
-		log.Warn().Str("token", token).Msg("Could not call webhook as there is no user for this token")
-	} else {
-		webhookurl = myuserinfo.(Values).Get("Webhook")
-	}
-	return webhookurl
-}
-
-func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
-	webhookurl := getUserWebhookUrl(mycli.Token)
-
-	// Get updated events from cache/database
-	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
-	if err != nil {
-		return
-	}
-
-	eventType, ok := postmap["type"].(string)
-	if !ok {
-		log.Error().Msg("Event type is not a string in postmap")
-		return
-	}
-
-	// Log subscription details for debugging
-	log.Debug().
-		Str("userID", mycli.UserID).
-		Str("eventType", eventType).
-		Strs("subscribedEvents", subscribedEvents).
-		Msg("Checking event subscription")
-
-	// Check if the current event is in the subscriptions
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.UserID)
-	if !checkIfSubscribedInEvent {
-		return
-	}
-
-	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
-	if mycli.mode == Stdio {
-		if mycli.NotifyFn != nil {
-			mycli.NotifyFn(eventType, postmap)
-		}
-		return
-	}
-
-	// Prepare webhook data
-	jsonData, err := json.Marshal(postmap)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
-		return
-	}
-
-	// Get HMAC key for this user
-	var encryptedHmacKey []byte
-	if userinfo, found := appCtx.UserInfoCache.Get(mycli.Token); found {
-		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
-		if encryptedB64 != "" {
-			var err error
-			encryptedHmacKey, err = base64.StdEncoding.DecodeString(encryptedB64)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to decode HMAC key from cache")
-			}
-		}
-	}
-
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.UserID, mycli.Token, encryptedHmacKey)
-
-	// Get global webhook if configured
-	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, mycli.Token, mycli.UserID) })
-
-	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, mycli.Token, mycli.UserID) })
-}
+// Webhook functions extracted to lifecycle_webhook.go
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
 	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
@@ -352,12 +190,12 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	store.DeviceProps.Os = osName
 
 	mycli := MyClient{
-		WAClient: client,
+		WAClient:       client,
 		EventHandlerID: 1,
-		UserID: userID,
-		Token: token,
-		DB: s.DB,
-		NotifyFn: s.SendNotification,
+		UserID:         userID,
+		Token:          token,
+		DB:             s.DB,
+		NotifyFn:       s.SendNotification,
 		mode:           s.Mode,
 	}
 	mycli.EventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
@@ -596,4 +434,3 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 }
 
 var fileToBase64 = client.FileToBase64
-
