@@ -26,8 +26,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "rm -f core wss 2>/dev/null\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo build ./cmd/core 2>&1 && go vet ./... 2>&1 && echo \"ALL ✓\"\ngo test -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"root .go: $(ls *.go 2>/dev/null | wc -l)\"",
-    "testCommand": "rm -f core wss 2>/dev/null\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo build ./cmd/core 2>&1 && go vet ./... 2>&1 && echo \"ALL ✓\"\ngo test -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"root .go: $(ls *.go 2>/dev/null | wc -l)\"",
+    "buildCommand": "rm -f core wss 2>/dev/null\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo build ./cmd/core 2>&1 && go vet ./... 2>&1 && echo \"ALL ✓\"\ngo test -count=1 ./internal/... 2>&1 | grep -E \"^(ok |FAIL)\"\necho \"root .go: $(ls *.go 2>/dev/null | wc -l)\"",
+    "testCommand": "export PATH=\"$HOME/go/bin:$PATH\"\ngo test -count=1 -v ./internal/bootstrap -run \".\" 2>&1 | grep -E \"^(--- |=== RUN|--- SKIP)\" | head -30",
     "lintCommand": null,
     "devCommand": null,
     "scripts": {}
