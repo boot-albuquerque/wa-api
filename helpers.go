@@ -35,30 +35,9 @@ const (
 	fetchDocumentMaxBytes    = 100 * 1024 * 1024 // 100MB
 	openGraphPageMaxBytes    = 2 * 1024 * 1024   // 2MB
 	openGraphImageMaxBytes   = 10 * 1024 * 1024  // 10MB
-	openGraphThumbnailWidth  = 192
-	openGraphThumbnailHeight = 192
-	openGraphHQThumbnailDim  = 600 // Max dimension of the uploaded thumbnail used for the large preview card
-	openGraphJpegQuality     = 80
-	openGraphMaxImageDim     = 4000 // Max width or height for Open Graph images
 	openGraphUserFetchLimit  = 20   // Limit concurrent Open Graph fetches per user
 
-	// WebP RIFF container constants
-	riffHeaderSize  = 12 // "RIFF" + size (4) + "WEBP"
-	chunkHeaderSize = 8  // tag (4) + size (4)
-	riffSizeOffset  = 4  // Offset to RIFF size field
-
-	// VP8X extended header chunk layout (10-byte payload)
-	vp8xChunkSize    = chunkHeaderSize + 10
-	vp8xPayloadSize  = 10
-	vp8xFlagsOffset  = chunkHeaderSize     // Byte 0 of payload: feature flags
-	vp8xWidthOffset  = chunkHeaderSize + 4 // Bytes 4-6: canvas width - 1 (24-bit LE)
-	vp8xHeightOffset = chunkHeaderSize + 7 // Bytes 7-9: canvas height - 1 (24-bit LE)
-
-	// VP8X feature flags
-	vp8xFlagEXIF byte = 0x08
 )
-
-
 
 
 
@@ -515,9 +494,6 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 
 	return nil, nil
 }
-
-
-
 
 
 
