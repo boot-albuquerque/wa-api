@@ -12,7 +12,7 @@ import (
 // concurrent readers. This assertion is deterministic (no -race needed): the
 // previous implementation mutated `base` and would fail here.
 func TestUpdateUserInfoCopyOnWrite(t *testing.T) {
-	base := Values{m: map[string]string{"Events": "Message", "Webhook": "https://example.test"}}
+	base := Values{M: map[string]string{"Events": "Message", "Webhook": "https://example.test"}}
 
 	updated := updateUserInfo(base, "Events", "Message,ReadReceipt").(Values)
 
@@ -32,7 +32,7 @@ func TestUpdateUserInfoCopyOnWrite(t *testing.T) {
 // read and map write" when one goroutine updated while another read. The
 // copy-on-write version never writes to the shared map, so it is clean.
 func TestUpdateUserInfoConcurrent(t *testing.T) {
-	base := Values{m: map[string]string{"Events": "Message"}}
+	base := Values{M: map[string]string{"Events": "Message"}}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {

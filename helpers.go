@@ -169,12 +169,12 @@ func updateUserInfo(values interface{}, field string, value string) interface{} 
 	// appCtx.UserInfoCache.Set. Use a comma-ok assertion so a nil or unexpected value
 	// can't panic — it falls back to the zero Values (nil map), handled below.
 	old, _ := values.(Values)
-	m := make(map[string]string, len(old.m)+1)
-	for k, v := range old.m {
+	m := make(map[string]string, len(old.M)+1)
+	for k, v := range old.M {
 		m[k] = v
 	}
 	m[field] = value
-	return Values{m: m}
+	return Values{M: m}
 }
 
 // webhook for regular messages

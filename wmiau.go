@@ -260,7 +260,7 @@ func (s *server) connectOnStartup() {
 			}
 
 			log.Info().Str("token", token).Msg("Connect to Whatsapp on startup")
-			v := Values{map[string]string{
+			v := Values{M: map[string]string{
 				"Id":               txtid,
 				"Name":             name,
 				"Jid":              jid,

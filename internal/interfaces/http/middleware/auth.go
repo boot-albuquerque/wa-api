@@ -21,19 +21,19 @@ import (
 
 // Values is a string map for user attributes carried through request context.
 type Values struct {
-	m map[string]string
+	M map[string]string
 }
 
 // Get returns the value for key or empty string.
 func (v Values) Get(key string) string {
-	if v.m == nil {
+	if v.M == nil {
 		return ""
 	}
-	return v.m[key]
+	return v.M[key]
 }
 
 // NewValues creates a Values from a map.
-func NewValues(m map[string]string) Values { return Values{m: m} }
+func NewValues(m map[string]string) Values { return Values{M: m} }
 
 // RespondJSON writes a legacy-compatible JSON envelope.
 func RespondJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -130,7 +130,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					if history.Valid {
 						historyStr = fmt.Sprintf("%d", history.Int64)
 					}
-					v := Values{m: map[string]string{
+					v := Values{M: map[string]string{
 						"Id": txtid, "Name": name, "Jid": jid, "Webhook": webhook,
 						"Token": token, "Proxy": proxyURL, "Events": events,
 						"Qrcode": qrcode, "History": historyStr,

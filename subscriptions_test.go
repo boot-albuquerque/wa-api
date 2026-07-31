@@ -18,7 +18,7 @@ func TestUpdateAndGetUserSubscriptionsFromCache(t *testing.T) {
 	const userID = "sub-user"
 
 	// Seed the cache exactly as the connect/webhook handlers do.
-	userinfocache.Set(token, Values{m: map[string]string{"Events": "Message,ReadReceipt"}}, cache.NoExpiration)
+	userinfocache.Set(token, Values{M: map[string]string{"Events": "Message,ReadReceipt"}}, cache.NoExpiration)
 	t.Cleanup(func() { userinfocache.Delete(token) })
 
 	mycli := &MyClient{userID: userID, token: token, db: s.db}
@@ -38,7 +38,7 @@ func TestUpdateAndGetUserSubscriptionsFromCache(t *testing.T) {
 	}
 
 	// Unsupported event names must be filtered out.
-	userinfocache.Set(token, Values{m: map[string]string{"Events": "Message,NotAReal Event"}}, cache.NoExpiration)
+	userinfocache.Set(token, Values{M: map[string]string{"Events": "Message,NotAReal Event"}}, cache.NoExpiration)
 	got, err = updateAndGetUserSubscriptions(mycli)
 	if err != nil {
 		t.Fatalf("second call returned error: %v", err)
