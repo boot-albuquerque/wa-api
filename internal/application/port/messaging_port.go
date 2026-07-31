@@ -5,7 +5,7 @@ package port
 import (
 	"context"
 
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 )
 
 // MessagingPort abstrai operações de mensageria (RabbitMQ).

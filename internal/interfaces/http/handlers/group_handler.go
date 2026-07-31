@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "wuzapi/internal/interfaces/http"
+	customhttp "disparazap/internal/interfaces/http"
 
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/domain"
 )
 
 // GroupHandlers agrupa os handlers de grupo.

@@ -9,14 +9,14 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
-	waclient "wuzapi/internal/whatsapp/client"
-	"wuzapi/internal/infrastructure/constants"
-	"wuzapi/internal/infrastructure/db"
-	wahistory "wuzapi/internal/infrastructure/history"
-	"wuzapi/internal/infrastructure/messaging"
-	stdiopkg "wuzapi/internal/infrastructure/stdio"
-	intwhatsmeow "wuzapi/internal/infrastructure/whatsmeow"
-	mwpkg "wuzapi/internal/interfaces/http/middleware"
+	waclient "disparazap/internal/whatsapp/client"
+	"disparazap/internal/infrastructure/constants"
+	"disparazap/internal/infrastructure/db"
+	wahistory "disparazap/internal/infrastructure/history"
+	"disparazap/internal/infrastructure/messaging"
+	stdiopkg "disparazap/internal/infrastructure/stdio"
+	intwhatsmeow "disparazap/internal/infrastructure/whatsmeow"
+	mwpkg "disparazap/internal/interfaces/http/middleware"
 )
 
 // ── DB ──

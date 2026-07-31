@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // DeleteHmacConfigUseCase encapsula a validação de exclusão de configuração de HMAC.

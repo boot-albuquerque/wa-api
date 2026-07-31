@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "wuzapi/internal/interfaces/http"
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/domain"
+	customhttp "disparazap/internal/interfaces/http"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/domain"
 )
 
 // --- Download handlers ---

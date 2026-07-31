@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp

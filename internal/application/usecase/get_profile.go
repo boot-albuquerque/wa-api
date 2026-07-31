@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"wuzapi/internal/application/port"
+	"disparazap/internal/application/port"
 
 	"go.mau.fi/whatsmeow"
 )

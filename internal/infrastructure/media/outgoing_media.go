@@ -5,7 +5,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"wuzapi/internal/infrastructure/storage"
+	"disparazap/internal/infrastructure/storage"
 )
 
 // ProcessOutgoingMedia handles media processing for outgoing messages with S3 support.

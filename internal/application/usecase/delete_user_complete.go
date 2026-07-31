@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // DeleteUserCompleteUseCase completely deletes a user

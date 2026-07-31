@@ -1,11 +1,11 @@
 package wuzapi
 
 import (
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/infrastructure/whatsmeow"
-	customhttp "wuzapi/internal/interfaces/http"
-	"wuzapi/internal/interfaces/http/handlers"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/infrastructure/whatsmeow"
+	customhttp "disparazap/internal/interfaces/http"
+	"disparazap/internal/interfaces/http/handlers"
 
 	"github.com/rs/zerolog/log"
 	wa "go.mau.fi/whatsmeow"

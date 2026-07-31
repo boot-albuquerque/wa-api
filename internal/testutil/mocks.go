@@ -3,15 +3,15 @@
 //
 // Use em arquivos _test.go:
 //
-//	import "wuzapi/internal/testutil"
+//	import "disparazap/internal/testutil"
 //	da := testutil.NewMockProfileDataAccess("John", "5511@s.whatsapp.net")
 package testutil
 
 import (
 	"context"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 )

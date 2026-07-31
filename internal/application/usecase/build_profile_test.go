@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // mockProfileData implementa port.ProfileDataAccess para testes internos.

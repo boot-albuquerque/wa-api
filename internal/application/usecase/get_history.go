@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // GetHistoryUseCase encapsula a validação de leitura de configuração de histórico.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"wuzapi/internal/application/port"
+	"disparazap/internal/application/port"
 )
 
 // Context key "userinfo" é injetada pelo middleware authalice do upstream.

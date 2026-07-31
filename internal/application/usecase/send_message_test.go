@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 )

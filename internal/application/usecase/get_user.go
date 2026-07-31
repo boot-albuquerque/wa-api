@@ -7,8 +7,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // GetUserUseCase obtém informações de usuários do WhatsApp

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 )
 
 // DeleteUserUseCase deleta um usuário

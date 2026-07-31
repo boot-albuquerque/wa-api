@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // GetBlocklistUseCase retrieves the current blocklist

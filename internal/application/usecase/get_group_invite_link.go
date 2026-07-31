@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
-	"wuzapi/internal/infrastructure/whatsmeow"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
+	"disparazap/internal/infrastructure/whatsmeow"
 )
 
 // GetGroupInviteLinkUseCase encapsula a validação para obter link de convite

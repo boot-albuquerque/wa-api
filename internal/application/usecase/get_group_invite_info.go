@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // GetGroupInviteInfoUseCase encapsula a validação para obter informações de convite

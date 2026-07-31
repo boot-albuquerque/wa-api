@@ -2,7 +2,7 @@ package wuzapi
 
 import (
 	"net/http"
-	customhttp "wuzapi/internal/interfaces/http"
+	customhttp "disparazap/internal/interfaces/http"
 
 	"github.com/justinas/alice"
 )

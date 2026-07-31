@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 )

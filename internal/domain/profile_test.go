@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 )
 
 func TestProfileStruct_AllFields(t *testing.T) {

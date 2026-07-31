@@ -5,7 +5,7 @@ package port
 import (
 	"context"
 
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 )
 
 // ProfileDataAccess abstrai a leitura de dados do perfil WhatsApp.

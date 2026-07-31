@@ -6,10 +6,10 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/application/usecase"
-	"wuzapi/internal/domain"
-	customhttp "wuzapi/internal/interfaces/http"
+	"disparazap/internal/application/port"
+	"disparazap/internal/application/usecase"
+	"disparazap/internal/domain"
+	customhttp "disparazap/internal/interfaces/http"
 )
 
 // UserHandlers agrupa todos os handlers de usuário.

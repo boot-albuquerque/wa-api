@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
-	"wuzapi/internal/infrastructure/whatsmeow"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
+	"disparazap/internal/infrastructure/whatsmeow"
 )
 
 // SubscribePresenceUseCase subscribes to contact presence updates

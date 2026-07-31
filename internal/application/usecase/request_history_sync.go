@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	"disparazap/internal/application/port"
+	"disparazap/internal/domain"
 )
 
 // RequestHistorySyncUseCase encapsula a validação de requisição de sincronização de histórico.

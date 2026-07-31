@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/application/usecase"
+	"disparazap/internal/application/port"
+	"disparazap/internal/application/usecase"
 )
 
 // mockGetProfileUseCase implementa a interface do usecase para testes do handler.

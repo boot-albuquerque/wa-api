@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"wuzapi/internal/whatsapp/client"
+	"disparazap/internal/whatsapp/client"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
@@ -32,7 +32,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"golang.org/x/net/proxy"
 
-	"wuzapi/internal/infrastructure/storage")
+	"disparazap/internal/infrastructure/storage")
 
 // db field declaration as *sqlx.DB
 type MyClient struct {

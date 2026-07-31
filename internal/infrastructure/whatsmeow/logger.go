@@ -1,7 +1,7 @@
 package whatsmeow
 
 import (
-	"wuzapi/internal/application/port"
+	"disparazap/internal/application/port"
 
 	"github.com/rs/zerolog"
 )

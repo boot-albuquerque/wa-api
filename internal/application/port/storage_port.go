@@ -5,7 +5,7 @@ package port
 import (
 	"context"
 
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 )
 
 // StoragePort abstrai operações de armazenamento (S3, mídia).

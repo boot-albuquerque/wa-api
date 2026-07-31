@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	appport "wuzapi/internal/application/port"
+	appport "disparazap/internal/application/port"
 )
 
 // GetPrivacySettingsUseCase retrieves privacy settings

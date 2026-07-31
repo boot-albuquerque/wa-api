@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"wuzapi/internal/application/usecase"
+	"disparazap/internal/application/usecase"
 )
 
 var validatePrivacySetting = usecase.ValidatePrivacySetting

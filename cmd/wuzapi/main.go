@@ -1,6 +1,6 @@
 package main
 
-import "wuzapi"
+import wuzapi "disparazap/internal/root"
 
 func main() {
 	wuzapi.Main()

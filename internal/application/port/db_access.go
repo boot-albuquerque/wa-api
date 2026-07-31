@@ -5,7 +5,7 @@ package port
 import (
 	"context"
 
-	"wuzapi/internal/domain"
+	"disparazap/internal/domain"
 
 	"github.com/jmoiron/sqlx"
 )

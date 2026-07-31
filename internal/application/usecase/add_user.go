@@ -7,9 +7,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"wuzapi/internal/domain"
-	dbpkg "wuzapi/internal/infrastructure/db"
-	"wuzapi/internal/infrastructure/storage"
+	"disparazap/internal/domain"
+	dbpkg "disparazap/internal/infrastructure/db"
+	"disparazap/internal/infrastructure/storage"
 )
 
 // AddUserUseCase adiciona um novo usuário

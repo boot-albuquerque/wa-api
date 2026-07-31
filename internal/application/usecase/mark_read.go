@@ -7,9 +7,9 @@ import (
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
-	appport "wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
-	"wuzapi/internal/infrastructure/whatsmeow"
+	appport "disparazap/internal/application/port"
+	"disparazap/internal/domain"
+	"disparazap/internal/infrastructure/whatsmeow"
 )
 
 // MarkReadUseCase marks messages as read

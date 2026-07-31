@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"wuzapi/internal/application/port"
+	"disparazap/internal/application/port"
 
 	wa "go.mau.fi/whatsmeow"
 )

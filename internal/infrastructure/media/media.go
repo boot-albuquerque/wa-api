@@ -9,7 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
-	wamgr "wuzapi/internal/infrastructure/whatsmeow"
+	wamgr "disparazap/internal/infrastructure/whatsmeow"
 )
 
 const (
