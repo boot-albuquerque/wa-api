@@ -23,7 +23,7 @@ func (s *server) routes() {
 
 	var routerLog zerolog.Logger
 	logOutput := os.Stdout
-	if s.mode == Stdio {
+	if s.Mode == Stdio {
 		logOutput = os.Stderr
 	}
 	if *logType == "json" {
@@ -49,7 +49,7 @@ func (s *server) routes() {
 
 	// Admin routes — authAdmin middleware (standalone in auth.go) validates the
 	// admin token. Internal handlers from customHandlerSet handle the logic.
-	adminRoutes := s.router.PathPrefix("/admin").Subrouter()
+	adminRoutes := s.Router.PathPrefix("/admin").Subrouter()
 	adminRoutes.Use(authAdmin(*adminToken))
 	adminRoutes.Handle("/users", customHandlerSet.User.ListUsers()).Methods("GET")
 	adminRoutes.Handle("/users/{id}", customHandlerSet.User.ListUsers()).Methods("GET")
@@ -59,7 +59,7 @@ func (s *server) routes() {
 	adminRoutes.Handle("/users/{id}/full", customHandlerSet.Misc.DeleteUserComplete).Methods("DELETE")
 
 	c := alice.New()
-	c = c.Append(authAlice(s.db.DB, userinfocache))
+	c = c.Append(authAlice(s.DB.DB, userinfocache))
 	c = c.Append(hlog.NewHandler(routerLog))
 
 	c = c.Append(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
@@ -82,5 +82,5 @@ func (s *server) routes() {
 	s.registerCustomRoutes(c)
 
 	// Static files
-	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir(exPath + "/static/")))
+	s.Router.PathPrefix("/").Handler(http.FileServer(http.Dir(exPath + "/static/")))
 }

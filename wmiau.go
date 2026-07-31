@@ -37,11 +37,11 @@ import (
 // db field declaration as *sqlx.DB
 type MyClient struct {
 	WAClient       *whatsmeow.Client
-	eventHandlerID uint32
-	userID         string
-	token          string
-	db             *sqlx.DB
-	notifyFn       func(method string, params map[string]interface{})
+	EventHandlerID uint32
+	UserID         string
+	Token          string
+	DB             *sqlx.DB
+	NotifyFn       func(method string, params map[string]interface{})
 	mode           ServerMode
 }
 
@@ -114,13 +114,13 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 	// Get updated events from cache/database
 	currentEvents := ""
-	userinfo2, found2 := appCtx.UserInfoCache.Get(mycli.token)
+	userinfo2, found2 := appCtx.UserInfoCache.Get(mycli.Token)
 	if found2 {
 		currentEvents = userinfo2.(Values).Get("Events")
 	} else {
 		// If not in cache, get from database
-		if err := mycli.db.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.userID); err != nil {
-			log.Warn().Err(err).Str("userID", mycli.userID).Msg("Could not get events from DB")
+		if err := mycli.DB.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.UserID); err != nil {
+			log.Warn().Err(err).Str("userID", mycli.UserID).Msg("Could not get events from DB")
 			return nil, err // Propagate the error
 		}
 	}
@@ -154,7 +154,7 @@ func getUserWebhookUrl(token string) string {
 }
 
 func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
-	webhookurl := getUserWebhookUrl(mycli.token)
+	webhookurl := getUserWebhookUrl(mycli.Token)
 
 	// Get updated events from cache/database
 	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
@@ -170,21 +170,21 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 
 	// Log subscription details for debugging
 	log.Debug().
-		Str("userID", mycli.userID).
+		Str("userID", mycli.UserID).
 		Str("eventType", eventType).
 		Strs("subscribedEvents", subscribedEvents).
 		Msg("Checking event subscription")
 
 	// Check if the current event is in the subscriptions
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.userID)
+	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.UserID)
 	if !checkIfSubscribedInEvent {
 		return
 	}
 
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if mycli.mode == Stdio {
-		if mycli.notifyFn != nil {
-			mycli.notifyFn(eventType, postmap)
+		if mycli.NotifyFn != nil {
+			mycli.NotifyFn(eventType, postmap)
 		}
 		return
 	}
@@ -198,7 +198,7 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 
 	// Get HMAC key for this user
 	var encryptedHmacKey []byte
-	if userinfo, found := appCtx.UserInfoCache.Get(mycli.token); found {
+	if userinfo, found := appCtx.UserInfoCache.Get(mycli.Token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
 		if encryptedB64 != "" {
 			var err error
@@ -209,12 +209,12 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
+	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.UserID, mycli.Token, encryptedHmacKey)
 
 	// Get global webhook if configured
-	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, mycli.token, mycli.userID) })
+	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, mycli.Token, mycli.UserID) })
 
-	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, mycli.token, mycli.userID) })
+	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, mycli.Token, mycli.UserID) })
 }
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
@@ -231,7 +231,7 @@ func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userI
 
 // Connects to Whatsapp Websocket on server startup if last state was connected
 func (s *server) connectOnStartup() {
-	rows, err := s.db.Queryx("SELECT id,name,token,jid,webhook,events,proxy_url,CASE WHEN s3_enabled THEN 'true' ELSE 'false' END AS s3_enabled,media_delivery,COALESCE(history, 0) as history,hmac_key FROM users WHERE connected=1")
+	rows, err := s.DB.Queryx("SELECT id,name,token,jid,webhook,events,proxy_url,CASE WHEN s3_enabled THEN 'true' ELSE 'false' END AS s3_enabled,media_delivery,COALESCE(history, 0) as history,hmac_key FROM users WHERE connected=1")
 	if err != nil {
 		log.Error().Err(err).Msg("DB Problem")
 		return
@@ -358,15 +358,15 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	store.DeviceProps.Os = osName
 
 	mycli := MyClient{
-		WAClient:       client,
-		eventHandlerID: 1,
-		userID:         userID,
-		token:          token,
-		db:             s.db,
-		notifyFn:       s.SendNotification,
-		mode:           s.mode,
+		WAClient: client,
+		EventHandlerID: 1,
+		UserID: userID,
+		Token: token,
+		DB: s.DB,
+		NotifyFn: s.SendNotification,
+		mode:           s.Mode,
 	}
-	mycli.eventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
+	mycli.EventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
 
 	// Store the MyClient in clientManager
 	clientManager.SetMyClient(userID, &mycli)
@@ -390,7 +390,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 
 	var proxyURL string
 	webhookUseProxy := appCtx.GlobalWebhookUseProxy
-	err = s.db.QueryRow(
+	err = s.DB.QueryRow(
 		"SELECT proxy_url, COALESCE(webhook_use_proxy, true) FROM users WHERE id=$1",
 		userID,
 	).Scan(&proxyURL, &webhookUseProxy)
@@ -452,7 +452,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 				if evt.Event == "code" {
 					// Display QR code in terminal (useful for testing/developing)
 					// Skip in stdio mode to avoid breaking JSON-RPC
-					if *logType != "json" && s.mode != Stdio {
+					if *logType != "json" && s.Mode != Stdio {
 						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 						fmt.Println("QR code:\n", evt.Code)
 					}
@@ -460,7 +460,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					image, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
 					base64qrcode := "data:image/png;base64," + base64.StdEncoding.EncodeToString(image)
 					sqlStmt := `UPDATE users SET qrcode=$1 WHERE id=$2`
-					_, err := s.db.Exec(sqlStmt, base64qrcode, userID)
+					_, err := s.DB.Exec(sqlStmt, base64qrcode, userID)
 					if err != nil {
 						log.Error().Err(err).Msg(sqlStmt)
 					} else {
@@ -488,7 +488,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					sendEventWithWebHook(&mycli, postmap, "")
 
 					sqlStmt := `UPDATE users SET qrcode='' WHERE id=$1`
-					_, err := s.db.Exec(sqlStmt, userID)
+					_, err := s.DB.Exec(sqlStmt, userID)
 					if err != nil {
 						log.Error().Err(err).Msg(sqlStmt)
 					} else {
@@ -506,7 +506,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					log.Info().Msg("QR pairing ok!")
 					// Clear QR code after pairing
 					sqlStmt := `UPDATE users SET qrcode='', connected=1 WHERE id=$1`
-					_, err := s.db.Exec(sqlStmt, userID)
+					_, err := s.DB.Exec(sqlStmt, userID)
 					if err != nil {
 						log.Error().Err(err).Msg(sqlStmt)
 					} else {
@@ -567,7 +567,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 			clientManager.DeleteHTTPClient(userID)
 
 			sqlStmt := `UPDATE users SET qrcode='', connected=0 WHERE id=$1`
-			_, dbErr := s.db.Exec(sqlStmt, userID)
+			_, dbErr := s.DB.Exec(sqlStmt, userID)
 			if dbErr != nil {
 				log.Error().Err(dbErr).Msg("Failed to update user status after connection error")
 			}
@@ -595,7 +595,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	clientManager.DeleteWhatsmeowClient(userID)
 	clientManager.DeleteMyClient(userID)
 	clientManager.DeleteHTTPClient(userID)
-	if _, err := s.db.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {
+	if _, err := s.DB.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {
 		log.Error().Err(err).Msg("failed to mark user disconnected on kill")
 	}
 	appCtx.KillChannel.Delete(userID, kill)
@@ -604,7 +604,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 var fileToBase64 = client.FileToBase64
 
 func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
-	txtid := mycli.userID
+	txtid := mycli.UserID
 	postmap := make(map[string]interface{})
 	postmap["event"] = rawEvt
 	dowebhook := 0
@@ -635,16 +635,16 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			log.Info().Msg("Marked self as available")
 		}
 		sqlStmt := `UPDATE users SET connected=1 WHERE id=$1`
-		_, err = mycli.db.Exec(sqlStmt, mycli.userID)
+		_, err = mycli.DB.Exec(sqlStmt, mycli.UserID)
 		if err != nil {
 			log.Error().Err(err).Msg(sqlStmt)
 			return
 		}
 	case *events.PairSuccess:
-		log.Info().Str("userid", mycli.userID).Str("token", mycli.token).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
+		log.Info().Str("userid", mycli.UserID).Str("token", mycli.Token).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
 		jid := evt.ID
 		sqlStmt := `UPDATE users SET jid=$1 WHERE id=$2`
-		_, err := mycli.db.Exec(sqlStmt, jid, mycli.userID)
+		_, err := mycli.DB.Exec(sqlStmt, jid, mycli.UserID)
 		if err != nil {
 			log.Error().Err(err).Msg(sqlStmt)
 			return
@@ -653,7 +653,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		postmap["type"] = "PairSuccess"
 		dowebhook = 1
 
-		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.token)
+		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
 		if !found {
 			log.Warn().Msg("No user info cached on pairing?")
 		} else {
@@ -667,10 +667,10 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Check if automatic history sync is enabled and trigger it after QR code is scanned
 		var daysToSyncHistory int
 		query := "SELECT COALESCE(days_to_sync_history, 0) FROM users WHERE id=$1"
-		query = mycli.db.Rebind(query)
-		err = mycli.db.Get(&daysToSyncHistory, query, mycli.userID)
+		query = mycli.DB.Rebind(query)
+		err = mycli.DB.Get(&daysToSyncHistory, query, mycli.UserID)
 		if err != nil {
-			log.Warn().Err(err).Str("userID", mycli.userID).Msg("Failed to get days_to_sync_history from database")
+			log.Warn().Err(err).Str("userID", mycli.UserID).Msg("Failed to get days_to_sync_history from database")
 		} else if daysToSyncHistory > 0 {
 			// Trigger history sync in a goroutine to avoid blocking
 			// Wait a bit for the connection to be fully established
@@ -678,7 +678,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				time.Sleep(2 * time.Second) // Give WhatsApp time to fully establish connection
 
 				log.Info().
-					Str("userID", mycli.userID).
+					Str("userID", mycli.UserID).
 					Int("days", daysToSyncHistory).
 					Msg("Triggering automatic history sync after QR code scan")
 
@@ -701,7 +701,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				// Get all contacts
 				contacts, err := mycli.WAClient.Store.Contacts.GetAllContacts(ctx)
 				if err != nil {
-					log.Error().Err(err).Str("userID", mycli.userID).Msg("Failed to get contacts for history sync")
+					log.Error().Err(err).Str("userID", mycli.UserID).Msg("Failed to get contacts for history sync")
 				} else {
 					for jid := range contacts {
 						chatJIDs = append(chatJIDs, jid.String())
@@ -711,7 +711,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				// Get all groups
 				groups, err := mycli.WAClient.GetJoinedGroups(ctx)
 				if err != nil {
-					log.Error().Err(err).Str("userID", mycli.userID).Msg("Failed to get groups for history sync")
+					log.Error().Err(err).Str("userID", mycli.UserID).Msg("Failed to get groups for history sync")
 				} else {
 					for _, group := range groups {
 						chatJIDs = append(chatJIDs, group.JID.String())
@@ -727,7 +727,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 					}
 
 					// Use the syncHistoryForChat function from handlers.go
-					err = syncHistoryForChat(context.Background(), mycli.db, mycli.userID, chatJID, count)
+					err = syncHistoryForChat(context.Background(), mycli.DB, mycli.UserID, chatJID, count)
 					if err != nil {
 						log.Warn().Err(err).Str("chatJID", chatJIDStr).Msg("Failed to sync history for chat")
 					} else {
@@ -739,7 +739,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 
 				log.Info().
-					Str("userID", mycli.userID).
+					Str("userID", mycli.UserID).
 					Int("days", daysToSyncHistory).
 					Int("chatsSynced", len(chatJIDs)).
 					Msg("Automatic history sync completed after QR code scan")
@@ -755,10 +755,10 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			MediaDelivery string `db:"media_delivery"`
 		}
 
-		appCtx.LastMessageCache.Set(mycli.userID, &evt.Info, cache.DefaultExpiration)
-		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.token)
+		appCtx.LastMessageCache.Set(mycli.UserID, &evt.Info, cache.DefaultExpiration)
+		myuserinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
 		if !found {
-			err := mycli.db.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
+			err := mycli.DB.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
 			if err != nil {
 				log.Error().Err(err).Msg("onMessage Failed to get S3 config from DB as it was not on cache")
 				s3Config.Enabled = "false"
@@ -815,7 +815,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 
 				selected := make([]string, 0, len(hashes))
-				if stored := clientManager.GetPollOptions(mycli.userID, pollMsgID); len(stored) > 0 {
+				if stored := clientManager.GetPollOptions(mycli.UserID, pollMsgID); len(stored) > 0 {
 					optionsByHash := make(map[string]string, len(stored))
 					for _, opt := range stored {
 						sum := sha256.Sum256([]byte(opt))
@@ -907,12 +907,12 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Save message to history regardless of skipMedia setting
 		// Get user's history setting from cache
 		var historyLimit int
-		userinfo, found := appCtx.UserInfoCache.Get(mycli.token)
+		userinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
 		if found {
 			historyStr := userinfo.(Values).Get("History")
 			historyLimit, _ = strconv.Atoi(historyStr)
 		} else {
-			log.Warn().Str("userID", mycli.userID).Msg("User info not found in cache, skipping history")
+			log.Warn().Str("userID", mycli.UserID).Msg("User info not found in cache, skipping history")
 			historyLimit = 0
 		}
 
@@ -1022,8 +1022,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 
 				err = saveMessageToHistory(
-					mycli.db,
-					mycli.userID,
+					mycli.DB,
+					mycli.UserID,
 					evt.Info.Chat.String(),
 					evt.Info.Sender.String(),
 					evt.Info.ID,
@@ -1036,7 +1036,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to save message to history")
 				} else {
-					err = trimMessageHistory(mycli.db, mycli.userID, evt.Info.Chat.String(), historyLimit)
+					err = trimMessageHistory(mycli.DB, mycli.UserID, evt.Info.Chat.String(), historyLimit)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to trim message history")
 					}
@@ -1318,8 +1318,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 						// Save message to history
 						// Only save if there's meaningful content
 						if textContent != "" || mediaLink != "" || (messageType != "text" && messageType != "reaction") {
-							err = saveMessageToHistory(mycli.db,
-								mycli.userID,
+							err = saveMessageToHistory(mycli.DB,
+								mycli.UserID,
 								chatJID.String(),
 								senderJID,
 								messageID,
@@ -1331,7 +1331,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 							)
 							if err != nil {
 								log.Error().Err(err).
-									Str("userID", mycli.userID).
+									Str("userID", mycli.UserID).
 									Str("chatJID", chatJID.String()).
 									Str("messageID", messageID).
 									Msg("Failed to save HistorySync message to history")
@@ -1344,7 +1344,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 				if savedCount > 0 {
 					log.Info().
-						Str("userID", mycli.userID).
+						Str("userID", mycli.UserID).
 						Int("savedCount", savedCount).
 						Msg("Saved HistorySync messages to message_history")
 				}
@@ -1359,10 +1359,10 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		log.Info().Str("reason", evt.Reason.String()).Msg("Logged out")
 		defer func() {
 			// Use a non-blocking send to prevent a deadlock if the receiver has already terminated.
-			appCtx.KillChannel.Signal(mycli.userID)
+			appCtx.KillChannel.Signal(mycli.UserID)
 		}()
 		sqlStmt := `UPDATE users SET connected=0 WHERE id=$1`
-		_, err := mycli.db.Exec(sqlStmt, mycli.userID)
+		_, err := mycli.DB.Exec(sqlStmt, mycli.UserID)
 		if err != nil {
 			log.Error().Err(err).Msg(sqlStmt)
 			return

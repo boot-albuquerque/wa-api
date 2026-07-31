@@ -166,7 +166,7 @@ func initCustomHandlers(s *server) {
 
 	// Webhook Handlers — standalone with direct DI, no longer delegate to *server.
 	whCtx := &handlers.WebhookHandlerContext{
-		DB:              s.db,
+		DB:              s.DB,
 		UserCache:       userinfocache,
 		SupportedEvents: supportedEventTypes,
 		FindInSlice:     Find,
@@ -182,10 +182,10 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	cmAdapter := &ClientManagerAdapterImpl{cm: clientManager}
-	listUsersUC := usecase.NewListUsersUseCase(s.db, zerologLogger, cmAdapter)
-	addUserUC := usecase.NewAddUserUseCase(s.db, zerologLogger)
-	editUserUC := usecase.NewEditUserUseCase(s.db, zerologLogger)
-	deleteUserUC := usecase.NewDeleteUserUseCase(s.db, zerologLogger)
+	listUsersUC := usecase.NewListUsersUseCase(s.DB, zerologLogger, cmAdapter)
+	addUserUC := usecase.NewAddUserUseCase(s.DB, zerologLogger)
+	editUserUC := usecase.NewEditUserUseCase(s.DB, zerologLogger)
+	deleteUserUC := usecase.NewDeleteUserUseCase(s.DB, zerologLogger)
 	checkUserUC := usecase.NewCheckUserUseCase(clientProvider, zerologLogger)
 	getUserUC := usecase.NewGetUserUseCase(clientProvider, zerologLogger)
 	getUserLIDUC := usecase.NewGetUserLIDUseCase(clientProvider, zerologLogger)
@@ -215,9 +215,9 @@ func initCustomHandlers(s *server) {
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
 	healthProvider := whatsmeow.NewHealthClientProviderAdapter(clientManager)
-	getHealthUC := usecase.NewGetHealthUseCase(s.db.DB, healthProvider, zerologLogger, version)
+	getHealthUC := usecase.NewGetHealthUseCase(s.DB.DB, healthProvider, zerologLogger, version)
 	listNewsletterUC := usecase.NewListNewsletterUseCase(clientProvider, zerologLogger)
-	deleteUserCompleteUC := usecase.NewDeleteUserCompleteUseCase(s.db.DB, clientProvider, healthProvider, zerologLogger, s.exPath)
+	deleteUserCompleteUC := usecase.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, zerologLogger, s.ExPath)
 	rejectCallUC := usecase.NewRejectCallUseCase(clientProvider, zerologLogger)
 	getPrivacySettingsUC := usecase.NewGetPrivacySettingsUseCase(clientProvider, zerologLogger)
 	setPrivacySettingUC := usecase.NewSetPrivacySettingUseCase(clientProvider, zerologLogger)

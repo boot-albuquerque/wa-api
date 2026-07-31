@@ -20,7 +20,7 @@ func TestSaveMessageToHistoryIdempotent(t *testing.T) {
 	)
 
 	// First insert: a normal live Message event.
-	if err := saveMessageToHistory(s.db, userID, chat, sender, msgID, "text", "hello", "", "", "{}"); err != nil {
+	if err := saveMessageToHistory(s.DB, userID, chat, sender, msgID, "text", "hello", "", "", "{}"); err != nil {
 		t.Fatalf("first insert failed: %v", err)
 	}
 
@@ -28,13 +28,13 @@ func TestSaveMessageToHistoryIdempotent(t *testing.T) {
 	// message arriving again in a HistorySync batch or on reconnect. With the
 	// fix this is a silent no-op; without it, it returns a unique-constraint
 	// violation.
-	if err := saveMessageToHistory(s.db, userID, chat, sender, msgID, "text", "hello", "", "", "{}"); err != nil {
+	if err := saveMessageToHistory(s.DB, userID, chat, sender, msgID, "text", "hello", "", "", "{}"); err != nil {
 		t.Fatalf("duplicate insert should be a silent no-op, got error: %v", err)
 	}
 
 	// Exactly one row must exist for this (user_id, message_id).
 	var count int
-	if err := s.db.Get(&count,
+	if err := s.DB.Get(&count,
 		"SELECT COUNT(*) FROM message_history WHERE user_id = ? AND message_id = ?",
 		userID, msgID); err != nil {
 		t.Fatalf("count query failed: %v", err)
@@ -45,10 +45,10 @@ func TestSaveMessageToHistoryIdempotent(t *testing.T) {
 
 	// A different message_id for the same user must still insert normally
 	// (the conflict clause must not swallow legitimate inserts).
-	if err := saveMessageToHistory(s.db, userID, chat, sender, "MSG-OTHER", "text", "world", "", "", "{}"); err != nil {
+	if err := saveMessageToHistory(s.DB, userID, chat, sender, "MSG-OTHER", "text", "world", "", "", "{}"); err != nil {
 		t.Fatalf("insert of a distinct message failed: %v", err)
 	}
-	if err := s.db.Get(&count,
+	if err := s.DB.Get(&count,
 		"SELECT COUNT(*) FROM message_history WHERE user_id = ?", userID); err != nil {
 		t.Fatalf("count query failed: %v", err)
 	}

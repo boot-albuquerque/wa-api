@@ -41,10 +41,10 @@ const (
 )
 
 type server struct {
-	db     *sqlx.DB
-	router *mux.Router
-	exPath string
-	mode   ServerMode
+	DB     *sqlx.DB
+	Router *mux.Router
+	ExPath string
+	Mode   ServerMode
 }
 
 // Replace the global variables
@@ -369,10 +369,10 @@ func Main() {
 	}
 
 	s := &server{
-		router: mux.NewRouter(),
-		db:     db,
-		exPath: exPath,
-		mode:   serverMode,
+		Router: mux.NewRouter(),
+		DB:     db,
+		ExPath: exPath,
+		Mode:   serverMode,
 	}
 	initCustomHandlers(s)
 	s.routes()
@@ -389,7 +389,7 @@ func Main() {
 func startHTTPMode(s *server) {
 	srv := &http.Server{
 		Addr:              *address + ":" + *port,
-		Handler:           s.router,
+		Handler:           s.Router,
 		ReadHeaderTimeout: 20 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      120 * time.Second,

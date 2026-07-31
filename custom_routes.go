@@ -155,5 +155,5 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 	registry.Register("/status/set/text", customChain.Then(customHandlerSet.Session.SetStatusMessage), "POST")
 	// Static files — keep in routes.go only, not reregistered here
 
-	registry.Apply(s.router)
+	registry.Apply(s.Router)
 }

@@ -62,7 +62,7 @@ func TestFormatBlocklist(t *testing.T) {
 func TestGetBlocklistEndpoint(t *testing.T) {
 	s := makeTestServer(t)
 	const token = "tok-blocklist"
-	if _, err := s.db.Exec(
+	if _, err := s.DB.Exec(
 		`INSERT INTO users (id, name, token, connected) VALUES ($1,$2,$3,$4)`,
 		"u-bl", "tester", token, 0); err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -71,7 +71,7 @@ func TestGetBlocklistEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/user/blocklist", nil)
 	req.Header.Set("token", token)
 	rr := httptest.NewRecorder()
-	s.router.ServeHTTP(rr, req)
+	s.Router.ServeHTTP(rr, req)
 
 	if rr.Code == http.StatusNotFound {
 		t.Fatalf("route /user/blocklist not registered (404)")

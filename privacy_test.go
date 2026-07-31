@@ -62,7 +62,7 @@ func TestValidatePrivacySetting(t *testing.T) {
 func TestPrivacyEndpoints(t *testing.T) {
 	s := makeTestServer(t)
 	const token = "tok-privacy"
-	if _, err := s.db.Exec(
+	if _, err := s.DB.Exec(
 		`INSERT INTO users (id, name, token, connected) VALUES ($1,$2,$3,$4)`,
 		"u-priv", "tester", token, 0); err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -73,7 +73,7 @@ func TestPrivacyEndpoints(t *testing.T) {
 		req := httptest.NewRequest(method, "/user/privacy", strings.NewReader(body))
 		req.Header.Set("token", token)
 		rr := httptest.NewRecorder()
-		s.router.ServeHTTP(rr, req)
+		s.Router.ServeHTTP(rr, req)
 
 		if rr.Code == http.StatusNotFound {
 			t.Fatalf("%s /user/privacy not registered (404)", method)

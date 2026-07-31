@@ -43,7 +43,7 @@ func TestSetDisconnectedState(t *testing.T) {
 
 	seed := func(t *testing.T, s *server) {
 		t.Helper()
-		if _, err := s.db.Exec(
+		if _, err := s.DB.Exec(
 			`INSERT INTO users (id, name, token, events, connected) VALUES ($1,$2,$3,$4,$5)`,
 			id, "tester", "tok-305", "Message,ReadReceipt", 1); err != nil {
 			t.Fatalf("seed user: %v", err)
@@ -51,7 +51,7 @@ func TestSetDisconnectedState(t *testing.T) {
 	}
 	read := func(t *testing.T, s *server) (events string, connected int) {
 		t.Helper()
-		if err := s.db.QueryRow(`SELECT events, connected FROM users WHERE id=$1`, id).Scan(&events, &connected); err != nil {
+		if err := s.DB.QueryRow(`SELECT events, connected FROM users WHERE id=$1`, id).Scan(&events, &connected); err != nil {
 			t.Fatalf("read user: %v", err)
 		}
 		return events, connected
@@ -60,7 +60,7 @@ func TestSetDisconnectedState(t *testing.T) {
 	t.Run("default preserves events", func(t *testing.T) {
 		s := makeTestServer(t)
 		seed(t, s)
-		if err := setDisconnectedState(s.db, id, false); err != nil {
+		if err := setDisconnectedState(s.DB, id, false); err != nil {
 			t.Fatalf("setDisconnectedState: %v", err)
 		}
 		events, connected := read(t, s)
@@ -75,7 +75,7 @@ func TestSetDisconnectedState(t *testing.T) {
 	t.Run("clear=true resets events", func(t *testing.T) {
 		s := makeTestServer(t)
 		seed(t, s)
-		if err := setDisconnectedState(s.db, id, true); err != nil {
+		if err := setDisconnectedState(s.DB, id, true); err != nil {
 			t.Fatalf("setDisconnectedState: %v", err)
 		}
 		events, connected := read(t, s)

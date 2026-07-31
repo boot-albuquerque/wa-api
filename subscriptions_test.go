@@ -21,7 +21,7 @@ func TestUpdateAndGetUserSubscriptionsFromCache(t *testing.T) {
 	userinfocache.Set(token, Values{M: map[string]string{"Events": "Message,ReadReceipt"}}, cache.NoExpiration)
 	t.Cleanup(func() { userinfocache.Delete(token) })
 
-	mycli := &MyClient{userID: userID, token: token, db: s.db}
+	mycli := &MyClient{UserID: userID, Token: token, DB: s.DB}
 	got, err := updateAndGetUserSubscriptions(mycli)
 	if err != nil {
 		t.Fatalf("updateAndGetUserSubscriptions returned error: %v", err)

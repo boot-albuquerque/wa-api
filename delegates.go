@@ -61,7 +61,7 @@ func (mycli *MyClient) processMedia(
 	isIncoming bool, chatJID, messageID string, s3cfg mediaS3Config,
 	postmap map[string]interface{}, extraKeys map[string]interface{},
 ) {
-	cc := &waclient.MyClient{Client: mycli.WAClient, UserID: mycli.userID, Token: mycli.token}
+	cc := &waclient.MyClient{Client: mycli.WAClient, UserID: mycli.UserID, Token: mycli.Token}
 	cc.ProcessMedia(msg, mimeType, fallbackExt, int(timeout.Seconds()),
 		isIncoming, chatJID, messageID,
 		waclient.MediaConfig{Enabled: s3cfg.Enabled, MediaDelivery: s3cfg.MediaDelivery},
@@ -80,8 +80,8 @@ func sendToGlobalRabbit(jsonData []byte, token, userID string, queueName ...stri
 
 // ── Stdio ──
 type stdioServer = stdiopkg.Server
-func NewStdioServer(s *server) *stdioServer { return stdiopkg.NewServer(s.router) }
-func newStdioServerWithIO(s *server, stdin io.Reader, stdout io.Writer) *stdioServer { return stdiopkg.NewServerWithIO(s.router, stdin, stdout) }
+func NewStdioServer(s *server) *stdioServer { return stdiopkg.NewServer(s.Router) }
+func newStdioServerWithIO(s *server, stdin io.Reader, stdout io.Writer) *stdioServer { return stdiopkg.NewServerWithIO(s.Router, stdin, stdout) }
 func (s *server) SendNotification(method string, params map[string]interface{}) { stdiopkg.SendNotification(method, params) }
 
 // ── History ──
