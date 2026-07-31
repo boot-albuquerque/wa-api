@@ -25,16 +25,21 @@
 | 12b. OpenGraph pkg | ✅ | `internal/infrastructure/media/opengraph/` |
 | 13a. db.go delete | ✅ | Delegates to `internal/infrastructure/db/` (202 LOC removed) |
 | 13b. Context bridges | ✅ | GetWA/GetHTTP/GetMC/SyncHist added for future 11c |
-| 13c. rabbitmq.go delete | ✅ | Delegates to `internal/infrastructure/messaging/` (298 LOC removed) |
+| 13c. rabbitmq.go delete | ✅ | Delegates to `internal/infrastructure/messaging/` (298 LOC) |
+| 12c. HMAC crypto | ✅ | Extracted to `internal/infrastructure/auth/hmac.go` (74 LOC) |
+| 12d. OpenGraph delegation | ✅ | fetchURLBytes/fetchOG → `opengraph` pkg (-151 LOC) |
+| 12e. Constant cleanup | ✅ | Remove duplicated WebP/OG consts (-24 LOC) |
 | 14. main.go minimize | ✅ | Delegates to `internal/app/` (99 LOC removed) |
 
 ### Metrics
 
-| Metric | Before (fase 9) | After (fase 14) |
+| Metric | Before (fase 9) | Final |
 |---|---|---|
-| Root .go LOC | 8,092 | **6,046** (-2,046) |
-| Internal .go files | 160 | **183** (+23) |
-| Internal .go LOC | ~10,000 | **14,901** (+4,901) |
+| Root .go LOC | 8,092 | **5,819** (-2,273, -28%) |
+| Internal .go files | 168 | **188** (+20) |
+| Internal .go LOC | 14,021 | **14,975** (+954) |
+| `package main` count | 1 (root) | 1 (`cmd/wuzapi`) |
+| Total commits | 22 | **41** |
 | Handler structs | ~40 | **76** |
 | Routes via s.*() | 79 | **0** |
 | Globals without encapsulation | 15 | **0** |
