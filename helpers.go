@@ -3,18 +3,13 @@ package wuzapi
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"image"
 	_ "image/gif"
 	_ "image/png"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,6 +32,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"wuzapi/internal/infrastructure/storage"
+	"wuzapi/internal/infrastructure/auth"
 	"wuzapi/internal/infrastructure/helpers"
 	"wuzapi/internal/infrastructure/media/sticker"
 )
@@ -570,77 +566,22 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 	return nil, nil
 }
 
-// generateHmacSignature generates HMAC-SHA256 signature for webhook payload
-func generateHmacSignature(payload []byte, encryptedHmacKey []byte) (string, error) {
-	if len(encryptedHmacKey) == 0 {
-		return "", nil
-	}
 
-	// Decrypt HMAC key
-	hmacKey, err := decryptHMACKey(encryptedHmacKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt HMAC key: %w", err)
-	}
 
-	// Generate HMAC
-	h := hmac.New(sha256.New, []byte(hmacKey))
-	h.Write(payload)
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+
+
+
+
+// HMAC crypto delegates to internal/infrastructure/auth
+func generateHmacSignature(payload, encryptedKey []byte) (string, error) {
+	return auth.GenerateHmacSignature(payload, encryptedKey, []byte(appCtx.GlobalEncryptionKey))
 }
-
 func encryptHMACKey(plainText string) ([]byte, error) {
-	if appCtx.GlobalEncryptionKey == "" {
-		return nil, fmt.Errorf("encryption key not configured")
-	}
-
-	block, err := aes.NewCipher([]byte(appCtx.GlobalEncryptionKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("failed to generate nonce: %w", err)
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plainText), nil)
-	return ciphertext, nil
+	return auth.EncryptHMACKey(plainText, appCtx.GlobalEncryptionKey)
 }
-
-// decryptHMACKey decrypts HMAC key using AES-GCM
 func decryptHMACKey(encryptedData []byte) (string, error) {
-	if appCtx.GlobalEncryptionKey == "" {
-		return "", fmt.Errorf("encryption key not configured")
-	}
-
-	block, err := aes.NewCipher([]byte(appCtx.GlobalEncryptionKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(encryptedData) < nonceSize {
-		return "", fmt.Errorf("ciphertext too short")
-	}
-
-	nonce, ciphertext := encryptedData[:nonceSize], encryptedData[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt: %w", err)
-	}
-
-	return string(plaintext), nil
+	return auth.DecryptHMACKey(encryptedData, []byte(appCtx.GlobalEncryptionKey))
 }
 
 var extractFirstURL = helpers.ExtractFirstURL
