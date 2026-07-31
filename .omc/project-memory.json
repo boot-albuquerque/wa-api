@@ -26,7 +26,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "git checkout HEAD -- Makefile Dockerfile README.md LICENSE 2>/dev/null\nrm -f core fix_app.sh\n# Fix Makefile\nsed -i 's|./cmd/core|./src/cmd/core|g' Makefile 2>/dev/null\nsed -i 's|BINARY := disparazap|BINARY := wuzapi|' Makefile 2>/dev/null\n# Fix Dockerfile  \nsed -i 's|COPY go.mod go.sum ./|COPY src/go.mod src/go.sum ./|' Dockerfile 2>/dev/null\nsed -i 's|COPY . .|COPY src/ .|' Dockerfile 2>/dev/null\nsed -i 's|go build -o disparazap ./cmd/core|go build -o wuzapi ./cmd/core|' Dockerfile 2>/dev/null\necho \"Files restored and fixed\"",
+    "buildCommand": "mv src/cmd cmd 2>/dev/null\nmv src/internal internal 2>/dev/null\nmv src/contracts contracts 2>/dev/null\nmv src/core core 2>/dev/null\nrmdir src 2>/dev/null && echo \"src/ cleaned\" || echo \"src/ still has: $(ls src/ 2>/dev/null)\"\n\necho \"=== VERIFY ===\"\nhead -1 go.mod\necho \"build: $(go build ./cmd/core 2>&1 && echo '✓' || echo 'FAIL')\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"",
     "testCommand": "cd src && export PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"=== ROOT ===\"\ncd /home/lucasmendoncadealbuquerque/Documentos/repos/wa-api && pwd\necho \"Root .go: $(ls *.go 2>/dev/null | wc -l)\"\necho \"Root dirs: $(ls -d */ 2>/dev/null | tr '\\n' ' ')\"\necho \"Src dirs: $(ls -d src/*/ 2>/dev/null | tr '\\n' ' ')\"",
     "lintCommand": null,
     "devCommand": null,
