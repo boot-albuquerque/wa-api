@@ -4,24 +4,24 @@ import (
 	"context"
 	"encoding/json"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 
 	"go.mau.fi/whatsmeow"
 )
 
 // GetProfileUseCase implementa a lógica de obtenção de perfil WhatsApp.
 type GetProfileUseCase struct {
-	clientProvider    port.ClientProvider
-	dataAccessFactory func(client *whatsmeow.Client) port.ProfileDataAccess
-	logger            port.Logger
+	clientProvider    appport.ClientProvider
+	dataAccessFactory func(client *whatsmeow.Client) appport.ProfileDataAccess
+	logger            appport.Logger
 }
 
 // NewGetProfileUseCase cria o usecase com dependências injetadas.
 // dataAccessFactory é tipicamente whatsmeow.NewProfileDataAccess.
 func NewGetProfileUseCase(
-	clientProvider port.ClientProvider,
-	dataAccessFactory func(client *whatsmeow.Client) port.ProfileDataAccess,
-	logger port.Logger,
+	clientProvider appport.ClientProvider,
+	dataAccessFactory func(client *whatsmeow.Client) appport.ProfileDataAccess,
+	logger appport.Logger,
 ) *GetProfileUseCase {
 	return &GetProfileUseCase{
 		clientProvider:    clientProvider,
@@ -65,7 +65,7 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 // buildProfile constrói o perfil a partir do ProfileDataAccess.
 // Extraída para teste unitário sem depender de *whatsmeow.Client.
 // Chama OwnJID() uma única vez e cacheia o resultado para reuso.
-func buildProfile(ctx context.Context, da port.ProfileDataAccess) ProfileResult {
+func buildProfile(ctx context.Context, da appport.ProfileDataAccess) ProfileResult {
 	result := ProfileResult{
 		Pushname:     "",
 		AvatarURL:    "",

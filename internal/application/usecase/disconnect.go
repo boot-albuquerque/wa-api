@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DisconnectUseCase encapsula a validação de desconexão.
 type DisconnectUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDisconnectUseCase cria uma nova instância do usecase.
-func NewDisconnectUseCase(cp port.ClientProvider, l port.Logger) *DisconnectUseCase {
+func NewDisconnectUseCase(cp appport.ClientProvider, l appport.Logger) *DisconnectUseCase {
 	return &DisconnectUseCase{
 		clientProvider: cp,
 		logger:         l,

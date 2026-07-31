@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DeleteHmacConfigUseCase encapsula a validação de exclusão de configuração de HMAC.
 type DeleteHmacConfigUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDeleteHmacConfigUseCase cria uma nova instância do usecase.
-func NewDeleteHmacConfigUseCase(cp port.ClientProvider, l port.Logger) *DeleteHmacConfigUseCase {
+func NewDeleteHmacConfigUseCase(cp appport.ClientProvider, l appport.Logger) *DeleteHmacConfigUseCase {
 	return &DeleteHmacConfigUseCase{
 		clientProvider: cp,
 		logger:         l,

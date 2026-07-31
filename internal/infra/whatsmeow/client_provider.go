@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 
 	wa "go.mau.fi/whatsmeow"
 )
 
-// ClientProviderAdapter implementa port.ClientProvider usando o
+// ClientProviderAdapter implementa appport.ClientProvider usando o
 // clientManager global do upstream (package main).
 type ClientProviderAdapter struct {
 	getClient func(txtID string) *wa.Client
@@ -32,4 +32,4 @@ func (a *ClientProviderAdapter) GetWhatsmeowClient(ctx context.Context, txtID st
 }
 
 // Verificação em tempo de compilação de que ClientProviderAdapter implementa a interface.
-var _ port.ClientProvider = (*ClientProviderAdapter)(nil)
+var _ appport.ClientProvider = (*ClientProviderAdapter)(nil)

@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // GetQRUseCase encapsula a validação de obtenção do QR code.
 type GetQRUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetQRUseCase cria uma nova instância do usecase.
-func NewGetQRUseCase(cp port.ClientProvider, l port.Logger) *GetQRUseCase {
+func NewGetQRUseCase(cp appport.ClientProvider, l appport.Logger) *GetQRUseCase {
 	return &GetQRUseCase{
 		clientProvider: cp,
 		logger:         l,

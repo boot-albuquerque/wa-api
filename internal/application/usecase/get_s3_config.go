@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // GetS3ConfigUseCase encapsula a validação de leitura de configuração de S3.
 type GetS3ConfigUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetS3ConfigUseCase cria uma nova instância do usecase.
-func NewGetS3ConfigUseCase(cp port.ClientProvider, l port.Logger) *GetS3ConfigUseCase {
+func NewGetS3ConfigUseCase(cp appport.ClientProvider, l appport.Logger) *GetS3ConfigUseCase {
 	return &GetS3ConfigUseCase{
 		clientProvider: cp,
 		logger:         l,

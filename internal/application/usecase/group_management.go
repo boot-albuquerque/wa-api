@@ -8,18 +8,18 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	wm "disparazap/internal/infra/whatsmeow"
 )
 
 // GroupManagementUseCase bundles group write operations (create, join, leave,
 // settings) that share the same clientProvider dependency.
 type GroupManagementUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
-func NewGroupManagementUseCase(cp port.ClientProvider, l port.Logger) *GroupManagementUseCase {
+func NewGroupManagementUseCase(cp appport.ClientProvider, l appport.Logger) *GroupManagementUseCase {
 	return &GroupManagementUseCase{clientProvider: cp, logger: l}
 }
 

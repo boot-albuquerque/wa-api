@@ -19,7 +19,7 @@ type ClientHealthProvider interface {
 	IterateWhatsmeowClients(func(*whatsmeow.Client) bool)
 }
 
-// HealthClientProviderAdapter adapta o ClientManager para port.HealthClientProvider.
+// HealthClientProviderAdapter adapta o ClientManager para appport.HealthClientProvider.
 type HealthClientProviderAdapter struct {
 	cm ClientHealthProvider
 }

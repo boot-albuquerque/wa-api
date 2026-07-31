@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendMessageUseCase encapsula a validação de mensagem de texto.
 // A lógica de envio complexa (link preview, context info, etc) fica no wrapper handlers.go.
 type SendMessageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendMessageUseCase cria uma nova instância do usecase.
-func NewSendMessageUseCase(cp port.ClientProvider, l port.Logger) *SendMessageUseCase {
+func NewSendMessageUseCase(cp appport.ClientProvider, l appport.Logger) *SendMessageUseCase {
 	return &SendMessageUseCase{
 		clientProvider: cp,
 		logger:         l,

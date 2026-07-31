@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	appport "disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/infra/whatsmeow"
 	customhttp "disparazap/internal/presentation/http"

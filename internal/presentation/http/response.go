@@ -11,7 +11,7 @@ import (
 // ou {"code": <statusCode>, "error": "<mensagem genérica>"} em caso de erro.
 //
 // O campo "error" NUNCA contém detalhes internos ou PII — apenas mensagens genéricas.
-// Usecases e handlers que precisam de detalhes devem logar internamente via port.Logger.
+// Usecases e handlers que precisam de detalhes devem logar internamente via appport.Logger.
 func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // LogoutUseCase encapsula a validação de logout.
 type LogoutUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewLogoutUseCase cria uma nova instância do usecase.
-func NewLogoutUseCase(cp port.ClientProvider, l port.Logger) *LogoutUseCase {
+func NewLogoutUseCase(cp appport.ClientProvider, l appport.Logger) *LogoutUseCase {
 	return &LogoutUseCase{
 		clientProvider: cp,
 		logger:         l,

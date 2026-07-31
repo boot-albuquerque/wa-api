@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 
 	"go.mau.fi/whatsmeow"
 )
 
-// mockCP implementa port.ClientProvider para testes.
+// mockCP implementa appport.ClientProvider para testes.
 type mockCP struct {
 	client *whatsmeow.Client
 	err    error
@@ -23,7 +23,7 @@ func (m *mockCP) GetWhatsmeowClient(ctx context.Context, txtID string) (*whatsme
 	return m.client, m.err
 }
 
-var _ port.ClientProvider = (*mockCP)(nil)
+var _ appport.ClientProvider = (*mockCP)(nil)
 
 type mockLog struct{}
 
@@ -31,7 +31,7 @@ func (m *mockLog) Info(msg string, keyvals ...any)  {}
 func (m *mockLog) Warn(msg string, keyvals ...any)  {}
 func (m *mockLog) Error(msg string, keyvals ...any) {}
 
-var _ port.Logger = (*mockLog)(nil)
+var _ appport.Logger = (*mockLog)(nil)
 
 var nopLog = zerolog.Nop()
 
@@ -44,7 +44,7 @@ func TestAllConstructors_NonNil(t *testing.T) {
 		name string
 		fn   func() interface{}
 	}{
-		// port.Logger usecases
+		// appport.Logger usecases
 		{"NewSendMessageUseCase", func() interface{} { return usecase.NewSendMessageUseCase(cp, pl) }},
 		{"NewSendImageUseCase", func() interface{} { return usecase.NewSendImageUseCase(cp, pl) }},
 		{"NewSendDocumentUseCase", func() interface{} { return usecase.NewSendDocumentUseCase(cp, pl) }},

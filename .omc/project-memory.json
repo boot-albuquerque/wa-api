@@ -26,8 +26,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "sed -i 's|BINARY := wuzapi|BINARY := disparazap|g' Makefile\nsed -i 's|go build -o wuzapi ./cmd/wuzapi|go build -o disparazap ./cmd/core|g' Dockerfile\ngrep \"BINARY\\|build:\" Makefile\necho \"---\"\ngrep \"go build\" Dockerfile\necho \"---\"\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"---ROOT .GO---\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"",
-    "testCommand": "sed -i 's|BINARY := wuzapi|BINARY := disparazap|g' Makefile\nsed -i 's|go build -o wuzapi ./cmd/wuzapi|go build -o disparazap ./cmd/core|g' Dockerfile\ngrep \"BINARY\\|build:\" Makefile\necho \"---\"\ngrep \"go build\" Dockerfile\necho \"---\"\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"---ROOT .GO---\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"",
+    "buildCommand": "find . -name '*.go' -exec sed -i 's/\\bport\\./appport./g' {} +\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo build ./cmd/core 2>&1 | head -5",
+    "testCommand": "export PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"===ROOT .GO===\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"\necho \"===DIRS===\"\nls internal/ | sort\necho \"===CMD===\"\nls cmd/ | sort\necho \"===CONTRACTS===\"\nls internal/contracts/",
     "lintCommand": null,
     "devCommand": null,
     "scripts": {}

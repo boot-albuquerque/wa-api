@@ -6,7 +6,7 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -23,7 +23,7 @@ func NewSendImageHandler(uc *usecase.SendImageUseCase) *SendImageHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/image.
 func (h *SendImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -62,7 +62,7 @@ func NewSendDocumentHandler(uc *usecase.SendDocumentUseCase) *SendDocumentHandle
 
 // ServeHTTP implementa http.Handler para POST /chat/send/document.
 func (h *SendDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -101,7 +101,7 @@ func NewSendAudioHandler(uc *usecase.SendAudioUseCase) *SendAudioHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/audio.
 func (h *SendAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return

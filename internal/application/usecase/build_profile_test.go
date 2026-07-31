@@ -6,11 +6,11 @@ import (
 	"errors"
 	"testing"
 
-	appport "disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
-// mockProfileData implementa port.ProfileDataAccess para testes internos.
+// mockProfileData implementa appport.ProfileDataAccess para testes internos.
 type mockProfileData struct {
 	pushName     string
 	jid          string

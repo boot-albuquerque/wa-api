@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendContactUseCase encapsula a validação de envio de contato.
 type SendContactUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendContactUseCase cria uma nova instância do usecase.
-func NewSendContactUseCase(cp port.ClientProvider, l port.Logger) *SendContactUseCase {
+func NewSendContactUseCase(cp appport.ClientProvider, l appport.Logger) *SendContactUseCase {
 	return &SendContactUseCase{
 		clientProvider: cp,
 		logger:         l,

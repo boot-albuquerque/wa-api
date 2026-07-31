@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendTemplateUseCase encapsula a validação de envio de template.
 type SendTemplateUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendTemplateUseCase cria uma nova instância do usecase.
-func NewSendTemplateUseCase(cp port.ClientProvider, l port.Logger) *SendTemplateUseCase {
+func NewSendTemplateUseCase(cp appport.ClientProvider, l appport.Logger) *SendTemplateUseCase {
 	return &SendTemplateUseCase{
 		clientProvider: cp,
 		logger:         l,

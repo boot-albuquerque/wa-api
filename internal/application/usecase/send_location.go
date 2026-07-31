@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendLocationUseCase encapsula a validação de envio de localização.
 type SendLocationUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendLocationUseCase cria uma nova instância do usecase.
-func NewSendLocationUseCase(cp port.ClientProvider, l port.Logger) *SendLocationUseCase {
+func NewSendLocationUseCase(cp appport.ClientProvider, l appport.Logger) *SendLocationUseCase {
 	return &SendLocationUseCase{
 		clientProvider: cp,
 		logger:         l,

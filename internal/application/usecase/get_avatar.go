@@ -6,7 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 	wa "go.mau.fi/whatsmeow"
-	appport "disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 	"disparazap/internal/infra/whatsmeow"
 )

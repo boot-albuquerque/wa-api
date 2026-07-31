@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SetHistoryUseCase encapsula a validação de configuração de histórico.
 type SetHistoryUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSetHistoryUseCase cria uma nova instância do usecase.
-func NewSetHistoryUseCase(cp port.ClientProvider, l port.Logger) *SetHistoryUseCase {
+func NewSetHistoryUseCase(cp appport.ClientProvider, l appport.Logger) *SetHistoryUseCase {
 	return &SetHistoryUseCase{
 		clientProvider: cp,
 		logger:         l,

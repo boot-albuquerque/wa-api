@@ -6,7 +6,7 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -23,7 +23,7 @@ func NewSendStickerHandler(uc *usecase.SendStickerUseCase) *SendStickerHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/sticker.
 func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -62,7 +62,7 @@ func NewSendVideoHandler(uc *usecase.SendVideoUseCase) *SendVideoHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/video.
 func (h *SendVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return

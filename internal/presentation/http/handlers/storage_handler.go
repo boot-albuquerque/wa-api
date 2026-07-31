@@ -6,7 +6,7 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -29,7 +29,7 @@ type StorageHandlers struct {
 type ConfigureS3Handler struct{ usecase *usecase.ConfigureS3UseCase }
 func NewConfigureS3Handler(uc *usecase.ConfigureS3UseCase) *ConfigureS3Handler { return &ConfigureS3Handler{uc} }
 func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -44,7 +44,7 @@ func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type GetS3ConfigHandler struct{ usecase *usecase.GetS3ConfigUseCase }
 func NewGetS3ConfigHandler(uc *usecase.GetS3ConfigUseCase) *GetS3ConfigHandler { return &GetS3ConfigHandler{uc} }
 func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -57,7 +57,7 @@ func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type TestS3ConnectionHandler struct{ usecase *usecase.TestS3ConnectionUseCase }
 func NewTestS3ConnectionHandler(uc *usecase.TestS3ConnectionUseCase) *TestS3ConnectionHandler { return &TestS3ConnectionHandler{uc} }
 func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -72,7 +72,7 @@ func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 type DeleteS3ConfigHandler struct{ usecase *usecase.DeleteS3ConfigUseCase }
 func NewDeleteS3ConfigHandler(uc *usecase.DeleteS3ConfigUseCase) *DeleteS3ConfigHandler { return &DeleteS3ConfigHandler{uc} }
 func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -85,7 +85,7 @@ func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 type ConfigureHmacHandler struct{ usecase *usecase.ConfigureHmacUseCase }
 func NewConfigureHmacHandler(uc *usecase.ConfigureHmacUseCase) *ConfigureHmacHandler { return &ConfigureHmacHandler{uc} }
 func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -100,7 +100,7 @@ func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 type GetHmacConfigHandler struct{ usecase *usecase.GetHmacConfigUseCase }
 func NewGetHmacConfigHandler(uc *usecase.GetHmacConfigUseCase) *GetHmacConfigHandler { return &GetHmacConfigHandler{uc} }
 func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -113,7 +113,7 @@ func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 type DeleteHmacConfigHandler struct{ usecase *usecase.DeleteHmacConfigUseCase }
 func NewDeleteHmacConfigHandler(uc *usecase.DeleteHmacConfigUseCase) *DeleteHmacConfigHandler { return &DeleteHmacConfigHandler{uc} }
 func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -126,7 +126,7 @@ func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 type SetProxyHandler struct{ usecase *usecase.SetProxyUseCase }
 func NewSetProxyHandler(uc *usecase.SetProxyUseCase) *SetProxyHandler { return &SetProxyHandler{uc} }
 func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -141,7 +141,7 @@ func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type SetHistoryHandler struct{ usecase *usecase.SetHistoryUseCase }
 func NewSetHistoryHandler(uc *usecase.SetHistoryUseCase) *SetHistoryHandler { return &SetHistoryHandler{uc} }
 func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }
@@ -156,7 +156,7 @@ func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type GetHistoryHandler struct{ usecase *usecase.GetHistoryUseCase }
 func NewGetHistoryHandler(uc *usecase.GetHistoryUseCase) *GetHistoryHandler { return &GetHistoryHandler{uc} }
 func (h *GetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
 	txtID := info.Get("Id")
 	if txtID == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return }

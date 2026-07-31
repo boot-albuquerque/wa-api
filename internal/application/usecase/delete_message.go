@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DeleteMessageUseCase encapsula a validação de exclusão de mensagem.
 type DeleteMessageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDeleteMessageUseCase cria uma nova instância do usecase.
-func NewDeleteMessageUseCase(cp port.ClientProvider, l port.Logger) *DeleteMessageUseCase {
+func NewDeleteMessageUseCase(cp appport.ClientProvider, l appport.Logger) *DeleteMessageUseCase {
 	return &DeleteMessageUseCase{
 		clientProvider: cp,
 		logger:         l,

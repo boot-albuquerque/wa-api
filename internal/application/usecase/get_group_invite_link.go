@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 	"disparazap/internal/infra/whatsmeow"
 )
 
 // GetGroupInviteLinkUseCase encapsula a validação para obter link de convite
 type GetGroupInviteLinkUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetGroupInviteLinkUseCase cria uma nova instância do usecase
-func NewGetGroupInviteLinkUseCase(cp port.ClientProvider, l port.Logger) *GetGroupInviteLinkUseCase {
+func NewGetGroupInviteLinkUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInviteLinkUseCase {
 	return &GetGroupInviteLinkUseCase{
 		clientProvider: cp,
 		logger:         l,

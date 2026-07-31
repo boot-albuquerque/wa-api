@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DeleteS3ConfigUseCase encapsula a validação de exclusão de configuração de S3.
 type DeleteS3ConfigUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDeleteS3ConfigUseCase cria uma nova instância do usecase.
-func NewDeleteS3ConfigUseCase(cp port.ClientProvider, l port.Logger) *DeleteS3ConfigUseCase {
+func NewDeleteS3ConfigUseCase(cp appport.ClientProvider, l appport.Logger) *DeleteS3ConfigUseCase {
 	return &DeleteS3ConfigUseCase{
 		clientProvider: cp,
 		logger:         l,

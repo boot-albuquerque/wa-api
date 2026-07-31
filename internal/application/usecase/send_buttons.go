@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendButtonsUseCase encapsula a validação de envio de botões.
 type SendButtonsUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendButtonsUseCase cria uma nova instância do usecase.
-func NewSendButtonsUseCase(cp port.ClientProvider, l port.Logger) *SendButtonsUseCase {
+func NewSendButtonsUseCase(cp appport.ClientProvider, l appport.Logger) *SendButtonsUseCase {
 	return &SendButtonsUseCase{
 		clientProvider: cp,
 		logger:         l,

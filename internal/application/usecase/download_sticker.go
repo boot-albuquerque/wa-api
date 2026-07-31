@@ -6,18 +6,18 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DownloadStickerUseCase encapsula a validação de download de sticker.
 type DownloadStickerUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDownloadStickerUseCase cria uma nova instância do usecase.
-func NewDownloadStickerUseCase(cp port.ClientProvider, l port.Logger) *DownloadStickerUseCase {
+func NewDownloadStickerUseCase(cp appport.ClientProvider, l appport.Logger) *DownloadStickerUseCase {
 	return &DownloadStickerUseCase{
 		clientProvider: cp,
 		logger:         l,

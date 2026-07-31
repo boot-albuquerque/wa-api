@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendListUseCase encapsula a validação de envio de lista.
 type SendListUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendListUseCase cria uma nova instância do usecase.
-func NewSendListUseCase(cp port.ClientProvider, l port.Logger) *SendListUseCase {
+func NewSendListUseCase(cp appport.ClientProvider, l appport.Logger) *SendListUseCase {
 	return &SendListUseCase{
 		clientProvider: cp,
 		logger:         l,

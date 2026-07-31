@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog"
-	appport "disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 

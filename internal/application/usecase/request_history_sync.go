@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // RequestHistorySyncUseCase encapsula a validação de requisição de sincronização de histórico.
 type RequestHistorySyncUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewRequestHistorySyncUseCase cria uma nova instância do usecase.
-func NewRequestHistorySyncUseCase(cp port.ClientProvider, l port.Logger) *RequestHistorySyncUseCase {
+func NewRequestHistorySyncUseCase(cp appport.ClientProvider, l appport.Logger) *RequestHistorySyncUseCase {
 	return &RequestHistorySyncUseCase{
 		clientProvider: cp,
 		logger:         l,

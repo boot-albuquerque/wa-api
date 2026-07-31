@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	customhttp "disparazap/internal/presentation/http"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -27,7 +27,7 @@ func NewGetBlocklistHandler(uc *usecase.GetBlocklistUseCase) *GetBlocklistHandle
 
 // ServeHTTP implements http.Handler for GET /user/blocklist.
 func (h *GetBlocklistHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return

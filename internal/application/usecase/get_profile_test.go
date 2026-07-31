@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	appport "disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 
@@ -32,7 +32,7 @@ func (m *mockLogger) Info(msg string, keyvals ...any)  { m.infos = append(m.info
 func (m *mockLogger) Warn(msg string, keyvals ...any)  { m.warns = append(m.warns, msg) }
 func (m *mockLogger) Error(msg string, keyvals ...any) { m.errors = append(m.errors, msg) }
 
-// mockDataAccess implementa port.ProfileDataAccess para testes.
+// mockDataAccess implementa appport.ProfileDataAccess para testes.
 type mockDataAccess struct {
 	pushName               string
 	jidStr                 string

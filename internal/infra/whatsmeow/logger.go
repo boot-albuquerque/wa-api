@@ -1,12 +1,12 @@
 package whatsmeow
 
 import (
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 
 	"github.com/rs/zerolog"
 )
 
-// ZerologAdapter implementa port.Logger usando zerolog (compatível com upstream).
+// ZerologAdapter implementa appport.Logger usando zerolog (compatível com upstream).
 type ZerologAdapter struct {
 	logger zerolog.Logger
 }
@@ -29,4 +29,4 @@ func (a *ZerologAdapter) Error(msg string, keyvals ...any) {
 }
 
 // Verificação em tempo de compilação.
-var _ port.Logger = (*ZerologAdapter)(nil)
+var _ appport.Logger = (*ZerologAdapter)(nil)

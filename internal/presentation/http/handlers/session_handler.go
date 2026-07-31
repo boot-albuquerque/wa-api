@@ -6,13 +6,13 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
 
 func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
-	info, _ := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return "", false }
 	id := info.Get("Id")
 	if id == "" { customhttp.RespondJSON(w, 400, nil, errMissingSessionID); return "", false }

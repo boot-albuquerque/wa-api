@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendStickerUseCase encapsula a validação de envio de sticker.
 type SendStickerUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendStickerUseCase cria uma nova instância do usecase.
-func NewSendStickerUseCase(cp port.ClientProvider, l port.Logger) *SendStickerUseCase {
+func NewSendStickerUseCase(cp appport.ClientProvider, l appport.Logger) *SendStickerUseCase {
 	return &SendStickerUseCase{
 		clientProvider: cp,
 		logger:         l,

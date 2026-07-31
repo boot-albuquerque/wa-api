@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendDocumentUseCase encapsula a validação de envio de documento.
 // A lógica de envio complexa (upload, etc) fica no wrapper handlers.go.
 type SendDocumentUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendDocumentUseCase cria uma nova instância do usecase.
-func NewSendDocumentUseCase(cp port.ClientProvider, l port.Logger) *SendDocumentUseCase {
+func NewSendDocumentUseCase(cp appport.ClientProvider, l appport.Logger) *SendDocumentUseCase {
 	return &SendDocumentUseCase{
 		clientProvider: cp,
 		logger:         l,

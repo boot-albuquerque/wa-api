@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // TestS3ConnectionUseCase encapsula a validação de teste de conexão S3.
 type TestS3ConnectionUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewTestS3ConnectionUseCase cria uma nova instância do usecase.
-func NewTestS3ConnectionUseCase(cp port.ClientProvider, l port.Logger) *TestS3ConnectionUseCase {
+func NewTestS3ConnectionUseCase(cp appport.ClientProvider, l appport.Logger) *TestS3ConnectionUseCase {
 	return &TestS3ConnectionUseCase{
 		clientProvider: cp,
 		logger:         l,

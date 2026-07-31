@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // GetHmacConfigUseCase encapsula a validação de leitura de configuração de HMAC.
 type GetHmacConfigUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetHmacConfigUseCase cria uma nova instância do usecase.
-func NewGetHmacConfigUseCase(cp port.ClientProvider, l port.Logger) *GetHmacConfigUseCase {
+func NewGetHmacConfigUseCase(cp appport.ClientProvider, l appport.Logger) *GetHmacConfigUseCase {
 	return &GetHmacConfigUseCase{
 		clientProvider: cp,
 		logger:         l,

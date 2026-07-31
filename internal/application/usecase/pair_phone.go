@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // PairPhoneUseCase encapsula a validação de pareamento por telefone.
 type PairPhoneUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewPairPhoneUseCase cria uma nova instância do usecase.
-func NewPairPhoneUseCase(cp port.ClientProvider, l port.Logger) *PairPhoneUseCase {
+func NewPairPhoneUseCase(cp appport.ClientProvider, l appport.Logger) *PairPhoneUseCase {
 	return &PairPhoneUseCase{
 		clientProvider: cp,
 		logger:         l,

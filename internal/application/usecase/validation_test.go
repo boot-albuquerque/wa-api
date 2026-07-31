@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 
@@ -17,7 +17,7 @@ func (m *testCP) GetWhatsmeowClient(ctx context.Context, txtID string) (*whatsme
 	return m.client, nil
 }
 
-var _ port.ClientProvider = (*testCP)(nil)
+var _ appport.ClientProvider = (*testCP)(nil)
 
 func TestMessageValidation(t *testing.T) {
 	p := &mockLog{}
@@ -115,7 +115,7 @@ func TestUsecaseNoClient(t *testing.T) {
 			return usecase.NewDownloadImageUseCase(c, pl).Execute(context.TODO(), "u", domain.DownloadRequest{URL: "http://x", DirectPath: "/v1", MediaKey: []byte{1}, Mimetype: "image/jpeg"})
 		})},
 		{"GetProfile", func() error {
-			_, err := usecase.NewGetProfileUseCase(c, func(wc *whatsmeow.Client) port.ProfileDataAccess { return nil }, pl).Execute(context.TODO(), "u")
+			_, err := usecase.NewGetProfileUseCase(c, func(wc *whatsmeow.Client) appport.ProfileDataAccess { return nil }, pl).Execute(context.TODO(), "u")
 			return err
 		}},
 		{"ArchiveChat", func() error {

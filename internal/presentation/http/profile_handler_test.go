@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 )
 
@@ -53,7 +53,7 @@ func TestProfileHandler_NoUserInfo_401(t *testing.T) {
 func TestProfileHandler_EmptyTxtID_400(t *testing.T) {
 	handler := NewProfileHandler(&mockGetProfileUseCase{result: `{}`})
 	req := httptest.NewRequest(http.MethodGet, "/session/profile", nil)
-	ctx := context.WithValue(req.Context(), port.UserInfoKey, &mockUserInfo{id: ""})
+	ctx := context.WithValue(req.Context(), appport.UserInfoKey, &mockUserInfo{id: ""})
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -72,7 +72,7 @@ func TestProfileHandler_UseCaseError_500_GenericMessage(t *testing.T) {
 		err: usecase.NewProfileError("failed: JID 5511987654321@s.whatsapp.net timeout"),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/session/profile", nil)
-	ctx := context.WithValue(req.Context(), port.UserInfoKey, &mockUserInfo{id: "test-user"})
+	ctx := context.WithValue(req.Context(), appport.UserInfoKey, &mockUserInfo{id: "test-user"})
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -99,7 +99,7 @@ func TestProfileHandler_ValidResponse_200_JSON(t *testing.T) {
 	expectedJSON := `{"pushname":"John","avatar_url":"","avatar_id":"","jid":"5511@s.whatsapp.net","full_name":"","business_name":""}`
 	handler := NewProfileHandler(&mockGetProfileUseCase{result: expectedJSON})
 	req := httptest.NewRequest(http.MethodGet, "/session/profile", nil)
-	ctx := context.WithValue(req.Context(), port.UserInfoKey, &mockUserInfo{id: "test-user"})
+	ctx := context.WithValue(req.Context(), appport.UserInfoKey, &mockUserInfo{id: "test-user"})
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -139,7 +139,7 @@ func TestProfileHandler_RequestCancelled_503(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/session/profile", nil)
 	ctx, cancel := context.WithCancel(req.Context())
 	cancel() // cancela imediatamente
-	ctx = context.WithValue(ctx, port.UserInfoKey, &mockUserInfo{id: "test-user"})
+	ctx = context.WithValue(ctx, appport.UserInfoKey, &mockUserInfo{id: "test-user"})
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 

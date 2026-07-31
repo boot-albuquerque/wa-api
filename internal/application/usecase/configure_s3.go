@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // ConfigureS3UseCase encapsula a validação de configuração de S3.
 type ConfigureS3UseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewConfigureS3UseCase cria uma nova instância do usecase.
-func NewConfigureS3UseCase(cp port.ClientProvider, l port.Logger) *ConfigureS3UseCase {
+func NewConfigureS3UseCase(cp appport.ClientProvider, l appport.Logger) *ConfigureS3UseCase {
 	return &ConfigureS3UseCase{
 		clientProvider: cp,
 		logger:         l,

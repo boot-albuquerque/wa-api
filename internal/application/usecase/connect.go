@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // ConnectUseCase encapsula a validação de conexão.
 type ConnectUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewConnectUseCase cria uma nova instância do usecase.
-func NewConnectUseCase(cp port.ClientProvider, l port.Logger) *ConnectUseCase {
+func NewConnectUseCase(cp appport.ClientProvider, l appport.Logger) *ConnectUseCase {
 	return &ConnectUseCase{
 		clientProvider: cp,
 		logger:         l,

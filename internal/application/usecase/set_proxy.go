@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SetProxyUseCase encapsula a validação de configuração de Proxy.
 type SetProxyUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSetProxyUseCase cria uma nova instância do usecase.
-func NewSetProxyUseCase(cp port.ClientProvider, l port.Logger) *SetProxyUseCase {
+func NewSetProxyUseCase(cp appport.ClientProvider, l appport.Logger) *SetProxyUseCase {
 	return &SetProxyUseCase{
 		clientProvider: cp,
 		logger:         l,

@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // GetStatusUseCase encapsula a validação de obtenção de status.
 type GetStatusUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetStatusUseCase cria uma nova instância do usecase.
-func NewGetStatusUseCase(cp port.ClientProvider, l port.Logger) *GetStatusUseCase {
+func NewGetStatusUseCase(cp appport.ClientProvider, l appport.Logger) *GetStatusUseCase {
 	return &GetStatusUseCase{
 		clientProvider: cp,
 		logger:         l,

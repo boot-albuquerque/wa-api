@@ -6,18 +6,18 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DownloadAudioUseCase encapsula a validação de download de áudio.
 type DownloadAudioUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDownloadAudioUseCase cria uma nova instância do usecase.
-func NewDownloadAudioUseCase(cp port.ClientProvider, l port.Logger) *DownloadAudioUseCase {
+func NewDownloadAudioUseCase(cp appport.ClientProvider, l appport.Logger) *DownloadAudioUseCase {
 	return &DownloadAudioUseCase{
 		clientProvider: cp,
 		logger:         l,

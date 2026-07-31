@@ -6,7 +6,7 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -23,7 +23,7 @@ func NewSendContactHandler(uc *usecase.SendContactUseCase) *SendContactHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/contact.
 func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -62,7 +62,7 @@ func NewSendLocationHandler(uc *usecase.SendLocationUseCase) *SendLocationHandle
 
 // ServeHTTP implementa http.Handler para POST /chat/send/location.
 func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -101,7 +101,7 @@ func NewSendButtonsHandler(uc *usecase.SendButtonsUseCase) *SendButtonsHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/buttons.
 func (h *SendButtonsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -140,7 +140,7 @@ func NewSendListHandler(uc *usecase.SendListUseCase) *SendListHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/list.
 func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -179,7 +179,7 @@ func NewSendPollHandler(uc *usecase.SendPollUseCase) *SendPollHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/poll.
 func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return

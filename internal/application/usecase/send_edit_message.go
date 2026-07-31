@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendEditMessageUseCase encapsula a validação de edição de mensagem.
 type SendEditMessageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendEditMessageUseCase cria uma nova instância do usecase.
-func NewSendEditMessageUseCase(cp port.ClientProvider, l port.Logger) *SendEditMessageUseCase {
+func NewSendEditMessageUseCase(cp appport.ClientProvider, l appport.Logger) *SendEditMessageUseCase {
 	return &SendEditMessageUseCase{
 		clientProvider: cp,
 		logger:         l,

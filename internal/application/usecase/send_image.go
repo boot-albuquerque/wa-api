@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendImageUseCase encapsula a validação de envio de imagem.
 // A lógica de envio complexa (upload, thumbnail, context info, etc) fica no wrapper handlers.go.
 type SendImageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendImageUseCase cria uma nova instância do usecase.
-func NewSendImageUseCase(cp port.ClientProvider, l port.Logger) *SendImageUseCase {
+func NewSendImageUseCase(cp appport.ClientProvider, l appport.Logger) *SendImageUseCase {
 	return &SendImageUseCase{
 		clientProvider: cp,
 		logger:         l,

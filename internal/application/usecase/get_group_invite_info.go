@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // GetGroupInviteInfoUseCase encapsula a validação para obter informações de convite
 type GetGroupInviteInfoUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetGroupInviteInfoUseCase cria uma nova instância do usecase
-func NewGetGroupInviteInfoUseCase(cp port.ClientProvider, l port.Logger) *GetGroupInviteInfoUseCase {
+func NewGetGroupInviteInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInviteInfoUseCase {
 	return &GetGroupInviteInfoUseCase{
 		clientProvider: cp,
 		logger:         l,

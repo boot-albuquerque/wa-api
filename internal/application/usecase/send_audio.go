@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendAudioUseCase encapsula a validação de envio de áudio.
 // A lógica de envio complexa (upload, etc) fica no wrapper handlers.go.
 type SendAudioUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendAudioUseCase cria uma nova instância do usecase.
-func NewSendAudioUseCase(cp port.ClientProvider, l port.Logger) *SendAudioUseCase {
+func NewSendAudioUseCase(cp appport.ClientProvider, l appport.Logger) *SendAudioUseCase {
 	return &SendAudioUseCase{
 		clientProvider: cp,
 		logger:         l,

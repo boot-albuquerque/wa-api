@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 	customhttp "disparazap/internal/presentation/http"
@@ -115,7 +115,7 @@ func (h *UserHandlers) DeleteUser() http.Handler {
 // CheckUser retorna o handler para POST /user/check.
 func (h *UserHandlers) CheckUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
@@ -142,7 +142,7 @@ func (h *UserHandlers) CheckUser() http.Handler {
 // GetUser retorna o handler para POST /user/info.
 func (h *UserHandlers) GetUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
@@ -169,7 +169,7 @@ func (h *UserHandlers) GetUser() http.Handler {
 // GetUserLID retorna o handler para POST /user/lid.
 func (h *UserHandlers) GetUserLID() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
@@ -196,7 +196,7 @@ func (h *UserHandlers) GetUserLID() http.Handler {
 // BlockUser retorna o handler para POST /user/block.
 func (h *UserHandlers) BlockUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
@@ -223,7 +223,7 @@ func (h *UserHandlers) BlockUser() http.Handler {
 // UnblockUser retorna o handler para POST /user/unblock.
 func (h *UserHandlers) UnblockUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return

@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SetStatusMessageUseCase encapsula a validação de definição de status.
 type SetStatusMessageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSetStatusMessageUseCase cria uma nova instância do usecase.
-func NewSetStatusMessageUseCase(cp port.ClientProvider, l port.Logger) *SetStatusMessageUseCase {
+func NewSetStatusMessageUseCase(cp appport.ClientProvider, l appport.Logger) *SetStatusMessageUseCase {
 	return &SetStatusMessageUseCase{
 		clientProvider: cp,
 		logger:         l,

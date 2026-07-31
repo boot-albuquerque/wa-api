@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 	"disparazap/internal/infra/whatsmeow"
 )
 
 // GetGroupInfoUseCase encapsula a validação para obter informações de grupo
 type GetGroupInfoUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewGetGroupInfoUseCase cria uma nova instância do usecase
-func NewGetGroupInfoUseCase(cp port.ClientProvider, l port.Logger) *GetGroupInfoUseCase {
+func NewGetGroupInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInfoUseCase {
 	return &GetGroupInfoUseCase{
 		clientProvider: cp,
 		logger:         l,

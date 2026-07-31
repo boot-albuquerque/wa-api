@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendVideoUseCase encapsula a validação de envio de vídeo.
 type SendVideoUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendVideoUseCase cria uma nova instância do usecase.
-func NewSendVideoUseCase(cp port.ClientProvider, l port.Logger) *SendVideoUseCase {
+func NewSendVideoUseCase(cp appport.ClientProvider, l appport.Logger) *SendVideoUseCase {
 	return &SendVideoUseCase{
 		clientProvider: cp,
 		logger:         l,

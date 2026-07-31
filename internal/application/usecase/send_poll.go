@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // SendPollUseCase encapsula a validação de envio de enquete.
 type SendPollUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewSendPollUseCase cria uma nova instância do usecase.
-func NewSendPollUseCase(cp port.ClientProvider, l port.Logger) *SendPollUseCase {
+func NewSendPollUseCase(cp appport.ClientProvider, l appport.Logger) *SendPollUseCase {
 	return &SendPollUseCase{
 		clientProvider: cp,
 		logger:         l,

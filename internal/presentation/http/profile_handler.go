@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 )
 
 // Context key "userinfo" é injetada pelo middleware authalice do upstream.
@@ -33,7 +33,7 @@ func NewProfileHandler(uc ProfileUseCase) *ProfileHandler {
 // ServeHTTP implementa http.Handler para GET /session/profile.
 // Extrai txtID do contexto (injetado pelo middleware authalice do upstream).
 func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

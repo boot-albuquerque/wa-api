@@ -6,7 +6,7 @@ import (
 
 	customhttp "disparazap/internal/presentation/http"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/application/usecase"
 	"disparazap/internal/shared/domain"
 )
@@ -23,7 +23,7 @@ func NewSendMessageHandler(uc *usecase.SendMessageUseCase) *SendMessageHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/text.
 func (h *SendMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -62,7 +62,7 @@ func NewDeleteMessageHandler(uc *usecase.DeleteMessageUseCase) *DeleteMessageHan
 
 // ServeHTTP implementa http.Handler para POST /chat/delete/message.
 func (h *DeleteMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -101,7 +101,7 @@ func NewSendEditMessageHandler(uc *usecase.SendEditMessageUseCase) *SendEditMess
 
 // ServeHTTP implementa http.Handler para POST /chat/send/edit.
 func (h *SendEditMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
@@ -140,7 +140,7 @@ func NewSendTemplateHandler(uc *usecase.SendTemplateUseCase) *SendTemplateHandle
 
 // ServeHTTP implementa http.Handler para POST /chat/send/template.
 func (h *SendTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	info, ok := r.Context().Value(port.UserInfoKey).(userInfo)
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return

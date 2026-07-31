@@ -6,18 +6,18 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DownloadVideoUseCase encapsula a validação de download de vídeo.
 type DownloadVideoUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDownloadVideoUseCase cria uma nova instância do usecase.
-func NewDownloadVideoUseCase(cp port.ClientProvider, l port.Logger) *DownloadVideoUseCase {
+func NewDownloadVideoUseCase(cp appport.ClientProvider, l appport.Logger) *DownloadVideoUseCase {
 	return &DownloadVideoUseCase{
 		clientProvider: cp,
 		logger:         l,

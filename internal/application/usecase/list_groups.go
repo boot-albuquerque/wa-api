@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // ListGroupsUseCase encapsula a validação para listar grupos
 type ListGroupsUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewListGroupsUseCase cria uma nova instância do usecase
-func NewListGroupsUseCase(cp port.ClientProvider, l port.Logger) *ListGroupsUseCase {
+func NewListGroupsUseCase(cp appport.ClientProvider, l appport.Logger) *ListGroupsUseCase {
 	return &ListGroupsUseCase{
 		clientProvider: cp,
 		logger:         l,

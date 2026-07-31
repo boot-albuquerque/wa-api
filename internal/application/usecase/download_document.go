@@ -6,18 +6,18 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DownloadDocumentUseCase encapsula a validação de download de documento.
 type DownloadDocumentUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDownloadDocumentUseCase cria uma nova instância do usecase.
-func NewDownloadDocumentUseCase(cp port.ClientProvider, l port.Logger) *DownloadDocumentUseCase {
+func NewDownloadDocumentUseCase(cp appport.ClientProvider, l appport.Logger) *DownloadDocumentUseCase {
 	return &DownloadDocumentUseCase{
 		clientProvider: cp,
 		logger:         l,

@@ -6,18 +6,18 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	"disparazap/internal/application/port"
+	appport "disparazap/internal/contracts"
 	"disparazap/internal/shared/domain"
 )
 
 // DownloadImageUseCase encapsula a validação de download de imagem.
 type DownloadImageUseCase struct {
-	clientProvider port.ClientProvider
-	logger         port.Logger
+	clientProvider appport.ClientProvider
+	logger         appport.Logger
 }
 
 // NewDownloadImageUseCase cria uma nova instância do usecase.
-func NewDownloadImageUseCase(cp port.ClientProvider, l port.Logger) *DownloadImageUseCase {
+func NewDownloadImageUseCase(cp appport.ClientProvider, l appport.Logger) *DownloadImageUseCase {
 	return &DownloadImageUseCase{
 		clientProvider: cp,
 		logger:         l,
