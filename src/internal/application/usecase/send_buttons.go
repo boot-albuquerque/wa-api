@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // SendButtonsUseCase encapsula a validação de envio de botões.

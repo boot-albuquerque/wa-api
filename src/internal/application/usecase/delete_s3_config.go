@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // DeleteS3ConfigUseCase encapsula a validação de exclusão de configuração de S3.

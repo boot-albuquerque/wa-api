@@ -6,9 +6,9 @@ import (
 
 	customhttp "wa-api/internal/presentation/http"
 
-	appport "wa-api/internal/contracts"
+	appport "wa-api/internal/application/contracts"
 	"wa-api/internal/application/usecase"
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 )
 
 func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {

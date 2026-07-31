@@ -8,8 +8,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // GetHealthUseCase retrieves health information about the server

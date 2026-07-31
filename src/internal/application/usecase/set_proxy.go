@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // SetProxyUseCase encapsula a validação de configuração de Proxy.

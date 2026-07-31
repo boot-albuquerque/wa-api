@@ -8,7 +8,7 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 
-	appport "wa-api/internal/contracts"
+	appport "wa-api/internal/application/contracts"
 	wm "wa-api/internal/infra/whatsmeow"
 )
 

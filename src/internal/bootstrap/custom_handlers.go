@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	appport "wa-api/internal/contracts"
+	appport "wa-api/internal/application/contracts"
 	"wa-api/internal/application/usecase"
 	"wa-api/internal/infra/whatsmeow"
 	customhttp "wa-api/internal/presentation/http"

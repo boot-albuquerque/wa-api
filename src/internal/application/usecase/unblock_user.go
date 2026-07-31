@@ -8,8 +8,8 @@ import (
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // UnblockUserUseCase desbloqueia um usuário

@@ -6,8 +6,8 @@ import (
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // DownloadAudioUseCase encapsula a validação de download de áudio.

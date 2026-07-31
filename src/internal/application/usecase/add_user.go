@@ -7,7 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 	dbpkg "wa-api/internal/infra/db"
 	"wa-api/internal/infra/storage"
 )

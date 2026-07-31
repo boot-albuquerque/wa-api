@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // GetBlocklistUseCase retrieves the current blocklist

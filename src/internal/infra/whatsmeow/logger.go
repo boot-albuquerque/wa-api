@@ -1,7 +1,7 @@
 package whatsmeow
 
 import (
-	appport "wa-api/internal/contracts"
+	appport "wa-api/internal/application/contracts"
 
 	"github.com/rs/zerolog"
 )

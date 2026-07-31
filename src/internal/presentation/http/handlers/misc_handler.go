@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"wa-api/internal/application/usecase"
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 	customhttp "wa-api/internal/presentation/http"
 )
 

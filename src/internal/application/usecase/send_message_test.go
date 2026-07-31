@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"wa-api/internal/application/usecase"
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 )

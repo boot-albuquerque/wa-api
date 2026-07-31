@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "wa-api/internal/contracts"
-	"wa-api/internal/shared/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 )
 
 // DeleteMessageUseCase encapsula a validação de exclusão de mensagem.

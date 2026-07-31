@@ -6,7 +6,7 @@ import (
 
 	customhttp "wa-api/internal/presentation/http"
 	"wa-api/internal/application/usecase"
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 )
 
 // --- Download handlers ---

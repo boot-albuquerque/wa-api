@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/shared/domain"
+	"wa-api/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
