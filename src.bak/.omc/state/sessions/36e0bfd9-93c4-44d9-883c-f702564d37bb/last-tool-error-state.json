@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git checkout -f main && git merge refactor/clean-architecture --no-edit\",\"description\":\"Force checkout main, ignoring local OMC state changes\"}",
+  "error": "Exit code 128\nSwitched to branch 'main'\nYour branch is up to date with 'origin/main'.\nfatal: Unable to read current working directory: Arquivo ou diretório inexistente",
+  "timestamp": "2026-07-31T05:36:30.623Z",
+  "retry_count": 1
+}

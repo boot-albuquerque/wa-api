@@ -14,12 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY src/go.mod src/go.sum ./
 RUN go mod download
 
-COPY . .
+COPY src/ .
 ENV CGO_ENABLED=1
-RUN go build -o wuzapi
+RUN go build -o wuzapi ./cmd/core
 
 FROM debian:bookworm-slim
 

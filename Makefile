@@ -24,7 +24,7 @@ DOCKER_TAG := latest
 ##@ Build
 
 build: ## Build the binary
-	$(GOBUILD) -o $(BINARY) .
+	$(GOBUILD) -o $(BINARY) ./src/cmd/core
 
 docker: ## Build Docker image
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
@@ -52,7 +52,7 @@ coverage-domain: ## Show domain + application coverage
 ##@ Quality
 
 lint: ## Run golangci-lint on internal packages
-	$(LINT) $(LINT_ARGS)
+	$(LINT) run ./... ./cmd/...
 
 vet: ## Run go vet
 	$(GOVET) ./...
@@ -72,10 +72,9 @@ clean: ## Remove build artifacts
 
 stats: ## Print project statistics
 	@echo "=== Root Files ==="
-	@echo "handlers.go: $$(wc -l < handlers.go) LOC"
-	@echo "helpers.go:  $$(wc -l < helpers.go) LOC"
-	@echo "wmiau.go:    $$(wc -l < wmiau.go) LOC"
-	@echo "main.go:     $$(wc -l < main.go) LOC"
+	@echo "root .go files: $$(ls *.go 2>/dev/null | wc -l)"
+	@echo "root LOC:       $$(cat *.go 2>/dev/null | wc -l)"
+	@echo "cmd/wuzapi/main.go: $$(wc -l < cmd/wuzapi/main.go) LOC"
 	@echo ""
 	@echo "=== Internal ==="
 	@echo "Files: $$(find internal -name '*.go' | wc -l)"

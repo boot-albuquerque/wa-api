@@ -1,0 +1,435 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1785431210034,
+  "projectRoot": "/home/lucasmendoncadealbuquerque/Documentos/repos/disparazaap-wuzapi",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Go",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "go.mod"
+        ]
+      },
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Makefile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "go",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "mv src/cmd cmd 2>/dev/null\nmv src/internal internal 2>/dev/null\nmv src/contracts contracts 2>/dev/null\nmv src/core core 2>/dev/null\nrmdir src 2>/dev/null && echo \"src/ cleaned\" || echo \"src/ still has: $(ls src/ 2>/dev/null)\"\n\necho \"=== VERIFY ===\"\nhead -1 go.mod\necho \"build: $(go build ./cmd/core 2>&1 && echo '✓' || echo 'FAIL')\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"",
+    "testCommand": "cd src && export PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"=== ROOT ===\"\ncd /home/lucasmendoncadealbuquerque/Documentos/repos/wa-api && pwd\necho \"Root .go: $(ls *.go 2>/dev/null | wc -l)\"\necho \"Root dirs: $(ls -d */ 2>/dev/null | tr '\\n' ' ')\"\necho \"Src dirs: $(ls -d src/*/ 2>/dev/null | tr '\\n' ' ')\"",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "static"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "contracts": {
+      "path": "contracts",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1785431210026,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 3,
+      "lastAccessed": 1785431210026,
+      "keyFiles": [
+        "PAIRING-SMOKE.md",
+        "SYNC-UPSTREAM.md",
+        "TEMPLATE-US-N1.md"
+      ]
+    },
+    "internal": {
+      "path": "internal",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1785431210027,
+      "keyFiles": []
+    },
+    "static": {
+      "path": "static",
+      "purpose": "Static files",
+      "fileCount": 2,
+      "lastAccessed": 1785431210031,
+      "keyFiles": [
+        "favicon.ico",
+        "index.html"
+      ]
+    },
+    "docs/api": {
+      "path": "docs/api",
+      "purpose": "API routes",
+      "fileCount": 2,
+      "lastAccessed": 1785431210032,
+      "keyFiles": [
+        "README.md",
+        "postman.json"
+      ]
+    },
+    "internal/app": {
+      "path": "internal/app",
+      "purpose": "Application code",
+      "fileCount": 3,
+      "lastAccessed": 1785431210033,
+      "keyFiles": [
+        "context.go",
+        "http.go",
+        "server.go"
+      ]
+    },
+    "static/api": {
+      "path": "static/api",
+      "purpose": "API routes",
+      "fileCount": 12,
+      "lastAccessed": 1785431210033,
+      "keyFiles": [
+        "favicon-16x16.png",
+        "favicon-32x32.png",
+        "index.html"
+      ]
+    },
+    "static/docs": {
+      "path": "static/docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1785431210033,
+      "keyFiles": [
+        "index.html"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "internal/whatsapp/client/client.go",
+      "accessCount": 24,
+      "lastAccessed": 1785466168065,
+      "type": "file"
+    },
+    {
+      "path": "helpers.go",
+      "accessCount": 20,
+      "lastAccessed": 1785458563238,
+      "type": "file"
+    },
+    {
+      "path": "wmiau.go",
+      "accessCount": 19,
+      "lastAccessed": 1785464550738,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/deps.go",
+      "accessCount": 12,
+      "lastAccessed": 1785444070506,
+      "type": "file"
+    },
+    {
+      "path": "auth.go",
+      "accessCount": 6,
+      "lastAccessed": 1785460883120,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 4,
+      "lastAccessed": 1785441545586,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 4,
+      "lastAccessed": 1785458622308,
+      "type": "file"
+    },
+    {
+      "path": "main.go",
+      "accessCount": 4,
+      "lastAccessed": 1785467261785,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/myclient.go",
+      "accessCount": 3,
+      "lastAccessed": 1785443474583,
+      "type": "file"
+    },
+    {
+      "path": "rabbitmq_delegates.go",
+      "accessCount": 3,
+      "lastAccessed": 1785448535193,
+      "type": "file"
+    },
+    {
+      "path": "stdio.go",
+      "accessCount": 3,
+      "lastAccessed": 1785458938574,
+      "type": "file"
+    },
+    {
+      "path": "internal/interfaces/http/middleware/auth.go",
+      "accessCount": 3,
+      "lastAccessed": 1785467286103,
+      "type": "file"
+    },
+    {
+      "path": "cmd/wuzapi/main.go",
+      "accessCount": 2,
+      "lastAccessed": 1785441428734,
+      "type": "file"
+    },
+    {
+      "path": "Dockerfile",
+      "accessCount": 2,
+      "lastAccessed": 1785441546596,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/context.go",
+      "accessCount": 2,
+      "lastAccessed": 1785444420311,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/webhook.go",
+      "accessCount": 2,
+      "lastAccessed": 1785444452905,
+      "type": "file"
+    },
+    {
+      "path": "custom_handlers.go",
+      "accessCount": 2,
+      "lastAccessed": 1785444802016,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/media/sticker/sticker.go",
+      "accessCount": 2,
+      "lastAccessed": 1785446749549,
+      "type": "file"
+    },
+    {
+      "path": "db.go",
+      "accessCount": 2,
+      "lastAccessed": 1785447142512,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/db/connection.go",
+      "accessCount": 2,
+      "lastAccessed": 1785447187732,
+      "type": "file"
+    },
+    {
+      "path": "db_delegates.go",
+      "accessCount": 2,
+      "lastAccessed": 1785447233272,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/auth/hmac.go",
+      "accessCount": 2,
+      "lastAccessed": 1785457290844,
+      "type": "file"
+    },
+    {
+      "path": "history_sync.go",
+      "accessCount": 2,
+      "lastAccessed": 1785458571138,
+      "type": "file"
+    },
+    {
+      "path": "clients.go",
+      "accessCount": 2,
+      "lastAccessed": 1785460344530,
+      "type": "file"
+    },
+    {
+      "path": "internal/interfaces/http/wiring/routes.go",
+      "accessCount": 2,
+      "lastAccessed": 1785464967896,
+      "type": "file"
+    },
+    {
+      "path": "internal/app/context.go",
+      "accessCount": 2,
+      "lastAccessed": 1785467275675,
+      "type": "file"
+    },
+    {
+      "path": "src/cmd/core/main.go",
+      "accessCount": 2,
+      "lastAccessed": 1785468260668,
+      "type": "file"
+    },
+    {
+      "path": "routes.go",
+      "accessCount": 1,
+      "lastAccessed": 1785440849687,
+      "type": "file"
+    },
+    {
+      "path": "custom_routes.go",
+      "accessCount": 1,
+      "lastAccessed": 1785440850939,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/handler.go",
+      "accessCount": 1,
+      "lastAccessed": 1785444088711,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/wmiau.go",
+      "accessCount": 1,
+      "lastAccessed": 1785444326495,
+      "type": "file"
+    },
+    {
+      "path": "internal/whatsapp/client/media.go",
+      "accessCount": 1,
+      "lastAccessed": 1785446233695,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/media/opengraph/fetch.go",
+      "accessCount": 1,
+      "lastAccessed": 1785446969932,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/db/message_history.go",
+      "accessCount": 1,
+      "lastAccessed": 1785447170449,
+      "type": "file"
+    },
+    {
+      "path": "constants.go",
+      "accessCount": 1,
+      "lastAccessed": 1785447367351,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/constants/events.go",
+      "accessCount": 1,
+      "lastAccessed": 1785447367756,
+      "type": "file"
+    },
+    {
+      "path": "rabbitmq.go",
+      "accessCount": 1,
+      "lastAccessed": 1785448453520,
+      "type": "file"
+    },
+    {
+      "path": "media.go",
+      "accessCount": 1,
+      "lastAccessed": 1785448463110,
+      "type": "file"
+    },
+    {
+      "path": "internal/app/http.go",
+      "accessCount": 1,
+      "lastAccessed": 1785448636198,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/stdio/stdio_server.go",
+      "accessCount": 1,
+      "lastAccessed": 1785458971606,
+      "type": "file"
+    },
+    {
+      "path": "stdio_delegates.go",
+      "accessCount": 1,
+      "lastAccessed": 1785459078886,
+      "type": "file"
+    },
+    {
+      "path": "internal/infrastructure/history/sync.go",
+      "accessCount": 1,
+      "lastAccessed": 1785459173883,
+      "type": "file"
+    },
+    {
+      "path": "killchannel_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1785461092702,
+      "type": "file"
+    },
+    {
+      "path": "jpeg_thumbnail_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1785461093154,
+      "type": "file"
+    },
+    {
+      "path": "internal/interfaces/http/wiring/wiring.go",
+      "accessCount": 1,
+      "lastAccessed": 1785461298111,
+      "type": "file"
+    },
+    {
+      "path": "go.mod",
+      "accessCount": 1,
+      "lastAccessed": 1785467257819,
+      "type": "file"
+    },
+    {
+      "path": "delegates.go",
+      "accessCount": 1,
+      "lastAccessed": 1785467261572,
+      "type": "file"
+    },
+    {
+      "path": "internal/infra/whatsapp/client/client.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518465,
+      "type": "file"
+    },
+    {
+      "path": "internal/infra/whatsapp/client/media.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518717,
+      "type": "file"
+    },
+    {
+      "path": "internal/bootstrap/main.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518998,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

@@ -3,20 +3,20 @@
 //
 // Use em arquivos _test.go:
 //
-//	import "wuzapi/internal/testutil"
+//	import "wa-api/internal/testutil"
 //	da := testutil.NewMockProfileDataAccess("John", "5511@s.whatsapp.net")
 package testutil
 
 import (
 	"context"
 
-	"wuzapi/internal/application/port"
-	"wuzapi/internal/domain"
+	appport "wa-api/internal/application/contracts"
+	"wa-api/internal/domain"
 
 	"go.mau.fi/whatsmeow"
 )
 
-// MockProfileDataAccess implementa port.ProfileDataAccess para testes.
+// MockProfileDataAccess implementa appport.ProfileDataAccess para testes.
 type MockProfileDataAccess struct {
 	PushNameVal  string
 	JIDStr       string
@@ -38,7 +38,7 @@ func NewMockProfileDataAccess(pushName, jid string) *MockProfileDataAccess {
 	}
 }
 
-var _ port.ProfileDataAccess = (*MockProfileDataAccess)(nil)
+var _ appport.ProfileDataAccess = (*MockProfileDataAccess)(nil)
 
 func (m *MockProfileDataAccess) PushName() string { return m.PushNameVal }
 
@@ -57,19 +57,19 @@ func (m *MockProfileDataAccess) ContactInfo(ctx context.Context, jid domain.JID)
 	return m.FullName, m.BusinessName, m.ContactErr
 }
 
-// MockClientProvider implementa port.ClientProvider para testes.
+// MockClientProvider implementa appport.ClientProvider para testes.
 type MockClientProvider struct {
 	Client *whatsmeow.Client
 	Err    error
 }
 
-var _ port.ClientProvider = (*MockClientProvider)(nil)
+var _ appport.ClientProvider = (*MockClientProvider)(nil)
 
 func (m *MockClientProvider) GetWhatsmeowClient(ctx context.Context, txtID string) (*whatsmeow.Client, error) {
 	return m.Client, m.Err
 }
 
-// MockLogger implementa port.Logger para testes.
+// MockLogger implementa appport.Logger para testes.
 // Captura msg E keyvals para validação de PII.
 type MockLogger struct {
 	Entries []LogEntry
@@ -82,7 +82,7 @@ type LogEntry struct {
 	Keyvals []any
 }
 
-var _ port.Logger = (*MockLogger)(nil)
+var _ appport.Logger = (*MockLogger)(nil)
 
 func (m *MockLogger) Info(msg string, keyvals ...any) {
 	m.Entries = append(m.Entries, LogEntry{Level: "info", Msg: msg, Keyvals: keyvals})

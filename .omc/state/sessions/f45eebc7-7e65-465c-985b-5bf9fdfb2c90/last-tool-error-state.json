@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls deploy/ 2>&1\",\"description\":\"Check if deploy/ exists on this branch\"}",
+  "error": "Exit code 2\nls: não foi possível acessar 'deploy/': Arquivo ou diretório inexistente",
+  "timestamp": "2026-07-30T17:15:39.651Z",
+  "retry_count": 1
+}

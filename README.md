@@ -1,269 +1,252 @@
-# WUZAPI
+# DisparaZap
 
-<img src="static/favicon.ico" width="30"> WuzAPI is an implementation 
-of the [@tulir/whatsmeow](https://github.com/tulir/whatsmeow) library as a 
-simple RESTful API service with multiple device support and concurrent 
-sessions.
+DisparaZap é uma implementação da biblioteca [@tulir/whatsmeow](https://github.com/tulir/whatsmeow) como um serviço
+RESTful com suporte a múltiplos dispositivos e sessões concorrentes.
 
-Whatsmeow does not use Puppeteer on headless Chrome, nor an Android emulator. It communicates directly with WhatsApp’s WebSocket servers, making it significantly faster and much less demanding on memory and CPU than those solutions. The drawback is that any changes to the WhatsApp protocol could break connections, requiring a library update.
+Whatsmeow não usa Puppeteer no Chrome headless, nem emulador Android. Comunica-se diretamente com os servidores
+WebSocket do WhatsApp, tornando-o significativamente mais rápido e muito menos exigente em memória e CPU do que
+essas soluções. A desvantagem é que mudanças no protocolo do WhatsApp podem quebrar conexões, exigindo atualização
+da biblioteca.
 
-## :warning: Warning
+## :warning: Aviso
 
-**Using this software in violation of WhatsApp’s Terms of Service can get your number banned**:  
-Be very careful—do not use this to send SPAM or anything similar. Use at your own risk. If you need to develop something for commercial purposes, contact a WhatsApp global solution provider and sign up for the WhatsApp Business API service instead.
+**Usar este software violando os Termos de Serviço do WhatsApp pode resultar no banimento do seu número.**
+Tenha muito cuidado — não use para enviar SPAM ou algo similar. Use por sua conta e risco. Se você precisa
+desenvolver algo para fins comerciais, entre em contato com um provedor global de soluções WhatsApp e
+registre-se no serviço WhatsApp Business API.
 
-## Available endpoints
+## Endpoints disponíveis
 
-* **Session:** Connect, disconnect, and log out from WhatsApp. Retrieve connection status and QR codes for scanning.
-* **Messages:** Send text, image, audio, document, template, video, sticker, location, contact, and poll messages.
-* **Users:** Check if phone numbers have WhatsApp, get user information and avatars, and retrieve the full contact list.
-* **Chat:** Set presence (typing/paused, recording media), mark messages as read, download images from messages, send reactions.
-* **Groups:** Create, delete and list groups, get info, get invite links, set participants, change group photos and names.
-* **Webhooks:** Set and get webhooks that will be called whenever events or messages are received.
-* **HMAC Configuration:** Configure HMAC keys for webhook security and signature verification.
+* **Session:** Conecte, desconecte e faça logout do WhatsApp. Consulte status da conexão e QR codes para escaneamento.
+* **Messages:** Envie mensagens de texto, imagem, áudio, documento, template, vídeo, sticker, localização, contato e enquetes.
+* **Users:** Verifique se números de telefone possuem WhatsApp, obtenha informações de usuários e avatares, e recupere a lista completa de contatos.
+* **Chat:** Configure presença (digitando/pausado, gravando mídia), marque mensagens como lidas, baixe imagens de mensagens, envie reações.
+* **Groups:** Crie, exclua e liste grupos, obtenha informações, links de convite, configure participantes, altere fotos e nomes de grupos.
+* **Webhooks:** Configure e obtenha webhooks que serão chamados sempre que eventos ou mensagens forem recebidos.
+* **HMAC Configuration:** Configure chaves HMAC para segurança de webhooks e verificação de assinaturas.
 
-### Webhook HMAC Signing
+### Assinatura HMAC para Webhooks
 
-When HMAC is configured, all webhooks include an `x-hmac-signature` header with SHA-256 HMAC signature.
+Quando HMAC está configurado, todos os webhooks incluem o header `x-hmac-signature` com assinatura SHA-256 HMAC.
 
-#### Signature Generation by Content-Type:
+#### Geração de Assinatura por Content-Type:
 
 **`application/json`**
-* Signed data: Raw JSON request body
-* Verification: Use the exact JSON received
+* Dados assinados: corpo bruto da requisição JSON
+* Verificação: use exatamente o JSON recebido
 
 **`application/x-www-form-urlencoded`**
-* Signed data: URL-encoded form string (`key=value&key2=value2`)
-* Verification: Reconstruct the form string from received parameters
+* Dados assinados: string form-encoded (`key=value&key2=value2`)
+* Verificação: reconstrua a string form a partir dos parâmetros recebidos
 
-**`multipart/form-data`** (file uploads)
-* Signed data: JSON representation of form fields (excluding files)
-* Verification: Create JSON from non-file form fields
+**`multipart/form-data`** (uploads de arquivo)
+* Dados assinados: representação JSON dos campos do formulário (excluindo arquivos)
+* Verificação: crie JSON a partir dos campos não-arquivo do formulário
 
-* Always verify signatures before processing webhooks
+*Sempre verifique assinaturas antes de processar webhooks*
 
-## Prerequisites
+## Pré-requisitos
 
-**Required:**
+**Obrigatório:**
 * Go (Go Programming Language)
 
-**Optional:**
-* Docker (for containerization)
+**Opcional:**
+* Docker (para containerização)
 
-## Updating dependencies
+## Atualizando dependências
 
-This project uses the whatsmeow library to communicate with WhatsApp. To update the library to the latest version, run:
+Este projeto usa a biblioteca whatsmeow para comunicar-se com o WhatsApp. Para atualizar para a versão mais recente:
 
 ```bash
 go get -u go.mau.fi/whatsmeow@latest
 go mod tidy
 ```
 
-## Building
+## Build
 
 ```
 go build .
 ```
 
-## Homebrew installation
+## Execução
 
-To install `wuzapi` via [Homebrew](https://brew.sh) use:
+Por padrão, inicia um serviço REST na porta 8080. Parâmetros disponíveis:
 
-```sh
-brew install asternic/wuzapi/wuzapi
-```
+* `-admintoken`  : define o token de autenticação para endpoints admin. Se não especificado, será lido do .env
+* `-address`  : define o endereço IP para bind do servidor (padrão 0.0.0.0)
+* `-port`  : define a porta (padrão 8080)
+* `-logtype` : formato dos logs, `console` (padrão) ou `json`
+* `-color` : habilita saída colorida para logs em console
+* `-osname` : nome do SO na conexão do WhatsApp
+* `-skipmedia` : pula download de mídia das mensagens
+* `-wadebug` : habilita debug do whatsmeow, níveis INFO ou DEBUG
 
-## Run
+* `-sslcertificate` : arquivo de certificado SSL
+* `-sslprivatekey` : arquivo de chave privada SSL
 
-By default it will start a REST service in port 8080. These are the parameters
-you can use to alter behaviour
-
-* -admintoken  : sets authentication token for admin endpoints. If not specified it will be read from .env
-* -address  : sets the IP address to bind the server to (default 0.0.0.0)
-* -port  : sets the port number (default 8080)
-* -logtype : format for logs, either console (default) or json
-* -color : enable colored output for console logs
-* -osname : Connection OS Name in Whatsapp
-* -skipmedia : Skip downloading media from messages
-* -wadebug : enable whatsmeow debug, either INFO or DEBUG levels are suported
-
-* -sslcertificate : SSL Certificate File
-* -sslprivatekey : SSL Private Key File
-
-Example:
-
-To have colored logs:
+Exemplo — logs coloridos:
 
 ```
-./wuzapi -logtype=console -color=true
+./disparazapi -logtype=console -color=true
 ```
 
-For JSON logs:
+Logs em JSON:
 
 ```
-./wuzapi -logtype json 
+./disparazapi -logtype json
 ```
 
-With time zone: 
+Com timezone:
 
-Set `TZ=America/New_York ./wuzapi ...` in your shell or in your .env file or Docker Compose environment: `TZ=America/New_York`.  
+Configure `TZ=America/Sao_Paulo ./disparazapi ...` no shell ou no arquivo `.env` ou Docker Compose: `TZ=America/Sao_Paulo`.
 
-## Configuration
+## Configuração
 
-WuzAPI uses a `.env` file for configuration. You can use the provided `.env.sample` as a template:
+DisparaZap usa um arquivo `.env` para configuração. Use o `.env.sample` como template:
 
 ```bash
 cp .env.sample .env
 ```
 
-### Environment Variables
+### Variáveis de Ambiente
 
-#### Required Settings
+#### Configurações Obrigatórias
 ```
-WUZAPI_ADMIN_TOKEN=your_admin_token_here
-```
-
-#### Security Settings
-
-```
-WUZAPI_GLOBAL_ENCRYPTION_KEY=your_32_byte_encryption_key_here
-WUZAPI_GLOBAL_HMAC_KEY=your_global_hmac_key_here
+WUZAPI_ADMIN_TOKEN=seu_admin_token_aqui
 ```
 
-#### Optional Settings
+#### Configurações de Segurança
 
 ```
-TZ=America/New_York
+WUZAPI_GLOBAL_ENCRYPTION_KEY=sua_chave_32_bytes_aqui
+WUZAPI_GLOBAL_HMAC_KEY=sua_chave_hmac_global_aqui
+```
+
+#### Configurações Opcionais
+
+```
+TZ=America/Sao_Paulo
 WEBHOOK_FORMAT=json
-SESSION_DEVICE_NAME=WuzAPI
+SESSION_DEVICE_NAME=DisparaZap
 WUZAPI_PORT=8080
-WUZAPI_GLOBAL_WEBHOOK=https://your-global-webhook.url
+WUZAPI_GLOBAL_WEBHOOK=https://sua-url-global-webhook.url
 WEBHOOK_RETRY_ENABLED=true
 WEBHOOK_RETRY_COUNT=2
 WEBHOOK_RETRY_DELAY_SECONDS=30
-WEBHOOK_ERROR_QUEUE_NAME=wuzapi_dead_letter_webhooks
+WEBHOOK_ERROR_QUEUE_NAME=disparazapi_dead_letter_webhooks
 ```
 
-### Important Notes
+### Notas Importantes
 
-#### Auto-Generated Credentials
-If the following settings are not provided, they will be auto-generated:
-* `WUZAPI_ADMIN_TOKEN`: Random 32-character token
-* `WUZAPI_GLOBAL_ENCRYPTION_KEY`: Random 32-byte key for AES-256 encryption
+#### Credenciais Auto-Geradas
+Se as seguintes configurações não forem fornecidas, serão auto-geradas:
+* `WUZAPI_ADMIN_TOKEN`: Token aleatório de 32 caracteres
+* `WUZAPI_GLOBAL_ENCRYPTION_KEY`: Chave aleatória de 32 bytes para criptografia AES-256
 
-**Important**: Save auto-generated credentials to your `.env` file or you will lose access to encrypted data and admin functions on restart!
+**Importante**: Salve as credenciais auto-geradas no seu arquivo `.env` ou você perderá acesso aos dados criptografados e funções de admin ao reiniciar!
 
-#### Webhook Security
-* `WUZAPI_GLOBAL_HMAC_KEY`: Global HMAC key for webhook signing (minimum 32 characters)
+#### Segurança de Webhooks
+* `WUZAPI_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
 
-#### Database Configuration
+#### Configuração de Banco de Dados
 
-**For PostgreSQL:**
+**Para PostgreSQL:**
 ```
-DB_USER=wuzapi
-DB_PASSWORD=wuzapi
-DB_NAME=wuzapi
-DB_HOST=db  # Use 'db' when running with Docker Compose, or 'localhost' for native execution
+DB_USER=disparazapi
+DB_PASSWORD=disparazapi
+DB_NAME=disparazapi
+DB_HOST=db  # Use 'db' com Docker Compose, ou 'localhost' para execução nativa
 DB_PORT=5432
 DB_SSLMODE=false
 ```
 
-**For SQLite (default):**
-No database configuration needed - SQLite is used by default if no PostgreSQL settings are provided.
+**Para SQLite (padrão):**
+Nenhuma configuração de banco necessária — SQLite é usado por padrão se nenhuma configuração PostgreSQL for fornecida.
 
-#### Optional Settings
-```
-TZ=America/New_York
-WEBHOOK_FORMAT=json # or "form" for the default
-SESSION_DEVICE_NAME=WuzAPI
-WUZAPI_PORT=8080 # Port for the WuzAPI server
-WUZAPI_GLOBAL_WEBHOOK= # Global webhook URL for all instances
-```
+### Integração com RabbitMQ
+DisparaZap suporta envio de eventos do WhatsApp para uma fila RabbitMQ para distribuição global de eventos. Quando habilitado, todos os eventos serão publicados na fila configurada independentemente das configurações de webhook individuais.
 
-### RabbitMQ Integration
-WuzAPI supports sending WhatsApp events to a RabbitMQ queue for global event distribution. When enabled, all WhatsApp events will be published to the specified queue regardless of individual user webhook configurations.
-
-Set these environment variables to enable RabbitMQ integration:
+Configure estas variáveis de ambiente para habilitar:
 
 ```
 RABBITMQ_URL=amqp://guest:guest@localhost:5672
-RABBITMQ_QUEUE=whatsapp  # Optional (default: whatsapp_events)
+RABBITMQ_QUEUE=whatsapp  # Opcional (padrão: whatsapp_events)
 ```
 
-When enabled:
+Quando habilitado:
 
-* All WhatsApp events (messages, presence updates, etc.) will be published to the configured queue regardless of event subscritions for regular webhooks
-* Events will include the userId and instanceName
-* This works alongside webhook configurations - events will be sent to both RabbitMQ and any configured webhooks
-* The integration is global and affects all instances
+* Todos os eventos do WhatsApp (mensagens, atualizações de presença, etc.) serão publicados na fila configurada independentemente das assinaturas de eventos para webhooks regulares
+* Eventos incluirão userId e instanceName
+* Funciona em conjunto com webhooks — eventos são enviados tanto para RabbitMQ quanto para webhooks configurados
+* A integração é global e afeta todas as instâncias
 
-### Webhook Security with HMAC
+### Segurança de Webhooks com HMAC
 
-WuzAPI supports HMAC signatures for webhook verification:
+DisparaZap suporta assinaturas HMAC para verificação de webhooks:
 
-* **Per-instance HMAC**: Configure unique HMAC keys for each user instance
-* **Global HMAC**: Set a global HMAC key via `WUZAPI_GLOBAL_HMAC_KEY` environment variable
-* **Signature Header**: All signed webhooks include `x-hmac-signature` header
-* **Key Security**: HMAC keys are never exposed after configuration
+* **HMAC por instância**: Configure chaves HMAC únicas para cada instância de usuário
+* **HMAC global**: Defina uma chave HMAC global via `WUZAPI_GLOBAL_HMAC_KEY`
+* **Header de assinatura**: Todos os webhooks assinados incluem o header `x-hmac-signature`
+* **Segurança da chave**: Chaves HMAC nunca são expostas após a configuração
 
-**Priority**: Instance HMAC > Global HMAC > No signature
+**Prioridade**: HMAC da instância > HMAC global > Sem assinatura
 
-Configure HMAC keys via the Dashboard or using the `/session/hmac/config` API endpoints.
+Configure chaves HMAC via Dashboard ou usando os endpoints da API `/session/hmac/config`.
 
-#### Key configuration options:
+#### Opções principais de configuração:
 
-* WUZAPI_ADMIN_TOKEN: Required - Authentication token for admin endpoints
-* TZ: Optional - Timezone for server operations (default: UTC)
-* PostgreSQL-specific options: Only required when using PostgreSQL backend
-* RabbitMQ options: Optional, only required if you want to publish events to RabbitMQ
+* WUZAPI_ADMIN_TOKEN: Obrigatório — Token de autenticação para endpoints admin
+* TZ: Opcional — Timezone para operações do servidor (padrão: UTC)
+* PostgreSQL: Opções específicas, apenas necessárias ao usar backend PostgreSQL
+* RabbitMQ: Opcional, necessário apenas para publicar eventos no RabbitMQ
 
-### Docker Configuration
+### Configuração Docker
 
-When using Docker Compose, `docker-compose.yml` automatically loads environment variables from a `.env` file when available. However, `docker-compose-swarm.yaml` uses `docker stack deploy`, which does not automatically load from `.env` files. Variables in the swarm file will only be substituted if they are exported in the shell environment where the deploy command is run. For managing secrets in Swarm, consider using Docker secrets.
+Ao usar Docker Compose, `deploy/docker-compose.yml` carrega automaticamente variáveis do arquivo `.env` quando disponível. No entanto, `deploy/docker-compose-swarm.yaml` usa `docker stack deploy`, que não carrega automaticamente do `.env`. Variáveis no arquivo swarm só serão substituídas se exportadas no shell onde o comando deploy é executado. Para gerenciar segredos no Swarm, considere usar Docker secrets.
 
-The Docker configuration will:
-1. First load variables from the `.env` file (if present and supported)
-2. Use default values as fallback if variables are not defined
-3. Override with any variables explicitly set in the `environment` section of the compose file
+A configuração Docker irá:
+1. Carregar variáveis do arquivo `.env` primeiro (se presente e suportado)
+2. Usar valores padrão como fallback se variáveis não estiverem definidas
+3. Sobrescrever com quaisquer variáveis definidas explicitamente na seção `environment` do compose
 
-**Key differences for Docker deployment:**
-- Set `DB_HOST=db` instead of `localhost` to connect to the PostgreSQL container
-- The `WUZAPI_PORT` variable controls the external port mapping in `docker-compose.yml`
-- In swarm mode, `WUZAPI_PORT` configures the Traefik load balancer port
+**Diferenças principais para deploy Docker:**
+- Defina `DB_HOST=db` em vez de `localhost` para conectar ao container PostgreSQL
+- A variável `WUZAPI_PORT` controla o mapeamento de porta externa no `deploy/docker-compose.yml`
+- Em modo swarm, `WUZAPI_PORT` configura a porta do load balancer Traefik
 
-**Note:** The `.env` file is already included in `.gitignore` to avoid committing sensitive information to your repository.
+**Nota:** O arquivo `.env` já está incluído no `.gitignore` para evitar commit de informações sensíveis.
 
-## Usage
+## Uso
 
-To interact with the API, you must include the `Authorization` header in HTTP requests, containing the user's authentication token. You can have multiple users (different WhatsApp numbers) on the same server.  
+Para interagir com a API, inclua o header `Authorization` nas requisições HTTP, contendo o token de autenticação do usuário. Você pode ter múltiplos usuários (números diferentes de WhatsApp) no mesmo servidor.
 
-* A Swagger API reference at [/api](/api)
-* A sample web page to connect and scan QR codes at [/login](/login)
-* A fully featured Dashboard to create, manage and test instances at [/dashboard](dashboard)
+* Referência Swagger em [/api](/api)
+* Página web para conectar e escanear QR codes em [/login](/login)
+* Dashboard completo para criar, gerenciar e testar instâncias em [/dashboard](dashboard)
 
-## ADMIN Actions
+## Ações de ADMIN
 
-You can list, add and remove users using the admin endpoints. For that you must use the WUZAPI_ADMIN_TOKEN in the Authorization header
+Você pode listar, adicionar e remover usuários usando os endpoints admin. Para isso, use o WUZAPI_ADMIN_TOKEN no header Authorization.
 
-Then you can use the /admin/users endpoint with the Authorization header containing the token to:
+Use o endpoint `/admin/users` com o header Authorization contendo o token para:
 
-- `GET /admin/users` - List all users
-- `POST /admin/users` - Create a new user
-- `DELETE /admin/users/{id}` - Remove a user
+- `GET /admin/users` - Listar todos os usuários
+- `POST /admin/users` - Criar um novo usuário
+- `DELETE /admin/users/{id}` - Remover um usuário
 
-The JSON body for creating a new user must contain:
+O corpo JSON para criar um novo usuário deve conter:
 
-- `name` [string] : User's name 
-- `token` [string] : Security token to authorize/authenticate this user
-- `webhook` [string] : URL to send events via POST (optional)
-- `events` [string] : Comma-separated list of events to receive (required) - Valid events are: "Message", "ReadReceipt", "Presence", "HistorySync", "ChatPresence", "All"
-- `expiration` [int] : Expiration timestamp (optional, not enforced by the system)
+- `name` [string] : Nome do usuário
+- `token` [string] : Token de segurança para autorizar/autenticar este usuário
+- `webhook` [string] : URL para enviar eventos via POST (opcional)
+- `events` [string] : Lista separada por vírgulas de eventos a receber (obrigatório) — eventos válidos: "Message", "ReadReceipt", "Presence", "HistorySync", "ChatPresence", "All"
+- `expiration` [int] : Timestamp de expiração (opcional, não aplicado pelo sistema)
 
-## User Creation with Optional Proxy and S3 Configuration
+## Criação de Usuário com Proxy e S3
 
-You can create a user with optional proxy and S3 storage configuration. All fields are optional and backward compatible. If you do not provide these fields, the user will be created with default settings.
+Você pode criar um usuário com configuração opcional de proxy e armazenamento S3. Todos os campos são opcionais e backward-compatible. Se não fornecidos, o usuário será criado com configurações padrão.
 
-### Example Payload
+### Exemplo de Payload
 
 ```json
 {
@@ -288,228 +271,41 @@ You can create a user with optional proxy and S3 storage configuration. All fiel
 }
 ```
 
-- `proxyConfig` (object, optional):
-  - `enabled` (boolean): Enable proxy for this user.
-  - `proxyURL` (string): Proxy URL (e.g., `socks5://user:pass@host:port`).
-- `s3Config` (object, optional):
-  - `enabled` (boolean): Enable S3 storage for this user.
-  - `endpoint` (string): S3 endpoint URL.
-  - `region` (string): S3 region.
-  - `bucket` (string): S3 bucket name.
-  - `accessKey` (string): S3 access key.
-  - `secretKey` (string): S3 secret key.
-  - `pathStyle` (boolean): Use path style addressing.
-  - `publicURL` (string): Public URL for accessing files.
-  - `mediaDelivery` (string): Media delivery type (`base64`, `s3`, or `both`).
-  - `retentionDays` (integer): Number of days to retain files.
+- `proxyConfig` (object, opcional):
+  - `enabled` (boolean): Habilita proxy para este usuário.
+  - `proxyURL` (string): URL do proxy (ex.: `socks5://user:pass@host:port`).
+- `s3Config` (object, opcional):
+  - `enabled` (boolean): Habilita armazenamento S3 para este usuário.
+  - `endpoint` (string): URL do endpoint S3.
+  - `region` (string): Região S3.
+  - `bucket` (string): Nome do bucket S3.
+  - `accessKey` (string): Chave de acesso S3.
+  - `secretKey` (string): Chave secreta S3.
+  - `pathStyle` (boolean): Usar endereçamento path-style.
+  - `publicURL` (string): URL pública para acesso aos arquivos.
+  - `mediaDelivery` (string): Tipo de entrega de mídia (`base64`, `s3`, ou `both`).
+  - `retentionDays` (integer): Dias para retenção dos arquivos.
 
-If you omit `proxyConfig` or `s3Config`, the user will be created without proxy or S3 integration, maintaining full backward compatibility.
+Se você omitir `proxyConfig` ou `s3Config`, o usuário será criado sem integração de proxy ou S3, mantendo total backward compatibility.
 
-## API reference 
+## Referência da API
 
-API calls should be made with content type json, and parameters sent into the
-request body, always passing the Token header for authenticating the request.
+As chamadas da API devem ser feitas com content-type JSON, e parâmetros enviados no corpo da requisição, sempre passando o header Token para autenticação.
 
-Check the [API Reference](docs/api/README.md)
+Consulte a [Referência da API](docs/api/README.md)
 
-## Contributors
+## Arquitetura
 
-<!-- CONTRIBUTORS:START -->
+Este projeto segue os princípios de Clean Architecture com as seguintes camadas:
 
-<table><tr>
-<td align="center">
-    <a href="https://github.com/asternic">
-      <img src="https://avatars.githubusercontent.com/u/25182694?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>asternic</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/cleitonme">
-      <img src="https://avatars.githubusercontent.com/u/12551230?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>cleitonme</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/guilhermejansen">
-      <img src="https://avatars.githubusercontent.com/u/52773109?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>guilhermejansen</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/LuizFelipeNeves">
-      <img src="https://avatars.githubusercontent.com/u/14094719?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>LuizFelipeNeves</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/WellingtonFonseca">
-      <img src="https://avatars.githubusercontent.com/u/25608175?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>WellingtonFonseca</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/xenodium">
-      <img src="https://avatars.githubusercontent.com/u/8107219?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>xenodium</b></sub>
-    </a>
-  </td>
-</tr><tr>
-<td align="center">
-    <a href="https://github.com/ramon-victor">
-      <img src="https://avatars.githubusercontent.com/u/13617054?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>ramon-victor</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/vitorsilvalima">
-      <img src="https://avatars.githubusercontent.com/u/9752658?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>vitorsilvalima</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/AntonKun">
-      <img src="https://avatars.githubusercontent.com/u/59668952?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>AntonKun</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/Piahn">
-      <img src="https://avatars.githubusercontent.com/u/132025108?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>Piahn</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/ThiagoBauken">
-      <img src="https://avatars.githubusercontent.com/u/107090829?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>ThiagoBauken</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/netrixken">
-      <img src="https://avatars.githubusercontent.com/u/9066682?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>netrixken</b></sub>
-    </a>
-  </td>
-</tr><tr>
-<td align="center">
-    <a href="https://github.com/luizrgf2">
-      <img src="https://avatars.githubusercontent.com/u/71092163?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>luizrgf2</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/andreydruz">
-      <img src="https://avatars.githubusercontent.com/u/976438?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>andreydruz</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/devLucasMoraes">
-      <img src="https://avatars.githubusercontent.com/u/104109951?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>devLucasMoraes</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/RuanAyram">
-      <img src="https://avatars.githubusercontent.com/u/16547662?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>RuanAyram</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/pedroafonso18">
-      <img src="https://avatars.githubusercontent.com/u/157052926?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>pedroafonso18</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/igortrinidad">
-      <img src="https://avatars.githubusercontent.com/u/13478652?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>igortrinidad</b></sub>
-    </a>
-  </td>
-</tr><tr>
-<td align="center">
-    <a href="https://github.com/chrsmendes">
-      <img src="https://avatars.githubusercontent.com/u/77082167?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>chrsmendes</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/jeffersonfelixdev">
-      <img src="https://avatars.githubusercontent.com/u/3003222?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>jeffersonfelixdev</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/paul-lestyo">
-      <img src="https://avatars.githubusercontent.com/u/51690314?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>paul-lestyo</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/luiis716">
-      <img src="https://avatars.githubusercontent.com/u/97978347?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>luiis716</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/dgattupalli696">
-      <img src="https://avatars.githubusercontent.com/u/219828309?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>dgattupalli696</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/joaosouz4dev">
-      <img src="https://avatars.githubusercontent.com/u/47183663?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>joaosouz4dev</b></sub>
-    </a>
-  </td>
-</tr><tr>
-<td align="center">
-    <a href="https://github.com/gusnips">
-      <img src="https://avatars.githubusercontent.com/u/981265?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>gusnips</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/anilgulecha">
-      <img src="https://avatars.githubusercontent.com/u/1016984?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>anilgulecha</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/zennnez">
-      <img src="https://avatars.githubusercontent.com/u/3524740?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>zennnez</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/murilo-koko">
-      <img src="https://avatars.githubusercontent.com/u/223512888?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>murilo-koko</b></sub>
-    </a>
-  </td>
-<td align="center">
-    <a href="https://github.com/Jwenqiang">
-      <img src="https://avatars.githubusercontent.com/u/20280001?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>Jwenqiang</b></sub>
-    </a>
-  </td>
-</tr></table>
-
-<!-- CONTRIBUTORS:END -->
-
-## Clients
-
-- [wuzapi TypeScript / Node Client](https://github.com/gusnips/wuzapi-node)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=asternic/wuzapi&type=Date)](https://www.star-history.com/#asternic/wuzapi&Date)
+- **Domain**: Entidades e regras de negócio centrais
+- **Application**: Casos de uso e ports (interfaces)
+- **Infrastructure**: Adaptadores externos (banco de dados, WhatsApp, S3, RabbitMQ)
+- **Interfaces**: HTTP handlers e rotas
 
 ## License
 
-Copyright &copy; 2025 Nicolás Gudiño and contributors
+Copyright &copy; 2025 DisparaZap contributors
 
 [MIT](https://choosealicense.com/licenses/mit/)
 
@@ -531,32 +327,29 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Icon Attribution
+## Atribuição do Ícone
 
-[Communication icons created by Vectors Market -
-Flaticon](https://www.flaticon.com/free-icons/communication)
+[Communication icons created by Vectors Market - Flaticon](https://www.flaticon.com/free-icons/communication)
 
 ## Legal
 
-This code is in no way affiliated with, authorized, maintained, sponsored or
-endorsed by WhatsApp or any of its affiliates or subsidiaries. This is an
-independent and unofficial software. Use at your own risk.
+Este código não é de forma alguma afiliado, autorizado, mantido, patrocinado ou
+endossado pelo WhatsApp ou qualquer de suas afiliadas ou subsidiárias. Este é um
+software independente e não-oficial. Use por sua conta e risco.
 
-## Cryptography Notice
+## Aviso de Criptografia
 
-This distribution includes cryptographic software. The country in which you
-currently reside may have restrictions on the import, possession, use, and/or
-re-export to another country, of encryption software. BEFORE using any
-encryption software, please check your country's laws, regulations and policies
-concerning the import, possession, or use, and re-export of encryption
-software, to see if this is permitted. See
-[http://www.wassenaar.org/](http://www.wassenaar.org/) for more information.
+Esta distribuição inclui software criptográfico. O país onde você reside atualmente
+pode ter restrições quanto à importação, posse, uso e/ou reexportação de software
+de criptografia. ANTES de usar qualquer software de criptografia, verifique as leis,
+regulamentos e políticas do seu país sobre importação, posse, uso e reexportação de
+software de criptografia, para verificar se isso é permitido. Veja
+[http://www.wassenaar.org/](http://www.wassenaar.org/) para mais informações.
 
-The U.S. Government Department of Commerce, Bureau of Industry and Security
-(BIS), has classified this software as Export Commodity Control Number (ECCN)
-5D002.C.1, which includes information security software using or performing
-cryptographic functions with asymmetric algorithms. The form and manner of this
-distribution makes it eligible for export under the License Exception ENC
-Technology Software Unrestricted (TSU) exception (see the BIS Export
-Administration Regulations, Section 740.13) for both object code and source
-code.
+O U.S. Government Department of Commerce, Bureau of Industry and Security (BIS),
+classificou este software como Export Commodity Control Number (ECCN) 5D002.C.1,
+que inclui software de segurança da informação usando ou executando funções
+criptográficas com algoritmos assimétricos. A forma e maneira desta distribuição
+a torna elegível para exportação sob a exceção License Exception ENC Technology
+Software Unrestricted (TSU) (veja o BIS Export Administration Regulations, Seção
+740.13) tanto para código objeto quanto código fonte.
