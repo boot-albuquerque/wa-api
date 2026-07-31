@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"git log --oneline -3 && echo \\\"---\\\" && export PATH=\\\"$HOME/go/bin:$PATH\\\" && go build ./cmd/core 2>&1 && echo \\\"BUILD ✓\\\"\",\"description\":\"Verify merge + build on main\"}",
-  "error": "Exit code 1\n9364e7d test: fix domain import references in test files after semantic grouping\ncdccdfa refactor: semantic grouping — 75 usecases → 7 domain packages\n89d776c refactor: move domain/ contracts/ to correct Clean Architecture layers\n---\nwarning: both GOPATH and GOROOT are the same directory (/home/lucasmendoncadealbuquerque/go); see https://go.dev/wiki/InstallTroubleshooting\ngo: cannot find main module, but found .git/config in /home/lucasmendoncadealbuquerque/Documentos/repos/wa-api\n\tt...",
-  "timestamp": "2026-07-31T05:38:50.820Z",
+  "tool_input_preview": "{\"command\":\"git checkout -f develop && git merge main --no-edit 2>&1\",\"description\":\"Force checkout develop and merge main\"}",
+  "error": "Exit code 1\nSwitched to branch 'develop'\nSeu ramo está à frente de 'origin/develop' por 1 submissão.\n  (use \"git push\" to publish your local commits)\nCONFLICT (rename/delete): docker-compose-swarm.yaml renamed to deploy/docker-compose-swarm.yaml in HEAD, but deleted in main.\nCONFLICT (rename/delete): docker-compose.yml renamed to deploy/docker-compose.yml in HEAD, but deleted in main.\nAutomatic merge failed; fix conflicts and then commit the result.",
+  "timestamp": "2026-07-31T05:41:05.756Z",
   "retry_count": 1
 }
