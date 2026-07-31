@@ -26,8 +26,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "sed -i 's|\"wa-api/pkg/presentation/http/handlers/user\"|\"wa-api/pkg/presentation/http/handlers\"|g' pkg/bootstrap/custom_handlers.go pkg/bootstrap/jpeg_thumbnail_test.go\nexport PATH=\"$HOME/go/bin:$PATH\" && go build ./cmd/core 2>&1 && go vet ./... 2>&1 && go test -count=1 ./pkg/... 2>&1 | grep \"^ok \" && echo \"ALL ✓\"",
-    "testCommand": "sed -i 's|\"wa-api/pkg/presentation/http/handlers/user\"|\"wa-api/pkg/presentation/http/handlers\"|g' pkg/bootstrap/custom_handlers.go pkg/bootstrap/jpeg_thumbnail_test.go\nexport PATH=\"$HOME/go/bin:$PATH\" && go build ./cmd/core 2>&1 && go vet ./... 2>&1 && go test -count=1 ./pkg/... 2>&1 | grep \"^ok \" && echo \"ALL ✓\"",
+    "buildCommand": "git mv pkg/bootstrap/custom_handlers.go pkg/bootstrap/wiring_handlers.go\ngit mv pkg/bootstrap/custom_routes.go pkg/bootstrap/wiring_routes.go\n\nexport PATH=\"$HOME/go/bin:$PATH\" && go build ./cmd/core 2>&1 && go vet ./... 2>&1 && go test -count=1 ./pkg/... 2>&1 | grep \"^ok \" && echo \"6/6 ✓\"\necho \"bootstrap:\" && ls pkg/bootstrap/*.go",
+    "testCommand": "git mv pkg/bootstrap/custom_handlers.go pkg/bootstrap/wiring_handlers.go\ngit mv pkg/bootstrap/custom_routes.go pkg/bootstrap/wiring_routes.go\n\nexport PATH=\"$HOME/go/bin:$PATH\" && go build ./cmd/core 2>&1 && go vet ./... 2>&1 && go test -count=1 ./pkg/... 2>&1 | grep \"^ok \" && echo \"6/6 ✓\"\necho \"bootstrap:\" && ls pkg/bootstrap/*.go",
     "lintCommand": null,
     "devCommand": null,
     "scripts": {}
