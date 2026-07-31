@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"wa-api/internal/bootstrap"
+	"wa-api/pkg/bootstrap"
 )
 
 func main() {

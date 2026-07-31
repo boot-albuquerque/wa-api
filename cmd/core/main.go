@@ -1,6 +1,6 @@
 package main
 
-import "wa-api/internal/bootstrap"
+import "wa-api/pkg/bootstrap"
 
 func main() {
 	bootstrap.Main()

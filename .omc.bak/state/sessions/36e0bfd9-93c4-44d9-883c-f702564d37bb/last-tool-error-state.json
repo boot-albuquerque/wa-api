@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"rmdir src 2>/dev/null\\ngit merge refactor/clean-architecture --no-edit 2>&1\",\"description\":\"Merge refactor into main\"}",
-  "error": "Exit code 1\nerror: The following untracked working tree files would be overwritten by merge:\n\t.omc/state/hud-stdin-cache.json\n\t.omc/state/idle-notif-cooldown.json\n\t.omc/state/sessions/36e0bfd9-93c4-44d9-883c-f702564d37bb/hud-state.json\n\t.omc/state/sessions/36e0bfd9-93c4-44d9-883c-f702564d37bb/pre-tool-advisory-throttle.json\n\tsrc/.omc/state/sessions/36e0bfd9-93c4-44d9-883c-f702564d37bb/last-tool-error-state.json\n\tsrc/.omc/state/sessions/36e0bfd9-93c4-44d9-883c-f702564d37bb/pre-tool-advisory-throt...",
-  "timestamp": "2026-07-31T05:38:25.693Z",
-  "retry_count": 1
-}

@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"sed -i 's/package usecase_test/package misc_test/' internal/application/usecase/misc/usecase_test.go\\n# Fix doc.go comment to match new package name\\nsed -i 's|// Package usecase|// Packag...",
-  "error": "Exit code 1\n===\n# wa-api/internal/application/usecase/misc_test\n# [wa-api/internal/application/usecase/misc_test]\nvet: internal/application/usecase/misc/usecase_test.go:47:57: undefined: message\n# wa-api/internal/bootstrap\n# [wa-api/internal/bootstrap]\nvet: internal/bootstrap/privacy_test.go:11:30: undefined: user",
-  "timestamp": "2026-07-31T05:02:10.297Z",
-  "retry_count": 1
-}
