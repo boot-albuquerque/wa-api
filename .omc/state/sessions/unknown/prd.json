@@ -1,0 +1,69 @@
+{
+  "title": "disparazaap-wuzapi Clean Architecture \u2014 Remaining Stories",
+  "version": "2.0",
+  "created": "2026-07-30T14:57:21Z",
+  "stories": [
+    {
+      "id": "US-8",
+      "title": "Extract wmiau.go event loop to internal/infrastructure/whatsmeow/event_handler.go",
+      "priority": 1,
+      "description": "Move myEventHandler, connectOnStartup, startClient, safeGo, and MyClient type to internal package. MyClient.s was already removed in US-10 \u2014 now extraction is unblocked.",
+      "acceptanceCriteria": [
+        "wmiau.go: all non-infra code (myEventHandler, startClient, connectOnStartup, MyClient, safeGo) moved to internal/infrastructure/whatsmeow/",
+        "wmiau.go reduced to webhook dispatch helpers only (sendEventWithWebHook, sendToGlobalWebHook, sendToUserWebHook, checkIfSubscribedToEvent, updateAndGetUserSubscriptions)",
+        "go build ./... passes",
+        "go vet ./... passes",
+        "go test -race ./internal/... passes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-9",
+      "title": "Create cmd/wuzapi/main.go thin entry point",
+      "priority": 2,
+      "description": "Move func main() and flag parsing from root main.go to cmd/wuzapi/main.go. Root main.go becomes a thin delegator.",
+      "acceptanceCriteria": [
+        "cmd/wuzapi/main.go exists with func main()",
+        "Root main.go is thin (<30 LOC) or deleted",
+        "Dockerfile updated to point to cmd/wuzapi/",
+        "go build ./... passes",
+        "docker build passes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-10",
+      "title": "Move remaining infrastructure files to internal/",
+      "priority": 3,
+      "description": "Move constants.go, media.go, rabbitmq.go, s3manager.go, helpers.go to internal/infrastructure/ subpackages.",
+      "acceptanceCriteria": [
+        "constants.go \u2192 internal/infrastructure/constants/",
+        "media.go \u2192 internal/infrastructure/media/",
+        "rabbitmq.go \u2192 internal/infrastructure/messaging/rabbitmq/",
+        "s3manager.go \u2192 internal/infrastructure/storage/s3/",
+        "helpers.go \u2192 split into internal/infrastructure/{webhook,media,crypto}/",
+        "go build ./... passes",
+        "go vet ./... passes",
+        "go test -race ./internal/... passes",
+        "docker build passes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-11",
+      "title": "Final validation and cleanup",
+      "priority": 4,
+      "description": "Full regression suite, update docs, verify zero regressions, clean up any remaining slop.",
+      "acceptanceCriteria": [
+        "go build ./... passes",
+        "go vet ./... passes",
+        "go test -race ./internal/... passes",
+        "docker build passes",
+        "Root .go files \u2264 15 (down from 27)",
+        "migration-summary.md updated with final metrics",
+        "Zero remaining func (s *server) except routes.go + stdio.go (infrastructure)"
+      ],
+      "passes": false
+    }
+  ]
+}

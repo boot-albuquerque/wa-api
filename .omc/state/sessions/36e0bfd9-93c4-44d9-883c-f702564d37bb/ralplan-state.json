@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-07-31T03:05:58.760Z",
+  "current_phase": "ralplan",
+  "original_prompt": "/oh-my-claudecode:ralplan \"o correto e que nenhum arquivo .go esteja no root mas as arch deve ser solida e estavel, src/{internal/{application,infra,presentation,contexts,contracts,shared},cmd/{core,wss}}/* \"",
+  "session_id": "36e0bfd9-93c4-44d9-883c-f702564d37bb",
+  "project_path": "/home/lucasmendoncadealbuquerque/Documentos/repos/wa-api",
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-07-31T03:05:58.760Z",
+  "last_checked_at": "2026-07-31T03:05:58.760Z"
+}

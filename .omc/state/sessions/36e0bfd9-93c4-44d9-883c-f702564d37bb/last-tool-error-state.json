@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/home/lucasmendoncadealbuquerque/Documentos/repos/wa-api\"}",
+  "error": "EISDIR: illegal operation on a directory, read '/home/lucasmendoncadealbuquerque/Documentos/repos/wa-api'",
+  "timestamp": "2026-07-31T03:10:10.131Z",
+  "retry_count": 1
+}

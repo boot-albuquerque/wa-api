@@ -1,0 +1,286 @@
+{
+  "$schema": "https://ralplan.dev/schemas/plan.v1.json",
+  "meta": {
+    "name": "refactor-completion",
+    "project": "disparazaap-wuzapi",
+    "branch": "refactor/clean-architecture",
+    "baseCommit": "9406815",
+    "createdAt": "2026-07-30",
+    "author": "ralplan",
+    "goal": "Complete Clean Architecture migration; root becomes cmd/wuzapi/main.go only.",
+    "estimatedPhases": 5,
+    "estimatedCommits": 5
+  },
+  "baseline": {
+    "rootLoc": 8092,
+    "rootGoFiles": 24,
+    "internalGoFiles": 168,
+    "internalLoc": 14021,
+    "handlerStructs": 76,
+    "routesViaLegacyServerMethods": 0,
+    "packageMainCount": 1
+  },
+  "targetEndState": {
+    "rootLoc": 200,
+    "rootGoFilesExcludingCmd": 0,
+    "packageMainCount": 1,
+    "packageMainLocation": "cmd/wuzapi",
+    "circularImports": 0
+  },
+  "successCriteria": [
+    "Root contains only cmd/wuzapi/main.go plus non-code files (Makefile, Dockerfile, docs/, deploy/, static/, go.mod, go.sum, .env.sample, README.md, LICENSE, .gitignore, .gitattributes, .dockerignore, .golangci.yml, wuzapi.service).",
+    "package main appears exactly once, in cmd/wuzapi.",
+    "internal/** never imports cmd/**.",
+    "All existing tests pass (contract, unit, integration).",
+    "Docker build succeeds; runtime behavior identical to base commit.",
+    "make check passes (build + vet + test + lint)."
+  ],
+  "nonGoals": [
+    "Rewrite myEventHandler logic",
+    "Add features",
+    "Change HTTP contracts",
+    "Alter database schema",
+    "Rename Go module 'wuzapi'"
+  ],
+  "phases": [
+    {
+      "id": 10,
+      "name": "root-to-package-wuzapi",
+      "title": "Root package main → package wuzapi + cmd/wuzapi/main.go",
+      "why": "Go forbids importing package main. Unblocks phases 11–14.",
+      "estimatedLocMoved": 556,
+      "estimatedFilesTouched": 27,
+      "riskLevel": "medium",
+      "dependencies": [],
+      "steps": [
+        "Create cmd/wuzapi/main.go with func main(), startHTTPMode, startStdioMode",
+        "Rename all root .go files from 'package main' to 'package wuzapi'",
+        "Export identifiers used across files: server→Server, clientManager→ClientManager, appCtx→AppCtx, container→Container, userinfocache→UserInfoCache, lastMessageCache→LastMessageCache, globalHTTPClient→GlobalHTTPClient, privateIPBlocks→PrivateIPBlocks",
+        "Update Makefile BINARY target to build ./cmd/wuzapi",
+        "Update Dockerfile go build path to ./cmd/wuzapi",
+        "Refresh .omc/plans/root-loc-baseline.txt"
+      ],
+      "filesCreated": ["cmd/wuzapi/main.go"],
+      "filesRenamed": ["all 24 root *.go files (package rename only)"],
+      "filesModified": ["Makefile", "Dockerfile"],
+      "verify": [
+        "go build ./cmd/wuzapi",
+        "go vet ./...",
+        "go test -race -count=1 ./internal/... ./...",
+        "docker build . -t wuzapi:phase10"
+      ],
+      "rollback": "git revert HEAD",
+      "commitMessage": "refactor(pkg): rename root package main → wuzapi, extract cmd/wuzapi/main.go"
+    },
+    {
+      "id": 11,
+      "name": "extract-myclient-eventhandler",
+      "title": "Extract MyClient + myEventHandler → internal/whatsapp/client/",
+      "why": "wmiau.go is 1,531 LOC; myEventHandler alone is 895 LOC. Biggest single-file complexity in root.",
+      "estimatedLocMoved": 1531,
+      "estimatedFilesTouched": 8,
+      "riskLevel": "high",
+      "dependencies": [10],
+      "steps": [
+        "Introduce internal/application/port/ClientLifecycle interface (Start, Connect, Disconnect, RegisterEventHandler)",
+        "Create internal/whatsapp/client/myclient.go with MyClient struct",
+        "Create internal/whatsapp/client/eventhandler.go with myEventHandler dispatch (from wmiau.go:636-1531)",
+        "Create internal/whatsapp/client/startup.go with connectOnStartup + startClient (from wmiau.go:249, 339)",
+        "Create internal/whatsapp/client/subscriptions.go with updateAndGetUserSubscriptions, checkIfSubscribedToEvent",
+        "Create internal/whatsapp/client/event_router.go for per-event-type dispatch",
+        "Wire webhookDispatcher, messageHistoryStore, mediaProcessor into MyClient constructor",
+        "Update cmd/wuzapi/main.go to call client.Manager.ConnectOnStartup()",
+        "Delete root wmiau.go"
+      ],
+      "filesCreated": [
+        "internal/application/port/client_lifecycle.go",
+        "internal/whatsapp/client/myclient.go",
+        "internal/whatsapp/client/eventhandler.go",
+        "internal/whatsapp/client/startup.go",
+        "internal/whatsapp/client/subscriptions.go",
+        "internal/whatsapp/client/event_router.go"
+      ],
+      "filesDeleted": ["wmiau.go"],
+      "filesModified": ["cmd/wuzapi/main.go"],
+      "verify": [
+        "go build ./cmd/wuzapi",
+        "go test -race ./internal/...",
+        "manual: docker run + connect one user + send one message + verify webhook fires"
+      ],
+      "rollback": "git revert HEAD",
+      "commitMessage": "refactor(whatsapp): extract MyClient + myEventHandler → internal/whatsapp/client/",
+      "manualReviewGate": true
+    },
+    {
+      "id": 12,
+      "name": "split-helpers",
+      "title": "Split helpers.go (1,084 LOC) by concern",
+      "why": "helpers.go conflates webhook, Open Graph, sticker, HMAC. Each has natural internal home.",
+      "estimatedLocMoved": 1191,
+      "estimatedFilesTouched": 12,
+      "riskLevel": "medium",
+      "dependencies": [10],
+      "steps": [
+        "Create internal/infrastructure/messaging/webhook_dispatch.go (callHook, callHookWithHmac)",
+        "Create internal/infrastructure/messaging/webhook_file.go (callHookFile, callHookFileWithHmac)",
+        "Create internal/infrastructure/media/opengraph/{fetcher,image,semaphore}.go",
+        "Create internal/infrastructure/media/sticker/{converter,processor,exif,webp}.go",
+        "Create internal/infrastructure/auth/hmac.go (generateHmacSignature, encryptHMACKey, decryptHMACKey)",
+        "Create internal/infrastructure/media/outgoing.go (ProcessOutgoingMedia)",
+        "Introduce internal/application/port/WebhookDispatcher interface",
+        "Move constants to their respective packages (openGraphFetchTimeout et al.)",
+        "Delete root helpers.go, media.go",
+        "Move root jpeg_thumbnail_test.go → internal/infrastructure/media/sticker/"
+      ],
+      "filesCreated": [
+        "internal/infrastructure/messaging/webhook_dispatch.go",
+        "internal/infrastructure/messaging/webhook_file.go",
+        "internal/infrastructure/media/opengraph/fetcher.go",
+        "internal/infrastructure/media/opengraph/image.go",
+        "internal/infrastructure/media/opengraph/semaphore.go",
+        "internal/infrastructure/media/sticker/converter.go",
+        "internal/infrastructure/media/sticker/processor.go",
+        "internal/infrastructure/media/sticker/exif.go",
+        "internal/infrastructure/media/sticker/webp.go",
+        "internal/infrastructure/auth/hmac.go",
+        "internal/infrastructure/media/outgoing.go",
+        "internal/application/port/webhook_dispatcher.go"
+      ],
+      "filesDeleted": ["helpers.go", "media.go"],
+      "filesMoved": [{"from": "jpeg_thumbnail_test.go", "to": "internal/infrastructure/media/sticker/jpeg_thumbnail_test.go"}],
+      "verify": [
+        "go build ./cmd/wuzapi",
+        "go test -race ./internal/...",
+        "go test -run TestJPEG ./internal/infrastructure/media/sticker/"
+      ],
+      "rollback": "git revert HEAD",
+      "commitMessage": "refactor(helpers): split helpers.go by concern → messaging/media/auth"
+    },
+    {
+      "id": 13,
+      "name": "migrate-remaining-root",
+      "title": "Move stdio, rabbitmq, db, auth, history_sync, clients, constants, custom_handlers, custom_routes, routes",
+      "why": "Mechanical moves unblocked by phase 10. Each file has natural internal home.",
+      "estimatedLocMoved": 2900,
+      "estimatedFilesTouched": 24,
+      "riskLevel": "medium",
+      "dependencies": [10, 11, 12],
+      "moves": [
+        {"from": "stdio.go", "to": "internal/infrastructure/stdio/server.go"},
+        {"from": "stdio_test.go", "to": "internal/infrastructure/stdio/server_test.go"},
+        {"from": "rabbitmq.go", "to": "internal/infrastructure/messaging/rabbitmq.go"},
+        {"from": "db.go", "to": "internal/infrastructure/db/connection.go"},
+        {"from": "db_history_test.go", "to": "internal/infrastructure/db/history_test.go"},
+        {"from": "auth.go", "to": "internal/interfaces/http/middleware/auth.go"},
+        {"from": "history_sync.go", "to": "internal/infrastructure/whatsapp/history_sync.go"},
+        {"from": "clients.go", "to": "internal/whatsapp/client/manager.go"},
+        {"from": "constants.go", "to": "internal/infrastructure/constants/events.go"},
+        {"from": "custom_handlers.go", "to": "internal/interfaces/http/wiring/handlers.go"},
+        {"from": "custom_routes.go", "to": "internal/interfaces/http/wiring/routes.go"},
+        {"from": "routes.go", "to": "internal/interfaces/http/wiring/router.go"},
+        {"from": "event_subscriptions_test.go", "to": "internal/whatsapp/client/event_subscriptions_test.go"},
+        {"from": "privacy_test.go", "to": "internal/interfaces/http/handlers/privacy_test.go"},
+        {"from": "subscriptions_test.go", "to": "internal/whatsapp/client/subscriptions_test.go"},
+        {"from": "blocklist_test.go", "to": "internal/interfaces/http/handlers/blocklist_test.go"},
+        {"from": "killchannel_test.go", "to": "internal/app/killchannel_test.go"},
+        {"from": "userinfo_cache_test.go", "to": "internal/app/userinfo_cache_test.go"},
+        {"from": "proxy_config_test.go", "to": "internal/infrastructure/messaging/proxy_config_test.go"}
+      ],
+      "steps": [
+        "Execute all moves above, one at a time; commit as single squashed atomic phase",
+        "Introduce wiring.Setup(db, cfg) *mux.Router façade",
+        "Update cmd/wuzapi/main.go to import wiring package",
+        "Consolidate supportedEventTypes into internal/infrastructure/constants"
+      ],
+      "verify": [
+        "go build ./cmd/wuzapi",
+        "go test -race -count=1 ./...",
+        "docker build . -t wuzapi:phase13",
+        "stdio snapshot: echo request → binary → compare response bytes"
+      ],
+      "rollback": "git revert HEAD",
+      "commitMessage": "refactor(structure): migrate remaining 19 root files → internal/**"
+    },
+    {
+      "id": 14,
+      "name": "bootstrap-minimize-docs-finalize",
+      "title": "Minimize cmd/wuzapi/main.go; refresh docs",
+      "why": "After phases 10–13, cmd/main.go may still exceed 100 LOC due to flag/env parsing. Extract to internal/app/config.",
+      "estimatedLocMoved": 500,
+      "estimatedFilesTouched": 4,
+      "riskLevel": "low",
+      "dependencies": [10, 11, 12, 13],
+      "steps": [
+        "Move flag definitions + env overrides to internal/app/config.Load() *config.Config",
+        "Move CIDR parsing to internal/app/httpclient.NewSafeClient()",
+        "Trim cmd/wuzapi/main.go to ≤ 80 LOC (parse config → wire deps → start server)",
+        "Update README.md architecture diagram",
+        "Refresh .omc/plans/migration-summary.md",
+        "Delete .omc/plans/root-loc-baseline.txt",
+        "Run make check as merge gate"
+      ],
+      "filesCreated": ["internal/app/config/config.go"],
+      "filesModified": ["cmd/wuzapi/main.go", "README.md", ".omc/plans/migration-summary.md"],
+      "filesDeleted": [".omc/plans/root-loc-baseline.txt"],
+      "verify": [
+        "make check",
+        "docker build . -t wuzapi:final",
+        "docker run wuzapi:final --version"
+      ],
+      "rollback": "git revert HEAD",
+      "commitMessage": "refactor(bootstrap): extract config to internal/app/config; finalize docs"
+    }
+  ],
+  "verificationMatrix": {
+    "goBuild": [10, 11, 12, 13, 14],
+    "goVet": [10, 11, 12, 13, 14],
+    "goTest": [10, 11, 12, 13, 14],
+    "makeLint": [10, 11, 12, 13, 14],
+    "dockerBuild": [10, 11, 12, 13, 14],
+    "contractTests": [10, 11, 12, 13, 14],
+    "stdioSnapshot": [13, 14],
+    "manualSmoke": [11, 13, 14]
+  },
+  "risks": [
+    {
+      "id": "circular-imports",
+      "description": "Circular imports between renamed root pkg and internal/",
+      "mitigation": "Introduce adapter interfaces in internal/application/port/ before moving impl",
+      "phases": [10, 11]
+    },
+    {
+      "id": "filesystem-layout",
+      "description": "Breaking main.db / users.db filesystem layout",
+      "mitigation": "Preserve os.Executable() path resolution in cmd/wuzapi/main.go",
+      "phases": [10, 14]
+    },
+    {
+      "id": "stdio-regression",
+      "description": "JSON-RPC over stdout regression",
+      "mitigation": "Run stdio_test.go before + after each phase; snapshot request/response bytes",
+      "phases": [13]
+    },
+    {
+      "id": "test-file-drift",
+      "description": "_test.go file lands in wrong package after move",
+      "mitigation": "Move tests alongside implementation in same commit",
+      "phases": [12, 13]
+    },
+    {
+      "id": "middleware-order",
+      "description": "alice.Chain middleware wiring breaks after router extraction",
+      "mitigation": "Preserve exact order captured in custom_routes.go:24 (securityHeaders after auth+logging)",
+      "phases": [13]
+    }
+  ],
+  "executionRecommendation": {
+    "mode": "ralph-per-phase",
+    "manualReviewBetween": [[11, 12]],
+    "notes": [
+      "Do not run all phases in one autopilot session; intermediate states are regression anchors.",
+      "Phase 11 (myEventHandler extraction) deserves manual review of adapter interfaces before proceeding.",
+      "Phases 10, 12, 13, 14 are safe for /ultrawork (mechanical).",
+      "Phase 11 recommended solo via /executor with subsequent /verifier pass."
+    ]
+  }
+}
