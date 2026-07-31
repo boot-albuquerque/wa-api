@@ -7,7 +7,7 @@ GOTEST := $(GOCMD) test
 GOVET := $(GOCMD) vet
 GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
-BINARY := disparazap
+BINARY := wuzapi
 
 # Lint
 LINT := golangci-lint
@@ -24,7 +24,7 @@ DOCKER_TAG := latest
 ##@ Build
 
 build: ## Build the binary
-	$(GOBUILD) -o $(BINARY) ./cmd/core
+	$(GOBUILD) -o $(BINARY) ./src/cmd/core
 
 docker: ## Build Docker image
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .

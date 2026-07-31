@@ -26,8 +26,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "find . -name '*.go' -exec sed -i 's/\\bport\\./appport./g' {} +\nexport PATH=\"$HOME/go/bin:$PATH\"\ngo build ./cmd/core 2>&1 | head -5",
-    "testCommand": "export PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"===ROOT .GO===\"\nls *.go 2>/dev/null | wc -l && echo \"root .go files\"\necho \"===DIRS===\"\nls internal/ | sort\necho \"===CMD===\"\nls cmd/ | sort\necho \"===CONTRACTS===\"\nls internal/contracts/",
+    "buildCommand": "git checkout HEAD -- Makefile Dockerfile README.md LICENSE 2>/dev/null\nrm -f core fix_app.sh\n# Fix Makefile\nsed -i 's|./cmd/core|./src/cmd/core|g' Makefile 2>/dev/null\nsed -i 's|BINARY := disparazap|BINARY := wuzapi|' Makefile 2>/dev/null\n# Fix Dockerfile  \nsed -i 's|COPY go.mod go.sum ./|COPY src/go.mod src/go.sum ./|' Dockerfile 2>/dev/null\nsed -i 's|COPY . .|COPY src/ .|' Dockerfile 2>/dev/null\nsed -i 's|go build -o disparazap ./cmd/core|go build -o wuzapi ./cmd/core|' Dockerfile 2>/dev/null\necho \"Files restored and fixed\"",
+    "testCommand": "cd src && export PATH=\"$HOME/go/bin:$PATH\"\ngo vet ./... 2>&1 && echo \"VET ✓\"\ngo test -race -count=1 ./internal/... 2>&1 | grep \"^ok \" && echo \"TESTS ✓\"\necho \"=== ROOT ===\"\ncd /home/lucasmendoncadealbuquerque/Documentos/repos/wa-api && pwd\necho \"Root .go: $(ls *.go 2>/dev/null | wc -l)\"\necho \"Root dirs: $(ls -d */ 2>/dev/null | tr '\\n' ' ')\"\necho \"Src dirs: $(ls -d src/*/ 2>/dev/null | tr '\\n' ' ')\"",
     "lintCommand": null,
     "devCommand": null,
     "scripts": {}
@@ -410,6 +410,24 @@
       "path": "delegates.go",
       "accessCount": 1,
       "lastAccessed": 1785467261572,
+      "type": "file"
+    },
+    {
+      "path": "internal/infra/whatsapp/client/client.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518465,
+      "type": "file"
+    },
+    {
+      "path": "internal/infra/whatsapp/client/media.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518717,
+      "type": "file"
+    },
+    {
+      "path": "internal/bootstrap/main.go",
+      "accessCount": 1,
+      "lastAccessed": 1785470518998,
       "type": "file"
     }
   ],
