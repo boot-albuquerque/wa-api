@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "disparazap/internal/presentation/http"
+	customhttp "wa-api/internal/presentation/http"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
 )
 
 // SendMessageHandler é o handler HTTP para POST /chat/send/text.

@@ -1,4 +1,4 @@
-module disparazap
+module wa-api
 
 go 1.25.0
 

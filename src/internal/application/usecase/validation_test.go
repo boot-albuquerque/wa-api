@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
 
 	"go.mau.fi/whatsmeow"
 )

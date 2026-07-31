@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"export PATH=\\\"$HOME/go/bin:$PATH\\\" && go vet ./... 2>&1 && echo \\\"VET ✓\\\" && go test -race -count=1 ./src/internal/... 2>&1 | grep \\\"^ok \\\" && echo \\\"TESTS ✓\\\"\",\"description\":\"Full verific...",
+  "error": "Exit code 1\nVET ✓",
+  "timestamp": "2026-07-31T04:26:12.280Z",
+  "retry_count": 2
+}

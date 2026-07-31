@@ -19,7 +19,7 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/rs/zerolog/log"
 
-	"disparazap/internal/infra/media/sticker"
+	"wa-api/internal/infra/media/sticker"
 )
 
 // Result holds Open Graph metadata extracted from a URL.

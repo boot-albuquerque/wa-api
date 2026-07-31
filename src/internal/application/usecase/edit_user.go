@@ -8,8 +8,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"disparazap/internal/shared/domain"
-	"disparazap/internal/infra/storage"
+	"wa-api/internal/shared/domain"
+	"wa-api/internal/infra/storage"
 )
 
 // EditUserUseCase edita um usuário existente

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "disparazap/internal/presentation/http"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
+	customhttp "wa-api/internal/presentation/http"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
 )
 
 // --- Download handlers ---

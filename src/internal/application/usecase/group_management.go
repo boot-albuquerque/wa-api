@@ -8,8 +8,8 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 
-	appport "disparazap/internal/contracts"
-	wm "disparazap/internal/infra/whatsmeow"
+	appport "wa-api/internal/contracts"
+	wm "wa-api/internal/infra/whatsmeow"
 )
 
 // GroupManagementUseCase bundles group write operations (create, join, leave,

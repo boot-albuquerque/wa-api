@@ -8,8 +8,8 @@ import (
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // GroupRequestUseCase encapsula a lógica de gerenciamento de solicitações de entrada em grupos

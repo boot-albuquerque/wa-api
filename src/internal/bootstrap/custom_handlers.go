@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/infra/whatsmeow"
-	customhttp "disparazap/internal/presentation/http"
-	"disparazap/internal/presentation/http/handlers"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/infra/whatsmeow"
+	customhttp "wa-api/internal/presentation/http"
+	"wa-api/internal/presentation/http/handlers"
 
 	"github.com/rs/zerolog/log"
 	wa "go.mau.fi/whatsmeow"

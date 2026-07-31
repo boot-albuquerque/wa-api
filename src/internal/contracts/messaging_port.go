@@ -5,7 +5,7 @@ package port
 import (
 	"context"
 
-	"disparazap/internal/shared/domain"
+	"wa-api/internal/shared/domain"
 )
 
 // MessagingPort abstrai operações de mensageria (RabbitMQ).

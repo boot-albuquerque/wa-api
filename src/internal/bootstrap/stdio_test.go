@@ -11,7 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"
 
-	dbmig "disparazap/internal/infra/db"
+	dbmig "wa-api/internal/infra/db"
 )
 
 func TestStdioHealthRequest(t *testing.T) {

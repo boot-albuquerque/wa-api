@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // SetProxyUseCase encapsula a validação de configuração de Proxy.

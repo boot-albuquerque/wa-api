@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // GetS3ConfigUseCase encapsula a validação de leitura de configuração de S3.

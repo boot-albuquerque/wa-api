@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"disparazap/internal/presentation/http/handlers"
+	"wa-api/internal/presentation/http/handlers"
 
 	"go.mau.fi/whatsmeow/types"
 )

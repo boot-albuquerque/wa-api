@@ -1,6 +1,6 @@
 package main
 
-import "disparazap/internal/bootstrap"
+import "wa-api/internal/bootstrap"
 
 func main() {
 	bootstrap.Main()

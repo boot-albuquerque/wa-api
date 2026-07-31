@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	appport "disparazap/internal/contracts"
+	appport "wa-api/internal/contracts"
 
 	wa "go.mau.fi/whatsmeow"
 )

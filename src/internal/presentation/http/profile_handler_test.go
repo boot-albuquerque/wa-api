@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
 )
 
 // mockGetProfileUseCase implementa a interface do usecase para testes do handler.

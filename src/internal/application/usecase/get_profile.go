@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	appport "disparazap/internal/contracts"
+	appport "wa-api/internal/contracts"
 
 	"go.mau.fi/whatsmeow"
 )

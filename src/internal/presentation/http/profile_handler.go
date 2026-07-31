@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	appport "disparazap/internal/contracts"
+	appport "wa-api/internal/contracts"
 )
 
 // Context key "userinfo" é injetada pelo middleware authalice do upstream.

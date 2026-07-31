@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
-	"disparazap/internal/infra/whatsmeow"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
+	"wa-api/internal/infra/whatsmeow"
 )
 
 // GetGroupInviteLinkUseCase encapsula a validação para obter link de convite

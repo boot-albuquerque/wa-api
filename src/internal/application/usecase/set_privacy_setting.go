@@ -7,8 +7,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // SetPrivacySettingUseCase sets a privacy setting

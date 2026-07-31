@@ -11,9 +11,9 @@ import (
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
-	"disparazap/internal/infra/whatsmeow"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
+	"wa-api/internal/infra/whatsmeow"
 )
 
 // ReactUseCase sends a reaction to a message

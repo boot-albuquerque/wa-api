@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "disparazap/internal/presentation/http"
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
+	customhttp "wa-api/internal/presentation/http"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
 )
 
 // BlocklistHandlers groups handlers for blocklist operations.

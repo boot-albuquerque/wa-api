@@ -20,11 +20,11 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 
-	"disparazap/internal/infra/storage"
-	"disparazap/internal/infra/auth"
-	"disparazap/internal/infra/helpers"
-	"disparazap/internal/infra/media/opengraph"
-	"disparazap/internal/infra/media/sticker"
+	"wa-api/internal/infra/storage"
+	"wa-api/internal/infra/auth"
+	"wa-api/internal/infra/helpers"
+	"wa-api/internal/infra/media/opengraph"
+	"wa-api/internal/infra/media/sticker"
 )
 
 const (

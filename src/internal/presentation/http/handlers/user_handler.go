@@ -6,10 +6,10 @@ import (
 
 	"github.com/gorilla/mux"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
-	customhttp "disparazap/internal/presentation/http"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
+	customhttp "wa-api/internal/presentation/http"
 )
 
 // UserHandlers agrupa todos os handlers de usuário.

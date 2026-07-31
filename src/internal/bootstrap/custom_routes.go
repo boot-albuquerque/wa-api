@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"net/http"
-	customhttp "disparazap/internal/presentation/http"
+	customhttp "wa-api/internal/presentation/http"
 
 	"github.com/justinas/alice"
 )

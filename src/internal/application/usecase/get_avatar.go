@@ -6,9 +6,9 @@ import (
 
 	"github.com/rs/zerolog"
 	wa "go.mau.fi/whatsmeow"
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
-	"disparazap/internal/infra/whatsmeow"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
+	"wa-api/internal/infra/whatsmeow"
 )
 
 // GetAvatarUseCase retrieves avatar info for a user

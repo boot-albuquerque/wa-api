@@ -6,9 +6,9 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"disparazap/internal/application/usecase"
-	"disparazap/internal/shared/domain"
-	customhttp "disparazap/internal/presentation/http"
+	"wa-api/internal/application/usecase"
+	"wa-api/internal/shared/domain"
+	customhttp "wa-api/internal/presentation/http"
 )
 
 // MiscHandlers agrupa os handlers de miscelânea (health, newsletter, privacy, calls, archive)

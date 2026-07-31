@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // TestS3ConnectionUseCase encapsula a validação de teste de conexão S3.

@@ -12,7 +12,7 @@ import (
 
 	"github.com/nfnt/resize"
 
-	"disparazap/internal/presentation/http/handlers"
+	"wa-api/internal/presentation/http/handlers"
 )
 
 var jpegThumbnail = handlers.JPEGThumbnail

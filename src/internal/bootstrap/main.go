@@ -28,8 +28,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	dbmig "disparazap/internal/infra/db"
-	"disparazap/internal/infra/storage"
+	dbmig "wa-api/internal/infra/db"
+	"wa-api/internal/infra/storage"
 )
 
 // ServerMode represents the server operating mode

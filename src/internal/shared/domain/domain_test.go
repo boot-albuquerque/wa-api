@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"disparazap/internal/shared/domain"
+	"wa-api/internal/shared/domain"
 )
 
 func TestIsValidEventType(t *testing.T) {

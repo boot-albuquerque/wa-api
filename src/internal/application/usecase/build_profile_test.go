@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	appport "disparazap/internal/contracts"
-	"disparazap/internal/shared/domain"
+	appport "wa-api/internal/contracts"
+	"wa-api/internal/shared/domain"
 )
 
 // mockProfileData implementa appport.ProfileDataAccess para testes internos.

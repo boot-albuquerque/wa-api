@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	customhttp "disparazap/internal/presentation/http"
-	"disparazap/internal/application/usecase"
+	customhttp "wa-api/internal/presentation/http"
+	"wa-api/internal/application/usecase"
 )
 
 // GroupManagementHandlers groups all group write-operation handlers.
