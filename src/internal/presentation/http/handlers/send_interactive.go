@@ -7,17 +7,18 @@ import (
 	customhttp "wa-api/internal/presentation/http"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/message"
 )
 
 // SendMessageHandler é o handler HTTP para POST /chat/send/text.
 type SendContactHandler struct {
-	usecase *usecase.SendContactUseCase
+	usecase *message.SendContactUseCase
 }
 
 // NewSendContactHandler cria o handler com o usecase injetado.
-func NewSendContactHandler(uc *usecase.SendContactUseCase) *SendContactHandler {
+func NewSendContactHandler(uc *message.SendContactUseCase) *SendContactHandler {
 	return &SendContactHandler{usecase: uc}
 }
 
@@ -52,11 +53,11 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendLocationHandler é o handler HTTP para POST /chat/send/location.
 type SendLocationHandler struct {
-	usecase *usecase.SendLocationUseCase
+	usecase *message.SendLocationUseCase
 }
 
 // NewSendLocationHandler cria o handler com o usecase injetado.
-func NewSendLocationHandler(uc *usecase.SendLocationUseCase) *SendLocationHandler {
+func NewSendLocationHandler(uc *message.SendLocationUseCase) *SendLocationHandler {
 	return &SendLocationHandler{usecase: uc}
 }
 
@@ -91,11 +92,11 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // SendButtonsHandler é o handler HTTP para POST /chat/send/buttons.
 type SendButtonsHandler struct {
-	usecase *usecase.SendButtonsUseCase
+	usecase *message.SendButtonsUseCase
 }
 
 // NewSendButtonsHandler cria o handler com o usecase injetado.
-func NewSendButtonsHandler(uc *usecase.SendButtonsUseCase) *SendButtonsHandler {
+func NewSendButtonsHandler(uc *message.SendButtonsUseCase) *SendButtonsHandler {
 	return &SendButtonsHandler{usecase: uc}
 }
 
@@ -130,11 +131,11 @@ func (h *SendButtonsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendListHandler é o handler HTTP para POST /chat/send/list.
 type SendListHandler struct {
-	usecase *usecase.SendListUseCase
+	usecase *message.SendListUseCase
 }
 
 // NewSendListHandler cria o handler com o usecase injetado.
-func NewSendListHandler(uc *usecase.SendListUseCase) *SendListHandler {
+func NewSendListHandler(uc *message.SendListUseCase) *SendListHandler {
 	return &SendListHandler{usecase: uc}
 }
 
@@ -169,11 +170,11 @@ func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendPollHandler é o handler HTTP para POST /chat/send/poll.
 type SendPollHandler struct {
-	usecase *usecase.SendPollUseCase
+	usecase *message.SendPollUseCase
 }
 
 // NewSendPollHandler cria o handler com o usecase injetado.
-func NewSendPollHandler(uc *usecase.SendPollUseCase) *SendPollHandler {
+func NewSendPollHandler(uc *message.SendPollUseCase) *SendPollHandler {
 	return &SendPollHandler{usecase: uc}
 }
 

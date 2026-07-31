@@ -7,35 +7,36 @@ import (
 	"github.com/gorilla/mux"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
 	customhttp "wa-api/internal/presentation/http"
+
+	"wa-api/internal/application/usecase/user"
 )
 
 // UserHandlers agrupa todos os handlers de usuário.
 type UserHandlers struct {
-	listUsers   *usecase.ListUsersUseCase
-	addUser     *usecase.AddUserUseCase
-	editUser    *usecase.EditUserUseCase
-	deleteUser  *usecase.DeleteUserUseCase
-	checkUser   *usecase.CheckUserUseCase
-	getUser     *usecase.GetUserUseCase
-	getUserLID  *usecase.GetUserLIDUseCase
-	blockUser   *usecase.BlockUserUseCase
-	unblockUser *usecase.UnblockUserUseCase
+	listUsers   *user.ListUsersUseCase
+	addUser     *user.AddUserUseCase
+	editUser    *user.EditUserUseCase
+	deleteUser  *user.DeleteUserUseCase
+	checkUser   *user.CheckUserUseCase
+	getUser     *user.GetUserUseCase
+	getUserLID  *user.GetUserLIDUseCase
+	blockUser   *user.BlockUserUseCase
+	unblockUser *user.UnblockUserUseCase
 }
 
 // NewUserHandlers cria uma nova instância de UserHandlers.
 func NewUserHandlers(
-	listUsers *usecase.ListUsersUseCase,
-	addUser *usecase.AddUserUseCase,
-	editUser *usecase.EditUserUseCase,
-	deleteUser *usecase.DeleteUserUseCase,
-	checkUser *usecase.CheckUserUseCase,
-	getUser *usecase.GetUserUseCase,
-	getUserLID *usecase.GetUserLIDUseCase,
-	blockUser *usecase.BlockUserUseCase,
-	unblockUser *usecase.UnblockUserUseCase,
+	listUsers *user.ListUsersUseCase,
+	addUser *user.AddUserUseCase,
+	editUser *user.EditUserUseCase,
+	deleteUser *user.DeleteUserUseCase,
+	checkUser *user.CheckUserUseCase,
+	getUser *user.GetUserUseCase,
+	getUserLID *user.GetUserLIDUseCase,
+	blockUser *user.BlockUserUseCase,
+	unblockUser *user.UnblockUserUseCase,
 ) *UserHandlers {
 	return &UserHandlers{
 		listUsers:  listUsers,

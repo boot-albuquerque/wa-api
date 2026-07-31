@@ -6,9 +6,12 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
 	customhttp "wa-api/internal/presentation/http"
+
+	"wa-api/internal/application/usecase/misc"
+	"wa-api/internal/application/usecase/notification"
+	"wa-api/internal/application/usecase/user"
 )
 
 // MiscHandlers agrupa os handlers de miscelânea (health, newsletter, privacy, calls, archive)
@@ -24,8 +27,8 @@ type MiscHandlers struct {
 }
 
 // GetHealthHandler handles GET /health
-type GetHealthHandler struct{ usecase *usecase.GetHealthUseCase }
-func NewGetHealthHandler(uc *usecase.GetHealthUseCase) *GetHealthHandler { return &GetHealthHandler{uc} }
+type GetHealthHandler struct{ usecase *notification.GetHealthUseCase }
+func NewGetHealthHandler(uc *notification.GetHealthUseCase) *GetHealthHandler { return &GetHealthHandler{uc} }
 func (h *GetHealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rsp, err := h.usecase.Execute(r.Context())
 	if err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
@@ -33,8 +36,8 @@ func (h *GetHealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListNewsletterHandler handles GET /newsletter/list
-type ListNewsletterHandler struct{ usecase *usecase.ListNewsletterUseCase }
-func NewListNewsletterHandler(uc *usecase.ListNewsletterUseCase) *ListNewsletterHandler { return &ListNewsletterHandler{uc} }
+type ListNewsletterHandler struct{ usecase *notification.ListNewsletterUseCase }
+func NewListNewsletterHandler(uc *notification.ListNewsletterUseCase) *ListNewsletterHandler { return &ListNewsletterHandler{uc} }
 func (h *ListNewsletterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	rsp, err := h.usecase.Execute(r.Context(), id)
@@ -43,8 +46,8 @@ func (h *ListNewsletterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 // DeleteUserCompleteHandler handles DELETE /admin/users/{id}/complete
-type DeleteUserCompleteHandler struct{ usecase *usecase.DeleteUserCompleteUseCase }
-func NewDeleteUserCompleteHandler(uc *usecase.DeleteUserCompleteUseCase) *DeleteUserCompleteHandler { return &DeleteUserCompleteHandler{uc} }
+type DeleteUserCompleteHandler struct{ usecase *user.DeleteUserCompleteUseCase }
+func NewDeleteUserCompleteHandler(uc *user.DeleteUserCompleteUseCase) *DeleteUserCompleteHandler { return &DeleteUserCompleteHandler{uc} }
 func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uid := vars["id"]
@@ -55,8 +58,8 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 // RejectCallHandler handles POST /chat/rejectcall
-type RejectCallHandler struct{ usecase *usecase.RejectCallUseCase }
-func NewRejectCallHandler(uc *usecase.RejectCallUseCase) *RejectCallHandler { return &RejectCallHandler{uc} }
+type RejectCallHandler struct{ usecase *misc.RejectCallUseCase }
+func NewRejectCallHandler(uc *misc.RejectCallUseCase) *RejectCallHandler { return &RejectCallHandler{uc} }
 func (h *RejectCallHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.RejectCallRequest
@@ -67,8 +70,8 @@ func (h *RejectCallHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetPrivacySettingsHandler handles GET /user/privacy
-type GetPrivacySettingsHandler struct{ usecase *usecase.GetPrivacySettingsUseCase }
-func NewGetPrivacySettingsHandler(uc *usecase.GetPrivacySettingsUseCase) *GetPrivacySettingsHandler { return &GetPrivacySettingsHandler{uc} }
+type GetPrivacySettingsHandler struct{ usecase *user.GetPrivacySettingsUseCase }
+func NewGetPrivacySettingsHandler(uc *user.GetPrivacySettingsUseCase) *GetPrivacySettingsHandler { return &GetPrivacySettingsHandler{uc} }
 func (h *GetPrivacySettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	rsp, err := h.usecase.Execute(r.Context(), id)
@@ -77,8 +80,8 @@ func (h *GetPrivacySettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 // SetPrivacySettingHandler handles POST /user/privacy
-type SetPrivacySettingHandler struct{ usecase *usecase.SetPrivacySettingUseCase }
-func NewSetPrivacySettingHandler(uc *usecase.SetPrivacySettingUseCase) *SetPrivacySettingHandler { return &SetPrivacySettingHandler{uc} }
+type SetPrivacySettingHandler struct{ usecase *user.SetPrivacySettingUseCase }
+func NewSetPrivacySettingHandler(uc *user.SetPrivacySettingUseCase) *SetPrivacySettingHandler { return &SetPrivacySettingHandler{uc} }
 func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.SetPrivacySettingRequest
@@ -89,8 +92,8 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 }
 
 // RequestUnavailableMessageHandler handles POST /chat/requestunavailablemessage
-type RequestUnavailableMessageHandler struct{ usecase *usecase.RequestUnavailableMessageUseCase }
-func NewRequestUnavailableMessageHandler(uc *usecase.RequestUnavailableMessageUseCase) *RequestUnavailableMessageHandler { return &RequestUnavailableMessageHandler{uc} }
+type RequestUnavailableMessageHandler struct{ usecase *misc.RequestUnavailableMessageUseCase }
+func NewRequestUnavailableMessageHandler(uc *misc.RequestUnavailableMessageUseCase) *RequestUnavailableMessageHandler { return &RequestUnavailableMessageHandler{uc} }
 func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.RequestUnavailableMessageRequest
@@ -101,8 +104,8 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 }
 
 // ArchiveChatHandler handles POST /chat/archive
-type ArchiveChatHandler struct{ usecase *usecase.ArchiveChatUseCase }
-func NewArchiveChatHandler(uc *usecase.ArchiveChatUseCase) *ArchiveChatHandler { return &ArchiveChatHandler{uc} }
+type ArchiveChatHandler struct{ usecase *misc.ArchiveChatUseCase }
+func NewArchiveChatHandler(uc *misc.ArchiveChatUseCase) *ArchiveChatHandler { return &ArchiveChatHandler{uc} }
 func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.ArchiveChatRequest

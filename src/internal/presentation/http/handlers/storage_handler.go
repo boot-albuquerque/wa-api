@@ -7,8 +7,9 @@ import (
 	customhttp "wa-api/internal/presentation/http"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/storage"
 )
 
 // StorageHandlers agrupa os handlers de armazenamento (S3, HMAC, proxy, history)
@@ -26,8 +27,8 @@ type StorageHandlers struct {
 }
 
 // ConfigureS3Handler handles POST /storage/s3/configure
-type ConfigureS3Handler struct{ usecase *usecase.ConfigureS3UseCase }
-func NewConfigureS3Handler(uc *usecase.ConfigureS3UseCase) *ConfigureS3Handler { return &ConfigureS3Handler{uc} }
+type ConfigureS3Handler struct{ usecase *storage.ConfigureS3UseCase }
+func NewConfigureS3Handler(uc *storage.ConfigureS3UseCase) *ConfigureS3Handler { return &ConfigureS3Handler{uc} }
 func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -41,8 +42,8 @@ func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetS3ConfigHandler handles GET /storage/s3/config
-type GetS3ConfigHandler struct{ usecase *usecase.GetS3ConfigUseCase }
-func NewGetS3ConfigHandler(uc *usecase.GetS3ConfigUseCase) *GetS3ConfigHandler { return &GetS3ConfigHandler{uc} }
+type GetS3ConfigHandler struct{ usecase *storage.GetS3ConfigUseCase }
+func NewGetS3ConfigHandler(uc *storage.GetS3ConfigUseCase) *GetS3ConfigHandler { return &GetS3ConfigHandler{uc} }
 func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -54,8 +55,8 @@ func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // TestS3ConnectionHandler handles POST /storage/s3/test
-type TestS3ConnectionHandler struct{ usecase *usecase.TestS3ConnectionUseCase }
-func NewTestS3ConnectionHandler(uc *usecase.TestS3ConnectionUseCase) *TestS3ConnectionHandler { return &TestS3ConnectionHandler{uc} }
+type TestS3ConnectionHandler struct{ usecase *storage.TestS3ConnectionUseCase }
+func NewTestS3ConnectionHandler(uc *storage.TestS3ConnectionUseCase) *TestS3ConnectionHandler { return &TestS3ConnectionHandler{uc} }
 func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -69,8 +70,8 @@ func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 // DeleteS3ConfigHandler handles DELETE /storage/s3/config
-type DeleteS3ConfigHandler struct{ usecase *usecase.DeleteS3ConfigUseCase }
-func NewDeleteS3ConfigHandler(uc *usecase.DeleteS3ConfigUseCase) *DeleteS3ConfigHandler { return &DeleteS3ConfigHandler{uc} }
+type DeleteS3ConfigHandler struct{ usecase *storage.DeleteS3ConfigUseCase }
+func NewDeleteS3ConfigHandler(uc *storage.DeleteS3ConfigUseCase) *DeleteS3ConfigHandler { return &DeleteS3ConfigHandler{uc} }
 func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -82,8 +83,8 @@ func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 // ConfigureHmacHandler handles POST /storage/hmac/configure
-type ConfigureHmacHandler struct{ usecase *usecase.ConfigureHmacUseCase }
-func NewConfigureHmacHandler(uc *usecase.ConfigureHmacUseCase) *ConfigureHmacHandler { return &ConfigureHmacHandler{uc} }
+type ConfigureHmacHandler struct{ usecase *storage.ConfigureHmacUseCase }
+func NewConfigureHmacHandler(uc *storage.ConfigureHmacUseCase) *ConfigureHmacHandler { return &ConfigureHmacHandler{uc} }
 func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -97,8 +98,8 @@ func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 // GetHmacConfigHandler handles GET /storage/hmac/config
-type GetHmacConfigHandler struct{ usecase *usecase.GetHmacConfigUseCase }
-func NewGetHmacConfigHandler(uc *usecase.GetHmacConfigUseCase) *GetHmacConfigHandler { return &GetHmacConfigHandler{uc} }
+type GetHmacConfigHandler struct{ usecase *storage.GetHmacConfigUseCase }
+func NewGetHmacConfigHandler(uc *storage.GetHmacConfigUseCase) *GetHmacConfigHandler { return &GetHmacConfigHandler{uc} }
 func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -110,8 +111,8 @@ func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 // DeleteHmacConfigHandler handles DELETE /storage/hmac/config
-type DeleteHmacConfigHandler struct{ usecase *usecase.DeleteHmacConfigUseCase }
-func NewDeleteHmacConfigHandler(uc *usecase.DeleteHmacConfigUseCase) *DeleteHmacConfigHandler { return &DeleteHmacConfigHandler{uc} }
+type DeleteHmacConfigHandler struct{ usecase *storage.DeleteHmacConfigUseCase }
+func NewDeleteHmacConfigHandler(uc *storage.DeleteHmacConfigUseCase) *DeleteHmacConfigHandler { return &DeleteHmacConfigHandler{uc} }
 func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -123,8 +124,8 @@ func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 // SetProxyHandler handles POST /storage/proxy
-type SetProxyHandler struct{ usecase *usecase.SetProxyUseCase }
-func NewSetProxyHandler(uc *usecase.SetProxyUseCase) *SetProxyHandler { return &SetProxyHandler{uc} }
+type SetProxyHandler struct{ usecase *storage.SetProxyUseCase }
+func NewSetProxyHandler(uc *storage.SetProxyUseCase) *SetProxyHandler { return &SetProxyHandler{uc} }
 func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -138,8 +139,8 @@ func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetHistoryHandler handles POST /storage/history
-type SetHistoryHandler struct{ usecase *usecase.SetHistoryUseCase }
-func NewSetHistoryHandler(uc *usecase.SetHistoryUseCase) *SetHistoryHandler { return &SetHistoryHandler{uc} }
+type SetHistoryHandler struct{ usecase *storage.SetHistoryUseCase }
+func NewSetHistoryHandler(uc *storage.SetHistoryUseCase) *SetHistoryHandler { return &SetHistoryHandler{uc} }
 func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }
@@ -153,8 +154,8 @@ func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetHistoryHandler handles GET /storage/history
-type GetHistoryHandler struct{ usecase *usecase.GetHistoryUseCase }
-func NewGetHistoryHandler(uc *usecase.GetHistoryUseCase) *GetHistoryHandler { return &GetHistoryHandler{uc} }
+type GetHistoryHandler struct{ usecase *storage.GetHistoryUseCase }
+func NewGetHistoryHandler(uc *storage.GetHistoryUseCase) *GetHistoryHandler { return &GetHistoryHandler{uc} }
 func (h *GetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil { customhttp.RespondJSON(w, 401, nil, errUnauthorized); return }

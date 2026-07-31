@@ -6,7 +6,8 @@ import (
 	"net/http"
 
 	customhttp "wa-api/internal/presentation/http"
-	"wa-api/internal/application/usecase"
+
+	"wa-api/internal/application/usecase/group"
 )
 
 // GroupManagementHandlers groups all group write-operation handlers.
@@ -26,8 +27,8 @@ type GroupManagementHandlers struct {
 
 // groupHandler is a generic handler that delegates to GroupManagementUseCase.
 type groupHandler struct {
-	uc       *usecase.GroupManagementUseCase
-	handler  func(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string)
+	uc       *group.GroupManagementUseCase
+	handler  func(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string)
 }
 
 func (h *groupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -38,12 +39,12 @@ func (h *groupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler(h.uc, w, r, id)
 }
 
-func newGroupHandler(uc *usecase.GroupManagementUseCase, h func(*usecase.GroupManagementUseCase, http.ResponseWriter, *http.Request, string)) *groupHandler {
+func newGroupHandler(uc *group.GroupManagementUseCase, h func(*group.GroupManagementUseCase, http.ResponseWriter, *http.Request, string)) *groupHandler {
 	return &groupHandler{uc: uc, handler: h}
 }
 
 // NewGroupManagementHandlers creates all group management handlers.
-func NewGroupManagementHandlers(uc *usecase.GroupManagementUseCase) *GroupManagementHandlers {
+func NewGroupManagementHandlers(uc *group.GroupManagementUseCase) *GroupManagementHandlers {
 	return &GroupManagementHandlers{
 		CreateGroup:             newGroupHandler(uc, handleCreateGroup),
 		GroupJoin:               newGroupHandler(uc, handleGroupJoin),
@@ -67,7 +68,7 @@ func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) boo
 	return true
 }
 
-func handleCreateGroup(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
 		Name         string   `json:"name"`
 		Participants []string `json:"participants"`
@@ -80,7 +81,7 @@ func handleCreateGroup(uc *usecase.GroupManagementUseCase, w http.ResponseWriter
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-func handleGroupJoin(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ Code string `json:"code"` }
 	if !decodeAndRespond(w, r, &req) { return }
 	if req.Code == "" { customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing code")); return }
@@ -89,7 +90,7 @@ func handleGroupJoin(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, 
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group joined successfully"}, nil)
 }
 
-func handleGroupLeave(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string `json:"groupJID"` }
 	if !decodeAndRespond(w, r, &req) { return }
 	if req.GroupJID == "" { customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing groupJID")); return }
@@ -97,7 +98,7 @@ func handleGroupLeave(uc *usecase.GroupManagementUseCase, w http.ResponseWriter,
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group left successfully"}, nil)
 }
 
-func handleSetGroupName(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID, Name string }
 	if !decodeAndRespond(w, r, &req) { return }
 	if req.Name == "" { customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing name")); return }
@@ -105,7 +106,7 @@ func handleSetGroupName(uc *usecase.GroupManagementUseCase, w http.ResponseWrite
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group name set successfully"}, nil)
 }
 
-func handleSetGroupTopic(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID, Topic string }
 	if !decodeAndRespond(w, r, &req) { return }
 	if req.Topic == "" { customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing topic")); return }
@@ -113,42 +114,42 @@ func handleSetGroupTopic(uc *usecase.GroupManagementUseCase, w http.ResponseWrit
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group topic set successfully"}, nil)
 }
 
-func handleSetGroupPhoto(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID, Photo string }
 	if !decodeAndRespond(w, r, &req) { return }
 	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, []byte(req.Photo)); err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group photo set successfully"}, nil)
 }
 
-func handleRemoveGroupPhoto(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleRemoveGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string `json:"groupjid"` }
 	if !decodeAndRespond(w, r, &req) { return }
 	if err := uc.RemoveGroupPhoto(r.Context(), id, req.GroupJID); err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group photo removed successfully"}, nil)
 }
 
-func handleSetGroupAnnounce(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetGroupAnnounce(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string; Announce bool }
 	if !decodeAndRespond(w, r, &req) { return }
 	if err := uc.SetGroupAnnounce(r.Context(), id, req.GroupJID, req.Announce); err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Group announce set successfully"}, nil)
 }
 
-func handleSetGroupLocked(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetGroupLocked(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string; Locked bool }
 	if !decodeAndRespond(w, r, &req) { return }
 	if err := uc.SetGroupLocked(r.Context(), id, req.GroupJID, req.Locked); err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Group lock updated"}, nil)
 }
 
-func handleSetDisappearingTimer(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleSetDisappearingTimer(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string `json:"groupjid"`; Duration string `json:"duration"` }
 	if !decodeAndRespond(w, r, &req) { return }
 	if err := uc.SetDisappearingTimer(r.Context(), id, req.GroupJID, req.Duration); err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Disappearing timer set"}, nil)
 }
 
-func handleUpdateGroupParticipants(uc *usecase.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
+func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct{ GroupJID string; Phone []string; Action string }
 	if !decodeAndRespond(w, r, &req) { return }
 	if len(req.Phone) < 1 { customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing phones")); return }

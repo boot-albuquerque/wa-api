@@ -2,13 +2,20 @@ package bootstrap
 
 import (
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/infra/whatsmeow"
 	customhttp "wa-api/internal/presentation/http"
 	"wa-api/internal/presentation/http/handlers"
 
 	"github.com/rs/zerolog/log"
 	wa "go.mau.fi/whatsmeow"
+
+	"wa-api/internal/application/usecase/group"
+	"wa-api/internal/application/usecase/message"
+	"wa-api/internal/application/usecase/misc"
+	"wa-api/internal/application/usecase/notification"
+	"wa-api/internal/application/usecase/session"
+	"wa-api/internal/application/usecase/storage"
+	"wa-api/internal/application/usecase/user"
 )
 
 // ClientManagerAdapterImpl adapta o ClientManager global para a interface ClientManagerAdapter.
@@ -107,33 +114,33 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Profile UseCase
-	getProfileUC := usecase.NewGetProfileUseCase(clientProvider, dataAccessFactory, logger)
+	getProfileUC := misc.NewGetProfileUseCase(clientProvider, dataAccessFactory, logger)
 
 	// Session UseCases
-	connectUC := usecase.NewConnectUseCase(clientProvider, logger)
-	disconnectUC := usecase.NewDisconnectUseCase(clientProvider, logger)
-	getQRUC := usecase.NewGetQRUseCase(clientProvider, logger)
-	logoutUC := usecase.NewLogoutUseCase(clientProvider, logger)
-	pairPhoneUC := usecase.NewPairPhoneUseCase(clientProvider, logger)
-	getStatusUC := usecase.NewGetStatusUseCase(clientProvider, logger)
-	setStatusMessageUC := usecase.NewSetStatusMessageUseCase(clientProvider, logger)
-	requestHistorySyncUC := usecase.NewRequestHistorySyncUseCase(clientProvider, logger)
+	connectUC := session.NewConnectUseCase(clientProvider, logger)
+	disconnectUC := session.NewDisconnectUseCase(clientProvider, logger)
+	getQRUC := session.NewGetQRUseCase(clientProvider, logger)
+	logoutUC := session.NewLogoutUseCase(clientProvider, logger)
+	pairPhoneUC := session.NewPairPhoneUseCase(clientProvider, logger)
+	getStatusUC := session.NewGetStatusUseCase(clientProvider, logger)
+	setStatusMessageUC := session.NewSetStatusMessageUseCase(clientProvider, logger)
+	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(clientProvider, logger)
 
 	// Message UseCases
-	sendMessageUC := usecase.NewSendMessageUseCase(clientProvider, logger)
-	sendImageUC := usecase.NewSendImageUseCase(clientProvider, logger)
-	sendDocumentUC := usecase.NewSendDocumentUseCase(clientProvider, logger)
-	sendAudioUC := usecase.NewSendAudioUseCase(clientProvider, logger)
-	sendStickerUC := usecase.NewSendStickerUseCase(clientProvider, logger)
-	sendVideoUC := usecase.NewSendVideoUseCase(clientProvider, logger)
-	sendContactUC := usecase.NewSendContactUseCase(clientProvider, logger)
-	sendLocationUC := usecase.NewSendLocationUseCase(clientProvider, logger)
-	sendButtonsUC := usecase.NewSendButtonsUseCase(clientProvider, logger)
-	sendListUC := usecase.NewSendListUseCase(clientProvider, logger)
-	sendPollUC := usecase.NewSendPollUseCase(clientProvider, logger)
-	deleteMessageUC := usecase.NewDeleteMessageUseCase(clientProvider, logger)
-	sendEditMessageUC := usecase.NewSendEditMessageUseCase(clientProvider, logger)
-	sendTemplateUC := usecase.NewSendTemplateUseCase(clientProvider, logger)
+	sendMessageUC := message.NewSendMessageUseCase(clientProvider, logger)
+	sendImageUC := message.NewSendImageUseCase(clientProvider, logger)
+	sendDocumentUC := message.NewSendDocumentUseCase(clientProvider, logger)
+	sendAudioUC := message.NewSendAudioUseCase(clientProvider, logger)
+	sendStickerUC := message.NewSendStickerUseCase(clientProvider, logger)
+	sendVideoUC := message.NewSendVideoUseCase(clientProvider, logger)
+	sendContactUC := message.NewSendContactUseCase(clientProvider, logger)
+	sendLocationUC := message.NewSendLocationUseCase(clientProvider, logger)
+	sendButtonsUC := message.NewSendButtonsUseCase(clientProvider, logger)
+	sendListUC := message.NewSendListUseCase(clientProvider, logger)
+	sendPollUC := message.NewSendPollUseCase(clientProvider, logger)
+	deleteMessageUC := message.NewDeleteMessageUseCase(clientProvider, logger)
+	sendEditMessageUC := message.NewSendEditMessageUseCase(clientProvider, logger)
+	sendTemplateUC := message.NewSendTemplateUseCase(clientProvider, logger)
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
@@ -182,16 +189,16 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	cmAdapter := &ClientManagerAdapterImpl{cm: clientManager}
-	listUsersUC := usecase.NewListUsersUseCase(s.DB, zerologLogger, cmAdapter)
-	addUserUC := usecase.NewAddUserUseCase(s.DB, zerologLogger)
-	editUserUC := usecase.NewEditUserUseCase(s.DB, zerologLogger)
-	deleteUserUC := usecase.NewDeleteUserUseCase(s.DB, zerologLogger)
-	checkUserUC := usecase.NewCheckUserUseCase(clientProvider, zerologLogger)
-	getUserUC := usecase.NewGetUserUseCase(clientProvider, zerologLogger)
-	getUserLIDUC := usecase.NewGetUserLIDUseCase(clientProvider, zerologLogger)
-	blockUserUC := usecase.NewBlockUserUseCase(clientProvider, zerologLogger)
-	unblockUserUC := usecase.NewUnblockUserUseCase(clientProvider, zerologLogger)
-	getBlocklistUC := usecase.NewGetBlocklistUseCase(clientProvider, zerologLogger)
+	listUsersUC := user.NewListUsersUseCase(s.DB, zerologLogger, cmAdapter)
+	addUserUC := user.NewAddUserUseCase(s.DB, zerologLogger)
+	editUserUC := user.NewEditUserUseCase(s.DB, zerologLogger)
+	deleteUserUC := user.NewDeleteUserUseCase(s.DB, zerologLogger)
+	checkUserUC := user.NewCheckUserUseCase(clientProvider, zerologLogger)
+	getUserUC := user.NewGetUserUseCase(clientProvider, zerologLogger)
+	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, zerologLogger)
+	blockUserUC := user.NewBlockUserUseCase(clientProvider, zerologLogger)
+	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, zerologLogger)
+	getBlocklistUC := user.NewGetBlocklistUseCase(clientProvider, zerologLogger)
 
 	// User Handlers
 	userHandlers := handlers.NewUserHandlers(
@@ -207,22 +214,22 @@ func initCustomHandlers(s *server) {
 	)
 
 	// Group UseCases
-	groupRequestUC := usecase.NewGroupRequestUseCase(clientProvider, zerologLogger)
-	listGroupsUC := usecase.NewListGroupsUseCase(clientProvider, logger)
-	getGroupInfoUC := usecase.NewGetGroupInfoUseCase(clientProvider, logger)
-	getGroupInviteLinkUC := usecase.NewGetGroupInviteLinkUseCase(clientProvider, logger)
-	getGroupInviteInfoUC := usecase.NewGetGroupInviteInfoUseCase(clientProvider, logger)
+	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, zerologLogger)
+	listGroupsUC := group.NewListGroupsUseCase(clientProvider, logger)
+	getGroupInfoUC := group.NewGetGroupInfoUseCase(clientProvider, logger)
+	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(clientProvider, logger)
+	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(clientProvider, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
 	healthProvider := whatsmeow.NewHealthClientProviderAdapter(clientManager)
-	getHealthUC := usecase.NewGetHealthUseCase(s.DB.DB, healthProvider, zerologLogger, version)
-	listNewsletterUC := usecase.NewListNewsletterUseCase(clientProvider, zerologLogger)
-	deleteUserCompleteUC := usecase.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, zerologLogger, s.ExPath)
-	rejectCallUC := usecase.NewRejectCallUseCase(clientProvider, zerologLogger)
-	getPrivacySettingsUC := usecase.NewGetPrivacySettingsUseCase(clientProvider, zerologLogger)
-	setPrivacySettingUC := usecase.NewSetPrivacySettingUseCase(clientProvider, zerologLogger)
-	requestUnavailableMessageUC := usecase.NewRequestUnavailableMessageUseCase(clientProvider, zerologLogger)
-	archiveChatUC := usecase.NewArchiveChatUseCase(clientProvider, zerologLogger)
+	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, healthProvider, zerologLogger, version)
+	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, zerologLogger)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, zerologLogger, s.ExPath)
+	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, zerologLogger)
+	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, zerologLogger)
+	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, zerologLogger)
+	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(clientProvider, zerologLogger)
+	archiveChatUC := misc.NewArchiveChatUseCase(clientProvider, zerologLogger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{
@@ -248,16 +255,16 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Storage UseCases
-	configureS3UC := usecase.NewConfigureS3UseCase(clientProvider, logger)
-	getS3ConfigUC := usecase.NewGetS3ConfigUseCase(clientProvider, logger)
-	testS3ConnectionUC := usecase.NewTestS3ConnectionUseCase(clientProvider, logger)
-	deleteS3ConfigUC := usecase.NewDeleteS3ConfigUseCase(clientProvider, logger)
-	configureHmacUC := usecase.NewConfigureHmacUseCase(clientProvider, logger)
-	getHmacConfigUC := usecase.NewGetHmacConfigUseCase(clientProvider, logger)
-	deleteHmacConfigUC := usecase.NewDeleteHmacConfigUseCase(clientProvider, logger)
-	setProxyUC := usecase.NewSetProxyUseCase(clientProvider, logger)
-	setHistoryUC := usecase.NewSetHistoryUseCase(clientProvider, logger)
-	getHistoryUC := usecase.NewGetHistoryUseCase(clientProvider, logger)
+	configureS3UC := storage.NewConfigureS3UseCase(clientProvider, logger)
+	getS3ConfigUC := storage.NewGetS3ConfigUseCase(clientProvider, logger)
+	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(clientProvider, logger)
+	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(clientProvider, logger)
+	configureHmacUC := storage.NewConfigureHmacUseCase(clientProvider, logger)
+	getHmacConfigUC := storage.NewGetHmacConfigUseCase(clientProvider, logger)
+	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(clientProvider, logger)
+	setProxyUC := storage.NewSetProxyUseCase(clientProvider, logger)
+	setHistoryUC := storage.NewSetHistoryUseCase(clientProvider, logger)
+	getHistoryUC := storage.NewGetHistoryUseCase(clientProvider, logger)
 
 	// Storage Handlers
 	storageHandlers := &handlers.StorageHandlers{
@@ -279,23 +286,23 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Group Management UseCase + Handlers
-	groupMgmtUC := usecase.NewGroupManagementUseCase(clientProvider, logger)
+	groupMgmtUC := group.NewGroupManagementUseCase(clientProvider, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
 	// Extended Handlers (downloads, presence, user-info, react, mark-read)
 	extendedHandlers := &handlers.ExtendedHandlers{
-		DownloadImage:     handlers.NewDownloadImageHandler(usecase.NewDownloadImageUseCase(clientProvider, logger)),
-		DownloadVideo:     handlers.NewDownloadVideoHandler(usecase.NewDownloadVideoUseCase(clientProvider, logger)),
-		DownloadAudio:     handlers.NewDownloadAudioHandler(usecase.NewDownloadAudioUseCase(clientProvider, logger)),
-		DownloadDocument:  handlers.NewDownloadDocumentHandler(usecase.NewDownloadDocumentUseCase(clientProvider, logger)),
-		DownloadSticker:   handlers.NewDownloadStickerHandler(usecase.NewDownloadStickerUseCase(clientProvider, logger)),
-		SendPresence:      handlers.NewSendPresenceHandler(usecase.NewSendPresenceUseCase(clientProvider, log.Logger)),
-		SubscribePresence: handlers.NewSubscribePresenceHandler(usecase.NewSubscribePresenceUseCase(clientProvider, log.Logger)),
-		ChatPresence:      handlers.NewChatPresenceHandler(usecase.NewChatPresenceUseCase(clientProvider, log.Logger)),
-		MarkRead:          handlers.NewMarkReadHandler(usecase.NewMarkReadUseCase(clientProvider, log.Logger)),
-		React:             handlers.NewReactHandler(usecase.NewReactUseCase(clientProvider, log.Logger)),
-		GetAvatar:         handlers.NewGetAvatarHandler(usecase.NewGetAvatarUseCase(clientProvider, log.Logger)),
-		GetContacts:       handlers.NewGetContactsHandler(usecase.NewGetContactsUseCase(clientProvider, log.Logger)),
+		DownloadImage:     handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(clientProvider, logger)),
+		DownloadVideo:     handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(clientProvider, logger)),
+		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(clientProvider, logger)),
+		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(clientProvider, logger)),
+		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(clientProvider, logger)),
+		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, log.Logger)),
+		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, log.Logger)),
+		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, log.Logger)),
+		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(clientProvider, log.Logger)),
+		React:             handlers.NewReactHandler(message.NewReactUseCase(clientProvider, log.Logger)),
+		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, log.Logger)),
+		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, log.Logger)),
 		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
 	}
 

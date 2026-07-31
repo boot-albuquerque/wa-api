@@ -6,8 +6,9 @@ import (
 
 	customhttp "wa-api/internal/presentation/http"
 
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/group"
 )
 
 // GroupHandlers agrupa os handlers de grupo.
@@ -22,8 +23,8 @@ type GroupHandlers struct {
 }
 
 // GetGroupRequestParticipantsHandler lists group join requests
-type GetGroupRequestParticipantsHandler struct{ usecase *usecase.GroupRequestUseCase }
-func NewGetGroupRequestParticipantsHandler(uc *usecase.GroupRequestUseCase) *GetGroupRequestParticipantsHandler { return &GetGroupRequestParticipantsHandler{uc} }
+type GetGroupRequestParticipantsHandler struct{ usecase *group.GroupRequestUseCase }
+func NewGetGroupRequestParticipantsHandler(uc *group.GroupRequestUseCase) *GetGroupRequestParticipantsHandler { return &GetGroupRequestParticipantsHandler{uc} }
 func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.GetGroupRequestParticipantsRequest
@@ -34,8 +35,8 @@ func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r 
 }
 
 // UpdateGroupRequestParticipantsHandler approves/rejects join requests
-type UpdateGroupRequestParticipantsHandler struct{ usecase *usecase.GroupRequestUseCase }
-func NewUpdateGroupRequestParticipantsHandler(uc *usecase.GroupRequestUseCase) *UpdateGroupRequestParticipantsHandler { return &UpdateGroupRequestParticipantsHandler{uc} }
+type UpdateGroupRequestParticipantsHandler struct{ usecase *group.GroupRequestUseCase }
+func NewUpdateGroupRequestParticipantsHandler(uc *group.GroupRequestUseCase) *UpdateGroupRequestParticipantsHandler { return &UpdateGroupRequestParticipantsHandler{uc} }
 func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.UpdateGroupRequestParticipantsRequest
@@ -46,8 +47,8 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 }
 
 // SetGroupJoinApprovalModeHandler toggles join approval requirement
-type SetGroupJoinApprovalModeHandler struct{ usecase *usecase.GroupRequestUseCase }
-func NewSetGroupJoinApprovalModeHandler(uc *usecase.GroupRequestUseCase) *SetGroupJoinApprovalModeHandler { return &SetGroupJoinApprovalModeHandler{uc} }
+type SetGroupJoinApprovalModeHandler struct{ usecase *group.GroupRequestUseCase }
+func NewSetGroupJoinApprovalModeHandler(uc *group.GroupRequestUseCase) *SetGroupJoinApprovalModeHandler { return &SetGroupJoinApprovalModeHandler{uc} }
 func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.SetGroupJoinApprovalModeRequest
@@ -58,8 +59,8 @@ func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 }
 
 // ListGroupsHandler lists groups
-type ListGroupsHandler struct{ usecase *usecase.ListGroupsUseCase }
-func NewListGroupsHandler(uc *usecase.ListGroupsUseCase) *ListGroupsHandler { return &ListGroupsHandler{uc} }
+type ListGroupsHandler struct{ usecase *group.ListGroupsUseCase }
+func NewListGroupsHandler(uc *group.ListGroupsUseCase) *ListGroupsHandler { return &ListGroupsHandler{uc} }
 func (h *ListGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	rsp, err := h.usecase.Execute(r.Context(), id, domain.ListGroupsRequest{})
@@ -68,8 +69,8 @@ func (h *ListGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetGroupInfoHandler gets group info
-type GetGroupInfoHandler struct{ usecase *usecase.GetGroupInfoUseCase }
-func NewGetGroupInfoHandler(uc *usecase.GetGroupInfoUseCase) *GetGroupInfoHandler { return &GetGroupInfoHandler{uc} }
+type GetGroupInfoHandler struct{ usecase *group.GetGroupInfoUseCase }
+func NewGetGroupInfoHandler(uc *group.GetGroupInfoUseCase) *GetGroupInfoHandler { return &GetGroupInfoHandler{uc} }
 func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.GetGroupInfoRequest
@@ -80,8 +81,8 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetGroupInviteLinkHandler gets invite link
-type GetGroupInviteLinkHandler struct{ usecase *usecase.GetGroupInviteLinkUseCase }
-func NewGetGroupInviteLinkHandler(uc *usecase.GetGroupInviteLinkUseCase) *GetGroupInviteLinkHandler { return &GetGroupInviteLinkHandler{uc} }
+type GetGroupInviteLinkHandler struct{ usecase *group.GetGroupInviteLinkUseCase }
+func NewGetGroupInviteLinkHandler(uc *group.GetGroupInviteLinkUseCase) *GetGroupInviteLinkHandler { return &GetGroupInviteLinkHandler{uc} }
 func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.GetGroupInviteLinkRequest
@@ -92,8 +93,8 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 // GetGroupInviteInfoHandler gets invite info
-type GetGroupInviteInfoHandler struct{ usecase *usecase.GetGroupInviteInfoUseCase }
-func NewGetGroupInviteInfoHandler(uc *usecase.GetGroupInviteInfoUseCase) *GetGroupInviteInfoHandler { return &GetGroupInviteInfoHandler{uc} }
+type GetGroupInviteInfoHandler struct{ usecase *group.GetGroupInviteInfoUseCase }
+func NewGetGroupInviteInfoHandler(uc *group.GetGroupInviteInfoUseCase) *GetGroupInviteInfoHandler { return &GetGroupInviteInfoHandler{uc} }
 func (h *GetGroupInviteInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	var req domain.GetGroupInviteInfoRequest

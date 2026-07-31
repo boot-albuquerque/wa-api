@@ -7,17 +7,18 @@ import (
 	customhttp "wa-api/internal/presentation/http"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/message"
 )
 
 // SendMessageHandler é o handler HTTP para POST /chat/send/text.
 type SendMessageHandler struct {
-	usecase *usecase.SendMessageUseCase
+	usecase *message.SendMessageUseCase
 }
 
 // NewSendMessageHandler cria o handler com o usecase injetado.
-func NewSendMessageHandler(uc *usecase.SendMessageUseCase) *SendMessageHandler {
+func NewSendMessageHandler(uc *message.SendMessageUseCase) *SendMessageHandler {
 	return &SendMessageHandler{usecase: uc}
 }
 
@@ -52,11 +53,11 @@ func (h *SendMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendImageHandler é o handler HTTP para POST /chat/send/image.
 type DeleteMessageHandler struct {
-	usecase *usecase.DeleteMessageUseCase
+	usecase *message.DeleteMessageUseCase
 }
 
 // NewDeleteMessageHandler cria o handler com o usecase injetado.
-func NewDeleteMessageHandler(uc *usecase.DeleteMessageUseCase) *DeleteMessageHandler {
+func NewDeleteMessageHandler(uc *message.DeleteMessageUseCase) *DeleteMessageHandler {
 	return &DeleteMessageHandler{usecase: uc}
 }
 
@@ -91,11 +92,11 @@ func (h *DeleteMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 // SendEditMessageHandler é o handler HTTP para POST /chat/send/edit.
 type SendEditMessageHandler struct {
-	usecase *usecase.SendEditMessageUseCase
+	usecase *message.SendEditMessageUseCase
 }
 
 // NewSendEditMessageHandler cria o handler com o usecase injetado.
-func NewSendEditMessageHandler(uc *usecase.SendEditMessageUseCase) *SendEditMessageHandler {
+func NewSendEditMessageHandler(uc *message.SendEditMessageUseCase) *SendEditMessageHandler {
 	return &SendEditMessageHandler{usecase: uc}
 }
 
@@ -130,11 +131,11 @@ func (h *SendEditMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 // SendTemplateHandler é o handler HTTP para POST /chat/send/template.
 type SendTemplateHandler struct {
-	usecase *usecase.SendTemplateUseCase
+	usecase *message.SendTemplateUseCase
 }
 
 // NewSendTemplateHandler cria o handler com o usecase injetado.
-func NewSendTemplateHandler(uc *usecase.SendTemplateUseCase) *SendTemplateHandler {
+func NewSendTemplateHandler(uc *message.SendTemplateUseCase) *SendTemplateHandler {
 	return &SendTemplateHandler{usecase: uc}
 }
 

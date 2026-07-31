@@ -7,17 +7,18 @@ import (
 	customhttp "wa-api/internal/presentation/http"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/message"
 )
 
 // SendMessageHandler é o handler HTTP para POST /chat/send/text.
 type SendImageHandler struct {
-	usecase *usecase.SendImageUseCase
+	usecase *message.SendImageUseCase
 }
 
 // NewSendImageHandler cria o handler com o usecase injetado.
-func NewSendImageHandler(uc *usecase.SendImageUseCase) *SendImageHandler {
+func NewSendImageHandler(uc *message.SendImageUseCase) *SendImageHandler {
 	return &SendImageHandler{usecase: uc}
 }
 
@@ -52,11 +53,11 @@ func (h *SendImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendDocumentHandler é o handler HTTP para POST /chat/send/document.
 type SendDocumentHandler struct {
-	usecase *usecase.SendDocumentUseCase
+	usecase *message.SendDocumentUseCase
 }
 
 // NewSendDocumentHandler cria o handler com o usecase injetado.
-func NewSendDocumentHandler(uc *usecase.SendDocumentUseCase) *SendDocumentHandler {
+func NewSendDocumentHandler(uc *message.SendDocumentUseCase) *SendDocumentHandler {
 	return &SendDocumentHandler{usecase: uc}
 }
 
@@ -91,11 +92,11 @@ func (h *SendDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // SendAudioHandler é o handler HTTP para POST /chat/send/audio.
 type SendAudioHandler struct {
-	usecase *usecase.SendAudioUseCase
+	usecase *message.SendAudioUseCase
 }
 
 // NewSendAudioHandler cria o handler com o usecase injetado.
-func NewSendAudioHandler(uc *usecase.SendAudioUseCase) *SendAudioHandler {
+func NewSendAudioHandler(uc *message.SendAudioUseCase) *SendAudioHandler {
 	return &SendAudioHandler{usecase: uc}
 }
 

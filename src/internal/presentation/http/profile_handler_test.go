@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
+
+	"wa-api/internal/application/usecase/misc"
 )
 
 // mockGetProfileUseCase implementa a interface do usecase para testes do handler.
@@ -69,7 +70,7 @@ func TestProfileHandler_EmptyTxtID_400(t *testing.T) {
 // usecase falha.
 func TestProfileHandler_UseCaseError_500_GenericMessage(t *testing.T) {
 	handler := NewProfileHandler(&mockGetProfileUseCase{
-		err: usecase.NewProfileError("failed: JID 5511987654321@s.whatsapp.net timeout"),
+		err: misc.NewProfileError("failed: JID 5511987654321@s.whatsapp.net timeout"),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/session/profile", nil)
 	ctx := context.WithValue(req.Context(), appport.UserInfoKey, &mockUserInfo{id: "test-user"})

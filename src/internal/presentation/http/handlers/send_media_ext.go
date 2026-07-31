@@ -7,17 +7,18 @@ import (
 	customhttp "wa-api/internal/presentation/http"
 
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/message"
 )
 
 // SendMessageHandler é o handler HTTP para POST /chat/send/text.
 type SendStickerHandler struct {
-	usecase *usecase.SendStickerUseCase
+	usecase *message.SendStickerUseCase
 }
 
 // NewSendStickerHandler cria o handler com o usecase injetado.
-func NewSendStickerHandler(uc *usecase.SendStickerUseCase) *SendStickerHandler {
+func NewSendStickerHandler(uc *message.SendStickerUseCase) *SendStickerHandler {
 	return &SendStickerHandler{usecase: uc}
 }
 
@@ -52,11 +53,11 @@ func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // SendVideoHandler é o handler HTTP para POST /chat/send/video.
 type SendVideoHandler struct {
-	usecase *usecase.SendVideoUseCase
+	usecase *message.SendVideoUseCase
 }
 
 // NewSendVideoHandler cria o handler com o usecase injetado.
-func NewSendVideoHandler(uc *usecase.SendVideoUseCase) *SendVideoHandler {
+func NewSendVideoHandler(uc *message.SendVideoUseCase) *SendVideoHandler {
 	return &SendVideoHandler{usecase: uc}
 }
 

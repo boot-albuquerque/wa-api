@@ -6,8 +6,9 @@ import (
 
 	customhttp "wa-api/internal/presentation/http"
 	appport "wa-api/internal/application/contracts"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/user"
 )
 
 // BlocklistHandlers groups handlers for blocklist operations.
@@ -17,11 +18,11 @@ type BlocklistHandlers struct {
 
 // GetBlocklistHandler returns the current list of blocked users.
 type GetBlocklistHandler struct {
-	uc *usecase.GetBlocklistUseCase
+	uc *user.GetBlocklistUseCase
 }
 
 // NewGetBlocklistHandler creates a new GetBlocklistHandler.
-func NewGetBlocklistHandler(uc *usecase.GetBlocklistUseCase) *GetBlocklistHandler {
+func NewGetBlocklistHandler(uc *user.GetBlocklistUseCase) *GetBlocklistHandler {
 	return &GetBlocklistHandler{uc: uc}
 }
 

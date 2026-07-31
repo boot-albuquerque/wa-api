@@ -5,14 +5,16 @@ import (
 	"net/http"
 
 	customhttp "wa-api/internal/presentation/http"
-	"wa-api/internal/application/usecase"
 	"wa-api/internal/domain"
+
+	"wa-api/internal/application/usecase/message"
+	"wa-api/internal/application/usecase/user"
 )
 
 // --- Download handlers ---
 
-type DownloadImageHandler struct{ uc *usecase.DownloadImageUseCase }
-func NewDownloadImageHandler(uc *usecase.DownloadImageUseCase) *DownloadImageHandler {
+type DownloadImageHandler struct{ uc *message.DownloadImageUseCase }
+func NewDownloadImageHandler(uc *message.DownloadImageUseCase) *DownloadImageHandler {
 	return &DownloadImageHandler{uc: uc}
 }
 func (h *DownloadImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -24,8 +26,8 @@ func (h *DownloadImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type DownloadVideoHandler struct{ uc *usecase.DownloadVideoUseCase }
-func NewDownloadVideoHandler(uc *usecase.DownloadVideoUseCase) *DownloadVideoHandler {
+type DownloadVideoHandler struct{ uc *message.DownloadVideoUseCase }
+func NewDownloadVideoHandler(uc *message.DownloadVideoUseCase) *DownloadVideoHandler {
 	return &DownloadVideoHandler{uc: uc}
 }
 func (h *DownloadVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +39,8 @@ func (h *DownloadVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type DownloadAudioHandler struct{ uc *usecase.DownloadAudioUseCase }
-func NewDownloadAudioHandler(uc *usecase.DownloadAudioUseCase) *DownloadAudioHandler {
+type DownloadAudioHandler struct{ uc *message.DownloadAudioUseCase }
+func NewDownloadAudioHandler(uc *message.DownloadAudioUseCase) *DownloadAudioHandler {
 	return &DownloadAudioHandler{uc: uc}
 }
 func (h *DownloadAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,8 +52,8 @@ func (h *DownloadAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type DownloadDocumentHandler struct{ uc *usecase.DownloadDocumentUseCase }
-func NewDownloadDocumentHandler(uc *usecase.DownloadDocumentUseCase) *DownloadDocumentHandler {
+type DownloadDocumentHandler struct{ uc *message.DownloadDocumentUseCase }
+func NewDownloadDocumentHandler(uc *message.DownloadDocumentUseCase) *DownloadDocumentHandler {
 	return &DownloadDocumentHandler{uc: uc}
 }
 func (h *DownloadDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -63,8 +65,8 @@ func (h *DownloadDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type DownloadStickerHandler struct{ uc *usecase.DownloadStickerUseCase }
-func NewDownloadStickerHandler(uc *usecase.DownloadStickerUseCase) *DownloadStickerHandler {
+type DownloadStickerHandler struct{ uc *message.DownloadStickerUseCase }
+func NewDownloadStickerHandler(uc *message.DownloadStickerUseCase) *DownloadStickerHandler {
 	return &DownloadStickerHandler{uc: uc}
 }
 func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +80,8 @@ func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 // --- Presence/Chat handlers ---
 
-type SendPresenceHandler struct{ uc *usecase.SendPresenceUseCase }
-func NewSendPresenceHandler(uc *usecase.SendPresenceUseCase) *SendPresenceHandler {
+type SendPresenceHandler struct{ uc *message.SendPresenceUseCase }
+func NewSendPresenceHandler(uc *message.SendPresenceUseCase) *SendPresenceHandler {
 	return &SendPresenceHandler{uc: uc}
 }
 func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -90,8 +92,8 @@ func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Presence sent"}, nil)
 }
 
-type SubscribePresenceHandler struct{ uc *usecase.SubscribePresenceUseCase }
-func NewSubscribePresenceHandler(uc *usecase.SubscribePresenceUseCase) *SubscribePresenceHandler {
+type SubscribePresenceHandler struct{ uc *message.SubscribePresenceUseCase }
+func NewSubscribePresenceHandler(uc *message.SubscribePresenceUseCase) *SubscribePresenceHandler {
 	return &SubscribePresenceHandler{uc: uc}
 }
 func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,8 +104,8 @@ func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Presence subscription updated"}, nil)
 }
 
-type ChatPresenceHandler struct{ uc *usecase.ChatPresenceUseCase }
-func NewChatPresenceHandler(uc *usecase.ChatPresenceUseCase) *ChatPresenceHandler {
+type ChatPresenceHandler struct{ uc *message.ChatPresenceUseCase }
+func NewChatPresenceHandler(uc *message.ChatPresenceUseCase) *ChatPresenceHandler {
 	return &ChatPresenceHandler{uc: uc}
 }
 func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -114,8 +116,8 @@ func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Chat presence sent"}, nil)
 }
 
-type MarkReadHandler struct{ uc *usecase.MarkReadUseCase }
-func NewMarkReadHandler(uc *usecase.MarkReadUseCase) *MarkReadHandler {
+type MarkReadHandler struct{ uc *message.MarkReadUseCase }
+func NewMarkReadHandler(uc *message.MarkReadUseCase) *MarkReadHandler {
 	return &MarkReadHandler{uc: uc}
 }
 func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -128,8 +130,8 @@ func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // --- User info handlers ---
 
-type ReactHandler struct{ uc *usecase.ReactUseCase }
-func NewReactHandler(uc *usecase.ReactUseCase) *ReactHandler {
+type ReactHandler struct{ uc *message.ReactUseCase }
+func NewReactHandler(uc *message.ReactUseCase) *ReactHandler {
 	return &ReactHandler{uc: uc}
 }
 func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +143,8 @@ func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type GetAvatarHandler struct{ uc *usecase.GetAvatarUseCase }
-func NewGetAvatarHandler(uc *usecase.GetAvatarUseCase) *GetAvatarHandler {
+type GetAvatarHandler struct{ uc *user.GetAvatarUseCase }
+func NewGetAvatarHandler(uc *user.GetAvatarUseCase) *GetAvatarHandler {
 	return &GetAvatarHandler{uc: uc}
 }
 func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -154,8 +156,8 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type GetContactsHandler struct{ uc *usecase.GetContactsUseCase }
-func NewGetContactsHandler(uc *usecase.GetContactsUseCase) *GetContactsHandler {
+type GetContactsHandler struct{ uc *user.GetContactsUseCase }
+func NewGetContactsHandler(uc *user.GetContactsUseCase) *GetContactsHandler {
 	return &GetContactsHandler{uc: uc}
 }
 func (h *GetContactsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -165,8 +167,8 @@ func (h *GetContactsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-type GetUserInfoHandler struct{ uc *usecase.GetUserUseCase }
-func NewGetUserInfoHandler(uc *usecase.GetUserUseCase) *GetUserInfoHandler {
+type GetUserInfoHandler struct{ uc *user.GetUserUseCase }
+func NewGetUserInfoHandler(uc *user.GetUserUseCase) *GetUserInfoHandler {
 	return &GetUserInfoHandler{uc: uc}
 }
 func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
