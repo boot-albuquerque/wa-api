@@ -2,6 +2,7 @@ package profile_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -115,8 +116,44 @@ func TestGetProfileExecute_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == "" || len(result) < 10 {
-		t.Errorf("expected JSON result, got %q", result)
+
+	// O corpo de GET /session/profile e' esta string, escrita direto no
+	// ResponseWriter por ProfileHandler. Entao as chaves abaixo SAO o
+	// contrato publico da rota, e nao um detalhe de serializacao.
+	//
+	// Estas assercoes vieram de pkg/domain/profile_test.go, deletado nesta
+	// fase: la elas testavam as tags de domain.Profile, um tipo que NENHUM
+	// codigo de producao constroi. Apontadas para ProfileResult, que e' o que
+	// de fato vai para o cliente, elas passam a valer alguma coisa. A
+	// assercao que estava aqui antes (len(result) >= 10) nao distinguia o
+	// perfil correto de "{\"a\":1234}".
+	var got map[string]string
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("resultado nao e' um objeto JSON de strings: %v (%q)", err, result)
+	}
+
+	want := map[string]string{
+		"pushname":      "John",
+		"jid":           "5511987654321@s.whatsapp.net",
+		"avatar_url":    "https://img.example.com/1.jpg",
+		"avatar_id":     "img-1",
+		"full_name":     "John Full",
+		"business_name": "Biz",
+	}
+	for key, wantVal := range want {
+		gotVal, present := got[key]
+		if !present {
+			t.Errorf("chave %q sumiu do corpo da rota (contrato publico): %s", key, result)
+			continue
+		}
+		if gotVal != wantVal {
+			t.Errorf("%s: got %q, want %q", key, gotVal, wantVal)
+		}
+	}
+	for key := range got {
+		if _, esperada := want[key]; !esperada {
+			t.Errorf("chave inesperada %q no corpo da rota: %s", key, result)
+		}
 	}
 }
 
