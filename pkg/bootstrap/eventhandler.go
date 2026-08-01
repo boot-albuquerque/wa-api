@@ -493,21 +493,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			return
 		}
 	case *events.Presence:
-		st.postmap["type"] = "Presence"
-		st.dowebhook = 1
-		st.postmap["from"] = evt.From.String()
-		if evt.Unavailable {
-			st.postmap["state"] = "offline"
-			if evt.LastSeen.IsZero() {
-				log.Info().Str("from", evt.From.String()).Msg("User is now offline")
-			} else {
-				st.postmap["last_seen"] = evt.LastSeen.Unix()
-				log.Info().Str("from", evt.From.String()).Str("lastSeen", fmt.Sprintf("%v", evt.LastSeen)).Msg("User is now offline")
-			}
-		} else {
-			st.postmap["state"] = "online"
-			log.Info().Str("from", evt.From.String()).Msg("User is now online")
-		}
+		mycli.handlePresence(evt, st)
 	case *events.HistorySync:
 		st.postmap["type"] = "HistorySync"
 		st.dowebhook = 1
@@ -794,9 +780,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			return
 		}
 	case *events.ChatPresence:
-		st.postmap["type"] = "ChatPresence"
-		st.dowebhook = 1
-		log.Info().Str("state", string(evt.State)).Str("media", string(evt.Media)).Str("chat", evt.MessageSource.Chat.String()).Str("sender", evt.MessageSource.Sender.String()).Msg("Chat Presence received")
+		mycli.handleChatPresence(evt, st)
 	case *events.CallOffer:
 		mycli.handleCallOffer(evt, st)
 	case *events.CallAccept:
