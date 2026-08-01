@@ -11,28 +11,23 @@ import (
 
 // ConfigureS3UseCase encapsula a validação de configuração de S3.
 type ConfigureS3UseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewConfigureS3UseCase cria uma nova instância do usecase.
-func NewConfigureS3UseCase(cp appport.ClientProvider, l appport.Logger) *ConfigureS3UseCase {
+func NewConfigureS3UseCase(sg appport.SessionGuard, l appport.Logger) *ConfigureS3UseCase {
 	return &ConfigureS3UseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *ConfigureS3UseCase) Execute(ctx context.Context, txtID string, req domain.S3ConfigRequest) (*domain.S3ConfigResult, error) {
 	// Validate client exists
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

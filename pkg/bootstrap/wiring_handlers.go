@@ -107,6 +107,7 @@ var customHandlerSet = &customHandlers{}
 func initCustomHandlers(s *server) {
 	// Adapters
 	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
+	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
 	// Factory que cria ProfileDataAccess a partir de *whatsmeow.Client
@@ -255,16 +256,16 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Storage UseCases
-	configureS3UC := storage.NewConfigureS3UseCase(clientProvider, logger)
+	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, logger)
 	getS3ConfigUC := storage.NewGetS3ConfigUseCase(clientProvider, logger)
 	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(clientProvider, logger)
-	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(clientProvider, logger)
-	configureHmacUC := storage.NewConfigureHmacUseCase(clientProvider, logger)
+	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
+	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, logger)
 	getHmacConfigUC := storage.NewGetHmacConfigUseCase(clientProvider, logger)
-	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(clientProvider, logger)
+	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, logger)
 	setProxyUC := storage.NewSetProxyUseCase(clientProvider, logger)
 	setHistoryUC := storage.NewSetHistoryUseCase(clientProvider, logger)
-	getHistoryUC := storage.NewGetHistoryUseCase(clientProvider, logger)
+	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
 
 	// Storage Handlers
 	storageHandlers := &handlers.StorageHandlers{
