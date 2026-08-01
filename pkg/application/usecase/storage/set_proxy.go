@@ -6,6 +6,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/infra/egress"
 )
 
 // SetProxyUseCase encapsula a validação de configuração de Proxy.
@@ -35,9 +36,16 @@ func (uc *SetProxyUseCase) Execute(ctx context.Context, txtID string, req domain
 		return nil, fmt.Errorf("no session")
 	}
 
-	// If enabled, validate URL is provided
-	if req.Enabled && req.URL == "" {
-		return nil, fmt.Errorf("proxy URL is required when proxy is enabled")
+	// If enabled, validate URL is provided and does not point at a
+	// reserved/loopback address (sec/F24 — proxy endpoint had no
+	// validation at all before this).
+	if req.Enabled {
+		if req.URL == "" {
+			return nil, fmt.Errorf("proxy URL is required when proxy is enabled")
+		}
+		if err := egress.ValidateOutboundURL(ctx, req.URL); err != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %w", err)
+		}
 	}
 
 	result := &domain.ProxyConfigResult{

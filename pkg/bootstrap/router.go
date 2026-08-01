@@ -158,6 +158,8 @@ func recoverMiddleware(next http.Handler) http.Handler {
 func buildRouter(d Deps) *mux.Router {
 	router := mux.NewRouter()
 	router.Use(recoverMiddleware)
+	router.Use(bodyLimitMiddleware)
+	router.Use(newRateLimitObserver().middleware)
 
 	// Admin routes — authAdmin middleware validates the admin token.
 	adminRoutes := router.PathPrefix("/admin").Subrouter()
