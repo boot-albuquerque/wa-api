@@ -140,10 +140,10 @@ func initCustomHandlers(s *server) {
 	sendLocationUC := message.NewSendLocationUseCase(messageComposer, logger)
 	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
 	sendListUC := message.NewSendListUseCase(messageComposer, logger)
-	sendPollUC := message.NewSendPollUseCase(clientProvider, logger)
-	deleteMessageUC := message.NewDeleteMessageUseCase(clientProvider, logger)
-	sendEditMessageUC := message.NewSendEditMessageUseCase(clientProvider, logger)
-	sendTemplateUC := message.NewSendTemplateUseCase(clientProvider, logger)
+	sendPollUC := message.NewSendPollUseCase(messageComposer, logger)
+	deleteMessageUC := message.NewDeleteMessageUseCase(sessionGuard, logger)
+	sendEditMessageUC := message.NewSendEditMessageUseCase(sessionGuard, logger)
+	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
