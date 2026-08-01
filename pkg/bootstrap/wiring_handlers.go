@@ -324,8 +324,5 @@ func initCustomHandlers(s *server) {
 // initConnectHandler creates a ConnectHandler wired to server.startClient.
 func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
 	h := handlers.NewConnectHandler(uc)
-	h.StartClient = func(userID, jid, token string, kill chan bool) {
-		s.startClient(userID, jid, token, kill)
-	}
-	return h
+	return h.WithStartClient(s.startClient)
 }

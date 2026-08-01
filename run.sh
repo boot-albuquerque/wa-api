@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/go/bin:$PATH"
 set -e
 cd "$(dirname "$0")"
 

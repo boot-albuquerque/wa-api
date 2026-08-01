@@ -22,11 +22,18 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
-type ConnectHandler struct{
+type ConnectHandler struct {
 	usecase     *session.ConnectUseCase
 	StartClient func(userID, jid, token string, kill chan bool) // injected by bootstrap
 }
 func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler { return &ConnectHandler{usecase: uc} }
+
+// WithStartClient injects the WhatsApp WebSocket launcher.
+func (h *ConnectHandler) WithStartClient(fn func(userID, jid, token string, kill chan bool)) *ConnectHandler {
+	h.StartClient = fn
+	return h
+}
+
 func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
 	_, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
