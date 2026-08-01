@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	appport "wa-api/pkg/application/contracts"
 	"strings"
 
 	"github.com/patrickmn/go-cache"
@@ -138,11 +140,11 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"S3Enabled": s3Enabled, "MediaDelivery": mediaDelivery,
 					}}
 					userCache.Set(token, v, cache.NoExpiration)
-					ctx = context.WithValue(r.Context(), "userinfo", v)
+					ctx = context.WithValue(r.Context(), appport.UserInfoKey, v)
 				}
 			} else {
 				v := myuserinfo.(Values)
-				ctx = context.WithValue(r.Context(), "userinfo", v)
+				ctx = context.WithValue(r.Context(), appport.UserInfoKey, v)
 				txtid = v.Get("Id")
 			}
 
