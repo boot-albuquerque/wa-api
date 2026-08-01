@@ -195,10 +195,10 @@ func initCustomHandlers(s *server) {
 	editUserUC := user.NewEditUserUseCase(s.DB, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(s.DB, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
-	getUserUC := user.NewGetUserUseCase(clientProvider, logger)
-	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, logger)
-	blockUserUC := user.NewBlockUserUseCase(clientProvider, logger)
-	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, logger)
+	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
+	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
+	blockUserUC := user.NewBlockUserUseCase(userAdapter, jidResolver, logger)
+	unblockUserUC := user.NewUnblockUserUseCase(userAdapter, jidResolver, logger)
 	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)
 
 	// User Handlers
@@ -302,7 +302,7 @@ func initCustomHandlers(s *server) {
 		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(presenceController, jidResolver, logger)),
 		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
 		React:             handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
-		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, logger)),
+		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
 		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
 		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
 	}
