@@ -10,15 +10,15 @@ import (
 
 // SendContactUseCase encapsula a validação de envio de contato.
 type SendContactUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendContactUseCase cria uma nova instância do usecase.
-func NewSendContactUseCase(cp appport.ClientProvider, l appport.Logger) *SendContactUseCase {
+func NewSendContactUseCase(mc appport.MessageComposer, l appport.Logger) *SendContactUseCase {
 	return &SendContactUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -34,19 +34,19 @@ func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req dom
 		return nil, fmt.Errorf("missing Vcard in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, fmt.Errorf("no session")
+		}
+		msgID = generated
 	}
 
 	result := &domain.SendContactResult{

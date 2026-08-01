@@ -10,15 +10,15 @@ import (
 
 // SendStickerUseCase encapsula a validação de envio de sticker.
 type SendStickerUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendStickerUseCase cria uma nova instância do usecase.
-func NewSendStickerUseCase(cp appport.ClientProvider, l appport.Logger) *SendStickerUseCase {
+func NewSendStickerUseCase(mc appport.MessageComposer, l appport.Logger) *SendStickerUseCase {
 	return &SendStickerUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -31,19 +31,19 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 		return nil, fmt.Errorf("missing Sticker in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, fmt.Errorf("no session")
+		}
+		msgID = generated
 	}
 
 	result := &domain.SendStickerResult{
