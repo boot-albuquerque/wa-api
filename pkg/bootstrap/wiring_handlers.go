@@ -120,11 +120,11 @@ func initCustomHandlers(s *server) {
 
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(clientProvider, logger)
-	disconnectUC := session.NewDisconnectUseCase(clientProvider, logger)
-	getQRUC := session.NewGetQRUseCase(clientProvider, logger)
-	logoutUC := session.NewLogoutUseCase(clientProvider, logger)
+	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
+	getQRUC := session.NewGetQRUseCase(sessionGuard, logger)
+	logoutUC := session.NewLogoutUseCase(sessionGuard, logger)
 	pairPhoneUC := session.NewPairPhoneUseCase(clientProvider, logger)
-	getStatusUC := session.NewGetStatusUseCase(clientProvider, logger)
+	getStatusUC := session.NewGetStatusUseCase(sessionGuard, logger)
 	setStatusMessageUC := session.NewSetStatusMessageUseCase(clientProvider, logger)
 	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(clientProvider, logger)
 

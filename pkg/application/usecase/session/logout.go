@@ -10,27 +10,22 @@ import (
 
 // LogoutUseCase encapsula a validação de logout.
 type LogoutUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewLogoutUseCase cria uma nova instância do usecase.
-func NewLogoutUseCase(cp appport.ClientProvider, l appport.Logger) *LogoutUseCase {
+func NewLogoutUseCase(sg appport.SessionGuard, l appport.Logger) *LogoutUseCase {
 	return &LogoutUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida se o cliente está disponível e logado.
 func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.LogoutRequest) (*domain.LogoutResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

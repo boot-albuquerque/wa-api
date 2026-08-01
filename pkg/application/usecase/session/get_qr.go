@@ -10,27 +10,22 @@ import (
 
 // GetQRUseCase encapsula a validação de obtenção do QR code.
 type GetQRUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewGetQRUseCase cria uma nova instância do usecase.
-func NewGetQRUseCase(cp appport.ClientProvider, l appport.Logger) *GetQRUseCase {
+func NewGetQRUseCase(sg appport.SessionGuard, l appport.Logger) *GetQRUseCase {
 	return &GetQRUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida se o cliente está disponível.
 func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQRResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

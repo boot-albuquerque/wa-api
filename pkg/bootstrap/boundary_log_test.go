@@ -12,7 +12,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
-	wa "go.mau.fi/whatsmeow"
 
 	"wa-api/pkg/application/usecase/session"
 	infrawa "wa-api/pkg/infra/whatsmeow"
@@ -27,24 +26,26 @@ const boundaryLogMsg = "Got API Request"
 
 const boundaryTestToken = "boundary-test-token"
 
-// nilClientProvider satisfies appport.ClientProvider and always reports "no
-// client". It exists so a real use case (session.GetStatusUseCase) runs and
+// noSessionGuard satisfies appport.SessionGuard and always reports "no
+// session". It exists so a real use case (session.GetStatusUseCase) runs and
 // logs through the real ZerologAdapter during a router-driven request —
-// without needing a live whatsmeow connection.
-type nilClientProvider struct{}
+// without needing a live whatsmeow connection. Que ele seja trivial de
+// escrever é o ponto da ADR-001: com a porta antiga, a mesma fake tinha que
+// produzir um *whatsmeow.Client.
+type noSessionGuard struct{}
 
-func (nilClientProvider) GetWhatsmeowClient(context.Context, string) (*wa.Client, error) {
-	return nil, nil
+func (noSessionGuard) EnsureSession(context.Context, string) error {
+	return infrawa.ErrNoSession("boundary-test-user", nil)
 }
 
-// panicClientProvider panics instead of returning, so a REAL panic originates
+// panicSessionGuard panics instead of returning, so a REAL panic originates
 // inside a REAL handler running behind the full middleware stack — the only
 // way to observe what the AccessHandler callback sees when a request dies.
-type panicClientProvider struct{}
+type panicSessionGuard struct{}
 
 const boundaryTestPanicMsg = "boundary-test-induced panic"
 
-func (panicClientProvider) GetWhatsmeowClient(context.Context, string) (*wa.Client, error) {
+func (panicSessionGuard) EnsureSession(context.Context, string) error {
 	panic(boundaryTestPanicMsg)
 }
 
@@ -64,7 +65,7 @@ func boundaryDeps(t *testing.T, buf *bytes.Buffer) Deps {
 	ch := emptyCustomHandlers()
 	ch.Session.GetStatus = handlers.NewGetStatusHandler(
 		session.NewGetStatusUseCase(
-			nilClientProvider{},
+			noSessionGuard{},
 			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
@@ -80,7 +81,7 @@ func boundaryPanicDeps(t *testing.T, buf *bytes.Buffer) Deps {
 	d := boundaryDeps(t, buf)
 	d.CustomHandlers.Session.GetStatus = handlers.NewGetStatusHandler(
 		session.NewGetStatusUseCase(
-			panicClientProvider{},
+			panicSessionGuard{},
 			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
@@ -228,7 +229,7 @@ func boundaryLogReqIDCorrelates(t *testing.T) {
 		switch rec.str("message") {
 		case boundaryLogMsg:
 			boundaryID = rec.str("req_id")
-		case "client is nil": // emitted by session.GetStatusUseCase
+		case "no whatsmeow session": // emitted by session.GetStatusUseCase
 			usecaseID = rec.str("req_id")
 		}
 	}
