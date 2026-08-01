@@ -9,15 +9,13 @@ import (
 
 // ConnectUseCase encapsula a validação de conexão.
 type ConnectUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	logger appport.Logger
 }
 
 // NewConnectUseCase cria uma nova instância do usecase.
-func NewConnectUseCase(cp appport.ClientProvider, l appport.Logger) *ConnectUseCase {
+func NewConnectUseCase(l appport.Logger) *ConnectUseCase {
 	return &ConnectUseCase{
-		clientProvider: cp,
-		logger:         l,
+		logger: l,
 	}
 }
 

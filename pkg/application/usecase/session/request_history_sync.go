@@ -10,27 +10,22 @@ import (
 
 // RequestHistorySyncUseCase encapsula a validação de requisição de sincronização de histórico.
 type RequestHistorySyncUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewRequestHistorySyncUseCase cria uma nova instância do usecase.
-func NewRequestHistorySyncUseCase(cp appport.ClientProvider, l appport.Logger) *RequestHistorySyncUseCase {
+func NewRequestHistorySyncUseCase(sg appport.SessionGuard, l appport.Logger) *RequestHistorySyncUseCase {
 	return &RequestHistorySyncUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida se o cliente está disponível.
 func (uc *RequestHistorySyncUseCase) Execute(ctx context.Context, txtID string, req domain.RequestHistorySyncRequest) (*domain.RequestHistorySyncResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

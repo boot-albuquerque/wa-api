@@ -119,14 +119,14 @@ func initCustomHandlers(s *server) {
 	getProfileUC := misc.NewGetProfileUseCase(clientProvider, dataAccessFactory, logger)
 
 	// Session UseCases
-	connectUC := session.NewConnectUseCase(clientProvider, logger)
+	connectUC := session.NewConnectUseCase(logger)
 	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
 	getQRUC := session.NewGetQRUseCase(sessionGuard, logger)
 	logoutUC := session.NewLogoutUseCase(sessionGuard, logger)
-	pairPhoneUC := session.NewPairPhoneUseCase(clientProvider, logger)
+	pairPhoneUC := session.NewPairPhoneUseCase(sessionGuard, logger)
 	getStatusUC := session.NewGetStatusUseCase(sessionGuard, logger)
-	setStatusMessageUC := session.NewSetStatusMessageUseCase(clientProvider, logger)
-	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(clientProvider, logger)
+	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
+	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
 
 	// Message UseCases
 	sendMessageUC := message.NewSendMessageUseCase(clientProvider, logger)

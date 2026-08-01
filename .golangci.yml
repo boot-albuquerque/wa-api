@@ -22,6 +22,7 @@ linters:
       rules:
         camada-de-aplicacao:
           files:
+            - "**/pkg/application/usecase/session/*.go"
             - "**/pkg/application/usecase/storage/*.go"
           deny:
             - pkg: go.mau.fi/whatsmeow

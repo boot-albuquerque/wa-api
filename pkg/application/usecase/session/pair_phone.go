@@ -10,15 +10,15 @@ import (
 
 // PairPhoneUseCase encapsula a validação de pareamento por telefone.
 type PairPhoneUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewPairPhoneUseCase cria uma nova instância do usecase.
-func NewPairPhoneUseCase(cp appport.ClientProvider, l appport.Logger) *PairPhoneUseCase {
+func NewPairPhoneUseCase(sg appport.SessionGuard, l appport.Logger) *PairPhoneUseCase {
 	return &PairPhoneUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
@@ -28,13 +28,8 @@ func (uc *PairPhoneUseCase) Execute(ctx context.Context, txtID string, req domai
 		return nil, fmt.Errorf("missing Phone in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
