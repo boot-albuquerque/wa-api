@@ -828,17 +828,11 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	case *events.JoinedGroup:
 		mycli.handleJoinedGroup(evt, st)
 	case *events.Picture:
-		st.postmap["type"] = "Picture"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("Picture updated")
+		mycli.handlePicture(evt, st)
 	case *events.BlocklistChange:
-		st.postmap["type"] = "BlocklistChange"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("Blocklist changed")
+		mycli.handleBlocklistChange(evt, st)
 	case *events.Blocklist:
-		st.postmap["type"] = "Blocklist"
-		st.dowebhook = 1
-		log.Info().Msg("Blocklist received")
+		mycli.handleBlocklist(evt, st)
 	case *events.KeepAliveRestored:
 		st.postmap["type"] = "KeepAliveRestored"
 		st.dowebhook = 1
@@ -864,13 +858,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		st.dowebhook = 1
 		log.Error().Msg("Pair error")
 	case *events.PrivacySettings:
-		st.postmap["type"] = "PrivacySettings"
-		st.dowebhook = 1
-		log.Info().Msg("Privacy settings updated")
+		mycli.handlePrivacySettings(evt, st)
 	case *events.UserAbout:
-		st.postmap["type"] = "UserAbout"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("User about updated")
+		mycli.handleUserAbout(evt, st)
 	case *events.OfflineSyncCompleted:
 		st.postmap["type"] = "OfflineSyncCompleted"
 		st.dowebhook = 1
@@ -880,9 +870,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		st.dowebhook = 1
 		log.Info().Msg("Offline sync preview")
 	case *events.IdentityChange:
-		st.postmap["type"] = "IdentityChange"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("Identity changed")
+		mycli.handleIdentityChange(evt, st)
 	case *events.NewsletterJoin:
 		mycli.handleNewsletterJoin(evt, st)
 	case *events.NewsletterLeave:
