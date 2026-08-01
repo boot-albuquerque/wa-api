@@ -1,0 +1,14 @@
+# Gate de nao-regressao de cobertura. Uma medida, e ela e' trava.
+#
+# min_coverage — a cobertura total do repo, em decimos de ponto percentual
+#   (147 = 14,7%). `make coverage-gate` falha se a cobertura atual CAIR abaixo
+#   deste piso. Subir e' sempre permitido; quando subir, atualize o numero no
+#   mesmo PR — o alvo avisa quando isso acontece.
+#
+# A medicao e' exatamente a do criterio de pronto da Fase 8:
+#   go test ./... -coverpkg=./... -coverprofile=coverage.out
+#   go tool cover -func=coverage.out | tail -1
+#
+# Decimos, e nao float, porque o gate e' shell: comparacao inteira e' exata e
+# nao depende de locale para o separador decimal.
+min_coverage=147

@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage docker check tidy fmt stats help
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate docker check tidy fmt stats help
 
 # Default Go configuration
 GOCMD := go
@@ -13,6 +13,9 @@ BINARY := wa-api
 LINT          := golangci-lint
 LINT_TARGETS  := ./...
 BASELINE_FILE := .golangci-baseline
+
+# Coverage ratchet
+COVERAGE_BASELINE_FILE := .coverage-baseline
 
 # Coverage output
 COVERAGE_OUT := coverage.out
@@ -49,6 +52,32 @@ coverage-html: coverage ## Generate HTML coverage report
 coverage-domain: ## Show domain + application coverage
 	$(GOTEST) -race -count=1 -coverprofile=$(COVERAGE_OUT) ./pkg/domain/... ./pkg/application/usecase/...
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
+
+coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
+	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
+	 if [ -z "$$pct" ]; then \
+	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \
+	   echo "       O formato de 'go tool cover -func' mudou, ou o run abortou."; \
+	   echo "       Este gate FALHA FECHADO de proposito: cobertura ausente nao e' cobertura ok."; \
+	   exit 1; \
+	 fi; \
+	 cur=$$(echo "$$pct" | awk '{printf "%d", $$1*10 + 0.5}'); \
+	 base=$$(grep -oE '^min_coverage=[0-9]+' $(COVERAGE_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 if [ -z "$$base" ]; then \
+	   echo "FALHA: $(COVERAGE_BASELINE_FILE) nao declara min_coverage=<N>. Gate FALHA FECHADO."; \
+	   exit 1; \
+	 fi; \
+	 echo "coverage: $$cur decimos de % (piso declarado $$base decimos de %) — atual $$pct%"; \
+	 if [ "$$cur" -lt "$$base" ]; then \
+	   echo "FALHA: a cobertura caiu ($$pct% < piso declarado)."; \
+	   echo "       Codigo novo sem teste, ou teste deletado. Cubra o codigo novo,"; \
+	   echo "       ou justifique e ajuste min_coverage no PR."; \
+	   exit 1; \
+	 fi; \
+	 if [ "$$cur" -gt "$$base" ]; then \
+	   echo "ATENCAO: a cobertura subiu. Suba min_coverage para $$cur neste mesmo PR."; \
+	 fi
 
 ##@ Quality
 
@@ -105,7 +134,7 @@ fmt: ## Format code
 tidy: ## Tidy module dependencies
 	$(GOMOD) tidy
 
-check: build vet test lint ## build + vet + test + lint contra o baseline
+check: build vet test lint coverage-gate ## build + vet + test + lint + cobertura contra os baselines
 
 ##@ Utilities
 
