@@ -315,8 +315,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					// Display QR code in terminal (useful for testing/developing)
 					// Skip in stdio mode to avoid breaking JSON-RPC
 					if *logType != "json" && s.Mode != Stdio {
-						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-						fmt.Println("QR code:\n", evt.Code)
+						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout) //nolint:forbidigo // renderização visual do QR no terminal; não deixa o payload em texto pesquisável
 					}
 					// Store encoded/embeded base64 QR on database for retrieval with the /qr endpoint
 					image, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
@@ -329,7 +328,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 						if found {
 							v := updateUserInfo(myuserinfo, "Qrcode", base64qrcode)
 							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
-							log.Info().Str("qrcode", base64qrcode).Msg("update cache userinfo with qr code")
+							log.Info().Str("userID", userID).Int("qrLen", len(base64qrcode)).Msg("update cache userinfo with qr code")
 						}
 					}
 
