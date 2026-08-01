@@ -35,7 +35,6 @@ var supportedEventTypes = constants.SupportedEventTypes
 // ── Middleware ──
 type Values = mwpkg.Values
 
-var respondJSON = mwpkg.RespondJSON
 var authAdmin = mwpkg.AuthAdmin
 var authAlice = mwpkg.AuthAlice
 

@@ -180,7 +180,6 @@ func initCustomHandlers(s *server) {
 		SupportedEvents: supportedEventTypes,
 		FindInSlice:     Find,
 		UpdateUserInfo:  updateUserInfo,
-		RespondJSON:     respondJSON,
 	}
 	webhookHandlers := &WebhookHandlers{
 		GetWebhook:    handlers.NewGetWebhookHandler(whCtx),

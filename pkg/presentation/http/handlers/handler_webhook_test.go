@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -74,17 +73,6 @@ func newWebhookTestContext(db *webhookFakeDB) *WebhookHandlerContext {
 			return false
 		},
 		UpdateUserInfo: func(info interface{}, key, value string) interface{} { return info },
-		RespondJSON: func(w http.ResponseWriter, status int, data interface{}) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			payload := map[string]interface{}{"code": status}
-			if err, isErr := data.(error); isErr {
-				payload["error"] = err.Error()
-			} else {
-				payload["data"] = data
-			}
-			_ = json.NewEncoder(w).Encode(payload)
-		},
 	}
 }
 

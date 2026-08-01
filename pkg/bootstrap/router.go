@@ -132,10 +132,9 @@ func emptyCustomHandlers() *customHandlers {
 }
 
 // recoverMiddleware is the outermost middleware on the router: it must run
-// before authAlice/authAdmin, because both have a panic reachable inside
-// them (middleware/auth.go's RespondJSON panics on encode failure, and
-// AuthAlice.db.Query panics if Deps.DB carries a nil *sql.DB). A recover
-// appended after auth would not cover either. Registered via router.Use,
+// before authAlice/authAdmin, because AuthAlice.db.Query panics if Deps.DB
+// carries a nil *sql.DB, and a recover appended after auth would not cover
+// that. Registered via router.Use,
 // not alice.Chain, specifically so it wraps admin routes too (their own
 // middleware is mux.Router.Use(authAdmin(...)) on a subrouter, not part of
 // the alice chain `c` below).

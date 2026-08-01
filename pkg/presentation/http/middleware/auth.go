@@ -8,14 +8,14 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-
 	"strings"
+
 	appport "wa-api/pkg/application/contracts"
+	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
@@ -37,38 +37,6 @@ func (v Values) Get(key string) string {
 // NewValues creates a Values from a map.
 func NewValues(m map[string]string) Values { return Values{M: m} }
 
-// RespondJSON writes a legacy-compatible JSON envelope.
-func RespondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	dataenvelope := map[string]interface{}{"code": status}
-	if err, ok := data.(error); ok {
-		dataenvelope["error"] = err.Error()
-		dataenvelope["success"] = false
-	} else if s, ok := data.(string); ok {
-		var mydata map[string]interface{}
-		if err := json.Unmarshal([]byte(s), &mydata); err == nil {
-			dataenvelope["data"] = mydata
-		} else {
-			var mySlice []interface{}
-			if err := json.Unmarshal([]byte(s), &mySlice); err == nil {
-				dataenvelope["data"] = mySlice
-			} else {
-				log.Error().Err(err).Msg("error unmarshalling JSON")
-			}
-		}
-		dataenvelope["success"] = true
-	} else {
-		dataenvelope["data"] = data
-		dataenvelope["success"] = true
-	}
-
-	if err := json.NewEncoder(w).Encode(dataenvelope); err != nil {
-		panic("RespondJSON: " + err.Error())
-	}
-}
-
 // AuthAdmin returns middleware that validates the Authorization header.
 func AuthAdmin(adminToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -77,7 +45,7 @@ func AuthAdmin(adminToken string) func(http.Handler) http.Handler {
 			tokenHash := sha256.Sum256([]byte(token))
 			adminHash := sha256.Sum256([]byte(adminToken))
 			if subtle.ConstantTimeCompare(tokenHash[:], adminHash[:]) != 1 {
-				RespondJSON(w, http.StatusUnauthorized, errors.New("unauthorized"))
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -116,7 +84,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					token,
 				)
 				if err != nil {
-					RespondJSON(w, http.StatusInternalServerError, err)
+					customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 					return
 				}
 				defer func() {
@@ -129,7 +97,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 				for rows.Next() {
 					err = rows.Scan(&txtid, &name, &webhook, &jid, &events, &proxyURL, &qrcode, &history, &hasHmac, &s3Enabled, &mediaDelivery)
 					if err != nil {
-						RespondJSON(w, http.StatusInternalServerError, err)
+						customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 						return
 					}
 					historyStr := "0"
@@ -153,7 +121,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 			}
 
 			if txtid == "" {
-				RespondJSON(w, http.StatusUnauthorized, errors.New("unauthorized"))
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
