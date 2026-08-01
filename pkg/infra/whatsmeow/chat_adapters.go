@@ -39,6 +39,14 @@ func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (do
 	if err != nil {
 		return "", fmt.Errorf("whatsmeow: could not parse JID %q: %w", raw, err)
 	}
+	// types.ParseJID não falha para uma string sem "@": ela devolve o texto
+	// inteiro em Server e User vazio. Sem esta checagem o resultado volta a
+	// ser o mesmo telefone cru, e o adapter que o reparseia com o ParseJID
+	// leniente aplicaria o servidor padrão — exatamente o que "qualificado"
+	// existe para impedir.
+	if jid.User == "" {
+		return "", fmt.Errorf("whatsmeow: JID %q has no server", raw)
+	}
 	return domain.JID(jid.String()), nil
 }
 
