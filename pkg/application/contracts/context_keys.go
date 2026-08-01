@@ -1,5 +1,5 @@
 // Package port define as interfaces (ports) que os usecases consomem.
-// Implementações concretas (adapters) vivem em internal/infrastructure/.
+// Implementações concretas (adapters) vivem em pkg/infra/.
 package port
 
 // CtxKey é o tipo para chaves de contexto tipadas, evitando magic strings.

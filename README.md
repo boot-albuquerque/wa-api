@@ -64,8 +64,24 @@ go mod tidy
 
 ## Build
 
+O `main` do serviço fica em `cmd/core`, não na raiz do módulo — `go build .`
+na raiz falha porque lá não existe pacote Go algum.
+
+```bash
+make build              # produz ./wa-api a partir de ./cmd/core
 ```
-go build .
+
+Sem o Makefile, o equivalente direto:
+
+```bash
+go build -o wa-api ./cmd/core
+```
+
+Para compilar tudo (inclusive os binários auxiliares `cmd/listroutes` e
+`cmd/wss`) sem gerar artefato:
+
+```bash
+go build ./...
 ```
 
 ## Execução

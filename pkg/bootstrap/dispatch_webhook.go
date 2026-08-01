@@ -79,7 +79,7 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 	return nil, nil
 }
 
-// HMAC crypto delegates to internal/infrastructure/auth
+// HMAC crypto delegates to pkg/infra/auth
 func generateHmacSignature(payload, encryptedKey []byte) (string, error) {
 	return auth.GenerateHmacSignature(payload, encryptedKey, []byte(appCtx.GlobalEncryptionKey))
 }
