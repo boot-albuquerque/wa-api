@@ -49,7 +49,6 @@ func depsFromServer(s *server) Deps {
 		DB:             s.DB,
 		UserCache:      userinfocache,
 		AdminToken:     *adminToken,
-		ExPath:         s.ExPath,
 		StaticDir:      s.ExPath + "/static/",
 		Log:            routerLog,
 		StartClient:    s.startClient,

@@ -26,7 +26,6 @@ type Deps struct {
 	DB         *sqlx.DB
 	UserCache  *cache.Cache
 	AdminToken string
-	ExPath     string
 	StaticDir  string // empty => don't register the FileServer
 	Log        zerolog.Logger
 
@@ -62,6 +61,16 @@ func NewRouter(d Deps) *mux.Router {
 	}
 	if d.CustomHandlers == nil {
 		panic("bootstrap.NewRouter: Deps.CustomHandlers is required")
+	}
+	if d.UserCache == nil {
+		// Unlike StartClient (bound into CustomHandlers before Deps is
+		// built, not read here), UserCache IS read directly by buildRouter
+		// below (authAlice(d.DB.DB, d.UserCache)), and middleware/auth.go's
+		// AuthAlice calls userCache.Get(token) unconditionally as its first
+		// substantive operation — a nil *cache.Cache panics there on the
+		// first authenticated request. This is the field whose nil actually
+		// reproduces the wiring_delegates.go:64 defect class; guard it.
+		panic("bootstrap.NewRouter: Deps.UserCache is required")
 	}
 	return buildRouter(d)
 }
