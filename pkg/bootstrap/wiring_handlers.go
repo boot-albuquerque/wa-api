@@ -292,11 +292,11 @@ func initCustomHandlers(s *server) {
 
 	// Extended Handlers (downloads, presence, user-info, react, mark-read)
 	extendedHandlers := &handlers.ExtendedHandlers{
-		DownloadImage:     handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(clientProvider, logger)),
-		DownloadVideo:     handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(clientProvider, logger)),
-		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(clientProvider, logger)),
-		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(clientProvider, logger)),
-		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(clientProvider, logger)),
+		DownloadImage:     handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
+		DownloadVideo:     handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
+		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
+		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
+		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
 		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, logger)),
 		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, logger)),
 		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, logger)),
