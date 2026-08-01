@@ -8,6 +8,8 @@ import (
 
 	"github.com/justinas/alice"
 	"github.com/rs/zerolog"
+
+	appport "wa-api/pkg/application/contracts"
 	"github.com/rs/zerolog/hlog"
 )
 
@@ -69,7 +71,7 @@ func (s *server) routes() {
 			Int("status", status).
 			Int("size", size).
 			Dur("duration", duration).
-			Str("userid", r.Context().Value("userinfo").(Values).Get("Id")).
+			Str("userid", r.Context().Value(appport.UserInfoKey).(interface{ Get(string) string }).Get("Id")).
 			Msg("Got API Request")
 	}))
 
