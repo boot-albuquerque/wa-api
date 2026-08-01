@@ -24,6 +24,8 @@ linters:
           files:
             - "**/pkg/application/usecase/group/*.go"
             - "**/pkg/application/usecase/message/*.go"
+            - "**/pkg/application/usecase/misc/*.go"
+            - "**/pkg/application/usecase/notification/*.go"
             - "**/pkg/application/usecase/session/*.go"
             - "**/pkg/application/usecase/storage/*.go"
           deny:

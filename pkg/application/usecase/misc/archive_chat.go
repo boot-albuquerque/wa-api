@@ -3,30 +3,26 @@ package misc
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // ArchiveChatUseCase archives or unarchives a chat
 type ArchiveChatUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	chats  appport.ChatOperations
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewArchiveChatUseCase creates a new instance
-func NewArchiveChatUseCase(cp appport.ClientProvider, logger appport.Logger) *ArchiveChatUseCase {
-	return &ArchiveChatUseCase{clientProvider: cp, logger: logger}
+func NewArchiveChatUseCase(co appport.ChatOperations, jr appport.JIDResolver, logger appport.Logger) *ArchiveChatUseCase {
+	return &ArchiveChatUseCase{chats: co, jids: jr, logger: logger}
 }
 
 // Execute archives or unarchives a chat
 func (uc *ArchiveChatUseCase) Execute(ctx context.Context, userID string, req domain.ArchiveChatRequest) (*domain.ArchiveChatResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
+	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -34,16 +30,12 @@ func (uc *ArchiveChatUseCase) Execute(ctx context.Context, userID string, req do
 		return nil, fmt.Errorf("missing jid in Payload")
 	}
 
-	chatJID, err := types.ParseJID(req.Jid)
+	chatJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Jid)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Chat JID format")
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	err = client.SendAppState(ctxWithTimeout, appstate.BuildArchive(chatJID, req.Archive, time.Time{}, nil))
-	if err != nil {
+	if err := uc.chats.ArchiveChat(ctx, userID, chatJID, req.Archive); err != nil {
 		uc.logger.Error(ctx, "failed to archive chat", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to archive chat: %w", err)
 	}

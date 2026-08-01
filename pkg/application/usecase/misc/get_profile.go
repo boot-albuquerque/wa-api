@@ -4,29 +4,23 @@ import (
 	"context"
 	"encoding/json"
 
-	"go.mau.fi/whatsmeow"
-
 	appport "wa-api/pkg/application/contracts"
 )
 
 // GetProfileUseCase implementa a lógica de obtenção de perfil WhatsApp.
 type GetProfileUseCase struct {
-	clientProvider    appport.ClientProvider
-	dataAccessFactory func(client *whatsmeow.Client) appport.ProfileDataAccess
-	logger            appport.Logger
+	profiles appport.ProfileAccessProvider
+	logger   appport.Logger
 }
 
 // NewGetProfileUseCase cria o usecase com dependências injetadas.
-// dataAccessFactory é tipicamente whatsmeow.NewProfileDataAccess.
 func NewGetProfileUseCase(
-	clientProvider appport.ClientProvider,
-	dataAccessFactory func(client *whatsmeow.Client) appport.ProfileDataAccess,
+	profiles appport.ProfileAccessProvider,
 	logger appport.Logger,
 ) *GetProfileUseCase {
 	return &GetProfileUseCase{
-		clientProvider:    clientProvider,
-		dataAccessFactory: dataAccessFactory,
-		logger:            logger,
+		profiles: profiles,
+		logger:   logger,
 	}
 }
 
@@ -42,17 +36,12 @@ type ProfileResult struct {
 
 // Execute obtém o perfil WhatsApp para o txtID informado.
 func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
+	da, err := uc.profiles.ProfileAccess(ctx, txtID)
 	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return "", err
-	}
-	if client == nil {
-		uc.logger.Warn(ctx, "no session for txtID", "txtID", txtID)
+		uc.logger.Warn(ctx, "no session for txtID", "txtID", txtID, "error", err)
 		return "", ErrNoSession
 	}
 
-	da := uc.dataAccessFactory(client)
 	result := buildProfile(ctx, da, uc.logger)
 	responseJSON, err := json.Marshal(result)
 	if err != nil {

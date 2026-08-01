@@ -3,30 +3,26 @@ package misc
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // RequestUnavailableMessageUseCase requests an unavailable message
 type RequestUnavailableMessageUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	chats  appport.ChatOperations
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewRequestUnavailableMessageUseCase creates a new instance
-func NewRequestUnavailableMessageUseCase(cp appport.ClientProvider, logger appport.Logger) *RequestUnavailableMessageUseCase {
-	return &RequestUnavailableMessageUseCase{clientProvider: cp, logger: logger}
+func NewRequestUnavailableMessageUseCase(co appport.ChatOperations, jr appport.JIDResolver, logger appport.Logger) *RequestUnavailableMessageUseCase {
+	return &RequestUnavailableMessageUseCase{chats: co, jids: jr, logger: logger}
 }
 
 // Execute requests an unavailable message
 func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID string, req domain.RequestUnavailableMessageRequest) (*domain.RequestUnavailableMessageResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
+	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -42,22 +38,17 @@ func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID 
 		return nil, fmt.Errorf("missing ID in Payload")
 	}
 
-	chatJID, err := types.ParseJID(req.Chat)
+	chatJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Chat)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Chat JID format")
 	}
 
-	senderJID, err := types.ParseJID(req.Sender)
+	senderJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Sender)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Sender JID format")
 	}
 
-	unavailableMessage := client.BuildUnavailableMessageRequest(chatJID, senderJID, req.ID)
-
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	resp, err := client.SendMessage(ctxWithTimeout, chatJID, unavailableMessage, whatsmeow.SendRequestExtra{Peer: true})
+	ack, err := uc.chats.RequestUnavailableMessage(ctx, userID, chatJID, senderJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send unavailable message request", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to send unavailable message request: %w", err)
@@ -66,10 +57,10 @@ func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID 
 	return &domain.RequestUnavailableMessageResult{
 		Success:   true,
 		Message:   "Unavailable message request sent successfully",
-		RequestID: resp.ID,
+		RequestID: ack.RequestID,
 		Chat:      req.Chat,
 		Sender:    req.Sender,
 		MessageID: req.ID,
-		Timestamp: resp.Timestamp.Unix(),
+		Timestamp: ack.Timestamp.Unix(),
 	}, nil
 }

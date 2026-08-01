@@ -9,17 +9,26 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/misc"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow"
 )
 
-type mockClientProvider struct {
-	client *whatsmeow.Client
-	err    error
+// mockProfileProvider é a fake de appport.ProfileAccessProvider. Antes da
+// ADR-001 ela devolvia um cliente concreto do SDK, e o teste ainda precisava
+// de uma fábrica separada para transformá-lo num ProfileDataAccess; agora
+// entrega o ProfileDataAccess direto.
+type mockProfileProvider struct {
+	da  appport.ProfileDataAccess
+	err error
 }
 
-func (m *mockClientProvider) GetWhatsmeowClient(ctx context.Context, txtID string) (*whatsmeow.Client, error) {
-	return m.client, m.err
+func (m *mockProfileProvider) EnsureSession(context.Context, string) error {
+	return m.err
+}
+
+func (m *mockProfileProvider) ProfileAccess(context.Context, string) (appport.ProfileDataAccess, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.da, nil
 }
 
 type mockLogger struct {
@@ -63,15 +72,10 @@ func (m *mockDataAccess) ContactInfo(ctx context.Context, jid domain.JID) (strin
 	return m.fullName, m.businessName, m.contactErr
 }
 
-func mockDataAccessFactory(da *mockDataAccess) func(*whatsmeow.Client) appport.ProfileDataAccess {
-	return func(c *whatsmeow.Client) appport.ProfileDataAccess { return da }
-}
-
 func TestGetProfileExecute_NoClient(t *testing.T) {
-	da := &mockDataAccess{}
-	provider := &mockClientProvider{client: nil, err: nil}
+	provider := &mockProfileProvider{err: errors.New("no session")}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, mockDataAccessFactory(da), logger)
+	uc := misc.NewGetProfileUseCase(provider, logger)
 
 	_, err := uc.Execute(context.Background(), "test-user")
 	if err == nil {
@@ -83,10 +87,9 @@ func TestGetProfileExecute_NoClient(t *testing.T) {
 }
 
 func TestGetProfileExecute_ProviderError(t *testing.T) {
-	da := &mockDataAccess{}
-	provider := &mockClientProvider{client: nil, err: errors.New("connection refused")}
+	provider := &mockProfileProvider{err: errors.New("connection refused")}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, mockDataAccessFactory(da), logger)
+	uc := misc.NewGetProfileUseCase(provider, logger)
 
 	_, err := uc.Execute(context.Background(), "test-user")
 	if err == nil {
@@ -104,9 +107,9 @@ func TestGetProfileExecute_Success(t *testing.T) {
 		fullName:     "John Full",
 		businessName: "Biz",
 	}
-	provider := &mockClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockProfileProvider{da: da}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, mockDataAccessFactory(da), logger)
+	uc := misc.NewGetProfileUseCase(provider, logger)
 
 	result, err := uc.Execute(context.Background(), "test-user")
 	if err != nil {
@@ -126,9 +129,9 @@ func (m *panicDataAccess) PushName() string { panic("boom") }
 
 func TestGetProfileExecute_RecoversFromPanicAndLogs(t *testing.T) {
 	da := &panicDataAccess{}
-	provider := &mockClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockProfileProvider{da: da}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, func(*whatsmeow.Client) appport.ProfileDataAccess { return da }, logger)
+	uc := misc.NewGetProfileUseCase(provider, logger)
 
 	result, err := uc.Execute(context.Background(), "test-user")
 	if err != nil {
@@ -148,8 +151,8 @@ func TestGetProfileExecute_RecoversFromPanicAndLogs(t *testing.T) {
 func TestGetProfileNoPIIInLogs(t *testing.T) {
 	da := &mockDataAccess{pushName: "John"}
 	logger := &mockLogger{}
-	provider := &mockClientProvider{client: &whatsmeow.Client{}}
-	uc := misc.NewGetProfileUseCase(provider, mockDataAccessFactory(da), logger)
+	provider := &mockProfileProvider{da: da}
+	uc := misc.NewGetProfileUseCase(provider, logger)
 	_, _ = uc.Execute(context.Background(), "test-user")
 	for _, log := range append(append(logger.infos, logger.warns...), logger.errors...) {
 		if strings.Contains(log, "5511") || strings.Contains(log, "John") {

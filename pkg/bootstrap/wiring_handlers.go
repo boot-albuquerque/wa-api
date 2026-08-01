@@ -1,13 +1,11 @@
 package bootstrap
 
 import (
-	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/infra/whatsmeow"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
 	"github.com/rs/zerolog/log"
-	wa "go.mau.fi/whatsmeow"
 
 	"wa-api/pkg/application/usecase/group"
 	"wa-api/pkg/application/usecase/message"
@@ -112,16 +110,12 @@ func initCustomHandlers(s *server) {
 	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
 	jidResolver := whatsmeow.NewJIDResolverAdapter()
 	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
+	miscAdapter := whatsmeow.NewMiscAdapter(clientManager.GetWhatsmeowClient)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
-	// Factory que cria ProfileDataAccess a partir de *whatsmeow.Client
-	dataAccessFactory := func(c *wa.Client) appport.ProfileDataAccess {
-		return whatsmeow.NewProfileDataAccess(c)
-	}
-
 	// Profile UseCase
-	getProfileUC := misc.NewGetProfileUseCase(clientProvider, dataAccessFactory, logger)
+	getProfileUC := misc.NewGetProfileUseCase(miscAdapter, logger)
 
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(logger)
@@ -229,13 +223,13 @@ func initCustomHandlers(s *server) {
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
 	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
-	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, logger)
+	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, logger, s.ExPath)
-	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, logger)
+	rejectCallUC := misc.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, logger)
-	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(clientProvider, logger)
-	archiveChatUC := misc.NewArchiveChatUseCase(clientProvider, logger)
+	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
+	archiveChatUC := misc.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{

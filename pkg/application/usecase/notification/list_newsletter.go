@@ -6,39 +6,29 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow/types"
 )
 
 // ListNewsletterUseCase lists subscribed newsletters
 type ListNewsletterUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	newsletters appport.NewsletterReader
+	logger      appport.Logger
 }
 
 // NewListNewsletterUseCase creates a new instance
-func NewListNewsletterUseCase(cp appport.ClientProvider, logger appport.Logger) *ListNewsletterUseCase {
-	return &ListNewsletterUseCase{clientProvider: cp, logger: logger}
+func NewListNewsletterUseCase(nr appport.NewsletterReader, logger appport.Logger) *ListNewsletterUseCase {
+	return &ListNewsletterUseCase{newsletters: nr, logger: logger}
 }
 
 // Execute lists subscribed newsletters
 func (uc *ListNewsletterUseCase) Execute(ctx context.Context, userID string) (*domain.NewsletterCollection, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
+	if err := uc.newsletters.EnsureSession(ctx, userID); err != nil {
 		return nil, fmt.Errorf("no session")
 	}
 
-	resp, err := client.GetSubscribedNewsletters(ctx)
+	newsletter, err := uc.newsletters.ListSubscribed(ctx, userID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get newsletter list", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get newsletter list: %w", err)
-	}
-
-	newsletter := make([]types.NewsletterMetadata, 0, len(resp))
-	for _, info := range resp {
-		if info != nil {
-			newsletter = append(newsletter, *info)
-		}
 	}
 
 	collection := &domain.NewsletterCollection{
