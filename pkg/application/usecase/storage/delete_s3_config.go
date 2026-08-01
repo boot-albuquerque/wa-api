@@ -27,11 +27,11 @@ func (uc *DeleteS3ConfigUseCase) Execute(ctx context.Context, txtID string) (*do
 	// Validate client exists
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -40,6 +40,6 @@ func (uc *DeleteS3ConfigUseCase) Execute(ctx context.Context, txtID string) (*do
 		Enabled: false,
 	}
 
-	uc.logger.Info("S3 configuration deleted", "txtID", txtID)
+	uc.logger.Info(ctx, "S3 configuration deleted", "txtID", txtID)
 	return result, nil
 }

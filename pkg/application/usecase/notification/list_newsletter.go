@@ -7,18 +7,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // ListNewsletterUseCase lists subscribed newsletters
 type ListNewsletterUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewListNewsletterUseCase creates a new instance
-func NewListNewsletterUseCase(cp appport.ClientProvider, logger zerolog.Logger) *ListNewsletterUseCase {
+func NewListNewsletterUseCase(cp appport.ClientProvider, logger appport.Logger) *ListNewsletterUseCase {
 	return &ListNewsletterUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -31,7 +30,7 @@ func (uc *ListNewsletterUseCase) Execute(ctx context.Context, userID string) (*d
 
 	resp, err := client.GetSubscribedNewsletters(ctx)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get newsletter list")
+		uc.logger.Error(ctx, "failed to get newsletter list", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get newsletter list: %w", err)
 	}
 

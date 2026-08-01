@@ -26,14 +26,14 @@ func NewLogoutUseCase(cp appport.ClientProvider, l appport.Logger) *LogoutUseCas
 func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.LogoutRequest) (*domain.LogoutResult, error) {
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
-	uc.logger.Info("logout validated", "txtID", txtID)
+	uc.logger.Info(ctx, "logout validated", "txtID", txtID)
 	return &domain.LogoutResult{}, nil
 }

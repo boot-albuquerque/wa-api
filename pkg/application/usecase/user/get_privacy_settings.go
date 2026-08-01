@@ -6,18 +6,16 @@ import (
 	"time"
 
 	appport "wa-api/pkg/application/contracts"
-
-	"github.com/rs/zerolog"
 )
 
 // GetPrivacySettingsUseCase retrieves privacy settings
 type GetPrivacySettingsUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetPrivacySettingsUseCase creates a new instance
-func NewGetPrivacySettingsUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetPrivacySettingsUseCase {
+func NewGetPrivacySettingsUseCase(cp appport.ClientProvider, logger appport.Logger) *GetPrivacySettingsUseCase {
 	return &GetPrivacySettingsUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -33,7 +31,7 @@ func (uc *GetPrivacySettingsUseCase) Execute(ctx context.Context, userID string)
 
 	settings, err := client.TryFetchPrivacySettings(ctxWithTimeout, false)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get privacy settings")
+		uc.logger.Error(ctx, "failed to get privacy settings", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get privacy settings: %w", err)
 	}
 

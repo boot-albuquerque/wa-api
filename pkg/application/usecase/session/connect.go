@@ -24,6 +24,6 @@ func NewConnectUseCase(cp appport.ClientProvider, l appport.Logger) *ConnectUseC
 // Execute returns a successful result so the handler can proceed
 // with the actual connection flow (QR code generation + WebSocket).
 func (uc *ConnectUseCase) Execute(ctx context.Context, txtID string, req domain.ConnectRequest) (*domain.ConnectResult, error) {
-	uc.logger.Info("connect requested", "txtID", txtID)
+	uc.logger.Info(ctx, "connect requested", "txtID", txtID)
 	return &domain.ConnectResult{}, nil
 }

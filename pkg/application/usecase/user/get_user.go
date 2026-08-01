@@ -8,18 +8,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // GetUserUseCase obtém informações de usuários do WhatsApp
 type GetUserUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetUserUseCase cria uma nova instância
-func NewGetUserUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetUserUseCase {
+func NewGetUserUseCase(cp appport.ClientProvider, logger appport.Logger) *GetUserUseCase {
 	return &GetUserUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -34,7 +33,7 @@ func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain
 	for _, phone := range req.Phone {
 		jid, err := types.ParseJID(phone)
 		if err != nil {
-			uc.logger.Warn().Err(err).Str("phone", phone).Msg("Failed to parse JID")
+			uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "phone", phone)
 			continue
 		}
 		jids = append(jids, jid)
@@ -42,14 +41,14 @@ func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain
 
 	resp, err := client.GetUserInfo(ctx, jids)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get user info")
+		uc.logger.Error(ctx, "Failed to get user info", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
 	// Convert response to JSON
 	data, err := json.Marshal(map[string]interface{}{"users": resp})
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to marshal response")
+		uc.logger.Error(ctx, "Failed to marshal response", "error", err)
 		return nil, fmt.Errorf("marshal error: %w", err)
 	}
 

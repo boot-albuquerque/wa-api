@@ -39,18 +39,18 @@ func (uc *GetGroupInviteLinkUseCase) Execute(ctx context.Context, txtID string, 
 	// Obter cliente whatsmeow
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter link de convite
 	link, err := client.GetGroupInviteLink(ctx, group, false)
 	if err != nil {
-		uc.logger.Error("failed to get group invite link", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
+		uc.logger.Error(ctx, "failed to get group invite link", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("failed to get group invite link: %v", err)
 	}
 
@@ -58,6 +58,6 @@ func (uc *GetGroupInviteLinkUseCase) Execute(ctx context.Context, txtID string, 
 		InviteLink: link,
 	}
 
-	uc.logger.Info("group invite link retrieved", "txtID", txtID, "groupJID", req.GroupJID)
+	uc.logger.Info(ctx, "group invite link retrieved", "txtID", txtID, "groupJID", req.GroupJID)
 	return result, nil
 }

@@ -10,7 +10,6 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -20,11 +19,11 @@ import (
 // ReactUseCase sends a reaction to a message
 type ReactUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewReactUseCase creates a new instance
-func NewReactUseCase(cp appport.ClientProvider, logger zerolog.Logger) *ReactUseCase {
+func NewReactUseCase(cp appport.ClientProvider, logger appport.Logger) *ReactUseCase {
 	return &ReactUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -91,11 +90,11 @@ func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.R
 
 	resp, err := client.SendMessage(ctx, recipient, msg)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Error sending reaction")
+		uc.logger.Error(ctx, "Error sending reaction", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("error sending message: %v", err)
 	}
 
-	uc.logger.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", msgid).Str("user_id", userID).Msg("Reaction sent")
+	uc.logger.Info(ctx, "Reaction sent", "timestamp", fmt.Sprintf("%v", resp.Timestamp), "id", msgid, "user_id", userID)
 
 	return map[string]interface{}{
 		"Details":   "Sent",

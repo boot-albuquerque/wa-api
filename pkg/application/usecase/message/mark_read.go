@@ -9,18 +9,17 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // MarkReadUseCase marks messages as read
 type MarkReadUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewMarkReadUseCase creates a new instance
-func NewMarkReadUseCase(cp appport.ClientProvider, logger zerolog.Logger) *MarkReadUseCase {
+func NewMarkReadUseCase(cp appport.ClientProvider, logger appport.Logger) *MarkReadUseCase {
 	return &MarkReadUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -62,10 +61,10 @@ func (uc *MarkReadUseCase) Execute(ctx context.Context, userID string, req domai
 	}
 
 	if err := client.MarkRead(ctx, req.Id, time.Now(), jidChat, jidSender); err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to mark messages as read")
+		uc.logger.Error(ctx, "Failed to mark messages as read", "error", err, "user_id", userID)
 		return fmt.Errorf("failure marking messages as read")
 	}
 
-	uc.logger.Info().Str("user_id", userID).Int("count", len(req.Id)).Msg("Messages marked as read")
+	uc.logger.Info(ctx, "Messages marked as read", "user_id", userID, "count", len(req.Id))
 	return nil
 }

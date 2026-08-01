@@ -7,18 +7,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // GetContactsUseCase retrieves all contacts
 type GetContactsUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetContactsUseCase creates a new instance
-func NewGetContactsUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetContactsUseCase {
+func NewGetContactsUseCase(cp appport.ClientProvider, logger appport.Logger) *GetContactsUseCase {
 	return &GetContactsUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -31,10 +30,10 @@ func (uc *GetContactsUseCase) Execute(ctx context.Context, userID string, _ doma
 
 	result, err := client.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get contacts")
+		uc.logger.Error(ctx, "Failed to get contacts", "error", err, "user_id", userID)
 		return nil, err
 	}
 
-	uc.logger.Info().Str("user_id", userID).Int("count", len(result)).Msg("Retrieved contacts")
+	uc.logger.Info(ctx, "Retrieved contacts", "user_id", userID, "count", len(result))
 	return result, nil
 }

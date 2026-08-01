@@ -75,6 +75,13 @@ func Main() {
 		}
 	}
 
+	// Check for log level in environment variable if flag is default or empty
+	if *logLevel == "info" || *logLevel == "" {
+		if v := os.Getenv("WA_API_LOG_LEVEL"); v != "" {
+			*logLevel = v
+		}
+	}
+
 	if v := os.Getenv("WEBHOOK_RETRY_ENABLED"); v != "" {
 		*webhookRetryEnabled = strings.ToLower(v) == "true" || v == "1"
 	}
@@ -164,6 +171,19 @@ func Main() {
 			Timestamp().
 			Str("role", filepath.Base(os.Args[0])).
 			Logger()
+	}
+
+	// Global log level. Until this call existed, zerolog's implicit default
+	// (TraceLevel) meant every Debug statement shipped to production — the
+	// root cause of the Debug-vs-Error volume skew in the Fase 4b audit.
+	// ParseLevel("") returns NoLevel with a nil error — which would disable
+	// filtering entirely, the exact bug this block fixes — so an empty value
+	// takes the fallback branch alongside a genuine parse failure.
+	if lvl, err := zerolog.ParseLevel(strings.ToLower(*logLevel)); err != nil || *logLevel == "" {
+		log.Warn().Str("loglevel", *logLevel).Msg("Unrecognized log level, falling back to info")
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	} else {
+		zerolog.SetGlobalLevel(lvl)
 	}
 
 	// Setup timezone (after logger is configured)

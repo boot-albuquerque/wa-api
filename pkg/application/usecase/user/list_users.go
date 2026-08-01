@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 )
 
 // ClientManagerAdapter interface para acessar whatsmeow clients
@@ -22,12 +22,12 @@ type ClientManagerAdapter interface {
 // ListUsersUseCase lista usuários do banco de dados
 type ListUsersUseCase struct {
 	db     *sqlx.DB
-	logger zerolog.Logger
+	logger appport.Logger
 	cm     ClientManagerAdapter
 }
 
 // NewListUsersUseCase cria uma nova instância
-func NewListUsersUseCase(db *sqlx.DB, logger zerolog.Logger, cm ClientManagerAdapter) *ListUsersUseCase {
+func NewListUsersUseCase(db *sqlx.DB, logger appport.Logger, cm ClientManagerAdapter) *ListUsersUseCase {
 	return &ListUsersUseCase{db: db, logger: logger, cm: cm}
 }
 
@@ -49,12 +49,12 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 
 	rows, err := uc.db.QueryxContext(ctx, query, args...)
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to list users")
+		uc.logger.Error(ctx, "Failed to list users", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			uc.logger.Warn().Err(closeErr).Msg("failed to close rows")
+			uc.logger.Warn(ctx, "failed to close rows", "error", closeErr)
 		}
 	}()
 
@@ -76,7 +76,7 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 		}
 
 		if err := rows.StructScan(&user); err != nil {
-			uc.logger.Error().Err(err).Msg("Failed to scan user")
+			uc.logger.Error(ctx, "Failed to scan user", "error", err)
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
 
@@ -122,7 +122,7 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 			s3Config["media_delivery"] = s3MediaDelivery
 			s3Config["retention_days"] = s3RetentionDays
 		} else if err != sql.ErrNoRows {
-			uc.logger.Warn().Err(err).Str("user_id", user.ID).Msg("Failed to query S3 config")
+			uc.logger.Warn(ctx, "Failed to query S3 config", "error", err, "user_id", user.ID)
 		}
 
 		// Build proxy config response
@@ -151,7 +151,7 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 	}
 
 	if err := rows.Err(); err != nil {
-		uc.logger.Error().Err(err).Msg("Error iterating users")
+		uc.logger.Error(ctx, "Error iterating users", "error", err)
 		return nil, fmt.Errorf("iteration error: %w", err)
 	}
 

@@ -7,18 +7,16 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
-
-	"github.com/rs/zerolog"
 )
 
 // SubscribePresenceUseCase subscribes to contact presence updates
 type SubscribePresenceUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewSubscribePresenceUseCase creates a new instance
-func NewSubscribePresenceUseCase(cp appport.ClientProvider, logger zerolog.Logger) *SubscribePresenceUseCase {
+func NewSubscribePresenceUseCase(cp appport.ClientProvider, logger appport.Logger) *SubscribePresenceUseCase {
 	return &SubscribePresenceUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -39,10 +37,10 @@ func (uc *SubscribePresenceUseCase) Execute(ctx context.Context, userID string, 
 	}
 
 	if err := client.SubscribePresence(ctx, jid); err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("phone", req.Phone).Msg("Failed to subscribe to presence")
+		uc.logger.Error(ctx, "Failed to subscribe to presence", "error", err, "user_id", userID, "phone", req.Phone)
 		return fmt.Errorf("failure subscribing to presence")
 	}
 
-	uc.logger.Info().Str("jid", jid.String()).Str("user_id", userID).Msg("Subscribed to presence")
+	uc.logger.Info(ctx, "Subscribed to presence", "jid", jid.String(), "user_id", userID)
 	return nil
 }

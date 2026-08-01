@@ -8,18 +8,17 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // ChatPresenceUseCase sets chat presence (typing/recording)
 type ChatPresenceUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewChatPresenceUseCase creates a new instance
-func NewChatPresenceUseCase(cp appport.ClientProvider, logger zerolog.Logger) *ChatPresenceUseCase {
+func NewChatPresenceUseCase(cp appport.ClientProvider, logger appport.Logger) *ChatPresenceUseCase {
 	return &ChatPresenceUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -45,7 +44,7 @@ func (uc *ChatPresenceUseCase) Execute(ctx context.Context, userID string, req d
 
 	err = client.SendChatPresence(ctx, jid, types.ChatPresence(req.State), types.ChatPresenceMedia(req.Media))
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("phone", req.Phone).Msg("Failed to send chat presence")
+		uc.logger.Error(ctx, "Failed to send chat presence", "error", err, "user_id", userID, "phone", req.Phone)
 		return fmt.Errorf("failure sending chat presence to Whatsapp servers")
 	}
 

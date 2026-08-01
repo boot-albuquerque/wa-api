@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -142,16 +143,90 @@ func recoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Error().
-					Interface("panic", rec).
-					Str("method", r.Method).
-					Stringer("url", r.URL).
-					Msg("recovered from panic in HTTP handler")
-				customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("panic: %v", rec))
+				reportPanic(w, r, rec, log.Error())
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// innerRecoverMiddleware is the SECOND recover layer, and both layers are
+// load-bearing — do not "simplify" either one away:
+//
+//   - The OUTER recoverMiddleware (router.Use) is the only one that covers
+//     panics raised outside the boundary-logging stack: /admin/* routes
+//     (registered on their own subrouter), and panics raised by the
+//     hlog/alice machinery itself (if hlog.NewHandler or RequestIDHandler
+//     panicked, this inner recover — which lives DOWNSTREAM of them — would
+//     never run).
+//   - This INNER recover is appended immediately after hlog.AccessHandler,
+//     i.e. it sits INSIDE AccessHandler. That placement fixes two defects the
+//     outer recover alone cannot:
+//     (1) AccessHandler's deferred callback closes over its own
+//     ResponseWriter wrapper. With only the outer recover, a panic unwound
+//     past AccessHandler's defer BEFORE anything wrote a status, so the
+//     callback observed lw.Status()==0 and outcomeFor(0) logged "success"
+//     for a request that actually returned 500. Writing the 500 here, before
+//     this frame returns, means the callback observes 500 and correctly logs
+//     outcome="server_error".
+//     (2) The outer recover logs through the package-global zerolog, which
+//     carries no req_id, so the panic record could not be correlated with the
+//     boundary record for the same request. This one logs through
+//     hlog.FromRequest(r), picking up req_id like every other request-scoped
+//     record.
+func innerRecoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				reportPanic(w, r, rec, hlog.FromRequest(r).Error())
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// reportPanic is the shared body of both recover layers: it writes the panic
+// record into the supplied (already level-bound) event and responds 500. Only
+// the logger differs between the two callers — the response shape must not.
+func reportPanic(w http.ResponseWriter, r *http.Request, rec any, ev *zerolog.Event) {
+	ev.
+		Interface("panic", rec).
+		Str("method", r.Method).
+		Stringer("url", r.URL).
+		Msg("recovered from panic in HTTP handler")
+	customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("panic: %v", rec))
+}
+
+// boundaryLogMiddlewares is the request-scoped logging stack, shared by the
+// alice chain `c` (which then appends authAlice) and by the /admin subrouter
+// and the 404/405 handlers (which do not). Order is outermost-first.
+func boundaryLogMiddlewares(l zerolog.Logger) []alice.Constructor {
+	return []alice.Constructor{
+		hlog.NewHandler(l),
+		hlog.RequestIDHandler("req_id", "Request-Id"),
+		hlog.RemoteAddrHandler("ip"),
+		hlog.UserAgentHandler("user_agent"),
+		hlog.RefererHandler("referer"),
+		userIDHolderHandler,
+		hlog.AccessHandler(writeBoundaryRecord),
+		innerRecoverMiddleware,
+	}
+}
+
+// writeBoundaryRecord is hlog.AccessHandler's callback: the one boundary
+// record per request.
+func writeBoundaryRecord(r *http.Request, status, size int, duration time.Duration) {
+	hlog.FromRequest(r).Info().
+		Str("method", r.Method).
+		Stringer("url", r.URL).
+		Str("route", accessLogRoute(r)).
+		Int("status", status).
+		Int("size", size).
+		Dur("duration", duration).
+		Float64("duration_ms", float64(duration.Nanoseconds())/float64(time.Millisecond)).
+		Str("outcome", outcomeFor(status)).
+		Str("userid", accessLogUserID(r)).
+		Msg("Got API Request")
 }
 
 func buildRouter(d Deps) *mux.Router {
@@ -160,8 +235,36 @@ func buildRouter(d Deps) *mux.Router {
 	router.Use(bodyLimitMiddleware)
 	router.Use(newRateLimitObserver().middleware)
 
+	// DECISION: unmatched routes (404) and wrong-method requests (405) COUNT
+	// as boundary-logged requests. A scanner sweep across hundreds of unknown
+	// paths is exactly the traffic an operator needs visibility into, and it
+	// would be inconsistent to log a 401 (auth failure on a KNOWN route) but
+	// not a 404 (a probe against an UNKNOWN one). These two handlers must be
+	// wrapped explicitly: mux assigns NotFoundHandler/MethodNotAllowedHandler
+	// WITHOUT applying router.Use middlewares (mux@v1.8.1 mux.go:151-165 —
+	// the middleware loop only runs on the matched-route branch). No
+	// authAlice here: there is no route or user to authenticate against.
+	router.NotFoundHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(http.NotFoundHandler())
+	router.MethodNotAllowedHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "405 method not allowed", http.StatusMethodNotAllowed)
+		}))
+
 	// Admin routes — authAdmin middleware validates the admin token.
+	//
+	// DECISION: /admin/* IS boundary-logged. These are the highest-privilege
+	// operations in the system (list/create/edit/delete users), so audit
+	// visibility matters here more than anywhere else. Registered BEFORE
+	// authAdmin because mux applies middlewares outermost-first in
+	// registration order (middleware.go:24-27 appends; mux.go:143-145 wraps in
+	// reverse) — so the logging stack encloses authAdmin and a 401 from a bad
+	// admin token still produces its boundary record, matching the 401
+	// decision already made for the alice chain. Calling Use twice chains both
+	// sets; it does not replace.
 	adminRoutes := router.PathPrefix("/admin").Subrouter()
+	for _, mw := range boundaryLogMiddlewares(d.Log) {
+		adminRoutes.Use(mux.MiddlewareFunc(mw))
+	}
 	adminRoutes.Use(authAdmin(d.AdminToken))
 	adminRoutes.Handle("/users", d.CustomHandlers.User.ListUsers()).Methods("GET")
 	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.ListUsers()).Methods("GET")
@@ -170,25 +273,25 @@ func buildRouter(d Deps) *mux.Router {
 	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.DeleteUser()).Methods("DELETE")
 	adminRoutes.Handle("/users/{id}/full", d.CustomHandlers.Misc.DeleteUserComplete).Methods("DELETE")
 
-	c := alice.New()
+	// Chain order matters, and alice.Chain.Then applies constructors so the
+	// FIRST appended one is OUTERMOST (verified against alice/chain.go:45-55).
+	// Two properties this order buys, both of which the previous order broke:
+	//
+	//  1. authAlice is now INNERMOST, not outermost. Before, a request
+	//     rejected by auth returned before hlog ever entered the chain, so a
+	//     401 produced no boundary record at all — precisely the signal an
+	//     operator needs when a token is wrong. A 401 IS a request: it must
+	//     be logged. authAlice still gates every route it wraps; only the
+	//     logging wrapper moved to enclose it.
+	//  2. RequestIDHandler runs BEFORE AccessHandler's callback fires, so
+	//     req_id is already on the context logger when the boundary line is
+	//     written (AccessHandler defers its callback until after the inner
+	//     handler returns, but it resolves the logger from the request it was
+	//     handed — which must already carry req_id).
+	c := alice.New(boundaryLogMiddlewares(d.Log)...)
+
 	c = c.Append(authAlice(d.DB.DB, d.UserCache))
-	c = c.Append(hlog.NewHandler(d.Log))
-
-	c = c.Append(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
-		hlog.FromRequest(r).Info().
-			Str("method", r.Method).
-			Stringer("url", r.URL).
-			Int("status", status).
-			Int("size", size).
-			Dur("duration", duration).
-			Str("userid", accessLogUserID(r)).
-			Msg("Got API Request")
-	}))
-
-	c = c.Append(hlog.RemoteAddrHandler("ip"))
-	c = c.Append(hlog.UserAgentHandler("user_agent"))
-	c = c.Append(hlog.RefererHandler("referer"))
-	c = c.Append(hlog.RequestIDHandler("req_id", "Request-Id"))
+	c = c.Append(recordUserIDHandler)
 
 	// /livez is the container-level liveness probe: no auth, no DB query,
 	// no runtime.ReadMemStats — cheap enough to hit unauthenticated on
@@ -218,7 +321,79 @@ func buildRouter(d Deps) *mux.Router {
 // with a nil value in production (authAlice always populates or returns
 // 401 first), but became a trap the moment the golden harness assembled
 // the router with different chains — exactly what this phase does.
+// userIDHolderKey / userIDHolder carry the authenticated user id ACROSS the
+// boundary-logging wrapper. Necessary because authAlice now runs INSIDE
+// hlog.AccessHandler: authAlice publishes the userinfo by deriving a new
+// request (r.WithContext), which only downstream handlers observe, while
+// AccessHandler's deferred callback still holds the request it was handed.
+// The holder is a per-request pointer installed outside AccessHandler and
+// filled just inside authAlice, so both sides see the same value without
+// the logging wrapper having to move back outside auth (which would cost
+// the 401 boundary record this phase exists to add).
+type userIDHolderKey struct{}
+
+type userIDHolder struct{ id string }
+
+// userIDHolderHandler installs the holder. Appended before AccessHandler.
+func userIDHolderHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), userIDHolderKey{}, &userIDHolder{})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// recordUserIDHandler fills the holder. Appended immediately after
+// authAlice, so it only ever runs once auth has succeeded — a rejected
+// request leaves the holder empty, which is the correct value for it.
+// Single-goroutine per request: written here, read by the AccessHandler
+// callback after the inner handler returns.
+func recordUserIDHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h, ok := r.Context().Value(userIDHolderKey{}).(*userIDHolder); ok {
+			h.id = userInfoID(r)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// accessLogRoute returns the NORMALIZED route template ("/user/{id}") rather
+// than the resolved URL ("/user/golden-test-id"), so boundary records
+// aggregate per route instead of exploding into one cardinality bucket per
+// path parameter value. Falls back to the resolved path when the request
+// matched no route (404) or the route carries no path template — never
+// panics on a nil route.
+func accessLogRoute(r *http.Request) string {
+	if route := mux.CurrentRoute(r); route != nil {
+		if tmpl, err := route.GetPathTemplate(); err == nil && tmpl != "" {
+			return tmpl
+		}
+	}
+	return r.URL.Path
+}
+
+// outcomeFor buckets an HTTP status into the three outcomes an operator
+// actually alerts on. 4xx is the client's fault and must not read as an
+// incident; 5xx is ours.
+func outcomeFor(status int) string {
+	switch {
+	case status >= 500:
+		return "server_error"
+	case status >= 400:
+		return "client_error"
+	default:
+		return "success"
+	}
+}
+
 func accessLogUserID(r *http.Request) string {
+	if h, ok := r.Context().Value(userIDHolderKey{}).(*userIDHolder); ok && h.id != "" {
+		return h.id
+	}
+	return userInfoID(r)
+}
+
+// userInfoID reads the request's userinfo in comma-ok form.
+func userInfoID(r *http.Request) string {
 	v, ok := r.Context().Value(appport.UserInfoKey).(interface{ Get(string) string })
 	if !ok {
 		return ""

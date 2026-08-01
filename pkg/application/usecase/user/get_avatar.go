@@ -8,18 +8,17 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
 
-	"github.com/rs/zerolog"
 	wa "go.mau.fi/whatsmeow"
 )
 
 // GetAvatarUseCase retrieves avatar info for a user
 type GetAvatarUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetAvatarUseCase creates a new instance
-func NewGetAvatarUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetAvatarUseCase {
+func NewGetAvatarUseCase(cp appport.ClientProvider, logger appport.Logger) *GetAvatarUseCase {
 	return &GetAvatarUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -46,7 +45,7 @@ func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req doma
 	})
 
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("phone", req.Phone).Msg("Failed to get avatar")
+		uc.logger.Error(ctx, "Failed to get avatar", "error", err, "user_id", userID, "phone", req.Phone)
 		return nil, fmt.Errorf("failed to get avatar: %v", err)
 	}
 
@@ -54,7 +53,7 @@ func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req doma
 		return nil, fmt.Errorf("no avatar found")
 	}
 
-	uc.logger.Info().Str("id", pic.ID).Str("url", pic.URL).Str("user_id", userID).Msg("Got avatar")
+	uc.logger.Info(ctx, "Got avatar", "id", pic.ID, "url", pic.URL, "user_id", userID)
 
 	return map[string]interface{}{
 		"id":  pic.ID,

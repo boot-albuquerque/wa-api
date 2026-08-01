@@ -27,18 +27,18 @@ func (uc *ListGroupsUseCase) Execute(ctx context.Context, txtID string, req doma
 	// Obter cliente whatsmeow
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter grupos
 	groups, err := client.GetJoinedGroups(ctx)
 	if err != nil {
-		uc.logger.Error("failed to get groups", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get groups", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("failed to get group list: %v", err)
 	}
 
@@ -46,6 +46,6 @@ func (uc *ListGroupsUseCase) Execute(ctx context.Context, txtID string, req doma
 		Groups: groups,
 	}
 
-	uc.logger.Info("groups listed successfully", "txtID", txtID, "count", len(groups))
+	uc.logger.Info(ctx, "groups listed successfully", "txtID", txtID, "count", len(groups))
 	return result, nil
 }

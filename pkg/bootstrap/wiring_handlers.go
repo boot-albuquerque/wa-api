@@ -108,7 +108,6 @@ func initCustomHandlers(s *server) {
 	// Adapters
 	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
-	zerologLogger := log.Logger
 
 	// Factory que cria ProfileDataAccess a partir de *whatsmeow.Client
 	dataAccessFactory := func(c *wa.Client) appport.ProfileDataAccess {
@@ -190,16 +189,16 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	cmAdapter := &ClientManagerAdapterImpl{cm: clientManager}
-	listUsersUC := user.NewListUsersUseCase(s.DB, zerologLogger, cmAdapter)
-	addUserUC := user.NewAddUserUseCase(s.DB, zerologLogger)
-	editUserUC := user.NewEditUserUseCase(s.DB, zerologLogger)
-	deleteUserUC := user.NewDeleteUserUseCase(s.DB, zerologLogger)
-	checkUserUC := user.NewCheckUserUseCase(clientProvider, zerologLogger)
-	getUserUC := user.NewGetUserUseCase(clientProvider, zerologLogger)
-	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, zerologLogger)
-	blockUserUC := user.NewBlockUserUseCase(clientProvider, zerologLogger)
-	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, zerologLogger)
-	getBlocklistUC := user.NewGetBlocklistUseCase(clientProvider, zerologLogger)
+	listUsersUC := user.NewListUsersUseCase(s.DB, logger, cmAdapter)
+	addUserUC := user.NewAddUserUseCase(s.DB, logger)
+	editUserUC := user.NewEditUserUseCase(s.DB, logger)
+	deleteUserUC := user.NewDeleteUserUseCase(s.DB, logger)
+	checkUserUC := user.NewCheckUserUseCase(clientProvider, logger)
+	getUserUC := user.NewGetUserUseCase(clientProvider, logger)
+	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, logger)
+	blockUserUC := user.NewBlockUserUseCase(clientProvider, logger)
+	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, logger)
+	getBlocklistUC := user.NewGetBlocklistUseCase(clientProvider, logger)
 
 	// User Handlers
 	userHandlers := handlers.NewUserHandlers(
@@ -215,7 +214,7 @@ func initCustomHandlers(s *server) {
 	)
 
 	// Group UseCases
-	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, zerologLogger)
+	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, logger)
 	listGroupsUC := group.NewListGroupsUseCase(clientProvider, logger)
 	getGroupInfoUC := group.NewGetGroupInfoUseCase(clientProvider, logger)
 	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(clientProvider, logger)
@@ -223,14 +222,14 @@ func initCustomHandlers(s *server) {
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
 	healthProvider := whatsmeow.NewHealthClientProviderAdapter(clientManager)
-	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, healthProvider, zerologLogger, version)
-	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, zerologLogger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, zerologLogger, s.ExPath)
-	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, zerologLogger)
-	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, zerologLogger)
-	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, zerologLogger)
-	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(clientProvider, zerologLogger)
-	archiveChatUC := misc.NewArchiveChatUseCase(clientProvider, zerologLogger)
+	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, healthProvider, logger, version)
+	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, logger)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, logger, s.ExPath)
+	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, logger)
+	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, logger)
+	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, logger)
+	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(clientProvider, logger)
+	archiveChatUC := misc.NewArchiveChatUseCase(clientProvider, logger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{
@@ -297,13 +296,13 @@ func initCustomHandlers(s *server) {
 		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(clientProvider, logger)),
 		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(clientProvider, logger)),
 		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(clientProvider, logger)),
-		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, log.Logger)),
-		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, log.Logger)),
-		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, log.Logger)),
-		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(clientProvider, log.Logger)),
-		React:             handlers.NewReactHandler(message.NewReactUseCase(clientProvider, log.Logger)),
-		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, log.Logger)),
-		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, log.Logger)),
+		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, logger)),
+		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, logger)),
+		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, logger)),
+		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(clientProvider, logger)),
+		React:             handlers.NewReactHandler(message.NewReactUseCase(clientProvider, logger)),
+		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, logger)),
+		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, logger)),
 		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
 	}
 

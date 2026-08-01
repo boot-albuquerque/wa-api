@@ -8,18 +8,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // SetPrivacySettingUseCase sets a privacy setting
 type SetPrivacySettingUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewSetPrivacySettingUseCase creates a new instance
-func NewSetPrivacySettingUseCase(cp appport.ClientProvider, logger zerolog.Logger) *SetPrivacySettingUseCase {
+func NewSetPrivacySettingUseCase(cp appport.ClientProvider, logger appport.Logger) *SetPrivacySettingUseCase {
 	return &SetPrivacySettingUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -39,7 +38,7 @@ func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, 
 
 	settings, err := client.SetPrivacySetting(ctxWithTimeout, types.PrivacySettingType(req.PrivacySetting), types.PrivacySetting(req.Value))
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to set privacy setting")
+		uc.logger.Error(ctx, "failed to set privacy setting", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to set privacy setting: %w", err)
 	}
 

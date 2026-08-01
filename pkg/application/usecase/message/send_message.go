@@ -38,11 +38,11 @@ func (uc *SendMessageUseCase) Execute(ctx context.Context, txtID string, req dom
 	// 2. Obter cliente whatsmeow para verificar se existe sessão
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -59,6 +59,6 @@ func (uc *SendMessageUseCase) Execute(ctx context.Context, txtID string, req dom
 		Status:    "validated",
 	}
 
-	uc.logger.Info("message validated", "msgID", msgID)
+	uc.logger.Info(ctx, "message validated", "msgID", msgID)
 	return result, nil
 }

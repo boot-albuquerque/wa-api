@@ -8,7 +8,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -16,11 +15,11 @@ import (
 // RequestUnavailableMessageUseCase requests an unavailable message
 type RequestUnavailableMessageUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewRequestUnavailableMessageUseCase creates a new instance
-func NewRequestUnavailableMessageUseCase(cp appport.ClientProvider, logger zerolog.Logger) *RequestUnavailableMessageUseCase {
+func NewRequestUnavailableMessageUseCase(cp appport.ClientProvider, logger appport.Logger) *RequestUnavailableMessageUseCase {
 	return &RequestUnavailableMessageUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -60,7 +59,7 @@ func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID 
 
 	resp, err := client.SendMessage(ctxWithTimeout, chatJID, unavailableMessage, whatsmeow.SendRequestExtra{Peer: true})
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to send unavailable message request")
+		uc.logger.Error(ctx, "failed to send unavailable message request", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to send unavailable message request: %w", err)
 	}
 

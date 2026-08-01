@@ -8,7 +8,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -16,11 +15,11 @@ import (
 // ArchiveChatUseCase archives or unarchives a chat
 type ArchiveChatUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewArchiveChatUseCase creates a new instance
-func NewArchiveChatUseCase(cp appport.ClientProvider, logger zerolog.Logger) *ArchiveChatUseCase {
+func NewArchiveChatUseCase(cp appport.ClientProvider, logger appport.Logger) *ArchiveChatUseCase {
 	return &ArchiveChatUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -45,7 +44,7 @@ func (uc *ArchiveChatUseCase) Execute(ctx context.Context, userID string, req do
 
 	err = client.SendAppState(ctxWithTimeout, appstate.BuildArchive(chatJID, req.Archive, time.Time{}, nil))
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to archive chat")
+		uc.logger.Error(ctx, "failed to archive chat", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to archive chat: %w", err)
 	}
 

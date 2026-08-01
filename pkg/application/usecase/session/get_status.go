@@ -26,14 +26,14 @@ func NewGetStatusUseCase(cp appport.ClientProvider, l appport.Logger) *GetStatus
 func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.GetStatusResult, error) {
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
-	uc.logger.Info("get status validated", "txtID", txtID)
+	uc.logger.Info(ctx, "get status validated", "txtID", txtID)
 	return &domain.GetStatusResult{}, nil
 }

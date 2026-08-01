@@ -9,7 +9,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 )
 
@@ -17,13 +16,13 @@ import (
 type GetHealthUseCase struct {
 	db             *sql.DB
 	healthProvider appport.HealthClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 	startTime      time.Time
 	version        string
 }
 
 // NewGetHealthUseCase creates a new instance
-func NewGetHealthUseCase(db *sql.DB, hp appport.HealthClientProvider, logger zerolog.Logger, version string) *GetHealthUseCase {
+func NewGetHealthUseCase(db *sql.DB, hp appport.HealthClientProvider, logger appport.Logger, version string) *GetHealthUseCase {
 	return &GetHealthUseCase{
 		db:             db,
 		healthProvider: hp,

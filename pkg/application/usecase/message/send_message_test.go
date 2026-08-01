@@ -24,9 +24,15 @@ type sendMockLogger struct {
 	entries []string
 }
 
-func (m *sendMockLogger) Info(msg string, keyvals ...any)  { m.entries = append(m.entries, msg) }
-func (m *sendMockLogger) Warn(msg string, keyvals ...any)  { m.entries = append(m.entries, msg) }
-func (m *sendMockLogger) Error(msg string, keyvals ...any) { m.entries = append(m.entries, msg) }
+func (m *sendMockLogger) Info(_ context.Context, msg string, keyvals ...any) {
+	m.entries = append(m.entries, msg)
+}
+func (m *sendMockLogger) Warn(_ context.Context, msg string, keyvals ...any) {
+	m.entries = append(m.entries, msg)
+}
+func (m *sendMockLogger) Error(_ context.Context, msg string, keyvals ...any) {
+	m.entries = append(m.entries, msg)
+}
 
 func TestSendMessageUseCase_Execute_NoClient(t *testing.T) {
 	provider := &mockSendClientProvider{client: nil, err: nil}

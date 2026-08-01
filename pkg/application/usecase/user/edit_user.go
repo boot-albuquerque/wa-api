@@ -6,21 +6,21 @@ import (
 	"strconv"
 	"strings"
 
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/storage"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 )
 
 // EditUserUseCase edita um usuário existente
 type EditUserUseCase struct {
 	db     *sqlx.DB
-	logger zerolog.Logger
+	logger appport.Logger
 }
 
 // NewEditUserUseCase cria uma nova instância
-func NewEditUserUseCase(db *sqlx.DB, logger zerolog.Logger) *EditUserUseCase {
+func NewEditUserUseCase(db *sqlx.DB, logger appport.Logger) *EditUserUseCase {
 	return &EditUserUseCase{db: db, logger: logger}
 }
 
@@ -116,7 +116,7 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	// Execute update
 	_, err := uc.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to update user")
+		uc.logger.Error(ctx, "Failed to update user", "error", err)
 		return fmt.Errorf("database error: %w", err)
 	}
 

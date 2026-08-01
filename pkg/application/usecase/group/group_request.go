@@ -8,7 +8,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -16,11 +15,11 @@ import (
 // GroupRequestUseCase encapsula a lógica de gerenciamento de solicitações de entrada em grupos
 type GroupRequestUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGroupRequestUseCase cria uma nova instância
-func NewGroupRequestUseCase(cp appport.ClientProvider, l zerolog.Logger) *GroupRequestUseCase {
+func NewGroupRequestUseCase(cp appport.ClientProvider, l appport.Logger) *GroupRequestUseCase {
 	return &GroupRequestUseCase{
 		clientProvider: cp,
 		logger:         l,
@@ -35,7 +34,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
 	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -46,13 +45,13 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 
 	resp, err := client.GetGroupRequestParticipants(ctx, group)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Msg("failed to get group request participants")
+		uc.logger.Error(ctx, "failed to get group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID)
 		return nil, fmt.Errorf("failed to get group request participants: %w", err)
 	}
 
 	responseJson, err := json.Marshal(resp)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to marshal response")
+		uc.logger.Error(ctx, "failed to marshal response", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to marshal response: %w", err)
 	}
 
@@ -63,7 +62,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context.Context, userID string, req domain.UpdateGroupRequestParticipantsRequest) (*domain.UpdateGroupRequestParticipantsResult, error) {
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
 	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -107,7 +106,7 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 
 	_, err = client.UpdateGroupRequestParticipants(ctx, group, phoneParsed, action)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Str("action", req.Action).Msg("failed to update group request participants")
+		uc.logger.Error(ctx, "failed to update group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("failed to update group request participants: %w", err)
 	}
 
@@ -120,7 +119,7 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Context, userID string, req domain.SetGroupJoinApprovalModeRequest) (*domain.SetGroupJoinApprovalModeResult, error) {
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
 	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -135,7 +134,7 @@ func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Conte
 
 	err = client.SetGroupJoinApprovalMode(ctx, group, req.Mode)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Bool("mode", req.Mode).Msg("failed to set group join approval mode")
+		uc.logger.Error(ctx, "failed to set group join approval mode", "error", err, "user_id", userID, "group_jid", req.GroupJID, "mode", req.Mode)
 		return nil, fmt.Errorf("failed to set group join approval mode: %w", err)
 	}
 

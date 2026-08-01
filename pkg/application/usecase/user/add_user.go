@@ -5,22 +5,22 @@ import (
 	"fmt"
 	"strings"
 
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	dbpkg "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 )
 
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
 	db     *sqlx.DB
-	logger zerolog.Logger
+	logger appport.Logger
 }
 
 // NewAddUserUseCase cria uma nova instância
-func NewAddUserUseCase(db *sqlx.DB, logger zerolog.Logger) *AddUserUseCase {
+func NewAddUserUseCase(db *sqlx.DB, logger appport.Logger) *AddUserUseCase {
 	return &AddUserUseCase{db: db, logger: logger}
 }
 
@@ -54,7 +54,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		// For now, we'll create a simple approach
 		encrypted, err := encryptHMACKeyFunc(req.HmacKey)
 		if err != nil {
-			uc.logger.Error().Err(err).Msg("Failed to encrypt HMAC key")
+			uc.logger.Error(ctx, "Failed to encrypt HMAC key", "error", err)
 			return nil, fmt.Errorf("failed to encrypt HMAC key: %w", err)
 		}
 		encryptedHmacKey = encrypted
@@ -63,7 +63,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	// Check for existing user
 	var count int
 	if err := uc.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE token = $1", req.Token); err != nil {
-		uc.logger.Error().Err(err).Msg("Database error checking token")
+		uc.logger.Error(ctx, "Database error checking token", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 	if count > 0 {
@@ -87,7 +87,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	// Generate ID
 	id, err := dbpkg.GenerateRandomID()
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to generate ID")
+		uc.logger.Error(ctx, "Failed to generate ID", "error", err)
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
@@ -104,7 +104,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		req.S3Config.MediaDelivery, req.S3Config.RetentionDays, encryptedHmacKey, req.History)
 
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to insert user")
+		uc.logger.Error(ctx, "Failed to insert user", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 

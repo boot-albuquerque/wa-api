@@ -7,18 +7,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // SendPresenceUseCase sets global presence status
 type SendPresenceUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewSendPresenceUseCase creates a new instance
-func NewSendPresenceUseCase(cp appport.ClientProvider, logger zerolog.Logger) *SendPresenceUseCase {
+func NewSendPresenceUseCase(cp appport.ClientProvider, logger appport.Logger) *SendPresenceUseCase {
 	return &SendPresenceUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -39,10 +38,10 @@ func (uc *SendPresenceUseCase) Execute(ctx context.Context, userID string, req d
 		return fmt.Errorf("invalid presence type. Allowed values: 'available', 'unavailable'")
 	}
 
-	uc.logger.Info().Str("presence", req.Type).Str("user_id", userID).Msg("Setting presence")
+	uc.logger.Info(ctx, "Setting presence", "presence", req.Type, "user_id", userID)
 
 	if err := client.SendPresence(ctx, presence); err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to send presence")
+		uc.logger.Error(ctx, "Failed to send presence", "error", err, "user_id", userID)
 		return fmt.Errorf("failure sending presence to Whatsapp servers")
 	}
 

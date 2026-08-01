@@ -28,9 +28,15 @@ type mockLogger struct {
 	errors []string
 }
 
-func (m *mockLogger) Info(msg string, keyvals ...any)  { m.infos = append(m.infos, msg) }
-func (m *mockLogger) Warn(msg string, keyvals ...any)  { m.warns = append(m.warns, msg) }
-func (m *mockLogger) Error(msg string, keyvals ...any) { m.errors = append(m.errors, msg) }
+func (m *mockLogger) Info(_ context.Context, msg string, keyvals ...any) {
+	m.infos = append(m.infos, msg)
+}
+func (m *mockLogger) Warn(_ context.Context, msg string, keyvals ...any) {
+	m.warns = append(m.warns, msg)
+}
+func (m *mockLogger) Error(_ context.Context, msg string, keyvals ...any) {
+	m.errors = append(m.errors, msg)
+}
 
 // mockDataAccess implementa appport.ProfileDataAccess para testes.
 type mockDataAccess struct {
@@ -108,6 +114,34 @@ func TestGetProfileExecute_Success(t *testing.T) {
 	}
 	if result == "" || len(result) < 10 {
 		t.Errorf("expected JSON result, got %q", result)
+	}
+}
+
+// panicDataAccess panics inside PushName to exercise buildProfile's recover
+// path — before Fase 4b this panic was swallowed with zero logging
+// (erros/F7).
+type panicDataAccess struct{ mockDataAccess }
+
+func (m *panicDataAccess) PushName() string { panic("boom") }
+
+func TestGetProfileExecute_RecoversFromPanicAndLogs(t *testing.T) {
+	da := &panicDataAccess{}
+	provider := &mockClientProvider{client: &whatsmeow.Client{}}
+	logger := &mockLogger{}
+	uc := misc.NewGetProfileUseCase(provider, func(*whatsmeow.Client) appport.ProfileDataAccess { return da }, logger)
+
+	result, err := uc.Execute(context.Background(), "test-user")
+	if err != nil {
+		t.Fatalf("panic inside buildProfile should be recovered, not surfaced as an error: %v", err)
+	}
+	if result == "" {
+		t.Fatalf("expected a JSON result even with a partially-built profile, got %q", result)
+	}
+	if len(logger.errors) != 1 {
+		t.Fatalf("expected exactly 1 error log for the recovered panic, got %d: %v", len(logger.errors), logger.errors)
+	}
+	if !strings.Contains(logger.errors[0], "panic") {
+		t.Errorf("error log %q should mention the panic", logger.errors[0])
 	}
 }
 

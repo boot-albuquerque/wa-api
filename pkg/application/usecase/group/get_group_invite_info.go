@@ -32,18 +32,18 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 	// Obter cliente whatsmeow
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter informações do convite
 	inviteInfo, err := client.GetGroupInfoFromLink(ctx, req.Code)
 	if err != nil {
-		uc.logger.Error("failed to get group invite info", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get group invite info", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("failed to get group invite info: %v", err)
 	}
 
@@ -51,6 +51,6 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 		InviteInfo: inviteInfo,
 	}
 
-	uc.logger.Info("group invite info retrieved", "txtID", txtID)
+	uc.logger.Info(ctx, "group invite info retrieved", "txtID", txtID)
 	return result, nil
 }

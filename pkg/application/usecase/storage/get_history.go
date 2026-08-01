@@ -27,11 +27,11 @@ func (uc *GetHistoryUseCase) Execute(ctx context.Context, txtID string) (*domain
 	// Validate client exists
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -39,6 +39,6 @@ func (uc *GetHistoryUseCase) Execute(ctx context.Context, txtID string) (*domain
 		Details: "History configuration retrieved",
 	}
 
-	uc.logger.Info("History configuration retrieved", "txtID", txtID)
+	uc.logger.Info(ctx, "History configuration retrieved", "txtID", txtID)
 	return result, nil
 }

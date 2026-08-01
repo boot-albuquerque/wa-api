@@ -28,11 +28,11 @@ func (uc *ConfigureS3UseCase) Execute(ctx context.Context, txtID string, req dom
 	// Validate client exists
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -58,6 +58,6 @@ func (uc *ConfigureS3UseCase) Execute(ctx context.Context, txtID string, req dom
 		Enabled: req.Enabled,
 	}
 
-	uc.logger.Info("S3 configuration validated", "txtID", txtID)
+	uc.logger.Info(ctx, "S3 configuration validated", "txtID", txtID)
 	return result, nil
 }

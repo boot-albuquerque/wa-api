@@ -39,18 +39,18 @@ func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req do
 	// Obter cliente whatsmeow
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter informações do grupo
 	groupInfo, err := client.GetGroupInfo(ctx, group)
 	if err != nil {
-		uc.logger.Error("failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
+		uc.logger.Error(ctx, "failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("failed to get group info: %v", err)
 	}
 
@@ -58,6 +58,6 @@ func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req do
 		GroupInfo: groupInfo,
 	}
 
-	uc.logger.Info("group info retrieved", "txtID", txtID, "groupJID", req.GroupJID)
+	uc.logger.Info(ctx, "group info retrieved", "txtID", txtID, "groupJID", req.GroupJID)
 	return result, nil
 }

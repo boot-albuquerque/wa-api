@@ -27,11 +27,11 @@ func (uc *ConfigureHmacUseCase) Execute(ctx context.Context, txtID string, req d
 	// Validate client exists
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -40,6 +40,6 @@ func (uc *ConfigureHmacUseCase) Execute(ctx context.Context, txtID string, req d
 		Enabled: req.Enabled,
 	}
 
-	uc.logger.Info("HMAC configuration validated", "txtID", txtID)
+	uc.logger.Info(ctx, "HMAC configuration validated", "txtID", txtID)
 	return result, nil
 }

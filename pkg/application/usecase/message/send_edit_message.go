@@ -36,11 +36,11 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
+		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -49,6 +49,6 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 		Status:    "validated",
 	}
 
-	uc.logger.Info("message edit validated", "msgID", req.ID)
+	uc.logger.Info(ctx, "message edit validated", "msgID", req.ID)
 	return result, nil
 }

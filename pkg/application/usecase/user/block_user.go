@@ -8,7 +8,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -17,11 +16,11 @@ import (
 // BlockUserUseCase bloqueia um usuário
 type BlockUserUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewBlockUserUseCase cria uma nova instância
-func NewBlockUserUseCase(cp appport.ClientProvider, logger zerolog.Logger) *BlockUserUseCase {
+func NewBlockUserUseCase(cp appport.ClientProvider, logger appport.Logger) *BlockUserUseCase {
 	return &BlockUserUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -52,7 +51,7 @@ func (uc *BlockUserUseCase) Execute(ctx context.Context, userID string, req doma
 
 	jid, err := types.ParseJID(target)
 	if err != nil {
-		uc.logger.Warn().Err(err).Str("target", target).Msg("Failed to parse JID")
+		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "target", target)
 		return nil, fmt.Errorf("could not parse Phone or JID: %w", err)
 	}
 
@@ -62,7 +61,7 @@ func (uc *BlockUserUseCase) Execute(ctx context.Context, userID string, req doma
 	// Get resolved JID
 	blocklistJID, blocklist, err := updateBlocklistWithResolvedJID(ctx, client, jid, events.BlocklistChangeActionBlock)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("jid", jid.String()).Msg("Failed to block user")
+		uc.logger.Error(ctx, "Failed to block user", "error", err, "jid", jid.String())
 		return nil, fmt.Errorf("failed to block user: %w", err)
 	}
 

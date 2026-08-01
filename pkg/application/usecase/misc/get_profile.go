@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	appport "wa-api/pkg/application/contracts"
-
 	"go.mau.fi/whatsmeow"
+
+	appport "wa-api/pkg/application/contracts"
 )
 
 // GetProfileUseCase implementa a lógica de obtenção de perfil WhatsApp.
@@ -44,19 +44,19 @@ type ProfileResult struct {
 func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string, error) {
 	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
 		return "", err
 	}
 	if client == nil {
-		uc.logger.Warn("no session for txtID", "txtID", txtID)
+		uc.logger.Warn(ctx, "no session for txtID", "txtID", txtID)
 		return "", ErrNoSession
 	}
 
 	da := uc.dataAccessFactory(client)
-	result := buildProfile(ctx, da)
+	result := buildProfile(ctx, da, uc.logger)
 	responseJSON, err := json.Marshal(result)
 	if err != nil {
-		uc.logger.Error("failed to marshal profile", "error", err)
+		uc.logger.Error(ctx, "failed to marshal profile", "error", err)
 		return "", err
 	}
 	return string(responseJSON), nil
@@ -65,7 +65,7 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 // buildProfile constrói o perfil a partir do ProfileDataAccess.
 // Extraída para teste unitário sem depender de *whatsmeow.Client.
 // Chama OwnJID() uma única vez e cacheia o resultado para reuso.
-func buildProfile(ctx context.Context, da appport.ProfileDataAccess) ProfileResult {
+func buildProfile(ctx context.Context, da appport.ProfileDataAccess, logger appport.Logger) ProfileResult {
 	result := ProfileResult{
 		Pushname:     "",
 		AvatarURL:    "",
@@ -76,7 +76,11 @@ func buildProfile(ctx context.Context, da appport.ProfileDataAccess) ProfileResu
 	}
 
 	func() {
-		defer func() { _ = recover() }()
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(ctx, "recovered from panic while building profile", "panic", r)
+			}
+		}()
 
 		result.Pushname = da.PushName()
 

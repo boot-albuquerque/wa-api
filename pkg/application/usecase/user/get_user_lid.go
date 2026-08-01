@@ -7,18 +7,17 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 )
 
 // GetUserLIDUseCase obtém o LID para um JID
 type GetUserLIDUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetUserLIDUseCase cria uma nova instância
-func NewGetUserLIDUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetUserLIDUseCase {
+func NewGetUserLIDUseCase(cp appport.ClientProvider, logger appport.Logger) *GetUserLIDUseCase {
 	return &GetUserLIDUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -38,14 +37,14 @@ func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req dom
 	// Parse JID
 	jid, err := types.ParseJID(req.JID)
 	if err != nil {
-		uc.logger.Warn().Err(err).Str("jid", req.JID).Msg("Failed to parse JID")
+		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "jid", req.JID)
 		return nil, fmt.Errorf("invalid jid format: %w", err)
 	}
 
 	// Get LID from store
 	lid, err := client.Store.LIDs.GetLIDForPN(ctx, jid)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("jid", req.JID).Msg("Failed to get LID")
+		uc.logger.Error(ctx, "Failed to get LID", "error", err, "jid", req.JID)
 		return nil, fmt.Errorf("LID not found: %w", err)
 	}
 

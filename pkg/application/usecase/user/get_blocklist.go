@@ -7,18 +7,16 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"github.com/rs/zerolog"
 )
 
 // GetBlocklistUseCase retrieves the current blocklist
 type GetBlocklistUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewGetBlocklistUseCase creates a new instance
-func NewGetBlocklistUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetBlocklistUseCase {
+func NewGetBlocklistUseCase(cp appport.ClientProvider, logger appport.Logger) *GetBlocklistUseCase {
 	return &GetBlocklistUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -34,7 +32,7 @@ func (uc *GetBlocklistUseCase) Execute(ctx context.Context, userID string, _ dom
 
 	blocklist, err := client.GetBlocklist(ctx)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get blocklist")
+		uc.logger.Error(ctx, "Failed to get blocklist", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get blocklist: %w", err)
 	}
 
@@ -48,7 +46,7 @@ func (uc *GetBlocklistUseCase) Execute(ctx context.Context, userID string, _ dom
 		dhash = blocklist.DHash
 	}
 
-	uc.logger.Info().Str("user_id", userID).Int("count", len(jids)).Msg("Retrieved blocklist")
+	uc.logger.Info(ctx, "Retrieved blocklist", "user_id", userID, "count", len(jids))
 
 	return map[string]interface{}{
 		"Blocklist": jids,

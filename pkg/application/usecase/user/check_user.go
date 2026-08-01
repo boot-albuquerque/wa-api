@@ -6,18 +6,16 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"github.com/rs/zerolog"
 )
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp
 type CheckUserUseCase struct {
 	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	logger         appport.Logger
 }
 
 // NewCheckUserUseCase cria uma nova instância
-func NewCheckUserUseCase(cp appport.ClientProvider, logger zerolog.Logger) *CheckUserUseCase {
+func NewCheckUserUseCase(cp appport.ClientProvider, logger appport.Logger) *CheckUserUseCase {
 	return &CheckUserUseCase{clientProvider: cp, logger: logger}
 }
 
@@ -38,7 +36,7 @@ func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req doma
 
 	resp, err := client.IsOnWhatsApp(ctx, req.Phone)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to check WhatsApp users")
+		uc.logger.Error(ctx, "Failed to check WhatsApp users", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to check users: %w", err)
 	}
 
