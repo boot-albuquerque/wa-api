@@ -28,10 +28,12 @@ type dynamicRoute struct {
 var staticRouteGroups = []map[string]staticRoute{
 	adminStaticRoutes,
 	sessionStaticRoutes,
+	chatStaticRoutes,
 }
 
 var dynamicRouteGroups = []map[string]dynamicRoute{
 	adminDynamicRoutes,
+	chatDynamicRoutes,
 }
 
 var staticRoutes = mergeStaticRoutes(staticRouteGroups)
