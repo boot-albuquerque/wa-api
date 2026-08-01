@@ -68,7 +68,10 @@ type customHandlers struct {
 	Storage   *handlers.StorageHandlers
 	Misc      *handlers.MiscHandlers
 	Blocklist *handlers.BlocklistHandlers
-	Extended  *handlers.ExtendedHandlers
+	Download  *handlers.DownloadHandlers
+	Presence  *handlers.PresenceHandlers
+	Reaction  *handlers.ReactionHandlers
+	Contact   *handlers.ContactHandlers
 	GroupMgmt *handlers.GroupManagementHandlers
 }
 
@@ -265,21 +268,33 @@ func initCustomHandlers(s *server) {
 	groupMgmtUC := group.NewGroupManagementUseCase(groupAdapter, groupAdapter, jidResolver, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
-	// Extended Handlers (downloads, presence, user-info, react, mark-read)
-	extendedHandlers := &handlers.ExtendedHandlers{
-		DownloadImage:     handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
-		DownloadVideo:     handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
-		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
-		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
-		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
-		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(presenceController, logger)),
-		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(presenceController, jidResolver, logger)),
-		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(presenceController, jidResolver, logger)),
-		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
-		React:             handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
-		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
-		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
-		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
+	// Download Handlers (/chat/download*)
+	downloadHandlers := &handlers.DownloadHandlers{
+		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
+		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
+		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
+		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
+		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
+	}
+
+	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)
+	presenceHandlers := &handlers.PresenceHandlers{
+		Send:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(presenceController, logger)),
+		Subscribe: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(presenceController, jidResolver, logger)),
+		Chat:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(presenceController, jidResolver, logger)),
+		MarkRead:  handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
+	}
+
+	// Reaction Handlers (/chat/react)
+	reactionHandlers := &handlers.ReactionHandlers{
+		React: handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
+	}
+
+	// Contact Handlers (/user/info, /user/avatar, /user/contacts)
+	contactHandlers := &handlers.ContactHandlers{
+		Avatar:   handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
+		Contacts: handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
+		UserInfo: handlers.NewGetUserInfoHandler(getUserUC),
 	}
 
 	customHandlerSet = &customHandlers{
@@ -292,7 +307,10 @@ func initCustomHandlers(s *server) {
 		Storage:   storageHandlers,
 		Misc:      miscHandlers,
 		Blocklist: blocklistHandlers,
-		Extended:  extendedHandlers,
+		Download:  downloadHandlers,
+		Presence:  presenceHandlers,
+		Reaction:  reactionHandlers,
+		Contact:   contactHandlers,
 		GroupMgmt: groupMgmtHandlers,
 	}
 }

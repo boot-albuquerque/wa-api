@@ -127,7 +127,10 @@ func emptyCustomHandlers() *customHandlers {
 		Storage:   &handlers.StorageHandlers{},
 		Misc:      &handlers.MiscHandlers{},
 		Blocklist: &handlers.BlocklistHandlers{},
-		Extended:  &handlers.ExtendedHandlers{},
+		Download:  &handlers.DownloadHandlers{},
+		Presence:  &handlers.PresenceHandlers{},
+		Reaction:  &handlers.ReactionHandlers{},
+		Contact:   &handlers.ContactHandlers{},
 		GroupMgmt: &handlers.GroupManagementHandlers{},
 	}
 }

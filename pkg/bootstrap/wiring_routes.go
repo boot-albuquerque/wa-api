@@ -106,25 +106,25 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/user/blocklist", customChain.Then(ch.Blocklist.GetBlocklist), "GET")
 
 	// Download routes
-	registry.Register("/chat/downloadimage", customChain.Then(ch.Extended.DownloadImage), "POST")
-	registry.Register("/chat/downloadvideo", customChain.Then(ch.Extended.DownloadVideo), "POST")
-	registry.Register("/chat/downloadaudio", customChain.Then(ch.Extended.DownloadAudio), "POST")
-	registry.Register("/chat/downloaddocument", customChain.Then(ch.Extended.DownloadDocument), "POST")
-	registry.Register("/chat/downloadsticker", customChain.Then(ch.Extended.DownloadSticker), "POST")
+	registry.Register("/chat/downloadimage", customChain.Then(ch.Download.Image), "POST")
+	registry.Register("/chat/downloadvideo", customChain.Then(ch.Download.Video), "POST")
+	registry.Register("/chat/downloadaudio", customChain.Then(ch.Download.Audio), "POST")
+	registry.Register("/chat/downloaddocument", customChain.Then(ch.Download.Document), "POST")
+	registry.Register("/chat/downloadsticker", customChain.Then(ch.Download.Sticker), "POST")
 
 	// Presence & Chat routes
-	registry.Register("/user/presence", customChain.Then(ch.Extended.SendPresence), "POST")
-	registry.Register("/user/presence/subscribe", customChain.Then(ch.Extended.SubscribePresence), "POST")
-	registry.Register("/chat/presence", customChain.Then(ch.Extended.ChatPresence), "POST")
-	registry.Register("/chat/markread", customChain.Then(ch.Extended.MarkRead), "POST")
+	registry.Register("/user/presence", customChain.Then(ch.Presence.Send), "POST")
+	registry.Register("/user/presence/subscribe", customChain.Then(ch.Presence.Subscribe), "POST")
+	registry.Register("/chat/presence", customChain.Then(ch.Presence.Chat), "POST")
+	registry.Register("/chat/markread", customChain.Then(ch.Presence.MarkRead), "POST")
 
 	// React route
-	registry.Register("/chat/react", customChain.Then(ch.Extended.React), "POST")
+	registry.Register("/chat/react", customChain.Then(ch.Reaction.React), "POST")
 
 	// User info routes
-	registry.Register("/user/info", customChain.Then(ch.Extended.GetUserInfo), "POST")
-	registry.Register("/user/avatar", customChain.Then(ch.Extended.GetAvatar), "POST")
-	registry.Register("/user/contacts", customChain.Then(ch.Extended.GetContacts), "GET")
+	registry.Register("/user/info", customChain.Then(ch.Contact.UserInfo), "POST")
+	registry.Register("/user/avatar", customChain.Then(ch.Contact.Avatar), "POST")
+	registry.Register("/user/contacts", customChain.Then(ch.Contact.Contacts), "GET")
 
 	// Misc routes (newsletter, privacy, call, archive)
 	registry.Register("/newsletter/list", customChain.Then(ch.Misc.ListNewsletter), "GET")
