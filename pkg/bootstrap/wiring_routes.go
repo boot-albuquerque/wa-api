@@ -17,7 +17,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// registerCustomRoutes registra todas as rotas custom do disparazaap-wuzapi.
+// registerCustomRoutes registra todas as rotas custom do disparazaap-wa-api.
 // Recebe a chain de middleware já configurada (authalice + logging) do upstream.
 // Chamado uma única vez em routes.go.
 func (s *server) registerCustomRoutes(c alice.Chain) {

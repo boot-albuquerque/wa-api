@@ -1,5 +1,5 @@
 // Package opengraph provides Open Graph link-preview fetching,
-// extracted from root wuzapi/helpers.go (Phase 12b).
+// extracted from root wa-api/helpers.go (Phase 12b).
 package opengraph
 
 import (

@@ -1,4 +1,4 @@
-// Package middleware contém middlewares HTTP cross-cutting para o disparazaap-wuzapi.
+// Package middleware contém middlewares HTTP cross-cutting para o disparazaap-wa-api.
 // Chains compostas via alice (github.com/justinas/alice) e aplicadas em registerCustomRoutes().
 //
 // Stubs atuais:

@@ -2,7 +2,7 @@
 //
 // This file implements a stdio-based JSON-RPC 2.0 interface that bridges
 // to the existing HTTP API handlers. It enables programmatic access to
-// wuzapi functionality through standard input/output, making it suitable
+// wa-api functionality through standard input/output, making it suitable
 // for use as a subprocess or in headless environments.
 //
 // The implementation:
@@ -528,7 +528,7 @@ func (ss *Server) convertHTTPResponse(requestID ID, recorder *httptest.ResponseR
 	success := statusCode >= 200 && statusCode < 300
 
 	if respMap, ok := responseData.(map[string]interface{}); ok {
-		// If it's already in wuzapi format, extract the data/error
+		// If it's already in wa-api format, extract the data/error
 		if data, hasData := respMap["data"]; hasData {
 			ss.sendSuccess(requestID, statusCode, data)
 			return

@@ -7,7 +7,7 @@ GOTEST := $(GOCMD) test
 GOVET := $(GOCMD) vet
 GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
-BINARY := wuzapi
+BINARY := wa-api
 
 # Lint
 LINT := golangci-lint
@@ -18,7 +18,7 @@ COVERAGE_OUT := coverage.out
 COVERAGE_HTML := coverage.html
 
 # Docker
-DOCKER_IMAGE := disparazaap-wuzapi
+DOCKER_IMAGE := disparazaap-wa-api
 DOCKER_TAG := latest
 
 ##@ Build
@@ -74,7 +74,7 @@ stats: ## Print project statistics
 	@echo "=== Root Files ==="
 	@echo "root .go files: $$(ls *.go 2>/dev/null | wc -l)"
 	@echo "root LOC:       $$(cat *.go 2>/dev/null | wc -l)"
-	@echo "cmd/wuzapi/main.go: $$(wc -l < cmd/wuzapi/main.go) LOC"
+	@echo "cmd/wa-api/main.go: $$(wc -l < cmd/wa-api/main.go) LOC"
 	@echo ""
 	@echo "=== Internal ==="
 	@echo "Files: $$(find internal -name '*.go' | wc -l)"

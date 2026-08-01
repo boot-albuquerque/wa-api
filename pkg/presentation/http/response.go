@@ -1,4 +1,4 @@
-// Package http contém os handlers HTTP e helpers de resposta do disparazaap-wuzapi.
+// Package http contém os handlers HTTP e helpers de resposta do disparazaap-wa-api.
 package http
 
 import (

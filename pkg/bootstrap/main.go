@@ -61,7 +61,7 @@ func Main() {
 
 	// Check for address in environment variable if flag is default or empty
 	if *address == "0.0.0.0" || *address == "" {
-		if v := os.Getenv("WUZAPI_ADDRESS"); v != "" {
+		if v := os.Getenv("WA_API_ADDRESS"); v != "" {
 			*address = v
 			log.Info().Str("address", v).Msg("Address configured from environment variable")
 		}
@@ -69,7 +69,7 @@ func Main() {
 
 	// Check for port in environment variable if flag is default or empty
 	if *port == "8080" || *port == "" {
-		if v := os.Getenv("WUZAPI_PORT"); v != "" {
+		if v := os.Getenv("WA_API_PORT"); v != "" {
 			*port = v
 			log.Info().Str("port", v).Msg("Port configured from environment variable")
 		}
@@ -91,7 +91,7 @@ func Main() {
 	if v := os.Getenv("WEBHOOK_ERROR_QUEUE_NAME"); v != "" {
 		*webhookErrorQueueName = v
 	}
-	if v := os.Getenv("WUZAPI_WEBHOOK_USE_PROXY"); v != "" {
+	if v := os.Getenv("WA_API_WEBHOOK_USE_PROXY"); v != "" {
 		*globalWebhookUseProxy = strings.ToLower(v) == "true" || v == "1"
 	}
 
@@ -179,7 +179,7 @@ func Main() {
 	}
 
 	if *adminToken == "" {
-		if v := os.Getenv("WUZAPI_ADMIN_TOKEN"); v != "" {
+		if v := os.Getenv("WA_API_ADMIN_TOKEN"); v != "" {
 			*adminToken = v
 		} else {
 			// Generate a random token if none provided
@@ -194,7 +194,7 @@ func Main() {
 	}
 
 	if *globalEncryptionKey == "" {
-		if v := os.Getenv("WUZAPI_GLOBAL_ENCRYPTION_KEY"); v != "" {
+		if v := os.Getenv("WA_API_GLOBAL_ENCRYPTION_KEY"); v != "" {
 			*globalEncryptionKey = v
 			log.Info().Msg("Encryption key loaded from environment variable")
 		} else {
@@ -205,14 +205,14 @@ func Main() {
 				b[i] = charset[rand.Intn(len(charset))]
 			}
 			*globalEncryptionKey = string(b)
-			log.Warn().Str("global_encryption_key", *globalEncryptionKey).Msg("No WUZAPI_GLOBAL_ENCRYPTION_KEY provided, generated a random one. " +
+			log.Warn().Str("global_encryption_key", *globalEncryptionKey).Msg("No WA_API_GLOBAL_ENCRYPTION_KEY provided, generated a random one. " +
 				"SAVE THIS KEY TO YOUR .ENV FILE OR ALL ENCRYPTED DATA WILL BE LOST ON RESTART!")
 		}
 	}
 
 	// Check for global webhook in environment variable
 	if *globalWebhook == "" {
-		if v := os.Getenv("WUZAPI_GLOBAL_WEBHOOK"); v != "" {
+		if v := os.Getenv("WA_API_GLOBAL_WEBHOOK"); v != "" {
 			*globalWebhook = v
 			log.Info().Str("global_webhook", v).Msg("Global webhook configured from environment variable")
 		}
@@ -222,7 +222,7 @@ func Main() {
 
 	// Check for global HMAC key in environment variable
 	if *globalHMACKey == "" {
-		if v := os.Getenv("WUZAPI_GLOBAL_HMAC_KEY"); v != "" {
+		if v := os.Getenv("WA_API_GLOBAL_HMAC_KEY"); v != "" {
 			*globalHMACKey = v
 			log.Info().Msg("Global HMAC key configured from environment variable")
 		} else {
@@ -233,7 +233,7 @@ func Main() {
 				b[i] = charset[rand.Intn(len(charset))]
 			}
 			*globalHMACKey = string(b)
-			log.Warn().Str("global_hmac_key", *globalHMACKey).Msg("No WUZAPI_GLOBAL_HMAC_KEY provided, generated a random one")
+			log.Warn().Str("global_hmac_key", *globalHMACKey).Msg("No WA_API_GLOBAL_HMAC_KEY provided, generated a random one")
 		}
 
 	} else {

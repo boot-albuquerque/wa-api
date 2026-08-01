@@ -1,5 +1,5 @@
 // Package middleware provides HTTP middleware handlers extracted from
-// root wuzapi/auth.go during Phase 13d of the Clean Architecture refactor.
+// root wa-api/auth.go during Phase 13d of the Clean Architecture refactor.
 // Functions accept all dependencies as parameters — no root imports.
 package middleware
 

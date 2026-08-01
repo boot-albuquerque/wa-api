@@ -23,7 +23,7 @@ import (
 //
 // Pré-requisitos:
 //   - Docker rodando
-//   - WuzAPI binary compilado (go build -o wuzapi-test .)
+//   - WuzAPI binary compilado (go build -o wa-api-test .)
 //   - postgres:15-alpine disponível
 func TestIntegration_GetProfile(t *testing.T) {
 	ctx := context.Background()
@@ -33,9 +33,9 @@ func TestIntegration_GetProfile(t *testing.T) {
 		Image:        "postgres:15-alpine",
 		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"POSTGRES_USER":     "wuzapi",
-			"POSTGRES_PASSWORD": "wuzapi",
-			"POSTGRES_DB":       "wuzapi",
+			"POSTGRES_USER":     "wa-api",
+			"POSTGRES_PASSWORD": "wa-api",
+			"POSTGRES_DB":       "wa-api",
 		},
 		WaitingFor: wait.ForLog("database system is ready to accept connections").
 			WithStartupTimeout(60 * time.Second),
@@ -57,18 +57,18 @@ func TestIntegration_GetProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get postgres port: %v", err)
 	}
-	pgDSN := fmt.Sprintf("postgres://wuzapi:wuzapi@%s:%d/wuzapi?sslmode=disable", pgHost, pgPort.Int())
+	pgDSN := fmt.Sprintf("postgres://wa-api:wa-api@%s:%d/wa-api?sslmode=disable", pgHost, pgPort.Int())
 	t.Logf("Postgres DSN: %s", pgDSN)
 
 	// 2. Compila WuzAPI binary (se não compilado ainda)
-	binaryPath := filepath.Join(os.TempDir(), "wuzapi-integration-test")
+	binaryPath := filepath.Join(os.TempDir(), "wa-api-integration-test")
 	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
 		cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 		cmd.Dir = repoRoot()
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("failed to build wuzapi binary: %v\n%s", err, out)
+			t.Fatalf("failed to build wa-api binary: %v\n%s", err, out)
 		}
 		t.Logf("Built WuzAPI binary at %s", binaryPath)
 	}
@@ -114,7 +114,7 @@ func TestIntegration_GetProfile(t *testing.T) {
 	}
 }
 
-// repoRoot retorna a raiz do repositório disparazaap-wuzapi.
+// repoRoot retorna a raiz do repositório disparazaap-wa-api.
 func repoRoot() string {
 	// Assume que o test roda a partir da raiz do módulo Go.
 	dir, err := os.Getwd()

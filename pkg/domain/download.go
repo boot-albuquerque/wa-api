@@ -1,4 +1,4 @@
-// Package domain contém as entidades centrais do domínio disparazaap-wuzapi.
+// Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
 // DownloadRequest representa o payload de download de mídia.

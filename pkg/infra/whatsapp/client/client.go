@@ -1,5 +1,5 @@
 // Package client provides WhatsApp helpers extracted from root
-// wuzapi/wmiau.go (Phase 11a Clean Architecture refactor).
+// wa-api/wmiau.go (Phase 11a Clean Architecture refactor).
 package client
 
 import (
@@ -26,7 +26,7 @@ const (
 	Stdio
 )
 
-// Context bundles external dependencies bridged from root wuzapi globals.
+// Context bundles external dependencies bridged from root wa-api globals.
 type Context struct {
 	UserCache   *cache.Cache
 	GlobalWH    string

@@ -112,14 +112,14 @@ cp .env.sample .env
 
 #### Configurações Obrigatórias
 ```
-WUZAPI_ADMIN_TOKEN=seu_admin_token_aqui
+WA_API_ADMIN_TOKEN=seu_admin_token_aqui
 ```
 
 #### Configurações de Segurança
 
 ```
-WUZAPI_GLOBAL_ENCRYPTION_KEY=sua_chave_32_bytes_aqui
-WUZAPI_GLOBAL_HMAC_KEY=sua_chave_hmac_global_aqui
+WA_API_GLOBAL_ENCRYPTION_KEY=sua_chave_32_bytes_aqui
+WA_API_GLOBAL_HMAC_KEY=sua_chave_hmac_global_aqui
 ```
 
 #### Configurações Opcionais
@@ -128,8 +128,8 @@ WUZAPI_GLOBAL_HMAC_KEY=sua_chave_hmac_global_aqui
 TZ=America/Sao_Paulo
 WEBHOOK_FORMAT=json
 SESSION_DEVICE_NAME=DisparaZap
-WUZAPI_PORT=8080
-WUZAPI_GLOBAL_WEBHOOK=https://sua-url-global-webhook.url
+WA_API_PORT=8080
+WA_API_GLOBAL_WEBHOOK=https://sua-url-global-webhook.url
 WEBHOOK_RETRY_ENABLED=true
 WEBHOOK_RETRY_COUNT=2
 WEBHOOK_RETRY_DELAY_SECONDS=30
@@ -140,13 +140,13 @@ WEBHOOK_ERROR_QUEUE_NAME=disparazapi_dead_letter_webhooks
 
 #### Credenciais Auto-Geradas
 Se as seguintes configurações não forem fornecidas, serão auto-geradas:
-* `WUZAPI_ADMIN_TOKEN`: Token aleatório de 32 caracteres
-* `WUZAPI_GLOBAL_ENCRYPTION_KEY`: Chave aleatória de 32 bytes para criptografia AES-256
+* `WA_API_ADMIN_TOKEN`: Token aleatório de 32 caracteres
+* `WA_API_GLOBAL_ENCRYPTION_KEY`: Chave aleatória de 32 bytes para criptografia AES-256
 
 **Importante**: Salve as credenciais auto-geradas no seu arquivo `.env` ou você perderá acesso aos dados criptografados e funções de admin ao reiniciar!
 
 #### Segurança de Webhooks
-* `WUZAPI_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
+* `WA_API_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
 
 #### Configuração de Banco de Dados
 
@@ -185,7 +185,7 @@ Quando habilitado:
 DisparaZap suporta assinaturas HMAC para verificação de webhooks:
 
 * **HMAC por instância**: Configure chaves HMAC únicas para cada instância de usuário
-* **HMAC global**: Defina uma chave HMAC global via `WUZAPI_GLOBAL_HMAC_KEY`
+* **HMAC global**: Defina uma chave HMAC global via `WA_API_GLOBAL_HMAC_KEY`
 * **Header de assinatura**: Todos os webhooks assinados incluem o header `x-hmac-signature`
 * **Segurança da chave**: Chaves HMAC nunca são expostas após a configuração
 
@@ -195,7 +195,7 @@ Configure chaves HMAC via Dashboard ou usando os endpoints da API `/session/hmac
 
 #### Opções principais de configuração:
 
-* WUZAPI_ADMIN_TOKEN: Obrigatório — Token de autenticação para endpoints admin
+* WA_API_ADMIN_TOKEN: Obrigatório — Token de autenticação para endpoints admin
 * TZ: Opcional — Timezone para operações do servidor (padrão: UTC)
 * PostgreSQL: Opções específicas, apenas necessárias ao usar backend PostgreSQL
 * RabbitMQ: Opcional, necessário apenas para publicar eventos no RabbitMQ
@@ -211,8 +211,8 @@ A configuração Docker irá:
 
 **Diferenças principais para deploy Docker:**
 - Defina `DB_HOST=db` em vez de `localhost` para conectar ao container PostgreSQL
-- A variável `WUZAPI_PORT` controla o mapeamento de porta externa no `deploy/docker-compose.yml`
-- Em modo swarm, `WUZAPI_PORT` configura a porta do load balancer Traefik
+- A variável `WA_API_PORT` controla o mapeamento de porta externa no `deploy/docker-compose.yml`
+- Em modo swarm, `WA_API_PORT` configura a porta do load balancer Traefik
 
 **Nota:** O arquivo `.env` já está incluído no `.gitignore` para evitar commit de informações sensíveis.
 
@@ -226,7 +226,7 @@ Para interagir com a API, inclua o header `Authorization` nas requisições HTTP
 
 ## Ações de ADMIN
 
-Você pode listar, adicionar e remover usuários usando os endpoints admin. Para isso, use o WUZAPI_ADMIN_TOKEN no header Authorization.
+Você pode listar, adicionar e remover usuários usando os endpoints admin. Para isso, use o WA_API_ADMIN_TOKEN no header Authorization.
 
 Use o endpoint `/admin/users` com o header Authorization contendo o token para:
 

@@ -1,4 +1,4 @@
-// Package domain contém as entidades centrais do domínio disparazaap-wuzapi.
+// Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 // Entities são imutáveis e não dependem de frameworks ou bibliotecas externas.
 package domain
 

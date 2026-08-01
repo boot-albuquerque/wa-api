@@ -1,5 +1,5 @@
 // Package testutil fornece mocks compartilhados para testes unitários
-// das camadas domain, application e interfaces do disparazaap-wuzapi.
+// das camadas domain, application e interfaces do disparazaap-wa-api.
 //
 // Use em arquivos _test.go:
 //

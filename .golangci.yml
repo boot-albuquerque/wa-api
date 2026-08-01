@@ -1,4 +1,4 @@
-# golangci-lint v2 configuration for disparazaap-wuzapi internal/ packages.
+# golangci-lint v2 configuration for disparazaap-wa-api internal/ packages.
 # Only lints our custom code — upstream (package main) is not linted.
 version: "2"
 

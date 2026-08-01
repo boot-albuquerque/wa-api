@@ -1,5 +1,5 @@
 // Package helpers provides pure utility functions extracted from
-// root wuzapi/helpers.go (Phase 12a).
+// root wa-api/helpers.go (Phase 12a).
 package helpers
 
 import (

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestProfileContract valida que o contrato JSON do perfil entre disparazaap-wuzapi
-// e o WuzApiHttpClient.getProfile() (disparazaap/services/wa-worker/src/.../wuzapi-http-client.ts:228-253)
+// TestProfileContract valida que o contrato JSON do perfil entre disparazaap-wa-api
+// e o WuzApiHttpClient.getProfile() (disparazaap/services/wa-worker/src/.../wa-api-http-client.ts:228-253)
 // é preservado. Os 6 campos devem existir com os nomes exatos e tipos esperados.
 func TestProfileContract(t *testing.T) {
 	// Fixture: payload real de /session/profile, envelope { data: { ... } } do s.Respond().

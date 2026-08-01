@@ -13,7 +13,7 @@ dbdata/
 files/
 
 # Build artifacts and binaries
-wuzapi
+wa-api
 *.exe
 *.o
 *.out
