@@ -43,7 +43,7 @@ func TestProcessMediaGuardsNilCtx(t *testing.T) {
 		postmap, nil)
 
 	out := buf.String()
-	if !strings.Contains(out, "media processing skipped: Ctx not configured") {
+	if !strings.Contains(out, "media processing skipped: WhatsApp client not configured") {
 		t.Fatalf("expected WARN guard line, got log output: %q", out)
 	}
 	if !strings.Contains(out, `"level":"warn"`) {

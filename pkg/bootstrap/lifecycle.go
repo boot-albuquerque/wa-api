@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"wa-api/pkg/infra/whatsapp/client"
+	"wa-api/pkg/infra/media"
+	wmhelpers "wa-api/pkg/infra/whatsmeow"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
@@ -43,7 +44,7 @@ type MyClient struct {
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
 // the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
-var safeGo = client.SafeGo
+var safeGo = wmhelpers.SafeGo
 
 // ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
 
@@ -142,8 +143,8 @@ func (s *server) connectOnStartup() {
 	}
 }
 
-var parseJID = client.ParseJID
-var getPlatformTypeEnum = client.GetPlatformTypeEnum
+var parseJID = wmhelpers.ParseJID
+var getPlatformTypeEnum = wmhelpers.GetPlatformTypeEnum
 
 func (s *server) startClient(userID string, textjid string, token string, kill chan bool) {
 	log.Info().Str("userid", userID).Str("jid", textjid).Msg("[startClient] ENTRY - Starting WhatsApp WebSocket")
@@ -438,4 +439,4 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	appCtx.KillChannel.Delete(userID, kill)
 }
 
-var fileToBase64 = client.FileToBase64
+var fileToBase64 = media.FileToBase64
