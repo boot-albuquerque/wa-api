@@ -27,6 +27,7 @@ type dynamicRoute struct {
 // novo entra aqui e em nenhum outro lugar.
 var staticRouteGroups = []map[string]staticRoute{
 	adminStaticRoutes,
+	sessionStaticRoutes,
 }
 
 var dynamicRouteGroups = []map[string]dynamicRoute{

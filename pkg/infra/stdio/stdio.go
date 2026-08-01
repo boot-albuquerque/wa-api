@@ -199,44 +199,6 @@ func (ss *Server) routeRequestLegacySwitch(req *JSONRpcRequest) {
 		httpMethod = "GET"
 		httpPath = "/health"
 
-	// Session management
-	case "session.connect":
-		httpMethod = "POST"
-		httpPath = "/session/connect"
-	case "session.qr":
-		httpMethod = "GET"
-		httpPath = "/session/qr"
-	case "session.status":
-		httpMethod = "GET"
-		httpPath = "/session/status"
-	case "session.disconnect":
-		httpMethod = "POST"
-		httpPath = "/session/disconnect"
-	case "session.logout":
-		httpMethod = "POST"
-		httpPath = "/session/logout"
-	case "session.pairphone":
-		httpMethod = "POST"
-		httpPath = "/session/pairphone"
-	case "session.history":
-		httpMethod = "GET"
-		httpPath = "/session/history"
-	case "session.history.set":
-		httpMethod = "POST"
-		httpPath = "/session/history"
-	case "session.proxy":
-		httpMethod = "POST"
-		httpPath = "/session/proxy"
-	case "session.hmac.config":
-		httpMethod = "POST"
-		httpPath = "/session/hmac/config"
-	case "session.hmac.config.get":
-		httpMethod = "GET"
-		httpPath = "/session/hmac/config"
-	case "session.hmac.config.delete":
-		httpMethod = "DELETE"
-		httpPath = "/session/hmac/config"
-
 	// Messaging
 	case "chat.send.text":
 		httpMethod = "POST"
