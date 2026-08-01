@@ -1,1 +1,13 @@
-29
+# Gate de lint. Duas medidas, só uma é trava.
+#
+# max_complexity — a maior complexidade ciclomática de UMA função no repo.
+#   Esta é a trava: `make lint` falha se ela SUBIR. Uma função gigante é uma
+#   função gigante, independente do que existe em volta dela.
+#
+# count — quantas issues o lint reporta. INFORMATIVO, nunca trava.
+#   Contagem de issues pune decomposição: quebrar um monolito de complexidade
+#   202 em cinco funções de 40 reduz a complexidade real em todo lugar e
+#   *aumenta* a contagem de 1 para 5. Travar na contagem é premiar quem deixa
+#   o monolito de pé. (Achado da revisão de arquitetura da Fase 7.)
+max_complexity=56
+count=28

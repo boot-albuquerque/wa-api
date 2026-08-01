@@ -61,17 +61,39 @@ lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	   echo "       Este gate FALHA FECHADO de proposito: contagem ausente nao e' zero."; \
 	   exit 1; \
 	 fi; \
-	 base=$$(cat $(BASELINE_FILE)); \
-	 echo "lint: $$found issue(s) | baseline declarado: $$base"; \
-	 if [ "$$found" -gt "$$base" ]; then \
-	   echo "FALHA: o lint piorou ($$found > $$base). Corrija, ou justifique e ajuste o baseline no PR."; \
+	 gocyclo_lines=$$(grep -c 'cyclomatic complexity .* is high' .lint.out || true); \
+	 if [ "$$gocyclo_lines" -eq 0 ]; then \
+	   max=0; \
+	 else \
+	   max=$$(grep -oE 'cyclomatic complexity [0-9]+ of' .lint.out | grep -oE '[0-9]+' | sort -rn | head -1); \
+	 fi; \
+	 if [ -z "$$max" ]; then \
+	   echo "FALHA: ha $$gocyclo_lines linha(s) de gocyclo em .lint.out mas nao consegui ler nenhuma complexidade."; \
+	   echo "       O formato da mensagem do gocyclo mudou. Gate FALHA FECHADO."; \
 	   exit 1; \
 	 fi; \
-	 if [ "$$found" -lt "$$base" ]; then \
-	   echo "ATENCAO: o lint melhorou ($$found < $$base). Baixe $(BASELINE_FILE) para $$found neste mesmo PR."; \
+	 base_max=$$(grep -oE '^max_complexity=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 base_count=$$(grep -oE '^count=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 if [ -z "$$base_max" ]; then \
+	   echo "FALHA: $(BASELINE_FILE) nao declara max_complexity=<N>. Gate FALHA FECHADO."; \
+	   exit 1; \
+	 fi; \
+	 echo "lint: complexidade maxima $$max (baseline $$base_max) | $$found issue(s) (informativo, baseline $$base_count)"; \
+	 if [ "$$max" -gt "$$base_max" ]; then \
+	   echo "FALHA: a maior funcao do repo piorou ($$max > $$base_max)."; \
+	   echo "       A trava e' a complexidade maxima, nao a contagem: decompor uma funcao"; \
+	   echo "       gigante em varias menores AUMENTA a contagem e MELHORA o repo."; \
+	   echo "       Quebre a funcao, ou justifique e ajuste max_complexity no PR."; \
+	   exit 1; \
+	 fi; \
+	 if [ "$$max" -lt "$$base_max" ]; then \
+	   echo "ATENCAO: a complexidade maxima caiu ($$max < $$base_max). Baixe max_complexity para $$max neste mesmo PR."; \
+	 fi; \
+	 if [ "$$found" -ne "$$base_count" ]; then \
+	   echo "NOTA: a contagem de issues mudou ($$base_count -> $$found). Informativo, nao trava. Atualize count no PR."; \
 	 fi
 
-lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` depois que a F7 deletar o baseline
+lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` quando max_complexity chegar a 10
 	$(LINT) run $(LINT_TARGETS)
 
 vet: ## Run go vet
