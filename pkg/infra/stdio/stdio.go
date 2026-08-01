@@ -199,37 +199,6 @@ func (ss *Server) routeRequestLegacySwitch(req *JSONRpcRequest) {
 		httpMethod = "GET"
 		httpPath = "/health"
 
-	// User info
-	case "user.contacts":
-		httpMethod = "GET"
-		httpPath = "/user/contacts"
-	case "user.presence":
-		httpMethod = "POST"
-		httpPath = "/user/presence"
-	case "user.info":
-		httpMethod = "POST"
-		httpPath = "/user/info"
-	case "user.check":
-		httpMethod = "POST"
-		httpPath = "/user/check"
-	case "user.avatar":
-		httpMethod = "POST"
-		httpPath = "/user/avatar"
-	case "user.block":
-		httpMethod = "POST"
-		httpPath = "/user/block"
-	case "user.unblock":
-		httpMethod = "POST"
-		httpPath = "/user/unblock"
-	case "user.lid":
-		httpMethod = "GET"
-		jid, ok := req.Params["jid"].(string)
-		if !ok || jid == "" {
-			ss.sendError(req.ID, 400, "missing or invalid jid parameter")
-			return
-		}
-		httpPath = "/user/lid/" + jid
-
 	// Status
 	case "status.set.text":
 		httpMethod = "POST"

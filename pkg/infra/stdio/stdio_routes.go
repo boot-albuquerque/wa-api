@@ -29,11 +29,13 @@ var staticRouteGroups = []map[string]staticRoute{
 	adminStaticRoutes,
 	sessionStaticRoutes,
 	chatStaticRoutes,
+	userStaticRoutes,
 }
 
 var dynamicRouteGroups = []map[string]dynamicRoute{
 	adminDynamicRoutes,
 	chatDynamicRoutes,
+	userDynamicRoutes,
 }
 
 var staticRoutes = mergeStaticRoutes(staticRouteGroups)
