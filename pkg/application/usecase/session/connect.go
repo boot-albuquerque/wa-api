@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -22,18 +21,9 @@ func NewConnectUseCase(cp appport.ClientProvider, l appport.Logger) *ConnectUseC
 	}
 }
 
-// Execute valida se o cliente está disponível.
+// Execute returns a successful result so the handler can proceed
+// with the actual connection flow (QR code generation + WebSocket).
 func (uc *ConnectUseCase) Execute(ctx context.Context, txtID string, req domain.ConnectRequest) (*domain.ConnectResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
-	}
-
-	uc.logger.Info("connect validated", "txtID", txtID)
+	uc.logger.Info("connect requested", "txtID", txtID)
 	return &domain.ConnectResult{}, nil
 }

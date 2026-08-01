@@ -161,7 +161,7 @@ func initCustomHandlers(s *server) {
 		SendTemplate:    handlers.NewSendTemplateHandler(sendTemplateUC),
 	}
 	sessionHandlers := &SessionHandlers{
-		Connect:            handlers.NewConnectHandler(connectUC),
+		Connect:            initConnectHandler(connectUC, s),
 		Disconnect:         handlers.NewDisconnectHandler(disconnectUC),
 		GetQR:              handlers.NewGetQRHandler(getQRUC),
 		Logout:             handlers.NewLogoutHandler(logoutUC),
@@ -319,4 +319,13 @@ func initCustomHandlers(s *server) {
 		Extended:  extendedHandlers,
 		GroupMgmt: groupMgmtHandlers,
 	}
+}
+
+// initConnectHandler creates a ConnectHandler wired to server.startClient.
+func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
+	h := handlers.NewConnectHandler(uc)
+	h.StartClient = func(userID, jid, token string, kill chan bool) {
+		s.startClient(userID, jid, token, kill)
+	}
+	return h
 }
