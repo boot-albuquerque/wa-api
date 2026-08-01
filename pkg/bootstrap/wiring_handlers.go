@@ -108,6 +108,9 @@ func initCustomHandlers(s *server) {
 	// Adapters
 	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
 	messageComposer := whatsmeow.NewMessageComposerAdapter(clientManager.GetWhatsmeowClient)
+	presenceController := whatsmeow.NewPresenceControllerAdapter(clientManager.GetWhatsmeowClient)
+	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
+	jidResolver := whatsmeow.NewJIDResolverAdapter()
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
@@ -298,11 +301,11 @@ func initCustomHandlers(s *server) {
 		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
 		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
 		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
-		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, logger)),
-		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, logger)),
-		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, logger)),
-		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(clientProvider, logger)),
-		React:             handlers.NewReactHandler(message.NewReactUseCase(clientProvider, logger)),
+		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(presenceController, logger)),
+		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(presenceController, jidResolver, logger)),
+		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(presenceController, jidResolver, logger)),
+		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
+		React:             handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
 		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, logger)),
 		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, logger)),
 		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),

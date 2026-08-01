@@ -8,29 +8,23 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/whatsmeow"
-
-	"go.mau.fi/whatsmeow/proto/waCommon"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 )
 
 // ReactUseCase sends a reaction to a message
 type ReactUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	chats  appport.ChatMessenger
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewReactUseCase creates a new instance
-func NewReactUseCase(cp appport.ClientProvider, logger appport.Logger) *ReactUseCase {
-	return &ReactUseCase{clientProvider: cp, logger: logger}
+func NewReactUseCase(cm appport.ChatMessenger, jr appport.JIDResolver, logger appport.Logger) *ReactUseCase {
+	return &ReactUseCase{chats: cm, jids: jr, logger: logger}
 }
 
 // Execute sends a reaction
 func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.ReactRequest) (map[string]interface{}, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
+	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -42,8 +36,8 @@ func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.R
 		return nil, fmt.Errorf("missing Body in Payload")
 	}
 
-	recipient, ok := whatsmeow.ParseJID(req.Phone)
-	if !ok {
+	recipient, err := uc.jids.ResolveJID(ctx, req.Phone)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Phone")
 	}
 
@@ -63,32 +57,22 @@ func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.R
 		reaction = ""
 	}
 
-	var participantJID types.JID
+	// Um Participant que não resolve é ignorado, e não vira erro —
+	// comportamento preservado do upstream.
+	var participant domain.JID
 	if !fromMe && req.Participant != "" {
-		if pj, ok := whatsmeow.ParseJID(req.Participant); ok {
-			participantJID = pj
+		if pj, err := uc.jids.ResolveJID(ctx, req.Participant); err == nil {
+			participant = pj
 		}
 	}
 
-	key := &waCommon.MessageKey{
-		RemoteJID: proto.String(recipient.String()),
-		FromMe:    proto.Bool(fromMe),
-		ID:        proto.String(msgid),
-	}
-	if !fromMe && participantJID.String() != "" {
-		key.Participant = proto.String(participantJID.String())
-	}
-
-	msg := &waE2E.Message{
-		ReactionMessage: &waE2E.ReactionMessage{
-			Key:               key,
-			Text:              proto.String(reaction),
-			GroupingKey:       proto.String(reaction),
-			SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
-		},
-	}
-
-	resp, err := client.SendMessage(ctx, recipient, msg)
+	resp, err := uc.chats.SendReaction(ctx, userID, recipient, domain.Reaction{
+		TargetMessageID: msgid,
+		FromMe:          fromMe,
+		Participant:     participant,
+		Text:            reaction,
+		SentAt:          time.Now(),
+	})
 	if err != nil {
 		uc.logger.Error(ctx, "Error sending reaction", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("error sending message: %v", err)
