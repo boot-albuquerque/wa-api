@@ -220,7 +220,7 @@ func initCustomHandlers(s *server) {
 	)
 
 	// Group UseCases
-	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, logger)
+	groupRequestUC := group.NewGroupRequestUseCase(groupAdapter, jidResolver, logger)
 	listGroupsUC := group.NewListGroupsUseCase(groupAdapter, logger)
 	getGroupInfoUC := group.NewGetGroupInfoUseCase(groupAdapter, jidResolver, logger)
 	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(groupAdapter, jidResolver, logger)
@@ -292,7 +292,7 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Group Management UseCase + Handlers
-	groupMgmtUC := group.NewGroupManagementUseCase(clientProvider, logger)
+	groupMgmtUC := group.NewGroupManagementUseCase(groupAdapter, groupAdapter, jidResolver, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
 	// Extended Handlers (downloads, presence, user-info, react, mark-read)

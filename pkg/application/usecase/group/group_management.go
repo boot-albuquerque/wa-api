@@ -5,168 +5,165 @@ import (
 	"fmt"
 	"time"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
-
 	appport "wa-api/pkg/application/contracts"
-	wm "wa-api/pkg/infra/whatsmeow"
+	"wa-api/pkg/domain"
 )
 
 // GroupManagementUseCase bundles group write operations (create, join, leave,
-// settings) that share the same clientProvider dependency.
+// settings) that share the same session dependency.
 type GroupManagementUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	lifecycle appport.GroupLifecycle
+	settings  appport.GroupSettings
+	jids      appport.JIDResolver
+	logger    appport.Logger
 }
 
-func NewGroupManagementUseCase(cp appport.ClientProvider, l appport.Logger) *GroupManagementUseCase {
-	return &GroupManagementUseCase{clientProvider: cp, logger: l}
+func NewGroupManagementUseCase(gl appport.GroupLifecycle, gs appport.GroupSettings, jr appport.JIDResolver, l appport.Logger) *GroupManagementUseCase {
+	return &GroupManagementUseCase{lifecycle: gl, settings: gs, jids: jr, logger: l}
 }
 
-func (uc *GroupManagementUseCase) client(ctx context.Context, txtID string) (*whatsmeow.Client, error) {
-	c, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil || c == nil {
-		return nil, fmt.Errorf("no session")
+// ensure mantém a guarda de sessão que o antigo helper client() aplicava
+// antes de cada operação, com a mesma mensagem de erro que os handlers já
+// recebiam.
+func (uc *GroupManagementUseCase) ensure(ctx context.Context, txtID string) error {
+	if err := uc.settings.EnsureSession(ctx, txtID); err != nil {
+		return fmt.Errorf("no session")
 	}
-	return c, nil
+	return nil
 }
 
-func (uc *GroupManagementUseCase) parseJID(s string) (types.JID, error) {
-	jid, ok := wm.ParseJID(s)
-	if !ok {
-		return types.EmptyJID, fmt.Errorf("could not parse JID: %s", s)
+func (uc *GroupManagementUseCase) parseJID(ctx context.Context, s string) (domain.JID, error) {
+	jid, err := uc.jids.ResolveJID(ctx, s)
+	if err != nil {
+		return "", fmt.Errorf("could not parse JID: %s", s)
 	}
 	return jid, nil
 }
 
+func (uc *GroupManagementUseCase) parseJIDs(ctx context.Context, in []string) ([]domain.JID, error) {
+	out := make([]domain.JID, len(in))
+	for i, p := range in {
+		j, err := uc.parseJID(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = j
+	}
+	return out, nil
+}
+
 // CreateGroup creates a new WhatsApp group.
 func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string, name string, phones []string) (interface{}, error) {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return nil, err
+	}
+	jids, err := uc.parseJIDs(ctx, phones)
 	if err != nil {
 		return nil, err
 	}
-	jids := make([]types.JID, len(phones))
-	for i, p := range phones {
-		j, e := uc.parseJID(p)
-		if e != nil {
-			return nil, e
-		}
-		jids[i] = j
-	}
-	return c.CreateGroup(ctx, whatsmeow.ReqCreateGroup{Name: name, Participants: jids})
+	return uc.lifecycle.CreateGroup(ctx, txtID, name, jids)
 }
 
 // JoinGroup joins a group via invitation link.
 func (uc *GroupManagementUseCase) JoinGroup(ctx context.Context, txtID, code string) (interface{}, error) {
-	c, err := uc.client(ctx, txtID)
-	if err != nil {
+	if err := uc.ensure(ctx, txtID); err != nil {
 		return nil, err
 	}
-	return c.JoinGroupWithLink(context.Background(), code)
+	return uc.lifecycle.JoinGroup(ctx, txtID, code)
 }
 
 // LeaveGroup leaves a group.
 func (uc *GroupManagementUseCase) LeaveGroup(ctx context.Context, txtID, groupJID string) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	return c.LeaveGroup(context.Background(), jid)
+	return uc.lifecycle.LeaveGroup(ctx, txtID, jid)
 }
 
 // SetGroupName renames a group.
 func (uc *GroupManagementUseCase) SetGroupName(ctx context.Context, txtID, groupJID, name string) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	return c.SetGroupName(context.Background(), jid, name)
+	return uc.settings.SetGroupName(ctx, txtID, jid, name)
 }
 
 // SetGroupTopic sets the group description.
 func (uc *GroupManagementUseCase) SetGroupTopic(ctx context.Context, txtID, groupJID, topic string) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	return c.SetGroupTopic(context.Background(), jid, "", "", topic)
+	return uc.settings.SetGroupTopic(ctx, txtID, jid, topic)
 }
 
 // SetGroupPhoto sets the group photo.
 func (uc *GroupManagementUseCase) SetGroupPhoto(ctx context.Context, txtID, groupJID string, photoData []byte) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	_, err = c.SetGroupPhoto(context.Background(), jid, photoData)
-	return err
+	return uc.settings.SetGroupPhoto(ctx, txtID, jid, photoData)
 }
 
 // RemoveGroupPhoto removes the group photo.
 func (uc *GroupManagementUseCase) RemoveGroupPhoto(ctx context.Context, txtID, groupJID string) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	_, err = c.SetGroupPhoto(context.Background(), jid, nil)
-	return err
+	return uc.settings.SetGroupPhoto(ctx, txtID, jid, nil)
 }
 
 // SetGroupAnnounce sets announcement-only mode.
 func (uc *GroupManagementUseCase) SetGroupAnnounce(ctx context.Context, txtID, groupJID string, announce bool) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	return c.SetGroupAnnounce(context.Background(), jid, announce)
+	return uc.settings.SetGroupAnnounce(ctx, txtID, jid, announce)
 }
 
 // SetGroupLocked locks/unlocks group settings.
 func (uc *GroupManagementUseCase) SetGroupLocked(ctx context.Context, txtID, groupJID string, locked bool) error {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
-	}
-	return c.SetGroupLocked(context.Background(), jid, locked)
+	return uc.settings.SetGroupLocked(ctx, txtID, jid, locked)
 }
 
 // SetDisappearingTimer sets the disappearing message timer.
 func (uc *GroupManagementUseCase) SetDisappearingTimer(ctx context.Context, txtID, groupJID, duration string) error {
-	c, err := uc.client(ctx, txtID)
-	if err != nil {
+	if err := uc.ensure(ctx, txtID); err != nil {
 		return err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return e
+	jid, err := uc.parseJID(ctx, groupJID)
+	if err != nil {
+		return err
 	}
 	var d time.Duration
 	switch duration {
@@ -179,32 +176,28 @@ func (uc *GroupManagementUseCase) SetDisappearingTimer(ctx context.Context, txtI
 	default:
 		d = 0
 	}
-	return c.SetDisappearingTimer(context.Background(), jid, d, time.Now())
+	return uc.settings.SetDisappearingTimer(ctx, txtID, jid, d, time.Now())
 }
 
 // UpdateGroupParticipants adds or removes participants from a group.
 func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, txtID, groupJID, action string, phones []string) (interface{}, error) {
-	c, err := uc.client(ctx, txtID)
+	if err := uc.ensure(ctx, txtID); err != nil {
+		return nil, err
+	}
+	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
 		return nil, err
 	}
-	jid, e := uc.parseJID(groupJID)
-	if e != nil {
-		return nil, e
+	jids, err := uc.parseJIDs(ctx, phones)
+	if err != nil {
+		return nil, err
 	}
-	jids := make([]types.JID, len(phones))
-	for i, p := range phones {
-		j, e := uc.parseJID(p)
-		if e != nil {
-			return nil, e
-		}
-		jids[i] = j
-	}
-	var result []types.GroupParticipant
+
+	// Qualquer ação diferente de "add" é remoção — regra preservada do
+	// upstream, que não validava o valor recebido.
+	participantAction := domain.ParticipantRemove
 	if action == "add" {
-		result, err = c.UpdateGroupParticipants(ctx, jid, jids, whatsmeow.ParticipantChangeAdd)
-	} else {
-		result, err = c.UpdateGroupParticipants(ctx, jid, jids, whatsmeow.ParticipantChangeRemove)
+		participantAction = domain.ParticipantAdd
 	}
-	return result, err
+	return uc.settings.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
 }

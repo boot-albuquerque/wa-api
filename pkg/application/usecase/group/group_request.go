@@ -7,22 +7,21 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // GroupRequestUseCase encapsula a lógica de gerenciamento de solicitações de entrada em grupos
 type GroupRequestUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	requests appport.GroupRequests
+	jids     appport.JIDResolver
+	logger   appport.Logger
 }
 
 // NewGroupRequestUseCase cria uma nova instância
-func NewGroupRequestUseCase(cp appport.ClientProvider, l appport.Logger) *GroupRequestUseCase {
+func NewGroupRequestUseCase(gr appport.GroupRequests, jr appport.JIDResolver, l appport.Logger) *GroupRequestUseCase {
 	return &GroupRequestUseCase{
-		clientProvider: cp,
-		logger:         l,
+		requests: gr,
+		jids:     jr,
+		logger:   l,
 	}
 }
 
@@ -32,18 +31,17 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	resp, err := client.GetGroupRequestParticipants(ctx, group)
+	resp, err := uc.requests.GetRequestParticipants(ctx, userID, group)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID)
 		return nil, fmt.Errorf("failed to get group request participants: %w", err)
@@ -60,9 +58,8 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 
 // ExecuteUpdateGroupRequestParticipants aprova ou rejeita solicitações de entrada
 func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context.Context, userID string, req domain.UpdateGroupRequestParticipantsRequest) (*domain.UpdateGroupRequestParticipantsResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -79,33 +76,32 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 		return nil, fmt.Errorf("missing Action in payload")
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
 	// Parse phone numbers
-	phoneParsed := make([]types.JID, len(req.Phone))
+	phoneParsed := make([]domain.JID, len(req.Phone))
 	for i, phone := range req.Phone {
-		phoneParsed[i], ok = parseJID(phone)
-		if !ok {
+		phoneParsed[i], err = uc.jids.ResolveQualifiedJID(ctx, phone)
+		if err != nil {
 			return nil, fmt.Errorf("could not parse Phone")
 		}
 	}
 
 	// Parse action
-	var action whatsmeow.ParticipantRequestChange
+	var action domain.RequestAction
 	switch req.Action {
 	case "approve":
-		action = whatsmeow.ParticipantChangeApprove
+		action = domain.RequestApprove
 	case "reject":
-		action = whatsmeow.ParticipantChangeReject
+		action = domain.RequestReject
 	default:
 		return nil, fmt.Errorf("invalid Action in payload (must be approve or reject)")
 	}
 
-	_, err = client.UpdateGroupRequestParticipants(ctx, group, phoneParsed, action)
-	if err != nil {
+	if err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action); err != nil {
 		uc.logger.Error(ctx, "failed to update group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("failed to update group request participants: %w", err)
 	}
@@ -117,9 +113,8 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 
 // ExecuteSetGroupJoinApprovalMode alterna o requisito de aprovação para entrar no grupo
 func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Context, userID string, req domain.SetGroupJoinApprovalModeRequest) (*domain.SetGroupJoinApprovalModeResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "error", err, "user_id", userID)
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("no session")
 	}
 
@@ -127,13 +122,12 @@ func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Conte
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	err = client.SetGroupJoinApprovalMode(ctx, group, req.Mode)
-	if err != nil {
+	if err := uc.requests.SetJoinApprovalMode(ctx, userID, group, req.Mode); err != nil {
 		uc.logger.Error(ctx, "failed to set group join approval mode", "error", err, "user_id", userID, "group_jid", req.GroupJID, "mode", req.Mode)
 		return nil, fmt.Errorf("failed to set group join approval mode: %w", err)
 	}
@@ -141,11 +135,4 @@ func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Conte
 	return &domain.SetGroupJoinApprovalModeResult{
 		Details: "Group join approval mode updated successfully",
 	}, nil
-}
-
-// parseJID é um helper que converte string para types.JID
-// Duplicado aqui por necessidade (também existe em handlers_grouprequests.go)
-func parseJID(jidStr string) (types.JID, bool) {
-	jid, err := types.ParseJID(jidStr)
-	return jid, err == nil
 }
