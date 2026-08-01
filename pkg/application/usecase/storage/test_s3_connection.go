@@ -10,28 +10,23 @@ import (
 
 // TestS3ConnectionUseCase encapsula a validação de teste de conexão S3.
 type TestS3ConnectionUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewTestS3ConnectionUseCase cria uma nova instância do usecase.
-func NewTestS3ConnectionUseCase(cp appport.ClientProvider, l appport.Logger) *TestS3ConnectionUseCase {
+func NewTestS3ConnectionUseCase(sg appport.SessionGuard, l appport.Logger) *TestS3ConnectionUseCase {
 	return &TestS3ConnectionUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *TestS3ConnectionUseCase) Execute(ctx context.Context, txtID string, req domain.S3TestRequest) (*domain.S3TestResult, error) {
 	// Validate client exists
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

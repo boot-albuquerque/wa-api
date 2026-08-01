@@ -11,28 +11,23 @@ import (
 
 // SetProxyUseCase encapsula a validação de configuração de Proxy.
 type SetProxyUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewSetProxyUseCase cria uma nova instância do usecase.
-func NewSetProxyUseCase(cp appport.ClientProvider, l appport.Logger) *SetProxyUseCase {
+func NewSetProxyUseCase(sg appport.SessionGuard, l appport.Logger) *SetProxyUseCase {
 	return &SetProxyUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SetProxyUseCase) Execute(ctx context.Context, txtID string, req domain.ProxyConfigRequest) (*domain.ProxyConfigResult, error) {
 	// Validate client exists
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 

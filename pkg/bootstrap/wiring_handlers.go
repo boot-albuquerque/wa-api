@@ -257,14 +257,14 @@ func initCustomHandlers(s *server) {
 
 	// Storage UseCases
 	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, logger)
-	getS3ConfigUC := storage.NewGetS3ConfigUseCase(clientProvider, logger)
-	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(clientProvider, logger)
+	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, logger)
+	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, logger)
 	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
 	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, logger)
-	getHmacConfigUC := storage.NewGetHmacConfigUseCase(clientProvider, logger)
+	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, logger)
 	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, logger)
-	setProxyUC := storage.NewSetProxyUseCase(clientProvider, logger)
-	setHistoryUC := storage.NewSetHistoryUseCase(clientProvider, logger)
+	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, logger)
+	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, logger)
 	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
 
 	// Storage Handlers

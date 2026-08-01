@@ -11,7 +11,32 @@ linters:
     - unused
     - gocyclo
     - forbidigo
+    - depguard
   settings:
+    # depguard e o mecanismo real da Fase 6: o gate avanca por diretorio, a
+    # medida que cada um para de importar o SDK concreto, e nao recua. A
+    # lista de `files` cresce commit a commit; um diretorio ausente daqui e
+    # um diretorio ainda nao fechado, e isso fica visivel neste arquivo
+    # (ADR-001).
+    depguard:
+      rules:
+        camada-de-aplicacao:
+          files:
+            - "**/pkg/application/usecase/storage/*.go"
+          deny:
+            - pkg: go.mau.fi/whatsmeow
+              desc: >-
+                a camada de aplicacao nao conhece o SDK concreto; consuma uma
+                porta de capacidade de pkg/application/contracts (ADR-001)
+            - pkg: github.com/jmoiron/sqlx
+              desc: >-
+                a camada de aplicacao nao fala com o banco direto; consuma uma
+                porta de persistencia de pkg/application/contracts (ADR-001)
+            - pkg: github.com/rs/zerolog
+              desc: >-
+                a camada de aplicacao loga pela porta appport.Logger, nao pelo
+                zerolog direto
+
     gocyclo:
       min-complexity: 10
     forbidigo:
