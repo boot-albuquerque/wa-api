@@ -15,17 +15,15 @@ import (
 type DeleteUserCompleteUseCase struct {
 	db             *sql.DB
 	clientProvider appport.ClientProvider
-	clientManager  appport.HealthClientProvider
 	logger         appport.Logger
 	exPath         string
 }
 
 // NewDeleteUserCompleteUseCase creates a new instance
-func NewDeleteUserCompleteUseCase(db *sql.DB, cp appport.ClientProvider, cm appport.HealthClientProvider, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
+func NewDeleteUserCompleteUseCase(db *sql.DB, cp appport.ClientProvider, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
 	return &DeleteUserCompleteUseCase{
 		db:             db,
 		clientProvider: cp,
-		clientManager:  cm,
 		logger:         logger,
 		exPath:         exPath,
 	}

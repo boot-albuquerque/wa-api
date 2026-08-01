@@ -221,10 +221,10 @@ func initCustomHandlers(s *server) {
 	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(clientProvider, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
-	healthProvider := whatsmeow.NewHealthClientProviderAdapter(clientManager)
-	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, healthProvider, logger, version)
+	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)
+	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, logger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, logger, s.ExPath)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, logger, s.ExPath)
 	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, logger)
