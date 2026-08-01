@@ -17,8 +17,15 @@ import (
 // SDK.
 type JIDResolver interface {
 	// ResolveJID devolve o JID canônico, ou erro se raw não for um JID
-	// válido.
+	// válido. Aceita telefone sem servidor, aplicando o servidor padrão.
 	ResolveJID(ctx context.Context, raw string) (domain.JID, error)
+
+	// ResolveQualifiedJID exige que raw já traga o servidor explícito. É a
+	// regra estrita que group_request.go aplicava com seu próprio helper
+	// parseJID — mais restrita que ResolveJID, e mantida separada porque
+	// unificá-las passaria a aceitar entradas que aquelas rotas hoje
+	// rejeitam.
+	ResolveQualifiedJID(ctx context.Context, raw string) (domain.JID, error)
 }
 
 // PresenceController expõe as operações de presença — o que a sessão sinaliza

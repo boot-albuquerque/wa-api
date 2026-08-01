@@ -31,6 +31,17 @@ func (JIDResolverAdapter) ResolveJID(_ context.Context, raw string) (domain.JID,
 	return domain.JID(jid.String()), nil
 }
 
+// ResolveQualifiedJID aplica a regra estrita: exige servidor explícito, sem
+// aplicar o padrão. É literalmente o helper parseJID que group_request.go
+// mantinha duplicado.
+func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID, error) {
+	jid, err := types.ParseJID(raw)
+	if err != nil {
+		return "", fmt.Errorf("whatsmeow: could not parse JID %q: %w", raw, err)
+	}
+	return domain.JID(jid.String()), nil
+}
+
 // toJID reconverte um domain.JID para o tipo do SDK. O domain.JID sempre vem
 // de ResolveJID, portanto já está canônico; o vazio mapeia para o JID zero,
 // que é como o upstream representava "sem remetente" em MarkRead.

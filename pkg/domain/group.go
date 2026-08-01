@@ -160,3 +160,24 @@ type SetDisappearingTimerRequest struct {
 type SetDisappearingTimerResult struct {
 	Details string `json:"details"`
 }
+
+// ParticipantAction é a mudança pedida sobre a lista de participantes de um
+// grupo. Os valores são os que o payload já aceitava.
+type ParticipantAction string
+
+const (
+	// ParticipantAdd adiciona participantes ao grupo.
+	ParticipantAdd ParticipantAction = "add"
+	// ParticipantRemove remove participantes do grupo.
+	ParticipantRemove ParticipantAction = "remove"
+)
+
+// RequestAction é o veredito sobre uma solicitação de entrada em grupo.
+type RequestAction string
+
+const (
+	// RequestApprove aprova a solicitação.
+	RequestApprove RequestAction = "approve"
+	// RequestReject rejeita a solicitação.
+	RequestReject RequestAction = "reject"
+)
