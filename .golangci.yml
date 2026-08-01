@@ -1,5 +1,5 @@
-# golangci-lint v2 configuration for disparazaap-wa-api internal/ packages.
-# Only lints our custom code — upstream (package main) is not linted.
+# golangci-lint v2 configuration for wa-api.
+# Lints the whole module: ./... including cmd/ (package main).
 version: "2"
 
 linters:
@@ -10,10 +10,9 @@ linters:
     - staticcheck
     - unused
     - gocyclo
-
-linters-settings:
-  gocyclo:
-    min-complexity: 10
+  settings:
+    gocyclo:
+      min-complexity: 10
 
 formatters:
   enable:

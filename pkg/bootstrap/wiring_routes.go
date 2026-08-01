@@ -137,7 +137,8 @@ func (s *server) registerCustomRoutes(c alice.Chain) {
 		}
 	})), "GET", "POST")
 
-	// Health route via internal handler (no auth chain needed)
+	// Health route via internal handler — behind auth (chain c), unlike the
+	// unauthenticated container liveness probe /livez (router_setup.go).
 	registry.Register("/health", c.Then(http.HandlerFunc(customHandlerSet.Misc.Health.ServeHTTP)), "GET")
 
 	// Legacy URL paths for storage/session — use same internal handlers

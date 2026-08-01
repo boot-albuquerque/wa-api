@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Version pinned deliberately: .golangci-baseline is an absolute issue
+      # count, tied to this exact golangci-lint release. A floating version
+      # would make the count drift with no code change — either a false-red
+      # gate, or a real regression masked by a linter that stopped firing.
+      # Bump this version and .golangci-baseline together, in the same PR.
+      - name: install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.5.0
+          install-mode: binary
+          install-only: true
+
+      - name: golangci-lint config verify
+        run: golangci-lint config verify
+
+      - name: make check
+        run: make check
+
+      - name: baseline nunca sobe
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          prev=$(git show origin/${{ github.base_ref }}:.golangci-baseline 2>/dev/null || echo 999999)
+          curr=$(cat .golangci-baseline)
+          echo "baseline: $prev -> $curr"
+          [ "$curr" -le "$prev" ] || { echo "FALHA: o baseline subiu de $prev para $curr."; exit 1; }
+
+      - name: docker build
+        run: docker build -t wa-api:ci .

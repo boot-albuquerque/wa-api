@@ -80,6 +80,17 @@ func (s *server) routes() {
 	c = c.Append(hlog.RefererHandler("referer"))
 	c = c.Append(hlog.RequestIDHandler("req_id", "Request-Id"))
 
+	// /livez is the container-level liveness probe: no auth, no DB query, no
+	// runtime.ReadMemStats — cheap enough to hit unauthenticated on every
+	// HEALTHCHECK tick without becoming a DoS amplifier. /health (below) stays
+	// behind auth: it fans out to a DB COUNT(*) and ReadMemStats and returns
+	// sizing/version data that must not be public.
+	s.Router.Handle("/livez", alice.New().Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))).Methods("GET")
+
 	// All non-admin routes are now registered via registerCustomRoutes
 	s.registerCustomRoutes(c)
 
