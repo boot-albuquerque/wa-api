@@ -26,11 +26,13 @@ type dynamicRoute struct {
 // staticRouteGroups / dynamicRouteGroups listam as tabelas por grupo. Um grupo
 // novo entra aqui e em nenhum outro lugar.
 var staticRouteGroups = []map[string]staticRoute{
+	miscStaticRoutes,
 	adminStaticRoutes,
 	sessionStaticRoutes,
 	chatStaticRoutes,
 	userStaticRoutes,
 	groupStaticRoutes,
+	webhookStaticRoutes,
 }
 
 var dynamicRouteGroups = []map[string]dynamicRoute{
@@ -78,8 +80,7 @@ func (ss *Server) routeRequest(req *JSONRpcRequest) {
 		ss.executeHTTPHandler(req, route.httpMethod, httpPath)
 		return
 	}
-	// Grupos ainda não migrados para a tabela continuam no switch legado.
-	ss.routeRequestLegacySwitch(req)
+	ss.sendError(req.ID, 404, fmt.Sprintf("unknown method: %s", req.Method))
 }
 
 // stringParam extrai um param string obrigatório, enviando o erro JSON-RPC

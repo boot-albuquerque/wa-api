@@ -188,53 +188,6 @@ func (ss *Server) handleRequest(requestBytes []byte) {
 	ss.routeRequest(&req)
 }
 
-// routeRequestLegacySwitch atende os grupos de métodos que ainda não foram
-// migrados para a tabela de rotas em stdio_routes.go.
-func (ss *Server) routeRequestLegacySwitch(req *JSONRpcRequest) {
-	// Map stdio method to HTTP route and method
-	var httpMethod, httpPath string
-
-	switch req.Method {
-	case "health":
-		httpMethod = "GET"
-		httpPath = "/health"
-
-	// Status
-	case "status.set.text":
-		httpMethod = "POST"
-		httpPath = "/status/set/text"
-
-	// Calls
-	case "call.reject":
-		httpMethod = "POST"
-		httpPath = "/call/reject"
-
-	// Newsletter
-	case "newsletter.list":
-		httpMethod = "GET"
-		httpPath = "/newsletter/list"
-
-	// Webhook management
-	case "webhook.get":
-		httpMethod = "GET"
-		httpPath = "/webhook"
-	case "webhook.set":
-		httpMethod = "POST"
-		httpPath = "/webhook"
-	case "webhook.update":
-		httpMethod = "PUT"
-		httpPath = "/webhook"
-	case "webhook.delete":
-		httpMethod = "DELETE"
-		httpPath = "/webhook"
-
-	default:
-		ss.sendError(req.ID, 404, fmt.Sprintf("unknown method: %s", req.Method))
-		return
-	}
-	ss.executeHTTPHandler(req, httpMethod, httpPath)
-}
-
 // executeHTTPHandler wraps the existing HTTP handler and adapts it for stdio
 func (ss *Server) executeHTTPHandler(req *JSONRpcRequest, httpMethod, httpPath string) {
 	// Create a mock HTTP request
