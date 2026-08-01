@@ -824,13 +824,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		st.dowebhook = 1
 		log.Info().Str("messageID", evt.MessageID).Msg("Media retry event")
 	case *events.GroupInfo:
-		st.postmap["type"] = "GroupInfo"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("Group info updated")
+		mycli.handleGroupInfo(evt, st)
 	case *events.JoinedGroup:
-		st.postmap["type"] = "JoinedGroup"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.JID.String()).Msg("Joined group")
+		mycli.handleJoinedGroup(evt, st)
 	case *events.Picture:
 		st.postmap["type"] = "Picture"
 		st.dowebhook = 1
@@ -888,21 +884,13 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		st.dowebhook = 1
 		log.Info().Str("jid", evt.JID.String()).Msg("Identity changed")
 	case *events.NewsletterJoin:
-		st.postmap["type"] = "NewsletterJoin"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.ID.String()).Msg("Newsletter joined")
+		mycli.handleNewsletterJoin(evt, st)
 	case *events.NewsletterLeave:
-		st.postmap["type"] = "NewsletterLeave"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.ID.String()).Msg("Newsletter left")
+		mycli.handleNewsletterLeave(evt, st)
 	case *events.NewsletterMuteChange:
-		st.postmap["type"] = "NewsletterMuteChange"
-		st.dowebhook = 1
-		log.Info().Str("jid", evt.ID.String()).Msg("Newsletter mute changed")
+		mycli.handleNewsletterMuteChange(evt, st)
 	case *events.NewsletterLiveUpdate:
-		st.postmap["type"] = "NewsletterLiveUpdate"
-		st.dowebhook = 1
-		log.Info().Msg("Newsletter live update")
+		mycli.handleNewsletterLiveUpdate(evt, st)
 	case *events.FBMessage:
 		st.postmap["type"] = "FBMessage"
 		st.dowebhook = 1
