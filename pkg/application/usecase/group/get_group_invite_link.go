@@ -6,20 +6,21 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/whatsmeow"
 )
 
 // GetGroupInviteLinkUseCase encapsula a validação para obter link de convite
 type GetGroupInviteLinkUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	groups appport.GroupDirectory
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewGetGroupInviteLinkUseCase cria uma nova instância do usecase
-func NewGetGroupInviteLinkUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInviteLinkUseCase {
+func NewGetGroupInviteLinkUseCase(gd appport.GroupDirectory, jr appport.JIDResolver, l appport.Logger) *GetGroupInviteLinkUseCase {
 	return &GetGroupInviteLinkUseCase{
-		clientProvider: cp,
-		logger:         l,
+		groups: gd,
+		jids:   jr,
+		logger: l,
 	}
 }
 
@@ -31,24 +32,19 @@ func (uc *GetGroupInviteLinkUseCase) Execute(ctx context.Context, txtID string, 
 	}
 
 	// Parse GroupJID
-	group, ok := whatsmeow.ParseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveJID(ctx, req.GroupJID)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	// Obter cliente whatsmeow
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	// Garantir que há sessão
+	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter link de convite
-	link, err := client.GetGroupInviteLink(ctx, group, false)
+	link, err := uc.groups.GetGroupInviteLink(ctx, txtID, group)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group invite link", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("failed to get group invite link: %v", err)

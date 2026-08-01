@@ -111,6 +111,7 @@ func initCustomHandlers(s *server) {
 	presenceController := whatsmeow.NewPresenceControllerAdapter(clientManager.GetWhatsmeowClient)
 	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
 	jidResolver := whatsmeow.NewJIDResolverAdapter()
+	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
@@ -220,10 +221,10 @@ func initCustomHandlers(s *server) {
 
 	// Group UseCases
 	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, logger)
-	listGroupsUC := group.NewListGroupsUseCase(clientProvider, logger)
-	getGroupInfoUC := group.NewGetGroupInfoUseCase(clientProvider, logger)
-	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(clientProvider, logger)
-	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(clientProvider, logger)
+	listGroupsUC := group.NewListGroupsUseCase(groupAdapter, logger)
+	getGroupInfoUC := group.NewGetGroupInfoUseCase(groupAdapter, jidResolver, logger)
+	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(groupAdapter, jidResolver, logger)
+	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(groupAdapter, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
 	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)

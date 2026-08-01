@@ -6,20 +6,21 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/whatsmeow"
 )
 
 // GetGroupInfoUseCase encapsula a validação para obter informações de grupo
 type GetGroupInfoUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	groups appport.GroupDirectory
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewGetGroupInfoUseCase cria uma nova instância do usecase
-func NewGetGroupInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInfoUseCase {
+func NewGetGroupInfoUseCase(gd appport.GroupDirectory, jr appport.JIDResolver, l appport.Logger) *GetGroupInfoUseCase {
 	return &GetGroupInfoUseCase{
-		clientProvider: cp,
-		logger:         l,
+		groups: gd,
+		jids:   jr,
+		logger: l,
 	}
 }
 
@@ -31,24 +32,19 @@ func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req do
 	}
 
 	// Parse GroupJID
-	group, ok := whatsmeow.ParseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveJID(ctx, req.GroupJID)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	// Obter cliente whatsmeow
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	// Garantir que há sessão
+	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter informações do grupo
-	groupInfo, err := client.GetGroupInfo(ctx, group)
+	groupInfo, err := uc.groups.GetGroupInfo(ctx, txtID, group)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("failed to get group info: %v", err)

@@ -10,15 +10,15 @@ import (
 
 // GetGroupInviteInfoUseCase encapsula a validação para obter informações de convite
 type GetGroupInviteInfoUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	groups appport.GroupDirectory
+	logger appport.Logger
 }
 
 // NewGetGroupInviteInfoUseCase cria uma nova instância do usecase
-func NewGetGroupInviteInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInviteInfoUseCase {
+func NewGetGroupInviteInfoUseCase(gd appport.GroupDirectory, l appport.Logger) *GetGroupInviteInfoUseCase {
 	return &GetGroupInviteInfoUseCase{
-		clientProvider: cp,
-		logger:         l,
+		groups: gd,
+		logger: l,
 	}
 }
 
@@ -29,19 +29,14 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 		return nil, fmt.Errorf("missing Code in payload")
 	}
 
-	// Obter cliente whatsmeow
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error(ctx, "client is nil", "txtID", txtID)
+	// Garantir que há sessão
+	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("no session")
 	}
 
 	// Obter informações do convite
-	inviteInfo, err := client.GetGroupInfoFromLink(ctx, req.Code)
+	inviteInfo, err := uc.groups.GetGroupInfoFromLink(ctx, txtID, req.Code)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group invite info", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("failed to get group invite info: %v", err)
