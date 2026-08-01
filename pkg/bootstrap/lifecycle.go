@@ -146,7 +146,12 @@ var parseJID = client.ParseJID
 var getPlatformTypeEnum = client.GetPlatformTypeEnum
 
 func (s *server) startClient(userID string, textjid string, token string, kill chan bool) {
-	log.Info().Str("userid", userID).Str("jid", textjid).Msg("Starting websocket connection to Whatsapp")
+	log.Info().Str("userid", userID).Str("jid", textjid).Msg("[startClient] ENTRY - Starting WhatsApp WebSocket")
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Str("userid", userID).Interface("panic", r).Msg("[startClient] PANIC caught")
+		}
+	}()
 
 	// Connection retry constants
 	const maxConnectionRetries = 3

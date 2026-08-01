@@ -9,6 +9,8 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
+	"github.com/rs/zerolog/log"
+
 	"wa-api/pkg/application/usecase/session"
 )
 
@@ -36,8 +38,10 @@ func (h *ConnectHandler) WithStartClient(fn func(userID, jid, token string, kill
 
 func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r); if !ok { return }
+	log.Info().Str("handler", "Connect").Str("id", id).Msg("ConnectHandler called")
 	_, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
-	if err != nil { customhttp.RespondJSON(w, 500, nil, err); return }
+	if err != nil { log.Error().Err(err).Str("id", id).Msg("Connect usecase failed"); customhttp.RespondJSON(w, 500, nil, err); return }
+	log.Info().Str("id", id).Bool("hasStartClient", h.StartClient != nil).Msg("ConnectHandler starting WhatsApp client")
 	// Fire-and-forget: start WhatsApp client in background (QR code appears in terminal)
 	if h.StartClient != nil {
 		kill := make(chan bool, 1)
