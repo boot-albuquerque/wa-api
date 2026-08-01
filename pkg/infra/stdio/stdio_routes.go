@@ -30,6 +30,7 @@ var staticRouteGroups = []map[string]staticRoute{
 	sessionStaticRoutes,
 	chatStaticRoutes,
 	userStaticRoutes,
+	groupStaticRoutes,
 }
 
 var dynamicRouteGroups = []map[string]dynamicRoute{

@@ -209,53 +209,6 @@ func (ss *Server) routeRequestLegacySwitch(req *JSONRpcRequest) {
 		httpMethod = "POST"
 		httpPath = "/call/reject"
 
-	// Group management
-	case "group.list":
-		httpMethod = "GET"
-		httpPath = "/group/list"
-	case "group.create":
-		httpMethod = "POST"
-		httpPath = "/group/create"
-	case "group.info":
-		httpMethod = "GET"
-		httpPath = "/group/info"
-	case "group.invitelink":
-		httpMethod = "GET"
-		httpPath = "/group/invitelink"
-	case "group.photo":
-		httpMethod = "POST"
-		httpPath = "/group/photo"
-	case "group.photo.remove":
-		httpMethod = "POST"
-		httpPath = "/group/photo/remove"
-	case "group.leave":
-		httpMethod = "POST"
-		httpPath = "/group/leave"
-	case "group.name":
-		httpMethod = "POST"
-		httpPath = "/group/name"
-	case "group.topic":
-		httpMethod = "POST"
-		httpPath = "/group/topic"
-	case "group.announce":
-		httpMethod = "POST"
-		httpPath = "/group/announce"
-	case "group.locked":
-		httpMethod = "POST"
-		httpPath = "/group/locked"
-	case "group.ephemeral":
-		httpMethod = "POST"
-		httpPath = "/group/ephemeral"
-	case "group.join":
-		httpMethod = "POST"
-		httpPath = "/group/join"
-	case "group.inviteinfo":
-		httpMethod = "POST"
-		httpPath = "/group/inviteinfo"
-	case "group.updateparticipants":
-		httpMethod = "POST"
-		httpPath = "/group/updateparticipants"
-
 	// Newsletter
 	case "newsletter.list":
 		httpMethod = "GET"
