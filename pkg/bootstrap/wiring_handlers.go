@@ -107,6 +107,7 @@ var customHandlerSet = &customHandlers{}
 func initCustomHandlers(s *server) {
 	// Adapters
 	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
+	messageComposer := whatsmeow.NewMessageComposerAdapter(clientManager.GetWhatsmeowClient)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
@@ -129,12 +130,12 @@ func initCustomHandlers(s *server) {
 	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
 
 	// Message UseCases
-	sendMessageUC := message.NewSendMessageUseCase(clientProvider, logger)
-	sendImageUC := message.NewSendImageUseCase(clientProvider, logger)
-	sendDocumentUC := message.NewSendDocumentUseCase(clientProvider, logger)
-	sendAudioUC := message.NewSendAudioUseCase(clientProvider, logger)
+	sendMessageUC := message.NewSendMessageUseCase(messageComposer, logger)
+	sendImageUC := message.NewSendImageUseCase(messageComposer, logger)
+	sendDocumentUC := message.NewSendDocumentUseCase(messageComposer, logger)
+	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
 	sendStickerUC := message.NewSendStickerUseCase(clientProvider, logger)
-	sendVideoUC := message.NewSendVideoUseCase(clientProvider, logger)
+	sendVideoUC := message.NewSendVideoUseCase(messageComposer, logger)
 	sendContactUC := message.NewSendContactUseCase(clientProvider, logger)
 	sendLocationUC := message.NewSendLocationUseCase(clientProvider, logger)
 	sendButtonsUC := message.NewSendButtonsUseCase(clientProvider, logger)

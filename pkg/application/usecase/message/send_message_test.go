@@ -7,17 +7,25 @@ import (
 
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow"
 )
 
-type mockSendClientProvider struct {
-	client *whatsmeow.Client
-	err    error
+// mockComposer é a fake de appport.MessageComposer. Antes da ADR-001 ela
+// tinha que produzir um cliente concreto do SDK para que o use case pudesse
+// chamar GenerateMessageID() nele; agora declara apenas as duas capacidades
+// que o use case de fato exerce.
+type mockComposer struct {
+	err error
 }
 
-func (m *mockSendClientProvider) GetWhatsmeowClient(ctx context.Context, txtID string) (*whatsmeow.Client, error) {
-	return m.client, m.err
+func (m *mockComposer) EnsureSession(context.Context, string) error {
+	return m.err
+}
+
+func (m *mockComposer) NewMessageID(context.Context, string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "generated-message-id", nil
 }
 
 type sendMockLogger struct {
@@ -35,7 +43,7 @@ func (m *sendMockLogger) Error(_ context.Context, msg string, keyvals ...any) {
 }
 
 func TestSendMessageUseCase_Execute_NoClient(t *testing.T) {
-	provider := &mockSendClientProvider{client: nil, err: nil}
+	provider := &mockComposer{err: errors.New("no session")}
 	logger := &sendMockLogger{}
 	uc := message.NewSendMessageUseCase(provider, logger)
 
@@ -49,7 +57,7 @@ func TestSendMessageUseCase_Execute_NoClient(t *testing.T) {
 }
 
 func TestSendMessageUseCase_Execute_ProviderError(t *testing.T) {
-	provider := &mockSendClientProvider{client: nil, err: errors.New("db error")}
+	provider := &mockComposer{err: errors.New("db error")}
 	logger := &sendMockLogger{}
 	uc := message.NewSendMessageUseCase(provider, logger)
 
@@ -63,7 +71,7 @@ func TestSendMessageUseCase_Execute_ProviderError(t *testing.T) {
 }
 
 func TestSendMessageUseCase_Execute_Success(t *testing.T) {
-	provider := &mockSendClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockComposer{}
 	logger := &sendMockLogger{}
 	uc := message.NewSendMessageUseCase(provider, logger)
 
@@ -83,7 +91,7 @@ func TestSendMessageUseCase_Execute_Success(t *testing.T) {
 }
 
 func TestSendMessageUseCase_Execute_EmptyPhone(t *testing.T) {
-	provider := &mockSendClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockComposer{}
 	logger := &sendMockLogger{}
 	uc := message.NewSendMessageUseCase(provider, logger)
 
@@ -97,7 +105,7 @@ func TestSendMessageUseCase_Execute_EmptyPhone(t *testing.T) {
 }
 
 func TestSendMessageUseCase_Execute_EmptyBody(t *testing.T) {
-	provider := &mockSendClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockComposer{}
 	logger := &sendMockLogger{}
 	uc := message.NewSendMessageUseCase(provider, logger)
 
@@ -111,7 +119,7 @@ func TestSendMessageUseCase_Execute_EmptyBody(t *testing.T) {
 }
 
 func TestSendImageUseCase_Execute_Success(t *testing.T) {
-	provider := &mockSendClientProvider{client: &whatsmeow.Client{}}
+	provider := &mockComposer{}
 	logger := &sendMockLogger{}
 	uc := message.NewSendImageUseCase(provider, logger)
 
@@ -128,7 +136,7 @@ func TestSendImageUseCase_Execute_Success(t *testing.T) {
 }
 
 func TestSendImageUseCase_Execute_NoClient(t *testing.T) {
-	provider := &mockSendClientProvider{client: nil, err: nil}
+	provider := &mockComposer{err: errors.New("no session")}
 	logger := &sendMockLogger{}
 	uc := message.NewSendImageUseCase(provider, logger)
 

@@ -11,7 +11,7 @@ import (
 //
 // Substitui a antiga HealthClientProvider, que devolvia o tipo concreto do
 // SDK (IterateWhatsmeowClients(func(*whatsmeow.Client) bool)) e portanto
-// obrigava o use case de health a importar go.mau.fi/whatsmeow só para
+// obrigava o use case de health a importar o SDK concreto só para
 // perguntar "quantas sessões estão conectadas?" — uma pergunta que é
 // inteiramente de domínio. Ver ADR-001.
 type SessionCounter interface {
