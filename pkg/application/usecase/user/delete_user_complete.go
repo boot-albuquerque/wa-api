@@ -13,19 +13,19 @@ import (
 
 // DeleteUserCompleteUseCase completely deletes a user
 type DeleteUserCompleteUseCase struct {
-	db             *sql.DB
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
-	exPath         string
+	db       *sql.DB
+	sessions appport.SessionController
+	logger   appport.Logger
+	exPath   string
 }
 
 // NewDeleteUserCompleteUseCase creates a new instance
-func NewDeleteUserCompleteUseCase(db *sql.DB, cp appport.ClientProvider, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
+func NewDeleteUserCompleteUseCase(db *sql.DB, sc appport.SessionController, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
 	return &DeleteUserCompleteUseCase{
-		db:             db,
-		clientProvider: cp,
-		logger:         logger,
-		exPath:         exPath,
+		db:       db,
+		sessions: sc,
+		logger:   logger,
+		exPath:   exPath,
 	}
 }
 
@@ -54,15 +54,15 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 		// Continue anyway since we have the ID
 	}
 
-	// 1. Logout and disconnect instance via port (simulated through clientProvider)
-	client, _ := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if client != nil {
-		if client.IsConnected() {
+	// 1. Logout and disconnect instance via port
+	if err := uc.sessions.EnsureSession(ctx, userID); err == nil {
+		connected, _ := uc.sessions.SessionStatus(ctx, userID)
+		if connected {
 			uc.logger.Info(ctx, "Logging out user", "user_id", userID)
-			_ = client.Logout(context.Background())
+			_ = uc.sessions.Logout(ctx, userID)
 		}
 		uc.logger.Info(ctx, "Disconnecting from WhatsApp", "user_id", userID)
-		client.Disconnect()
+		_ = uc.sessions.Disconnect(ctx, userID)
 	}
 
 	// 2. Query S3 config before deleting the user

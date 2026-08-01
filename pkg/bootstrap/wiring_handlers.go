@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/whatsmeow"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
@@ -15,33 +16,6 @@ import (
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/application/usecase/user"
 )
-
-// ClientManagerAdapterImpl adapta o ClientManager global para a interface ClientManagerAdapter.
-// Accepts the ClientLookup interface so both *main.ClientManager (root) and
-// *whatsmeow.ClientManager satisfy it without a concrete-type dependency.
-type ClientManagerAdapterImpl struct {
-	cm whatsmeow.ClientLookup
-}
-
-func (a *ClientManagerAdapterImpl) GetWhatsmeowClient(id string) interface{} {
-	return a.cm.GetWhatsmeowClient(id)
-}
-
-func (a *ClientManagerAdapterImpl) IsConnected(id string) bool {
-	client := a.cm.GetWhatsmeowClient(id)
-	if client == nil {
-		return false
-	}
-	return client.IsConnected()
-}
-
-func (a *ClientManagerAdapterImpl) IsLoggedIn(id string) bool {
-	client := a.cm.GetWhatsmeowClient(id)
-	if client == nil {
-		return false
-	}
-	return client.IsLoggedIn()
-}
 
 // MessageHandlers agrupa os handlers de mensagem.
 type MessageHandlers struct {
@@ -104,7 +78,6 @@ var customHandlerSet = &customHandlers{}
 // customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
 	messageComposer := whatsmeow.NewMessageComposerAdapter(clientManager.GetWhatsmeowClient)
 	presenceController := whatsmeow.NewPresenceControllerAdapter(clientManager.GetWhatsmeowClient)
 	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
@@ -112,6 +85,7 @@ func initCustomHandlers(s *server) {
 	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
 	miscAdapter := whatsmeow.NewMiscAdapter(clientManager.GetWhatsmeowClient)
 	userAdapter := whatsmeow.NewUserAdapter(clientManager.GetWhatsmeowClient)
+	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
@@ -189,11 +163,10 @@ func initCustomHandlers(s *server) {
 	}
 
 	// User UseCases
-	cmAdapter := &ClientManagerAdapterImpl{cm: clientManager}
-	listUsersUC := user.NewListUsersUseCase(s.DB, logger, cmAdapter)
-	addUserUC := user.NewAddUserUseCase(s.DB, logger)
-	editUserUC := user.NewEditUserUseCase(s.DB, logger)
-	deleteUserUC := user.NewDeleteUserUseCase(s.DB, logger)
+	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
+	addUserUC := user.NewAddUserUseCase(userRepo, logger)
+	editUserUC := user.NewEditUserUseCase(userRepo, logger)
+	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
@@ -225,7 +198,7 @@ func initCustomHandlers(s *server) {
 	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, logger, s.ExPath)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
 	rejectCallUC := misc.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)

@@ -1,4 +1,15 @@
-package user
+package db_test
+
+// Testes de integração dos use cases de user/ contra um banco real.
+//
+// Vieram de pkg/application/usecase/user/add_user_token_test.go. Mudaram de
+// lugar, não de conteúdo: a partir da Fase 6 os use cases não recebem mais
+// *sqlx.DB — recebem appport.UserRepository — e um teste que abre um sqlite
+// de verdade passa a ser teste do adapter de persistência. Manter o arquivo
+// na camada de aplicação exigiria abrir uma exceção de depguard para
+// jmoiron/sqlx exatamente no diretório que a fase acabou de fechar.
+//
+// Todas as asserções são as de antes, inclusive o controle de TOCTOU.
 
 import (
 	"context"
@@ -7,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
 	dbpkg "wa-api/pkg/infra/db"
 
@@ -39,7 +51,7 @@ func newUserTestDB(t *testing.T) *sqlx.DB {
 
 func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := NewAddUserUseCase(db, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
 	ctx := context.Background()
 
 	if _, err := uc.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "shared"}); err != nil {
@@ -47,8 +59,8 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	}
 
 	_, err := uc.Execute(ctx, domain.AddUserRequest{Name: "mallory", Token: "shared"})
-	if !errors.Is(err, ErrDuplicateToken) {
-		t.Fatalf("second add error = %v, want ErrDuplicateToken", err)
+	if !errors.Is(err, user.ErrDuplicateToken) {
+		t.Fatalf("second add error = %v, want user.ErrDuplicateToken", err)
 	}
 
 	var count int
@@ -65,7 +77,7 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 // requisições simultâneas com o mesmo token passavam ambas pela checagem.
 func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := NewAddUserUseCase(db, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
 
 	const attempts = 8
 	var wg sync.WaitGroup
@@ -102,7 +114,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 
 func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := NewAddUserUseCase(db, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
 
 	resp, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 	if err != nil {
@@ -121,7 +133,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
-	add := NewAddUserUseCase(db, discardLogger{})
+	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
 
 	if _, err := add.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "alice-token"}); err != nil {
 		t.Fatalf("add alice: %v", err)
@@ -131,10 +143,10 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 		t.Fatalf("add bob: %v", err)
 	}
 
-	edit := NewEditUserUseCase(db, discardLogger{})
+	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
 	err = edit.Execute(ctx, domain.EditUserRequest{UserID: bob.ID, Token: "alice-token"})
-	if !errors.Is(err, ErrDuplicateToken) {
-		t.Fatalf("edit error = %v, want ErrDuplicateToken", err)
+	if !errors.Is(err, user.ErrDuplicateToken) {
+		t.Fatalf("edit error = %v, want user.ErrDuplicateToken", err)
 	}
 
 	var stillBob string
@@ -150,13 +162,13 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	created, err := NewAddUserUseCase(db, discardLogger{}).
+	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{}).
 		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "old-token"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
-	if err := NewEditUserUseCase(db, discardLogger{}).
+	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), discardLogger{}).
 		Execute(ctx, domain.EditUserRequest{UserID: created.ID, Token: "new-token"}); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
@@ -174,12 +186,12 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	if _, err := NewAddUserUseCase(db, discardLogger{}).
+	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), discardLogger{}).
 		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "secret-token"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
-	users, err := NewListUsersUseCase(db, discardLogger{}, stubClientManager{}).
+	users, err := user.NewListUsersUseCase(dbpkg.NewUserRepository(db), discardLogger{}, stubSessionStatus{}).
 		Execute(ctx, domain.ListUsersRequest{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -192,8 +204,8 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	}
 }
 
-type stubClientManager struct{}
+// stubSessionStatus reporta sempre "sem sessão". Antes da ADR-001 a fake
+// equivalente precisava de três métodos, um deles devolvendo interface{}.
+type stubSessionStatus struct{}
 
-func (stubClientManager) GetWhatsmeowClient(string) interface{} { return nil }
-func (stubClientManager) IsConnected(string) bool               { return false }
-func (stubClientManager) IsLoggedIn(string) bool                { return false }
+func (stubSessionStatus) SessionStatus(context.Context, string) (bool, bool) { return false, false }

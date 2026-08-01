@@ -28,6 +28,8 @@ linters:
             - "**/pkg/application/usecase/notification/*.go"
             - "**/pkg/application/usecase/session/*.go"
             - "**/pkg/application/usecase/storage/*.go"
+            - "**/pkg/application/usecase/user/*.go"
+            - "**/pkg/application/contracts/*.go"
           deny:
             - pkg: go.mau.fi/whatsmeow
               desc: >-

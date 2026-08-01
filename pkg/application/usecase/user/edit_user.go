@@ -2,26 +2,24 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/storage"
-
-	"github.com/jmoiron/sqlx"
 )
 
 // EditUserUseCase edita um usuário existente
 type EditUserUseCase struct {
-	db     *sqlx.DB
+	users  appport.UserRepository
 	logger appport.Logger
 }
 
 // NewEditUserUseCase cria uma nova instância
-func NewEditUserUseCase(db *sqlx.DB, logger appport.Logger) *EditUserUseCase {
-	return &EditUserUseCase{db: db, logger: logger}
+func NewEditUserUseCase(users appport.UserRepository, logger appport.Logger) *EditUserUseCase {
+	return &EditUserUseCase{users: users, logger: logger}
 }
 
 // Execute edita um usuário
@@ -31,11 +29,11 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	}
 
 	// Check if user exists
-	var count int
-	if err := uc.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE id = $1", req.UserID); err != nil {
+	exists, err := uc.users.UserExists(ctx, req.UserID)
+	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	if count == 0 {
+	if !exists {
 		return fmt.Errorf("user not found")
 	}
 
@@ -53,76 +51,45 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		}
 	}
 
-	// Build dynamic UPDATE query
-	query := "UPDATE users SET "
-	args := []interface{}{}
-	argIndex := 1
-
-	// Helper to add field
-	addField := func(fieldName string, value interface{}, condition bool) {
-		if condition {
-			if argIndex > 1 {
-				query += ", "
-			}
-			query += fieldName + " = $" + strconv.Itoa(argIndex)
-			args = append(args, value)
-			argIndex++
-		}
+	// Quais campos mudam é decisão do use case; como isso vira uma instrução
+	// SQL é do adapter. Ponteiro nil significa "não informado".
+	upd := domain.UserUpdate{}
+	if req.Name != "" {
+		upd.Name = &req.Name
 	}
-
-	// Add fields to update
-	addField("name", req.Name, req.Name != "")
-	addField("token", req.Token, req.Token != "")
-	addField("token_hash", domain.HashToken(req.Token), req.Token != "")
-	addField("webhook", req.Webhook, req.Webhook != "")
-	addField("expiration", req.Expiration, req.Expiration != 0)
-	addField("events", req.Events, req.Events != "")
-	addField("history", req.History, req.History != 0)
-
-	// Handle proxy config
+	if req.Token != "" {
+		upd.Token = &req.Token
+	}
+	if req.Webhook != "" {
+		upd.Webhook = &req.Webhook
+	}
+	if req.Expiration != 0 {
+		upd.Expiration = &req.Expiration
+	}
+	if req.Events != "" {
+		upd.Events = &req.Events
+	}
+	if req.History != 0 {
+		upd.History = &req.History
+	}
 	if req.ProxyConfig != nil {
+		proxyURL := ""
 		if req.ProxyConfig.Enabled {
-			addField("proxy_url", req.ProxyConfig.ProxyURL, true)
-		} else {
-			addField("proxy_url", "", true)
+			proxyURL = req.ProxyConfig.ProxyURL
 		}
-		if req.ProxyConfig.WebhookUseProxy != nil {
-			addField("webhook_use_proxy", *req.ProxyConfig.WebhookUseProxy, true)
-		}
+		upd.ProxyURL = &proxyURL
+		upd.WebhookUseProxy = req.ProxyConfig.WebhookUseProxy
 	}
-
-	// Handle S3 config
 	if req.S3Config != nil {
-		addField("s3_enabled", req.S3Config.Enabled, true)
-		addField("s3_endpoint", req.S3Config.Endpoint, true)
-		addField("s3_region", req.S3Config.Region, true)
-		addField("s3_bucket", req.S3Config.Bucket, true)
-		addField("s3_access_key", req.S3Config.AccessKey, true)
-		addField("s3_secret_key", req.S3Config.SecretKey, true)
-		addField("s3_path_style", req.S3Config.PathStyle, true)
-		addField("s3_public_url", req.S3Config.PublicURL, true)
-		addField("media_delivery", req.S3Config.MediaDelivery, true)
-		addField("s3_retention_days", req.S3Config.RetentionDays, true)
+		upd.S3 = req.S3Config
 	}
 
-	// If no fields to update
-	if argIndex == 1 {
-		return fmt.Errorf("no fields to update")
-	}
-
-	// Add WHERE clause
-	query += " WHERE id = $" + strconv.Itoa(argIndex)
-	args = append(args, req.UserID)
-
-	// Execute update
-	// Antes desta fase não havia checagem nenhuma de duplicidade aqui: trocar o
-	// token de um usuário para o token de outro passava silenciosamente. Quem
-	// rejeita agora é o índice UNIQUE de token_hash; o papel deste bloco é
-	// traduzir o erro do driver antes que ele vaze para o cliente HTTP.
-	_, err := uc.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		if isUniqueViolation(err) {
+	if err := uc.users.UpdateUser(ctx, req.UserID, upd); err != nil {
+		if errors.Is(err, ErrDuplicateToken) {
 			return ErrDuplicateToken
+		}
+		if errors.Is(err, domain.ErrNoFieldsToUpdate) {
+			return err
 		}
 		uc.logger.Error(ctx, "Failed to update user", "error", err)
 		return fmt.Errorf("database error: %w", err)
