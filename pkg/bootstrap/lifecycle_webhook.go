@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -87,7 +88,7 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 	} else {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
-			if arg != "" && Find(supportedEventTypes, arg) {
+			if arg != "" && slices.Contains(supportedEventTypes, arg) {
 				subscribedEvents = append(subscribedEvents, arg)
 			}
 		}

@@ -7,7 +7,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"wa-api/pkg/infra/auth"
-	"wa-api/pkg/infra/helpers"
 	"wa-api/pkg/infra/storage"
 )
 
@@ -17,8 +16,6 @@ type ProxyConfig struct {
 	ProxyURL        string `json:"proxyURL"`
 	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
 }
-
-var Find = helpers.Find
 
 // Update entry in User map
 func updateUserInfo(values interface{}, field string, value string) interface{} {

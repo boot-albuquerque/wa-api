@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"slices"
+
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/whatsmeow"
 	customhttp "wa-api/pkg/presentation/http"
@@ -152,7 +154,7 @@ func initCustomHandlers(s *server) {
 		DB:              s.DB,
 		UserCache:       userinfocache,
 		SupportedEvents: supportedEventTypes,
-		FindInSlice:     Find,
+		FindInSlice:     slices.Contains[[]string, string],
 		UpdateUserInfo:  updateUserInfo,
 	}
 	webhookHandlers := &WebhookHandlers{

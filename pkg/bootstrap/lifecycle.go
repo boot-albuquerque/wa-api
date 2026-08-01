@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -67,7 +68,7 @@ var safeGo = wmhelpers.SafeGo
 // Webhook functions extracted to lifecycle_webhook.go
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
-	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
+	if !slices.Contains(subscribedEvents, eventType) && !slices.Contains(subscribedEvents, "All") {
 		log.Warn().
 			Str("type", eventType).
 			Strs("subscribedEvents", subscribedEvents).
@@ -135,11 +136,11 @@ func (s *server) connectOnStartup() {
 				subscribedEvents = []string{}
 			} else {
 				for _, arg := range eventarray {
-					if !Find(supportedEventTypes, arg) {
+					if !slices.Contains(supportedEventTypes, arg) {
 						log.Warn().Str("Type", arg).Msg("Event type discarded")
 						continue
 					}
-					if !Find(subscribedEvents, arg) {
+					if !slices.Contains(subscribedEvents, arg) {
 						subscribedEvents = append(subscribedEvents, arg)
 					}
 				}
