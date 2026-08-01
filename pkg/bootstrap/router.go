@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,7 +13,10 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	appport "wa-api/pkg/application/contracts"
+	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Deps is everything NewRouter/Routes need to build the router: no CLI
@@ -118,8 +122,33 @@ func emptyCustomHandlers() *customHandlers {
 	}
 }
 
+// recoverMiddleware is the outermost middleware on the router: it must run
+// before authAlice/authAdmin, because both have a panic reachable inside
+// them (middleware/auth.go's RespondJSON panics on encode failure, and
+// AuthAlice.db.Query panics if Deps.DB carries a nil *sql.DB). A recover
+// appended after auth would not cover either. Registered via router.Use,
+// not alice.Chain, specifically so it wraps admin routes too (their own
+// middleware is mux.Router.Use(authAdmin(...)) on a subrouter, not part of
+// the alice chain `c` below).
+func recoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Error().
+					Interface("panic", rec).
+					Str("method", r.Method).
+					Stringer("url", r.URL).
+					Msg("recovered from panic in HTTP handler")
+				customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("panic: %v", rec))
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func buildRouter(d Deps) *mux.Router {
 	router := mux.NewRouter()
+	router.Use(recoverMiddleware)
 
 	// Admin routes — authAdmin middleware validates the admin token.
 	adminRoutes := router.PathPrefix("/admin").Subrouter()
@@ -131,8 +160,6 @@ func buildRouter(d Deps) *mux.Router {
 	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.DeleteUser()).Methods("DELETE")
 	adminRoutes.Handle("/users/{id}/full", d.CustomHandlers.Misc.DeleteUserComplete).Methods("DELETE")
 
-	// recover is the outermost middleware (F4a wires the actual recover
-	// handler; the chain order is asserted there). Auth, then logging.
 	c := alice.New()
 	c = c.Append(authAlice(d.DB.DB, d.UserCache))
 	c = c.Append(hlog.NewHandler(d.Log))
