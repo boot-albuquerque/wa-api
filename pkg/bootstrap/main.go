@@ -48,6 +48,31 @@ type server struct {
 
 const version = Version
 
+// resolveLogLevel traduz o valor de -loglevel para o nivel global do zerolog,
+// e diz se ele foi reconhecido. Comportamento identico ao bloco que vivia
+// inline em Main(); virou funcao para que a correcao da Fase 4b passe a ter
+// teste, que era o unico jeito de torna-la permanente.
+//
+// Ate esta regra existir, nao havia SetGlobalLevel em lugar nenhum do repo, e
+// o default implicito do zerolog (TraceLevel) mandava todo Debug para
+// producao — a causa raiz do desequilibrio Debug-vs-Error da auditoria da
+// Fase 4b.
+//
+// O detalhe nao-obvio: zerolog.ParseLevel("") devolve NoLevel com erro NIL.
+// Tratar so o erro deixaria o valor vazio DESLIGAR a filtragem inteira —
+// exatamente o defeito que esta regra existe para consertar. Por isso o vazio
+// cai no fallback junto com o valor invalido.
+func resolveLogLevel(raw string) (zerolog.Level, bool) {
+	if raw == "" {
+		return zerolog.InfoLevel, false
+	}
+	lvl, err := zerolog.ParseLevel(strings.ToLower(raw))
+	if err != nil {
+		return zerolog.InfoLevel, false
+	}
+	return lvl, true
+}
+
 // killchannel helpers now delegate to appCtx.KillChannel (internal/app).
 // The raw sync.Mutex and map have been migrated to KillChannel struct.
 func Main() {
@@ -173,18 +198,12 @@ func Main() {
 			Logger()
 	}
 
-	// Global log level. Until this call existed, zerolog's implicit default
-	// (TraceLevel) meant every Debug statement shipped to production — the
-	// root cause of the Debug-vs-Error volume skew in the Fase 4b audit.
-	// ParseLevel("") returns NoLevel with a nil error — which would disable
-	// filtering entirely, the exact bug this block fixes — so an empty value
-	// takes the fallback branch alongside a genuine parse failure.
-	if lvl, err := zerolog.ParseLevel(strings.ToLower(*logLevel)); err != nil || *logLevel == "" {
+	// Global log level. Ver resolveLogLevel para a regra e o porquê dela.
+	lvl, recognized := resolveLogLevel(*logLevel)
+	if !recognized {
 		log.Warn().Str("loglevel", *logLevel).Msg("Unrecognized log level, falling back to info")
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	} else {
-		zerolog.SetGlobalLevel(lvl)
 	}
+	zerolog.SetGlobalLevel(lvl)
 
 	// Setup timezone (after logger is configured)
 	tz := os.Getenv("TZ")
