@@ -188,18 +188,9 @@ func (ss *Server) handleRequest(requestBytes []byte) {
 	ss.routeRequest(&req)
 }
 
-// routeRequest dispatches the request to the appropriate HTTP handler
-// getUserIdParam extracts and validates userId from request params
-func (ss *Server) getUserIdParam(req *JSONRpcRequest) (string, bool) {
-	userId, ok := req.Params["userId"].(string)
-	if !ok || userId == "" {
-		ss.sendError(req.ID, 400, "missing or invalid userId parameter")
-		return "", false
-	}
-	return userId, true
-}
-
-func (ss *Server) routeRequest(req *JSONRpcRequest) {
+// routeRequestLegacySwitch atende os grupos de métodos que ainda não foram
+// migrados para a tabela de rotas em stdio_routes.go.
+func (ss *Server) routeRequestLegacySwitch(req *JSONRpcRequest) {
 	// Map stdio method to HTTP route and method
 	var httpMethod, httpPath string
 
@@ -207,46 +198,6 @@ func (ss *Server) routeRequest(req *JSONRpcRequest) {
 	case "health":
 		httpMethod = "GET"
 		httpPath = "/health"
-
-	// Admin user management
-	case "admin.users.add":
-		httpMethod = "POST"
-		httpPath = "/admin/users"
-	case "admin.users.list":
-		httpMethod = "GET"
-		httpPath = "/admin/users"
-	case "admin.users.get":
-		httpMethod = "GET"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.delete":
-		httpMethod = "DELETE"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.edit":
-		httpMethod = "PUT"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.delete.full":
-		httpMethod = "DELETE"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId + "/full"
 
 	// Session management
 	case "session.connect":
