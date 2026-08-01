@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 
+	"wa-api/pkg/domain"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
@@ -23,10 +25,21 @@ func ValidateAdminToken(authHeader, adminToken string) bool {
 }
 
 // ExtractToken extrai o token do header ou query parameter.
+//
+// A query string continua aceita nesta release para não quebrar clientes que
+// dependem dela, mas cada uso emite WARN identificando o chamador. A remoção é
+// a release seguinte. O token nunca é logado — só quem o mandou e para onde.
 func ExtractToken(r *http.Request) string {
-	token := r.Header.Get("token")
-	if token == "" {
-		token = strings.Join(r.URL.Query()["token"], "")
+	if token := r.Header.Get("token"); token != "" {
+		return token
+	}
+	token := strings.Join(r.URL.Query()["token"], "")
+	if token != "" {
+		log.Warn().
+			Str("remote_addr", r.RemoteAddr).
+			Str("path", r.URL.Path).
+			Str("user_agent", r.UserAgent()).
+			Msg("token received via query string; deprecated, will be rejected in a future release")
 	}
 	return token
 }
@@ -52,9 +65,9 @@ func LookupUser(db *sql.DB, token string) (*UserRecord, error) {
 		hmac_key IS NOT NULL AND length(hmac_key) > 0,
 		CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,
 		COALESCE(media_delivery, 'base64')
-		FROM users WHERE token = $1 LIMIT 1`
+		FROM users WHERE token = $1 OR token_hash = $2 LIMIT 1`
 
-	rows, err := db.Query(query, token)
+	rows, err := db.Query(query, token, domain.HashToken(token))
 	if err != nil {
 		return nil, fmt.Errorf("db query: %w", err)
 	}

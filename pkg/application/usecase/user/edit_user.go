@@ -73,6 +73,7 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	// Add fields to update
 	addField("name", req.Name, req.Name != "")
 	addField("token", req.Token, req.Token != "")
+	addField("token_hash", domain.HashToken(req.Token), req.Token != "")
 	addField("webhook", req.Webhook, req.Webhook != "")
 	addField("expiration", req.Expiration, req.Expiration != 0)
 	addField("events", req.Events, req.Events != "")
@@ -114,8 +115,15 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	args = append(args, req.UserID)
 
 	// Execute update
+	// Antes desta fase não havia checagem nenhuma de duplicidade aqui: trocar o
+	// token de um usuário para o token de outro passava silenciosamente. Quem
+	// rejeita agora é o índice UNIQUE de token_hash; o papel deste bloco é
+	// traduzir o erro do driver antes que ele vaze para o cliente HTTP.
 	_, err := uc.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrDuplicateToken
+		}
 		uc.logger.Error(ctx, "Failed to update user", "error", err)
 		return fmt.Errorf("database error: %w", err)
 	}

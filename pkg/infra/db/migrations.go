@@ -3,7 +3,10 @@ package db
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+
+	"wa-api/pkg/domain"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -79,7 +82,24 @@ var migrations = []Migration{
 		Name:  "add_webhook_use_proxy",
 		UpSQL: addWebhookUseProxySQL,
 	},
+	{
+		ID:   11,
+		Name: "add_token_hash",
+		// UpSQL fica vazio de propósito: esta migração precisa calcular
+		// SHA-256 em Go (Postgres exige pgcrypto e o driver SQLite não expõe
+		// sha256 nenhum), então applyMigration a roteia para
+		// applyTokenHashMigration em vez de tx.Exec(UpSQL).
+		DownSQL: addTokenHashDownSQL,
+	},
 }
+
+// addTokenHashDownSQL desfaz a migração 11. Primeiro DownSQL preenchido no
+// repositório: o runner ainda não executa down steps (dados/F1), mas sem o SQL
+// escrito o rollback teria que ser reconstruído sob pressão em incidente.
+const addTokenHashDownSQL = `
+DROP INDEX IF EXISTS idx_users_token_hash;
+ALTER TABLE users DROP COLUMN token_hash;
+`
 
 const changeIDToStringSQL = `
 -- Migration to change ID from integer to random string
@@ -488,6 +508,8 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}
+	} else if migration.ID == 11 {
+		err = applyTokenHashMigration(tx, db.DriverName())
 	} else {
 		_, err = tx.Exec(migration.UpSQL)
 	}
@@ -504,6 +526,70 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	}
 
 	return tx.Commit()
+}
+
+// ErrDuplicateTokens é retornado pela migração 11 quando users.token já contém
+// valores repetidos. A checagem roda antes de qualquer DDL para que o operador
+// receba esta mensagem em vez de uma violação de constraint vinda do driver no
+// meio do ALTER TABLE.
+var ErrDuplicateTokens = errors.New(
+	"migration 11 (add_token_hash) aborted: users.token contains duplicate values; " +
+		"resolve them before applying the UNIQUE constraint on token_hash")
+
+func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
+	var duplicates int
+	if err := tx.Get(&duplicates, `
+        SELECT COUNT(*) FROM (
+            SELECT token FROM users GROUP BY token HAVING COUNT(*) > 1
+        ) AS duplicated_tokens`); err != nil {
+		return fmt.Errorf("failed to check for duplicate tokens: %w", err)
+	}
+	if duplicates > 0 {
+		return fmt.Errorf("%w (%d duplicated token value(s) found)", ErrDuplicateTokens, duplicates)
+	}
+
+	if driver == "sqlite" {
+		if err := addColumnIfNotExistsSQLite(tx, "users", "token_hash", "TEXT"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'token_hash'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN token_hash TEXT;
+                END IF;
+            END $$;`); err != nil {
+			return fmt.Errorf("failed to add token_hash column: %w", err)
+		}
+	}
+
+	// O hash é calculado em Go, não em SQL: Postgres só expõe sha256() com
+	// pgcrypto instalado e o driver SQLite não expõe nenhuma, e o valor precisa
+	// bater byte a byte com o que a autenticação calcula em domain.HashToken.
+	var existing []struct {
+		ID    string `db:"id"`
+		Token string `db:"token"`
+	}
+	if err := tx.Select(&existing, "SELECT id, token FROM users"); err != nil {
+		return fmt.Errorf("failed to read tokens for hashing: %w", err)
+	}
+	updateSQL := tx.Rebind("UPDATE users SET token_hash = ? WHERE id = ?")
+	for _, row := range existing {
+		if _, err := tx.Exec(updateSQL, domain.HashToken(row.Token), row.ID); err != nil {
+			return fmt.Errorf("failed to populate token_hash for user %s: %w", row.ID, err)
+		}
+	}
+
+	if _, err := tx.Exec(
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token_hash ON users (token_hash)"); err != nil {
+		return fmt.Errorf("failed to create unique index on token_hash: %w", err)
+	}
+
+	return nil
 }
 
 func createTableIfNotExistsSQLite(tx *sqlx.Tx, tableName, createSQL string) error {

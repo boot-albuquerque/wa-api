@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
@@ -53,6 +55,34 @@ func AuthAdmin(adminToken string) func(http.Handler) http.Handler {
 	}
 }
 
+// userCacheTTL limita por quanto tempo uma autenticação bem-sucedida sobrevive
+// sem voltar ao banco. Antes era cache.NoExpiration, o que fazia revogar ou
+// deletar um usuário não ter efeito nenhum enquanto o processo vivesse
+// (sec/F11). 10 minutos é o teto de exposição pós-revogação; abaixo disso o
+// custo por request de um SELECT indexado ainda é irrelevante frente ao ganho.
+const userCacheTTL = 10 * time.Minute
+
+// extractRequestToken lê o token do header e, se ausente, da query string.
+//
+// A query string continua aceita nesta release para não quebrar clientes que
+// dependem dela, mas cada uso emite WARN com identificação do chamador. A
+// remoção é a release seguinte. O token nunca é logado — só quem o mandou e
+// para onde.
+func extractRequestToken(r *http.Request) string {
+	if token := r.Header.Get("token"); token != "" {
+		return token
+	}
+	token := strings.Join(r.URL.Query()["token"], "")
+	if token != "" {
+		log.Warn().
+			Str("remote_addr", r.RemoteAddr).
+			Str("path", r.URL.Path).
+			Str("user_agent", r.UserAgent()).
+			Msg("token received via query string; deprecated, will be rejected in a future release")
+	}
+	return token
+}
+
 // AuthAlice returns middleware that looks up a user by token.
 func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -67,10 +97,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 			qrcode := ""
 			var hasHmac bool
 
-			token := r.Header.Get("token")
-			if token == "" {
-				token = strings.Join(r.URL.Query()["token"], "")
-			}
+			token := extractRequestToken(r)
 
 			myuserinfo, found := userCache.Get(token)
 			if !found {
@@ -80,8 +107,8 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"hmac_key IS NOT NULL AND length(hmac_key) > 0,"+
 						"CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,"+
 						"COALESCE(media_delivery, 'base64') "+
-						"FROM users WHERE token=$1 LIMIT 1",
-					token,
+						"FROM users WHERE token=$1 OR token_hash=$2 LIMIT 1",
+					token, domain.HashToken(token),
 				)
 				if err != nil {
 					customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
@@ -111,7 +138,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"HasHmac":   strconv.FormatBool(hasHmac),
 						"S3Enabled": s3Enabled, "MediaDelivery": mediaDelivery,
 					}}
-					userCache.Set(token, v, cache.NoExpiration)
+					userCache.Set(token, v, userCacheTTL)
 					ctx = context.WithValue(r.Context(), appport.UserInfoKey, v)
 				}
 			} else {

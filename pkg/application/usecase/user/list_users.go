@@ -37,12 +37,12 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 	var args []interface{}
 
 	if req.UserID != "" {
-		query = `SELECT id, name, token, webhook, jid, qrcode, connected, expiration, proxy_url,
+		query = `SELECT id, name, webhook, jid, qrcode, connected, expiration, proxy_url,
 				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history
 				 FROM users WHERE id = $1`
 		args = append(args, req.UserID)
 	} else {
-		query = `SELECT id, name, token, webhook, jid, qrcode, connected, expiration, proxy_url,
+		query = `SELECT id, name, webhook, jid, qrcode, connected, expiration, proxy_url,
 				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history
 				 FROM users`
 	}
@@ -63,7 +63,6 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 		var user struct {
 			ID              string         `db:"id"`
 			Name            string         `db:"name"`
-			Token           string         `db:"token"`
 			Webhook         string         `db:"webhook"`
 			JID             string         `db:"jid"`
 			QRCode          string         `db:"qrcode"`
@@ -132,10 +131,13 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 			"webhookUseProxy": user.WebhookUseProxy,
 		}
 
+		// Token fica deliberadamente vazio: GET /admin/users devolvia o token em
+		// texto claro de todos os usuários (sec/F20), o que transformava uma
+		// leitura de listagem no vazamento de todas as credenciais da
+		// instalação. A listagem não é o lugar de recuperar credencial.
 		userResp := domain.UserResponse{
 			ID:          user.ID,
 			Name:        user.Name,
-			Token:       user.Token,
 			Webhook:     user.Webhook,
 			JID:         user.JID,
 			QRCode:      user.QRCode,

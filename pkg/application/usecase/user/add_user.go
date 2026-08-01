@@ -60,16 +60,6 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		encryptedHmacKey = encrypted
 	}
 
-	// Check for existing user
-	var count int
-	if err := uc.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE token = $1", req.Token); err != nil {
-		uc.logger.Error(ctx, "Database error checking token", "error", err)
-		return nil, fmt.Errorf("database error: %w", err)
-	}
-	if count > 0 {
-		return nil, fmt.Errorf("user with this token already exists")
-	}
-
 	// Validate events
 	if req.Events != "" {
 		eventList := strings.Split(req.Events, ",")
@@ -91,21 +81,38 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	// Insert user
-	_, err = uc.db.ExecContext(ctx,
-		`INSERT INTO users (id, name, token, webhook, expiration, events, jid, qrcode, proxy_url,
+	// ON CONFLICT DO NOTHING + linhas afetadas substitui o par
+	// SELECT COUNT(*)/INSERT que existia aqui: a checagem prévia rodava fora de
+	// transação e sem lock, então duas requisições concorrentes com o mesmo
+	// token passavam ambas pela checagem e ambas inseriam. Agora quem decide é
+	// o índice UNIQUE de token_hash, atomicamente.
+	res, err := uc.db.ExecContext(ctx,
+		`INSERT INTO users (id, name, token, token_hash, webhook, expiration, events, jid, qrcode, proxy_url,
 		 webhook_use_proxy, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
 		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
-		id, req.Name, req.Token, req.Webhook, req.Expiration, req.Events, "", "",
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		 ON CONFLICT DO NOTHING`,
+		id, req.Name, req.Token, domain.HashToken(req.Token), req.Webhook, req.Expiration, req.Events, "", "",
 		req.ProxyConfig.ProxyURL, webhookUseProxy,
 		req.S3Config.Enabled, req.S3Config.Endpoint, req.S3Config.Region, req.S3Config.Bucket,
 		req.S3Config.AccessKey, req.S3Config.SecretKey, req.S3Config.PathStyle, req.S3Config.PublicURL,
 		req.S3Config.MediaDelivery, req.S3Config.RetentionDays, encryptedHmacKey, req.History)
 
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrDuplicateToken
+		}
 		uc.logger.Error(ctx, "Failed to insert user", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		uc.logger.Error(ctx, "Failed to read rows affected after insert", "error", err)
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	if affected == 0 {
+		return nil, ErrDuplicateToken
 	}
 
 	// Initialize S3 if enabled
