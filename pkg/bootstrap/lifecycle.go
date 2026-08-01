@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"wa-api/pkg/infra/media"
@@ -29,6 +30,24 @@ import (
 	"wa-api/pkg/infra/storage"
 )
 
+// webhookTLSSkipVerify reports whether outgoing webhook deliveries should skip
+// TLS certificate verification. Defaults to false (verification enabled) and is
+// only disabled when WA_API_WEBHOOK_TLS_SKIP_VERIFY is explicitly set to
+// "true"/"1", which is an insecure, deliberately registered choice (it allows
+// delivery to consumers with self-signed certificates while exposing webhook
+// traffic to man-in-the-middle attacks). Evaluated once, warning logged once.
+var webhookTLSSkipVerify = sync.OnceValue(func() bool {
+	v := strings.ToLower(os.Getenv("WA_API_WEBHOOK_TLS_SKIP_VERIFY"))
+	skip := v == "true" || v == "1"
+	if skip {
+		log.Warn().
+			Str("env", "WA_API_WEBHOOK_TLS_SKIP_VERIFY").
+			Msg("INSECURE: webhook TLS certificate verification is DISABLED by explicit configuration. " +
+				"Webhook deliveries are vulnerable to man-in-the-middle attacks. Unset this variable in production.")
+	}
+	return skip
+})
+
 // db field declaration as *sqlx.DB
 type MyClient struct {
 	WAClient       *whatsmeow.Client
@@ -45,8 +64,6 @@ type MyClient struct {
 // the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
 var safeGo = wmhelpers.SafeGo
-
-// ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
 
 // Webhook functions extracted to lifecycle_webhook.go
 
@@ -216,7 +233,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 		webhookClient.SetDebug(true)
 	}
 	webhookClient.SetTimeout(30 * time.Second)
-	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: webhookTLSSkipVerify()})
 	webhookClient.OnError(func(req *resty.Request, err error) {
 		if v, ok := err.(*resty.ResponseError); ok {
 			// v.Response contains the last response from the server

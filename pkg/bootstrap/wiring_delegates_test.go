@@ -30,6 +30,10 @@ func TestProcessMediaGuardsNilCtx(t *testing.T) {
 	mycli := &MyClient{UserID: "user-42", Token: "tok"}
 	postmap := map[string]interface{}{}
 
+	// Belt-and-suspenders: whatsmeow's Client.Download on a nil receiver
+	// returns an error rather than panicking, so this guard is defense in
+	// depth, not the mechanism that prevents a panic here. It still must
+	// fire and skip cleanly instead of falling through to a real download.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("processMedia panicked instead of skipping: %v", r)

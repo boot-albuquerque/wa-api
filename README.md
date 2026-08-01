@@ -148,6 +148,8 @@ Se as seguintes configurações não forem fornecidas, serão auto-geradas:
 #### Segurança de Webhooks
 * `WA_API_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
 
+**Breaking change:** o envio de webhooks agora verifica o certificado TLS do destino por padrão (antes a verificação era sempre desabilitada). Se o seu receptor de webhook usa certificado self-signed, defina `WA_API_WEBHOOK_TLS_SKIP_VERIFY=true` para restaurar o comportamento antigo — um aviso é registrado no log de boot quando habilitado. Padrão: `false`.
+
 #### Configuração de Banco de Dados
 
 **Para PostgreSQL:**

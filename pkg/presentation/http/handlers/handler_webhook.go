@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	appport "wa-api/pkg/application/contracts"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
@@ -33,7 +35,12 @@ type GetWebhookHandler struct{ ctx *WebhookHandlerContext }
 func NewGetWebhookHandler(ctx *WebhookHandlerContext) *GetWebhookHandler { return &GetWebhookHandler{ctx} }
 
 func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	txtid := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Id")
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+	if !ok || info == nil {
+		h.ctx.RespondJSON(w, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	txtid := info.Get("Id")
 	rows, err := h.ctx.DB.Query("SELECT webhook,events FROM users WHERE id=$1 LIMIT 1", txtid)
 	if err != nil {
 		h.ctx.RespondJSON(w, http.StatusInternalServerError, fmt.Errorf("could not get webhook: %v", err))
@@ -63,8 +70,13 @@ type SetWebhookHandler struct{ ctx *WebhookHandlerContext }
 func NewSetWebhookHandler(ctx *WebhookHandlerContext) *SetWebhookHandler { return &SetWebhookHandler{ctx} }
 
 func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	txtid := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Id")
-	token := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Token")
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+	if !ok || info == nil {
+		h.ctx.RespondJSON(w, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	txtid := info.Get("Id")
+	token := info.Get("Token")
 
 	var t struct {
 		WebhookURL string   `json:"webhookurl"`
@@ -106,7 +118,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	v := h.ctx.UpdateUserInfo(r.Context().Value("userinfo"), "Webhook", webhook)
+	v := h.ctx.UpdateUserInfo(info, "Webhook", webhook)
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
 	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
 
@@ -123,8 +135,13 @@ func NewUpdateWebhookHandler(ctx *WebhookHandlerContext) *UpdateWebhookHandler {
 }
 
 func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	txtid := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Id")
-	token := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Token")
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+	if !ok || info == nil {
+		h.ctx.RespondJSON(w, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	txtid := info.Get("Id")
+	token := info.Get("Token")
 
 	var t struct {
 		WebhookURL string   `json:"webhook"`
@@ -173,7 +190,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	v := h.ctx.UpdateUserInfo(r.Context().Value("userinfo"), "Webhook", webhook)
+	v := h.ctx.UpdateUserInfo(info, "Webhook", webhook)
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
 	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
 
@@ -190,15 +207,20 @@ func NewDeleteWebhookHandler(ctx *WebhookHandlerContext) *DeleteWebhookHandler {
 }
 
 func (h *DeleteWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	txtid := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Id")
-	token := r.Context().Value("userinfo").(interface{ Get(string) string }).Get("Token")
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+	if !ok || info == nil {
+		h.ctx.RespondJSON(w, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	txtid := info.Get("Id")
+	token := info.Get("Token")
 
 	if _, err := h.ctx.DB.Exec("UPDATE users SET webhook='', events='' WHERE id=$1", txtid); err != nil {
 		h.ctx.RespondJSON(w, http.StatusInternalServerError, fmt.Errorf("could not delete webhook: %v", err))
 		return
 	}
 
-	v := h.ctx.UpdateUserInfo(r.Context().Value("userinfo"), "Webhook", "")
+	v := h.ctx.UpdateUserInfo(info, "Webhook", "")
 	v = h.ctx.UpdateUserInfo(v, "Events", "")
 	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
 

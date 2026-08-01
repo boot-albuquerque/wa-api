@@ -169,6 +169,12 @@ func (m *S3Manager) GetClient(userID string) (*s3.Client, *S3Config, bool) {
 
 // GenerateS3Key generates S3 object key based on message metadata
 func (m *S3Manager) GenerateS3Key(userID, contactJID, messageID string, mimeType string, isIncoming bool) string {
+	return m.generateS3KeyAt(time.Now(), userID, contactJID, messageID, mimeType, isIncoming)
+}
+
+// generateS3KeyAt is GenerateS3Key with the timestamp injected, so the date
+// partitioning can be tested deterministically.
+func (m *S3Manager) generateS3KeyAt(now time.Time, userID, contactJID, messageID string, mimeType string, isIncoming bool) string {
 	// Determine direction
 	direction := "outbox"
 	if isIncoming {
@@ -179,11 +185,9 @@ func (m *S3Manager) GenerateS3Key(userID, contactJID, messageID string, mimeType
 	contactJID = strings.ReplaceAll(contactJID, "@", "_")
 	contactJID = strings.ReplaceAll(contactJID, ":", "_")
 
-	// Get current time
-	now := time.Now()
-	year := now.Format("2025")
-	month := now.Format("05")
-	day := now.Format("25")
+	year := now.Format("2006")
+	month := now.Format("01")
+	day := now.Format("02")
 
 	// Determine media type folder
 	mediaType := "documents"

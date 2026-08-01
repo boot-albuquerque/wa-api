@@ -9,6 +9,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
+	mwpkg "wa-api/pkg/presentation/http/middleware"
 )
 
 // Type definitions for webhook error payloads
@@ -31,14 +32,9 @@ type WebhookErrorPayload struct {
 	ErrorMessage     string                 `json:"errorMessage"`
 }
 
-// Values type for user info cache
-type Values struct {
-	M map[string]string
-}
-
-func (v Values) Get(key string) string {
-	return v.M[key]
-}
+// Values type for user info cache (alias to the middleware type actually
+// stored in the cache by all callers).
+type Values = mwpkg.Values
 
 var (
 	rabbitMu sync.RWMutex // protects RabbitConn, RabbitChannel, RabbitEnabled
@@ -315,7 +311,9 @@ func SendToGlobalRabbit(jsonData []byte, token string, userID string, queueName 
 	if userInfoCache != nil {
 		userinfo, found := userInfoCache.Get(token)
 		if found {
-			instance_name = userinfo.(Values).Get("Name")
+			if v, ok := userinfo.(Values); ok {
+				instance_name = v.Get("Name")
+			}
 		}
 	}
 
