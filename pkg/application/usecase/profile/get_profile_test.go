@@ -1,4 +1,4 @@
-package misc_test
+package profile_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/application/usecase/misc"
+	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/domain"
 )
 
@@ -75,7 +75,7 @@ func (m *mockDataAccess) ContactInfo(ctx context.Context, jid domain.JID) (strin
 func TestGetProfileExecute_NoClient(t *testing.T) {
 	provider := &mockProfileProvider{err: errors.New("no session")}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, logger)
+	uc := profile.NewGetProfileUseCase(provider, logger)
 
 	_, err := uc.Execute(context.Background(), "test-user")
 	if err == nil {
@@ -89,7 +89,7 @@ func TestGetProfileExecute_NoClient(t *testing.T) {
 func TestGetProfileExecute_ProviderError(t *testing.T) {
 	provider := &mockProfileProvider{err: errors.New("connection refused")}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, logger)
+	uc := profile.NewGetProfileUseCase(provider, logger)
 
 	_, err := uc.Execute(context.Background(), "test-user")
 	if err == nil {
@@ -109,7 +109,7 @@ func TestGetProfileExecute_Success(t *testing.T) {
 	}
 	provider := &mockProfileProvider{da: da}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, logger)
+	uc := profile.NewGetProfileUseCase(provider, logger)
 
 	result, err := uc.Execute(context.Background(), "test-user")
 	if err != nil {
@@ -131,7 +131,7 @@ func TestGetProfileExecute_RecoversFromPanicAndLogs(t *testing.T) {
 	da := &panicDataAccess{}
 	provider := &mockProfileProvider{da: da}
 	logger := &mockLogger{}
-	uc := misc.NewGetProfileUseCase(provider, logger)
+	uc := profile.NewGetProfileUseCase(provider, logger)
 
 	result, err := uc.Execute(context.Background(), "test-user")
 	if err != nil {
@@ -152,7 +152,7 @@ func TestGetProfileNoPIIInLogs(t *testing.T) {
 	da := &mockDataAccess{pushName: "John"}
 	logger := &mockLogger{}
 	provider := &mockProfileProvider{da: da}
-	uc := misc.NewGetProfileUseCase(provider, logger)
+	uc := profile.NewGetProfileUseCase(provider, logger)
 	_, _ = uc.Execute(context.Background(), "test-user")
 	for _, log := range append(append(logger.infos, logger.warns...), logger.errors...) {
 		if strings.Contains(log, "5511") || strings.Contains(log, "John") {

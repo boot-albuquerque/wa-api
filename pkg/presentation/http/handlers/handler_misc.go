@@ -9,7 +9,7 @@ import (
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 
-	"wa-api/pkg/application/usecase/misc"
+	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/application/usecase/user"
 )
@@ -88,9 +88,9 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 // RejectCallHandler handles POST /chat/rejectcall
-type RejectCallHandler struct{ usecase *misc.RejectCallUseCase }
+type RejectCallHandler struct{ usecase *chat.RejectCallUseCase }
 
-func NewRejectCallHandler(uc *misc.RejectCallUseCase) *RejectCallHandler {
+func NewRejectCallHandler(uc *chat.RejectCallUseCase) *RejectCallHandler {
 	return &RejectCallHandler{uc}
 }
 func (h *RejectCallHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -160,10 +160,10 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 
 // RequestUnavailableMessageHandler handles POST /chat/requestunavailablemessage
 type RequestUnavailableMessageHandler struct {
-	usecase *misc.RequestUnavailableMessageUseCase
+	usecase *chat.RequestUnavailableMessageUseCase
 }
 
-func NewRequestUnavailableMessageHandler(uc *misc.RequestUnavailableMessageUseCase) *RequestUnavailableMessageHandler {
+func NewRequestUnavailableMessageHandler(uc *chat.RequestUnavailableMessageUseCase) *RequestUnavailableMessageHandler {
 	return &RequestUnavailableMessageHandler{uc}
 }
 func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -185,9 +185,9 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 }
 
 // ArchiveChatHandler handles POST /chat/archive
-type ArchiveChatHandler struct{ usecase *misc.ArchiveChatUseCase }
+type ArchiveChatHandler struct{ usecase *chat.ArchiveChatUseCase }
 
-func NewArchiveChatHandler(uc *misc.ArchiveChatUseCase) *ArchiveChatHandler {
+func NewArchiveChatHandler(uc *chat.ArchiveChatUseCase) *ArchiveChatHandler {
 	return &ArchiveChatHandler{uc}
 }
 func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

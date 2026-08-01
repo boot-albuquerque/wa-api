@@ -10,10 +10,11 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/group"
 	"wa-api/pkg/application/usecase/message"
-	"wa-api/pkg/application/usecase/misc"
 	"wa-api/pkg/application/usecase/notification"
+	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/application/usecase/user"
@@ -95,7 +96,7 @@ func initCustomHandlers(s *server) {
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase
-	getProfileUC := misc.NewGetProfileUseCase(miscAdapter, logger)
+	getProfileUC := profile.NewGetProfileUseCase(miscAdapter, logger)
 
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(logger)
@@ -204,11 +205,11 @@ func initCustomHandlers(s *server) {
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
-	rejectCallUC := misc.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
+	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
-	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
-	archiveChatUC := misc.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
+	requestUnavailableMessageUC := chat.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
+	archiveChatUC := chat.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{
