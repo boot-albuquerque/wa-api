@@ -62,6 +62,18 @@ func (mycli *MyClient) processMedia(
 	postmap map[string]interface{}, extraKeys map[string]interface{},
 ) {
 	cc := &waclient.MyClient{Client: mycli.WAClient, UserID: mycli.UserID, Token: mycli.Token}
+	// Guard: cc.Ctx is never populated by this literal, and ProcessMedia
+	// dereferences it (c.Ctx.SkipMedia) on the first line. Without this check the
+	// nil dereference panics and unwinds myEventHandler entirely, silently dropping
+	// history persistence, webhook dispatch and RabbitMQ publish for every message
+	// carrying media.
+	if cc.Ctx == nil {
+		log.Warn().
+			Str("userID", mycli.UserID).
+			Str("messageID", messageID).
+			Msg("media processing skipped: Ctx not configured")
+		return
+	}
 	cc.ProcessMedia(msg, mimeType, fallbackExt, int(timeout.Seconds()),
 		isIncoming, chatJID, messageID,
 		waclient.MediaConfig{Enabled: s3cfg.Enabled, MediaDelivery: s3cfg.MediaDelivery},
