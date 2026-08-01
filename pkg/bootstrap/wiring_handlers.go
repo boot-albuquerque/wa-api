@@ -111,6 +111,7 @@ func initCustomHandlers(s *server) {
 	jidResolver := whatsmeow.NewJIDResolverAdapter()
 	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
 	miscAdapter := whatsmeow.NewMiscAdapter(clientManager.GetWhatsmeowClient)
+	userAdapter := whatsmeow.NewUserAdapter(clientManager.GetWhatsmeowClient)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
@@ -193,12 +194,12 @@ func initCustomHandlers(s *server) {
 	addUserUC := user.NewAddUserUseCase(s.DB, logger)
 	editUserUC := user.NewEditUserUseCase(s.DB, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(s.DB, logger)
-	checkUserUC := user.NewCheckUserUseCase(clientProvider, logger)
+	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(clientProvider, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, logger)
 	blockUserUC := user.NewBlockUserUseCase(clientProvider, logger)
 	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, logger)
-	getBlocklistUC := user.NewGetBlocklistUseCase(clientProvider, logger)
+	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)
 
 	// User Handlers
 	userHandlers := handlers.NewUserHandlers(
@@ -226,8 +227,8 @@ func initCustomHandlers(s *server) {
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, logger, s.ExPath)
 	rejectCallUC := misc.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
-	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, logger)
-	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, logger)
+	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
+	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
 	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
 	archiveChatUC := misc.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
 
@@ -302,7 +303,7 @@ func initCustomHandlers(s *server) {
 		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
 		React:             handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
 		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, logger)),
-		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, logger)),
+		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
 		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
 	}
 

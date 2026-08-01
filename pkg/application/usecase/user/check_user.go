@@ -10,13 +10,13 @@ import (
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp
 type CheckUserUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	contacts appport.ContactDirectory
+	logger   appport.Logger
 }
 
 // NewCheckUserUseCase cria uma nova instância
-func NewCheckUserUseCase(cp appport.ClientProvider, logger appport.Logger) *CheckUserUseCase {
-	return &CheckUserUseCase{clientProvider: cp, logger: logger}
+func NewCheckUserUseCase(cd appport.ContactDirectory, logger appport.Logger) *CheckUserUseCase {
+	return &CheckUserUseCase{contacts: cd, logger: logger}
 }
 
 // CheckUserResult representa o resultado da verificação
@@ -29,12 +29,11 @@ type CheckUserResult struct {
 
 // Execute verifica se um usuário está no WhatsApp
 func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) ([]CheckUserResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
+	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
 		return nil, fmt.Errorf("no session")
 	}
 
-	resp, err := client.IsOnWhatsApp(ctx, req.Phone)
+	resp, err := uc.contacts.IsOnWhatsApp(ctx, userID, req.Phone)
 	if err != nil {
 		uc.logger.Error(ctx, "Failed to check WhatsApp users", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to check users: %w", err)
@@ -42,18 +41,12 @@ func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req doma
 
 	var results []CheckUserResult
 	for _, item := range resp {
-		verifiedName := ""
-		if item.VerifiedName != nil {
-			verifiedName = item.VerifiedName.Details.GetVerifiedName()
-		}
-
-		result := CheckUserResult{
+		results = append(results, CheckUserResult{
 			Query:        item.Query,
 			IsInWhatsapp: item.IsIn,
-			JID:          item.JID.String(),
-			VerifiedName: verifiedName,
-		}
-		results = append(results, result)
+			JID:          item.JID,
+			VerifiedName: item.VerifiedName,
+		})
 	}
 
 	return results, nil
