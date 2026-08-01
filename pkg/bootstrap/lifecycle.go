@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"wa-api/pkg/infra/media"
 	wmhelpers "wa-api/pkg/infra/whatsmeow"
 
 	"github.com/go-resty/resty/v2"
@@ -86,7 +85,11 @@ func (s *server) connectOnStartup() {
 		log.Error().Err(err).Msg("DB Problem")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close rows")
+		}
+	}()
 	for rows.Next() {
 		txtid := ""
 		token := ""
@@ -268,8 +271,11 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					log.Info().Msg("SOCKS proxy configured for WhatsApp connection")
 				}
 			} else {
-				client.SetProxyAddress(parsed.String(), whatsmeow.SetProxyOptions{})
-				log.Info().Msg("HTTP/HTTPS proxy configured for WhatsApp connection")
+				if err := client.SetProxyAddress(parsed.String(), whatsmeow.SetProxyOptions{}); err != nil {
+					log.Warn().Err(err).Str("proxy", proxyURL).Msg("Failed to set HTTP/HTTPS proxy address, skipping proxy setup")
+				} else {
+					log.Info().Msg("HTTP/HTTPS proxy configured for WhatsApp connection")
+				}
 			}
 
 			if webhookUseProxy {
@@ -304,7 +310,8 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 			myuserinfo, found := appCtx.UserInfoCache.Get(token)
 
 			for evt := range qrChan {
-				if evt.Event == "code" {
+				switch evt.Event {
+				case "code":
 					// Display QR code in terminal (useful for testing/developing)
 					// Skip in stdio mode to avoid breaking JSON-RPC
 					if *logType != "json" && s.Mode != Stdio {
@@ -334,7 +341,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 
 					sendEventWithWebHook(&mycli, postmap, "")
 
-				} else if evt.Event == "timeout" {
+				case "timeout":
 					// Clear QR code from DB on timeout
 					// Send webhook notifying QR timeout before cleanup
 					postmap := make(map[string]interface{})
@@ -357,7 +364,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					clientManager.DeleteMyClient(userID)
 					clientManager.DeleteHTTPClient(userID)
 					appCtx.KillChannel.Signal(userID)
-				} else if evt.Event == "success" {
+				case "success":
 					log.Info().Msg("QR pairing ok!")
 					// Clear QR code after pairing
 					sqlStmt := `UPDATE users SET qrcode='', connected=1 WHERE id=$1`
@@ -370,7 +377,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 						}
 					}
-				} else {
+				default:
 					log.Info().Str("event", evt.Event).Msg("Login event")
 				}
 			}
@@ -455,5 +462,3 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	}
 	appCtx.KillChannel.Delete(userID, kill)
 }
-
-var fileToBase64 = media.FileToBase64

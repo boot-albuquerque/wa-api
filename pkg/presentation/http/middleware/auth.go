@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"strconv"
 
-	appport "wa-api/pkg/application/contracts"
 	"strings"
+	appport "wa-api/pkg/application/contracts"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
@@ -119,7 +119,11 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					RespondJSON(w, http.StatusInternalServerError, err)
 					return
 				}
-				defer rows.Close()
+				defer func() {
+					if cerr := rows.Close(); cerr != nil {
+						log.Warn().Err(cerr).Msg("error closing rows")
+					}
+				}()
 				var history sql.NullInt64
 				var s3Enabled, mediaDelivery string
 				for rows.Next() {
@@ -136,7 +140,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"Id": txtid, "Name": name, "Jid": jid, "Webhook": webhook,
 						"Token": token, "Proxy": proxyURL, "Events": events,
 						"Qrcode": qrcode, "History": historyStr,
-						"HasHmac": strconv.FormatBool(hasHmac),
+						"HasHmac":   strconv.FormatBool(hasHmac),
 						"S3Enabled": s3Enabled, "MediaDelivery": mediaDelivery,
 					}}
 					userCache.Set(token, v, cache.NoExpiration)

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
 )
 
 // GetBlocklistUseCase retrieves the current blocklist

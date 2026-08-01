@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
+
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
-	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 )
 
 // GroupRequestUseCase encapsula a lógica de gerenciamento de solicitações de entrada em grupos

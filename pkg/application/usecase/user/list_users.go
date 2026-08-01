@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 
+	"wa-api/pkg/domain"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"wa-api/pkg/domain"
 )
 
 // ClientManagerAdapter interface para acessar whatsmeow clients
@@ -51,7 +52,11 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 		uc.logger.Error().Err(err).Msg("Failed to list users")
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			uc.logger.Warn().Err(closeErr).Msg("failed to close rows")
+		}
+	}()
 
 	var users []domain.UserResponse
 	for rows.Next() {

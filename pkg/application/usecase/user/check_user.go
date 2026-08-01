@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
 )
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp
@@ -51,7 +52,7 @@ func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req doma
 		result := CheckUserResult{
 			Query:        item.Query,
 			IsInWhatsapp: item.IsIn,
-			JID:          fmt.Sprintf("%s", item.JID),
+			JID:          item.JID.String(),
 			VerifiedName: verifiedName,
 		}
 		results = append(results, result)

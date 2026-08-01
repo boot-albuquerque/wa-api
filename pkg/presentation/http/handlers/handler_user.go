@@ -39,14 +39,14 @@ func NewUserHandlers(
 	unblockUser *user.UnblockUserUseCase,
 ) *UserHandlers {
 	return &UserHandlers{
-		listUsers:  listUsers,
-		addUser:    addUser,
-		editUser:   editUser,
-		deleteUser: deleteUser,
-		checkUser:  checkUser,
-		getUser:    getUser,
-		getUserLID: getUserLID,
-		blockUser:  blockUser,
+		listUsers:   listUsers,
+		addUser:     addUser,
+		editUser:    editUser,
+		deleteUser:  deleteUser,
+		checkUser:   checkUser,
+		getUser:     getUser,
+		getUserLID:  getUserLID,
+		blockUser:   blockUser,
 		unblockUser: unblockUser,
 	}
 }

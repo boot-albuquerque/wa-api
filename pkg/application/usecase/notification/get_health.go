@@ -6,19 +6,20 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
+	"go.mau.fi/whatsmeow"
 )
 
 // GetHealthUseCase retrieves health information about the server
 type GetHealthUseCase struct {
-	db                 *sql.DB
-	healthProvider     appport.HealthClientProvider
-	logger             zerolog.Logger
-	startTime          time.Time
-	version            string
+	db             *sql.DB
+	healthProvider appport.HealthClientProvider
+	logger         zerolog.Logger
+	startTime      time.Time
+	version        string
 }
 
 // NewGetHealthUseCase creates a new instance

@@ -484,7 +484,7 @@ func (ss *Server) routeRequest(req *JSONRpcRequest) {
 func (ss *Server) executeHTTPHandler(req *JSONRpcRequest, httpMethod, httpPath string) {
 	// Create a mock HTTP request
 	var body io.Reader
-	if req.Params != nil && len(req.Params) > 0 {
+	if len(req.Params) > 0 {
 		jsonParams, err := json.Marshal(req.Params)
 		if err != nil {
 			ss.sendError(req.ID, 400, fmt.Sprintf("invalid params: %v", err))
@@ -597,7 +597,9 @@ func (ss *Server) writeResponse(response JSONRpcResponse) {
 	}
 
 	// Write to stdout with newline
-	fmt.Fprintf(ss.stdout, "%s\n", string(responseBytes))
+	if _, err := fmt.Fprintf(ss.stdout, "%s\n", string(responseBytes)); err != nil {
+		log.Error().Err(err).Msg("Failed to write response to stdout")
+	}
 
 	// Log with appropriate fields based on response type
 	logEvent := log.Debug().Str("id", response.ID.String())
@@ -632,7 +634,9 @@ func SendNotification(method string, params map[string]interface{}) {
 		return
 	}
 
-	fmt.Fprintf(os.Stdout, "%s\n", string(notificationBytes))
+	if _, err := fmt.Fprintf(os.Stdout, "%s\n", string(notificationBytes)); err != nil {
+		log.Error().Err(err).Msg("Failed to write notification to stdout")
+	}
 
 	log.Debug().
 		Str("method", method).

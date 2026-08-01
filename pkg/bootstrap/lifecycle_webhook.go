@@ -35,10 +35,6 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 	}
 }
 
-func sendToUserWebHook(webhookurl string, path string, jsonData []byte, userID string, token string) {
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, userID, token, nil)
-}
-
 func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
 
 	instance_name := ""

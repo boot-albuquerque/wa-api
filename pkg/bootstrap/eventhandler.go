@@ -1,22 +1,21 @@
 package bootstrap
 
 import (
-	"time"
-	"path/filepath"
-	"strconv"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-
 )
 
 func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
@@ -75,7 +74,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		} else {
 			txtid = myuserinfo.(Values).Get("Id")
 			token := myuserinfo.(Values).Get("Token")
-			v := updateUserInfo(myuserinfo, "Jid", fmt.Sprintf("%s", jid))
+			v := updateUserInfo(myuserinfo, "Jid", jid.String())
 			appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 			log.Info().Str("jid", jid.String()).Str("userid", txtid).Str("token", token).Msg("User information set")
 		}
@@ -251,24 +250,24 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 			}
 		}
-    
-    if encMessage := evt.Message.GetSecretEncryptedMessage(); encMessage != nil {
-        decrypted, derr := mycli.WAClient.DecryptSecretEncryptedMessage(context.Background(), evt)
-        if derr != nil {
-            log.Warn().
-                Err(derr).
-                Str("messageID", evt.Info.ID).
-                Str("secretEncType", encMessage.GetSecretEncType().String()).
-                Msg("DecryptSecretEncryptedMessage failed")
-        } else if decrypted != nil {
-            log.Info().
-                Str("messageID", evt.Info.ID).
-                Str("secretEncType", encMessage.GetSecretEncType().String()).
-                Msg("Decrypted secretEncryptedMessage; swapping evt.Message")
-                evt.Message = decrypted
-        }
-    }
-    
+
+		if encMessage := evt.Message.GetSecretEncryptedMessage(); encMessage != nil {
+			decrypted, derr := mycli.WAClient.DecryptSecretEncryptedMessage(context.Background(), evt)
+			if derr != nil {
+				log.Warn().
+					Err(derr).
+					Str("messageID", evt.Info.ID).
+					Str("secretEncType", encMessage.GetSecretEncType().String()).
+					Msg("DecryptSecretEncryptedMessage failed")
+			} else if decrypted != nil {
+				log.Info().
+					Str("messageID", evt.Info.ID).
+					Str("secretEncType", encMessage.GetSecretEncType().String()).
+					Msg("Decrypted secretEncryptedMessage; swapping evt.Message")
+				evt.Message = decrypted
+			}
+		}
+
 		if !*skipMedia {
 
 			isIncoming := !evt.Info.IsFromMe
@@ -411,15 +410,11 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 			}
 
-			// Check for replies in regular conversation messages too
-			if messageType == "text" && replyToMessageID == "" {
-				// For regular text messages, check if there's context info indicating a reply
-				// This might be available in the message context
-				if conv := evt.Message.GetConversation(); conv != "" {
-					// Check if the message has reply context (this depends on WhatsApp message structure)
-					// For now, we'll rely on ExtendedTextMessage for reply detection
-				}
-			}
+			// Check for replies in regular conversation messages too.
+			// For regular text messages, reply detection currently relies on
+			// ExtendedTextMessage handled above; plain Conversation messages
+			// carry no reply context in the WhatsApp message structure, so
+			// there is nothing further to do here.
 
 			// Try to get media link from S3 data if available
 			if s3Data, ok := postmap["s3"].(map[string]interface{}); ok {
@@ -465,20 +460,18 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	case *events.Receipt:
 		postmap["type"] = "ReadReceipt"
 		dowebhook = 1
-		//if evt.Type == events.ReceiptTypeRead || evt.Type == events.ReceiptTypeReadSelf {
-		if evt.Type == types.ReceiptTypeRead || evt.Type == types.ReceiptTypeReadSelf {
+		switch evt.Type {
+		case types.ReceiptTypeRead, types.ReceiptTypeReadSelf:
 			log.Info().Strs("id", evt.MessageIDs).Str("source", evt.SourceString()).Str("timestamp", fmt.Sprintf("%v", evt.Timestamp)).Msg("Message was read")
-			//if evt.Type == events.ReceiptTypeRead {
 			if evt.Type == types.ReceiptTypeRead {
 				postmap["state"] = "Read"
 			} else {
 				postmap["state"] = "ReadSelf"
 			}
-			//} else if evt.Type == events.ReceiptTypeDelivered {
-		} else if evt.Type == types.ReceiptTypeDelivered {
+		case types.ReceiptTypeDelivered:
 			postmap["state"] = "Delivered"
 			log.Info().Str("id", evt.MessageIDs[0]).Str("source", evt.SourceString()).Str("timestamp", fmt.Sprintf("%v", evt.Timestamp)).Msg("Message delivered")
-		} else {
+		default:
 			// Discard webhooks for inactive or other delivery types
 			return
 		}
@@ -786,7 +779,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	case *events.ChatPresence:
 		postmap["type"] = "ChatPresence"
 		dowebhook = 1
-		log.Info().Str("state", fmt.Sprintf("%s", evt.State)).Str("media", fmt.Sprintf("%s", evt.Media)).Str("chat", evt.MessageSource.Chat.String()).Str("sender", evt.MessageSource.Sender.String()).Msg("Chat Presence received")
+		log.Info().Str("state", string(evt.State)).Str("media", string(evt.Media)).Str("chat", evt.MessageSource.Chat.String()).Str("sender", evt.MessageSource.Sender.String()).Msg("Chat Presence received")
 	case *events.CallOffer:
 		postmap["type"] = "CallOffer"
 		dowebhook = 1

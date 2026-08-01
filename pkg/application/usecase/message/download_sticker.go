@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
-	"google.golang.org/protobuf/proto"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"google.golang.org/protobuf/proto"
 )
 
 // DownloadStickerUseCase encapsula a validação de download de sticker.

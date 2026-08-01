@@ -37,11 +37,9 @@ var (
 	webhookErrorQueueName    = flag.String("errorqueue", "webhook_errors", "RabbitMQ queue name for failed webhooks")
 	globalWebhookUseProxy    = flag.Bool("webhookuseproxy", true, "Route webhook deliveries through the per-user proxy when configured")
 
-	container        *sqlstore.Container
-	clientManager    = NewClientManager()
-	userinfocache    = cache.New(5*time.Minute, 10*time.Minute)
-	lastMessageCache = cache.New(24*time.Hour, 24*time.Hour)
-	globalHTTPClient = NewSafeHTTPClient()
+	container     *sqlstore.Container
+	clientManager = NewClientManager()
+	userinfocache = cache.New(5*time.Minute, 10*time.Minute)
 )
 
 // appCtx bundles runtime configuration previously spread across global vars.

@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	wa "go.mau.fi/whatsmeow"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
+
+	"github.com/rs/zerolog"
+	wa "go.mau.fi/whatsmeow"
 )
 
 // GetAvatarUseCase retrieves avatar info for a user

@@ -156,8 +156,6 @@ type userInfo interface {
 var (
 	errUnauthorized     = &simpleErr{"unauthorized"}
 	errMissingSessionID = &simpleErr{"missing session id"}
-	errMissingPhone     = &simpleErr{"missing phone"}
-	errMissingJID       = &simpleErr{"missing jid"}
 	errMissingID        = &simpleErr{"missing ID"}
 	errDecodePayload    = &simpleErr{"could not decode payload"}
 )

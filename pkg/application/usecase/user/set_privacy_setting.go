@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
+	"go.mau.fi/whatsmeow/types"
 )
 
 // SetPrivacySettingUseCase sets a privacy setting

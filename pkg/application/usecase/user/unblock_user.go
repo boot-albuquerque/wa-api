@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
+
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 )
 
 // UnblockUserUseCase desbloqueia um usuário

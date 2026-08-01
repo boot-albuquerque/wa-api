@@ -58,7 +58,11 @@ func LookupUser(db *sql.DB, token string) (*UserRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db query: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Warn().Err(closeErr).Msg("failed to close rows")
+		}
+	}()
 
 	rec := &UserRecord{}
 	var historyVal sql.NullInt64

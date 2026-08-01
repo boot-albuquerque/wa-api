@@ -22,3 +22,12 @@ formatters:
 run:
   timeout: 2m
   tests: true
+
+issues:
+  # Both default to a low cap (max-same-issues: 3) that silently truncates
+  # the reported count for any linter with many hits of the same message —
+  # exactly what the lint/check Makefile targets parse to compare against
+  # .golangci-baseline. Uncapped here so the baseline reflects the real
+  # issue count, not a truncated sample.
+  max-issues-per-linter: 0
+  max-same-issues: 0

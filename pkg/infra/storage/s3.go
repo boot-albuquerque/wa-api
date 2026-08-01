@@ -122,22 +122,12 @@ func (m *S3Manager) InitializeS3Client(userID string, config *S3Config) error {
 		Credentials: credProvider,
 	}
 
-	if config.Endpoint != "" {
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			if service == s3.ServiceID {
-				return aws.Endpoint{
-					URL:               config.Endpoint,
-					HostnameImmutable: config.PathStyle,
-				}, nil
-			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-		})
-		cfg.EndpointResolverWithOptions = customResolver
-	}
-
 	// Create S3 client
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = config.PathStyle
+		if config.Endpoint != "" {
+			o.BaseEndpoint = aws.String(config.Endpoint)
+		}
 	})
 
 	m.clients[userID] = client

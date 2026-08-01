@@ -6,10 +6,11 @@ import (
 	"sync"
 	"time"
 
+	mwpkg "wa-api/pkg/presentation/http/middleware"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
-	mwpkg "wa-api/pkg/presentation/http/middleware"
 )
 
 // Type definitions for webhook error payloads
@@ -42,7 +43,6 @@ var (
 	RabbitConn           *amqp091.Connection
 	RabbitChannel        *amqp091.Channel
 	RabbitEnabled        bool
-	rabbitOnce           sync.Once
 	RabbitQueue          string
 	userInfoCache        *cache.Cache
 	webhookErrorQueuePtr *string
@@ -146,7 +146,9 @@ func InitRabbitMQ() {
 		// Connection successful, attempt to open channel
 		channel, err := conn.Channel()
 		if err != nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Warn().Err(closeErr).Msg("Failed to close RabbitMQ connection")
+			}
 			log.Warn().
 				Err(err).
 				Int("attempt", attempt).
@@ -213,7 +215,9 @@ func HandleConnectionErrors() {
 
 			channel, err := conn.Channel()
 			if err != nil {
-				conn.Close()
+				if closeErr := conn.Close(); closeErr != nil {
+					log.Warn().Err(closeErr).Msg("Failed to close RabbitMQ connection")
+				}
 				log.Warn().
 					Err(err).
 					Int("attempt", attempt).

@@ -6,14 +6,15 @@ import (
 	"strings"
 	"time"
 
+	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
+	"wa-api/pkg/infra/whatsmeow"
+
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
-	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/whatsmeow"
 )
 
 // ReactUseCase sends a reaction to a message

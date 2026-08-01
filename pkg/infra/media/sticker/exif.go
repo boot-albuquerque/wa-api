@@ -77,10 +77,18 @@ func BuildStickerMetadata(packID, packName, packPublisher string, emojis []strin
 		return nil
 	}
 	meta := make(map[string]interface{})
-	if packID != ""       { meta["sticker-pack-id"] = packID }
-	if packName != ""     { meta["sticker-pack-name"] = packName }
-	if packPublisher != "" { meta["sticker-pack-publisher"] = packPublisher }
-	if len(emojis) > 0    { meta["emojis"] = emojis }
+	if packID != "" {
+		meta["sticker-pack-id"] = packID
+	}
+	if packName != "" {
+		meta["sticker-pack-name"] = packName
+	}
+	if packPublisher != "" {
+		meta["sticker-pack-publisher"] = packPublisher
+	}
+	if len(emojis) > 0 {
+		meta["emojis"] = emojis
+	}
 	return meta
 }
 
@@ -100,7 +108,10 @@ func BuildWhatsAppEXIF(meta map[string]interface{}) []byte {
 	footer := []byte{0x16, 0x00, 0x00, 0x00}
 	var buf bytes.Buffer
 	buf.Write(header)
-	binary.Write(&buf, binary.LittleEndian, uint32(len(jsonBytes)))
+	if err := binary.Write(&buf, binary.LittleEndian, uint32(len(jsonBytes))); err != nil {
+		log.Warn().Err(err).Msg("Failed to write EXIF length field")
+		return nil
+	}
 	buf.Write(footer)
 	buf.Write(jsonBytes)
 	return buf.Bytes()

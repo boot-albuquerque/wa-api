@@ -59,7 +59,11 @@ func FetchURLBytes(ctx context.Context, httpClient *http.Client, resourceURL str
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", fmt.Errorf("unexpected status code %d", resp.StatusCode)

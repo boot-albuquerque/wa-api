@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "wa-api/pkg/presentation/http"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	customhttp "wa-api/pkg/presentation/http"
 
 	"wa-api/pkg/application/usecase/user"
 )

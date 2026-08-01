@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"wa-api/pkg/domain"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
-	"wa-api/pkg/domain"
 )
 
 // DeleteUserUseCase deleta um usuário

@@ -40,9 +40,10 @@ func GetDatabaseConfig(exPath, dataDirFlag string) DatabaseConfig {
 	dbSSL := os.Getenv("DB_SSLMODE")
 
 	sslMode := dbSSL
-	if dbSSL == "true" {
+	switch dbSSL {
+	case "true":
 		sslMode = "require"
-	} else if dbSSL == "false" || dbSSL == "" {
+	case "false", "":
 		sslMode = "disable"
 	}
 

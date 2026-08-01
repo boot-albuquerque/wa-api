@@ -70,18 +70,6 @@ func (usm *UserSemaphoreManager) ForUser(userID string) chan struct{} {
 	return pool.(chan struct{})
 }
 
-// IsHTTPURL checks if the input string is a valid HTTP or HTTPS URL.
-func IsHTTPURL(input string) bool {
-	parsed, err := url.ParseRequestURI(input)
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	return parsed.Host != ""
-}
-
 // FetchURLBytes fetches bytes from a URL with a size limit.
 func FetchURLBytes(ctx context.Context, resourceURL string, limit int64, httpClient *http.Client) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", resourceURL, nil)
@@ -102,7 +90,11 @@ func FetchURLBytes(ctx context.Context, resourceURL string, limit int64, httpCli
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", fmt.Errorf("unexpected status code %d", resp.StatusCode)

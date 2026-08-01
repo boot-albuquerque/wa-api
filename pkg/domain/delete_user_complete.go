@@ -7,10 +7,10 @@ type DeleteUserCompleteRequest struct {
 
 // DeleteUserCompleteResult represents the result of completely deleting a user
 type DeleteUserCompleteResult struct {
-	Code    int    `json:"code"`
+	Code    int            `json:"code"`
 	Data    UserDeleteData `json:"data"`
-	Success bool   `json:"success"`
-	Details string `json:"details"`
+	Success bool           `json:"success"`
+	Details string         `json:"details"`
 }
 
 // UserDeleteData represents the user data returned after deletion

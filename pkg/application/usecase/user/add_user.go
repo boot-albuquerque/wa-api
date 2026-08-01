@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 	"wa-api/pkg/domain"
 	dbpkg "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog"
 )
 
 // AddUserUseCase adiciona um novo usuário

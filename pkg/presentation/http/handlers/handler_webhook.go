@@ -21,18 +21,20 @@ type WebhookHandlerDB interface {
 
 // WebhookHandlerContext bundles the dependencies webhook handlers need.
 type WebhookHandlerContext struct {
-	DB                WebhookHandlerDB
-	UserCache         *cache.Cache
-	SupportedEvents   []string
-	FindInSlice       func(slice []string, val string) bool
-	UpdateUserInfo    func(info interface{}, key, value string) interface{}
-	RespondJSON       func(w http.ResponseWriter, status int, data interface{})
+	DB              WebhookHandlerDB
+	UserCache       *cache.Cache
+	SupportedEvents []string
+	FindInSlice     func(slice []string, val string) bool
+	UpdateUserInfo  func(info interface{}, key, value string) interface{}
+	RespondJSON     func(w http.ResponseWriter, status int, data interface{})
 }
 
 // GetWebhookHandler handles GET /webhook
 type GetWebhookHandler struct{ ctx *WebhookHandlerContext }
 
-func NewGetWebhookHandler(ctx *WebhookHandlerContext) *GetWebhookHandler { return &GetWebhookHandler{ctx} }
+func NewGetWebhookHandler(ctx *WebhookHandlerContext) *GetWebhookHandler {
+	return &GetWebhookHandler{ctx}
+}
 
 func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
@@ -46,7 +48,11 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.ctx.RespondJSON(w, http.StatusInternalServerError, fmt.Errorf("could not get webhook: %v", err))
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Warn().Err(closeErr).Msg("failed to close rows")
+		}
+	}()
 	var webhook, events string
 	for rows.Next() {
 		if err := rows.Scan(&webhook, &events); err != nil {
@@ -67,7 +73,9 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // SetWebhookHandler handles POST /webhook
 type SetWebhookHandler struct{ ctx *WebhookHandlerContext }
 
-func NewSetWebhookHandler(ctx *WebhookHandlerContext) *SetWebhookHandler { return &SetWebhookHandler{ctx} }
+func NewSetWebhookHandler(ctx *WebhookHandlerContext) *SetWebhookHandler {
+	return &SetWebhookHandler{ctx}
+}
 
 func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)

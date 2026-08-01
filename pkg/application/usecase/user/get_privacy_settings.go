@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
+
+	"github.com/rs/zerolog"
 )
 
 // GetPrivacySettingsUseCase retrieves privacy settings

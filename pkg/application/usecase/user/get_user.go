@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
+	"go.mau.fi/whatsmeow/types"
 )
 
 // GetUserUseCase obtém informações de usuários do WhatsApp

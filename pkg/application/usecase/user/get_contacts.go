@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog"
+	"go.mau.fi/whatsmeow/types"
 )
 
 // GetContactsUseCase retrieves all contacts
@@ -28,8 +29,7 @@ func (uc *GetContactsUseCase) Execute(ctx context.Context, userID string, _ doma
 		return nil, fmt.Errorf("no session")
 	}
 
-	result := make(map[types.JID]types.ContactInfo)
-	result, err = client.Store.Contacts.GetAllContacts(ctx)
+	result, err := client.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
 		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get contacts")
 		return nil, err

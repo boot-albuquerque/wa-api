@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -348,10 +347,20 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			// Rollback error is intentionally discarded: err (the original
+			// failure) is already what this function returns, and the
+			// transaction is torn down by the driver on connection close
+			// regardless of whether Rollback itself succeeds.
+			_ = tx.Rollback()
 		}
 	}()
 
+	//nolint:staticcheck // QF1003: this if/else-if chain over 10 migration.ID
+	// branches spans ~130 lines of schema DDL in the migration runner.
+	// Rewriting it as a switch is purely cosmetic and carries real risk of a
+	// transcription error in production schema migrations; deliberately left
+	// untouched during lint cleanup. Revisit alongside the Fase 5b migration
+	// work, where this file is already in scope for careful changes.
 	if migration.ID == 1 {
 		// Handle initial schema creation differently per database
 		if db.DriverName() == "sqlite" {
@@ -512,92 +521,6 @@ func createTableIfNotExistsSQLite(tx *sqlx.Tx, tableName, createSQL string) erro
 	}
 	return nil
 }
-func sqliteChangeIDType(tx *sqlx.Tx) error {
-	// SQLite requires a more complex approach:
-	// 1. Create new table with string ID
-	// 2. Copy data with new UUIDs
-	// 3. Drop old table
-	// 4. Rename new table
-
-	// Step 1: Get the current schema
-	var tableInfo string
-	err := tx.Get(&tableInfo, `
-        SELECT sql FROM sqlite_master
-        WHERE type='table' AND name='users'`)
-	if err != nil {
-		return fmt.Errorf("failed to get table info: %w", err)
-	}
-
-	// Step 2: Create new table with string ID
-	newTableSQL := strings.Replace(tableInfo,
-		"CREATE TABLE users (",
-		"CREATE TABLE users_new (id TEXT PRIMARY KEY, ", 1)
-	newTableSQL = strings.Replace(newTableSQL,
-		"id INTEGER PRIMARY KEY AUTOINCREMENT,", "", 1)
-
-	if _, err = tx.Exec(newTableSQL); err != nil {
-		return fmt.Errorf("failed to create new table: %w", err)
-	}
-
-	// Step 3: Copy data with new UUIDs
-	columns, err := getTableColumns(tx, "users")
-	if err != nil {
-		return fmt.Errorf("failed to get table columns: %w", err)
-	}
-
-	// Remove 'id' from columns list
-	var filteredColumns []string
-	for _, col := range columns {
-		if col != "id" {
-			filteredColumns = append(filteredColumns, col)
-		}
-	}
-
-	columnList := strings.Join(filteredColumns, ", ")
-	if _, err = tx.Exec(fmt.Sprintf(`
-        INSERT INTO users_new (id, %s)
-        SELECT gen_random_uuid(), %s FROM users`,
-		columnList, columnList)); err != nil {
-		return fmt.Errorf("failed to copy data: %w", err)
-	}
-
-	// Step 4: Drop old table
-	if _, err = tx.Exec("DROP TABLE users"); err != nil {
-		return fmt.Errorf("failed to drop old table: %w", err)
-	}
-
-	// Step 5: Rename new table
-	if _, err = tx.Exec("ALTER TABLE users_new RENAME TO users"); err != nil {
-		return fmt.Errorf("failed to rename table: %w", err)
-	}
-
-	return nil
-}
-
-func getTableColumns(tx *sqlx.Tx, tableName string) ([]string, error) {
-	var columns []string
-	rows, err := tx.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get table info: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notnull int
-		var dfltValue interface{}
-		var pk int
-
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &dfltValue, &pk); err != nil {
-			return nil, fmt.Errorf("failed to scan column info: %w", err)
-		}
-		columns = append(columns, name)
-	}
-
-	return columns, nil
-}
-
 func migrateSQLiteIDToString(tx *sqlx.Tx) error {
 	// 1. Check if we need to do the migration
 	var currentType string

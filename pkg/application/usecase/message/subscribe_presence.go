@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
+
+	"github.com/rs/zerolog"
 )
 
 // SubscribePresenceUseCase subscribes to contact presence updates

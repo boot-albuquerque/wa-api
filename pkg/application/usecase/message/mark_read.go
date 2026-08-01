@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/whatsmeow"
+
+	"github.com/rs/zerolog"
+	"go.mau.fi/whatsmeow/types"
 )
 
 // MarkReadUseCase marks messages as read

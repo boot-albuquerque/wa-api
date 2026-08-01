@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/patrickmn/go-cache"
@@ -30,20 +29,18 @@ type AppContext struct {
 	LastMessageCache *cache.Cache
 
 	// Shared mutable state
-	KillChannel   *KillChannel
+	KillChannel      *KillChannel
 	GlobalHTTPClient *http.Client
 
 	// ClientManager must be set after bootstrap (circular import avoidance:
 	// the concrete type lives in package main, but we store it as interface{}).
 	ClientManager interface{}
-
-	mu sync.Mutex
 }
 
 // NewAppContext creates a fully initialized AppContext.
 func NewAppContext() *AppContext {
 	return &AppContext{
-		KillChannel:     NewKillChannel(),
+		KillChannel:      NewKillChannel(),
 		GlobalHTTPClient: NewSafeHTTPClient(),
 		UserInfoCache:    cache.New(5*time.Minute, 10*time.Minute),
 		LastMessageCache: cache.New(24*time.Hour, 24*time.Hour),

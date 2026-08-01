@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/storage"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog"
 )
 
 // EditUserUseCase edita um usuário existente

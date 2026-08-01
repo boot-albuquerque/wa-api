@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog"
 
 	appport "wa-api/pkg/application/contracts"
+
 	"github.com/rs/zerolog/hlog"
 )
 

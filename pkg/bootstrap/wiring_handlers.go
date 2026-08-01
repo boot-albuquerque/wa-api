@@ -85,14 +85,14 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
-	Profile  *customhttp.ProfileHandler
-	Message  *MessageHandlers
-	Session  *SessionHandlers
-	Webhook  *WebhookHandlers
-	User     *handlers.UserHandlers
-	Group    *handlers.GroupHandlers
-	Storage  *handlers.StorageHandlers
-	Misc     *handlers.MiscHandlers
+	Profile   *customhttp.ProfileHandler
+	Message   *MessageHandlers
+	Session   *SessionHandlers
+	Webhook   *WebhookHandlers
+	User      *handlers.UserHandlers
+	Group     *handlers.GroupHandlers
+	Storage   *handlers.StorageHandlers
+	Misc      *handlers.MiscHandlers
 	Blocklist *handlers.BlocklistHandlers
 	Extended  *handlers.ExtendedHandlers
 	GroupMgmt *handlers.GroupManagementHandlers
