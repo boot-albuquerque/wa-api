@@ -22,10 +22,11 @@ linters:
       rules:
         camada-de-aplicacao:
           files:
+            - "**/pkg/application/usecase/chat/*.go"
             - "**/pkg/application/usecase/group/*.go"
             - "**/pkg/application/usecase/message/*.go"
-            - "**/pkg/application/usecase/misc/*.go"
             - "**/pkg/application/usecase/notification/*.go"
+            - "**/pkg/application/usecase/profile/*.go"
             - "**/pkg/application/usecase/session/*.go"
             - "**/pkg/application/usecase/storage/*.go"
             - "**/pkg/application/usecase/user/*.go"
