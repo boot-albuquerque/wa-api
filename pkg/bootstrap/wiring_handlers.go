@@ -101,7 +101,9 @@ type customHandlers struct {
 var customHandlerSet = &customHandlers{}
 
 // initCustomHandlers faz o wiring entre usecases, adapters e handlers custom.
-// Chamado em main() logo após s.routes(), antes de connectOnStartup().
+// Chamado em main() ANTES de s.routes() (main.go:330-331) — registerCustomRoutes
+// lê customHandlerSet, então a ordem é obrigatória: invertida, os campos de
+// customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
 	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
