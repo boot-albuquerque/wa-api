@@ -25,12 +25,17 @@ jobs:
       # would make the count drift with no code change — either a false-red
       # gate, or a real regression masked by a linter that stopped firing.
       # Bump this version and .golangci-baseline together, in the same PR.
+      #
+      # Instalado direto pelo script oficial, nao pela golangci-lint-action:
+      # a action roda `golangci-lint run` com o exit code dela mesma assim
+      # que a instala (o antigo input `install-only` nao existe mais em
+      # v6/v7), o que faz TODO achado falhar o job — inclusive os que
+      # `make lint` trata como informativos. `make check` e' quem decide o
+      # que trava, via .golangci-baseline.
       - name: install golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.5.0
-          install-mode: binary
-          install-only: true
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: golangci-lint config verify
         run: golangci-lint config verify
