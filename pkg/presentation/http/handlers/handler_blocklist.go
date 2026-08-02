@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	customhttp "wa-api/pkg/presentation/http"
+	"github.com/rs/zerolog/hlog"
+
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	customhttp "wa-api/pkg/presentation/http"
 
 	"wa-api/pkg/application/usecase/user"
 )
@@ -30,18 +32,27 @@ func NewGetBlocklistHandler(uc *user.GetBlocklistUseCase) *GetBlocklistHandler {
 func (h *GetBlocklistHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).
+			Str("path", r.URL.Path).
+			Msg("request without user info in context")
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
 	}
 
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+			Str("path", r.URL.Path).
+			Msg("request with empty session id")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 		return
 	}
 
 	result, err := h.uc.Execute(r.Context(), txtID, domain.GetBlocklistRequest{})
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", txtID).
+			Msg("get blocklist use case failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
@@ -49,6 +60,9 @@ func (h *GetBlocklistHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// Serialize as JSON string to match the legacy s.Respond format
 	responseJSON, err := json.Marshal(result)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", txtID).
+			Msg("could not marshal blocklist response")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}

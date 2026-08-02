@@ -5,53 +5,53 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // GroupRequestUseCase encapsula a lógica de gerenciamento de solicitações de entrada em grupos
 type GroupRequestUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	requests appport.GroupRequests
+	jids     appport.JIDResolver
+	logger   appport.Logger
 }
 
 // NewGroupRequestUseCase cria uma nova instância
-func NewGroupRequestUseCase(cp appport.ClientProvider, l zerolog.Logger) *GroupRequestUseCase {
+func NewGroupRequestUseCase(gr appport.GroupRequests, jr appport.JIDResolver, l appport.Logger) *GroupRequestUseCase {
 	return &GroupRequestUseCase{
-		clientProvider: cp,
-		logger:         l,
+		requests: gr,
+		jids:     jr,
+		logger:   l,
 	}
 }
 
 // ExecuteGetGroupRequestParticipants lista os participantes que solicitaram entrar
 func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (json.RawMessage, error) {
 	if req.GroupJID == "" {
+		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
-		return nil, fmt.Errorf("no session")
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
+		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	resp, err := client.GetGroupRequestParticipants(ctx, group)
+	resp, err := uc.requests.GetRequestParticipants(ctx, userID, group)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Msg("failed to get group request participants")
+		uc.logger.Error(ctx, "failed to get group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID)
 		return nil, fmt.Errorf("failed to get group request participants: %w", err)
 	}
 
 	responseJson, err := json.Marshal(resp)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to marshal response")
+		uc.logger.Error(ctx, "failed to marshal response", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to marshal response: %w", err)
 	}
 
@@ -60,53 +60,57 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 
 // ExecuteUpdateGroupRequestParticipants aprova ou rejeita solicitações de entrada
 func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context.Context, userID string, req domain.UpdateGroupRequestParticipantsRequest) (*domain.UpdateGroupRequestParticipantsResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
-		return nil, fmt.Errorf("no session")
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	// Validate request
 	if req.GroupJID == "" {
+		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
 	if len(req.Phone) < 1 {
+		uc.logger.Warn(ctx, "missing phone list in request", "user_id", userID, "group_jid", req.GroupJID)
 		return nil, fmt.Errorf("missing Phone in payload")
 	}
 
 	if req.Action == "" {
+		uc.logger.Warn(ctx, "missing action in request", "user_id", userID, "group_jid", req.GroupJID)
 		return nil, fmt.Errorf("missing Action in payload")
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
+		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
 	// Parse phone numbers
-	phoneParsed := make([]types.JID, len(req.Phone))
+	phoneParsed := make([]domain.JID, len(req.Phone))
 	for i, phone := range req.Phone {
-		phoneParsed[i], ok = parseJID(phone)
-		if !ok {
+		phoneParsed[i], err = uc.jids.ResolveQualifiedJID(ctx, phone)
+		if err != nil {
+			uc.logger.Warn(ctx, "could not parse phone", "user_id", userID, "index", i, "error", err)
 			return nil, fmt.Errorf("could not parse Phone")
 		}
 	}
 
 	// Parse action
-	var action whatsmeow.ParticipantRequestChange
+	var action domain.RequestAction
 	switch req.Action {
 	case "approve":
-		action = whatsmeow.ParticipantChangeApprove
+		action = domain.RequestApprove
 	case "reject":
-		action = whatsmeow.ParticipantChangeReject
+		action = domain.RequestReject
 	default:
+		uc.logger.Warn(ctx, "invalid action in request", "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("invalid Action in payload (must be approve or reject)")
 	}
 
-	_, err = client.UpdateGroupRequestParticipants(ctx, group, phoneParsed, action)
-	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Str("action", req.Action).Msg("failed to update group request participants")
+	if err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action); err != nil {
+		uc.logger.Error(ctx, "failed to update group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("failed to update group request participants: %w", err)
 	}
 
@@ -117,35 +121,28 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 
 // ExecuteSetGroupJoinApprovalMode alterna o requisito de aprovação para entrar no grupo
 func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Context, userID string, req domain.SetGroupJoinApprovalModeRequest) (*domain.SetGroupJoinApprovalModeResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("failed to get whatsmeow client")
-		return nil, fmt.Errorf("no session")
+	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	if req.GroupJID == "" {
+		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
-	group, ok := parseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
+	if err != nil {
+		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	err = client.SetGroupJoinApprovalMode(ctx, group, req.Mode)
-	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Str("group_jid", req.GroupJID).Bool("mode", req.Mode).Msg("failed to set group join approval mode")
+	if err := uc.requests.SetJoinApprovalMode(ctx, userID, group, req.Mode); err != nil {
+		uc.logger.Error(ctx, "failed to set group join approval mode", "error", err, "user_id", userID, "group_jid", req.GroupJID, "mode", req.Mode)
 		return nil, fmt.Errorf("failed to set group join approval mode: %w", err)
 	}
 
 	return &domain.SetGroupJoinApprovalModeResult{
 		Details: "Group join approval mode updated successfully",
 	}, nil
-}
-
-// parseJID é um helper que converte string para types.JID
-// Duplicado aqui por necessidade (também existe em handlers_grouprequests.go)
-func parseJID(jidStr string) (types.JID, bool) {
-	jid, err := types.ParseJID(jidStr)
-	return jid, err == nil
 }

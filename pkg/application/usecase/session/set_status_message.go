@@ -10,15 +10,15 @@ import (
 
 // SetStatusMessageUseCase encapsula a validação de definição de status.
 type SetStatusMessageUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewSetStatusMessageUseCase cria uma nova instância do usecase.
-func NewSetStatusMessageUseCase(cp appport.ClientProvider, l appport.Logger) *SetStatusMessageUseCase {
+func NewSetStatusMessageUseCase(sg appport.SessionGuard, l appport.Logger) *SetStatusMessageUseCase {
 	return &SetStatusMessageUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
@@ -28,16 +28,11 @@ func (uc *SetStatusMessageUseCase) Execute(ctx context.Context, txtID string, re
 		return nil, fmt.Errorf("missing Body in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
-	uc.logger.Info("set status message validated", "txtID", txtID)
+	uc.logger.Info(ctx, "set status message validated", "txtID", txtID)
 	return &domain.SetStatusMessageResult{}, nil
 }

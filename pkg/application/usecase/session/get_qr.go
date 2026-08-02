@@ -6,34 +6,51 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
-// GetQRUseCase encapsula a validação de obtenção do QR code.
+// GetQRUseCase encapsula a validação e leitura do QR code de pareamento.
 type GetQRUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	users    appport.UserRepository
+	logger   appport.Logger
 }
 
 // NewGetQRUseCase cria uma nova instância do usecase.
-func NewGetQRUseCase(cp appport.ClientProvider, l appport.Logger) *GetQRUseCase {
+func NewGetQRUseCase(sg appport.SessionGuard, users appport.UserRepository, l appport.Logger) *GetQRUseCase {
 	return &GetQRUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		users:    users,
+		logger:   l,
 	}
 }
 
-// Execute valida se o cliente está disponível.
+// Execute valida se o cliente está disponível e devolve o QR code persistido
+// pelo listener de eventos do whatsmeow (bootstrap/lifecycle.go grava em
+// users.qrcode a cada evento "code" do canal de QR).
+//
+// Antes, Execute só validava a sessão e devolvia GetQRResult{} vazio — o
+// endpoint respondia 200 sem nunca ler o QR de volta, mesmo com ele já
+// persistido no banco por outro caminho. ListUsers(ctx, txtID) lê o valor
+// atual direto do banco (mesmo padrão de list_users.go), sem depender do
+// cache de 10min da auth middleware, que ficaria obsoleto durante o
+// intervalo em que o QR gira.
 func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQRResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
-	uc.logger.Info("get QR validated", "txtID", txtID)
-	return &domain.GetQRResult{}, nil
+	entries, err := uc.users.ListUsers(ctx, txtID)
+	if err != nil {
+		uc.logger.Error(ctx, "failed to read QR code", "txtID", txtID, "error", err)
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	if len(entries) == 0 {
+		uc.logger.Error(ctx, "no user record for session", "txtID", txtID)
+		return nil, apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
+	}
+
+	uc.logger.Info(ctx, "get QR validated", "txtID", txtID, "hasQR", entries[0].QRCode != "")
+	return &domain.GetQRResult{QRCode: entries[0].QRCode}, nil
 }

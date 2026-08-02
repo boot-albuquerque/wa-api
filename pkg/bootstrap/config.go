@@ -11,10 +11,15 @@ import (
 
 // Replace the global variables
 var (
-	address             = flag.String("address", "0.0.0.0", "Bind IP Address")
-	port                = flag.String("port", "8080", "Listen Port")
-	waDebug             = flag.String("wadebug", "", "Enable whatsmeow debug (INFO or DEBUG)")
-	logType             = flag.String("logtype", "console", "Type of log output (console or json)")
+	address = flag.String("address", "0.0.0.0", "Bind IP Address")
+	port    = flag.String("port", "8080", "Listen Port")
+	waDebug = flag.String("wadebug", "", "Enable whatsmeow debug (INFO or DEBUG)")
+	logType = flag.String("logtype", "console", "Type of log output (console or json)")
+	// logLevel defaults to info deliberately. Before this flag existed there
+	// was no SetGlobalLevel call anywhere in the repo, so zerolog's implicit
+	// TraceLevel default left DEBUG on in production. Restore the old volume
+	// with -loglevel=debug or WA_API_LOG_LEVEL=debug.
+	logLevel            = flag.String("loglevel", "info", "Log level (debug, info, warn, error)")
 	skipMedia           = flag.Bool("skipmedia", false, "Do not attempt to download media in messages")
 	osName              = flag.String("osname", "Mac OS 10", "Connection OSName in Whatsapp")
 	platformType        = flag.String("platformtype", "DESKTOP", "Device platform type (DESKTOP, IPAD, ANDROID_TABLET, IOS_PHONE, ANDROID_PHONE, etc.)")
@@ -37,11 +42,9 @@ var (
 	webhookErrorQueueName    = flag.String("errorqueue", "webhook_errors", "RabbitMQ queue name for failed webhooks")
 	globalWebhookUseProxy    = flag.Bool("webhookuseproxy", true, "Route webhook deliveries through the per-user proxy when configured")
 
-	container        *sqlstore.Container
-	clientManager    = NewClientManager()
-	userinfocache    = cache.New(5*time.Minute, 10*time.Minute)
-	lastMessageCache = cache.New(24*time.Hour, 24*time.Hour)
-	globalHTTPClient = NewSafeHTTPClient()
+	container     *sqlstore.Container
+	clientManager = NewClientManager()
+	userinfocache = cache.New(5*time.Minute, 10*time.Minute)
 )
 
 // appCtx bundles runtime configuration previously spread across global vars.

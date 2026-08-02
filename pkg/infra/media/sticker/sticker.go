@@ -17,15 +17,15 @@ const JpegQuality = 80
 
 // WebP RIFF container constants.
 const (
-	RiffHeaderSize  = 12
-	ChunkHeaderSize = 8
-	RiffSizeOffset  = 4
-	Vp8xChunkSize   = ChunkHeaderSize + 10
-	Vp8xPayloadSize = 10
-	Vp8xFlagsOffset = ChunkHeaderSize
-	Vp8xWidthOffset = ChunkHeaderSize + 4
-	Vp8xHeightOffset = ChunkHeaderSize + 7
-	Vp8xFlagEXIF    byte = 0x08
+	RiffHeaderSize        = 12
+	ChunkHeaderSize       = 8
+	RiffSizeOffset        = 4
+	Vp8xChunkSize         = ChunkHeaderSize + 10
+	Vp8xPayloadSize       = 10
+	Vp8xFlagsOffset       = ChunkHeaderSize
+	Vp8xWidthOffset       = ChunkHeaderSize + 4
+	Vp8xHeightOffset      = ChunkHeaderSize + 7
+	Vp8xFlagEXIF     byte = 0x08
 )
 
 // EncodeJPEGThumbnail encodes an image as a JPEG byte slice.
@@ -44,8 +44,16 @@ func RunFFmpegConversion(input []byte, inputExt string, ffmpegArgs func(inPath, 
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(inFile.Name())
-	defer inFile.Close()
+	defer func() {
+		if err := os.Remove(inFile.Name()); err != nil {
+			log.Warn().Err(err).Str("path", inFile.Name()).Msg("Failed to remove temp input file")
+		}
+	}()
+	defer func() {
+		if err := inFile.Close(); err != nil {
+			log.Warn().Err(err).Msg("Failed to close temp input file")
+		}
+	}()
 	if _, err := inFile.Write(input); err != nil {
 		return nil, err
 	}
@@ -54,8 +62,14 @@ func RunFFmpegConversion(input []byte, inputExt string, ffmpegArgs func(inPath, 
 		return nil, err
 	}
 	outPath := outFile.Name()
-	outFile.Close()
-	defer os.Remove(outPath)
+	if err := outFile.Close(); err != nil {
+		log.Warn().Err(err).Msg("Failed to close temp output file")
+	}
+	defer func() {
+		if err := os.Remove(outPath); err != nil {
+			log.Warn().Err(err).Str("path", outPath).Msg("Failed to remove temp output file")
+		}
+	}()
 	args := ffmpegArgs(inFile.Name(), outPath)
 	cmd := exec.Command("ffmpeg", args...)
 	var stdout, stderr bytes.Buffer
@@ -70,6 +84,7 @@ func RunFFmpegConversion(input []byte, inputExt string, ffmpegArgs func(inPath, 
 
 // ConvertVideoStickerToWebP converts a video sticker to WebP via ffmpeg.
 func ConvertVideoStickerToWebP(input []byte) ([]byte, error) {
+	log.Debug().Int("inputSize", len(input)).Msg("Converting video sticker to WebP")
 	return RunFFmpegConversion(input, ".mp4", func(inPath, outPath string) []string {
 		return []string{"-y", "-t", "10", "-i", inPath, "-vf", "fps=15,scale=512:512", "-loop", "0", "-an", "-vsync", "0", "-fs", "1000000", "-c:v", "libwebp", "-qscale:v", "10", outPath}
 	}, "ffmpeg failed converting video sticker")
@@ -77,6 +92,7 @@ func ConvertVideoStickerToWebP(input []byte) ([]byte, error) {
 
 // ConvertImageToWebP converts an image to WebP via ffmpeg.
 func ConvertImageToWebP(input []byte) ([]byte, error) {
+	log.Debug().Int("inputSize", len(input)).Msg("Converting image sticker to WebP")
 	return RunFFmpegConversion(input, ".img", func(inPath, outPath string) []string {
 		return []string{"-y", "-i", inPath, "-vf", "scale=512:512", "-c:v", "libwebp", "-lossless", "1", outPath}
 	}, "ffmpeg failed converting image sticker")

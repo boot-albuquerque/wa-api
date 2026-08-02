@@ -8,7 +8,7 @@ import (
 
 // SafeGo runs fn in a new goroutine with a defer recover so a panic inside
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
-// the whole process. Losing one delivery is preferable to taking wuzapi
+// the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
 func SafeGo(name string, fn func()) {
 	go func() {

@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/hlog"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -39,14 +41,14 @@ func NewUserHandlers(
 	unblockUser *user.UnblockUserUseCase,
 ) *UserHandlers {
 	return &UserHandlers{
-		listUsers:  listUsers,
-		addUser:    addUser,
-		editUser:   editUser,
-		deleteUser: deleteUser,
-		checkUser:  checkUser,
-		getUser:    getUser,
-		getUserLID: getUserLID,
-		blockUser:  blockUser,
+		listUsers:   listUsers,
+		addUser:     addUser,
+		editUser:    editUser,
+		deleteUser:  deleteUser,
+		checkUser:   checkUser,
+		getUser:     getUser,
+		getUserLID:  getUserLID,
+		blockUser:   blockUser,
 		unblockUser: unblockUser,
 	}
 }
@@ -58,6 +60,9 @@ func (h *UserHandlers) ListUsers() http.Handler {
 		userID := vars["id"]
 		result, err := h.listUsers.Execute(r.Context(), domain.ListUsersRequest{UserID: userID})
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -70,11 +75,29 @@ func (h *UserHandlers) AddUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req domain.AddUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.addUser.Execute(r.Context(), req)
 		if err != nil {
+			// ErrDuplicateToken era sempre reportado como 500 — o caller não
+			// tinha como distinguir "token já existe" (chamada idempotente,
+			// re-provisionar o mesmo usuário) de um erro real de servidor.
+			// Provisionamento repetido do mesmo token é o caso comum de um
+			// client que reconecta/reenvia (ex.: retry de pareamento).
+			if errors.Is(err, user.ErrDuplicateToken) {
+				hlog.FromRequest(r).Warn().Err(err).
+					Str("path", r.URL.Path).
+					Msg("add user rejected: token already provisioned")
+				customhttp.RespondJSON(w, http.StatusConflict, nil, err)
+				return
+			}
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("add user use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -89,10 +112,16 @@ func (h *UserHandlers) EditUser() http.Handler {
 		var req domain.EditUserRequest
 		req.UserID = vars["id"]
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		if err := h.editUser.Execute(r.Context(), req); err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("user_id", req.UserID).
+				Msg("edit user use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -106,6 +135,9 @@ func (h *UserHandlers) DeleteUser() http.Handler {
 		vars := mux.Vars(r)
 		req := domain.DeleteUserRequest{UserID: vars["id"]}
 		if err := h.deleteUser.Execute(r.Context(), req); err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("user_id", req.UserID).
+				Msg("delete user use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -118,21 +150,33 @@ func (h *UserHandlers) CheckUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
 		}
 		txtID := info.Get("Id")
 		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
 		var req domain.CheckUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.checkUser.Execute(r.Context(), txtID, req)
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -145,21 +189,33 @@ func (h *UserHandlers) GetUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
 		}
 		txtID := info.Get("Id")
 		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
 		var req domain.CheckUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.getUser.Execute(r.Context(), txtID, req)
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -172,21 +228,33 @@ func (h *UserHandlers) GetUserLID() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
 		}
 		txtID := info.Get("Id")
 		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
 		var req domain.GetUserLIDRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.getUserLID.Execute(r.Context(), txtID, req)
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -199,21 +267,33 @@ func (h *UserHandlers) BlockUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
 		}
 		txtID := info.Get("Id")
 		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
 		var req domain.BlockUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.blockUser.Execute(r.Context(), txtID, req)
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
@@ -226,21 +306,33 @@ func (h *UserHandlers) UnblockUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
 			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 			return
 		}
 		txtID := info.Get("Id")
 		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
 		var req domain.UnblockUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("could not decode payload")
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
 		result, err := h.unblockUser.Execute(r.Context(), txtID, req)
 		if err != nil {
+			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}

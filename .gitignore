@@ -3,7 +3,7 @@
 # =============================================================================
 
 # --- Go ---
-/wuzapi
+/wa-api
 /core
 /wss
 *.exe
@@ -13,6 +13,7 @@
 *.dylib
 *.test
 *.out
+!cmd/logcov/testdata/profile/*.out
 coverage.out
 coverage.html
 go.work
@@ -175,3 +176,4 @@ dev-debug.log
 *.temp
 *.swp
 *.orig
+wuzapi

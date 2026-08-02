@@ -1,0 +1,15 @@
+# Pacotes fora do denominador de log (regra X5 de cmd/logcov/METRIC.md).
+#
+# Uma linha por prefixo de caminho module-relative. Um pacote listado aqui sai
+# do DENOMINADOR — e por isso .log-coverage-baseline trava `min_eligible`:
+# adicionar um item aqui faz o percentual subir sozinho, e a trava transforma
+# isso em falha visivel em vez de melhora silenciosa.
+#
+# cmd/ — os binarios sao `main` triviais, e a propria ferramenta nao se julga.
+cmd/
+
+# pkg/application/contracts/contractsfake/ — sao dublês de teste (fakes de
+# porta para a F11); nao logam por definicao, e contar seus ~70 metodos no
+# denominador so dilui o percentual sem significar nada sobre o repositorio
+# real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
+pkg/application/contracts/contractsfake/

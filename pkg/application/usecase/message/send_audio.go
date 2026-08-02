@@ -11,15 +11,15 @@ import (
 // SendAudioUseCase encapsula a validação de envio de áudio.
 // A lógica de envio complexa (upload, etc) fica no wrapper handlers.go.
 type SendAudioUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendAudioUseCase cria uma nova instância do usecase.
-func NewSendAudioUseCase(cp appport.ClientProvider, l appport.Logger) *SendAudioUseCase {
+func NewSendAudioUseCase(mc appport.MessageComposer, l appport.Logger) *SendAudioUseCase {
 	return &SendAudioUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -32,19 +32,19 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 		return nil, fmt.Errorf("missing Audio in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, err
+		}
+		msgID = generated
 	}
 
 	result := &domain.SendAudioResult{
@@ -52,6 +52,6 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 		Status:    "validated",
 	}
 
-	uc.logger.Info("audio validated", "msgID", msgID)
+	uc.logger.Info(ctx, "audio validated", "msgID", msgID)
 	return result, nil
 }

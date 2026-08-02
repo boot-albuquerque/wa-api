@@ -70,18 +70,6 @@ func (usm *UserSemaphoreManager) ForUser(userID string) chan struct{} {
 	return pool.(chan struct{})
 }
 
-// IsHTTPURL checks if the input string is a valid HTTP or HTTPS URL.
-func IsHTTPURL(input string) bool {
-	parsed, err := url.ParseRequestURI(input)
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	return parsed.Host != ""
-}
-
 // FetchURLBytes fetches bytes from a URL with a size limit.
 func FetchURLBytes(ctx context.Context, resourceURL string, limit int64, httpClient *http.Client) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", resourceURL, nil)
@@ -102,9 +90,15 @@ func FetchURLBytes(ctx context.Context, resourceURL string, limit int64, httpCli
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Warn().Int("status", resp.StatusCode).Str("url", resourceURL).
+			Msg("Unexpected status code fetching URL bytes")
 		return nil, "", fmt.Errorf("unexpected status code %d", resp.StatusCode)
 	}
 
@@ -114,6 +108,8 @@ func FetchURLBytes(ctx context.Context, resourceURL string, limit int64, httpCli
 		return nil, "", err
 	}
 	if int64(len(data)) > limit {
+		log.Warn().Int64("limit", limit).Int("size", len(data)).Str("url", resourceURL).
+			Msg("Response exceeds allowed size")
 		return nil, "", fmt.Errorf("response exceeds allowed size (%d bytes)", limit)
 	}
 
@@ -187,6 +183,7 @@ func GetOpenGraphData(ctx context.Context, urlStr string, userID string, httpCli
 func ExtractFirstURL(text string) string {
 	match := urlRegex.FindString(text)
 	if match == "" {
+		log.Debug().Int("textLength", len(text)).Msg("No URL found in text")
 		return ""
 	}
 	return match

@@ -6,20 +6,21 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/whatsmeow"
 )
 
 // GetGroupInfoUseCase encapsula a validação para obter informações de grupo
 type GetGroupInfoUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	groups appport.GroupDirectory
+	jids   appport.JIDResolver
+	logger appport.Logger
 }
 
 // NewGetGroupInfoUseCase cria uma nova instância do usecase
-func NewGetGroupInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGroupInfoUseCase {
+func NewGetGroupInfoUseCase(gd appport.GroupDirectory, jr appport.JIDResolver, l appport.Logger) *GetGroupInfoUseCase {
 	return &GetGroupInfoUseCase{
-		clientProvider: cp,
-		logger:         l,
+		groups: gd,
+		jids:   jr,
+		logger: l,
 	}
 }
 
@@ -27,37 +28,34 @@ func NewGetGroupInfoUseCase(cp appport.ClientProvider, l appport.Logger) *GetGro
 func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req domain.GetGroupInfoRequest) (*domain.GetGroupInfoResult, error) {
 	// Validar GroupJID
 	if req.GroupJID == "" {
+		uc.logger.Warn(ctx, "missing groupJID in request", "txtID", txtID)
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
 	// Parse GroupJID
-	group, ok := whatsmeow.ParseJID(req.GroupJID)
-	if !ok {
+	group, err := uc.jids.ResolveJID(ctx, req.GroupJID)
+	if err != nil {
+		uc.logger.Warn(ctx, "could not parse group JID", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
-	// Obter cliente whatsmeow
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	// Garantir que há sessão
+	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	// Obter informações do grupo
-	groupInfo, err := client.GetGroupInfo(ctx, group)
+	groupInfo, err := uc.groups.GetGroupInfo(ctx, txtID, group)
 	if err != nil {
-		uc.logger.Error("failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("Failed to get group info: %v", err)
+		uc.logger.Error(ctx, "failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
+		return nil, fmt.Errorf("failed to get group info: %v", err)
 	}
 
 	result := &domain.GetGroupInfoResult{
 		GroupInfo: groupInfo,
 	}
 
-	uc.logger.Info("group info retrieved", "txtID", txtID, "groupJID", req.GroupJID)
+	uc.logger.Info(ctx, "group info retrieved", "txtID", txtID, "groupJID", req.GroupJID)
 	return result, nil
 }

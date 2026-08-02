@@ -1,8 +1,9 @@
 package domain
 
-import "go.mau.fi/whatsmeow/types"
-
 // NewsletterCollection represents a collection of newsletters
 type NewsletterCollection struct {
-	Newsletter []types.NewsletterMetadata `json:"newsletter"`
+	// Newsletter carrega a lista devolvida pela porta NewsletterReader. É any
+	// e não um tipo do SDK: o domínio não deve conhecer types.NewsletterMetadata,
+	// e o valor só existe para ser serializado (ADR-001).
+	Newsletter interface{} `json:"newsletter"`
 }

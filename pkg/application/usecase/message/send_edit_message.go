@@ -10,15 +10,15 @@ import (
 
 // SendEditMessageUseCase encapsula a validação de edição de mensagem.
 type SendEditMessageUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewSendEditMessageUseCase cria uma nova instância do usecase.
-func NewSendEditMessageUseCase(cp appport.ClientProvider, l appport.Logger) *SendEditMessageUseCase {
+func NewSendEditMessageUseCase(sg appport.SessionGuard, l appport.Logger) *SendEditMessageUseCase {
 	return &SendEditMessageUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
@@ -34,14 +34,9 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 		return nil, fmt.Errorf("missing Id in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	result := &domain.SendEditMessageResult{
@@ -49,6 +44,6 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 		Status:    "validated",
 	}
 
-	uc.logger.Info("message edit validated", "msgID", req.ID)
+	uc.logger.Info(ctx, "message edit validated", "msgID", req.ID)
 	return result, nil
 }

@@ -1,4 +1,4 @@
-// Package domain contém as entidades centrais do domínio disparazaap-wuzapi.
+// Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
 // GetGroupRequestParticipantsRequest representa a requisição para listar participantes que solicitaram entrar

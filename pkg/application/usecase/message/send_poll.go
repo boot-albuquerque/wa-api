@@ -10,15 +10,15 @@ import (
 
 // SendPollUseCase encapsula a validação de envio de enquete.
 type SendPollUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendPollUseCase cria uma nova instância do usecase.
-func NewSendPollUseCase(cp appport.ClientProvider, l appport.Logger) *SendPollUseCase {
+func NewSendPollUseCase(mc appport.MessageComposer, l appport.Logger) *SendPollUseCase {
 	return &SendPollUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -34,19 +34,19 @@ func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain
 		return nil, fmt.Errorf("at least 2 options are required")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, err
+		}
+		msgID = generated
 	}
 
 	result := &domain.SendPollResult{
@@ -54,6 +54,6 @@ func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain
 		Status:    "validated",
 	}
 
-	uc.logger.Info("poll validated", "msgID", msgID)
+	uc.logger.Info(ctx, "poll validated", "msgID", msgID)
 	return result, nil
 }

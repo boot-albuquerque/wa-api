@@ -1,6 +1,6 @@
-# Arquivos custom do disparazaap-wuzapi — nunca sobrescritos em merge upstream
+# Arquivos custom do disparazaap-wa-api — nunca sobrescritos em merge upstream
 #
-# merge=ours faz o git preferir a versão local (disparazaap-wuzapi) em um merge,
+# merge=ours faz o git preferir a versão local (disparazaap-wa-api) em um merge,
 # então git pull upstream main nunca sobrescreve estes arquivos.
 # Rotas upstream (routes.go, handlers.go) ficam no default para merge inteligente.
 

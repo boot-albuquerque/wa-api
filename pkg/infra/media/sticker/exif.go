@@ -16,10 +16,14 @@ import (
 // ProcessStickerData decodes a data URI sticker and converts to WebP.
 func ProcessStickerData(stickerData, mimeOverride, packID, packName, packPublisher string, emojis []string) ([]byte, string, error) {
 	if !strings.HasPrefix(stickerData, "data") {
+		log.Warn().Int("payloadLength", len(stickerData)).
+			Msg("Sticker payload is not a data URI")
 		return nil, "", fmt.Errorf("data should start with \"data:mime/type;base64,\"")
 	}
 	dataURL, err := dataurl.DecodeString(stickerData)
 	if err != nil {
+		log.Warn().Err(err).Int("payloadLength", len(stickerData)).
+			Msg("Failed to decode sticker data URI")
 		return nil, "", fmt.Errorf("could not decode base64 encoded data from payload")
 	}
 	filedata, mimeType, err := ConvertToWebPSticker(dataURL.Data, mimeOverride)
@@ -42,12 +46,16 @@ func ConvertToWebPSticker(data []byte, mimeOverride string) ([]byte, string, err
 	case strings.HasPrefix(mimeType, "video/"), mimeType == "image/gif":
 		converted, err := ConvertVideoStickerToWebP(data)
 		if err != nil {
+			log.Warn().Err(err).Str("mimeType", mimeType).
+				Msg("Failed to convert video/gif sticker to webp")
 			return nil, "", fmt.Errorf("failed to convert video/gif sticker to webp: %w", err)
 		}
 		return converted, "image/webp", nil
 	case mimeType == "image/jpeg", mimeType == "image/png", mimeType == "image/jpg":
 		converted, err := ConvertImageToWebP(data)
 		if err != nil {
+			log.Warn().Err(err).Str("mimeType", mimeType).
+				Msg("Failed to convert image sticker to webp")
 			return nil, "", fmt.Errorf("failed to convert image sticker to webp: %w", err)
 		}
 		return converted, "image/webp", nil
@@ -74,13 +82,23 @@ func EmbedStickerEXIF(inputWebP []byte, packID, packName, packPublisher string, 
 // BuildStickerMetadata creates a sticker metadata map.
 func BuildStickerMetadata(packID, packName, packPublisher string, emojis []string) map[string]interface{} {
 	if packID == "" && packName == "" && packPublisher == "" && len(emojis) == 0 {
+		log.Debug().Int("emojiCount", len(emojis)).
+			Msg("No sticker pack metadata supplied; skipping EXIF metadata")
 		return nil
 	}
 	meta := make(map[string]interface{})
-	if packID != ""       { meta["sticker-pack-id"] = packID }
-	if packName != ""     { meta["sticker-pack-name"] = packName }
-	if packPublisher != "" { meta["sticker-pack-publisher"] = packPublisher }
-	if len(emojis) > 0    { meta["emojis"] = emojis }
+	if packID != "" {
+		meta["sticker-pack-id"] = packID
+	}
+	if packName != "" {
+		meta["sticker-pack-name"] = packName
+	}
+	if packPublisher != "" {
+		meta["sticker-pack-publisher"] = packPublisher
+	}
+	if len(emojis) > 0 {
+		meta["emojis"] = emojis
+	}
 	return meta
 }
 
@@ -88,6 +106,8 @@ func BuildStickerMetadata(packID, packName, packPublisher string, emojis []strin
 func BuildWhatsAppEXIF(meta map[string]interface{}) []byte {
 	jsonBytes, err := json.Marshal(meta)
 	if err != nil {
+		log.Warn().Err(err).Int("fieldCount", len(meta)).
+			Msg("Failed to marshal sticker metadata to JSON")
 		return nil
 	}
 	header := []byte{
@@ -100,7 +120,10 @@ func BuildWhatsAppEXIF(meta map[string]interface{}) []byte {
 	footer := []byte{0x16, 0x00, 0x00, 0x00}
 	var buf bytes.Buffer
 	buf.Write(header)
-	binary.Write(&buf, binary.LittleEndian, uint32(len(jsonBytes)))
+	if err := binary.Write(&buf, binary.LittleEndian, uint32(len(jsonBytes))); err != nil {
+		log.Warn().Err(err).Msg("Failed to write EXIF length field")
+		return nil
+	}
 	buf.Write(footer)
 	buf.Write(jsonBytes)
 	return buf.Bytes()
@@ -109,6 +132,7 @@ func BuildWhatsAppEXIF(meta map[string]interface{}) []byte {
 // InjectWebPEXIF injects EXIF data into a WebP file.
 func InjectWebPEXIF(in, exif []byte) ([]byte, error) {
 	if !IsValidWebP(in) {
+		log.Warn().Int("size", len(in)).Msg("Sticker payload is not a RIFF WEBP file")
 		return nil, fmt.Errorf("not a RIFF WEBP file")
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(in))
@@ -139,6 +163,8 @@ func ParseWebPChunks(in []byte) (chunks [][]byte, vp8xIndex int, err error) {
 		size := int(binary.LittleEndian.Uint32(in[pos+4 : pos+8]))
 		dataEnd := pos + ChunkHeaderSize + size
 		if dataEnd > len(in) {
+			log.Warn().Str("tag", tag).Int("declaredSize", size).Int("available", len(in)-pos-ChunkHeaderSize).
+				Msg("Truncated webp chunk")
 			return nil, -1, fmt.Errorf("truncated webp chunk: %s", tag)
 		}
 		pad := size & 1
@@ -169,6 +195,7 @@ func EnsureVP8XWithEXIF(chunks [][]byte, vp8xIndex, width, height int) [][]byte 
 
 // CreateVP8XChunk creates a VP8X chunk for the given dimensions.
 func CreateVP8XChunk(width, height int) []byte {
+	log.Trace().Int("width", width).Int("height", height).Msg("Creating VP8X chunk with EXIF flag")
 	chunk := make([]byte, Vp8xChunkSize)
 	copy(chunk[0:4], "VP8X")
 	binary.LittleEndian.PutUint32(chunk[4:8], Vp8xPayloadSize)
@@ -180,6 +207,7 @@ func CreateVP8XChunk(width, height int) []byte {
 
 // PutUint24LE writes a 24-bit little-endian unsigned int.
 func PutUint24LE(b []byte, v int) {
+	log.Trace().Int("value", v).Msg("Writing 24-bit little-endian value")
 	b[0] = uint8(v)
 	b[1] = uint8(v >> 8)
 	b[2] = uint8(v >> 16)
@@ -197,11 +225,14 @@ func AssembleWebP(chunks [][]byte, exif []byte) []byte {
 	WriteChunk(&out, "EXIF", exif)
 	b := out.Bytes()
 	binary.LittleEndian.PutUint32(b[RiffSizeOffset:], uint32(len(b)-8))
+	log.Trace().Int("chunkCount", len(chunks)).Int("exifSize", len(exif)).Int("totalSize", len(b)).
+		Msg("Assembled WebP sticker")
 	return b
 }
 
 // WriteChunk writes a tagged chunk to the buffer.
 func WriteChunk(buf *bytes.Buffer, tag string, data []byte) {
+	log.Trace().Str("tag", tag).Int("size", len(data)).Msg("Writing WebP chunk")
 	buf.WriteString(tag)
 	sz := make([]byte, 4)
 	binary.LittleEndian.PutUint32(sz, uint32(len(data)))

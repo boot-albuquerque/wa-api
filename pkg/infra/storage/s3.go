@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,7 @@ func (m *S3Manager) SetDB(db *sqlx.DB) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.db = db
+	log.Debug().Bool("hasDB", db != nil).Msg("S3 manager database reference set")
 }
 
 // EnsureClientFromDB loads S3 config from DB and initializes client if enabled. Returns true if client is available.
@@ -65,6 +67,7 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	db := m.db
 	m.mu.RUnlock()
 	if db == nil {
+		log.Warn().Str("userID", userID).Msg("S3 lazy init skipped: no database reference on manager")
 		return false
 	}
 	var s3DbConfig struct {
@@ -81,7 +84,11 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	}
 	query := `SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_public_url, COALESCE(media_delivery, 'base64') AS media_delivery, COALESCE(s3_retention_days, 30) AS s3_retention_days FROM users WHERE id = $1`
 	query = db.Rebind(query)
-	if err := db.Get(&s3DbConfig, query, userID); err != nil || !s3DbConfig.Enabled {
+	if err := db.Get(&s3DbConfig, query, userID); err != nil {
+		log.Warn().Err(err).Str("userID", userID).Msg("failed to load S3 config from database, lazy init aborted")
+		return false
+	}
+	if !s3DbConfig.Enabled {
 		return false
 	}
 	config := &S3Config{
@@ -122,22 +129,12 @@ func (m *S3Manager) InitializeS3Client(userID string, config *S3Config) error {
 		Credentials: credProvider,
 	}
 
-	if config.Endpoint != "" {
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			if service == s3.ServiceID {
-				return aws.Endpoint{
-					URL:               config.Endpoint,
-					HostnameImmutable: config.PathStyle,
-				}, nil
-			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-		})
-		cfg.EndpointResolverWithOptions = customResolver
-	}
-
 	// Create S3 client
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = config.PathStyle
+		if config.Endpoint != "" {
+			o.BaseEndpoint = aws.String(config.Endpoint)
+		}
 	})
 
 	m.clients[userID] = client
@@ -154,6 +151,8 @@ func (m *S3Manager) RemoveClient(userID string) {
 
 	delete(m.clients, userID)
 	delete(m.configs, userID)
+
+	log.Debug().Str("userID", userID).Msg("S3 client removed")
 }
 
 // GetClient returns S3 client for a user
@@ -164,11 +163,38 @@ func (m *S3Manager) GetClient(userID string) (*s3.Client, *S3Config, bool) {
 	client, clientOk := m.clients[userID]
 	config, configOk := m.configs[userID]
 
+	if !clientOk || !configOk {
+		log.Debug().Str("userID", userID).Msg("no S3 client registered for user")
+	}
+
 	return client, config, clientOk && configOk
+}
+
+// s3KeyComponentPattern matches any character not safe inside a single S3
+// key path segment. Deliberately conservative (allow-list, not deny-list):
+// anything outside [A-Za-z0-9_-] becomes "_". "." is excluded on purpose,
+// not just "/" — replacing "/" alone in "../../../etc/passwd" leaves
+// ".." sequences sitting mid-string ("_.._.._etc_passwd"), so excluding
+// "." entirely is what actually guarantees no ".." can ever reach the
+// interpolated key. A WhatsApp message ID has no legitimate need for a
+// literal dot.
+var s3KeyComponentPattern = regexp.MustCompile(`[^A-Za-z0-9_-]`)
+
+// sanitizeS3KeyComponent makes s safe to interpolate as one segment of an
+// S3 key: neither "/" (extra path segments) nor "." (which combined with
+// "/" could form "..") can survive.
+func sanitizeS3KeyComponent(s string) string {
+	return s3KeyComponentPattern.ReplaceAllString(s, "_")
 }
 
 // GenerateS3Key generates S3 object key based on message metadata
 func (m *S3Manager) GenerateS3Key(userID, contactJID, messageID string, mimeType string, isIncoming bool) string {
+	return m.generateS3KeyAt(time.Now(), userID, contactJID, messageID, mimeType, isIncoming)
+}
+
+// generateS3KeyAt is GenerateS3Key with the timestamp injected, so the date
+// partitioning can be tested deterministically.
+func (m *S3Manager) generateS3KeyAt(now time.Time, userID, contactJID, messageID string, mimeType string, isIncoming bool) string {
 	// Determine direction
 	direction := "outbox"
 	if isIncoming {
@@ -179,11 +205,19 @@ func (m *S3Manager) GenerateS3Key(userID, contactJID, messageID string, mimeType
 	contactJID = strings.ReplaceAll(contactJID, "@", "_")
 	contactJID = strings.ReplaceAll(contactJID, ":", "_")
 
-	// Get current time
-	now := time.Now()
-	year := now.Format("2025")
-	month := now.Format("05")
-	day := now.Format("25")
+	// messageID comes from whatsmeow's MessageInfo.ID, a raw string attribute
+	// off the incoming <message> stanza (verified against whatsmeow's own
+	// source: types/jid.go's MessageID is a plain string alias, and
+	// message.go's parseMessageInfo sets it from ag.String("id") with no
+	// format validation). For an incoming message, that attribute is set by
+	// the sender, not this SDK — an unsanitized "/" or "../" here would
+	// traverse the direction/date prefixes above and let one partition
+	// collide with or overwrite another (sec/F28, confirmed in Fase 1-v).
+	messageID = sanitizeS3KeyComponent(messageID)
+
+	year := now.Format("2006")
+	month := now.Format("01")
+	day := now.Format("02")
 
 	// Determine media type folder
 	mediaType := "documents"
@@ -241,6 +275,8 @@ func (m *S3Manager) GenerateS3Key(userID, contactJID, messageID string, mimeType
 		ext,
 	)
 
+	log.Debug().Str("userID", userID).Str("key", key).Str("mimeType", mimeType).Msg("S3 object key generated")
+
 	return key
 }
 
@@ -253,6 +289,7 @@ func (m *S3Manager) UploadToS3(ctx context.Context, userID string, key string, d
 			client, config, ok = m.GetClient(userID)
 		}
 		if !ok {
+			log.Error().Str("userID", userID).Str("key", key).Msg("S3 upload aborted: client not initialized for user")
 			return fmt.Errorf("S3 client not initialized for user %s", userID)
 		}
 	}
@@ -276,7 +313,6 @@ func (m *S3Manager) UploadToS3(ctx context.Context, userID string, key string, d
 		Body:         bytes.NewReader(data),
 		ContentType:  aws.String(contentType),
 		CacheControl: aws.String("public, max-age=3600"),
-		ACL:          types.ObjectCannedACLPublicRead,
 	}
 
 	if expires != nil {
@@ -290,50 +326,56 @@ func (m *S3Manager) UploadToS3(ctx context.Context, userID string, key string, d
 
 	_, err := client.PutObject(ctx, input)
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("bucket", config.Bucket).Str("key", key).Msg("failed to upload object to S3")
 		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
 	return nil
 }
 
-// GetPublicURL generates public URL for S3 object
-func (m *S3Manager) GetPublicURL(userID, key string) string {
-	_, config, ok := m.GetClient(userID)
+// presignExpiry is how long a presigned GetObject URL stays valid. 7 days
+// is the maximum SigV4 allows; media links in a chat app are viewed well
+// within that window, and re-presigning is just calling this again.
+const presignExpiry = 7 * 24 * time.Hour
+
+// GetPublicURL returns a URL the object can be fetched from without AWS
+// credentials. UploadToS3 no longer sets ACL: public-read (Fase 1b removed
+// it; Block Public Access was not confirmed enabled — Fase 1-v, sec/F26),
+// so a plain constructed URL would 403 for anyone who isn't the bucket
+// owner. A presigned GetObject URL is the replacement: it grants
+// time-limited access to that one object without making the object or the
+// bucket public. If config.PublicURL is set (the user pointed a CDN or
+// reverse proxy at the bucket themselves), that's used as-is — presigning
+// is only for the case where this process's own credentials are what
+// grant access.
+func (m *S3Manager) GetPublicURL(ctx context.Context, userID, key string) (string, error) {
+	client, config, ok := m.GetClient(userID)
 	if !ok {
-		return ""
+		log.Error().Str("userID", userID).Str("key", key).Msg("cannot build S3 URL: client not initialized for user")
+		return "", fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 
-	// Use custom public URL if configured
 	if config.PublicURL != "" {
-		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(config.PublicURL, "/"), config.Bucket, key)
+		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(config.PublicURL, "/"), config.Bucket, key), nil
 	}
 
-	// Generate standard S3 URL
-	if config.PathStyle {
-		return fmt.Sprintf("%s/%s/%s",
-			strings.TrimRight(config.Endpoint, "/"),
-			config.Bucket,
-			key)
+	presignClient := s3.NewPresignClient(client)
+	req, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(config.Bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(presignExpiry))
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("bucket", config.Bucket).Str("key", key).Msg("failed to presign S3 GetObject URL")
+		return "", fmt.Errorf("failed to presign S3 URL: %w", err)
 	}
-
-	// Virtual hosted-style URL
-	if strings.Contains(config.Endpoint, "amazonaws.com") {
-		return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s",
-			config.Bucket,
-			config.Region,
-			key)
-	}
-
-	// For other S3-compatible services
-	endpoint := strings.TrimPrefix(config.Endpoint, "https://")
-	endpoint = strings.TrimPrefix(endpoint, "http://")
-	return fmt.Sprintf("https://%s.%s/%s", config.Bucket, endpoint, key)
+	return req.URL, nil
 }
 
 // TestConnection tests S3 connection
 func (m *S3Manager) TestConnection(ctx context.Context, userID string) error {
 	client, config, ok := m.GetClient(userID)
 	if !ok {
+		log.Error().Str("userID", userID).Msg("S3 connection test aborted: client not initialized for user")
 		return fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 
@@ -357,11 +399,16 @@ func (m *S3Manager) ProcessMediaForS3(ctx context.Context, userID, contactJID, m
 	// Upload to S3
 	err := m.UploadToS3(ctx, userID, key, data, mimeType)
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("key", key).Str("fileName", fileName).Msg("media processing failed at S3 upload")
 		return nil, fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
 	// Generate public URL
-	publicURL := m.GetPublicURL(userID, key)
+	publicURL, err := m.GetPublicURL(ctx, userID, key)
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("key", key).Str("fileName", fileName).Msg("media processing failed at S3 URL generation")
+		return nil, fmt.Errorf("failed to generate S3 URL: %w", err)
+	}
 
 	// Read the bucket through GetClient, which acquires the read lock — this
 	// avoids racing with a concurrent reconfigure/removal of the configs map and
@@ -388,6 +435,7 @@ func (m *S3Manager) ProcessMediaForS3(ctx context.Context, userID, contactJID, m
 func (m *S3Manager) DeleteAllUserObjects(ctx context.Context, userID string) error {
 	client, config, ok := m.GetClient(userID)
 	if !ok {
+		log.Error().Str("userID", userID).Msg("S3 purge aborted: client not initialized for user")
 		return fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 

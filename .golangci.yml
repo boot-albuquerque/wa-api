@@ -1,5 +1,5 @@
-# golangci-lint v2 configuration for disparazaap-wuzapi internal/ packages.
-# Only lints our custom code — upstream (package main) is not linted.
+# golangci-lint v2 configuration for wa-api.
+# Lints the whole module: ./... including cmd/ (package main).
 version: "2"
 
 linters:
@@ -10,10 +10,59 @@ linters:
     - staticcheck
     - unused
     - gocyclo
+    - forbidigo
+    - depguard
+  settings:
+    # depguard e o mecanismo real da Fase 6: o gate avanca por diretorio, a
+    # medida que cada um para de importar o SDK concreto, e nao recua. A
+    # lista de `files` cresce commit a commit; um diretorio ausente daqui e
+    # um diretorio ainda nao fechado, e isso fica visivel neste arquivo
+    # (ADR-001).
+    depguard:
+      rules:
+        camada-de-aplicacao:
+          files:
+            - "**/pkg/application/usecase/chat/*.go"
+            - "**/pkg/application/usecase/group/*.go"
+            - "**/pkg/application/usecase/message/*.go"
+            - "**/pkg/application/usecase/notification/*.go"
+            - "**/pkg/application/usecase/profile/*.go"
+            - "**/pkg/application/usecase/session/*.go"
+            - "**/pkg/application/usecase/storage/*.go"
+            - "**/pkg/application/usecase/user/*.go"
+            - "**/pkg/application/contracts/*.go"
+          deny:
+            - pkg: go.mau.fi/whatsmeow
+              desc: >-
+                a camada de aplicacao nao conhece o SDK concreto; consuma uma
+                porta de capacidade de pkg/application/contracts (ADR-001)
+            - pkg: github.com/jmoiron/sqlx
+              desc: >-
+                a camada de aplicacao nao fala com o banco direto; consuma uma
+                porta de persistencia de pkg/application/contracts (ADR-001)
+            - pkg: github.com/rs/zerolog
+              desc: >-
+                a camada de aplicacao loga pela porta appport.Logger, nao pelo
+                zerolog direto
 
-linters-settings:
-  gocyclo:
-    min-complexity: 10
+    gocyclo:
+      min-complexity: 10
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print.*$
+          msg: escreva pelo logger estruturado; stdout direto escapa da redação de segredo
+        - pattern: ^os\.Stdout$
+          msg: escreva pelo logger estruturado; stdout direto escapa da redação de segredo
+  exclusions:
+    rules:
+      # Fronteiras onde stdout é o contrato, não um vazamento: os binários,
+      # o transporte JSON-RPC e a construção do próprio sink do logger.
+      - path: ^cmd/
+        linters: [forbidigo]
+      - path: ^pkg/infra/stdio/
+        linters: [forbidigo]
+      - path: ^pkg/bootstrap/(main|router_setup)\.go$
+        linters: [forbidigo]
 
 formatters:
   enable:
@@ -23,3 +72,12 @@ formatters:
 run:
   timeout: 2m
   tests: true
+
+issues:
+  # Both default to a low cap (max-same-issues: 3) that silently truncates
+  # the reported count for any linter with many hits of the same message —
+  # exactly what the lint/check Makefile targets parse to compare against
+  # .golangci-baseline. Uncapped here so the baseline reflects the real
+  # issue count, not a truncated sample.
+  max-issues-per-linter: 0
+  max-same-issues: 0

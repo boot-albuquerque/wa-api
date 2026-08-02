@@ -4,20 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp
 type CheckUserUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	contacts appport.ContactDirectory
+	logger   appport.Logger
 }
 
 // NewCheckUserUseCase cria uma nova instância
-func NewCheckUserUseCase(cp appport.ClientProvider, logger zerolog.Logger) *CheckUserUseCase {
-	return &CheckUserUseCase{clientProvider: cp, logger: logger}
+func NewCheckUserUseCase(cd appport.ContactDirectory, logger appport.Logger) *CheckUserUseCase {
+	return &CheckUserUseCase{contacts: cd, logger: logger}
 }
 
 // CheckUserResult representa o resultado da verificação
@@ -30,31 +29,25 @@ type CheckUserResult struct {
 
 // Execute verifica se um usuário está no WhatsApp
 func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) ([]CheckUserResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		return nil, fmt.Errorf("no session")
+	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
-	resp, err := client.IsOnWhatsApp(ctx, req.Phone)
+	resp, err := uc.contacts.IsOnWhatsApp(ctx, userID, req.Phone)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to check WhatsApp users")
+		uc.logger.Error(ctx, "Failed to check WhatsApp users", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to check users: %w", err)
 	}
 
 	var results []CheckUserResult
 	for _, item := range resp {
-		verifiedName := ""
-		if item.VerifiedName != nil {
-			verifiedName = item.VerifiedName.Details.GetVerifiedName()
-		}
-
-		result := CheckUserResult{
+		results = append(results, CheckUserResult{
 			Query:        item.Query,
 			IsInWhatsapp: item.IsIn,
-			JID:          fmt.Sprintf("%s", item.JID),
-			VerifiedName: verifiedName,
-		}
-		results = append(results, result)
+			JID:          item.JID,
+			VerifiedName: item.VerifiedName,
+		})
 	}
 
 	return results, nil

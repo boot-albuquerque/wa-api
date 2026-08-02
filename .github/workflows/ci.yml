@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Version pinned deliberately: .golangci-baseline is an absolute issue
+      # count, tied to this exact golangci-lint release. A floating version
+      # would make the count drift with no code change — either a false-red
+      # gate, or a real regression masked by a linter that stopped firing.
+      # Bump this version and .golangci-baseline together, in the same PR.
+      #
+      # Instalado direto pelo script oficial, nao pela golangci-lint-action:
+      # a action roda `golangci-lint run` com o exit code dela mesma assim
+      # que a instala (o antigo input `install-only` nao existe mais em
+      # v6/v7), o que faz TODO achado falhar o job — inclusive os que
+      # `make lint` trata como informativos. `make check` e' quem decide o
+      # que trava, via .golangci-baseline.
+      - name: install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: golangci-lint config verify
+        run: golangci-lint config verify
+
+      - name: make check
+        run: make check
+
+      - name: baseline nunca sobe
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          prev=$(git show origin/${{ github.base_ref }}:.golangci-baseline 2>/dev/null | grep -oE '^max_complexity=[0-9]+' | cut -d= -f2)
+          curr=$(grep -oE '^max_complexity=[0-9]+' .golangci-baseline | cut -d= -f2)
+          prev=${prev:-999999}
+          echo "max_complexity baseline: $prev -> $curr"
+          [ "$curr" -le "$prev" ] || { echo "FALHA: o baseline subiu de $prev para $curr."; exit 1; }
+
+      - name: docker build
+        run: docker build -t wa-api:ci .

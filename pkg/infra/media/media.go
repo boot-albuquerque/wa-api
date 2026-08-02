@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"time"
 
+	wamgr "wa-api/pkg/infra/whatsmeow"
+
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
-	wamgr "wa-api/pkg/infra/whatsmeow"
 )
 
 const (

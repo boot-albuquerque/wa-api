@@ -1,0 +1,75 @@
+# Gate de cobertura de log. Quatro medidas, e nesta fase NENHUMA e' trava.
+#
+# stage — o estagio do gate (ADR-008): advisory | ratchet | floor.
+#   advisory: `make log-coverage-report` IMPRIME os numeros e nao falha. E' o
+#   estagio da Fase 9: a metrica nasce medindo o repositorio onde ele esta',
+#   nao onde queremos que esteja. Subir a trava e' trabalho das fases F10-F15.
+#
+# A definicao normativa das duas metricas esta' em cmd/logcov/METRIC.md, que e'
+# a autoridade; cmd/logcov e' a implementacao dela. Divergencia entre os dois e'
+# bug da ferramenta, nao do documento.
+#
+# A medicao e' exatamente a do criterio de pronto da Fase 9:
+#   go run ./cmd/logcov ./pkg
+#
+# Decimos, e nao float, pelo mesmo motivo de .coverage-baseline: o gate e'
+# shell, comparacao inteira e' exata e nao depende de locale para o separador
+# decimal.
+#
+# --- as quatro travas, e por que sao quatro e nao tres ---
+#
+# min_func_coverage    — decimos de %, ratchet-UP. Funcoes elegiveis que
+#   satisfazem L1 (presenca de log reconhecido) e L3 (estruturacao por call
+#   site), sobre o total de elegiveis.
+#
+# min_errpath_coverage — decimos de %, ratchet-UP. Caminhos de saida
+#   (S-ret / S-http / S-consume) cobertos por log de nivel >= Warn no menor
+#   bloco que os contem, ou por propagacao de causa sem descarte, sobre o
+#   total de caminhos de saida dentro de funcoes elegiveis.
+#
+# BURACO CONHECIDO (achado na revisao da F11, nao corrigido aqui): o
+#   DENOMINADOR de errpath_coverage (o total de caminhos de saida) nao tem
+#   uma trava equivalente a min_eligible. Migrar um site que ja logava
+#   (shape-a: fmt.Errorf descartando causa -> return err) faz o S-consume
+#   daquele bloco deixar de existir — denominador -1 E numerador -1 ao
+#   mesmo tempo. Isso e' comportamento honesto da metrica (o caminho de
+#   fato desapareceu), mas permite que o percentual de um pacote CAIA
+#   (message 51.4%->44.2%, storage 84.6%->75.0%, session 90.0%->84.6% na
+#   F11) sem que nenhuma trava atual acuse. F12 (ou antes) deveria avaliar
+#   uma quinta trava min_errpaths (numero exato, no molde de min_eligible)
+#   para fechar isso.
+#
+# min_eligible         — numero EXATO de funcoes elegiveis; falha se CAIR.
+#   Impede subir o percentual ENCOLHENDO o denominador: adicionar um pacote a
+#   .logcov-exclude, ou afrouxar X1-X7. Sem ela, um PR remove
+#   pkg/infra/messaging do escopo e o numero sobe sozinho.
+#
+# max_exempt_annotations — contagem de //log:exempt em pkg/, ratchet-DOWN.
+#   Impede subir o percentual ANOTANDO funcoes para fora do numerador.
+#
+# As duas ultimas atacam a mesma superficie por lados opostos e nenhuma
+# substitui a outra.
+#
+# --- o limite honesto destas travas ---
+#
+# "Fail-closed" aqui e' leitura de um arquivo que o mesmo PR pode editar — vale
+# igualmente para .coverage-baseline e .golangci-baseline. Um ratchet in-repo e'
+# um dispositivo de VISIBILIDADE, nao uma trava criptografica: converte
+# regressao silenciosa em linha de diff que alguem tem de aprovar
+# conscientemente. Toda reducao de qualquer valor abaixo exige uma linha
+# `# justificativa: <texto>` adjacente.
+
+stage=ratchet
+
+# rules_frozen=true (ADR-008, a partir da Fase 12): as regras X1-X8/L1-L3 de
+# cmd/logcov (rules.go, analyzer.go) nao mudam mais em fases normais. S-http e
+# S-consume so' foram exercitadas contra codigo real nesta fase (handlers) —
+# congelar antes teria petrificado regras ainda nao postas a prova. Uma
+# mudanca de regra depois disto e' uma decisao deliberada, nao um efeito
+# colateral de fechar uma fase de volume.
+rules_frozen=true
+
+min_func_coverage=726
+min_errpath_coverage=864
+min_eligible=464
+max_exempt_annotations=0

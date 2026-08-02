@@ -4,21 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // GetUserLIDUseCase obtém o LID para um JID
 type GetUserLIDUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	contacts appport.ContactDirectory
+	jids     appport.JIDResolver
+	logger   appport.Logger
 }
 
 // NewGetUserLIDUseCase cria uma nova instância
-func NewGetUserLIDUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetUserLIDUseCase {
-	return &GetUserLIDUseCase{clientProvider: cp, logger: logger}
+func NewGetUserLIDUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logger appport.Logger) *GetUserLIDUseCase {
+	return &GetUserLIDUseCase{contacts: cd, jids: jr, logger: logger}
 }
 
 // LIDResult representa o resultado com JID e LID
@@ -29,31 +28,31 @@ type LIDResult struct {
 
 // Execute obtém o LID para um JID
 func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req domain.GetUserLIDRequest) (*LIDResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		return nil, fmt.Errorf("no session")
+	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	// Parse JID
-	jid, err := types.ParseJID(req.JID)
+	jid, err := uc.jids.ResolveQualifiedJID(ctx, req.JID)
 	if err != nil {
-		uc.logger.Warn().Err(err).Str("jid", req.JID).Msg("Failed to parse JID")
+		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "jid", req.JID)
 		return nil, fmt.Errorf("invalid jid format: %w", err)
 	}
 
 	// Get LID from store
-	lid, err := client.Store.LIDs.GetLIDForPN(ctx, jid)
+	lid, err := uc.contacts.GetLIDForPN(ctx, userID, jid)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("jid", req.JID).Msg("Failed to get LID")
+		uc.logger.Error(ctx, "Failed to get LID", "error", err, "jid", req.JID)
 		return nil, fmt.Errorf("LID not found: %w", err)
 	}
 
-	if lid.IsEmpty() {
+	if lid == "" {
 		return nil, fmt.Errorf("LID not found for this number")
 	}
 
 	return &LIDResult{
-		JID: jid.String(),
-		LID: lid.String(),
+		JID: string(jid),
+		LID: string(lid),
 	}, nil
 }

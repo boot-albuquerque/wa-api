@@ -3,29 +3,28 @@ package notification
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"runtime"
 	"time"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // GetHealthUseCase retrieves health information about the server
 type GetHealthUseCase struct {
-	db                 *sql.DB
-	healthProvider     appport.HealthClientProvider
-	logger             zerolog.Logger
-	startTime          time.Time
-	version            string
+	db             *sql.DB
+	sessionCounter appport.SessionCounter
+	logger         appport.Logger
+	startTime      time.Time
+	version        string
 }
 
 // NewGetHealthUseCase creates a new instance
-func NewGetHealthUseCase(db *sql.DB, hp appport.HealthClientProvider, logger zerolog.Logger, version string) *GetHealthUseCase {
+func NewGetHealthUseCase(db *sql.DB, sc appport.SessionCounter, logger appport.Logger, version string) *GetHealthUseCase {
 	return &GetHealthUseCase{
 		db:             db,
-		healthProvider: hp,
+		sessionCounter: sc,
 		logger:         logger,
 		startTime:      time.Now(),
 		version:        version,
@@ -45,21 +44,11 @@ func (uc *GetHealthUseCase) Execute(ctx context.Context) (*domain.HealthResponse
 		}
 	}
 
-	activeConnections := uc.healthProvider.GetWhatsmeowClientsCount()
-	connectedUsers := 0
-	loggedInUsers := 0
-
-	uc.healthProvider.IterateWhatsmeowClients(func(client *whatsmeow.Client) bool {
-		if client != nil {
-			if client.IsConnected() {
-				connectedUsers++
-			}
-			if client.IsLoggedIn() {
-				loggedInUsers++
-			}
-		}
-		return true
-	})
+	counts, err := uc.sessionCounter.CountSessions(ctx)
+	if err != nil {
+		uc.logger.Error(ctx, "failed to count sessions", "error", err)
+		return nil, fmt.Errorf("failed to count sessions: %w", err)
+	}
 
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -75,10 +64,10 @@ func (uc *GetHealthUseCase) Execute(ctx context.Context) (*domain.HealthResponse
 		Status:            "ok",
 		Timestamp:         time.Now().UTC().Format(time.RFC3339),
 		Uptime:            uptime.String(),
-		ActiveConnections: activeConnections,
+		ActiveConnections: counts.Total,
 		TotalUsers:        totalUsers,
-		ConnectedUsers:    connectedUsers,
-		LoggedInUsers:     loggedInUsers,
+		ConnectedUsers:    counts.Connected,
+		LoggedInUsers:     counts.LoggedIn,
 		MemoryStats:       memoryStats,
 		GoRoutines:        runtime.NumGoroutine(),
 		Version:           uc.version,

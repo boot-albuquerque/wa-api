@@ -4,20 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // DeleteUserUseCase deleta um usuário
 type DeleteUserUseCase struct {
-	db     *sqlx.DB
-	logger zerolog.Logger
+	users  appport.UserRepository
+	logger appport.Logger
 }
 
 // NewDeleteUserUseCase cria uma nova instância
-func NewDeleteUserUseCase(db *sqlx.DB, logger zerolog.Logger) *DeleteUserUseCase {
-	return &DeleteUserUseCase{db: db, logger: logger}
+func NewDeleteUserUseCase(users appport.UserRepository, logger appport.Logger) *DeleteUserUseCase {
+	return &DeleteUserUseCase{users: users, logger: logger}
 }
 
 // Execute deleta um usuário
@@ -26,22 +25,15 @@ func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserR
 		return fmt.Errorf("user ID is required")
 	}
 
-	result, err := uc.db.ExecContext(ctx, "DELETE FROM users WHERE id=$1", req.UserID)
+	deleted, err := uc.users.DeleteUser(ctx, req.UserID)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", req.UserID).Msg("Failed to delete user")
+		uc.logger.Error(ctx, "Failed to delete user", "error", err, "user_id", req.UserID)
 		return fmt.Errorf("database error: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to check rows affected")
-		return fmt.Errorf("failed to verify deletion: %w", err)
-	}
-
-	if rowsAffected == 0 {
+	if !deleted {
 		return fmt.Errorf("user not found")
 	}
 
-	uc.logger.Info().Str("user_id", req.UserID).Msg("User deleted successfully")
+	uc.logger.Info(ctx, "User deleted successfully", "user_id", req.UserID)
 	return nil
 }

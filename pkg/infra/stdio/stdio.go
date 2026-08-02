@@ -2,7 +2,7 @@
 //
 // This file implements a stdio-based JSON-RPC 2.0 interface that bridges
 // to the existing HTTP API handlers. It enables programmatic access to
-// wuzapi functionality through standard input/output, making it suitable
+// wa-api functionality through standard input/output, making it suitable
 // for use as a subprocess or in headless environments.
 //
 // The implementation:
@@ -140,7 +140,7 @@ func NewServerWithIO(router interface{}, stdin io.Reader, stdout io.Writer) *Ser
 }
 
 func (ss *Server) Start() error {
-	log.Info().Msg("Starting stdio mode - reading JSON requests from stdin")
+	log.Info().Str("component", "stdio").Msg("Starting stdio mode - reading JSON requests from stdin")
 
 	scanner := bufio.NewScanner(ss.stdin)
 
@@ -162,13 +162,14 @@ func (ss *Server) Start() error {
 		return err
 	}
 
-	log.Info().Msg("EOF reached on stdin, shutting down")
+	log.Info().Str("component", "stdio").Msg("EOF reached on stdin, shutting down")
 	return nil
 }
 
 func (ss *Server) handleRequest(requestBytes []byte) {
 	var req JSONRpcRequest
 	if err := json.Unmarshal(requestBytes, &req); err != nil {
+		log.Warn().Err(err).Int("bytes", len(requestBytes)).Msg("Invalid JSON request received on stdin")
 		ss.sendError(ID{}, 400, fmt.Sprintf("invalid JSON request: %v", err))
 		return
 	}
@@ -188,305 +189,14 @@ func (ss *Server) handleRequest(requestBytes []byte) {
 	ss.routeRequest(&req)
 }
 
-// routeRequest dispatches the request to the appropriate HTTP handler
-// getUserIdParam extracts and validates userId from request params
-func (ss *Server) getUserIdParam(req *JSONRpcRequest) (string, bool) {
-	userId, ok := req.Params["userId"].(string)
-	if !ok || userId == "" {
-		ss.sendError(req.ID, 400, "missing or invalid userId parameter")
-		return "", false
-	}
-	return userId, true
-}
-
-func (ss *Server) routeRequest(req *JSONRpcRequest) {
-	// Map stdio method to HTTP route and method
-	var httpMethod, httpPath string
-
-	switch req.Method {
-	case "health":
-		httpMethod = "GET"
-		httpPath = "/health"
-
-	// Admin user management
-	case "admin.users.add":
-		httpMethod = "POST"
-		httpPath = "/admin/users"
-	case "admin.users.list":
-		httpMethod = "GET"
-		httpPath = "/admin/users"
-	case "admin.users.get":
-		httpMethod = "GET"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.delete":
-		httpMethod = "DELETE"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.edit":
-		httpMethod = "PUT"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId
-	case "admin.users.delete.full":
-		httpMethod = "DELETE"
-		userId, ok := ss.getUserIdParam(req)
-		if !ok {
-			// Error sent by getUserIdParam.
-			return
-		}
-		httpPath = "/admin/users/" + userId + "/full"
-
-	// Session management
-	case "session.connect":
-		httpMethod = "POST"
-		httpPath = "/session/connect"
-	case "session.qr":
-		httpMethod = "GET"
-		httpPath = "/session/qr"
-	case "session.status":
-		httpMethod = "GET"
-		httpPath = "/session/status"
-	case "session.disconnect":
-		httpMethod = "POST"
-		httpPath = "/session/disconnect"
-	case "session.logout":
-		httpMethod = "POST"
-		httpPath = "/session/logout"
-	case "session.pairphone":
-		httpMethod = "POST"
-		httpPath = "/session/pairphone"
-	case "session.history":
-		httpMethod = "GET"
-		httpPath = "/session/history"
-	case "session.history.set":
-		httpMethod = "POST"
-		httpPath = "/session/history"
-	case "session.proxy":
-		httpMethod = "POST"
-		httpPath = "/session/proxy"
-	case "session.hmac.config":
-		httpMethod = "POST"
-		httpPath = "/session/hmac/config"
-	case "session.hmac.config.get":
-		httpMethod = "GET"
-		httpPath = "/session/hmac/config"
-	case "session.hmac.config.delete":
-		httpMethod = "DELETE"
-		httpPath = "/session/hmac/config"
-
-	// Messaging
-	case "chat.send.text":
-		httpMethod = "POST"
-		httpPath = "/chat/send/text"
-	case "chat.send.image":
-		httpMethod = "POST"
-		httpPath = "/chat/send/image"
-	case "chat.send.video":
-		httpMethod = "POST"
-		httpPath = "/chat/send/video"
-	case "chat.send.document":
-		httpMethod = "POST"
-		httpPath = "/chat/send/document"
-	case "chat.send.audio":
-		httpMethod = "POST"
-		httpPath = "/chat/send/audio"
-	case "chat.send.sticker":
-		httpMethod = "POST"
-		httpPath = "/chat/send/sticker"
-	case "chat.send.location":
-		httpMethod = "POST"
-		httpPath = "/chat/send/location"
-	case "chat.send.contact":
-		httpMethod = "POST"
-		httpPath = "/chat/send/contact"
-	case "chat.send.poll":
-		httpMethod = "POST"
-		httpPath = "/chat/send/poll"
-	case "chat.send.buttons":
-		httpMethod = "POST"
-		httpPath = "/chat/send/buttons"
-	case "chat.send.list":
-		httpMethod = "POST"
-		httpPath = "/chat/send/list"
-	case "chat.send.edit":
-		httpMethod = "POST"
-		httpPath = "/chat/send/edit"
-	case "chat.delete":
-		httpMethod = "POST"
-		httpPath = "/chat/delete"
-	case "chat.react":
-		httpMethod = "POST"
-		httpPath = "/chat/react"
-	case "chat.archive":
-		httpMethod = "POST"
-		httpPath = "/chat/archive"
-	case "chat.presence":
-		httpMethod = "POST"
-		httpPath = "/chat/presence"
-	case "chat.markread":
-		httpMethod = "POST"
-		httpPath = "/chat/markread"
-	case "chat.request-unavailable-message":
-		httpMethod = "POST"
-		httpPath = "/chat/request-unavailable-message"
-	case "chat.download.image":
-		httpMethod = "POST"
-		httpPath = "/chat/downloadimage"
-	case "chat.download.video":
-		httpMethod = "POST"
-		httpPath = "/chat/downloadvideo"
-	case "chat.download.audio":
-		httpMethod = "POST"
-		httpPath = "/chat/downloadaudio"
-	case "chat.download.document":
-		httpMethod = "POST"
-		httpPath = "/chat/downloaddocument"
-	case "chat.history":
-		httpMethod = "GET"
-		chatJID, ok := req.Params["chat_jid"].(string)
-		if !ok || chatJID == "" {
-			ss.sendError(req.ID, 400, "missing or invalid chat_jid parameter")
-			return
-		}
-		httpPath = "/chat/history?chat_jid=" + chatJID
-		// Add optional limit parameter
-		if limit, ok := req.Params["limit"].(float64); ok {
-			httpPath += fmt.Sprintf("&limit=%d", int(limit))
-		}
-
-	// User info
-	case "user.contacts":
-		httpMethod = "GET"
-		httpPath = "/user/contacts"
-	case "user.presence":
-		httpMethod = "POST"
-		httpPath = "/user/presence"
-	case "user.info":
-		httpMethod = "POST"
-		httpPath = "/user/info"
-	case "user.check":
-		httpMethod = "POST"
-		httpPath = "/user/check"
-	case "user.avatar":
-		httpMethod = "POST"
-		httpPath = "/user/avatar"
-	case "user.block":
-		httpMethod = "POST"
-		httpPath = "/user/block"
-	case "user.unblock":
-		httpMethod = "POST"
-		httpPath = "/user/unblock"
-	case "user.lid":
-		httpMethod = "GET"
-		jid, ok := req.Params["jid"].(string)
-		if !ok || jid == "" {
-			ss.sendError(req.ID, 400, "missing or invalid jid parameter")
-			return
-		}
-		httpPath = "/user/lid/" + jid
-
-	// Status
-	case "status.set.text":
-		httpMethod = "POST"
-		httpPath = "/status/set/text"
-
-	// Calls
-	case "call.reject":
-		httpMethod = "POST"
-		httpPath = "/call/reject"
-
-	// Group management
-	case "group.list":
-		httpMethod = "GET"
-		httpPath = "/group/list"
-	case "group.create":
-		httpMethod = "POST"
-		httpPath = "/group/create"
-	case "group.info":
-		httpMethod = "GET"
-		httpPath = "/group/info"
-	case "group.invitelink":
-		httpMethod = "GET"
-		httpPath = "/group/invitelink"
-	case "group.photo":
-		httpMethod = "POST"
-		httpPath = "/group/photo"
-	case "group.photo.remove":
-		httpMethod = "POST"
-		httpPath = "/group/photo/remove"
-	case "group.leave":
-		httpMethod = "POST"
-		httpPath = "/group/leave"
-	case "group.name":
-		httpMethod = "POST"
-		httpPath = "/group/name"
-	case "group.topic":
-		httpMethod = "POST"
-		httpPath = "/group/topic"
-	case "group.announce":
-		httpMethod = "POST"
-		httpPath = "/group/announce"
-	case "group.locked":
-		httpMethod = "POST"
-		httpPath = "/group/locked"
-	case "group.ephemeral":
-		httpMethod = "POST"
-		httpPath = "/group/ephemeral"
-	case "group.join":
-		httpMethod = "POST"
-		httpPath = "/group/join"
-	case "group.inviteinfo":
-		httpMethod = "POST"
-		httpPath = "/group/inviteinfo"
-	case "group.updateparticipants":
-		httpMethod = "POST"
-		httpPath = "/group/updateparticipants"
-
-	// Newsletter
-	case "newsletter.list":
-		httpMethod = "GET"
-		httpPath = "/newsletter/list"
-
-	// Webhook management
-	case "webhook.get":
-		httpMethod = "GET"
-		httpPath = "/webhook"
-	case "webhook.set":
-		httpMethod = "POST"
-		httpPath = "/webhook"
-	case "webhook.update":
-		httpMethod = "PUT"
-		httpPath = "/webhook"
-	case "webhook.delete":
-		httpMethod = "DELETE"
-		httpPath = "/webhook"
-
-	default:
-		ss.sendError(req.ID, 404, fmt.Sprintf("unknown method: %s", req.Method))
-		return
-	}
-	ss.executeHTTPHandler(req, httpMethod, httpPath)
-}
-
 // executeHTTPHandler wraps the existing HTTP handler and adapts it for stdio
 func (ss *Server) executeHTTPHandler(req *JSONRpcRequest, httpMethod, httpPath string) {
 	// Create a mock HTTP request
 	var body io.Reader
-	if req.Params != nil && len(req.Params) > 0 {
+	if len(req.Params) > 0 {
 		jsonParams, err := json.Marshal(req.Params)
 		if err != nil {
+			log.Error().Err(err).Str("method", req.Method).Str("path", httpPath).Msg("Failed to marshal stdio request params")
 			ss.sendError(req.ID, 400, fmt.Sprintf("invalid params: %v", err))
 			return
 		}
@@ -521,6 +231,7 @@ func (ss *Server) convertHTTPResponse(requestID ID, recorder *httptest.ResponseR
 	if len(responseBody) > 0 {
 		if err := json.Unmarshal(responseBody, &responseData); err != nil {
 			// If it's not JSON, just use the raw string
+			log.Warn().Err(err).Int("status", statusCode).Int("bytes", len(responseBody)).Msg("Non-JSON body from HTTP handler in stdio mode")
 			responseData = string(responseBody)
 		}
 	}
@@ -528,7 +239,7 @@ func (ss *Server) convertHTTPResponse(requestID ID, recorder *httptest.ResponseR
 	success := statusCode >= 200 && statusCode < 300
 
 	if respMap, ok := responseData.(map[string]interface{}); ok {
-		// If it's already in wuzapi format, extract the data/error
+		// If it's already in wa-api format, extract the data/error
 		if data, hasData := respMap["data"]; hasData {
 			ss.sendSuccess(requestID, statusCode, data)
 			return
@@ -597,7 +308,9 @@ func (ss *Server) writeResponse(response JSONRpcResponse) {
 	}
 
 	// Write to stdout with newline
-	fmt.Fprintf(ss.stdout, "%s\n", string(responseBytes))
+	if _, err := fmt.Fprintf(ss.stdout, "%s\n", string(responseBytes)); err != nil {
+		log.Error().Err(err).Msg("Failed to write response to stdout")
+	}
 
 	// Log with appropriate fields based on response type
 	logEvent := log.Debug().Str("id", response.ID.String())
@@ -632,7 +345,9 @@ func SendNotification(method string, params map[string]interface{}) {
 		return
 	}
 
-	fmt.Fprintf(os.Stdout, "%s\n", string(notificationBytes))
+	if _, err := fmt.Fprintf(os.Stdout, "%s\n", string(notificationBytes)); err != nil {
+		log.Error().Err(err).Msg("Failed to write notification to stdout")
+	}
 
 	log.Debug().
 		Str("method", method).

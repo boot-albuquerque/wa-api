@@ -11,15 +11,15 @@ import (
 // SendImageUseCase encapsula a validação de envio de imagem.
 // A lógica de envio complexa (upload, thumbnail, context info, etc) fica no wrapper handlers.go.
 type SendImageUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendImageUseCase cria uma nova instância do usecase.
-func NewSendImageUseCase(cp appport.ClientProvider, l appport.Logger) *SendImageUseCase {
+func NewSendImageUseCase(mc appport.MessageComposer, l appport.Logger) *SendImageUseCase {
 	return &SendImageUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -36,20 +36,20 @@ func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domai
 	}
 
 	// 2. Obter cliente whatsmeow para verificar se existe sessão
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	// 3. Gerar message ID se não fornecido
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, err
+		}
+		msgID = generated
 	}
 
 	// 4. Retornar resultado com dados validados
@@ -59,6 +59,6 @@ func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domai
 		Status:    "validated",
 	}
 
-	uc.logger.Info("image validated", "msgID", msgID)
+	uc.logger.Info(ctx, "image validated", "msgID", msgID)
 	return result, nil
 }

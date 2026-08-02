@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -33,10 +34,6 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 		}
 		callHookWithHmac(appCtx.GlobalWebhook, globalData, userID, appCtx.GlobalHMACKeyEncrypted)
 	}
-}
-
-func sendToUserWebHook(webhookurl string, path string, jsonData []byte, userID string, token string) {
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, userID, token, nil)
 }
 
 func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
@@ -91,7 +88,7 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 	} else {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
-			if arg != "" && Find(supportedEventTypes, arg) {
+			if arg != "" && slices.Contains(supportedEventTypes, arg) {
 				subscribedEvents = append(subscribedEvents, arg)
 			}
 		}

@@ -4,7 +4,6 @@ package bootstrap
 
 import (
 	"sync"
-
 )
 
 // Version is the application version.
@@ -15,8 +14,8 @@ const Version = "1.0.6"
 
 // KillChannel holds the map and mutex for per-session kill channels.
 type KillChannel struct {
-	mu     sync.Mutex
-	chans  map[string](chan bool)
+	mu    sync.Mutex
+	chans map[string](chan bool)
 }
 
 // NewKillChannel returns an initialised KillChannel.

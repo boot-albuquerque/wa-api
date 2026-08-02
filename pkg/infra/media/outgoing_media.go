@@ -3,9 +3,10 @@ package media
 import (
 	"context"
 
+	"wa-api/pkg/infra/storage"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"wa-api/pkg/infra/storage"
 )
 
 // ProcessOutgoingMedia handles media processing for outgoing messages with S3 support.

@@ -1,49 +1,24 @@
 package bootstrap
 
 import (
-	appport "wa-api/pkg/application/contracts"
+	"slices"
+
+	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/whatsmeow"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
 	"github.com/rs/zerolog/log"
-	wa "go.mau.fi/whatsmeow"
 
+	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/group"
 	"wa-api/pkg/application/usecase/message"
-	"wa-api/pkg/application/usecase/misc"
 	"wa-api/pkg/application/usecase/notification"
+	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/application/usecase/user"
 )
-
-// ClientManagerAdapterImpl adapta o ClientManager global para a interface ClientManagerAdapter.
-// Accepts the ClientLookup interface so both *main.ClientManager (root) and
-// *whatsmeow.ClientManager satisfy it without a concrete-type dependency.
-type ClientManagerAdapterImpl struct {
-	cm whatsmeow.ClientLookup
-}
-
-func (a *ClientManagerAdapterImpl) GetWhatsmeowClient(id string) interface{} {
-	return a.cm.GetWhatsmeowClient(id)
-}
-
-func (a *ClientManagerAdapterImpl) IsConnected(id string) bool {
-	client := a.cm.GetWhatsmeowClient(id)
-	if client == nil {
-		return false
-	}
-	return client.IsConnected()
-}
-
-func (a *ClientManagerAdapterImpl) IsLoggedIn(id string) bool {
-	client := a.cm.GetWhatsmeowClient(id)
-	if client == nil {
-		return false
-	}
-	return client.IsLoggedIn()
-}
 
 // MessageHandlers agrupa os handlers de mensagem.
 type MessageHandlers struct {
@@ -85,62 +60,69 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
-	Profile  *customhttp.ProfileHandler
-	Message  *MessageHandlers
-	Session  *SessionHandlers
-	Webhook  *WebhookHandlers
-	User     *handlers.UserHandlers
-	Group    *handlers.GroupHandlers
-	Storage  *handlers.StorageHandlers
-	Misc     *handlers.MiscHandlers
+	Profile   *customhttp.ProfileHandler
+	Message   *MessageHandlers
+	Session   *SessionHandlers
+	Webhook   *WebhookHandlers
+	User      *handlers.UserHandlers
+	Group     *handlers.GroupHandlers
+	Storage   *handlers.StorageHandlers
+	Misc      *handlers.MiscHandlers
 	Blocklist *handlers.BlocklistHandlers
-	Extended  *handlers.ExtendedHandlers
+	Download  *handlers.DownloadHandlers
+	Presence  *handlers.PresenceHandlers
+	Reaction  *handlers.ReactionHandlers
+	Contact   *handlers.ContactHandlers
 	GroupMgmt *handlers.GroupManagementHandlers
 }
 
 var customHandlerSet = &customHandlers{}
 
 // initCustomHandlers faz o wiring entre usecases, adapters e handlers custom.
-// Chamado em main() logo após s.routes(), antes de connectOnStartup().
+// Chamado em main() ANTES de s.routes() (main.go:330-331) — registerCustomRoutes
+// lê customHandlerSet, então a ordem é obrigatória: invertida, os campos de
+// customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	clientProvider := whatsmeow.NewClientProviderAdapter(clientManager.GetWhatsmeowClient)
+	messageComposer := whatsmeow.NewMessageComposerAdapter(clientManager.GetWhatsmeowClient)
+	presenceController := whatsmeow.NewPresenceControllerAdapter(clientManager.GetWhatsmeowClient)
+	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
+	jidResolver := whatsmeow.NewJIDResolverAdapter()
+	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
+	miscAdapter := whatsmeow.NewMiscAdapter(clientManager.GetWhatsmeowClient)
+	userAdapter := whatsmeow.NewUserAdapter(clientManager.GetWhatsmeowClient)
+	userRepo := db.NewUserRepository(s.DB)
+	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
-	zerologLogger := log.Logger
-
-	// Factory que cria ProfileDataAccess a partir de *whatsmeow.Client
-	dataAccessFactory := func(c *wa.Client) appport.ProfileDataAccess {
-		return whatsmeow.NewProfileDataAccess(c)
-	}
 
 	// Profile UseCase
-	getProfileUC := misc.NewGetProfileUseCase(clientProvider, dataAccessFactory, logger)
+	getProfileUC := profile.NewGetProfileUseCase(miscAdapter, logger)
 
 	// Session UseCases
-	connectUC := session.NewConnectUseCase(clientProvider, logger)
-	disconnectUC := session.NewDisconnectUseCase(clientProvider, logger)
-	getQRUC := session.NewGetQRUseCase(clientProvider, logger)
-	logoutUC := session.NewLogoutUseCase(clientProvider, logger)
-	pairPhoneUC := session.NewPairPhoneUseCase(clientProvider, logger)
-	getStatusUC := session.NewGetStatusUseCase(clientProvider, logger)
-	setStatusMessageUC := session.NewSetStatusMessageUseCase(clientProvider, logger)
-	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(clientProvider, logger)
+	connectUC := session.NewConnectUseCase(logger)
+	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
+	getQRUC := session.NewGetQRUseCase(sessionGuard, userRepo, logger)
+	logoutUC := session.NewLogoutUseCase(sessionGuard, logger)
+	pairPhoneUC := session.NewPairPhoneUseCase(sessionGuard, logger)
+	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
+	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
+	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
 
 	// Message UseCases
-	sendMessageUC := message.NewSendMessageUseCase(clientProvider, logger)
-	sendImageUC := message.NewSendImageUseCase(clientProvider, logger)
-	sendDocumentUC := message.NewSendDocumentUseCase(clientProvider, logger)
-	sendAudioUC := message.NewSendAudioUseCase(clientProvider, logger)
-	sendStickerUC := message.NewSendStickerUseCase(clientProvider, logger)
-	sendVideoUC := message.NewSendVideoUseCase(clientProvider, logger)
-	sendContactUC := message.NewSendContactUseCase(clientProvider, logger)
-	sendLocationUC := message.NewSendLocationUseCase(clientProvider, logger)
-	sendButtonsUC := message.NewSendButtonsUseCase(clientProvider, logger)
-	sendListUC := message.NewSendListUseCase(clientProvider, logger)
-	sendPollUC := message.NewSendPollUseCase(clientProvider, logger)
-	deleteMessageUC := message.NewDeleteMessageUseCase(clientProvider, logger)
-	sendEditMessageUC := message.NewSendEditMessageUseCase(clientProvider, logger)
-	sendTemplateUC := message.NewSendTemplateUseCase(clientProvider, logger)
+	sendMessageUC := message.NewSendMessageUseCase(messageComposer, logger)
+	sendImageUC := message.NewSendImageUseCase(messageComposer, logger)
+	sendDocumentUC := message.NewSendDocumentUseCase(messageComposer, logger)
+	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
+	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)
+	sendVideoUC := message.NewSendVideoUseCase(messageComposer, logger)
+	sendContactUC := message.NewSendContactUseCase(messageComposer, logger)
+	sendLocationUC := message.NewSendLocationUseCase(messageComposer, logger)
+	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
+	sendListUC := message.NewSendListUseCase(messageComposer, logger)
+	sendPollUC := message.NewSendPollUseCase(messageComposer, logger)
+	deleteMessageUC := message.NewDeleteMessageUseCase(sessionGuard, logger)
+	sendEditMessageUC := message.NewSendEditMessageUseCase(sessionGuard, logger)
+	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
@@ -161,7 +143,7 @@ func initCustomHandlers(s *server) {
 		SendTemplate:    handlers.NewSendTemplateHandler(sendTemplateUC),
 	}
 	sessionHandlers := &SessionHandlers{
-		Connect:            handlers.NewConnectHandler(connectUC),
+		Connect:            initConnectHandler(connectUC, s),
 		Disconnect:         handlers.NewDisconnectHandler(disconnectUC),
 		GetQR:              handlers.NewGetQRHandler(getQRUC),
 		Logout:             handlers.NewLogoutHandler(logoutUC),
@@ -176,9 +158,8 @@ func initCustomHandlers(s *server) {
 		DB:              s.DB,
 		UserCache:       userinfocache,
 		SupportedEvents: supportedEventTypes,
-		FindInSlice:     Find,
+		FindInSlice:     slices.Contains[[]string, string],
 		UpdateUserInfo:  updateUserInfo,
-		RespondJSON:     respondJSON,
 	}
 	webhookHandlers := &WebhookHandlers{
 		GetWebhook:    handlers.NewGetWebhookHandler(whCtx),
@@ -188,17 +169,16 @@ func initCustomHandlers(s *server) {
 	}
 
 	// User UseCases
-	cmAdapter := &ClientManagerAdapterImpl{cm: clientManager}
-	listUsersUC := user.NewListUsersUseCase(s.DB, zerologLogger, cmAdapter)
-	addUserUC := user.NewAddUserUseCase(s.DB, zerologLogger)
-	editUserUC := user.NewEditUserUseCase(s.DB, zerologLogger)
-	deleteUserUC := user.NewDeleteUserUseCase(s.DB, zerologLogger)
-	checkUserUC := user.NewCheckUserUseCase(clientProvider, zerologLogger)
-	getUserUC := user.NewGetUserUseCase(clientProvider, zerologLogger)
-	getUserLIDUC := user.NewGetUserLIDUseCase(clientProvider, zerologLogger)
-	blockUserUC := user.NewBlockUserUseCase(clientProvider, zerologLogger)
-	unblockUserUC := user.NewUnblockUserUseCase(clientProvider, zerologLogger)
-	getBlocklistUC := user.NewGetBlocklistUseCase(clientProvider, zerologLogger)
+	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
+	addUserUC := user.NewAddUserUseCase(userRepo, logger)
+	editUserUC := user.NewEditUserUseCase(userRepo, logger)
+	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
+	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
+	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
+	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
+	blockUserUC := user.NewBlockUserUseCase(userAdapter, jidResolver, logger)
+	unblockUserUC := user.NewUnblockUserUseCase(userAdapter, jidResolver, logger)
+	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)
 
 	// User Handlers
 	userHandlers := handlers.NewUserHandlers(
@@ -214,22 +194,22 @@ func initCustomHandlers(s *server) {
 	)
 
 	// Group UseCases
-	groupRequestUC := group.NewGroupRequestUseCase(clientProvider, zerologLogger)
-	listGroupsUC := group.NewListGroupsUseCase(clientProvider, logger)
-	getGroupInfoUC := group.NewGetGroupInfoUseCase(clientProvider, logger)
-	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(clientProvider, logger)
-	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(clientProvider, logger)
+	groupRequestUC := group.NewGroupRequestUseCase(groupAdapter, jidResolver, logger)
+	listGroupsUC := group.NewListGroupsUseCase(groupAdapter, logger)
+	getGroupInfoUC := group.NewGetGroupInfoUseCase(groupAdapter, jidResolver, logger)
+	getGroupInviteLinkUC := group.NewGetGroupInviteLinkUseCase(groupAdapter, jidResolver, logger)
+	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(groupAdapter, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
-	healthProvider := whatsmeow.NewHealthClientProviderAdapter(clientManager)
-	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, healthProvider, zerologLogger, version)
-	listNewsletterUC := notification.NewListNewsletterUseCase(clientProvider, zerologLogger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, clientProvider, healthProvider, zerologLogger, s.ExPath)
-	rejectCallUC := misc.NewRejectCallUseCase(clientProvider, zerologLogger)
-	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(clientProvider, zerologLogger)
-	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(clientProvider, zerologLogger)
-	requestUnavailableMessageUC := misc.NewRequestUnavailableMessageUseCase(clientProvider, zerologLogger)
-	archiveChatUC := misc.NewArchiveChatUseCase(clientProvider, zerologLogger)
+	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)
+	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
+	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
+	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
+	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
+	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
+	requestUnavailableMessageUC := chat.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
+	archiveChatUC := chat.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{
@@ -255,16 +235,16 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Storage UseCases
-	configureS3UC := storage.NewConfigureS3UseCase(clientProvider, logger)
-	getS3ConfigUC := storage.NewGetS3ConfigUseCase(clientProvider, logger)
-	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(clientProvider, logger)
-	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(clientProvider, logger)
-	configureHmacUC := storage.NewConfigureHmacUseCase(clientProvider, logger)
-	getHmacConfigUC := storage.NewGetHmacConfigUseCase(clientProvider, logger)
-	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(clientProvider, logger)
-	setProxyUC := storage.NewSetProxyUseCase(clientProvider, logger)
-	setHistoryUC := storage.NewSetHistoryUseCase(clientProvider, logger)
-	getHistoryUC := storage.NewGetHistoryUseCase(clientProvider, logger)
+	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, logger)
+	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, logger)
+	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, logger)
+	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
+	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, logger)
+	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, logger)
+	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, logger)
+	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, logger)
+	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, logger)
+	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
 
 	// Storage Handlers
 	storageHandlers := &handlers.StorageHandlers{
@@ -286,24 +266,36 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Group Management UseCase + Handlers
-	groupMgmtUC := group.NewGroupManagementUseCase(clientProvider, logger)
+	groupMgmtUC := group.NewGroupManagementUseCase(groupAdapter, groupAdapter, jidResolver, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
-	// Extended Handlers (downloads, presence, user-info, react, mark-read)
-	extendedHandlers := &handlers.ExtendedHandlers{
-		DownloadImage:     handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(clientProvider, logger)),
-		DownloadVideo:     handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(clientProvider, logger)),
-		DownloadAudio:     handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(clientProvider, logger)),
-		DownloadDocument:  handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(clientProvider, logger)),
-		DownloadSticker:   handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(clientProvider, logger)),
-		SendPresence:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(clientProvider, log.Logger)),
-		SubscribePresence: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(clientProvider, log.Logger)),
-		ChatPresence:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(clientProvider, log.Logger)),
-		MarkRead:          handlers.NewMarkReadHandler(message.NewMarkReadUseCase(clientProvider, log.Logger)),
-		React:             handlers.NewReactHandler(message.NewReactUseCase(clientProvider, log.Logger)),
-		GetAvatar:         handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(clientProvider, log.Logger)),
-		GetContacts:       handlers.NewGetContactsHandler(user.NewGetContactsUseCase(clientProvider, log.Logger)),
-		GetUserInfo:       handlers.NewGetUserInfoHandler(getUserUC),
+	// Download Handlers (/chat/download*)
+	downloadHandlers := &handlers.DownloadHandlers{
+		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
+		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
+		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
+		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
+		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
+	}
+
+	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)
+	presenceHandlers := &handlers.PresenceHandlers{
+		Send:      handlers.NewSendPresenceHandler(message.NewSendPresenceUseCase(presenceController, logger)),
+		Subscribe: handlers.NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(presenceController, jidResolver, logger)),
+		Chat:      handlers.NewChatPresenceHandler(message.NewChatPresenceUseCase(presenceController, jidResolver, logger)),
+		MarkRead:  handlers.NewMarkReadHandler(message.NewMarkReadUseCase(chatMessenger, jidResolver, logger)),
+	}
+
+	// Reaction Handlers (/chat/react)
+	reactionHandlers := &handlers.ReactionHandlers{
+		React: handlers.NewReactHandler(message.NewReactUseCase(chatMessenger, jidResolver, logger)),
+	}
+
+	// Contact Handlers (/user/info, /user/avatar, /user/contacts)
+	contactHandlers := &handlers.ContactHandlers{
+		Avatar:   handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
+		Contacts: handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
+		UserInfo: handlers.NewGetUserInfoHandler(getUserUC),
 	}
 
 	customHandlerSet = &customHandlers{
@@ -316,7 +308,16 @@ func initCustomHandlers(s *server) {
 		Storage:   storageHandlers,
 		Misc:      miscHandlers,
 		Blocklist: blocklistHandlers,
-		Extended:  extendedHandlers,
+		Download:  downloadHandlers,
+		Presence:  presenceHandlers,
+		Reaction:  reactionHandlers,
+		Contact:   contactHandlers,
 		GroupMgmt: groupMgmtHandlers,
 	}
+}
+
+// initConnectHandler creates a ConnectHandler wired to server.startClient.
+func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
+	h := handlers.NewConnectHandler(uc)
+	return h.WithStartClient(s.startClient)
 }

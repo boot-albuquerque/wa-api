@@ -2,11 +2,11 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	dbpkg "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
@@ -14,13 +14,13 @@ import (
 
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
-	db     *sqlx.DB
-	logger zerolog.Logger
+	users  appport.UserRepository
+	logger appport.Logger
 }
 
 // NewAddUserUseCase cria uma nova instância
-func NewAddUserUseCase(db *sqlx.DB, logger zerolog.Logger) *AddUserUseCase {
-	return &AddUserUseCase{db: db, logger: logger}
+func NewAddUserUseCase(users appport.UserRepository, logger appport.Logger) *AddUserUseCase {
+	return &AddUserUseCase{users: users, logger: logger}
 }
 
 // Execute adiciona um novo usuário
@@ -53,20 +53,10 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		// For now, we'll create a simple approach
 		encrypted, err := encryptHMACKeyFunc(req.HmacKey)
 		if err != nil {
-			uc.logger.Error().Err(err).Msg("Failed to encrypt HMAC key")
+			uc.logger.Error(ctx, "Failed to encrypt HMAC key", "error", err)
 			return nil, fmt.Errorf("failed to encrypt HMAC key: %w", err)
 		}
 		encryptedHmacKey = encrypted
-	}
-
-	// Check for existing user
-	var count int
-	if err := uc.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE token = $1", req.Token); err != nil {
-		uc.logger.Error().Err(err).Msg("Database error checking token")
-		return nil, fmt.Errorf("database error: %w", err)
-	}
-	if count > 0 {
-		return nil, fmt.Errorf("user with this token already exists")
 	}
 
 	// Validate events
@@ -86,25 +76,32 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	// Generate ID
 	id, err := dbpkg.GenerateRandomID()
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to generate ID")
+		uc.logger.Error(ctx, "Failed to generate ID", "error", err)
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	// Insert user
-	_, err = uc.db.ExecContext(ctx,
-		`INSERT INTO users (id, name, token, webhook, expiration, events, jid, qrcode, proxy_url,
-		 webhook_use_proxy, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
-		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
-		id, req.Name, req.Token, req.Webhook, req.Expiration, req.Events, "", "",
-		req.ProxyConfig.ProxyURL, webhookUseProxy,
-		req.S3Config.Enabled, req.S3Config.Endpoint, req.S3Config.Region, req.S3Config.Bucket,
-		req.S3Config.AccessKey, req.S3Config.SecretKey, req.S3Config.PathStyle, req.S3Config.PublicURL,
-		req.S3Config.MediaDelivery, req.S3Config.RetentionDays, encryptedHmacKey, req.History)
-
+	created, err := uc.users.CreateUser(ctx, domain.UserRecord{
+		ID:              id,
+		Name:            req.Name,
+		Token:           req.Token,
+		Webhook:         req.Webhook,
+		Expiration:      req.Expiration,
+		Events:          req.Events,
+		ProxyURL:        req.ProxyConfig.ProxyURL,
+		WebhookUseProxy: webhookUseProxy,
+		S3:              *req.S3Config,
+		HmacKey:         encryptedHmacKey,
+		History:         req.History,
+	})
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to insert user")
+		if errors.Is(err, ErrDuplicateToken) {
+			return nil, ErrDuplicateToken
+		}
+		uc.logger.Error(ctx, "Failed to insert user", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
+	}
+	if !created {
+		return nil, ErrDuplicateToken
 	}
 
 	// Initialize S3 if enabled

@@ -1,8 +1,8 @@
-// Package domain contém as entidades centrais do domínio disparazaap-wuzapi.
+// Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 // Entities são imutáveis e não dependem de frameworks ou bibliotecas externas.
 package domain
 
-// Session representa uma sessão WhatsApp conectada no wuzapi.
+// Session representa uma sessão WhatsApp conectada no wa-api.
 type Session struct {
 	ID         string `json:"id"`
 	JID        JID    `json:"jid"`
@@ -12,7 +12,7 @@ type Session struct {
 	QRCode     string `json:"qrcode"`
 }
 
-// User representa um usuário/admin do wuzapi.
+// User representa um usuário/admin do wa-api.
 type User struct {
 	ID      string `json:"id"`
 	Token   string `json:"token"`

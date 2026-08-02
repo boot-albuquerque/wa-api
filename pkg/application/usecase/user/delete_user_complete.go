@@ -7,28 +7,25 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rs/zerolog"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // DeleteUserCompleteUseCase completely deletes a user
 type DeleteUserCompleteUseCase struct {
-	db             *sql.DB
-	clientProvider appport.ClientProvider
-	clientManager  appport.HealthClientProvider
-	logger         zerolog.Logger
-	exPath         string
+	db       *sql.DB
+	sessions appport.SessionController
+	logger   appport.Logger
+	exPath   string
 }
 
 // NewDeleteUserCompleteUseCase creates a new instance
-func NewDeleteUserCompleteUseCase(db *sql.DB, cp appport.ClientProvider, cm appport.HealthClientProvider, logger zerolog.Logger, exPath string) *DeleteUserCompleteUseCase {
+func NewDeleteUserCompleteUseCase(db *sql.DB, sc appport.SessionController, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
 	return &DeleteUserCompleteUseCase{
-		db:             db,
-		clientProvider: cp,
-		clientManager:  cm,
-		logger:         logger,
-		exPath:         exPath,
+		db:       db,
+		sessions: sc,
+		logger:   logger,
+		exPath:   exPath,
 	}
 }
 
@@ -42,7 +39,7 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 	var exists bool
 	err := uc.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)", userID).Scan(&exists)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("database error checking user existence")
+		uc.logger.Error(ctx, "database error checking user existence", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("database error")
 	}
 	if !exists {
@@ -53,33 +50,33 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 	var uname, jid, token string
 	err = uc.db.QueryRowContext(ctx, "SELECT name, jid, token FROM users WHERE id = $1", userID).Scan(&uname, &jid, &token)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("problem retrieving user information")
+		uc.logger.Error(ctx, "problem retrieving user information", "error", err, "user_id", userID)
 		// Continue anyway since we have the ID
 	}
 
-	// 1. Logout and disconnect instance via port (simulated through clientProvider)
-	client, _ := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if client != nil {
-		if client.IsConnected() {
-			uc.logger.Info().Str("user_id", userID).Msg("Logging out user")
-			_ = client.Logout(context.Background())
+	// 1. Logout and disconnect instance via port
+	if err := uc.sessions.EnsureSession(ctx, userID); err == nil {
+		connected, _ := uc.sessions.SessionStatus(ctx, userID)
+		if connected {
+			uc.logger.Info(ctx, "Logging out user", "user_id", userID)
+			_ = uc.sessions.Logout(ctx, userID)
 		}
-		uc.logger.Info().Str("user_id", userID).Msg("Disconnecting from WhatsApp")
-		client.Disconnect()
+		uc.logger.Info(ctx, "Disconnecting from WhatsApp", "user_id", userID)
+		_ = uc.sessions.Disconnect(ctx, userID)
 	}
 
 	// 2. Query S3 config before deleting the user
 	var s3Enabled bool
 	err = uc.db.QueryRowContext(ctx, "SELECT s3_enabled FROM users WHERE id = $1", userID).Scan(&s3Enabled)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("problem retrieving user s3 configuration")
+		uc.logger.Error(ctx, "problem retrieving user s3 configuration", "error", err, "user_id", userID)
 		// Continue anyway since we have the ID to delete local files
 	}
 
 	// 3. Remove from DB
 	_, err = uc.db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", userID)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("database error deleting user")
+		uc.logger.Error(ctx, "database error deleting user", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("database error")
 	}
 
@@ -89,20 +86,20 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 	// 5. Remove media files
 	userDirectory := filepath.Join(uc.exPath, "files", userID)
 	if stat, err := os.Stat(userDirectory); err == nil && stat.IsDir() {
-		uc.logger.Info().Str("dir", userDirectory).Msg("deleting media and history files from disk")
+		uc.logger.Info(ctx, "deleting media and history files from disk", "dir", userDirectory)
 		err = os.RemoveAll(userDirectory)
 		if err != nil {
-			uc.logger.Error().Err(err).Str("dir", userDirectory).Msg("error removing media directory")
+			uc.logger.Error(ctx, "error removing media directory", "error", err, "dir", userDirectory)
 		}
 	}
 
 	// 6. Remove files from S3 (if enabled)
 	// This would be delegated to storage provider in handlers
 	if s3Enabled {
-		uc.logger.Info().Str("user_id", userID).Msg("S3 deletion needed - to be handled by handler")
+		uc.logger.Info(ctx, "S3 deletion needed - to be handled by handler", "user_id", userID)
 	}
 
-	uc.logger.Info().Str("user_id", userID).Str("name", uname).Str("jid", jid).Msg("user deleted successfully")
+	uc.logger.Info(ctx, "user deleted successfully", "user_id", userID, "name", uname, "jid", jid)
 
 	return &domain.DeleteUserCompleteResult{
 		Code: 200,

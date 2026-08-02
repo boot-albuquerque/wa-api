@@ -2,37 +2,12 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"runtime/debug"
-	"sync"
-
-	"time"
-
-	"golang.org/x/sync/singleflight"
-
-	"github.com/patrickmn/go-cache"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 
 	"wa-api/pkg/infra/auth"
-	"wa-api/pkg/infra/helpers"
-	"wa-api/pkg/infra/media/opengraph"
-	"wa-api/pkg/infra/media/sticker"
 	"wa-api/pkg/infra/storage"
-)
-
-const (
-	openGraphFetchTimeout   = 5 * time.Second
-	fetchImageMaxBytes      = 16 * 1024 * 1024  // 16MB
-	fetchVideoMaxBytes      = 100 * 1024 * 1024 // 100MB
-	fetchAudioMaxBytes      = 16 * 1024 * 1024  // 16MB
-	fetchDocumentMaxBytes   = 100 * 1024 * 1024 // 100MB
-	openGraphPageMaxBytes   = 2 * 1024 * 1024   // 2MB
-	openGraphImageMaxBytes  = 10 * 1024 * 1024  // 10MB
-	openGraphUserFetchLimit = 20                // Limit concurrent Open Graph fetches per user
-
 )
 
 // ProxyConfig holds per-user proxy settings for WhatsApp and webhook delivery.
@@ -40,118 +15,6 @@ type ProxyConfig struct {
 	Enabled         bool   `json:"enabled"`
 	ProxyURL        string `json:"proxyURL"`
 	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
-}
-
-func resolveWebhookUseProxy(perUser *bool) bool {
-	if perUser != nil {
-		return *perUser
-	}
-	return appCtx.GlobalWebhookUseProxy
-}
-
-func proxyConfigResponse(proxyURL string, webhookUseProxy bool) map[string]interface{} {
-	return map[string]interface{}{
-		"enabled":           proxyURL != "",
-		"proxy_url":         proxyURL,
-		"webhook_use_proxy": webhookUseProxy,
-	}
-}
-
-type openGraphResult struct {
-	Title       string
-	Description string
-	ImageData   []byte // small inline thumbnail (JPEGThumbnail field)
-	HQImageData []byte // larger thumbnail uploaded to WA media servers for the big preview card
-	HQWidth     uint32
-	HQHeight    uint32
-}
-
-type UserSemaphoreManager struct {
-	pools sync.Map
-}
-
-func NewUserSemaphoreManager() *UserSemaphoreManager {
-	return &UserSemaphoreManager{}
-}
-
-func (usm *UserSemaphoreManager) ForUser(userID string) chan struct{} {
-	// LoadOrStore provides an atomic way to get or create a semaphore.
-	pool, _ := usm.pools.LoadOrStore(userID, make(chan struct{}, openGraphUserFetchLimit))
-	return pool.(chan struct{})
-}
-
-var (
-	userSemaphoreManager = NewUserSemaphoreManager()
-
-	openGraphGroup singleflight.Group
-
-	openGraphCache = cache.New(5*time.Minute, 10*time.Minute) // Cache Open Graph data for 5 minutes, cleanup every 10 minutes
-
-)
-
-var Find = helpers.Find
-
-var isHTTPURL = helpers.IsHTTPURL
-
-func fetchURLBytes(ctx context.Context, url string, limit int64) ([]byte, string, error) {
-	return opengraph.FetchURLBytes(ctx, globalHTTPClient, url, limit)
-}
-
-func getOpenGraphData(ctx context.Context, urlStr string, userID string) openGraphResult {
-	// Check cache first
-	if cachedData, found := openGraphCache.Get(urlStr); found {
-		if data, ok := cachedData.(openGraphResult); ok {
-			log.Debug().Str("url", urlStr).Msg("Open Graph data fetched from cache")
-			return data
-		}
-	}
-
-	v, err, _ := openGraphGroup.Do(urlStr, func() (res any, err error) {
-		ctx, cancel := context.WithTimeout(ctx, openGraphFetchTimeout)
-		defer cancel()
-
-		// Acquire a token from the semaphore pool
-		userPool := userSemaphoreManager.ForUser(userID)
-		select {
-		case userPool <- struct{}{}:
-			defer func() { <-userPool }()
-		case <-ctx.Done():
-			log.Warn().Str("url", urlStr).Msg("Open Graph data fetch timed out while waiting for a worker")
-			return nil, ctx.Err()
-		}
-
-		// Recover from panics and convert to error
-		defer func() {
-			if r := recover(); r != nil {
-				stack := debug.Stack()
-				log.Error().
-					Interface("panic_info", r).
-					Str("url", urlStr).
-					Bytes("stack", stack).
-					Msg("Panic recovered while fetching Open Graph data")
-				err = fmt.Errorf("panic: %v", r)
-			}
-		}()
-
-		// Fetch Open Graph data
-		result := fetchOpenGraphData(ctx, urlStr)
-
-		// Store in cache
-		openGraphCache.Set(urlStr, result, cache.DefaultExpiration)
-
-		return result, nil
-	})
-
-	if err != nil {
-		log.Error().Err(err).Str("url", urlStr).Msg("Error fetching Open Graph data via singleflight")
-		return openGraphResult{}
-	}
-
-	if v == nil {
-		return openGraphResult{}
-	}
-
-	return v.(openGraphResult)
 }
 
 // Update entry in User map
@@ -213,63 +76,10 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 	return nil, nil
 }
 
-// HMAC crypto delegates to internal/infrastructure/auth
+// HMAC crypto delegates to pkg/infra/auth
 func generateHmacSignature(payload, encryptedKey []byte) (string, error) {
 	return auth.GenerateHmacSignature(payload, encryptedKey, []byte(appCtx.GlobalEncryptionKey))
 }
 func encryptHMACKey(plainText string) ([]byte, error) {
 	return auth.EncryptHMACKey(plainText, appCtx.GlobalEncryptionKey)
 }
-func decryptHMACKey(encryptedData []byte) (string, error) {
-	return auth.DecryptHMACKey(encryptedData, []byte(appCtx.GlobalEncryptionKey))
-}
-
-var extractFirstURL = helpers.ExtractFirstURL
-
-func fetchOpenGraphData(ctx context.Context, urlStr string) openGraphResult {
-	oResult := opengraph.FetchOpenGraphData(ctx, globalHTTPClient, urlStr)
-	return openGraphResult{Title: oResult.Title, Description: oResult.Description, ImageData: oResult.ImageData, HQImageData: oResult.HQImageData, HQWidth: oResult.HQWidth, HQHeight: oResult.HQHeight}
-}
-
-var encodeJPEGThumbnail = sticker.EncodeJPEGThumbnail
-
-func fetchOpenGraphImage(ctx context.Context, pageURL *url.URL, imageURLStr string, result *openGraphResult) {
-	oResult := opengraph.Result{Title: result.Title, Description: result.Description, ImageData: result.ImageData, HQImageData: result.HQImageData, HQWidth: result.HQWidth, HQHeight: result.HQHeight}
-	opengraph.FetchOpenGraphImage(ctx, globalHTTPClient, pageURL, imageURLStr, &oResult)
-	result.ImageData = oResult.ImageData
-	result.HQImageData = oResult.HQImageData
-	result.HQWidth = oResult.HQWidth
-	result.HQHeight = oResult.HQHeight
-}
-
-var runFFmpegConversion = sticker.RunFFmpegConversion
-
-var convertVideoStickerToWebP = sticker.ConvertVideoStickerToWebP
-
-var convertImageToWebP = sticker.ConvertImageToWebP
-
-var processStickerData = sticker.ProcessStickerData
-
-var convertToWebPSticker = sticker.ConvertToWebPSticker
-
-var embedStickerEXIF = sticker.EmbedStickerEXIF
-
-var buildStickerMetadata = sticker.BuildStickerMetadata
-
-var buildWhatsAppEXIF = sticker.BuildWhatsAppEXIF
-
-var injectWebPEXIF = sticker.InjectWebPEXIF
-
-var isValidWebP = sticker.IsValidWebP
-
-var parseWebPChunks = sticker.ParseWebPChunks
-
-var ensureVP8XWithEXIF = sticker.EnsureVP8XWithEXIF
-
-var createVP8XChunk = sticker.CreateVP8XChunk
-
-var putUint24LE = sticker.PutUint24LE
-
-var assembleWebP = sticker.AssembleWebP
-
-var writeChunk = sticker.WriteChunk

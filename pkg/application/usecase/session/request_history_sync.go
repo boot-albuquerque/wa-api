@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -10,30 +9,25 @@ import (
 
 // RequestHistorySyncUseCase encapsula a validação de requisição de sincronização de histórico.
 type RequestHistorySyncUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewRequestHistorySyncUseCase cria uma nova instância do usecase.
-func NewRequestHistorySyncUseCase(cp appport.ClientProvider, l appport.Logger) *RequestHistorySyncUseCase {
+func NewRequestHistorySyncUseCase(sg appport.SessionGuard, l appport.Logger) *RequestHistorySyncUseCase {
 	return &RequestHistorySyncUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida se o cliente está disponível.
 func (uc *RequestHistorySyncUseCase) Execute(ctx context.Context, txtID string, req domain.RequestHistorySyncRequest) (*domain.RequestHistorySyncResult, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
-	uc.logger.Info("request history sync validated", "txtID", txtID)
+	uc.logger.Info(ctx, "request history sync validated", "txtID", txtID)
 	return &domain.RequestHistorySyncResult{}, nil
 }

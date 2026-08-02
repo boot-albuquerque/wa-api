@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -10,35 +9,30 @@ import (
 
 // GetHistoryUseCase encapsula a validação de leitura de configuração de histórico.
 type GetHistoryUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewGetHistoryUseCase cria uma nova instância do usecase.
-func NewGetHistoryUseCase(cp appport.ClientProvider, l appport.Logger) *GetHistoryUseCase {
+func NewGetHistoryUseCase(sg appport.SessionGuard, l appport.Logger) *GetHistoryUseCase {
 	return &GetHistoryUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
 // Execute valida se o cliente está disponível.
 func (uc *GetHistoryUseCase) Execute(ctx context.Context, txtID string) (*domain.WebhookHistoryResult, error) {
 	// Validate client exists
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	result := &domain.WebhookHistoryResult{
 		Details: "History configuration retrieved",
 	}
 
-	uc.logger.Info("History configuration retrieved", "txtID", txtID)
+	uc.logger.Info(ctx, "History configuration retrieved", "txtID", txtID)
 	return result, nil
 }

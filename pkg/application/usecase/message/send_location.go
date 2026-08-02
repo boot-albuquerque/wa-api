@@ -10,15 +10,15 @@ import (
 
 // SendLocationUseCase encapsula a validação de envio de localização.
 type SendLocationUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendLocationUseCase cria uma nova instância do usecase.
-func NewSendLocationUseCase(cp appport.ClientProvider, l appport.Logger) *SendLocationUseCase {
+func NewSendLocationUseCase(mc appport.MessageComposer, l appport.Logger) *SendLocationUseCase {
 	return &SendLocationUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -34,19 +34,19 @@ func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req do
 		return nil, fmt.Errorf("missing Longitude in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, err
+		}
+		msgID = generated
 	}
 
 	result := &domain.SendLocationResult{
@@ -54,6 +54,6 @@ func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req do
 		Status:    "validated",
 	}
 
-	uc.logger.Info("location validated", "msgID", msgID)
+	uc.logger.Info(ctx, "location validated", "msgID", msgID)
 	return result, nil
 }

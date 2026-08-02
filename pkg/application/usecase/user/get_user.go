@@ -5,50 +5,51 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow/types"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // GetUserUseCase obtém informações de usuários do WhatsApp
 type GetUserUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         zerolog.Logger
+	contacts appport.ContactDirectory
+	jids     appport.JIDResolver
+	logger   appport.Logger
 }
 
 // NewGetUserUseCase cria uma nova instância
-func NewGetUserUseCase(cp appport.ClientProvider, logger zerolog.Logger) *GetUserUseCase {
-	return &GetUserUseCase{clientProvider: cp, logger: logger}
+func NewGetUserUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logger appport.Logger) *GetUserUseCase {
+	return &GetUserUseCase{contacts: cd, jids: jr, logger: logger}
 }
 
 // Execute obtém informações de usuários
 func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) (json.RawMessage, error) {
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, userID)
-	if err != nil || client == nil {
-		return nil, fmt.Errorf("no session")
+	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
-	var jids []types.JID
+	// Telefone que não parseia é pulado, não é erro — comportamento
+	// preservado do upstream.
+	var jids []domain.JID
 	for _, phone := range req.Phone {
-		jid, err := types.ParseJID(phone)
+		jid, err := uc.jids.ResolveQualifiedJID(ctx, phone)
 		if err != nil {
-			uc.logger.Warn().Err(err).Str("phone", phone).Msg("Failed to parse JID")
+			uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "phone", phone)
 			continue
 		}
 		jids = append(jids, jid)
 	}
 
-	resp, err := client.GetUserInfo(ctx, jids)
+	resp, err := uc.contacts.GetUserInfo(ctx, userID, jids)
 	if err != nil {
-		uc.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get user info")
+		uc.logger.Error(ctx, "Failed to get user info", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
 	// Convert response to JSON
 	data, err := json.Marshal(map[string]interface{}{"users": resp})
 	if err != nil {
-		uc.logger.Error().Err(err).Msg("Failed to marshal response")
+		uc.logger.Error(ctx, "Failed to marshal response", "error", err)
 		return nil, fmt.Errorf("marshal error: %w", err)
 	}
 

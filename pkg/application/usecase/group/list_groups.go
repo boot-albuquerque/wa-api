@@ -10,35 +10,30 @@ import (
 
 // ListGroupsUseCase encapsula a validação para listar grupos
 type ListGroupsUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	groups appport.GroupDirectory
+	logger appport.Logger
 }
 
 // NewListGroupsUseCase cria uma nova instância do usecase
-func NewListGroupsUseCase(cp appport.ClientProvider, l appport.Logger) *ListGroupsUseCase {
+func NewListGroupsUseCase(gd appport.GroupDirectory, l appport.Logger) *ListGroupsUseCase {
 	return &ListGroupsUseCase{
-		clientProvider: cp,
-		logger:         l,
+		groups: gd,
+		logger: l,
 	}
 }
 
 // Execute valida se o cliente está disponível e obtém a lista de grupos
 func (uc *ListGroupsUseCase) Execute(ctx context.Context, txtID string, req domain.ListGroupsRequest) (*domain.ListGroupsResult, error) {
-	// Obter cliente whatsmeow
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	// Garantir que há sessão
+	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	// Obter grupos
-	groups, err := client.GetJoinedGroups(ctx)
+	groups, count, err := uc.groups.ListJoinedGroups(ctx, txtID)
 	if err != nil {
-		uc.logger.Error("failed to get groups", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "failed to get groups", "txtID", txtID, "error", err)
 		return nil, fmt.Errorf("failed to get group list: %v", err)
 	}
 
@@ -46,6 +41,6 @@ func (uc *ListGroupsUseCase) Execute(ctx context.Context, txtID string, req doma
 		Groups: groups,
 	}
 
-	uc.logger.Info("groups listed successfully", "txtID", txtID, "count", len(groups))
+	uc.logger.Info(ctx, "groups listed successfully", "txtID", txtID, "count", count)
 	return result, nil
 }

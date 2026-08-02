@@ -10,15 +10,15 @@ import (
 
 // DeleteMessageUseCase encapsula a validação de exclusão de mensagem.
 type DeleteMessageUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	sessions appport.SessionGuard
+	logger   appport.Logger
 }
 
 // NewDeleteMessageUseCase cria uma nova instância do usecase.
-func NewDeleteMessageUseCase(cp appport.ClientProvider, l appport.Logger) *DeleteMessageUseCase {
+func NewDeleteMessageUseCase(sg appport.SessionGuard, l appport.Logger) *DeleteMessageUseCase {
 	return &DeleteMessageUseCase{
-		clientProvider: cp,
-		logger:         l,
+		sessions: sg,
+		logger:   l,
 	}
 }
 
@@ -31,14 +31,9 @@ func (uc *DeleteMessageUseCase) Execute(ctx context.Context, txtID string, req d
 		return nil, fmt.Errorf("missing Id in payload")
 	}
 
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	result := &domain.DeleteMessageResult{
@@ -46,6 +41,6 @@ func (uc *DeleteMessageUseCase) Execute(ctx context.Context, txtID string, req d
 		Status:    "validated",
 	}
 
-	uc.logger.Info("message delete validated", "msgID", req.ID)
+	uc.logger.Info(ctx, "message delete validated", "msgID", req.ID)
 	return result, nil
 }

@@ -13,3 +13,16 @@ type HealthResponse struct {
 	GoRoutines        int                    `json:"goroutines"`
 	Version           string                 `json:"version,omitempty"`
 }
+
+// SessionCounts agrega as contagens de sessões WhatsApp usadas pelo health
+// check. Expressa em tipos de domínio para que o use case não precise
+// conhecer o tipo concreto do cliente do SDK (ADR-001).
+type SessionCounts struct {
+	// Total é o número de sessões registradas no gerenciador de clientes,
+	// conectadas ou não.
+	Total int
+	// Connected é o número de sessões com transporte ativo.
+	Connected int
+	// LoggedIn é o número de sessões autenticadas no WhatsApp.
+	LoggedIn int
+}

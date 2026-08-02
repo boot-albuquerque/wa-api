@@ -8,6 +8,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/rs/zerolog/log"
 	_ "modernc.org/sqlite"
 )
 
@@ -26,9 +27,22 @@ func InitializeDatabase(exPath, dataDirFlag string) (*sqlx.DB, error) {
 	config := GetDatabaseConfig(exPath, dataDirFlag)
 
 	if config.Type == "postgres" {
-		return initializePostgres(config)
+		db, err := initializePostgres(config)
+		if err != nil {
+			log.Error().Err(err).Str("db_type", "postgres").Str("db_name", config.Name).
+				Str("host", config.Host).Msg("failed to initialize database")
+			return nil, err
+		}
+		return db, nil
 	}
-	return initializeSQLite(config)
+
+	db, err := initializeSQLite(config)
+	if err != nil {
+		log.Error().Err(err).Str("db_type", "sqlite").Str("path", config.Path).
+			Msg("failed to initialize database")
+		return nil, err
+	}
+	return db, nil
 }
 
 func GetDatabaseConfig(exPath, dataDirFlag string) DatabaseConfig {
@@ -40,9 +54,10 @@ func GetDatabaseConfig(exPath, dataDirFlag string) DatabaseConfig {
 	dbSSL := os.Getenv("DB_SSLMODE")
 
 	sslMode := dbSSL
-	if dbSSL == "true" {
+	switch dbSSL {
+	case "true":
 		sslMode = "require"
-	} else if dbSSL == "false" || dbSSL == "" {
+	case "false", "":
 		sslMode = "disable"
 	}
 
@@ -56,6 +71,14 @@ func GetDatabaseConfig(exPath, dataDirFlag string) DatabaseConfig {
 			Name:     dbName,
 			SSLMode:  sslMode,
 		}
+	}
+
+	// Um subconjunto não vazio das variáveis de Postgres, mas incompleto, é
+	// quase sempre erro de configuração: o processo cai silenciosamente para
+	// SQLite e o operador só descobre quando os dados não estão onde espera.
+	if dbUser != "" || dbPassword != "" || dbName != "" || dbHost != "" || dbPort != "" {
+		log.Warn().Str("db_type", "sqlite").Str("reason", "incomplete_postgres_env").
+			Msg("falling back to sqlite: DB_USER/DB_PASSWORD/DB_NAME/DB_HOST/DB_PORT partially set")
 	}
 
 	// Use datadir flag if provided, otherwise fall back to executable directory
@@ -78,10 +101,16 @@ func initializePostgres(config DatabaseConfig) (*sqlx.DB, error) {
 
 	db, err := sqlx.Open("postgres", dsn)
 	if err != nil {
+		log.Error().Err(err).Str("db_type", "postgres").Str("db_name", config.Name).
+			Str("host", config.Host).Str("port", config.Port).
+			Msg("failed to open postgres connection")
 		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
+		log.Error().Err(err).Str("db_type", "postgres").Str("db_name", config.Name).
+			Str("host", config.Host).Str("port", config.Port).
+			Msg("failed to ping postgres database")
 		return nil, fmt.Errorf("failed to ping postgres database: %w", err)
 	}
 
@@ -90,16 +119,22 @@ func initializePostgres(config DatabaseConfig) (*sqlx.DB, error) {
 
 func initializeSQLite(config DatabaseConfig) (*sqlx.DB, error) {
 	if err := os.MkdirAll(config.Path, 0751); err != nil {
+		log.Error().Err(err).Str("db_type", "sqlite").Str("path", config.Path).
+			Msg("could not create dbdata directory")
 		return nil, fmt.Errorf("could not create dbdata directory: %w", err)
 	}
 
 	dbPath := filepath.ToSlash(filepath.Join(config.Path, "users.db"))
 	db, err := sqlx.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)")
 	if err != nil {
+		log.Error().Err(err).Str("db_type", "sqlite").Str("path", dbPath).
+			Msg("failed to open sqlite database")
 		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
+		log.Error().Err(err).Str("db_type", "sqlite").Str("path", dbPath).
+			Msg("failed to ping sqlite database")
 		return nil, fmt.Errorf("failed to ping sqlite database: %w", err)
 	}
 
@@ -124,9 +159,17 @@ type HistoryMessage struct {
 // reset only when clearEvents is true (issue #305).
 func SetDisconnectedState(db *sqlx.DB, txtid string, clearEvents bool) error {
 	if clearEvents {
-		_, err := db.Exec("UPDATE users SET connected=0,events=$1 WHERE id=$2", "", txtid)
+		if _, err := db.Exec("UPDATE users SET connected=0,events=$1 WHERE id=$2", "", txtid); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("user_id", txtid).
+				Bool("clear_events", true).Msg("failed to set disconnected state")
+			return err
+		}
+		return nil
+	}
+	if _, err := db.Exec("UPDATE users SET connected=0 WHERE id=$1", txtid); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", txtid).
+			Bool("clear_events", false).Msg("failed to set disconnected state")
 		return err
 	}
-	_, err := db.Exec("UPDATE users SET connected=0 WHERE id=$1", txtid)
-	return err
+	return nil
 }

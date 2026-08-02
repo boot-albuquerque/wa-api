@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
-	"wa-api/pkg/infra/whatsapp/client"
+	wmhelpers "wa-api/pkg/infra/whatsmeow"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
@@ -28,6 +30,24 @@ import (
 	"wa-api/pkg/infra/storage"
 )
 
+// webhookTLSSkipVerify reports whether outgoing webhook deliveries should skip
+// TLS certificate verification. Defaults to false (verification enabled) and is
+// only disabled when WA_API_WEBHOOK_TLS_SKIP_VERIFY is explicitly set to
+// "true"/"1", which is an insecure, deliberately registered choice (it allows
+// delivery to consumers with self-signed certificates while exposing webhook
+// traffic to man-in-the-middle attacks). Evaluated once, warning logged once.
+var webhookTLSSkipVerify = sync.OnceValue(func() bool {
+	v := strings.ToLower(os.Getenv("WA_API_WEBHOOK_TLS_SKIP_VERIFY"))
+	skip := v == "true" || v == "1"
+	if skip {
+		log.Warn().
+			Str("env", "WA_API_WEBHOOK_TLS_SKIP_VERIFY").
+			Msg("INSECURE: webhook TLS certificate verification is DISABLED by explicit configuration. " +
+				"Webhook deliveries are vulnerable to man-in-the-middle attacks. Unset this variable in production.")
+	}
+	return skip
+})
+
 // db field declaration as *sqlx.DB
 type MyClient struct {
 	WAClient       *whatsmeow.Client
@@ -41,16 +61,14 @@ type MyClient struct {
 
 // safeGo runs fn in a new goroutine with a defer recover so a panic inside
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
-// the whole process. Losing one delivery is preferable to taking wuzapi
+// the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
-var safeGo = client.SafeGo
-
-// ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
+var safeGo = wmhelpers.SafeGo
 
 // Webhook functions extracted to lifecycle_webhook.go
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
-	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
+	if !slices.Contains(subscribedEvents, eventType) && !slices.Contains(subscribedEvents, "All") {
 		log.Warn().
 			Str("type", eventType).
 			Strs("subscribedEvents", subscribedEvents).
@@ -68,7 +86,11 @@ func (s *server) connectOnStartup() {
 		log.Error().Err(err).Msg("DB Problem")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close rows")
+		}
+	}()
 	for rows.Next() {
 		txtid := ""
 		token := ""
@@ -114,11 +136,11 @@ func (s *server) connectOnStartup() {
 				subscribedEvents = []string{}
 			} else {
 				for _, arg := range eventarray {
-					if !Find(supportedEventTypes, arg) {
+					if !slices.Contains(supportedEventTypes, arg) {
 						log.Warn().Str("Type", arg).Msg("Event type discarded")
 						continue
 					}
-					if !Find(subscribedEvents, arg) {
+					if !slices.Contains(subscribedEvents, arg) {
 						subscribedEvents = append(subscribedEvents, arg)
 					}
 				}
@@ -142,11 +164,16 @@ func (s *server) connectOnStartup() {
 	}
 }
 
-var parseJID = client.ParseJID
-var getPlatformTypeEnum = client.GetPlatformTypeEnum
+var parseJID = wmhelpers.ParseJID
+var getPlatformTypeEnum = wmhelpers.GetPlatformTypeEnum
 
 func (s *server) startClient(userID string, textjid string, token string, kill chan bool) {
-	log.Info().Str("userid", userID).Str("jid", textjid).Msg("Starting websocket connection to Whatsapp")
+	log.Info().Str("userid", userID).Str("jid", textjid).Msg("[startClient] ENTRY - Starting WhatsApp WebSocket")
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Str("userid", userID).Interface("panic", r).Msg("[startClient] PANIC caught")
+		}
+	}()
 
 	// Connection retry constants
 	const maxConnectionRetries = 3
@@ -210,7 +237,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 		webhookClient.SetDebug(true)
 	}
 	webhookClient.SetTimeout(30 * time.Second)
-	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: webhookTLSSkipVerify()})
 	webhookClient.OnError(func(req *resty.Request, err error) {
 		if v, ok := err.(*resty.ResponseError); ok {
 			// v.Response contains the last response from the server
@@ -245,8 +272,11 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					log.Info().Msg("SOCKS proxy configured for WhatsApp connection")
 				}
 			} else {
-				client.SetProxyAddress(parsed.String(), whatsmeow.SetProxyOptions{})
-				log.Info().Msg("HTTP/HTTPS proxy configured for WhatsApp connection")
+				if err := client.SetProxyAddress(parsed.String(), whatsmeow.SetProxyOptions{}); err != nil {
+					log.Warn().Err(err).Str("proxy", proxyURL).Msg("Failed to set HTTP/HTTPS proxy address, skipping proxy setup")
+				} else {
+					log.Info().Msg("HTTP/HTTPS proxy configured for WhatsApp connection")
+				}
 			}
 
 			if webhookUseProxy {
@@ -281,12 +311,12 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 			myuserinfo, found := appCtx.UserInfoCache.Get(token)
 
 			for evt := range qrChan {
-				if evt.Event == "code" {
+				switch evt.Event {
+				case "code":
 					// Display QR code in terminal (useful for testing/developing)
 					// Skip in stdio mode to avoid breaking JSON-RPC
 					if *logType != "json" && s.Mode != Stdio {
-						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-						fmt.Println("QR code:\n", evt.Code)
+						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout) //nolint:forbidigo // renderização visual do QR no terminal; não deixa o payload em texto pesquisável
 					}
 					// Store encoded/embeded base64 QR on database for retrieval with the /qr endpoint
 					image, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
@@ -299,7 +329,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 						if found {
 							v := updateUserInfo(myuserinfo, "Qrcode", base64qrcode)
 							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
-							log.Info().Str("qrcode", base64qrcode).Msg("update cache userinfo with qr code")
+							log.Info().Str("userID", userID).Int("qrLen", len(base64qrcode)).Msg("update cache userinfo with qr code")
 						}
 					}
 
@@ -311,7 +341,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 
 					sendEventWithWebHook(&mycli, postmap, "")
 
-				} else if evt.Event == "timeout" {
+				case "timeout":
 					// Clear QR code from DB on timeout
 					// Send webhook notifying QR timeout before cleanup
 					postmap := make(map[string]interface{})
@@ -334,7 +364,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					clientManager.DeleteMyClient(userID)
 					clientManager.DeleteHTTPClient(userID)
 					appCtx.KillChannel.Signal(userID)
-				} else if evt.Event == "success" {
+				case "success":
 					log.Info().Msg("QR pairing ok!")
 					// Clear QR code after pairing
 					sqlStmt := `UPDATE users SET qrcode='', connected=1 WHERE id=$1`
@@ -347,7 +377,7 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 							appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
 						}
 					}
-				} else {
+				default:
 					log.Info().Str("event", evt.Event).Msg("Login event")
 				}
 			}
@@ -432,5 +462,3 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 	}
 	appCtx.KillChannel.Delete(userID, kill)
 }
-
-var fileToBase64 = client.FileToBase64

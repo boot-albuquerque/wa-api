@@ -14,11 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// webhook for regular messages
-func callHook(myurl string, payload map[string]string, userID string) {
-	callHookWithHmac(myurl, payload, userID, nil)
-}
-
 // webhook for regular messages with HMAC
 func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte) {
 	log.Info().Str("url", myurl).Str("userID", userID).Msg("Sending POST to client with retry logic")
@@ -168,11 +163,6 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 
 		PublishDataErrorToQueue(errorPayload)
 	}
-}
-
-// webhook for messages with file attachments
-func callHookFile(myurl string, payload map[string]string, userID string, file string) error {
-	return callHookFileWithHmac(myurl, payload, userID, file, nil)
 }
 
 // webhook for messages with file attachments and HMAC

@@ -11,15 +11,15 @@ import (
 // SendDocumentUseCase encapsula a validação de envio de documento.
 // A lógica de envio complexa (upload, etc) fica no wrapper handlers.go.
 type SendDocumentUseCase struct {
-	clientProvider appport.ClientProvider
-	logger         appport.Logger
+	messages appport.MessageComposer
+	logger   appport.Logger
 }
 
 // NewSendDocumentUseCase cria uma nova instância do usecase.
-func NewSendDocumentUseCase(cp appport.ClientProvider, l appport.Logger) *SendDocumentUseCase {
+func NewSendDocumentUseCase(mc appport.MessageComposer, l appport.Logger) *SendDocumentUseCase {
 	return &SendDocumentUseCase{
-		clientProvider: cp,
-		logger:         l,
+		messages: mc,
+		logger:   l,
 	}
 }
 
@@ -39,20 +39,20 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 	}
 
 	// 2. Obter cliente whatsmeow para verificar se existe sessão
-	client, err := uc.clientProvider.GetWhatsmeowClient(ctx, txtID)
-	if err != nil {
-		uc.logger.Error("failed to get whatsmeow client", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
-	}
-	if client == nil {
-		uc.logger.Error("client is nil", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
+		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	// 3. Gerar message ID se não fornecido
 	msgID := req.ID
 	if msgID == "" {
-		msgID = client.GenerateMessageID()
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		if err != nil {
+			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
+			return nil, err
+		}
+		msgID = generated
 	}
 
 	// 4. Retornar resultado com dados validados
@@ -62,6 +62,6 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 		Status:    "validated",
 	}
 
-	uc.logger.Info("document validated", "msgID", msgID)
+	uc.logger.Info(ctx, "document validated", "msgID", msgID)
 	return result, nil
 }
