@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -75,6 +76,15 @@ func (h *UserHandlers) AddUser() http.Handler {
 		}
 		result, err := h.addUser.Execute(r.Context(), req)
 		if err != nil {
+			// ErrDuplicateToken era sempre reportado como 500 — o caller não
+			// tinha como distinguir "token já existe" (chamada idempotente,
+			// re-provisionar o mesmo usuário) de um erro real de servidor.
+			// Provisionamento repetido do mesmo token é o caso comum de um
+			// client que reconecta/reenvia (ex.: retry de pareamento).
+			if errors.Is(err, user.ErrDuplicateToken) {
+				customhttp.RespondJSON(w, http.StatusConflict, nil, err)
+				return
+			}
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}

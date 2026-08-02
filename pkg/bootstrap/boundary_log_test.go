@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	"wa-api/pkg/application/usecase/session"
+	"wa-api/pkg/domain"
 	infrawa "wa-api/pkg/infra/whatsmeow"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
@@ -38,10 +39,27 @@ func (noSessionGuard) EnsureSession(context.Context, string) error {
 	return infrawa.ErrNoSession("boundary-test-user", nil)
 }
 
+// SessionStatus and ListUsers exist only to satisfy the wider
+// SessionStatusReader/UserRepository params GetStatusUseCase now takes —
+// EnsureSession always fails first, so neither is ever actually called.
+func (noSessionGuard) SessionStatus(context.Context, string) (bool, bool) { return false, false }
+
+func (noSessionGuard) CreateUser(context.Context, domain.UserRecord) (bool, error) {
+	return false, nil
+}
+func (noSessionGuard) UserExists(context.Context, string) (bool, error) { return false, nil }
+func (noSessionGuard) UpdateUser(context.Context, string, domain.UserUpdate) error {
+	return nil
+}
+func (noSessionGuard) ListUsers(context.Context, string) ([]domain.UserListEntry, error) {
+	return nil, nil
+}
+func (noSessionGuard) DeleteUser(context.Context, string) (bool, error) { return false, nil }
+
 // panicSessionGuard panics instead of returning, so a REAL panic originates
 // inside a REAL handler running behind the full middleware stack — the only
 // way to observe what the AccessHandler callback sees when a request dies.
-type panicSessionGuard struct{}
+type panicSessionGuard struct{ noSessionGuard }
 
 const boundaryTestPanicMsg = "boundary-test-induced panic"
 
@@ -66,6 +84,8 @@ func boundaryDeps(t *testing.T, buf *bytes.Buffer) Deps {
 	ch.Session.GetStatus = handlers.NewGetStatusHandler(
 		session.NewGetStatusUseCase(
 			noSessionGuard{},
+			noSessionGuard{},
+			noSessionGuard{},
 			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
@@ -81,6 +101,8 @@ func boundaryPanicDeps(t *testing.T, buf *bytes.Buffer) Deps {
 	d := boundaryDeps(t, buf)
 	d.CustomHandlers.Session.GetStatus = handlers.NewGetStatusHandler(
 		session.NewGetStatusUseCase(
+			panicSessionGuard{},
+			panicSessionGuard{},
 			panicSessionGuard{},
 			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),

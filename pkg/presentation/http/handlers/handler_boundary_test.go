@@ -103,6 +103,39 @@ func (s *spyPort) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID
 	return domain.JID(raw + "@s.whatsapp.net"), nil
 }
 
+// Métodos de appport.UserRepository — só GetQR consome esta porta, e nesse
+// teste EnsureSession sempre falha antes de alcançá-los (ver doc do
+// arquivo); existem apenas para satisfazer a interface em tempo de compilação.
+func (s *spyPort) CreateUser(context.Context, domain.UserRecord) (bool, error) {
+	s.calls++
+	return false, s.err
+}
+
+func (s *spyPort) UserExists(context.Context, string) (bool, error) {
+	s.calls++
+	return false, s.err
+}
+
+func (s *spyPort) UpdateUser(context.Context, string, domain.UserUpdate) error {
+	s.calls++
+	return s.err
+}
+
+func (s *spyPort) ListUsers(context.Context, string) ([]domain.UserListEntry, error) {
+	s.calls++
+	return nil, s.err
+}
+
+func (s *spyPort) DeleteUser(context.Context, string) (bool, error) {
+	s.calls++
+	return false, s.err
+}
+
+func (s *spyPort) SessionStatus(context.Context, string) (bool, bool) {
+	s.calls++
+	return false, false
+}
+
 // silentLogger satisfaz appport.Logger sem poluir a saida do teste.
 type silentLogger struct{}
 
@@ -267,14 +300,14 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "GetStatus",
-			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, s, s, log)) },
 			method:    http.MethodGet,
 			path:      "/session/status",
 			readsBody: false,
 		},
 		{
 			name:      "GetQR",
-			build:     func(s *spyPort) http.Handler { return NewGetQRHandler(session.NewGetQRUseCase(s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewGetQRHandler(session.NewGetQRUseCase(s, s, log)) },
 			method:    http.MethodGet,
 			path:      "/session/qr",
 			readsBody: false,
@@ -504,7 +537,7 @@ func TestHandlers_AppErrFromPortDoesNotReachTheClient(t *testing.T) {
 	spy := &spyPort{err: infrawa.ErrNoSession("user-1", nil)}
 	rec := httptest.NewRecorder()
 
-	NewGetStatusHandler(session.NewGetStatusUseCase(spy, silentLogger{})).
+	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, spy, silentLogger{})).
 		ServeHTTP(rec, withUser(httptest.NewRequest(http.MethodGet, "/session/status", nil), "user-1"))
 
 	if rec.Code == http.StatusBadRequest {
