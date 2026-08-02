@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"wa-api/pkg/domain/apperr"
+
+	"github.com/rs/zerolog/log"
 )
 
 // RespondJSON escreve uma resposta JSON com envelope compatível com s.Respond() do upstream.
@@ -69,7 +71,14 @@ func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err er
 
 	respBytes, marshalErr := json.Marshal(envelope)
 	if marshalErr != nil {
-		// Fallback: erro de serialização — retornar erro genérico
+		// Fallback: erro de serialização — retornar erro genérico.
+		// O statusCode já foi escrito acima, então este WriteHeader é um
+		// no-op registrado pelo net/http; o log abaixo é a única evidência
+		// de que o corpo entregue não é o corpo pretendido.
+		log.Error().Err(marshalErr).
+			Int("status", statusCode).
+			Bool("had_error", err != nil).
+			Msg("failed to marshal JSON response envelope; falling back to generic body")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"code":500,"error":"internal server error"}`))
 		return

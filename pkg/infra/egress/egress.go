@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+
+	"github.com/rs/zerolog/log"
 )
 
 // IsHTTPURL reports whether s is a syntactically valid http/https URL with
@@ -21,12 +23,23 @@ import (
 func IsHTTPURL(s string) bool {
 	parsed, err := url.ParseRequestURI(s)
 	if err != nil {
+		// A URL bruta nunca entra no registro: ela pode carregar credencial
+		// no userinfo ou na query. Só o motivo da recusa é observável.
+		log.Debug().Err(err).Str("reason", "unparseable").
+			Msg("URL rejected as non-http(s)")
 		return false
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		log.Debug().Str("reason", "scheme").Str("scheme", parsed.Scheme).
+			Msg("URL rejected as non-http(s)")
 		return false
 	}
-	return parsed.Host != ""
+	if parsed.Host == "" {
+		log.Debug().Str("reason", "empty_host").
+			Msg("URL rejected as non-http(s)")
+		return false
+	}
+	return true
 }
 
 // reservedBlocks are the CIDR ranges no outbound URL should resolve to.
@@ -56,6 +69,12 @@ func mustParseCIDRs(cidrs []string) []*net.IPNet {
 	for _, cidr := range cidrs {
 		_, block, err := net.ParseCIDR(cidr)
 		if err != nil {
+			// O panic aborta o processo na inicialização do pacote, quando
+			// nada leu ainda o stderr estruturado; o registro existe para
+			// que a causa apareça no mesmo formato do resto do sistema.
+			log.Error().Err(err).
+				Str("cidr", cidr).
+				Msg("invalid CIDR literal in the reserved-block table")
 			panic(fmt.Sprintf("egress: invalid CIDR literal %q: %v", cidr, err))
 		}
 		blocks = append(blocks, block)
@@ -70,10 +89,15 @@ func mustParseCIDRs(cidrs []string) []*net.IPNet {
 func IsReservedOrLoopback(ip net.IP) bool {
 	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast() || ip.IsUnspecified() {
+		log.Debug().Stringer("ip", ip).Str("reason", "special_purpose").
+			Msg("address classified as reserved")
 		return true
 	}
 	for _, block := range reservedBlocks {
 		if block.Contains(ip) {
+			log.Debug().Stringer("ip", ip).Str("reason", "reserved_cidr").
+				Str("block", block.String()).
+				Msg("address classified as reserved")
 			return true
 		}
 	}
@@ -89,21 +113,26 @@ func IsReservedOrLoopback(ip net.IP) bool {
 // at DialContext regardless of what was validated at config time).
 func ValidateOutboundURL(ctx context.Context, rawURL string) error {
 	if !IsHTTPURL(rawURL) {
+		log.Warn().Str("reason", "malformed").Msg("outbound URL rejected")
 		return fmt.Errorf("not a valid http(s) URL")
 	}
 
 	parsed, err := url.ParseRequestURI(rawURL)
 	if err != nil {
+		log.Warn().Err(err).Str("reason", "unparseable").Msg("outbound URL rejected")
 		return fmt.Errorf("not a valid http(s) URL")
 	}
 
 	host := parsed.Hostname()
 	if host == "" {
+		log.Warn().Str("reason", "empty_host").Msg("outbound URL rejected")
 		return fmt.Errorf("URL has no host")
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
 		if IsReservedOrLoopback(ip) {
+			log.Warn().Str("reason", "reserved_address").Str("host", host).
+				Msg("outbound URL rejected")
 			return fmt.Errorf("URL resolves to a reserved or loopback address")
 		}
 		return nil
@@ -112,13 +141,20 @@ func ValidateOutboundURL(ctx context.Context, rawURL string) error {
 	resolver := &net.Resolver{}
 	ips, err := resolver.LookupIP(ctx, "ip", host)
 	if err != nil {
+		log.Warn().Err(err).Str("reason", "unresolvable").Str("host", host).
+			Msg("outbound URL rejected")
 		return fmt.Errorf("could not resolve host %q: %w", host, err)
 	}
 	if len(ips) == 0 {
+		log.Warn().Str("reason", "no_addresses").Str("host", host).
+			Msg("outbound URL rejected")
 		return fmt.Errorf("no IP addresses found for host %q", host)
 	}
 	for _, ip := range ips {
 		if IsReservedOrLoopback(ip) {
+			log.Warn().Str("reason", "reserved_address").Str("host", host).
+				Stringer("resolved_ip", ip).
+				Msg("outbound URL rejected")
 			return fmt.Errorf("URL resolves to a reserved or loopback address")
 		}
 	}

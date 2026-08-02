@@ -13,6 +13,7 @@
 *.dylib
 *.test
 *.out
+!cmd/logcov/testdata/profile/*.out
 coverage.out
 coverage.html
 go.work

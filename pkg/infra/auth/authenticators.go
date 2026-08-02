@@ -21,7 +21,17 @@ import (
 func ValidateAdminToken(authHeader, adminToken string) bool {
 	tokenHash := sha256.Sum256([]byte(authHeader))
 	adminHash := sha256.Sum256([]byte(adminToken))
-	return subtle.ConstantTimeCompare(tokenHash[:], adminHash[:]) == 1
+	if subtle.ConstantTimeCompare(tokenHash[:], adminHash[:]) != 1 {
+		// Rejeição de admin é fronteira: sem log, uma tentativa de escalada de
+		// privilégio não deixa rastro. O token nunca é logado — só o formato.
+		log.Warn().
+			Str("component", "auth.ValidateAdminToken").
+			Int("presented_len", len(authHeader)).
+			Bool("presented_empty", authHeader == "").
+			Msg("token admin recusado")
+		return false
+	}
+	return true
 }
 
 // ExtractToken extrai o token do header ou query parameter.
@@ -107,6 +117,10 @@ func GetOrSetCache(tokenCache *cache.Cache, token string, factory func() interfa
 	if val, found := tokenCache.Get(token); found {
 		return val, true
 	}
+	log.Debug().
+		Str("component", "auth.GetOrSetCache").
+		Int("cached_entries", tokenCache.ItemCount()).
+		Msg("miss no cache de token; repopulando pela factory")
 	val := factory()
 	return val, false
 }

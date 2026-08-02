@@ -49,7 +49,7 @@
 
 stage=advisory
 
-min_func_coverage=335
-min_errpath_coverage=458
+min_func_coverage=369
+min_errpath_coverage=479
 min_eligible=463
 max_exempt_annotations=0

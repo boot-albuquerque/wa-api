@@ -20,6 +20,7 @@ import (
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
+	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -47,6 +48,12 @@ func AuthAdmin(adminToken string) func(http.Handler) http.Handler {
 			tokenHash := sha256.Sum256([]byte(token))
 			adminHash := sha256.Sum256([]byte(adminToken))
 			if subtle.ConstantTimeCompare(tokenHash[:], adminHash[:]) != 1 {
+				hlog.FromRequest(r).Warn().
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Str("remote_addr", r.RemoteAddr).
+					Bool("token_present", token != "").
+					Msg("admin authentication rejected")
 				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
 				return
 			}
@@ -101,7 +108,9 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 
 			myuserinfo, found := userCache.Get(token)
 			if !found {
-				log.Info().Msg("Looking for user information in DB")
+				hlog.FromRequest(r).Debug().
+					Str("path", r.URL.Path).
+					Msg("token not in cache; looking up user in DB")
 				rows, err := db.Query(
 					"SELECT id,name,webhook,jid,events,proxy_url,qrcode,history,"+
 						"hmac_key IS NOT NULL AND length(hmac_key) > 0,"+
@@ -111,6 +120,9 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					token, domain.HashToken(token),
 				)
 				if err != nil {
+					hlog.FromRequest(r).Error().Err(err).
+						Str("path", r.URL.Path).
+						Msg("user lookup query failed")
 					customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 					return
 				}
@@ -124,6 +136,9 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 				for rows.Next() {
 					err = rows.Scan(&txtid, &name, &webhook, &jid, &events, &proxyURL, &qrcode, &history, &hasHmac, &s3Enabled, &mediaDelivery)
 					if err != nil {
+						hlog.FromRequest(r).Error().Err(err).
+							Str("path", r.URL.Path).
+							Msg("scanning user row failed")
 						customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 						return
 					}
@@ -148,6 +163,12 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 			}
 
 			if txtid == "" {
+				hlog.FromRequest(r).Warn().
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Bool("token_present", token != "").
+					Bool("cache_hit", found).
+					Msg("authentication rejected: no user matches the supplied token")
 				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
 				return
 			}

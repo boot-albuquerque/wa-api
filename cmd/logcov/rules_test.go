@@ -171,13 +171,28 @@ func TestZerologSuprimidoNaCamadaDeAplicacao(t *testing.T) {
 		t.Fatal(err)
 	}
 	rep := a.Analyze(pkgs)
+	// packages.Load com NeedDeps traz o fecho transitivo de dependencias
+	// junto com o pacote pedido — a asserção sobre call sites de zerolog
+	// tem de ficar restrita as entradas do proprio fixture l1, senao
+	// zerolog legitimo em qualquer dependencia real (ex.: pkg/domain) conta
+	// aqui tambem, sem nenhuma relacao com a supressao por diretorio sendo
+	// testada.
+	zerologSitesEmL1 := 0
 	for _, e := range rep.Entries {
+		if !strings.HasPrefix(e.Key, casesPrefix+"l1.") {
+			continue
+		}
 		if e.Key == casesPrefix+"l1.ZerologPos" && e.L1 {
 			t.Fatal("ZerologPos deveria ficar sem cobertura: L1-b suprimida neste diretorio")
 		}
+		for _, s := range e.Sites {
+			if s.form == "zerolog" {
+				zerologSitesEmL1++
+			}
+		}
 	}
-	if rep.Forms["zerolog"].CallSites != 0 {
-		t.Fatalf("call sites zerolog = %d, quero 0 no diretorio restrito", rep.Forms["zerolog"].CallSites)
+	if zerologSitesEmL1 != 0 {
+		t.Fatalf("call sites zerolog no fixture l1 = %d, quero 0 no diretorio restrito", zerologSitesEmL1)
 	}
 }
 

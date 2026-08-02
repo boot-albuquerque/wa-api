@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	appport "wa-api/pkg/application/contracts"
+
+	"github.com/rs/zerolog/hlog"
 )
 
 // Context key "userinfo" é injetada pelo middleware authalice do upstream.
@@ -35,18 +37,27 @@ func NewProfileHandler(uc ProfileUseCase) *ProfileHandler {
 func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().
+			Str("path", r.URL.Path).
+			Msg("profile request without user info in context")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().
+			Str("path", r.URL.Path).
+			Msg("profile request with empty session id")
 		http.Error(w, "missing session id", http.StatusBadRequest)
 		return
 	}
 
 	response, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", txtID).
+			Msg("get profile use case failed")
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}

@@ -1,6 +1,10 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rs/zerolog/log"
+)
 
 // WhatsAppCheck é o resultado da verificação de um telefone contra a base do
 // WhatsApp.
@@ -61,6 +65,8 @@ var privacySettingValues = map[string][]string{
 func ValidatePrivacySetting(name, value string) error {
 	allowed, ok := privacySettingValues[name]
 	if !ok {
+		log.Warn().Str("setting", name).Str("reason", "unknown_setting").
+			Msg("privacy setting rejected")
 		return fmt.Errorf("invalid privacy setting name %q", name)
 	}
 	for _, v := range allowed {
@@ -68,5 +74,8 @@ func ValidatePrivacySetting(name, value string) error {
 			return nil
 		}
 	}
+	log.Warn().Str("setting", name).Str("value", value).
+		Str("reason", "value_not_allowed").Strs("allowed", allowed).
+		Msg("privacy setting rejected")
 	return fmt.Errorf("invalid value %q for privacy setting %q", value, name)
 }

@@ -2,8 +2,10 @@ package auth_test
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	"wa-api/pkg/infra/auth"
@@ -141,6 +143,60 @@ func TestDecryptHMACKey_RejectsMalformedInput(t *testing.T) {
 func TestDecryptHMACKey_RejectsEmptyEncryptionKey(t *testing.T) {
 	if _, err := auth.DecryptHMACKey([]byte("qualquer-coisa"), nil); err == nil {
 		t.Fatal("chave de encriptacao vazia foi aceita")
+	}
+}
+
+// TestDecryptHMACKey_RejectsKeysOfInvalidLength fecha a contrapartida do lado da
+// decriptação: uma chave não-vazia mas de tamanho inválido para AES tem que
+// virar erro, e não passar adiante para o GCM. O caminho não estava coberto —
+// só o caso de chave vazia estava.
+func TestDecryptHMACKey_RejectsKeysOfInvalidLength(t *testing.T) {
+	ct, err := auth.EncryptHMACKey("segredo", aes256Key)
+	if err != nil {
+		t.Fatalf("EncryptHMACKey: %v", err)
+	}
+
+	cases := map[string]string{
+		"chave curta demais":    "curta",
+		"tamanho invalido (31)": "0123456789abcdef0123456789abcde",
+		"tamanho invalido (33)": "0123456789abcdef0123456789abcdefX",
+	}
+
+	for name, key := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := auth.DecryptHMACKey(ct, []byte(key))
+			if err == nil {
+				t.Fatalf("chave de tamanho invalido foi aceita, resultado %q", got)
+			}
+			if got != "" {
+				t.Fatalf("erro veio acompanhado de plaintext %q", got)
+			}
+		})
+	}
+}
+
+// failingReader é uma fonte de entropia quebrada.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("entropia indisponivel") }
+
+// TestEncryptHMACKey_AbortsWhenEntropyFails prova que, se a fonte de entropia
+// falhar, EncryptHMACKey aborta em vez de selar com um nonce zerado. Nonce
+// previsível em AES-GCM destrói a confidencialidade sob reuso de chave, então
+// "seguir mesmo assim" seria pior que falhar.
+//
+// Não usa t.Parallel: troca a variável global crypto/rand.Reader.
+func TestEncryptHMACKey_AbortsWhenEntropyFails(t *testing.T) {
+	original := rand.Reader
+	rand.Reader = failingReader{}
+	t.Cleanup(func() { rand.Reader = original })
+
+	ct, err := auth.EncryptHMACKey("segredo", aes256Key)
+	if err == nil {
+		t.Fatal("encriptacao seguiu adiante com a fonte de entropia quebrada")
+	}
+	if ct != nil {
+		t.Fatalf("erro veio acompanhado de ciphertext de %d bytes", len(ct))
 	}
 }
 

@@ -3,8 +3,12 @@ package auth_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"io"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,6 +175,107 @@ func TestLookupUser_ReportsErrorOnBrokenSchema(t *testing.T) {
 	}
 	if rec != nil {
 		t.Fatal("erro de infraestrutura devolveu um UserRecord")
+	}
+}
+
+// TestLookupUser_ReportsErrorOnUnscannableRow cobre a falha de Scan, que é
+// diferente da falha de Query: a linha existe e volta, mas um valor não cabe no
+// destino. Aqui `history` (sql.NullInt64) recebe texto — sqlite é tipado
+// dinamicamente e aceita gravar. O contrato continua sendo (nil, err): uma
+// linha ilegível não pode virar "usuário não encontrado" nem autenticar
+// parcialmente.
+func TestLookupUser_ReportsErrorOnUnscannableRow(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertUser(t, db, "u1", "alice", "alice-token", false)
+
+	if _, err := db.Exec(`UPDATE users SET history = 'nao-e-numero' WHERE id = 'u1'`); err != nil {
+		t.Fatalf("update history: %v", err)
+	}
+
+	rec, err := auth.LookupUser(db, "alice-token")
+	if err == nil {
+		t.Fatal("linha com valor inescaneavel nao reportou erro")
+	}
+	if rec != nil {
+		t.Fatal("erro de scan devolveu um UserRecord")
+	}
+}
+
+// rowsCloseFailDriver é um driver mínimo que entrega uma linha inescaneável e
+// cujo Rows.Close falha. Serve para exercitar o defer de LookupUser: quando o
+// Scan falha, o loop sai antes do fim do resultset, o database/sql ainda não
+// fechou o Rows, e o Close do defer é quem propaga o erro do driver. Esse erro
+// tem que ser apenas logado — o erro de Scan é o que vai para o chamador, e
+// trocar um pelo outro apagaria a causa real.
+type rowsCloseFailDriver struct{}
+
+func (rowsCloseFailDriver) Open(string) (driver.Conn, error) { return rowsCloseFailConn{}, nil }
+
+type rowsCloseFailConn struct{}
+
+func (rowsCloseFailConn) Prepare(string) (driver.Stmt, error) { return rowsCloseFailStmt{}, nil }
+func (rowsCloseFailConn) Close() error                        { return nil }
+func (rowsCloseFailConn) Begin() (driver.Tx, error)           { return nil, errors.New("sem transacao") }
+
+type rowsCloseFailStmt struct{}
+
+func (rowsCloseFailStmt) Close() error  { return nil }
+func (rowsCloseFailStmt) NumInput() int { return -1 }
+func (rowsCloseFailStmt) Exec([]driver.Value) (driver.Result, error) {
+	return nil, errors.New("sem exec")
+}
+func (rowsCloseFailStmt) Query([]driver.Value) (driver.Rows, error) {
+	return &rowsCloseFailRows{}, nil
+}
+
+type rowsCloseFailRows struct{ served bool }
+
+func (*rowsCloseFailRows) Columns() []string {
+	return []string{
+		"id", "name", "webhook", "jid", "events", "proxy_url", "qrcode",
+		"history", "has_hmac", "s3_enabled", "media_delivery",
+	}
+}
+
+func (*rowsCloseFailRows) Close() error { return errors.New("falha ao fechar rows") }
+
+func (r *rowsCloseFailRows) Next(dest []driver.Value) error {
+	if r.served {
+		return io.EOF
+	}
+	r.served = true
+	for i := range dest {
+		dest[i] = ""
+	}
+	// Índice 7 é `history`, escaneado em sql.NullInt64: texto não numérico
+	// derruba o Scan e faz LookupUser sair do loop antes do fim do resultset.
+	dest[7] = "nao-e-numero"
+	dest[8] = false
+	return nil
+}
+
+func init() { sql.Register("wa-auth-rows-close-fail", rowsCloseFailDriver{}) }
+
+func TestLookupUser_ScanErrorSurvivesRowsCloseFailure(t *testing.T) {
+	db, err := sql.Open("wa-auth-rows-close-fail", "")
+	if err != nil {
+		t.Fatalf("open driver falso: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close db: %v", err)
+		}
+	})
+
+	rec, err := auth.LookupUser(db, "qualquer")
+	if err == nil {
+		t.Fatal("linha inescaneavel nao reportou erro")
+	}
+	if rec != nil {
+		t.Fatal("erro devolveu um UserRecord")
+	}
+	if !strings.Contains(err.Error(), "db scan") {
+		t.Fatalf("o erro de Close do driver mascarou a causa real: %v", err)
 	}
 }
 

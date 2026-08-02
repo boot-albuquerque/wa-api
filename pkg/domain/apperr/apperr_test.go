@@ -90,6 +90,27 @@ func TestErrorsIs_NonAppError(t *testing.T) {
 	}
 }
 
+// TestErrorsIs_TargetIsNotAppError é o ramo espelhado de
+// TestErrorsIs_NonAppError e o único que executa AppError.Is com um target
+// que errors.As rejeita. Sem ele, comparar um AppError contra um sentinel
+// legado (errors.New) poderia passar a retornar true — por exemplo se a
+// guarda `if !errors.As(...)` fosse invertida — e nenhum teste reclamaria.
+func TestErrorsIs_TargetIsNotAppError(t *testing.T) {
+	appErr := New("user_not_found", CategoryValidation, "user not found", false, nil)
+	plain := errors.New("user not found")
+
+	if errors.Is(appErr, plain) {
+		t.Error("errors.Is(appErr, plain) = true, want false — identity is Code, not message text")
+	}
+
+	// Mesmo envolvendo o erro simples, a identidade continua sendo Code: o
+	// AppError não passa a "ser" a causa que carrega.
+	wrapping := New("db_error", CategoryInternal, "database error", true, plain)
+	if errors.Is(wrapping, plain) != true {
+		t.Error("errors.Is(wrapping, plain) = false, want true — Unwrap should reach the wrapped cause")
+	}
+}
+
 func TestErrorsAs(t *testing.T) {
 	wrapped := errors.New("root cause")
 	original := New("db_error", CategoryInternal, "database error", true, wrapped)

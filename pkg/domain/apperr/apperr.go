@@ -5,7 +5,11 @@
 // happens incrementally, in later phases, as each path is touched.
 package apperr
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/rs/zerolog/log"
+)
 
 // AppError is a domain error carrying enough structure for the HTTP
 // boundary to make a decision without inspecting message text.
@@ -36,6 +40,16 @@ type AppError struct {
 
 // New constructs an AppError. Err may be nil.
 func New(code string, category Category, message string, retryable bool, err error) *AppError {
+	// Debug, e não Warn: construir um AppError não é por si só uma falha —
+	// quem decide a gravidade é o call site que o consome. O registro aqui
+	// existe para dar origem à taxonomia (qual código, qual categoria, qual
+	// causa) sem depender de o consumidor lembrar de logar.
+	log.Debug().
+		Str("code", code).
+		Str("category", string(category)).
+		Bool("retryable", retryable).
+		AnErr("cause", err).
+		Msg("domain error constructed")
 	return &AppError{
 		Code:      code,
 		Category:  category,
@@ -68,6 +82,10 @@ func (e *AppError) Unwrap() error {
 func (e *AppError) Is(target error) bool {
 	var other *AppError
 	if !errors.As(target, &other) {
+		// target's chain has no AppError at all — a normal, frequent case
+		// (e.g. errors.Is(err, sql.ErrNoRows)), not evidence of anything
+		// wrong. Not logged: logging it here would fire on every legitimate
+		// sentinel comparison against a non-AppError.
 		return false
 	}
 	return e.Code == other.Code
