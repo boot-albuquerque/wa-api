@@ -7,3 +7,9 @@
 #
 # cmd/ — os binarios sao `main` triviais, e a propria ferramenta nao se julga.
 cmd/
+
+# pkg/application/contracts/contractsfake/ — sao dublês de teste (fakes de
+# porta para a F11); nao logam por definicao, e contar seus ~70 metodos no
+# denominador so dilui o percentual sem significar nada sobre o repositorio
+# real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
+pkg/application/contracts/contractsfake/
