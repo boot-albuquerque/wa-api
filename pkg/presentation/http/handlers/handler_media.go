@@ -9,6 +9,8 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
+	"github.com/rs/zerolog/hlog"
+
 	"wa-api/pkg/application/usecase/message"
 )
 
@@ -26,24 +28,28 @@ func NewSendImageHandler(uc *message.SendImageUseCase) *SendImageHandler {
 func (h *SendImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
 	}
 
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 		return
 	}
 
 	var req domain.SendImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
 
 	result, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("media send failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
@@ -65,24 +71,28 @@ func NewSendDocumentHandler(uc *message.SendDocumentUseCase) *SendDocumentHandle
 func (h *SendDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
 	}
 
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 		return
 	}
 
 	var req domain.SendDocumentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
 
 	result, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("media send failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
@@ -104,24 +114,28 @@ func NewSendAudioHandler(uc *message.SendAudioUseCase) *SendAudioHandler {
 func (h *SendAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 		return
 	}
 
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("media send rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 		return
 	}
 
 	var req domain.SendAudioRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
 
 	result, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("media send failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}

@@ -2,26 +2,42 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/hlog"
 
 	"wa-api/pkg/application/usecase/session"
 )
 
+// isClientCausedSessionError decide o NIVEL do log do caminho de saida vindo
+// do use case, seguindo a taxonomia da apperr: erro cuja categoria mapeia para
+// 4xx e' falha do cliente (warn); qualquer outra e' falha real (error). Sem
+// isso o 400 de `no_session` e o 500 de banco fora do ar sairiam no mesmo
+// nivel. So' a DECISAO mora aqui — a cadeia hlog.FromRequest(r) fica inline em
+// cada caminho de saida, porque cmd/logcov so' enxerga o log onde a cadeia
+// literalmente esta'.
+func isClientCausedSessionError(err error) bool {
+	var appErr *apperr.AppError
+	return errors.As(err, &appErr) && appErr.Category.HTTPStatus() < http.StatusInternalServerError
+}
+
 func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return "", false
 	}
 	id := info.Get("Id")
 	if id == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return "", false
 	}
@@ -50,14 +66,18 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	log.Info().Str("handler", "Connect").Str("id", id).Msg("ConnectHandler called")
+	hlog.FromRequest(r).Info().Str("handler", "Connect").Str("id", id).Msg("ConnectHandler called")
+	// ConnectUseCase.Execute nunca retorna erro hoje (session/connect.go) - o
+	// branch abaixo e' so' defesa contra uma mudanca futura que passe a
+	// devolver um, e por isso fica com um unico nivel (Error), nao o mesmo
+	// split Warn/Error dos outros handlers desta rota.
 	_, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
 	if err != nil {
-		log.Error().Err(err).Str("id", id).Msg("Connect usecase failed")
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "Connect").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	log.Info().Str("id", id).Bool("hasStartClient", h.StartClient != nil).Msg("ConnectHandler starting WhatsApp client")
+	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartClient", h.StartClient != nil).Msg("ConnectHandler starting WhatsApp client")
 	// Fire-and-forget: start WhatsApp client in background (QR code appears in terminal)
 	if h.StartClient != nil {
 		kill := make(chan bool, 1)
@@ -79,6 +99,12 @@ func (h *DisconnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, domain.DisconnectRequest{})
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "Disconnect").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "Disconnect").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -96,6 +122,12 @@ func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id)
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "GetQR").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "GetQR").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -113,6 +145,12 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, domain.LogoutRequest{})
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "Logout").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "Logout").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -132,11 +170,18 @@ func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var req domain.PairPhoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PairPhone").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "PairPhone").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -156,6 +201,12 @@ func (h *GetStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id)
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "GetStatus").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "GetStatus").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -177,11 +228,18 @@ func (h *SetStatusMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	var req domain.SetStatusMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SetStatusMessage").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "SetStatusMessage").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -203,6 +261,12 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, domain.RequestHistorySyncRequest{})
 	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "RequestHistorySync").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

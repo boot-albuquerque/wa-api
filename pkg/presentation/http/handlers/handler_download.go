@@ -7,6 +7,8 @@ import (
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 
+	"github.com/rs/zerolog/hlog"
+
 	"wa-api/pkg/application/usecase/message"
 )
 
@@ -22,11 +24,13 @@ func (h *DownloadImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	var req domain.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -45,11 +49,13 @@ func (h *DownloadVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	var req domain.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -68,11 +74,13 @@ func (h *DownloadAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	var req domain.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -93,11 +101,13 @@ func (h *DownloadDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	var req domain.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -118,11 +128,13 @@ func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	var req domain.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

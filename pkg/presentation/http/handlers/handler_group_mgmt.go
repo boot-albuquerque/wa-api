@@ -7,6 +7,8 @@ import (
 
 	customhttp "wa-api/pkg/presentation/http"
 
+	"github.com/rs/zerolog/hlog"
+
 	"wa-api/pkg/application/usecase/group"
 )
 
@@ -62,10 +64,20 @@ func NewGroupManagementHandlers(uc *group.GroupManagementUseCase) *GroupManageme
 
 func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode group management payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return false
 	}
 	return true
+}
+
+// rejectMissingField e' o caminho de saida 400 compartilhado pelas validacoes
+// de campo obrigatorio deste arquivo: loga a causa (S-http) e responde com o
+// MESMO erro que foi logado — nao ha' divergencia possivel entre os dois.
+func rejectMissingField(w http.ResponseWriter, r *http.Request, field, logMsg string) {
+	err := fmt.Errorf("missing %s", field)
+	hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg(logMsg)
+	customhttp.RespondJSON(w, 400, nil, err)
 }
 
 func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
@@ -77,15 +89,16 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 		return
 	}
 	if req.Name == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing name"))
+		rejectMissingField(w, r, "name", "create group request rejected")
 		return
 	}
 	if len(req.Participants) < 1 {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing participants"))
+		rejectMissingField(w, r, "participants", "create group request rejected")
 		return
 	}
 	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("create group failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -100,11 +113,12 @@ func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r 
 		return
 	}
 	if req.Code == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing code"))
+		rejectMissingField(w, r, "code", "join group request rejected")
 		return
 	}
 	_, err := uc.JoinGroup(r.Context(), id, req.Code)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("join group failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -119,10 +133,11 @@ func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r
 		return
 	}
 	if req.GroupJID == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing groupJID"))
+		rejectMissingField(w, r, "groupJID", "leave group request rejected")
 		return
 	}
 	if err := uc.LeaveGroup(r.Context(), id, req.GroupJID); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("leave group failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -135,10 +150,11 @@ func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter,
 		return
 	}
 	if req.Name == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing name"))
+		rejectMissingField(w, r, "name", "set group name request rejected")
 		return
 	}
 	if err := uc.SetGroupName(r.Context(), id, req.GroupJID, req.Name); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group name failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -151,10 +167,11 @@ func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter
 		return
 	}
 	if req.Topic == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing topic"))
+		rejectMissingField(w, r, "topic", "set group topic request rejected")
 		return
 	}
 	if err := uc.SetGroupTopic(r.Context(), id, req.GroupJID, req.Topic); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group topic failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -167,6 +184,7 @@ func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter
 		return
 	}
 	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, []byte(req.Photo)); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -181,6 +199,7 @@ func handleRemoveGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWri
 		return
 	}
 	if err := uc.RemoveGroupPhoto(r.Context(), id, req.GroupJID); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("remove group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -196,6 +215,7 @@ func handleSetGroupAnnounce(uc *group.GroupManagementUseCase, w http.ResponseWri
 		return
 	}
 	if err := uc.SetGroupAnnounce(r.Context(), id, req.GroupJID, req.Announce); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group announce failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -211,6 +231,7 @@ func handleSetGroupLocked(uc *group.GroupManagementUseCase, w http.ResponseWrite
 		return
 	}
 	if err := uc.SetGroupLocked(r.Context(), id, req.GroupJID, req.Locked); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group locked failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -226,6 +247,7 @@ func handleSetDisappearingTimer(uc *group.GroupManagementUseCase, w http.Respons
 		return
 	}
 	if err := uc.SetDisappearingTimer(r.Context(), id, req.GroupJID, req.Duration); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set disappearing timer failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -242,15 +264,16 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		return
 	}
 	if len(req.Phone) < 1 {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing phones"))
+		rejectMissingField(w, r, "phones", "update group participants request rejected")
 		return
 	}
 	if req.Action == "" {
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("missing action"))
+		rejectMissingField(w, r, "action", "update group participants request rejected")
 		return
 	}
 	_, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("update group participants failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

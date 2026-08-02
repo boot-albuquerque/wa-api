@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/rs/zerolog/hlog"
+
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 
@@ -22,11 +24,17 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var req domain.GetAvatarRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).
+			Str("user_id", id).
+			Msg("could not decode get avatar payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", id).
+			Msg("get avatar use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -45,6 +53,9 @@ func (h *GetContactsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, domain.GetContactsRequest{})
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", id).
+			Msg("get contacts use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -63,11 +74,17 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var req domain.CheckUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).
+			Str("user_id", id).
+			Msg("could not decode get user info payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", id).
+			Msg("get user info use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

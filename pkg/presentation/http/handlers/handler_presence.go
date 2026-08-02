@@ -8,6 +8,8 @@ import (
 	customhttp "wa-api/pkg/presentation/http"
 
 	"wa-api/pkg/application/usecase/message"
+
+	"github.com/rs/zerolog/hlog"
 )
 
 type SendPresenceHandler struct{ uc *message.SendPresenceUseCase }
@@ -16,16 +18,20 @@ func NewSendPresenceHandler(uc *message.SendPresenceUseCase) *SendPresenceHandle
 	return &SendPresenceHandler{uc: uc}
 }
 func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/user/presence"
+
 	id, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
 	var req domain.SendPresenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -40,16 +46,20 @@ func NewSubscribePresenceHandler(uc *message.SubscribePresenceUseCase) *Subscrib
 	return &SubscribePresenceHandler{uc: uc}
 }
 func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/user/presence/subscribe"
+
 	id, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
 	var req domain.SubscribePresenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -62,16 +72,20 @@ func NewChatPresenceHandler(uc *message.ChatPresenceUseCase) *ChatPresenceHandle
 	return &ChatPresenceHandler{uc: uc}
 }
 func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/chat/presence"
+
 	id, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
 	var req domain.ChatPresenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -84,16 +98,20 @@ func NewMarkReadHandler(uc *message.MarkReadUseCase) *MarkReadHandler {
 	return &MarkReadHandler{uc: uc}
 }
 func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/chat/markread"
+
 	id, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
 	var req domain.MarkReadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

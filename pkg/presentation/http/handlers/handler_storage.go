@@ -10,6 +10,8 @@ import (
 	"wa-api/pkg/domain"
 
 	"wa-api/pkg/application/usecase/storage"
+
+	"github.com/rs/zerolog/hlog"
 )
 
 // StorageHandlers agrupa os handlers de armazenamento (S3, HMAC, proxy, history)
@@ -35,21 +37,25 @@ func NewConfigureS3Handler(uc *storage.ConfigureS3UseCase) *ConfigureS3Handler {
 func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	var req domain.S3ConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -65,16 +71,19 @@ func NewGetS3ConfigHandler(uc *storage.GetS3ConfigUseCase) *GetS3ConfigHandler {
 func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -92,21 +101,25 @@ func NewTestS3ConnectionHandler(uc *storage.TestS3ConnectionUseCase) *TestS3Conn
 func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	var req domain.S3TestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -124,16 +137,19 @@ func NewDeleteS3ConfigHandler(uc *storage.DeleteS3ConfigUseCase) *DeleteS3Config
 func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -149,21 +165,25 @@ func NewConfigureHmacHandler(uc *storage.ConfigureHmacUseCase) *ConfigureHmacHan
 func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	var req domain.HmacConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -179,16 +199,19 @@ func NewGetHmacConfigHandler(uc *storage.GetHmacConfigUseCase) *GetHmacConfigHan
 func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -206,16 +229,19 @@ func NewDeleteHmacConfigHandler(uc *storage.DeleteHmacConfigUseCase) *DeleteHmac
 func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -229,21 +255,25 @@ func NewSetProxyHandler(uc *storage.SetProxyUseCase) *SetProxyHandler { return &
 func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	var req domain.ProxyConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -259,21 +289,25 @@ func NewSetHistoryHandler(uc *storage.SetHistoryUseCase) *SetHistoryHandler {
 func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	var req domain.WebhookHistoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -289,16 +323,19 @@ func NewGetHistoryHandler(uc *storage.GetHistoryUseCase) *GetHistoryHandler {
 func (h *GetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if info == nil {
+		hlog.FromRequest(r).Warn().Err(errUnauthorized).Msg("unauthenticated request rejected")
 		customhttp.RespondJSON(w, 401, nil, errUnauthorized)
 		return
 	}
 	txtID := info.Get("Id")
 	if txtID == "" {
+		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Msg("request without session id rejected")
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

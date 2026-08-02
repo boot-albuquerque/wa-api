@@ -61,7 +61,15 @@
 
 stage=ratchet
 
-min_func_coverage=400
-min_errpath_coverage=507
-min_eligible=463
+# rules_frozen=true (ADR-008, a partir da Fase 12): as regras X1-X8/L1-L3 de
+# cmd/logcov (rules.go, analyzer.go) nao mudam mais em fases normais. S-http e
+# S-consume so' foram exercitadas contra codigo real nesta fase (handlers) —
+# congelar antes teria petrificado regras ainda nao postas a prova. Uma
+# mudanca de regra depois disto e' uma decisao deliberada, nao um efeito
+# colateral de fechar uma fase de volume.
+rules_frozen=true
+
+min_func_coverage=582
+min_errpath_coverage=840
+min_eligible=464
 max_exempt_annotations=0

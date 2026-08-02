@@ -8,8 +8,17 @@ import (
 
 	"wa-api/pkg/domain"
 
+	"github.com/rs/zerolog/hlog"
+
 	"wa-api/pkg/application/usecase/group"
 )
+
+// Os caminhos de saida deste arquivo logam a causa INLINE, com a cadeia
+// hlog.FromRequest(r) inteira num unico ponto: Warn para a rejeicao causada
+// pelo cliente (>=400 abaixo de 500) e Error para a falha de dependencia
+// (>=500). O registro de fronteira do router ja' diz QUE houve o status; estes
+// dizem POR QUE. Extrair a cadeia para um helper apagaria o log da funcao aos
+// olhos de cmd/logcov, que exige a cadeia no proprio caminho de saida.
 
 // GroupHandlers agrupa os handlers de grupo.
 type GroupHandlers struct {
@@ -35,11 +44,13 @@ func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r 
 	}
 	var req domain.GetGroupRequestParticipantsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode group request participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.ExecuteGetGroupRequestParticipants(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group request participants failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -59,11 +70,13 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 	}
 	var req domain.UpdateGroupRequestParticipantsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode update group request participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.ExecuteUpdateGroupRequestParticipants(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("update group request participants failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -83,11 +96,13 @@ func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 	}
 	var req domain.SetGroupJoinApprovalModeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode set group join approval mode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.ExecuteSetGroupJoinApprovalMode(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group join approval mode failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -107,6 +122,7 @@ func (h *ListGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, domain.ListGroupsRequest{})
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("list groups failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -126,11 +142,13 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	var req domain.GetGroupInfoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group info payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group info failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -152,11 +170,13 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	var req domain.GetGroupInviteLinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group invite link payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group invite link failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -178,11 +198,13 @@ func (h *GetGroupInviteInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	var req domain.GetGroupInviteInfoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group invite info payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group invite info failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
