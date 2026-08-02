@@ -26,7 +26,7 @@ jobs:
       # gate, or a real regression masked by a linter that stopped firing.
       # Bump this version and .golangci-baseline together, in the same PR.
       - name: install golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.5.0
           install-mode: binary
@@ -42,9 +42,10 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin ${{ github.base_ref }} --depth=1
-          prev=$(git show origin/${{ github.base_ref }}:.golangci-baseline 2>/dev/null || echo 999999)
-          curr=$(cat .golangci-baseline)
-          echo "baseline: $prev -> $curr"
+          prev=$(git show origin/${{ github.base_ref }}:.golangci-baseline 2>/dev/null | grep -oE '^max_complexity=[0-9]+' | cut -d= -f2)
+          curr=$(grep -oE '^max_complexity=[0-9]+' .golangci-baseline | cut -d= -f2)
+          prev=${prev:-999999}
+          echo "max_complexity baseline: $prev -> $curr"
           [ "$curr" -le "$prev" ] || { echo "FALHA: o baseline subiu de $prev para $curr."; exit 1; }
 
       - name: docker build
