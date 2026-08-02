@@ -11,8 +11,10 @@
 #
 # Decimos, e nao float, porque o gate e' shell: comparacao inteira e' exata e
 # nao depende de locale para o separador decimal.
-min_coverage=814
+min_coverage=818
 # F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,
 # user, misc) e no logger.from(ctx).
+# F15a (parcial) — http.go + bootstrap_server.go cobertos a 100% via
+# IsPrivateOrLoopback/NewSafeHTTPClient. Total repo sobe para 81.8%.
