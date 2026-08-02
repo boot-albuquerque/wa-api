@@ -32,7 +32,7 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 	// Garantir que há sessão
 	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// Obter informações do convite

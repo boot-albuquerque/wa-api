@@ -1,0 +1,55 @@
+# Gate de cobertura de log. Quatro medidas, e nesta fase NENHUMA e' trava.
+#
+# stage — o estagio do gate (ADR-008): advisory | ratchet | floor.
+#   advisory: `make log-coverage-report` IMPRIME os numeros e nao falha. E' o
+#   estagio da Fase 9: a metrica nasce medindo o repositorio onde ele esta',
+#   nao onde queremos que esteja. Subir a trava e' trabalho das fases F10-F15.
+#
+# A definicao normativa das duas metricas esta' em cmd/logcov/METRIC.md, que e'
+# a autoridade; cmd/logcov e' a implementacao dela. Divergencia entre os dois e'
+# bug da ferramenta, nao do documento.
+#
+# A medicao e' exatamente a do criterio de pronto da Fase 9:
+#   go run ./cmd/logcov ./pkg
+#
+# Decimos, e nao float, pelo mesmo motivo de .coverage-baseline: o gate e'
+# shell, comparacao inteira e' exata e nao depende de locale para o separador
+# decimal.
+#
+# --- as quatro travas, e por que sao quatro e nao tres ---
+#
+# min_func_coverage    — decimos de %, ratchet-UP. Funcoes elegiveis que
+#   satisfazem L1 (presenca de log reconhecido) e L3 (estruturacao por call
+#   site), sobre o total de elegiveis.
+#
+# min_errpath_coverage — decimos de %, ratchet-UP. Caminhos de saida
+#   (S-ret / S-http / S-consume) cobertos por log de nivel >= Warn no menor
+#   bloco que os contem, ou por propagacao de causa sem descarte, sobre o
+#   total de caminhos de saida dentro de funcoes elegiveis.
+#
+# min_eligible         — numero EXATO de funcoes elegiveis; falha se CAIR.
+#   Impede subir o percentual ENCOLHENDO o denominador: adicionar um pacote a
+#   .logcov-exclude, ou afrouxar X1-X7. Sem ela, um PR remove
+#   pkg/infra/messaging do escopo e o numero sobe sozinho.
+#
+# max_exempt_annotations — contagem de //log:exempt em pkg/, ratchet-DOWN.
+#   Impede subir o percentual ANOTANDO funcoes para fora do numerador.
+#
+# As duas ultimas atacam a mesma superficie por lados opostos e nenhuma
+# substitui a outra.
+#
+# --- o limite honesto destas travas ---
+#
+# "Fail-closed" aqui e' leitura de um arquivo que o mesmo PR pode editar — vale
+# igualmente para .coverage-baseline e .golangci-baseline. Um ratchet in-repo e'
+# um dispositivo de VISIBILIDADE, nao uma trava criptografica: converte
+# regressao silenciosa em linha de diff que alguem tem de aprovar
+# conscientemente. Toda reducao de qualquer valor abaixo exige uma linha
+# `# justificativa: <texto>` adjacente.
+
+stage=advisory
+
+min_func_coverage=335
+min_errpath_coverage=458
+min_eligible=463
+max_exempt_annotations=0

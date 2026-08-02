@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate docker check tidy fmt stats help
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-report docker check tidy fmt stats help
 
 # Default Go configuration
 GOCMD := go
@@ -16,6 +16,9 @@ BASELINE_FILE := .golangci-baseline
 
 # Coverage ratchet
 COVERAGE_BASELINE_FILE := .coverage-baseline
+
+# Log coverage ratchet (Fase 9). Estagio advisory: imprime, nao trava.
+LOGCOV_BASELINE_FILE := .log-coverage-baseline
 
 # Coverage output
 COVERAGE_OUT := coverage.out
@@ -48,6 +51,23 @@ coverage: ## Run tests and generate coverage report
 coverage-html: coverage ## Generate HTML coverage report
 	$(GOCMD) tool cover -html=$(COVERAGE_OUT) -o $(COVERAGE_HTML)
 	@echo "Coverage report: $(COVERAGE_HTML)"
+
+coverage-report: ## Cobertura por pacote com DEDUP DE BLOCOS + total que bate com go tool cover
+	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOCMD) run ./cmd/logcov -coverprofile=$(COVERAGE_OUT)
+	@echo ""
+	@echo "NOTA: o total acima usa deduplicacao de blocos por chave arquivo:range,"
+	@echo "      retendo max(count). Somar as linhas cruas de um perfil gerado com"
+	@echo "      -coverpkg=./... infla o denominador ~13x, porque o mesmo bloco"
+	@echo "      aparece uma vez por pacote de teste que o executou. O total bate"
+	@echo "      com 'go tool cover -func=$(COVERAGE_OUT) | tail -1' por construcao,"
+	@echo "      e ha teste provando isso em cmd/logcov/main_test.go."
+	@echo ""
+	@echo "      A comparacao e' do PERCENTUAL, nao dos bytes da linha: go tool"
+	@echo "      cover usa tabwriter sobre as colunas da propria listagem por"
+	@echo "      funcao, entao a quantidade de TABs de padding difere. Confira com:"
+	@echo "        diff <(make coverage-report | grep -oE '[0-9.]+%$$' | tail -1) \\\\"
+	@echo "             <($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9.]+%$$')"
 
 coverage-domain: ## Show domain + application coverage
 	$(GOTEST) -race -count=1 -coverprofile=$(COVERAGE_OUT) ./pkg/domain/... ./pkg/application/usecase/...
@@ -134,7 +154,27 @@ fmt: ## Format code
 tidy: ## Tidy module dependencies
 	$(GOMOD) tidy
 
-check: build vet test lint coverage-gate ## build + vet + test + lint + cobertura contra os baselines
+log-coverage-report: ## Cobertura de log (METRIC.md): IMPRIME os numeros, nao falha (stage=advisory)
+	@stage=$$(grep -oE '^stage=[a-z]+' $(LOGCOV_BASELINE_FILE) | cut -d= -f2); \
+	 if [ -z "$$stage" ]; then \
+	   echo "ATENCAO: $(LOGCOV_BASELINE_FILE) nao declara stage=<advisory|ratchet|floor>."; \
+	   echo "         Seguindo como advisory; este alvo nao trava nesta fase."; \
+	   stage=advisory; \
+	 fi; \
+	 echo "log-coverage: estagio do gate = $$stage (ADR-008)"; \
+	 $(GOCMD) run ./cmd/logcov ./pkg || { \
+	   echo "ATENCAO: logcov nao conseguiu medir. Estagio advisory: nao trava,"; \
+	   echo "         mas a metrica esta' cega e isso precisa ser resolvido."; \
+	   exit 0; \
+	 }; \
+	 echo ""; \
+	 echo "--- $(LOGCOV_BASELINE_FILE) (impresso em toda execucao, por design) ---"; \
+	 grep -E '^(stage|min_|max_)' $(LOGCOV_BASELINE_FILE); \
+	 echo ""; \
+	 echo "NOTA: estagio advisory — este alvo IMPRIME e nao falha. A trava entra"; \
+	 echo "      quando stage virar ratchet, nas fases F10-F15."
+
+check: build vet test lint coverage-gate log-coverage-report ## build + vet + test + lint + cobertura + cobertura de log
 
 ##@ Utilities
 

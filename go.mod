@@ -27,6 +27,7 @@ require (
 	github.com/vincent-petithory/dataurl v1.0.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/time v0.11.0
+	golang.org/x/tools v0.45.0
 	modernc.org/sqlite v1.37.1
 )
 
@@ -51,6 +52,7 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.33 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	modernc.org/libc v1.65.8 // indirect
