@@ -10,6 +10,7 @@ import (
 	"wa-api/pkg/domain"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 // UserRepository implementa appport.UserRepository sobre *sqlx.DB.
@@ -35,8 +36,13 @@ func isUniqueViolation(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "UNIQUE constraint failed") ||
+	unique := strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "duplicate key value violates unique constraint")
+	if unique {
+		log.Warn().Err(err).Str("table", "users").Str("constraint", "unique").
+			Msg("database rejected write on unique constraint")
+	}
+	return unique
 }
 
 // CreateUser insere o usuário.
@@ -61,13 +67,19 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 
 	if err != nil {
 		if isUniqueViolation(err) {
+			log.Warn().Err(err).Str("table", "users").Str("user_id", rec.ID).
+				Str("column", "token_hash").Msg("create user rejected: duplicate token")
 			return false, domain.ErrDuplicateToken
 		}
+		log.Error().Err(err).Str("table", "users").Str("user_id", rec.ID).
+			Str("query", "insert_user").Msg("failed to insert user")
 		return false, err
 	}
 
 	affected, err := res.RowsAffected()
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", rec.ID).
+			Msg("failed to read rows affected after insert")
 		return false, err
 	}
 	return affected > 0, nil
@@ -77,6 +89,8 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 func (r *UserRepository) UserExists(ctx context.Context, id string) (bool, error) {
 	var count int
 	if err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE id = $1", id); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Str("query", "user_exists").Msg("failed to check user existence")
 		return false, err
 	}
 	return count > 0, nil
@@ -139,6 +153,8 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 	}
 
 	if argIndex == 1 {
+		log.Warn().Str("table", "users").Str("user_id", id).
+			Msg("update user rejected: no fields to update")
 		return domain.ErrNoFieldsToUpdate
 	}
 
@@ -151,8 +167,12 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 	// traduzir o erro do driver antes que ele vaze para o cliente HTTP.
 	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
 		if isUniqueViolation(err) {
+			log.Warn().Err(err).Str("table", "users").Str("user_id", id).
+				Str("column", "token_hash").Msg("update user rejected: duplicate token")
 			return domain.ErrDuplicateToken
 		}
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Str("query", "update_user").Msg("failed to update user")
 		return err
 	}
 	return nil
@@ -173,6 +193,8 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 
 	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Str("query", "list_users").Msg("failed to list users")
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
@@ -193,6 +215,8 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			History         sql.NullInt64  `db:"history"`
 		}
 		if err := rows.StructScan(&row); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("query", "list_users").
+				Msg("failed to scan user row")
 			return nil, err
 		}
 
@@ -220,6 +244,8 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 	}
 
 	if err := rows.Err(); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "list_users").
+			Msg("failed to iterate user rows")
 		return nil, err
 	}
 	return out, nil
@@ -234,6 +260,10 @@ func (r *UserRepository) userS3Config(ctx context.Context, id string) (domain.S3
 		 COALESCE(media_delivery, ''), COALESCE(s3_retention_days, 0) FROM users WHERE id = $1`,
 		id).Scan(&s3.Enabled, &s3.Endpoint, &s3.Region, &s3.Bucket, &s3.PathStyle, &s3.PublicURL,
 		&s3.MediaDelivery, &s3.RetentionDays)
+	if err != nil {
+		log.Warn().Err(err).Str("table", "users").Str("user_id", id).
+			Str("query", "user_s3_config").Msg("failed to read s3 config for user")
+	}
 	return s3, err
 }
 
@@ -241,10 +271,14 @@ func (r *UserRepository) userS3Config(ctx context.Context, id string) (domain.S3
 func (r *UserRepository) DeleteUser(ctx context.Context, id string) (bool, error) {
 	result, err := r.db.ExecContext(ctx, "DELETE FROM users WHERE id=$1", id)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Str("query", "delete_user").Msg("failed to delete user")
 		return false, err
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Msg("failed to read rows affected after delete")
 		return false, err
 	}
 	return affected > 0, nil

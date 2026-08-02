@@ -1,5 +1,7 @@
 package stdio
 
+import "github.com/rs/zerolog/log"
+
 // Rotas de usuário do WhatsApp (`user.*`): contatos, presença, avatar,
 // bloqueio e resolução de LID.
 
@@ -22,5 +24,7 @@ func userLidPath(ss *Server, req *JSONRpcRequest) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return "/user/lid/" + jid, true
+	httpPath := "/user/lid/" + jid
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de usuario resolvida")
+	return httpPath, true
 }

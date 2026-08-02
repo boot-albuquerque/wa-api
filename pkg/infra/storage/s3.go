@@ -55,6 +55,7 @@ func (m *S3Manager) SetDB(db *sqlx.DB) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.db = db
+	log.Debug().Bool("hasDB", db != nil).Msg("S3 manager database reference set")
 }
 
 // EnsureClientFromDB loads S3 config from DB and initializes client if enabled. Returns true if client is available.
@@ -66,6 +67,7 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	db := m.db
 	m.mu.RUnlock()
 	if db == nil {
+		log.Warn().Str("userID", userID).Msg("S3 lazy init skipped: no database reference on manager")
 		return false
 	}
 	var s3DbConfig struct {
@@ -82,7 +84,11 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	}
 	query := `SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_public_url, COALESCE(media_delivery, 'base64') AS media_delivery, COALESCE(s3_retention_days, 30) AS s3_retention_days FROM users WHERE id = $1`
 	query = db.Rebind(query)
-	if err := db.Get(&s3DbConfig, query, userID); err != nil || !s3DbConfig.Enabled {
+	if err := db.Get(&s3DbConfig, query, userID); err != nil {
+		log.Warn().Err(err).Str("userID", userID).Msg("failed to load S3 config from database, lazy init aborted")
+		return false
+	}
+	if !s3DbConfig.Enabled {
 		return false
 	}
 	config := &S3Config{
@@ -145,6 +151,8 @@ func (m *S3Manager) RemoveClient(userID string) {
 
 	delete(m.clients, userID)
 	delete(m.configs, userID)
+
+	log.Debug().Str("userID", userID).Msg("S3 client removed")
 }
 
 // GetClient returns S3 client for a user
@@ -154,6 +162,10 @@ func (m *S3Manager) GetClient(userID string) (*s3.Client, *S3Config, bool) {
 
 	client, clientOk := m.clients[userID]
 	config, configOk := m.configs[userID]
+
+	if !clientOk || !configOk {
+		log.Debug().Str("userID", userID).Msg("no S3 client registered for user")
+	}
 
 	return client, config, clientOk && configOk
 }
@@ -263,6 +275,8 @@ func (m *S3Manager) generateS3KeyAt(now time.Time, userID, contactJID, messageID
 		ext,
 	)
 
+	log.Debug().Str("userID", userID).Str("key", key).Str("mimeType", mimeType).Msg("S3 object key generated")
+
 	return key
 }
 
@@ -275,6 +289,7 @@ func (m *S3Manager) UploadToS3(ctx context.Context, userID string, key string, d
 			client, config, ok = m.GetClient(userID)
 		}
 		if !ok {
+			log.Error().Str("userID", userID).Str("key", key).Msg("S3 upload aborted: client not initialized for user")
 			return fmt.Errorf("S3 client not initialized for user %s", userID)
 		}
 	}
@@ -311,6 +326,7 @@ func (m *S3Manager) UploadToS3(ctx context.Context, userID string, key string, d
 
 	_, err := client.PutObject(ctx, input)
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("bucket", config.Bucket).Str("key", key).Msg("failed to upload object to S3")
 		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
@@ -335,6 +351,7 @@ const presignExpiry = 7 * 24 * time.Hour
 func (m *S3Manager) GetPublicURL(ctx context.Context, userID, key string) (string, error) {
 	client, config, ok := m.GetClient(userID)
 	if !ok {
+		log.Error().Str("userID", userID).Str("key", key).Msg("cannot build S3 URL: client not initialized for user")
 		return "", fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 
@@ -348,6 +365,7 @@ func (m *S3Manager) GetPublicURL(ctx context.Context, userID, key string) (strin
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(presignExpiry))
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("bucket", config.Bucket).Str("key", key).Msg("failed to presign S3 GetObject URL")
 		return "", fmt.Errorf("failed to presign S3 URL: %w", err)
 	}
 	return req.URL, nil
@@ -357,6 +375,7 @@ func (m *S3Manager) GetPublicURL(ctx context.Context, userID, key string) (strin
 func (m *S3Manager) TestConnection(ctx context.Context, userID string) error {
 	client, config, ok := m.GetClient(userID)
 	if !ok {
+		log.Error().Str("userID", userID).Msg("S3 connection test aborted: client not initialized for user")
 		return fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 
@@ -380,12 +399,14 @@ func (m *S3Manager) ProcessMediaForS3(ctx context.Context, userID, contactJID, m
 	// Upload to S3
 	err := m.UploadToS3(ctx, userID, key, data, mimeType)
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("key", key).Str("fileName", fileName).Msg("media processing failed at S3 upload")
 		return nil, fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
 	// Generate public URL
 	publicURL, err := m.GetPublicURL(ctx, userID, key)
 	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("key", key).Str("fileName", fileName).Msg("media processing failed at S3 URL generation")
 		return nil, fmt.Errorf("failed to generate S3 URL: %w", err)
 	}
 
@@ -414,6 +435,7 @@ func (m *S3Manager) ProcessMediaForS3(ctx context.Context, userID, contactJID, m
 func (m *S3Manager) DeleteAllUserObjects(ctx context.Context, userID string) error {
 	client, config, ok := m.GetClient(userID)
 	if !ok {
+		log.Error().Str("userID", userID).Msg("S3 purge aborted: client not initialized for user")
 		return fmt.Errorf("S3 client not initialized for user %s", userID)
 	}
 

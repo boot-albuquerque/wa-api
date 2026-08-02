@@ -1,5 +1,7 @@
 package stdio
 
+import "github.com/rs/zerolog/log"
+
 // Rotas de administração de usuários (`admin.users.*`).
 
 var adminStaticRoutes = map[string]staticRoute{
@@ -19,7 +21,9 @@ func adminUserPath(ss *Server, req *JSONRpcRequest) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return "/admin/users/" + userId, true
+	httpPath := "/admin/users/" + userId
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de admin resolvida")
+	return httpPath, true
 }
 
 func adminUserFullPath(ss *Server, req *JSONRpcRequest) (string, bool) {
@@ -27,5 +31,7 @@ func adminUserFullPath(ss *Server, req *JSONRpcRequest) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return path + "/full", true
+	fullPath := path + "/full"
+	log.Debug().Str("method", req.Method).Str("path", fullPath).Msg("Rota dinamica de admin (full) resolvida")
+	return fullPath, true
 }

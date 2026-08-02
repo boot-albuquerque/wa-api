@@ -140,7 +140,7 @@ func NewServerWithIO(router interface{}, stdin io.Reader, stdout io.Writer) *Ser
 }
 
 func (ss *Server) Start() error {
-	log.Info().Msg("Starting stdio mode - reading JSON requests from stdin")
+	log.Info().Str("component", "stdio").Msg("Starting stdio mode - reading JSON requests from stdin")
 
 	scanner := bufio.NewScanner(ss.stdin)
 
@@ -162,13 +162,14 @@ func (ss *Server) Start() error {
 		return err
 	}
 
-	log.Info().Msg("EOF reached on stdin, shutting down")
+	log.Info().Str("component", "stdio").Msg("EOF reached on stdin, shutting down")
 	return nil
 }
 
 func (ss *Server) handleRequest(requestBytes []byte) {
 	var req JSONRpcRequest
 	if err := json.Unmarshal(requestBytes, &req); err != nil {
+		log.Warn().Err(err).Int("bytes", len(requestBytes)).Msg("Invalid JSON request received on stdin")
 		ss.sendError(ID{}, 400, fmt.Sprintf("invalid JSON request: %v", err))
 		return
 	}
@@ -195,6 +196,7 @@ func (ss *Server) executeHTTPHandler(req *JSONRpcRequest, httpMethod, httpPath s
 	if len(req.Params) > 0 {
 		jsonParams, err := json.Marshal(req.Params)
 		if err != nil {
+			log.Error().Err(err).Str("method", req.Method).Str("path", httpPath).Msg("Failed to marshal stdio request params")
 			ss.sendError(req.ID, 400, fmt.Sprintf("invalid params: %v", err))
 			return
 		}
@@ -229,6 +231,7 @@ func (ss *Server) convertHTTPResponse(requestID ID, recorder *httptest.ResponseR
 	if len(responseBody) > 0 {
 		if err := json.Unmarshal(responseBody, &responseData); err != nil {
 			// If it's not JSON, just use the raw string
+			log.Warn().Err(err).Int("status", statusCode).Int("bytes", len(responseBody)).Msg("Non-JSON body from HTTP handler in stdio mode")
 			responseData = string(responseBody)
 		}
 	}

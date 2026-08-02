@@ -9,8 +9,19 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 )
+
+// historySender e' o recorte de *whatsmeow.Client que SyncHistoryForChat usa.
+// A costura existe para que o envio do pedido de sync possa ser exercitado sem
+// socket; *whatsmeow.Client a satisfaz e continua sendo o unico implementador
+// em producao. A assercao de tipo permanece de valor unico, entao o
+// comportamento para um valor de tipo inesperado e' o mesmo de antes.
+type historySender interface {
+	BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageInfo, count int) *waE2E.Message
+	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
+}
 
 // SyncDeps provides the external callbacks needed for history sync.
 type SyncDeps struct {
@@ -63,7 +74,7 @@ func SyncHistoryForChat(ctx context.Context, db *sqlx.DB, deps SyncDeps, userID 
 		}
 	}
 
-	waClient := deps.GetWA(userID).(*whatsmeow.Client)
+	waClient := deps.GetWA(userID).(historySender)
 	historyMsg := waClient.BuildHistorySyncRequest(lastMessageInfo, count)
 	if historyMsg == nil {
 		return errors.New("failed to build history sync request")

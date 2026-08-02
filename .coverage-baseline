@@ -11,4 +11,4 @@
 #
 # Decimos, e nao float, porque o gate e' shell: comparacao inteira e' exata e
 # nao depende de locale para o separador decimal.
-min_coverage=621
+min_coverage=752

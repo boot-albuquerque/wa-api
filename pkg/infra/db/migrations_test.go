@@ -11,12 +11,20 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// testPragmas replica o busy_timeout que initializeSQLite aplica em produção.
+// Sem ele o driver devolve SQLITE_BUSY na hora em vez de esperar pelo lock, e
+// qualquer teste com escritores concorrentes falha de forma intermitente — foi
+// o que derrubava TestAddUserConcurrentSameTokenCreatesOneRow em ~1 de cada 3
+// execuções da suíte. O teste estava certo; o banco de teste é que não estava
+// configurado como o de produção.
+const testPragmas = "?_pragma=busy_timeout(10000)"
+
 // openTestDB abre um SQLite em arquivo (não :memory:) porque o pool do
 // database/sql pode abrir mais de uma conexão, e cada conexão para :memory: vê
 // um banco diferente.
 func openTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "test.db")+testPragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

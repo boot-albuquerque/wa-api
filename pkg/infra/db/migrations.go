@@ -9,6 +9,7 @@ import (
 	"wa-api/pkg/domain"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 type Migration struct {
@@ -269,6 +270,8 @@ END $$;
 func GenerateRandomID() (string, error) {
 	bytes := make([]byte, 16) // 128 bits
 	if _, err := rand.Read(bytes); err != nil {
+		log.Error().Err(err).Str("source", "crypto/rand").Int("bytes", len(bytes)).
+			Msg("failed to generate random ID")
 		return "", fmt.Errorf("failed to generate random ID: %w", err)
 	}
 	return hex.EncodeToString(bytes), nil
@@ -278,12 +281,16 @@ func GenerateRandomID() (string, error) {
 func InitializeSchema(db *sqlx.DB) error {
 	// Create migrations table if it doesn't exist
 	if err := createMigrationsTable(db); err != nil {
+		log.Error().Err(err).Str("table", "migrations").Str("driver", db.DriverName()).
+			Msg("failed to create migrations table")
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
 	// Get already applied migrations
 	applied, err := getAppliedMigrations(db)
 	if err != nil {
+		log.Error().Err(err).Str("table", "migrations").Str("driver", db.DriverName()).
+			Msg("failed to get applied migrations")
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
@@ -291,6 +298,9 @@ func InitializeSchema(db *sqlx.DB) error {
 	for _, migration := range migrations {
 		if _, ok := applied[migration.ID]; !ok {
 			if err := applyMigration(db, migration); err != nil {
+				log.Error().Err(err).Int("migration_id", migration.ID).
+					Str("migration", migration.Name).Str("driver", db.DriverName()).
+					Msg("failed to apply migration")
 				return fmt.Errorf("failed to apply migration %d: %w", migration.ID, err)
 			}
 		}
@@ -317,10 +327,14 @@ func createMigrationsTable(db *sqlx.DB) error {
 				WHERE type='table' AND name='migrations'
 			)`)
 	default:
+		log.Error().Str("driver", db.DriverName()).Str("table", "migrations").
+			Msg("unsupported database driver")
 		return fmt.Errorf("unsupported database driver: %s", db.DriverName())
 	}
 
 	if err != nil {
+		log.Error().Err(err).Str("driver", db.DriverName()).Str("table", "migrations").
+			Msg("failed to check migrations table existence")
 		return fmt.Errorf("failed to check migrations table existence: %w", err)
 	}
 
@@ -335,6 +349,8 @@ func createMigrationsTable(db *sqlx.DB) error {
 			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`)
 	if err != nil {
+		log.Error().Err(err).Str("driver", db.DriverName()).Str("table", "migrations").
+			Msg("failed to create migrations table")
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
@@ -350,6 +366,8 @@ func getAppliedMigrations(db *sqlx.DB) (map[int]struct{}, error) {
 
 	err := db.Select(&rows, "SELECT id, name FROM migrations ORDER BY id ASC")
 	if err != nil {
+		log.Error().Err(err).Str("table", "migrations").Str("query", "select_applied_migrations").
+			Msg("failed to query applied migrations")
 		return nil, fmt.Errorf("failed to query applied migrations: %w", err)
 	}
 
@@ -363,6 +381,8 @@ func getAppliedMigrations(db *sqlx.DB) (map[int]struct{}, error) {
 func applyMigration(db *sqlx.DB, migration Migration) error {
 	tx, err := db.Beginx()
 	if err != nil {
+		log.Error().Err(err).Int("migration_id", migration.ID).Str("migration", migration.Name).
+			Msg("failed to begin migration transaction")
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
@@ -371,6 +391,9 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 			// failure) is already what this function returns, and the
 			// transaction is torn down by the driver on connection close
 			// regardless of whether Rollback itself succeeds.
+			log.Warn().Err(err).Int("migration_id", migration.ID).
+				Str("migration", migration.Name).
+				Msg("rolling back migration transaction after failure")
 			_ = tx.Rollback()
 		}
 	}()
@@ -515,6 +538,8 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	}
 
 	if err != nil {
+		log.Error().Err(err).Int("migration_id", migration.ID).Str("migration", migration.Name).
+			Str("driver", db.DriverName()).Msg("failed to execute migration SQL")
 		return fmt.Errorf("failed to execute migration SQL: %w", err)
 	}
 
@@ -522,10 +547,20 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	if _, err = tx.Exec(`
         INSERT INTO migrations (id, name)
         VALUES ($1, $2)`, migration.ID, migration.Name); err != nil {
+		log.Error().Err(err).Int("migration_id", migration.ID).Str("migration", migration.Name).
+			Str("table", "migrations").Msg("failed to record migration")
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
-	return tx.Commit()
+	// commitErr é deliberadamente uma variável nova: atribuir a `err` faria o
+	// defer acima disparar um Rollback sobre transação já encerrada.
+	if commitErr := tx.Commit(); commitErr != nil {
+		log.Error().Err(commitErr).Int("migration_id", migration.ID).
+			Str("migration", migration.Name).
+			Msg("failed to commit migration transaction")
+		return commitErr
+	}
+	return nil
 }
 
 // ErrDuplicateTokens é retornado pela migração 11 quando users.token já contém
@@ -542,14 +577,20 @@ func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
         SELECT COUNT(*) FROM (
             SELECT token FROM users GROUP BY token HAVING COUNT(*) > 1
         ) AS duplicated_tokens`); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "count_duplicate_tokens").
+			Str("driver", driver).Msg("failed to check for duplicate tokens")
 		return fmt.Errorf("failed to check for duplicate tokens: %w", err)
 	}
 	if duplicates > 0 {
+		log.Error().Str("table", "users").Str("column", "token").Int("duplicates", duplicates).
+			Msg("migration 11 aborted: users.token contains duplicate values")
 		return fmt.Errorf("%w (%d duplicated token value(s) found)", ErrDuplicateTokens, duplicates)
 	}
 
 	if driver == "sqlite" {
 		if err := addColumnIfNotExistsSQLite(tx, "users", "token_hash", "TEXT"); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("column", "token_hash").
+				Str("driver", driver).Msg("failed to add token_hash column")
 			return err
 		}
 	} else {
@@ -563,6 +604,8 @@ func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
                     ALTER TABLE users ADD COLUMN token_hash TEXT;
                 END IF;
             END $$;`); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("column", "token_hash").
+				Str("driver", driver).Msg("failed to add token_hash column")
 			return fmt.Errorf("failed to add token_hash column: %w", err)
 		}
 	}
@@ -575,17 +618,23 @@ func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
 		Token string `db:"token"`
 	}
 	if err := tx.Select(&existing, "SELECT id, token FROM users"); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "select_tokens_for_hashing").
+			Msg("failed to read tokens for hashing")
 		return fmt.Errorf("failed to read tokens for hashing: %w", err)
 	}
 	updateSQL := tx.Rebind("UPDATE users SET token_hash = ? WHERE id = ?")
 	for _, row := range existing {
 		if _, err := tx.Exec(updateSQL, domain.HashToken(row.Token), row.ID); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("user_id", row.ID).
+				Str("column", "token_hash").Msg("failed to populate token_hash")
 			return fmt.Errorf("failed to populate token_hash for user %s: %w", row.ID, err)
 		}
 	}
 
 	if _, err := tx.Exec(
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token_hash ON users (token_hash)"); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("index", "idx_users_token_hash").
+			Msg("failed to create unique index on token_hash")
 		return fmt.Errorf("failed to create unique index on token_hash: %w", err)
 	}
 
@@ -598,12 +647,16 @@ func createTableIfNotExistsSQLite(tx *sqlx.Tx, tableName, createSQL string) erro
         SELECT COUNT(*) FROM sqlite_master
         WHERE type='table' AND name=?`, tableName)
 	if err != nil {
+		log.Error().Err(err).Str("table", tableName).Str("query", "sqlite_master_table_exists").
+			Msg("failed to check table existence")
 		return err
 	}
 
 	if exists == 0 {
-		_, err = tx.Exec(createSQL)
-		return err
+		if _, err := tx.Exec(createSQL); err != nil {
+			log.Error().Err(err).Str("table", tableName).Msg("failed to create table")
+			return err
+		}
 	}
 	return nil
 }
@@ -614,6 +667,8 @@ func migrateSQLiteIDToString(tx *sqlx.Tx) error {
         SELECT type FROM pragma_table_info('users')
         WHERE name = 'id'`).Scan(&currentType)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("column", "id").
+			Str("query", "pragma_table_info").Msg("failed to check column type")
 		return fmt.Errorf("failed to check column type: %w", err)
 	}
 
@@ -637,6 +692,7 @@ func migrateSQLiteIDToString(tx *sqlx.Tx) error {
             proxy_url TEXT DEFAULT ''
         )`)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users_new").Msg("failed to create new table")
 		return fmt.Errorf("failed to create new table: %w", err)
 	}
 
@@ -649,18 +705,22 @@ func migrateSQLiteIDToString(tx *sqlx.Tx) error {
             connected, expiration, events, proxy_url
         FROM users`)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users_new").Str("source_table", "users").
+			Msg("failed to copy data")
 		return fmt.Errorf("failed to copy data: %w", err)
 	}
 
 	// 4. Drop old table
 	_, err = tx.Exec(`DROP TABLE users`)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users").Msg("failed to drop old table")
 		return fmt.Errorf("failed to drop old table: %w", err)
 	}
 
 	// 5. Rename new table
 	_, err = tx.Exec(`ALTER TABLE users_new RENAME TO users`)
 	if err != nil {
+		log.Error().Err(err).Str("table", "users_new").Msg("failed to rename table")
 		return fmt.Errorf("failed to rename table: %w", err)
 	}
 
@@ -673,6 +733,8 @@ func addColumnIfNotExistsSQLite(tx *sqlx.Tx, tableName, columnName, columnDef st
         SELECT COUNT(*) FROM pragma_table_info(?)
         WHERE name = ?`, tableName, columnName)
 	if err != nil {
+		log.Error().Err(err).Str("table", tableName).Str("column", columnName).
+			Str("query", "pragma_table_info").Msg("failed to check column existence")
 		return fmt.Errorf("failed to check column existence: %w", err)
 	}
 
@@ -681,6 +743,8 @@ func addColumnIfNotExistsSQLite(tx *sqlx.Tx, tableName, columnName, columnDef st
 			"ALTER TABLE %s ADD COLUMN %s %s",
 			tableName, columnName, columnDef))
 		if err != nil {
+			log.Error().Err(err).Str("table", tableName).Str("column", columnName).
+				Msg("failed to add column")
 			return fmt.Errorf("failed to add column: %w", err)
 		}
 	}

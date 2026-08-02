@@ -1,6 +1,10 @@
 package stdio
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rs/zerolog/log"
+)
 
 // Rotas de conversa (`chat.*`): envio, ações sobre mensagens, download de
 // mídia e leitura de histórico.
@@ -46,5 +50,6 @@ func chatHistoryPath(ss *Server, req *JSONRpcRequest) (string, bool) {
 	if limit, ok := req.Params["limit"].(float64); ok {
 		httpPath += fmt.Sprintf("&limit=%d", int(limit))
 	}
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de chat resolvida")
 	return httpPath, true
 }

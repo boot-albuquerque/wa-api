@@ -1,6 +1,10 @@
 package stdio
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rs/zerolog/log"
+)
 
 // Tabela de rotas JSON-RPC → HTTP.
 //
@@ -49,6 +53,9 @@ func mergeStaticRoutes(groups []map[string]staticRoute) map[string]staticRoute {
 	all := make(map[string]staticRoute)
 	for _, group := range groups {
 		for method, route := range group {
+			if _, dup := all[method]; dup {
+				log.Warn().Str("method", method).Str("kind", "static").Msg("Rota JSON-RPC declarada em mais de um grupo; a ultima vence")
+			}
 			all[method] = route
 		}
 	}
@@ -59,6 +66,9 @@ func mergeDynamicRoutes(groups []map[string]dynamicRoute) map[string]dynamicRout
 	all := make(map[string]dynamicRoute)
 	for _, group := range groups {
 		for method, route := range group {
+			if _, dup := all[method]; dup {
+				log.Warn().Str("method", method).Str("kind", "dynamic").Msg("Rota JSON-RPC declarada em mais de um grupo; a ultima vence")
+			}
 			all[method] = route
 		}
 	}
@@ -80,6 +90,7 @@ func (ss *Server) routeRequest(req *JSONRpcRequest) {
 		ss.executeHTTPHandler(req, route.httpMethod, httpPath)
 		return
 	}
+	log.Warn().Str("method", req.Method).Str("id", req.ID.String()).Msg("Metodo JSON-RPC desconhecido em stdio")
 	ss.sendError(req.ID, 404, fmt.Sprintf("unknown method: %s", req.Method))
 }
 
@@ -88,6 +99,7 @@ func (ss *Server) routeRequest(req *JSONRpcRequest) {
 func (ss *Server) stringParam(req *JSONRpcRequest, name string) (string, bool) {
 	value, ok := req.Params[name].(string)
 	if !ok || value == "" {
+		log.Warn().Str("param", name).Str("method", req.Method).Str("id", req.ID.String()).Msg("Param obrigatorio ausente ou invalido em stdio")
 		ss.sendError(req.ID, 400, fmt.Sprintf("missing or invalid %s parameter", name))
 		return "", false
 	}

@@ -66,6 +66,8 @@ func FetchURLBytes(ctx context.Context, httpClient *http.Client, resourceURL str
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Warn().Int("status", resp.StatusCode).Str("url", resourceURL).
+			Msg("Unexpected status code fetching URL bytes")
 		return nil, "", fmt.Errorf("unexpected status code %d", resp.StatusCode)
 	}
 
@@ -75,6 +77,8 @@ func FetchURLBytes(ctx context.Context, httpClient *http.Client, resourceURL str
 		return nil, "", err
 	}
 	if int64(len(data)) > limit {
+		log.Warn().Int64("limit", limit).Int("size", len(data)).Str("url", resourceURL).
+			Msg("Response exceeds allowed size")
 		return nil, "", fmt.Errorf("response exceeds allowed size (%d bytes)", limit)
 	}
 

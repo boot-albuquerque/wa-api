@@ -84,6 +84,7 @@ func RunFFmpegConversion(input []byte, inputExt string, ffmpegArgs func(inPath, 
 
 // ConvertVideoStickerToWebP converts a video sticker to WebP via ffmpeg.
 func ConvertVideoStickerToWebP(input []byte) ([]byte, error) {
+	log.Debug().Int("inputSize", len(input)).Msg("Converting video sticker to WebP")
 	return RunFFmpegConversion(input, ".mp4", func(inPath, outPath string) []string {
 		return []string{"-y", "-t", "10", "-i", inPath, "-vf", "fps=15,scale=512:512", "-loop", "0", "-an", "-vsync", "0", "-fs", "1000000", "-c:v", "libwebp", "-qscale:v", "10", outPath}
 	}, "ffmpeg failed converting video sticker")
@@ -91,6 +92,7 @@ func ConvertVideoStickerToWebP(input []byte) ([]byte, error) {
 
 // ConvertImageToWebP converts an image to WebP via ffmpeg.
 func ConvertImageToWebP(input []byte) ([]byte, error) {
+	log.Debug().Int("inputSize", len(input)).Msg("Converting image sticker to WebP")
 	return RunFFmpegConversion(input, ".img", func(inPath, outPath string) []string {
 		return []string{"-y", "-i", inPath, "-vf", "scale=512:512", "-c:v", "libwebp", "-lossless", "1", outPath}
 	}, "ffmpeg failed converting image sticker")

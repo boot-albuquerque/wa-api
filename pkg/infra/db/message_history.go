@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 // SaveMessageToHistory inserts a message into the message_history table.
@@ -18,6 +19,9 @@ func SaveMessageToHistory(db *sqlx.DB, userID, chatJID, senderJID, messageID, me
               ON CONFLICT (user_id, message_id) DO NOTHING`)
 	_, err := db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson)
 	if err != nil {
+		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
+			Str("chat_jid", chatJID).Str("message_id", messageID).
+			Msg("failed to save message to history")
 		return fmt.Errorf("failed to save message to history: %w", err)
 	}
 	return nil
@@ -69,10 +73,16 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	}
 
 	if _, err := db.Exec(querySecrets, userID, chatJID, limit); err != nil {
+		log.Error().Err(err).Str("table", "whatsmeow_message_secrets").Str("user_id", userID).
+			Str("chat_jid", chatJID).Int("limit", limit).
+			Msg("failed to trim message secrets")
 		return fmt.Errorf("failed to trim message secrets: %w", err)
 	}
 
 	if _, err := db.Exec(queryHistory, userID, chatJID, limit); err != nil {
+		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
+			Str("chat_jid", chatJID).Int("limit", limit).
+			Msg("failed to trim message history")
 		return fmt.Errorf("failed to trim message history: %w", err)
 	}
 
