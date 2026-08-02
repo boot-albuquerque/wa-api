@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -26,7 +25,7 @@ func NewLogoutUseCase(sg appport.SessionGuard, l appport.Logger) *LogoutUseCase 
 func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.LogoutRequest) (*domain.LogoutResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	uc.logger.Info(ctx, "logout validated", "txtID", txtID)

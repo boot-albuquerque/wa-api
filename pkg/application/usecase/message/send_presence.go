@@ -22,7 +22,8 @@ func NewSendPresenceUseCase(pc appport.PresenceController, logger appport.Logger
 // Execute sets presence status
 func (uc *SendPresenceUseCase) Execute(ctx context.Context, userID string, req domain.SendPresenceRequest) error {
 	if err := uc.presence.EnsureSession(ctx, userID); err != nil {
-		return fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return err
 	}
 
 	var presence domain.PresenceType

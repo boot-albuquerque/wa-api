@@ -25,7 +25,8 @@ func NewReactUseCase(cm appport.ChatMessenger, jr appport.JIDResolver, logger ap
 // Execute sends a reaction
 func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.ReactRequest) (map[string]interface{}, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	if req.Phone == "" {

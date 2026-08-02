@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -22,7 +21,8 @@ func NewGetContactsUseCase(cd appport.ContactDirectory, logger appport.Logger) *
 // Execute retrieves all contacts
 func (uc *GetContactsUseCase) Execute(ctx context.Context, userID string, _ domain.GetContactsRequest) (interface{}, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	result, count, err := uc.contacts.GetAllContacts(ctx, userID)

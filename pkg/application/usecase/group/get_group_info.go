@@ -28,19 +28,21 @@ func NewGetGroupInfoUseCase(gd appport.GroupDirectory, jr appport.JIDResolver, l
 func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req domain.GetGroupInfoRequest) (*domain.GetGroupInfoResult, error) {
 	// Validar GroupJID
 	if req.GroupJID == "" {
+		uc.logger.Warn(ctx, "missing groupJID in request", "txtID", txtID)
 		return nil, fmt.Errorf("missing groupJID parameter")
 	}
 
 	// Parse GroupJID
 	group, err := uc.jids.ResolveJID(ctx, req.GroupJID)
 	if err != nil {
+		uc.logger.Warn(ctx, "could not parse group JID", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
 		return nil, fmt.Errorf("could not parse Group JID")
 	}
 
 	// Garantir que há sessão
 	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// Obter informações do grupo

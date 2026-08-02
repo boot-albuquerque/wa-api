@@ -43,11 +43,14 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 	}
 
 	result := buildProfile(ctx, da, uc.logger)
-	responseJSON, err := json.Marshal(result)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to marshal profile", "error", err)
-		return "", err
-	}
+
+	// ProfileResult é composto exclusivamente de campos string, e json.Marshal
+	// não tem como falhar para esse conjunto de tipos — UTF-8 inválido é
+	// substituído, não rejeitado. O tratamento de erro que existia aqui era
+	// inalcançável: nenhuma execução o atingia e nenhum teste podia cobri-lo.
+	// Se ProfileResult ganhar um campo que não seja string (map, chan, func,
+	// interface), reintroduza a verificação de erro junto com o campo.
+	responseJSON, _ := json.Marshal(result)
 	return string(responseJSON), nil
 }
 

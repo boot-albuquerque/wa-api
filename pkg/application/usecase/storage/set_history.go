@@ -27,7 +27,7 @@ func (uc *SetHistoryUseCase) Execute(ctx context.Context, txtID string, req doma
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// Validate history value

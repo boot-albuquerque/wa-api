@@ -29,7 +29,8 @@ type LIDResult struct {
 // Execute obtém o LID para um JID
 func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req domain.GetUserLIDRequest) (*LIDResult, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	// Parse JID

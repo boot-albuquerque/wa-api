@@ -28,7 +28,7 @@ func (uc *ConfigureS3UseCase) Execute(ctx context.Context, txtID string, req dom
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// Validate media_delivery

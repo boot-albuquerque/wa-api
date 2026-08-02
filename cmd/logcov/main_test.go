@@ -94,10 +94,21 @@ func TestBaselineBateComAMedicao(t *testing.T) {
 			t.Errorf("%s = %d no baseline, medido %d", k, base[k], want)
 		}
 	}
-	if base["stage_advisory"] != 1 {
-		t.Error("stage=advisory ausente do baseline")
+	// stage evolui advisory -> ratchet -> floor ao longo das fases F9-F16
+	// (ADR-008); o que este teste garante e' que o valor declarado seja um
+	// dos tres validos, nao que fique fixo em advisory para sempre.
+	switch base["stage_raw"] {
+	case stageAdvisory, stageRatchet, stageFloor:
+	default:
+		t.Errorf("stage invalido ou ausente no baseline: %d", base["stage_raw"])
 	}
 }
+
+const (
+	stageAdvisory = 1
+	stageRatchet  = 2
+	stageFloor    = 3
+)
 
 func readBaselineForTest(t *testing.T, path string) map[string]int {
 	t.Helper()
@@ -108,8 +119,13 @@ func readBaselineForTest(t *testing.T, path string) map[string]int {
 	out := map[string]int{}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "stage=advisory" {
-			out["stage_advisory"] = 1
+		switch line {
+		case "stage=advisory":
+			out["stage_raw"] = stageAdvisory
+		case "stage=ratchet":
+			out["stage_raw"] = stageRatchet
+		case "stage=floor":
+			out["stage_raw"] = stageFloor
 		}
 		k, v, ok := strings.Cut(line, "=")
 		if !ok || strings.HasPrefix(k, "#") {

@@ -41,7 +41,7 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 	// 2. Obter cliente whatsmeow para verificar se existe sessão
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// 3. Gerar message ID se não fornecido
@@ -50,7 +50,7 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 		generated, err := uc.messages.NewMessageID(ctx, txtID)
 		if err != nil {
 			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
-			return nil, fmt.Errorf("no session")
+			return nil, err
 		}
 		msgID = generated
 	}

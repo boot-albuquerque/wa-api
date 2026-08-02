@@ -4,6 +4,7 @@ package main
 // Um par positivo/negativo por regra, table-driven contra testdata/cases.
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -207,8 +208,9 @@ func TestReadExcludeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != "cmd/" {
-		t.Fatalf("excludes = %v, quero [cmd/]", got)
+	want := []string{"cmd/", "pkg/application/contracts/contractsfake/"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("excludes = %v, quero %v", got, want)
 	}
 	missing, err := readExcludeFile("../../.logcov-exclude-inexistente")
 	if err != nil || missing != nil {

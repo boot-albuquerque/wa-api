@@ -30,7 +30,7 @@ func (uc *PairPhoneUseCase) Execute(ctx context.Context, txtID string, req domai
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	uc.logger.Info(ctx, "pair phone validated", "txtID", txtID)

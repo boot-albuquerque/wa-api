@@ -22,7 +22,8 @@ func NewGetBlocklistUseCase(bm appport.BlocklistManager, logger appport.Logger) 
 // Execute retrieves the blocklist
 func (uc *GetBlocklistUseCase) Execute(ctx context.Context, userID string, _ domain.GetBlocklistRequest) (map[string]interface{}, error) {
 	if err := uc.blocklist.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	blocklist, err := uc.blocklist.GetBlocklist(ctx, userID)

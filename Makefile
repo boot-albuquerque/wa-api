@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-report docker check tidy fmt stats help
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help
 
 # Default Go configuration
 GOCMD := go
@@ -154,27 +154,76 @@ fmt: ## Format code
 tidy: ## Tidy module dependencies
 	$(GOMOD) tidy
 
-log-coverage-report: ## Cobertura de log (METRIC.md): IMPRIME os numeros, nao falha (stage=advisory)
+log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/floor falham em regressao (ADR-008)
 	@stage=$$(grep -oE '^stage=[a-z]+' $(LOGCOV_BASELINE_FILE) | cut -d= -f2); \
-	 if [ -z "$$stage" ]; then \
-	   echo "ATENCAO: $(LOGCOV_BASELINE_FILE) nao declara stage=<advisory|ratchet|floor>."; \
-	   echo "         Seguindo como advisory; este alvo nao trava nesta fase."; \
-	   stage=advisory; \
-	 fi; \
+	 case "$$stage" in \
+	   advisory|ratchet|floor) ;; \
+	   *) \
+	     echo "FALHA: $(LOGCOV_BASELINE_FILE) nao declara stage=<advisory|ratchet|floor>."; \
+	     echo "       Uma linha stage= ausente ou invalida NAO reverte para advisory:"; \
+	     echo "       isso desarmaria as quatro travas em silencio. Gate FALHA FECHADO."; \
+	     exit 1; \
+	   ;; \
+	 esac; \
 	 echo "log-coverage: estagio do gate = $$stage (ADR-008)"; \
-	 $(GOCMD) run ./cmd/logcov ./pkg || { \
-	   echo "ATENCAO: logcov nao conseguiu medir. Estagio advisory: nao trava,"; \
-	   echo "         mas a metrica esta' cega e isso precisa ser resolvido."; \
-	   exit 0; \
+	 json=$$($(GOCMD) run ./cmd/logcov -json ./pkg) || { \
+	   echo "FALHA: logcov nao conseguiu medir. A metrica esta' cega, o que nao e'"; \
+	   echo "       o mesmo que 100%: ausencia de medicao nao vira aprovacao."; \
+	   exit 1; \
 	 }; \
+	 func_cov=$$(echo "$$json" | grep -oE '"func_coverage_tenths": *[0-9]+' | grep -oE '[0-9]+'); \
+	 errpath_cov=$$(echo "$$json" | grep -oE '"errpath_coverage_tenths": *[0-9]+' | grep -oE '[0-9]+'); \
+	 eligible=$$(echo "$$json" | grep -oE '"eligible": *[0-9]+' | head -1 | grep -oE '[0-9]+'); \
+	 exempt=$$(echo "$$json" | grep -oE '"exempt_annotations": *[0-9]+' | grep -oE '[0-9]+'); \
+	 min_func=$$(grep -oE '^min_func_coverage=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 min_errpath=$$(grep -oE '^min_errpath_coverage=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 min_eligible=$$(grep -oE '^min_eligible=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 max_exempt=$$(grep -oE '^max_exempt_annotations=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 echo ""; \
+	 echo "func_coverage    = $$func_cov decimos de % (piso $$min_func)"; \
+	 echo "errpath_coverage = $$errpath_cov decimos de % (piso $$min_errpath)"; \
+	 echo "eligible         = $$eligible (piso exato $$min_eligible)"; \
+	 echo "exempt           = $$exempt (teto $$max_exempt)"; \
+	 fail=0; \
+	 if [ "$$stage" != "advisory" ]; then \
+	   if [ -z "$$func_cov" ] || [ -z "$$errpath_cov" ] || [ -z "$$eligible" ] || [ -z "$$exempt" ] || \
+	      [ -z "$$min_func" ] || [ -z "$$min_errpath" ] || [ -z "$$min_eligible" ] || [ -z "$$max_exempt" ]; then \
+	     echo "FALHA: valor ausente no JSON ou em $(LOGCOV_BASELINE_FILE). Gate FALHA FECHADO."; \
+	     fail=1; \
+	   fi; \
+	   if [ "$$fail" -eq 0 ] && [ "$$func_cov" -lt "$$min_func" ]; then \
+	     echo "FALHA: func_coverage caiu ($$func_cov < $$min_func)."; fail=1; \
+	   fi; \
+	   if [ "$$fail" -eq 0 ] && [ "$$errpath_cov" -lt "$$min_errpath" ]; then \
+	     echo "FALHA: errpath_coverage caiu ($$errpath_cov < $$min_errpath)."; fail=1; \
+	   fi; \
+	   if [ "$$fail" -eq 0 ] && [ "$$eligible" -lt "$$min_eligible" ]; then \
+	     echo "FALHA: eligible caiu ($$eligible < $$min_eligible) — denominador encolheu."; fail=1; \
+	   fi; \
+	   if [ "$$fail" -eq 0 ] && [ "$$exempt" -gt "$$max_exempt" ]; then \
+	     echo "FALHA: exempt_annotations subiu ($$exempt > $$max_exempt)."; fail=1; \
+	   fi; \
+	 fi; \
 	 echo ""; \
 	 echo "--- $(LOGCOV_BASELINE_FILE) (impresso em toda execucao, por design) ---"; \
 	 grep -E '^(stage|min_|max_)' $(LOGCOV_BASELINE_FILE); \
 	 echo ""; \
-	 echo "NOTA: estagio advisory — este alvo IMPRIME e nao falha. A trava entra"; \
-	 echo "      quando stage virar ratchet, nas fases F10-F15."
+	 if [ "$$stage" = "advisory" ]; then \
+	   echo "NOTA: estagio advisory — este alvo IMPRIME e nao falha."; \
+	 elif [ "$$fail" -eq 1 ]; then \
+	   echo "NOTA: estagio $$stage — regressao encontrada, gate FALHA FECHADO."; \
+	   exit 1; \
+	 else \
+	   echo "NOTA: estagio $$stage — sem regressao."; \
+	   if [ "$$func_cov" -gt "$$min_func" ]; then \
+	     echo "ATENCAO: func_coverage subiu. Suba min_func_coverage para $$func_cov neste PR."; \
+	   fi; \
+	   if [ "$$errpath_cov" -gt "$$min_errpath" ]; then \
+	     echo "ATENCAO: errpath_coverage subiu. Suba min_errpath_coverage para $$errpath_cov neste PR."; \
+	   fi; \
+	 fi
 
-check: build vet test lint coverage-gate log-coverage-report ## build + vet + test + lint + cobertura + cobertura de log
+check: build vet test lint coverage-gate log-coverage-gate ## build + vet + test + lint + cobertura + cobertura de log
 
 ##@ Utilities
 

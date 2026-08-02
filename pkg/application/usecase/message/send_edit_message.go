@@ -36,7 +36,7 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	result := &domain.SendEditMessageResult{

@@ -26,6 +26,7 @@ func NewGetGroupInviteInfoUseCase(gd appport.GroupDirectory, l appport.Logger) *
 func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, req domain.GetGroupInviteInfoRequest) (*domain.GetGroupInviteInfoResult, error) {
 	// Validar Code
 	if req.Code == "" {
+		uc.logger.Warn(ctx, "missing invite code in request", "txtID", txtID)
 		return nil, fmt.Errorf("missing Code in payload")
 	}
 

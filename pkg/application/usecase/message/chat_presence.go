@@ -23,7 +23,8 @@ func NewChatPresenceUseCase(pc appport.PresenceController, jr appport.JIDResolve
 // Execute sets chat presence
 func (uc *ChatPresenceUseCase) Execute(ctx context.Context, userID string, req domain.ChatPresenceRequest) error {
 	if err := uc.presence.EnsureSession(ctx, userID); err != nil {
-		return fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return err
 	}
 
 	if len(req.Phone) < 1 {

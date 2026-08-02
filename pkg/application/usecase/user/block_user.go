@@ -33,7 +33,8 @@ type BlockResult struct {
 // Execute bloqueia um usuário
 func (uc *BlockUserUseCase) Execute(ctx context.Context, userID string, req domain.BlockUserRequest) (*BlockResult, error) {
 	if err := uc.blocklist.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	// Parse target JID

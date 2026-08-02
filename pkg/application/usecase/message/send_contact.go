@@ -36,7 +36,7 @@ func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req dom
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	msgID := req.ID
@@ -44,7 +44,7 @@ func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req dom
 		generated, err := uc.messages.NewMessageID(ctx, txtID)
 		if err != nil {
 			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
-			return nil, fmt.Errorf("no session")
+			return nil, err
 		}
 		msgID = generated
 	}

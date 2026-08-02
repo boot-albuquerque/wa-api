@@ -24,7 +24,8 @@ func NewMarkReadUseCase(cm appport.ChatMessenger, jr appport.JIDResolver, logger
 // Execute marks messages as read
 func (uc *MarkReadUseCase) Execute(ctx context.Context, userID string, req domain.MarkReadRequest) error {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		return fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return err
 	}
 
 	var jidChat domain.JID

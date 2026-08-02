@@ -23,7 +23,8 @@ func NewRequestUnavailableMessageUseCase(co appport.ChatOperations, jr appport.J
 // Execute requests an unavailable message
 func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID string, req domain.RequestUnavailableMessageRequest) (*domain.RequestUnavailableMessageResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	if req.Chat == "" {

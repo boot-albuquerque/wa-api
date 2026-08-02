@@ -27,6 +27,18 @@
 #   bloco que os contem, ou por propagacao de causa sem descarte, sobre o
 #   total de caminhos de saida dentro de funcoes elegiveis.
 #
+# BURACO CONHECIDO (achado na revisao da F11, nao corrigido aqui): o
+#   DENOMINADOR de errpath_coverage (o total de caminhos de saida) nao tem
+#   uma trava equivalente a min_eligible. Migrar um site que ja logava
+#   (shape-a: fmt.Errorf descartando causa -> return err) faz o S-consume
+#   daquele bloco deixar de existir — denominador -1 E numerador -1 ao
+#   mesmo tempo. Isso e' comportamento honesto da metrica (o caminho de
+#   fato desapareceu), mas permite que o percentual de um pacote CAIA
+#   (message 51.4%->44.2%, storage 84.6%->75.0%, session 90.0%->84.6% na
+#   F11) sem que nenhuma trava atual acuse. F12 (ou antes) deveria avaliar
+#   uma quinta trava min_errpaths (numero exato, no molde de min_eligible)
+#   para fechar isso.
+#
 # min_eligible         — numero EXATO de funcoes elegiveis; falha se CAIR.
 #   Impede subir o percentual ENCOLHENDO o denominador: adicionar um pacote a
 #   .logcov-exclude, ou afrouxar X1-X7. Sem ela, um PR remove
@@ -47,9 +59,9 @@
 # conscientemente. Toda reducao de qualquer valor abaixo exige uma linha
 # `# justificativa: <texto>` adjacente.
 
-stage=advisory
+stage=ratchet
 
-min_func_coverage=369
-min_errpath_coverage=479
+min_func_coverage=400
+min_errpath_coverage=507
 min_eligible=463
 max_exempt_annotations=0

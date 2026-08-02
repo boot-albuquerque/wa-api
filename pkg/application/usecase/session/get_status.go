@@ -6,6 +6,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // GetStatusUseCase encapsula a validação e leitura do status de sessão.
@@ -35,7 +36,7 @@ func NewGetStatusUseCase(sg appport.SessionGuard, status appport.SessionStatusRe
 func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.GetStatusResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	connected, loggedIn := uc.status.SessionStatus(ctx, txtID)
@@ -47,7 +48,7 @@ func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.
 	}
 	if len(entries) == 0 {
 		uc.logger.Error(ctx, "no user record for session", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+		return nil, apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
 	}
 	entry := entries[0]
 

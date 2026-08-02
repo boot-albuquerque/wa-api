@@ -22,7 +22,8 @@ func NewListNewsletterUseCase(nr appport.NewsletterReader, logger appport.Logger
 // Execute lists subscribed newsletters
 func (uc *ListNewsletterUseCase) Execute(ctx context.Context, userID string) (*domain.NewsletterCollection, error) {
 	if err := uc.newsletters.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	newsletter, err := uc.newsletters.ListSubscribed(ctx, userID)

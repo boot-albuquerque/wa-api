@@ -24,7 +24,8 @@ func NewGetUserUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logg
 // Execute obtém informações de usuários
 func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) (json.RawMessage, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		return nil, fmt.Errorf("no session")
+		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		return nil, err
 	}
 
 	// Telefone que não parseia é pulado, não é erro — comportamento

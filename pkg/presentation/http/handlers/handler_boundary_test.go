@@ -519,41 +519,35 @@ func TestSessionUser_AndInlineGuard_AgreeOnEveryInput(t *testing.T) {
 	}
 }
 
-// TestHandlers_AppErrFromPortDoesNotReachTheClient documenta um DEFEITO
-// conhecido, nao um comportamento desejado.
+// TestHandlers_AppErrFromPortReachesTheClient trava o CONSERTO do defeito que
+// a versao anterior deste teste documentava.
 //
 // pkg/infra/whatsmeow.ErrNoSession produz um *apperr.AppError com
-// Code="no_session" e Category=validation (=> 400). Mas TODOS os use cases de
-// message/ e session/ traduzem esse erro com fmt.Errorf("no session") SEM %w
-// (20+ call sites, ex. send_message.go:41, get_status.go:29). O wrap se perde,
-// RespondJSON nao consegue errors.As, e o cliente recebe 500 generico em vez
-// de 400 com error.code — que e' exatamente o que o ADR-002 existe para
-// entregar ("erro de validacao deixa de sair como 500").
+// Code="no_session" e Category=validation (=> 400). Ate' a F11, todos os use
+// cases de session/ traduziam esse erro com fmt.Errorf("no session") SEM %w:
+// o wrap se perdia, RespondJSON nao conseguia errors.As, e o cliente recebia
+// 500 generico em vez do 400 com error.code que o ADR-002 promete.
 //
-// O teste trava o comportamento ATUAL. Quando o %w for adicionado, ele falha —
-// e a mensagem de falha diz o que fazer. Nao trocar por um teste que aceite os
-// dois status: isso apagaria o unico registro executavel do defeito.
-func TestHandlers_AppErrFromPortDoesNotReachTheClient(t *testing.T) {
+// A F11 migrou os sitios para `return err`. O erro tipado agora atravessa o
+// use case intacto, e o que se assere aqui e' o Code — nao o texto.
+func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 	spy := &spyPort{err: infrawa.ErrNoSession("user-1", nil)}
 	rec := httptest.NewRecorder()
 
 	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, spy, silentLogger{})).
 		ServeHTTP(rec, withUser(httptest.NewRequest(http.MethodGet, "/session/status", nil), "user-1"))
 
-	if rec.Code == http.StatusBadRequest {
-		t.Fatal("o apperr agora CHEGA na fronteira (400) — os use cases passaram a propagar com %w. " +
-			"Isto e' o conserto esperado: troque este teste por um que assere error.code == \"no_session\" " +
-			"e status 400, e propague a mesma assercao para os outros handlers da tabela")
-	}
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status inesperado %d — nem o defeito conhecido (500) nem o conserto (400)", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, quero 400 — a categoria validation do apperr deixou de chegar "+
+			"a' fronteira; algum use case voltou a traduzir o erro da porta", rec.Code)
 	}
 
 	env := decodeEnvelope(t, rec)
 	var errObj map[string]any
-	if err := json.Unmarshal(env.Error, &errObj); err == nil {
-		if _, hasCode := errObj["code"]; hasCode {
-			t.Fatal("error.code apareceu no envelope — ver acima, o defeito foi consertado e o teste precisa mudar")
-		}
+	if err := json.Unmarshal(env.Error, &errObj); err != nil {
+		t.Fatalf("envelope.error nao e' o objeto tipado do ADR-002: %s", env.Error)
+	}
+	if got := errObj["code"]; got != "no_session" {
+		t.Errorf("error.code = %v, quero %q", got, "no_session")
 	}
 }

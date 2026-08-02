@@ -6,6 +6,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // GetQRUseCase encapsula a validação e leitura do QR code de pareamento.
@@ -37,7 +38,7 @@ func NewGetQRUseCase(sg appport.SessionGuard, users appport.UserRepository, l ap
 func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQRResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	entries, err := uc.users.ListUsers(ctx, txtID)
@@ -47,7 +48,7 @@ func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQ
 	}
 	if len(entries) == 0 {
 		uc.logger.Error(ctx, "no user record for session", "txtID", txtID)
-		return nil, fmt.Errorf("no session")
+		return nil, apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
 	}
 
 	uc.logger.Info(ctx, "get QR validated", "txtID", txtID, "hasQR", entries[0].QRCode != "")

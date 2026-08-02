@@ -28,7 +28,7 @@ func (uc *SetProxyUseCase) Execute(ctx context.Context, txtID string, req domain
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf("no session")
+		return nil, err
 	}
 
 	// If enabled, validate URL is provided and does not point at a
