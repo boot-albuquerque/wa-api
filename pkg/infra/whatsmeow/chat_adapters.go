@@ -8,7 +8,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	wa "go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -70,7 +69,7 @@ type PresenceControllerAdapter struct {
 }
 
 // NewPresenceControllerAdapter cria o adapter com a função de lookup.
-func NewPresenceControllerAdapter(getClient func(txtID string) *wa.Client) *PresenceControllerAdapter {
+func NewPresenceControllerAdapter(getClient waClientGetter) *PresenceControllerAdapter {
 	return &PresenceControllerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
@@ -126,7 +125,7 @@ type ChatMessengerAdapter struct {
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
-func NewChatMessengerAdapter(getClient func(txtID string) *wa.Client) *ChatMessengerAdapter {
+func NewChatMessengerAdapter(getClient waClientGetter) *ChatMessengerAdapter {
 	return &ChatMessengerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 

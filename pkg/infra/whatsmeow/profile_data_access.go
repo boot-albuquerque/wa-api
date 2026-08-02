@@ -20,9 +20,21 @@ func NewProfileDataAccess(client *whatsmeow.Client) *ProfileDataAccess {
 	return &ProfileDataAccess{client: client}
 }
 
+// NewProfileDataAccessFromInterface aceita a interface waClient (usada pelos
+// adapters) e desembrulha para o tipo concreto que ProfileDataAccess
+// requer. Falha com segurança: se o waClient não for um realWAClient
+// (improvável em produção), devolve ProfileDataAccess com client nil —
+// o que reproduz o comportamento anterior de "Store ausente é vazio".
+func NewProfileDataAccessFromInterface(c waClient) *ProfileDataAccess {
+	if r, ok := c.(realWAClient); ok {
+		return &ProfileDataAccess{client: r.Client}
+	}
+	return &ProfileDataAccess{}
+}
+
 // PushName retorna o nome público do WhatsApp.
 func (d *ProfileDataAccess) PushName() string {
-	if d.client.Store != nil {
+	if d.client != nil && d.client.Store != nil {
 		return d.client.Store.PushName
 	}
 	return ""
@@ -30,7 +42,7 @@ func (d *ProfileDataAccess) PushName() string {
 
 // OwnJID retorna o JID do próprio dispositivo como domain.JID.
 func (d *ProfileDataAccess) OwnJID() (domain.JID, bool) {
-	if d.client.Store != nil && d.client.Store.ID != nil {
+	if d.client != nil && d.client.Store != nil && d.client.Store.ID != nil {
 		return domain.JID(d.client.Store.ID.ToNonAD().String()), true
 	}
 	return "", false
@@ -42,10 +54,19 @@ func toTypesJID(jid domain.JID) (types.JID, error) {
 }
 
 // ProfilePictureURL retorna URL e ID da foto de perfil.
+//
+// O caminho real desta função exige um *whatsmeow.Client inicializado
+// pelo SDK (que abre websocket). Esta refatoração fica limitada: o
+// adaptador continua a chamar o método concreto porque o SDK não
+// oferece uma interface alternativa. Testes diretos desta função
+// exercitam apenas o caminho de erro de toTypesJID.
 func (d *ProfileDataAccess) ProfilePictureURL(ctx context.Context, jid domain.JID) (string, string, error) {
 	tj, err := toTypesJID(jid)
 	if err != nil {
 		return "", "", err
+	}
+	if d.client == nil {
+		return "", "", nil
 	}
 	pic, err := d.client.GetProfilePictureInfo(ctx, tj, &whatsmeow.GetProfilePictureParams{Preview: false})
 	if err != nil || pic == nil {
@@ -56,7 +77,7 @@ func (d *ProfileDataAccess) ProfilePictureURL(ctx context.Context, jid domain.JI
 
 // ContactInfo retorna nome completo e nome comercial do contato.
 func (d *ProfileDataAccess) ContactInfo(ctx context.Context, jid domain.JID) (string, string, error) {
-	if d.client.Store == nil || d.client.Store.Contacts == nil {
+	if d.client == nil || d.client.Store == nil || d.client.Store.Contacts == nil {
 		return "", "", nil
 	}
 	tj, err := toTypesJID(jid)

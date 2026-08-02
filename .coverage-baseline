@@ -11,4 +11,8 @@
 #
 # Decimos, e nao float, porque o gate e' shell: comparacao inteira e' exata e
 # nao depende de locale para o separador decimal.
-min_coverage=752
+min_coverage=814
+# F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
+# o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
+# principalmente nas famílias de adapters (presence, chat, group,
+# user, misc) e no logger.from(ctx).

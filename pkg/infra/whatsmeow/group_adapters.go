@@ -36,7 +36,7 @@ type GroupAdapter struct {
 }
 
 // NewGroupAdapter cria o adapter com a função de lookup.
-func NewGroupAdapter(getClient func(txtID string) *wa.Client) *GroupAdapter {
+func NewGroupAdapter(getClient waClientGetter) *GroupAdapter {
 	return &GroupAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
@@ -49,7 +49,7 @@ func NewGroupAdapter(getClient func(txtID string) *wa.Client) *GroupAdapter {
 var bgCtx = context.Background()
 
 // client devolve o cliente da sessão ou o erro tipado de sessão ausente.
-func (a *GroupAdapter) client(txtID string) (*wa.Client, error) {
+func (a *GroupAdapter) client(txtID string) (waClient, error) {
 	client := a.getClient(txtID)
 	if client == nil {
 		return nil, ErrNoSession(txtID, nil)

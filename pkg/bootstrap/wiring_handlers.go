@@ -84,15 +84,16 @@ var customHandlerSet = &customHandlers{}
 // customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	messageComposer := whatsmeow.NewMessageComposerAdapter(clientManager.GetWhatsmeowClient)
-	presenceController := whatsmeow.NewPresenceControllerAdapter(clientManager.GetWhatsmeowClient)
-	chatMessenger := whatsmeow.NewChatMessengerAdapter(clientManager.GetWhatsmeowClient)
+	waClientLookup := whatsmeow.ClientForGetter(clientManager.GetWhatsmeowClient)
+	messageComposer := whatsmeow.NewMessageComposerAdapter(waClientLookup)
+	presenceController := whatsmeow.NewPresenceControllerAdapter(waClientLookup)
+	chatMessenger := whatsmeow.NewChatMessengerAdapter(waClientLookup)
 	jidResolver := whatsmeow.NewJIDResolverAdapter()
-	groupAdapter := whatsmeow.NewGroupAdapter(clientManager.GetWhatsmeowClient)
-	miscAdapter := whatsmeow.NewMiscAdapter(clientManager.GetWhatsmeowClient)
-	userAdapter := whatsmeow.NewUserAdapter(clientManager.GetWhatsmeowClient)
+	groupAdapter := whatsmeow.NewGroupAdapter(waClientLookup)
+	miscAdapter := whatsmeow.NewMiscAdapter(waClientLookup)
+	userAdapter := whatsmeow.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
-	sessionGuard := whatsmeow.NewSessionGuardAdapter(clientManager.GetWhatsmeowClient)
+	sessionGuard := whatsmeow.NewSessionGuardAdapter(waClientLookup)
 	logger := whatsmeow.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase

@@ -19,11 +19,11 @@ type MiscAdapter struct {
 }
 
 // NewMiscAdapter cria o adapter com a função de lookup.
-func NewMiscAdapter(getClient func(txtID string) *wa.Client) *MiscAdapter {
+func NewMiscAdapter(getClient waClientGetter) *MiscAdapter {
 	return &MiscAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
-func (a *MiscAdapter) client(txtID string) (*wa.Client, error) {
+func (a *MiscAdapter) client(txtID string) (waClient, error) {
 	client := a.getClient(txtID)
 	if client == nil {
 		return nil, ErrNoSession(txtID, nil)
@@ -98,7 +98,7 @@ func (a *MiscAdapter) ProfileAccess(_ context.Context, txtID string) (appport.Pr
 	if err != nil {
 		return nil, err
 	}
-	return NewProfileDataAccess(client), nil
+	return NewProfileDataAccessFromInterface(client), nil
 }
 
 // ListSubscribed devolve as newsletters assinadas pela sessão.

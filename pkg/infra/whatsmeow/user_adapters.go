@@ -20,11 +20,11 @@ type UserAdapter struct {
 }
 
 // NewUserAdapter cria o adapter com a função de lookup.
-func NewUserAdapter(getClient func(txtID string) *wa.Client) *UserAdapter {
+func NewUserAdapter(getClient waClientGetter) *UserAdapter {
 	return &UserAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
-func (a *UserAdapter) client(txtID string) (*wa.Client, error) {
+func (a *UserAdapter) client(txtID string) (waClient, error) {
 	client := a.getClient(txtID)
 	if client == nil {
 		return nil, ErrNoSession(txtID, nil)
@@ -78,7 +78,7 @@ func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, in
 	if err != nil {
 		return nil, 0, err
 	}
-	contacts, err := client.Store.Contacts.GetAllContacts(ctx)
+	contacts, err := client.Store().Contacts.GetAllContacts(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -120,7 +120,7 @@ func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.
 	if err != nil {
 		return "", err
 	}
-	lid, err := client.Store.LIDs.GetLIDForPN(ctx, parsed)
+	lid, err := client.Store().LIDs.GetLIDForPN(ctx, parsed)
 	if err != nil {
 		return "", err
 	}
@@ -211,8 +211,9 @@ func normalizeBlocklistJID(jid types.JID) types.JID {
 // resolveBlocklistPNJID traduz um LID para o número de telefone, que é a
 // forma que a lista de bloqueio aceita. Migrado literalmente de block_user.go,
 // menos a asserção de tipo `client.(*whatsmeow.Client)`, que existia só
-// porque o helper recebia interface{} — aqui o tipo é concreto por construção.
-func resolveBlocklistPNJID(ctx context.Context, client *wa.Client, jid types.JID) (types.JID, error) {
+// porque o helper recebia interface{} — aqui o tipo é a interface waClient
+// e o Store é acessado pelo método Store().
+func resolveBlocklistPNJID(ctx context.Context, client waClient, jid types.JID) (types.JID, error) {
 	jid = normalizeBlocklistJID(jid)
 	switch jid.Server {
 	case types.DefaultUserServer:
@@ -228,11 +229,12 @@ func resolveBlocklistPNJID(ctx context.Context, client *wa.Client, jid types.JID
 	}
 }
 
-func getCachedPNForLID(ctx context.Context, client *wa.Client, jid types.JID) (types.JID, error) {
-	if client.Store == nil || client.Store.LIDs == nil {
+func getCachedPNForLID(ctx context.Context, client waClient, jid types.JID) (types.JID, error) {
+	store := client.Store()
+	if store == nil || store.LIDs == nil {
 		return types.JID{}, fmt.Errorf("LID-to-PN mapping store is not available")
 	}
-	pn, err := client.Store.LIDs.GetPNForLID(ctx, jid)
+	pn, err := store.LIDs.GetPNForLID(ctx, jid)
 	if err != nil {
 		return types.JID{}, fmt.Errorf("could not resolve phone-number JID for LID %s: %w", jid, err)
 	}

@@ -4,8 +4,6 @@ import (
 	"context"
 
 	appport "wa-api/pkg/application/contracts"
-
-	wa "go.mau.fi/whatsmeow"
 )
 
 // MessageComposerAdapter implementa appport.MessageComposer sobre o
@@ -15,8 +13,9 @@ type MessageComposerAdapter struct {
 }
 
 // NewMessageComposerAdapter cria o adapter com a função de lookup.
-// O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient.
-func NewMessageComposerAdapter(getClient func(txtID string) *wa.Client) *MessageComposerAdapter {
+// O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient
+// (convertido via clientForGetter).
+func NewMessageComposerAdapter(getClient waClientGetter) *MessageComposerAdapter {
 	return &MessageComposerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 

@@ -6,8 +6,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	wa "go.mau.fi/whatsmeow"
-)
+	)
 
 // ErrNoSession é o erro tipado que toda porta de capacidade devolve quando
 // não existe sessão WhatsApp para o txtID pedido. Nasce tipado por exigência
@@ -28,12 +27,13 @@ func ErrNoSession(txtID string, cause error) *apperr.AppError {
 
 // SessionGuardAdapter implementa appport.SessionGuard sobre o clientManager.
 type SessionGuardAdapter struct {
-	getClient func(txtID string) *wa.Client
+	getClient waClientGetter
 }
 
 // NewSessionGuardAdapter cria o adapter com a função de lookup.
-// O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient.
-func NewSessionGuardAdapter(getClient func(txtID string) *wa.Client) *SessionGuardAdapter {
+// O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient
+// (convertido via clientForGetter).
+func NewSessionGuardAdapter(getClient waClientGetter) *SessionGuardAdapter {
 	return &SessionGuardAdapter{getClient: getClient}
 }
 
