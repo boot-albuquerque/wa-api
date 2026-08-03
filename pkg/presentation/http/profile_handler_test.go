@@ -118,15 +118,23 @@ func TestProfileHandler_ValidResponse_200_JSON(t *testing.T) {
 		t.Error("expected Cache-Control header to be set")
 	}
 
-	// Validar que o body é JSON válido com os campos esperados
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+	// Validar que o body é o envelope {code,data,success} (ADR-002), com os
+	// campos do perfil dentro de "data" — não mais soltos no top-level.
+	var envelope struct {
+		Code    int                    `json:"code"`
+		Success bool                   `json:"success"`
+		Data    map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("response body is not valid JSON: %v\nBody: %s", err, w.Body.String())
+	}
+	if !envelope.Success {
+		t.Errorf("expected success=true, got %+v", envelope)
 	}
 	// Verificar campos obrigatórios
 	for _, field := range []string{"pushname", "avatar_url", "avatar_id", "jid", "full_name", "business_name"} {
-		if _, ok := parsed[field]; !ok {
-			t.Errorf("missing required field %q in JSON response", field)
+		if _, ok := envelope.Data[field]; !ok {
+			t.Errorf("missing required field %q in JSON response data: %s", field, w.Body.String())
 		}
 	}
 }

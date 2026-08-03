@@ -177,9 +177,9 @@ func TestGetProfileExecute(t *testing.T) {
 				t.Fatalf("erro inesperado: %v", err)
 			}
 
-			// O corpo de GET /session/profile é esta string, escrita direto no
-			// ResponseWriter por ProfileHandler. Então as chaves abaixo SÃO o
-			// contrato público da rota, e não um detalhe de serialização.
+			// Esta string vira o campo "data" do envelope {code,data,success}
+			// que ProfileHandler devolve (RespondJSON). Então as chaves abaixo
+			// SÃO o contrato público da rota, e não um detalhe de serialização.
 			//
 			// Estas asserções vieram de pkg/domain/profile_test.go, deletado
 			// nesta fase: lá elas testavam as tags de domain.Profile, um tipo

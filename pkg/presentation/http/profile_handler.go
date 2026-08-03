@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 
 	appport "wa-api/pkg/application/contracts"
@@ -62,8 +62,11 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	// RespondJSON envelopa em {code,data,success} (ADR-002), igual às demais
+	// rotas de /session/*. Antes este handler escrevia `response` cru no
+	// ResponseWriter — o cliente wa-worker (que desembrulha body.data como
+	// todo o resto da API) sempre lia data=undefined e devolvia pushname/
+	// avatar vazios, mesmo com o whatsmeow retornando os campos certos.
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, response)
+	RespondJSON(w, http.StatusOK, json.RawMessage(response), nil)
 }
