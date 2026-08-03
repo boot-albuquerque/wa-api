@@ -35,6 +35,9 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/session/logout", customChain.Then(ch.Session.Logout), "POST")
 	registry.Register("/session/pairphone", customChain.Then(ch.Session.PairPhone), "POST")
 	registry.Register("/session/status", customChain.Then(ch.Session.GetStatus), "GET")
+	// Real-time push counterpart of /session/status + /session/qr — see
+	// handler_session_ws.go. Same auth chain (customChain), REST untouched.
+	registry.Register("/session/ws", customChain.Then(ch.Session.WS), "GET")
 	registry.Register("/user/status", customChain.Then(ch.Session.SetStatusMessage), "POST")
 	registry.Register("/user/history/sync", customChain.Then(ch.Session.RequestHistorySync), "POST")
 

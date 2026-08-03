@@ -48,6 +48,9 @@ type SessionHandlers struct {
 	GetStatus          *handlers.GetStatusHandler
 	SetStatusMessage   *handlers.SetStatusMessageHandler
 	RequestHistorySync *handlers.RequestHistorySyncHandler
+	// WS is the real-time counterpart of GetStatus/GetQR — see
+	// handler_session_ws.go. Additive: REST polling keeps working unchanged.
+	WS *handlers.WSHandler
 }
 
 // WebhookHandlers agrupa os handlers de webhook.
@@ -152,6 +155,7 @@ func initCustomHandlers(s *server) {
 		GetStatus:          handlers.NewGetStatusHandler(getStatusUC),
 		SetStatusMessage:   handlers.NewSetStatusMessageHandler(setStatusMessageUC),
 		RequestHistorySync: handlers.NewRequestHistorySyncHandler(requestHistorySyncUC),
+		WS:                 handlers.NewWSHandler(clientManager),
 	}
 
 	// Webhook Handlers — standalone with direct DI, no longer delegate to *server.

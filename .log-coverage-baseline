@@ -69,7 +69,7 @@ stage=ratchet
 # colateral de fechar uma fase de volume.
 rules_frozen=true
 
-min_func_coverage=726
+min_func_coverage=729
 min_errpath_coverage=864
-min_eligible=464
+min_eligible=468
 max_exempt_annotations=0

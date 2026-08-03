@@ -338,6 +338,11 @@ func (s *server) startClient(userID string, textjid string, token string, kill c
 					postmap["event"] = evt.Event
 					postmap["qrCodeBase64"] = base64qrcode
 					postmap["type"] = "QR"
+					// Real per-code validity (whatsmeow: 20s for each of the
+					// first 5 codes, 60s for the 6th/last — see qrchan.go
+					// emitQRs). RFC3339 so wa-worker can forward it as-is
+					// instead of guessing a fixed window client-side.
+					postmap["expiresAt"] = time.Now().Add(evt.Timeout).Format(time.RFC3339)
 
 					sendEventWithWebHook(&mycli, postmap, "")
 

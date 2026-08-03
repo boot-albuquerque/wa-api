@@ -136,6 +136,15 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		return
 	}
 
+	// Real-time push to any live /session/ws connection — the same event,
+	// same subscription gate, as a fourth delivery channel alongside the
+	// per-user webhook, global webhook, and RabbitMQ below. Best-effort and
+	// fully additive: a stuck/absent WS client never blocks webhook
+	// delivery (BroadcastToUser is itself non-blocking per-connection, see
+	// wsBroadcastTimeout), and REST polling of /session/status and
+	// /session/qr is untouched either way.
+	safeGo("sendToWS", func() { clientManager.BroadcastToUser(mycli.UserID, postmap) })
+
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if mycli.mode == Stdio {
 		if mycli.NotifyFn != nil {

@@ -366,6 +366,7 @@ pkg/bootstrap.securityHeadersMiddleware.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.sendEventWithWebHook	ELIGIBLE	uncovered:L3(zerolog,lifecycle_webhook.go:122);uncovered:L2(S-consume,lifecycle_webhook.go:116)
 pkg/bootstrap.sendEventWithWebHook.func1	EXCLUDED	X6
 pkg/bootstrap.sendEventWithWebHook.func2	EXCLUDED	X6
+pkg/bootstrap.sendEventWithWebHook.func3	EXCLUDED	X6
 pkg/bootstrap.sendToGlobalRabbit	EXCLUDED	X1
 pkg/bootstrap.sendToGlobalWebHook	ELIGIBLE	covered
 pkg/bootstrap.sendToUserWebHookWithHmac	ELIGIBLE	covered
@@ -375,7 +376,7 @@ pkg/bootstrap.server.connectOnStartup	ELIGIBLE	covered
 pkg/bootstrap.server.connectOnStartup.func1	ELIGIBLE	covered
 pkg/bootstrap.server.connectOnStartup.func2	EXCLUDED	X1
 pkg/bootstrap.server.routes	EXCLUDED	X1
-pkg/bootstrap.server.startClient	ELIGIBLE	uncovered:L3(zerolog,lifecycle.go:194);uncovered:L3(zerolog,lifecycle.go:199);uncovered:L3(zerolog,lifecycle.go:272);uncovered:L3(zerolog,lifecycle.go:278);uncovered:L3(zerolog,lifecycle.go:284);uncovered:L3(zerolog,lifecycle.go:286);uncovered:L3(zerolog,lifecycle.go:362);uncovered:L3(zerolog,lifecycle.go:368);uncovered:L3(zerolog,lifecycle.go:388);uncovered:L2(S-consume,lifecycle.go:298)
+pkg/bootstrap.server.startClient	ELIGIBLE	uncovered:L3(zerolog,lifecycle.go:194);uncovered:L3(zerolog,lifecycle.go:199);uncovered:L3(zerolog,lifecycle.go:272);uncovered:L3(zerolog,lifecycle.go:278);uncovered:L3(zerolog,lifecycle.go:284);uncovered:L3(zerolog,lifecycle.go:286);uncovered:L3(zerolog,lifecycle.go:367);uncovered:L3(zerolog,lifecycle.go:373);uncovered:L3(zerolog,lifecycle.go:393);uncovered:L2(S-consume,lifecycle.go:298)
 pkg/bootstrap.server.startClient.func1	EXCLUDED	X1
 pkg/bootstrap.server.startClient.func2	EXCLUDED	X6
 pkg/bootstrap.setKillChannel	EXCLUDED	X1
@@ -565,6 +566,8 @@ pkg/infra/whatsmeow.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovere
 pkg/infra/whatsmeow.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:157)
 pkg/infra/whatsmeow.ClientForGetter	EXCLUDED	X1
 pkg/infra/whatsmeow.ClientForGetter.func1	EXCLUDED	X6
+pkg/infra/whatsmeow.ClientManager.AddWSConn	ELIGIBLE	covered
+pkg/infra/whatsmeow.ClientManager.BroadcastToUser	ELIGIBLE	covered
 pkg/infra/whatsmeow.ClientManager.DeleteHTTPClient	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.DeleteMyClient	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.DeleteWhatsmeowClient	ELIGIBLE	uncovered:L1
@@ -575,6 +578,7 @@ pkg/infra/whatsmeow.ClientManager.GetPollOptions	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.GetWhatsmeowClient	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.GetWhatsmeowClientsCount	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.IterateWhatsmeowClients	ELIGIBLE	uncovered:L1
+pkg/infra/whatsmeow.ClientManager.RemoveWSConn	ELIGIBLE	covered
 pkg/infra/whatsmeow.ClientManager.SetHTTPClient	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.SetMyClient	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ClientManager.SetPollOptions	ELIGIBLE	uncovered:L1
@@ -774,6 +778,7 @@ pkg/presentation/http/handlers.NewTestS3ConnectionHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewUpdateGroupRequestParticipantsHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewUpdateWebhookHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewUserHandlers	EXCLUDED	X1
+pkg/presentation/http/handlers.NewWSHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.PairPhoneHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ReactHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.RejectCallHandler.ServeHTTP	ELIGIBLE	covered
@@ -821,6 +826,7 @@ pkg/presentation/http/handlers.UserHandlers.ListUsers	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.ListUsers.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.UnblockUser	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.UnblockUser.func1	ELIGIBLE	covered
+pkg/presentation/http/handlers.WSHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session_ws.go:71)
 pkg/presentation/http/handlers.decodeAndRespond	ELIGIBLE	covered
 pkg/presentation/http/handlers.groupHandler.ServeHTTP	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.handleCreateGroup	ELIGIBLE	covered
