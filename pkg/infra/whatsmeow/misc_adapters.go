@@ -2,15 +2,22 @@ package whatsmeow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 
 	wa "go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/types"
 )
+
+// appStateFetchTimeout é o teto de espera do pull de app-state — mais
+// generoso que os 30s de ArchiveChat/RequestUnavailableMessage porque o modo
+// "full" pode reprocessar um snapshot inteiro vindo do servidor.
+const appStateFetchTimeout = 45 * time.Second
 
 // MiscAdapter implementa ChatOperations, ProfileAccessProvider e
 // NewsletterReader sobre o clientManager.
@@ -121,9 +128,35 @@ func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) (any, er
 	return newsletter, nil
 }
 
+// SyncContactRoster força o pull do patch de app-state que carrega a agenda
+// de contatos (critical_unblock_low). Não mexe em histórico de mensagens —
+// capacidade distinta de qualquer fluxo de history sync.
+func (a *MiscAdapter) SyncContactRoster(ctx context.Context, txtID string, mode string) error {
+	client, err := a.client(txtID)
+	if err != nil {
+		return err
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, appStateFetchTimeout)
+	defer cancel()
+
+	switch mode {
+	case "if_unsynced":
+		return client.FetchAppState(ctxWithTimeout, appstate.WAPatchCriticalUnblockLow, false, true)
+	case "incremental":
+		return client.FetchAppState(ctxWithTimeout, appstate.WAPatchCriticalUnblockLow, false, false)
+	case "full":
+		return client.FetchAppState(ctxWithTimeout, appstate.WAPatchCriticalUnblockLow, true, false)
+	default:
+		return apperr.New("invalid_sync_mode", apperr.CategoryValidation,
+			fmt.Sprintf("unknown contact roster sync mode %q", mode), false, nil)
+	}
+}
+
 // Verificações em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatOperations        = (*MiscAdapter)(nil)
 	_ appport.ProfileAccessProvider = (*MiscAdapter)(nil)
 	_ appport.NewsletterReader      = (*MiscAdapter)(nil)
+	_ appport.AppStateSyncer        = (*MiscAdapter)(nil)
 )

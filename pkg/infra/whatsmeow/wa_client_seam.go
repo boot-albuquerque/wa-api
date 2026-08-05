@@ -75,6 +75,7 @@ type waClient interface {
 
 	// Família de app state
 	SendAppState(ctx context.Context, patch appstate.PatchInfo) error
+	FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
 
 	// Família de newsletter
 	GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error)

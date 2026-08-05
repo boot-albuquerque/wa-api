@@ -48,6 +48,9 @@ type SessionHandlers struct {
 	GetStatus          *handlers.GetStatusHandler
 	SetStatusMessage   *handlers.SetStatusMessageHandler
 	RequestHistorySync *handlers.RequestHistorySyncHandler
+	// SyncContactRoster is additive: a genuinely separate capability from
+	// RequestHistorySync — see handler_session.go.
+	SyncContactRoster *handlers.SyncContactRosterHandler
 	// WS is the real-time counterpart of GetStatus/GetQR — see
 	// handler_session_ws.go. Additive: REST polling keeps working unchanged.
 	WS *handlers.WSHandler
@@ -111,6 +114,7 @@ func initCustomHandlers(s *server) {
 	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
 	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
 	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
+	syncContactRosterUC := session.NewSyncContactRosterUseCase(miscAdapter, logger)
 
 	// Message UseCases
 	sendMessageUC := message.NewSendMessageUseCase(messageComposer, logger)
@@ -155,6 +159,7 @@ func initCustomHandlers(s *server) {
 		GetStatus:          handlers.NewGetStatusHandler(getStatusUC),
 		SetStatusMessage:   handlers.NewSetStatusMessageHandler(setStatusMessageUC),
 		RequestHistorySync: handlers.NewRequestHistorySyncHandler(requestHistorySyncUC),
+		SyncContactRoster:  handlers.NewSyncContactRosterHandler(syncContactRosterUC),
 		WS:                 handlers.NewWSHandler(clientManager),
 	}
 

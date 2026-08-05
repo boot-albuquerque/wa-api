@@ -28,6 +28,22 @@ func (mycli *MyClient) handleAppStateSyncComplete(evt *events.AppStateSyncComple
 			log.Info().Msg("Marked self as available")
 		}
 	}
+
+	// WAPatchCriticalUnblockLow carrega a agenda de contatos do usuário
+	// (go.mau.fi/whatsmeow/appstate.WAPatchCriticalUnblockLow). Observamos a
+	// conclusão desse patch com uma contagem — não com os contatos em si —
+	// porque é a mesma fonte que GET /user/contacts lê
+	// (mycli.WAClient.Store.Contacts.GetAllContacts), então o número aqui
+	// correlaciona diretamente com o que qualquer chamador HTTP vê depois
+	// desse sync.
+	if evt.Name == appstate.WAPatchCriticalUnblockLow {
+		contacts, err := mycli.WAClient.Store.Contacts.GetAllContacts(context.Background())
+		if err != nil {
+			log.Warn().Str("userid", mycli.UserID).Str("patch", string(evt.Name)).Err(err).Msg("Failed to get contact count after app state sync")
+		} else {
+			log.Info().Str("userid", mycli.UserID).Str("patch", string(evt.Name)).Uint64("version", evt.Version).Int("contact_count", len(contacts)).Msg("Contact roster app state sync complete")
+		}
+	}
 }
 
 // handleConnected atende events.Connected E events.PushNameSetting — o ramo

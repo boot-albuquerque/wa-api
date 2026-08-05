@@ -505,6 +505,26 @@ func TestNewsletterReader(t *testing.T) {
 	}
 }
 
+func TestAppStateSyncer(t *testing.T) {
+	f := &contractsfake.AppStateSyncer{}
+	ctx := context.Background()
+
+	if err := f.SyncContactRoster(ctx, "u1", "incremental"); err != nil {
+		t.Errorf("zero-value = %v", err)
+	}
+	if c := f.SyncContactRosterCalls[0]; c.TxtID != "u1" || c.Mode != "incremental" {
+		t.Errorf("SyncContactRosterCalls[0] = %+v", c)
+	}
+
+	f.SyncContactRosterFunc = func(context.Context, string, string) error { return errBoom }
+	if err := f.SyncContactRoster(ctx, "u2", "full"); !errors.Is(err, errBoom) {
+		t.Errorf("SyncContactRosterFunc = %v", err)
+	}
+	if len(f.SyncContactRosterCalls) != 2 || f.SyncContactRosterCalls[1].Mode != "full" {
+		t.Errorf("calls = %+v", f.SyncContactRosterCalls)
+	}
+}
+
 // --- Group -------------------------------------------------------------
 
 func TestGroupDirectory(t *testing.T) {

@@ -272,3 +272,31 @@ func (f *NewsletterReader) ListSubscribed(ctx context.Context, txtID string) (an
 	}
 	return nil, nil
 }
+
+// --- AppStateSyncer ------------------------------------------------------
+
+// AppStateSyncerSyncContactRosterCall é uma chamada a SyncContactRoster.
+type AppStateSyncerSyncContactRosterCall struct {
+	Ctx   context.Context
+	TxtID string
+	Mode  string
+}
+
+// AppStateSyncer é o fake de port.AppStateSyncer.
+type AppStateSyncer struct {
+	SessionGuard
+
+	SyncContactRosterFunc  func(ctx context.Context, txtID string, mode string) error
+	SyncContactRosterCalls []AppStateSyncerSyncContactRosterCall
+}
+
+var _ port.AppStateSyncer = (*AppStateSyncer)(nil)
+
+// SyncContactRoster implementa port.AppStateSyncer.
+func (f *AppStateSyncer) SyncContactRoster(ctx context.Context, txtID string, mode string) error {
+	f.SyncContactRosterCalls = append(f.SyncContactRosterCalls, AppStateSyncerSyncContactRosterCall{Ctx: ctx, TxtID: txtID, Mode: mode})
+	if f.SyncContactRosterFunc != nil {
+		return f.SyncContactRosterFunc(ctx, txtID, mode)
+	}
+	return nil
+}

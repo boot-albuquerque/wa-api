@@ -279,25 +279,26 @@ func Main() {
 		log.Info().Msg("Global HMAC key configured from command line")
 	}
 
-	globalHMACKeyEncrypted, err = encryptHMACKey(*globalHMACKey)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to encrypt global HMAC key")
-	} else {
-		log.Info().Msg("Global HMAC key encrypted successfully")
-	}
-
-	InitRabbitMQ()
-
 	// Seed the AppContext with runtime config so functions in wmiau.go
 	// and helpers.go can access global state without raw globals.
+	// GlobalEncryptionKey must be set before encryptHMACKey below, which reads it via appCtx.
 	appCtx.GlobalWebhook = *globalWebhook
-	appCtx.GlobalHMACKeyEncrypted = globalHMACKeyEncrypted
 	appCtx.GlobalWebhookUseProxy = *globalWebhookUseProxy
 	appCtx.GlobalEncryptionKey = *globalEncryptionKey
 	appCtx.WebhookRetryEnabled = *webhookRetryEnabled
 	appCtx.WebhookRetryCount = *webhookRetryCount
 	appCtx.WebhookRetryDelaySeconds = *webhookRetryDelaySeconds
 	appCtx.WebhookErrorQueueName = *webhookErrorQueueName
+
+	globalHMACKeyEncrypted, err = encryptHMACKey(*globalHMACKey)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to encrypt global HMAC key")
+	} else {
+		log.Info().Msg("Global HMAC key encrypted successfully")
+	}
+	appCtx.GlobalHMACKeyEncrypted = globalHMACKeyEncrypted
+
+	InitRabbitMQ()
 
 	ex, err := os.Executable()
 	if err != nil {

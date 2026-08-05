@@ -143,6 +143,17 @@ func sessionCases() []sessionCase {
 			path:   "/session/historysync",
 		},
 		{
+			name: "SyncContactRoster",
+			build: func(e error) http.Handler {
+				as := &contractsfake.AppStateSyncer{SessionGuard: contractsfake.FailSession(e)}
+				return NewSyncContactRosterHandler(session.NewSyncContactRosterUseCase(as, log))
+			},
+			method:    http.MethodPost,
+			path:      "/user/contacts/sync",
+			body:      `{"mode":"incremental"}`,
+			readsBody: true,
+		},
+		{
 			name: "PairPhone",
 			build: func(e error) http.Handler {
 				return NewPairPhoneHandler(session.NewPairPhoneUseCase(guard(e), log))
@@ -325,6 +336,33 @@ func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
 			}
 			logassert.OutcomeLogged(t, recs, tt.want)
 		})
+	}
+}
+
+// TestSyncContactRoster_InvalidMode_400: modo fora dos tres aceitos e'
+// recusado com um *apperr.AppError de categoria validation, e por isso 400 —
+// diferente de PairPhone/SetStatusMessage (TestSessionHandlers_
+// MissingRequiredField_500_LogsError), cuja validacao de payload nao usa a
+// taxonomia apperr e por isso ainda vira 500.
+func TestSyncContactRoster_InvalidMode_400(t *testing.T) {
+	log := &contractsfake.Logger{}
+	h := NewSyncContactRosterHandler(session.NewSyncContactRosterUseCase(&contractsfake.AppStateSyncer{}, log))
+
+	rec, recs := serveSession(t, h, http.MethodPost, "/user/contacts/sync", `{"mode":"bogus"}`, "user-1", true)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
+	}
+	errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("envelope.error nao e' o objeto tipado do ADR-002: %s", rec.Body.String())
+	}
+	if errObj["code"] != "invalid_sync_mode" {
+		t.Fatalf("error.code = %v, quero invalid_sync_mode", errObj["code"])
+	}
+	got := logassert.OutcomeLogged(t, recs, "mode must be one of")
+	if got.str("level") != "warn" {
+		t.Fatalf("nivel %q para uma falha de CLIENTE (400), quero warn", got.str("level"))
 	}
 }
 

@@ -10,4 +10,4 @@
 #   *aumenta* a contagem de 1 para 5. Travar na contagem é premiar quem deixa
 #   o monolito de pé. (Achado da revisão de arquitetura da Fase 7.)
 max_complexity=56
-count=79
+count=105

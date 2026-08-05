@@ -97,3 +97,20 @@ type RequestHistorySyncResult struct {
 	OldestMsgFromMe    bool   `json:"oldest_msg_from_me"`
 	OldestMsgTimestamp int64  `json:"oldest_msg_timestamp"`
 }
+
+// SyncContactRosterRequest representa o payload de sincronização forçada da
+// agenda de contatos (patch de app-state critical_unblock_low). Capacidade
+// distinta de RequestHistorySyncRequest: não mexe em histórico de mensagens.
+type SyncContactRosterRequest struct {
+	// Mode escolhe o custo do pull: "if_unsynced" (no-op se já sincronizado),
+	// "incremental" (fetch barato, não apaga versão) ou "full" (re-snapshot
+	// completo, caro).
+	Mode string `json:"mode"`
+}
+
+// SyncContactRosterResult representa o resultado da sincronização forçada da
+// agenda de contatos.
+type SyncContactRosterResult struct {
+	Details string `json:"details"`
+	Mode    string `json:"mode"`
+}

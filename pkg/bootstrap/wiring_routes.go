@@ -40,6 +40,10 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/session/ws", customChain.Then(ch.Session.WS), "GET")
 	registry.Register("/user/status", customChain.Then(ch.Session.SetStatusMessage), "POST")
 	registry.Register("/user/history/sync", customChain.Then(ch.Session.RequestHistorySync), "POST")
+	// Additive: forces a re-fetch of the contact roster app-state patch —
+	// a separate capability from /user/history/sync (message history), not
+	// a variant of it. See handler_session.go: SyncContactRosterHandler.
+	registry.Register("/user/contacts/sync", customChain.Then(ch.Session.SyncContactRoster), "POST")
 
 	// Message routes
 	registry.Register("/chat/send/text", customChain.Then(ch.Message.SendMessage), "POST")

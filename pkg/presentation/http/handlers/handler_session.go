@@ -272,3 +272,40 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
+
+// SyncContactRosterHandler handles POST /user/contacts/sync.
+//
+// Capacidade nova e distinta de RequestHistorySyncHandler: força o pull do
+// patch de app-state que carrega a agenda de contatos, não histórico de
+// mensagens.
+type SyncContactRosterHandler struct {
+	usecase *session.SyncContactRosterUseCase
+}
+
+func NewSyncContactRosterHandler(uc *session.SyncContactRosterUseCase) *SyncContactRosterHandler {
+	return &SyncContactRosterHandler{uc}
+}
+func (h *SyncContactRosterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	id, ok := sessionUser(w, r)
+	if !ok {
+		return
+	}
+	var req domain.SyncContactRosterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
+		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
+		return
+	}
+	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	if err != nil {
+		if isClientCausedSessionError(err) {
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SyncContactRoster").Str("user_id", id).Msg("session use case failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+			return
+		}
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "SyncContactRoster").Str("user_id", id).Msg("session use case failed")
+		customhttp.RespondJSON(w, 500, nil, err)
+		return
+	}
+	customhttp.RespondJSON(w, 200, rsp, nil)
+}

@@ -44,3 +44,14 @@ type NewsletterReader interface {
 	// opaco até a serialização.
 	ListSubscribed(ctx context.Context, txtID string) (any, error)
 }
+
+// AppStateSyncer força o pull de um patch de app-state do servidor WhatsApp.
+type AppStateSyncer interface {
+	SessionGuard
+
+	// SyncContactRoster puxa o patch critical_unblock_low (agenda de
+	// contatos). mode: "if_unsynced" (no-op se já sincronizado) |
+	// "incremental" (fetch barato, não apaga versão) | "full" (re-snapshot
+	// completo, caro).
+	SyncContactRoster(ctx context.Context, txtID string, mode string) error
+}
