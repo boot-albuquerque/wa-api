@@ -1,6 +1,14 @@
 # ADR-0002: Vendorizar o núcleo do `whatsmeow` em vez de reimplementar protocolo do zero
 
-- **Status**: accepted (amenda o ADR-0001; aprovado 2026-08-06)
+- **Status**: accepted (amenda o ADR-0001; aprovado 2026-08-06) —
+  **amendado parcialmente por [ADR-0003](0003-vendorizar-modulo-inteiro-sem-selecao.md)**
+  (2026-08-06): a rejeição de "fork completo ingênuo" e a decisão de
+  vendorizar `libsignal` foram revistas — vendorizar seletivamente provou
+  ser inviável sem quebrar `appstate` (já em uso) e sem economia real de
+  manutenção; `libsignal` não tem import reverso e não faz parte do
+  motivador do roadmap, ficando como dependência externa. A decisão
+  central (vendorizar em vez de reimplementar, preservando a API pública
+  do `Client`) permanece válida.
 - **Data**: 2026-08-06
 - **Amenda**: [ADR-0001](0001-native-whatsapp-protocol-roadmap.md), especificamente a alternativa
   descartada "Fork completo do `whatsmeow` agora" e o critério de partida
@@ -99,7 +107,11 @@ nome equivalente) passa a satisfazer o mesmo port, sem tocar em
   (`binary`/`socket`/`store`/`types`/`proto`/`libsignal`) e reescrever só
   a orquestração é mais barato de manter do que carregar as 124k linhas
   inteiras, incluindo partes (ex: `appstate`, funcionalidades não usadas)
-  que talvez nunca precisem de customização.
+  que talvez nunca precisem de customização. **Revisto pelo ADR-0003**: a
+  seletividade não é viável sem quebrar `appstate` (já em uso pelo
+  wa-api) e sem a economia de manutenção esperada — ver ADR-0003 para o
+  racional atualizado. `libsignal` fica de fora do vendoring (dependência
+  externa, sem import reverso).
 
 ## Consequências
 
