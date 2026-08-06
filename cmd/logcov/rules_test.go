@@ -208,7 +208,7 @@ func TestReadExcludeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"cmd/", "pkg/application/contracts/contractsfake/"}
+	want := []string{"cmd/", "pkg/application/contracts/contractsfake/", "internal/waclient/"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)
 	}

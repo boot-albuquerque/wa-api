@@ -37,7 +37,19 @@
 # linha 13 ("nao depende de locale") está incorreta na prática. Rode com
 # LC_NUMERIC=C LC_ALL=C make coverage-gate para medir corretamente. Reportado
 # separadamente, não corrigido aqui (fora do escopo deste plano).
-min_coverage=822
+# vendor-whatsmeow-native-fork (2026-08-06): 822->819. `make coverage-gate`
+# nesta branch (feature/vendor-whatsmeow, baseada em 31287b9) mediu 81.9%
+# (819), abaixo do piso declarado (822) — investigado com um worktree
+# temporário no PRÓPRIO commit 31287b9 (`git worktree add /tmp/... 31287b9`)
+# pra isolar se era regressão desta mudança: a medição honesta nesse commit
+# TAMBÉM é 81.9% (819), idêntica. Ou seja, o 822 anterior já estava
+# incorreto/não-reprodutível antes desta branch existir (medição pontual
+# divergente, causa não investigada — possível não-determinismo entre
+# execuções de teste, não confirmado). Este vendoring (troca mecânica de
+# import path em 45 arquivos + go.mod, sem lógica nova) é comprovadamente
+# neutro em cobertura (819 -> 819, verificado contra o commit-pai). Ajustado
+# para o número honesto e reprodutível.
+min_coverage=819
 # F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

@@ -13,3 +13,13 @@ cmd/
 # denominador so dilui o percentual sem significar nada sobre o repositorio
 # real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
 pkg/application/contracts/contractsfake/
+
+# internal/waclient/ — modulo go.mau.fi/whatsmeow vendorizado por completo
+# (ADR-0002/0003), cópia fiel de codigo de terceiros sob MPL-2.0, nao codigo
+# nosso a instrumentar. `packages.Visit` do proprio cmd/logcov inclui
+# qualquer pacote transitivamente importado cujo PkgPath comece com o path
+# do modulo (`wa-api/`) — antes do vendoring, todo o whatsmeow ficava fora
+# do denominador por ser `go.mau.fi/whatsmeow/...` (path externo); depois de
+# vendorizado sob `wa-api/internal/waclient/...`, o mesmo filtro passaria a
+# incluir as ~124k linhas de terceiros sem essa exclusao explicita.
+internal/waclient/

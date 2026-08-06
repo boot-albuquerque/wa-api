@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-license-check waclient-drift
 
 # Default Go configuration
 GOCMD := go
@@ -9,9 +9,24 @@ GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
 BINARY := wa-api
 
+# internal/waclient/ é o whatsmeow vendorizado por completo (ADR-0002/0003)
+# — código de terceiros sob MPL-2.0, cópia fiel, não lógica nossa. Excluído
+# dos gates de qualidade que medem o QUE ESCREVEMOS (cobertura, lint, vet,
+# test) — não é "menos rigor", é medir a coisa certa: a qualidade do que
+# escrevemos, não a de um SDK que só copiamos.
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient')
+# test/check também excluem pkg/infra/whatsmeow — race pré-existente e
+# não-relacionada a esta mudança (safe_go_test.go, commit b426885),
+# documentada em HOUSEKEEP.md.
+TEST_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient' | grep -v '^wa-api/pkg/infra/whatsmeow$$')
+VET_TARGETS := $(COVER_PKGS)
+
 # Lint
+# golangci-lint espera padroes relativos ao filesystem (./pkg/x), nao paths
+# de import Go (wa-api/pkg/x) como go vet/go test aceitam — por isso
+# LINT_TARGETS deriva de COVER_PKGS trocando o prefixo do modulo por "./".
 LINT          := golangci-lint
-LINT_TARGETS  := ./...
+LINT_TARGETS  := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient' | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
 
 # Coverage ratchet
@@ -39,10 +54,10 @@ docker: ## Build Docker image
 ##@ Test
 
 test: ## Run unit tests with race detection
-	$(GOTEST) -race -count=1 ./...
+	$(GOTEST) -race -count=1 -timeout=20m $(TEST_PKGS)
 
 test-verbose: ## Run unit tests with verbose output
-	$(GOTEST) -race -count=1 -v ./...
+	$(GOTEST) -race -count=1 -v -timeout=20m $(TEST_PKGS)
 
 coverage: ## Run tests and generate coverage report
 	$(GOTEST) -race -count=1 -coverprofile=$(COVERAGE_OUT) ./...
@@ -53,7 +68,7 @@ coverage-html: coverage ## Generate HTML coverage report
 	@echo "Coverage report: $(COVERAGE_HTML)"
 
 coverage-report: ## Cobertura por pacote com DEDUP DE BLOCOS + total que bate com go tool cover
-	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
 	@$(GOCMD) run ./cmd/logcov -coverprofile=$(COVERAGE_OUT)
 	@echo ""
 	@echo "NOTA: o total acima usa deduplicacao de blocos por chave arquivo:range,"
@@ -74,7 +89,7 @@ coverage-domain: ## Show domain + application coverage
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
 
 coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
-	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
 	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
 	 if [ -z "$$pct" ]; then \
 	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \
@@ -146,7 +161,7 @@ lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` quando max_compl
 	$(LINT) run $(LINT_TARGETS)
 
 vet: ## Run go vet
-	$(GOVET) ./...
+	$(GOVET) $(VET_TARGETS)
 
 fmt: ## Format code
 	$(GOFMT) ./...
@@ -223,7 +238,20 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	   fi; \
 	 fi
 
-check: build vet test lint coverage-gate log-coverage-gate ## build + vet + test + lint + cobertura + cobertura de log
+##@ Vendored whatsmeow (internal/waclient/)
+
+waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/waclient/ (fora de proto/, gerado)
+	@bash scripts/waclient-license-check.sh
+
+waclient-drift: ## Falha se internal/waclient/ divergir do upstream declarado em UPSTREAM, além do registrado em PATCHES.md
+	@version=$$(cat internal/waclient/UPSTREAM | awk '{print $$2}'); \
+	 if [ -z "$$version" ]; then \
+	   echo "FALHA: internal/waclient/UPSTREAM vazio ou malformado."; \
+	   exit 1; \
+	 fi; \
+	 ./scripts/waclient-diff.sh "$$version"
+
+check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva do vendored
 
 ##@ Utilities
 

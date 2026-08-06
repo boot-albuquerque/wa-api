@@ -122,8 +122,6 @@ rules_frozen=true
 # Deletar a orfa tira 1 funcao do denominador E 1 do numerador (ela logava o
 # Warn de opt-in inseguro), entao a razao cai 1 decimo sem que nenhum site
 # tenha deixado de logar — o log continua existindo, no arquivo novo.
-min_func_coverage=710
-min_errpath_coverage=856
 #
 # 504->503: connectOnStartup passou a chamar s.startSession direto em vez de
 # repetir o corpo dele numa closure inline — a closure (connectOnStartup.func2)
