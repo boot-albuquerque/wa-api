@@ -136,14 +136,14 @@ func (c *Container) scanDevice(row dbutil.Scannable) (*store.Device, error) {
 		&device.Platform, &device.BusinessName, &device.PushName, &fbUUID, &device.LIDMigrationTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan session: %w", err)
-	} else if len(noisePriv) != 32 || len(identityPriv) != 32 || len(preKeyPriv) != 32 || len(preKeySig) != 64 {
+	} else if len(noisePriv) != curve25519KeyLength || len(identityPriv) != curve25519KeyLength || len(preKeyPriv) != curve25519KeyLength || len(preKeySig) != signedPreKeySignatureLength {
 		return nil, ErrInvalidLength
 	}
 
-	device.NoiseKey = keys.NewKeyPairFromPrivateKey(*(*[32]byte)(noisePriv))
-	device.IdentityKey = keys.NewKeyPairFromPrivateKey(*(*[32]byte)(identityPriv))
-	device.SignedPreKey.KeyPair = *keys.NewKeyPairFromPrivateKey(*(*[32]byte)(preKeyPriv))
-	device.SignedPreKey.Signature = (*[64]byte)(preKeySig)
+	device.NoiseKey = keys.NewKeyPairFromPrivateKey(*(*[curve25519KeyLength]byte)(noisePriv))
+	device.IdentityKey = keys.NewKeyPairFromPrivateKey(*(*[curve25519KeyLength]byte)(identityPriv))
+	device.SignedPreKey.KeyPair = *keys.NewKeyPairFromPrivateKey(*(*[curve25519KeyLength]byte)(preKeyPriv))
+	device.SignedPreKey.Signature = (*[signedPreKeySignatureLength]byte)(preKeySig)
 	device.Account = &account
 	device.FacebookUUID = fbUUID.UUID
 
@@ -226,9 +226,9 @@ func (c *Container) NewDevice() *store.Device {
 		NoiseKey:       keys.NewKeyPair(),
 		IdentityKey:    keys.NewKeyPair(),
 		RegistrationID: mathRand.Uint32(),
-		AdvSecretKey:   random.Bytes(32),
+		AdvSecretKey:   random.Bytes(advSecretKeyLength),
 	}
-	device.SignedPreKey = device.IdentityKey.CreateSignedPreKey(1)
+	device.SignedPreKey = device.IdentityKey.CreateSignedPreKey(initialSignedPreKeyID)
 	return device
 }
 
