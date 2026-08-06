@@ -49,7 +49,18 @@
 # import path em 45 arquivos + go.mod, sem lógica nova) é comprovadamente
 # neutro em cobertura (819 -> 819, verificado contra o commit-pai). Ajustado
 # para o número honesto e reprodutível.
-min_coverage=819
+# whatsmeow-clean-arch-walog-bridge (2026-08-06): 819->829. Ratchet-UP, medido
+# com LC_NUMERIC=C LC_ALL=C make coverage-gate (o bug de locale acima continua
+# valendo). O ganho de +10 decimos vem de tres frentes do plano
+# .omc/plans/whatsmeow-clean-arch-walog-bridge.md: (1) testes novos para
+# ClientManager.ProvisionWebhookClient e para o fan-out WS (AddWSConn /
+# RemoveWSConn / BroadcastToUser), que nao tinham teste nenhum antes do split
+# de client_manager.go; (2) o pacote novo pkg/infra/whatsmeow/walog, que nasce
+# com bridge.go e level.go integralmente cobertos; (3) os testes de apperr dos
+# cinco sites de UserAdapter e o teste de integracao do seam em
+# pkg/bootstrap/walog_seam_test.go. Nenhum arquivo de producao perdeu
+# cobertura: os splits movem funcoes, nao logica.
+min_coverage=829
 # F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

@@ -242,3 +242,44 @@ secundário, envolver os retornos crus de `user_adapters.go` com
 **Status**: não corrigido — decisão de quando implementar pendente com o
 usuário; avaliação de arquitetura clean/DDD-lite + testes para essa área
 em andamento na mesma sessão.
+
+---
+
+## 2026-08-06 — `user_info_failed` classificado como `CategoryInternal` sendo erro de entrada
+
+**Contexto**: execução da Fase 3 (apperr) do plano
+`.omc/plans/whatsmeow-clean-arch-walog-bridge.md`, que fixa código e
+categoria dos 5 sites em tabela.
+
+**Onde**: `pkg/infra/whatsmeow/user_adapters.go:63-66` (era
+`user_adapters.go:71` antes dos splits das Fases 0):
+
+```go
+parsed, err := toJIDs(jids)
+if err != nil {
+    return nil, apperr.New("user_info_failed", apperr.CategoryInternal,
+        "failed to resolve user info targets", true, err)
+}
+```
+
+**Problema**: o erro vem de `toJIDs`, ou seja, de um `domain.JID` que o
+caller passou e que `ParseJID` não aceita — é falha de entrada, não do
+servidor. Classificado como `CategoryInternal` e `retryable=true`, o
+handler HTTP responde 500 e sugere retry para uma requisição que vai
+falhar igual em toda tentativa. Reproduz com
+`GetUserInfo(ctx, "u1", []domain.JID{"@s.whatsapp.net"})`, coberto por
+`TestUserAdapter_GetUserInfo_JIDInvalido`.
+
+A tabela do plano (§3, Fase 3) rotula esta linha como "GetUserInfo (SDK)",
+o que sugere que o autor mirava o erro da chamada `client.GetUserInfo` —
+mas esse site não é um `return err` cru (é `return client.GetUserInfo(...)`
+direto), então a linha citada só pode ser a de `toJIDs`. Seguido o plano
+literalmente para não divergir em silêncio de um plano revisado.
+
+**Correção sugerida**: trocar para
+`apperr.New("user_info_invalid_jid", apperr.CategoryValidation, ..., false, err)`,
+alinhando com os demais erros de parse de JID da fronteira, e atualizar
+`TestUserAdapter_GetUserInfo_JIDInvalido`.
+
+**Status**: não corrigido — plano aprovado fixa código e categoria; mudar
+aqui seria divergir do que foi revisado. Pendente de decisão do usuário.
