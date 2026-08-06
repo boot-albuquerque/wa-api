@@ -410,3 +410,161 @@ literais que substituíram.
 - **Escopo**: só a raiz. Os subdiretórios entram nas Fases B/C do ADR-0004 e
   ainda não respeitam o teto; incluí-los agora deixaria o gate vermelho no
   primeiro `make check`.
+
+---
+
+## Fase A — `internal/waclient/socket/`, 2026-08-06
+
+Segunda metade da Fase A do ADR-0004 (a primeira foi a raiz do pacote, acima).
+`socket/` é o transporte: websocket + framing + handshake Noise
+(`Noise_XX_25519_AESGCM_SHA256`). É o caminho por onde todo byte de e para o
+WhatsApp passa.
+
+### Por que esta entrada tem tão pouca mudança estrutural
+
+Nenhum dos 6 arquivos de produção do diretório passava do teto de 300 linhas
+antes desta fase (maior: `framesocket.go`, 222). **Não houve nenhuma divisão de
+arquivo** — não havia o que dividir, e o ADR-0004 pede divisão por
+responsabilidade, não corte mecânico. A revisão SOLID também não encontrou
+função fazendo duas coisas não relacionadas: `FrameSocket` cuida do framing,
+`NoiseHandshake` do handshake, `NoiseSocket` do transporte cifrado, e a
+separação já é limpa. Este diretório é protocolo-crítico, então a régua adotada
+foi: **só muda o que é provadamente equivalente**.
+
+O trabalho real desta entrada foi nos outros pilares: constantes nomeadas,
+auditoria de logging e cobertura de teste.
+
+### Magic numbers e strings extraídos para constantes nomeadas
+
+Em `constants.go` (o arquivo de constantes que já existia no diretório):
+
+| Literal original | Onde estava | Constante |
+|---|---|---|
+| `"Origin"` | chave do header HTTP em `NewFrameSocket` | `originHeaderName` |
+| `0` (código de fechamento) | `Close(0)`, `code > 0`, `code == 0` em `framesocket.go` | `statusForceClose` |
+| `32` | `len(data) == 32` em `NoiseHandshake.Start` | `noiseHashSize` |
+| `32` (2×) | `make([]byte, 32)` em `extractAndExpand` | `noiseHashSize` |
+| `12` | `make([]byte, 12)` em `generateIV` | `gcmIVSize` |
+| `8` | `iv[8:]` em `generateIV` | `gcmIVCounterOffset` (= `gcmIVSize - 4`) |
+
+`statusForceClose` merece nota: o `0` passado a `Close` **não é** um status code
+de websocket (o protocolo não tem código 0). É um sentinela com dois
+significados acoplados no código original — "feche sem enviar close frame" e,
+via `code == 0`, "reporte este disconnect como remoto/sujo". A constante
+documenta isso; o comportamento é idêntico.
+
+`gcmIVCounterOffset` foi escrito como `gcmIVSize - 4` em vez de `8` literal para
+que a relação (o contador `uint32` ocupa os últimos 4 bytes do nonce) fique
+expressa, e não precise ser redescoberta se `gcmIVSize` algum dia mudar.
+
+Literais deixados **de propósito** como estão: `WAMagicValue = 6`,
+`FrameMaxSize`, `FrameLengthSize`, `NoiseStartPattern`, `Origin`, `URL` — já
+eram constantes nomeadas e exportadas antes desta fase.
+
+### Extração com criação de helper privado
+
+- **Criado** `framelength.go` (35): `frameLengthShiftHigh`,
+  `frameLengthShiftMid`, `encodeFrameLength`, `decodeFrameLength`.
+- **Por quê**: o prefixo de comprimento big-endian de 24 bits aparecia duas
+  vezes em `framesocket.go`, escrito inline e de forma assimétrica — três linhas
+  de shift em `SendFrame` para escrever, uma expressão de uma linha em
+  `processData` para ler. Extrair o par deixa o codec num só lugar, torna-o
+  testável sem rede (é logica pura sobre `[]byte`), e nomeia o `16`/`8` dos
+  shifts.
+- **Comportamento mudou? Não** — mesmas operações, mesma ordem de bytes, com
+  teste de round trip e de ordem de bytes provando.
+
+### Auditoria de logging
+
+Varrido `internal/waclient/socket/*.go` atrás de escrita de log fora do
+`waLog.Logger` injetado. Resultado: **nenhum bypass**. `FrameSocket.log` é
+alimentado por `NewFrameSocket(cli.Log.Sub("Socket"), ...)`
+(`client_connection.go:126`), ou seja já chega no `walog.Bridge` sobre zerolog
+(`pkg/infra/whatsmeow/walog/`, commits `2848388`/`279a68a`). `NoiseSocket` loga
+via `ns.fs.log`, o mesmo logger. Não há `fmt.Print*`, `log.*` do stdlib nem
+`println`. Nada a corrigir.
+
+Uma exceção conceitual, **não corrigida**: `NoiseHandshake.Start` faz
+`panic(err)` se `gcmutil.Prepare` falhar. Não é bypass de log (é panic, não
+escrita de log), mas é um caminho de falha que nunca chega ao bridge. Na
+prática é inalcançável — a chave é sempre o hash SHA-256 de `noiseHashSize`
+bytes, tamanho que o AES-GCM sempre aceita — então o custo de mudar a
+assinatura de `Start` para devolver erro não se paga. Registrado aqui em vez de
+mudado.
+
+### Cobertura de teste
+
+Nenhum arquivo `_test.go` existia neste diretório (nem em nenhum subpacote de
+`internal/waclient/`; o único `_test.go` do fork inteiro é
+`client_test.go`, um `Example()` de godoc sem asserção). Não havia, portanto,
+mock de transporte para reaproveitar — mas também não foi preciso construir um:
+tudo o que esta fase tocou é lógica pura, exercitável sem conexão.
+
+- **Criado** `framelength_test.go` (63): round trip de encode/decode em toda a
+  faixa representável, ordem de bytes big-endian travada explicitamente,
+  decode ignorando bytes além do cabeçalho, e a relação
+  `FrameMaxSize == 1 << (FrameLengthSize * 8)`.
+- **Criado** `framesocket_test.go` (145): remontagem de frame em
+  `processData` — frame único, vários frames no mesmo websocket message, payload
+  picado, cabeçalho parcial, frame vazio — mais `SendFrame` sem conexão
+  devolvendo `ErrSocketClosed`, os defaults de `NewFrameSocket`, e a forma de
+  `WAConnHeader`. Sem rede: `processData` é chamado direto e os frames são
+  lidos do canal `Frames`.
+- **Criado** `noisehandshake_test.go` (140): forma do nonce AES-GCM
+  (tamanho, zeros à esquerda, contador big-endian ao final), nonces distintos
+  por contador, os dois ramos de `Start` (pattern de exatamente `noiseHashSize`
+  bytes usado verbatim × pattern mais longo reduzido por SHA-256), round trip
+  `Encrypt`/`Decrypt` entre dois handshakes com o mesmo estado, rejeição de
+  texto cifrado adulterado, reset de contador em `MixIntoKey`, e tamanhos das
+  chaves derivadas por `extractAndExpand`.
+
+Um desses testes, `TestProcessDataSplitPayload`, está `t.Skip`ado: ele
+**reprova** contra o código atual e revelou um bug de remontagem do upstream —
+ver a seção seguinte e o achado F18 em `HOUSEKEEP.md`.
+
+### Bug encontrado e NÃO corrigido: remontagem de frame picado
+
+`framesocket.go:170` (`processData`) faz `fs.receivedLength = len(msg)` **antes**
+de descartar os `FrameLengthSize` bytes de cabeçalho, enquanto
+`fs.incomingLength` e todos os `copy(fs.incoming[fs.receivedLength:], ...)`
+seguintes são relativos ao payload. Quando um payload chega picado em mais de um
+websocket message, o segundo pedaço é escrito `FrameLengthSize` bytes adiante do
+lugar certo, deixando 3 bytes zerados no meio do frame remontado.
+
+Evidência (saída real do teste antes do `t.Skip`):
+
+```
+frame 0 = "pay\x00\x00\x00load longo dividido em peda", esperado "payload longo dividido em pedacos"
+```
+
+**Não corrigido** nesta fase: é mudança de comportamento observável, e a Fase A
+do ADR-0004 é estrutural por contrato. Registrado em `HOUSEKEEP.md` (F18) com o
+fix sugerido, pendente de decisão do usuário. O teste fica versionado e
+`t.Skip`ado, pronto para virar a prova da correção.
+
+### Gates atualizados
+
+- `scripts/waclient-filesize-check.sh` passou de um diretório (`DIR`) para uma
+  lista (`DIRS`), agora cobrindo `internal/waclient/` **e**
+  `internal/waclient/socket/` — as duas metades da Fase A. A checagem de "achei
+  zero arquivos, o escopo do gate quebrou" passou a ser feita **por diretório**,
+  não no total, senão um diretório vazio se esconderia atrás do outro. Nenhum
+  arquivo de `socket/` tem cabeçalho de código gerado (verificado: nenhum
+  `GENERATED BY` / `DO NOT EDIT` / `Code generated`), então a isenção existente
+  continua valendo só para `internals.go`.
+- **Criado** o alvo `make waclient-test`, ligado a `check`. Pelo mesmo racional
+  do gate de tamanho: `internal/waclient/` está fora de `TEST_PKGS`
+  (achado F17), então os `_test.go` acima nunca rodariam por `make check` —
+  seriam testes que não testam. `WACLIENT_TEST_PKGS` lista explicitamente os
+  subpacotes do fork que já têm teste real nosso (hoje só `socket/`) e cresce
+  conforme as Fases B/C forem cobrindo o resto.
+- `cmd/logcov/testdata/eligible.golden` ganhou duas linhas
+  (`encodeFrameLength`/`decodeFrameLength`, ambas `EXCLUDED X5`, já que
+  `internal/waclient/` está em `.logcov-exclude`) — mesma regeneração mecânica
+  do commit `5d376a6`.
+
+### Fora do escopo
+
+- `git diff --stat internal/waclient/proto/` continua vazio.
+- `dialopts.go` / `dialopts_js.go` não foram tocados: são 14 e 9 linhas, um par
+  de build tags por plataforma, sem literal nem lógica a extrair.

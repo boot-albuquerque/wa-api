@@ -397,3 +397,75 @@ issues não relacionadas às mudanças. O teto de 300 linhas, esse sim, ficou
 travado por gate novo (`make waclient-filesize`,
 `scripts/waclient-filesize-check.sh`), que roda independente de
 `COVER_PKGS`/`LINT_TARGETS` justamente por causa desta exclusão.
+
+---
+
+## F18 — `processData` corrompe frame cujo payload chega picado em mais de um websocket message
+
+**Data**: 2026-08-06
+**Contexto**: Fase A do ADR-0004, metade `internal/waclient/socket/`. Achado ao
+escrever o primeiro teste de remontagem de frame do pacote — o bug é do
+whatsmeow upstream, não introduzido por nós.
+
+**Onde**: `internal/waclient/socket/framesocket.go:161-200`
+(`(*FrameSocket).processData`), especificamente a linha 170:
+
+```go
+length := decodeFrameLength(msg)
+fs.incomingLength = length
+fs.receivedLength = len(msg)   // <-- conta os 3 bytes de cabecalho
+msg = msg[FrameLengthSize:]    // <-- cabecalho so' e' descartado DEPOIS
+```
+
+**Problema**: `incomingLength` é o tamanho do **payload**, e todos os
+`copy(fs.incoming[fs.receivedLength:], ...)` do ramo de continuação são
+relativos ao payload. Mas `receivedLength` é inicializado com `len(msg)`
+**incluindo** os `FrameLengthSize` (3) bytes de cabeçalho. Resultado: quando o
+payload de um frame chega dividido em mais de um websocket message, o segundo
+pedaço é escrito 3 bytes adiante do lugar correto, deixando 3 bytes zerados no
+meio do frame remontado (e truncando os 3 últimos).
+
+Reprodução (`internal/waclient/socket/framesocket_test.go`,
+`TestProcessDataSplitPayload`, hoje `t.Skip`ado). Rodar sem o skip:
+
+```
+go test -run TestProcessDataSplitPayload ./internal/waclient/socket/
+```
+
+Saída observada vs esperada:
+
+```
+frame 0 = "pay\x00\x00\x00load longo dividido em peda"
+esperado  "payload longo dividido em pedacos"
+```
+
+O caminho do cabeçalho parcial (`fs.partialHeader`) **não** tem o bug, porque lá
+o `msg` é remontado e reprocessado do zero pelo ramo normal — por isso
+`TestProcessDataPartialHeader` passa. Só o ramo de payload picado é afetado.
+
+Alcançabilidade real: depende de o `conn.Read` do `coder/websocket` entregar um
+frame WhatsApp partido em mais de uma leitura. Como a lib remonta fragmentação
+de websocket antes de devolver, o caso mais provável é um frame WhatsApp grande
+atravessando mais de uma mensagem websocket, ou vários frames por mensagem com
+o último cortado. Não observado em produção até agora; o comentário do próprio
+upstream na linha 163 ("This probably doesn't happen a lot (if at all), so the
+code is unoptimized") sugere que o caminho nunca foi exercitado a sério.
+
+**Correção sugerida**: mover a contagem para depois do descarte do cabeçalho —
+
+```go
+length := decodeFrameLength(msg)
+fs.incomingLength = length
+msg = msg[FrameLengthSize:]
+fs.receivedLength = len(msg)
+```
+
+E, no mesmo commit, remover o `t.Skip` de `TestProcessDataSplitPayload`, que
+passa a ser a prova da correção. Vale também mandar o patch para o upstream
+(`go.mau.fi/whatsmeow`), já que o bug não é nosso.
+
+**Status**: **não corrigido**. A Fase A do ADR-0004 é estrutural por contrato
+(`PATCHES.md` declara "comportamento não mudou" em todas as entradas) e este é
+justamente um caso em que o comportamento observável muda. Pendente de decisão
+do usuário: corrigir agora em commit próprio, ou tratar junto com F16 numa
+leva de correções de comportamento do fork.
