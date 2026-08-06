@@ -44,6 +44,13 @@ type ContactDirectoryGetLIDForPNCall struct {
 	JID   domain.JID
 }
 
+// ContactDirectoryGetManyLIDsForPNsCall é uma chamada a GetManyLIDsForPNs.
+type ContactDirectoryGetManyLIDsForPNsCall struct {
+	Ctx   context.Context
+	TxtID string
+	JIDs  []domain.JID
+}
+
 // ContactDirectory é o fake de port.ContactDirectory.
 type ContactDirectory struct {
 	SessionGuard
@@ -62,6 +69,9 @@ type ContactDirectory struct {
 
 	GetLIDForPNFunc  func(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
 	GetLIDForPNCalls []ContactDirectoryGetLIDForPNCall
+
+	GetManyLIDsForPNsFunc  func(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error)
+	GetManyLIDsForPNsCalls []ContactDirectoryGetManyLIDsForPNsCall
 }
 
 var _ port.ContactDirectory = (*ContactDirectory)(nil)
@@ -109,6 +119,15 @@ func (f *ContactDirectory) GetLIDForPN(ctx context.Context, txtID string, jid do
 		return f.GetLIDForPNFunc(ctx, txtID, jid)
 	}
 	return "", nil
+}
+
+// GetManyLIDsForPNs implementa port.ContactDirectory.
+func (f *ContactDirectory) GetManyLIDsForPNs(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error) {
+	f.GetManyLIDsForPNsCalls = append(f.GetManyLIDsForPNsCalls, ContactDirectoryGetManyLIDsForPNsCall{Ctx: ctx, TxtID: txtID, JIDs: jids})
+	if f.GetManyLIDsForPNsFunc != nil {
+		return f.GetManyLIDsForPNsFunc(ctx, txtID, jids)
+	}
+	return nil, nil
 }
 
 // --- BlocklistManager --------------------------------------------------

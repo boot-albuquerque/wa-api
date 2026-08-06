@@ -95,6 +95,11 @@ func (s *spyPort) GetLIDForPN(context.Context, string, domain.JID) (domain.JID, 
 	return "", s.err
 }
 
+func (s *spyPort) GetManyLIDsForPNs(context.Context, string, []domain.JID) (map[domain.JID]domain.JID, error) {
+	s.calls++
+	return nil, s.err
+}
+
 func (s *spyPort) ResolveJID(_ context.Context, raw string) (domain.JID, error) {
 	return domain.JID(raw + "@s.whatsapp.net"), nil
 }

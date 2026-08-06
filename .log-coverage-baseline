@@ -144,7 +144,19 @@ min_errpath_coverage=856
 # (os 2 pontos que decidem se e' erro) ja logam. errpath_coverage nao muda
 # (856): o adapter nao tem branch de erro proprio pra contar como S-ret
 # descoberto (so' repassa o retorno de baixo).
-min_func_coverage=707
+#
+# justificativa: resolucao LID<->PN em GET /user/contacts/last-activity
+# (2026-08-06, fecha o gap medido contra dados reais: 0/1141 contatos
+# casavam por telefone, so' 5/284 por JID bruto, porque whatsmeow_contacts
+# vive majoritariamente em espaco @lid e message_history mistura @lid/PN).
+# min_eligible sobe 509->511 (+2: UserAdapter.GetManyLIDsForPNs + o novo
+# GetContactsLastActivityUseCase.normalizeToLID). func_coverage cai
+# 707->706: SO' GetManyLIDsForPNs fica descoberto — adapter fino que so'
+# inverte o mapa lid->pn do store em pn->lid, mesmo padrao ja aceito
+# (adapter nao loga, use case loga); normalizeToLID loga no branch de erro
+# (resolver falhou) e por isso conta como coberto. errpath_coverage nao
+# muda (856): GetManyLIDsForPNs propaga o erro do SDK sem branch proprio.
+min_func_coverage=706
 min_errpath_coverage=856
-min_eligible=509
+min_eligible=511
 max_exempt_annotations=0

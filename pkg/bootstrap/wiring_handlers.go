@@ -307,7 +307,7 @@ func initCustomHandlers(s *server) {
 		Avatar:       handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
 		Contacts:     handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
 		UserInfo:     handlers.NewGetUserInfoHandler(getUserUC),
-		LastActivity: handlers.NewGetContactsLastActivityHandler(user.NewGetContactsLastActivityUseCase(chatActivityRepo, logger)),
+		LastActivity: handlers.NewGetContactsLastActivityHandler(user.NewGetContactsLastActivityUseCase(chatActivityRepo, userAdapter, logger)),
 	}
 
 	customHandlerSet = &customHandlers{

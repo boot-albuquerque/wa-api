@@ -150,6 +150,31 @@ func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.
 	return domain.JID(lid.String()), nil
 }
 
+// GetManyLIDsForPNs resolve em lote (1 chamada ao store local, não 1 por
+// JID) o LID de cada telefone informado.
+func (a *UserAdapter) GetManyLIDsForPNs(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error) {
+	client, err := a.client(txtID)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := toJIDs(jids)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := client.Store().LIDs.GetManyLIDsForPNs(ctx, parsed)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[domain.JID]domain.JID, len(resolved))
+	for lid, pn := range resolved {
+		if lid.IsEmpty() || pn.IsEmpty() {
+			continue
+		}
+		out[domain.JID(pn.String())] = domain.JID(lid.String())
+	}
+	return out, nil
+}
+
 // GetBlocklist devolve a lista atual de bloqueados.
 func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Blocklist, error) {
 	client, err := a.client(txtID)

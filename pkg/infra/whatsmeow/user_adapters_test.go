@@ -334,6 +334,42 @@ func TestUserAdapter_GetLIDForPN_OK(t *testing.T) {
 	}
 }
 
+// TestUserAdapter_GetManyLIDsForPNs_NoSession.
+func TestUserAdapter_GetManyLIDsForPNs_NoSession(t *testing.T) {
+	a := NewUserAdapter(getterWith(nil))
+	_, err := a.GetManyLIDsForPNs(context.Background(), "u1", []domain.JID{"x@s.whatsapp.net"})
+	if appErrCode(err) != "no_session" {
+		t.Errorf("GetManyLIDsForPNs code = %q", appErrCode(err))
+	}
+}
+
+// TestUserAdapter_GetManyLIDsForPNs_OK — devolve map[PN]LID (invertido em
+// relação ao mapping interno lid→pn do store), e IGNORA PNs sem mapeamento
+// conhecido em vez de incluí-los com valor vazio.
+func TestUserAdapter_GetManyLIDsForPNs_OK(t *testing.T) {
+	dev := storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{
+		types.NewJID("lid-x", types.HiddenUserServer): types.NewJID("1234", types.DefaultUserServer),
+		types.NewJID("lid-y", types.HiddenUserServer): types.NewJID("5678", types.DefaultUserServer),
+	}}, nil)
+	fake := &fakeWAClient{StoreFn: func() *store.Device { return dev }}
+	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	got, err := a.GetManyLIDsForPNs(context.Background(), "u1", []domain.JID{
+		"1234@s.whatsapp.net", "5678@s.whatsapp.net", "9999@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("GetManyLIDsForPNs = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %+v, want 2 entradas (9999 sem mapeamento fica de fora)", got)
+	}
+	if got["1234@s.whatsapp.net"] != "lid-x@lid" {
+		t.Errorf("1234@s.whatsapp.net = %q, want lid-x@lid", got["1234@s.whatsapp.net"])
+	}
+	if got["5678@s.whatsapp.net"] != "lid-y@lid" {
+		t.Errorf("5678@s.whatsapp.net = %q, want lid-y@lid", got["5678@s.whatsapp.net"])
+	}
+}
+
 // TestUserAdapter_GetLIDForPN_NotMapped devolve "", nil.
 func TestUserAdapter_GetLIDForPN_NotMapped(t *testing.T) {
 	dev := storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{}}, nil)

@@ -2,6 +2,7 @@ pkg/application/contracts/contractsfake.AppStateSyncer.SyncContactRoster	EXCLUDE
 pkg/application/contracts/contractsfake.BlocklistManager.GetBlocklist	EXCLUDED	X5
 pkg/application/contracts/contractsfake.BlocklistManager.UpdateBlocklist	EXCLUDED	X5
 pkg/application/contracts/contractsfake.CallRecorder.Record	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatActivityReader.GetLastActivityByUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.MarkRead	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.ArchiveChat	EXCLUDED	X5
@@ -9,6 +10,7 @@ pkg/application/contracts/contractsfake.ChatOperations.RejectCall	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RequestUnavailableMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetAllContacts	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetLIDForPN	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ContactDirectory.GetManyLIDsForPNs	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetProfilePicture	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetUserInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.IsOnWhatsApp	EXCLUDED	X5
@@ -270,6 +272,7 @@ pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret
 pkg/application/usecase/user.GetAvatarUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_avatar.go:32);uncovered:L2(S-consume,get_avatar.go:36);uncovered:L2(S-ret,get_avatar.go:37)
 pkg/application/usecase/user.GetBlocklistUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsLastActivityUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/user.GetContactsLastActivityUseCase.normalizeToLID	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetPrivacySettingsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:51)
@@ -722,6 +725,7 @@ pkg/infra/whatsmeow.SessionProviderAdapter.resolveDevice	ELIGIBLE	uncovered:L1;u
 pkg/infra/whatsmeow.UserAdapter.GetAllContacts	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.GetBlocklist	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.GetLIDForPN	ELIGIBLE	uncovered:L1
+pkg/infra/whatsmeow.UserAdapter.GetManyLIDsForPNs	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.GetPrivacySettings	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.GetProfilePicture	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:119);uncovered:L2(S-ret,user_adapters.go:122);uncovered:L2(S-ret,user_adapters.go:128)
 pkg/infra/whatsmeow.UserAdapter.GetUserInfo	ELIGIBLE	uncovered:L1
@@ -733,10 +737,10 @@ pkg/infra/whatsmeow.ZerologAdapter.Error	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Info	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Warn	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.from	ELIGIBLE	uncovered:L1
-pkg/infra/whatsmeow.getCachedPNForLID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:255);uncovered:L2(S-ret,user_adapters.go:262)
+pkg/infra/whatsmeow.getCachedPNForLID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:280);uncovered:L2(S-ret,user_adapters.go:287)
 pkg/infra/whatsmeow.normalizeBlocklistJID	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.realWAClient.Store	EXCLUDED	X1
-pkg/infra/whatsmeow.resolveBlocklistPNJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:248)
+pkg/infra/whatsmeow.resolveBlocklistPNJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:273)
 pkg/infra/whatsmeow.toDomainBlocklist	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.toJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:61)
 pkg/infra/whatsmeow.toJIDs	ELIGIBLE	uncovered:L1

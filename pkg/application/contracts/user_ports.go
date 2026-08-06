@@ -26,6 +26,15 @@ type ContactDirectory interface {
 
 	// GetLIDForPN resolve o LID correspondente a um número de telefone.
 	GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
+
+	// GetManyLIDsForPNs resolve em lote o LID correspondente a cada JID de
+	// telefone (`@s.whatsapp.net`) informado — usado pra normalizar
+	// last-activity (message_history, majoritariamente PN) pro mesmo espaço
+	// de identidade de GetAllContacts (whatsmeow_contacts, majoritariamente
+	// @lid no WhatsApp Multi-Device atual). PN sem mapeamento conhecido fica
+	// AUSENTE do mapa devolvido (não é erro — o caller mantém o PN original
+	// como fallback).
+	GetManyLIDsForPNs(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error)
 }
 
 // ChatActivityReader expõe o histórico de atividade por chat já persistido
