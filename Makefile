@@ -251,7 +251,7 @@ waclient-drift: ## Falha se internal/wa-noise/proto/ (codigo gerado) divergir do
 	 fi; \
 	 ./scripts/waclient-diff.sh "$$version"
 
-waclient-filesize: ## Falha se algum .go de producao da raiz ou de socket/ de internal/wa-noise/ passar de 300 linhas (ADR-0004, Fase A)
+waclient-filesize: ## Falha se algum .go de producao da raiz, de socket/ ou de appstate/ de internal/wa-noise/ passar de 300 linhas (ADR-0004, Fases A/B)
 	@bash scripts/waclient-filesize-check.sh
 
 # internal/wa-noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado
@@ -259,7 +259,7 @@ waclient-filesize: ## Falha se algum .go de producao da raiz ou de socket/ de in
 # check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
 # subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
 # fases do ADR-0004 forem cobrindo o resto.
-WACLIENT_TEST_PKGS := ./internal/wa-noise/socket/
+WACLIENT_TEST_PKGS := ./internal/wa-noise/socket/ ./internal/wa-noise/appstate/
 
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
