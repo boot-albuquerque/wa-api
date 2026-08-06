@@ -11,7 +11,7 @@ import (
 	"wa-api/pkg/infra/messaging"
 	stdiopkg "wa-api/pkg/infra/stdio"
 	"wa-api/pkg/infra/storage"
-	intwhatsmeow "wa-api/pkg/infra/whatsmeow"
+	intwhatsmeow "wa-api/pkg/infra/wa-noise"
 	mwpkg "wa-api/pkg/presentation/http/middleware"
 
 	whatsmeow "wa-api/internal/wa-noise"

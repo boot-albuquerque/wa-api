@@ -10,7 +10,7 @@ import (
 )
 
 // sessionAttachHookAdapter implementa appport.SessionAttachHook. Fica em
-// pkg/bootstrap (não em pkg/infra/whatsmeow) porque monta *MyClient e
+// pkg/bootstrap (não em pkg/infra/wa-noise) porque monta *MyClient e
 // registra myEventHandler — o handler de domínio completo, que depende de
 // estado privado de bootstrap (DB, NotifyFn, mode) e não pode ser movido
 // para infra sem inverter a direção de dependência bootstrap -> infra.

@@ -15,7 +15,7 @@ import (
 
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
-	infrawa "wa-api/pkg/infra/whatsmeow"
+	infrawa "wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
 )

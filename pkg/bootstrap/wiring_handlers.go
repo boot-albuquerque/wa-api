@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/whatsmeow"
+	"wa-api/pkg/infra/wa-noise"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 

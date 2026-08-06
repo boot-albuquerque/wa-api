@@ -14,7 +14,7 @@ import (
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
-	infrawa "wa-api/pkg/infra/whatsmeow"
+	infrawa "wa-api/pkg/infra/wa-noise"
 )
 
 // Este arquivo cobre a FRONTEIRA compartilhada por praticamente todos os
@@ -522,7 +522,7 @@ func TestSessionUser_AndInlineGuard_AgreeOnEveryInput(t *testing.T) {
 // TestHandlers_AppErrFromPortReachesTheClient trava o CONSERTO do defeito que
 // a versao anterior deste teste documentava.
 //
-// pkg/infra/whatsmeow.ErrNoSession produz um *apperr.AppError com
+// pkg/infra/wa-noise.ErrNoSession produz um *apperr.AppError com
 // Code="no_session" e Category=validation (=> 400). Ate' a F11, todos os use
 // cases de session/ traduziam esse erro com fmt.Errorf("no session") SEM %w:
 // o wrap se perdia, RespondJSON nao conseguia errors.As, e o cliente recebia

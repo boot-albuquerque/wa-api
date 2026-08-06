@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	wmhelpers "wa-api/pkg/infra/whatsmeow"
+	wmhelpers "wa-api/pkg/infra/wa-noise"
 
 	whatsmeow "wa-api/internal/wa-noise"
 

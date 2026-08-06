@@ -3,7 +3,7 @@
 //
 // É o único código de produção fora de internal/wa-noise/ que implementa uma
 // interface *do* vendored: concentrá-lo aqui limita o raio de explosão de um
-// drift do upstream (ADR-0002/0003) e mantém pkg/infra/whatsmeow livre de
+// drift do upstream (ADR-0002/0003) e mantém pkg/infra/wa-noise livre de
 // dependência da interface waLog.Logger.
 package walog
 

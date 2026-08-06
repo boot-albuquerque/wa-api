@@ -13,7 +13,7 @@ import (
 // webhookTLSSkipVerify reports whether outgoing webhook deliveries should
 // skip TLS certificate verification. Mirrors pkg/bootstrap/lifecycle.go's
 // webhookTLSSkipVerify (same env var, same insecure-opt-in semantics) —
-// duplicated here rather than imported because pkg/infra/whatsmeow must not
+// duplicated here rather than imported because pkg/infra/wa-noise must not
 // depend on pkg/bootstrap (see SessionAttachHook design in the plan).
 var webhookTLSSkipVerify = sync.OnceValue(func() bool {
 	v := strings.ToLower(os.Getenv(envWebhookTLSSkipVerify))

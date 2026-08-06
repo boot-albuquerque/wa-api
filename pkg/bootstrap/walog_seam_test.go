@@ -11,7 +11,7 @@ import (
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/pkg/infra/whatsmeow/walog"
+	"wa-api/pkg/infra/wa-noise/walog"
 )
 
 // TestWalogSeam_ErroDoSDKSaiSemWadebug exercita os dois lados do seam de log

@@ -9,8 +9,8 @@ import (
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
-	wa "wa-api/pkg/infra/whatsmeow"
-	"wa-api/pkg/infra/whatsmeow/walog"
+	wa "wa-api/pkg/infra/wa-noise"
+	"wa-api/pkg/infra/wa-noise/walog"
 )
 
 // newSessionOrchestrator liga os quatro ports de sessão (Fases 2a-2e) ao
