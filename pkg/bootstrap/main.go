@@ -27,6 +27,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	appsession "wa-api/pkg/application/session"
 	dbmig "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
 )
@@ -40,10 +41,11 @@ const (
 )
 
 type server struct {
-	DB     *sqlx.DB
-	Router *mux.Router
-	ExPath string
-	Mode   ServerMode
+	DB                  *sqlx.DB
+	Router              *mux.Router
+	ExPath              string
+	Mode                ServerMode
+	SessionOrchestrator *appsession.Orchestrator
 }
 
 const version = Version
@@ -367,6 +369,7 @@ func Main() {
 		ExPath: exPath,
 		Mode:   serverMode,
 	}
+	s.SessionOrchestrator = newSessionOrchestrator(s)
 	initCustomHandlers(s)
 	s.routes()
 

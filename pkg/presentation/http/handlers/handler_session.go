@@ -47,17 +47,19 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
 type ConnectHandler struct {
-	usecase     *session.ConnectUseCase
-	StartClient func(userID, jid, token string, kill chan bool) // injected by bootstrap
+	usecase      *session.ConnectUseCase
+	StartSession func(userID, token string) // injected by bootstrap
 }
 
 func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler {
 	return &ConnectHandler{usecase: uc}
 }
 
-// WithStartClient injects the WhatsApp WebSocket launcher.
-func (h *ConnectHandler) WithStartClient(fn func(userID, jid, token string, kill chan bool)) *ConnectHandler {
-	h.StartClient = fn
+// WithStartSession injects the session launcher (bootstrap's
+// SessionOrchestrator). The kill-channel is owned by the orchestrator's
+// attach hook, so the handler no longer creates one.
+func (h *ConnectHandler) WithStartSession(fn func(userID, token string)) *ConnectHandler {
+	h.StartSession = fn
 	return h
 }
 
@@ -77,11 +79,10 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartClient", h.StartClient != nil).Msg("ConnectHandler starting WhatsApp client")
-	// Fire-and-forget: start WhatsApp client in background (QR code appears in terminal)
-	if h.StartClient != nil {
-		kill := make(chan bool, 1)
-		go h.StartClient(id, "", "", kill)
+	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartSession", h.StartSession != nil).Msg("ConnectHandler starting WhatsApp client")
+	// Fire-and-forget: start WhatsApp client in background
+	if h.StartSession != nil {
+		go h.StartSession(id, "")
 	}
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
 }

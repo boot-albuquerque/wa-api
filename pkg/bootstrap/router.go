@@ -30,14 +30,15 @@ type Deps struct {
 	StaticDir  string // empty => don't register the FileServer
 	Log        zerolog.Logger
 
-	// StartClient injects (*server).startClient (lifecycle.go). By the time
+	// StartSession injects the session launcher backed by the
+	// SessionOrchestrator (session_orchestrator_wiring.go). By the time
 	// NewRouter runs, it's already bound into CustomHandlers.Session.Connect
 	// (see initConnectHandler) — this field exists purely so NewRouter can
 	// fail loud if the caller forgot to wire it, instead of nil-derefing on
 	// the first /session/connect request. Field func: this is dynamic
 	// coupling the compiler doesn't cover (§1.3, fifth row of the
 	// verification-mechanism table).
-	StartClient func(userID, textjid, token string, kill chan bool)
+	StartSession func(userID, token string)
 
 	// CustomHandlers backs the 87 custom routes. Required by NewRouter.
 	// Routes() supplies a zero-value one internally when omitted, since
@@ -57,14 +58,14 @@ type RouteInfo struct {
 // the same guard shape the media fix in wiring_delegates.go established
 // for the exact same class of defect (a struct field never populated).
 func NewRouter(d Deps) *mux.Router {
-	if d.StartClient == nil {
-		panic("bootstrap.NewRouter: Deps.StartClient is required")
+	if d.StartSession == nil {
+		panic("bootstrap.NewRouter: Deps.StartSession is required")
 	}
 	if d.CustomHandlers == nil {
 		panic("bootstrap.NewRouter: Deps.CustomHandlers is required")
 	}
 	if d.UserCache == nil {
-		// Unlike StartClient (bound into CustomHandlers before Deps is
+		// Unlike StartSession (bound into CustomHandlers before Deps is
 		// built, not read here), UserCache IS read directly by buildRouter
 		// below (authAlice(d.DB.DB, d.UserCache)), and middleware/auth.go's
 		// AuthAlice calls userCache.Get(token) unconditionally as its first
@@ -77,7 +78,7 @@ func NewRouter(d Deps) *mux.Router {
 }
 
 // Routes enumerates {path, methods} for every registered route without
-// requiring a fully-wired CustomHandlers or StartClient. This is what
+// requiring a fully-wired CustomHandlers or StartSession. This is what
 // cmd/listroutes calls, and what the golden-file harness in F4a diffs
 // against — before this phase, enumerating routes from outside
 // pkg/bootstrap was not possible: the registration loop lived inside the
@@ -91,8 +92,8 @@ func Routes(d Deps) []RouteInfo {
 	if d.CustomHandlers == nil {
 		d.CustomHandlers = emptyCustomHandlers()
 	}
-	if d.StartClient == nil {
-		d.StartClient = func(string, string, string, chan bool) {}
+	if d.StartSession == nil {
+		d.StartSession = func(string, string) {}
 	}
 	router := buildRouter(d)
 	var infos []RouteInfo

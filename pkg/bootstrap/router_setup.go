@@ -51,7 +51,7 @@ func depsFromServer(s *server) Deps {
 		AdminToken:     *adminToken,
 		StaticDir:      s.ExPath + "/static/",
 		Log:            routerLog,
-		StartClient:    s.startClient,
+		StartSession:   s.startSession,
 		CustomHandlers: customHandlerSet,
 	}
 }

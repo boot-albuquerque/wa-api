@@ -326,8 +326,8 @@ func initCustomHandlers(s *server) {
 	}
 }
 
-// initConnectHandler creates a ConnectHandler wired to server.startClient.
+// initConnectHandler creates a ConnectHandler wired to the SessionOrchestrator.
 func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
 	h := handlers.NewConnectHandler(uc)
-	return h.WithStartClient(s.startClient)
+	return h.WithStartSession(s.startSession)
 }

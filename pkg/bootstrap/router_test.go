@@ -8,7 +8,7 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
-func noopStartClient(string, string, string, chan bool) {}
+func noopStartSession(string, string) {}
 
 // minimalDeps builds a Deps value using only in-memory/zero-value
 // dependencies — no flag.Parse(), no os.Executable(), no database
@@ -20,7 +20,7 @@ func minimalDeps() Deps {
 		UserCache:      cache.New(0, 0),
 		AdminToken:     "test-admin-token",
 		StaticDir:      "", // empty: don't register the FileServer
-		StartClient:    noopStartClient,
+		StartSession:   noopStartSession,
 		CustomHandlers: emptyCustomHandlers(),
 	}
 }
@@ -45,14 +45,14 @@ func TestNewRouter(t *testing.T) {
 	}
 }
 
-func TestNewRouter_PanicsWithoutStartClient(t *testing.T) {
+func TestNewRouter_PanicsWithoutStartSession(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatal("expected panic when Deps.StartClient is nil, got none")
+			t.Fatal("expected panic when Deps.StartSession is nil, got none")
 		}
 	}()
 	d := minimalDeps()
-	d.StartClient = nil
+	d.StartSession = nil
 	NewRouter(d)
 }
 
@@ -68,7 +68,7 @@ func TestNewRouter_PanicsWithoutCustomHandlers(t *testing.T) {
 }
 
 func TestRoutes_ZeroValueDeps(t *testing.T) {
-	// Routes() must work with a zero-value Deps — no StartClient, no
+	// Routes() must work with a zero-value Deps — no StartSession, no
 	// CustomHandlers, no DB — since route enumeration never invokes a
 	// handler's ServeHTTP. This is what cmd/listroutes relies on.
 	infos := Routes(Deps{})

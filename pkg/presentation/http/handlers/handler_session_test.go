@@ -541,12 +541,12 @@ func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
 }
 
 // TestConnectHandler_StartsClientOnce: o unico handler com efeito colateral
-// proprio. WithStartClient injeta o lancador; ConnectHandler responde 200 e
-// dispara o cliente em background exatamente uma vez.
+// proprio. WithStartSession injeta o lancador; ConnectHandler responde 200 e
+// dispara a sessao em background exatamente uma vez.
 func TestConnectHandler_StartsClientOnce(t *testing.T) {
 	started := make(chan string, 2)
 	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartClient(func(userID, jid, token string, kill chan bool) { started <- userID })
+		WithStartSession(func(userID, token string) { started <- userID })
 
 	rec, recs := serveSession(t, h, http.MethodPost, "/session/connect", "", "user-1", true)
 
@@ -554,20 +554,20 @@ func TestConnectHandler_StartsClientOnce(t *testing.T) {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
 	if got := <-started; got != "user-1" {
-		t.Fatalf("StartClient recebeu %q, quero user-1", got)
+		t.Fatalf("StartSession recebeu %q, quero user-1", got)
 	}
 	select {
 	case extra := <-started:
-		t.Fatalf("StartClient chamado mais de uma vez (segunda: %q)", extra)
+		t.Fatalf("StartSession chamado mais de uma vez (segunda: %q)", extra)
 	default:
 	}
 	logassert.NoSecrets(t, recs)
 }
 
-// TestConnectHandler_WithoutStartClient_StillResponds: sem lancador injetado
+// TestConnectHandler_WithoutStartSession_StillResponds: sem lancador injetado
 // (o zero-value do handler, que e' o que bootstrap monta antes do wiring) a
 // rota nao pode entrar em panico com um nil call.
-func TestConnectHandler_WithoutStartClient_StillResponds(t *testing.T) {
+func TestConnectHandler_WithoutStartSession_StillResponds(t *testing.T) {
 	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}))
 
 	rec, recs := serveSession(t, h, http.MethodPost, "/session/connect", "", "user-1", true)
