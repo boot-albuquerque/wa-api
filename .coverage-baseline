@@ -22,7 +22,22 @@
 # uma MELHORA sobre o estado real anterior, mesmo ficando abaixo do numero
 # (desatualizado) que estava escrito aqui. min_coverage ajustado para refletir
 # a medicao honesta; nenhuma regressao real ocorreu.
-min_coverage=814
+# Fase 2g (2026-08-06): 817->820. A remocao de startClient tirou do
+# denominador uma funcao grande e sem teste; os testes novos de
+# pkg/application/session (helpers de traducao/payload) e dos adapters de
+# sessao em pkg/bootstrap cobrem o codigo que entrou no lugar.
+# native-multisession-architecture, verificacao final (2026-08-06): 820->822
+# apos gofmt -w nos arquivos pendentes (mecanico, sem mudanca de logica) e
+# regeneracao do golden de cmd/logcov (numeros de linha shiftaram). Medido
+# com `go test ./... -coverpkg=./... -coverprofile=coverage.out` sob
+# LC_NUMERIC=C: 82.2%. NOTA: `make coverage-gate` sob LANG=pt_BR.UTF-8 (locale
+# deste ambiente) mostra FALHA falsa porque o awk do gate trunca o decimal
+# em locale que usa vírgula (81.6% virou "810" em vez de "816" num teste
+# anterior) — bug pré-existente do Makefile, não desta mudança; a claim da
+# linha 13 ("nao depende de locale") está incorreta na prática. Rode com
+# LC_NUMERIC=C LC_ALL=C make coverage-gate para medir corretamente. Reportado
+# separadamente, não corrigido aqui (fora do escopo deste plano).
+min_coverage=822
 # F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

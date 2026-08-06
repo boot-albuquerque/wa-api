@@ -150,7 +150,9 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 		}},
 		{"SetDisappearingTimer", fakeSpec{
 			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetDisappearingTimerFn: func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error { return sdkErr }}
+				return &fakeWAClient{SetDisappearingTimerFn: func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error {
+					return sdkErr
+				}}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetDisappearingTimer(context.Background(), "u1", "g@g.us", time.Hour, time.Now())

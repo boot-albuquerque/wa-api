@@ -180,6 +180,69 @@ parte da dor observável no ecossistema é "capacidade exposta e não usada"
 de tratar reimplementação binária como último recurso, não ponto de partida,
 está alinhada com a experiência de outro projeto maduro sobre a mesma lib.
 
+## Limitação conhecida: `GetAllContacts` nunca devolve grupos
+
+Achado durante o trabalho de listagem/ordenação de contatos no `disparazaap`
+(2026-08-06), registrado aqui porque é o tipo exato de trade-off que este ADR
+existe para rastrear: uma limitação que hoje **nos beneficia por acidente**,
+mas pode virar **bloqueio real** no dia em que precisarmos de dado de grupo.
+
+### O que descobrimos
+
+`GetAllContacts` (`whatsmeow/store/sqlstore/store.go:797`) lê exclusivamente
+da tabela `whatsmeow_contacts`:
+
+```sql
+SELECT their_jid, first_name, full_name, push_name, business_name, redacted_phone
+  FROM whatsmeow_contacts WHERE our_jid=$1
+```
+
+Essa tabela é alimentada só por eventos `contact_action` do app-state sync —
+a agenda 1:1 do usuário. **Grupos nunca entram nela**, por design do
+`whatsmeow`: metadados de grupo (membros, admin, nome) vivem numa estrutura
+inteiramente separada (`GetGroupInfo`/`GetJoinedGroups`), não em
+`whatsmeow_contacts`. Não é um bug nem uma omissão nossa — é a lib decidindo
+que "contato" e "grupo" são conceitos diferentes desde a base, e só expõe
+`their_jid` do primeiro.
+
+### Por que isso nos beneficia agora
+
+O `wa-api` usa `GetAllContacts` como fonte de `GET /user/contacts`
+(`user_adapters.go`), que o `wa-worker` consome pra sincronizar a agenda do
+tenant no `disparazaap`. A tela de contatos do produto é sobre conversas
+privadas com clientes — grupo nunca deveria aparecer ali. Como o `whatsmeow`
+já filtra isso na origem, **não precisamos de filtro nosso** nesse caminho
+específico (o `wa-api` não escreve nenhuma lógica de "ignore grupo" — a lib
+simplesmente nunca oferece o dado).
+
+### Por que isso pode virar problema
+
+O dia em que o produto precisar de QUALQUER informação de grupo via este
+provider — lista de grupos que o número participa, membros, nome/admin de um
+grupo, mensagens de um grupo — `GetAllContacts` **não serve**, e não há como
+fazer servir (não é um parâmetro que falta, é uma tabela que não tem o dado).
+Seria necessário:
+
+1. Portas novas sobre `GetGroupInfo`/`GetJoinedGroups` (ou equivalente) do
+   `whatsmeow` — capacidade que a lib TEM, só não é usada hoje (mesmo padrão
+   do caso do avatar: "a lib expõe, ninguém threadou" ainda não se aplica
+   aqui porque ninguém pediu).
+2. Ports/domain novos no `wa-api` (`Group`, não `Contact`) — grupo não é o
+   mesmo agregado, misturar os dois no mesmo endpoint reintroduziria a
+   ambiguidade que hoje não existe.
+3. Nenhuma reimplementação de protocolo binário exigida por isso — é
+   inteiramente superfície de API já coberta pelo SDK, mesma categoria do
+   critério de partida deste ADR (evidência de dor real primeiro, nativizar
+   só se a lib genuinamente não suportar).
+
+### Ação registrada, não tomada
+
+Este ADR não cria trabalho de grupo agora — não há demanda de produto pra
+isso hoje. Fica documentado para que, quando essa demanda aparecer, quem
+investigar não perca tempo redescobrindo que `GetAllContacts` é a fonte
+errada — a resposta já está aqui: portas novas sobre a API de grupos do
+`whatsmeow`, não sobre `ContactDirectory`.
+
 ## Alternativas descartadas
 
 - **Fork completo do `whatsmeow` agora**: alto custo de manutenção
@@ -205,3 +268,25 @@ está alinhada com a experiência de outro projeto maduro sobre a mesma lib.
 - Revisar este ADR quando a primeira superfície nativa (se houver) estiver
   em produção, pra validar se o critério de partida se provou útil na
   prática.
+- A superfície de sessão (pareamento, transporte, eventos) já tem port
+  pronto pra receber uma implementação nativa, resultado do plano
+  `.omc/plans/native-multisession-architecture.md`: `SessionProvider`/
+  `Session` (`pkg/application/contracts/session_provider.go`) cobrem
+  `Pair`/`Connect`/`Disconnect`/`Logout`/`SetProxy`/`Subscribe`, com
+  `SessionEvent` (`pkg/application/contracts/session_event.go`) e
+  `PairingEvent` (`pkg/application/contracts/pairing_event.go`) tipando os 6
+  eventos de sessão/transporte e o fluxo de QR sem vazar nenhum tipo de
+  `go.mau.fi/whatsmeow` na assinatura pública do port. A orquestração (grava
+  em `users`, webhook, S3, retry) permanece em `SessionOrchestrator`,
+  agnóstica de provider, e não precisa ser tocada quando a primeira peça
+  nativa chegar — só a implementação de `SessionProvider` muda. Eventos de
+  domínio (mensagem, presença, grupo, histórico) ficam fora deste port,
+  continuam em `myEventHandler`/`eventhandler_*.go`.
+- Os outros três ports criados junto (`SessionRegistry`,
+  `SessionEventDispatcher`, `SessionAttachHook`) **não** fazem parte da
+  superfície candidata a nativização: existem só para preservar a direção de
+  dependência (`pkg/application` e `pkg/infra` nunca importam
+  `pkg/bootstrap`), e continuam implementados por `ClientManager`/
+  `pkg/bootstrap` independentemente de a sessão vir do `whatsmeow` ou de
+  código nativo. Quem for avaliar a nativização da sessão deve olhar apenas
+  para `SessionProvider`/`Session`.

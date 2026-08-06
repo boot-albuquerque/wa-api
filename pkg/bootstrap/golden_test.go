@@ -50,7 +50,7 @@ func goldenTestDeps(t *testing.T) Deps {
 		DB:             sqlDB,
 		UserCache:      cache.New(0, 0),
 		AdminToken:     "golden-test-admin-token",
-		StartClient:    noopStartClient,
+		StartSession:   noopStartSession,
 		CustomHandlers: emptyCustomHandlers(),
 		Log:            zerolog.Nop(),
 	}

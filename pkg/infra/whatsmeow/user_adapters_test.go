@@ -21,7 +21,7 @@ func TestNewUserAdapter(t *testing.T) {
 
 // fakeLIDStore é um LIDStore mínimo com mapa pré-carregado.
 type fakeLIDStore struct {
-	mapping map[types.JID]types.JID
+	mapping  map[types.JID]types.JID
 	errOnGet error
 }
 

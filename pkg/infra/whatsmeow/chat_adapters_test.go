@@ -207,7 +207,9 @@ func TestPresenceControllerAdapter_SendChatPresence_NoSession(t *testing.T) {
 // TestPresenceControllerAdapter_SendChatPresence_PropagatesError.
 func TestPresenceControllerAdapter_SendChatPresence_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("boom")
-	fake := &fakeWAClient{SendChatPresenceFn: func(ctx context.Context, jid types.JID, s types.ChatPresence, m types.ChatPresenceMedia) error { return sdkErr }}
+	fake := &fakeWAClient{SendChatPresenceFn: func(ctx context.Context, jid types.JID, s types.ChatPresence, m types.ChatPresenceMedia) error {
+		return sdkErr
+	}}
 	a := NewPresenceControllerAdapter(getterWith(map[string]waClient{"u1": fake}))
 	err := a.SendChatPresence(context.Background(), "u1", "x@y.com", "composing", "")
 	if err == nil {
@@ -310,7 +312,9 @@ func TestChatMessengerAdapter_MarkRead_NoSession(t *testing.T) {
 // TestChatMessengerAdapter_MarkRead_PropagatesError.
 func TestChatMessengerAdapter_MarkRead_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("boom")
-	fake := &fakeWAClient{MarkReadFn: func(ctx context.Context, ids []types.MessageID, ts time.Time, chat, sender types.JID, extra ...types.ReceiptType) error { return sdkErr }}
+	fake := &fakeWAClient{MarkReadFn: func(ctx context.Context, ids []types.MessageID, ts time.Time, chat, sender types.JID, extra ...types.ReceiptType) error {
+		return sdkErr
+	}}
 	a := NewChatMessengerAdapter(getterWith(map[string]waClient{"u1": fake}))
 	err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), "x@y.com", "z@y.com")
 	if err == nil {
@@ -373,8 +377,8 @@ func TestChatMessengerAdapter_SendReaction_OK(t *testing.T) {
 	}}
 	a := NewChatMessengerAdapter(getterWith(map[string]waClient{"u1": fake}))
 	res, err := a.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{
-		Text:           "👍",
-		FromMe:         true,
+		Text:            "👍",
+		FromMe:          true,
 		TargetMessageID: "orig-msg",
 	})
 	if err != nil {
