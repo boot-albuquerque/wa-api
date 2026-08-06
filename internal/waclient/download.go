@@ -8,133 +8,16 @@ package whatsmeow
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"strings"
-	"time"
-
-	"go.mau.fi/util/retryafter"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/proto/waHistorySync"
 	"wa-api/internal/waclient/proto/waMediaTransport"
-	"wa-api/internal/waclient/proto/waServerSync"
-	"wa-api/internal/waclient/socket"
 	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/util/cbcutil"
-	"wa-api/internal/waclient/util/hkdfutil"
 )
-
-// MediaType represents a type of uploaded file on WhatsApp.
-// The value is the key which is used as a part of generating the encryption keys.
-type MediaType string
-
-// The known media types
-const (
-	MediaImage    MediaType = "WhatsApp Image Keys"
-	MediaVideo    MediaType = "WhatsApp Video Keys"
-	MediaAudio    MediaType = "WhatsApp Audio Keys"
-	MediaDocument MediaType = "WhatsApp Document Keys"
-	MediaHistory  MediaType = "WhatsApp History Keys"
-	MediaAppState MediaType = "WhatsApp App State Keys"
-
-	MediaStickerPack   MediaType = "WhatsApp Sticker Pack Keys"
-	MediaLinkThumbnail MediaType = "WhatsApp Link Thumbnail Keys"
-)
-
-// DownloadableMessage represents a protobuf message that contains attachment info.
-//
-// All of the downloadable messages inside a Message struct implement this interface
-// (ImageMessage, VideoMessage, AudioMessage, DocumentMessage, StickerMessage).
-type DownloadableMessage interface {
-	GetDirectPath() string
-	GetMediaKey() []byte
-	GetFileSHA256() []byte
-	GetFileEncSHA256() []byte
-}
-
-type MediaTypeable interface {
-	GetMediaType() MediaType
-}
-
-// DownloadableThumbnail represents a protobuf message that contains a thumbnail attachment.
-//
-// This is primarily meant for link preview thumbnails in ExtendedTextMessage.
-type DownloadableThumbnail interface {
-	proto.Message
-	GetThumbnailDirectPath() string
-	GetThumbnailSHA256() []byte
-	GetThumbnailEncSHA256() []byte
-	GetMediaKey() []byte
-}
-
-// All the message types that are intended to be downloadable
-var (
-	_ DownloadableMessage   = (*waE2E.ImageMessage)(nil)
-	_ DownloadableMessage   = (*waE2E.AudioMessage)(nil)
-	_ DownloadableMessage   = (*waE2E.VideoMessage)(nil)
-	_ DownloadableMessage   = (*waE2E.DocumentMessage)(nil)
-	_ DownloadableMessage   = (*waE2E.StickerMessage)(nil)
-	_ DownloadableMessage   = (*waE2E.StickerPackMessage)(nil)
-	_ DownloadableMessage   = (*waHistorySync.StickerMetadata)(nil)
-	_ DownloadableMessage   = (*waE2E.HistorySyncNotification)(nil)
-	_ DownloadableMessage   = (*waServerSync.ExternalBlobReference)(nil)
-	_ DownloadableThumbnail = (*waE2E.ExtendedTextMessage)(nil)
-	_ DownloadableMessage   = (*types.StickerPackItem)(nil)
-)
-
-type downloadableMessageWithLength interface {
-	DownloadableMessage
-	GetFileLength() uint64
-}
-
-type downloadableMessageWithSizeBytes interface {
-	DownloadableMessage
-	GetFileSizeBytes() uint64
-}
-
-type downloadableMessageWithURL interface {
-	DownloadableMessage
-	GetURL() string
-}
-
-var classToMediaType = map[protoreflect.Name]MediaType{
-	"ImageMessage":    MediaImage,
-	"AudioMessage":    MediaAudio,
-	"VideoMessage":    MediaVideo,
-	"DocumentMessage": MediaDocument,
-	"StickerMessage":  MediaImage,
-	"StickerMetadata": MediaImage,
-
-	"StickerPackMessage":      MediaStickerPack,
-	"HistorySyncNotification": MediaHistory,
-	"ExternalBlobReference":   MediaAppState,
-}
-
-var classToThumbnailMediaType = map[protoreflect.Name]MediaType{
-	"ExtendedTextMessage": MediaLinkThumbnail,
-}
-
-var mediaTypeToMMSType = map[MediaType]string{
-	MediaImage:    "image",
-	MediaAudio:    "audio",
-	MediaVideo:    "video",
-	MediaDocument: "document",
-	MediaHistory:  "md-msg-hist",
-	MediaAppState: "md-app-state",
-
-	MediaStickerPack:   "sticker-pack",
-	MediaLinkThumbnail: "thumbnail-link",
-}
 
 // DownloadAny loops through the downloadable parts of the given message and downloads the first non-nil item.
 //
@@ -159,17 +42,6 @@ func (cli *Client) DownloadAny(ctx context.Context, msg *waE2E.Message) (data []
 	}
 }
 
-func getSize(msg DownloadableMessage) int {
-	switch sized := msg.(type) {
-	case downloadableMessageWithLength:
-		return int(sized.GetFileLength())
-	case downloadableMessageWithSizeBytes:
-		return int(sized.GetFileSizeBytes())
-	default:
-		return -1
-	}
-}
-
 // ReturnDownloadWarnings controls whether the Download function returns non-fatal validation warnings.
 // Currently, these include [ErrFileLengthMismatch] and [ErrInvalidMediaSHA256].
 var ReturnDownloadWarnings = true
@@ -189,20 +61,6 @@ func (cli *Client) DownloadThumbnail(ctx context.Context, msg DownloadableThumbn
 		return cli.DownloadMediaWithPath(ctx, msg.GetThumbnailDirectPath(), msg.GetThumbnailEncSHA256(), msg.GetThumbnailSHA256(), msg.GetMediaKey(), -1, mediaType, mediaTypeToMMSType[mediaType])
 	} else {
 		return nil, ErrNoURLPresent
-	}
-}
-
-// GetMediaType returns the MediaType value corresponding to the given protobuf message.
-func GetMediaType(msg DownloadableMessage) MediaType {
-	switch typedMsg := msg.(type) {
-	case *types.StickerPackItem:
-		return MediaImage
-	case proto.Message:
-		return classToMediaType[typedMsg.ProtoReflect().Descriptor().Name()]
-	case MediaTypeable:
-		return typedMsg.GetMediaType()
-	default:
-		return ""
 	}
 }
 
@@ -305,134 +163,4 @@ func (cli *Client) DownloadMediaWithPath(
 		cli.Log.Warnf("Failed to download media: %s, trying with next host...", err)
 	}
 	return
-}
-
-func (cli *Client) downloadAndDecrypt(
-	ctx context.Context,
-	url string,
-	mediaKey []byte,
-	appInfo MediaType,
-	fileLength int,
-	fileEncSHA256,
-	fileSHA256 []byte,
-) (data []byte, err error) {
-	iv, cipherKey, macKey, _ := getMediaKeys(mediaKey, appInfo)
-	var ciphertext, mac []byte
-	if ciphertext, mac, err = cli.downloadPossiblyEncryptedMediaWithRetries(ctx, url, fileEncSHA256); err != nil {
-
-	} else if mediaKey == nil && fileEncSHA256 == nil && mac == nil {
-		// Unencrypted media, just return the downloaded data
-		data = ciphertext
-	} else if err = validateMedia(iv, ciphertext, macKey, mac); err != nil {
-
-	} else if data, err = cbcutil.Decrypt(cipherKey, iv, ciphertext); err != nil {
-		err = fmt.Errorf("failed to decrypt file: %w", err)
-	} else if ReturnDownloadWarnings {
-		if fileLength >= 0 && len(data) != fileLength {
-			err = fmt.Errorf("%w: expected %d, got %d", ErrFileLengthMismatch, fileLength, len(data))
-		} else if len(fileSHA256) == 32 && sha256.Sum256(data) != *(*[32]byte)(fileSHA256) {
-			err = ErrInvalidMediaSHA256
-		}
-	}
-	return
-}
-
-func getMediaKeys(mediaKey []byte, appInfo MediaType) (iv, cipherKey, macKey, refKey []byte) {
-	mediaKeyExpanded := hkdfutil.SHA256(mediaKey, nil, []byte(appInfo), 112)
-	return mediaKeyExpanded[:16], mediaKeyExpanded[16:48], mediaKeyExpanded[48:80], mediaKeyExpanded[80:]
-}
-
-func shouldRetryMediaDownload(err error) bool {
-	if errors.Is(err, context.Canceled) {
-		return false
-	}
-	var netErr net.Error
-	var httpErr DownloadHTTPError
-	return errors.As(err, &netErr) ||
-		strings.HasPrefix(err.Error(), "stream error:") || // hacky check for http2 errors
-		(errors.As(err, &httpErr) && retryafter.Should(httpErr.StatusCode, true))
-}
-
-func (cli *Client) downloadPossiblyEncryptedMediaWithRetries(ctx context.Context, url string, checksum []byte) (file, mac []byte, err error) {
-	for retryNum := 0; retryNum < 5; retryNum++ {
-		if checksum == nil {
-			file, err = cli.downloadMedia(ctx, url)
-		} else {
-			file, mac, err = cli.downloadEncryptedMedia(ctx, url, checksum)
-		}
-		if err == nil || !shouldRetryMediaDownload(err) {
-			return
-		}
-		retryDuration := time.Duration(retryNum+1) * time.Second
-		var httpErr DownloadHTTPError
-		if errors.As(err, &httpErr) {
-			retryDuration = retryafter.Parse(httpErr.Response.Header.Get("Retry-After"), retryDuration)
-		}
-		cli.Log.Warnf("Failed to download media due to network error: %v, retrying in %s...", err, retryDuration)
-		select {
-		case <-ctx.Done():
-			return nil, nil, ctx.Err()
-		case <-time.After(retryDuration):
-		}
-	}
-	return
-}
-
-func (cli *Client) doMediaDownloadRequest(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare request: %w", err)
-	}
-	req.Header.Set("Origin", socket.Origin)
-	req.Header.Set("Referer", socket.Origin+"/")
-	if cli.MessengerConfig != nil {
-		req.Header.Set("User-Agent", cli.MessengerConfig.UserAgent)
-	}
-	// TODO user agent for whatsapp downloads?
-	resp, err := cli.mediaHTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, DownloadHTTPError{Response: resp}
-	}
-	return resp, nil
-}
-
-func (cli *Client) downloadMedia(ctx context.Context, url string) ([]byte, error) {
-	resp, err := cli.doMediaDownloadRequest(ctx, url)
-	if err != nil {
-		return nil, err
-	}
-	data, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	return data, err
-}
-
-const mediaHMACLength = 10
-
-func (cli *Client) downloadEncryptedMedia(ctx context.Context, url string, checksum []byte) (file, mac []byte, err error) {
-	data, err := cli.downloadMedia(ctx, url)
-	if err != nil {
-		return
-	} else if len(data) <= mediaHMACLength {
-		err = ErrTooShortFile
-		return
-	}
-	file, mac = data[:len(data)-mediaHMACLength], data[len(data)-mediaHMACLength:]
-	if len(checksum) == 32 && sha256.Sum256(data) != *(*[32]byte)(checksum) {
-		err = ErrInvalidMediaEncSHA256
-	}
-	return
-}
-
-func validateMedia(iv, file, macKey, mac []byte) error {
-	h := hmac.New(sha256.New, macKey)
-	h.Write(iv)
-	h.Write(file)
-	if !hmac.Equal(h.Sum(nil)[:mediaHMACLength], mac) {
-		return ErrInvalidMediaHMAC
-	}
-	return nil
 }
