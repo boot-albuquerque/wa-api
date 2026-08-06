@@ -180,3 +180,65 @@ sessão/branch que pode não ter esse fix, vale confirmar que a duplicata
 não reaparece no merge — é um problema de "esqueceu de apagar a linha
 velha ao adicionar a nova", fácil de reintroduzir se outra sessão editar
 o arquivo do mesmo jeito.
+
+---
+
+## 2026-08-06 — `internal/waclient/` (vendored whatsmeow) sem bridge de log para o padrão do projeto
+
+**Encontrado durante**: revisão de arquitetura pós-vendoring do whatsmeow
+(branch `feature/vendor-whatsmeow`), solicitada explicitamente para
+avaliar se `internal/waclient/` segue os padrões de log/erro já
+estabelecidos no resto do projeto (via agente `architect`).
+
+**Onde**:
+- `internal/waclient/util/log/log.go:17-23` — interface `waLog.Logger`
+  (`Warnf/Errorf/Infof/Debugf/Sub`) que o whatsmeow espera receber.
+- `pkg/infra/whatsmeow/logger.go:12` — `ZerologAdapter`, que implementa
+  `appport.Logger` (`Info/Warn/Error(ctx, msg, keyvals...)`), uma
+  interface **diferente** — não satisfaz `waLog.Logger`.
+- `pkg/bootstrap/main.go:327-329` e
+  `pkg/bootstrap/session_orchestrator_wiring.go:22-24` — únicos pontos de
+  wiring; deixam o logger `nil` a menos que `--wadebug` seja passado.
+- `internal/waclient/client.go:241-242` — logger `nil` vira
+  `waLog.Noop` internamente.
+- `internal/waclient/util/log/log.go:64` — `stdoutLogger.outputf`, usa
+  `fmt.Printf` com ANSI + timestamp próprio quando `--wadebug` está
+  ligado.
+
+**Problema**: dois efeitos concretos.
+1. Em produção (sem `--wadebug`), todo erro de socket/handshake/decrypt/
+   appstate dentro da camada vendorizada (`internal/waclient/`) é
+   **descartado silenciosamente** — não chega no zerolog nem no stderr,
+   diferente do resto da aplicação, que sempre loga estruturado.
+2. Quando `--wadebug` está ligado, o output é texto puro com ANSI/
+   timestamp próprios, misturado no mesmo stream que emite JSON
+   estruturado (`--logtype=json`, `pkg/bootstrap/main.go:165`), sem
+   `req_id`/`role`/correlação com o resto dos logs da app.
+
+**Achado secundário (severidade média)**: adoção de `apperr` na fronteira
+do port é parcial — `pkg/infra/whatsmeow/user_adapters.go:40,44,67,71,80`
+repassa `err` cru vindo do waclient sem `apperr.New(...)`, então esses
+erros chegam no HTTP boundary sem `Code`/`Category`/`Retryable`. Os
+demais pontos da fronteira (`session_provider_adapter.go`,
+`session_guard_adapter.go`, `misc_adapters.go`) já fazem a tradução
+correta com `errors.Is` contra sentinels do whatsmeow — nenhum
+string-matching encontrado no repo.
+
+**Confirmado como correto (sem ação necessária)**: `.logcov-exclude`
+excluir `internal/waclient/` é arquiteturalmente certo (código
+third-party vendorizado, MPL-2.0, não é lógica nossa) e não esconde a
+fronteira de callback real — `session_provider_adapter.go:272` e
+`pkg/bootstrap/eventhandler.go:25` continuam dentro de `pkg/`, no escopo
+normal de log-coverage.
+
+**Correção sugerida**: implementar um adapter que satisfaça
+`waLog.Logger` sobre zerolog (mapear `Sub(mod)` para
+`.With().Str("wa_module", mod)`), injetar nos dois pontos de wiring
+citados, e logar por padrão pelo menos Warn/Error (não `nil`/`Noop`) —
+reservando `--wadebug` só para baixar o nível a Debug. Para o achado
+secundário, envolver os retornos crus de `user_adapters.go` com
+`apperr.New(...)` conforme os pontos forem tocados.
+
+**Status**: não corrigido — decisão de quando implementar pendente com o
+usuário; avaliação de arquitetura clean/DDD-lite + testes para essa área
+em andamento na mesma sessão.

@@ -1,0 +1,67 @@
+package whatsmeow
+
+import (
+	"context"
+	"errors"
+
+	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain/apperr"
+
+	whatsmeow "wa-api/internal/waclient"
+)
+
+// Pair inicia o fluxo de QR e conecta o transporte (a conexão é o que faz o
+// whatsmeow emitir os códigos). O canal devolvido é fechado quando o canal
+// do SDK fecha.
+func (s *whatsmeowSession) Pair(ctx context.Context) (<-chan appport.PairingEvent, error) {
+	if s.HasCredentials() {
+		return nil, apperr.New("session_already_paired", apperr.CategoryValidation, "session already has credentials", false, nil)
+	}
+
+	qrChan, err := s.client.GetQRChannel(ctx)
+	if err != nil {
+		if errors.Is(err, whatsmeow.ErrQRStoreContainsID) {
+			return nil, apperr.New("session_already_paired", apperr.CategoryValidation, "session already has credentials", false, err)
+		}
+		return nil, apperr.New("qr_channel_failed", apperr.CategoryInternal, "failed to get QR channel", true, err)
+	}
+
+	if err := s.client.Connect(); err != nil {
+		return nil, apperr.New("qr_connect_failed", apperr.CategoryInternal, "failed to connect client for QR pairing", true, err)
+	}
+
+	out := make(chan appport.PairingEvent)
+	go func() {
+		defer close(out)
+		for item := range qrChan {
+			evt, ok := s.translatePairingItem(item)
+			if !ok {
+				continue
+			}
+			select {
+			case out <- evt:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+func (s *whatsmeowSession) translatePairingItem(item whatsmeow.QRChannelItem) (appport.PairingEvent, bool) {
+	switch item.Event {
+	case whatsmeow.QRChannelEventCode:
+		return appport.PairingEvent{
+			Kind:    appport.PairingEventKindQR,
+			Code:    item.Code,
+			Timeout: item.Timeout,
+		}, true
+	case "timeout":
+		return appport.PairingEvent{Kind: appport.PairingEventKindTimeout}, true
+	case "success":
+		jid, _ := s.JID()
+		return appport.PairingEvent{Kind: appport.PairingEventKindSuccess, JID: jid}, true
+	default:
+		return appport.PairingEvent{}, false
+	}
+}
