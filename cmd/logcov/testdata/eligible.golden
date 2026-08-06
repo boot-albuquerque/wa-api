@@ -137,7 +137,9 @@ internal/waclient.Client.UploadReader.func1	EXCLUDED	X5
 internal/waclient.Client.WaitForConnection	EXCLUDED	X5
 internal/waclient.Client.addRecentMessage	EXCLUDED	X5
 internal/waclient.Client.applyAppStatePatches	EXCLUDED	X5
+internal/waclient.Client.applySendAck	EXCLUDED	X5
 internal/waclient.Client.autoReconnect	EXCLUDED	X5
+internal/waclient.Client.awaitSendAck	EXCLUDED	X5
 internal/waclient.Client.backgroundIfAsyncAck	EXCLUDED	X5
 internal/waclient.Client.bufferedDecrypt	EXCLUDED	X5
 internal/waclient.Client.bufferedDecrypt.func1	EXCLUDED	X6
@@ -269,6 +271,7 @@ internal/waclient.Client.handleStreamError.func1	EXCLUDED	X5
 internal/waclient.Client.handlerQueueLoop	EXCLUDED	X5
 internal/waclient.Client.handlerQueueLoop.func1	EXCLUDED	X5
 internal/waclient.Client.immediateRequestMessageFromPhone	EXCLUDED	X5
+internal/waclient.Client.invalidateParticipantCache	EXCLUDED	X5
 internal/waclient.Client.isExpectedDisconnect	EXCLUDED	X5
 internal/waclient.Client.issuePrivacyToken	EXCLUDED	X5
 internal/waclient.Client.issuePrivacyTokenAndSave	EXCLUDED	X5
@@ -278,6 +281,7 @@ internal/waclient.Client.makeQRData	EXCLUDED	X5
 internal/waclient.Client.maybeDeferredAck	EXCLUDED	X5
 internal/waclient.Client.maybeDeferredAck.func1	EXCLUDED	X6
 internal/waclient.Client.maybeDeferredAck.func2	EXCLUDED	X6
+internal/waclient.Client.migrateSendTargetToLID	EXCLUDED	X5
 internal/waclient.Client.migrateSessionStore	EXCLUDED	X5
 internal/waclient.Client.onDisconnect	EXCLUDED	X5
 internal/waclient.Client.parseBlocklist	EXCLUDED	X5
@@ -293,6 +297,7 @@ internal/waclient.Client.parseMsgMetaInfo	EXCLUDED	X5
 internal/waclient.Client.parseNewsletterMessages	EXCLUDED	X5
 internal/waclient.Client.parsePrivacySettings	EXCLUDED	X5
 internal/waclient.Client.parseReceipt	EXCLUDED	X5
+internal/waclient.Client.prepareBotMessage	EXCLUDED	X5
 internal/waclient.Client.prepareMessageNode	EXCLUDED	X5
 internal/waclient.Client.prepareMessageNode.func1	EXCLUDED	X6
 internal/waclient.Client.prepareMessageNodeV3	EXCLUDED	X5
@@ -305,6 +310,8 @@ internal/waclient.Client.refreshMediaConn	EXCLUDED	X5
 internal/waclient.Client.requestAppStateKeys	EXCLUDED	X5
 internal/waclient.Client.requestMissingAppStateKeys	EXCLUDED	X5
 internal/waclient.Client.resetExpectedDisconnect	EXCLUDED	X5
+internal/waclient.Client.resolveGroupSendTarget	EXCLUDED	X5
+internal/waclient.Client.resolveSendTarget	EXCLUDED	X5
 internal/waclient.Client.resolveTCTokenStorageLID	EXCLUDED	X5
 internal/waclient.Client.retryFrame	EXCLUDED	X5
 internal/waclient.Client.sendAck	EXCLUDED	X5
@@ -556,6 +563,7 @@ internal/waclient.ParseDisappearingTimerString	EXCLUDED	X5
 internal/waclient.RecentMessage.IsEmpty	EXCLUDED	X5
 internal/waclient.WebPushConfig.GetPushConfigAttrs	EXCLUDED	X5
 internal/waclient.applyBotMessageHKDF	EXCLUDED	X5
+internal/waclient.applyRequestExtraNodes	EXCLUDED	X5
 internal/waclient.buildBaseReceipt	EXCLUDED	X5
 internal/waclient.checkCertValidity	EXCLUDED	X5
 internal/waclient.concatBytes	EXCLUDED	X5
