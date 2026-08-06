@@ -113,3 +113,70 @@ Cobertura verificada como neutra (81.9% → 81.9%, isolado via
 outro commit concorrente não relacionado (`ace7770`,
 `feat(contacts): last-activity`), que também precisa de ajuste de
 baseline (fora do escopo deste fix).
+
+---
+
+## 2026-08-06 — `.coverage-baseline` `min_coverage=822` estava incorreto/não-reprodutível
+
+**Encontrado durante**: implementação do plano de vendoring do whatsmeow
+(branch `feature/vendor-whatsmeow`, `.omc/plans/vendor-whatsmeow-native-fork.md`).
+
+**Onde**: `.coverage-baseline:40` (na branch-base `feature/native-multisession-architecture`,
+commit `31287b9`).
+
+**Problema**: `make coverage-gate` reportava `81.9% < piso declarado 82.2%`
+logo após o vendoring (troca mecânica de import path em 45 arquivos, sem
+lógica nova). Para isolar se era regressão real, criei um worktree
+temporário exatamente no commit-pai (`git worktree add /tmp/... 31287b9`,
+sem nenhuma das minhas mudanças) e medi lá:
+`go test ./... -coverpkg=./... -coverprofile=... && go tool cover -func=... | tail -1`
+→ **81.9%**, idêntico à medição pós-vendoring. Ou seja, o `822` já estava
+errado/não-reprodutível **antes** desta branch existir — não foi regredido
+por mim, nunca foi 82.2% de forma reproduzível.
+
+**Causa provável (não confirmada)**: a medição anterior (registrada em
+`.coverage-baseline` por outra sessão, ver histórico do arquivo) pode ter
+capturado um resultado não-determinístico (timing/paralelismo de testes
+afetando quais branches de código executam) ou um erro de leitura pontual.
+Não investiguei a fundo — não é uma linha de código com bug, é uma medição
+de métrica.
+
+**Correção aplicada**: `min_coverage` ajustado para `819` (o valor honesto
+e reproduzível, confirmado 2x — antes e depois do vendoring), com nota
+explicando a investigação. Ver commit `d11979b` em
+`feature/vendor-whatsmeow`.
+
+**Status**: corrigido (branch `feature/vendor-whatsmeow`, ainda não
+mergeada em `develop` no momento deste registro).
+
+---
+
+## 2026-08-06 — `.log-coverage-baseline` tinha `min_func_coverage=`/`min_errpath_coverage=` duplicados
+
+**Encontrado durante**: mesma implementação acima (vendoring do whatsmeow).
+
+**Onde**: `.log-coverage-baseline`, herdado do commit `ace7770`
+(`feat(contacts): expõe GET /user/contacts/last-activity`, de uma sessão
+concorrente — não relacionado ao vendoring).
+
+**Problema**: o commit `ace7770` adicionou uma nova linha
+`min_func_coverage=707` (refletindo a métrica após a feature de
+last-activity) mas **não removeu** a linha anterior
+`min_func_coverage=710` (da Fase 2g, sessão diferente) — ficaram duas
+chaves `min_func_coverage=` no mesmo arquivo (710 e 707), e
+`min_errpath_coverage=856` duplicada de forma idêntica. `make check` (via
+`log-coverage-gate`) quebrava com `/bin/sh: [: 710\n707: integer
+expression expected` — o `grep -oE '^min_func_coverage=[0-9]+'` capturava
+as duas ocorrências, concatenadas com newline, inválidas como inteiro
+único pro `[ ... ]` do shell.
+
+**Correção aplicada**: removida a linha `min_func_coverage=710`/
+`min_errpath_coverage=856` mais antiga, mantendo só o par final
+(707/856, o valor efetivamente vigente pós-`ace7770`). Ver commit
+`d11979b` em `feature/vendor-whatsmeow`.
+
+**Status**: corrigido nesta branch. **Atenção**: como `ace7770` é de outra
+sessão/branch que pode não ter esse fix, vale confirmar que a duplicata
+não reaparece no merge — é um problema de "esqueceu de apagar a linha
+velha ao adicionar a nova", fácil de reintroduzir se outra sessão editar
+o arquivo do mesmo jeito.
