@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-license-check waclient-drift waclient-filesize
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-license-check waclient-drift waclient-filesize waclient-test
 
 # Default Go configuration
 GOCMD := go
@@ -251,10 +251,20 @@ waclient-drift: ## Falha se internal/waclient/proto/ (codigo gerado) divergir do
 	 fi; \
 	 ./scripts/waclient-diff.sh "$$version"
 
-waclient-filesize: ## Falha se algum .go de producao da raiz de internal/waclient/ passar de 300 linhas (ADR-0004, Fase A)
+waclient-filesize: ## Falha se algum .go de producao da raiz ou de socket/ de internal/waclient/ passar de 300 linhas (ADR-0004, Fase A)
 	@bash scripts/waclient-filesize-check.sh
 
-check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-filesize ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/tamanho do vendored
+# internal/waclient/ esta fora de TEST_PKGS (ver comentario no topo e o achado
+# F17 em HOUSEKEEP.md), entao um _test.go escrito la' nunca rodaria por `make
+# check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
+# subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
+# fases do ADR-0004 forem cobrindo o resto.
+WACLIENT_TEST_PKGS := ./internal/waclient/socket/
+
+waclient-test: ## Roda os testes dos subpacotes de internal/waclient/ ja' cobertos (ADR-0004)
+	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
+
+check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/tamanho/testes do vendored
 
 ##@ Utilities
 
