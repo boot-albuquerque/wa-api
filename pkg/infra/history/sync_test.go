@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/proto/waE2E"
+	"wa-api/internal/waclient/store"
+	"wa-api/internal/waclient/types"
+
 	"github.com/jmoiron/sqlx"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
 	_ "modernc.org/sqlite"
 
 	"wa-api/pkg/infra/db"

@@ -5,10 +5,10 @@ import (
 	"context"
 	"strings"
 	"testing"
+	whatsmeow "wa-api/internal/waclient"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 )
 
 // TestSessionEventDispatcher_SemMyClient: o dispatcher resolve userID ->

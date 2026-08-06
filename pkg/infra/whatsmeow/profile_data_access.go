@@ -5,8 +5,8 @@ import (
 
 	"wa-api/pkg/domain"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/types"
 )
 
 // ProfileDataAccess adapta *whatsmeow.Client para a interface

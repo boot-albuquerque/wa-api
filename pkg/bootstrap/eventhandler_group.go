@@ -1,8 +1,9 @@
 package bootstrap
 
 import (
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de grupo e de newsletter — o que acontece com uma coleção de

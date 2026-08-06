@@ -9,9 +9,9 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	wa "go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
+	wa "wa-api/internal/waclient"
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
 )
 
 // UserAdapter implementa ContactDirectory, BlocklistManager e PrivacyManager

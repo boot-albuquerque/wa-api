@@ -2,9 +2,9 @@ package whatsmeow
 
 import (
 	"testing"
+	whatsmeow "wa-api/internal/waclient"
 
 	"github.com/go-resty/resty/v2"
-	"go.mau.fi/whatsmeow"
 )
 
 // fakeMyClient é um MyClient mínimo para os testes do ClientManager.

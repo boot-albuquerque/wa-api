@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/appstate"
+	"wa-api/internal/waclient/proto/waE2E"
+	"wa-api/internal/waclient/store"
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
 )
 
 // fakeWAClient é o fake mínimo de waClient. Cada campo é um override

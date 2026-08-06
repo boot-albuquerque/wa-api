@@ -3,8 +3,9 @@ package whatsmeow
 import (
 	"strings"
 
+	"wa-api/internal/waclient/types"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // ParseJID parses a phone number or JID string into a WhatsApp JID

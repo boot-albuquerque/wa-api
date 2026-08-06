@@ -3,10 +3,9 @@ package whatsmeow
 import (
 	"context"
 
+	whatsmeow "wa-api/internal/waclient"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-
-	"go.mau.fi/whatsmeow"
 )
 
 // ClientLookup is the subset of ClientManager methods needed by adapters

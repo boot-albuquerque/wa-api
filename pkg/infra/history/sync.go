@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/proto/waE2E"
+	"wa-api/internal/waclient/types"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // historySender e' o recorte de *whatsmeow.Client que SyncHistoryForChat usa.

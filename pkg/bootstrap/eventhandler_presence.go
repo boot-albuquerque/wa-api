@@ -3,8 +3,9 @@ package bootstrap
 import (
 	"fmt"
 
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de presença: quem está online e quem está digitando.

@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
+	"wa-api/internal/waclient/proto/waHistorySync"
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/proto/waHistorySync"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de sincronização de histórico: o blob de conversas antigas que o

@@ -1,8 +1,9 @@
 package bootstrap
 
 import (
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos sobre contatos: bloqueio, privacidade, avatar, recado e troca de

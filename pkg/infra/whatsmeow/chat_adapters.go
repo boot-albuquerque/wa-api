@@ -8,9 +8,10 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"go.mau.fi/whatsmeow/proto/waCommon"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
+	"wa-api/internal/waclient/proto/waCommon"
+	"wa-api/internal/waclient/proto/waE2E"
+	"wa-api/internal/waclient/types"
+
 	"google.golang.org/protobuf/proto"
 )
 

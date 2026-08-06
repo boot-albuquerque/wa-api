@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"go.mau.fi/whatsmeow/types"
+	"wa-api/internal/waclient/types"
 )
 
 // TestMessageComposerAdapter_NewMessageID_NoSession devolve ErrNoSession.

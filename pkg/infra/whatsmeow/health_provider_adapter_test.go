@@ -3,8 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"testing"
-
-	"go.mau.fi/whatsmeow"
+	whatsmeow "wa-api/internal/waclient"
 )
 
 // TestSessionCounterAdapter_New devolve adapter não-nil.

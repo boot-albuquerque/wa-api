@@ -3,9 +3,10 @@ package bootstrap
 import (
 	"context"
 
+	"wa-api/internal/waclient/store"
+	waLog "wa-api/internal/waclient/util/log"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/store"
-	waLog "go.mau.fi/whatsmeow/util/log"
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"

@@ -14,10 +14,11 @@ import (
 	intwhatsmeow "wa-api/pkg/infra/whatsmeow"
 	mwpkg "wa-api/pkg/presentation/http/middleware"
 
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/types"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
 )
 
 // ── DB ──

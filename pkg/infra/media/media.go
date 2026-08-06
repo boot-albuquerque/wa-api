@@ -9,8 +9,9 @@ import (
 
 	wamgr "wa-api/pkg/infra/whatsmeow"
 
+	whatsmeow "wa-api/internal/waclient"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 )
 
 const (

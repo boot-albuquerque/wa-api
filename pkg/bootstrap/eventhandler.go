@@ -3,8 +3,9 @@ package bootstrap
 import (
 	"fmt"
 
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // eventState carrega o estado que os ramos do type-switch de myEventHandler

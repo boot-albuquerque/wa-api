@@ -8,8 +8,8 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	wa "go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
+	wa "wa-api/internal/waclient"
+	"wa-api/internal/waclient/types"
 )
 
 // toJIDs converte uma lista de domain.JID para o tipo do SDK.

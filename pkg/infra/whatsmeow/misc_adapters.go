@@ -9,9 +9,9 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 
-	wa "go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/types"
+	wa "wa-api/internal/waclient"
+	"wa-api/internal/waclient/appstate"
+	"wa-api/internal/waclient/types"
 )
 
 // appStateFetchTimeout é o teto de espera do pull de app-state — mais

@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/appstate"
+	"wa-api/internal/waclient/store"
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // fakeContactStore devolve um mapa pré-carregado de contatos, ou um erro

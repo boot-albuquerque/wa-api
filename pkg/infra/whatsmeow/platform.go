@@ -3,8 +3,9 @@ package whatsmeow
 import (
 	"strings"
 
+	"wa-api/internal/waclient/proto/waCompanionReg"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 )
 
 // GetPlatformTypeEnum converts a platform type string to the corresponding DeviceProps enum

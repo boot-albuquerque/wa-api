@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	waLog "go.mau.fi/whatsmeow/util/log"
+	"wa-api/internal/waclient/store/sqlstore"
+	waLog "wa-api/internal/waclient/util/log"
 
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"

@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de mensagem: a mensagem em si e os avisos sobre mensagens

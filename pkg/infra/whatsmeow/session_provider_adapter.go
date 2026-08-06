@@ -10,11 +10,12 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
-	waLog "go.mau.fi/whatsmeow/util/log"
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/store"
+	"wa-api/internal/waclient/types"
+	"wa-api/internal/waclient/types/events"
+	waLog "wa-api/internal/waclient/util/log"
+
 	"golang.org/x/net/proxy"
 )
 

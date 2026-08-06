@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/store"
+	"wa-api/internal/waclient/types"
 )
 
 // TestProfileDataAccess_PushName_NilStore verifica que PushName retorna ""

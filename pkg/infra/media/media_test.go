@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
+	whatsmeow "wa-api/internal/waclient"
+	"wa-api/internal/waclient/proto/waE2E"
+
 	"google.golang.org/protobuf/proto"
 )
 

@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
+	whatsmeow "wa-api/internal/waclient"
+
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 
 	port "wa-api/pkg/application/contracts"
 )

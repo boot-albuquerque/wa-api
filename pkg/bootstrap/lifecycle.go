@@ -8,10 +8,11 @@ import (
 
 	wmhelpers "wa-api/pkg/infra/whatsmeow"
 
+	whatsmeow "wa-api/internal/waclient"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 )
 
 // db field declaration as *sqlx.DB
