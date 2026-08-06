@@ -583,3 +583,137 @@ escolher sem a intenção.
 `TestDecodeMutationsRemovesFakeIndex` (que passa o mapa direto para
 `decodeMutations`), de modo que ele não se degrade silenciosamente caso venha a
 ser ligado. Pendente de investigação no upstream.
+
+---
+
+## F21 — `SQLStore.DeleteIdentity` usa a query de `LIKE`, não a de igualdade
+
+**Data**: 2026-08-06. **Contexto**: segunda metade da Fase B do ADR-0004
+(refactor de `internal/wa-noise/store/` + `store/sqlstore/`), mesmo racional de
+F18/F19/F20: código do upstream, achado na leitura para dividir o arquivo.
+
+**Onde**: `internal/wa-noise/store/sqlstore/store_identity.go:36` (era
+`store.go:92` antes da divisão desta fase):
+
+```go
+func (s *SQLStore) DeleteIdentity(ctx context.Context, address string) error {
+	_, err := s.db.Exec(ctx, deleteAllIdentitiesQuery, s.JID, address)
+	return err
+}
+```
+
+`deleteAllIdentitiesQuery` é `... WHERE our_jid=$1 AND their_id LIKE $2`.
+A query de igualdade existe logo acima, declarada e **sem nenhum uso**:
+
+```go
+deleteIdentityQuery = `DELETE FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id=$2`
+```
+
+**Problema**: `DeleteIdentity` recebe um endereço Signal completo
+(`<user>:<device>`), sem sufixo curinga, então na prática o `LIKE` degenera em
+igualdade e o efeito observável coincide — há teste provando isso
+(`TestDeleteIdentityRemovesOnlyThatAddress` em `store_identity_test.go`, que
+confere que `erin:1` sobrevive a `DeleteIdentity("erin:0")`). Duas consequências
+mesmo assim:
+
+1. `deleteIdentityQuery` é código morto — uma constante declarada que nenhum
+   caminho executa, exatamente o tipo de coisa que confunde na próxima leitura.
+2. Um endereço que contenha `%` ou `_` seria interpretado como padrão de `LIKE`
+   e apagaria mais linhas que o pedido. Hoje inalcançável, porque o endereço vem
+   de `types.JID.SignalAddressUser()` (dígitos + `:` + dígitos), mas é uma
+   dependência silenciosa numa função de apagar chave criptográfica.
+
+**Correção sugerida**: trocar para `deleteIdentityQuery`. Uma linha:
+
+```go
+_, err := s.db.Exec(ctx, deleteIdentityQuery, s.JID, address)
+```
+
+**Status**: **não corrigido**. A Fase B é estrutural por contrato, e isto é
+mudança de comportamento em entrada patologica (ainda que a intenção do autor
+seja evidente pela existência da constante não usada). Pendente de decisão do
+usuário.
+
+---
+
+## F22 — `record.Session` recém-criado dá panic em `Serialize()`
+
+**Data**: 2026-08-06. **Contexto**: escrita dos testes de
+`internal/wa-noise/store/sessioncache.go` e `signal.go` na Fase B do ADR-0004.
+
+**Onde**: não é código nosso — é `go.mau.fi/libsignal@v0.2.1`,
+`state/record/SessionState.go:517` (`State.structure()`), alcançado por
+`record.Session.Serialize()`. O caminho no nosso código:
+
+- `internal/wa-noise/store/signal.go:96` e `signal.go:115`
+  (`LoadSession` devolve `record.NewSession(...)` quando não há sessão; e
+  `StoreSession` chama `record.Serialize()`).
+- `internal/wa-noise/store/sessioncache.go:87` e `sessioncache.go:113`
+  (`WithCachedSessions` cria o mesmo record vazio; `PutCachedSessions` serializa
+  as entradas `Dirty`).
+
+**Problema**: um `record.NewSession(...)` "fresco" tem `localIdentityPublic`,
+`remoteIdentityPublic`, `senderBaseKey` e `senderChain` nil. `Serialize()` os
+desreferencia sem checar e dá `SIGSEGV` — panic, não erro. Reprodução (é um
+teste versionado, `TestFreshSessionIsNotSerializable` em `sessioncache_test.go`):
+
+```go
+_ = record.NewSession(SignalProtobufSerializer.Session, SignalProtobufSerializer.State).Serialize()
+// panic: runtime error: invalid memory address or nil pointer dereference
+//   go.mau.fi/libsignal/keys/identity.(*Key).Serialize(...)
+//   .../state/record/SessionState.go:517
+```
+
+**Por que não explode em produção hoje**: `PutCachedSessions` só serializa
+entradas marcadas `Dirty`, e `Dirty` só é setado por `putCachedSession`, que o
+libsignal chama depois do handshake — quando o state já está preenchido.
+`StoreSession` idem. É um panic latente atrás de uma invariante não declarada,
+não um bug ativo.
+
+**Correção sugerida**: nenhuma no libsignal (é dependência externa). Do nosso
+lado, a defesa barata seria `PutCachedSessions` pular entradas cujo record ainda
+não tem state utilizável, mas não há predicado exportado para checar isso sem
+chamar `Serialize()` — que é exatamente o que panica. A alternativa honesta é
+`recover()` localizado, que é pior do que o problema.
+
+**Status**: **não corrigido**, documentado. Ficam versionados dois testes que
+travam a assimetria para quem for mexer no cache de sessão:
+`TestFreshSessionIsNotSerializable` (prova o panic) e
+`TestStoredSessionFixtureRoundTrips` (mostra a forma mínima de sessão que
+sobrevive ao round trip, usada como duplo nos demais testes).
+
+---
+
+## F23 — caminho Postgres de `store/sqlstore/` não é exercitado por teste
+
+**Data**: 2026-08-06. **Contexto**: cobertura da Fase B do ADR-0004
+(`store/sqlstore/` fechou em 89.7% de statements).
+
+**Onde**: os três pontos que ramificam por dialeto:
+
+- `internal/wa-noise/store/sqlstore/store_session.go:66`
+  (`GetManySessions`, ramo `PostgresArrayWrapper != nil`)
+- `internal/wa-noise/store/sqlstore/store_appstate.go:106`
+  (`DeleteAppStateMutationMACs`, mesmo ramo)
+- `internal/wa-noise/store/sqlstore/lidmap.go:171`
+  (`GetManyLIDsForPNs`, mesmo ramo)
+
+**Problema**: os testes rodam sobre `modernc.org/sqlite` (sem CGO, sem Docker,
+como o resto do repositório), então só o ramo genérico com placeholders `$N`
+expandidos é executado. O ramo Postgres — que usa `= ANY($2)` com o array
+envolvido por `PostgresArrayWrapper` — nunca roda em `make check`. **Produção
+usa Postgres** (`pkg/bootstrap/main.go:339`), ou seja: o caminho testado e o
+caminho executado em produção são ramos diferentes do mesmo `if`.
+
+Não há evidência de defeito neles — são o código original do upstream, e a
+divergência entre os dois ramos é só a sintaxe do `IN`. Mas é a maior lacuna de
+cobertura do pacote, e é justamente na metade que roda em produção.
+
+**Correção sugerida**: subir um Postgres efêmero para o `make check` (testcontainers
+ou um serviço no CI) e parametrizar `newTestContainer` por dialeto, rodando a
+mesma suíte duas vezes. É decisão de infraestrutura de CI, não de código — hoje
+o repositório inteiro é deliberadamente Docker-free nos testes.
+
+**Status**: **não corrigido**, registrado como lacuna consciente. Também anotado
+na seção "Fora do escopo" da entrada da Fase B em
+`internal/wa-noise/PATCHES.md`.

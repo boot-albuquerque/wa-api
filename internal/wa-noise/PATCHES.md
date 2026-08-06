@@ -852,3 +852,360 @@ expõem acesso lazy. Nenhuma mudança estrutural foi necessária.
   pacote mutável é um cheiro de arquitetura menor (não é injeção de
   dependência), mas mudar isso afetaria a API pública do pacote sem ganho
   correspondente — registrado aqui, não corrigido.
+
+---
+
+## Fase B — `internal/wa-noise/store/` e `store/sqlstore/`, 2026-08-06
+
+Segunda metade da Fase B do ADR-0004 (a primeira foi `appstate/`, acima).
+`store/` e' a camada de **persistencia**: identidade do dispositivo, sessoes do
+protocolo Signal, sender keys de grupo, chaves de sincronizacao de app state,
+segredos de mensagem, tokens de privacidade e o mapa LID <-> PN. E' a area mais
+sensivel tocada ate' agora — um bug aqui corrompe estado de sessao ou perde
+chave, e o sintoma so' aparece depois, como mensagem que nao decifra.
+
+Por isso a regua foi mais apertada que nas fases anteriores: **so' movimentacao
+de declaracao e substituicao de literal por constante de valor identico**.
+Nenhuma funcao foi decomposta, nenhum helper privado novo foi criado, nenhuma
+query SQL teve uma virgula alterada.
+
+### Regra geral desta fase
+
+**Comportamento nao mudou em nenhuma entrada abaixo.** As divisoes sao
+movimentacao pura de declaracoes de topo entre arquivos do **mesmo pacote** e do
+**mesmo diretorio**. A prova foi feita mecanicamente, arquivo a arquivo: a lista
+de declaracoes de topo (`^(type|func|var|const) `) do arquivo original foi
+comparada com `diff` contra a uniao das declaracoes dos arquivos resultantes, e
+so' as substituicoes de literal por constante nomeada aparecem como diferenca.
+
+**Cuidado especifico com locks.** `SQLStore` tem dois mutexes com escopos
+distintos, e a divisao preservou cada um dentro de um unico arquivo:
+
+- `preKeyLock` — usado so' por `GenOnePreKey` e `GetOrGenPreKeys`, ambos agora em
+  `store_prekey.go`. Nenhum outro arquivo o toca.
+- `contactCacheLock` — usado por todos os metodos de contato e pelo privado
+  `getContact`, que **assume o lock ja' tomado pelo chamador**. Todos foram para
+  `store_contact.go` juntos, de proposito: se `getContact` tivesse ficado em
+  outro arquivo, a proxima pessoa a mexer nele nao teria como saber do contrato
+  implicito. Foi adicionado um comentario declarando isso (unica mudanca de
+  comentario feita nesta fase).
+- `migratedPNSessionsCache` (`exsync.Set`) — usado so' por `MigratePNToLID`, em
+  `store_lid_migration.go`.
+- `CachedLIDMap.lidCacheLock` — `lidmap.go` nao foi dividido, entao permanece
+  intacto.
+
+### Divisoes por arquivo
+
+Formato: `arquivo original` (linhas antes → depois) → arquivos criados.
+
+#### `store/sqlstore/store.go` (1119 → 62)
+
+Era o maior arquivo do fork fora de `proto/` e de `internals.go`: **doze**
+implementacoes de interface de store diferentes num arquivo so', cada uma com
+seu proprio bloco de constantes de query logo acima dos metodos. O eixo de
+divisao foi o obvio e ja' declarado pelo proprio codigo — **uma interface do
+pacote `store` por arquivo** — porque os blocos de query ja' estavam agrupados
+assim; faltava so' a fronteira de arquivo.
+
+- **Criado** `store_identity.go` (52): as 4 queries de
+  `whatsmeow_identity_keys` e `PutIdentity`, `DeleteAllIdentities`,
+  `DeleteIdentity`, `IsTrustedIdentity` (`store.IdentityStore`).
+- **Criado** `store_session.go` (120): as queries de `whatsmeow_sessions`,
+  `addressSessionTuple`, `sessionScanner`, `GetSession`, `HasSession`,
+  `GetManySessions`, `PutManySessions`, `PutSession`, `DeleteAllSessions`,
+  `deleteAllSessions`, `DeleteSession`.
+- **Criado** `store_lid_migration.go` (113): as tres queries `migratePNToLID*`,
+  `deleteAllIdentityKeysQuery`, `deleteAllSenderKeysQuery`, os privados
+  `deleteAllSenderKeys`/`deleteAllIdentityKeys` e `MigratePNToLID`.
+  - **Por que num arquivo proprio e nao em `store_session.go`**: `MigratePNToLID`
+    pertence formalmente a `store.SessionStore`, mas reescreve **tres** tabelas
+    (sessoes, identity keys e sender keys) numa unica transacao. Nao e' uma
+    operacao de sessao: e' uma migracao que atravessa os tres stores com chave
+    por endereco Signal, e o fato de as tres irem juntas e' a propria invariante
+    (uma sessao migrada sem a identity key correspondente falharia na
+    verificacao de confianca da proxima mensagem). Isolar deixa isso visivel.
+  - `deleteAllSessions` continua em `store_session.go` porque e' chamada tanto
+    pelo metodo publico `DeleteAllSessions` quanto pela migracao.
+- **Criado** `store_prekey.go` (128): as 7 queries de `whatsmeow_pre_keys`,
+  `genOnePreKey`, `getNextPreKeyID`, `GenOnePreKey`, `GetOrGenPreKeys`,
+  `scanPreKey`, `GetPreKey`, `RemovePreKey`, `MarkPreKeysAsUploaded`,
+  `UploadedPreKeyCount` (`store.PreKeyStore`). Leva junto `preKeyLock`.
+- **Criado** `store_senderkey.go` (34): `store.SenderKeyStore`.
+- **Criado** `store_appstate_keys.go` (69): `store.AppStateSyncKeyStore` — as
+  chaves de decifragem de app state.
+- **Criado** `store_appstate.go` (126): `store.AppStateStore` — versao/hash da
+  colecao e os MACs de mutacao. Separado do anterior porque sao tabelas e
+  ciclos de vida diferentes: a chave e' material criptografico de longa duracao,
+  a versao/MAC e' estado de sincronizacao descartavel.
+- **Criado** `store_contact.go` (247): `store.ContactStore`, os dois
+  `MassInsertBuilder` e `getContact`. Leva junto `contactCacheLock` e
+  `contactCache`.
+- **Criado** `store_chatsettings.go` (70): `store.ChatSettingsStore`.
+- **Criado** `store_msgsecret.go` (74): `store.MsgSecretStore`.
+- **Criado** `store_privacytoken.go` (100): `store.PrivacyTokenStore`.
+- **Criado** `store_nctsalt.go` (43): `store.NCTSaltStore`.
+- **Criado** `store_eventbuffer.go` (101): `store.EventBuffer` — buffer de
+  evento recebido (deduplicacao de decriptacao) e buffer de saida (retry).
+- **Criado** `constants.go` (86): ver a secao de magic numbers abaixo.
+- `store.go` ficou com o que e' do tipo e nao de nenhuma interface especifica:
+  `ErrInvalidLength`, `PostgresArrayWrapper`, a struct `SQLStore`, `NewSQLStore`
+  e o assert `var _ store.AllSessionSpecificStores`.
+
+Nota sobre as queries que ficaram **fora** do bloco de constantes original:
+`putPrivacyTokens`/`getPrivacyToken`/`deleteExpiredPrivacyTokens` e as tres de
+NCT salt estavam declaradas dezenas de linhas acima dos metodos que as usam, com
+metodos de outro store no meio (`DeleteExpiredPrivacyTokens` aparecia depois de
+`DeleteNCTSalt`). A divisao reagrupou cada query com seus metodos. Isso e'
+movimentacao, nao mudanca.
+
+#### `store/store.go` (323 → 205)
+
+- **Criado** `device.go` (134): `DeviceContainer`, a struct `Device`,
+  `Device.GetJID`, `Device.GetLID`, `ErrDeviceDeleted`, `Device.Save`,
+  `Device.Delete`, `Device.SetAllStores`, `Device.GetAltJID`.
+- **Por que**: `store.go` misturava **duas coisas de natureza diferente** — o
+  catalogo de **interfaces** que o pacote define (o contrato que `sqlstore`
+  implementa e que o resto do whatsmeow consome) com a unica **implementacao
+  concreta** do pacote, o agregado `Device`. `store.go` ficou so' com as
+  interfaces e os tipos de dado que elas trocam (`AppStateSyncKey`,
+  `ContactEntry`, `PrivacyToken`, `LIDMapping` etc.); `device.go` com o agregado
+  e seu ciclo de vida.
+- `Device` ficou em 134 linhas porque a struct sozinha tem 45 campos.
+
+#### `store/noop.go` (306 → 133)
+
+- **Criado** `noop_appstate.go` (49): os 7 metodos de `AppStateSyncKeyStore` +
+  `AppStateStore`.
+- **Criado** `noop_contacts.go` (94): os metodos de `ContactStore`,
+  `ChatSettingsStore`, `MsgSecretStore`, `PrivacyTokenStore` e `NCTSaltStore` —
+  o bloco de "dados do usuario".
+- **Criado** `noop_buffers.go` (66): `EventBuffer` (incluindo o buffer de saida)
+  e `LIDStore`.
+- `noop.go` ficou com o tipo `NoopStore`, `nilStore`, `NoopDevice`, os asserts de
+  interface, e os metodos de `IdentityStore`, `SessionStore`, `PreKeyStore`,
+  `SenderKeyStore` e `DeviceContainer` — o nucleo cripto.
+- **Por que este corte**: `NoopStore` e' uma parede de 60 metodos triviais, e a
+  ordem original ja' seguia a ordem das interfaces em `store.go`. O corte apenas
+  materializou os grupos que ja' existiam visualmente, com a fronteira escolhida
+  pelo que cada grupo protege: chaves (fica em `noop.go`), dados de usuario, e
+  buffers/cache.
+
+### Arquivos NAO divididos
+
+- `store/sqlstore/container.go` (281), `store/sqlstore/lidmap.go` (264),
+  `store/clientpayload.go` (212), `store/signal.go` (190),
+  `store/sessioncache.go` (125): todos ja' dentro do teto e cada um com uma
+  responsabilidade so' (ciclo de vida do banco/device; cache do mapa LID;
+  payload de handshake; adaptador `store.SignalProtocol`; cache de sessao por
+  contexto). Dividir seria corte mecanico, que o ADR-0004 nao pede.
+
+### Magic numbers e strings extraidos para constantes nomeadas
+
+Escopo: **todos** os arquivos de `store/sqlstore/`, nao so' os divididos.
+
+**Criado** `store/sqlstore/constants.go` (86):
+
+| Literal original | Constante | Onde estava |
+|---|---|---|
+| `32` (chave) | `curve25519KeyLength` | `[32]byte` de identity key e prekey, `len(...) != 32` em `IsTrustedIdentity`/`scanPreKey`/`scanDevice` |
+| `64` | `signedPreKeySignatureLength` | `len(preKeySig) != 64` e `(*[64]byte)(preKeySig)` em `scanDevice` |
+| `128` | `appStateHashLength` | `[128]byte` do LTHash e `len(uncheckedHash) != 128` |
+| `32` (segredo ADV) | `advSecretKeyLength` | `random.Bytes(32)` em `NewDevice` |
+| `1` | `initialSignedPreKeyID` | `CreateSignedPreKey(1)` em `NewDevice` |
+| `32` (hash) | `ciphertextHashLength` | `[32]byte` do `ciphertext_hash` do buffer de evento |
+| `400` | `mutationBatchSize` | ja' era constante; movida para ca' |
+| `300` | `contactBatchSize` | ja' era constante; movida para ca' |
+| `"($1, $2, $3, $%d, $%d)"` | `mutationMACPlaceholderPostgres` | `putAppStateMutationMACs` |
+| `"(?1, ?2, ?3, ?%d, ?%d)"` | `mutationMACPlaceholderSQLite` | `putAppStateMutationMACs` |
+| `"($1, $2, $3, $4, $5)"` | `privacyTokenValuesTemplate` | alvo do `strings.ReplaceAll` em `PutPrivacyTokens` |
+| `"muted_until"` / `"pinned"` / `"archived"` | `chatSettingColumnMutedUntil` / `...Pinned` / `...Archived` | nome de coluna interpolado em `putChatSettingQuery` |
+| `-1` | `mutedForeverDBValue` | sentinela de mute permanente em `PutMutedUntil` |
+| `14*24*time.Hour` | `bufferedEventRetention` | `DeleteOldBufferedHashes` |
+| `7*24*time.Hour` | `outgoingEventRetention` | `DeleteOldOutgoingEvents` |
+| `2` | `decryptionTxnCallerSkip` | `ContextKeyDoTxnCallerSkip` em `DoDecryptionTxn` |
+| `":%"` | `signalAddressWildcardSuffix` | os quatro `phone+":%"` dos `deleteAll*` |
+
+Tres notas sobre onde a extracao **parou de proposito**:
+
+- `curve25519KeyLength` e `ciphertextHashLength` valem ambos `32` e sao
+  constantes **separadas**: um e' o tamanho de uma chave Curve25519, o outro o de
+  um SHA-256 usado como chave de deduplicacao. Coincidem hoje e nao tem relacao.
+  Mesmo racional que a fase de `appstate/` usou para `macLength` ×
+  `appStateKeyPartLength`.
+- **As queries SQL nao foram fragmentadas em constantes de nome de tabela e
+  coluna.** Uma query e' legivel exatamente porque e' uma string contigua; trocar
+  `SELECT session FROM whatsmeow_sessions WHERE our_jid=$1` por concatenacao de
+  constantes tornaria o codigo ilegivel sem eliminar nenhum valor "magico" — o
+  nome da tabela nao e' um numero sem explicacao, e' o proprio SQL. A unica
+  excecao sao os nomes de coluna de `whatsmeow_chat_settings`, que **ja' eram**
+  interpolados com `fmt.Sprintf` (SQL nao aceita nome de coluna parametrizado):
+  ali o literal solto realmente existia, e virou constante.
+- Os `$%d` calculados em `GetManySessions`, `DeleteAppStateMutationMACs` e
+  `PutPrivacyTokens` continuam inline: sao aritmetica de posicao de placeholder,
+  nao parametro de protocolo, e nomear afastaria o numero do laco que o produz.
+
+Em `store/`: nenhuma extracao. Os literais de `clientpayload.go`
+(`"000"`, `"0.1"`, `"Desktop"`, `10240`, `60`, `WAVersionContainer{2, 3000, ...}`)
+sao **dados declarativos de um payload de protocolo** — cada um ja' esta' ligado
+ao campo protobuf que o nomeia (`Mcc`, `OsVersion`, `Device`, `StorageQuotaMb`,
+`ThumbnailSyncDaysLimit`). Extrair `mccPadrao = "000"` nao acrescenta informacao
+que `Mcc: proto.String("000")` ja' nao de'. `MutedForever` e `contextKeySessionCache`
+ja' eram constantes/variaveis nomeadas.
+
+### Auditoria de logging
+
+Varrido `internal/wa-noise/store/` e `store/sqlstore/` atras de escrita de log
+fora do `waLog.Logger` injetado. Resultado: **nenhum bypass**. Nao ha'
+`fmt.Print*`, `log.*` do stdlib nem `println`. Os pontos de log sao:
+
+- `sqlstore`: `s.log.Infof`/`Debugf` em `MigratePNToLID` e `s.log.Warnf` em
+  `PutAllContactNames`/`PutManyRedactedPhones`. `s.log` e' o `Container.log`
+  promovido via embedding, alimentado por `NewWithWrappedDB` com o logger que o
+  bootstrap passa (`sqlstore.New(..., dbLog)` em `pkg/bootstrap/main.go:339`),
+  ja' ligado ao `walog.Bridge` sobre zerolog (`pkg/infra/wa-noise/walog/`).
+  Quando o logger e' nil, `NewWithWrappedDB` troca por `waLog.Noop` — nao ha'
+  caminho de `s.log` nil.
+- `lidmap.go:222` e `sessioncache.go:92` usam `zerolog.Ctx(ctx)` direto, em vez
+  do `waLog.Logger`. **Nao e' bypass do destino** (chega no mesmo zerolog que o
+  bridge alimenta), e' so' um caminho diferente ate' ele — e nesses dois pontos
+  e' deliberado: `CachedLIDMap` e o cache de sessao nao recebem `waLog.Logger`
+  nenhum, so' tem o contexto. Nao foi mexido; adicionar plumbing de logger
+  contraria a instrucao desta fase de nao criar infraestrutura de log nova.
+
+Nenhuma infraestrutura de log foi adicionada.
+
+### Cobertura de teste
+
+Os dois diretorios nao tinham **nenhum** `_test.go`. Cobertura final:
+
+| Pacote | Cobertura |
+|---|---|
+| `internal/wa-noise/store` | **98.6%** de statements |
+| `internal/wa-noise/store/sqlstore` | **89.7%** de statements |
+
+Duas estrategias distintas, pelo que cada pacote e':
+
+- **`store/`** e' interface + agregado, sem I/O: os duplos em memoria
+  (`recordingContainer`, `memSessionStore`, `memSignalStore`) rodam tudo sem
+  banco. Embutem `NoopStore` e sobrescrevem so' os metodos de interesse — o
+  resto falha ruidosamente se for chamado por engano.
+- **`store/sqlstore/`** e' quase inteiramente SQL: um duplo provaria apenas que o
+  duplo funciona. Os testes rodam contra **SQLite real** em `t.TempDir()`, com o
+  schema de producao (`upgrades.Table` via `Container.Upgrade`), sem CGO e sem
+  Docker — `modernc.org/sqlite`, o mesmo driver ja' usado em
+  `pkg/infra/history/sync_test.go`. So' assim da' para provar os `ON CONFLICT`,
+  os `CHECK()` de tamanho, os `ON DELETE CASCADE` e os `CASE` de traducao
+  LID <-> PN.
+
+Arquivos criados, 1:1 com os de producao:
+
+- `store/`: `device_test.go` (243), `noop_test.go` (202),
+  `sessioncache_test.go` (349), `signal_test.go` (525),
+  `clientpayload_test.go` (282).
+- `store/sqlstore/`: `testsupport_test.go` (84), `container_test.go` (322),
+  `lidmap_test.go` (369), `store_identity_test.go` (169),
+  `store_session_test.go` (192), `store_lid_migration_test.go` (175),
+  `store_prekey_test.go` (202), `store_senderkey_test.go` (103),
+  `store_appstate_keys_test.go` (180), `store_appstate_test.go` (341),
+  `store_contact_test.go` (369), `store_chatsettings_test.go` (147),
+  `store_msgsecret_test.go` (181), `store_privacytoken_test.go` (226),
+  `store_nctsalt_test.go` (98), `store_eventbuffer_test.go` (261).
+
+O que os testes travam, alem do round trip obvio de cada getter/setter:
+
+- **Isolamento por `our_jid`/`jid`**: cada store por sessao tem um teste provando
+  que o dado de uma conta nao vaza para outra. Numa API multi-sessao como o
+  `wa-api`, esse e' o vazamento com pior consequencia.
+- **Semantica de `ON CONFLICT`**, que difere por tabela e nao e' obvia:
+  app state sync key e privacy token so' aceitam timestamp **maior** (uma
+  re-entrega fora de ordem nao pode sobrescrever a chave boa); message secret e'
+  `DO NOTHING` (o primeiro segredo manda); device atualiza **so'** os campos
+  mutaveis, deixando as chaves cripto intactas — ha' teste explicito provando
+  que salvar de novo nao reescreve a noise key, porque reescreve-la invalidaria
+  todas as sessoes.
+- **`MigratePNToLID`** move as tres tabelas juntas, apaga as linhas PN antigas, e
+  a **segunda chamada e' curto-circuitada** pelo cache. Esse ultimo tem teste
+  dedicado: sem o cache, uma sessao nova criada em PN depois da migracao seria
+  movida por cima da sessao LID em uso.
+- **Traducao LID <-> PN** nos `CASE` de `getMsgSecret` e `getPrivacyToken`, nas
+  duas direcoes, com o `whatsmeow_lid_map` populado.
+- **Loteamento**: `PutAppStateMutationMACs` e `PutAllContactNames` sao
+  exercitados com mais itens que `mutationBatchSize`/`contactBatchSize`,
+  conferindo o primeiro e o ultimo item — um bug de chunking gravaria so' o
+  primeiro lote e passaria despercebido em teste pequeno.
+- **`ON DELETE CASCADE`**: apagar o device leva as sessoes; apagar a versao de
+  app state leva os MACs de mutacao.
+- **Contrato do `NoopStore`**, que tem duas metades opostas: com
+  `ErrDeviceDeleted` instalado, ~57 metodos tem que **falhar** (e' o que barra o
+  uso de uma sessao encerrada), mas os buffers de evento/retry e
+  `GetAllAppStateSyncKeys` devolvem `nil` de proposito — sao caches opcionais, e
+  falhar neles quebraria o pipeline de mensagem em vez de proteger.
+  `DoDecryptionTxn` executa o callback sem transacao, senao um Device sem banco
+  nao decifraria nada.
+
+### Achados NAO corrigidos (registrados em `HOUSEKEEP.md`)
+
+Nenhum bug de logica foi encontrado nos caminhos exercitados. Tres observacoes
+que **nao** foram mexidas por serem mudanca de comportamento:
+
+1. **`SQLStore.DeleteIdentity` executa `deleteAllIdentitiesQuery` (com `LIKE`),
+   nao `deleteIdentityQuery` (com `=`)** — `store_identity.go:36`. Como o
+   endereco e' passado sem o sufixo curinga, o `LIKE` degenera em igualdade e o
+   efeito observavel coincide (ha' teste provando que so' o endereco pedido
+   some). Mas `deleteIdentityQuery` fica declarada e **sem nenhum uso**, e um
+   endereco que por acaso contenha `%` ou `_` seria tratado como padrao. E' assim
+   no upstream. Trocar para a query certa e' o fix, mas muda comportamento em
+   entrada patologica.
+2. **Um `record.Session` recem-criado nao e' serializavel** — o libsignal
+   *panica* em `Serialize()` porque as chaves de identidade ainda sao nil. E'
+   correto no dominio (uma sessao sem handshake nao tem o que persistir), e
+   `PutCachedSessions` so' serializa entradas marcadas `Dirty`, que em producao
+   ja' passaram pelo handshake. Mas e' um panic latente e nao um erro. Foi
+   documentado com dois testes (`TestFreshSessionIsNotSerializable` e
+   `TestStoredSessionFixtureRoundTrips`) para que a assimetria fique explicita
+   para quem mexer no cache de sessao.
+3. **`ErrInvalidLength` e' inalcancavel na pratica** em `IsTrustedIdentity`,
+   `scanPreKey`, `scanDevice` e `GetAppStateVersion`: o schema tem `CHECK()` de
+   tamanho em todas as colunas correspondentes, entao o banco recusa a escrita
+   antes. Nao e' defeito (a checagem em Go e' defesa em profundidade e o proprio
+   comentario do upstream diz "This should be impossible"), mas explica por que
+   esses ramos nao aparecem cobertos. Ha' testes provando que o `CHECK` e' quem
+   barra.
+
+### Gates atualizados
+
+- `scripts/waclient-filesize-check.sh`: `DIRS` ganhou `internal/wa-noise/store/`
+  e `internal/wa-noise/store/sqlstore/`. Nenhum arquivo dos dois diretorios tem
+  cabecalho de codigo gerado, entao a isencao continua valendo so' para
+  `internals.go`. O gate passa a cobrir 138 arquivos.
+- `Makefile`: `WACLIENT_TEST_PKGS` ganhou `./internal/wa-noise/store/` e
+  `./internal/wa-noise/store/sqlstore/` — `internal/wa-noise/` segue fora de
+  `TEST_PKGS` (achado F17), entao sem isso os `_test.go` acima nunca rodariam em
+  `make check`.
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio.
+- **`internal/wa-noise/store/sqlstore/upgrades/*.sql` nao foi tocado.** Migracao
+  de schema e' historico append-only: cada arquivo ja' foi aplicado em bancos de
+  producao e esta' registrado em `whatsmeow_version`. Editar, dividir ou
+  reformatar um deles nao "melhora" nada — bancos existentes nao reexecutam a
+  migracao — e faria o schema divergir entre instalacoes novas e antigas. Alem
+  disso sao `.sql`, nao `.go`, e o teto de 300 linhas do ADR-0004 e' sobre
+  arquivo de producao Go. O gate de tamanho foi escrito para nao alcanca-los
+  (itera sobre `"$dir"/*.go`).
+- `upgrades/upgrades.go` (o registro da tabela de migracao) tambem nao foi
+  tocado: e' a lista `//go:embed` das migracoes acima, com a mesma natureza de
+  historico append-only.
+- Os dois usos de `zerolog.Ctx(ctx)` (secao de logging acima) — trocar por
+  `waLog.Logger` exigiria adicionar plumbing de logger em `CachedLIDMap` e no
+  cache de sessao, que e' infraestrutura nova.
+- `PostgresArrayWrapper` como variavel global de pacote mutavel e' o mesmo cheiro
+  ja' registrado para `argo.Store`: e' API publica documentada do upstream
+  (`whatsmeow.PostgresArrayWrapper = pq.Array`), mudar quebraria consumidores.
+  Registrado aqui, nao corrigido.
+- O caminho Postgres (`PostgresArrayWrapper != nil`) de `GetManySessions`,
+  `DeleteAppStateMutationMACs` e `GetManyLIDsForPNs` nao e' exercitado pelos
+  testes — eles rodam sobre SQLite, que e' o dialeto testavel sem Docker. E' a
+  maior lacuna dos 89.7%. Cobri-lo exigiria subir um Postgres no `make check`,
+  decisao de infraestrutura fora do escopo desta fase.
