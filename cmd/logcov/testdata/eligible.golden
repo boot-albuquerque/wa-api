@@ -1767,8 +1767,8 @@ pkg/infra/storage.S3Manager.TestConnection	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
-pkg/infra/whatsmeow.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:137);uncovered:L2(S-ret,chat_adapters.go:147)
-pkg/infra/whatsmeow.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:158)
+pkg/infra/whatsmeow.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:30);uncovered:L2(S-ret,chat_adapters.go:40)
+pkg/infra/whatsmeow.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:51)
 pkg/infra/whatsmeow.ClientForGetter	EXCLUDED	X1
 pkg/infra/whatsmeow.ClientForGetter.func1	EXCLUDED	X6
 pkg/infra/whatsmeow.ClientManager.AddWSConn	ELIGIBLE	covered
@@ -1813,8 +1813,8 @@ pkg/infra/whatsmeow.GroupAdapter.SetJoinApprovalMode	ELIGIBLE	uncovered:L1;uncov
 pkg/infra/whatsmeow.GroupAdapter.UpdateGroupParticipants	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.GroupAdapter.UpdateRequestParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group_participants_adapters.go:71)
 pkg/infra/whatsmeow.GroupAdapter.client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group_adapters.go:52)
-pkg/infra/whatsmeow.JIDResolverAdapter.ResolveJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:29)
-pkg/infra/whatsmeow.JIDResolverAdapter.ResolveQualifiedJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:48)
+pkg/infra/whatsmeow.JIDResolverAdapter.ResolveJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid_resolver_adapter.go:24)
+pkg/infra/whatsmeow.JIDResolverAdapter.ResolveQualifiedJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid_resolver_adapter.go:43)
 pkg/infra/whatsmeow.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_composer_adapter.go:26)
 pkg/infra/whatsmeow.MiscAdapter.ArchiveChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,misc_adapters.go:59)
 pkg/infra/whatsmeow.MiscAdapter.ListSubscribed	ELIGIBLE	uncovered:L1
@@ -1841,9 +1841,9 @@ pkg/infra/whatsmeow.NewSessionProviderWithLogger.func1	EXCLUDED	X6
 pkg/infra/whatsmeow.NewUserAdapter	EXCLUDED	X1
 pkg/infra/whatsmeow.NewZerologAdapter	EXCLUDED	X1
 pkg/infra/whatsmeow.ParseJID	ELIGIBLE	covered
-pkg/infra/whatsmeow.PresenceControllerAdapter.SendChatPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:101);uncovered:L2(S-ret,chat_adapters.go:107)
-pkg/infra/whatsmeow.PresenceControllerAdapter.SendPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:81);uncovered:L2(S-ret,chat_adapters.go:91);uncovered:L2(S-ret,chat_adapters.go:94)
-pkg/infra/whatsmeow.PresenceControllerAdapter.SubscribePresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:114);uncovered:L2(S-ret,chat_adapters.go:120)
+pkg/infra/whatsmeow.PresenceControllerAdapter.SendChatPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,presence_adapters.go:47);uncovered:L2(S-ret,presence_adapters.go:53)
+pkg/infra/whatsmeow.PresenceControllerAdapter.SendPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,presence_adapters.go:27);uncovered:L2(S-ret,presence_adapters.go:37);uncovered:L2(S-ret,presence_adapters.go:40)
+pkg/infra/whatsmeow.PresenceControllerAdapter.SubscribePresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,presence_adapters.go:60);uncovered:L2(S-ret,presence_adapters.go:66)
 pkg/infra/whatsmeow.ProfileDataAccess.ContactInfo	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.ProfileDataAccess.OwnJID	EXCLUDED	X1
 pkg/infra/whatsmeow.ProfileDataAccess.ProfilePictureURL	ELIGIBLE	uncovered:L1
@@ -1878,7 +1878,7 @@ pkg/infra/whatsmeow.normalizeBlocklistJID	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.realWAClient.Store	EXCLUDED	X1
 pkg/infra/whatsmeow.resolveBlocklistPNJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_blocklist_adapters.go:109)
 pkg/infra/whatsmeow.toDomainBlocklist	ELIGIBLE	uncovered:L1
-pkg/infra/whatsmeow.toJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,chat_adapters.go:62)
+pkg/infra/whatsmeow.toJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid_resolver_adapter.go:57)
 pkg/infra/whatsmeow.toJIDs	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.toTypesJID	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.translateSessionEvent	EXCLUDED	X1

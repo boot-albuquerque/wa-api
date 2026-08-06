@@ -1,0 +1,70 @@
+package whatsmeow
+
+import (
+	"context"
+	"fmt"
+
+	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
+
+	"wa-api/internal/waclient/types"
+)
+
+// PresenceControllerAdapter implementa appport.PresenceController.
+type PresenceControllerAdapter struct {
+	*SessionGuardAdapter
+}
+
+// NewPresenceControllerAdapter cria o adapter com a função de lookup.
+func NewPresenceControllerAdapter(getClient waClientGetter) *PresenceControllerAdapter {
+	return &PresenceControllerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
+}
+
+// SendPresence define a presença global da sessão.
+func (a *PresenceControllerAdapter) SendPresence(ctx context.Context, txtID string, presence domain.PresenceType) error {
+	client := a.getClient(txtID)
+	if client == nil {
+		return ErrNoSession(txtID, nil)
+	}
+
+	var p types.Presence
+	switch presence {
+	case domain.PresenceAvailable:
+		p = types.PresenceAvailable
+	case domain.PresenceUnavailable:
+		p = types.PresenceUnavailable
+	default:
+		return fmt.Errorf("whatsmeow: unknown presence type %q", string(presence))
+	}
+
+	return client.SendPresence(ctx, p)
+}
+
+// SendChatPresence sinaliza estado dentro de uma conversa.
+func (a *PresenceControllerAdapter) SendChatPresence(ctx context.Context, txtID string, chat domain.JID, state, media string) error {
+	client := a.getClient(txtID)
+	if client == nil {
+		return ErrNoSession(txtID, nil)
+	}
+	jid, err := toJID(chat)
+	if err != nil {
+		return err
+	}
+	return client.SendChatPresence(ctx, jid, types.ChatPresence(state), types.ChatPresenceMedia(media))
+}
+
+// SubscribePresence assina as atualizações de presença de um contato.
+func (a *PresenceControllerAdapter) SubscribePresence(ctx context.Context, txtID string, target domain.JID) error {
+	client := a.getClient(txtID)
+	if client == nil {
+		return ErrNoSession(txtID, nil)
+	}
+	jid, err := toJID(target)
+	if err != nil {
+		return err
+	}
+	return client.SubscribePresence(ctx, jid)
+}
+
+// Verificação em tempo de compilação de que o adapter implementa a porta.
+var _ appport.PresenceController = (*PresenceControllerAdapter)(nil)

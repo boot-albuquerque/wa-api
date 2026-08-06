@@ -2,7 +2,6 @@ package whatsmeow
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	appport "wa-api/pkg/application/contracts"
@@ -10,115 +9,9 @@ import (
 
 	"wa-api/internal/waclient/proto/waCommon"
 	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/types"
 
 	"google.golang.org/protobuf/proto"
 )
-
-// JIDResolverAdapter implementa appport.JIDResolver sobre ParseJID, a mesma
-// função que os use cases chamavam diretamente antes da ADR-001.
-type JIDResolverAdapter struct{}
-
-// NewJIDResolverAdapter cria o resolvedor.
-func NewJIDResolverAdapter() *JIDResolverAdapter { return &JIDResolverAdapter{} }
-
-// ResolveJID devolve o JID canônico de raw.
-func (JIDResolverAdapter) ResolveJID(_ context.Context, raw string) (domain.JID, error) {
-	jid, ok := ParseJID(raw)
-	if !ok {
-		return "", fmt.Errorf("whatsmeow: could not parse JID %q", raw)
-	}
-	return domain.JID(jid.String()), nil
-}
-
-// ResolveQualifiedJID aplica a regra estrita: exige servidor explícito, sem
-// aplicar o padrão. É literalmente o helper parseJID que group_request.go
-// mantinha duplicado.
-func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID, error) {
-	jid, err := types.ParseJID(raw)
-	if err != nil {
-		return "", fmt.Errorf("whatsmeow: could not parse JID %q: %w", raw, err)
-	}
-	// types.ParseJID não falha para uma string sem "@": ela devolve o texto
-	// inteiro em Server e User vazio. Sem esta checagem o resultado volta a
-	// ser o mesmo telefone cru, e o adapter que o reparseia com o ParseJID
-	// leniente aplicaria o servidor padrão — exatamente o que "qualificado"
-	// existe para impedir.
-	if jid.User == "" {
-		return "", fmt.Errorf("whatsmeow: JID %q has no server", raw)
-	}
-	return domain.JID(jid.String()), nil
-}
-
-// toJID reconverte um domain.JID para o tipo do SDK. O domain.JID sempre vem
-// de ResolveJID, portanto já está canônico; o vazio mapeia para o JID zero,
-// que é como o upstream representava "sem remetente" em MarkRead.
-func toJID(j domain.JID) (types.JID, error) {
-	if j == "" {
-		return types.JID{}, nil
-	}
-	parsed, ok := ParseJID(string(j))
-	if !ok {
-		return types.JID{}, fmt.Errorf("whatsmeow: could not parse JID %q", string(j))
-	}
-	return parsed, nil
-}
-
-// PresenceControllerAdapter implementa appport.PresenceController.
-type PresenceControllerAdapter struct {
-	*SessionGuardAdapter
-}
-
-// NewPresenceControllerAdapter cria o adapter com a função de lookup.
-func NewPresenceControllerAdapter(getClient waClientGetter) *PresenceControllerAdapter {
-	return &PresenceControllerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
-}
-
-// SendPresence define a presença global da sessão.
-func (a *PresenceControllerAdapter) SendPresence(ctx context.Context, txtID string, presence domain.PresenceType) error {
-	client := a.getClient(txtID)
-	if client == nil {
-		return ErrNoSession(txtID, nil)
-	}
-
-	var p types.Presence
-	switch presence {
-	case domain.PresenceAvailable:
-		p = types.PresenceAvailable
-	case domain.PresenceUnavailable:
-		p = types.PresenceUnavailable
-	default:
-		return fmt.Errorf("whatsmeow: unknown presence type %q", string(presence))
-	}
-
-	return client.SendPresence(ctx, p)
-}
-
-// SendChatPresence sinaliza estado dentro de uma conversa.
-func (a *PresenceControllerAdapter) SendChatPresence(ctx context.Context, txtID string, chat domain.JID, state, media string) error {
-	client := a.getClient(txtID)
-	if client == nil {
-		return ErrNoSession(txtID, nil)
-	}
-	jid, err := toJID(chat)
-	if err != nil {
-		return err
-	}
-	return client.SendChatPresence(ctx, jid, types.ChatPresence(state), types.ChatPresenceMedia(media))
-}
-
-// SubscribePresence assina as atualizações de presença de um contato.
-func (a *PresenceControllerAdapter) SubscribePresence(ctx context.Context, txtID string, target domain.JID) error {
-	client := a.getClient(txtID)
-	if client == nil {
-		return ErrNoSession(txtID, nil)
-	}
-	jid, err := toJID(target)
-	if err != nil {
-		return err
-	}
-	return client.SubscribePresence(ctx, jid)
-}
 
 // ChatMessengerAdapter implementa appport.ChatMessenger.
 type ChatMessengerAdapter struct {
@@ -188,9 +81,5 @@ func (a *ChatMessengerAdapter) SendReaction(ctx context.Context, txtID string, t
 	return domain.MessageSendResult{Timestamp: resp.Timestamp}, nil
 }
 
-// Verificações em tempo de compilação de que os adapters implementam as portas.
-var (
-	_ appport.JIDResolver        = (*JIDResolverAdapter)(nil)
-	_ appport.PresenceController = (*PresenceControllerAdapter)(nil)
-	_ appport.ChatMessenger      = (*ChatMessengerAdapter)(nil)
-)
+// Verificação em tempo de compilação de que o adapter implementa a porta.
+var _ appport.ChatMessenger = (*ChatMessengerAdapter)(nil)
