@@ -44,29 +44,50 @@ git push --quiet origin main 2>/dev/null || true
 
 ## A causa raiz
 
-`cd "$REPO_DIR"` **não tem checagem de falha** (sem `set -e`, sem `|| exit`,
-sem verificar `$?`). Se esse `cd` falhar por qualquer motivo (o mirror não
-existir nessa máquina, permissão, o worktree confundir a resolução de
-caminho — não determinei a causa exata da falha do `cd` em si, só que ela
-aconteceu), o script **continua rodando no diretório onde o commit original
-aconteceu** — ou seja, dentro do próprio `wa-api` — e faz:
+### Hipótese inicial (parcialmente errada)
+
+A primeira leitura do incidente apontou o `cd "$REPO_DIR"` **sem checagem de
+falha** (sem `set -e`, sem `|| exit`, sem verificar `$?`) como a causa: se o
+`cd` falhasse, o script continuaria rodando no diretório do commit original.
+Isso levou a uma primeira correção — trocar `cd` + comandos relativos por
+`git -C "$REPO_DIR" add/commit/push` — que **não resolveu o problema**: o
+loop reproduziu de novo, idêntico, mesmo com `git -C` em todo lugar.
+
+### Causa raiz real: vazamento de variáveis de ambiente do git
+
+Hooks (principalmente em **worktrees**) rodam com `GIT_DIR`, `GIT_WORK_TREE`,
+`GIT_INDEX_FILE` (e às vezes `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`,
+`GIT_PREFIX`) **exportados no ambiente** pelo processo `git commit` que
+disparou o hook, apontando pro repositório/worktree onde o commit aconteceu.
+
+Essas variáveis têm **prioridade sobre `git -C <dir>`** — `-C` só troca o
+diretório de trabalho do processo `git`, mas se `GIT_DIR` já está no
+ambiente, o git usa esse `GIT_DIR` independente do `-C`. Ou seja:
 
 ```bash
-git add log.md          # cria log.md DENTRO do wa-api
-git commit --quiet -m "activity: ..."   # commita no repo errado
-git push --quiet origin main            # tenta empurrar pro remote ERRADO (o do wa-api, não o do mirror)
+git -C "$REPO_DIR" add log.md          # GIT_DIR ainda aponta pro repo original
+git -C "$REPO_DIR" commit --quiet ...   # commita no repo ERRADO mesmo com -C
+git -C "$REPO_DIR" push --quiet ...     # push também mira o remote errado
 ```
 
-Esse commit **também dispara o `post-commit`** (todo commit dispara), e o
-guard de "evitar loop" (`if echo "$REMOTE_URL" | grep -qi "activity-log"`)
-**não protege esse caso**: ele checa se o remote `origin` do repo atual tem
-"activity-log" no nome — mas o repo atual continua sendo `wa-api`
-(`git@github.com:.../wa-api.git`), não o mirror. O guard foi desenhado pra
-impedir o hook de disparar recursivamente **dentro do próprio mirror**, não
-pra detectar "estou no repo errado por causa de um `cd` que falhou". Como a
-condição de saída nunca fica verdadeira nesse cenário, o loop continua até
-alguma interrupção externa (no nosso caso, um timeout de 2 minutos do
-processo que disparou o commit original).
+continua secretamente operando no repo onde o commit original rodou — o
+mesmo bug de sempre, só que sobrevivendo à correção ingênua de trocar `cd`
+por `-C`.
+
+Esse commit "errado" **também dispara o `post-commit`** (todo commit
+dispara), e o guard de "evitar loop"
+(`if echo "$REMOTE_URL" | grep -qi "activity-log"`) **não protege esse
+caso**: ele checa o remote `origin` do repo atual, que continua sendo o do
+repo original (ex.: `wa-api`), não o do mirror. Como a condição de saída
+nunca fica verdadeira, o loop continua até alguma interrupção externa.
+
+### Fator agravante encontrado durante o teste
+
+No momento do teste (2026-08-06), `~/.git-mirror/activity-log` **não tinha
+mais `.git`** — o repositório mirror tinha sido perdido/corrompido em algum
+momento anterior (causa não determinada). Isso não é a causa raiz do loop,
+mas confirma que o hook precisa validar a saúde do mirror antes de operar
+nele, e não assumir que ele existe e está íntegro.
 
 ## Por que não foi pior
 
@@ -81,20 +102,43 @@ processo que disparou o commit original).
   original rodou — nada foi publicado, nenhuma outra branch/repo foi
   afetado.
 
-## Sugestão de correção (não aplicada — fora do escopo deste repo)
+## Correção aplicada e testada (2026-08-06)
 
-No script do hook (`~/.config/git/hooks/post-commit`):
+Fora do escopo original do repo `wa-api`, mas aplicada e verificada ao vivo
+porque o bug estava ativo e bloqueando qualquer `git commit` na máquina.
+Alterações em `~/.config/git/hooks/post-commit`:
 
-1. Adicionar `set -e` no topo, OU checar explicitamente o resultado do `cd`:
+1. **Isolar o ambiente do git antes de tocar no mirror** — a correção que
+   efetivamente resolve o loop:
    ```bash
-   cd "$REPO_DIR" || { echo "post-commit: não foi possível entrar em $REPO_DIR, abortando" >&2; exit 1; }
+   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR \
+         GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
    ```
-2. Tornar o guard de loop robusto a esse cenário: checar `$(pwd)` (ou
-   `git rev-parse --show-toplevel`) contra `$REPO_DIR` **depois** do `cd`,
-   não confiar só no `remote.origin.url` do repo original.
-3. Considerar `git -C "$REPO_DIR" add/commit/push` (com `-C`, sem depender
-   de `cd` ter funcionado) em vez de `cd` + comandos relativos — mais barato
-   de auditar e não tem esse modo de falha silencioso.
+2. **Guarda dura pós-unset**: valida que `$REPO_DIR` é de fato a raiz de um
+   repositório git válido antes de prosseguir, ao invés de assumir que
+   existe e está íntegro:
+   ```bash
+   MIRROR_TOPLEVEL=$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)
+   if [ -z "$MIRROR_TOPLEVEL" ] || [ "$MIRROR_TOPLEVEL" != "$REPO_DIR" ]; then
+     echo "post-commit: $REPO_DIR não é um repositório git válido — pulando log de atividade (sem afetar o commit atual)" >&2
+     exit 0
+   fi
+   ```
+3. Todos os comandos no mirror usam `git -C "$REPO_DIR" ...` (sem `cd`) —
+   agora funciona de verdade porque o ambiente já não está vazando `GIT_DIR`.
+
+### Verificação
+
+Testado ao vivo, duas vezes, com watchdog matando o processo se passasse de
+~10s: ambas terminaram em **2 segundos**, sem loop, sem processos git
+residuais, com o aviso correto no stderr (mirror sem `.git`, hook pulou o
+log sem afetar o commit). `ps aux` confirmou zero processos `git
+commit`/`add`/`push` remanescentes após cada teste.
+
+**Pendência separada, não bloqueante**: `~/.git-mirror/activity-log` segue
+sem `.git` — o log de atividade central está desativado até alguém recriar
+esse repositório lá (`git init` + remote). Isso não afeta mais a segurança
+de `git commit` em nenhum repo da máquina.
 
 ## Como reproduzir / verificar se ainda está quebrado
 
