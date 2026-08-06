@@ -283,3 +283,117 @@ alinhando com os demais erros de parse de JID da fronteira, e atualizar
 
 **Status**: não corrigido — plano aprovado fixa código e categoria; mudar
 aqui seria divergir do que foi revisado. Pendente de decisão do usuário.
+
+---
+
+## F16 — `log.Fatalf` do stdlib dentro de `sendMexIQ` derruba o processo
+
+**Data**: 2026-08-06
+**Contexto**: auditoria de logging da Fase A do ADR-0004 (divisão da raiz
+de `internal/waclient/` por responsabilidade). A tarefa pedia verificar se
+o código vendorizado bypassa o padrão `cli.Log`/`cli.Log.Sub(...)` que o
+`walog.Bridge` (commits `2848388`/`279a68a`) instrumenta. Achado de lado —
+o escopo da fase era estrutural.
+
+**Onde**: `internal/waclient/newsletter_mex.go:137` (era
+`internal/waclient/newsletter.go` antes do split desta sessão), dentro de
+`(*Client).sendMexIQ`:
+
+```go
+data, err := decoder.ArgoToMap(wt)
+if err != nil {
+    log.Fatalf("argo to map error: %v", err)
+}
+```
+
+**Problema**: dois defeitos no mesmo `if`.
+
+1. É o **único** ponto de toda a raiz de `internal/waclient/` que loga fora
+   de `cli.Log` — usa o logger global do stdlib (`"log"`), então a mensagem
+   não passa pelo `walog.Bridge` e não aparece no zerolog estruturado do
+   `wa-api`. Todos os demais `fmt.Print*` do pacote estão dentro de
+   comentários de exemplo de godoc; este é código real.
+2. Pior que o log: `log.Fatalf` chama `os.Exit(1)`. Um payload argo
+   malformado vindo do servidor do WhatsApp — entrada remota, não
+   controlada por nós — **derruba o processo inteiro do `wa-api`**,
+   matando todas as demais sessões. Todo o resto de `sendMexIQ` trata erro
+   por `return nil, err` (linhas 122-134, 140-142, 146-151); esta linha é a
+   única fora do padrão.
+
+Não há teste cobrindo o caminho (o pacote está fora de `TEST_PKGS`), então
+não há reprodução automatizada; o caminho é alcançável por qualquer
+resposta MEX com codificação argo inválida.
+
+**Correção sugerida**: alinhar com as linhas vizinhas —
+
+```go
+data, err := decoder.ArgoToMap(wt)
+if err != nil {
+    return nil, fmt.Errorf("argo to map error: %w", err)
+}
+```
+
+e remover o import `"log"` do arquivo. Se por algum motivo o erro precisar
+ser tolerado, o mínimo é `cli.Log.Errorf(...)` **com** `return nil, err` —
+nunca seguir adiante com `data == nil`, que hoje faria `json.Marshal`
+devolver o literal `null` como se fosse sucesso.
+
+**Status**: **não corrigido**. A Fase A do ADR-0004 é estrutural por
+contrato (`PATCHES.md` declara "comportamento não mudou" em todas as
+entradas) e trocar `os.Exit` por retorno de erro é mudança de
+comportamento observável. Pendente de decisão do usuário: corrigir agora
+em commit próprio, ou deixar para a fase que tratar erros de
+`internal/waclient/` com `apperr`.
+
+---
+
+## F17 — `internal/waclient/` continua fora de cobertura/lint/vet mesmo virando fork mantido
+
+**Data**: 2026-08-06
+**Contexto**: Fase A do ADR-0004. A tarefa pedia reavaliar a exclusão de
+`internal/waclient/` dos gates agora que o diretório é mantido ativamente,
+e incluí-lo **apenas se** `make check` continuasse verde.
+
+**Onde**: `Makefile:17,21,22,29` (`COVER_PKGS`, `TEST_PKGS`, `VET_TARGETS`,
+`LINT_TARGETS`, todos com `grep -v '^wa-api/internal/waclient'`) e
+`.logcov-exclude:29` (`internal/waclient/`).
+
+**Problema**: a justificativa escrita nesses arquivos ("cópia fiel de
+código de terceiros, não código nosso a instrumentar") **está obsoleta**
+desde o ADR-0004 — o diretório deixou de ser cópia fiel. O texto do
+comentário agora contradiz o ADR vigente.
+
+Medido nesta sessão, com os splits já aplicados:
+
+- `go vet ./internal/waclient/` → **limpo** (sairia de graça).
+- `golangci-lint run ./internal/waclient/` → **92 issues**, distribuídas em
+  `gocyclo: 69`, `staticcheck: 19`, `ineffassign: 2`, `errcheck: 1`,
+  `goimports: 1`. **Nenhuma** vem dos arquivos criados nesta fase — são
+  todas do estilo do whatsmeow upstream (ex:
+  `download-to-file.go:185` errcheck em `resp.Body.Close`;
+  `message_decrypt.go:282` ST1012 em `EventAlreadyProcessed`;
+  `client_test.go:16` goimports, arquivo não tocado).
+- Cobertura: o pacote tem **zero testes** (só `client_test.go`, que é um
+  `Example()` de godoc sem asserção). Entrar em `COVER_PKGS` adicionaria
+  ~15.8k linhas com 0% ao denominador e derrubaria o `coverage-gate` na
+  hora — `min_coverage=818` (décimos de %) é um piso de ratchet, não um
+  alvo.
+
+**Correção sugerida**: faseada, não de uma vez.
+1. Agora: atualizar o **comentário** de `Makefile:12-16` e
+   `.logcov-exclude:22-29` para citar o ADR-0004 e dizer que a exclusão é
+   temporária/por dívida, não por o código ser de terceiros.
+2. `VET_TARGETS` pode ser desacoplado de `COVER_PKGS` e passar a incluir
+   `internal/waclient/...` já — vet está limpo hoje.
+3. `LINT_TARGETS`: incluir só depois de um baseline próprio para o
+   diretório (o gate de lint hoje trava por `max_complexity`, e o
+   `gocyclo` máximo do whatsmeow é muito acima do baseline do repo).
+4. `COVER_PKGS`/`TEST_PKGS`: só quando houver testes reais, por
+   subdiretório, à medida que as Fases B/C do ADR-0004 forem cobrindo.
+
+**Status**: **não corrigido** — a instrução da tarefa era explícita em não
+incluir se aparecesse enxurrada de lint pré-existente, e apareceram 92
+issues não relacionadas às mudanças. O teto de 300 linhas, esse sim, ficou
+travado por gate novo (`make waclient-filesize`,
+`scripts/waclient-filesize-check.sh`), que roda independente de
+`COVER_PKGS`/`LINT_TARGETS` justamente por causa desta exclusão.
