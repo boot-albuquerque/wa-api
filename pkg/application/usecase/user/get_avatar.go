@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
@@ -37,13 +38,19 @@ func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req doma
 	}
 
 	pic, err := uc.contacts.GetProfilePicture(ctx, userID, jid, req.Preview)
+	if errors.Is(err, domain.ErrAvatarNotFound) || errors.Is(err, domain.ErrAvatarUnauthorized) {
+		// Não é falha — propaga o sentinel intacto (sem fmt.Errorf, que
+		// quebraria errors.Is no handler) para o caller distinguir
+		// "sem foto" (404) de "escondida por privacidade" (403).
+		return nil, err
+	}
 	if err != nil {
 		uc.logger.Error(ctx, "Failed to get avatar", "error", err, "user_id", userID, "phone", req.Phone)
 		return nil, fmt.Errorf("failed to get avatar: %v", err)
 	}
 
 	if pic == nil {
-		return nil, fmt.Errorf("no avatar found")
+		return nil, ErrAvatarNotFound
 	}
 
 	uc.logger.Info(ctx, "Got avatar", "id", pic.ID, "url", pic.URL, "user_id", userID)

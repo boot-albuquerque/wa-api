@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/rs/zerolog/hlog"
@@ -32,6 +33,27 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		// ErrAvatarNotFound era sempre reportado como 500 — indistinguível de
+		// falha real (sessão caída, JID inválido). "Contato sem foto pública"
+		// é o caso comum, não um erro de servidor.
+		if errors.Is(err, user.ErrAvatarNotFound) {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("user_id", id).
+				Msg("get avatar: contact has no public photo")
+			customhttp.RespondJSON(w, 404, nil, err)
+			return
+		}
+		// ErrAvatarUnauthorized: o contato TEM foto, mas escondeu-a via
+		// privacidade — distinto de "não tem foto" (404). 403 deixa o caller
+		// (wa-worker) diferenciar "nunca vai ter foto" de "pode reaparecer se
+		// a privacidade mudar", em vez de tratar os dois como o mesmo "sem avatar".
+		if errors.Is(err, user.ErrAvatarUnauthorized) {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("user_id", id).
+				Msg("get avatar: hidden by privacy settings")
+			customhttp.RespondJSON(w, 403, nil, err)
+			return
+		}
 		hlog.FromRequest(r).Error().Err(err).
 			Str("user_id", id).
 			Msg("get avatar use case failed")

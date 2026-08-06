@@ -169,6 +169,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 		path             string
 		body             string
 		wantErrSubstring string
+		wantStatus       int // 0 → default http.StatusInternalServerError
 	}{
 		{
 			name: "GetAvatar sessao recusada",
@@ -217,6 +218,23 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
 			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
 			wantErrSubstring: "no avatar found",
+			// Contato sem foto pública é o caso comum, não uma falha de servidor —
+			// distinto dos demais casos desta tabela (sessão/porta/JID reais falhando).
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "GetAvatar escondido por privacidade",
+			arrange: func(f *chFakes) {
+				f.contacts.GetProfilePictureFunc = func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
+					return nil, domain.ErrAvatarUnauthorized
+				}
+			},
+			build:  func(f *chFakes) http.Handler { return f.avatar() },
+			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
+			wantErrSubstring: domain.ErrAvatarUnauthorized.Error(),
+			// Distinto de "sem foto" (404): o contato TEM foto, só está oculta
+			// pela privacidade dele — 403, não 404.
+			wantStatus: http.StatusForbidden,
 		},
 		{
 			name: "GetContacts sessao recusada",
@@ -270,7 +288,11 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 			rec, capture := uhServe(tc.build(f),
 				withUser(uhRequest(tc.method, tc.path, tc.body, nil), "u-1"))
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			wantStatus := tc.wantStatus
+			if wantStatus == 0 {
+				wantStatus = http.StatusInternalServerError
+			}
+			assertErrorEnvelope(t, rec, wantStatus)
 			logassert.OutcomeLogged(t, capture.Records(t), tc.wantErrSubstring)
 		})
 	}
