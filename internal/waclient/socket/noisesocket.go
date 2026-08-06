@@ -71,8 +71,8 @@ func (ns *NoiseSocket) consumeFrames(ctx context.Context, frames <-chan []byte) 
 }
 
 func generateIV(count uint32) []byte {
-	iv := make([]byte, 12)
-	binary.BigEndian.PutUint32(iv[8:], count)
+	iv := make([]byte, gcmIVSize)
+	binary.BigEndian.PutUint32(iv[gcmIVCounterOffset:], count)
 	return iv
 }
 

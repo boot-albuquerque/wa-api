@@ -50,7 +50,7 @@ func NewFrameSocket(log waLog.Logger, client *http.Client) *FrameSocket {
 		Frames: make(chan []byte),
 
 		URL:         URL,
-		HTTPHeaders: http.Header{"Origin": {Origin}},
+		HTTPHeaders: http.Header{originHeaderName: {Origin}},
 		HTTPClient:  client,
 	}
 }
@@ -68,7 +68,7 @@ func (fs *FrameSocket) Close(code websocket.StatusCode) {
 	}
 
 	fs.closed = true
-	if code > 0 {
+	if code > statusForceClose {
 		err := fs.conn.Close(code, "")
 		if err != nil {
 			fs.log.Warnf("Error sending close to websocket: %v", err)
@@ -83,7 +83,7 @@ func (fs *FrameSocket) Close(code websocket.StatusCode) {
 	fs.cancel()
 	fs.cancel = nil
 	if fs.OnDisconnect != nil {
-		go fs.OnDisconnect(fs.parentCtx, code == 0)
+		go fs.OnDisconnect(fs.parentCtx, code == statusForceClose)
 	}
 }
 
@@ -139,9 +139,7 @@ func (fs *FrameSocket) SendFrame(data []byte) error {
 	}
 
 	// Encode length of frame
-	wholeFrame[headerLength] = byte(dataLength >> 16)
-	wholeFrame[headerLength+1] = byte(dataLength >> 8)
-	wholeFrame[headerLength+2] = byte(dataLength)
+	encodeFrameLength(wholeFrame[headerLength:], dataLength)
 
 	// Copy actual frame data
 	copy(wholeFrame[headerLength+FrameLengthSize:], data)
@@ -167,7 +165,7 @@ func (fs *FrameSocket) processData(msg []byte) {
 		}
 		if fs.incoming == nil {
 			if len(msg) >= FrameLengthSize {
-				length := (int(msg[0]) << 16) + (int(msg[1]) << 8) + int(msg[2])
+				length := decodeFrameLength(msg)
 				fs.incomingLength = length
 				fs.receivedLength = len(msg)
 				msg = msg[FrameLengthSize:]
@@ -203,7 +201,7 @@ func (fs *FrameSocket) readPump(conn *websocket.Conn, ctx context.Context) {
 	fs.log.Debugf("Frame websocket read pump starting %p", fs)
 	defer func() {
 		fs.log.Debugf("Frame websocket read pump exiting %p", fs)
-		go fs.Close(0)
+		go fs.Close(statusForceClose)
 	}()
 	for {
 		msgType, data, err := conn.Read(ctx)

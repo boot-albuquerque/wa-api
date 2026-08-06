@@ -38,7 +38,7 @@ func sha256Slice(data []byte) []byte {
 
 func (nh *NoiseHandshake) Start(pattern string, header []byte) {
 	data := []byte(pattern)
-	if len(data) == 32 {
+	if len(data) == noiseHashSize {
 		nh.hash = data
 	} else {
 		nh.hash = sha256Slice(data)
@@ -118,8 +118,8 @@ func (nh *NoiseHandshake) MixIntoKey(data []byte) error {
 
 func (nh *NoiseHandshake) extractAndExpand(salt, data []byte) (write []byte, read []byte, err error) {
 	h := hkdf.New(sha256.New, data, salt, nil)
-	write = make([]byte, 32)
-	read = make([]byte, 32)
+	write = make([]byte, noiseHashSize)
+	read = make([]byte, noiseHashSize)
 
 	if _, err = io.ReadFull(h, write); err != nil {
 		err = fmt.Errorf("failed to read write key: %w", err)

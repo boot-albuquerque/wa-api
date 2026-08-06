@@ -845,6 +845,8 @@ internal/waclient/socket.NoiseSocket.SendFrame.func1	EXCLUDED	X5
 internal/waclient/socket.NoiseSocket.Stop	EXCLUDED	X5
 internal/waclient/socket.NoiseSocket.consumeFrames	EXCLUDED	X5
 internal/waclient/socket.NoiseSocket.receiveEncryptedFrame	EXCLUDED	X5
+internal/waclient/socket.decodeFrameLength	EXCLUDED	X5
+internal/waclient/socket.encodeFrameLength	EXCLUDED	X5
 internal/waclient/socket.generateIV	EXCLUDED	X5
 internal/waclient/socket.newNoiseSocket	EXCLUDED	X5
 internal/waclient/socket.newNoiseSocket.func1	EXCLUDED	X6
