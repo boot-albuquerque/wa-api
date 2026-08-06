@@ -321,6 +321,10 @@ Este projeto segue os princípios de Clean Architecture com as seguintes camadas
 - **Infrastructure**: Adaptadores externos (banco de dados, WhatsApp, S3, RabbitMQ)
 - **Interfaces**: HTTP handlers e rotas
 
+Decisões arquiteturais registradas em [`docs/adr/`](docs/adr/):
+
+- [ADR-0001](docs/adr/0001-native-whatsapp-protocol-roadmap.md) — reimplementação nativa e gradual do protocolo binário do WhatsApp
+
 ## License
 
 Copyright &copy; 2025 DisparaZap contributors
