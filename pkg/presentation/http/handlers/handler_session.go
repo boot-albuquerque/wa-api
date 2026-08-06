@@ -82,7 +82,11 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartSession", h.StartSession != nil).Msg("ConnectHandler starting WhatsApp client")
 	// Fire-and-forget: start WhatsApp client in background
 	if h.StartSession != nil {
-		go h.StartSession(id, "")
+		// sessionUser ja' validou acima que o contexto tem um userInfo valido
+		// (nao-nil) para esta requisicao — reassert sem checagem extra, mesmo
+		// padrao que sessionUser usa internamente (linha 32).
+		info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
+		go h.StartSession(id, info.Get("Token"))
 	}
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
 }

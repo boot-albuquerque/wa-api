@@ -542,23 +542,29 @@ func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
 
 // TestConnectHandler_StartsClientOnce: o unico handler com efeito colateral
 // proprio. WithStartSession injeta o lancador; ConnectHandler responde 200 e
-// dispara a sessao em background exatamente uma vez.
+// dispara a sessao em background exatamente uma vez, propagando o token do
+// userinfo autenticado (HOUSEKEEP.md: antes ia sempre vazio).
 func TestConnectHandler_StartsClientOnce(t *testing.T) {
-	started := make(chan string, 2)
+	type call struct{ userID, token string }
+	started := make(chan call, 2)
 	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartSession(func(userID, token string) { started <- userID })
+		WithStartSession(func(userID, token string) { started <- call{userID, token} })
 
 	rec, recs := serveSession(t, h, http.MethodPost, "/session/connect", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	if got := <-started; got != "user-1" {
-		t.Fatalf("StartSession recebeu %q, quero user-1", got)
+	got := <-started
+	if got.userID != "user-1" {
+		t.Fatalf("StartSession recebeu userID %q, quero user-1", got.userID)
+	}
+	if got.token != logassertAdminToken {
+		t.Fatalf("StartSession recebeu token %q, quero o token do userinfo autenticado", got.token)
 	}
 	select {
 	case extra := <-started:
-		t.Fatalf("StartSession chamado mais de uma vez (segunda: %q)", extra)
+		t.Fatalf("StartSession chamado mais de uma vez (segunda: %+v)", extra)
 	default:
 	}
 	logassert.NoSecrets(t, recs)
