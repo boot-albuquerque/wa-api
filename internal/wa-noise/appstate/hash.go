@@ -33,7 +33,7 @@ type Mutation struct {
 
 type HashState struct {
 	Version uint64
-	Hash    [128]byte
+	Hash    [lthashLength]byte
 }
 
 func (hs *HashState) updateHash(mutations []*waServerSync.SyncdMutation, getPrevSetValueMAC func(indexMAC []byte, maxIndex int) ([]byte, error)) ([]error, error) {
@@ -43,7 +43,7 @@ func (hs *HashState) updateHash(mutations []*waServerSync.SyncdMutation, getPrev
 	for i, mutation := range mutations {
 		if mutation.GetOperation() == waServerSync.SyncdMutation_SET {
 			value := mutation.GetRecord().GetValue().GetBlob()
-			added = append(added, value[len(value)-32:])
+			added = append(added, value[len(value)-macLength:])
 		}
 		indexMAC := mutation.GetRecord().GetIndex().GetBlob()
 		removal, err := getPrevSetValueMAC(indexMAC, i)
@@ -65,7 +65,7 @@ func (hs *HashState) updateHash(mutations []*waServerSync.SyncdMutation, getPrev
 }
 
 func uint64ToBytes(val uint64) []byte {
-	data := make([]byte, 8)
+	data := make([]byte, versionByteLength)
 	binary.BigEndian.PutUint64(data, val)
 	return data
 }
@@ -87,7 +87,7 @@ func generatePatchMAC(patch *waServerSync.SyncdPatch, name WAPatchName, key []by
 	dataToHash[0] = patch.GetSnapshotMAC()
 	for i, mutation := range patch.Mutations {
 		val := mutation.GetRecord().GetValue().GetBlob()
-		dataToHash[i+1] = val[len(val)-32:]
+		dataToHash[i+1] = val[len(val)-macLength:]
 	}
 	dataToHash[len(dataToHash)-2] = uint64ToBytes(version)
 	dataToHash[len(dataToHash)-1] = []byte(name)
@@ -95,7 +95,7 @@ func generatePatchMAC(patch *waServerSync.SyncdPatch, name WAPatchName, key []by
 }
 
 func generateContentMAC(operation waServerSync.SyncdMutation_SyncdOperation, data, keyID, key []byte) []byte {
-	operationBytes := []byte{byte(operation) + 1}
-	keyDataLength := uint64ToBytes(uint64(len(keyID) + 1))
-	return concatAndHMAC(sha512.New, key, operationBytes, keyID, data, keyDataLength)[:32]
+	operationBytes := []byte{byte(operation) + contentMACOperationOffset}
+	keyDataLength := uint64ToBytes(uint64(len(keyID) + contentMACKeyIDLengthOffset))
+	return concatAndHMAC(sha512.New, key, operationBytes, keyID, data, keyDataLength)[:macLength]
 }

@@ -49,7 +49,7 @@ func ParseRecovery(
 }
 
 func (proc *Processor) ProcessRecovery(ctx context.Context, recovery *waSyncdSnapshotRecovery.SyncdSnapshotRecovery) ([]Mutation, error) {
-	if len(recovery.GetCollectionLthash()) != 128 {
+	if len(recovery.GetCollectionLthash()) != lthashLength {
 		return nil, fmt.Errorf("invalid lthash length: %d", len(recovery.GetCollectionLthash()))
 	}
 	name := recovery.GetCollectionName()
@@ -85,7 +85,7 @@ func (proc *Processor) ProcessRecovery(ctx context.Context, recovery *waSyncdSna
 	if err != nil {
 		return mutations, fmt.Errorf("failed to reset app state version in database: %w", err)
 	}
-	err = proc.Store.AppState.PutAppStateVersion(ctx, name, version, *(*[128]byte)(recovery.GetCollectionLthash()))
+	err = proc.Store.AppState.PutAppStateVersion(ctx, name, version, *(*[lthashLength]byte)(recovery.GetCollectionLthash()))
 	if err != nil {
 		return mutations, fmt.Errorf("failed to update app state version in the database: %w", err)
 	}
