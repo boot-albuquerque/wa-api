@@ -1899,6 +1899,14 @@ pkg/infra/whatsmeow.whatsmeowSession.Subscribe.func2	EXCLUDED	X6
 pkg/infra/whatsmeow.whatsmeowSession.Subscribe.func3	EXCLUDED	X6
 pkg/infra/whatsmeow.whatsmeowSession.WhatsmeowClient	EXCLUDED	X1
 pkg/infra/whatsmeow.whatsmeowSession.translatePairingItem	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.Bridge.Debugf	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.Bridge.Errorf	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.Bridge.Infof	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.Bridge.Sub	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.Bridge.Warnf	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.New	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.ParseLevel	EXCLUDED	X1
+pkg/infra/whatsmeow/walog.format	EXCLUDED	X1
 pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
