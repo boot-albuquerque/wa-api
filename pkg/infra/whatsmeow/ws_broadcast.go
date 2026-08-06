@@ -2,7 +2,6 @@ package whatsmeow
 
 import (
 	"context"
-	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -44,11 +43,6 @@ func (cm *ClientManager) RemoveWSConn(userID string, conn *websocket.Conn) {
 	log.Debug().Str("userID", userID).Int("wsConnCount", remaining).
 		Msg("websocket connection unregistered")
 }
-
-// wsBroadcastTimeout bounds how long BroadcastToUser waits on a single slow
-// client before giving up on it — a wedged reader on the other end must
-// never stall event delivery to every other connection.
-const wsBroadcastTimeout = 5 * time.Second
 
 // BroadcastToUser pushes payload (JSON-encoded) to every live WS connection
 // for userID. Best-effort: a write failure drops that one connection

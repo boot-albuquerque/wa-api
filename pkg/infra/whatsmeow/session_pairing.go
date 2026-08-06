@@ -15,13 +15,13 @@ import (
 // do SDK fecha.
 func (s *whatsmeowSession) Pair(ctx context.Context) (<-chan appport.PairingEvent, error) {
 	if s.HasCredentials() {
-		return nil, apperr.New("session_already_paired", apperr.CategoryValidation, "session already has credentials", false, nil)
+		return nil, apperr.New(codeSessionAlreadyPaired, apperr.CategoryValidation, "session already has credentials", false, nil)
 	}
 
 	qrChan, err := s.client.GetQRChannel(ctx)
 	if err != nil {
 		if errors.Is(err, whatsmeow.ErrQRStoreContainsID) {
-			return nil, apperr.New("session_already_paired", apperr.CategoryValidation, "session already has credentials", false, err)
+			return nil, apperr.New(codeSessionAlreadyPaired, apperr.CategoryValidation, "session already has credentials", false, err)
 		}
 		return nil, apperr.New("qr_channel_failed", apperr.CategoryInternal, "failed to get QR channel", true, err)
 	}

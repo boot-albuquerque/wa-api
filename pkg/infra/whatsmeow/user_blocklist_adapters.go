@@ -3,7 +3,6 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"wa-api/pkg/domain"
 
@@ -18,7 +17,7 @@ func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Bl
 		return domain.Blocklist{}, err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
 	defer cancel()
 
 	blocklist, err := client.GetBlocklist(ctxWithTimeout)

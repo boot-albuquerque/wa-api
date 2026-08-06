@@ -2,7 +2,6 @@ package whatsmeow
 
 import (
 	"context"
-	"time"
 
 	"wa-api/internal/waclient/types"
 )
@@ -14,7 +13,7 @@ func (a *UserAdapter) GetPrivacySettings(ctx context.Context, txtID string) (any
 		return nil, err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
 	defer cancel()
 
 	return client.TryFetchPrivacySettings(ctxWithTimeout, false)
@@ -27,7 +26,7 @@ func (a *UserAdapter) SetPrivacySetting(ctx context.Context, txtID, name, value 
 		return nil, err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
 	defer cancel()
 
 	return client.SetPrivacySetting(ctxWithTimeout, types.PrivacySettingType(name), types.PrivacySetting(value))

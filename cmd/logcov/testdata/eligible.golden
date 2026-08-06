@@ -1873,10 +1873,10 @@ pkg/infra/whatsmeow.ZerologAdapter.Error	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Info	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Warn	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.from	ELIGIBLE	uncovered:L1
-pkg/infra/whatsmeow.getCachedPNForLID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_blocklist_adapters.go:116);uncovered:L2(S-ret,user_blocklist_adapters.go:123)
+pkg/infra/whatsmeow.getCachedPNForLID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_blocklist_adapters.go:115);uncovered:L2(S-ret,user_blocklist_adapters.go:122)
 pkg/infra/whatsmeow.normalizeBlocklistJID	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.realWAClient.Store	EXCLUDED	X1
-pkg/infra/whatsmeow.resolveBlocklistPNJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_blocklist_adapters.go:109)
+pkg/infra/whatsmeow.resolveBlocklistPNJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_blocklist_adapters.go:108)
 pkg/infra/whatsmeow.toDomainBlocklist	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.toJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid_resolver_adapter.go:57)
 pkg/infra/whatsmeow.toJIDs	ELIGIBLE	uncovered:L1

@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
@@ -17,11 +16,11 @@ import (
 // duplicated here rather than imported because pkg/infra/whatsmeow must not
 // depend on pkg/bootstrap (see SessionAttachHook design in the plan).
 var webhookTLSSkipVerify = sync.OnceValue(func() bool {
-	v := strings.ToLower(os.Getenv("WA_API_WEBHOOK_TLS_SKIP_VERIFY"))
+	v := strings.ToLower(os.Getenv(envWebhookTLSSkipVerify))
 	skip := v == "true" || v == "1"
 	if skip {
 		log.Warn().
-			Str("env", "WA_API_WEBHOOK_TLS_SKIP_VERIFY").
+			Str("env", envWebhookTLSSkipVerify).
 			Msg("INSECURE: webhook TLS certificate verification is DISABLED by explicit configuration. " +
 				"Webhook deliveries are vulnerable to man-in-the-middle attacks. Unset this variable in production.")
 	}
@@ -35,7 +34,7 @@ var webhookTLSSkipVerify = sync.OnceValue(func() bool {
 func (cm *ClientManager) ProvisionWebhookClient(userID string, proxyURL string) error {
 	webhookClient := resty.New()
 	webhookClient.SetRedirectPolicy(resty.FlexibleRedirectPolicy(15))
-	webhookClient.SetTimeout(30 * time.Second)
+	webhookClient.SetTimeout(webhookClientTimeout)
 	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: webhookTLSSkipVerify()}) //nolint:gosec // opt-in explícito via env var, ver webhookTLSSkipVerify
 	webhookClient.OnError(func(req *resty.Request, err error) {
 		if v, ok := err.(*resty.ResponseError); ok {

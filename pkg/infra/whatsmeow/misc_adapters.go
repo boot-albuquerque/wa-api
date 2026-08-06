@@ -53,7 +53,7 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 		return err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
 	defer cancel()
 
 	return client.SendAppState(ctxWithTimeout, appstate.BuildArchive(jid, archive, time.Time{}, nil))
@@ -89,7 +89,7 @@ func (a *MiscAdapter) RequestUnavailableMessage(ctx context.Context, txtID strin
 
 	unavailableMessage := client.BuildUnavailableMessageRequest(chatJID, senderJID, messageID)
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
 	defer cancel()
 
 	resp, err := client.SendMessage(ctxWithTimeout, chatJID, unavailableMessage, wa.SendRequestExtra{Peer: true})

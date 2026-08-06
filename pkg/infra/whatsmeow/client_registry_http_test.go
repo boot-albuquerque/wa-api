@@ -2,7 +2,6 @@ package whatsmeow
 
 import (
 	"testing"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -31,8 +30,8 @@ func TestClientManager_ProvisionWebhookClient(t *testing.T) {
 	if got == nil {
 		t.Fatal("ProvisionWebhookClient did not register an HTTP client")
 	}
-	if got.GetClient().Timeout != 30*time.Second {
-		t.Errorf("timeout = %v, want %v", got.GetClient().Timeout, 30*time.Second)
+	if got.GetClient().Timeout != webhookClientTimeout {
+		t.Errorf("timeout = %v, want %v", got.GetClient().Timeout, webhookClientTimeout)
 	}
 }
 
