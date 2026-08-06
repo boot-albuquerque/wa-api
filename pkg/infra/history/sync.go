@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/types"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"

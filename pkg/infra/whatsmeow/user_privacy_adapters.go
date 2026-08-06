@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // GetPrivacySettings devolve as configurações atuais.

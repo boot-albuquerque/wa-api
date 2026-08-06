@@ -9,7 +9,7 @@ import (
 
 	wamgr "wa-api/pkg/infra/whatsmeow"
 
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 
 	"github.com/rs/zerolog/log"
 )

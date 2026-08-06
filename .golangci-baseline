@@ -12,6 +12,6 @@
 max_complexity=56
 # vendor-whatsmeow-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
-# troca mecânica de import path pra internal/waclient/ — não é código
+# troca mecânica de import path pra internal/wa-noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).
 count=87

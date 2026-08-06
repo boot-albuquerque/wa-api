@@ -6,8 +6,8 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/types"
 )
 
 // TestGroupAdapter_UpdateGroupParticipants_AddOK.

@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

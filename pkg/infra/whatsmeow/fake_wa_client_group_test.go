@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/types"
 )
 
 func (f *fakeWAClient) GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error) {

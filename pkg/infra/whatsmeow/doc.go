@@ -1,4 +1,4 @@
 // Package whatsmeow contém adapters que implementam as interfaces
 // definidas em internal/application/port usando o clientManager global
-// e a biblioteca wa-api/internal/waclient.
+// e a biblioteca wa-api/internal/wa-noise.
 package whatsmeow

@@ -7,7 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	waLog "wa-api/internal/waclient/util/log"
+	waLog "wa-api/internal/wa-noise/util/log"
 )
 
 // newSink devolve um bridge escrevendo num buffer, mais um decodificador do

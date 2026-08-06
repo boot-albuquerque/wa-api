@@ -6,7 +6,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // toJIDs converte uma lista de domain.JID para o tipo do SDK.

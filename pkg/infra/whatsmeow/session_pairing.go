@@ -7,7 +7,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // Pair inicia o fluxo de QR e conecta o transporte (a conexão é o que faz o

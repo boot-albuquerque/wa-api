@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/types"
 )
 
 // TestGroupAdapter_CreateGroup_OK.

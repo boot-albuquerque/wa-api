@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"wa-api/internal/waclient/proto/waHistorySync"
-	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/types/events"
+	"wa-api/internal/wa-noise/proto/waHistorySync"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 
 	"github.com/rs/zerolog/log"
 )

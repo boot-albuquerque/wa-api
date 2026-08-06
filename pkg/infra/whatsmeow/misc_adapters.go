@@ -9,9 +9,9 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 
-	wa "wa-api/internal/waclient"
-	"wa-api/internal/waclient/appstate"
-	"wa-api/internal/waclient/types"
+	wa "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/types"
 )
 
 // appStateFetchTimeout é o teto de espera do pull de app-state — mais

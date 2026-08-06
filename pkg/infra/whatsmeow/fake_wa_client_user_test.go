@@ -3,9 +3,9 @@ package whatsmeow
 import (
 	"context"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/types/events"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 )
 
 func (f *fakeWAClient) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {

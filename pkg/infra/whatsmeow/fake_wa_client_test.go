@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/appstate"
-	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/types/events"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 )
 
 // fakeWAClient é o fake mínimo de waClient. Cada campo é um override

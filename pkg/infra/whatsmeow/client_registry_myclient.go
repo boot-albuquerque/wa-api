@@ -1,7 +1,7 @@
 package whatsmeow
 
 import (
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // MyClient defines the interface for WhatsApp client wrappers.

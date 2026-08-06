@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 
-	"wa-api/internal/waclient/store"
+	"wa-api/internal/wa-noise/store"
 
 	"github.com/rs/zerolog/log"
 

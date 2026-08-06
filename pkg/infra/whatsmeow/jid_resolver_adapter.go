@@ -7,7 +7,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // JIDResolverAdapter implementa appport.JIDResolver sobre ParseJID, a mesma

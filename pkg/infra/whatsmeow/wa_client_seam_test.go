@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
 )
 
 // exatamente o comportamento de ClientManager.GetWhatsmeowClient).

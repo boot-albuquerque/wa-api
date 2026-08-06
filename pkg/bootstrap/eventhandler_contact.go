@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"wa-api/internal/waclient/types/events"
+	"wa-api/internal/wa-noise/types/events"
 
 	"github.com/rs/zerolog/log"
 )

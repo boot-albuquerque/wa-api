@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"testing"
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // TestSessionCounterAdapter_New devolve adapter não-nil.

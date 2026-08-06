@@ -8,9 +8,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types/events"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types/events"
 	"wa-api/pkg/infra/whatsmeow/walog"
 )
 
@@ -18,7 +18,7 @@ import (
 // numa execução só, sem mock de logger nenhum:
 //
 //  1. O caminho que o whatsmeow percorre: bridge.Sub(...).Errorf(...), que é
-//     literalmente o que internal/waclient/client.go faz com o sublogger que
+//     literalmente o que internal/wa-noise/client.go faz com o sublogger que
 //     recebe em NewClient. Sem --wadebug — ou seja, no default de produção,
 //     que antes desta mudança era waLog.Noop e descartava o registro.
 //

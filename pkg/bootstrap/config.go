@@ -6,7 +6,7 @@ import (
 
 	"github.com/patrickmn/go-cache"
 
-	"wa-api/internal/waclient/store/sqlstore"
+	"wa-api/internal/wa-noise/store/sqlstore"
 )
 
 // Replace the global variables

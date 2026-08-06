@@ -3,9 +3,9 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/waclient/appstate"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
 )
 
 func (f *fakeWAClient) RejectCall(ctx context.Context, callFrom types.JID, callID string) error {

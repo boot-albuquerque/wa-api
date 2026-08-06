@@ -7,7 +7,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // --- PresenceControllerAdapter ---

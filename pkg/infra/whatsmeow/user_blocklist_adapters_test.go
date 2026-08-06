@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/types/events"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 )
 
 // TestUserAdapter_GetBlocklist_NoSession.

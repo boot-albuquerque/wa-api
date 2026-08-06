@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"testing"
 
-	"wa-api/internal/waclient/proto/waCompanionReg"
+	"wa-api/internal/wa-noise/proto/waCompanionReg"
 )
 
 // TestGetPlatformTypeEnum_Chrome mapeia "CHROME" para CHROME enum.

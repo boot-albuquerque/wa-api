@@ -6,10 +6,10 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
-	waLog "wa-api/internal/waclient/util/log"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
+	waLog "wa-api/internal/wa-noise/util/log"
 
 	"golang.org/x/net/proxy"
 )

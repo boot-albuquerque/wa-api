@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // TestMessageComposerAdapter_NewMessageID_NoSession devolve ErrNoSession.

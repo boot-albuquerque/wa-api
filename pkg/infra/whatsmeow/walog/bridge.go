@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	waLog "wa-api/internal/waclient/util/log"
+	waLog "wa-api/internal/wa-noise/util/log"
 )
 
 // Bridge implementa waLog.Logger emitindo no zerolog da aplicação.
@@ -76,7 +76,7 @@ func (b *Bridge) Debugf(msg string, args ...any) {
 }
 
 // Sub devolve um bridge para um submódulo, herdando sink e piso. O SDK chama
-// isto na construção do cliente (internal/waclient/client.go) para separar
+// isto na construção do cliente (internal/wa-noise/client.go) para separar
 // Recv/Send/Pair, e o resultado tem de continuar sendo um Bridge — devolver
 // waLog.Noop aqui reintroduziria o silêncio que este pacote elimina.
 func (b *Bridge) Sub(module string) waLog.Logger {

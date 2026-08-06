@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/appstate"
-	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/types"
 )
 
 func TestNewMiscAdapter(t *testing.T) {

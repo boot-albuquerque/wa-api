@@ -2,7 +2,7 @@ package whatsmeow
 
 import (
 	"testing"
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // TestClientManager_WhatsmeowLifecycle: Set → Get → Delete.

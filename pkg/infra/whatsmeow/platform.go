@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"strings"
 
-	"wa-api/internal/waclient/proto/waCompanionReg"
+	"wa-api/internal/wa-noise/proto/waCompanionReg"
 
 	"github.com/rs/zerolog/log"
 )

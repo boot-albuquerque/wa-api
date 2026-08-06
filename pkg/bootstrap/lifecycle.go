@@ -8,7 +8,7 @@ import (
 
 	wmhelpers "wa-api/pkg/infra/whatsmeow"
 
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"

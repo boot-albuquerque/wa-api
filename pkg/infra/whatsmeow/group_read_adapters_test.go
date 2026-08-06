@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 )
 
 // TestGroupAdapter_GetGroupInfo_NoSession.

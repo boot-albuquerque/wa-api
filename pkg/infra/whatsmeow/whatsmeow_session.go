@@ -7,8 +7,8 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/store"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/store"
 
 	"golang.org/x/net/proxy"
 )

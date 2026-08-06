@@ -3,7 +3,7 @@ package whatsmeow
 import (
 	"strings"
 
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/types"
 
 	"github.com/rs/zerolog/log"
 )

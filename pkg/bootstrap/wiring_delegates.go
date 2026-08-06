@@ -14,8 +14,8 @@ import (
 	intwhatsmeow "wa-api/pkg/infra/whatsmeow"
 	mwpkg "wa-api/pkg/presentation/http/middleware"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/types"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/types"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"

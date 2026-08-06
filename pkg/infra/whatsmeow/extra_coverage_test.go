@@ -7,11 +7,11 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/proto/waE2E"
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
-	"wa-api/internal/waclient/types/events"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 )
 
 // TestProfileDataAccess_NewProfileDataAccess cria adapter com client.

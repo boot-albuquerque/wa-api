@@ -1,7 +1,7 @@
 package whatsmeow
 
 import (
-	whatsmeow "wa-api/internal/waclient"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // Ciclo de vida dos *whatsmeow.Client por usuário.

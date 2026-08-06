@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	whatsmeow "wa-api/internal/waclient"
-	"wa-api/internal/waclient/proto/waE2E"
+	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/proto/waE2E"
 
 	"google.golang.org/protobuf/proto"
 )

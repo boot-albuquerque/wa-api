@@ -8,8 +8,8 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 
-	"wa-api/internal/waclient/store"
-	"wa-api/internal/waclient/types"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/types"
 )
 
 func TestNewUserAdapter(t *testing.T) {
