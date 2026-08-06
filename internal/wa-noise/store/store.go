@@ -9,15 +9,10 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/google/uuid"
-
-	"wa-api/internal/wa-noise/proto/waAdv"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/util/keys"
-	waLog "wa-api/internal/wa-noise/util/log"
 )
 
 type IdentityStore interface {
@@ -118,11 +113,6 @@ type ChatSettingsStore interface {
 	GetChatSettings(ctx context.Context, chat types.JID) (types.LocalChatSettings, error)
 }
 
-type DeviceContainer interface {
-	PutDevice(ctx context.Context, store *Device) error
-	DeleteDevice(ctx context.Context, store *Device) error
-}
-
 type MessageSecretInsert struct {
 	Chat   types.JID
 	Sender types.JID
@@ -212,112 +202,4 @@ type AllGlobalStores interface {
 type AllStores interface {
 	AllSessionSpecificStores
 	AllGlobalStores
-}
-
-type Device struct {
-	Log waLog.Logger
-
-	NoiseKey       *keys.KeyPair
-	IdentityKey    *keys.KeyPair
-	SignedPreKey   *keys.PreKey
-	RegistrationID uint32
-	AdvSecretKey   []byte
-
-	ID  *types.JID
-	LID types.JID
-
-	Account      *waAdv.ADVSignedDeviceIdentity
-	Platform     string
-	BusinessName string
-	PushName     string
-
-	LIDMigrationTimestamp int64
-
-	FacebookUUID uuid.UUID
-
-	Initialized   bool
-	Deleted       bool
-	Identities    IdentityStore
-	Sessions      SessionStore
-	PreKeys       PreKeyStore
-	SenderKeys    SenderKeyStore
-	AppStateKeys  AppStateSyncKeyStore
-	AppState      AppStateStore
-	Contacts      ContactStore
-	ChatSettings  ChatSettingsStore
-	MsgSecrets    MsgSecretStore
-	PrivacyTokens PrivacyTokenStore
-	NCTSalt       NCTSaltStore
-	EventBuffer   EventBuffer
-	LIDs          LIDStore
-	Container     DeviceContainer
-}
-
-func (device *Device) GetJID() types.JID {
-	if device == nil {
-		return types.EmptyJID
-	}
-	id := device.ID
-	if id == nil {
-		return types.EmptyJID
-	}
-	return *id
-}
-
-func (device *Device) GetLID() types.JID {
-	if device == nil {
-		return types.EmptyJID
-	}
-	return device.LID
-}
-
-var ErrDeviceDeleted = errors.New("invalid use of deleted device")
-
-func (device *Device) Save(ctx context.Context) error {
-	if device.Deleted {
-		return ErrDeviceDeleted
-	}
-	return device.Container.PutDevice(ctx, device)
-}
-
-func (device *Device) Delete(ctx context.Context) error {
-	if device.Deleted {
-		return nil
-	}
-	err := device.Container.DeleteDevice(ctx, device)
-	if err != nil {
-		return err
-	}
-	device.ID = nil
-	device.LID = types.EmptyJID
-	device.Deleted = true
-	device.SetAllStores(&NoopStore{ErrDeviceDeleted})
-	return nil
-}
-
-func (device *Device) SetAllStores(store AllSessionSpecificStores) {
-	device.Identities = store
-	device.Sessions = store
-	device.PreKeys = store
-	device.SenderKeys = store
-	device.AppStateKeys = store
-	device.AppState = store
-	device.Contacts = store
-	device.ChatSettings = store
-	device.MsgSecrets = store
-	device.PrivacyTokens = store
-	device.NCTSalt = store
-	device.EventBuffer = store
-}
-
-func (device *Device) GetAltJID(ctx context.Context, jid types.JID) (types.JID, error) {
-	if device == nil {
-		return types.EmptyJID, nil
-	} else if jid.Server == types.DefaultUserServer {
-		return device.LIDs.GetLIDForPN(ctx, jid)
-	} else if jid.Server == types.HiddenUserServer {
-		return device.LIDs.GetPNForLID(ctx, jid)
-	} else {
-		return types.EmptyJID, nil
-	}
 }
