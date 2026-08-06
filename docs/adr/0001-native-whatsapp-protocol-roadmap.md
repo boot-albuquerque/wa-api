@@ -1,6 +1,14 @@
 # ADR-0001: Reimplementação nativa e gradual do protocolo binário do WhatsApp
 
-- **Status**: accepted (roadmap de longo prazo, execução incremental)
+- **Status**: accepted (roadmap de longo prazo, execução incremental) —
+  **amendado parcialmente por [ADR-0002](0002-vendorizar-whatsmeow-em-vez-de-reimplementar.md)**
+  (2026-08-06): a rejeição de "fork completo do whatsmeow" e o critério
+  "não vale reimplementar Signal/Noise do zero" foram revistos à luz de
+  a licença MPL-2.0 permitir vendorizar o núcleo do `whatsmeow`
+  (`binary`/`socket`/`store`/`types`/`proto`) e o módulo `libsignal`
+  quase sem alteração, reescrevendo só a camada de orquestração de alto
+  nível. A filosofia geral deste ADR (migração incremental, ports antes
+  de troca de implementação, zero regressão observável) continua válida.
 - **Data**: 2026-08-06
 
 ## Contexto
@@ -249,7 +257,11 @@ errada — a resposta já está aqui: portas novas sobre a API de grupos do
   imediato (toda a superfície de protocolo, criptografia incluída) sem
   evidência suficiente ainda de que a maioria das lacunas exige isso — o
   caso do avatar já mostra que parte da dor é uso incompleto da lib, não
-  limitação dela.
+  limitação dela. **Revisto pelo ADR-0002**: a premissa de que fork exige
+  reimplementar criptografia do zero está incorreta — MPL-2.0 permite
+  vendorizar `binary`/`socket`/`libsignal`/`store` quase sem alteração,
+  reduzindo o fork a reescrever só a camada de orquestração de alto
+  nível. Ver ADR-0002 para o racional atualizado.
 - **Esperar passivamente por PRs upstream**: já demonstrado que trava o
   ritmo (pseudo-versão pinada em `go.mod` em vez de release estável).
 - **Reimplementação big-bang do protocolo**: risco alto demais — criptografia
