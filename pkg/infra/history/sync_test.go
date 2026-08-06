@@ -66,7 +66,7 @@ func insertMessage(t *testing.T, conn *sqlx.DB, userID, chatJID, senderJID, mess
 	}
 }
 
-// mcWithClient implementa o waClientGetter anonimo esperado por SyncHistoryForChat.
+// mcWithClient implementa MyClientGetter, esperado por SyncHistoryForChat.
 type mcWithClient struct{ client *whatsmeow.Client }
 
 func (m mcWithClient) GetWAClient() *whatsmeow.Client { return m.client }
@@ -102,10 +102,10 @@ func (f *fakeSender) SendMessage(_ context.Context, to types.JID, _ *waE2E.Messa
 	return whatsmeow.SendResponse{}, f.sendErr
 }
 
-func depsWith(wa interface{}, mc interface{}) SyncDeps {
+func depsWith(wa interface{}, mc MyClientGetter) SyncDeps {
 	return SyncDeps{
 		GetWA: func(string) interface{} { return wa },
-		GetMC: func(string) interface{} { return mc },
+		GetMC: func(string) MyClientGetter { return mc },
 	}
 }
 
@@ -203,7 +203,7 @@ func TestSyncHistoryForChat_EnvioComSucesso(t *testing.T) {
 func TestSyncHistoryForChat_SemStoreDoCliente(t *testing.T) {
 	tests := []struct {
 		name string
-		mc   interface{}
+		mc   MyClientGetter
 	}{
 		{name: "GetWAClient devolve nil", mc: mcWithClient{}},
 		{name: "cliente sem store", mc: mcWithClient{client: &whatsmeow.Client{}}},

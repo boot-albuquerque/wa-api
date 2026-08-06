@@ -130,6 +130,6 @@ func (s *server) SendNotification(method string, params map[string]interface{}) 
 func syncHistoryForChat(ctx context.Context, db *sqlx.DB, userID string, chatJID types.JID, count int) error {
 	return wahistory.SyncHistoryForChat(ctx, db, wahistory.SyncDeps{
 		GetWA: func(uid string) interface{} { return clientManager.GetWhatsmeowClient(uid) },
-		GetMC: func(uid string) interface{} { return clientManager.GetMyClient(uid) },
+		GetMC: func(uid string) wahistory.MyClientGetter { return clientManager.GetMyClient(uid) },
 	}, userID, chatJID, count)
 }

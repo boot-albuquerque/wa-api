@@ -23,10 +23,16 @@ type historySender interface {
 	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
 }
 
+// MyClientGetter e' a interface minima que SyncDeps.GetMC precisa: acesso ao
+// *whatsmeow.Client subjacente, sem exigir o tipo concreto de MyClient.
+type MyClientGetter interface {
+	GetWAClient() *whatsmeow.Client
+}
+
 // SyncDeps provides the external callbacks needed for history sync.
 type SyncDeps struct {
 	GetWA func(userID string) interface{} // returns *whatsmeow.Client
-	GetMC func(userID string) interface{} // returns something with WAClient
+	GetMC func(userID string) MyClientGetter
 }
 
 // SaveMessageFunc saves a message to history.
@@ -81,10 +87,7 @@ func SyncHistoryForChat(ctx context.Context, db *sqlx.DB, deps SyncDeps, userID 
 	}
 
 	myClient := deps.GetMC(userID)
-	type waClientGetter interface {
-		GetWAClient() *whatsmeow.Client
-	}
-	waclient := myClient.(waClientGetter).GetWAClient()
+	waclient := myClient.GetWAClient()
 	if waclient == nil || waclient.Store == nil || waclient.Store.ID == nil {
 		return errors.New("client store not available")
 	}

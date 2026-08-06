@@ -5,8 +5,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
-
-	)
+)
 
 // ErrNoSession é o erro tipado que toda porta de capacidade devolve quando
 // não existe sessão WhatsApp para o txtID pedido. Nasce tipado por exigência

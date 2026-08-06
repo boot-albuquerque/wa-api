@@ -2,6 +2,9 @@ package whatsmeow
 
 import (
 	"context"
+	"crypto/tls"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,7 +13,26 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
+
+	port "wa-api/pkg/application/contracts"
 )
+
+// webhookTLSSkipVerify reports whether outgoing webhook deliveries should
+// skip TLS certificate verification. Mirrors pkg/bootstrap/lifecycle.go's
+// webhookTLSSkipVerify (same env var, same insecure-opt-in semantics) —
+// duplicated here rather than imported because pkg/infra/whatsmeow must not
+// depend on pkg/bootstrap (see SessionAttachHook design in the plan).
+var webhookTLSSkipVerify = sync.OnceValue(func() bool {
+	v := strings.ToLower(os.Getenv("WA_API_WEBHOOK_TLS_SKIP_VERIFY"))
+	skip := v == "true" || v == "1"
+	if skip {
+		log.Warn().
+			Str("env", "WA_API_WEBHOOK_TLS_SKIP_VERIFY").
+			Msg("INSECURE: webhook TLS certificate verification is DISABLED by explicit configuration. " +
+				"Webhook deliveries are vulnerable to man-in-the-middle attacks. Unset this variable in production.")
+	}
+	return skip
+})
 
 // MyClient defines the interface for WhatsApp client wrappers.
 type MyClient interface {
@@ -22,7 +44,7 @@ type ClientManager struct {
 	sync.RWMutex
 	whatsmeowClients map[string]*whatsmeow.Client
 	httpClients      map[string]*resty.Client
-	myClients        map[string]interface{} // stores MyClient (from wmiau.go)
+	myClients        map[string]MyClient
 	// pollOptions stores the plaintext options sent for each poll, keyed on
 	// userID then on the poll's message ID. This lets the event handler
 	// SHA-256-match incoming vote hashes back to the original option text
@@ -35,17 +57,82 @@ type ClientManager struct {
 	// than one WS to the same session — e.g. a reconnect racing the old
 	// connection's close.
 	wsConns map[string]map[*websocket.Conn]struct{}
+	// sessions backs the port.SessionRegistry implementation (Fase 2c):
+	// CRUD of Session handles for SessionOrchestrator, kept separate from
+	// whatsmeowClients since a Session (port.Session) wraps more than the
+	// raw *whatsmeow.Client during the migration.
+	sessions map[string]port.Session
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		whatsmeowClients: make(map[string]*whatsmeow.Client),
 		httpClients:      make(map[string]*resty.Client),
-		myClients:        make(map[string]interface{}),
+		myClients:        make(map[string]MyClient),
 		pollOptions:      make(map[string]map[string][]string),
 		wsConns:          make(map[string]map[*websocket.Conn]struct{}),
+		sessions:         make(map[string]port.Session),
 	}
 }
+
+// Register associa a Session ao userID, satisfazendo port.SessionRegistry.
+//
+// Também publica o *whatsmeow.Client subjacente em whatsmeowClients: os
+// adapters de domínio (e o SessionAttachHook) resolvem o cliente por
+// GetWhatsmeowClient, e o orchestrator — que só conhece port.Session — não
+// teria como preenchê-lo.
+func (cm *ClientManager) Register(userID string, sess port.Session) {
+	cm.Lock()
+	defer cm.Unlock()
+	cm.sessions[userID] = sess
+	if exposer, ok := sess.(interface{ WhatsmeowClient() *whatsmeow.Client }); ok {
+		if client := exposer.WhatsmeowClient(); client != nil {
+			cm.whatsmeowClients[userID] = client
+		}
+	}
+}
+
+// Unregister remove o handle de Session associado a userID, se houver.
+func (cm *ClientManager) Unregister(userID string) {
+	cm.Lock()
+	defer cm.Unlock()
+	delete(cm.sessions, userID)
+}
+
+// Get devolve a Session registrada para userID.
+func (cm *ClientManager) Get(userID string) (port.Session, bool) {
+	cm.RLock()
+	defer cm.RUnlock()
+	sess, ok := cm.sessions[userID]
+	return sess, ok
+}
+
+// ProvisionWebhookClient monta o cliente HTTP de entrega de webhook para
+// userID, seguindo a mesma configuração hoje montada inline em
+// lifecycle.go:234-291 (redirect policy, timeout, TLS, proxy opcional) e
+// registra o resultado via SetHTTPClient. proxyURL vazio entrega sem proxy.
+func (cm *ClientManager) ProvisionWebhookClient(userID string, proxyURL string) error {
+	webhookClient := resty.New()
+	webhookClient.SetRedirectPolicy(resty.FlexibleRedirectPolicy(15))
+	webhookClient.SetTimeout(30 * time.Second)
+	webhookClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: webhookTLSSkipVerify()}) //nolint:gosec // opt-in explícito via env var, ver webhookTLSSkipVerify
+	webhookClient.OnError(func(req *resty.Request, err error) {
+		if v, ok := err.(*resty.ResponseError); ok {
+			log.Debug().Str("response", v.Response.String()).Msg("resty error")
+			log.Error().Err(v.Err).Msg("resty error")
+		}
+	})
+
+	if proxyURL != "" {
+		webhookClient.SetProxy(proxyURL)
+	}
+
+	cm.SetHTTPClient(userID, webhookClient)
+	return nil
+}
+
+// Verificação em tempo de compilação de que ClientManager implementa o port.
+var _ port.SessionRegistry = (*ClientManager)(nil)
 
 func (cm *ClientManager) SetWhatsmeowClient(userID string, client *whatsmeow.Client) {
 	cm.Lock()
@@ -83,15 +170,15 @@ func (cm *ClientManager) DeleteHTTPClient(userID string) {
 	delete(cm.httpClients, userID)
 }
 
-// SetMyClient stores a MyClient instance (should be *wmiau.MyClient).
-func (cm *ClientManager) SetMyClient(userID string, client interface{}) {
+// SetMyClient stores a MyClient instance.
+func (cm *ClientManager) SetMyClient(userID string, client MyClient) {
 	cm.Lock()
 	defer cm.Unlock()
 	cm.myClients[userID] = client
 }
 
-// GetMyClient retrieves a MyClient instance. Callers must type-assert to the concrete type.
-func (cm *ClientManager) GetMyClient(userID string) interface{} {
+// GetMyClient retrieves a MyClient instance.
+func (cm *ClientManager) GetMyClient(userID string) MyClient {
 	cm.RLock()
 	defer cm.RUnlock()
 	return cm.myClients[userID]

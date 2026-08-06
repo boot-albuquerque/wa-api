@@ -11,7 +11,7 @@ import (
 type fakeMyClient struct{}
 
 func (f *fakeMyClient) GetWAClient() *whatsmeow.Client { return nil }
-func (f *fakeMyClient) GetUserID() string             { return "fake-user" }
+func (f *fakeMyClient) GetUserID() string              { return "fake-user" }
 
 func TestNewClientManager(t *testing.T) {
 	cm := NewClientManager()
@@ -163,16 +163,6 @@ func TestClientManager_IterateWhatsmeowClients_Empty(t *testing.T) {
 	})
 	if count != 0 {
 		t.Errorf("IterateWhatsmeowClients(empty) count = %d, want 0", count)
-	}
-}
-
-// TestClientManager_MyClientInterface satisfaz o tipo interface{} sem assert.
-func TestClientManager_MyClientInterface(t *testing.T) {
-	cm := NewClientManager()
-	mc := &fakeMyClient{}
-	cm.SetMyClient("u1", mc)
-	if got, ok := cm.GetMyClient("u1").(*fakeMyClient); !ok || got != mc {
-		t.Error("GetMyClient type assertion failed")
 	}
 }
 
