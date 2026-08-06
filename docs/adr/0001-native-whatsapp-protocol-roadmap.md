@@ -108,6 +108,78 @@ passo antes de decidir se vale nativizar essa IQ específica.
   não "a lib não expõe" (motivo real pra nativizar). Vale medir caso a caso
   antes de gastar esforço em protocolo binário.
 
+## Evidência complementar: análise do `wuzapi`
+
+Pra checar se as dores descritas no Contexto são peculiaridade do `wa-api` ou
+padrão do ecossistema `whatsmeow`, foi analisado o
+[`wuzapi`](https://github.com/asternic/wuzapi) — outro projeto Go open-source
+que também expõe o `whatsmeow` via API HTTP, mais maduro/populoso que o
+`wa-api` (~15.3k linhas, análise em 2026-08-06, repo local em
+`~/Documents/projetos/github/wuzapi`). Seis apontamentos relevantes:
+
+1. **Arquitetura sem abstração sobre a lib.** `clients.go:10-40` define um
+   `ClientManager` (`sync.RWMutex` + `map[userID]*whatsmeow.Client`) e
+   `handlers.go` chama o SDK `whatsmeow` **diretamente dentro dos handlers**
+   HTTP (76 ocorrências de `clientManager.GetWhatsmeowClient(txtid).X(...)`),
+   sem port/adapter separando use case de infraestrutura. Contraste com o
+   `wa-api`, que já isola o `whatsmeow` atrás de ports
+   (`appport.ContactDirectory` e afins) — arquitetura que este ADR pretende
+   preservar ao nativizar superfícies.
+
+2. **`ExistingID` também não é usado.** `handlers.go:3516-3580`, função
+   `GetAvatar()`:
+   ```go
+   existingID := ""
+   pic, err = clientManager.GetWhatsmeowClient(txtid).GetProfilePictureInfo(
+       context.Background(), jid,
+       &whatsmeow.GetProfilePictureParams{Preview: t.Preview, ExistingID: existingID},
+   )
+   ```
+   `existingID` é zerado na hora e nunca preenchido a partir de estado
+   anterior; não há cache/persistência de `pic.ID` em nenhum arquivo do
+   projeto (`handlers.go`, `wmiau.go`, `clients.go`, `db.go`, `helpers.go`) —
+   a única gravação é um log de telemetria (`handlers.go:3570`), descartado
+   em seguida. **Confirma que o caso do avatar (ver Contexto) é padrão do
+   ecossistema, não peculiaridade do `wa-api`** — dois projetos
+   independentes cometeram a mesma omissão, o que é evidência mais forte de
+   "a lib expõe, ninguém threadou" do que uma observação isolada teria sido.
+   Ponto onde o `wa-api` já está à frente do `wuzapi`: distinção entre
+   sem-foto/privacidade e erro real (commit `905d35b`) — o `wuzapi` trata
+   ausência de avatar como 500 genérico.
+
+3. **Erros sem tradução semântica.** Sem camada de abstração, erros do SDK
+   viram HTTP 400/500 genéricos na maioria dos handlers — reforça o valor de
+   manter os ports no `wa-api` mesmo nas peças que continuarem no
+   `whatsmeow`.
+
+4. **Mesma pseudo-versão pinada.** `go.mod` do `wuzapi` fixa
+   `go.mau.fi/whatsmeow v0.0.0-20260516102357-8d3700152a69` — **o mesmo
+   pseudo-commit exato** que o `wa-api` usa hoje. Evidência direta de que
+   não há tag estável recente disponível no upstream; corrobora o argumento
+   do Contexto de que essa é uma limitação estrutural do `whatsmeow`, não um
+   sintoma de manutenção do `wa-api`.
+
+5. **Workaround próprio existe, mas fora do escopo do protocolo binário.**
+   `clients.go:14-20` mantém um cache in-memory (`pollOptions
+   map[string]map[string][]string`) de texto plano das opções de enquete,
+   pra resolver os hashes SHA-256 que o `whatsmeow` entrega nos eventos de
+   voto — contorno de aplicação, não de protocolo. Não encontrado nenhum
+   workaround que exigisse reimplementar `waBinary`/criptografia; reforça
+   que nativizar protocolo deve continuar sendo exceção, não ponto de
+   partida.
+
+6. **Eventos**: dispatch centralizado em um switch grande
+   (`myEventHandler`, `wmiau.go:696`) roteando por tipo de evento
+   `whatsmeow` pra webhook/RabbitMQ/stdio — mesmo padrão observado no
+   `wa-api`, sem achado que sugira lacuna na lib.
+
+**Conclusão da análise**: nenhum achado no `wuzapi` motiva acelerar a
+reimplementação nativa de protocolo — pelo contrário, reforça que a maior
+parte da dor observável no ecossistema é "capacidade exposta e não usada"
+(itens 2 e 4), resolvível com código de aplicação, e que a decisão deste ADR
+de tratar reimplementação binária como último recurso, não ponto de partida,
+está alinhada com a experiência de outro projeto maduro sobre a mesma lib.
+
 ## Alternativas descartadas
 
 - **Fork completo do `whatsmeow` agora**: alto custo de manutenção
