@@ -469,3 +469,117 @@ passa a ser a prova da correção. Vale também mandar o patch para o upstream
 justamente um caso em que o comportamento observável muda. Pendente de decisão
 do usuário: corrigir agora em commit próprio, ou tratar junto com F16 numa
 leva de correções de comportamento do fork.
+
+---
+
+## F19 — cortes de MAC em `appstate/` dão panic com blob mais curto que 32 bytes
+
+**Data**: 2026-08-06
+**Contexto**: Fase B do ADR-0004, metade `internal/wa-noise/appstate/`. Achado
+na leitura linha a linha para a auditoria de magic numbers; o código é do
+whatsmeow upstream, não introduzido por nós.
+
+**Onde**: quatro cortes que assumem, sem checar, que o blob tem pelo menos
+`macLength` (32) bytes:
+
+- `internal/wa-noise/appstate/decode_mutation.go:60` (`Processor.decodeMutation`)
+
+  ```go
+  content := bytes.Clone(mutation.GetRecord().GetValue().GetBlob())
+  content, valueMAC = content[:len(content)-macLength], content[len(content)-macLength:]
+  ```
+
+- `internal/wa-noise/appstate/hash.go:46` (`HashState.updateHash`)
+
+  ```go
+  value := mutation.GetRecord().GetValue().GetBlob()
+  added = append(added, value[len(value)-macLength:])
+  ```
+
+- `internal/wa-noise/appstate/hash.go:90` (`generatePatchMAC`)
+- `internal/wa-noise/appstate/decode.go:100` (callback de `validatePatch`)
+
+**Problema**: `len(blob)` menor que 32 faz `len(blob)-macLength` ficar negativo
+e o slice dar panic (`slice bounds out of range`). O blob vem direto de um
+`SyncdValue` desserializado do servidor — ou seja, é entrada não confiável.
+Um patch de app state malformado (ou um blob externo adulterado) derruba a
+goroutine que processa app state em vez de devolver erro. Não há validação de
+tamanho mínima em nenhum ponto do caminho: `ParsePatchList` só desserializa o
+protobuf, e `decodeMutation` já corta na primeira linha útil.
+
+Não há reprodução em produção; o caminho exige um servidor (ou um MITM pós-Noise)
+mandando `SyncdValue.Blob` truncado. Nenhum teste foi escrito para ele
+justamente porque o teste seria um panic, não uma falha de asserção.
+
+**Correção sugerida**: validar antes de cortar, no ponto de entrada
+(`decodeMutation`), e devolver erro sentinela novo em `errors.go`:
+
+```go
+// errors.go
+ErrShortMutationBlob = errors.New("mutation value blob shorter than MAC length")
+
+// decode_mutation.go, antes do corte
+blob := mutation.GetRecord().GetValue().GetBlob()
+if len(blob) < macLength+cbcIVLength {
+    err = fmt.Errorf("failed to decode mutation #%d: %w", i+1, ErrShortMutationBlob)
+    return
+}
+```
+
+O mesmo teto vale para `updateHash`/`generatePatchMAC`, que rodam **antes** de
+`decodeMutation` no fluxo de `validatePatch` — então a validação precisa
+acontecer nos dois lugares, ou `validatePatch` precisa varrer as mutações uma
+vez antes de chamar `updateHash`. Vale mandar o patch para o upstream
+(`go.mau.fi/whatsmeow`), já que o bug não é nosso.
+
+**Status**: **não corrigido**. A Fase B do ADR-0004 é estrutural por contrato
+(`PATCHES.md` declara "comportamento não mudou" nas entradas de divisão) e
+trocar panic por erro é mudança de comportamento observável. Pendente de
+decisão do usuário — candidato natural à mesma leva de F16/F18.
+
+---
+
+## F20 — `fakeIndexesToRemove` é sempre nil: ramo morto em `decodeMutations`
+
+**Data**: 2026-08-06
+**Contexto**: Fase B do ADR-0004, metade `internal/wa-noise/appstate/`. Mesmo
+racional de F19: código do upstream, achado na leitura para a auditoria.
+
+**Onde**: `internal/wa-noise/appstate/decode.go:48` e
+`internal/wa-noise/appstate/decode.go:155` — as duas declarações:
+
+```go
+var fakeIndexesToRemove map[[macLength]byte][]byte
+```
+
+O mapa é declarado e passado a `Processor.decodeMutations` sem nunca ser
+inicializado nem populado, nos dois chamadores (`decodeSnapshot` e o laço de
+`DecodePatches`). Consumidor em
+`internal/wa-noise/appstate/decode_mutation.go:118`:
+
+```go
+altIndexMAC, ok := fakeIndexesToRemove[indexMACToArray(indexMAC)]
+if ok && len(indexMAC) == macLength {
+    out.RemoveMAC(altIndexMAC)
+}
+```
+
+**Problema**: leitura de mapa nil sempre devolve `ok == false`, então o ramo de
+remoção do "index MAC alternativo" nunca executa. Não é um bug de corretude
+observável hoje (o comportamento é o de não ter a feature), mas é um parâmetro
+que atravessa três funções sem fazer nada — e, se a intenção original era
+remover MACs de índices "falsos"/legados gerados por outra plataforma, então há
+uma limpeza de estado que simplesmente não acontece, e o app state acumula MACs
+órfãos no banco.
+
+**Correção sugerida**: nenhuma imediata — antes é preciso descobrir a intenção
+no upstream (`git log`/issues de `go.mau.fi/whatsmeow` em torno de
+`fakeIndexesToRemove`). Dois desfechos possíveis: (a) a feature nunca foi
+ligada e o parâmetro deve ser removido das três assinaturas, simplificando;
+(b) deveria estar populado, e aí é bug de verdade no upstream. Não dá para
+escolher sem a intenção.
+
+**Status**: **não corrigido**. O ramo fica coberto por
+`TestDecodeMutationsRemovesFakeIndex` (que passa o mapa direto para
+`decodeMutations`), de modo que ele não se degrade silenciosamente caso venha a
+ser ligado. Pendente de investigação no upstream.

@@ -571,6 +571,257 @@ fix sugerido, pendente de decisão do usuário. O teste fica versionado e
 
 ---
 
+## Fase B — `internal/wa-noise/appstate/`, 2026-08-06
+
+Primeira metade da Fase B do ADR-0004. `appstate/` implementa o protocolo de
+sincronizacao de estado entre dispositivos do WhatsApp: derivacao de chaves,
+cifragem/decifragem de mutacoes, cadeia de hashes (LTHash) e verificacao de
+MACs. E' o caminho por onde passa toda mudanca de configuracao, contato,
+label, mute, pin e star vinda de outro dispositivo.
+
+### Regra geral desta fase
+
+**Comportamento nao mudou em nenhuma entrada abaixo.** As divisoes sao
+movimentacao pura de declaracoes de topo entre arquivos do **mesmo pacote**
+(`package appstate`) e do **mesmo diretorio**; as extracoes de constante
+substituem literais por constantes de valor identico. A prova esta na secao
+de cobertura: os testes de round trip `EncodePatch` → `DecodePatches` e a
+verificacao independente dos quatro MACs (index, value/content, snapshot,
+patch) contra os algoritmos reimplementados no teste passam sem mudanca.
+
+### Divisoes por arquivo
+
+Formato: `arquivo original` (linhas antes → depois) → arquivos criados.
+
+#### `decode.go` (407 → 179)
+
+- **Criado** `patchlist.go` (106): `PatchList`, `DownloadExternalFunc`,
+  `parseSnapshotInternal`, `parsePatchListInternal`, `ParsePatchList`.
+- **Criado** `decode_mutation.go` (155): `patchOutput`, `patchOutput.RemoveMAC`,
+  `patchOutput.AddMAC`, `Processor.decodeMutation`, `indexMACToArray`,
+  `Processor.decodeMutations`, `Processor.storeMACs`.
+- **Por que**: o arquivo acumulava tres responsabilidades sem relacao entre si.
+  A primeira e' **parsing de transporte**: ler o no XML `<collection>`, achar
+  `<snapshot>`/`<patches>`, e baixar blobs externos — nao toca em cripto nem em
+  banco, so' desserializa. A segunda e' a **decifragem de uma mutacao
+  individual** (AES-CBC + verificacao de content MAC e index MAC) mais a
+  contabilidade de MACs a inserir/remover e a escrita desse delta no store. A
+  terceira, que ficou em `decode.go`, e' a **verificacao e aplicacao no nivel do
+  patch/snapshot** (`validateSnapshotMAC`, `decodeSnapshot`, `validatePatch`,
+  `DecodePatches`) — a camada que decide se um patch e' aceitavel e em que ordem
+  os estados encadeiam.
+
+#### `encode.go` (375 → 112)
+
+- **Criado** `patch_builders_chat.go` (152): `BuildMute`, `BuildMuteAbs`,
+  `newPinMutationInfo`, `BuildPin`, `BuildArchive`, `BuildMarkChatAsRead`,
+  `BuildDeleteChat`, `newMessageRange`.
+- **Criado** `patch_builders_label.go` (74): `newLabelChatMutation`,
+  `BuildLabelChat`, `newLabelMessageMutation`, `BuildLabelMessage`,
+  `newLabelEditMutation`, `BuildLabelEdit`.
+- **Criado** `patch_builders_message.go` (58): `newSettingPushNameMutation`,
+  `BuildSettingPushName`, `newStarMutation`, `BuildStar`.
+- **Por que**: `encode.go` misturava o **codificador** (`EncodePatch`: cifra,
+  gera os MACs, atualiza o hash e serializa o `SyncdPatch`) com uma colecao de
+  **construtores de patch** que sao dados declarativos — cada `BuildX` so' monta
+  um `PatchInfo` e nao executa cripto nenhuma. Os construtores foram agrupados
+  pelo alvo da mutacao: estado de conversa (mute/pin/archive/read/delete, que
+  compartilham `newMessageRange`), labels, e mensagem/perfil (push name, star).
+  `encode.go` ficou so' com `MutationInfo`, `PatchInfo` e `EncodePatch`.
+
+#### `keys.go` (221 → 123)
+
+- **Criado** `patchnames.go` (128): `WAPatchName`, o bloco de constantes
+  `WAPatchCriticalBlock`..`WAPatchRegular`, `AllPatchNames` e os cinco blocos de
+  constantes `IndexX` (regular_low, regular, regular_high, critical_unblock_low,
+  critical_block).
+- **Por que**: `keys.go` era 60% taxonomia do protocolo (a lista de nomes de
+  colecao e ~100 indices de mutacao, puro dado) e 40% gestao de chave
+  (`Processor`, cache, expansao HKDF). Nao passava do teto, mas sao duas
+  responsabilidades distintas e a taxonomia e' o que mais cresce a cada versao
+  do protocolo. `keys.go` ficou com `Processor`, `NewProcessor`,
+  `ExpandedAppStateKeys`, `expandAppStateKeys`, `getAppStateKey` e
+  `GetMissingKeyIDs`.
+
+### Extracao com criacao de helper privado
+
+- Em `keys.go`, `expandAppStateKeys` fatiava o material HKDF com dez offsets
+  literais numa unica linha (`[0:32]`, `[32:64]`, ... `[128:160]`) e montava
+  `ExpandedAppStateKeys` **por posicao**, sem nomes de campo — nao havia como
+  ler o codigo e saber qual fatia era a chave de index e qual era a de patch
+  MAC. Passou a usar `appStateKeyPart(expanded, i)` e literal com nome de campo.
+  **Comportamento identico**: `appStateKeyPart(e, i) == e[i*32:(i+1)*32]`, e a
+  ordem dos campos e' a mesma do literal posicional original (verificado por
+  `TestExpandAppStateKeysSplitsHKDFOutput`, que confere fatia a fatia contra o
+  `hkdfutil.SHA256` chamado diretamente no teste).
+
+### Magic numbers e strings extraidos para constantes nomeadas
+
+Escopo: **todos** os arquivos do diretorio, nao so' os divididos.
+
+**Criado** `constants.go` (77), com os literais de protocolo:
+
+| Literal original | Constante | Onde estava |
+|---|---|---|
+| `32` (MAC) | `macLength` | `decode.go`, `decode_mutation.go`, `hash.go` — corte de value MAC, `[:32]` do SHA-512, `[32]byte` do `indexMACToArray`/`fakeIndexesToRemove` |
+| `16` | `cbcIVLength` | prefixo IV do AES-CBC em `decodeMutation` |
+| `128` | `lthashLength` | `HashState.Hash [128]byte`, validacao e conversao do lthash em `recovery.go` |
+| `8` | `versionByteLength` | `make([]byte, 8)` em `uint64ToBytes` |
+| `+ 1` (operacao) | `contentMACOperationOffset` | `byte(operation) + 1` em `generateContentMAC` |
+| `+ 1` (key ID) | `contentMACKeyIDLengthOffset` | `uint64(len(keyID) + 1)` em `generateContentMAC` |
+| `"snapshot"` | `snapshotNodeTag` | tag do no de snapshot |
+| `"patches"` | `patchesNodeTag` | tag do no container de patches |
+| `"patch"` | `patchNodeTag` | tag de cada no de patch |
+| `"name"` | `patchListAttrName` | atributo de `<collection>` |
+| `"has_more_patches"` | `patchListAttrHasMore` | atributo de `<collection>` |
+| `"0"` / `"1"` | `indexBoolFalse` / `indexBoolTrue` | flags dentro do array JSON do indice (`BuildStar`, `BuildDeleteChat`, `newLabelMessageMutation`) |
+| `"0"` (sender) | `selfSenderIndexValue` | sentinela de "remetente sou eu" no indice de `star` |
+| `-1` | `muteForeverEndTimestamp` | `MuteEndTimestamp` de mute permanente |
+| `2`,`5`,`3`,`3`,`3`,`3`,`3`,`1`,`2`,`6` | `mutationVersionMute`, `...Pin`, `...Archive`, `...MarkChatAsRead`, `...LabelAssocChat`, `...LabelAssocMsg`, `...LabelEdit`, `...SettingPushName`, `...Star`, `...DeleteChat` | campo `Version` de cada `MutationInfo` |
+
+Em `keys.go`:
+
+| Literal original | Constante |
+|---|---|
+| `"WhatsApp Mutation Keys"` | `appStateKeyHKDFInfo` |
+| `160` | `appStateKeyExpandedLength` (= `appStateKeyPartLength * appStateKeyPartCount`) |
+| `32` (fatia de chave) | `appStateKeyPartLength` |
+| `5` (implicito) | `appStateKeyPartCount` |
+
+Duas notas sobre por que certos numeros **nao** viraram a mesma constante:
+
+- `macLength` e `appStateKeyPartLength` valem ambos `32` mas sao coisas
+  diferentes — um e' o tamanho de um MAC truncado, o outro o tamanho de uma
+  subchave derivada. Manter constantes separadas evita acoplar dois conceitos
+  que so' coincidem hoje.
+- O `+3` de `dataToHash := make([][]byte, len(patch.GetMutations())+3)` em
+  `generatePatchMAC` **nao** virou constante: e' a aridade de um literal
+  imediatamente abaixo (snapshot MAC + versao + nome, os tres `dataToHash[...]`
+  seguintes), nao um parametro de protocolo. Nomear so' afastaria o numero do
+  codigo que o justifica.
+
+Literais deixados **de proposito** como estao: as strings dos ~100 `IndexX` e
+dos cinco `WAPatchX` ja' **sao** constantes nomeadas (em `patchnames.go`), e
+`lthash.WAPatchIntegrity` ja' encapsulava `"WhatsApp Patch Integrity"`/`128`.
+
+### Auditoria de logging
+
+Varrido `internal/wa-noise/appstate/*.go` atras de escrita de log fora do
+`waLog.Logger` injetado. Resultado: **nenhum bypass**. Nao ha `fmt.Print*`,
+`log.*` do stdlib, `println` nem `panic` no diretorio. Os quatro pontos de log
+do pacote (`decode.go` ×2, `encode.go` ×1, `keys.go` ×1) usam `proc.Log.Warnf`,
+onde `proc.Log` e' o `waLog.Logger` recebido em `NewProcessor` — que o
+bootstrap alimenta com `cli.Log.Sub("AppState")`, ja' ligado ao `walog.Bridge`
+sobre zerolog (`pkg/infra/wa-noise/walog/`). Nada a corrigir, e nenhuma
+infraestrutura de log nova foi adicionada.
+
+### Cobertura de teste
+
+O diretorio nao tinha **nenhum** `_test.go`. Cobertura final: **91.0% de
+statements** (`go test -race -cover ./internal/wa-noise/appstate/`).
+
+A viabilidade veio de `store.AppStateStore` e `store.AppStateSyncKeyStore`
+serem **interfaces**: deu para escrever um duplo em memoria dentro do pacote de
+teste e exercitar `Processor` de ponta a ponta sem banco e sem rede. **Nada em
+`internal/wa-noise/store/` foi tocado.**
+
+- **Criado** `testsupport_test.go` (139): `memAppStateStore`, o duplo em memoria
+  das duas interfaces de store, com hooks de erro por metodo
+  (`putVersionErr`, `putMACsErr`, `deleteMACsErr`, `getMACErr`, `getKeyErr`)
+  para cobrir os caminhos de falha de persistencia; e `newTestProcessor`, que
+  devolve um `Processor` com chave de app state ja' registrada.
+- **Criado** `patchlist_test.go` (203): `ParsePatchList` — atributos lidos,
+  `name` obrigatorio, filhos que nao sao `<patch>` ignorados, patch malformado
+  rejeitado, download de mutacoes externas (anexadas ao patch, erro propagado,
+  download vazio rejeitado) e download de snapshot.
+- **Criado** `decode_mutation_test.go` (251): `patchOutput.AddMAC`/`RemoveMAC`
+  (incluindo o cancelamento de um add anterior no mesmo patch),
+  `indexMACToArray` em todos os tamanhos de entrada, `decodeMutation` (round
+  trip, content MAC adulterado → `ErrMismatchingContentMAC`, index MAC
+  adulterado → `ErrMismatchingIndexMAC`, chave ausente → `ErrKeyNotFound`),
+  `decodeMutations` (SET+REMOVE, propagacao de `PatchVersion`, remocao do index
+  alternativo via `fakeIndexesToRemove`) e `storeMACs` (persistencia e
+  propagacao dos tres erros de store).
+- **Criado** `decode_test.go` (222): round trip `EncodePatch` → `DecodePatches`
+  provando que a mutacao volta com index, acao, versao e MACs corretos e
+  persistidos; deteccao de patch MAC e snapshot MAC adulterados;
+  `validateMACs=false` aceitando os mesmos patches adulterados; lista vazia como
+  no-op que nao escreve no store; dois patches encadeados em ordem com
+  `PatchVersion` 1 e 2; propagacao de erro de escrita; e decodificacao de
+  snapshot (caminho feliz e MAC adulterado).
+- **Criado** `encode_test.go` (172): `EncodePatch` verificado **contra os
+  algoritmos, nao contra si mesmo** — o index MAC e' reconferido como HMAC do
+  indice JSON, o value MAC como content MAC do ciphertext, e o ciphertext e'
+  decifrado com `cbcutil` e desserializado ate' o `SyncActionValue`. Mais: o
+  `HashState` do chamador nao e' mutado (passagem por valor) enquanto snapshot
+  MAC e patch MAC usam a versao ja' incrementada, preenchimento de timestamp
+  zerado, chave ausente, erro de store e patch sem mutacoes.
+- **Criado** `hash_test.go` (247): `uint64ToBytes` big-endian,
+  `concatAndHMAC` (concatenacao equivalente e sensivel a ordem),
+  `generateSnapshotMAC` e `generatePatchMAC` sensiveis a cada componente de
+  entrada, `generateContentMAC` truncado e ligado a operacao/key ID/conteudo, e
+  `updateHash` — SET somando no LTHash conferido contra `lthash.WAPatchIntegrity`
+  chamado direto, idempotencia de reaplicar um SET, SET+REMOVE zerando o hash,
+  REMOVE orfao gerando `ErrMissingPreviousSetValueOperation` como *warning* sem
+  alterar o hash, propagacao de erro do lookup, e o `maxIndex` passado ao
+  callback.
+- **Criado** `keys_test.go` (130): `expandAppStateKeys` conferida fatia a fatia
+  contra o HKDF direto, determinismo e distincao entre subchaves,
+  `getAppStateKey` (cache que sobrevive a remocao do store, `ErrKeyNotFound`,
+  propagacao de erro) e `GetMissingKeyIDs` (deduplicacao entre snapshot,
+  records e patches; key ID nil ignorado).
+- **Criado** `recovery_test.go` (209): `ParseRecovery` comprimido e nao
+  comprimido, gzip e protobuf invalidos; `ProcessRecovery` persistindo versao,
+  lthash e MACs, recalculando o index MAC a partir do indice e preservando o
+  value MAC do servidor; lthash de tamanho errado, chave ausente e indice JSON
+  invalido rejeitados; e o contrato de devolver as mutacoes decodificadas mesmo
+  quando a escrita no store falha.
+- **Criado** `patchnames_test.go` (72), `patch_builders_chat_test.go` (177),
+  `patch_builders_label_test.go` (72), `patch_builders_message_test.go` (59):
+  `AllPatchNames` cobrindo todos os nomes declarados, indices sem colisao, e
+  cada `BuildX` conferido no tipo de colecao, na forma exata do array de indice,
+  na constante de versao e no conteudo da acao.
+
+### Achados NAO corrigidos (registrados em `HOUSEKEEP.md`)
+
+Nenhum bug de logica foi encontrado — o round trip encode/decode fecha. Mas a
+leitura linha a linha expos uma classe de fragilidade a payload malformado:
+varios cortes de MAC assumem, sem checar, que o blob tem pelo menos
+`macLength` bytes (`decode_mutation.go:60`, `hash.go:46`, `hash.go:90`,
+`decode.go:100`). Um `SyncdValue.Blob` mais curto que 32 bytes vindo do
+servidor gera *panic* de slice em vez de erro. **Nao corrigido**: virar erro e'
+mudanca de comportamento observavel, e esta fase e' estrutural por contrato.
+Registrado com o fix sugerido, pendente de decisao.
+
+Tambem nao mexido: `fakeIndexesToRemove` e' declarado como `var ... map[...]`
+nunca inicializado em `decodeSnapshot` e em `DecodePatches` — sempre `nil`, o
+que torna o ramo de remocao de indice alternativo em `decodeMutations` codigo
+morto na pratica. E' assim no upstream; mexer exigiria entender a intencao do
+autor. O teste `TestDecodeMutationsRemovesFakeIndex` exercita o ramo passando o
+mapa direto, para que ele nao se degrade caso algum dia seja ligado.
+
+### Gates atualizados
+
+- `scripts/waclient-filesize-check.sh`: `DIRS` ganhou
+  `internal/wa-noise/appstate/`. Nenhum arquivo do diretorio tem cabecalho de
+  codigo gerado, entao a isencao continua valendo so' para `internals.go`.
+- `Makefile`: `WACLIENT_TEST_PKGS` ganhou `./internal/wa-noise/appstate/`, para
+  que os `_test.go` acima rodem de fato em `make check` — `internal/wa-noise/`
+  segue fora de `TEST_PKGS` (achado F17).
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio.
+- `internal/wa-noise/appstate/lthash/` (58 linhas, subpacote proprio) nao foi
+  tocado: ja' esta dentro do teto, ja' encapsula seus parametros em
+  `WAPatchIntegrity`, e e' single-responsibility. Fica para o restante da Fase B
+  se merecer teste dedicado — hoje e' coberto indiretamente por `hash_test.go`.
+- `errors.go` (19) e `hash.go` (101) nao foram divididos: ja' estao no teto e
+  cada um tem uma responsabilidade so'.
+- `internal/wa-noise/store/` — segunda metade da Fase B, executada em paralelo.
+
+---
+
 ## `internal/wa-noise/argo/`, 2026-08-06
 
 ### Contexto
