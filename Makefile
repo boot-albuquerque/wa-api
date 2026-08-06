@@ -243,7 +243,7 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/waclient/ (fora de proto/, gerado)
 	@bash scripts/waclient-license-check.sh
 
-waclient-drift: ## Falha se internal/waclient/ divergir do upstream declarado em UPSTREAM, além do registrado em PATCHES.md
+waclient-drift: ## Falha se internal/waclient/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
 	@version=$$(cat internal/waclient/UPSTREAM | awk '{print $$2}'); \
 	 if [ -z "$$version" ]; then \
 	   echo "FALHA: internal/waclient/UPSTREAM vazio ou malformado."; \

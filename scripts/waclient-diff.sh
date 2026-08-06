@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Compara internal/waclient/ contra uma versão do go.mau.fi/whatsmeow
+# Compara internal/waclient/proto/ contra uma versão do go.mau.fi/whatsmeow
 # upstream, normalizando o import path antes do diff (sem essa
 # normalização, TODO arquivo apareceria como modificado só pela troca de
 # path, tornando o diff inútil).
 #
+# ADR-0004 (2026-08-06): a partir desta ADR, internal/waclient/ deixou de
+# ser um espelho drift-zero do upstream inteiro — só internal/waclient/proto/
+# (código GERADO a partir de .proto, nunca editado à mão) continua sob essa
+# trava. O restante do módulo (raiz, appstate/, argo/, binary/, socket/,
+# store/, types/, util/) é agora um fork ativamente mantido, com
+# modificações esperadas e registradas em internal/waclient/PATCHES.md — não
+# faz sentido compará-lo contra upstream byte-a-byte.
+#
 # Uso: scripts/waclient-diff.sh <versão>
 #   ex: scripts/waclient-diff.sh v0.0.0-20260516102357-8d3700152a69
 #
-# Saída vazia (exit 0) = internal/waclient/ é cópia fiel da versão indicada,
-# sem patches locais não registrados.
-# Saída não-vazia = há diferença; revise se é patch conhecido (registrado em
-# internal/waclient/PATCHES.md) ou deriva não intencional.
+# Saída vazia (exit 0) = internal/waclient/proto/ é cópia fiel do upstream
+# gerado pela versão indicada.
+# Saída não-vazia = proto/ divergiu do gerador upstream — isso é sempre bug,
+# nunca patch intencional (código gerado não se edita à mão).
 set -euo pipefail
 
 VERSION="${1:?uso: scripts/waclient-diff.sh <versão>}"
@@ -64,17 +72,13 @@ done
 if [ -f "$SRC/.gitattributes" ]; then
   cp "$SRC/.gitattributes" "$NORM/.gitattributes"
 fi
-DOCGO="$NORM/binary/proto/doc.go"
-if [ -f "$DOCGO" ]; then
-  perl -pi -e "s{\Q${MODULE}\E/proto/wa\* packages}{wa-api/${DEST}/proto/wa* packages}" "$DOCGO"
-fi
-gofmt -w "$NORM" 2>/dev/null || true
+gofmt -w "$NORM/proto" 2>/dev/null || true
 
-# UPSTREAM/PROVENANCE.md/PATCHES.md são artefatos nossos, não existem na
-# fonte normalizada — remove do lado vendorizado antes do diff pra não
-# aparecerem como "removidos".
-diff -ru \
-  -x UPSTREAM \
-  -x PROVENANCE.md \
-  -x PATCHES.md \
-  "$NORM" "$DEST"
+# ADR-0004: escopo restrito a proto/ — só o código gerado continua sob a
+# trava de diff-zero. O restante do módulo é fork ativo, comparação
+# byte-a-byte deixou de fazer sentido para ele.
+if [ ! -d "$NORM/proto" ] || [ ! -d "$DEST/proto" ]; then
+  echo "ERRO: proto/ ausente em um dos lados da comparação." >&2
+  exit 1
+fi
+diff -ru "$NORM/proto" "$DEST/proto"
