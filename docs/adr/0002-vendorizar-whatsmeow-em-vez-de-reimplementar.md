@@ -1,6 +1,6 @@
 # ADR-0002: Vendorizar o núcleo do `whatsmeow` em vez de reimplementar protocolo do zero
 
-- **Status**: proposed (amenda o ADR-0001; aguardando validação antes de virar accepted)
+- **Status**: accepted (amenda o ADR-0001; aprovado 2026-08-06)
 - **Data**: 2026-08-06
 - **Amenda**: [ADR-0001](0001-native-whatsapp-protocol-roadmap.md), especificamente a alternativa
   descartada "Fork completo do `whatsmeow` agora" e o critério de partida
@@ -120,7 +120,7 @@ nome equivalente) passa a satisfazer o mesmo port, sem tocar em
 
 ## Próximos passos
 
-1. Confirmar este ADR como `accepted`.
+1. ~~Confirmar este ADR como `accepted`.~~ Feito (2026-08-06).
 2. `ralplan` para o plano de execução: qual pacote vendorizar primeiro,
    como estruturar o vendoring (módulo Go interno vs `vendor/` vs
    submódulo), e o desenho da nova implementação de `SessionProvider`
