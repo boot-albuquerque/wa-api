@@ -146,3 +146,27 @@ import path sem tocar em bytes de descriptor).
 - Avaliar se `PATCHES.md` precisa de um formato estruturado (tabela
   arquivo→motivo→PR) em vez de prosa livre, dado o volume esperado de
   entradas.
+
+## Errata: renomeação de diretórios (2026-08-06)
+
+Após esta ADR, os dois diretórios foram renomeados:
+
+- `internal/waclient/` → `internal/wa-noise/`
+- `pkg/infra/whatsmeow/` → `pkg/infra/wa-noise/`
+
+A mudança é de **caminho/import path apenas** — nenhuma cláusula
+`package X` foi alterada (`package whatsmeow`, `package walog` etc.
+continuam com o mesmo identificador), e não houve mudança de comportamento.
+`internal/wa-noise/proto/` foi verificado byte-a-byte contra o upstream
+declarado em `UPSTREAM` após a renomeação (`make waclient-drift`, saída
+vazia).
+
+Os nomes dos alvos de `make` (`waclient-drift`, `waclient-license-check`,
+`waclient-filesize`) e dos scripts (`scripts/waclient-*.sh`) foram mantidos
+estáveis de propósito — só o caminho para onde apontam mudou.
+
+O texto desta ADR e o das ADRs 0002/0003 **não** foi reescrito: as
+referências a `internal/waclient/` e `pkg/infra/whatsmeow/` acima e nas
+ADRs anteriores são registro histórico do que foi decidido na época. Leia
+`internal/waclient/` como `internal/wa-noise/` e `pkg/infra/whatsmeow/`
+como `pkg/infra/wa-noise/` ao confrontar essas ADRs com o código atual.
