@@ -302,10 +302,12 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Contact Handlers (/user/info, /user/avatar, /user/contacts)
+	chatActivityRepo := db.NewChatActivityRepository(s.DB)
 	contactHandlers := &handlers.ContactHandlers{
-		Avatar:   handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
-		Contacts: handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
-		UserInfo: handlers.NewGetUserInfoHandler(getUserUC),
+		Avatar:       handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
+		Contacts:     handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),
+		UserInfo:     handlers.NewGetUserInfoHandler(getUserUC),
+		LastActivity: handlers.NewGetContactsLastActivityHandler(user.NewGetContactsLastActivityUseCase(chatActivityRepo, logger)),
 	}
 
 	customHandlerSet = &customHandlers{

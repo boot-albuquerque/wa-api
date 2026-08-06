@@ -445,6 +445,107 @@ func TestGetDatabaseConfig_MapsSSLModeAliases(t *testing.T) {
 // TestGetDatabaseConfig_DataDirFlagWinsOverExecPath: a flag existe para
 // permitir montar o volume em outro lugar. Se ela for ignorada, o banco nasce
 // dentro do container e some no proximo deploy.
+// insertHistoryAt insere uma linha com timestamp explícito — SaveMessageToHistory
+// sempre usa time.Now(), então os testes de MAX(timestamp) precisam inserir
+// direto pra controlar a ordem.
+func insertHistoryAt(t *testing.T, db *sqlx.DB, userID, chatJID, messageID string, ts time.Time) {
+	t.Helper()
+	_, err := db.Exec(db.Rebind(
+		`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type)
+		 VALUES (?, ?, ?, ?, ?, ?)`),
+		userID, chatJID, chatJID, messageID, ts, "text")
+	if err != nil {
+		t.Fatalf("insertHistoryAt: %v", err)
+	}
+}
+
+// TestGetLastActivityByUser_MaxPorChat: dois chats do mesmo usuário, cada um
+// com N mensagens — devolve o timestamp MAIS RECENTE de cada, não o primeiro
+// nem uma média.
+func TestGetLastActivityByUser_MaxPorChat(t *testing.T) {
+	db := newHistoryDB(t)
+	older := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
+
+	insertHistoryAt(t, db, "u1", "a@s.whatsapp.net", "MSG-A1", older)
+	insertHistoryAt(t, db, "u1", "a@s.whatsapp.net", "MSG-A2", newer)
+	insertHistoryAt(t, db, "u1", "b@s.whatsapp.net", "MSG-B1", older)
+
+	got, err := GetLastActivityByUser(db, "u1")
+	if err != nil {
+		t.Fatalf("GetLastActivityByUser: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d chats, want 2: %+v", len(got), got)
+	}
+	if !got["a@s.whatsapp.net"].Equal(newer) {
+		t.Fatalf("chat a: got %v, want %v (o mais recente, não o primeiro)", got["a@s.whatsapp.net"], newer)
+	}
+	if !got["b@s.whatsapp.net"].Equal(older) {
+		t.Fatalf("chat b: got %v, want %v", got["b@s.whatsapp.net"], older)
+	}
+}
+
+// TestGetLastActivityByUser_EscopoPorUsuario: mensagem de outro usuário não
+// vaza — cada wa-api serve múltiplas sessões na mesma tabela.
+func TestGetLastActivityByUser_EscopoPorUsuario(t *testing.T) {
+	db := newHistoryDB(t)
+	ts := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	insertHistoryAt(t, db, "u1", "a@s.whatsapp.net", "MSG-1", ts)
+	insertHistoryAt(t, db, "u2", "a@s.whatsapp.net", "MSG-2", ts)
+
+	got, err := GetLastActivityByUser(db, "u1")
+	if err != nil {
+		t.Fatalf("GetLastActivityByUser: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d chats pra u1, want 1 (vazamento de u2?): %+v", len(got), got)
+	}
+}
+
+// TestGetLastActivityByUser_SemHistorico devolve mapa vazio, não erro — usuário
+// recém-pareado sem HistorySync processado ainda é um estado válido.
+func TestGetLastActivityByUser_SemHistorico(t *testing.T) {
+	db := newHistoryDB(t)
+	got, err := GetLastActivityByUser(db, "u-sem-nada")
+	if err != nil {
+		t.Fatalf("GetLastActivityByUser: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %+v, want mapa vazio", got)
+	}
+}
+
+// TestGetLastActivityByUser_ComRelogioMonotonico exercita o caminho real de
+// produção: SaveMessageToHistory grava via time.Now(), que carrega leitura de
+// clock monotônico (sufixo " m=+..." no Stringer) — o MESMO valor que
+// MAX(timestamp) devolve pro driver sqlite. Sem o parseFlexTimestamp cortar
+// esse sufixo, este teste falha do mesmo jeito que falhava no debug manual
+// via sqlite3 CLI (2026-08-06): MAX(timestamp) devolvia string tipo
+// "2026-08-06 11:18:59.481145720 -0400 -04 m=+61646.546743738" e nenhum
+// layout de calendário consegue parsear a parte "m=+...".
+func TestGetLastActivityByUser_ComRelogioMonotonico(t *testing.T) {
+	db := newHistoryDB(t)
+	before := time.Now()
+	if err := SaveMessageToHistory(db, "u1", "a@s.whatsapp.net", "a@s.whatsapp.net",
+		"MSG-1", "text", "oi", "", "", ""); err != nil {
+		t.Fatalf("SaveMessageToHistory: %v", err)
+	}
+	after := time.Now()
+
+	got, err := GetLastActivityByUser(db, "u1")
+	if err != nil {
+		t.Fatalf("GetLastActivityByUser: %v", err)
+	}
+	ts, ok := got["a@s.whatsapp.net"]
+	if !ok {
+		t.Fatalf("chat a@s.whatsapp.net ausente do resultado: %+v", got)
+	}
+	if ts.Before(before.Add(-time.Second)) || ts.After(after.Add(time.Second)) {
+		t.Fatalf("timestamp fora da janela esperada: got %v, want entre %v e %v", ts, before, after)
+	}
+}
+
 func TestGetDatabaseConfig_DataDirFlagWinsOverExecPath(t *testing.T) {
 	for _, v := range []string{"DB_USER", "DB_PASSWORD", "DB_NAME", "DB_HOST", "DB_PORT", "DB_SSLMODE"} {
 		t.Setenv(v, "")

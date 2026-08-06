@@ -269,6 +269,7 @@ pkg/application/usecase/user.DeleteUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-r
 pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,edit_user.go:28);uncovered:L2(S-ret,edit_user.go:37);uncovered:L2(S-ret,edit_user.go:49)
 pkg/application/usecase/user.GetAvatarUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_avatar.go:32);uncovered:L2(S-consume,get_avatar.go:36);uncovered:L2(S-ret,get_avatar.go:37)
 pkg/application/usecase/user.GetBlocklistUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/user.GetContactsLastActivityUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetPrivacySettingsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:51)
@@ -282,6 +283,7 @@ pkg/application/usecase/user.NewDeleteUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewEditUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetAvatarUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetBlocklistUseCase	EXCLUDED	X1
+pkg/application/usecase/user.NewGetContactsLastActivityUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetContactsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetPrivacySettingsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserLIDUseCase	EXCLUDED	X1
@@ -483,10 +485,13 @@ pkg/infra/auth.ValidateAdminToken	ELIGIBLE	covered
 pkg/infra/auth.WithUserInfo	EXCLUDED	X1
 pkg/infra/constants.IsValidEventType	EXCLUDED	X1
 pkg/infra/constants.init	EXCLUDED	X3
+pkg/infra/db.ChatActivityRepository.GetLastActivityByUser	ELIGIBLE	uncovered:L1
 pkg/infra/db.GenerateRandomID	ELIGIBLE	covered
 pkg/infra/db.GetDatabaseConfig	ELIGIBLE	covered
+pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
 pkg/infra/db.InitializeDatabase	ELIGIBLE	covered
 pkg/infra/db.InitializeSchema	ELIGIBLE	covered
+pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
@@ -505,11 +510,13 @@ pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
 pkg/infra/db.createMigrationsTable	ELIGIBLE	covered
 pkg/infra/db.createTableIfNotExistsSQLite	ELIGIBLE	covered
+pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:58)
 pkg/infra/db.getAppliedMigrations	ELIGIBLE	covered
 pkg/infra/db.initializePostgres	ELIGIBLE	covered
 pkg/infra/db.initializeSQLite	ELIGIBLE	covered
 pkg/infra/db.isUniqueViolation	ELIGIBLE	covered
 pkg/infra/db.migrateSQLiteIDToString	ELIGIBLE	covered
+pkg/infra/db.parseFlexTimestamp	ELIGIBLE	uncovered:L1
 pkg/infra/egress.IsHTTPURL	ELIGIBLE	uncovered:L2(S-consume,egress.go:25)
 pkg/infra/egress.IsReservedOrLoopback	ELIGIBLE	covered
 pkg/infra/egress.ValidateOutboundURL	ELIGIBLE	covered
@@ -780,6 +787,7 @@ pkg/presentation/http/handlers.DownloadVideoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetAvatarHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetBlocklistHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetContactsHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.GetContactsLastActivityHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetGroupInfoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetGroupInviteInfoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetGroupInviteLinkHandler.ServeHTTP	ELIGIBLE	covered
@@ -818,6 +826,7 @@ pkg/presentation/http/handlers.NewDownloadVideoHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetAvatarHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetBlocklistHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetContactsHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewGetContactsLastActivityHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetGroupInfoHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetGroupInviteInfoHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetGroupInviteLinkHandler	EXCLUDED	X1

@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"time"
 
 	"wa-api/pkg/domain"
 )
@@ -25,6 +26,18 @@ type ContactDirectory interface {
 
 	// GetLIDForPN resolve o LID correspondente a um número de telefone.
 	GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
+}
+
+// ChatActivityReader expõe o histórico de atividade por chat já persistido
+// localmente (message_history) — em particular o backfill automático do
+// HistorySync pós-pareamento. Não estende SessionGuard: é leitura de banco
+// local, não chamada ao whatsmeow, então não exige sessão whatsmeow ativa
+// (funciona mesmo com a sessão em standby).
+type ChatActivityReader interface {
+	// GetLastActivityByUser devolve, por JID de chat (string bruta — pode
+	// incluir grupos/broadcasts, filtragem é do caller), o timestamp da
+	// mensagem mais recente já persistida.
+	GetLastActivityByUser(ctx context.Context, userID string) (map[string]time.Time, error)
 }
 
 // BlocklistManager expõe a lista de bloqueados.

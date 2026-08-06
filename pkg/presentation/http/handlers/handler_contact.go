@@ -63,6 +63,33 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
+// GetContactsLastActivityHandler expõe GetContactsLastActivityUseCase —
+// timestamp da mensagem mais recente por chat_jid, derivado do backfill
+// local de message_history (HistorySync pós-pareamento). Não decodifica
+// body (GET, sem payload) e não depende de sessão whatsmeow ativa.
+type GetContactsLastActivityHandler struct {
+	uc *user.GetContactsLastActivityUseCase
+}
+
+func NewGetContactsLastActivityHandler(uc *user.GetContactsLastActivityUseCase) *GetContactsLastActivityHandler {
+	return &GetContactsLastActivityHandler{uc: uc}
+}
+func (h *GetContactsLastActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	id, ok := sessionUser(w, r)
+	if !ok {
+		return
+	}
+	rsp, err := h.uc.Execute(r.Context(), id)
+	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).
+			Str("user_id", id).
+			Msg("get contacts last activity use case failed")
+		customhttp.RespondJSON(w, 500, nil, err)
+		return
+	}
+	customhttp.RespondJSON(w, 200, rsp, nil)
+}
+
 type GetContactsHandler struct{ uc *user.GetContactsUseCase }
 
 func NewGetContactsHandler(uc *user.GetContactsUseCase) *GetContactsHandler {
@@ -116,7 +143,8 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ContactHandlers agrupa os handlers de leitura de dados de contato
 // (/user/info, /user/avatar, /user/contacts).
 type ContactHandlers struct {
-	Avatar   *GetAvatarHandler
-	Contacts *GetContactsHandler
-	UserInfo *GetUserInfoHandler
+	Avatar       *GetAvatarHandler
+	Contacts     *GetContactsHandler
+	UserInfo     *GetUserInfoHandler
+	LastActivity *GetContactsLastActivityHandler
 }

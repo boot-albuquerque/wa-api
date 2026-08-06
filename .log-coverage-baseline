@@ -129,5 +129,22 @@ min_errpath_coverage=856
 # repetir o corpo dele numa closure inline — a closure (connectOnStartup.func2)
 # era 1 funcao elegivel a mais medindo o MESMO codigo que startSession ja
 # mede. Deduplicacao, nao perda de instrumentacao.
-min_eligible=503
+#
+# justificativa: GET /user/contacts/last-activity (2026-08-06, fecha a lacuna
+# de ordenacao "por conversa" pro provider single/wa-api documentada no
+# ADR-0001 — expoe MAX(timestamp) de message_history, ja preenchida pelo
+# backfill automatico do HistorySync). min_eligible sobe 503->509 (+6:
+# ChatActivityRepository.GetLastActivityByUser + 2 construtores +
+# GetContactsLastActivityUseCase.Execute + GetContactsLastActivityHandler.
+# ServeHTTP + 1 construtor). func_coverage cai 710->707: SO'
+# ChatActivityRepository.GetLastActivityByUser fica descoberto — e' um
+# adapter fino de 1 linha (so' delega pra GetLastActivityByUser em
+# message_history.go), mesmo padrao ja aceito nas duas justificativas
+# anteriores (adapter nao loga, use case loga). O use case e o handler
+# (os 2 pontos que decidem se e' erro) ja logam. errpath_coverage nao muda
+# (856): o adapter nao tem branch de erro proprio pra contar como S-ret
+# descoberto (so' repassa o retorno de baixo).
+min_func_coverage=707
+min_errpath_coverage=856
+min_eligible=509
 max_exempt_annotations=0

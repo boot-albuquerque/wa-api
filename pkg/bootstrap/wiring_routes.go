@@ -132,6 +132,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/user/info", customChain.Then(ch.Contact.UserInfo), "POST")
 	registry.Register("/user/avatar", customChain.Then(ch.Contact.Avatar), "POST")
 	registry.Register("/user/contacts", customChain.Then(ch.Contact.Contacts), "GET")
+	registry.Register("/user/contacts/last-activity", customChain.Then(ch.Contact.LastActivity), "GET")
 
 	// Misc routes (newsletter, privacy, call, archive)
 	registry.Register("/newsletter/list", customChain.Then(ch.Misc.ListNewsletter), "GET")
