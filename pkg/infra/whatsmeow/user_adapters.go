@@ -5,6 +5,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // UserAdapter implementa ContactDirectory, BlocklistManager e PrivacyManager
@@ -30,11 +31,13 @@ func (a *UserAdapter) client(txtID string) (waClient, error) {
 func (a *UserAdapter) IsOnWhatsApp(ctx context.Context, txtID string, phones []string) ([]domain.WhatsAppCheck, error) {
 	client, err := a.client(txtID)
 	if err != nil {
-		return nil, err
+		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
+			"no active session for user", false, err)
 	}
 	resp, err := client.IsOnWhatsApp(ctx, phones)
 	if err != nil {
-		return nil, err
+		return nil, apperr.New("user_is_on_whatsapp_failed", apperr.CategoryInternal,
+			"failed to check whether phones are on WhatsApp", true, err)
 	}
 
 	var out []domain.WhatsAppCheck
@@ -57,11 +60,13 @@ func (a *UserAdapter) IsOnWhatsApp(ctx context.Context, txtID string, phones []s
 func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error) {
 	client, err := a.client(txtID)
 	if err != nil {
-		return nil, err
+		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
+			"no active session for user", false, err)
 	}
 	parsed, err := toJIDs(jids)
 	if err != nil {
-		return nil, err
+		return nil, apperr.New("user_info_failed", apperr.CategoryInternal,
+			"failed to resolve user info targets", true, err)
 	}
 	return client.GetUserInfo(ctx, parsed)
 }
@@ -70,7 +75,8 @@ func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []doma
 func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, int, error) {
 	client, err := a.client(txtID)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
+			"no active session for user", false, err)
 	}
 	contacts, err := client.Store().Contacts.GetAllContacts(ctx)
 	if err != nil {

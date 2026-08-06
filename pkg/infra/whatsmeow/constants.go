@@ -36,6 +36,11 @@ const (
 	// Pair (checagem local de credenciais e ErrQRStoreContainsID do SDK) que
 	// o caller precisa tratar da mesma forma.
 	codeSessionAlreadyPaired = "session_already_paired"
+
+	// codeUserSessionUnavailable e devolvido pelos tres metodos de
+	// ContactDirectory quando nao ha sessao ativa; o caller distingue este
+	// caso de uma falha do SDK pelo codigo, nao pela mensagem.
+	codeUserSessionUnavailable = "user_session_unavailable"
 )
 
 // Auditoria de literais (plano §4, Fase 4): os demais literais de string do

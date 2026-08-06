@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 
 	"wa-api/internal/waclient/store"
 	"wa-api/internal/waclient/types"
@@ -108,9 +109,7 @@ func storeWith(lids store.LIDStore, contacts store.ContactStore) *store.Device {
 func TestUserAdapter_IsOnWhatsApp_NoSession(t *testing.T) {
 	a := NewUserAdapter(getterWith(nil))
 	_, err := a.IsOnWhatsApp(context.Background(), "u1", []string{"5511"})
-	if appErrCode(err) != "no_session" {
-		t.Errorf("IsOnWhatsApp code = %q", appErrCode(err))
-	}
+	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
 
 // TestUserAdapter_IsOnWhatsApp_OK mapeia resposta do SDK para domain.
@@ -146,15 +145,43 @@ func TestUserAdapter_IsOnWhatsApp_PropagatesError(t *testing.T) {
 	if err == nil {
 		t.Fatal("IsOnWhatsApp não propagou erro")
 	}
+	assertAppErr(t, err, "user_is_on_whatsapp_failed", apperr.CategoryInternal)
+	if !errors.Is(err, sdkErr) {
+		t.Error("apperr.New descartou o erro de origem do SDK")
+	}
+}
+
+// assertAppErr afirma que err é um *apperr.AppError com code e category
+// esperados, via errors.As — o wrap tem de sobreviver a quem o inspecione
+// pela cadeia, não só a uma asserção de tipo direta.
+func assertAppErr(t *testing.T, err error, code string, category apperr.Category) {
+	t.Helper()
+	var ae *apperr.AppError
+	if !errors.As(err, &ae) {
+		t.Fatalf("erro = %v (%T), queria *apperr.AppError", err, err)
+	}
+	if ae.Code != code {
+		t.Errorf("code = %q, queria %q", ae.Code, code)
+	}
+	if ae.Category != category {
+		t.Errorf("category = %v, queria %v", ae.Category, category)
+	}
+}
+
+// TestUserAdapter_GetUserInfo_JIDInvalido é o quinto site envolvido: um JID
+// que não parseia não pode subir cru do adapter.
+func TestUserAdapter_GetUserInfo_JIDInvalido(t *testing.T) {
+	fake := &fakeWAClient{}
+	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	_, err := a.GetUserInfo(context.Background(), "u1", []domain.JID{"@s.whatsapp.net"})
+	assertAppErr(t, err, "user_info_failed", apperr.CategoryInternal)
 }
 
 // TestUserAdapter_GetUserInfo_NoSession.
 func TestUserAdapter_GetUserInfo_NoSession(t *testing.T) {
 	a := NewUserAdapter(getterWith(nil))
 	_, err := a.GetUserInfo(context.Background(), "u1", nil)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetUserInfo code = %q", appErrCode(err))
-	}
+	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
 
 // TestUserAdapter_GetUserInfo_OK.
@@ -178,9 +205,7 @@ func TestUserAdapter_GetUserInfo_OK(t *testing.T) {
 func TestUserAdapter_GetAllContacts_NoSession(t *testing.T) {
 	a := NewUserAdapter(getterWith(nil))
 	_, _, err := a.GetAllContacts(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetAllContacts code = %q", appErrCode(err))
-	}
+	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
 
 // TestUserAdapter_GetAllContacts_OK.

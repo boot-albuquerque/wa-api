@@ -1868,7 +1868,7 @@ pkg/infra/whatsmeow.UserAdapter.GetUserInfo	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.IsOnWhatsApp	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.SetPrivacySetting	ELIGIBLE	uncovered:L1
 pkg/infra/whatsmeow.UserAdapter.UpdateBlocklist	ELIGIBLE	uncovered:L1
-pkg/infra/whatsmeow.UserAdapter.client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:24)
+pkg/infra/whatsmeow.UserAdapter.client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,user_adapters.go:25)
 pkg/infra/whatsmeow.ZerologAdapter.Error	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Info	EXCLUDED	X1
 pkg/infra/whatsmeow.ZerologAdapter.Warn	EXCLUDED	X1
