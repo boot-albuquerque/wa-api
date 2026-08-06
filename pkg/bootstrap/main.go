@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"wa-api/internal/waclient/store/sqlstore"
-	waLog "wa-api/internal/waclient/util/log"
 
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
@@ -30,6 +29,7 @@ import (
 	appsession "wa-api/pkg/application/session"
 	dbmig "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
+	"wa-api/pkg/infra/whatsmeow/walog"
 )
 
 // ServerMode represents the server operating mode
@@ -324,10 +324,9 @@ func Main() {
 	// Set DB reference in S3Manager for lazy client initialization
 	storage.GetS3Manager().SetDB(db)
 
-	var dbLog waLog.Logger
-	if *waDebug != "" {
-		dbLog = waLog.Stdout("Database", *waDebug, *colorOutput)
-	}
+	// Nunca nil e nunca um logger nulo: Warn e Error do sqlstore saem sempre.
+	// --wadebug apenas baixa o piso (ver walog.ParseLevel).
+	dbLog := walog.New(log.Logger, walog.ModuleDatabase, walog.ParseLevel(*waDebug))
 
 	// Get database configuration
 	config := getDatabaseConfig(exPath, *dataDir)

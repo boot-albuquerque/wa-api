@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"wa-api/internal/waclient/store"
-	waLog "wa-api/internal/waclient/util/log"
 
 	"github.com/rs/zerolog/log"
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
 	wa "wa-api/pkg/infra/whatsmeow"
+	"wa-api/pkg/infra/whatsmeow/walog"
 )
 
 // newSessionOrchestrator liga os quatro ports de sessão (Fases 2a-2e) ao
@@ -19,10 +19,9 @@ import (
 // dois adapters de pkg/bootstrap para dispatcher e attach hook. É o que
 // substitui (*server).startClient, removido nesta fase.
 func newSessionOrchestrator(s *server) *appsession.Orchestrator {
-	var clientLog waLog.Logger
-	if *waDebug != "" {
-		clientLog = waLog.Stdout("Client", *waDebug, *colorOutput)
-	}
+	// Nunca nil e nunca um logger nulo: Warn e Error do SDK saem sempre. --wadebug
+	// apenas baixa o piso (ver walog.ParseLevel).
+	clientLog := walog.New(log.Logger, walog.ModuleClient, walog.ParseLevel(*waDebug))
 
 	// DeviceProps é global do SDK e precisa estar definido antes de qualquer
 	// cliente ser criado — antes vivia no topo de startClient.

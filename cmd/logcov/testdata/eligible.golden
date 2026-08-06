@@ -1584,10 +1584,10 @@ pkg/bootstrap.setKillChannel	EXCLUDED	X1
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:405);uncovered:L3(zerolog,main.go:416)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:404);uncovered:L3(zerolog,main.go:415)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:452)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:451)
 pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_delegates.go:132)
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6
