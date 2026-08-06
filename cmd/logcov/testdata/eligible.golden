@@ -662,6 +662,7 @@ internal/wa-noise/appstate.Processor.storeMACs	EXCLUDED	X5
 internal/wa-noise/appstate.Processor.validatePatch	EXCLUDED	X5
 internal/wa-noise/appstate.Processor.validatePatch.func1	EXCLUDED	X6
 internal/wa-noise/appstate.Processor.validateSnapshotMAC	EXCLUDED	X5
+internal/wa-noise/appstate.appStateKeyPart	EXCLUDED	X5
 internal/wa-noise/appstate.concatAndHMAC	EXCLUDED	X5
 internal/wa-noise/appstate.expandAppStateKeys	EXCLUDED	X5
 internal/wa-noise/appstate.generateContentMAC	EXCLUDED	X5
