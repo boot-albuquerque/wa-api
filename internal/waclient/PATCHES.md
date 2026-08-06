@@ -568,3 +568,36 @@ fix sugerido, pendente de decisão do usuário. O teste fica versionado e
 - `git diff --stat internal/waclient/proto/` continua vazio.
 - `dialopts.go` / `dialopts_js.go` não foram tocados: são 14 e 9 linhas, um par
   de build tags por plataforma, sem literal nem lógica a extrair.
+
+---
+
+## `internal/waclient/argo/`, 2026-08-06
+
+### Contexto
+
+Único arquivo do diretório (`argo.go`, 62 linhas) — já estava dentro do teto
+de 300 linhas e sem magic number/string hardcoded fora de constante (os dois
+`//go:embed` referenciam nomes de arquivo de dado, não literais de negócio).
+Estrutura já é single-responsibility: `Init()` carrega os dois blobs
+embarcados uma única vez (`sync.Once`), `GetStore`/`GetQueryIDToMessageName`
+expõem acesso lazy. Nenhuma mudança estrutural foi necessária.
+
+### O que mudou
+
+- **`argo_test.go`** (novo, 100% do que faltava): pacote não tinha nenhum
+  teste. Cobre `Init()` (carrega com sucesso, mapas não-vazios),
+  idempotência de `Init()` via `sync.Once` (chamar duas vezes preserva o
+  conteúdo do `Store`), `GetStore()`/`GetQueryIDToMessageName()` (delegam
+  para `Init()` e retornam os mapas), e a inversão id→nome feita a partir do
+  `name-to-queryids.json` embarcado (nenhuma chave/valor vazio).
+- Único consumidor no repo: `internal/waclient/newsletter_mex.go:18`. Não
+  tocado — este patch é só cobertura de teste, comportamento idêntico.
+
+**Comportamento não mudou.** Nenhum arquivo de produção foi editado.
+
+### Fora do escopo
+
+- Os dois globais exportados (`Store`, `QueryIDToMessageName`) como estado de
+  pacote mutável é um cheiro de arquitetura menor (não é injeção de
+  dependência), mas mudar isso afetaria a API pública do pacote sem ganho
+  correspondente — registrado aqui, não corrigido.
