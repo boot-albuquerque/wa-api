@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.mau.fi/libsignal/ecc"
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/waclient/binary"
@@ -24,15 +23,6 @@ import (
 	"wa-api/internal/waclient/store"
 	"wa-api/internal/waclient/types"
 	"wa-api/internal/waclient/types/events"
-	"wa-api/internal/waclient/util/keys"
-)
-
-var (
-	AdvAccountSignaturePrefix = []byte{6, 0}
-	AdvDeviceSignaturePrefix  = []byte{6, 1}
-
-	AdvHostedAccountSignaturePrefix = []byte{6, 5}
-	AdvHostedDeviceSignaturePrefix  = []byte{6, 6}
 )
 
 func (cli *Client) handleIQ(ctx context.Context, node *waBinary.Node) {
@@ -246,43 +236,6 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 		return fmt.Errorf("failed to send pairing confirmation: %w", err)
 	}
 	return nil
-}
-
-func concatBytes(data ...[]byte) []byte {
-	length := 0
-	for _, item := range data {
-		length += len(item)
-	}
-	output := make([]byte, length)
-	ptr := 0
-	for _, item := range data {
-		ptr += copy(output[ptr:ptr+len(item)], item)
-	}
-	return output
-}
-
-func verifyAccountSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair, isHosted bool) bool {
-	if len(deviceIdentity.AccountSignatureKey) != 32 || len(deviceIdentity.AccountSignature) != 64 {
-		return false
-	}
-
-	signatureKey := ecc.NewDjbECPublicKey(*(*[32]byte)(deviceIdentity.AccountSignatureKey))
-	signature := *(*[64]byte)(deviceIdentity.AccountSignature)
-
-	prefix := AdvAccountSignaturePrefix
-	if isHosted {
-		prefix = AdvHostedAccountSignaturePrefix
-	}
-	message := concatBytes(prefix, deviceIdentity.Details, ikp.Pub[:])
-
-	return ecc.VerifySignature(signatureKey, message, signature)
-}
-
-func generateDeviceSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair) *[64]byte {
-	prefix := AdvDeviceSignaturePrefix
-	message := concatBytes(prefix, deviceIdentity.Details, ikp.Pub[:], deviceIdentity.AccountSignatureKey)
-	sig := ecc.CalculateSignature(ecc.NewDjbECPrivateKey(*ikp.Priv), message)
-	return &sig
 }
 
 func (cli *Client) sendPairError(ctx context.Context, id string, code int, text string) {
