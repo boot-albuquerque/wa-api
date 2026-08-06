@@ -95,7 +95,21 @@ mesmo sem mudar o comportamento observável.
 `h.StartSession(id, token)` em vez de `h.StartSession(id, "")`. Baixo
 risco, mudança pequena e localizada.
 
-**Status**: não corrigido — preservado por decisão consciente (o objetivo
-da feature que o encontrou era reorganizar arquitetura sem mudar
-comportamento observável; bugs pré-existentes fora de escopo não devem ser
-corrigidos "de graça" no meio de um refactor estrutural).
+**Status**: **corrigido** em `ae11dc3` (2026-08-06, mesma sessão/branch,
+depois de discussão explícita com o usuário sobre corrigir agora).
+`ConnectHandler.ServeHTTP` (`handler_session.go:84-88`) volta a fazer o
+type-assert do `userInfo` já validado por `sessionUser` — sem checagem
+extra, já que `sessionUser` retornou `ok=true` antes desse ponto — e lê
+`info.Get("Token")`, mesmo padrão de `handler_webhook.go:115`. Nada é
+logado (só passado como parâmetro pro orchestrator), então
+`logassert.NoSecrets` continua passando.
+`TestConnectHandler_StartsClientOnce` (`handler_session_test.go`) passou
+a assertar o token recebido contra o sentinel `logassertAdminToken` do
+userinfo autenticado de teste, não só o `userID` — antes o teste não
+teria pego essa lacuna porque só verificava `userID`.
+Cobertura verificada como neutra (81.9% → 81.9%, isolado via
+`git stash`/medição contra o commit anterior) — o piso do
+`coverage-gate` já estava desatualizado antes deste fix, por conta de
+outro commit concorrente não relacionado (`ace7770`,
+`feat(contacts): last-activity`), que também precisa de ajuste de
+baseline (fora do escopo deste fix).
