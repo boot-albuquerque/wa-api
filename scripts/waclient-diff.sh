@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Compara internal/waclient/proto/ contra uma versão do go.mau.fi/whatsmeow
+# Compara internal/wa-noise/proto/ contra uma versão do go.mau.fi/whatsmeow
 # upstream, normalizando o import path antes do diff (sem essa
 # normalização, TODO arquivo apareceria como modificado só pela troca de
 # path, tornando o diff inútil).
 #
-# ADR-0004 (2026-08-06): a partir desta ADR, internal/waclient/ deixou de
-# ser um espelho drift-zero do upstream inteiro — só internal/waclient/proto/
+# ADR-0004 (2026-08-06): a partir desta ADR, internal/wa-noise/ deixou de
+# ser um espelho drift-zero do upstream inteiro — só internal/wa-noise/proto/
 # (código GERADO a partir de .proto, nunca editado à mão) continua sob essa
 # trava. O restante do módulo (raiz, appstate/, argo/, binary/, socket/,
 # store/, types/, util/) é agora um fork ativamente mantido, com
-# modificações esperadas e registradas em internal/waclient/PATCHES.md — não
+# modificações esperadas e registradas em internal/wa-noise/PATCHES.md — não
 # faz sentido compará-lo contra upstream byte-a-byte.
 #
 # Uso: scripts/waclient-diff.sh <versão>
 #   ex: scripts/waclient-diff.sh v0.0.0-20260516102357-8d3700152a69
 #
-# Saída vazia (exit 0) = internal/waclient/proto/ é cópia fiel do upstream
+# Saída vazia (exit 0) = internal/wa-noise/proto/ é cópia fiel do upstream
 # gerado pela versão indicada.
 # Saída não-vazia = proto/ divergiu do gerador upstream — isso é sempre bug,
 # nunca patch intencional (código gerado não se edita à mão).
@@ -23,7 +23,7 @@ set -euo pipefail
 
 VERSION="${1:?uso: scripts/waclient-diff.sh <versão>}"
 MODULE="go.mau.fi/whatsmeow"
-DEST="internal/waclient"
+DEST="internal/wa-noise"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 

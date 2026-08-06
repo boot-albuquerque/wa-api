@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vendoriza o módulo go.mau.fi/whatsmeow inteiro para internal/waclient/,
+# Vendoriza o módulo go.mau.fi/whatsmeow inteiro para internal/wa-noise/,
 # preservando a API pública, trocando só o import path.
 #
 # Uso: scripts/waclient-vendor.sh <versão>
@@ -11,7 +11,7 @@ set -euo pipefail
 
 VERSION="${1:?uso: scripts/waclient-vendor.sh <versão>}"
 MODULE="go.mau.fi/whatsmeow"
-DEST="internal/waclient"
+DEST="internal/wa-noise"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$REPO_ROOT"
@@ -107,7 +107,7 @@ ${MODULE} ${VERSION}
 EOF
 
 cat > "$DEST/PROVENANCE.md" <<EOF
-# Proveniência de internal/waclient/
+# Proveniência de internal/wa-noise/
 
 Vendorizado a partir de \`${MODULE} ${VERSION}\` (MPL-2.0, © Tulir Asokan e
 contribuidores) em $(date -u +%Y-%m-%d) via \`scripts/waclient-vendor.sh\`.
@@ -152,7 +152,7 @@ EOF
 touch "$DEST/PATCHES.md"
 if [ ! -s "$DEST/PATCHES.md" ]; then
   cat > "$DEST/PATCHES.md" <<'EOF'
-# Patches locais em internal/waclient/
+# Patches locais em internal/wa-noise/
 
 Lista de edições inline nos arquivos vendorizados que não puderam ser
 expressas como arquivo novo (`wa-api_*.go`) por pacote. Cada item:

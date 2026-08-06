@@ -9,16 +9,16 @@ GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
 BINARY := wa-api
 
-# internal/waclient/ é o whatsmeow vendorizado por completo (ADR-0002/0003)
+# internal/wa-noise/ é o whatsmeow vendorizado por completo (ADR-0002/0003)
 # — código de terceiros sob MPL-2.0, cópia fiel, não lógica nossa. Excluído
 # dos gates de qualidade que medem o QUE ESCREVEMOS (cobertura, lint, vet,
 # test) — não é "menos rigor", é medir a coisa certa: a qualidade do que
 # escrevemos, não a de um SDK que só copiamos.
-COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient')
-# test/check também excluem pkg/infra/whatsmeow — race pré-existente e
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
+# test/check também excluem pkg/infra/wa-noise — race pré-existente e
 # não-relacionada a esta mudança (safe_go_test.go, commit b426885),
 # documentada em HOUSEKEEP.md.
-TEST_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient' | grep -v '^wa-api/pkg/infra/whatsmeow$$')
+TEST_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | grep -v '^wa-api/pkg/infra/wa-noise$$')
 VET_TARGETS := $(COVER_PKGS)
 
 # Lint
@@ -26,7 +26,7 @@ VET_TARGETS := $(COVER_PKGS)
 # de import Go (wa-api/pkg/x) como go vet/go test aceitam — por isso
 # LINT_TARGETS deriva de COVER_PKGS trocando o prefixo do modulo por "./".
 LINT          := golangci-lint
-LINT_TARGETS  := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/waclient' | sed 's|^wa-api/|./|')
+LINT_TARGETS  := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
 
 # Coverage ratchet
@@ -238,30 +238,30 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	   fi; \
 	 fi
 
-##@ Vendored whatsmeow (internal/waclient/)
+##@ Vendored whatsmeow (internal/wa-noise/)
 
-waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/waclient/ (fora de proto/, gerado)
+waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/wa-noise/ (fora de proto/, gerado)
 	@bash scripts/waclient-license-check.sh
 
-waclient-drift: ## Falha se internal/waclient/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
-	@version=$$(cat internal/waclient/UPSTREAM | awk '{print $$2}'); \
+waclient-drift: ## Falha se internal/wa-noise/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
+	@version=$$(cat internal/wa-noise/UPSTREAM | awk '{print $$2}'); \
 	 if [ -z "$$version" ]; then \
-	   echo "FALHA: internal/waclient/UPSTREAM vazio ou malformado."; \
+	   echo "FALHA: internal/wa-noise/UPSTREAM vazio ou malformado."; \
 	   exit 1; \
 	 fi; \
 	 ./scripts/waclient-diff.sh "$$version"
 
-waclient-filesize: ## Falha se algum .go de producao da raiz ou de socket/ de internal/waclient/ passar de 300 linhas (ADR-0004, Fase A)
+waclient-filesize: ## Falha se algum .go de producao da raiz ou de socket/ de internal/wa-noise/ passar de 300 linhas (ADR-0004, Fase A)
 	@bash scripts/waclient-filesize-check.sh
 
-# internal/waclient/ esta fora de TEST_PKGS (ver comentario no topo e o achado
+# internal/wa-noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado
 # F17 em HOUSEKEEP.md), entao um _test.go escrito la' nunca rodaria por `make
 # check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
 # subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
 # fases do ADR-0004 forem cobrindo o resto.
-WACLIENT_TEST_PKGS := ./internal/waclient/socket/
+WACLIENT_TEST_PKGS := ./internal/wa-noise/socket/
 
-waclient-test: ## Roda os testes dos subpacotes de internal/waclient/ ja' cobertos (ADR-0004)
+waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
 check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/tamanho/testes do vendored

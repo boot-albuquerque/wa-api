@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifica conformidade de licença de internal/waclient/ (whatsmeow
+# Verifica conformidade de licença de internal/wa-noise/ (whatsmeow
 # vendorizado, MPL-2.0).
 #
 # Achado durante a implementação: nem todo arquivo do whatsmeow upstream
@@ -8,7 +8,7 @@
 # argo/argo.go e outros) — não é algo que perdemos na cópia, o próprio
 # upstream nunca colocou o header nesses arquivos. MPL-2.0 §3.1 cobre isso
 # via o LICENSE do projeto na raiz da árvore vendorizada
-# (internal/waclient/LICENSE-whatsmeow), que é o mecanismo que este check
+# (internal/wa-noise/LICENSE-whatsmeow), que é o mecanismo que este check
 # verifica como obrigatório. Onde o header POR ARQUIVO existe no upstream,
 # ele é preservado por construção (o script de vendoring só reescreve
 # imports Go entre aspas, nunca remove texto) — por isso não exigimos
@@ -18,7 +18,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-DEST="internal/waclient"
+DEST="internal/wa-noise"
 if [ ! -d "$DEST" ]; then
   echo "FALHA: $DEST não existe."
   exit 1
