@@ -71,7 +71,7 @@ func Message(
 	// Sending multiple messages at a time can cause weird issues and makes it harder to retry safely
 	// This is also required for the session prefetching that makes group sends faster
 	// (everything will explode if you send a message to the same user twice in parallel)
-	lock := t.SendLock()
+	lock := t.State().SendLock()
 	lock.Lock()
 	resp.DebugTimings.Queue = time.Since(start)
 	defer lock.Unlock()

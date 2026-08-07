@@ -120,7 +120,7 @@ func FBMessage(
 
 	start := time.Now()
 	// Sending multiple messages at a time can cause weird issues and makes it harder to retry safely
-	lock := t.SendLock()
+	lock := t.State().SendLock()
 	lock.Lock()
 	resp.DebugTimings.Queue = time.Since(start)
 	defer lock.Unlock()

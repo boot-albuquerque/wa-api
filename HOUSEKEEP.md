@@ -10,6 +10,39 @@ linha(s) exatos, descrição do problema, e se possível o caminho de correção
 sugerido. Sem isso, o achado se perde ou vira arqueologia de código na
 próxima vez que alguém tropeçar nele.
 
+## Índice
+
+Situação em 2026-08-07, depois da leva de saneamento (lotes A–E). São 43
+achados: **29 corrigidos**, 14 abertos.
+
+Os abertos **não** são pendências esquecidas — cada um está aberto por um
+motivo registrado no próprio bloco. Em resumo:
+
+| Achado | Por que continua aberto |
+|---|---|
+| `ConnectHandler` com token vazio | corrigido em `ae11dc3`; entrada mantida como registro |
+| `user_info_failed` como `CategoryInternal` | classificação de erro é contrato de API do produto |
+| F17 — `wa-noise` fora de cobertura/lint | decisão de política de gate; muda o baseline do repo inteiro |
+| F20 — `fakeIndexesToRemove` sempre nil | não dá para escolher entre remover o parâmetro e popular o mapa sem saber a intenção do upstream |
+| F22 — panic em `record.Session.Serialize` | bug em dependência externa (`libsignal`); a defesa local disponível é pior que o problema |
+| F23 — Postgres sem teste | exige infra de teste (container/CI), não é mudança de código |
+| F26 — `GetChildByTag` devolve o nó de partida | mudar o retorno quebraria silenciosamente quem hoje depende dele; travado e documentado por teste |
+| F27 — ramo inalcançável em `contentString` | inofensivo; documentado no código |
+| **F31** — comparação de ponteiros inerte | **acoplado à F32**: corrigir ligaria as query IDs de desktop, que a F32 mostra estarem erradas |
+| **F32** — query IDs de desktop erradas | não temos os valores corretos; chutar quebra em produção |
+| F35 — duas funções de política idênticas | são políticas distintas que hoje coincidem; unificar é decisão de produto |
+| F36 — contadores de retry sem limite | exige escolher política de expurgo/TTL |
+| F37 — chave de cache em `GetUserDevices` | depende de confirmar o comportamento real do servidor |
+| F42 — atributo `v` numérico vs string | formato de fio; mudar sem captura real arrisca quebrar envio |
+| F43 — nomes de tipo duplicados | cosmético |
+| F44 — envio bloqueante de history sync | qualquer correção muda política de entrega de histórico |
+| F53 — `*groupMetaCache` escapa do lock | a correção (clonar o `Meta`) custa uma alocação por envio de grupo num caminho quente, e a entrada pede medição antes |
+| F57 — `SetProxy*` concorrente com `Connect` | mexer em quando o `http.Client` é lido muda o ciclo de vida da conexão |
+
+Fora da lista, uma pendência que não é achado: **o smoke test manual**
+(pareamento por QR, envio, avatar, criação de grupo, reconexão) continua sem
+ser executado — exige ambiente com sessão real, e é bloqueador de merge.
+
 ---
 
 ## 2026-08-06 — bug de locale no `coverage-gate` do Makefile
@@ -2431,7 +2464,18 @@ de `SendLock()` são `send/message.go:80` e `send/fb_message.go:129`, e
 `grep -rn "messageSendLock" internal/wa-noise` só devolve a declaração e o
 adaptador. Se isso se confirmar sob revisão, a correção é local e barata.
 
-**Status**: **não corrigido — fora do escopo da Fase H.** A Fase H é
+**Status**: **CORRIGIDO** (lote E, 2026-08-07) pelo caminho que a própria
+entrada sugeria: `capabilities/send/` ganhou o seu `State`, dono do mutex, como
+`retry`, `prekeys` e `tctoken` já tinham. `Transport.SendLock() *sync.Mutex`
+virou `Transport.State() *State`, e o campo `messageSendLock` saiu de
+`core.Client` (que agora carrega `sendState send.State`).
+
+A seção crítica não mudou de forma — continua cobrindo da gravação da mensagem
+recente até o fim do envio. O que muda é quem é o dono: emprestar o ponteiro
+não era incorreto, mas deixava quem lê `core/client.go` vendo um mutex sem saber
+o que ele serializa, e quem lê `send/` vendo um lock sem dono aparente.
+
+**Status original**: fora do escopo da Fase H. A Fase H é
 reorganização de diretórios; isto é mudança de design de API (a interface
 `send.Transport` perde um método e o `Client` perde um campo). Além disso é
 mudança em código crítico de concorrência, e a regra 10 de

@@ -301,6 +301,7 @@ internal/wa-noise/capabilities/send.PrepareMessageNode	EXCLUDED	X5
 internal/wa-noise/capabilities/send.PrepareMessageNode.func1	EXCLUDED	X6
 internal/wa-noise/capabilities/send.PrepareMessageNodeV3	EXCLUDED	X5
 internal/wa-noise/capabilities/send.PreparePeerMessageNode	EXCLUDED	X5
+internal/wa-noise/capabilities/send.State.SendLock	EXCLUDED	X5
 internal/wa-noise/capabilities/send.applyRequestExtraNodes	EXCLUDED	X5
 internal/wa-noise/capabilities/send.copyAttrs	EXCLUDED	X5
 internal/wa-noise/capabilities/send.encryptForDeviceAndWrap	EXCLUDED	X5
@@ -1112,9 +1113,9 @@ internal/wa-noise/core.sendTransport.OwnID	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.OwnLID	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.ResolveTCTokenStorageLID	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.RetryFrame	EXCLUDED	X5
-internal/wa-noise/core.sendTransport.SendLock	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.SendNodeAndGetData	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.ShouldIncludeReportingToken	EXCLUDED	X5
+internal/wa-noise/core.sendTransport.State	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.Store	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.TCTokenSenderTS	EXCLUDED	X5
 internal/wa-noise/core.sendTransport.UserDevices	EXCLUDED	X5

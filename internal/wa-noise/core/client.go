@@ -19,6 +19,7 @@ import (
 	"wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/capabilities/retry"
+	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/capabilities/tctoken"
 	"wa-api/internal/wa-noise/capabilities/user"
 	waLog "wa-api/internal/wa-noise/observability/log"
@@ -112,7 +113,10 @@ type Client struct {
 	// contadores sem despejo) viajou junto e segue em aberto.
 	retryState retry.State
 
-	messageSendLock sync.Mutex
+	// sendState e' o estado do dominio de envio, dono do mutex que serializa
+	// os envios. Era o campo `messageSendLock sync.Mutex` aqui, emprestado por
+	// ponteiro para capabilities/send — ver F58 em HOUSEKEEP.md.
+	sendState send.State
 
 	tcToken tctoken.State // cache de emissao de tctoken e os dois locks dele
 

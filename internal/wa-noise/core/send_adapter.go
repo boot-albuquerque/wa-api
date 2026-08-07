@@ -2,7 +2,6 @@ package wanoise
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.mau.fi/libsignal/keys/prekey"
@@ -56,10 +55,10 @@ func (t sendTransport) AutoTrustIdentity() bool { return t.cli.AutoTrustIdentity
 
 func (t sendTransport) DefaultRequestTimeout() time.Duration { return defaultRequestTimeout }
 
-// SendLock devolve o ponteiro para o mutex de envio do cliente. O ponteiro
-// precisa ser estavel — messageSendLock e' campo de *Client e sendTransport
-// embrulha o ponteiro do cliente, entao o mutex nunca e' copiado por valor.
-func (t sendTransport) SendLock() *sync.Mutex { return &t.cli.messageSendLock }
+// State devolve o estado do dominio de envio. O ponteiro precisa ser estavel —
+// send.State contem um mutex, e sendTransport embrulha o ponteiro do cliente,
+// entao o State nunca e' copiado por valor.
+func (t sendTransport) State() *send.State { return &t.cli.sendState }
 
 func (t sendTransport) WaitResponse(reqID string) chan *waBinary.Node {
 	return t.cli.waitResponse(reqID)

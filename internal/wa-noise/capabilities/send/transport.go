@@ -13,7 +13,6 @@ package send
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.mau.fi/libsignal/keys/prekey"
@@ -125,14 +124,13 @@ type Transport interface {
 
 	// --- serializacao e transporte do stanza ---
 
-	// SendLock e' o mutex que serializa TODOS os envios do cliente. O ponteiro
-	// precisa ser estavel: e' campo de *Client e um sync.Mutex nunca pode ser
-	// copiado por valor.
+	// State e' o estado mutavel deste dominio, dono do mutex de envio.
 	//
-	// A secao critica NAO mudou de forma nesta extracao — continua sendo
-	// "trava antes de gravar a mensagem recente, libera no fim da funcao de
-	// envio", cobrindo cifragem e escrita no socket. Ver PATCHES.md, lote 8.
-	SendLock() *sync.Mutex
+	// Era `SendLock() *sync.Mutex`, emprestando por ponteiro um campo de
+	// *core.Client — a unica capacidade que nao tinha o proprio State (F58 em
+	// HOUSEKEEP.md). O ponteiro devolvido precisa ser estavel: State contem um
+	// mutex e nunca pode ser copiado por valor.
+	State() *State
 	// WaitResponse registra a espera pela resposta de um ID de requisicao.
 	WaitResponse(reqID string) chan *waBinary.Node
 	// CancelResponse desfaz o registro feito por WaitResponse.

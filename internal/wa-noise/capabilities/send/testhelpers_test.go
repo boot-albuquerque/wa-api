@@ -40,8 +40,7 @@ var errNotLoggedIn = errors.New("the store doesn't contain a device JID")
 type fakeTransport struct {
 	log   waLog.Logger
 	store *store.Device
-	lock  sync.Mutex
-
+	state State
 	// mu protege waiters e issuedTokens, que sao tocados de mais de uma
 	// goroutine: o teste alimenta o ack em paralelo, e DM emite o privacy
 	// token novo num `go` — comportamento de producao, nao do duble.
@@ -119,7 +118,7 @@ func (f *fakeTransport) Errors() Errors                       { return Errors{No
 func (f *fakeTransport) IsMessenger() bool                    { return false }
 func (f *fakeTransport) AutoTrustIdentity() bool              { return false }
 func (f *fakeTransport) DefaultRequestTimeout() time.Duration { return 75 * time.Second }
-func (f *fakeTransport) SendLock() *sync.Mutex                { return &f.lock }
+func (f *fakeTransport) State() *State                        { return &f.state }
 
 func (f *fakeTransport) WaitResponse(reqID string) chan *waBinary.Node {
 	f.mu.Lock()
