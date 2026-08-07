@@ -158,6 +158,9 @@ type fakeTransport struct {
 	skdmChats    []types.JID
 	preRetryArgs []int
 	encV3Payload *waMsgTransport.MessageTransport_Payload
+	// messageContentErr permite exercitar a propagacao do erro que
+	// MessageContent passou a devolver com a correcao da F41.
+	messageContentErr error
 }
 
 var _ Transport = (*fakeTransport)(nil)
@@ -264,12 +267,12 @@ func (f *fakeTransport) EncryptForDeviceV3(
 	return &waBinary.Node{Tag: "enc", Attrs: cloneAttrs(extraAttrs)}, nil
 }
 
-func (f *fakeTransport) MessageContent(baseNode waBinary.Node, _ *waE2E.Message, _ waBinary.Attrs, includeIdentity bool) []waBinary.Node {
+func (f *fakeTransport) MessageContent(baseNode waBinary.Node, _ *waE2E.Message, _ waBinary.Attrs, includeIdentity bool) ([]waBinary.Node, error) {
 	content := []waBinary.Node{baseNode}
 	if includeIdentity {
 		content = append(content, waBinary.Node{Tag: "device-identity"})
 	}
-	return content
+	return content, f.messageContentErr
 }
 
 func (f *fakeTransport) BuildBaseReceipt(id string, node *waBinary.Node) waBinary.Attrs {

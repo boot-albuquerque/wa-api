@@ -986,11 +986,35 @@ continua correta (é código gerado), mas o motivo declarado está falso.
 `go generate` e commitar o `internals.go` resultante, que passaria a cobrir
 os 197 métodos em vez de 82.
 
-**Status**: **não corrigido** — achado incidental, fora do escopo da tarefa
-que o encontrou (CLAUDE.md: registrar e perguntar antes de corrigir de
-graça). Nenhum gate detecta a regressão hoje: `go generate` não roda em
-`make check`, e não há teste que compare `internals.go` com o que o gerador
-produziria.
+**Status**: **CORRIGIDO** (lote E, 2026-08-07), incluindo os dois adendos
+abaixo e um terceiro bug que só apareceu depois do fix.
+
+1. A lista literal virou `sourceFileNames()`: varredura de `*.go` menos
+   `internals.go`, `internals_generate.go` e `*_test.go`, ordenada. Não há mais
+   lista para esquecer de atualizar.
+2. O bloco de import passou por `mergedImports()`, que junta os imports de
+   **todos** os arquivos processados (dedup por caminho, alias preservado) em
+   vez de copiar só os de `files[0]` — é o que resolve o adendo do `msgattrs`.
+   Confirmado: o `internals.go` regenerado traz
+   `"wa-api/internal/wa-noise/protocol/msgattrs"` e compila.
+3. **Bug novo, exposto pelo fix**: o gerador copiava os nomes de parâmetro
+   verbatim nos dois lugares onde eles aparecem. Para um parâmetro chamado `_`
+   a assinatura fica válida, mas a chamada vira `int.c.decryptBotMessage(_, ...)`,
+   que não compila. Só apareceu porque a varredura passou a alcançar métodos que
+   usam `_`. Resolvido por `effectiveParamNames()`, que sintetiza `arg0`,
+   `arg1`… posicionalmente — assinatura e chamada leem a mesma lista, então
+   concordam por construção.
+
+Resultado: `internals.go` foi de 178 para **206 wrappers**, superset estrito do
+commitado (`comm -23` entre os dois conjuntos de nomes é vazio).
+
+**O gate que faltava agora existe**: `internals_sync_test.go` afere a invariante
+que o gerador mantém, sem precisar rodá-lo (o gerador escreveria no diretório do
+pacote durante o teste). `TestInternalsGeradoCobreTodoMetodoElegivel` reclama de
+método sem wrapper; `TestInternalsGeradoNaoTemWrapperOrfao` reclama do inverso.
+Verificado com controle negativo: acrescentar um `func (cli *Client)
+probeMetodoSemWrapper()` faz o teste falhar nomeando o método; removê-lo faz
+voltar a passar.
 
 ### Adendo ao F29 — a Fase D acrescentou uma segunda dependência ao fix, 2026-08-06
 
@@ -1519,9 +1543,18 @@ vez de devolver erro. Caso correlato, silencioso: se `cli.Store.Account` for
 propagar; os dois chamadores já devolvem erro. Custo: `getMessageContent` passa
 a devolver erro e o `internals.go` gerado precisa ser regerado.
 
-**Status**: **não corrigido**. Muda assinatura de função usada pelo
-`DangerousInternalClient` gerado, e o lote 8 é de qualidade estrutural.
-Pendente de decisão.
+**Status**: **CORRIGIDO** (lote E, 2026-08-07), depois de a F29 destravar a
+regeneração do `internals.go`. `send.MakeDeviceIdentityNode` devolve
+`(waBinary.Node, error)`, e a mudança propagou por `send.MessageContent`,
+`retry.Transport.MessageContent`, `core.Client.getMessageContent`,
+`core.retryTransport.MessageContent` e o call site em `retry/handle.go` — todos
+já devolviam erro ou passaram a devolver.
+
+O **caso silencioso citado na entrada foi corrigido junto**, e era o pior dos
+dois: com `Store.Account` nil, `proto.Marshal` devolve bytes vazios *sem erro* e
+o `<device-identity>` ia vazio para o fio. Agora sai `ErrNoDeviceIdentity`.
+Travado por `TestMakeDeviceIdentityNodeSemContaDevolveErro` e
+`TestMessageContentSemContaDevolveErro`.
 
 ---
 
@@ -2064,7 +2097,17 @@ do lote:
 2. Renomear a função de domínio para `GetFBIDDevicesLocked`, tornando o contrato
    impossível de ignorar por leitura. Exige regenerar `internals.go` (F29).
 
-**Status**: não corrigido. `internals.go`/`internals_generate.go` estão fora do
+**Status**: **CORRIGIDO** (lote E, 2026-08-07). A trava foi para a **fachada**
+`core.Client.getFBIDDevices`, não para `user.GetFBIDDevices`.
+
+A assimetria é o ponto: `user.GetFBIDDevices` não pode travar por conta própria
+(seu chamador de produção, `user.GetDevices`, já segura o lock, e `sync.Mutex`
+não é reentrante), mas a fachada **não está no caminho de produção** —
+`grep -rn "getFBIDDevices\\b"` devolve exatamente a definição e a chamada em
+`internals.go`, nada mais. Então travar lá fecha o único caminho sem
+sincronização (o `DangerousInternalClient`) sem nenhum risco de deadlock.
+
+**Status original**: `internals.go`/`internals_generate.go` estão fora do
 escopo por designação (F29), e a regra do projeto proíbe corrigir de graça bug
 pré-existente fora do escopo da tarefa. Registrado para decisão do usuário.
 

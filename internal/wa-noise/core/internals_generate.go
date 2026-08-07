@@ -8,6 +8,8 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"go.mau.fi/util/exerrors"
@@ -93,14 +95,7 @@ var writef func(format string, args ...any)
 
 func main() {
 	fset := token.NewFileSet()
-	fileNames := []string{
-		"appstate.go", "armadillomessage.go", "broadcast.go", "call.go", "client.go",
-		"connectionevents.go", "download.go", "download-to-file.go", "group.go", "handshake.go",
-		"keepalive.go", "mediaconn.go", "mediaretry.go", "message.go", "msgsecret.go",
-		"newsletter.go", "notification.go", "pair-code.go", "pair.go", "prekeys.go",
-		"presence.go", "privacysettings.go", "push.go", "qrchan.go", "receipt.go", "request.go",
-		"retry.go", "sendfb.go", "send.go", "upload.go", "user.go", "reportingtoken.go",
-	}
+	fileNames := sourceFileNames()
 	files := make([]*ast.File, len(fileNames))
 	for i, name := range fileNames {
 		files[i] = exerrors.Must(parser.ParseFile(fset, name, nil, parser.SkipObjectResolution))
@@ -114,12 +109,12 @@ func main() {
 	}
 	write(header)
 	write("import (\n")
-	for _, i := range files[0].Imports {
+	for _, i := range mergedImports(files) {
 		write("\t")
-		if i.Name != nil {
-			writef("%s ", i.Name.Name)
+		if i.alias != "" {
+			writef("%s ", i.alias)
 		}
-		writef("%s\n", i.Path.Value)
+		writef("%s\n", i.path)
 	}
 	write(")\n")
 	write(postImportHeader)
@@ -127,6 +122,99 @@ func main() {
 		processFile(f)
 	}
 	exerrors.PanicIfNotNil(file.Close())
+}
+
+// sourceFileNames devolve, em ordem determinada, todo .go de producao do
+// pacote.
+//
+// Era uma lista literal de 32 nomes — os do upstream, de antes da divisao da
+// raiz. Arquivos criados depois nunca entraram nela, entao o gerador so'
+// enxergava 82 dos 197 metodos: rodar `go generate` derrubava 96 wrappers em
+// silencio, sem erro de compilacao, porque DangerousInternals nao tem
+// consumidor no repositorio (F29 em HOUSEKEEP.md).
+//
+// A varredura elimina a classe inteira do problema: nao ha mais lista para
+// esquecer de atualizar.
+func sourceFileNames() []string {
+	all := exerrors.Must(filepath.Glob("*.go"))
+	out := make([]string, 0, len(all))
+	for _, name := range all {
+		switch {
+		case name == "internals.go", name == "internals_generate.go":
+			// A saida do gerador e o proprio gerador.
+			continue
+		case strings.HasSuffix(name, "_test.go"):
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+type importSpec struct {
+	alias string
+	path  string
+}
+
+// mergedImports junta os imports de TODOS os arquivos processados.
+//
+// O gerador copiava apenas os imports de files[0]. Isso ja' era fragil, e
+// virou quebra concreta quando assinaturas passaram a citar tipos de pacotes
+// que files[0] nao importa (msgattrs.MessageAttrs, no adendo do F29): o
+// internals.go saia com o tipo e sem o import, e desta vez o erro e' de
+// compilacao, nao silencioso.
+//
+// A deduplicacao e' por caminho, mantendo o primeiro alias visto — dois
+// arquivos do mesmo pacote nao podem dar aliases diferentes ao mesmo import
+// sem que um deles ja' estivesse errado. Imports que sobrarem sem uso saem no
+// `goimports` que o //go:generate roda logo depois.
+func mergedImports(files []*ast.File) []importSpec {
+	seen := map[string]importSpec{}
+	for _, f := range files {
+		for _, i := range f.Imports {
+			if _, dup := seen[i.Path.Value]; dup {
+				continue
+			}
+			spec := importSpec{path: i.Path.Value}
+			if i.Name != nil {
+				spec.alias = i.Name.Name
+			}
+			seen[i.Path.Value] = spec
+		}
+	}
+	out := make([]importSpec, 0, len(seen))
+	for _, spec := range seen {
+		out = append(out, spec)
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].path < out[b].path })
+	return out
+}
+
+// effectiveParamNames devolve, na ordem, o nome a usar para cada parametro do
+// metodo — trocando o identificador branco por um nome sintetizado.
+//
+// O gerador copiava os nomes verbatim nos dois lugares onde eles aparecem: a
+// assinatura do wrapper e a chamada ao metodo original. Para um parametro
+// chamado `_` a assinatura fica valida, mas a chamada vira
+// `int.c.decryptBotMessage(_, ...)`, que nao compila. So' apareceu quando a
+// varredura de diretorio (F29) passou a alcancar metodos que usam `_` para
+// marcar parametros ignorados.
+//
+// Os nomes sintetizados sao posicionais (arg0, arg1...) para que assinatura e
+// chamada concordem por construcao — as duas passam por esta mesma lista.
+func effectiveParamNames(funcDecl *ast.FuncDecl) []string {
+	var out []string
+	for _, param := range funcDecl.Type.Params.List {
+		for _, name := range param.Names {
+			if name.Name == "_" {
+				out = append(out, fmt.Sprintf("arg%d", len(out)))
+				continue
+			}
+			out = append(out, name.Name)
+		}
+	}
+	return out
 }
 
 func processFile(f *ast.File) {
@@ -140,16 +228,19 @@ func processFile(f *ast.File) {
 			funcDecl.Recv.List[0].Names[0].Name != "cli" {
 			return
 		}
+		paramNames := effectiveParamNames(funcDecl)
 		writef("\nfunc (int *DangerousInternalClient) %s%s(", strings.ToUpper(funcDecl.Name.Name[0:1]), funcDecl.Name.Name[1:])
+		next := 0
 		for i, param := range funcDecl.Type.Params.List {
 			if i != 0 {
 				write(", ")
 			}
-			for j, name := range param.Names {
+			for j := range param.Names {
 				if j != 0 {
 					write(", ")
 				}
-				write(name.Name)
+				write(paramNames[next])
+				next++
 			}
 			if len(param.Names) > 0 {
 				write(" ")
@@ -187,14 +278,15 @@ func processFile(f *ast.File) {
 			write("return ")
 		}
 		writef("int.c.%s(", funcDecl.Name.Name)
+		next = 0
 		for i, param := range funcDecl.Type.Params.List {
-			for j, name := range param.Names {
+			for j := range param.Names {
 				if i != 0 || j != 0 {
 					write(", ")
 				}
-				write(name.Name)
-				_, isEllipsis := param.Type.(*ast.Ellipsis)
-				if isEllipsis {
+				write(paramNames[next])
+				next++
+				if _, isEllipsis := param.Type.(*ast.Ellipsis); isEllipsis {
 					write("...")
 				}
 			}

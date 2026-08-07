@@ -151,8 +151,13 @@ func GetFBIDDevicesInternal(ctx context.Context, t Transport, jids []types.JID) 
 //
 // Escreve no cache SEM tomar o lock: o unico chamador de producao e' GetDevices,
 // que ja' o segura. Um Lock() aqui seria deadlock imediato (sync.Mutex nao e'
-// reentrante) — era assim antes da extracao e continua sendo. A fachada da raiz
-// (cli.getFBIDDevices, citada por internals.go) preserva esse contrato.
+// reentrante) — era assim antes da extracao e continua sendo.
+//
+// A fachada da raiz (cli.getFBIDDevices) NAO preserva mais esse contrato: ela
+// toma o lock, porque o gerador de internals.go a expoe como
+// DangerousInternalClient.GetFBIDDevices e por ali ninguem segurava nada
+// (F54 em HOUSEKEEP.md). Ela nao esta' no caminho de producao, entao travar la'
+// nao pode deadlockar.
 func GetFBIDDevices(ctx context.Context, t Transport, jids []types.JID) ([]types.JID, error) {
 	cache := t.DeviceCache()
 	var devices []types.JID

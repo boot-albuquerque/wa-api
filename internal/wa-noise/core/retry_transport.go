@@ -134,7 +134,7 @@ func (t retryTransport) MessageContent(
 	message *waE2E.Message,
 	msgAttrs waBinary.Attrs,
 	includeIdentity bool,
-) []waBinary.Node {
+) ([]waBinary.Node, error) {
 	return t.cli.getMessageContent(baseNode, message, msgAttrs, includeIdentity, nodeExtraParams{})
 }
 

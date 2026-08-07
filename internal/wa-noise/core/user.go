@@ -115,9 +115,26 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 
 // getFBIDDevices consulta dispositivos de JIDs do Messenger.
 //
-// Contrato preservado da versao pre-extracao: escreve no cache SEM tomar o
-// lock, porque o unico chamador de producao (GetUserDevices) ja' o segura.
+// TOMA o lock do cache, ao contrario de user.GetFBIDDevices, que escreve nele
+// sem lock nenhum.
+//
+// A assimetria e' intencional e fecha a F54. user.GetFBIDDevices nao pode
+// travar por conta propria: seu unico chamador de producao, user.GetDevices,
+// ja' segura o lock durante toda a chamada, e sync.Mutex nao e' reentrante —
+// um Lock() la' seria deadlock imediato. Mas o gerador de internals.go expoe
+// TODO metodo nao exportado de *Client, entao esta fachada virava
+// DangerousInternalClient.GetFBIDDevices: um caminho publico que escrevia no
+// mapa sem sincronizacao nenhuma, o que em Go pode virar
+// "fatal error: concurrent map writes" — nao recuperavel.
+//
+// Travar aqui e' seguro porque esta fachada NAO esta' no caminho de producao:
+// user.GetDevices chama user.GetFBIDDevices diretamente. Confirmado por
+// `grep -rn "getFBIDDevices\b"`, que devolve so' esta definicao e a chamada
+// em internals.go.
 func (cli *Client) getFBIDDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	cache := cli.userT().DeviceCache()
+	cache.Lock()
+	defer cache.Unlock()
 	return user.GetFBIDDevices(ctx, cli.userT(), jids)
 }
 

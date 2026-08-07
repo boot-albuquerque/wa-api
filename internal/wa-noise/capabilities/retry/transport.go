@@ -112,7 +112,7 @@ type Transport interface {
 		message *waE2E.Message,
 		msgAttrs waBinary.Attrs,
 		includeIdentity bool,
-	) []waBinary.Node
+	) ([]waBinary.Node, error)
 	// BuildBaseReceipt monta os atributos comuns de um <receipt> de resposta.
 	// Continua vivendo em receipt.go na raiz, que nao foi extraido — ver
 	// PATCHES.md, lote 5.

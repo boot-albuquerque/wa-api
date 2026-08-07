@@ -33,7 +33,7 @@ func copyAttrs(from, to waBinary.Attrs) {
 	send.CopyAttrs(from, to)
 }
 
-func (cli *Client) makeDeviceIdentityNode() waBinary.Node {
+func (cli *Client) makeDeviceIdentityNode() (waBinary.Node, error) {
 	return send.MakeDeviceIdentityNode(cli.sendT())
 }
 
@@ -43,7 +43,7 @@ func (cli *Client) getMessageContent(
 	msgAttrs waBinary.Attrs,
 	includeIdentity bool,
 	extraParams nodeExtraParams,
-) []waBinary.Node {
+) ([]waBinary.Node, error) {
 	return send.MessageContent(cli.sendT(), baseNode, message, msgAttrs, includeIdentity, extraParams)
 }
 

@@ -189,7 +189,10 @@ func HandleReceipt(ctx context.Context, t Transport, receipt *events.Receipt, no
 	attrs := buildRetryMessageAttrs(node, receipt, msgAttrs.Type, messageID, timestamp)
 	var content []waBinary.Node
 	if msg.WA != nil {
-		content = t.MessageContent(*encrypted, msg.WA, attrs, includeDeviceIdentity)
+		content, err = t.MessageContent(*encrypted, msg.WA, attrs, includeDeviceIdentity)
+		if err != nil {
+			return fmt.Errorf("failed to build retry message content: %w", err)
+		}
 	} else {
 		content = []waBinary.Node{
 			*encrypted,

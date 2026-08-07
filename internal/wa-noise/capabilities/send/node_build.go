@@ -70,7 +70,11 @@ func PreparePeerMessageNode(
 		},
 	}, *encrypted}
 	if isPreKey && !t.IsMessenger() {
-		content = append(content, MakeDeviceIdentityNode(t))
+		identity, err := MakeDeviceIdentityNode(t)
+		if err != nil {
+			return nil, err
+		}
+		content = append(content, identity)
 	}
 	return &waBinary.Node{
 		Tag:     messageNodeTag,
@@ -88,10 +92,14 @@ func MessageContent(
 	msgAttrs waBinary.Attrs,
 	includeIdentity bool,
 	extraParams NodeExtraParams,
-) []waBinary.Node {
+) ([]waBinary.Node, error) {
 	content := []waBinary.Node{baseNode}
 	if includeIdentity {
-		content = append(content, MakeDeviceIdentityNode(t))
+		identity, err := MakeDeviceIdentityNode(t)
+		if err != nil {
+			return nil, err
+		}
+		content = append(content, identity)
 	}
 	if msgAttrs[msgAttrType] == msgTypePoll {
 		pollType := pollTypeCreation
@@ -125,7 +133,7 @@ func MessageContent(
 			}},
 		})
 	}
-	return content
+	return content, nil
 }
 
 // PrepareMessageNode monta o <message> waE2E ja' cifrado por dispositivo,
@@ -190,12 +198,14 @@ func PrepareMessageNode(
 		Tag:     participantsNodeTag,
 		Content: participantNodes,
 	}
+	content, err := MessageContent(t, participantNode, message, attrs, includeIdentity, extraParams)
+	if err != nil {
+		return nil, nil, err
+	}
 	return &waBinary.Node{
-		Tag:   messageNodeTag,
-		Attrs: attrs,
-		Content: MessageContent(
-			t, participantNode, message, attrs, includeIdentity, extraParams,
-		),
+		Tag:     messageNodeTag,
+		Attrs:   attrs,
+		Content: content,
 	}, allDevices, nil
 }
 
@@ -228,18 +238,24 @@ func MarshalMessage(to types.JID, message *waE2E.Message) (plaintext, dsmPlainte
 	return
 }
 
-// MakeDeviceIdentityNode monta o <device-identity>. Era
-// Client.makeDeviceIdentityNode — incluindo o panic, preservado literalmente:
-// falhar ao serializar a propria conta e' corrupcao de estado local, nao erro
-// de protocolo, e o comportamento historico e' visivel via
-// DangerousInternalClient.MakeDeviceIdentityNode.
-func MakeDeviceIdentityNode(t Transport) waBinary.Node {
-	deviceIdentity, err := proto.Marshal(t.Store().Account)
+// MakeDeviceIdentityNode monta o <device-identity>.
+//
+// Era Client.makeDeviceIdentityNode, e entrava em panic quando proto.Marshal
+// falhava — o unico panic do caminho de envio, derrubando o processo em vez de
+// devolver erro (F41 em HOUSEKEEP.md). O caso irmao, silencioso, era pior:
+// com Store.Account nil, proto.Marshal devolve bytes vazios SEM erro e o no'
+// ia vazio para o fio. Agora os dois viram erro.
+func MakeDeviceIdentityNode(t Transport) (waBinary.Node, error) {
+	account := t.Store().Account
+	if account == nil {
+		return waBinary.Node{}, ErrNoDeviceIdentity
+	}
+	deviceIdentity, err := proto.Marshal(account)
 	if err != nil {
-		panic(fmt.Errorf("failed to marshal device identity: %w", err))
+		return waBinary.Node{}, fmt.Errorf("failed to marshal device identity: %w", err)
 	}
 	return waBinary.Node{
 		Tag:     deviceIdentityNodeTag,
 		Content: deviceIdentity,
-	}
+	}, nil
 }

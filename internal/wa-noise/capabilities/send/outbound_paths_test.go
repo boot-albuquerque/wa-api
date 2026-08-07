@@ -311,11 +311,28 @@ func TestPrepareMessageNodePropagatesDeviceError(t *testing.T) {
 func TestMakeDeviceIdentityNode(t *testing.T) {
 	tr := loggedIn()
 	tr.store.Account = &waAdv.ADVSignedDeviceIdentity{Details: []byte("detalhe")}
-	node := MakeDeviceIdentityNode(tr)
+	node, err := MakeDeviceIdentityNode(tr)
+	if err != nil {
+		t.Fatalf("MakeDeviceIdentityNode: %v", err)
+	}
 	if node.Tag != deviceIdentityNodeTag {
 		t.Errorf("tag = %q", node.Tag)
 	}
 	if body, _ := node.Content.([]byte); len(body) == 0 {
 		t.Error("conteudo vazio")
+	}
+}
+
+// Antes da F41 isto devolvia um no' com Content vazio e err nil — o
+// <device-identity> ia vazio para o servidor sem ninguem notar.
+func TestMakeDeviceIdentityNodeSemContaDevolveErro(t *testing.T) {
+	tr := loggedIn()
+	tr.store.Account = nil
+	node, err := MakeDeviceIdentityNode(tr)
+	if !errors.Is(err, ErrNoDeviceIdentity) {
+		t.Fatalf("err = %v, esperava ErrNoDeviceIdentity", err)
+	}
+	if node.Tag != "" {
+		t.Errorf("no' = %+v, esperava o zero", node)
 	}
 }

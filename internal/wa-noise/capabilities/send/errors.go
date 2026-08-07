@@ -28,4 +28,9 @@ var (
 	ErrServerReturnedError = errors.New("server returned error")
 	// ErrInvalidInlineBotID is returned by SendMessage if the inline bot JID is not a bot JID.
 	ErrInvalidInlineBotID = errors.New("invalid inline bot ID")
+
+	// ErrNoDeviceIdentity: o <device-identity> foi pedido mas Store.Account
+	// esta' vazio. Antes isto passava em silencio — proto.Marshal(nil) devolve
+	// bytes vazios SEM erro, e o no' ia vazio para o fio (F41 em HOUSEKEEP.md).
+	ErrNoDeviceIdentity = errors.New("can't build device identity node: no account in store")
 )

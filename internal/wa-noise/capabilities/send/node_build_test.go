@@ -1,6 +1,7 @@
 package send
 
 import (
+	"errors"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -111,7 +112,7 @@ func TestMarshalMessageNilNewsletter(t *testing.T) {
 func TestGetMessageContentBaseNodeOnly(t *testing.T) {
 	tr := newFakeTransport()
 	base := waBinary.Node{Tag: participantsNodeTag}
-	content := MessageContent(
+	content := mustMessageContent(t,
 		tr, base, &waE2E.Message{Conversation: proto.String("oi")},
 		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
 	)
@@ -131,7 +132,7 @@ func TestGetMessageContentPollMeta(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			content := MessageContent(
+			content := mustMessageContent(t,
 				tr, waBinary.Node{Tag: participantsNodeTag}, tc.message,
 				waBinary.Attrs{msgAttrType: msgTypePoll}, false, NodeExtraParams{},
 			)
@@ -155,7 +156,7 @@ func TestGetMessageContentPollMeta(t *testing.T) {
 // PollUpdateMessage preenchido — quem decide e' o atributo `type`.
 func TestGetMessageContentNoPollMetaForNonPollType(t *testing.T) {
 	tr := newFakeTransport()
-	content := MessageContent(
+	content := mustMessageContent(t,
 		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{PollUpdateMessage: &waE2E.PollUpdateMessage{}},
 		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
@@ -174,7 +175,7 @@ func TestGetMessageContentChildOrder(t *testing.T) {
 		metaNode:        &waBinary.Node{Tag: metaNodeTag},
 		additionalNodes: &[]waBinary.Node{{Tag: "custom"}},
 	}
-	content := MessageContent(
+	content := mustMessageContent(t,
 		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{}},
 		waBinary.Attrs{msgAttrType: msgTypePoll}, false, extra,
@@ -193,7 +194,7 @@ func TestGetMessageContentChildOrder(t *testing.T) {
 
 func TestGetMessageContentButtonNode(t *testing.T) {
 	tr := newFakeTransport()
-	content := MessageContent(
+	content := mustMessageContent(t,
 		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{ButtonsMessage: &waE2E.ButtonsMessage{}},
 		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
@@ -232,5 +233,44 @@ func TestCopyAttrsEmptySource(t *testing.T) {
 	copyAttrs(waBinary.Attrs{}, dst)
 	if len(dst) != 1 || dst[encAttrType] != encTypeMsg {
 		t.Errorf("dst = %v, nao deveria mudar", dst)
+	}
+}
+
+// mustMessageContent embrulha MessageContent nos testes que exercitam o caminho
+// feliz: desde a correcao da F41 ela devolve erro, e nenhum destes casos monta
+// um transporte sem Account.
+func mustMessageContent(
+	t *testing.T,
+	tr Transport,
+	baseNode waBinary.Node,
+	message *waE2E.Message,
+	msgAttrs waBinary.Attrs,
+	includeIdentity bool,
+	extraParams NodeExtraParams,
+) []waBinary.Node {
+	t.Helper()
+	content, err := MessageContent(tr, baseNode, message, msgAttrs, includeIdentity, extraParams)
+	if err != nil {
+		t.Fatalf("MessageContent: %v", err)
+	}
+	return content
+}
+
+// includeIdentity com Store.Account vazio ia em silencio para o fio: o no'
+// <device-identity> saia com conteudo vazio porque proto.Marshal(nil) nao
+// devolve erro (F41).
+func TestMessageContentSemContaDevolveErro(t *testing.T) {
+	tr := newFakeTransport()
+	tr.store.Account = nil
+	content, err := MessageContent(
+		tr, waBinary.Node{Tag: participantsNodeTag},
+		&waE2E.Message{Conversation: proto.String("oi")},
+		waBinary.Attrs{msgAttrType: msgTypeText}, true, NodeExtraParams{},
+	)
+	if !errors.Is(err, ErrNoDeviceIdentity) {
+		t.Fatalf("err = %v, esperava ErrNoDeviceIdentity", err)
+	}
+	if content != nil {
+		t.Errorf("content = %v, esperava nil", content)
 	}
 }
