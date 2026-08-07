@@ -12,7 +12,8 @@
 # Escopo: Fase A (raiz de internal/wa-noise/ e socket/), Fase B (appstate/,
 # store/ e store/sqlstore/) e Fase C (binary/ com seu token/, types/ com
 # types/events/, e os cinco subpacotes de util/) e Fase D (msgpad/, paircrypto/
-# e msgattrs/, extraidos da raiz). Cobre todo o fork.
+# e msgattrs/, extraidos da raiz) e Fase F/G (media/ e newsletter/, extracao
+# real de subpacote). Cobre todo o fork.
 #
 # Dois diretorios ficam de fora, ambos por serem codigo GERADO, pelo mesmo
 # racional que o ADR-0004 aplica a proto/: dividi-los nao tem valor porque o
@@ -35,6 +36,7 @@ internal/wa-noise/msgpad \
 internal/wa-noise/paircrypto \
 internal/wa-noise/msgattrs \
 internal/wa-noise/media \
+internal/wa-noise/newsletter \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \

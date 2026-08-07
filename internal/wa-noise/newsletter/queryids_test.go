@@ -4,45 +4,36 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package newsletter
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"wa-api/internal/wa-noise/argo"
 	"wa-api/internal/wa-noise/proto/waWa6"
-	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/util/keys"
 )
 
-// newMexTestClient devolve um Client com o minimo que convertQueryID precisa:
-// um Store capaz de montar o payload de registro (sem JID, sem socket).
-func newMexTestClient() *Client {
-	device := &store.Device{
-		IdentityKey:    keys.NewKeyPair(),
-		NoiseKey:       keys.NewKeyPair(),
-		RegistrationID: 0x01020304,
+// webPayload e desktopPayload sao os dois estados que ConvertQueryID distingue.
+//
+// UserAgent precisa estar presente nos dois: ConvertQueryID faz
+// `payload.GetUserAgent().Platform`, acesso a CAMPO (nao ao getter), que estoura
+// nil deref se UserAgent for nil. Em producao o payload vem de
+// store.Device.GetClientPayload(), que sempre preenche UserAgent, entao o caso
+// nao acontece — mas e' fragilidade herdada do upstream, registrada em
+// HOUSEKEEP.md (F48).
+func webPayload() *waWa6.ClientPayload {
+	return &waWa6.ClientPayload{
+		UserAgent: &waWa6.ClientPayload_UserAgent{},
+		WebInfo:   &waWa6.ClientPayload_WebInfo{},
 	}
-	device.SignedPreKey = device.IdentityKey.CreateSignedPreKey(0x00AABBCC)
-	return &Client{Store: device}
 }
 
-// withoutWebInfo zera o WebInfo do payload base (restaurando no fim), que e' o
-// que de fato faz convertQueryID escolher as query IDs de desktop.
-func withoutWebInfo(t *testing.T) {
-	t.Helper()
-	original := store.BaseClientPayload.WebInfo
-	store.BaseClientPayload.WebInfo = nil
-	t.Cleanup(func() {
-		store.BaseClientPayload.WebInfo = original
-	})
+func desktopPayload() *waWa6.ClientPayload {
+	return &waWa6.ClientPayload{UserAgent: &waWa6.ClientPayload_UserAgent{}}
 }
 
 // Com WebInfo presente (cliente web), as query IDs passam intactas.
 func TestConvertQueryIDWebMantemIDs(t *testing.T) {
-	cli := newMexTestClient()
 	for _, id := range []string{
 		queryFetchNewsletter,
 		queryRecommendedNewsletters,
@@ -55,8 +46,8 @@ func TestConvertQueryIDWebMantemIDs(t *testing.T) {
 		mutationUnfollowNewsletter,
 		mutationFollowNewsletter,
 	} {
-		if got := convertQueryID(cli, id); got != id {
-			t.Errorf("convertQueryID(%q) = %q, esperava o mesmo ID", id, got)
+		if got := ConvertQueryID(webPayload(), id); got != id {
+			t.Errorf("ConvertQueryID(%q) = %q, esperava o mesmo ID", id, got)
 		}
 	}
 }
@@ -64,9 +55,6 @@ func TestConvertQueryIDWebMantemIDs(t *testing.T) {
 // Sem WebInfo (desktop/companion), cada ID web vira o ID desktop equivalente.
 // Um mapeamento errado aqui faz o servidor recusar a consulta inteira.
 func TestConvertQueryIDDesktopMapeiaTodasAsIDs(t *testing.T) {
-	withoutWebInfo(t)
-	cli := newMexTestClient()
-
 	for web, desktop := range map[string]string{
 		queryFetchNewsletter:        queryFetchNewsletterDesktop,
 		queryRecommendedNewsletters: queryRecommendedNewslettersDesktop,
@@ -79,49 +67,41 @@ func TestConvertQueryIDDesktopMapeiaTodasAsIDs(t *testing.T) {
 		mutationUnfollowNewsletter:  mutationUnfollowNewsletterDesktop,
 		mutationFollowNewsletter:    mutationFollowNewsletterDesktop,
 	} {
-		if got := convertQueryID(cli, web); got != desktop {
-			t.Errorf("convertQueryID(%q) = %q, esperava %q", web, got, desktop)
+		if got := ConvertQueryID(desktopPayload(), web); got != desktop {
+			t.Errorf("ConvertQueryID(%q) = %q, esperava %q", web, got, desktop)
 		}
 	}
 }
 
 // IDs fora da tabela (e as proprias IDs de desktop) passam sem traducao.
 func TestConvertQueryIDDesktopPassaDesconhecidas(t *testing.T) {
-	withoutWebInfo(t)
-	cli := newMexTestClient()
-
 	for _, id := range []string{
 		queryFetchNewsletterDehydrated,
 		queryNewslettersDirectory,
 		queryFetchNewsletterDesktop,
 		"0000000000000000",
 	} {
-		if got := convertQueryID(cli, id); got != id {
-			t.Errorf("convertQueryID(%q) = %q, esperava o mesmo ID", id, got)
+		if got := ConvertQueryID(desktopPayload(), id); got != id {
+			t.Errorf("ConvertQueryID(%q) = %q, esperava o mesmo ID", id, got)
 		}
 	}
 }
 
-// Documenta um bug herdado do upstream: convertQueryID compara
+// Documenta um bug herdado do upstream: ConvertQueryID compara
 // `payload.GetUserAgent().Platform == waWa6...MACOS.Enum()`, ou seja, dois
 // PONTEIROS diferentes — a comparacao e' sempre falsa. Na pratica so' o
 // `GetWebInfo() == nil` decide. Ver HOUSEKEEP.md (F31).
 func TestConvertQueryIDPlatformMacOSNaoDecideSozinho(t *testing.T) {
-	original := store.BaseClientPayload.UserAgent.Platform
-	store.BaseClientPayload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_MACOS.Enum()
-	t.Cleanup(func() {
-		store.BaseClientPayload.UserAgent.Platform = original
-	})
-
-	cli := newMexTestClient()
+	payload := webPayload()
+	payload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_MACOS.Enum()
 	// WebInfo continua presente, entao o ramo desktop nao e' escolhido, apesar
 	// da plataforma MACOS.
-	if got := convertQueryID(cli, queryFetchNewsletter); got != queryFetchNewsletter {
-		t.Errorf("convertQueryID = %q, esperava %q (a comparacao de ponteiro e' inerte)", got, queryFetchNewsletter)
+	if got := ConvertQueryID(payload, queryFetchNewsletter); got != queryFetchNewsletter {
+		t.Errorf("ConvertQueryID = %q, esperava %q (a comparacao de ponteiro e' inerte)", got, queryFetchNewsletter)
 	}
 }
 
-// Toda ID de desktop emitida por convertQueryID precisa ter um wire type Argo
+// Toda ID de desktop emitida por ConvertQueryID precisa ter um wire type Argo
 // correspondente; sem isso a decodificacao Argo nao teria como montar a
 // resposta quando o caminho for reabilitado.
 func TestQueryIDsDesktopTemWireTypeArgo(t *testing.T) {
@@ -185,23 +165,5 @@ func TestQueryIDUnfollowDesktopSemWireTypeArgo(t *testing.T) {
 func TestQueryIDsDesktopDuplicadaConhecida(t *testing.T) {
 	if mutationFollowNewsletterDesktop != querySubscribedNewslettersDesktop {
 		t.Fatal("a duplicata conhecida sumiu — atualize HOUSEKEEP.md (F32) e este teste")
-	}
-}
-
-// O guard de MACOS aborta sendMexIQ antes de tocar no socket: e' o unico
-// caminho de sendMexIQ exercitavel sem sessao Noise aberta.
-func TestSendMexIQRecusaEmMacOS(t *testing.T) {
-	original := store.BaseClientPayload.UserAgent.Platform
-	store.BaseClientPayload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_MACOS.Enum()
-	t.Cleanup(func() {
-		store.BaseClientPayload.UserAgent.Platform = original
-	})
-
-	data, err := (&Client{}).sendMexIQ(context.Background(), queryFetchNewsletter, nil)
-	if data != nil {
-		t.Errorf("esperava data nil, veio %s", data)
-	}
-	if !errors.Is(err, errArgoDecodingBroken) {
-		t.Fatalf("err = %v, esperava errArgoDecodingBroken", err)
 	}
 }

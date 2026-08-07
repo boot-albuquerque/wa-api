@@ -11,41 +11,41 @@ import (
 	"encoding/json"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/newsletter"
 	"wa-api/internal/wa-noise/types"
 )
 
+// Fachada do dominio de canais (newsletters). A logica vive em
+// internal/wa-noise/newsletter e opera sobre newsletter.Transport; aqui ficam
+// so' os metodos de *Client que delegam, mais os apelidos de tipo que preservam
+// a API historica do pacote.
+//
+// Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 2".
+//
+// Todos os metodos abaixo recusam receiver nil com ErrClientIsNil. Antes da
+// extracao so' NewsletterMarkViewed fazia essa checagem; os demais estouravam
+// nil deref. E' a mesma correcao que as Fases A-E aplicaram nos outros dominios.
+
+// CreateNewsletterParams sao os parametros de CreateNewsletter.
+//
+// A definicao vive em internal/wa-noise/newsletter; aqui fica um apelido, que e'
+// o mesmo tipo — chamadores externos continuam compilando sem conversao.
+type CreateNewsletterParams = newsletter.CreateParams
+
+// GetNewsletterMessagesParams sao os parametros de paginacao de
+// GetNewsletterMessages. Apelido, ver CreateNewsletterParams.
+type GetNewsletterMessagesParams = newsletter.GetMessagesParams
+
+// GetNewsletterUpdatesParams sao os parametros de paginacao de
+// GetNewsletterMessageUpdates. Apelido, ver CreateNewsletterParams.
+type GetNewsletterUpdatesParams = newsletter.GetUpdatesParams
+
 // NewsletterSubscribeLiveUpdates subscribes to receive live updates from a WhatsApp channel temporarily (for the duration returned).
 func (cli *Client) NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: newsletterNamespace,
-		Type:      iqSet,
-		To:        jid,
-		Content: []waBinary.Node{{
-			Tag: newsletterLiveUpdatesTag,
-		}},
-	})
-	if err != nil {
-		return 0, err
+	if cli == nil {
+		return 0, ErrClientIsNil
 	}
-	child := resp.GetChildByTag(newsletterLiveUpdatesTag)
-	dur := child.AttrGetter().Int(newsletterLiveUpdatesDurationAttr)
-	return time.Duration(dur) * time.Second, nil
-}
-
-// newsletterViewedItems monta a lista de <item server_id="..."/> do recibo de
-// visualização. Lista vazia continua produzindo um <list> vazio, como antes.
-func newsletterViewedItems(serverIDs []types.MessageServerID) []waBinary.Node {
-	items := make([]waBinary.Node, len(serverIDs))
-	for i, id := range serverIDs {
-		items[i] = waBinary.Node{
-			Tag: "item",
-			Attrs: waBinary.Attrs{
-				"server_id": id,
-			},
-		}
-	}
-	return items
+	return newsletter.SubscribeLiveUpdates(ctx, cli.newsletterT(), jid)
 }
 
 // NewsletterMarkViewed marks a channel message as viewed, incrementing the view counter.
@@ -55,47 +55,7 @@ func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serv
 	if cli == nil {
 		return ErrClientIsNil
 	}
-	items := newsletterViewedItems(serverIDs)
-	reqID := cli.generateRequestID()
-	resp := cli.waitResponse(reqID)
-	err := cli.sendNode(ctx, waBinary.Node{
-		Tag: "receipt",
-		Attrs: waBinary.Attrs{
-			"to":   jid,
-			"type": "view",
-			"id":   reqID,
-		},
-		Content: []waBinary.Node{{
-			Tag:     "list",
-			Content: items,
-		}},
-	})
-	if err != nil {
-		cli.cancelResponse(reqID, resp)
-		return err
-	}
-	// TODO handle response?
-	<-resp
-	return nil
-}
-
-// newsletterReactionAttrs monta os atributos do <message> e do <reaction>.
-// Reação vazia significa remover a reação enviada antes: em vez de mandar um
-// código vazio, o nó vira uma edição de revogação do próprio remetente.
-func newsletterReactionAttrs(jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) (messageAttrs, reactionAttrs waBinary.Attrs) {
-	reactionAttrs = waBinary.Attrs{}
-	messageAttrs = waBinary.Attrs{
-		"to":        jid,
-		"id":        messageID,
-		"server_id": serverID,
-		"type":      "reaction",
-	}
-	if reaction != "" {
-		reactionAttrs["code"] = reaction
-	} else {
-		messageAttrs["edit"] = string(types.EditAttributeSenderRevoke)
-	}
-	return messageAttrs, reactionAttrs
+	return newsletter.MarkViewed(ctx, cli.newsletterT(), jid, serverIDs)
 }
 
 // NewsletterSendReaction sends a reaction to a channel message.
@@ -103,44 +63,18 @@ func newsletterReactionAttrs(jid types.JID, serverID types.MessageServerID, reac
 //
 // The last parameter is the message ID of the reaction itself. It can be left empty to let whatsmeow generate a random one.
 func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
-	if messageID == "" {
-		messageID = cli.GenerateMessageID()
+	if cli == nil {
+		return ErrClientIsNil
 	}
-	messageAttrs, reactionAttrs := newsletterReactionAttrs(jid, serverID, reaction, messageID)
-	return cli.sendNode(ctx, waBinary.Node{
-		Tag:   "message",
-		Attrs: messageAttrs,
-		Content: []waBinary.Node{{
-			Tag:   "reaction",
-			Attrs: reactionAttrs,
-		}},
-	})
-}
-
-type CreateNewsletterParams struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Picture     []byte `json:"picture,omitempty"`
-}
-
-type respCreateNewsletter struct {
-	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter_create"`
+	return newsletter.SendReaction(ctx, cli.newsletterT(), jid, serverID, reaction, messageID)
 }
 
 // CreateNewsletter creates a new WhatsApp channel.
 func (cli *Client) CreateNewsletter(ctx context.Context, params CreateNewsletterParams) (*types.NewsletterMetadata, error) {
-	resp, err := cli.sendMexIQ(ctx, mutationCreateNewsletter, map[string]any{
-		"newsletter_input": &params,
-	})
-	if err != nil {
-		return nil, err
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	var respData respCreateNewsletter
-	err = json.Unmarshal(resp, &respData)
-	if err != nil {
-		return nil, err
-	}
-	return respData.Newsletter, nil
+	return newsletter.Create(ctx, cli.newsletterT(), params)
 }
 
 // AcceptTOSNotice accepts a ToS notice.
@@ -149,45 +83,90 @@ func (cli *Client) CreateNewsletter(ctx context.Context, params CreateNewsletter
 //
 //	cli.AcceptTOSNotice("20601218", "5")
 func (cli *Client) AcceptTOSNotice(ctx context.Context, noticeID, stage string) error {
-	_, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "tos",
-		Type:      iqSet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{{
-			Tag: "notice",
-			Attrs: waBinary.Attrs{
-				"id":    noticeID,
-				"stage": stage,
-			},
-		}},
-	})
-	return err
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.AcceptTOSNotice(ctx, cli.newsletterT(), noticeID, stage)
 }
 
 // NewsletterToggleMute changes the mute status of a newsletter.
 func (cli *Client) NewsletterToggleMute(ctx context.Context, jid types.JID, mute bool) error {
-	query := mutationUnmuteNewsletter
-	if mute {
-		query = mutationMuteNewsletter
+	if cli == nil {
+		return ErrClientIsNil
 	}
-	_, err := cli.sendMexIQ(ctx, query, map[string]any{
-		"newsletter_id": jid.String(),
-	})
-	return err
+	return newsletter.ToggleMute(ctx, cli.newsletterT(), jid, mute)
 }
 
 // FollowNewsletter makes the user follow (join) a WhatsApp channel.
 func (cli *Client) FollowNewsletter(ctx context.Context, jid types.JID) error {
-	_, err := cli.sendMexIQ(ctx, mutationFollowNewsletter, map[string]any{
-		"newsletter_id": jid.String(),
-	})
-	return err
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.Follow(ctx, cli.newsletterT(), jid)
 }
 
 // UnfollowNewsletter makes the user unfollow (leave) a WhatsApp channel.
 func (cli *Client) UnfollowNewsletter(ctx context.Context, jid types.JID) error {
-	_, err := cli.sendMexIQ(ctx, mutationUnfollowNewsletter, map[string]any{
-		"newsletter_id": jid.String(),
-	})
-	return err
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.Unfollow(ctx, cli.newsletterT(), jid)
+}
+
+// GetNewsletterInfo gets the info of a newsletter that you're joined to.
+func (cli *Client) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error) {
+	return cli.getNewsletterInfo(ctx, newsletter.JIDInput(jid), true)
+}
+
+// GetNewsletterInfoWithInvite gets the info of a newsletter with an invite link.
+//
+// You can either pass the full link (https://whatsapp.com/channel/...) or just the `...` part.
+//
+// Note that the ViewerMeta field of the returned NewsletterMetadata will be nil.
+func (cli *Client) GetNewsletterInfoWithInvite(ctx context.Context, key string) (*types.NewsletterMetadata, error) {
+	return cli.getNewsletterInfo(ctx, newsletter.InviteInput(key), false)
+}
+
+// getNewsletterInfo continua existindo como metodo nao exportado porque
+// internals.go (gerado) o embrulha em DangerousInternalClient.
+func (cli *Client) getNewsletterInfo(ctx context.Context, input map[string]any, fetchViewerMeta bool) (*types.NewsletterMetadata, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return newsletter.GetInfo(ctx, cli.newsletterT(), input, fetchViewerMeta)
+}
+
+// GetSubscribedNewsletters gets the info of all newsletters that you're joined to.
+func (cli *Client) GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return newsletter.GetSubscribed(ctx, cli.newsletterT())
+}
+
+// GetNewsletterMessages gets messages in a WhatsApp channel.
+func (cli *Client) GetNewsletterMessages(ctx context.Context, jid types.JID, params *GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return newsletter.GetMessages(ctx, cli.newsletterT(), jid, params)
+}
+
+// GetNewsletterMessageUpdates gets updates in a WhatsApp channel.
+//
+// These are the same kind of updates that NewsletterSubscribeLiveUpdates triggers (reaction and view counts).
+func (cli *Client) GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return newsletter.GetMessageUpdates(ctx, cli.newsletterT(), jid, params)
+}
+
+// sendMexIQ continua existindo como metodo nao exportado porque internals.go
+// (gerado) o embrulha em DangerousInternalClient.
+func (cli *Client) sendMexIQ(ctx context.Context, queryID string, variables any) (json.RawMessage, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return newsletter.SendMexIQ(ctx, cli.newsletterT(), queryID, variables)
 }

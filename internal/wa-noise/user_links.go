@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/newsletter"
 	"wa-api/internal/wa-noise/types"
 )
 
@@ -20,7 +21,10 @@ const (
 	ContactQRLinkPrefix             = "https://wa.me/qr/"
 	BusinessMessageLinkDirectPrefix = "https://api.whatsapp.com/message/"
 	ContactQRLinkDirectPrefix       = "https://api.whatsapp.com/qr/"
-	NewsletterLinkPrefix            = "https://whatsapp.com/channel/"
+	// NewsletterLinkPrefix e' o MESMO valor de newsletter.LinkPrefix, nao uma
+	// copia: newsletter.InviteInput corta o prefixo antes de mandar a chave
+	// para o wire, e as duas pontas precisam concordar.
+	NewsletterLinkPrefix = newsletter.LinkPrefix
 )
 
 // ResolveBusinessMessageLink resolves a business message short link and returns the target JID, business name and
