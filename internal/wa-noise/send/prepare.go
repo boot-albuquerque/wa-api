@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"context"
@@ -15,31 +15,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/proto/waAICommon"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
-)
-
-const (
-	// messageSecretSize is the length in bytes of the random message secret
-	// generated for messages that need one (bot messages and messages that
-	// carry a reporting token).
-	messageSecretSize = 32
-	// defaultBotPersonaID is the persona identifier WhatsApp expects in
-	// BotMetadata when no explicit persona was configured for the request.
-	defaultBotPersonaID = "867051314767696$760019659443059"
-	// botNodeTag is the tag of the child node carrying the encrypted inline
-	// bot invocation inside an outgoing message stanza.
-	botNodeTag = "bot"
-	// metaNodeTag is the tag of the child node carrying per-request metadata.
-	metaNodeTag = "meta"
-)
-
-// Attribute names of the <meta> node built from SendRequestExtra.Meta.
-const (
-	metaAttrDeprecatedLIDSession = "deprecated_lid_session"
-	metaAttrThreadMsgID          = "thread_msg_id"
-	metaAttrThreadMsgSenderJID   = "thread_msg_sender_jid"
 )
 
 // prepareBotMessage fills in the bot-related parts of an outgoing message:
@@ -47,13 +26,14 @@ const (
 // rewritten BotInvokeMessage envelope plus the encrypted <bot> node stored in
 // extraParams. It returns the message that should actually be sent, which is a
 // new envelope in inline bot mode and the original message otherwise.
-func (cli *Client) prepareBotMessage(
+func prepareBotMessage(
 	ctx context.Context,
-	req *SendRequestExtra,
+	t Transport,
+	req *RequestExtra,
 	to types.JID,
 	message *waE2E.Message,
 	msgID types.MessageID,
-	extraParams *nodeExtraParams,
+	extraParams *NodeExtraParams,
 ) (*waE2E.Message, error) {
 	isInlineBotMode := false
 	if !req.InlineBotJID.IsEmpty() {
@@ -64,7 +44,7 @@ func (cli *Client) prepareBotMessage(
 	}
 
 	isBotMode := isInlineBotMode || to.IsBot()
-	needsMessageSecret := isBotMode || cli.shouldIncludeReportingToken(message)
+	needsMessageSecret := isBotMode || t.ShouldIncludeReportingToken(message)
 
 	if needsMessageSecret {
 		if message.MessageContextInfo == nil {
@@ -106,16 +86,16 @@ func (cli *Client) prepareBotMessage(
 		BotInvokeMessage: message.BotInvokeMessage,
 		MessageContextInfo: &waE2E.MessageContextInfo{
 			BotMetadata:      message.MessageContextInfo.BotMetadata,
-			BotMessageSecret: applyBotMessageHKDF(messageSecret),
+			BotMessageSecret: t.ApplyBotMessageHKDF(messageSecret),
 		},
 	}
 
-	messagePlaintext, _, marshalErr := marshalMessage(req.InlineBotJID, botMessage)
+	messagePlaintext, _, marshalErr := MarshalMessage(req.InlineBotJID, botMessage)
 	if marshalErr != nil {
 		return nil, marshalErr
 	}
 
-	participantNodes, _, err := cli.encryptMessageForDevices(ctx, []types.JID{req.InlineBotJID}, msgID, messagePlaintext, nil, waBinary.Attrs{})
+	participantNodes, _, err := EncryptForDevices(ctx, t, []types.JID{req.InlineBotJID}, msgID, messagePlaintext, nil, waBinary.Attrs{})
 	if err != nil {
 		return nil, err
 	}
@@ -131,21 +111,22 @@ func (cli *Client) prepareBotMessage(
 // outgoing message. For groups and broadcast lists it returns the participant
 // list; for LID-migrated direct chats it rewrites `to` to the LID address. It
 // mutates `to`, `ownID`, resp.DebugTimings and extraParams in place.
-func (cli *Client) resolveSendTarget(
+func resolveSendTarget(
 	ctx context.Context,
+	t Transport,
 	to *types.JID,
 	ownID *types.JID,
-	req *SendRequestExtra,
-	resp *SendResponse,
-	extraParams *nodeExtraParams,
+	req *RequestExtra,
+	resp *Response,
+	extraParams *NodeExtraParams,
 ) ([]types.JID, error) {
 	switch {
 	case to.Server == types.GroupServer || to.Server == types.BroadcastServer:
-		return cli.resolveGroupSendTarget(ctx, *to, ownID, req, resp, extraParams)
+		return resolveGroupSendTarget(ctx, t, *to, ownID, req, resp, extraParams)
 	case to.Server == types.HiddenUserServer:
-		*ownID = cli.getOwnLID()
-	case to.Server == types.DefaultUserServer && cli.Store.LIDMigrationTimestamp > 0 && !req.Peer:
-		if err := cli.migrateSendTargetToLID(ctx, to, ownID, resp); err != nil {
+		*ownID = t.OwnLID()
+	case to.Server == types.DefaultUserServer && t.Store().LIDMigrationTimestamp > 0 && !req.Peer:
+		if err := migrateSendTargetToLID(ctx, t, to, ownID, resp); err != nil {
 			return nil, err
 		}
 	}
@@ -154,18 +135,19 @@ func (cli *Client) resolveSendTarget(
 
 // resolveGroupSendTarget resolves the participant list of a group or broadcast
 // list destination, picking the addressing mode (PN/LID) the group expects.
-func (cli *Client) resolveGroupSendTarget(
+func resolveGroupSendTarget(
 	ctx context.Context,
+	t Transport,
 	to types.JID,
 	ownID *types.JID,
-	req *SendRequestExtra,
-	resp *SendResponse,
-	extraParams *nodeExtraParams,
+	req *RequestExtra,
+	resp *Response,
+	extraParams *NodeExtraParams,
 ) ([]types.JID, error) {
 	start := time.Now()
 
 	if to.Server != types.GroupServer {
-		groupParticipants, err := cli.getBroadcastListParticipants(ctx, to)
+		groupParticipants, err := t.BroadcastListParticipants(ctx, to)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get broadcast list members: %w", err)
 		}
@@ -173,22 +155,22 @@ func (cli *Client) resolveGroupSendTarget(
 		return groupParticipants, nil
 	}
 
-	cachedData, err := cli.getCachedGroupData(ctx, to)
+	cachedData, err := t.CachedGroupData(ctx, to)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group members: %w", err)
 	} else if cachedData == nil {
-		// getCachedGroupData returns (nil, nil) when the group info query
+		// CachedGroupData returns (nil, nil) when the group info query
 		// succeeded but the response was cached under a different JID than the
 		// one requested (the cache is keyed by the `id` the *server* echoes
 		// back). Dereferencing it here would be a server-triggerable panic.
-		return nil, fmt.Errorf("failed to get group members: %w", ErrGroupNotFound)
+		return nil, fmt.Errorf("failed to get group members: %w", group.ErrNotFound)
 	}
 	// TODO this is fairly hacky, is there a proper way to determine which identity the message is sent with?
 	if cachedData.AddressingMode == types.AddressingModeLID {
-		*ownID = cli.getOwnLID()
+		*ownID = t.OwnLID()
 		extraParams.addressingMode = types.AddressingModeLID
 	} else if cachedData.CommunityAnnouncementGroup && req.Meta != nil {
-		*ownID = cli.getOwnLID()
+		*ownID = t.OwnLID()
 		// Why is this set to PN?
 		extraParams.addressingMode = types.AddressingModePN
 	}
@@ -198,13 +180,13 @@ func (cli *Client) resolveGroupSendTarget(
 
 // migrateSendTargetToLID replaces a phone-number destination with its LID
 // address when the account has already migrated to LID addressing.
-func (cli *Client) migrateSendTargetToLID(ctx context.Context, to *types.JID, ownID *types.JID, resp *SendResponse) error {
+func migrateSendTargetToLID(ctx context.Context, t Transport, to *types.JID, ownID *types.JID, resp *Response) error {
 	start := time.Now()
-	toLID, err := cli.Store.LIDs.GetLIDForPN(ctx, *to)
+	toLID, err := t.Store().LIDs.GetLIDForPN(ctx, *to)
 	if err != nil {
 		return fmt.Errorf("failed to get LID for PN %s: %w", *to, err)
 	} else if toLID.IsEmpty() {
-		info, err := cli.GetUserInfo(ctx, []types.JID{*to})
+		info, err := t.UserInfo(ctx, []types.JID{*to})
 		if err != nil {
 			return fmt.Errorf("failed to get user info for %s to fill LID cache: %w", *to, err)
 		} else if toLID = info[*to].LID; toLID.IsEmpty() {
@@ -212,15 +194,15 @@ func (cli *Client) migrateSendTargetToLID(ctx context.Context, to *types.JID, ow
 		}
 	}
 	resp.DebugTimings.LIDFetch = time.Since(start)
-	cli.Log.Debugf("Replacing SendMessage destination with LID as migration timestamp is set %s -> %s", *to, toLID)
+	t.Log().Debugf("Replacing SendMessage destination with LID as migration timestamp is set %s -> %s", *to, toLID)
 	*to = toLID
-	*ownID = cli.getOwnLID()
+	*ownID = t.OwnLID()
 	return nil
 }
 
 // applyRequestExtraNodes translates the optional Meta and AdditionalNodes of a
 // send request into the extra child nodes of the outgoing message stanza.
-func applyRequestExtraNodes(req *SendRequestExtra, extraParams *nodeExtraParams) {
+func applyRequestExtraNodes(req *RequestExtra, extraParams *NodeExtraParams) {
 	if req.Meta != nil {
 		extraParams.metaNode = &waBinary.Node{
 			Tag:   metaNodeTag,

@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"context"
@@ -17,44 +17,55 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waMsgTransport"
+	"wa-api/internal/wa-noise/retry"
+	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )
 
-func (cli *Client) sendGroupV3(
+// FBApplicationVersion e' o `version` do SubProtocol de aplicacao FB. O valor
+// mora em internal/wa-noise/retry desde a Fase F/G lote 5, para que o caminho
+// de retry e o de envio normal nao possam divergir; a raiz o reexporta como
+// whatsmeow.FBMessageApplicationVersion.
+const FBApplicationVersion = retry.FBApplicationVersion
+
+// GroupV3 envia uma mensagem v3/FB a um grupo. Era Client.sendGroupV3.
+func GroupV3(
 	ctx context.Context,
+	t Transport,
 	to,
 	ownID types.JID,
 	id types.MessageID,
 	messageApp []byte,
 	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) (string, []byte, error) {
-	var groupMeta *groupMetaCache
+	var groupMeta *group.Meta
 	var err error
 	start := time.Now()
 	if to.Server == types.GroupServer {
-		groupMeta, err = cli.getCachedGroupData(ctx, to)
+		groupMeta, err = t.CachedGroupData(ctx, to)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to get group members: %w", err)
 		}
 	}
 	timings.GetParticipants = time.Since(start)
 	// groupMeta stays nil both when `to` is not a group JID and when
-	// getCachedGroupData returns (nil, nil) — which it does if the server
+	// CachedGroupData returns (nil, nil) — which it does if the server
 	// echoed a different group `id` than the one queried, so the cache entry
 	// landed under another key. Reading groupMeta.Members below would then be a
 	// server-triggerable nil dereference.
 	if groupMeta == nil {
-		return "", nil, fmt.Errorf("failed to get group members: %w", ErrGroupNotFound)
+		return "", nil, fmt.Errorf("failed to get group members: %w", group.ErrNotFound)
 	}
 
 	start = time.Now()
-	builder := groups.NewGroupSessionBuilder(cli.Store, pbSerializer)
+	builder := groups.NewGroupSessionBuilder(t.Store(), store.SignalProtobufSerializer)
 	senderKeyName := protocol.NewSenderKeyName(to.String(), ownID.SignalAddress())
 	signalSKDMessage, err := builder.Create(ctx, senderKeyName)
 	if err != nil {
@@ -65,12 +76,12 @@ func (cli *Client) sendGroupV3(
 		AxolotlSenderKeyDistributionMessage: signalSKDMessage.Serialize(),
 	}
 
-	cipher := groups.NewGroupCipher(builder, senderKeyName, cli.Store)
+	cipher := groups.NewGroupCipher(builder, senderKeyName, t.Store())
 	plaintext, err := proto.Marshal(&waMsgTransport.MessageTransport{
 		Payload: &waMsgTransport.MessageTransport_Payload{
 			ApplicationPayload: &waCommon.SubProtocol{
 				Payload: messageApp,
-				Version: proto.Int32(FBMessageApplicationVersion),
+				Version: proto.Int32(FBApplicationVersion),
 			},
 			FutureProof: waCommon.FutureProofBehavior_PLACEHOLDER.Enum(),
 		},
@@ -100,14 +111,14 @@ func (cli *Client) sendGroupV3(
 	ciphertext := encrypted.SignedSerialize()
 	timings.GroupEncrypt = time.Since(start)
 
-	node, allDevices, err := cli.prepareMessageNodeV3(
-		ctx, to, ownID, id, nil, skdm, msgAttrs, frankingTag, groupMeta.Members, timings,
+	node, allDevices, err := PrepareMessageNodeV3(
+		ctx, t, to, ownID, id, nil, skdm, msgAttrs, frankingTag, groupMeta.Members, timings,
 	)
 	if err != nil {
 		return "", nil, err
 	}
 
-	phash := participantListHashV2(allDevices)
+	phash := ParticipantListHashV2(allDevices)
 	node.Attrs[msgAttrPHash] = phash
 	skMsg := waBinary.Node{
 		Tag:     encNodeTag,
@@ -123,7 +134,7 @@ func (cli *Client) sendGroupV3(
 	node.Content = append(node.GetChildren(), skMsg)
 
 	start = time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, *node)
+	data, err := t.SendNodeAndGetData(ctx, *node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send message node: %w", err)
@@ -131,39 +142,44 @@ func (cli *Client) sendGroupV3(
 	return phash, data, nil
 }
 
-func (cli *Client) sendDMV3(
+// DMV3 envia uma mensagem v3/FB a um usuario. Era Client.sendDMV3.
+func DMV3(
 	ctx context.Context,
+	t Transport,
 	to,
 	ownID types.JID,
 	id types.MessageID,
 	messageApp []byte,
 	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) ([]byte, string, error) {
 	payload := &waMsgTransport.MessageTransport_Payload{
 		ApplicationPayload: &waCommon.SubProtocol{
 			Payload: messageApp,
-			Version: proto.Int32(FBMessageApplicationVersion),
+			Version: proto.Int32(FBApplicationVersion),
 		},
 		FutureProof: waCommon.FutureProofBehavior_PLACEHOLDER.Enum(),
 	}
 
-	node, allDevices, err := cli.prepareMessageNodeV3(ctx, to, ownID, id, payload, nil, msgAttrs, frankingTag, []types.JID{to, ownID.ToNonAD()}, timings)
+	node, allDevices, err := PrepareMessageNodeV3(ctx, t, to, ownID, id, payload, nil, msgAttrs, frankingTag, []types.JID{to, ownID.ToNonAD()}, timings)
 	if err != nil {
 		return nil, "", err
 	}
 	start := time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, *node)
+	data, err := t.SendNodeAndGetData(ctx, *node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to send message node: %w", err)
 	}
-	return data, participantListHashV2(allDevices), nil
+	return data, ParticipantListHashV2(allDevices), nil
 }
 
-func (cli *Client) prepareMessageNodeV3(
+// PrepareMessageNodeV3 monta o <message> v3/FB. Era
+// Client.prepareMessageNodeV3.
+func PrepareMessageNodeV3(
 	ctx context.Context,
+	t Transport,
 	to,
 	ownID types.JID,
 	id types.MessageID,
@@ -172,10 +188,10 @@ func (cli *Client) prepareMessageNodeV3(
 	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
 	participants []types.JID,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) (*waBinary.Node, []types.JID, error) {
 	start := time.Now()
-	allDevices, err := cli.GetUserDevices(ctx, participants)
+	allDevices, err := t.UserDevices(ctx, participants)
 	timings.GetDevices = time.Since(start)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get device list: %w", err)
@@ -204,7 +220,7 @@ func (cli *Client) prepareMessageNodeV3(
 	}
 
 	start = time.Now()
-	participantNodes, err := cli.encryptMessageForDevicesV3(ctx, allDevices, ownID, id, payload, skdm, dsm, encAttrs)
+	participantNodes, err := EncryptForDevicesV3(ctx, t, allDevices, ownID, id, payload, skdm, dsm, encAttrs)
 	if err != nil {
 		return nil, nil, err
 	}

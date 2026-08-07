@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"context"
@@ -23,10 +23,18 @@ import (
 	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/types"
 )
 
-func participantListHashV2(participants []types.JID) string {
+// ParticipantListHashV2 calcula o `phash` de uma lista de dispositivos.
+//
+// Continua morando no dominio de ENVIO — e nao em user/ — porque hasheia
+// listas de participantes de grupo tanto quanto listas de dispositivo. O lote 7
+// ja' registrava essa pendencia em user.Transport.ParticipantListHash, que
+// agora atravessa a fachada da raiz ate' aqui.
+func ParticipantListHashV2(participants []types.JID) string {
 	participantsStrings := make([]string, len(participants))
 	for i, part := range participants {
 		participantsStrings[i] = part.ADString()
@@ -41,13 +49,16 @@ func participantListHashV2(participants []types.JID) string {
 	)
 }
 
-func (cli *Client) sendNewsletter(
+// Newsletter envia uma mensagem de canal (texto plano, sem Signal).
+// Era Client.sendNewsletter.
+func Newsletter(
 	ctx context.Context,
+	t Transport,
 	to types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
 	mediaID string,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) ([]byte, error) {
 	attrs := waBinary.Attrs{
 		msgAttrTo:   to,
@@ -65,7 +76,7 @@ func (cli *Client) sendNewsletter(
 		message = nil
 	}
 	start := time.Now()
-	plaintext, _, err := marshalMessage(to, message)
+	plaintext, _, err := MarshalMessage(to, message)
 	timings.Marshal = time.Since(start)
 	if err != nil {
 		return nil, err
@@ -86,7 +97,7 @@ func (cli *Client) sendNewsletter(
 		Content: []waBinary.Node{plaintextNode},
 	}
 	start = time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, node)
+	data, err := t.SendNodeAndGetData(ctx, node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message node: %w", err)
@@ -94,33 +105,29 @@ func (cli *Client) sendNewsletter(
 	return data, nil
 }
 
-type nodeExtraParams struct {
-	botNode         *waBinary.Node
-	metaNode        *waBinary.Node
-	additionalNodes *[]waBinary.Node
-	addressingMode  types.AddressingMode
-}
-
-func (cli *Client) sendGroup(
+// Group envia uma mensagem waE2E a um grupo ou lista de transmissao.
+// Era Client.sendGroup.
+func Group(
 	ctx context.Context,
+	t Transport,
 	ownID,
 	to types.JID,
 	participants []types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
-	timings *MessageDebugTimings,
-	extraParams nodeExtraParams,
+	timings *DebugTimings,
+	extraParams NodeExtraParams,
 ) (string, []byte, error) {
 	start := time.Now()
-	plaintext, _, err := marshalMessage(to, message)
+	plaintext, _, err := MarshalMessage(to, message)
 	timings.Marshal = time.Since(start)
 	if err != nil {
 		return "", nil, err
 	}
 
 	start = time.Now()
-	builder := groups.NewGroupSessionBuilder(cli.Store, pbSerializer)
-	senderKeyName := protocol.NewSenderKeyName(to.String(), cli.getOwnLID().SignalAddress())
+	builder := groups.NewGroupSessionBuilder(t.Store(), store.SignalProtobufSerializer)
+	senderKeyName := protocol.NewSenderKeyName(to.String(), t.OwnLID().SignalAddress())
 	signalSKDMessage, err := builder.Create(ctx, senderKeyName)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create sender key distribution message to send %s to %s: %w", id, to, err)
@@ -136,7 +143,7 @@ func (cli *Client) sendGroup(
 		return "", nil, fmt.Errorf("failed to marshal sender key distribution message to send %s to %s: %w", id, to, err)
 	}
 
-	cipher := groups.NewGroupCipher(builder, senderKeyName, cli.Store)
+	cipher := groups.NewGroupCipher(builder, senderKeyName, t.Store())
 	encrypted, err := cipher.Encrypt(ctx, msgpad.Pad(plaintext))
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to encrypt group message to send %s to %s: %w", id, to, err)
@@ -144,14 +151,14 @@ func (cli *Client) sendGroup(
 	ciphertext := encrypted.SignedSerialize()
 	timings.GroupEncrypt = time.Since(start)
 
-	node, allDevices, err := cli.prepareMessageNode(
-		ctx, to, id, message, participants, skdPlaintext, nil, timings, extraParams,
+	node, allDevices, err := PrepareMessageNode(
+		ctx, t, to, id, message, participants, skdPlaintext, nil, timings, extraParams,
 	)
 	if err != nil {
 		return "", nil, err
 	}
 
-	phash := participantListHashV2(allDevices)
+	phash := ParticipantListHashV2(allDevices)
 	node.Attrs[msgAttrPHash] = phash
 	skMsg := waBinary.Node{
 		Tag:     encNodeTag,
@@ -165,12 +172,12 @@ func (cli *Client) sendGroup(
 		skMsg.Attrs[encAttrMediaType] = mediaType
 	}
 	node.Content = append(node.GetChildren(), skMsg)
-	if cli.shouldIncludeReportingToken(message) && message.GetMessageContextInfo().GetMessageSecret() != nil {
-		node.Content = append(node.GetChildren(), cli.getMessageReportingToken(plaintext, message, ownID, to, id))
+	if t.ShouldIncludeReportingToken(message) && message.GetMessageContextInfo().GetMessageSecret() != nil {
+		node.Content = append(node.GetChildren(), t.MessageReportingToken(plaintext, message, ownID, to, id))
 	}
 
 	start = time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, *node)
+	data, err := t.SendNodeAndGetData(ctx, *node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send message node: %w", err)
@@ -178,19 +185,22 @@ func (cli *Client) sendGroup(
 	return phash, data, nil
 }
 
-func (cli *Client) sendPeerMessage(
+// PeerMessage envia uma mensagem de protocolo aos proprios dispositivos.
+// Era Client.sendPeerMessage.
+func PeerMessage(
 	ctx context.Context,
+	t Transport,
 	to types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) ([]byte, error) {
-	node, err := cli.preparePeerMessageNode(ctx, to, id, message, timings)
+	node, err := PreparePeerMessageNode(ctx, t, to, id, message, timings)
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, *node)
+	data, err := t.SendNodeAndGetData(ctx, *node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message node: %w", err)
@@ -198,45 +208,47 @@ func (cli *Client) sendPeerMessage(
 	return data, nil
 }
 
-func (cli *Client) sendDM(
+// DM envia uma mensagem waE2E a um usuario. Era Client.sendDM.
+func DM(
 	ctx context.Context,
+	t Transport,
 	ownID,
 	to types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
-	timings *MessageDebugTimings,
-	extraParams nodeExtraParams,
+	timings *DebugTimings,
+	extraParams NodeExtraParams,
 ) (string, []byte, error) {
 	start := time.Now()
-	messagePlaintext, deviceSentMessagePlaintext, err := marshalMessage(to, message)
+	messagePlaintext, deviceSentMessagePlaintext, err := MarshalMessage(to, message)
 	timings.Marshal = time.Since(start)
 	if err != nil {
 		return "", nil, err
 	}
 
-	node, allDevices, err := cli.prepareMessageNode(
-		ctx, to, id, message, []types.JID{to, ownID.ToNonAD()},
+	node, allDevices, err := PrepareMessageNode(
+		ctx, t, to, id, message, []types.JID{to, ownID.ToNonAD()},
 		messagePlaintext, deviceSentMessagePlaintext, timings, extraParams,
 	)
 	if err != nil {
 		return "", nil, err
 	}
-	phash := participantListHashV2(allDevices)
+	phash := ParticipantListHashV2(allDevices)
 
-	if cli.shouldIncludeReportingToken(message) && message.GetMessageContextInfo().GetMessageSecret() != nil {
-		node.Content = append(node.GetChildren(), cli.getMessageReportingToken(messagePlaintext, message, ownID, to, id))
+	if t.ShouldIncludeReportingToken(message) && message.GetMessageContextInfo().GetMessageSecret() != nil {
+		node.Content = append(node.GetChildren(), t.MessageReportingToken(messagePlaintext, message, ownID, to, id))
 	}
 
-	tcTokenBytes, tcErr := cli.ensureTCToken(ctx, to)
+	tcTokenBytes, tcErr := t.EnsureTCToken(ctx, to)
 	if tcErr != nil {
-		cli.Log.Warnf("Failed to get privacy token for %s: %v", to, tcErr)
+		t.Log().Warnf("Failed to get privacy token for %s: %v", to, tcErr)
 	}
 	if len(tcTokenBytes) > 0 {
 		node.Content = append(node.GetChildren(), waBinary.Node{
 			Tag:     tcTokenNodeTag,
 			Content: tcTokenBytes,
 		})
-	} else if csToken := cli.generateCsToken(ctx, to); len(csToken) > 0 {
+	} else if csToken := t.GenerateCsToken(ctx, to); len(csToken) > 0 {
 		node.Content = append(node.GetChildren(), waBinary.Node{
 			Tag:     csTokenNodeTag,
 			Content: csToken,
@@ -244,15 +256,15 @@ func (cli *Client) sendDM(
 	}
 
 	start = time.Now()
-	data, err := cli.sendNodeAndGetData(ctx, *node)
+	data, err := t.SendNodeAndGetData(ctx, *node)
 	timings.Send = time.Since(start)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send message node: %w", err)
 	}
 
-	storageJID := cli.resolveTCTokenStorageLID(ctx, to)
-	if shouldSendTCTokenInChatAction(to) && shouldSendNewTCToken(cli.getTCTokenSenderTS(storageJID)) {
-		go cli.issuePrivacyTokenAndSave(storageJID, time.Now())
+	storageJID := t.ResolveTCTokenStorageLID(ctx, to)
+	if tctoken.ShouldSendInChatAction(to) && tctoken.ShouldSendNew(t.TCTokenSenderTS(storageJID)) {
+		go t.IssuePrivacyTokenAndSave(storageJID, time.Now())
 	}
 
 	return phash, data, nil

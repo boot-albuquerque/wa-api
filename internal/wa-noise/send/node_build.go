@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"context"
@@ -21,12 +21,15 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-func (cli *Client) preparePeerMessageNode(
+// PreparePeerMessageNode monta o <message> de uma mensagem de protocolo para os
+// proprios dispositivos. Era Client.preparePeerMessageNode.
+func PreparePeerMessageNode(
 	ctx context.Context,
+	t Transport,
 	to types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
-	timings *MessageDebugTimings,
+	timings *DebugTimings,
 ) (*waBinary.Node, error) {
 	attrs := waBinary.Attrs{
 		msgAttrID:       id,
@@ -49,7 +52,7 @@ func (cli *Client) preparePeerMessageNode(
 	}
 	encryptionIdentity := to
 	if to.Server == types.DefaultUserServer {
-		encryptionIdentity, err = cli.Store.LIDs.GetLIDForPN(ctx, to)
+		encryptionIdentity, err = t.Store().LIDs.GetLIDForPN(ctx, to)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get LID for PN %s: %w", to, err)
 		} else if encryptionIdentity.IsEmpty() {
@@ -61,7 +64,7 @@ func (cli *Client) preparePeerMessageNode(
 		}
 	}
 	start = time.Now()
-	encrypted, isPreKey, err := cli.encryptMessageForDevice(ctx, plaintext, encryptionIdentity, nil, nil, nil)
+	encrypted, isPreKey, err := EncryptForDevice(ctx, t, plaintext, encryptionIdentity, nil, nil, nil)
 	timings.PeerEncrypt = time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt peer message for %s: %v", to, err)
@@ -72,8 +75,8 @@ func (cli *Client) preparePeerMessageNode(
 			metaAttrAppData: metaAppDataDefault,
 		},
 	}, *encrypted}
-	if isPreKey && cli.MessengerConfig == nil {
-		content = append(content, cli.makeDeviceIdentityNode())
+	if isPreKey && !t.IsMessenger() {
+		content = append(content, MakeDeviceIdentityNode(t))
 	}
 	return &waBinary.Node{
 		Tag:     messageNodeTag,
@@ -82,16 +85,19 @@ func (cli *Client) preparePeerMessageNode(
 	}, nil
 }
 
-func (cli *Client) getMessageContent(
+// MessageContent monta a lista de filhos do <message>. Era
+// Client.getMessageContent.
+func MessageContent(
+	t Transport,
 	baseNode waBinary.Node,
 	message *waE2E.Message,
 	msgAttrs waBinary.Attrs,
 	includeIdentity bool,
-	extraParams nodeExtraParams,
+	extraParams NodeExtraParams,
 ) []waBinary.Node {
 	content := []waBinary.Node{baseNode}
 	if includeIdentity {
-		content = append(content, cli.makeDeviceIdentityNode())
+		content = append(content, MakeDeviceIdentityNode(t))
 	}
 	if msgAttrs[msgAttrType] == msgTypePoll {
 		pollType := pollTypeCreation
@@ -128,18 +134,22 @@ func (cli *Client) getMessageContent(
 	return content
 }
 
-func (cli *Client) prepareMessageNode(
+// PrepareMessageNode monta o <message> waE2E ja' cifrado por dispositivo,
+// devolvendo tambem a lista de dispositivos usada (base do phash). Era
+// Client.prepareMessageNode.
+func PrepareMessageNode(
 	ctx context.Context,
+	t Transport,
 	to types.JID,
 	id types.MessageID,
 	message *waE2E.Message,
 	participants []types.JID,
 	plaintext, dsmPlaintext []byte,
-	timings *MessageDebugTimings,
-	extraParams nodeExtraParams,
+	timings *DebugTimings,
+	extraParams NodeExtraParams,
 ) (*waBinary.Node, []types.JID, error) {
 	start := time.Now()
-	allDevices, err := cli.GetUserDevices(ctx, participants)
+	allDevices, err := t.UserDevices(ctx, participants)
 	timings.GetDevices = time.Since(start)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get device list: %w", err)
@@ -175,8 +185,8 @@ func (cli *Client) prepareMessageNode(
 	}
 
 	start = time.Now()
-	participantNodes, includeIdentity, err := cli.encryptMessageForDevices(
-		ctx, allDevices, id, plaintext, dsmPlaintext, encAttrs,
+	participantNodes, includeIdentity, err := EncryptForDevices(
+		ctx, t, allDevices, id, plaintext, dsmPlaintext, encAttrs,
 	)
 	timings.PeerEncrypt = time.Since(start)
 	if err != nil {
@@ -189,13 +199,15 @@ func (cli *Client) prepareMessageNode(
 	return &waBinary.Node{
 		Tag:   messageNodeTag,
 		Attrs: attrs,
-		Content: cli.getMessageContent(
-			participantNode, message, attrs, includeIdentity, extraParams,
+		Content: MessageContent(
+			t, participantNode, message, attrs, includeIdentity, extraParams,
 		),
 	}, allDevices, nil
 }
 
-func marshalMessage(to types.JID, message *waE2E.Message) (plaintext, dsmPlaintext []byte, err error) {
+// MarshalMessage serializa a mensagem e, quando cabe, a copia device-sent para
+// os proprios dispositivos. Era marshalMessage (funcao livre ja' na raiz).
+func MarshalMessage(to types.JID, message *waE2E.Message) (plaintext, dsmPlaintext []byte, err error) {
 	if message == nil && to.Server == types.NewsletterServer {
 		return
 	}
@@ -222,8 +234,13 @@ func marshalMessage(to types.JID, message *waE2E.Message) (plaintext, dsmPlainte
 	return
 }
 
-func (cli *Client) makeDeviceIdentityNode() waBinary.Node {
-	deviceIdentity, err := proto.Marshal(cli.Store.Account)
+// MakeDeviceIdentityNode monta o <device-identity>. Era
+// Client.makeDeviceIdentityNode — incluindo o panic, preservado literalmente:
+// falhar ao serializar a propria conta e' corrupcao de estado local, nao erro
+// de protocolo, e o comportamento historico e' visivel via
+// DangerousInternalClient.MakeDeviceIdentityNode.
+func MakeDeviceIdentityNode(t Transport) waBinary.Node {
+	deviceIdentity, err := proto.Marshal(t.Store().Account)
 	if err != nil {
 		panic(fmt.Errorf("failed to marshal device identity: %w", err))
 	}

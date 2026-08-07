@@ -9,13 +9,15 @@ package whatsmeow
 import (
 	"context"
 	"errors"
-	"fmt"
-	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
 )
+
+// A logica deste dominio vive em internal/wa-noise/send/. O que sobra aqui sao
+// fachadas: elas guardam o contrato historico (nomes, assinaturas e o receptor
+// *Client) e delegam. Ver PATCHES.md, "Fase F/G — lote 8".
 
 // SendMessage sends the given message.
 //
@@ -53,101 +55,7 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 	} else if len(extra) == 1 {
 		req = extra[0]
 	}
-	if to.Device > 0 && !req.Peer {
-		err = ErrRecipientADJID
-		return
-	}
-	ownID := cli.getOwnID()
-	if ownID.IsEmpty() {
-		err = ErrNotLoggedIn
-		return
-	}
-
-	if req.Timeout == 0 {
-		req.Timeout = defaultRequestTimeout
-	}
-	if len(req.ID) == 0 {
-		req.ID = cli.GenerateMessageID()
-	}
-	if to.Server == types.NewsletterServer {
-		// TODO somehow deduplicate this with the code in sendNewsletter?
-		if message.EditedMessage != nil {
-			req.ID = types.MessageID(message.GetEditedMessage().GetMessage().GetProtocolMessage().GetKey().GetID())
-		} else if message.ProtocolMessage != nil && message.ProtocolMessage.GetType() == waE2E.ProtocolMessage_REVOKE {
-			req.ID = types.MessageID(message.GetProtocolMessage().GetKey().GetID())
-		}
-	}
-	resp.ID = req.ID
-
-	var extraParams nodeExtraParams
-	message, err = cli.prepareBotMessage(ctx, &req, to, message, resp.ID, &extraParams)
-	if err != nil {
-		return
-	}
-
-	var groupParticipants []types.JID
-	groupParticipants, err = cli.resolveSendTarget(ctx, &to, &ownID, &req, &resp, &extraParams)
-	if err != nil {
-		return
-	}
-	applyRequestExtraNodes(&req, &extraParams)
-
-	resp.Sender = ownID
-
-	start := time.Now()
-	// Sending multiple messages at a time can cause weird issues and makes it harder to retry safely
-	// This is also required for the session prefetching that makes group sends faster
-	// (everything will explode if you send a message to the same user twice in parallel)
-	cli.messageSendLock.Lock()
-	resp.DebugTimings.Queue = time.Since(start)
-	defer cli.messageSendLock.Unlock()
-
-	// Peer message retries aren't implemented yet
-	if !req.Peer {
-		err = cli.addRecentMessage(ctx, to, req.ID, message, nil)
-		if err != nil {
-			return
-		}
-	}
-
-	if message.GetMessageContextInfo().GetMessageSecret() != nil {
-		err = cli.Store.MsgSecrets.PutMessageSecret(ctx, to, ownID, req.ID, message.GetMessageContextInfo().GetMessageSecret())
-		if err != nil {
-			cli.Log.Warnf("Failed to store message secret key for outgoing message %s: %v", req.ID, err)
-		} else {
-			cli.Log.Debugf("Stored message secret key for outgoing message %s", req.ID)
-		}
-	}
-
-	respChan := cli.waitResponse(req.ID)
-	var phash string
-	var data []byte
-	switch to.Server {
-	case types.GroupServer, types.BroadcastServer:
-		phash, data, err = cli.sendGroup(ctx, ownID, to, groupParticipants, req.ID, message, &resp.DebugTimings, extraParams)
-	case types.DefaultUserServer, types.BotServer, types.HiddenUserServer:
-		if req.Peer {
-			data, err = cli.sendPeerMessage(ctx, to, req.ID, message, &resp.DebugTimings)
-		} else {
-			phash, data, err = cli.sendDM(ctx, ownID, to, req.ID, message, &resp.DebugTimings, extraParams)
-		}
-	case types.NewsletterServer:
-		data, err = cli.sendNewsletter(ctx, to, req.ID, message, req.MediaHandle, &resp.DebugTimings)
-	default:
-		err = fmt.Errorf("%w %s", ErrUnknownServer, to.Server)
-	}
-	start = time.Now()
-	if err != nil {
-		cli.cancelResponse(req.ID, respChan)
-		return
-	}
-	var respNode *waBinary.Node
-	respNode, err = cli.awaitSendAck(ctx, &req, &resp, respChan, data, start)
-	if err != nil {
-		return
-	}
-	err = cli.applySendAck(respNode, to, phash, &resp)
-	return
+	return send.Message(ctx, cli.sendT(), to, message, req)
 }
 
 func (cli *Client) SendPeerMessage(ctx context.Context, message *waE2E.Message) (SendResponse, error) {

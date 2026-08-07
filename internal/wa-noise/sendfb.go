@@ -8,37 +8,24 @@ package whatsmeow
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"errors"
-	"fmt"
-	"time"
 
-	"go.mau.fi/util/random"
-	"google.golang.org/protobuf/proto"
-
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/msgattrs"
 	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/retry"
+	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
 )
 
-const FBMessageVersion = 3
-
-// FBMessageApplicationVersion e' o `version` do SubProtocol de aplicacao FB.
-// Continua sendo API publica da raiz com o mesmo valor e o mesmo tipo
-// (constante sem tipo); a definicao mora em internal/wa-noise/retry desde a
-// Fase F/G lote 5, para que o caminho de retry e o de envio normal nao possam
-// divergir.
-const FBMessageApplicationVersion = retry.FBApplicationVersion
-const IGMessageApplicationVersion = 3
-const FBConsumerMessageVersion = 1
-const FBArmadilloMessageVersion = 1
+// As cinco constantes continuam sendo API publica da raiz com os mesmos valores
+// e o mesmo tipo (constante sem tipo). As definicoes moram em
+// internal/wa-noise/send desde a Fase F/G lote 8 — e FBMessageApplicationVersion
+// mora em internal/wa-noise/retry desde o lote 5, para que o caminho de retry e
+// o de envio normal nao possam divergir.
+const FBMessageVersion = send.FBMessageVersion
+const FBMessageApplicationVersion = send.FBApplicationVersion
+const IGMessageApplicationVersion = send.IGApplicationVersion
+const FBConsumerMessageVersion = send.ConsumerVersion
+const FBArmadilloMessageVersion = send.ArmadilloVersion
 
 // SendFBMessage sends the given v3 message to the given JID.
 func (cli *Client) SendFBMessage(
@@ -59,116 +46,5 @@ func (cli *Client) SendFBMessage(
 	} else if len(extra) == 1 {
 		req = extra[0]
 	}
-	var subproto waMsgApplication.MessageApplication_SubProtocolPayload
-	subproto.FutureProof = waCommon.FutureProofBehavior_PLACEHOLDER.Enum()
-	switch typedMsg := message.(type) {
-	case *waConsumerApplication.ConsumerApplication:
-		var consumerMessage []byte
-		consumerMessage, err = proto.Marshal(typedMsg)
-		if err != nil {
-			err = fmt.Errorf("failed to marshal consumer message: %w", err)
-			return
-		}
-		subproto.SubProtocol = &waMsgApplication.MessageApplication_SubProtocolPayload_ConsumerMessage{
-			ConsumerMessage: &waCommon.SubProtocol{
-				Payload: consumerMessage,
-				Version: proto.Int32(FBConsumerMessageVersion),
-			},
-		}
-	case *waArmadilloApplication.Armadillo:
-		var armadilloMessage []byte
-		armadilloMessage, err = proto.Marshal(typedMsg)
-		if err != nil {
-			err = fmt.Errorf("failed to marshal armadillo message: %w", err)
-			return
-		}
-		subproto.SubProtocol = &waMsgApplication.MessageApplication_SubProtocolPayload_Armadillo{
-			Armadillo: &waCommon.SubProtocol{
-				Payload: armadilloMessage,
-				Version: proto.Int32(FBArmadilloMessageVersion),
-			},
-		}
-	default:
-		err = fmt.Errorf("unsupported message type %T", message)
-		return
-	}
-	if metadata == nil {
-		metadata = &waMsgApplication.MessageApplication_Metadata{}
-	}
-	metadata.FrankingVersion = proto.Int32(frankingVersion)
-	metadata.FrankingKey = random.Bytes(frankingKeySize)
-	msgAttrs := msgattrs.GetAttrsFromFBMessage(message)
-	messageAppProto := &waMsgApplication.MessageApplication{
-		Payload: &waMsgApplication.MessageApplication_Payload{
-			Content: &waMsgApplication.MessageApplication_Payload_SubProtocol{
-				SubProtocol: &subproto,
-			},
-		},
-		Metadata: metadata,
-	}
-	messageApp, err := proto.Marshal(messageAppProto)
-	if err != nil {
-		return resp, fmt.Errorf("failed to marshal message application: %w", err)
-	}
-	frankingHash := hmac.New(sha256.New, metadata.FrankingKey)
-	frankingHash.Write(messageApp)
-	frankingTag := frankingHash.Sum(nil)
-	if to.Device > 0 && !req.Peer {
-		err = ErrRecipientADJID
-		return
-	}
-	ownID := cli.getOwnID()
-	if ownID.IsEmpty() {
-		err = ErrNotLoggedIn
-		return
-	}
-
-	if req.Timeout == 0 {
-		req.Timeout = defaultRequestTimeout
-	}
-	if len(req.ID) == 0 {
-		req.ID = cli.GenerateMessageID()
-	}
-	resp.ID = req.ID
-
-	start := time.Now()
-	// Sending multiple messages at a time can cause weird issues and makes it harder to retry safely
-	cli.messageSendLock.Lock()
-	resp.DebugTimings.Queue = time.Since(start)
-	defer cli.messageSendLock.Unlock()
-
-	if !req.Peer {
-		err = cli.addRecentMessage(ctx, to, req.ID, nil, messageAppProto)
-		if err != nil {
-			return
-		}
-	}
-	respChan := cli.waitResponse(req.ID)
-	var phash string
-	var data []byte
-	switch to.Server {
-	case types.GroupServer:
-		phash, data, err = cli.sendGroupV3(ctx, to, ownID, req.ID, messageApp, msgAttrs, frankingTag, &resp.DebugTimings)
-	case types.DefaultUserServer, types.MessengerServer:
-		if req.Peer {
-			err = fmt.Errorf("peer messages to fb are not yet supported")
-			//data, err = cli.sendPeerMessage(to, req.ID, message, &resp.DebugTimings)
-		} else {
-			data, phash, err = cli.sendDMV3(ctx, to, ownID, req.ID, messageApp, msgAttrs, frankingTag, &resp.DebugTimings)
-		}
-	default:
-		err = fmt.Errorf("%w %s", ErrUnknownServer, to.Server)
-	}
-	start = time.Now()
-	if err != nil {
-		cli.cancelResponse(req.ID, respChan)
-		return
-	}
-	var respNode *waBinary.Node
-	respNode, err = cli.awaitSendAck(ctx, &req, &resp, respChan, data, start)
-	if err != nil {
-		return
-	}
-	err = cli.applySendAck(respNode, to, phash, &resp)
-	return
+	return send.FBMessage(ctx, cli.sendT(), to, message, metadata, req)
 }

@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"time"
@@ -12,7 +12,16 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type MessageDebugTimings struct {
+// DebugTimings e' o MessageDebugTimings historico da raiz, que continua
+// expondo o nome antigo por apelido de tipo — ver o doc de Response.
+//
+// O apelido importa mais aqui do que nos outros dois tipos: MessageDebugTimings
+// tem um METODO (MarshalZerologObject) e satisfaz zerolog.LogObjectMarshaler.
+// Com apelido, o metodo continua sendo o mesmo metodo do mesmo tipo, e o
+// `evt.Object(...)` de quem loga um SendResponse produz exatamente o mesmo
+// JSON. Um tipo novo na raiz precisaria reimplementar o metodo, e as duas
+// implementacoes poderiam divergir.
+type DebugTimings struct {
 	LIDFetch time.Duration
 	Queue    time.Duration
 
@@ -27,7 +36,7 @@ type MessageDebugTimings struct {
 	Retry time.Duration
 }
 
-func (mdt MessageDebugTimings) MarshalZerologObject(evt *zerolog.Event) {
+func (mdt DebugTimings) MarshalZerologObject(evt *zerolog.Event) {
 	if mdt.LIDFetch != 0 {
 		evt.Dur("lid_fetch", mdt.LIDFetch)
 	}

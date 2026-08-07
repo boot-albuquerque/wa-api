@@ -6,109 +6,36 @@
 
 package whatsmeow
 
-// Tags of the nodes that make up an outgoing <message> stanza, in both the
-// waE2E path (send*.go) and the v3/FB path (sendfb*.go).
+import "wa-api/internal/wa-noise/send"
+
+// As constantes de wire do stanza <message> moram em
+// internal/wa-noise/send/constants.go desde a Fase F/G lote 8. As nove abaixo
+// continuam existindo na raiz porque o caminho de ENTRADA (message_decrypt.go,
+// message_decrypt_session.go, message.go) e o de segredo de mensagem
+// (msgsecret_poll.go) as leem de volta — e por atribuicao, nao por
+// redeclaracao, para que o valor que vai para o fio tenha UM dono. Redeclarar
+// `encTypeMsg = "msg"` dos dois lados da fronteira e' exatamente a divergencia
+// silenciosa que a Fase F/G existe para impedir.
+
+// Tag e atributos do <enc>, lidos de volta pelo caminho de decifragem.
 const (
-	messageNodeTag        = "message"
-	participantsNodeTag   = "participants"
-	participantToNodeTag  = "to"
-	encNodeTag            = "enc"
-	plaintextNodeTag      = "plaintext"
-	deviceIdentityNodeTag = "device-identity"
-	bizNodeTag            = "biz"
-	frankingNodeTag       = "franking"
-	frankingTagNodeTag    = "franking_tag"
-	traceNodeTag          = "trace"
-	traceRequestIDNodeTag = "request_id"
-	tcTokenNodeTag        = "tctoken"
-	csTokenNodeTag        = "cstoken"
+	encNodeTag         = send.EncNodeTag
+	encAttrVersion     = send.EncAttrVersion
+	encAttrType        = send.EncAttrType
+	encAttrDecryptFail = send.EncAttrDecryptFail
 )
 
-// Attributes of the outgoing <message> stanza.
+// Valores do atributo `type` do <enc>, comparados em message_decrypt.go.
 const (
-	msgAttrID               = "id"
-	msgAttrType             = "type"
-	msgAttrTo               = "to"
-	msgAttrCategory         = "category"
-	msgAttrEdit             = "edit"
-	msgAttrPHash            = "phash"
-	msgAttrMediaID          = "media_id"
-	msgAttrAddressingMode   = "addressing_mode"
-	msgAttrPushPriority     = "push_priority"
-	msgAttrPrivacySensitive = "privacy_sensitive"
+	encTypeMsg       = send.EncTypeMsg
+	encTypePreKeyMsg = send.EncTypePreKeyMsg
+	encTypeSenderKey = send.EncTypeSenderKey
 )
 
-// Values of the <message> attributes above. The message type values mirror what
-// msgattrs.GetTypeFromMessage returns; they are compared against, never
-// produced, by this package.
+// msgCategoryPeer e' comparado em message.go ao classificar a mensagem
+// recebida; messageSecretSize e' o tamanho do segredo gerado em
+// msgsecret_poll.go.
 const (
-	msgTypeText     = "text"
-	msgTypePoll     = "poll"
-	msgTypeReaction = "reaction"
-
-	msgCategoryPeer = "peer"
-
-	// pushPriorityHigh asks the server to wake the recipient for app state
-	// sync key requests; pushPriorityHighForce does the same for on-demand
-	// history sync, which additionally is marked privacy sensitive.
-	pushPriorityHigh      = "high"
-	pushPriorityHighForce = "high_force"
-	privacySensitiveOn    = "1"
+	msgCategoryPeer   = send.MsgCategoryPeer
+	messageSecretSize = send.MessageSecretSize
 )
-
-// Attributes of the <enc> node carrying a Signal ciphertext, plus the single
-// attribute of the <to> node that wraps it per recipient device.
-const (
-	encAttrVersion     = "v"
-	encAttrType        = "type"
-	encAttrMediaType   = "mediatype"
-	encAttrDecryptFail = "decrypt-fail"
-
-	participantToAttrJID = "jid"
-)
-
-// Values of the <enc> `type` attribute: a normal Signal message, a message that
-// also establishes the session from a prekey bundle, and a group (sender key)
-// message.
-const (
-	encTypeMsg       = "msg"
-	encTypePreKeyMsg = "pkmsg"
-	encTypeSenderKey = "skmsg"
-)
-
-// Values of the <enc> `v` attribute. The waE2E path is version 2; the v3/FB
-// group path writes "3" as a string here (the per-device v3 nodes use the
-// numeric FBMessageVersion instead — see sendfb_encrypt.go).
-const (
-	encVersionSignal = "2"
-	encVersionFB     = "3"
-)
-
-// Attributes and values of the <meta> node inside an outgoing message stanza.
-// This is a different node from the <meta> built out of SendRequestExtra.Meta
-// (see send_prepare.go), even though both use metaNodeTag.
-const (
-	metaAttrAppData     = "appdata"
-	metaAttrPollType    = "polltype"
-	metaAttrDecryptFail = "decrypt-fail"
-
-	metaAppDataDefault = "default"
-	pollTypeCreation   = "creation"
-	pollTypeVote       = "vote"
-)
-
-// participantListHashPrefix is the version prefix of the participant list hash
-// sent as the `phash` attribute, and participantListHashLength the number of
-// bytes of the SHA-256 digest that go into it.
-const (
-	participantListHashPrefix = "2"
-	participantListHashLength = 6
-)
-
-// frankingKeySize is the length in bytes of the random HMAC key generated per
-// v3/FB message to produce its franking tag.
-const frankingKeySize = 32
-
-// frankingVersion is the franking scheme version advertised in the v3/FB
-// message application metadata.
-const frankingVersion = 0

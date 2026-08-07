@@ -6,30 +6,17 @@
 
 package whatsmeow
 
-import (
-	"time"
+import "wa-api/internal/wa-noise/send"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
-)
+// Os quatro tipos do dominio de envio moram em internal/wa-noise/send desde a
+// Fase F/G lote 8. A raiz os reexporta por APELIDO DE TIPO, nao por definicao
+// nova: o apelido faz dos dois o MESMO tipo, entao todo chamador externo que
+// escrevia whatsmeow.SendResponse{...} continua compilando, e
+// MessageDebugTimings continua satisfazendo zerolog.LogObjectMarshaler com o
+// mesmo metodo. Uma definicao nova seria um tipo distinto e quebraria a API.
 
-type SendResponse struct {
-	// The message timestamp returned by the server
-	Timestamp time.Time
-
-	// The ID of the sent message
-	ID types.MessageID
-
-	// The server-specified ID of the sent message. Only present for newsletter messages.
-	ServerID types.MessageServerID
-
-	// Message handling duration, used for debugging
-	DebugTimings MessageDebugTimings
-
-	// The identity the message was sent with (LID or PN)
-	// This is currently not reliable in all cases.
-	Sender types.JID
-}
+// SendResponse is the result of a message send. See send.Response.
+type SendResponse = send.Response
 
 // SendRequestExtra contains the optional parameters for SendMessage.
 //
@@ -42,21 +29,12 @@ type SendResponse struct {
 //	cli.SendMessage(ctx, to, message, whatsmeow.SendRequestExtra{...})
 //
 // Trying to add multiple extra parameters will return an error.
-type SendRequestExtra struct {
-	// The message ID to use when sending. If this is not provided, a random message ID will be generated
-	ID types.MessageID
-	// JID of the bot to be invoked (optional)
-	InlineBotJID types.JID
-	// Should the message be sent as a peer message (protocol messages to your own devices, e.g. app state key requests)
-	Peer bool
-	// A timeout for the send request. Unlike timeouts using the context parameter, this only applies
-	// to the actual response waiting and not preparing/encrypting the message.
-	// Defaults to 75 seconds. The timeout can be disabled by using a negative value.
-	Timeout time.Duration
-	// When sending media to newsletters, the Handle field returned by the file upload.
-	MediaHandle string
+type SendRequestExtra = send.RequestExtra
 
-	Meta *types.MsgMetaInfo
-	// use this only if you know what you are doing
-	AdditionalNodes *[]waBinary.Node
-}
+// MessageDebugTimings is the message handling duration breakdown of a send.
+type MessageDebugTimings = send.DebugTimings
+
+// nodeExtraParams continua com o nome minusculo porque internals.go, que e'
+// GERADO e esta' fora do escopo do lote, o cita em quatro assinaturas de
+// DangerousInternalClient.
+type nodeExtraParams = send.NodeExtraParams

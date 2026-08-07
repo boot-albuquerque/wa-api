@@ -15,17 +15,21 @@ import (
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/pairing"
+	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/user"
 )
 
 // Miscellaneous errors
 var (
-	ErrClientIsNil     = errors.New("client is nil")
-	ErrNoSession       = errors.New("can't encrypt message for device: no signal session established")
-	ErrIQTimedOut      = errors.New("info query timed out")
-	ErrNotConnected    = errors.New("websocket not connected")
-	ErrNotLoggedIn     = errors.New("the store doesn't contain a device JID")
-	ErrMessageTimedOut = errors.New("timed out waiting for message send response")
+	ErrClientIsNil  = errors.New("client is nil")
+	ErrIQTimedOut   = errors.New("info query timed out")
+	ErrNotConnected = errors.New("websocket not connected")
+	ErrNotLoggedIn  = errors.New("the store doesn't contain a device JID")
+
+	// Os dois sao o MESMO valor de send.*, nao copias — a mesma armadilha de
+	// aliasing documentada em ErrAppStateUpdate e nos erros de grupo.
+	ErrNoSession       = send.ErrNoSession
+	ErrMessageTimedOut = send.ErrMessageTimedOut
 
 	ErrAlreadyConnected = errors.New("websocket is already connected")
 
@@ -109,10 +113,11 @@ var (
 // Some errors that Client.SendMessage can return
 var (
 	ErrBroadcastListUnsupported = errors.New("sending to non-status broadcast lists is not yet supported")
-	ErrUnknownServer            = errors.New("can't send message to unknown server")
-	ErrRecipientADJID           = errors.New("message recipient must be a user JID with no device part")
-	ErrServerReturnedError      = errors.New("server returned error")
-	ErrInvalidInlineBotID       = errors.New("invalid inline bot ID")
+	// Os quatro sao o MESMO valor de send.*, nao copias. Ver ErrNoSession.
+	ErrUnknownServer       = send.ErrUnknownServer
+	ErrRecipientADJID      = send.ErrRecipientADJID
+	ErrServerReturnedError = send.ErrServerReturnedError
+	ErrInvalidInlineBotID  = send.ErrInvalidInlineBotID
 )
 
 // DownloadHTTPError is returned when the media server answers with an
