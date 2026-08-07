@@ -10,7 +10,7 @@ import (
 	"context"
 
 	"wa-api/internal/wa-noise/protocol/appstate"
-	"wa-api/internal/wa-noise/appstatesync"
+	"wa-api/internal/wa-noise/capabilities/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"

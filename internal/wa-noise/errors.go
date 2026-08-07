@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 
-	"wa-api/internal/wa-noise/appstatesync"
+	"wa-api/internal/wa-noise/capabilities/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/capabilities/media"
