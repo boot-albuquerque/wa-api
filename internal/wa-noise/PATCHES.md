@@ -1793,3 +1793,178 @@ Inalterados — nenhum diretório novo foi criado, então
 `scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
 `Makefile` seguem cobrindo os mesmos 177 arquivos em 14 diretórios.
 `git diff --stat internal/wa-noise/proto/` continua vazio.
+
+---
+
+## Fase D — a raiz vira subpacotes até onde Go permite, 2026-08-06
+
+Esta entrada **reverte parcialmente** a decisão registrada acima
+("a raiz de `internal/wa-noise/` **não** vira subpacotes"). O usuário foi
+informado do risco descrito naquela entrada — em particular o de `socketLock`
+— e pediu para prosseguir mesmo assim. O trabalho foi encadeado por risco, do
+mais seguro para o mais perigoso, e **parou onde a linguagem parou**, não onde
+o gosto pessoal parou.
+
+Resultado em uma linha: **Estágio 1 foi feito** (94 → 90 arquivos na raiz,
+3 subpacotes novos); **Estágios 2 e 3 são impossíveis em Go** sem reescrever a
+API pública do fork, e a prova disso está abaixo com `arquivo:linha`.
+
+### Estágio 1 — feito (commit `d904e78`)
+
+Critério: só arquivos que **não tocam nenhum campo não exportado de `Client`**
+e não seguram lock nenhum. São funções puras; mover não altera invariante de
+concorrência alguma.
+
+| Antes (raiz) | Depois | Linhas |
+|---|---|---|
+| `message_padding.go` | `msgpad/padding.go` | 44 |
+| `pair_crypto.go` | `paircrypto/signature.go` | 59 |
+| `message_attrs.go` | `msgattrs/message.go` | 169 |
+| `sendfb_attrs.go` | `msgattrs/fbmessage.go` | 109 |
+
+Raiz: **94 → 90** arquivos `.go`. Diretórios no gate: 14 → 17.
+
+#### Exports novos — divergência permanente contra o upstream
+
+Cada linha abaixo é um identificador que **não era exportado** no upstream e
+passou a ser, porque um subpacote precisa dele. Nenhum é campo, nenhum é
+mutex, nenhum é tipo com estado compartilhado — são funções puras e um struct
+de valor.
+
+| Novo símbolo | Era | Onde | Por quê |
+|---|---|---|---|
+| `msgpad.Pad` | `padMessage` | `msgpad/padding.go:36` | chamado por `send_encrypt.go:173`, `send_transport.go:134`, `sendfb_encrypt.go:136`, `sendfb_transport.go:69` |
+| `msgpad.Unpad` | `unpadMessage` | `msgpad/padding.go:24` | chamado por `message_decrypt_session.go:130,156` |
+| `paircrypto.ConcatBytes` | `concatBytes` | `paircrypto/signature.go:24` | chamado por `pair-code.go:216,218` |
+| `paircrypto.VerifyAccountSignature` | `verifyAccountSignature` | `paircrypto/signature.go:37` | chamado por `pair.go:171` |
+| `paircrypto.GenerateDeviceSignature` | `generateDeviceSignature` | `paircrypto/signature.go:54` | chamado por `pair.go:176` |
+| `msgattrs.MessageAttrs` | `messageAttrs` | `msgattrs/fbmessage.go:17` | tipo de parâmetro em `sendfb_transport.go:31,127,159` e em três assinaturas de `internals.go` |
+| `msgattrs.GetAttrsFromFBMessage` | `getAttrsFromFBMessage` | `msgattrs/fbmessage.go:25` | chamado por `sendfb.go:92` |
+| `msgattrs.GetTypeFromMessage` | `getTypeFromMessage` | `msgattrs/message.go:17` | `retry.go`, `send_node_build.go`, `send_transport.go` |
+| `msgattrs.GetMediaTypeFromMessage` | `getMediaTypeFromMessage` | `msgattrs/message.go:44` | idem |
+| `msgattrs.GetButtonTypeFromMessage` | `getButtonTypeFromMessage` | `msgattrs/message.go:99` | `send_node_build.go:112` |
+| `msgattrs.GetButtonAttributes` | `getButtonAttributes` | `msgattrs/message.go:122` | `send_node_build.go:117` |
+| `msgattrs.GetEditAttribute` | `getEditAttribute` | `msgattrs/message.go:144` | `send_node_build.go:162` |
+
+Dois símbolos **deixaram** de existir como API da raiz e viraram API de
+subpacote — `whatsmeow.RemoveReactionText` → `msgattrs.RemoveReactionText`
+(`msgattrs/message.go:142`) e os quatro `whatsmeow.Adv*SignaturePrefix` →
+`paircrypto.Adv*SignaturePrefix` (`paircrypto/signature.go:16-22`). Ambos já
+eram exportados no upstream, então isto é **movimentação** de API, não export
+novo. Foi verificado que nenhum dos dois tem consumidor fora de
+`internal/wa-noise/`: `RemoveReactionText` só era usado dentro do próprio
+`message_attrs.go`, e os prefixos `Adv*` só em `pair.go:146` e no próprio
+`pair_crypto.go`.
+
+`internals.go` é **gerado** e foi editado à mão nas três assinaturas que
+mencionavam `messageAttrs` (`SendGroupV3`, `SendDMV3`, `PrepareMessageNodeV3`).
+Isso é aceitável só porque o gerador **já está quebrado** — ver F29 em
+`HOUSEKEEP.md`: `internals_generate.go:101-110` traz uma lista literal de 32
+nomes de arquivo e regenerar hoje já perde 96 wrappers. Nenhum dos quatro
+arquivos movidos está nessa lista, então a Fase D **não agravou** o F29.
+
+#### Testes
+
+Três `_test.go` novos, todos rodando sob `-race` no `make check` via
+`WACLIENT_TEST_PKGS`. `msgpad/padding_test.go` inclui
+`TestPadIsSafeUnderConcurrentUse`, que exercita 64 goroutines × 50 iterações
+de `Pad`/`Unpad` — `Pad` puxa bytes de um gerador aleatório global e é chamada
+de várias goroutines no pipeline de envio, então o teste tem razão de existir.
+Para `paircrypto` e `msgattrs` **não há teste de concorrência**, e isso é
+deliberado: são funções sem estado, sem lock e sem global mutável; um teste
+concorrente ali não pegaria nada que o `-race` do teste normal já não pegue.
+
+### Estágio 2 — **impossível**, não "arriscado"
+
+O plano era mover grupos de domínio (`group*.go`, `user*.go`, `presence.go`,
+`receipt.go`, `prekeys.go`, ...) exportando **só** os campos que cada
+subpacote precisasse. Medido arquivo a arquivo, o custo de export por domínio é
+modesto:
+
+| Arquivo | Identificadores `cli.<não exportado>` usados |
+|---|---|
+| `push.go` | 1 (`sendIQ`) |
+| `broadcast.go` | 3 |
+| `user.go` | 4 (`dispatchEvent`, `sendIQ`, `updateBusinessName`, `usync`) |
+| `privacysettings.go` | 4 |
+| `call.go` | 4 |
+| `prekeys.go` | 5 (inclui `uploadPreKeysLock`, um mutex) |
+| `presence.go` | 6 |
+| `group.go` | 7 (inclui `groupCache` + `groupCacheLock`, um mutex) |
+| `receipt.go` | 9 |
+
+Mas o número de exports não é o que bloqueia. **O bloqueio é ciclo de
+import**, e ele é da linguagem, não de gosto.
+
+Um subpacote `group/` precisa de `*Client` como receptor, logo
+`group/` importa a raiz. E a raiz **chama de volta** para dentro de `group/`,
+a partir de arquivos que não podem sair da raiz porque estão no caminho de
+envio/decriptação:
+
+```
+send_prepare.go:176        cli.getCachedGroupData(ctx, to)          -> group_*.go
+sendfb_transport.go:41     cli.getCachedGroupData(ctx, to)          -> group_*.go
+notification.go:169        cli.parseGroupNotification(node)         -> group_notification.go
+disappearing_timer.go:70   cli.sendGroupIQ(...)                     -> group.go
+```
+
+O mesmo padrão em todos os outros candidatos:
+
+```
+send_node_build.go:136     cli.GetUserDevices(ctx, participants)    -> user_devices.go
+sendfb_transport.go:167    cli.GetUserDevices(ctx, participants)    -> user_devices.go
+send_prepare.go:201        cli.GetUserInfo(ctx, []types.JID{*to})   -> user.go
+message_decrypt.go:39      go cli.updateBusinessName(...)           -> user_business.go
+message_decrypt.go:42      go cli.updatePushName(...)               -> user.go
+message_history_sync.go:142 cli.handleHistoricalPushNames(...)      -> user.go
+retry.go:184               cli.fetchPreKeys(...)                    -> prekeys.go
+send_encrypt.go:75         cli.fetchPreKeysNoError(ctx, ...)        -> prekeys.go
+sendfb_encrypt.go:55       cli.fetchPreKeysNoError(ctx, ...)        -> prekeys.go
+connectionevents.go:186    cli.getServerPreKeyCount(ctx)            -> prekeys.go
+connectionevents.go:191    cli.uploadPreKeys(ctx, ...)              -> prekeys.go
+notification.go:32         cli.uploadPreKeys(ctx, false)            -> prekeys.go
+receipt.go:252,254,279     cli.sendActiveReceipts                   -> campo lido por presence.go
+```
+
+`raiz -> domínio` **e** `domínio -> raiz` ao mesmo tempo. Go proíbe. Não há
+ordem de extração que desfaça isso, porque as arestas são mútuas em **todos**
+os domínios avaliados, não em um caso isolado.
+
+A única saída é converter os métodos de `*Client` em funções livres sobre uma
+interface (`group.GetInfo(c GroupClient, ...)` em vez de `cli.GetGroupInfo(...)`).
+Isso não é reorganização de arquivo: é **reescrita da API pública do fork**.
+Medido, são **249 chamadas** fora de `internal/wa-noise/` para **29 métodos
+exportados** que vivem nesses arquivos de domínio — `UpdateGroupParticipants`
+(16), `CreateGroup` (15), `SetGroupPhoto` (15), `LeaveGroup` (13),
+`SetGroupName` (13), `SetGroupTopic` (13), `SetGroupLocked` (13),
+`SetGroupAnnounce` (13), `SendPresence` (12), `GetUserInfo` (11), `MarkRead`
+(11), `UpdateBlocklist` (10), e assim por diante.
+
+**Recusado**, e desta vez não por custo/benefício e sim porque o caminho
+"mover arquivo exportando pouco" simplesmente não existe.
+
+### Estágio 3 — **não aconteceu**
+
+`client.go`, `client_connection.go` e o resto do código que segura `socketLock`
+atravessando blocos read-modify-write de várias instruções
+(`client_connection.go:24-31` e `client_connection.go:102-154`) **permanecem
+intactos na raiz**. Nenhuma linha foi tocada.
+
+Isso não é prudência: o Estágio 3 estava atrás do Estágio 2 na fila, e o
+Estágio 2 não passou. Não havia como chegar aqui. Fica registrado, porém, que
+a orientação continua valendo caso alguém tente de novo: **não exportar
+`socketLock`**. Um `sync.Mutex` como campo público é anti-pattern conhecido em
+Go — qualquer consumidor pode travar na ordem errada, travar duas vezes, ou
+esquecer de travar, e o compilador não ajuda. Se algum dia a conexão precisar
+ser decomposta, o caminho é manter a seção crítica dentro da raiz e expor
+métodos atômicos que já encapsulem o lock, nunca o lock em si.
+
+**Nenhum mutex foi exportado nesta fase.** Nenhum campo de `Client` foi
+exportado nesta fase. O Estágio 1 não chega perto de `socketLock`.
+
+### Gates
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` ganharam `msgpad/`, `paircrypto/` e `msgattrs/`: **177 arquivos de
+produção em 17 diretórios**, todos dentro do teto de 300 linhas.
+`git diff --stat internal/wa-noise/proto/` continua vazio.
