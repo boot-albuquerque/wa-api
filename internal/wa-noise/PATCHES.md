@@ -1653,3 +1653,143 @@ de API pública (F26/F28), e esta fase é movimentação mais cobertura.
 - **Os panics latentes (F24/F25) não foram convertidos em erro** e as
   armadilhas de API (F26/F28) não foram mexidas — todos são mudança de
   comportamento observável, documentados acima e em `HOUSEKEEP.md`.
+
+---
+
+## Decisão — a raiz de `internal/wa-noise/` **não** vira subpacotes, 2026-08-06
+
+Esta entrada resolve a pendência que a Fase C deixou registrada em "Fora do
+escopo": *"Reorganizar o fork em mais subpacotes é uma decisão bem maior,
+pendente à parte."* A resposta é **não**, e o que segue é o porquê, com os
+números que sustentam a conclusão.
+
+**Nenhum arquivo de produção foi alterado por esta entrada.** Ela é só
+análise e registro.
+
+### O pedido
+
+Estender à raiz de `internal/wa-noise/` a mesma reorganização por domínio que
+`pkg/infra/wa-noise/` acabou de receber (73 arquivos planos → subpacotes
+`session/`, `group/`, `user/`, `chat/`, ...): "organização extrema, sem
+arquivos `.go` jogados na raiz".
+
+### Por que a mesma operação não se aplica aqui
+
+`pkg/infra/wa-noise/` é código **nosso**, e seus 73 arquivos eram adaptadores
+independentes — cada um só dependia de interfaces já exportadas. Quebrar
+aquilo em subpacotes não exigiu exportar nada de novo.
+
+A raiz de `internal/wa-noise/` é o oposto: é **um único pacote coeso
+construído em volta de um tipo só**, o `Client`. Medindo a árvore atual:
+
+| Medida | Valor |
+|---|---|
+| Arquivos `.go` na raiz | 94 (93 de produção + `client_test.go`) |
+| Arquivos com ao menos um método `func (cli *Client)` | **83 de 94** |
+| Métodos de `*Client` (fora de `internals.go` e testes) | **328** (197 não exportados, 131 exportados) |
+| Campos **não exportados** de `Client` (`client.go:40-185`) | **58** |
+
+Go não permite que um pacote se espalhe por diretórios. Mover qualquer um
+desses 83 arquivos para uma subpasta cria um **pacote novo**, que perde
+acesso aos 58 campos não exportados de `Client` — `socket`, `socketLock`,
+`groupCache`, `recentMessagesMap`, `responseWaiters`, `nodeHandlers`,
+`uniqueID`, `idCounter`, `mediaConnCache`, e assim por diante.
+
+Para o código voltar a compilar só há dois caminhos, e ambos são ruins:
+
+1. **Exportar os campos.** Isso não é reorganização de arquivo, é redesenhar
+   a fronteira público/privado de um fork vendorizado — e a fronteira passaria
+   a valer para *qualquer* consumidor, não só para os subpacotes
+   "organizacionais". Os invariantes de concorrência do `Client` deixariam de
+   ser defensáveis.
+2. **Passar fatias de `Client` por interface.** Não funciona onde o estado é
+   manipulado sob lock em blocos read-modify-write de várias instruções — por
+   exemplo `client_connection.go`, que segura `socketLock` atravessando
+   leitura, decisão e escrita. Trocar isso por accessors seria **reescrita de
+   concorrência**, não refatoração, com risco real de deadlock e corrida.
+
+Nada disso é uma limitação nossa: **muitos arquivos no mesmo pacote é a
+resposta idiomática do Go** para um tipo grande e coeso. A própria biblioteca
+padrão faz assim — `net/http` tem ~60 arquivos na raiz do pacote,
+`crypto/tls` ~30, todos girando em torno de poucos tipos centrais. Nenhum
+deles extrai os métodos de um tipo para subdiretórios, porque a linguagem não
+oferece esse recurso sem quebrar encapsulamento.
+
+### O agravante concreto: `internals.go` (ver F29 em `HOUSEKEEP.md`)
+
+Mover arquivos nesta raiz já tem um acoplamento oculto e sem trava.
+`internals_generate.go:101-110` **não escaneia o diretório** — ele traz uma
+lista literal de 32 nomes de arquivo do upstream, anterior à Fase A. Os nomes
+criados pela Fase A nunca entraram na lista. Verificado rodando o gerador em
+cópia temporária (o repo não foi tocado):
+
+```
+internals.go commitado : 756 linhas, 178 wrappers
+internals.go regenerado: 361 linhas,  82 wrappers   -> 96 perdidos em silêncio
+```
+
+Ou seja: mover arquivos aqui já quebra um gerador que ninguém percebe estar
+quebrado. Extrair subpacotes agravaria isso — os métodos movidos sairiam do
+alcance do gerador de vez. **O bug não foi corrigido nesta entrada** (achado
+incidental, fora de escopo); está registrado como F29 em `HOUSEKEEP.md` para
+o usuário decidir.
+
+### O que foi avaliado para extração e recusado
+
+Dos 94 arquivos, só **10** não têm nenhum método de `*Client`. Destes:
+
+- `download_types.go`, `errors.go`, `msgsecret_keys.go`, `send_types.go`,
+  `send_debug_timings.go` declaram **API exportada** (`whatsmeow.MediaType`,
+  `whatsmeow.SendResponse`, `whatsmeow.SendRequestExtra`,
+  `whatsmeow.ElementMissingError`, `whatsmeow.MsgSecretType`) que **45
+  arquivos** em `pkg/infra/**` importam. Movê-los quebra o caminho de import
+  dos consumidores — mudança de API, não de organização.
+- Sobram **4** arquivos genuinamente independentes, todos só funções não
+  exportadas consumidas por métodos do `Client` na raiz:
+  `message_padding.go` (44), `pair_crypto.go` (59), `message_attrs.go` (169),
+  `sendfb_attrs.go` (109).
+
+Extrair esses 4 custaria **~14 identificadores novos exportados** para mover
+**381 de 15819 linhas (2,4%)**, reduzindo a raiz de 94 para 90 arquivos. Cada
+export é divergência permanente contra o upstream, que é exatamente o que
+este arquivo existe para minimizar, e violaria a invariante que a Fase A
+declarou para si mesma: *"nenhuma assinatura pública, nenhum tipo, nenhum
+campo foi alterado"*. **Recusado**: o custo é permanente e o ganho é
+cosmético.
+
+### Qual é, então, o teto real de organização — e ele já foi atingido
+
+O critério do ADR-0004 nunca foi "quantidade de diretórios", foi **uma
+responsabilidade por arquivo, com teto de 300 linhas**. Nesse critério a raiz
+já está no teto do que Go permite:
+
+- Os 93 arquivos de produção estão **todos** dentro de 300 linhas. O maior é
+  `client.go` (299). Único acima é `internals.go` (756), gerado e isento.
+- Todos já são nomeados por domínio, e o prefixo do nome já cumpre o papel de
+  namespace que um subdiretório cumpriria: `appstate_*`, `client_*`,
+  `download*`, `group_*`, `message_*`, `msgsecret_*`, `newsletter_*`,
+  `notification_*`, `pair*`, `retry_*`, `send*`, `sendfb_*`, `upload*`,
+  `user_*`.
+
+Em outras palavras: **a raiz não tem "arquivos jogados"** — tem 93 arquivos
+de responsabilidade única agrupados por domínio, que é a forma que
+modularidade assume em Go quando o pacote gira em torno de um tipo coeso.
+
+### Se um dia se quiser mais granularidade
+
+O caminho é **mais divisões dentro da raiz**, nunca diretórios novos. Os
+candidatos naturais são os que estão mais perto do teto: `receipt.go` (289),
+`message_decrypt.go` (282), `prekeys.go` (277), `appstate_dispatch.go` (277),
+`retry.go` (274). Nenhum deles precisa disso hoje — todos passam no gate e
+cada um já tem uma responsabilidade só, então dividir seria o corte mecânico
+que o ADR-0004 explicitamente não pede.
+
+Pré-requisito para qualquer divisão futura: **corrigir F29 antes**, senão
+cada arquivo novo continua saindo do alcance do gerador de `internals.go`.
+
+### Gates
+
+Inalterados — nenhum diretório novo foi criado, então
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` seguem cobrindo os mesmos 177 arquivos em 14 diretórios.
+`git diff --stat internal/wa-noise/proto/` continua vazio.
