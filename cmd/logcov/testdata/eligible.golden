@@ -37,6 +37,7 @@ internal/wa-noise.Client.DownloadToFile	EXCLUDED	X5
 internal/wa-noise.Client.EncryptComment	EXCLUDED	X5
 internal/wa-noise.Client.EncryptPollVote	EXCLUDED	X5
 internal/wa-noise.Client.EncryptReaction	EXCLUDED	X5
+internal/wa-noise.Client.EncryptReaction.func1	EXCLUDED	X5
 internal/wa-noise.Client.FetchAppState	EXCLUDED	X5
 internal/wa-noise.Client.FetchStickerPack	EXCLUDED	X5
 internal/wa-noise.Client.FollowNewsletter	EXCLUDED	X5

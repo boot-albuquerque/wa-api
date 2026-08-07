@@ -4152,3 +4152,313 @@ não reexercitam a derivação.
   anteriores.
 - `internals.go` — gerado, isento (ADR-0004). Nenhuma assinatura exposta por ele
   mudou neste lote.
+
+---
+
+## Fase E — lote 9: recepção/decriptação de mensagem, 2026-08-07
+
+Onze arquivos da raiz, todos `package whatsmeow`: `message.go`,
+`message_builders.go`, `message_decrypt.go`, `message_decrypt_session.go`,
+`message_history_sync.go`, `message_id.go`, `message_parse.go`,
+`message_secrets_store.go`, `msgsecret.go`, `msgsecret_keys.go`,
+`msgsecret_poll.go`. É o caminho de entrada: onde toda mensagem recebida é
+parseada, decriptada e transformada em evento.
+
+Este lote foi conduzido com um critério de risco explícito, combinado antes de
+começar: `message_decrypt.go` e `message_decrypt_session.go` são o caminho
+Signal de **toda** mensagem que entra na plataforma. Ali só entrou mudança cuja
+equivalência de comportamento pudesse ser verificada por leitura direta —
+substituição de literal por constante de valor idêntico, e uma correção de
+`panic`. Tudo que exigiria raciocínio sobre estado de sessão ficou documentado
+e **não** mexido, na seção "Suspeitas deliberadamente não tocadas".
+
+---
+
+### Bugs encontrados e corrigidos
+
+#### 1. Panic remoto: `child.Content.([]byte)` sem comma-ok no `<enc type="msmsg">`
+
+`message_decrypt.go:166` (antes da correção):
+
+```go
+} else if err = proto.Unmarshal(child.Content.([]byte), &msMsg); err != nil {
+```
+
+Type assertion crua sobre o conteúdo de um nó do binário XMPP — dado 100%
+controlado pelo servidor. Um `<enc type="msmsg">` cujo conteúdo fosse uma lista
+de nós filhos, ou nulo, em vez de bytes, derruba o **processo inteiro**: isso
+roda dentro de `decryptMessages`, no goroutine de tratamento do nó, sem
+`recover` no caminho.
+
+O que torna o achado inequívoco é a inconsistência interna: os outros dois ramos
+de decriptação do mesmo arquivo, `decryptDM` e `decryptGroupMsg`
+(`message_decrypt_session.go:89` e `:139`), abrem exatamente com
+
+```go
+content, ok := child.Content.([]byte)
+if !ok {
+    return nil, nil, fmt.Errorf("message content is not a byte slice")
+}
+```
+
+Só o ramo de mensagem de bot não checava. Alcançabilidade: exige
+`info.Sender.IsBot()`, e o `from` do stanza vem do servidor.
+
+Correção: a checagem entra como primeira condição da mesma cadeia `else if`, e
+o erro flui pelo caminho que já existia — o mesmo que responde
+`NackMissingMessageSecret` para `msmsg`. Nenhum outro comportamento do ramo
+mudou; o `proto.Unmarshal` passou a receber a variável já validada.
+
+#### 2. `EncryptReaction` mutilava permanentemente o `ReactionMessage` do chamador
+
+`msgsecret.go:200`:
+
+```go
+reactionKey := reaction.Key
+reaction.Key = nil
+plaintext, err := proto.Marshal(reaction)
+```
+
+Zerar a chave é correto — ela viaja em claro no `TargetMessageKey` e não deve
+ser duplicada dentro do payload cifrado. O problema é que o
+`*waE2E.ReactionMessage` é do **chamador**, e a chave nunca voltava. Quem
+montasse uma reação e chamasse `EncryptReaction` (para reenviar, para outro
+chat, ou depois de um erro) enviaria a partir daí uma reação sem alvo. Vale
+tanto para o caminho de sucesso quanto para os dois `return` de erro.
+
+Correção: `defer func() { reaction.Key = reactionKey }()` logo após o zeramento.
+O payload cifrado continua byte a byte o mesmo — travado por
+`TestEncryptReactionExcludesKeyFromPayload`, que decripta o resultado e confere
+que o `Key` está ausente lá dentro e presente na struct do chamador.
+
+#### 3. `getOrigSenderFromKey` engolia a causa do `ParseJID`
+
+`msgsecret_keys.go:74`:
+
+```go
+sender, err := types.ParseJID(key.GetParticipant())
+if sender.Server != types.DefaultUserServer && sender.Server != types.HiddenUserServer {
+    err = fmt.Errorf("unexpected server")
+}
+```
+
+`types.ParseJID` (`types/jid.go:158`) devolve o JID **meio-parseado** junto do
+erro. Quando o parse falhava e esse JID parcial tinha um server fora dos dois
+esperados, o `err` real era sobrescrito por `"unexpected server"` — e a causa
+verdadeira (`unexpected number of dots in JID`, `failed to parse device`…) nunca
+chegava ao log. Diagnóstico errado, não perda de mensagem.
+
+Correção: o erro de parse é verificado e retornado primeiro; a checagem de
+server virou o sentinela `errUnexpectedOrigSenderServer`, testável com
+`errors.Is`. Travado por `TestGetOrigSenderFromKeyGroupInvalidJIDKeepsParseError`
+(que usa `"1.2.3@g.us"`, o caso exato em que o antigo sobrescrevia) e
+`TestGetOrigSenderFromKeyGroupUnexpectedServer`.
+
+---
+
+### Suspeitas deliberadamente **não** tocadas
+
+Registradas aqui com o raciocínio, como pedido — este lote vale tanto pelo que
+não mudou quanto pelo que mudou.
+
+**`switch ag.Int("v")` com `case 2` / `case 3` crus**
+(`message_decrypt.go:212`). Seria natural trocar por constantes numéricas, mas
+`send_constants.go` já documenta (achado F42) que a versão do `<enc>` existe em
+duas formas divergentes no fork — string `"2"`/`"3"` no caminho de envio, e o
+`int` `FBMessageVersion` no v3/FB — e que a divergência pode ser intencional.
+Introduzir um terceiro nome numérico no caminho de recepção antes de resolver
+F42 arrisca consolidar a confusão. Os literais ficaram; só o nome do atributo
+(`"v"` → `encAttrVersion`) foi extraído.
+
+**Envio bloqueante para `cli.historySyncNotifications`** (`message.go:28`). O
+canal tem buffer 32 (`client.go:241`) e o envio acontece **antes** de o loop
+consumidor ser iniciado. Se o buffer encher e o consumidor estiver travado (por
+exemplo, um `DownloadHistorySync` pendurado numa requisição HTTP sem timeout), o
+goroutine de tratamento de mensagem bloqueia indefinidamente. Na prática o
+`defer`/`recover` de `handleHistorySyncNotificationLoop` religa o loop quando
+sobra algo no canal, o que drena o buffer nos casos normais. Não corrigido de
+propósito: as duas saídas óbvias — envio não-bloqueante, ou timeout no envio —
+**descartam** notificações de history sync, o que é pior que o travamento raro
+que evitam. Precisa de decisão de projeto, não de patch. Registrado como F44 em
+`HOUSEKEEP.md`.
+
+**`storeHistoricalPNLIDMappings` chama `PutManyLIDMappings` com fatia vazia**
+(`message_secrets_store.go:182`) quando todos os pares falham no parse. Escrita
+inútil no banco e uma linha de log "Stored PN-LID mappings" com `pair_count: 0`.
+Inofensivo; mexer aqui é ruído. Registrado como F45.
+
+**`bufferedDecrypt`: separadores `[]byte{0}` entre partes e `[]byte{0,0}` no
+fim** (`message_decrypt_session.go:41-45`). É um esquema de separação de domínio
+sutil (o terminador duplo distingue "sem partes extras" de "parte extra
+vazia"). Correto como está; não extraído para constante porque nomear bytes
+soltos ali deixaria o algoritmo *menos* legível, não mais. Só os três
+identificadores de domínio (`"prekey"`, `"normal"`, `"senderkey"`) viraram
+constantes, com aviso explícito de que são entrada de hash **persistida**.
+
+**`waE2E.SecretEncryptedMessage_MESSAGE_SCHEDULE` não está no `switch` de
+`DecryptSecretEncryptedMessage`** (`msgsecret.go:149`). O enum tem seis valores;
+o switch mapeia quatro. `MESSAGE_SCHEDULE` cai no `default` e vira
+`"unsupported secret enc type"` — que é o comportamento seguro, e adivinhar um
+`MsgSecretType` para ele seria inventar formato de fio. Não corrigido; travado
+como lacuna **conhecida** por `TestDecryptSecretEncryptedMessageTypeMapping`,
+que exige justamente o erro.
+
+---
+
+### Magic numbers e strings extraídos
+
+**Criado** `message_constants.go` (79 linhas).
+
+Geração de ID de mensagem (`message_id.go`):
+
+| Literal | Constante |
+|---|---|
+| `make([]byte, 8, ...)` | `webMessageIDTimestampLength` |
+| `random.Bytes(16)` | `webMessageIDRandomLength` |
+| `hash[:9]` | `webMessageIDHashLength` |
+| `"@c.us"` | `webMessageIDJIDSuffix` |
+| `random.Bytes(8)` (função depreciada) | `legacyMessageIDRandomLength` |
+| `1 << 22` e `<< 22` | `facebookMessageIDRandomBits` |
+
+Temporizadores:
+
+| Literal | Constante | Onde |
+|---|---|---|
+| `1 * time.Minute` | `historySyncLoopIdleTimeout` | `handleHistorySyncNotificationLoop` |
+| `12*time.Hour` | `decryptedBufferClearInterval` | `decryptMessages` |
+
+Message secret:
+
+| Literal | Constante | Onde |
+|---|---|---|
+| `32` (saída do HKDF) ×2 | `msgSecretKeyLength` | `generateMsgSecretKey`, `applyBotMessageHKDF` |
+| `random.Bytes(12)` | `msgSecretIVSize` | `encryptMsgSecret` |
+| `random.Bytes(32)` | `messageSecretSize` (já existia, `send_prepare.go`) | `BuildPollCreation` |
+
+Novos, exclusivos da recepção: `encTypeMsgSecret` (`"msmsg"`) e os três
+`ciphertextHashDomain*` (`"prekey"`, `"normal"`, `"senderkey"`).
+
+**Reuso** das constantes de `send_constants.go` no caminho de recepção, que até
+aqui repetia as mesmas strings: `encNodeTag`, `encAttrType`, `encAttrVersion`,
+`encAttrDecryptFail`, `encTypeMsg`, `encTypePreKeyMsg`, `encTypeSenderKey`
+(`message_decrypt.go`, `message_decrypt_session.go`) e `msgCategoryPeer`
+(`message.go:61`).
+
+Deixados **de propósito** como literais: os nomes de atributo do parsing
+(`"from"`, `"participant"`, `"participant_pn"`, `"id"`, `"t"`, `"notify"`…) em
+`message_parse.go`, e as tags/atributos dos nós `<receipt>` montados em
+`message.go:113` e `message_history_sync.go:95`. É a convenção já registrada em
+`receipt_constants.go` (Fase E, lotes 1-4): tag ou atributo usado uma única vez,
+no ponto onde o nó é montado ou lido, continua literal.
+
+**Comportamento mudou? Não** — todo valor de constante é idêntico ao literal que
+substituiu.
+
+---
+
+### Auditoria de logging
+
+Varridos os 11 arquivos. **Nenhum bypass do logger injetado**: os pontos de log
+usam `cli.Log.{Warnf,Errorf,Debugf,Infof}` ou `zerolog.Ctx(ctx)`, ambos ligados
+ao `walog.Bridge`. Não há `fmt.Print*`, `log.*` do stdlib nem `println`.
+
+A convivência dos dois estilos é herdada do upstream e **não** foi uniformizada:
+`message_secrets_store.go` e a parte nova de `message_decrypt.go` (buffer de
+eventos) usam `zerolog.Ctx(ctx)` estruturado; o resto usa `cli.Log`. Trocar um
+pelo outro mudaria o formato de saída de linhas de log que podem estar sendo
+consumidas, sem ganho funcional.
+
+**Nenhum `panic` cru** nos 11 arquivos. O único `recover()` é o de
+`handleHistorySyncNotificationLoop` (`message_history_sync.go:52`), que existe
+para não derrubar o processo quando um handler de history sync falha e para
+religar o loop — correto como está, e o `debug.Stack()` vai para `cli.Log.Errorf`.
+
+---
+
+### Cobertura de teste
+
+O que **não** dá para testar sem sessão viva, dito com todas as letras:
+`decryptDM`, `decryptGroupMsg`, `bufferedDecrypt`, `decryptMessages`,
+`handleEncryptedMessage`, `handlePlaintextMessage`, `handleDecryptedMessage`,
+`processProtocolParts`, `handleProtocolMessage`, `handleSenderKeyDistributionMessage`,
+`DownloadHistorySync` e `handleAppStateSyncKeyShare`. Todos dependem de alguma
+combinação de: sessão Signal estabelecida (`session.NewBuilderFromSignal` sobre
+um `store.Device` real), `AllSessionSpecificStores` completo, socket, e
+despacho de evento com handlers registrados. Um duplo desses stores daria falsa
+confiança exatamente onde ela custa mais caro — a correção do panic `msmsg`
+acima, por exemplo, é verificável por leitura (é uma comma-ok), mas não por
+teste unitário honesto. Fica como lacuna consciente, a mesma do lote 8.
+
+O que **dá** e foi coberto — 7 arquivos novos:
+
+- **`message_id_test.go`**: formato do ID web (prefixo, comprimento derivado de
+  `webMessageIDHashLength`, hex maiúsculo), aleatoriedade em 64 chamadas no
+  mesmo segundo, ausência de JID próprio, ramo do `MessengerConfig` (inteiro em
+  base 10, sem prefixo), `*Client` nil, e o layout do ID do Facebook conferido
+  **contra o relógio** (`ts >> 22` tem que cair entre dois `time.Now()`), não
+  contra a própria função.
+- **`message_builders_test.go`**: `BuildMessageKey` — `FromMe` para JID vazio,
+  próprio PN e próprio LID; `Participant` presente em grupo e broadcast e
+  ausente em DM/LID/Messenger (tabela por server); `Participant` sempre sem
+  device. `BuildRevoke`/`BuildReaction`/`BuildEdit` (incluindo reação vazia, que
+  é como se *remove* uma reação, tendo que continuar string explícita e não
+  nil). `BuildHistorySyncRequest` — o `OldestMsgTimestampMS` que, apesar do
+  nome, vai em **segundos**.
+- **`message_parse_test.go`**: `parseMessageSource` nos seis ramos — grupo
+  (com e sem `requireParticipant`), broadcast com lista de destinatários
+  (inclusive o filho não-`<to>` que tem que ser ignorado, e o fato de a lista só
+  ser lida quando a mensagem é nossa), newsletter, aparelho próprio (com e sem
+  `recipient`), bot e terceiro. Mais: a escolha de `participant_pn` × 
+  `participant_lid` conforme o `addressing_mode` (trocá-los grava o par LID/PN
+  invertido), a herança de device pelo JID alternativo e a precedência quando
+  ele traz device próprio, e a normalização dos servers `hosted`/`hosted-lid`.
+  `parseMsgBotInfo` (alvo de edição lido só nos dois edit types que o exigem),
+  `parseMsgMetaInfo` (`deprecated_lid_session` como `*bool` de três estados —
+  ausente tem que continuar `nil`, não virar `false`) e `parseMessageInfo`
+  (atributos obrigatórios, filhos, e o fato de um `<bot>` malformado virar
+  warning e não derrubar a mensagem inteira).
+- **`msgsecret_keys_test.go`**: `generateMsgSecretKey` conferida **contra o
+  HKDF**, remontando a concatenação declarada — é o mesmo material que o outro
+  lado deriva, e um deslize na ordem dos campos só apareceria em produção como
+  "falha de autenticação"; independência de device (dois aparelhos do mesmo
+  usuário têm que derivar a mesma chave); a regra de `additionalData` por use
+  case (só voto, resposta de evento e o caso do bot); separação de domínio em
+  cinco eixos. `applyBotMessageHKDF`, `getOrigSenderFromKey` nos três ramos mais
+  as duas correções de erro, e `getKeyFromInfo`.
+- **`msgsecret_test.go`** (o mais denso): `stubMsgSecretStore`, ida e volta
+  **real** de AES-GCM em `encryptMsgSecret`/`decryptMsgSecret` para três use
+  cases, decriptação com use case errado tendo que falhar, o *fallback* para o
+  remetente original gravado (o hack da migração PN→LID, sem o qual mensagens da
+  transição ficam ilegíveis para sempre), `decryptBotMessage` cifrado à mão com
+  a mesma derivação, os quatro guardas de tipo dos wrappers públicos, o
+  mapeamento de `SecretEncType`, e as três facetas da correção de
+  `EncryptReaction`.
+- **`msgsecret_poll_test.go`**: `HashPollOptions` contra o SHA-256 e sua natureza
+  posicional e sem sal; `BuildPollCreation` (forma, frescor do message secret
+  entre duas enquetes, e o *clamping* de `selectableOptionCount` em seis
+  entradas); ida e volta completa `BuildPollVote` → `DecryptPollVote`, que é o
+  único caminho de msgsecret exercitável de ponta a ponta sem sessão Signal; e a
+  escolha de PN × LID conforme o server de quem criou a enquete — errar isso
+  deriva uma chave que o criador não consegue refazer.
+- **`message_secrets_store_test.go`**: os quatro ramos de resolução de remetente
+  de `storeHistoricalMessageSecrets` (própria, `Key.Participant`,
+  `Message.Participant`, DM) numa só tabela — errar qualquer um grava o segredo
+  sob chave que nunca será consultada; os descartes por dado incompleto; a
+  exigência de JID próprio; e o tc token só em conversa de telefone.
+
+`recvTestClient` (em `message_id_test.go`) é o cliente mínimo compartilhado
+pelos sete arquivos; difere de `sendTestClient` do lote 8 por já trazer um
+`store.Device` com ID e LID, porque quase tudo da recepção passa por
+`getOwnID`/`getOwnLID`.
+
+---
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio.
+- `cmd/logcov/testdata/eligible.golden` ganhou uma linha: o `defer func()` da
+  correção de `EncryptReaction` vira uma função anônima nova, classificada
+  `EXCLUDED` (sem impacto em cobertura). Regenerado com
+  `go run ./cmd/logcov -golden`, como o próprio teste instrui.
+- `internals.go` — gerado, isento (ADR-0004). Nenhuma assinatura exposta por ele
+  mudou neste lote.

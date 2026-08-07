@@ -1505,3 +1505,55 @@ usarem as mesmas. `msgattrs` é escopo da Fase D, já fechada.
 
 **Status**: **não corrigido** (fora do escopo do lote 8, que é a raiz).
 Pendente de decisão.
+
+## F44 — envio bloqueante para `historySyncNotifications` antes de iniciar o loop
+
+**Data / contexto**: 2026-08-07, Fase E lote 9 (recepção/decriptação).
+
+**Onde**: `internal/wa-noise/message.go:26-32`, com o canal declarado em
+`internal/wa-noise/client.go:81` e criado em `client.go:241`.
+
+```go
+if !cli.ManualHistorySyncDownload {
+    cli.historySyncNotifications <- protoMsg.HistorySyncNotification
+    if cli.historySyncHandlerStarted.CompareAndSwap(false, true) {
+        go cli.handleHistorySyncNotificationLoop()
+    }
+}
+```
+
+**Problema**: o envio é bloqueante e acontece **antes** de o consumidor ser
+iniciado. O canal tem buffer 32. Se o buffer encher e o consumidor estiver
+travado — `DownloadHistorySync` faz um `cli.Download` HTTP —, o goroutine que
+trata a mensagem recebida bloqueia indefinidamente, segurando o processamento
+do stanza. Na prática o `defer`/`recover` de `handleHistorySyncNotificationLoop`
+(`message_history_sync.go:49-63`) religa o loop quando sobra algo no canal, o
+que drena o buffer no caso normal; o risco é o consumidor pendurado.
+
+**Correção sugerida**: nenhuma das duas saídas óbvias serve como está — envio
+não-bloqueante (`select` com `default`) e envio com timeout ambos **descartam**
+notificações de history sync, perdendo histórico em silêncio, o que é pior que o
+travamento raro que evitam. O caminho provável é iniciar o loop *antes* do envio
+e dar timeout ao download, mas isso é decisão de projeto sobre a política de
+history sync, não patch pontual.
+
+**Status**: **não corrigido** (fora do escopo do lote 9, que é higienização, e
+qualquer correção aqui muda política de entrega). Pendente de decisão.
+
+## F45 — `PutManyLIDMappings` chamado com fatia vazia
+
+**Data / contexto**: 2026-08-07, Fase E lote 9.
+
+**Onde**: `internal/wa-noise/message_secrets_store.go:182`.
+
+**Problema**: quando **todos** os pares do history sync falham no
+`types.ParseJID` (os dois `continue` logo acima), `lidPairs` fica vazia e
+`PutManyLIDMappings` é chamado assim mesmo, gerando uma escrita inútil e uma
+linha de log `"Stored PN-LID mappings from history sync"` com `pair_count: 0` —
+que lida sozinha sugere sucesso quando na verdade nada foi mapeado.
+
+**Correção sugerida**: `if len(lidPairs) == 0 { return }` antes da chamada, como
+`storeHistoricalMessageSecrets` já faz para `secrets` e `privacyTokens`.
+
+**Status**: **não corrigido** — inofensivo, e o lote 9 se limitou a corrigir o
+que tem consequência real. Pendente de decisão.
