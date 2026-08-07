@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package handshake
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waCert"
 )
 
-// Estes testes cobrem o **lado da rejeicao** de verifyServerCert. Montar uma
+// Estes testes cobrem o **lado da rejeicao** de VerifyServerCert. Montar uma
 // cadeia que passe exigiria a chave privada do emissor da WhatsApp, que nao
 // existe fora dos servidores deles — e simular a verificacao com outra chave
 // testaria o duplo, nao o codigo. O caminho de aceitacao esta' documentado como
@@ -46,7 +46,7 @@ func certChainBytes(t *testing.T, chain *waCert.CertChain) []byte {
 
 // Lixo que nao e' protobuf tem que virar erro, nao panic.
 func TestVerifyServerCertRejectsUnparseable(t *testing.T) {
-	err := verifyServerCert([]byte{0xff, 0xff, 0xff, 0xff}, make([]byte, noiseKeyLength))
+	err := VerifyServerCert([]byte{0xff, 0xff, 0xff, 0xff}, make([]byte, NoiseKeyLength))
 	if err == nil {
 		t.Fatal("cadeia ilegivel deveria ser rejeitada")
 	}
@@ -60,7 +60,7 @@ func TestVerifyServerCertRejectsUnparseable(t *testing.T) {
 func TestVerifyServerCertRejectsMissingParts(t *testing.T) {
 	valid := &waCert.CertChain_NoiseCertificate{
 		Details:   detailsBytes(t, &waCert.CertChain_NoiseCertificate_Details{}),
-		Signature: make([]byte, certSignatureLength),
+		Signature: make([]byte, CertSignatureLength),
 	}
 	cases := []struct {
 		name  string
@@ -80,7 +80,7 @@ func TestVerifyServerCertRejectsMissingParts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := verifyServerCert(certChainBytes(t, tc.chain), make([]byte, noiseKeyLength))
+			err := VerifyServerCert(certChainBytes(t, tc.chain), make([]byte, NoiseKeyLength))
 			if err == nil {
 				t.Fatal("deveria ser rejeitada")
 			}
@@ -91,7 +91,7 @@ func TestVerifyServerCertRejectsMissingParts(t *testing.T) {
 	}
 }
 
-// As conversoes de fatia para array em verifyServerCert ([certSignatureLength]byte(...))
+// As conversoes de fatia para array em VerifyServerCert ([CertSignatureLength]byte(...))
 // entram em panic se o comprimento nao bater. As checagens de tamanho sao o que
 // as torna seguras: um servidor mandando uma assinatura de 3 bytes tem que
 // receber erro, nao derrubar o processo.
@@ -103,11 +103,11 @@ func TestVerifyServerCertRejectsBadSignatureLengths(t *testing.T) {
 		leafSigLen   int
 		wantContains string
 	}{
-		{name: "intermediate curta", interSigLen: 3, leafSigLen: certSignatureLength, wantContains: "intermediate cert signature"},
-		{name: "intermediate longa", interSigLen: 65, leafSigLen: certSignatureLength, wantContains: "intermediate cert signature"},
-		{name: "intermediate vazia mas nao nil", interSigLen: 1, leafSigLen: certSignatureLength, wantContains: "intermediate cert signature"},
-		{name: "leaf curta", interSigLen: certSignatureLength, leafSigLen: 10, wantContains: "leaf cert signature"},
-		{name: "leaf longa", interSigLen: certSignatureLength, leafSigLen: 128, wantContains: "leaf cert signature"},
+		{name: "intermediate curta", interSigLen: 3, leafSigLen: CertSignatureLength, wantContains: "intermediate cert signature"},
+		{name: "intermediate longa", interSigLen: 65, leafSigLen: CertSignatureLength, wantContains: "intermediate cert signature"},
+		{name: "intermediate vazia mas nao nil", interSigLen: 1, leafSigLen: CertSignatureLength, wantContains: "intermediate cert signature"},
+		{name: "leaf curta", interSigLen: CertSignatureLength, leafSigLen: 10, wantContains: "leaf cert signature"},
+		{name: "leaf longa", interSigLen: CertSignatureLength, leafSigLen: 128, wantContains: "leaf cert signature"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestVerifyServerCertRejectsBadSignatureLengths(t *testing.T) {
 					Signature: make([]byte, tc.leafSigLen),
 				},
 			}
-			err := verifyServerCert(certChainBytes(t, chain), make([]byte, noiseKeyLength))
+			err := VerifyServerCert(certChainBytes(t, chain), make([]byte, NoiseKeyLength))
 			if err == nil {
 				t.Fatal("deveria ser rejeitada")
 			}
@@ -138,20 +138,20 @@ func TestVerifyServerCertRejectsBadSignatureLengths(t *testing.T) {
 func TestVerifyServerCertRejectsInvalidSignature(t *testing.T) {
 	details := detailsBytes(t, &waCert.CertChain_NoiseCertificate_Details{
 		Serial: proto.Uint32(1),
-		Key:    make([]byte, noiseKeyLength),
+		Key:    make([]byte, NoiseKeyLength),
 	})
 	chain := &waCert.CertChain{
 		Intermediate: &waCert.CertChain_NoiseCertificate{
 			Details:   details,
-			Signature: bytes.Repeat([]byte{0xAA}, certSignatureLength),
+			Signature: bytes.Repeat([]byte{0xAA}, CertSignatureLength),
 		},
 		Leaf: &waCert.CertChain_NoiseCertificate{
 			Details:   details,
-			Signature: bytes.Repeat([]byte{0xBB}, certSignatureLength),
+			Signature: bytes.Repeat([]byte{0xBB}, CertSignatureLength),
 		},
 	}
 
-	err := verifyServerCert(certChainBytes(t, chain), make([]byte, noiseKeyLength))
+	err := VerifyServerCert(certChainBytes(t, chain), make([]byte, NoiseKeyLength))
 
 	if err == nil {
 		t.Fatal("assinatura forjada deveria ser rejeitada")
@@ -235,19 +235,19 @@ func TestCheckCertValidityMissingBoundsIsExpired(t *testing.T) {
 // cadeia). Se alguem mexer neles, as conversoes de fatia para array em
 // handshake.go passam a entrar em panic com dados validos.
 func TestHandshakeKeyLengthConstants(t *testing.T) {
-	if noiseKeyLength != 32 {
-		t.Errorf("noiseKeyLength = %d, queria 32 (Curve25519)", noiseKeyLength)
+	if NoiseKeyLength != 32 {
+		t.Errorf("NoiseKeyLength = %d, queria 32 (Curve25519)", NoiseKeyLength)
 	}
-	if certSignatureLength != 64 {
-		t.Errorf("certSignatureLength = %d, queria 64", certSignatureLength)
+	if CertSignatureLength != 64 {
+		t.Errorf("CertSignatureLength = %d, queria 64", CertSignatureLength)
 	}
-	if len(WACertPubKey) != noiseKeyLength {
-		t.Errorf("len(WACertPubKey) = %d, queria %d", len(WACertPubKey), noiseKeyLength)
+	if len(WACertPubKey) != NoiseKeyLength {
+		t.Errorf("len(WACertPubKey) = %d, queria %d", len(WACertPubKey), NoiseKeyLength)
 	}
 	if WACertIssuerSerial != 0 {
 		t.Errorf("WACertIssuerSerial = %d, queria 0", WACertIssuerSerial)
 	}
-	if NoiseHandshakeResponseTimeout <= 0 {
-		t.Error("NoiseHandshakeResponseTimeout tem que ser positivo, senao o handshake desiste na hora")
+	if ResponseTimeout <= 0 {
+		t.Error("ResponseTimeout tem que ser positivo, senao o handshake desiste na hora")
 	}
 }

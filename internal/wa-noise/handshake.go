@@ -8,175 +8,53 @@ package whatsmeow
 
 import (
 	"context"
-	"crypto/hmac"
-	"fmt"
-	"time"
 
-	"go.mau.fi/libsignal/ecc"
-	"google.golang.org/protobuf/proto"
-
-	"wa-api/internal/wa-noise/proto/waCert"
+	"wa-api/internal/wa-noise/handshake"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/util/keys"
 )
 
-const NoiseHandshakeResponseTimeout = 20 * time.Second
-const WACertIssuerSerial = 0
+// NoiseHandshakeResponseTimeout e' reexportado de handshake.ResponseTimeout para
+// que o nome historico da raiz continue existindo. Sao constantes: nao ha' como
+// os dois valores divergirem em tempo de execucao.
+const NoiseHandshakeResponseTimeout = handshake.ResponseTimeout
 
-var WACertPubKey = [...]byte{0x14, 0x23, 0x75, 0x57, 0x4d, 0xa, 0x58, 0x71, 0x66, 0xaa, 0xe7, 0x1e, 0xbe, 0x51, 0x64, 0x37, 0xc4, 0xa2, 0x8b, 0x73, 0xe3, 0x69, 0x5c, 0x6c, 0xe1, 0xf7, 0xf9, 0x54, 0x5d, 0xa8, 0xee, 0x6b}
-
-// doHandshake implements the Noise_XX_25519_AESGCM_SHA256 handshake for the WhatsApp web API.
+// doHandshake roda o handshake Noise e guarda o socket resultante.
+//
+// **Este metodo so' pode ser chamado com socketLock ja' segurado em modo
+// escrita.** O unico chamador de producao e' unlockedConnect
+// (client_connection.go), que roda sob `cli.socketLock.Lock()` tomado por
+// ConnectContext ou connect. A atribuicao `cli.socket = ns` abaixo e' a razao —
+// e e' exatamente por isso que ela ficou na raiz em vez de ir para o subpacote:
+// o pacote handshake nao conhece socketLock e nao deve conhecer.
+//
+// Ver PATCHES.md, "Fase F/G — lote 10".
 func (cli *Client) doHandshake(ctx context.Context, fs *socket.FrameSocket, ephemeralKP keys.KeyPair) error {
-	nh := socket.NewNoiseHandshake()
-	nh.Start(socket.NoiseStartPattern, fs.Header)
-	nh.Authenticate(ephemeralKP.Pub[:])
-	data, err := proto.Marshal(&waWa6.HandshakeMessage{
-		ClientHello: &waWa6.HandshakeMessage_ClientHello{
-			Ephemeral: ephemeralKP.Pub[:],
-		},
+	ns, err := handshake.Do(ctx, fs, handshake.Config{
+		NoiseKey:          cli.Store.NoiseKey,
+		EphemeralKP:       ephemeralKP,
+		ClientPayload:     cli.clientPayload,
+		FrameHandler:      cli.handleFrame,
+		DisconnectHandler: cli.onDisconnect,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal handshake message: %w", err)
+		return err
 	}
-	err = fs.SendFrame(data)
-	if err != nil {
-		return fmt.Errorf("failed to send handshake message: %w", err)
-	}
-	var resp []byte
-	select {
-	case resp = <-fs.Frames:
-	case <-time.After(NoiseHandshakeResponseTimeout):
-		return fmt.Errorf("timed out waiting for handshake response")
-	}
-	var handshakeResponse waWa6.HandshakeMessage
-	err = proto.Unmarshal(resp, &handshakeResponse)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal handshake response: %w", err)
-	}
-	serverEphemeral := handshakeResponse.GetServerHello().GetEphemeral()
-	serverStaticCiphertext := handshakeResponse.GetServerHello().GetStatic()
-	certificateCiphertext := handshakeResponse.GetServerHello().GetPayload()
-	if len(serverEphemeral) != noiseKeyLength || serverStaticCiphertext == nil || certificateCiphertext == nil {
-		return fmt.Errorf("missing parts of handshake response")
-	}
-	serverEphemeralArr := *(*[noiseKeyLength]byte)(serverEphemeral)
-
-	nh.Authenticate(serverEphemeral)
-	err = nh.MixSharedSecretIntoKey(*ephemeralKP.Priv, serverEphemeralArr)
-	if err != nil {
-		return fmt.Errorf("failed to mix server ephemeral key in: %w", err)
-	}
-
-	staticDecrypted, err := nh.Decrypt(serverStaticCiphertext)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt server static ciphertext: %w", err)
-	} else if len(staticDecrypted) != noiseKeyLength {
-		return fmt.Errorf("unexpected length of server static plaintext %d (expected %d)", len(staticDecrypted), noiseKeyLength)
-	}
-	err = nh.MixSharedSecretIntoKey(*ephemeralKP.Priv, *(*[noiseKeyLength]byte)(staticDecrypted))
-	if err != nil {
-		return fmt.Errorf("failed to mix server static key in: %w", err)
-	}
-
-	certDecrypted, err := nh.Decrypt(certificateCiphertext)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt noise certificate ciphertext: %w", err)
-	} else if err = verifyServerCert(certDecrypted, staticDecrypted); err != nil {
-		return fmt.Errorf("failed to verify server cert: %w", err)
-	}
-
-	encryptedPubkey := nh.Encrypt(cli.Store.NoiseKey.Pub[:])
-	err = nh.MixSharedSecretIntoKey(*cli.Store.NoiseKey.Priv, serverEphemeralArr)
-	if err != nil {
-		return fmt.Errorf("failed to mix noise private key in: %w", err)
-	}
-
-	var clientPayload *waWa6.ClientPayload
-	if cli.GetClientPayload != nil {
-		clientPayload = cli.GetClientPayload()
-	} else {
-		clientPayload = cli.Store.GetClientPayload()
-	}
-
-	clientFinishPayloadBytes, err := proto.Marshal(clientPayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal client finish payload: %w", err)
-	}
-	encryptedClientFinishPayload := nh.Encrypt(clientFinishPayloadBytes)
-	data, err = proto.Marshal(&waWa6.HandshakeMessage{
-		ClientFinish: &waWa6.HandshakeMessage_ClientFinish{
-			Static:  encryptedPubkey,
-			Payload: encryptedClientFinishPayload,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to marshal handshake finish message: %w", err)
-	}
-	err = fs.SendFrame(data)
-	if err != nil {
-		return fmt.Errorf("failed to send handshake finish message: %w", err)
-	}
-
-	ns, err := nh.Finish(ctx, fs, cli.handleFrame, cli.onDisconnect)
-	if err != nil {
-		return fmt.Errorf("failed to create noise socket: %w", err)
-	}
-
 	cli.socket = ns
-
 	return nil
 }
 
-func checkCertValidity(cert *waCert.CertChain_NoiseCertificate_Details) error {
-	notBefore := time.Unix(int64(cert.GetNotBefore()), 0)
-	notAfter := time.Unix(int64(cert.GetNotAfter()), 0)
-	now := time.Now()
-	if now.Before(notBefore) {
-		return fmt.Errorf("certificate not valid yet (current time %s is before %s)", now, notBefore)
-	} else if now.After(notAfter) {
-		return fmt.Errorf("certificate expired (current time %s is after %s)", now, notAfter)
+// clientPayload devolve o payload de login desta conexao: o do consumidor
+// quando GetClientPayload esta' preenchido, o do device store caso contrario.
+// A escolha fica na raiz porque e' leitura de campo do Client.
+//
+// E' passada como funcao (nao como valor ja' resolvido) para que handshake.Do a
+// chame no mesmo ponto da sequencia em que o codigo original lia o campo — ver
+// handshake.Config.ClientPayload.
+func (cli *Client) clientPayload() *waWa6.ClientPayload {
+	if cli.GetClientPayload != nil {
+		return cli.GetClientPayload()
 	}
-	return nil
-}
-
-func verifyServerCert(certDecrypted, staticDecrypted []byte) error {
-	var certChain waCert.CertChain
-	err := proto.Unmarshal(certDecrypted, &certChain)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal noise certificate: %w", err)
-	}
-	var intermediateCertDetails, leafCertDetails waCert.CertChain_NoiseCertificate_Details
-	intermediateCertDetailsRaw := certChain.GetIntermediate().GetDetails()
-	intermediateCertSignature := certChain.GetIntermediate().GetSignature()
-	leafCertDetailsRaw := certChain.GetLeaf().GetDetails()
-	leafCertSignature := certChain.GetLeaf().GetSignature()
-	if intermediateCertDetailsRaw == nil || intermediateCertSignature == nil || leafCertDetailsRaw == nil || leafCertSignature == nil {
-		return fmt.Errorf("missing parts of noise certificate")
-	} else if len(intermediateCertSignature) != certSignatureLength {
-		return fmt.Errorf("unexpected length of intermediate cert signature %d (expected %d)", len(intermediateCertSignature), certSignatureLength)
-	} else if len(leafCertSignature) != certSignatureLength {
-		return fmt.Errorf("unexpected length of leaf cert signature %d (expected %d)", len(leafCertSignature), certSignatureLength)
-	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey(WACertPubKey), intermediateCertDetailsRaw, [certSignatureLength]byte(intermediateCertSignature)) {
-		return fmt.Errorf("failed to verify intermediate cert signature")
-	} else if err = proto.Unmarshal(intermediateCertDetailsRaw, &intermediateCertDetails); err != nil {
-		return fmt.Errorf("failed to unmarshal noise certificate details: %w", err)
-	} else if intermediateCertDetails.GetIssuerSerial() != WACertIssuerSerial {
-		return fmt.Errorf("unexpected intermediate issuer serial %d (expected %d)", intermediateCertDetails.GetIssuerSerial(), WACertIssuerSerial)
-	} else if len(intermediateCertDetails.GetKey()) != noiseKeyLength {
-		return fmt.Errorf("unexpected length of intermediate cert key %d (expected %d)", len(intermediateCertDetails.GetKey()), noiseKeyLength)
-	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey([noiseKeyLength]byte(intermediateCertDetails.GetKey())), leafCertDetailsRaw, [certSignatureLength]byte(leafCertSignature)) {
-		return fmt.Errorf("failed to verify intermediate cert signature")
-	} else if err = checkCertValidity(&intermediateCertDetails); err != nil {
-		return fmt.Errorf("intermediate cert %w", err)
-	} else if err = proto.Unmarshal(leafCertDetailsRaw, &leafCertDetails); err != nil {
-		return fmt.Errorf("failed to unmarshal noise certificate details: %w", err)
-	} else if leafCertDetails.GetIssuerSerial() != intermediateCertDetails.GetSerial() {
-		return fmt.Errorf("unexpected leaf issuer serial %d (expected %d)", leafCertDetails.GetIssuerSerial(), intermediateCertDetails.GetSerial())
-	} else if !hmac.Equal(leafCertDetails.GetKey(), staticDecrypted) {
-		return fmt.Errorf("cert key doesn't match decrypted static")
-	} else if err = checkCertValidity(&leafCertDetails); err != nil {
-		return fmt.Errorf("leaf cert cert %w", err)
-	}
-	return nil
+	return cli.Store.GetClientPayload()
 }
