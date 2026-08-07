@@ -94,7 +94,7 @@ func (cli *Client) migrateSessionStore(ctx context.Context, pn, lid types.JID) {
 
 func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo, node *waBinary.Node) {
 	unavailableNode, ok := node.GetOptionalChildByTag("unavailable")
-	if ok && len(node.GetChildrenByTag("enc")) == 0 {
+	if ok && len(node.GetChildrenByTag(encNodeTag)) == 0 {
 		uType := events.UnavailableType(unavailableNode.AttrGetter().String("type"))
 		cli.Log.Warnf("Unavailable message %s from %s (type: %q)", info.ID, info.SourceString(), uType)
 		cli.backgroundIfAsyncAck(func() {
@@ -125,24 +125,24 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 	}
 	var recognizedStanza, protobufFailed bool
 	for _, child := range children {
-		if child.Tag != "enc" {
+		if child.Tag != encNodeTag {
 			continue
 		}
 		recognizedStanza = true
 		ag := child.AttrGetter()
-		encType, ok := ag.GetString("type", false)
+		encType, ok := ag.GetString(encAttrType, false)
 		if !ok {
 			continue
 		}
 		var decrypted []byte
 		var ciphertextHash *[32]byte
 		var err error
-		if encType == "pkmsg" || encType == "msg" {
-			decrypted, ciphertextHash, err = cli.decryptDM(ctx, &child, senderEncryptionJID, encType == "pkmsg", info.Timestamp)
+		if encType == encTypePreKeyMsg || encType == encTypeMsg {
+			decrypted, ciphertextHash, err = cli.decryptDM(ctx, &child, senderEncryptionJID, encType == encTypePreKeyMsg, info.Timestamp)
 			containsDirectMsg = true
-		} else if info.IsGroup && encType == "skmsg" {
+		} else if info.IsGroup && encType == encTypeSenderKey {
 			decrypted, ciphertextHash, err = cli.decryptGroupMsg(ctx, &child, senderEncryptionJID, info.Chat, info.Timestamp)
-		} else if encType == "msmsg" && info.Sender.IsBot() {
+		} else if encType == encTypeMsgSecret && info.Sender.IsBot() {
 			targetSenderJID := info.MsgMetaInfo.TargetSender
 			if targetSenderJID.User == "" {
 				if info.Sender.Server == types.BotServer {
@@ -184,8 +184,8 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 				return
 			}
-			isUnavailable := encType == "skmsg" && !containsDirectMsg && errors.Is(err, signalerror.ErrNoSenderKeyForUser)
-			if encType == "msmsg" {
+			isUnavailable := encType == encTypeSenderKey && !containsDirectMsg && errors.Is(err, signalerror.ErrNoSenderKeyForUser)
+			if encType == encTypeMsgSecret {
 				cli.backgroundIfAsyncAck(func() {
 					cli.sendAck(ctx, node, NackMissingMessageSecret)
 				})
@@ -200,7 +200,7 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 			cli.dispatchEvent(&events.UndecryptableMessage{
 				Info:            *info,
 				IsUnavailable:   isUnavailable,
-				DecryptFailMode: events.DecryptFailMode(ag.OptionalString("decrypt-fail")),
+				DecryptFailMode: events.DecryptFailMode(ag.OptionalString(encAttrDecryptFail)),
 			})
 			return
 		}
@@ -209,7 +209,7 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 
 		var msg waE2E.Message
 		var handlerFailed bool
-		switch ag.Int("v") {
+		switch ag.Int(encAttrVersion) {
 		case 2:
 			err = proto.Unmarshal(decrypted, &msg)
 			if err != nil {
@@ -222,7 +222,7 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 		case 3:
 			handlerFailed, protobufFailed = cli.handleDecryptedArmadillo(ctx, info, decrypted, retryCount)
 		default:
-			cli.Log.Warnf("Unknown version %d in decrypted message from %s", ag.Int("v"), info.SourceString())
+			cli.Log.Warnf("Unknown version %d in decrypted message from %s", ag.Int(encAttrVersion), info.SourceString())
 		}
 		if handlerFailed {
 			cli.Log.Warnf("Handler for %s failed", info.ID)
@@ -243,7 +243,7 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 					Msg("Deleted event plaintext from buffer")
 			}
 
-			if time.Since(cli.lastDecryptedBufferClear) > 12*time.Hour && ctx.Err() == nil {
+			if time.Since(cli.lastDecryptedBufferClear) > decryptedBufferClearInterval && ctx.Err() == nil {
 				cli.lastDecryptedBufferClear = time.Now()
 				go func() {
 					err := cli.Store.EventBuffer.DeleteOldBufferedHashes(context.WithoutCancel(ctx))

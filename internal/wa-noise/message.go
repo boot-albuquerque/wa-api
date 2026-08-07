@@ -58,7 +58,7 @@ func (cli *Client) handleProtocolMessage(ctx context.Context, info *types.Messag
 		go cli.handleAppStateSyncKeyShare(context.WithoutCancel(ctx), protoMsg.AppStateSyncKeyShare)
 	}
 
-	if info.Category == "peer" {
+	if info.Category == msgCategoryPeer {
 		go func() {
 			err := cli.SendProtocolMessageReceipt(ctx, info.ID, types.ReceiptTypePeerMsg)
 			if err != nil {

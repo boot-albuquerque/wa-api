@@ -29,21 +29,21 @@ func (cli *Client) GenerateMessageID() types.MessageID {
 	if cli != nil && cli.MessengerConfig != nil {
 		return types.MessageID(strconv.FormatInt(GenerateFacebookMessageID(), 10))
 	}
-	data := make([]byte, 8, 8+20+16)
+	data := make([]byte, webMessageIDTimestampLength, webMessageIDTimestampLength+20+webMessageIDRandomLength)
 	binary.BigEndian.PutUint64(data, uint64(time.Now().Unix()))
 	ownID := cli.getOwnID()
 	if !ownID.IsEmpty() {
 		data = append(data, []byte(ownID.User)...)
-		data = append(data, []byte("@c.us")...)
+		data = append(data, []byte(webMessageIDJIDSuffix)...)
 	}
-	data = append(data, random.Bytes(16)...)
+	data = append(data, random.Bytes(webMessageIDRandomLength)...)
 	hash := sha256.Sum256(data)
-	return WebMessageIDPrefix + strings.ToUpper(hex.EncodeToString(hash[:9]))
+	return WebMessageIDPrefix + strings.ToUpper(hex.EncodeToString(hash[:webMessageIDHashLength]))
 }
 
 func GenerateFacebookMessageID() int64 {
-	const randomMask = (1 << 22) - 1
-	return (time.Now().UnixMilli() << 22) | (int64(binary.BigEndian.Uint32(random.Bytes(4))) & randomMask)
+	const randomMask = (1 << facebookMessageIDRandomBits) - 1
+	return (time.Now().UnixMilli() << facebookMessageIDRandomBits) | (int64(binary.BigEndian.Uint32(random.Bytes(4))) & randomMask)
 }
 
 // GenerateMessageID generates a random string that can be used as a message ID on WhatsApp.
@@ -53,5 +53,5 @@ func GenerateFacebookMessageID() int64 {
 //
 // Deprecated: WhatsApp web has switched to using a hash of the current timestamp, user id and random bytes. Use Client.GenerateMessageID instead.
 func GenerateMessageID() types.MessageID {
-	return WebMessageIDPrefix + strings.ToUpper(hex.EncodeToString(random.Bytes(8)))
+	return WebMessageIDPrefix + strings.ToUpper(hex.EncodeToString(random.Bytes(legacyMessageIDRandomLength)))
 }

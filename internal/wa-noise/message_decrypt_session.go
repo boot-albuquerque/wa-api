@@ -111,7 +111,7 @@ func (cli *Client) decryptDM(ctx context.Context, child *waBinary.Node, from typ
 				pt, innerErr = cipher.DecryptMessage(decryptCtx, preKeyMsg)
 			}
 			return pt, innerErr
-		}, "prekey", from.String())
+		}, ciphertextHashDomainPreKey, from.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decrypt prekey message: %w", err)
 		}
@@ -122,13 +122,13 @@ func (cli *Client) decryptDM(ctx context.Context, child *waBinary.Node, from typ
 		}
 		plaintext, ciphertextHash, err = cli.bufferedDecrypt(ctx, content, serverTS, func(decryptCtx context.Context) ([]byte, error) {
 			return cipher.Decrypt(decryptCtx, msg)
-		}, "normal", from.String())
+		}, ciphertextHashDomainNormal, from.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decrypt normal message: %w", err)
 		}
 	}
 	var err error
-	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int("v"))
+	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int(encAttrVersion))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to unpad message: %w", err)
 	}
@@ -150,11 +150,11 @@ func (cli *Client) decryptGroupMsg(ctx context.Context, child *waBinary.Node, fr
 	}
 	plaintext, ciphertextHash, err := cli.bufferedDecrypt(ctx, content, serverTS, func(decryptCtx context.Context) ([]byte, error) {
 		return cipher.Decrypt(decryptCtx, msg)
-	}, "senderkey", chat.String(), from.String())
+	}, ciphertextHashDomainSenderKey, chat.String(), from.String())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decrypt group message: %w", err)
 	}
-	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int("v"))
+	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int(encAttrVersion))
 	if err != nil {
 		return nil, nil, err
 	}

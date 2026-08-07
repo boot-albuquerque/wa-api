@@ -67,7 +67,7 @@ func (cli *Client) encryptMsgSecret(ctx context.Context, ownID, chat, origSender
 	}
 	secretKey, additionalData := generateMsgSecretKey(useCase, ownID, origMsgID, origSender, baseEncKey)
 
-	iv = random.Bytes(12)
+	iv = random.Bytes(msgSecretIVSize)
 	ciphertext, err = gcmutil.Encrypt(secretKey, iv, plaintext, additionalData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to encrypt secret message: %w", err)

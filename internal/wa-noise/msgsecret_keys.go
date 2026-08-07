@@ -33,7 +33,7 @@ const (
 )
 
 func applyBotMessageHKDF(messageSecret []byte) []byte {
-	return hkdfutil.SHA256(messageSecret, nil, []byte(EncSecretBotMsg), 32)
+	return hkdfutil.SHA256(messageSecret, nil, []byte(EncSecretBotMsg), msgSecretKeyLength)
 }
 
 func generateMsgSecretKey(
@@ -49,7 +49,7 @@ func generateMsgSecretKey(
 	useCaseSecret = append(useCaseSecret, modificationSenderStr...)
 	useCaseSecret = append(useCaseSecret, modificationType...)
 
-	secretKey := hkdfutil.SHA256(origMsgSecret, nil, useCaseSecret, 32)
+	secretKey := hkdfutil.SHA256(origMsgSecret, nil, useCaseSecret, msgSecretKeyLength)
 	var additionalData []byte
 	switch modificationType {
 	case EncSecretPollVote, EncSecretEventResponse, "":

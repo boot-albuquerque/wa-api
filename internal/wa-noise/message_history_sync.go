@@ -75,7 +75,7 @@ func (cli *Client) handleHistorySyncNotificationLoop() {
 					cli.Log.Warnf("Failed to delete history sync media from server: %v", err)
 				}
 			}
-		case <-time.After(1 * time.Minute):
+		case <-time.After(historySyncLoopIdleTimeout):
 			return
 		}
 	}
