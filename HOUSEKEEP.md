@@ -744,3 +744,161 @@ compartilhada, e remover a exclusão do `Makefile`.
 
 **Status**: corrigido nesta sessão (commits `c196a68` e `d005ab1`).
 `go test -race` passa em toda a árvore de `pkg/`.
+
+---
+
+## F24 — `binary/` dá panic com bytes da rede em três type assertions sem checagem
+
+**Data**: 2026-08-06. **Contexto**: Fase C do ADR-0004 (cobertura de
+`internal/wa-noise/binary/`). Apareceu ao escrever os testes de frame
+malformado, não por relato de produção.
+
+**Onde**:
+
+- `internal/wa-noise/binary/decoder_node.go:137` — `ret.Tag = rawDesc.(string)`
+- `internal/wa-noise/binary/jid.go:113` — `types.NewADJID(user.(string), ...)`
+- `internal/wa-noise/binary/jid.go:82` e `:99` — `User: user.(string)` em
+  `readInteropJID` e `readFBJID`
+
+**Problema**: `read()` devolve `interface{}` e pode legitimamente devolver
+`nil` (tag `ListEmpty`), `types.JID` ou `[]Node`. As quatro linhas acima
+assumem `string` sem checar o `ok`. Um frame que traga qualquer um desses
+tipos na posição da tag do nó ou na posição do usuário de um JID faz o
+decoder entrar em **panic**, com bytes vindos direto do socket.
+
+Reproduz:
+
+```go
+// panic: interface conversion: interface {} is nil, not string
+newDecoder([]byte{0xF8, 0x01, 0x00}).readNode()
+```
+
+O caminho é alcançável de fora: `binary.Unmarshal` é chamado sobre todo
+frame recebido, e o pacote não recupera panic em lugar nenhum. O efeito
+prático depende de haver `recover` na goroutine de leitura do socket — se
+não houver, é derrubada de processo por frame malformado.
+
+**Correção sugerida**: trocar por type assertion com `ok` e devolver
+`ErrInvalidNode` / `ErrInvalidJIDType`. As duas sentinelas já existem em
+`binary/errors.go` e os chamadores já tratam erro nesses pontos, então o
+fix é local e não muda a assinatura de nada.
+
+**Status**: **não corrigido**. É mudança de comportamento (panic vira erro)
+e a Fase C é movimentação mais cobertura. O comportamento atual está travado
+por `TestReadNodePanicsOnNonStringTag` e `TestJIDReadersPanicOnNonStringUser`
+em `decoder_node_test.go`, que falham com uma mensagem apontando para esta
+entrada se o panic deixar de acontecer — ou seja, quem corrigir vai ser
+avisado de que precisa reescrever os dois testes como prova do fix.
+
+---
+
+## F25 — `binary.Unpack` dá panic com frame vazio
+
+**Data**: 2026-08-06. **Contexto**: mesmo da F24.
+
+**Onde**: `internal/wa-noise/binary/unpack.go:22`
+
+```go
+dataType, data := data[0], data[1:]
+```
+
+**Problema**: `data[0]` sem checar `len(data)`. Um frame de zero bytes vindo
+do websocket dá `panic: runtime error: index out of range [0] with length 0`.
+É o mesmo tipo de exposição da F24, num caminho ainda mais raso: `Unpack` é
+a primeira coisa que roda sobre o payload decifrado.
+
+**Correção sugerida**: `if len(data) == 0 { return nil, io.ErrUnexpectedEOF }`
+no topo. `Unpack` já devolve erro, então nenhum chamador muda.
+
+**Status**: **não corrigido**, mesmo racional da F24. Travado por
+`TestUnpackPanicsOnEmptyFrame` em `unpack_test.go`.
+
+---
+
+## F26 — `Node.GetChildByTag` devolve o nó de partida quando não acha, não um nó zero
+
+**Data**: 2026-08-06. **Contexto**: mesmo da F24.
+
+**Onde**: `internal/wa-noise/binary/node.go` — `GetOptionalChildByTag` e
+`GetChildByTag`.
+
+**Problema**: `GetOptionalChildByTag` usa retorno nomeado (`val Node, ok bool`),
+inicializa `val = *n` e, quando não encontra a tag, faz um `return` nu — que
+devolve `val` com o **último nó alcançado**, não o zero. `GetChildByTag`
+descarta o `ok`, então:
+
+```go
+n := &binary.Node{Tag: "iq"}
+n.GetChildByTag("ausente").Tag   // devolve "iq", não ""
+```
+
+Quem checar o resultado por `.Tag != ""` para saber se achou está checando
+algo que é sempre verdadeiro. O padrão correto é `GetOptionalChildByTag` com
+o `ok`, e o resto do whatsmeow em geral faz isso — mas a armadilha não está
+escrita em lugar nenhum.
+
+**Correção sugerida**: nenhuma no código. É API pública do upstream e mudar o
+retorno quebraria silenciosamente qualquer chamador que hoje dependa de
+receber o nó de partida. O que faltava era documentação.
+
+**Status**: **não corrigido, documentado**.
+`TestGetChildByTagReturnsTheStartNodeWhenMissing` em `node_test.go` trava e
+explica o comportamento.
+
+---
+
+## F27 — ramo inalcançável em `Node.contentString` (escape de `\n` em conteúdo `[]byte`)
+
+**Data**: 2026-08-06. **Contexto**: mesmo da F24.
+
+**Onde**: `internal/wa-noise/binary/xml.go`, ramo `case []byte` de
+`contentString`.
+
+**Problema**: o ramo só é alcançado quando `printable(content)` devolve
+string não vazia, e `printable` rejeita qualquer rune que não passe em
+`unicode.IsPrint` — `\n` é um deles. Logo o `strings.ReplaceAll(..., "\n",
+"\\n")` de dentro desse ramo nunca executa: conteúdo `[]byte` com quebra de
+linha sempre cai no ramo de hex. O escape só acontece de fato no `default`,
+para conteúdo que não é nem `[]Node` nem `[]byte`.
+
+É cosmético (só afeta o XML de debug), mas é código morto que sugere um
+comportamento que não existe.
+
+**Correção sugerida**: ou remover o `ReplaceAll` do ramo `[]byte`, ou fazer
+`printable` aceitar `\n` — a segunda muda a saída de log de mensagens de
+texto multilinha, que hoje saem em hex.
+
+**Status**: **não corrigido**. Documentado no comentário de
+`TestNewlinesAreEscapedWhenNotIndenting` em `xml_test.go`, que exercita os
+dois ramos e mostra qual é qual.
+
+---
+
+## F28 — `errors.Is` não funciona com `types.GraphQLError` como alvo
+
+**Data**: 2026-08-06. **Contexto**: Fase C do ADR-0004, cobertura de
+`internal/wa-noise/types/`.
+
+**Onde**: `internal/wa-noise/types/newsletter.go` — `GraphQLError` e
+`GraphQLErrors.Unwrap`.
+
+**Problema**: `GraphQLErrors` implementa `Unwrap() []error` justamente para
+que `errors.Is`/`errors.As` atravessem a lista. Mas `GraphQLError` tem um
+campo `Path []string`, o que torna o tipo **não comparável**, e `errors.Is`
+só compara alvos comparáveis (`reflectlite.TypeOf(target).Comparable()`).
+Resultado: `errors.Is(resp, algumGraphQLError)` percorre a árvore inteira e
+devolve `false` **sempre**, inclusive para um erro que está na lista.
+
+O `Unwrap` não é inútil — `errors.As` funciona — mas a assimetria é
+invisível: nada em compilação nem em runtime avisa, o `Is` só responde
+`false`.
+
+**Correção sugerida**: trocar `Path []string` por um tipo comparável, ou
+adicionar um método `Is(error) bool` em `GraphQLError` que compare por
+`Extensions.ErrorCode`. A segunda é a menos invasiva e não mexe na
+serialização JSON.
+
+**Status**: **não corrigido** (mexer no tipo é mudança de API pública).
+`TestGraphQLErrorsUnwrapExposesEveryError` em `newsletter_test.go` mostra que
+`errors.As` funciona, que `errors.Is` não, e falha avisando para atualizar
+esta entrada se `GraphQLError` virar comparável.
