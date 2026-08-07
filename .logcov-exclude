@@ -24,11 +24,11 @@ pkg/application/contracts/contractsfake/
 # incluir as ~124k linhas de terceiros sem essa exclusao explicita.
 internal/wa-noise/
 
-# pkg/infra/wa-noise/waclient/waclienttest/ — mesmo caso de contractsfake: e'
+# pkg/infra/wa-noise/client/testkit/ — mesmo caso de contractsfake: e'
 # o dublê de waclient.Client (e do ContactStore) compartilhado pelos testes de
 # todos os subpacotes de pkg/infra/wa-noise/. Era codigo _test.go ate' a quebra
 # do pacote em subpacotes, quando deixou de ser alcancavel de fora do pacote
 # original e virou um pacote de apoio exportado. Continua sendo dublê de teste,
 # nao codigo de producao a instrumentar; contar seus ~45 metodos triviais no
 # denominador so diluiria o percentual.
-pkg/infra/wa-noise/waclient/waclienttest/
+pkg/infra/wa-noise/client/testkit/

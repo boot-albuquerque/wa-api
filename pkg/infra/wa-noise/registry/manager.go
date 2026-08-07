@@ -1,82 +1,202 @@
+// Package registry mantém as instâncias e o estado compartilhado por
+// userID da camada de integração.
+//
+// # Por que existem sub-registries
+//
+// Até a quebra, ClientManager era um struct com um sync.RWMutex EMBUTIDO
+// guardando cinco mapas de propósitos distintos. Duas consequências:
+//
+//  1. Contenção sem relação de causa: o fan-out WebSocket segurava o mesmo
+//     lock que o registro de sessões, então um cliente WS lento atrasava
+//     um Register de outro usuário.
+//  2. O mutex embutido era API PÚBLICA — qualquer chamador podia congelar
+//     o registro inteiro com cm.Lock().
+//
+// Cada mapa passou a viver no seu próprio pacote, com o seu próprio mutex
+// não exportado. ClientManager virou a composição dos quatro e delega.
+//
+// # O invariante que sustenta a divisão
+//
+// NENHUM método adquire mais de um lock. Não há ordem de aquisição, logo
+// não há ordem errada — nem hoje nem em código futuro.
+//
+// É por isso que o corte não seguiu os nomes. Os pares (sessions,
+// clientes do SDK) e (MyClient, opções de enquete) ficaram juntos porque
+// Register e Delete escrevem nos dois membros de cada par sob o mesmo
+// lock; separá-los por afinidade de nome obrigaria esses métodos a tomar
+// dois locks e destruiria o invariante.
+//
+// # O que a quebra NÃO mudou
+//
+// Nada observável. Em particular, ela não pode ter quebrado atomicidade
+// entre mapas porque essa atomicidade nunca foi observável: nenhum método
+// público lê dois mapas, então qualquer leitor já precisava de duas
+// chamadas com dois locks e já podia intercalar. Register e Delete apenas
+// ESCREVEM em dois mapas.
+//
+// O baseline dessa afirmação está em concurrency_test.go, escrito contra o
+// ClientManager monolítico antes da quebra e mantido depois dela.
 package registry
 
 import (
-	"sync"
-
 	wanoise "wa-api/internal/wa-noise"
+	port "wa-api/pkg/application/contracts"
+	"wa-api/pkg/infra/wa-noise/registry/broadcast"
+	"wa-api/pkg/infra/wa-noise/registry/clients"
+	"wa-api/pkg/infra/wa-noise/registry/myclients"
+	"wa-api/pkg/infra/wa-noise/registry/webhook"
 
 	"github.com/coder/websocket"
 	"github.com/go-resty/resty/v2"
-
-	port "wa-api/pkg/application/contracts"
 )
 
+// MyClient é o wrapper de cliente WhatsApp mantido por userID.
+//
+// Alias, e não uma segunda declaração: o tipo passou a viver em
+// registry/myclients, e um alias mantém registry.MyClient válido para quem
+// já o referenciava sem criar dois tipos incompatíveis.
+type MyClient = myclients.MyClient
+
+// ClientManager é a fachada sobre os quatro sub-registries.
+//
+// Os campos são ponteiros para os Registry de cada sub-pacote, e não mapas:
+// o estado e o lock que o protege viajam juntos, dentro do pacote que
+// entende aquele estado.
 type ClientManager struct {
-	sync.RWMutex
-	wanoiseClients map[string]*wanoise.Client
-	httpClients    map[string]*resty.Client
-	myClients      map[string]MyClient
-	// pollOptions stores the plaintext options sent for each poll, keyed on
-	// userID then on the poll's message ID. This lets the event handler
-	// SHA-256-match incoming vote hashes back to the original option text
-	// before emitting the webhook payload. Entries are best-effort and
-	// in-memory only — if wa-api restarts between send and vote, plaintext
-	// resolution is skipped and the webhook falls back to hashes only.
-	pollOptions map[string]map[string][]string
-	// wsConns tracks live /session/ws connections per userID. Set semantics
-	// (not a single *Conn) because nothing stops a client from opening more
-	// than one WS to the same session — e.g. a reconnect racing the old
-	// connection's close.
-	wsConns map[string]map[*websocket.Conn]struct{}
-	// sessions backs the port.SessionRegistry implementation (Fase 2c):
-	// CRUD of Session handles for SessionOrchestrator, kept separate from
-	// wa-noiseClients since a Session (port.Session) wraps more than the
-	// raw *wa-noise.Client during the migration.
-	sessions map[string]port.Session
+	clients   *clients.Registry
+	myClients *myclients.Registry
+	webhooks  *webhook.Registry
+	wsConns   *broadcast.Registry
 }
 
+// NewClientManager devolve um ClientManager com os quatro sub-registries
+// prontos.
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		wanoiseClients: make(map[string]*wanoise.Client),
-		httpClients:    make(map[string]*resty.Client),
-		myClients:      make(map[string]MyClient),
-		pollOptions:    make(map[string]map[string][]string),
-		wsConns:        make(map[string]map[*websocket.Conn]struct{}),
-		sessions:       make(map[string]port.Session),
+		clients:   clients.New(),
+		myClients: myclients.New(),
+		webhooks:  webhook.New(),
+		wsConns:   broadcast.New(),
 	}
 }
 
+// -- port.SessionRegistry ---------------------------------------------------
+
 // Register associa a Session ao userID, satisfazendo port.SessionRegistry.
-//
-// Também publica o *wa-noise.Client subjacente em wa-noiseClients: os
-// adapters de domínio (e o SessionAttachHook) resolvem o cliente por
-// Getwa-noiseClient, e o orchestrator — que só conhece port.Session — não
-// teria como preenchê-lo.
 func (cm *ClientManager) Register(userID string, sess port.Session) {
-	cm.Lock()
-	defer cm.Unlock()
-	cm.sessions[userID] = sess
-	if exposer, ok := sess.(interface{ WaNoiseClient() *wanoise.Client }); ok {
-		if client := exposer.WaNoiseClient(); client != nil {
-			cm.wanoiseClients[userID] = client
-		}
-	}
+	cm.clients.Register(userID, sess)
 }
 
 // Unregister remove o handle de Session associado a userID, se houver.
 func (cm *ClientManager) Unregister(userID string) {
-	cm.Lock()
-	defer cm.Unlock()
-	delete(cm.sessions, userID)
+	cm.clients.Unregister(userID)
 }
 
 // Get devolve a Session registrada para userID.
 func (cm *ClientManager) Get(userID string) (port.Session, bool) {
-	cm.RLock()
-	defer cm.RUnlock()
-	sess, ok := cm.sessions[userID]
-	return sess, ok
+	return cm.clients.Session(userID)
 }
 
 // Verificação em tempo de compilação de que ClientManager implementa o port.
 var _ port.SessionRegistry = (*ClientManager)(nil)
+
+// -- clientes do SDK --------------------------------------------------------
+
+// SetWaNoiseClient publica o cliente do SDK de userID.
+func (cm *ClientManager) SetWaNoiseClient(userID string, client *wanoise.Client) {
+	cm.clients.SetClient(userID, client)
+}
+
+// GetWaNoiseClient devolve o cliente do SDK de userID, ou nil.
+func (cm *ClientManager) GetWaNoiseClient(userID string) *wanoise.Client {
+	return cm.clients.GetClient(userID)
+}
+
+// DeleteWaNoiseClient remove o cliente do SDK de userID.
+func (cm *ClientManager) DeleteWaNoiseClient(userID string) {
+	cm.clients.DeleteClient(userID)
+}
+
+// GetAllClients devolve uma cópia do mapa de clientes do SDK.
+func (cm *ClientManager) GetAllClients() map[string]*wanoise.Client {
+	return cm.clients.Snapshot()
+}
+
+// GetWaNoiseClientsCount devolve quantos clientes do SDK estão registrados.
+func (cm *ClientManager) GetWaNoiseClientsCount() int {
+	return cm.clients.Count()
+}
+
+// IterateWaNoiseClients percorre os clientes do SDK sob lock de leitura,
+// parando quando callback devolve false.
+func (cm *ClientManager) IterateWaNoiseClients(callback func(*wanoise.Client) bool) {
+	cm.clients.Iterate(callback)
+}
+
+// -- MyClient e enquetes ----------------------------------------------------
+
+// SetMyClient guarda o MyClient de userID.
+func (cm *ClientManager) SetMyClient(userID string, client MyClient) {
+	cm.myClients.Set(userID, client)
+}
+
+// GetMyClient devolve o MyClient de userID, ou nil.
+func (cm *ClientManager) GetMyClient(userID string) MyClient {
+	return cm.myClients.Get(userID)
+}
+
+// DeleteMyClient remove o MyClient de userID e descarta junto o cache de
+// enquetes dele.
+func (cm *ClientManager) DeleteMyClient(userID string) {
+	cm.myClients.Delete(userID)
+}
+
+// SetPollOptions memoriza o texto em claro das opções de uma enquete.
+func (cm *ClientManager) SetPollOptions(userID, msgID string, options []string) {
+	cm.myClients.SetPollOptions(userID, msgID, options)
+}
+
+// GetPollOptions devolve as opções em claro de uma enquete, ou nil.
+func (cm *ClientManager) GetPollOptions(userID, msgID string) []string {
+	return cm.myClients.GetPollOptions(userID, msgID)
+}
+
+// -- clientes HTTP de webhook -----------------------------------------------
+
+// ProvisionWebhookClient monta e registra o cliente HTTP de entrega de
+// webhook para userID. proxyURL vazio entrega sem proxy.
+func (cm *ClientManager) ProvisionWebhookClient(userID string, proxyURL string) error {
+	return cm.webhooks.Provision(userID, proxyURL)
+}
+
+// SetHTTPClient guarda o cliente HTTP de userID.
+func (cm *ClientManager) SetHTTPClient(userID string, client *resty.Client) {
+	cm.webhooks.Set(userID, client)
+}
+
+// GetHTTPClient devolve o cliente HTTP de userID, ou nil.
+func (cm *ClientManager) GetHTTPClient(userID string) *resty.Client {
+	return cm.webhooks.Get(userID)
+}
+
+// DeleteHTTPClient remove o cliente HTTP de userID.
+func (cm *ClientManager) DeleteHTTPClient(userID string) {
+	cm.webhooks.Delete(userID)
+}
+
+// -- fan-out WebSocket ------------------------------------------------------
+
+// AddWSConn registra uma conexão /session/ws viva para userID.
+func (cm *ClientManager) AddWSConn(userID string, conn *websocket.Conn) {
+	cm.wsConns.Add(userID, conn)
+}
+
+// RemoveWSConn desregistra uma conexão de userID.
+func (cm *ClientManager) RemoveWSConn(userID string, conn *websocket.Conn) {
+	cm.wsConns.Remove(userID, conn)
+}
+
+// BroadcastToUser empurra payload para toda conexão WS viva de userID.
+func (cm *ClientManager) BroadcastToUser(userID string, payload interface{}) {
+	cm.wsConns.Broadcast(userID, payload)
+}

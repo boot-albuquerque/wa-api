@@ -14,7 +14,13 @@ max_complexity=56
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).
-count=283
+# Quebra de ClientManager em sub-registries (2026-08-07): 283 -> 261.
+# max_complexity inalterado (56) — a quebra nao tocou a funcao mais complexa
+# do repo, que vive em internal/wa-noise/. A queda de 22 issues vem de
+# reescrever os cinco arquivos de metodos de ClientManager como quatro
+# pacotes com estado proprio: sumiram os acessos diretos a mapa compartilhado
+# que o lint sinalizava.
+count=261
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

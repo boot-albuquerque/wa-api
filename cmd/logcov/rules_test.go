@@ -212,7 +212,7 @@ func TestReadExcludeFile(t *testing.T) {
 		"cmd/",
 		"pkg/application/contracts/contractsfake/",
 		"internal/wa-noise/",
-		"pkg/infra/wa-noise/waclient/testkit/",
+		"pkg/infra/wa-noise/client/testkit/",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)

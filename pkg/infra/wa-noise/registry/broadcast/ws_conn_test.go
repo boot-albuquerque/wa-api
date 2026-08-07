@@ -1,4 +1,4 @@
-package registry
+package broadcast
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 // dialTestWS sobe um servidor WS de teste e devolve a conexão do lado
-// cliente (a que o ClientManager registraria) mais uma função que lê uma
+// cliente (a que o Registry registraria) mais uma função que lê uma
 // mensagem do lado servidor.
 func dialTestWS(t *testing.T) (*websocket.Conn, func() (map[string]string, error)) {
 	t.Helper()
@@ -51,41 +51,41 @@ func dialTestWS(t *testing.T) (*websocket.Conn, func() (map[string]string, error
 
 // TestClientManager_WSConnLifecycle: Add → Remove, incluindo o ramo de
 // remoção do último conn (que apaga a entrada do usuário).
-func TestClientManager_WSConnLifecycle(t *testing.T) {
-	cm := NewClientManager()
+func TestRegistry_WSConnLifecycle(t *testing.T) {
+	r := New()
 	conn, _ := dialTestWS(t)
 
-	cm.AddWSConn("u1", conn)
-	cm.RLock()
-	n := len(cm.wsConns["u1"])
-	cm.RUnlock()
+	r.Add("u1", conn)
+	r.mu.RLock()
+	n := len(r.conns["u1"])
+	r.mu.RUnlock()
 	if n != 1 {
 		t.Fatalf("wsConns after AddWSConn = %d, want 1", n)
 	}
 
-	cm.RemoveWSConn("u1", conn)
-	cm.RLock()
-	_, still := cm.wsConns["u1"]
-	cm.RUnlock()
+	r.Remove("u1", conn)
+	r.mu.RLock()
+	_, still := r.conns["u1"]
+	r.mu.RUnlock()
 	if still {
 		t.Error("wsConns entry survived removal of last connection")
 	}
 }
 
 // TestClientManager_RemoveWSConn_Unknown é no-op e não pode entrar em pânico.
-func TestClientManager_RemoveWSConn_Unknown(t *testing.T) {
-	cm := NewClientManager()
+func TestRegistry_RemoveWSConn_Unknown(t *testing.T) {
+	r := New()
 	conn, _ := dialTestWS(t)
-	cm.RemoveWSConn("u-inexistente", conn)
+	r.Remove("u-inexistente", conn)
 }
 
 // TestClientManager_BroadcastToUser entrega o payload à conexão registrada.
-func TestClientManager_BroadcastToUser(t *testing.T) {
-	cm := NewClientManager()
+func TestRegistry_BroadcastToUser(t *testing.T) {
+	r := New()
 	conn, readOne := dialTestWS(t)
-	cm.AddWSConn("u1", conn)
+	r.Add("u1", conn)
 
-	cm.BroadcastToUser("u1", map[string]string{"event": "ping"})
+	r.Broadcast("u1", map[string]string{"event": "ping"})
 
 	got, err := readOne()
 	if err != nil {
@@ -97,24 +97,24 @@ func TestClientManager_BroadcastToUser(t *testing.T) {
 }
 
 // TestClientManager_BroadcastToUser_NoConns é no-op silencioso.
-func TestClientManager_BroadcastToUser_NoConns(t *testing.T) {
-	cm := NewClientManager()
-	cm.BroadcastToUser("u1", map[string]string{"event": "ping"})
+func TestRegistry_BroadcastToUser_NoConns(t *testing.T) {
+	r := New()
+	r.Broadcast("u1", map[string]string{"event": "ping"})
 }
 
 // TestClientManager_BroadcastToUser_DropsDeadConn: escrever numa conexão já
 // fechada derruba a conexão do registro.
-func TestClientManager_BroadcastToUser_DropsDeadConn(t *testing.T) {
-	cm := NewClientManager()
+func TestRegistry_BroadcastToUser_DropsDeadConn(t *testing.T) {
+	r := New()
 	conn, _ := dialTestWS(t)
-	cm.AddWSConn("u1", conn)
+	r.Add("u1", conn)
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 
-	cm.BroadcastToUser("u1", map[string]string{"event": "ping"})
+	r.Broadcast("u1", map[string]string{"event": "ping"})
 
-	cm.RLock()
-	_, still := cm.wsConns["u1"]
-	cm.RUnlock()
+	r.mu.RLock()
+	_, still := r.conns["u1"]
+	r.mu.RUnlock()
 	if still {
 		t.Error("dead connection was not dropped from the registry")
 	}
