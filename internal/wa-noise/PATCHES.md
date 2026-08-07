@@ -5826,71 +5826,161 @@ closures que viraram `dispatchAll`). Nenhuma mudança de piso.
 ### Estado da revisão — REVISADO INDEPENDENTEMENTE, COM RESSALVAS DECLARADAS
 
 Diferente dos lotes 1 e 2, este lote **teve revisão independente de fato** da
-mudança de concorrência — que era o item que o lote 1 deixou explicitamente
-pendente. A revisão foi feita por um agente revisor separado, com citações de
-arquivo:linha e comandos efetivamente rodados, e o veredito chegou por
-intermédio do coordenador da sessão. Ela **não** é a mesma pessoa que escreveu o
-código.
+mudança de concorrência — que era exatamente o item que a retratação do lote 1
+deixou registrado como pendente.
 
-**Veredito: equivalente**, nos três pontos centrais:
+**Proveniência.** A revisão foi feita por um agente revisor separado de quem
+escreveu o código, em modo somente-leitura, e ele confirmou que todo o material
+citado veio de arquivos efetivamente abertos nesta sessão, por
+`git show HEAD:<caminho>`, `git diff`, `cat -n` e `grep`. O veredito chegou por
+intermédio do coordenador da sessão. Cada afirmação abaixo vem com a citação de
+arquivo:linha que o revisor produziu, de modo que qualquer uma pode ser
+reconferida.
 
-1. **`fetchAppState` → `appstatesync.Fetch`: equivalente.** Aquisição e
-   liberação nos mesmos pontos, corpo é transcrição statement-a-statement do
-   original, e o despacho de eventos continua acontecendo **fora** do lock. Grep
-   confirmou que só `Fetch` chama `LockSync` — não há caminho novo de
-   self-deadlock (a preocupação era `Send` → `Fetch`).
+**Veredito geral: equivalente.**
 
-2. **`requestMissingAppStateKeys` → `State.FilterKeyIDs`: equivalente**, com uma
-   diferença benigna que vale registrar: `time.Now()` passou a ser capturado
-   **antes** da aquisição do lock (`keys.go`, no chamador), enquanto o original
-   o computava **depois** do `Lock()`. O efeito possível é o timestamp ficar
-   mais *cedo* pela duração da espera do lock; como não há I/O dentro dessa
-   janela (o envio de rede fica fora do lock), não é regressão do throttle de
-   24h.
+**Item 1 — `fetchAppState` → `appstatesync.Fetch`: verificado equivalente.**
 
-3. **`handleAppStateSyncKeyShare` → `State.ReadKeyRequests`: equivalente.**
-   `RLock`/`RUnlock` nos mesmos pontos, predicado idêntico, e os dois `continue`
-   dentro da closure se comportam igual — em Go o `continue` liga ao `for` mais
-   interno, que continua sendo o mesmo laço.
+- `appstate.go:36-41` é fachada: o `nil` check fica **fora** do lock, como no
+  `HEAD` (que também checava antes do `Lock()`).
+- `appstatesync/fetch.go:28-29`: `LockSync()` / `defer UnlockSync()` são as
+  primeiras instruções da função.
+- `fetch.go:30-77` é transcrição statement-a-statement do corpo original:
+  `DeleteAppStateVersion` sob `fullSync`, `GetAppStateVersion`, o ramo
+  `version == 0` / `onlyIfNotSynced`, a montagem do `HashState`, o laço de
+  `hasMore` com `FetchPatches` + `ApplyPatches` e os três ramos de erro, e os
+  dois `Debugf` terminais. **Nada passou de dentro para fora do lock nem o
+  contrário.**
+- Os dois `return` antecipados (`fetch.go:33`, `:43`) são cobertos pelo mesmo
+  `defer`.
+- O despacho de eventos continua **fora** do lock (`appstate.go:26-34`).
+- Self-deadlock: `grep` de `LockSync` no pacote inteiro dá só a definição
+  (`state.go:44`) e um único call site (`fetch.go:28`). `Send` nunca chama
+  `LockSync`; `send.go:86` chama `Fetch` sem lock nenhum segurado, e `Fetch`
+  nunca chama `Send`. `handleSendError` recursa em `Send` (`send.go:123`) antes
+  de a linha 86 ser alcançada, então nenhum frame segura o lock durante a
+  recursão. **Não há caminho novo de self-deadlock.**
+- `recovery.go`: `grep` de `LockSync`, `Fetch(` e `Send(` dá zero hits — igual ao
+  `HEAD`, onde `handleAppStateRecovery` também nunca tocava o
+  `appStateSyncLock`.
 
-Itens adicionais verificados pela revisão: o mapa `keyRequests` preguiçoso é
-seguro (só é escrito sob o lock de escrita); `appStateTransport` nunca copia o
-mutex (carrega só um `*Client`); nenhuma cópia de `*Client` por valor no
-repositório.
+**Item 2 — `requestMissingAppStateKeys` → `State.FilterKeyIDs`: verificado
+equivalente; a movimentação do `time.Now()` é benigna.**
 
-**O que a revisão declarou NÃO ter checado** — registrado aqui porque uma
-ressalva omitida vale menos que a revisão inteira:
+- `HEAD` (`appstate_keys.go:19-33`): `Lock()` → `GetMissingKeyIDs` **dentro** →
+  `time.Now()` → laço de filtro/registro → `Unlock()` → `requestAppStateKeys`
+  **fora**.
+- Novo (`state.go:62-63`): `Lock()` / `defer Unlock()`; `state.go:67`
+  (`raw := rawKeyIDs()`) invoca o produtor **dentro** da seção crítica, e o
+  callback (`keys.go:25-27`) é exatamente
+  `return t.Proc().GetMissingKeyIDs(ctx, patches)` — a chamada continua rodando
+  sob o lock de escrita de verdade, que era o ponto do desenho.
+- O laço de filtro (`state.go:69-76`) é byte-equivalente ao do `HEAD`.
+- Constante inalterada: `KeyRequestInterval = 24h` (`constants.go:76`), o mesmo
+  valor do antigo `appStateKeyRequestInterval`.
+- O envio continua **fora** do lock (`keys.go:28`, depois do `defer Unlock`).
+- Sobre o `time.Now()` ter passado para antes do lock, no chamador — pior caso
+  concreto levantado pelo revisor: a goroutine A segura o lock de escrita por
+  `D`; a goroutine B capturou `now = T` antes de bloquear no `Lock`, então grava
+  `keyRequests[k] = T` em vez de `T+D`, o que torna `k` re-requisitável até `D`
+  mais cedo que a janela de 24h. `D` é limitado a `GetMissingKeyIDs` mais um laço
+  de mapa, **sem I/O de rede** (o envio está fora do lock). E dentro de uma mesma
+  chamada o mesmo `now` dirige tanto a comparação (`state.go:72`) quanto o valor
+  gravado (`state.go:73`), então o registro é autoconsistente. **Não é regressão
+  de throttling.**
 
-- O corpo de `mutation.go`, `dispatch.go` e `recovery.go` além de grep por lock:
-  **não houve diff linha-a-linha contra `HEAD`** por parte do revisor. Essa
-  lacuna foi fechada depois, mecanicamente, por quem escreveu o commit (portanto
-  **não** é evidência independente): um diff normalizado — whitespace e
-  comentários removidos, receptor `cli.X` reescrito para o `t.X()` equivalente,
-  constantes desprefixadas — entre `git show <commit>^:internal/wa-noise/appstate_dispatch.go`
-  e `appstatesync/{mutation,dispatch}.go` sai **vazio** para todo o `switch` de
-  `DispatchMutation` (as 165 linhas de `case appstate.IndexMute:` até o fim), e o
-  resíduo no resto do arquivo é exatamente: linhas de `import`/`package`, as
-  assinaturas (que ganharam `t Transport`), e a extração de `logMutation` com sua
-  chamada. O mesmo diff contra `appstate.go` (para `fetch.go` e `recovery.go`)
-  tem como resíduo apenas os renomes (`sendIQ`→`SendIQ`, `infoQuery`→`IQ`,
-  `&ElementMissingError{...}`→`t.ElementMissing(...)`,
-  `SyncLock.Lock()`→`LockSync()`) e os dois wrappers que **ficaram** na raiz
-  (`FetchAppState`, `downloadExternalAppStateBlob`) mais a guarda de `cli == nil`
-  que subiu para a fachada. Nenhum statement de corpo ficou sem explicação.
-- **Nenhum `go test -race` foi rodado pelo revisor**: o veredito é por leitura de
-  código, não evidência dinâmica. Essa lacuna específica é coberta por fora — o
-  `make check` deste lote roda `go test -race` sobre o pacote novo e passou
-  (exit 0), e a cobertura de 100% também foi medida sob `-race`.
-- Não foi traçado se `cli.SendPeerMessage` tem algum caminho de volta para a
-  sincronização de app state. Se existir, seria comportamento pré-existente, não
-  regressão desta extração — mas fica registrado como não verificado.
+**Item 3 — `handleAppStateSyncKeyShare` → `State.ReadKeyRequests`: verificado
+equivalente.**
 
-O que sustenta este lote, então: `make check` verde (build, vet, testes com
-`-race`, lint, gates de cobertura, licença, deriva, tamanho de arquivo e testes
-do fork), cobertura de 100,0% de statements e funções no pacote novo, a revisão
-independente de concorrência acima com suas ressalvas, e comparação manual de
-cada função movida contra o original — esta última feita por quem escreveu o
-commit e portanto **não** independente.
+- `message_history_sync.go:163-193`. No `HEAD`: `RLock()` antes do laço,
+  `RUnlock()` depois, com as escritas de `PutAppStateSyncKey` dentro. No novo: o
+  mesmo corpo de laço envolvido em
+  `ReadKeyRequests(func(wasRequested func(string) bool) { ... })`.
+- `state.go:88-94`: `RLock()` / `defer RUnlock()`, com `fn` chamado na linha 91.
+  A duração do lock é idêntica — o read lock cobre o laço inteiro, incluindo toda
+  escrita no store, e só é liberado quando `fn` retorna.
+- Os dois `continue` ligam ao `for` mais interno, que agora está dentro da
+  closure; o comportamento é inalterado.
+- `onlyResyncIfNotSynced` é capturado e atribuído dentro da closure, e o `for`
+  seguinte (`appstate.AllPatchNames` → `FetchAppState`) roda **depois** de o read
+  lock ser liberado (no `HEAD` pelo `RUnlock` explícito, agora pelo `defer`).
+  Isso é **load-bearing**: `FetchAppState` → `Fetch` → `ApplyPatches` →
+  `go RequestMissingKeys` (`fetch.go:96`) → `FilterKeyIDs` quer o lado de
+  **escrita** do mesmo `RWMutex`. A ordem foi preservada.
+- O predicado é idêntico (o mapa `keyRequests` no lugar do
+  `appStateKeyRequests` original).
+
+**Checagem A — inicialização preguiçosa do mapa: segura.** As escritas só
+acontecem sob `keyRequestsLock.Lock()` (`state.go:65`, `:73`) e as leituras sob
+lock ou `RLock` (`state.go:71`, `:92`) — totalmente serializado pelo `RWMutex`.
+Ler um mapa nil devolve o zero-value, idêntico ao mapa vazio criado eagerly no
+`HEAD`; remover `appStateKeyRequests: make(...)` de `NewClient` é inerte.
+
+**Checagem B — estabilidade de ponteiro e cópia de mutex: segura.**
+`appStateTransport` tem um campo só (`cli *Client`), então copiá-lo copia um
+ponteiro e nunca um mutex. `State()` devolve `&t.cli.appStateSync`, endereço
+estável do `*Client` no heap. Todos os métodos de `State` usam receptor
+ponteiro. `go vet` limpo.
+
+**Checagem C — cópia de `*Client` por valor: não encontrada.** O grep amplo só
+achou construção (`cli := &Client{`), embrulho de ponteiro
+(`DangerousInternalClient`) e deref de campo não relacionado (`NoiseKey.Priv`).
+Ressalva do próprio revisor: foram varridos só os arquivos da raiz — os
+subpacotes não podem copiar `*Client` porque não importam a raiz.
+
+#### O que a revisão declarou NÃO ter checado
+
+Registrado por inteiro, sem resumir: uma ressalva omitida vale menos que a
+revisão toda.
+
+- `mutation.go`, `dispatch.go` e `recovery.go`: houve `grep` por lock (sem hits),
+  mas **sem diff linha-a-linha contra o `HEAD`** da lógica não relacionada a
+  lock.
+- **Nenhum `go test -race` foi rodado pelo revisor** — o veredito é por leitura
+  de código mais `go vet` limpo, não evidência dinâmica.
+- **Sem rastreamento de `cli.SendPeerMessage`** procurando um caminho de volta
+  para a sincronização de app state. Se existir, seria comportamento
+  pré-existente, não regressão desta extração.
+- **Sem avaliação de adequação dos `*_test.go`** de `appstatesync/`.
+
+#### As duas lacunas fechadas por fora (evidência NÃO independente)
+
+Ambas foram cobertas por quem escreveu o commit, e por isso **não** contam como
+revisão independente:
+
+1. **A falta de `-race`.** Rodado explicitamente:
+   `go test -race -count=1 ./internal/wa-noise/appstatesync/... ./internal/wa-noise/`
+   → `ok` nos dois pacotes, exit 0. O `make check` do lote também roda a suíte do
+   fork sob `-race` e passou (exit 0). A cobertura de 100% foi medida sob
+   `-race`.
+2. **A falta de diff linha-a-linha.** Feito um diff normalizado — whitespace e
+   comentários removidos, receptor `cli.X` reescrito para o `t.X()` equivalente,
+   constantes desprefixadas — entre
+   `git show <commit>^:internal/wa-noise/appstate_dispatch.go` e
+   `appstatesync/{mutation,dispatch}.go`: sai **vazio** para todo o `switch` de
+   `DispatchMutation` (as 165 linhas de `case appstate.IndexMute:` até o fim), e
+   o resíduo no resto do arquivo é exatamente linhas de `import`/`package`, as
+   assinaturas (que ganharam `t Transport`) e a extração de `logMutation` com sua
+   chamada. O mesmo diff contra `appstate.go` (para `fetch.go` e `recovery.go`)
+   deixa como resíduo apenas os renomes (`sendIQ`→`SendIQ`, `infoQuery`→`IQ`,
+   `&ElementMissingError{...}`→`t.ElementMissing(...)`,
+   `SyncLock.Lock()`→`LockSync()`) e os dois wrappers que **ficaram** na raiz
+   (`FetchAppState`, `downloadExternalAppStateBlob`), mais a guarda de
+   `cli == nil` que subiu para a fachada. Nenhum statement de corpo ficou sem
+   explicação.
+
+As duas ressalvas restantes (`SendPeerMessage` e adequação dos testes) **seguem
+em aberto** e estão registradas como tal.
+
+#### O que sustenta este lote, ao todo
+
+`make check` verde (exit 0 observado: build, vet, testes com `-race`, lint, gates
+de cobertura e de cobertura de log, licença, deriva, tamanho de arquivo e testes
+do fork), cobertura de 100,0% de statements e de funções no pacote novo, a
+revisão independente de concorrência acima com suas ressalvas, o `-race` e o
+diff normalizado citados — estes dois últimos **não** independentes — e a
+comparação manual de cada função movida contra o original, também feita por quem
+escreveu o commit e portanto **não** independente.
 
 ### Fora do escopo
 
