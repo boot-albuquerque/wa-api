@@ -22,6 +22,7 @@ import (
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/pairing"
 	"wa-api/internal/wa-noise/prekeys"
@@ -116,8 +117,10 @@ type Client struct {
 
 	privacySettingsCache atomic.Value
 
-	groupCache           map[types.JID]*groupMetaCache
-	groupCacheLock       sync.Mutex
+	// groupCache reune os antigos groupCache/groupCacheLock. O lock de dentro
+	// continua sendo um so', com os mesmos pontos de aquisicao — inclusive o
+	// que atravessa a consulta ao servidor em group.GetOrFetch.
+	groupCache           group.Cache
 	userDevicesCache     map[types.JID]deviceCache
 	userDevicesCacheLock sync.Mutex
 
@@ -173,12 +176,6 @@ type Client struct {
 	RefreshCAT      func(context.Context) error
 }
 
-type groupMetaCache struct {
-	AddressingMode             types.AddressingMode
-	CommunityAnnouncementGroup bool
-	Members                    []types.JID
-}
-
 type MessengerConfig struct {
 	UserAgent    string
 	BaseURL      string
@@ -227,7 +224,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 
 		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
 
-		groupCache:       make(map[types.JID]*groupMetaCache),
 		userDevicesCache: make(map[types.JID]deviceCache),
 
 		GetMessageForRetry: func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },

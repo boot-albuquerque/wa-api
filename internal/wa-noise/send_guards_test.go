@@ -84,7 +84,7 @@ func TestPreparePeerMessageNodePropagatesLIDError(t *testing.T) {
 
 func TestResolveGroupSendTargetNilCachedData(t *testing.T) {
 	cli := sendTestClient()
-	cli.groupCache[sendTestGroupJID] = nil // reproduz o (nil, nil)
+	putGroupCache(cli, sendTestGroupJID, nil) // reproduz o (nil, nil)
 
 	var resp SendResponse
 	var extra nodeExtraParams
@@ -101,7 +101,7 @@ func TestResolveGroupSendTargetNilCachedData(t *testing.T) {
 
 func TestSendGroupV3NilCachedData(t *testing.T) {
 	cli := sendTestClient()
-	cli.groupCache[sendTestGroupJID] = nil
+	putGroupCache(cli, sendTestGroupJID, nil)
 
 	var timings MessageDebugTimings
 	_, _, err := cli.sendGroupV3(

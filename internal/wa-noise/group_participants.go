@@ -8,118 +8,53 @@ package whatsmeow
 
 import (
 	"context"
-	"fmt"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/types"
 )
 
-type ParticipantChange string
+// Fachada; ver o cabecalho de group.go.
+
+// ParticipantChange e' apelido de tipo, e as quatro constantes sao os MESMOS
+// valores de group.Change* — nao copias. Chamadores externos que passam
+// whatsmeow.ParticipantChangeAdd continuam compilando sem conversao.
+type ParticipantChange = group.ParticipantChange
 
 const (
-	ParticipantChangeAdd     ParticipantChange = "add"
-	ParticipantChangeRemove  ParticipantChange = "remove"
-	ParticipantChangePromote ParticipantChange = "promote"
-	ParticipantChangeDemote  ParticipantChange = "demote"
+	ParticipantChangeAdd     ParticipantChange = group.ChangeAdd
+	ParticipantChangeRemove  ParticipantChange = group.ChangeRemove
+	ParticipantChangePromote ParticipantChange = group.ChangePromote
+	ParticipantChangeDemote  ParticipantChange = group.ChangeDemote
 )
 
 // UpdateGroupParticipants can be used to add, remove, promote and demote members in a WhatsApp group.
 func (cli *Client) UpdateGroupParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action ParticipantChange) ([]types.GroupParticipant, error) {
-	content := make([]waBinary.Node, len(participantChanges))
-	for i, participantJID := range participantChanges {
-		content[i] = waBinary.Node{
-			Tag:   groupParticipantTag,
-			Attrs: waBinary.Attrs{"jid": participantJID},
-		}
-		if participantJID.Server == types.HiddenUserServer && action == ParticipantChangeAdd {
-			pn, err := cli.Store.LIDs.GetPNForLID(ctx, participantJID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get phone number for LID %s: %v", participantJID, err)
-			} else if !pn.IsEmpty() {
-				content[i].Attrs["phone_number"] = pn
-			}
-		}
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	resp, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{
-		Tag:     string(action),
-		Content: content,
-	})
-	if err != nil {
-		return nil, err
-	}
-	requestAction, ok := resp.GetOptionalChildByTag(string(action))
-	if !ok {
-		return nil, &ElementMissingError{Tag: string(action), In: "response to group participants update"}
-	}
-	requestParticipants := requestAction.GetChildrenByTag(groupParticipantTag)
-	participants := make([]types.GroupParticipant, len(requestParticipants))
-	for i, child := range requestParticipants {
-		participants[i] = parseParticipant(child.AttrGetter(), &child)
-	}
-	return participants, nil
+	return group.UpdateParticipants(ctx, cli.groupT(), jid, participantChanges, action)
 }
 
 // GetGroupRequestParticipants gets the list of participants that have requested to join the group.
 func (cli *Client) GetGroupRequestParticipants(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error) {
-	resp, err := cli.sendGroupIQ(ctx, iqGet, jid, waBinary.Node{
-		Tag: "membership_approval_requests",
-	})
-	if err != nil {
-		return nil, err
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	request, ok := resp.GetOptionalChildByTag("membership_approval_requests")
-	if !ok {
-		return nil, &ElementMissingError{Tag: "membership_approval_requests", In: "response to group request participants query"}
-	}
-	requestParticipants := request.GetChildrenByTag("membership_approval_request")
-	participants := make([]types.GroupParticipantRequest, len(requestParticipants))
-	for i, req := range requestParticipants {
-		participants[i] = types.GroupParticipantRequest{
-			JID:         req.AttrGetter().JID("jid"),
-			RequestedAt: req.AttrGetter().UnixTime("request_time"),
-		}
-	}
-	return participants, nil
+	return group.GetRequestParticipants(ctx, cli.groupT(), jid)
 }
 
-type ParticipantRequestChange string
+// ParticipantRequestChange e' apelido de tipo; ver ParticipantChange.
+type ParticipantRequestChange = group.ParticipantRequestChange
 
 const (
-	ParticipantChangeApprove ParticipantRequestChange = "approve"
-	ParticipantChangeReject  ParticipantRequestChange = "reject"
+	ParticipantChangeApprove ParticipantRequestChange = group.RequestApprove
+	ParticipantChangeReject  ParticipantRequestChange = group.RequestReject
 )
 
 // UpdateGroupRequestParticipants can be used to approve or reject requests to join the group.
 func (cli *Client) UpdateGroupRequestParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action ParticipantRequestChange) ([]types.GroupParticipant, error) {
-	content := make([]waBinary.Node, len(participantChanges))
-	for i, participantJID := range participantChanges {
-		content[i] = waBinary.Node{
-			Tag:   groupParticipantTag,
-			Attrs: waBinary.Attrs{"jid": participantJID},
-		}
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	resp, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{
-		Tag: "membership_requests_action",
-		Content: []waBinary.Node{{
-			Tag:     string(action),
-			Content: content,
-		}},
-	})
-	if err != nil {
-		return nil, err
-	}
-	request, ok := resp.GetOptionalChildByTag("membership_requests_action")
-	if !ok {
-		return nil, &ElementMissingError{Tag: "membership_requests_action", In: "response to group request participants update"}
-	}
-	requestAction, ok := request.GetOptionalChildByTag(string(action))
-	if !ok {
-		return nil, &ElementMissingError{Tag: string(action), In: "response to group request participants update"}
-	}
-	requestParticipants := requestAction.GetChildrenByTag(groupParticipantTag)
-	participants := make([]types.GroupParticipant, len(requestParticipants))
-	for i, child := range requestParticipants {
-		participants[i] = parseParticipant(child.AttrGetter(), &child)
-	}
-	return participants, nil
+	return group.UpdateRequestParticipants(ctx, cli.groupT(), jid, participantChanges, action)
 }

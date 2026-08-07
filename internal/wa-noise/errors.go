@@ -12,6 +12,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/pairing"
 )
@@ -74,22 +75,27 @@ var (
 	// ErrProfilePictureNotSet is returned by GetProfilePictureInfo when the given user or group doesn't have a profile
 	// picture (status code 404).
 	ErrProfilePictureNotSet = errors.New("that user or group does not have a profile picture")
+	// Os cinco sao o MESMO valor de group.*, nao copias — a mesma armadilha de
+	// aliasing documentada em ErrAppStateUpdate.
+	//
 	// ErrGroupInviteLinkUnauthorized is returned by GetGroupInviteLink if you don't have the permission to get the link (status code 401).
-	ErrGroupInviteLinkUnauthorized = errors.New("you don't have the permission to get the group's invite link")
+	ErrGroupInviteLinkUnauthorized = group.ErrInviteLinkUnauthorized
 	// ErrNotInGroup is returned by group info getting methods if you're not in the group (status code 403).
-	ErrNotInGroup = errors.New("you're not participating in that group")
+	ErrNotInGroup = group.ErrNotInGroup
 	// ErrGroupNotFound is returned by group info getting methods if the group doesn't exist (status code 404).
-	ErrGroupNotFound = errors.New("that group does not exist")
+	ErrGroupNotFound = group.ErrNotFound
 	// ErrInviteLinkInvalid is returned by methods that use group invite links if the invite link is malformed.
-	ErrInviteLinkInvalid = errors.New("that group invite link is not valid")
+	ErrInviteLinkInvalid = group.ErrInviteLinkInvalid
 	// ErrInviteLinkRevoked is returned by methods that use group invite links if the invite link was valid, but has been revoked and can no longer be used.
-	ErrInviteLinkRevoked = errors.New("that group invite link has been revoked")
+	ErrInviteLinkRevoked = group.ErrInviteLinkRevoked
 	// ErrBusinessMessageLinkNotFound is returned by ResolveBusinessMessageLink if the link doesn't exist or has been revoked.
 	ErrBusinessMessageLinkNotFound = errors.New("that business message link does not exist or has been revoked")
 	// ErrContactQRLinkNotFound is returned by ResolveContactQRLink if the link doesn't exist or has been revoked.
 	ErrContactQRLinkNotFound = errors.New("that contact QR link does not exist or has been revoked")
 	// ErrInvalidImageFormat is returned by SetGroupPhoto if the given photo is not in the correct format.
-	ErrInvalidImageFormat = errors.New("the given data is not a valid image")
+	//
+	// MESMO valor que group.ErrInvalidImageFormat; ver acima.
+	ErrInvalidImageFormat = group.ErrInvalidImageFormat
 	// ErrInvalidDisappearingTimer is returned by SetDisappearingTimer if the given timer is not one of the allowed values.
 	ErrInvalidDisappearingTimer = errors.New("invalid disappearing timer provided")
 )

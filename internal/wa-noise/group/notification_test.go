@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package group
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ import (
 )
 
 // groupChangeNode monta o envelope <notification type="w:gp2"> com os
-// atributos obrigatorios que parseGroupChange exige, mais os filhos dados.
+// atributos obrigatorios que ParseChange exige, mais os filhos dados.
 func groupChangeNode(children ...waBinary.Node) *waBinary.Node {
 	return &waBinary.Node{
 		Tag: "notification",
@@ -30,11 +30,11 @@ func groupChangeNode(children ...waBinary.Node) *waBinary.Node {
 	}
 }
 
-// --- parseGroupChange: envelope ---
+// --- ParseChange: envelope ---
 
 func TestParseGroupChangeEnvelope(t *testing.T) {
-	cli := groupTestClient()
-	evt, _, err := cli.parseGroupChange(groupChangeNode())
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode())
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -53,27 +53,27 @@ func TestParseGroupChangeEnvelope(t *testing.T) {
 }
 
 func TestParseGroupChangeMissingEnvelopeAttrs(t *testing.T) {
-	cli := groupTestClient()
-	_, _, err := cli.parseGroupChange(&waBinary.Node{Tag: "notification"})
+	tr := newFakeTransport()
+	_, _, err := ParseChange(tr, &waBinary.Node{Tag: "notification"})
 	if err == nil {
 		t.Fatal("esperado erro sem `from`/`t`")
 	}
 }
 
-// --- parseGroupChange: listas de participantes ---
+// --- ParseChange: listas de participantes ---
 
 func TestParseGroupChangeParticipantLists(t *testing.T) {
-	cli := groupTestClient()
-	evt, _, err := cli.parseGroupChange(groupChangeNode(
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode(
 		waBinary.Node{
-			Tag:   string(ParticipantChangeAdd),
+			Tag:   string(ChangeAdd),
 			Attrs: waBinary.Attrs{"reason": "invite", "v_id": "2", "prev_v_id": "1"},
 			Content: []waBinary.Node{
 				participantNode(groupTestPNJID, nil),
 			},
 		},
 		waBinary.Node{
-			Tag:     string(ParticipantChangePromote),
+			Tag:     string(ChangePromote),
 			Content: []waBinary.Node{participantNode(groupTestPN2JID, nil)},
 		},
 	))
@@ -92,9 +92,9 @@ func TestParseGroupChangeParticipantLists(t *testing.T) {
 }
 
 func TestParseGroupChangeParticipantVersionIDs(t *testing.T) {
-	cli := groupTestClient()
-	evt, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag:     string(ParticipantChangeAdd),
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:     string(ChangeAdd),
 		Attrs:   waBinary.Attrs{"v_id": "2", "prev_v_id": "1"},
 		Content: []waBinary.Node{participantNode(groupTestPNJID, nil)},
 	}))
@@ -113,15 +113,15 @@ func TestParseGroupChangeParticipantVersionIDs(t *testing.T) {
 // contrario dos pares LID/PN (que sao lista e passaram a acumular no lote 6),
 // nao ha como acumular um campo escalar sem decidir uma semantica nova.
 func TestParseGroupChangeParticipantVersionIDsLastElementWins(t *testing.T) {
-	cli := groupTestClient()
-	evt, _, err := cli.parseGroupChange(groupChangeNode(
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode(
 		waBinary.Node{
-			Tag:     string(ParticipantChangeAdd),
+			Tag:     string(ChangeAdd),
 			Attrs:   waBinary.Attrs{"v_id": "2", "prev_v_id": "1"},
 			Content: []waBinary.Node{participantNode(groupTestPNJID, nil)},
 		},
 		waBinary.Node{
-			Tag:     string(ParticipantChangePromote),
+			Tag:     string(ChangePromote),
 			Content: []waBinary.Node{participantNode(groupTestPN2JID, nil)},
 		},
 	))
@@ -139,14 +139,14 @@ func TestParseGroupChangeParticipantVersionIDsLastElementWins(t *testing.T) {
 // mapeamentos LID/PN do primeiro — e eles nunca chegavam ao
 // PutManyLIDMappings do chamador (notification.go).
 func TestParseGroupChangeAccumulatesLIDPairsAcrossElements(t *testing.T) {
-	cli := groupTestClient()
-	evt, lidPairs, err := cli.parseGroupChange(groupChangeNode(
+	tr := newFakeTransport()
+	evt, lidPairs, err := ParseChange(tr, groupChangeNode(
 		waBinary.Node{
-			Tag:     string(ParticipantChangeAdd),
+			Tag:     string(ChangeAdd),
 			Content: []waBinary.Node{participantNode(groupTestLIDJID, waBinary.Attrs{"phone_number": groupTestPNJID})},
 		},
 		waBinary.Node{
-			Tag:     string(ParticipantChangeRemove),
+			Tag:     string(ChangeRemove),
 			Content: []waBinary.Node{participantNode(groupTestPN2JID, waBinary.Attrs{"lid": groupTestLID2})},
 		},
 	))
@@ -167,71 +167,71 @@ func TestParseGroupChangeAccumulatesLIDPairsAcrossElements(t *testing.T) {
 	}
 }
 
-// --- parseGroupChange: mudancas de configuracao ---
+// --- ParseChange: mudancas de configuracao ---
 
 func TestParseGroupChangeLockedAndAnnounce(t *testing.T) {
-	cli := groupTestClient()
+	tr := newFakeTransport()
 	cases := []struct {
 		tag        string
 		attrs      waBinary.Attrs
 		checkEvent func(*testing.T, *events.GroupInfo)
 	}{
-		{groupLockedTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{lockedTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if e.Locked == nil || !e.Locked.IsLocked {
 				t.Errorf("Locked = %+v", e.Locked)
 			}
 		}},
-		{groupUnlockedTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{unlockedTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if e.Locked == nil || e.Locked.IsLocked {
 				t.Errorf("Locked = %+v", e.Locked)
 			}
 		}},
-		{groupAnnouncementTag, waBinary.Attrs{"v_id": "3"}, func(t *testing.T, e *events.GroupInfo) {
+		{announcementTag, waBinary.Attrs{"v_id": "3"}, func(t *testing.T, e *events.GroupInfo) {
 			if e.Announce == nil || !e.Announce.IsAnnounce || e.Announce.AnnounceVersionID != "3" {
 				t.Errorf("Announce = %+v", e.Announce)
 			}
 		}},
-		{groupNotAnnouncementTag, waBinary.Attrs{"v_id": "4"}, func(t *testing.T, e *events.GroupInfo) {
+		{notAnnouncementTag, waBinary.Attrs{"v_id": "4"}, func(t *testing.T, e *events.GroupInfo) {
 			if e.Announce == nil || e.Announce.IsAnnounce {
 				t.Errorf("Announce = %+v", e.Announce)
 			}
 		}},
-		{groupEphemeralTag, waBinary.Attrs{"expiration": "604800"}, func(t *testing.T, e *events.GroupInfo) {
+		{ephemeralTag, waBinary.Attrs{"expiration": "604800"}, func(t *testing.T, e *events.GroupInfo) {
 			if e.Ephemeral == nil || !e.Ephemeral.IsEphemeral || e.Ephemeral.DisappearingTimer != 604800 {
 				t.Errorf("Ephemeral = %+v", e.Ephemeral)
 			}
 		}},
-		{groupNotEphemeralTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{notEphemeralTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if e.Ephemeral == nil || e.Ephemeral.IsEphemeral {
 				t.Errorf("Ephemeral = %+v", e.Ephemeral)
 			}
 		}},
-		{groupMembershipApprovalModeTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{membershipApprovalModeTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if e.MembershipApprovalMode == nil || !e.MembershipApprovalMode.IsJoinApprovalRequired {
 				t.Errorf("MembershipApprovalMode = %+v", e.MembershipApprovalMode)
 			}
 		}},
-		{groupSuspendedTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{suspendedTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if !e.Suspended {
 				t.Error("Suspended = false")
 			}
 		}},
-		{groupUnsuspendedTag, nil, func(t *testing.T, e *events.GroupInfo) {
+		{unsuspendedTag, nil, func(t *testing.T, e *events.GroupInfo) {
 			if !e.Unsuspended {
 				t.Error("Unsuspended = false")
 			}
 		}},
-		{groupDeleteTag, waBinary.Attrs{"reason": "spam"}, func(t *testing.T, e *events.GroupInfo) {
+		{deleteTag, waBinary.Attrs{"reason": "spam"}, func(t *testing.T, e *events.GroupInfo) {
 			if e.Delete == nil || !e.Delete.Deleted || e.Delete.DeleteReason != "spam" {
 				t.Errorf("Delete = %+v", e.Delete)
 			}
 		}},
-		{groupInviteTag, waBinary.Attrs{"code": "XYZ"}, func(t *testing.T, e *events.GroupInfo) {
+		{inviteTag, waBinary.Attrs{"code": "XYZ"}, func(t *testing.T, e *events.GroupInfo) {
 			if e.NewInviteLink == nil || *e.NewInviteLink != InviteLinkPrefix+"XYZ" {
 				t.Errorf("NewInviteLink = %v", e.NewInviteLink)
 			}
 		}},
-		{groupSubjectTag, waBinary.Attrs{"subject": "Novo nome", "s_t": "1700000005", "s_o": groupTestPNJID}, func(t *testing.T, e *events.GroupInfo) {
+		{subjectTag, waBinary.Attrs{"subject": "Novo nome", "s_t": "1700000005", "s_o": groupTestPNJID}, func(t *testing.T, e *events.GroupInfo) {
 			if e.Name == nil || e.Name.Name != "Novo nome" || e.Name.NameSetAt.Unix() != 1700000005 {
 				t.Errorf("Name = %+v", e.Name)
 			}
@@ -239,7 +239,7 @@ func TestParseGroupChangeLockedAndAnnounce(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.tag, func(t *testing.T) {
-			evt, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{Tag: tc.tag, Attrs: tc.attrs}))
+			evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{Tag: tc.tag, Attrs: tc.attrs}))
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -249,13 +249,13 @@ func TestParseGroupChangeLockedAndAnnounce(t *testing.T) {
 }
 
 func TestParseGroupChangeTopicSetAndDeleted(t *testing.T) {
-	cli := groupTestClient()
+	tr := newFakeTransport()
 
-	evt, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag:   groupDescriptionTag,
+	evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:   descriptionTag,
 		Attrs: waBinary.Attrs{"id": "TOPIC2"},
 		Content: []waBinary.Node{{
-			Tag:     groupDescriptionBodyTag,
+			Tag:     descriptionBodyTag,
 			Content: []byte("novo assunto"),
 		}},
 	}))
@@ -275,10 +275,10 @@ func TestParseGroupChangeTopicSetAndDeleted(t *testing.T) {
 		t.Errorf("TopicSetAt = %v, esperado o timestamp da notificacao", evt.Topic.TopicSetAt)
 	}
 
-	evt, _, err = cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag:     groupDescriptionTag,
+	evt, _, err = ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:     descriptionTag,
 		Attrs:   waBinary.Attrs{"id": "TOPIC3"},
-		Content: []waBinary.Node{{Tag: groupDeleteTag}},
+		Content: []waBinary.Node{{Tag: deleteTag}},
 	}))
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
@@ -289,12 +289,12 @@ func TestParseGroupChangeTopicSetAndDeleted(t *testing.T) {
 }
 
 func TestParseGroupChangeTopicWithBadBodyFails(t *testing.T) {
-	cli := groupTestClient()
-	_, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag:   groupDescriptionTag,
+	tr := newFakeTransport()
+	_, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:   descriptionTag,
 		Attrs: waBinary.Attrs{"id": "TOPIC4"},
 		Content: []waBinary.Node{{
-			Tag:     groupDescriptionBodyTag,
+			Tag:     descriptionBodyTag,
 			Content: []waBinary.Node{{Tag: "inesperado"}},
 		}},
 	}))
@@ -304,14 +304,14 @@ func TestParseGroupChangeTopicWithBadBodyFails(t *testing.T) {
 }
 
 func TestParseGroupChangeLinkAndUnlink(t *testing.T) {
-	cli := groupTestClient()
+	tr := newFakeTransport()
 	linked := waBinary.Node{
-		Tag:   groupNodeTag,
+		Tag:   nodeTag,
 		Attrs: waBinary.Attrs{"jid": groupTestJID, "subject": "Subgrupo"},
 	}
 
-	evt, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag:     groupLinkTag,
+	evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:     linkTag,
 		Attrs:   waBinary.Attrs{"link_type": string(types.GroupLinkChangeTypeSub)},
 		Content: []waBinary.Node{linked},
 	}))
@@ -322,8 +322,8 @@ func TestParseGroupChangeLinkAndUnlink(t *testing.T) {
 		t.Errorf("Link = %+v", evt.Link)
 	}
 
-	evt, _, err = cli.parseGroupChange(groupChangeNode(waBinary.Node{
-		Tag: groupUnlinkTag,
+	evt, _, err = ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag: unlinkTag,
 		Attrs: waBinary.Attrs{
 			"unlink_type":   string(types.GroupLinkChangeTypeSub),
 			"unlink_reason": "delete",
@@ -339,22 +339,25 @@ func TestParseGroupChangeLinkAndUnlink(t *testing.T) {
 }
 
 func TestParseGroupChangeLinkWithoutGroupNode(t *testing.T) {
-	cli := groupTestClient()
-	for _, tag := range []string{groupLinkTag, groupUnlinkTag} {
-		_, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{
+	tr := newFakeTransport()
+	for _, tag := range []string{linkTag, unlinkTag} {
+		_, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
 			Tag:   tag,
 			Attrs: waBinary.Attrs{"link_type": "sub", "unlink_type": "sub", "unlink_reason": "delete"},
 		}))
-		var missing *ElementMissingError
-		if !errors.As(err, &missing) || missing.Tag != groupNodeTag {
+		// testElementMissing e' o duble de *whatsmeow.ElementMissingError; o
+		// contrato de que a raiz entrega o tipo historico esta' em
+		// group_transport.go.
+		var missing *testElementMissing
+		if !errors.As(err, &missing) || missing.Tag != nodeTag {
 			t.Errorf("%s: erro = %v, esperado ElementMissingError de <group>", tag, err)
 		}
 	}
 }
 
 func TestParseGroupChangeUnknownChildIsCollected(t *testing.T) {
-	cli := groupTestClient()
-	evt, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{Tag: "tag_do_futuro"}))
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{Tag: "tag_do_futuro"}))
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -364,27 +367,27 @@ func TestParseGroupChangeUnknownChildIsCollected(t *testing.T) {
 }
 
 func TestParseGroupChangeChildMissingAttrsFails(t *testing.T) {
-	cli := groupTestClient()
+	tr := newFakeTransport()
 	// <delete> exige `reason`.
-	_, _, err := cli.parseGroupChange(groupChangeNode(waBinary.Node{Tag: groupDeleteTag}))
+	_, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{Tag: deleteTag}))
 	if err == nil {
 		t.Fatal("esperado erro por atributo obrigatorio ausente no filho")
 	}
 }
 
-// --- updateGroupParticipantCache ---
+// --- UpdateParticipantCache ---
 
 func TestUpdateGroupParticipantCacheAddsAndRemoves(t *testing.T) {
-	cli := groupTestClient()
-	cli.groupCache[groupTestJID] = &groupMetaCache{
+	tr := newFakeTransport()
+	tr.putCached(groupTestJID, &Meta{
 		Members: []types.JID{groupTestPNJID, groupTestPN2JID},
-	}
-	cli.updateGroupParticipantCache(&events.GroupInfo{
+	})
+	UpdateParticipantCache(tr, &events.GroupInfo{
 		JID:   groupTestJID,
 		Join:  []types.JID{groupTestLIDJID, groupTestPNJID}, // o segundo ja' esta la'
 		Leave: []types.JID{groupTestPN2JID},
 	})
-	members := cli.groupCache[groupTestJID].Members
+	members := mustCached(t, tr, groupTestJID).Members
 	if len(members) != 2 {
 		t.Fatalf("membros = %v, esperado 2", members)
 	}
@@ -402,24 +405,24 @@ func TestUpdateGroupParticipantCacheAddsAndRemoves(t *testing.T) {
 }
 
 func TestUpdateGroupParticipantCacheNoopWithoutJoinOrLeave(t *testing.T) {
-	cli := groupTestClient()
-	cli.groupCache[groupTestJID] = &groupMetaCache{Members: []types.JID{groupTestPNJID}}
-	cli.updateGroupParticipantCache(&events.GroupInfo{
+	tr := newFakeTransport()
+	tr.putCached(groupTestJID, &Meta{Members: []types.JID{groupTestPNJID}})
+	UpdateParticipantCache(tr, &events.GroupInfo{
 		JID:     groupTestJID,
 		Promote: []types.JID{groupTestPN2JID},
 	})
-	if len(cli.groupCache[groupTestJID].Members) != 1 {
-		t.Errorf("membros = %v, promote nao deve mexer no cache", cli.groupCache[groupTestJID].Members)
+	if len(mustCached(t, tr, groupTestJID).Members) != 1 {
+		t.Errorf("membros = %v, promote nao deve mexer no cache", mustCached(t, tr, groupTestJID).Members)
 	}
 }
 
 func TestUpdateGroupParticipantCacheIgnoresUncachedGroup(t *testing.T) {
-	cli := groupTestClient()
-	cli.updateGroupParticipantCache(&events.GroupInfo{
+	tr := newFakeTransport()
+	UpdateParticipantCache(tr, &events.GroupInfo{
 		JID:  groupTestJID,
 		Join: []types.JID{groupTestPNJID},
 	})
-	if _, ok := cli.groupCache[groupTestJID]; ok {
+	if _, ok := tr.cached(groupTestJID); ok {
 		t.Error("grupo nao cacheado nao deve ser criado pela notificacao")
 	}
 }
@@ -427,18 +430,18 @@ func TestUpdateGroupParticipantCacheIgnoresUncachedGroup(t *testing.T) {
 // Remover um membro que nao esta no cache nao pode estourar indice nem
 // corromper a lista.
 func TestUpdateGroupParticipantCacheLeaveOfUnknownMember(t *testing.T) {
-	cli := groupTestClient()
-	cli.groupCache[groupTestJID] = &groupMetaCache{Members: []types.JID{groupTestPNJID}}
-	cli.updateGroupParticipantCache(&events.GroupInfo{
+	tr := newFakeTransport()
+	tr.putCached(groupTestJID, &Meta{Members: []types.JID{groupTestPNJID}})
+	UpdateParticipantCache(tr, &events.GroupInfo{
 		JID:   groupTestJID,
 		Leave: []types.JID{groupTestPN2JID},
 	})
-	if len(cli.groupCache[groupTestJID].Members) != 1 {
-		t.Errorf("membros = %v", cli.groupCache[groupTestJID].Members)
+	if len(mustCached(t, tr, groupTestJID).Members) != 1 {
+		t.Errorf("membros = %v", mustCached(t, tr, groupTestJID).Members)
 	}
 }
 
-// --- parseGroupCreate / parseGroupNotification ---
+// --- ParseCreate / ParseNotification ---
 
 func createNotificationNode() *waBinary.Node {
 	return &waBinary.Node{
@@ -448,10 +451,10 @@ func createNotificationNode() *waBinary.Node {
 			"notify":      "Fulano",
 		},
 		Content: []waBinary.Node{{
-			Tag:   groupCreateTag,
+			Tag:   createTag,
 			Attrs: waBinary.Attrs{"reason": "create", "key": "KEY1", "type": "new"},
 			Content: []waBinary.Node{{
-				Tag:   groupNodeTag,
+				Tag:   nodeTag,
 				Attrs: waBinary.Attrs{"id": groupTestJID.User, "creation": "1699999999"},
 				Content: []waBinary.Node{
 					participantNode(groupTestLIDJID, waBinary.Attrs{"phone_number": groupTestPNJID, "display_name": "5511XXXX999"}),
@@ -462,8 +465,8 @@ func createNotificationNode() *waBinary.Node {
 }
 
 func TestParseGroupNotificationRoutesCreate(t *testing.T) {
-	cli := groupTestClient()
-	evt, lidPairs, redacted, err := cli.parseGroupNotification(createNotificationNode())
+	tr := newFakeTransport()
+	evt, lidPairs, redacted, err := ParseNotification(tr, createNotificationNode())
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -486,16 +489,16 @@ func TestParseGroupNotificationRoutesCreate(t *testing.T) {
 	if len(redacted) != 1 {
 		t.Errorf("redacted = %+v", redacted)
 	}
-	if _, cached := cli.groupCache[groupTestJID]; !cached {
-		t.Error("parseGroupCreate deveria ter cacheado o grupo")
+	if _, cached := tr.cached(groupTestJID); !cached {
+		t.Error("ParseCreate deveria ter cacheado o grupo")
 	}
 }
 
 func TestParseGroupCreateWithoutGroupNode(t *testing.T) {
-	cli := groupTestClient()
-	_, _, _, err := cli.parseGroupNotification(&waBinary.Node{
+	tr := newFakeTransport()
+	_, _, _, err := ParseNotification(tr, &waBinary.Node{
 		Tag:     "notification",
-		Content: []waBinary.Node{{Tag: groupCreateTag}},
+		Content: []waBinary.Node{{Tag: createTag}},
 	})
 	if err == nil {
 		t.Fatal("esperado erro sem <group> dentro de <create>")
@@ -503,12 +506,12 @@ func TestParseGroupCreateWithoutGroupNode(t *testing.T) {
 }
 
 func TestParseGroupCreateWithUnparseableGroupNode(t *testing.T) {
-	cli := groupTestClient()
-	_, _, _, err := cli.parseGroupNotification(&waBinary.Node{
+	tr := newFakeTransport()
+	_, _, _, err := ParseNotification(tr, &waBinary.Node{
 		Tag: "notification",
 		Content: []waBinary.Node{{
-			Tag:     groupCreateTag,
-			Content: []waBinary.Node{{Tag: groupNodeTag}}, // sem `id`/`creation`
+			Tag:     createTag,
+			Content: []waBinary.Node{{Tag: nodeTag}}, // sem `id`/`creation`
 		}},
 	})
 	if err == nil {
@@ -519,13 +522,13 @@ func TestParseGroupCreateWithUnparseableGroupNode(t *testing.T) {
 // Um <create> acompanhado de outro filho **nao** e' tratado como criacao: cai
 // no ramo de mudanca de grupo, que exige o envelope completo.
 func TestParseGroupNotificationRoutesChangeWhenNotSoleCreate(t *testing.T) {
-	cli := groupTestClient()
+	tr := newFakeTransport()
 	node := createNotificationNode()
 	node.Attrs["from"] = groupTestJID
 	node.Attrs["t"] = "1700000000"
-	node.Content = append(node.Content.([]waBinary.Node), waBinary.Node{Tag: groupSuspendedTag})
+	node.Content = append(node.Content.([]waBinary.Node), waBinary.Node{Tag: suspendedTag})
 
-	evt, _, redacted, err := cli.parseGroupNotification(node)
+	evt, _, redacted, err := ParseNotification(tr, node)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -536,7 +539,7 @@ func TestParseGroupNotificationRoutesChangeWhenNotSoleCreate(t *testing.T) {
 	if !change.Suspended {
 		t.Error("Suspended = false")
 	}
-	if len(change.UnknownChanges) != 1 || change.UnknownChanges[0].Tag != groupCreateTag {
+	if len(change.UnknownChanges) != 1 || change.UnknownChanges[0].Tag != createTag {
 		t.Errorf("UnknownChanges = %+v", change.UnknownChanges)
 	}
 	if redacted != nil {
@@ -545,24 +548,65 @@ func TestParseGroupNotificationRoutesChangeWhenNotSoleCreate(t *testing.T) {
 }
 
 func TestParseGroupNotificationChangeUpdatesCache(t *testing.T) {
-	cli := groupTestClient()
-	cli.groupCache[groupTestJID] = &groupMetaCache{Members: []types.JID{groupTestPNJID}}
-	_, _, _, err := cli.parseGroupNotification(groupChangeNode(waBinary.Node{
-		Tag:     string(ParticipantChangeAdd),
+	tr := newFakeTransport()
+	tr.putCached(groupTestJID, &Meta{Members: []types.JID{groupTestPNJID}})
+	_, _, _, err := ParseNotification(tr, groupChangeNode(waBinary.Node{
+		Tag:     string(ChangeAdd),
 		Content: []waBinary.Node{participantNode(groupTestPN2JID, nil)},
 	}))
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if len(cli.groupCache[groupTestJID].Members) != 2 {
-		t.Errorf("membros = %v", cli.groupCache[groupTestJID].Members)
+	if len(mustCached(t, tr, groupTestJID).Members) != 2 {
+		t.Errorf("membros = %v", mustCached(t, tr, groupTestJID).Members)
 	}
 }
 
 func TestParseGroupNotificationPropagatesChangeError(t *testing.T) {
-	cli := groupTestClient()
-	_, _, _, err := cli.parseGroupNotification(&waBinary.Node{Tag: "notification"})
+	tr := newFakeTransport()
+	_, _, _, err := ParseNotification(tr, &waBinary.Node{Tag: "notification"})
 	if err == nil {
 		t.Fatal("esperado erro de envelope")
+	}
+}
+
+// <demote> na notificacao vira evt.Demote — e' o quarto ramo de mudanca de
+// participante; os outros tres ja' tem teste acima.
+func TestParseGroupChangeDemote(t *testing.T) {
+	tr := newFakeTransport()
+	evt, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+		Tag:     string(ChangeDemote),
+		Attrs:   waBinary.Attrs{"v_id": "V2", "prev_v_id": "V1"},
+		Content: []waBinary.Node{participantNode(groupTestPNJID, nil)},
+	}))
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if len(evt.Demote) != 1 || evt.Demote[0] != groupTestPNJID {
+		t.Errorf("Demote = %v", evt.Demote)
+	}
+	if evt.ParticipantVersionID != "V2" || evt.PrevParticipantVersionID != "V1" {
+		t.Errorf("versoes = %q/%q", evt.ParticipantVersionID, evt.PrevParticipantVersionID)
+	}
+}
+
+// <link>/<unlink> com um <group> filho que nao parseia devolve erro de parse,
+// nao ElementMissingError.
+func TestParseGroupChangeLinkWithUnparseableGroupNode(t *testing.T) {
+	for _, tag := range []string{linkTag, unlinkTag} {
+		tr := newFakeTransport()
+		_, _, err := ParseChange(tr, groupChangeNode(waBinary.Node{
+			Tag:   tag,
+			Attrs: waBinary.Attrs{"link_type": "sub", "unlink_type": "sub", "unlink_reason": "delete"},
+			// <group> sem `jid` nem `id`: ParseLinkTargetNode falha.
+			Content: []waBinary.Node{{Tag: nodeTag}},
+		}))
+		if err == nil {
+			t.Fatalf("%s: esperado erro de parse do <group>", tag)
+		}
+		var missing *testElementMissing
+		if errors.As(err, &missing) {
+			t.Errorf("%s: erro = %v, esperado erro de parse e nao de elemento ausente", tag, err)
+		}
 	}
 }

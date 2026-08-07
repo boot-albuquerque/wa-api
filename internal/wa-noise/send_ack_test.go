@@ -26,10 +26,25 @@ var (
 func sendTestClient() *Client {
 	return &Client{
 		Log:              waLog.Noop,
-		groupCache:       make(map[types.JID]*groupMetaCache),
 		userDevicesCache: make(map[types.JID]deviceCache),
 		responseWaiters:  make(map[string]chan<- *waBinary.Node),
 	}
+}
+
+// putGroupCache/hasGroupCache encapsulam o par Lock/SetLocked (e Lock/GetLocked)
+// de group.Cache. O cache deixou de ser um mapa nu em *Client no lote 6; ver
+// PATCHES.md, "Fase F/G — lote 6".
+func putGroupCache(cli *Client, jid types.JID, meta *groupMetaCache) {
+	cli.groupCache.Lock()
+	defer cli.groupCache.Unlock()
+	cli.groupCache.SetLocked(jid, meta)
+}
+
+func hasGroupCache(cli *Client, jid types.JID) bool {
+	cli.groupCache.Lock()
+	defer cli.groupCache.Unlock()
+	_, ok := cli.groupCache.GetLocked(jid)
+	return ok
 }
 
 func ackNode(attrs waBinary.Attrs) *waBinary.Node {
@@ -73,7 +88,7 @@ func TestApplySendAckServerError(t *testing.T) {
 // roda antes do retorno — nao ha return antecipado.
 func TestApplySendAckErrorStillInvalidatesCache(t *testing.T) {
 	cli := sendTestClient()
-	cli.groupCache[sendTestGroupJID] = &groupMetaCache{}
+	putGroupCache(cli, sendTestGroupJID, &groupMetaCache{})
 	var resp SendResponse
 	err := cli.applySendAck(ackNode(waBinary.Attrs{
 		ackAttrError: "500",
@@ -82,14 +97,14 @@ func TestApplySendAckErrorStillInvalidatesCache(t *testing.T) {
 	if !errors.Is(err, ErrServerReturnedError) {
 		t.Fatalf("err = %v, want ErrServerReturnedError", err)
 	}
-	if _, ok := cli.groupCache[sendTestGroupJID]; ok {
+	if ok := hasGroupCache(cli, sendTestGroupJID); ok {
 		t.Error("groupCache deveria ter sido invalidado apesar do erro")
 	}
 }
 
 func TestApplySendAckMatchingPHashKeepsCache(t *testing.T) {
 	cli := sendTestClient()
-	cli.groupCache[sendTestGroupJID] = &groupMetaCache{}
+	putGroupCache(cli, sendTestGroupJID, &groupMetaCache{})
 	var resp SendResponse
 	if err := cli.applySendAck(
 		ackNode(waBinary.Attrs{ackAttrPHash: "2:igual"}),
@@ -97,7 +112,7 @@ func TestApplySendAckMatchingPHashKeepsCache(t *testing.T) {
 	); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if _, ok := cli.groupCache[sendTestGroupJID]; !ok {
+	if ok := hasGroupCache(cli, sendTestGroupJID); !ok {
 		t.Error("phash igual nao deve invalidar o cache")
 	}
 }
@@ -132,10 +147,10 @@ func TestInvalidateParticipantCacheByServer(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			cli := sendTestClient()
-			cli.groupCache[tc.jid] = &groupMetaCache{}
+			putGroupCache(cli, tc.jid, &groupMetaCache{})
 			cli.userDevicesCache[tc.jid] = deviceCache{}
 			cli.invalidateParticipantCache(tc.jid)
-			if _, ok := cli.groupCache[tc.jid]; ok == tc.wantGroupGone {
+			if ok := hasGroupCache(cli, tc.jid); ok == tc.wantGroupGone {
 				t.Errorf("groupCache presente=%v, queria removido=%v", ok, tc.wantGroupGone)
 			}
 			if _, ok := cli.userDevicesCache[tc.jid]; ok == tc.wantUserGone {

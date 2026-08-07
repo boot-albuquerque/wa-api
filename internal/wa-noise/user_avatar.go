@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/types"
 )
 
@@ -62,7 +63,7 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 	if params.IsCommunity {
 		target = types.EmptyJID
 		// Foto de comunidade sai pelo namespace de grupo, não pelo de perfil.
-		namespace = groupIQNamespace
+		namespace = group.IQNamespace
 		to = jid
 		attrs["parent_group_jid"] = jid
 		expectWrapped = true

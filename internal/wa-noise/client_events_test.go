@@ -246,9 +246,18 @@ func TestNewClientDefaults(t *testing.T) {
 	if cli.BackgroundEventCtx == nil {
 		t.Error("BackgroundEventCtx nao pode ser nil")
 	}
-	if cli.responseWaiters == nil ||
-		cli.groupCache == nil || cli.userDevicesCache == nil {
+	if cli.responseWaiters == nil || cli.userDevicesCache == nil {
 		t.Error("algum mapa interno ficou nil")
+	}
+	// O mapa do cache de grupo NAO e' mais criado aqui: group.Cache o cria
+	// preguicosamente sob o lock de escrita (mesmo racional do lote 3, do
+	// tctoken do lote 4 e do retry do lote 5). Uma leitura antes de qualquer
+	// gravacao enxerga mapa nil, o que em Go devolve o zero.
+	cli.groupCache.Lock()
+	_, cachedGroup := cli.groupCache.GetLocked(types.EmptyJID)
+	cli.groupCache.Unlock()
+	if cachedGroup {
+		t.Error("cache de grupo vazio nao deveria devolver entrada")
 	}
 	// Os mapas do dominio de retry NAO sao mais criados aqui: retry.State os
 	// cria preguicosamente sob o lock de escrita (mesmo racional do lote 3 e do

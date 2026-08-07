@@ -93,9 +93,7 @@ func (cli *Client) invalidateParticipantCache(to types.JID) {
 	switch to.Server {
 	case types.GroupServer:
 		// TODO also invalidate device list caches
-		cli.groupCacheLock.Lock()
-		delete(cli.groupCache, to)
-		cli.groupCacheLock.Unlock()
+		cli.groupCache.Delete(to)
 	case types.BroadcastServer:
 		// TODO do something
 	case types.DefaultUserServer, types.HiddenUserServer, types.BotServer, types.HostedServer, types.HostedLIDServer:
