@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package user
 
 import (
 	"context"
@@ -14,22 +14,26 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-// nodeContentString devolve o conteúdo textual de um nó do XML binário.
+// NodeContentString devolve o conteudo textual de um no do XML binario.
 //
-// Existe porque `Node.GetChildByTag` devolve o **próprio nó** quando não acha o
-// filho (`binary/node.go:116`), e nesse caso `Content` é `[]waBinary.Node` ou
-// `nil` — nunca `[]byte`. Fazer `.Content.([]byte)` sem comma-ok num campo
-// opcional é, portanto, um panic disparável por resposta do servidor.
-func nodeContentString(node waBinary.Node) string {
+// Existe porque Node.GetChildByTag devolve o **proprio no** quando nao acha o
+// filho (binary/node.go:116), e nesse caso Content e' []waBinary.Node ou nil —
+// nunca []byte. Fazer .Content.([]byte) sem comma-ok num campo opcional e',
+// portanto, um panic disparavel por resposta do servidor.
+//
+// Regressao do lote 7 da Fase E: eram 11 leituras diretas em GetBotProfiles,
+// cada uma um panic remoto.
+func NodeContentString(node waBinary.Node) string {
 	content, _ := node.Content.([]byte)
 	return string(content)
 }
 
-func (cli *Client) GetBotListV2(ctx context.Context) ([]types.BotListInfo, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
+// GetBotListV2 lista os bots disponiveis para a conta.
+func GetBotListV2(ctx context.Context, t Transport) ([]types.BotListInfo, error) {
+	resp, err := t.SendIQ(ctx, IQ{
 		To:        types.ServerJID,
 		Namespace: botIQNamespace,
-		Type:      iqGet,
+		Type:      IQGet,
 		Content: []waBinary.Node{
 			{Tag: botIQNamespace, Attrs: waBinary.Attrs{"v": botListVersion}},
 		},
@@ -39,7 +43,7 @@ func (cli *Client) GetBotListV2(ctx context.Context) ([]types.BotListInfo, error
 	}
 	botNode, ok := resp.GetOptionalChildByTag(botIQNamespace)
 	if !ok {
-		return nil, &ElementMissingError{Tag: botIQNamespace, In: "response to bot list query"}
+		return nil, t.ElementMissing(botIQNamespace, "response to bot list query")
 	}
 
 	var list []types.BotListInfo
@@ -53,7 +57,7 @@ func (cli *Client) GetBotListV2(ctx context.Context) ([]types.BotListInfo, error
 					BotJID:    ag.JID("jid"),
 				}
 				if !ag.OK() {
-					cli.Log.Debugf("Ignoring bot list entry with unexpected attributes: %v", ag.Error())
+					t.Log().Debugf("Ignoring bot list entry with unexpected attributes: %v", ag.Error())
 					continue
 				}
 				list = append(list, info)
@@ -64,15 +68,16 @@ func (cli *Client) GetBotListV2(ctx context.Context) ([]types.BotListInfo, error
 	return list, nil
 }
 
-func (cli *Client) GetBotProfiles(ctx context.Context, botInfo []types.BotListInfo) ([]types.BotProfileInfo, error) {
+// GetBotProfiles busca os perfis dos bots da lista.
+func GetBotProfiles(ctx context.Context, t Transport, botInfo []types.BotListInfo) ([]types.BotProfileInfo, error) {
 	jids := make([]types.JID, len(botInfo))
 	for i, bot := range botInfo {
 		jids[i] = bot.BotJID
 	}
 
-	list, err := cli.usync(ctx, jids, usyncModeQuery, usyncContextInteractive, []waBinary.Node{
+	list, err := USync(ctx, t, jids, ModeQuery, ContextInteractive, []waBinary.Node{
 		{Tag: botIQNamespace, Content: []waBinary.Node{{Tag: profileNodeTag, Attrs: waBinary.Attrs{"v": botProfileVersion}}}},
-	}, UsyncQueryExtras{
+	}, QueryExtras{
 		BotListInfo: botInfo,
 	})
 
@@ -81,23 +86,23 @@ func (cli *Client) GetBotProfiles(ctx context.Context, botInfo []types.BotListIn
 	}
 
 	var profiles []types.BotProfileInfo
-	for _, user := range list.GetChildren() {
-		jid := user.AttrGetter().JID("jid")
-		bot := user.GetChildByTag(botIQNamespace)
+	for _, u := range list.GetChildren() {
+		jid := u.AttrGetter().JID("jid")
+		bot := u.GetChildByTag(botIQNamespace)
 		profile := bot.GetChildByTag(profileNodeTag)
-		name := nodeContentString(profile.GetChildByTag("name"))
-		attributes := nodeContentString(profile.GetChildByTag("attributes"))
-		description := nodeContentString(profile.GetChildByTag("description"))
-		category := nodeContentString(profile.GetChildByTag(businessCategoryTag))
+		name := NodeContentString(profile.GetChildByTag("name"))
+		attributes := NodeContentString(profile.GetChildByTag("attributes"))
+		description := NodeContentString(profile.GetChildByTag("description"))
+		category := NodeContentString(profile.GetChildByTag(businessCategoryTag))
 		_, isDefault := profile.GetOptionalChildByTag("default")
 		personaID := profile.AttrGetter().String("persona_id")
 		commandsNode := profile.GetChildByTag(botCommandsTag)
-		commandDescription := nodeContentString(commandsNode.GetChildByTag("description"))
+		commandDescription := NodeContentString(commandsNode.GetChildByTag("description"))
 		var commands []types.BotProfileCommand
 		for _, commandNode := range commandsNode.GetChildrenByTag(botCommandTag) {
 			commands = append(commands, types.BotProfileCommand{
-				Name:        nodeContentString(commandNode.GetChildByTag("name")),
-				Description: nodeContentString(commandNode.GetChildByTag("description")),
+				Name:        NodeContentString(commandNode.GetChildByTag("name")),
+				Description: NodeContentString(commandNode.GetChildByTag("description")),
 			})
 		}
 
@@ -108,8 +113,8 @@ func (cli *Client) GetBotProfiles(ctx context.Context, botInfo []types.BotListIn
 				prompts,
 				fmt.Sprintf(
 					"%s %s",
-					nodeContentString(promptNode.GetChildByTag("emoji")),
-					nodeContentString(promptNode.GetChildByTag("text")),
+					NodeContentString(promptNode.GetChildByTag("emoji")),
+					NodeContentString(promptNode.GetChildByTag("text")),
 				),
 			)
 		}

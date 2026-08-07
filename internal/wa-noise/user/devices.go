@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package user
 
 import (
 	"context"
@@ -15,25 +15,23 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-func (cli *Client) GetUserDevicesContext(ctx context.Context, jids []types.JID) ([]types.JID, error) {
-	return cli.GetUserDevices(ctx, jids)
-}
-
-// GetUserDevices gets the list of devices that the given user has. The input should be a list of
+// GetDevices gets the list of devices that the given user has. The input should be a list of
 // regular JIDs, and the output will be a list of AD JIDs. The local device will not be included in
 // the output even if the user's JID is included in the input. All other devices will be included.
-func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
-	if cli == nil {
-		return nil, ErrClientIsNil
-	}
-	cli.userDevicesCacheLock.Lock()
-	defer cli.userDevicesCacheLock.Unlock()
+//
+// Segura o lock do cache do inicio ao fim, inclusive atraves da consulta usync
+// ao servidor — exatamente como o GetUserDevices original fazia. Ver o doc de
+// DeviceCache.
+func GetDevices(ctx context.Context, t Transport, jids []types.JID) ([]types.JID, error) {
+	cache := t.DeviceCache()
+	cache.Lock()
+	defer cache.Unlock()
 
 	var devices, jidsToSync, fbJIDsToSync []types.JID
 	for _, jid := range jids {
-		cached, ok := cli.userDevicesCache[jid]
-		if ok && len(cached.devices) > 0 {
-			devices = append(devices, cached.devices...)
+		cached, ok := cache.GetLocked(jid)
+		if ok && len(cached.Devices) > 0 {
+			devices = append(devices, cached.Devices...)
 		} else if jid.Server == types.MessengerServer {
 			fbJIDsToSync = append(fbJIDsToSync, jid)
 		} else if jid.IsBot() {
@@ -44,26 +42,29 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 		}
 	}
 	if len(jidsToSync) > 0 {
-		list, err := cli.usync(ctx, jidsToSync, usyncModeQuery, usyncContextMessage, []waBinary.Node{
+		list, err := USync(ctx, t, jidsToSync, ModeQuery, ContextMessage, []waBinary.Node{
 			{Tag: devicesNodeTag, Attrs: waBinary.Attrs{"version": deviceListVersion}},
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		for _, user := range list.GetChildren() {
-			jid, jidOK := user.Attrs["jid"].(types.JID)
-			if user.Tag != usyncUserTag || !jidOK {
+		for _, u := range list.GetChildren() {
+			jid, jidOK := u.Attrs["jid"].(types.JID)
+			if u.Tag != usyncUserTag || !jidOK {
 				continue
 			}
-			userDevices := parseDeviceList(jid, user.GetChildByTag(devicesNodeTag))
-			cli.userDevicesCache[jid] = deviceCache{devices: userDevices, dhash: participantListHashV2(userDevices)}
+			userDevices := ParseDeviceList(jid, u.GetChildByTag(devicesNodeTag))
+			cache.SetLocked(jid, DeviceEntry{
+				Devices: userDevices,
+				DHash:   t.ParticipantListHash(userDevices),
+			})
 			devices = append(devices, userDevices...)
 		}
 	}
 
 	if len(fbJIDsToSync) > 0 {
-		userDevices, err := cli.getFBIDDevices(ctx, fbJIDsToSync)
+		userDevices, err := GetFBIDDevices(ctx, t, fbJIDsToSync)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +74,8 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 	return devices, nil
 }
 
-func parseDeviceList(user types.JID, deviceNode waBinary.Node) []types.JID {
+// ParseDeviceList le o <devices><device-list> da resposta usync.
+func ParseDeviceList(user types.JID, deviceNode waBinary.Node) []types.JID {
 	deviceList := deviceNode.GetChildByTag(deviceListNodeTag)
 	if deviceNode.Tag != devicesNodeTag || deviceList.Tag != deviceListNodeTag {
 		return nil
@@ -102,7 +104,9 @@ func parseDeviceList(user types.JID, deviceNode waBinary.Node) []types.JID {
 	return devices
 }
 
-func parseFBDeviceList(user types.JID, deviceList waBinary.Node) deviceCache {
+// ParseFBDeviceList le a lista de dispositivos do formato `fbid:devices`. Ao
+// contrario de ParseDeviceList, nao tem o conceito de `is_hosted`.
+func ParseFBDeviceList(user types.JID, deviceList waBinary.Node) DeviceEntry {
 	children := deviceList.GetChildren()
 	devices := make([]types.JID, 0, len(children))
 	for _, device := range children {
@@ -115,22 +119,24 @@ func parseFBDeviceList(user types.JID, deviceList waBinary.Node) deviceCache {
 		// TODO take identities here too?
 	}
 	// TODO do something with the icdc blob?
-	return deviceCache{
-		devices: devices,
-		dhash:   deviceList.AttrGetter().String("dhash"),
+	return DeviceEntry{
+		Devices: devices,
+		DHash:   deviceList.AttrGetter().String("dhash"),
 	}
 }
 
-func (cli *Client) getFBIDDevicesInternal(ctx context.Context, jids []types.JID) (*waBinary.Node, error) {
+// GetFBIDDevicesInternal manda um unico IQ `fbid:devices` e devolve o <users>
+// da resposta.
+func GetFBIDDevicesInternal(ctx context.Context, t Transport, jids []types.JID) (*waBinary.Node, error) {
 	users := make([]waBinary.Node, len(jids))
 	for i, jid := range jids {
 		users[i].Tag = usyncUserTag
 		users[i].Attrs = waBinary.Attrs{"jid": jid}
 		// TODO include dhash for users
 	}
-	resp, err := cli.sendIQ(ctx, infoQuery{
+	resp, err := t.SendIQ(ctx, IQ{
 		Namespace: fbidDevicesIQNamespace,
-		Type:      iqGet,
+		Type:      IQGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
 			Tag:     usersNodeTag,
@@ -140,27 +146,35 @@ func (cli *Client) getFBIDDevicesInternal(ctx context.Context, jids []types.JID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send usync query: %w", err)
 	} else if list, ok := resp.GetOptionalChildByTag(usersNodeTag); !ok {
-		return nil, &ElementMissingError{Tag: usersNodeTag, In: "response to fbid devices query"}
+		return nil, t.ElementMissing(usersNodeTag, "response to fbid devices query")
 	} else {
 		return &list, err
 	}
 }
 
-func (cli *Client) getFBIDDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+// GetFBIDDevices consulta as listas de dispositivo de JIDs do Messenger, em
+// lotes de fbIDDeviceChunkSize, gravando cada uma no cache.
+//
+// Escreve no cache SEM tomar o lock: o unico chamador de producao e' GetDevices,
+// que ja' o segura. Um Lock() aqui seria deadlock imediato (sync.Mutex nao e'
+// reentrante) — era assim antes da extracao e continua sendo. A fachada da raiz
+// (cli.getFBIDDevices, citada por internals.go) preserva esse contrato.
+func GetFBIDDevices(ctx context.Context, t Transport, jids []types.JID) ([]types.JID, error) {
+	cache := t.DeviceCache()
 	var devices []types.JID
 	for chunk := range slices.Chunk(jids, fbIDDeviceChunkSize) {
-		list, err := cli.getFBIDDevicesInternal(ctx, chunk)
+		list, err := GetFBIDDevicesInternal(ctx, t, chunk)
 		if err != nil {
 			return nil, err
 		}
-		for _, user := range list.GetChildren() {
-			jid, jidOK := user.Attrs["jid"].(types.JID)
-			if user.Tag != usyncUserTag || !jidOK {
+		for _, u := range list.GetChildren() {
+			jid, jidOK := u.Attrs["jid"].(types.JID)
+			if u.Tag != usyncUserTag || !jidOK {
 				continue
 			}
-			userDevices := parseFBDeviceList(jid, user.GetChildByTag(devicesNodeTag))
-			cli.userDevicesCache[jid] = userDevices
-			devices = append(devices, userDevices.devices...)
+			userDevices := ParseFBDeviceList(jid, u.GetChildByTag(devicesNodeTag))
+			cache.SetLocked(jid, userDevices)
+			devices = append(devices, userDevices.Devices...)
 		}
 	}
 	return devices, nil

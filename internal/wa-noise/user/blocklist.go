@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package user
 
 import (
 	"context"
@@ -14,7 +14,11 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-func (cli *Client) parseBlocklist(node *waBinary.Node) *types.Blocklist {
+// ParseBlocklist le o <list> da resposta de blocklist.
+//
+// A tag dos filhos nao e' conferida: o criterio de aceitacao e' o `jid` ser
+// lido com sucesso.
+func ParseBlocklist(t Transport, node *waBinary.Node) *types.Blocklist {
 	output := &types.Blocklist{
 		DHash: node.AttrGetter().String("dhash"),
 	}
@@ -22,7 +26,7 @@ func (cli *Client) parseBlocklist(node *waBinary.Node) *types.Blocklist {
 		ag := child.AttrGetter()
 		blockedJID := ag.JID("jid")
 		if !ag.OK() {
-			cli.Log.Debugf("Ignoring contact blocked data with unexpected attributes: %v", ag.Error())
+			t.Log().Debugf("Ignoring contact blocked data with unexpected attributes: %v", ag.Error())
 			continue
 		}
 
@@ -32,10 +36,10 @@ func (cli *Client) parseBlocklist(node *waBinary.Node) *types.Blocklist {
 }
 
 // GetBlocklist gets the list of users that this user has blocked.
-func (cli *Client) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
+func GetBlocklist(ctx context.Context, t Transport) (*types.Blocklist, error) {
+	resp, err := t.SendIQ(ctx, IQ{
 		Namespace: blocklistIQNamespace,
-		Type:      iqGet,
+		Type:      IQGet,
 		To:        types.ServerJID,
 	})
 	if err != nil {
@@ -43,16 +47,19 @@ func (cli *Client) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
 	}
 	list, ok := resp.GetOptionalChildByTag("list")
 	if !ok {
-		return nil, &ElementMissingError{Tag: "list", In: "response to blocklist query"}
+		return nil, t.ElementMissing("list", "response to blocklist query")
 	}
-	return cli.parseBlocklist(&list), nil
+	return ParseBlocklist(t, &list), nil
 }
 
 // UpdateBlocklist updates the user's block list and returns the updated list.
-func (cli *Client) UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
+func UpdateBlocklist(
+	ctx context.Context, t Transport,
+	jid types.JID, action events.BlocklistChangeAction,
+) (*types.Blocklist, error) {
+	resp, err := t.SendIQ(ctx, IQ{
 		Namespace: blocklistIQNamespace,
-		Type:      iqSet,
+		Type:      IQSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
 			Tag: "item",
@@ -67,7 +74,7 @@ func (cli *Client) UpdateBlocklist(ctx context.Context, jid types.JID, action ev
 	}
 	list, ok := resp.GetOptionalChildByTag("list")
 	if !ok {
-		return nil, &ElementMissingError{Tag: "list", In: "response to blocklist update"}
+		return nil, t.ElementMissing("list", "response to blocklist update")
 	}
-	return cli.parseBlocklist(&list), err
+	return ParseBlocklist(t, &list), err
 }

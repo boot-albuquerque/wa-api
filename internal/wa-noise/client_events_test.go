@@ -246,8 +246,13 @@ func TestNewClientDefaults(t *testing.T) {
 	if cli.BackgroundEventCtx == nil {
 		t.Error("BackgroundEventCtx nao pode ser nil")
 	}
-	if cli.responseWaiters == nil || cli.userDevicesCache == nil {
+	if cli.responseWaiters == nil {
 		t.Error("algum mapa interno ficou nil")
+	}
+	// Idem para o cache de dispositivos (lote 7): user.DeviceCache tambem cria
+	// o mapa preguicosamente, entao o observavel e' o zero, nao o mapa nao-nil.
+	if cli.userDevicesCache.Len() != 0 {
+		t.Error("o cache de dispositivos deveria nascer vazio")
 	}
 	// O mapa do cache de grupo NAO e' mais criado aqui: group.Cache o cria
 	// preguicosamente sob o lock de escrita (mesmo racional do lote 3, do

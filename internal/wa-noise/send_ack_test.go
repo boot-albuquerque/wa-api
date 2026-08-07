@@ -25,10 +25,24 @@ var (
 
 func sendTestClient() *Client {
 	return &Client{
-		Log:              waLog.Noop,
-		userDevicesCache: make(map[types.JID]deviceCache),
-		responseWaiters:  make(map[string]chan<- *waBinary.Node),
+		Log:             waLog.Noop,
+		responseWaiters: make(map[string]chan<- *waBinary.Node),
 	}
+}
+
+// putDeviceCache/getDeviceCache encapsulam o par Lock/SetLocked (e
+// Lock/GetLocked) de user.DeviceCache. O cache de dispositivos deixou de ser um
+// mapa nu em *Client no lote 7, pelo mesmo motivo que o de grupo no lote 6.
+func putDeviceCache(cli *Client, jid types.JID, entry deviceCache) {
+	cli.userDevicesCache.Lock()
+	defer cli.userDevicesCache.Unlock()
+	cli.userDevicesCache.SetLocked(jid, entry)
+}
+
+func getDeviceCache(cli *Client, jid types.JID) (deviceCache, bool) {
+	cli.userDevicesCache.Lock()
+	defer cli.userDevicesCache.Unlock()
+	return cli.userDevicesCache.GetLocked(jid)
 }
 
 // putGroupCache/hasGroupCache encapsulam o par Lock/SetLocked (e Lock/GetLocked)
@@ -121,12 +135,12 @@ func TestApplySendAckMatchingPHashKeepsCache(t *testing.T) {
 // que o phash local seja nao vazio.
 func TestApplySendAckAbsentPHashKeepsCache(t *testing.T) {
 	cli := sendTestClient()
-	cli.userDevicesCache[sendTestUserJID] = deviceCache{}
+	putDeviceCache(cli, sendTestUserJID, deviceCache{})
 	var resp SendResponse
 	if err := cli.applySendAck(ackNode(waBinary.Attrs{}), sendTestUserJID, "2:nosso", &resp); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if _, ok := cli.userDevicesCache[sendTestUserJID]; !ok {
+	if _, ok := getDeviceCache(cli, sendTestUserJID); !ok {
 		t.Error("ack sem phash nao deve invalidar o cache")
 	}
 }
@@ -148,12 +162,12 @@ func TestInvalidateParticipantCacheByServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cli := sendTestClient()
 			putGroupCache(cli, tc.jid, &groupMetaCache{})
-			cli.userDevicesCache[tc.jid] = deviceCache{}
+			putDeviceCache(cli, tc.jid, deviceCache{})
 			cli.invalidateParticipantCache(tc.jid)
 			if ok := hasGroupCache(cli, tc.jid); ok == tc.wantGroupGone {
 				t.Errorf("groupCache presente=%v, queria removido=%v", ok, tc.wantGroupGone)
 			}
-			if _, ok := cli.userDevicesCache[tc.jid]; ok == tc.wantUserGone {
+			if _, ok := getDeviceCache(cli, tc.jid); ok == tc.wantUserGone {
 				t.Errorf("userDevicesCache presente=%v, queria removido=%v", ok, tc.wantUserGone)
 			}
 		})

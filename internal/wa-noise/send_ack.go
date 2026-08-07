@@ -97,8 +97,6 @@ func (cli *Client) invalidateParticipantCache(to types.JID) {
 	case types.BroadcastServer:
 		// TODO do something
 	case types.DefaultUserServer, types.HiddenUserServer, types.BotServer, types.HostedServer, types.HostedLIDServer:
-		cli.userDevicesCacheLock.Lock()
-		delete(cli.userDevicesCache, to)
-		cli.userDevicesCacheLock.Unlock()
+		cli.userDevicesCache.Delete(to)
 	}
 }

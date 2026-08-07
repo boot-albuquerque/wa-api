@@ -15,6 +15,7 @@ import (
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/pairing"
+	"wa-api/internal/wa-noise/user"
 )
 
 // Miscellaneous errors
@@ -69,12 +70,15 @@ type PairProtoError = pairing.ProtoError
 type PairDatabaseError = pairing.DatabaseError
 
 var (
+	// Os dois sao o MESMO valor de user.*, nao copias — a mesma armadilha de
+	// aliasing documentada em ErrAppStateUpdate e nos erros de grupo.
+	//
 	// ErrProfilePictureUnauthorized is returned by GetProfilePictureInfo when trying to get the profile picture of a user
 	// whose privacy settings prevent you from seeing their profile picture (status code 401).
-	ErrProfilePictureUnauthorized = errors.New("the user has hidden their profile picture from you")
+	ErrProfilePictureUnauthorized = user.ErrProfilePictureUnauthorized
 	// ErrProfilePictureNotSet is returned by GetProfilePictureInfo when the given user or group doesn't have a profile
 	// picture (status code 404).
-	ErrProfilePictureNotSet = errors.New("that user or group does not have a profile picture")
+	ErrProfilePictureNotSet = user.ErrProfilePictureNotSet
 	// Os cinco sao o MESMO valor de group.*, nao copias — a mesma armadilha de
 	// aliasing documentada em ErrAppStateUpdate.
 	//
@@ -88,10 +92,12 @@ var (
 	ErrInviteLinkInvalid = group.ErrInviteLinkInvalid
 	// ErrInviteLinkRevoked is returned by methods that use group invite links if the invite link was valid, but has been revoked and can no longer be used.
 	ErrInviteLinkRevoked = group.ErrInviteLinkRevoked
+	// Os dois sao o MESMO valor de user.*; ver acima.
+	//
 	// ErrBusinessMessageLinkNotFound is returned by ResolveBusinessMessageLink if the link doesn't exist or has been revoked.
-	ErrBusinessMessageLinkNotFound = errors.New("that business message link does not exist or has been revoked")
+	ErrBusinessMessageLinkNotFound = user.ErrBusinessMessageLinkNotFound
 	// ErrContactQRLinkNotFound is returned by ResolveContactQRLink if the link doesn't exist or has been revoked.
-	ErrContactQRLinkNotFound = errors.New("that contact QR link does not exist or has been revoked")
+	ErrContactQRLinkNotFound = user.ErrContactQRLinkNotFound
 	// ErrInvalidImageFormat is returned by SetGroupPhoto if the given photo is not in the correct format.
 	//
 	// MESMO valor que group.ErrInvalidImageFormat; ver acima.

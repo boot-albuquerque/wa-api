@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package user
 
 import (
 	"context"
@@ -18,14 +18,15 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-func (cli *Client) parseBusinessProfile(node *waBinary.Node) (*types.BusinessProfile, error) {
+// ParseBusinessProfile le o <business_profile> da resposta de w:biz.
+func ParseBusinessProfile(node *waBinary.Node) (*types.BusinessProfile, error) {
 	profileNode := node.GetChildByTag(profileNodeTag)
 	jid, ok := profileNode.AttrGetter().GetJID("jid", true)
 	if !ok {
 		return nil, errors.New("missing jid in business profile")
 	}
-	address := nodeContentString(profileNode.GetChildByTag("address"))
-	email := nodeContentString(profileNode.GetChildByTag("email"))
+	address := NodeContentString(profileNode.GetChildByTag("address"))
+	email := NodeContentString(profileNode.GetChildByTag("email"))
 	businessHour := profileNode.GetChildByTag("business_hours")
 	businessHourTimezone := businessHour.AttrGetter().String("timezone")
 	businessHoursConfigs := businessHour.GetChildren()
@@ -54,13 +55,13 @@ func (cli *Client) parseBusinessProfile(node *waBinary.Node) (*types.BusinessPro
 		id := category.AttrGetter().String("id")
 		categories = append(categories, types.Category{
 			ID:   id,
-			Name: nodeContentString(category),
+			Name: NodeContentString(category),
 		})
 	}
 	profileOptionsNode := profileNode.GetChildByTag("profile_options")
 	profileOptions := make(map[string]string)
 	for _, option := range profileOptionsNode.GetChildren() {
-		profileOptions[option.Tag] = nodeContentString(option)
+		profileOptions[option.Tag] = NodeContentString(option)
 		// TODO parse bot_fields
 	}
 	return &types.BusinessProfile{
@@ -75,9 +76,9 @@ func (cli *Client) parseBusinessProfile(node *waBinary.Node) (*types.BusinessPro
 }
 
 // GetBusinessProfile gets the profile info of a WhatsApp business account
-func (cli *Client) GetBusinessProfile(ctx context.Context, jid types.JID) (*types.BusinessProfile, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Type:      iqGet,
+func GetBusinessProfile(ctx context.Context, t Transport, jid types.JID) (*types.BusinessProfile, error) {
+	resp, err := t.SendIQ(ctx, IQ{
+		Type:      IQGet,
 		To:        types.ServerJID,
 		Namespace: businessIQNamespace,
 		Content: []waBinary.Node{{
@@ -98,32 +99,37 @@ func (cli *Client) GetBusinessProfile(ctx context.Context, jid types.JID) (*type
 	}
 	node, ok := resp.GetOptionalChildByTag(businessProfileNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: businessProfileNodeTag, In: "response to business profile query"}
+		return nil, t.ElementMissing(businessProfileNodeTag, "response to business profile query")
 	}
-	return cli.parseBusinessProfile(&node)
+	return ParseBusinessProfile(&node)
 }
 
-func (cli *Client) updateBusinessName(ctx context.Context, user, userAlt types.JID, messageInfo *types.MessageInfo, name string) {
-	if cli.Store.Contacts == nil {
+// UpdateBusinessName grava o nome verificado de uma conta business e, se mudou,
+// replica para o JID alternativo (LID <-> PN) e emite events.BusinessName.
+func UpdateBusinessName(
+	ctx context.Context, t Transport,
+	jid, jidAlt types.JID, messageInfo *types.MessageInfo, name string,
+) {
+	if t.Store().Contacts == nil {
 		return
 	}
-	changed, previousName, err := cli.Store.Contacts.PutBusinessName(ctx, user, name)
+	changed, previousName, err := t.Store().Contacts.PutBusinessName(ctx, jid, name)
 	if err != nil {
-		cli.Log.Errorf("Failed to save business name of %s in device store: %v", user, err)
+		t.Log().Errorf("Failed to save business name of %s in device store: %v", jid, err)
 	} else if changed {
-		userAlt = userAlt.ToNonAD()
-		if userAlt.IsEmpty() {
-			userAlt, _ = cli.Store.GetAltJID(ctx, user)
+		jidAlt = jidAlt.ToNonAD()
+		if jidAlt.IsEmpty() {
+			jidAlt, _ = t.Store().GetAltJID(ctx, jid)
 		}
-		if !userAlt.IsEmpty() {
-			_, _, err = cli.Store.Contacts.PutBusinessName(ctx, userAlt, name)
+		if !jidAlt.IsEmpty() {
+			_, _, err = t.Store().Contacts.PutBusinessName(ctx, jidAlt, name)
 			if err != nil {
-				cli.Log.Errorf("Failed to save push name of %s in device store: %v", userAlt, err)
+				t.Log().Errorf("Failed to save push name of %s in device store: %v", jidAlt, err)
 			}
 		}
-		cli.Log.Debugf("Business name of %s changed from %s to %s, dispatching event", user, previousName, name)
-		cli.dispatchEvent(&events.BusinessName{
-			JID:             user,
+		t.Log().Debugf("Business name of %s changed from %s to %s, dispatching event", jid, previousName, name)
+		t.DispatchEvent(&events.BusinessName{
+			JID:             jid,
 			Message:         messageInfo,
 			OldBusinessName: previousName,
 			NewBusinessName: name,
@@ -131,7 +137,9 @@ func (cli *Client) updateBusinessName(ctx context.Context, user, userAlt types.J
 	}
 }
 
-func parseVerifiedName(businessNode waBinary.Node) (*types.VerifiedName, error) {
+// ParseVerifiedName le o <business><verified_name> de uma resposta usync.
+// Ausencia nao e' erro: um usuario comum, sem conta business, cai aqui.
+func ParseVerifiedName(businessNode waBinary.Node) (*types.VerifiedName, error) {
 	if businessNode.Tag != businessNodeTag {
 		return nil, nil
 	}
@@ -139,10 +147,13 @@ func parseVerifiedName(businessNode waBinary.Node) (*types.VerifiedName, error) 
 	if !ok {
 		return nil, nil
 	}
-	return parseVerifiedNameContent(verifiedNameNode)
+	return ParseVerifiedNameContent(verifiedNameNode)
 }
 
-func parseVerifiedNameContent(verifiedNameNode waBinary.Node) (*types.VerifiedName, error) {
+// ParseVerifiedNameContent desserializa o certificado de nome verificado.
+// Tambem e' chamado pelo dominio de mensagem (message_parse.go, na raiz), que
+// recebe o no ja' desembrulhado.
+func ParseVerifiedNameContent(verifiedNameNode waBinary.Node) (*types.VerifiedName, error) {
 	rawCert, ok := verifiedNameNode.Content.([]byte)
 	if !ok {
 		return nil, nil

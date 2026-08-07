@@ -8,177 +8,137 @@ package whatsmeow
 
 import (
 	"context"
-	"strings"
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/proto/waHistorySync"
-	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/user"
 )
+
+// Fachada do dominio de usuario. A logica vive em internal/wa-noise/user e
+// opera sobre user.Transport; aqui ficam so' os metodos de *Client que delegam,
+// mais os apelidos de tipo que preservam a API historica do pacote.
+//
+// Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 7".
+//
+// Os metodos **exportados** recusam receiver nil com ErrClientIsNil, como as
+// fachadas dos lotes 1-6. Os **nao exportados** (usync, getFBIDDevices,
+// getFBIDDevicesInternal, parseBlocklist, parseBusinessProfile,
+// parseVerifiedNameContent, updatePushName, updateBusinessName,
+// handleHistoricalPushNames) NAO ganham essa guarda: eles sao citados por
+// internals.go (gerado, fora de escopo — F29) e chamados de dentro do proprio
+// cliente, onde `cli` nunca e' nil; adicionar a guarda mudaria assinaturas que
+// o gerador copia.
+//
+// A unica excecao e' `usync`, que JA' tinha a guarda antes desta extracao
+// (com teste de regressao proprio) — ela foi preservada literalmente.
+
+// deviceCache e' apelido de tipo, e nao um tipo novo, porque
+// notification_device.go monta e le entradas do cache diretamente. Os campos
+// eram nao exportados (`devices`, `dhash`) e agora sao `Devices`/`DHash`.
+type deviceCache = user.DeviceEntry
+
+// UsyncQueryExtras e' apelido de tipo porque internals.go cita o nome antigo na
+// assinatura de DangerousInternalClient.Usync.
+type UsyncQueryExtras = user.QueryExtras
+
+// GetProfilePictureParams e' apelido de tipo: e' parte da API publica do
+// pacote, usada por chamadores externos em literais compostos com nome de
+// campo.
+type GetProfilePictureParams = user.GetProfilePictureParams
+
+const (
+	BusinessMessageLinkPrefix       = user.BusinessMessageLinkPrefix
+	ContactQRLinkPrefix             = user.ContactQRLinkPrefix
+	BusinessMessageLinkDirectPrefix = user.BusinessMessageLinkDirectPrefix
+	ContactQRLinkDirectPrefix       = user.ContactQRLinkDirectPrefix
+)
+
+func (cli *Client) usync(
+	ctx context.Context, jids []types.JID, mode, queryContext string,
+	query []waBinary.Node, extra ...UsyncQueryExtras,
+) (*waBinary.Node, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return user.USync(ctx, cli.userT(), jids, mode, queryContext, query, extra...)
+}
 
 // SetStatusMessage updates the current user's status text, which is shown in the "About" section in the user profile.
 //
 // This is different from the ephemeral status broadcast messages. Use SendMessage to types.StatusBroadcastJID to send
 // such messages.
 func (cli *Client) SetStatusMessage(ctx context.Context, msg string) error {
-	_, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: statusIQNamespace,
-		Type:      iqSet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{{
-			Tag:     statusNodeTag,
-			Content: msg,
-		}},
-	})
-	return err
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return user.SetStatusMessage(ctx, cli.userT(), msg)
 }
 
 // IsOnWhatsApp checks if the given phone numbers are registered on WhatsApp.
 // The phone numbers should be in international format, including the `+` prefix.
 func (cli *Client) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
-	jids := make([]types.JID, len(phones))
-	for i := range jids {
-		jids[i] = types.NewJID(phones[i], types.LegacyUserServer)
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	list, err := cli.usync(ctx, jids, usyncModeQuery, usyncContextInteractive, []waBinary.Node{
-		{Tag: businessNodeTag, Content: []waBinary.Node{{Tag: verifiedNameNodeTag}}},
-		{Tag: contactNodeTag},
-	})
-	if err != nil {
-		return nil, err
-	}
-	output := make([]types.IsOnWhatsAppResponse, 0, len(jids))
-	querySuffix := "@" + types.LegacyUserServer
-	for _, child := range list.GetChildren() {
-		jid, jidOK := child.Attrs["jid"].(types.JID)
-		if child.Tag != usyncUserTag || !jidOK {
-			continue
-		}
-		var info types.IsOnWhatsAppResponse
-		info.JID = jid
-		info.VerifiedName, err = parseVerifiedName(child.GetChildByTag(businessNodeTag))
-		if err != nil {
-			cli.Log.Warnf("Failed to parse %s's verified name details: %v", jid, err)
-		}
-		contactNode := child.GetChildByTag(contactNodeTag)
-		info.IsIn = contactNode.AttrGetter().String("type") == contactTypeIn
-		contactQuery, _ := contactNode.Content.([]byte)
-		info.Query = strings.TrimSuffix(string(contactQuery), querySuffix)
-		output = append(output, info)
-	}
-	return output, nil
-}
-
-// isValidLIDMapping diz se o par (PN, LID) é um mapeamento que
-// `store.LIDStore.PutManyLIDMappings` aceita: PN em `s.whatsapp.net` e LID em
-// `lid`, ambos não vazios.
-//
-// A consulta usync aceita LID como entrada (ver o `case` de `HiddenUserServer`
-// em `usync`), então o `jid` de `<user>` na resposta pode ser um LID — e nesse
-// caso o par montado seria LID/LID, não PN/LID. Filtrar aqui evita entregar ao
-// store um mapeamento que ele só pode descartar.
-func isValidLIDMapping(pn, lid types.JID) bool {
-	return pn.Server == types.DefaultUserServer && lid.Server == types.HiddenUserServer &&
-		pn.User != "" && lid.User != ""
+	return user.IsOnWhatsApp(ctx, cli.userT(), phones)
 }
 
 // GetUserInfo gets basic user info (avatar, status, verified business name, device list).
 func (cli *Client) GetUserInfo(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error) {
-	list, err := cli.usync(ctx, jids, usyncModeFull, usyncContextBackground, []waBinary.Node{
-		{Tag: businessNodeTag, Content: []waBinary.Node{{Tag: verifiedNameNodeTag}}},
-		{Tag: statusNodeTag},
-		{Tag: pictureNodeTag},
-		{Tag: devicesNodeTag, Attrs: waBinary.Attrs{"version": deviceListVersion}},
-		{Tag: lidNodeTag},
-	})
-	if err != nil {
-		return nil, err
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	respData := make(map[types.JID]types.UserInfo, len(jids))
-	mappings := make([]store.LIDMapping, 0, len(jids))
-	for _, child := range list.GetChildren() {
-		jid, jidOK := child.Attrs["jid"].(types.JID)
-		if child.Tag != usyncUserTag || !jidOK {
-			continue
-		}
-		var info types.UserInfo
-		verifiedName, err := parseVerifiedName(child.GetChildByTag(businessNodeTag))
-		if err != nil {
-			cli.Log.Warnf("Failed to parse %s's verified name details: %v", jid, err)
-		}
-		info.Status = nodeContentString(child.GetChildByTag(statusNodeTag))
-		info.PictureID, _ = child.GetChildByTag(pictureNodeTag).Attrs["id"].(string)
-		info.Devices = parseDeviceList(jid, child.GetChildByTag(devicesNodeTag))
-
-		lidTag := child.GetChildByTag(lidNodeTag)
-		info.LID = lidTag.AttrGetter().OptionalJIDOrEmpty("val")
-
-		if isValidLIDMapping(jid, info.LID) {
-			mappings = append(mappings, store.LIDMapping{PN: jid, LID: info.LID})
-		}
-
-		if verifiedName != nil {
-			cli.updateBusinessName(ctx, jid, info.LID, nil, verifiedName.Details.GetVerifiedName())
-		}
-		respData[jid] = info
-	}
-
-	err = cli.Store.LIDs.PutManyLIDMappings(ctx, mappings)
-	if err != nil {
-		// not worth returning on the error, instead just post a log
-		cli.Log.Errorf("Failed to place LID mappings from USync call: %v", err)
-	}
-
-	return respData, nil
+	return user.GetInfo(ctx, cli.userT(), jids)
 }
 
 func (cli *Client) handleHistoricalPushNames(ctx context.Context, names []*waHistorySync.Pushname) {
-	if cli.Store.Contacts == nil {
-		return
-	}
-	cli.Log.Infof("Updating contact store with %d push names from history sync", len(names))
-	for _, user := range names {
-		if user.GetPushname() == "-" {
-			continue
-		}
-		var changed bool
-		if jid, err := types.ParseJID(user.GetID()); err != nil {
-			cli.Log.Warnf("Failed to parse user ID '%s' in push name history sync: %v", user.GetID(), err)
-		} else if changed, _, err = cli.Store.Contacts.PutPushName(ctx, jid, user.GetPushname()); err != nil {
-			cli.Log.Warnf("Failed to store push name of %s from history sync: %v", jid, err)
-		} else if changed {
-			cli.Log.Debugf("Got push name %s for %s in history sync", user.GetPushname(), jid)
-		}
-	}
+	user.HandleHistoricalPushNames(ctx, cli.userT(), names)
 }
 
-func (cli *Client) updatePushName(ctx context.Context, user, userAlt types.JID, messageInfo *types.MessageInfo, name string) {
-	if cli.Store.Contacts == nil {
-		return
+func (cli *Client) updatePushName(ctx context.Context, jid, jidAlt types.JID, messageInfo *types.MessageInfo, name string) {
+	user.UpdatePushName(ctx, cli.userT(), jid, jidAlt, messageInfo, name)
+}
+
+func (cli *Client) updateBusinessName(ctx context.Context, jid, jidAlt types.JID, messageInfo *types.MessageInfo, name string) {
+	user.UpdateBusinessName(ctx, cli.userT(), jid, jidAlt, messageInfo, name)
+}
+
+// GetUserDevicesContext is a deprecated alias of GetUserDevices.
+func (cli *Client) GetUserDevicesContext(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	return cli.GetUserDevices(ctx, jids)
+}
+
+// GetUserDevices gets the list of devices that the given user has. The input should be a list of
+// regular JIDs, and the output will be a list of AD JIDs. The local device will not be included in
+// the output even if the user's JID is included in the input. All other devices will be included.
+func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	user = user.ToNonAD()
-	changed, previousName, err := cli.Store.Contacts.PutPushName(ctx, user, name)
-	if err != nil {
-		cli.Log.Errorf("Failed to save push name of %s in device store: %v", user, err)
-	} else if changed {
-		userAlt = userAlt.ToNonAD()
-		if userAlt.IsEmpty() {
-			userAlt, _ = cli.Store.GetAltJID(ctx, user)
-		}
-		if !userAlt.IsEmpty() {
-			_, _, err = cli.Store.Contacts.PutPushName(ctx, userAlt, name)
-			if err != nil {
-				cli.Log.Errorf("Failed to save push name of %s in device store: %v", userAlt, err)
-			}
-		}
-		cli.Log.Debugf("Push name of %s changed from %s to %s, dispatching event", user, previousName, name)
-		cli.dispatchEvent(&events.PushName{
-			JID:         user,
-			JIDAlt:      userAlt,
-			Message:     messageInfo,
-			OldPushName: previousName,
-			NewPushName: name,
-		})
-	}
+	return user.GetDevices(ctx, cli.userT(), jids)
+}
+
+// getFBIDDevices consulta dispositivos de JIDs do Messenger.
+//
+// Contrato preservado da versao pre-extracao: escreve no cache SEM tomar o
+// lock, porque o unico chamador de producao (GetUserDevices) ja' o segura.
+func (cli *Client) getFBIDDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	return user.GetFBIDDevices(ctx, cli.userT(), jids)
+}
+
+func (cli *Client) getFBIDDevicesInternal(ctx context.Context, jids []types.JID) (*waBinary.Node, error) {
+	return user.GetFBIDDevicesInternal(ctx, cli.userT(), jids)
+}
+
+// parseFBDeviceList e' usado por notification_device.go, que continua na raiz
+// (e' o dominio de notificacao de dispositivo).
+func parseFBDeviceList(jid types.JID, deviceList waBinary.Node) deviceCache {
+	return user.ParseFBDeviceList(jid, deviceList)
+}
+
+// parseVerifiedNameContent e' usado por message_parse.go, que continua na raiz
+// (e' o dominio de mensagem — lote 9, pendente).
+func parseVerifiedNameContent(verifiedNameNode waBinary.Node) (*types.VerifiedName, error) {
+	return user.ParseVerifiedNameContent(verifiedNameNode)
 }

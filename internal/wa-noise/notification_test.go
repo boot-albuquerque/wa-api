@@ -64,9 +64,7 @@ func TestFachadaDeNotificacaoRecusaClientNil(t *testing.T) {
 // --- handleOwnDevicesNotification ---
 
 func ownDevicesTestClient() *Client {
-	cli := notifTestClient()
-	cli.userDevicesCache = make(map[types.JID]deviceCache)
-	return cli
+	return notifTestClient()
 }
 
 func ownDeviceNode(jid types.JID, dhash string, devices ...types.JID) waBinary.Node {
@@ -91,23 +89,23 @@ func TestHandleOwnDevicesNotificationStoresBothIdentities(t *testing.T) {
 	node := ownDeviceNode(receiptTestOwnJID, hash, devices...)
 	cli.handleOwnDevicesNotification(context.Background(), &node, receiptTestOwnJID)
 
-	cached, ok := cli.userDevicesCache[receiptTestOwnJID]
+	cached, ok := getDeviceCache(cli, receiptTestOwnJID)
 	if !ok {
 		t.Fatal("cache do PN nao foi preenchido")
 	}
-	if len(cached.devices) != 2 || cached.dhash != hash {
+	if len(cached.Devices) != 2 || cached.DHash != hash {
 		t.Errorf("cache do PN = %+v", cached)
 	}
 	// O LID equivalente e' derivado trocando o usuario e mantendo o device.
-	altCached, ok := cli.userDevicesCache[receiptTestOwnLID]
+	altCached, ok := getDeviceCache(cli, receiptTestOwnLID)
 	if !ok {
 		t.Fatal("cache do LID nao foi preenchido")
 	}
-	if len(altCached.devices) != 2 {
+	if len(altCached.Devices) != 2 {
 		t.Fatalf("cache do LID = %+v", altCached)
 	}
-	if altCached.devices[1].User != receiptTestOwnLID.User || altCached.devices[1].Device != 1 {
-		t.Errorf("device alternativo = %v, esperado usuario do LID com device 1", altCached.devices[1])
+	if altCached.Devices[1].User != receiptTestOwnLID.User || altCached.Devices[1].Device != 1 {
+		t.Errorf("device alternativo = %v, esperado usuario do LID com device 1", altCached.Devices[1])
 	}
 }
 
@@ -115,24 +113,24 @@ func TestHandleOwnDevicesNotificationStoresBothIdentities(t *testing.T) {
 // a proxima consulta va' buscar a lista de verdade no servidor.
 func TestHandleOwnDevicesNotificationHashMismatchDropsCache(t *testing.T) {
 	cli := ownDevicesTestClient()
-	cli.userDevicesCache[receiptTestOwnJID] = deviceCache{devices: []types.JID{receiptTestOwnJID}}
-	cli.userDevicesCache[receiptTestOwnLID] = deviceCache{devices: []types.JID{receiptTestOwnLID}}
+	putDeviceCache(cli, receiptTestOwnJID, deviceCache{Devices: []types.JID{receiptTestOwnJID}})
+	putDeviceCache(cli, receiptTestOwnLID, deviceCache{Devices: []types.JID{receiptTestOwnLID}})
 
 	node := ownDeviceNode(receiptTestOwnJID, "hash-que-nao-bate", receiptTestOwnJID)
 	cli.handleOwnDevicesNotification(context.Background(), &node, receiptTestOwnJID)
 
-	if len(cli.userDevicesCache) != 0 {
-		t.Errorf("cache deveria ter sido esvaziado, sobrou %v", cli.userDevicesCache)
+	if cli.userDevicesCache.Len() != 0 {
+		t.Errorf("cache deveria ter sido esvaziado, sobrou %v", cli.userDevicesCache.Len())
 	}
 }
 
 func TestHandleOwnDevicesNotificationUnexpectedSender(t *testing.T) {
 	cli := ownDevicesTestClient()
-	cli.userDevicesCache[receiptTestOwnJID] = deviceCache{devices: []types.JID{receiptTestOwnJID}}
+	putDeviceCache(cli, receiptTestOwnJID, deviceCache{Devices: []types.JID{receiptTestOwnJID}})
 	node := ownDeviceNode(receiptTestPeerJID, "x", receiptTestPeerJID)
 	cli.handleOwnDevicesNotification(context.Background(), &node, receiptTestPeerJID)
-	if len(cli.userDevicesCache) != 1 {
-		t.Errorf("notificacao de outro usuario nao deveria mexer no cache: %v", cli.userDevicesCache)
+	if cli.userDevicesCache.Len() != 1 {
+		t.Errorf("notificacao de outro usuario nao deveria mexer no cache: %v", cli.userDevicesCache.Len())
 	}
 }
 
@@ -141,8 +139,8 @@ func TestHandleOwnDevicesNotificationWithoutSession(t *testing.T) {
 	cli.Store.ID = nil
 	node := ownDeviceNode(receiptTestOwnJID, "x", receiptTestOwnJID)
 	cli.handleOwnDevicesNotification(context.Background(), &node, receiptTestOwnJID)
-	if len(cli.userDevicesCache) != 0 {
-		t.Errorf("sem sessao nada deveria ser cacheado: %v", cli.userDevicesCache)
+	if cli.userDevicesCache.Len() != 0 {
+		t.Errorf("sem sessao nada deveria ser cacheado: %v", cli.userDevicesCache.Len())
 	}
 }
 
@@ -162,7 +160,7 @@ func deviceChangeNode(from types.JID, tag string, deviceHash string, device type
 
 func TestHandleDeviceNotificationAddWithMatchingHash(t *testing.T) {
 	cli := ownDevicesTestClient()
-	cli.userDevicesCache[receiptTestPeerJID] = deviceCache{devices: []types.JID{receiptTestPeerJID}}
+	putDeviceCache(cli, receiptTestPeerJID, deviceCache{Devices: []types.JID{receiptTestPeerJID}})
 	newDevice := receiptTestPeerJID
 	newDevice.Device = 3
 	hash := participantListHashV2([]types.JID{receiptTestPeerJID, newDevice})
@@ -170,8 +168,8 @@ func TestHandleDeviceNotificationAddWithMatchingHash(t *testing.T) {
 	node := deviceChangeNode(receiptTestPeerJID, "add", hash, newDevice)
 	cli.handleDeviceNotification(context.Background(), &node)
 
-	cached := cli.userDevicesCache[receiptTestPeerJID]
-	if len(cached.devices) != 2 || cached.devices[1] != newDevice {
+	cached, _ := getDeviceCache(cli, receiptTestPeerJID)
+	if len(cached.Devices) != 2 || cached.Devices[1] != newDevice {
 		t.Errorf("cache = %+v, esperado o device novo anexado", cached)
 	}
 }
@@ -180,14 +178,14 @@ func TestHandleDeviceNotificationRemoveWithMatchingHash(t *testing.T) {
 	cli := ownDevicesTestClient()
 	extra := receiptTestPeerJID
 	extra.Device = 3
-	cli.userDevicesCache[receiptTestPeerJID] = deviceCache{devices: []types.JID{receiptTestPeerJID, extra}}
+	putDeviceCache(cli, receiptTestPeerJID, deviceCache{Devices: []types.JID{receiptTestPeerJID, extra}})
 	hash := participantListHashV2([]types.JID{receiptTestPeerJID})
 
 	node := deviceChangeNode(receiptTestPeerJID, "remove", hash, extra)
 	cli.handleDeviceNotification(context.Background(), &node)
 
-	cached := cli.userDevicesCache[receiptTestPeerJID]
-	if len(cached.devices) != 1 || cached.devices[0] != receiptTestPeerJID {
+	cached, _ := getDeviceCache(cli, receiptTestPeerJID)
+	if len(cached.Devices) != 1 || cached.Devices[0] != receiptTestPeerJID {
 		t.Errorf("cache = %+v, esperado so' o device principal", cached)
 	}
 }
@@ -196,14 +194,14 @@ func TestHandleDeviceNotificationRemoveWithMatchingHash(t *testing.T) {
 // que sumir, e nao ficar com um estado que achamos certo e o servidor nao.
 func TestHandleDeviceNotificationHashMismatchDropsCache(t *testing.T) {
 	cli := ownDevicesTestClient()
-	cli.userDevicesCache[receiptTestPeerJID] = deviceCache{devices: []types.JID{receiptTestPeerJID}}
+	putDeviceCache(cli, receiptTestPeerJID, deviceCache{Devices: []types.JID{receiptTestPeerJID}})
 	newDevice := receiptTestPeerJID
 	newDevice.Device = 3
 
 	node := deviceChangeNode(receiptTestPeerJID, "add", "hash-errado", newDevice)
 	cli.handleDeviceNotification(context.Background(), &node)
 
-	if _, ok := cli.userDevicesCache[receiptTestPeerJID]; ok {
+	if _, ok := getDeviceCache(cli, receiptTestPeerJID); ok {
 		t.Error("cache deveria ter sido descartado")
 	}
 }
@@ -215,10 +213,10 @@ func TestHandleDeviceNotificationUpdateAndUnknownTags(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			cli := ownDevicesTestClient()
-			cli.userDevicesCache[receiptTestPeerJID] = deviceCache{devices: []types.JID{receiptTestPeerJID}}
+			putDeviceCache(cli, receiptTestPeerJID, deviceCache{Devices: []types.JID{receiptTestPeerJID}})
 			node := deviceChangeNode(receiptTestPeerJID, tag, "qualquer", receiptTestPeerJID)
 			cli.handleDeviceNotification(context.Background(), &node)
-			_, stillCached := cli.userDevicesCache[receiptTestPeerJID]
+			_, stillCached := getDeviceCache(cli, receiptTestPeerJID)
 			// "update" derruba o cache por precaucao; tag desconhecida e' ignorada.
 			if tag == "update" && stillCached {
 				t.Error("update deveria derrubar o cache")
@@ -236,8 +234,8 @@ func TestHandleDeviceNotificationWithoutCachedListIsIgnored(t *testing.T) {
 	cli := ownDevicesTestClient()
 	node := deviceChangeNode(receiptTestPeerJID, "add", "x", receiptTestPeerJID)
 	cli.handleDeviceNotification(context.Background(), &node)
-	if len(cli.userDevicesCache) != 0 {
-		t.Errorf("cache = %v, esperado vazio", cli.userDevicesCache)
+	if cli.userDevicesCache.Len() != 0 {
+		t.Errorf("cache = %v, esperado vazio", cli.userDevicesCache.Len())
 	}
 }
 

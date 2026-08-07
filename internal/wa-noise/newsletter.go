@@ -26,6 +26,14 @@ import (
 // extracao so' NewsletterMarkViewed fazia essa checagem; os demais estouravam
 // nil deref. E' a mesma correcao que as Fases A-E aplicaram nos outros dominios.
 
+// NewsletterLinkPrefix e' o MESMO valor de newsletter.LinkPrefix, nao uma
+// copia: newsletter.InviteInput corta o prefixo antes de mandar a chave para o
+// wire, e as duas pontas precisam concordar.
+//
+// Vivia em user_links.go ate' o lote 7; e' do dominio de canais, nao do de
+// usuario, e mudou de arquivo junto com a extracao de user/.
+const NewsletterLinkPrefix = newsletter.LinkPrefix
+
 // CreateNewsletterParams sao os parametros de CreateNewsletter.
 //
 // A definicao vive em internal/wa-noise/newsletter; aqui fica um apelido, que e'

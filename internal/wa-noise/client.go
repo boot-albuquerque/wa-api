@@ -34,13 +34,9 @@ import (
 	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/user"
 	waLog "wa-api/internal/wa-noise/util/log"
 )
-
-type deviceCache struct {
-	devices []types.JID
-	dhash   string
-}
 
 // Client contains everything necessary to connect to and interact with the WhatsApp web API.
 type Client struct {
@@ -120,9 +116,12 @@ type Client struct {
 	// groupCache reune os antigos groupCache/groupCacheLock. O lock de dentro
 	// continua sendo um so', com os mesmos pontos de aquisicao — inclusive o
 	// que atravessa a consulta ao servidor em group.GetOrFetch.
-	groupCache           group.Cache
-	userDevicesCache     map[types.JID]deviceCache
-	userDevicesCacheLock sync.Mutex
+	groupCache group.Cache
+	// userDevicesCache reune os antigos userDevicesCache/userDevicesCacheLock.
+	// O lock de dentro continua sendo um so', com os mesmos pontos de
+	// aquisicao — inclusive o que atravessa a consulta ao servidor em
+	// user.GetDevices.
+	userDevicesCache user.DeviceCache
 
 	// GetMessageForRetry is used to find the source message for handling retry receipts
 	// when the message is not found in the recently sent message cache.
@@ -223,8 +222,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		expectedDisconnect: exsync.NewEvent(),
 
 		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
-
-		userDevicesCache: make(map[types.JID]deviceCache),
 
 		GetMessageForRetry: func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },
 

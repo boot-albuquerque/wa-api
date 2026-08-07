@@ -4,18 +4,23 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package user
 
 import (
+	"errors"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/proto/waVnameCert"
+	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/types/events"
 )
 
-// --- parseBusinessProfile ---
+// Relocado de user_business_test.go (Fase E lote 7), adaptado aos dubles.
+
+// --- ParseBusinessProfile ---
 
 func TestParseBusinessProfileFullNode(t *testing.T) {
 	node := waBinary.Node{
@@ -47,7 +52,7 @@ func TestParseBusinessProfileFullNode(t *testing.T) {
 			},
 		}},
 	}
-	got, err := userTestClient().parseBusinessProfile(&node)
+	got, err := ParseBusinessProfile(&node)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +83,7 @@ func TestParseBusinessProfileMissingJID(t *testing.T) {
 		Tag:     businessProfileNodeTag,
 		Content: []waBinary.Node{{Tag: profileNodeTag}},
 	}
-	got, err := userTestClient().parseBusinessProfile(&node)
+	got, err := ParseBusinessProfile(&node)
 	if err == nil {
 		t.Fatalf("expected an error, got profile %+v", got)
 	}
@@ -108,7 +113,7 @@ func TestParseBusinessProfileTolerantesToMissingAndNonByteContent(t *testing.T) 
 			},
 		}},
 	}
-	got, err := userTestClient().parseBusinessProfile(&node)
+	got, err := ParseBusinessProfile(&node)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -127,22 +132,148 @@ func TestParseBusinessProfileTolerantesToMissingAndNonByteContent(t *testing.T) 
 	}
 }
 
-// --- parseVerifiedName ---
+// --- GetBusinessProfile ---
 
-func verifiedNameCertBytes(t *testing.T, name string) []byte {
-	t.Helper()
-	details, err := proto.Marshal(&waVnameCert.VerifiedNameCertificate_Details{
-		VerifiedName: proto.String(name),
-	})
+func TestGetBusinessProfileBuildsTheIQAndParses(t *testing.T) {
+	f := newFakeTransport()
+	f.resp = []*waBinary.Node{{
+		Tag: "iq",
+		Content: []waBinary.Node{{
+			Tag: businessProfileNodeTag,
+			Content: []waBinary.Node{{
+				Tag:   profileNodeTag,
+				Attrs: waBinary.Attrs{"jid": userTestPNJID},
+			}},
+		}},
+	}}
+
+	got, err := GetBusinessProfile(t.Context(), f, userTestPNJID)
 	if err != nil {
-		t.Fatalf("failed to marshal details: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	cert, err := proto.Marshal(&waVnameCert.VerifiedNameCertificate{Details: details})
-	if err != nil {
-		t.Fatalf("failed to marshal cert: %v", err)
+	if got.JID != userTestPNJID {
+		t.Errorf("got %+v", got)
 	}
-	return cert
+	iq := f.sent[0]
+	if iq.Namespace != businessIQNamespace || iq.Type != IQGet || iq.To != types.ServerJID {
+		t.Errorf("envelope = %+v", iq)
+	}
+	bp := iq.Content.([]waBinary.Node)[0]
+	if bp.Tag != businessProfileNodeTag || bp.Attrs["v"] != businessProfileVersion {
+		t.Errorf("<business_profile> = %+v", bp)
+	}
+	profile := bp.Content.([]waBinary.Node)[0]
+	if profile.Tag != profileNodeTag || profile.Attrs["jid"] != userTestPNJID {
+		t.Errorf("<profile> = %+v", profile)
+	}
 }
+
+func TestGetBusinessProfilePropagatesError(t *testing.T) {
+	boom := errors.New("nope")
+	f := newFakeTransport()
+	f.err = []error{boom}
+	if _, err := GetBusinessProfile(t.Context(), f, userTestPNJID); !errors.Is(err, boom) {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestGetBusinessProfileMissingNodeIsAnError(t *testing.T) {
+	f := newFakeTransport()
+	f.resp = []*waBinary.Node{{Tag: "iq"}}
+	_, err := GetBusinessProfile(t.Context(), f, userTestPNJID)
+	var missing *testElementMissing
+	if !errors.As(err, &missing) || missing.Tag != businessProfileNodeTag {
+		t.Errorf("got %v", err)
+	}
+}
+
+// --- UpdateBusinessName ---
+
+func TestUpdateBusinessNameStoresBothJIDsAndDispatches(t *testing.T) {
+	f := newFakeTransport()
+	st := f.withStores()
+
+	UpdateBusinessName(t.Context(), f, userTestPNJID, userTestLIDJID, nil, "Loja")
+
+	if st.businessNames[userTestPNJID] != "Loja" || st.businessNames[userTestLIDJID] != "Loja" {
+		t.Errorf("gravados = %v", st.businessNames)
+	}
+	if len(f.events) != 1 {
+		t.Fatalf("eventos = %v", f.events)
+	}
+	evt, ok := f.events[0].(*events.BusinessName)
+	if !ok || evt.JID != userTestPNJID || evt.NewBusinessName != "Loja" {
+		t.Errorf("evento = %+v", f.events[0])
+	}
+}
+
+func TestUpdateBusinessNameResolvesAltJIDFromStore(t *testing.T) {
+	f := newFakeTransport()
+	st := f.withStores()
+	st.altJID = userTestLIDJID
+
+	UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+
+	if st.businessNames[userTestLIDJID] != "Loja" {
+		t.Errorf("gravados = %v", st.businessNames)
+	}
+}
+
+func TestUpdateBusinessNameWithoutAltJID(t *testing.T) {
+	f := newFakeTransport()
+	st := f.withStores()
+
+	UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+
+	if len(st.businessNames) != 1 || len(f.events) != 1 {
+		t.Errorf("gravados = %v, eventos = %v", st.businessNames, f.events)
+	}
+}
+
+func TestUpdateBusinessNameNoOpPaths(t *testing.T) {
+	t.Run("sem contact store", func(t *testing.T) {
+		f := newFakeTransport()
+		f.withStores()
+		f.store.Contacts = nil
+		UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+		if len(f.events) != 0 {
+			t.Errorf("eventos = %v", f.events)
+		}
+	})
+	t.Run("nome nao mudou", func(t *testing.T) {
+		f := newFakeTransport()
+		st := f.withStores()
+		st.noChange = true
+		UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+		if len(f.events) != 0 {
+			t.Errorf("eventos = %v", f.events)
+		}
+	})
+	t.Run("erro ao gravar", func(t *testing.T) {
+		f := newFakeTransport()
+		st := f.withStores()
+		st.putErr = errors.New("disco cheio")
+		UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+		if len(f.events) != 0 {
+			t.Errorf("eventos = %v", f.events)
+		}
+	})
+}
+
+func TestUpdateBusinessNameAltStoreErrorStillDispatches(t *testing.T) {
+	f := newFakeTransport()
+	st := f.withStores()
+	st.altJID = userTestLIDJID
+	f.store.Contacts = &failOnSecondPut{fakeStores: st}
+
+	UpdateBusinessName(t.Context(), f, userTestPNJID, types.EmptyJID, nil, "Loja")
+
+	if len(f.events) != 1 {
+		t.Errorf("eventos = %v", f.events)
+	}
+}
+
+// --- ParseVerifiedName ---
 
 func TestParseVerifiedNameRoundTrip(t *testing.T) {
 	node := waBinary.Node{
@@ -152,7 +283,7 @@ func TestParseVerifiedNameRoundTrip(t *testing.T) {
 			Content: verifiedNameCertBytes(t, "Loja Teste"),
 		}},
 	}
-	got, err := parseVerifiedName(node)
+	got, err := ParseVerifiedName(node)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,8 +296,8 @@ func TestParseVerifiedNameRoundTrip(t *testing.T) {
 }
 
 // Os tres "nao e' erro, so' nao tem nome verificado" — importantes porque
-// `IsOnWhatsApp`/`GetUserInfo` logam Warn quando o erro nao e' nil, e um usuario
-// comum (sem conta business) cai exatamente aqui.
+// IsOnWhatsApp/GetInfo logam Warn quando o erro nao e' nil, e um usuario comum
+// (sem conta business) cai exatamente aqui.
 func TestParseVerifiedNameAbsentIsNotAnError(t *testing.T) {
 	cases := map[string]waBinary.Node{
 		"tag nao e' business": {Tag: "not-business", Content: []waBinary.Node{
@@ -180,7 +311,7 @@ func TestParseVerifiedNameAbsentIsNotAnError(t *testing.T) {
 	}
 	for name, node := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, err := parseVerifiedName(node)
+			got, err := ParseVerifiedName(node)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -199,7 +330,7 @@ func TestParseVerifiedNameInvalidProtobuf(t *testing.T) {
 			Content: []byte{0xff, 0xff, 0xff, 0xff},
 		}},
 	}
-	got, err := parseVerifiedName(node)
+	got, err := ParseVerifiedName(node)
 	if err == nil {
 		t.Fatalf("expected an error, got %+v", got)
 	}
@@ -217,7 +348,7 @@ func TestParseVerifiedNameInvalidDetails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal cert: %v", err)
 	}
-	got, err := parseVerifiedNameContent(waBinary.Node{
+	got, err := ParseVerifiedNameContent(waBinary.Node{
 		Tag:     verifiedNameNodeTag,
 		Content: cert,
 	})
@@ -228,7 +359,7 @@ func TestParseVerifiedNameInvalidDetails(t *testing.T) {
 
 // Certificado vazio: details ausente desserializa para Details zerado, sem erro.
 func TestParseVerifiedNameEmptyCertificate(t *testing.T) {
-	got, err := parseVerifiedNameContent(waBinary.Node{
+	got, err := ParseVerifiedNameContent(waBinary.Node{
 		Tag:     verifiedNameNodeTag,
 		Content: []byte{},
 	})
