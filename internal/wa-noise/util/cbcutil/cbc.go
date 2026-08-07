@@ -66,7 +66,7 @@ func DecryptFile(key, iv []byte, file File) error {
 		return fmt.Errorf("file size is not a multiple of the block size: %d / %d", fileSize, aes.BlockSize)
 	}
 
-	var bufSize int64 = 32 * 1024
+	var bufSize int64 = streamBufferSize
 	if fileSize < bufSize {
 		bufSize = fileSize
 	}
@@ -137,7 +137,7 @@ func Encrypt(key, iv, plaintext []byte) ([]byte, error) {
 		cbc.CryptBlocks(ciphertext[aes.BlockSize:], plaintextStart)
 		cbc.CryptBlocks(ciphertext[aes.BlockSize+len(plaintextStart):], lastBlock)
 	} else {
-		ciphertext = make([]byte, len(plaintext)+paddingLen, len(plaintext)+paddingLen+10)
+		ciphertext = make([]byte, len(plaintext)+paddingLen, len(plaintext)+paddingLen+mediaMACLength)
 
 		cbc := cipher.NewCBCEncrypter(block, iv)
 		cbc.CryptBlocks(ciphertext, plaintextStart)
@@ -172,7 +172,7 @@ func EncryptStream(key, iv, macKey []byte, plaintext io.Reader, ciphertext io.Wr
 
 	writerAt, hasWriterAt := ciphertext.(io.WriterAt)
 
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, streamBufferSize)
 	var size, extraSize int
 	var writePtr int64
 	hasMore := true
@@ -202,8 +202,8 @@ func EncryptStream(key, iv, macKey []byte, plaintext io.Reader, ciphertext io.Wr
 			return nil, nil, 0, 0, fmt.Errorf("failed to write file: %w", err)
 		}
 	}
-	mac := cipherMAC.Sum(nil)[:10]
-	extraSize += 10
+	mac := cipherMAC.Sum(nil)[:mediaMACLength]
+	extraSize += mediaMACLength
 	cipherHasher.Write(mac)
 	if hasWriterAt {
 		_, err = writerAt.WriteAt(mac, writePtr)

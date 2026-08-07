@@ -7,8 +7,6 @@
 package waLog
 
 import (
-	"fmt"
-
 	"github.com/rs/zerolog"
 )
 
@@ -30,7 +28,7 @@ func (z *zeroLogger) Infof(msg string, args ...any)  { z.Info().Msgf(msg, args..
 func (z *zeroLogger) Debugf(msg string, args ...any) { z.Debug().Msgf(msg, args...) }
 func (z *zeroLogger) Sub(module string) Logger {
 	if z.mod != "" {
-		module = fmt.Sprintf("%s/%s", z.mod, module)
+		module = z.mod + moduleSeparator + module
 	}
 	return &zeroLogger{mod: module, Logger: z.Logger.With().Str("sublogger", module).Logger()}
 }

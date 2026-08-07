@@ -14,27 +14,27 @@ import (
 )
 
 type KeyPair struct {
-	Pub  *[32]byte
-	Priv *[32]byte
+	Pub  *[KeyLength]byte
+	Priv *[KeyLength]byte
 }
 
 var _ ecc.ECPublicKeyable
 
-func NewKeyPairFromPrivateKey(priv [32]byte) *KeyPair {
+func NewKeyPairFromPrivateKey(priv [KeyLength]byte) *KeyPair {
 	var kp KeyPair
 	kp.Priv = &priv
-	var pub [32]byte
+	var pub [KeyLength]byte
 	curve25519.ScalarBaseMult(&pub, kp.Priv)
 	kp.Pub = &pub
 	return &kp
 }
 
 func NewKeyPair() *KeyPair {
-	priv := *(*[32]byte)(random.Bytes(32))
+	priv := *(*[KeyLength]byte)(random.Bytes(KeyLength))
 
-	priv[0] &= 248
-	priv[31] &= 127
-	priv[31] |= 64
+	priv[clampFirstByte] &= clampLowBitsMask
+	priv[clampLastByte] &= clampHighBitMask
+	priv[clampLastByte] |= clampSecondHighBit
 
 	return NewKeyPairFromPrivateKey(priv)
 }
@@ -45,10 +45,10 @@ func (kp *KeyPair) CreateSignedPreKey(keyID uint32) *PreKey {
 	return newKey
 }
 
-func (kp *KeyPair) Sign(keyToSign *KeyPair) *[64]byte {
-	pubKeyForSignature := make([]byte, 33)
+func (kp *KeyPair) Sign(keyToSign *KeyPair) *[SignatureLength]byte {
+	pubKeyForSignature := make([]byte, signedKeyLength)
 	pubKeyForSignature[0] = ecc.DjbType
-	copy(pubKeyForSignature[1:], keyToSign.Pub[:])
+	copy(pubKeyForSignature[keyTypePrefixLength:], keyToSign.Pub[:])
 
 	signature := ecc.CalculateSignature(ecc.NewDjbECPrivateKey(*kp.Priv), pubKeyForSignature)
 	return &signature
@@ -57,7 +57,7 @@ func (kp *KeyPair) Sign(keyToSign *KeyPair) *[64]byte {
 type PreKey struct {
 	KeyPair
 	KeyID     uint32
-	Signature *[64]byte
+	Signature *[SignatureLength]byte
 }
 
 func NewPreKey(keyID uint32) *PreKey {
