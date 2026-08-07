@@ -2300,3 +2300,210 @@ mudar, forçando revisão consciente.
 mexer no `Makefile`. `newsletter_constants.go` (único arquivo de produção
 novo) tem 35 linhas e carrega o header MPL-2.0.
 `git diff --stat internal/wa-noise/proto/` continua vazio.
+
+## Fase E — lote 3: appstate (raiz), 2026-08-07
+
+### Contexto
+
+Terceiro lote da Fase E (ver o lote 1 para o porquê da fase). Quatro arquivos
+da cola de app state que vive na **raiz** do pacote `whatsmeow`:
+
+`appstate.go`, `appstate_dispatch.go`, `appstate_keys.go`, `appstate_send.go`.
+
+Não confundir com o subpacote `internal/wa-noise/appstate/`, coberto na Fase B
+e **não tocado aqui** (`git diff --stat internal/wa-noise/appstate/` vazio).
+Estes quatro são métodos de `Client` que chamam *para dentro* do subpacote:
+busca de patches por IQ, dispatch das mutações para eventos, orquestração de
+pedido de chaves e envio de patches. Ficam na raiz porque precisam do estado
+de conexão não exportado do `Client` — exatamente o achado da Fase D sobre
+ciclos de import.
+
+Nenhum arquivo foi dividido: o maior tem 282 linhas, abaixo do teto de 300.
+
+### Bug real corrigido — panic remoto em `label_edit` derrubava o processo
+
+`appstate_dispatch.go`, ramo `case appstate.IndexLabelEdit` de
+`dispatchAppState`. Antes:
+
+```go
+case appstate.IndexLabelEdit:
+    act := mutation.Action.GetLabelEditAction()
+    eventToDispatch = &events.LabelEdit{
+        Timestamp:    ts,
+        LabelID:      mutation.Index[1],   // <- sem guarda de tamanho
+        ...
+```
+
+**Todos** os outros ramos posicionais do mesmo `switch` guardam o tamanho do
+índice (`IndexStar` e `IndexDeleteMessageForMe` checam `< 5`,
+`IndexLabelAssociationChat` checa `< 3`, `IndexLabelAssociationMessage` checa
+`< 6`). O `IndexLabelEdit` não checava nada e lia `Index[1]` direto.
+
+O índice da mutação **vem do servidor** (é o array decodificado do patch de
+app state). Um `label_edit` com índice de um elemento só — servidor com bug,
+patch corrompido, ou resposta hostil — causava `index out of range`.
+
+Por que isso é fatal e não só um erro: o caminho de chamada é
+`handleAppStateNotification` → `FetchAppState` → … → `dispatchAppState`, e
+`handleAppStateNotification` é um `nodeHandler`, invocado em
+`client_events.go`, `handlerQueueLoop`:
+
+```go
+go func() {
+    cli.nodeHandlers[node.Tag](evtCtx, node)   // goroutine nua, sem recover
+    ...
+}()
+```
+
+Não há `recover()` nesse caminho — o `recover` de `dispatchEvent`
+(`client_events.go:227`) só protege os *event handlers* do usuário, e é tarde
+demais: o panic acontece antes, na construção do evento. Panic em goroutine
+sem recover **mata o processo inteiro**. Num binário de API multi-sessão, isso
+derruba todas as sessões. É a mesma classe do `log.Fatalf` que o lote 2 achou
+em `newsletter_mex.go`, com o agravante de ser alcançável por dado de rede em
+caminho quente, não atrás de um `if true`.
+
+Correção: guarda igual à dos ramos vizinhos, retornando evento nil.
+
+```go
+case appstate.IndexLabelEdit:
+    if len(mutation.Index) < appStateIndexMinLenLabelEdit {
+        return
+    }
+```
+
+Travado por `TestDispatchAppStateLabelEditShortIndex` (nil em vez de panic com
+índice curto; evento normal com o índice mínimo) e por
+`TestDispatchAppStateMalformedIndexDoesNotPanic`, que varre 15 índices curtos
+de todos os tipos do switch e falha se qualquer um entrar em panico — ou seja,
+pega a mesma omissão em ramos futuros.
+
+### Constantes extraídas
+
+`appstate_constants.go` (novo, 105 linhas, header MPL-2.0).
+
+Nomes de wire da consulta `<iq><sync><collection>`, que apareciam duplicados
+entre `appstate.go` (fetch) e `appstate_send.go` (send):
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `appStateNamespace` | `w:sync:app:state` | os 2 `Namespace:` |
+| `appStateSyncTag` | `sync` | tag de envio + `GetOptionalChildByTag` nos 2 arquivos |
+| `appStateCollectionTag` | `collection` | tag, `GetOptionalChildByTag` e os 2 `ElementMissingError{Tag:}` |
+| `appStatePatchTag` | `patch` | tag do patch codificado no envio |
+| `appStateErrorTag` | `error` | `GetOptionalChildByTag("error")` da resposta de erro |
+| `appStateAttrName` / `appStateAttrVersion` / `appStateAttrReturnSnapshot` | `name` / `version` / `return_snapshot` | atributos de `<collection>` nos 2 arquivos |
+| `appStateAttrType` / `appStateAttrCode` | `type` / `code` | leitura da resposta de erro |
+| `appStateRespTypeError` | `error` | o `== "error"` que decide se a resposta é falha |
+| `appStateConflictCode` | `409` | o código que dispara aplicar conflitos e reenviar uma vez |
+| `appStateFetchErrContext` / `appStateSendErrContext` | `app state patch response` / `app state send response` | campo `In` dos 2 `ElementMissingError` |
+
+Namespace `urn:xmpp:whatsapp:dirty` (protocolo separado, só `MarkNotDirty`):
+`dirtyNamespace`, `dirtyCleanTag`, `dirtyCleanAttrType`,
+`dirtyCleanAttrTimestamp`.
+
+Política de pedido de chave: `appStateKeyRequestInterval = 24 * time.Hour`,
+substituindo o `24*time.Hour` embutido em `appstate_keys.go`.
+
+Flags de índice e aridades mínimas, todas em `appstate_dispatch.go`:
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `appStateIndexTrue` | `1` | os 4 `== "1"` (isFromMe de star e deleteForMe, deleteMedia de clear\_chat e delete\_chat) |
+| `appStateIndexSelfSender` | `0` | os 2 `!= "0"` da posição de sender |
+| `appStateIndexMinLenLabelEdit` | 2 | **novo** (a guarda do bug acima) |
+| `appStateIndexMinLenDeleteChatMedia` | 3 | o `len(Index) > 2` |
+| `appStateIndexMinLenLabelAssocChat` | 3 | o `len(Index) < 3` |
+| `appStateIndexMinLenClearChatMedia` | 4 | o `len(Index) > 3` |
+| `appStateIndexMinLenStar` | 5 | o `len(Index) < 5` de star |
+| `appStateIndexMinLenDeleteForMe` | 5 | o `len(Index) < 5` de deleteForMe |
+| `appStateIndexMinLenLabelAssocMessage` | 6 | o `len(Index) < 6` |
+
+Os `> N` viraram `>= N+1` para que a constante seja o **tamanho mínimo** em
+todos os casos, e não ora um limite ora um índice.
+
+`appStateIndexTrue`/`appStateIndexSelfSender` duplicam
+`indexBoolTrue`/`indexBoolFalse` de `appstate/constants.go` **de propósito**:
+aqueles são não exportados, e exportá-los só para esta leitura alargaria a
+superfície pública do subpacote sem ganho.
+
+Reusado do subpacote em vez de reescrito: o literal `"contact"` de
+`filterContacts` virou `appstate.IndexContact` (a constante já existia e já
+era usada no `switch` logo abaixo, no mesmo arquivo — era literal só ali).
+Todos os `WAPatch*` e `Index*` continuam vindo de `appstate/patchnames.go`.
+
+### Consistência de tipo
+
+`appstate.go` montava a IQ de fetch com `Type: "set"` (string crua coagida
+para `infoQueryType`), enquanto `appstate_send.go` e o resto da raiz usam a
+constante tipada `iqSet` (`request.go:94`). Passou a `iqSet`. Mesmo valor de
+wire, zero mudança de comportamento.
+
+### Logging
+
+Auditados os quatro arquivos: **nenhum** `log.Fatalf`, `panic`, `os.Exit` ou
+uso do `log` da stdlib. Todo log já roteia por `cli.Log` (o `waLog.Logger`
+injetado) ou por `zerolog.Ctx(ctx)` — este último em `dispatchAppState` (log
+por mutação, em `TraceLevel`, ou `DebugLevel` sob `cli.AppStateDebugLogs`) e
+nos dois pontos de retry de `sendAppState`. Ambos os padrões já são os do
+resto da raiz. **Nada foi adicionado nem reroteado.**
+
+O único ponto silencioso é o `_` dos `types.ParseJID` em `filterContacts` e
+`dispatchAppState` — mantido, porque o JID zerado resultante é o
+comportamento que os eventos já expõem ao chamador. Fica travado por
+`TestFilterContactsJIDSemServidor`, que documenta o que `ParseJID` faz com uma
+string sem `@` (trata tudo como *servidor*, usuário vazio) para que uma
+mudança aqui seja consciente.
+
+### Testes
+
+Três arquivos novos, `package whatsmeow`:
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `appstate_dispatch_test.go` | `dispatchAppState` (índices malformados sem panic, o caso `label_edit` do bug, `REMOVE` ignorado, índice desconhecido, star com sender explícito e com sentinela, deleteForMe, as duas posições diferentes da flag `deleteMedia`, as duas associações de label, os 7 ramos que só constroem evento, mute-para-sempre) e `filterContacts` (separação contato/resto, `contact` sem JID fica nas mutações, lista vazia devolve slice não-nil, JID sem `@`) |
+| `appstate_send_test.go` | `BuildFatalAppStateExceptionNotification` (tipo do protocolo, ordem dos nomes de coleção, timestamp em **ms**, lista vazia) e `BuildAppStateRecoveryRequest` (tipo, `PeerDataOperationRequestType`, nome da coleção, timestamp em **segundos** — a assimetria de unidade entre os dois é fácil de inverter numa edição futura) |
+| `appstate_keys_test.go` | guarda de lista vazia de `requestAppStateKeys` (sem ela, um patch que falhasse por outro motivo enviaria peer message com zero key IDs) e o valor de `appStateKeyRequestInterval` |
+
+Cobertura resultante: `filterContacts` 100%,
+`BuildFatalAppStateExceptionNotification` 100%,
+`BuildAppStateRecoveryRequest` 100%, `dispatchAppState` **78,5%**.
+
+O `Client` dos testes é `&Client{Log: waLog.Noop, Store: &store.Device{}}`:
+sub-stores nil de propósito, para que `ChatSettings`/`Contacts` caiam nas
+guardas de nil já existentes e o teste afirme só a construção do evento.
+
+### Lacunas assumidas, sem teste de fachada
+
+Os 22% restantes de `dispatchAppState` e **todas** as outras funções destes
+arquivos ficaram em 0%. Não é descuido; é o mesmo limite dos lotes 1 e 2, e
+vale nomear o que não dá para afirmar:
+
+- **`FetchAppState` / `fetchAppState` / `fetchAppStatePatches` /
+  `applyAppStatePatches`** — o laço de fetch é `sendIQ` + `ParsePatchList` +
+  `DecodePatches` num ciclo com estado de hash. Testar de verdade exige
+  socket Noise aberto, servidor devolvendo patches assinados e chaves de app
+  state válidas no store. Montar a resposta na mão seria reescrever
+  `ParsePatchList` dentro do teste — e essa função já é coberta na Fase B, no
+  subpacote, onde ela mora.
+- **`sendAppState`** — mesma coisa, com o agravante do caminho de retry de
+  409, que só é alcançável com duas respostas encadeadas do servidor.
+- **`handleAppStateRecovery`** — depende de `cli.appStateProc` (processor com
+  store de chaves) e de `dispatchEvent` com handlers registrados.
+- **`MarkNotDirty`** — um `sendIQ` e nada mais.
+- **Ramos de `dispatchAppState` que persistem**: `setting_pushName` (chama
+  `cli.Store.Save`, precisa de container) e o curto-circuito de
+  `IndexNCTSaltSync` (`storeNCTSalt`/`clearNCTSalt`, idem). São os 22%
+  faltantes, junto com os ramos de persistência de mute/pin/archive/contact
+  quando os sub-stores **não** são nil.
+
+Tudo isso é a mesma costura de transporte + store que a decisão da Fase D
+deixou na raiz e que não pode ser extraída para subpacote. Fica para o lote do
+núcleo do `Client`, junto com `queryMediaConn`/`SendMediaRetryReceipt` (lote
+1) e o corpo de `sendMexIQ` (lote 2).
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. `git diff --stat internal/wa-noise/proto/` e
+`git diff --stat internal/wa-noise/appstate/` continuam vazios.
