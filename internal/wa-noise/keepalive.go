@@ -8,13 +8,18 @@ package whatsmeow
 
 import (
 	"context"
-	"math/rand/v2"
 	"time"
 
+	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/keepalive"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	waLog "wa-api/internal/wa-noise/util/log"
 )
 
+// Estas quatro variaveis continuam sendo a fonte da verdade e continuam na raiz
+// porque sao API exportada e ajustavel em tempo de execucao. O subpacote
+// keepalive nao as duplica: le as quatro por keepAliveTransport.Timing(), que e'
+// chamado a cada volta do loop.
 var (
 	// KeepAliveResponseDeadline specifies the duration to wait for a response to websocket keepalive pings.
 	KeepAliveResponseDeadline = 10 * time.Second
@@ -27,80 +32,73 @@ var (
 	KeepAliveMaxFailTime = 3 * time.Minute
 )
 
-// randomKeepAliveInterval sorteia o intervalo ate' o proximo ping dentro de
-// [KeepAliveIntervalMin, KeepAliveIntervalMax).
+// keepAliveTransport adapta *Client a keepalive.Transport. Existe para que o
+// pacote internal/wa-noise/keepalive possa operar sobre uma interface estreita
+// sem importar o pacote raiz (o que fecharia um ciclo).
 //
-// A guarda de janela nao-positiva e' o que impede um panic: `rand.Int64N`
-// entra em panic com argumento <= 0, e as duas pontas sao variaveis
-// *exportadas* do pacote. Configurar um intervalo fixo — KeepAliveIntervalMin
-// == KeepAliveIntervalMax, o jeito obvio de pedir "pingue de 20 em 20s" — ou
-// inverter as pontas por engano derrubava o processo inteiro, porque este
-// sorteio roda num goroutine sem recover. Com a janela degenerada o intervalo
-// passa a ser o proprio minimo, que e' o comportamento que quem configurou
-// assim esperava.
-func randomKeepAliveInterval() time.Duration {
-	minMS := KeepAliveIntervalMin.Milliseconds()
-	window := KeepAliveIntervalMax.Milliseconds() - minMS
-	if window <= 0 {
-		return time.Duration(minMS) * time.Millisecond
-	}
-	return time.Duration(rand.Int64N(window)+minMS) * time.Millisecond
+// Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 10".
+type keepAliveTransport struct {
+	cli *Client
 }
 
-func (cli *Client) keepAliveLoop(ctx, connCtx context.Context) {
-	lastSuccess := time.Now()
-	var errorCount int
-	for {
-		select {
-		case <-time.After(randomKeepAliveInterval()):
-			isSuccess, shouldContinue := cli.sendKeepAlive(connCtx)
-			if !shouldContinue {
-				return
-			} else if !isSuccess {
-				errorCount++
-				go cli.dispatchEvent(&events.KeepAliveTimeout{
-					ErrorCount:  errorCount,
-					LastSuccess: lastSuccess,
-				})
-				if cli.EnableAutoReconnect && time.Since(lastSuccess) > KeepAliveMaxFailTime {
-					cli.Log.Debugf("Forcing reconnect due to keepalive failure")
-					cli.Disconnect()
-					cli.resetExpectedDisconnect()
-					go cli.autoReconnect(ctx)
-				}
-			} else {
-				if errorCount > 0 {
-					errorCount = 0
-					go cli.dispatchEvent(&events.KeepAliveRestored{})
-				}
-				lastSuccess = time.Now()
-			}
-		case <-connCtx.Done():
-			return
-		}
+var _ keepalive.Transport = keepAliveTransport{}
+
+func (cli *Client) keepAliveT() keepalive.Transport {
+	return keepAliveTransport{cli}
+}
+
+func (t keepAliveTransport) Log() waLog.Logger {
+	return t.cli.Log
+}
+
+// Timing le as quatro variaveis exportadas na hora da chamada. E' o que
+// preserva o comportamento anterior a extracao, em que cada iteracao do loop
+// lia a variavel de novo.
+func (t keepAliveTransport) Timing() keepalive.Timing {
+	return keepalive.Timing{
+		ResponseDeadline: KeepAliveResponseDeadline,
+		IntervalMin:      KeepAliveIntervalMin,
+		IntervalMax:      KeepAliveIntervalMax,
+		MaxFailTime:      KeepAliveMaxFailTime,
 	}
 }
 
-func (cli *Client) sendKeepAlive(ctx context.Context) (isSuccess, shouldContinue bool) {
-	respCh, err := cli.sendIQAsync(ctx, infoQuery{
+func (t keepAliveTransport) AutoReconnectEnabled() bool {
+	return t.cli.EnableAutoReconnect
+}
+
+func (t keepAliveTransport) SendPing(ctx context.Context) (<-chan *waBinary.Node, error) {
+	return t.cli.sendIQAsync(ctx, infoQuery{
 		Namespace: "w:p",
 		Type:      "get",
 		To:        types.ServerJID,
 	})
-	if ctx.Err() != nil {
-		return false, false
-	} else if err != nil {
-		cli.Log.Warnf("Failed to send keepalive: %v", err)
-		return false, true
-	}
-	select {
-	case <-respCh:
-		// All good
-		return true, true
-	case <-time.After(KeepAliveResponseDeadline):
-		cli.Log.Warnf("Keepalive timed out")
-		return false, true
-	case <-ctx.Done():
-		return false, false
-	}
+}
+
+func (t keepAliveTransport) DispatchEvent(evt any) {
+	t.cli.dispatchEvent(evt)
+}
+
+// Disconnect, ResetExpectedDisconnect e AutoReconnect sao os tres pontos em que
+// o keepalive mexe no ciclo de vida da conexao. Os tres sao metodos da raiz que
+// ja' encapsulam socketLock — o subpacote nunca ve o mutex, exatamente como a
+// Fase D exigiu.
+func (t keepAliveTransport) Disconnect() {
+	t.cli.Disconnect()
+}
+
+func (t keepAliveTransport) ResetExpectedDisconnect() {
+	t.cli.resetExpectedDisconnect()
+}
+
+func (t keepAliveTransport) AutoReconnect(ctx context.Context) {
+	t.cli.autoReconnect(ctx)
+}
+
+func (cli *Client) keepAliveLoop(ctx, connCtx context.Context) {
+	keepalive.Loop(ctx, connCtx, cli.keepAliveT())
+}
+
+func (cli *Client) sendKeepAlive(ctx context.Context) (isSuccess, shouldContinue bool) {
+	return keepalive.Send(ctx, cli.keepAliveT())
 }

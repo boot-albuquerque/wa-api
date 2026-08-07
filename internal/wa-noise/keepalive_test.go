@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// Os testes do sorteio de intervalo e do laco em si mudaram para
+// internal/wa-noise/keepalive no lote 10 da Fase F/G, junto com o codigo. O que
+// fica aqui e' a fiacao: que a fachada da raiz repassa as quatro variaveis
+// exportadas e os tres metodos de ciclo de vida da conexao.
+
 // setKeepAliveWindow troca as duas variaveis exportadas e as restaura no fim.
 // Sao globais do pacote, entao estes testes nao podem rodar em paralelo.
 func setKeepAliveWindow(t *testing.T, minD, maxD time.Duration) {
@@ -23,63 +28,42 @@ func setKeepAliveWindow(t *testing.T, minD, maxD time.Duration) {
 	KeepAliveIntervalMin, KeepAliveIntervalMax = minD, maxD
 }
 
-// O caso normal: o sorteio tem que ficar dentro da janela configurada, em toda
-// tentativa. O jitter existe para os pings de varias sessoes nao baterem no
-// servidor todos no mesmo instante.
-func TestRandomKeepAliveIntervalWithinWindow(t *testing.T) {
-	setKeepAliveWindow(t, 20*time.Second, 30*time.Second)
-	for i := 0; i < 200; i++ {
-		got := randomKeepAliveInterval()
-		if got < KeepAliveIntervalMin || got >= KeepAliveIntervalMax {
-			t.Fatalf("intervalo %v fora de [%v, %v)", got, KeepAliveIntervalMin, KeepAliveIntervalMax)
-		}
+// Timing tem que refletir as quatro variaveis exportadas **no momento da
+// chamada**. Se a fachada capturasse os valores uma vez so', ajustar
+// KeepAliveIntervalMin com o cliente rodando deixaria de ter efeito — que era o
+// comportamento antes da extracao.
+func TestKeepAliveTransportTimingReadsExportedVars(t *testing.T) {
+	setKeepAliveWindow(t, 7*time.Second, 9*time.Second)
+	oldDeadline, oldMaxFail := KeepAliveResponseDeadline, KeepAliveMaxFailTime
+	t.Cleanup(func() {
+		KeepAliveResponseDeadline, KeepAliveMaxFailTime = oldDeadline, oldMaxFail
+	})
+	KeepAliveResponseDeadline = 3 * time.Second
+	KeepAliveMaxFailTime = 11 * time.Second
+
+	got := connTestClient().keepAliveT().Timing()
+
+	if got.IntervalMin != 7*time.Second || got.IntervalMax != 9*time.Second {
+		t.Errorf("janela = [%v, %v), queria [7s, 9s)", got.IntervalMin, got.IntervalMax)
+	}
+	if got.ResponseDeadline != 3*time.Second {
+		t.Errorf("ResponseDeadline = %v, queria 3s", got.ResponseDeadline)
+	}
+	if got.MaxFailTime != 11*time.Second {
+		t.Errorf("MaxFailTime = %v, queria 11s", got.MaxFailTime)
 	}
 }
 
-// Se todo sorteio devolvesse o mesmo valor nao haveria jitter nenhum.
-func TestRandomKeepAliveIntervalVaries(t *testing.T) {
-	setKeepAliveWindow(t, 20*time.Second, 30*time.Second)
-	seen := make(map[time.Duration]struct{})
-	for i := 0; i < 100; i++ {
-		seen[randomKeepAliveInterval()] = struct{}{}
+// AutoReconnectEnabled tem que espelhar o campo do cliente, nao um valor fixo.
+func TestKeepAliveTransportAutoReconnectEnabled(t *testing.T) {
+	cli := connTestClient()
+	cli.EnableAutoReconnect = false
+	if cli.keepAliveT().AutoReconnectEnabled() {
+		t.Error("AutoReconnectEnabled = true com EnableAutoReconnect = false")
 	}
-	if len(seen) < 2 {
-		t.Errorf("100 sorteios deram %d valor(es) distinto(s); nao ha' jitter", len(seen))
-	}
-}
-
-// BUG DO LOTE 10: janela degenerada derrubava o processo.
-//
-// KeepAliveIntervalMin e KeepAliveIntervalMax sao variaveis *exportadas*.
-// Configurar as duas com o mesmo valor — a forma obvia de pedir "pingue de 20
-// em 20 segundos, sem jitter" — fazia `rand.Int64N(0)` entrar em panic dentro
-// do keepAliveLoop, um goroutine sem recover: processo inteiro no chao por uma
-// linha de configuracao aparentemente inocente.
-func TestRandomKeepAliveIntervalEqualBoundsDoesNotPanic(t *testing.T) {
-	setKeepAliveWindow(t, 20*time.Second, 20*time.Second)
-	got := randomKeepAliveInterval()
-	if got != 20*time.Second {
-		t.Errorf("intervalo = %v, queria 20s (o proprio minimo)", got)
-	}
-}
-
-// Mesma raiz, outra digitacao errada: pontas invertidas dariam argumento
-// negativo, que tambem entra em panic.
-func TestRandomKeepAliveIntervalInvertedBoundsDoesNotPanic(t *testing.T) {
-	setKeepAliveWindow(t, 30*time.Second, 10*time.Second)
-	got := randomKeepAliveInterval()
-	if got != 30*time.Second {
-		t.Errorf("intervalo = %v, queria 30s (o proprio minimo)", got)
-	}
-}
-
-// Uma janela de 1ms ainda e' valida e nao pode virar o ramo degenerado.
-func TestRandomKeepAliveIntervalMinimalWindow(t *testing.T) {
-	setKeepAliveWindow(t, 20*time.Second, 20*time.Second+time.Millisecond)
-	for i := 0; i < 20; i++ {
-		if got := randomKeepAliveInterval(); got != 20*time.Second {
-			t.Fatalf("intervalo = %v, queria 20s", got)
-		}
+	cli.EnableAutoReconnect = true
+	if !cli.keepAliveT().AutoReconnectEnabled() {
+		t.Error("AutoReconnectEnabled = false com EnableAutoReconnect = true")
 	}
 }
 
@@ -115,5 +99,20 @@ func TestSendKeepAliveStopsOnCancelledContext(t *testing.T) {
 	}
 	if shouldContinue {
 		t.Error("contexto cancelado tem que encerrar o loop, nao contar como falha")
+	}
+}
+
+// sendKeepAlive sobre um cliente sem socket tem que devolver falha
+// contabilizavel — o loop continua e tenta de novo — e nao encerrar o loop.
+func TestSendKeepAliveOnDisconnectedClientCountsAsFailure(t *testing.T) {
+	cli := connTestClient()
+
+	isSuccess, shouldContinue := cli.sendKeepAlive(t.Context())
+
+	if isSuccess {
+		t.Error("cliente sem socket nao pode reportar sucesso")
+	}
+	if !shouldContinue {
+		t.Error("falha de envio nao pode encerrar o loop")
 	}
 }
