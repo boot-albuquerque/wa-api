@@ -91,22 +91,10 @@ const (
 	initialEventHandlerCapacity = 1
 )
 
-// Tamanhos fixos do handshake Noise. Sao definidos pelas primitivas usadas
-// (Curve25519 e Ed25519 sobre a curva Djb), nao escolhas nossas — as
-// conversoes de fatia para array em handshake.go so' sao seguras porque estes
-// comprimentos sao conferidos antes.
-const (
-	// noiseKeyLength e' o tamanho de uma chave publica/privada Curve25519.
-	noiseKeyLength = 32
+// Os tamanhos fixos do handshake Noise (noiseKeyLength, certSignatureLength)
+// mudaram para internal/wa-noise/handshake, junto com o proprio handshake, no
+// lote 10 da Fase F/G. Nenhum arquivo da raiz os le mais.
 
-	// certSignatureLength e' o tamanho de uma assinatura da cadeia de
-	// certificados do servidor.
-	certSignatureLength = 64
-)
-
-// Parametros do dialer usado quando um proxy SOCKS5 e' montado a partir de uma
-// URL por SetProxyAddress.
-const (
-	socksProxyDialTimeout = 30 * time.Second
-	socksProxyKeepAlive   = 30 * time.Second
-)
+// Os parametros do dialer SOCKS5 (socksProxyDialTimeout, socksProxyKeepAlive)
+// mudaram para internal/wa-noise/proxyconf no lote 10 da Fase F/G, junto com a
+// montagem dos transports. Nenhum arquivo da raiz os le mais.

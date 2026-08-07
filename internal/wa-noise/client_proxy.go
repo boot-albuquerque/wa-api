@@ -8,45 +8,44 @@
 package whatsmeow
 
 import (
-	"context"
-	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 
 	"golang.org/x/net/proxy"
+
+	"wa-api/internal/wa-noise/proxyconf"
 )
+
+// Proxy e SetProxyOptions sao aliases para os tipos de proxyconf. Precisam ser
+// **aliases**, e nao tipos novos: `whatsmeow.SetProxyOptions` aparece nas
+// assinaturas de SetProxy/SetSOCKSProxy/SetProxyAddress e e' usado por
+// consumidores fora do fork (pkg/infra/wa-noise/session). Um tipo distinto
+// quebraria esses chamadores.
+type (
+	Proxy           = proxyconf.Proxy
+	SetProxyOptions = proxyconf.Options
+)
+
+// firstOpt reproduz o `var opt X; if len(opts) > 0 { opt = opts[0] }` que os
+// tres metodos repetiam: opcoes alem da primeira sao ignoradas, e nenhuma
+// opcao vale o zero-value.
+func firstOpt(opts []SetProxyOptions) SetProxyOptions {
+	if len(opts) > 0 {
+		return opts[0]
+	}
+	return SetProxyOptions{}
+}
 
 // SetProxyAddress is a helper method that parses a URL string and calls SetProxy or SetSOCKSProxy based on the URL scheme.
 //
 // Returns an error if url.Parse fails to parse the given address.
 func (cli *Client) SetProxyAddress(addr string, opts ...SetProxyOptions) error {
-	if addr == "" {
-		cli.SetProxy(nil, opts...)
-		return nil
-	}
-	parsed, err := url.Parse(addr)
+	transport, err := proxyconf.TransportForAddress(addr)
 	if err != nil {
 		return err
 	}
-	if parsed.Scheme == "http" || parsed.Scheme == "https" {
-		cli.SetProxy(http.ProxyURL(parsed), opts...)
-	} else if parsed.Scheme == "socks5" {
-		px, err := proxy.FromURL(parsed, &net.Dialer{
-			Timeout:   socksProxyDialTimeout,
-			KeepAlive: socksProxyKeepAlive,
-		})
-		if err != nil {
-			return err
-		}
-		cli.SetSOCKSProxy(px, opts...)
-	} else {
-		return fmt.Errorf("unsupported proxy scheme %q", parsed.Scheme)
-	}
+	cli.setTransport(transport, firstOpt(opts))
 	return nil
 }
-
-type Proxy = func(*http.Request) (*url.URL, error)
 
 // SetProxy sets a HTTP proxy to use for WhatsApp web websocket connections and media uploads/downloads.
 //
@@ -68,71 +67,31 @@ type Proxy = func(*http.Request) (*url.URL, error)
 //			return mediaProxyURL, nil
 //		}
 //	})
-func (cli *Client) SetProxy(proxy Proxy, opts ...SetProxyOptions) {
-	var opt SetProxyOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-	transport := (http.DefaultTransport.(*http.Transport)).Clone()
-	transport.Proxy = proxy
-	cli.setTransport(transport, opt)
-}
-
-type SetProxyOptions struct {
-	// If NoWebsocket is true, the proxy won't be used for the websocket
-	NoWebsocket bool
-	// If OnlyLogin is true, the proxy will be used for the pre-login websocket, but not the post-login one
-	OnlyLogin bool
-	// If NoMedia is true, the proxy won't be used for media uploads/downloads
-	NoMedia bool
+func (cli *Client) SetProxy(p Proxy, opts ...SetProxyOptions) {
+	cli.setTransport(proxyconf.TransportForProxy(p), firstOpt(opts))
 }
 
 // SetSOCKSProxy sets a SOCKS5 proxy to use for WhatsApp web websocket connections and media uploads/downloads.
 //
 // Same details as SetProxy apply, but using a different proxy for the websocket and media is not currently supported.
 func (cli *Client) SetSOCKSProxy(px proxy.Dialer, opts ...SetProxyOptions) {
-	var opt SetProxyOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-	transport := (http.DefaultTransport.(*http.Transport)).Clone()
-	transport.DialContext = contextDialerFor(px)
-	cli.setTransport(transport, opt)
+	cli.setTransport(proxyconf.TransportForDialer(px), firstOpt(opts))
 }
 
-// contextDialerFor adapta um proxy.Dialer qualquer para a assinatura de
-// http.Transport.DialContext.
-//
-// A type assertion crua que estava aqui (`px.(proxy.ContextDialer)`) entrava em
-// panic para qualquer Dialer que nao implementasse ContextDialer — e
-// SetSOCKSProxy e' API *exportada*, entao o Dialer vem do chamador. O caminho
-// interno (proxy.FromURL em SetProxyAddress) devolve um dialer que implementa,
-// mas isso nao vale para um dialer customizado.
-//
-// O fallback disca sem contexto de proposito. A alternativa — nao instalar o
-// proxy — faria o trafego sair direto, sem proxy e sem aviso, o que e' pior que
-// perder o cancelamento: um proxy pedido e silenciosamente ignorado vaza o
-// endereco real do cliente.
-func contextDialerFor(px proxy.Dialer) func(context.Context, string, string) (net.Conn, error) {
-	if pxc, ok := px.(proxy.ContextDialer); ok {
-		return pxc.DialContext
-	}
-	return func(_ context.Context, network, addr string) (net.Conn, error) {
-		return px.Dial(network, addr)
-	}
-}
-
+// setTransport instala transport nos http.Client que opt permitir. Continua
+// existindo com este nome porque internals.go (gerado) o expoe como
+// DangerousInternalClient.SetTransport.
 func (cli *Client) setTransport(transport *http.Transport, opt SetProxyOptions) {
-	if !opt.NoWebsocket {
-		cli.preLoginHTTP.Transport = transport
-		if !opt.OnlyLogin {
-			cli.websocketHTTP.Transport = transport
-		}
-	}
-	if !opt.NoMedia {
-		cli.mediaHTTP.Transport = transport
-	}
+	proxyconf.Apply(proxyconf.Clients{
+		PreLogin:  cli.preLoginHTTP,
+		Websocket: cli.websocketHTTP,
+		Media:     cli.mediaHTTP,
+	}, transport, opt)
 }
+
+// Os tres setters abaixo **trocam o ponteiro** do http.Client, e por isso ficam
+// na raiz: sao escrita direta em campo de Client, nao algo que proxyconf possa
+// fazer a partir de Clients (que carrega copias dos ponteiros).
 
 // SetMediaHTTPClient sets the HTTP client used to download media.
 // This will overwrite any set proxy calls.
