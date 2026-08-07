@@ -163,29 +163,31 @@ func (cli *Client) handleAppStateSyncKeyShare(ctx context.Context, keys *waE2E.A
 	onlyResyncIfNotSynced := true
 
 	cli.Log.Debugf("Got %d new app state keys", len(keys.GetKeys()))
-	cli.appStateKeyRequestsLock.RLock()
-	for _, key := range keys.GetKeys() {
-		marshaledFingerprint, err := proto.Marshal(key.GetKeyData().GetFingerprint())
-		if err != nil {
-			cli.Log.Errorf("Failed to marshal fingerprint of app state sync key %X", key.GetKeyID().GetKeyID())
-			continue
+	// O lock de leitura fica segurado pelo laco inteiro, incluindo as gravacoes
+	// no store — e' o que o RLock/RUnlock manual daqui fazia antes da extracao
+	// do dominio para internal/wa-noise/appstatesync.
+	cli.appStateSync.ReadKeyRequests(func(wasRequested func(string) bool) {
+		for _, key := range keys.GetKeys() {
+			marshaledFingerprint, err := proto.Marshal(key.GetKeyData().GetFingerprint())
+			if err != nil {
+				cli.Log.Errorf("Failed to marshal fingerprint of app state sync key %X", key.GetKeyID().GetKeyID())
+				continue
+			}
+			if wasRequested(hex.EncodeToString(key.GetKeyID().GetKeyID())) {
+				onlyResyncIfNotSynced = false
+			}
+			err = cli.Store.AppStateKeys.PutAppStateSyncKey(ctx, key.GetKeyID().GetKeyID(), store.AppStateSyncKey{
+				Data:        key.GetKeyData().GetKeyData(),
+				Fingerprint: marshaledFingerprint,
+				Timestamp:   key.GetKeyData().GetTimestamp(),
+			})
+			if err != nil {
+				cli.Log.Errorf("Failed to store app state sync key %X: %v", key.GetKeyID().GetKeyID(), err)
+				continue
+			}
+			cli.Log.Debugf("Received app state sync key %X (ts: %d)", key.GetKeyID().GetKeyID(), key.GetKeyData().GetTimestamp())
 		}
-		_, isReRequest := cli.appStateKeyRequests[hex.EncodeToString(key.GetKeyID().GetKeyID())]
-		if isReRequest {
-			onlyResyncIfNotSynced = false
-		}
-		err = cli.Store.AppStateKeys.PutAppStateSyncKey(ctx, key.GetKeyID().GetKeyID(), store.AppStateSyncKey{
-			Data:        key.GetKeyData().GetKeyData(),
-			Fingerprint: marshaledFingerprint,
-			Timestamp:   key.GetKeyData().GetTimestamp(),
-		})
-		if err != nil {
-			cli.Log.Errorf("Failed to store app state sync key %X: %v", key.GetKeyID().GetKeyID(), err)
-			continue
-		}
-		cli.Log.Debugf("Received app state sync key %X (ts: %d)", key.GetKeyID().GetKeyID(), key.GetKeyData().GetTimestamp())
-	}
-	cli.appStateKeyRequestsLock.RUnlock()
+	})
 
 	for _, name := range appstate.AllPatchNames {
 		err := cli.FetchAppState(ctx, name, false, onlyResyncIfNotSynced)

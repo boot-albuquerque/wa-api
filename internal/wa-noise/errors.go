@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
 )
@@ -35,7 +36,11 @@ var (
 
 	ErrNoPrivacyToken = errors.New("no privacy token stored")
 
-	ErrAppStateUpdate = errors.New("server returned error updating app state")
+	// ErrAppStateUpdate e' o MESMO valor que appstatesync.ErrUpdate, nao uma
+	// copia — trocar por um errors.New proprio quebraria errors.Is para quem
+	// compara com este nome (mesma armadilha de aliasing dos erros de midia,
+	// documentada logo abaixo).
+	ErrAppStateUpdate = appstatesync.ErrUpdate
 )
 
 // Errors that happen while confirming device pairing

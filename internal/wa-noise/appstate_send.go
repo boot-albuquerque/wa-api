@@ -8,17 +8,14 @@ package whatsmeow
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
 	"go.mau.fi/util/exslices"
 	"go.mau.fi/util/ptr"
 
 	"wa-api/internal/wa-noise/appstate"
-	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/appstatesync"
 	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/types"
 )
 
 // SendAppState sends the given app state patch, then triggers a background resync of that app state type
@@ -35,109 +32,21 @@ func (cli *Client) sendAppState(ctx context.Context, patch appstate.PatchInfo, a
 	if cli == nil {
 		return ErrClientIsNil
 	}
-	version, hash, err := cli.Store.AppState.GetAppStateVersion(ctx, string(patch.Type))
-	if err != nil {
-		return err
-	}
-	// TODO create new key instead of reusing the primary client's keys
-	latestKeyID, err := cli.Store.AppStateKeys.GetLatestAppStateSyncKeyID(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get latest app state key ID: %w", err)
-	} else if latestKeyID == nil {
-		return fmt.Errorf("no app state keys found, creating app state keys is not yet supported")
-	}
-
-	state := appstate.HashState{Version: version, Hash: hash}
-
-	encodedPatch, err := cli.appStateProc.EncodePatch(ctx, latestKeyID, state, patch)
-	if err != nil {
-		return err
-	}
-
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: appStateNamespace,
-		Type:      iqSet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{{
-			Tag: appStateSyncTag,
-			Content: []waBinary.Node{{
-				Tag: appStateCollectionTag,
-				Attrs: waBinary.Attrs{
-					appStateAttrName:           string(patch.Type),
-					appStateAttrVersion:        version,
-					appStateAttrReturnSnapshot: false,
-				},
-				Content: []waBinary.Node{{
-					Tag:     appStatePatchTag,
-					Content: encodedPatch,
-				}},
-			}},
-		}},
-	})
-	if err != nil {
-		return err
-	}
-
-	respCollection, ok := resp.GetOptionalChildByTag(appStateSyncTag, appStateCollectionTag)
-	if !ok {
-		return &ElementMissingError{Tag: appStateCollectionTag, In: appStateSendErrContext}
-	}
-	respCollectionAttr := respCollection.AttrGetter()
-	if respCollectionAttr.OptionalString(appStateAttrType) == appStateRespTypeError {
-		errorTag, ok := respCollection.GetOptionalChildByTag(appStateErrorTag)
-
-		mainErr := fmt.Errorf("%w: %s", ErrAppStateUpdate, respCollection.XMLString())
-		if ok {
-			mainErr = fmt.Errorf("%w (%s): %s", ErrAppStateUpdate, patch.Type, errorTag.XMLString())
-		}
-		if ok && errorTag.AttrGetter().Int(appStateAttrCode) == appStateConflictCode && allowRetry {
-			zerolog.Ctx(ctx).Warn().Err(mainErr).Msg("Failed to update app state, trying to apply conflicts and retry")
-			var eventsToDispatch []any
-			patches, err := appstate.ParsePatchList(ctx, &respCollection, cli.downloadExternalAppStateBlob)
-			if err != nil {
-				return fmt.Errorf("%w (also, parsing patches in the response failed: %w)", mainErr, err)
-			} else if state, err = cli.applyAppStatePatches(ctx, patch.Type, state, patches, false, &eventsToDispatch); err != nil {
-				return fmt.Errorf("%w (also, applying patches in the response failed: %w)", mainErr, err)
-			} else {
-				zerolog.Ctx(ctx).Debug().Msg("Retrying app state send after applying conflicting patches")
-				go func() {
-					for _, evt := range eventsToDispatch {
-						cli.dispatchEvent(evt)
-					}
-				}()
-				return cli.sendAppState(ctx, patch, false)
-			}
-		}
-		return mainErr
-	}
-	eventsToDispatch, err := cli.fetchAppState(ctx, patch.Type, false, false)
-	if err != nil {
-		return fmt.Errorf("failed to fetch app state after sending update: %w", err)
-	}
-	go func() {
-		for _, evt := range eventsToDispatch {
-			cli.dispatchEvent(evt)
-		}
-	}()
-
-	return nil
+	return appstatesync.Send(ctx, cli.appStateT(), patch, allowRetry)
 }
 
+// MarkNotDirty marca uma colecao como "nao suja" no servidor.
 func (cli *Client) MarkNotDirty(ctx context.Context, cleanType string, ts time.Time) error {
-	_, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: dirtyNamespace,
-		Type:      iqSet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{{
-			Tag: dirtyCleanTag,
-			Attrs: waBinary.Attrs{
-				dirtyCleanAttrType:      cleanType,
-				dirtyCleanAttrTimestamp: ts.Unix(),
-			},
-		}},
-	})
-	return err
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return appstatesync.MarkNotDirty(ctx, cli.appStateT(), cleanType, ts)
 }
+
+// As duas funcoes abaixo nao dependem de *Client nem do Transport: montam
+// mensagens a partir dos argumentos e so'. Ficam na raiz porque sao API publica
+// do fork e funcoes (ao contrario de tipos) nao podem ser reexportadas por
+// apelido — move-las quebraria todo chamador externo.
 
 // BuildFatalAppStateExceptionNotification builds a message to request the user's primary device
 // to reset specific app state collections. This will cause all linked devices to be logged out.

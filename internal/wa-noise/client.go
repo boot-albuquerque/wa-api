@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waE2E"
@@ -76,8 +77,11 @@ type Client struct {
 	pendingPhoneRerequests             map[types.MessageID]context.CancelFunc
 	pendingPhoneRerequestsLock         sync.RWMutex
 
-	appStateProc     *appstate.Processor
-	appStateSyncLock sync.Mutex
+	appStateProc *appstate.Processor
+	// appStateSync reune os antigos appStateSyncLock, appStateKeyRequests e
+	// appStateKeyRequestsLock; os dois locks de dentro continuam sendo dois,
+	// com os mesmos pontos de aquisicao.
+	appStateSync appstatesync.State
 
 	historySyncNotifications        chan *waE2E.HistorySyncNotification
 	historySyncHandlerStarted       atomic.Bool
@@ -104,9 +108,6 @@ type Client struct {
 
 	incomingRetryRequestCounter     map[incomingRetryKey]int
 	incomingRetryRequestCounterLock sync.Mutex
-
-	appStateKeyRequests     map[string]time.Time
-	appStateKeyRequestsLock sync.RWMutex
 
 	messageSendLock sync.Mutex
 
@@ -248,7 +249,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		recentMessagesMap:      make(map[recentMessageKey]RecentMessage, recentMessagesSize),
 		sessionRecreateHistory: make(map[types.JID]time.Time),
 		GetMessageForRetry:     func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },
-		appStateKeyRequests:    make(map[string]time.Time),
 
 		pendingPhoneRerequests: make(map[types.MessageID]context.CancelFunc),
 
