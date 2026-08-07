@@ -7,7 +7,7 @@
 package whatsmeow
 
 import (
-	"wa-api/internal/wa-noise/notification"
+	"wa-api/internal/wa-noise/capabilities/notification"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
