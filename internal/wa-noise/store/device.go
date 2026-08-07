@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"wa-api/internal/wa-noise/proto/waAdv"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/security/keys"
 	waLog "wa-api/internal/wa-noise/observability/log"

@@ -49,9 +49,9 @@ while IFS= read -r -d '' f; do
   if grep -q "Mozilla Public" "$f"; then
     with_header=$((with_header + 1))
   fi
-done < <(find "$DEST" -name '*.go' -not -path "$DEST/proto/*" -print0)
+done < <(find "$DEST" -name '*.go' -not -path "$DEST/protocol/proto/*" -print0)
 
-echo "waclient-license-check: LICENSE-whatsmeow/PROVENANCE.md/UPSTREAM presentes; $with_header arquivos .go (fora de proto/) carregam header MPL-2.0 por arquivo (upstream não usa o header em todos os arquivos — LICENSE-whatsmeow cobre a árvore inteira, MPL-2.0 §3.1)."
+echo "waclient-license-check: LICENSE-whatsmeow/PROVENANCE.md/UPSTREAM presentes; $with_header arquivos .go (fora de protocol/proto/) carregam header MPL-2.0 por arquivo (upstream não usa o header em todos os arquivos — LICENSE-whatsmeow cobre a árvore inteira, MPL-2.0 §3.1)."
 
 if [ "$fail" -eq 1 ]; then
   exit 1

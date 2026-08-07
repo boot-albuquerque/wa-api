@@ -10,9 +10,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waHistorySync"
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/types"
 )
 

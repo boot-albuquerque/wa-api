@@ -244,7 +244,7 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/wa-noise/ (fora de proto/, gerado)
 	@bash scripts/waclient-license-check.sh
 
-waclient-drift: ## Falha se internal/wa-noise/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
+waclient-drift: ## Falha se internal/wa-noise/protocol/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
 	@version=$$(cat internal/wa-noise/UPSTREAM | awk '{print $$2}'); \
 	 if [ -z "$$version" ]; then \
 	   echo "FALHA: internal/wa-noise/UPSTREAM vazio ou malformado."; \
@@ -252,7 +252,7 @@ waclient-drift: ## Falha se internal/wa-noise/proto/ (codigo gerado) divergir do
 	 fi; \
 	 ./scripts/waclient-diff.sh "$$version"
 
-waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exceto proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
+waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exceto protocol/proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
 	@bash scripts/waclient-filesize-check.sh
 
 # internal/wa-noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado

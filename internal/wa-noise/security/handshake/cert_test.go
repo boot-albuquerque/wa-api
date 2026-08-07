@@ -14,7 +14,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waCert"
+	"wa-api/internal/wa-noise/protocol/proto/waCert"
 )
 
 // Estes testes cobrem o **lado da rejeicao** de VerifyServerCert. Montar uma

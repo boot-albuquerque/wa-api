@@ -20,10 +20,10 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/prekeys"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/security/keys"
 )

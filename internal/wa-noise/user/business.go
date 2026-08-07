@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waVnameCert"
+	"wa-api/internal/wa-noise/protocol/proto/waVnameCert"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )

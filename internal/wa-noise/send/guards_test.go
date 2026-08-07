@@ -15,7 +15,7 @@ import (
 
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/msgattrs"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )

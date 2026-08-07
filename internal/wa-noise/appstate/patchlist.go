@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 )
 
 // PatchList represents a decoded response to getting app state patches from the WhatsApp servers.

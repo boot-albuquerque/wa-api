@@ -16,7 +16,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 	waLog "wa-api/internal/wa-noise/observability/log"

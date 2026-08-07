@@ -14,7 +14,7 @@ import (
 
 	"go.mau.fi/util/jsontime"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 type NewsletterVerificationState string

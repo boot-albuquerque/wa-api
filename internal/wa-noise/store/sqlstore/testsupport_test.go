@@ -14,7 +14,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"wa-api/internal/wa-noise/proto/waAdv"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )

@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"wa-api/internal/wa-noise/appstate"
-	"wa-api/internal/wa-noise/proto/waServerSync"
-	"wa-api/internal/wa-noise/proto/waSyncAction"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 	"wa-api/internal/wa-noise/types/events"
 )
 

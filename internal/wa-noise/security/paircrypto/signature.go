@@ -9,7 +9,7 @@ package paircrypto
 import (
 	"go.mau.fi/libsignal/ecc"
 
-	"wa-api/internal/wa-noise/proto/waAdv"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

@@ -3,7 +3,7 @@ package platform
 import (
 	"strings"
 
-	"wa-api/internal/wa-noise/proto/waCompanionReg"
+	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
 
 	"github.com/rs/zerolog/log"
 )

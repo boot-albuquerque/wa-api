@@ -18,11 +18,11 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/msgattrs"
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/types"
 )
 

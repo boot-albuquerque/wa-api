@@ -1,7 +1,7 @@
 package appstate
 
 import (
-	"wa-api/internal/wa-noise/proto/waSyncAction"
+	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 	"wa-api/internal/wa-noise/types"
 )
 

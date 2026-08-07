@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // HistorySyncQueue e' o estado do loop de history sync: a fila de notificacoes

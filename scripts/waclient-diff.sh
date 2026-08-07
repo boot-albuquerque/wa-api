@@ -69,6 +69,17 @@ done
 grep -rl "^//go:generate.*${MODULE}" "$NORM" --include="*.go" | while read -r f; do
   perl -pi -e "s{(^//go:generate.*)\Q${MODULE}\E}{\$1wa-api/${DEST}}g" "$f"
 done
+
+# Fase H (etapa 3): proto/ passou a viver em ${DEST}/protocol/proto/. O
+# upstream normalizado acima ficou com "wa-api/${DEST}/proto/...", entao
+# precisa de um segundo passo para casar com o layout atual do fork.
+# MESMA regra ancorada de linha-inteira dos passos acima — nunca um match
+# parcial no meio de linha, porque os .pb.go embutem o go_package original
+# como string serializada no rawDesc do file descriptor e um replace de
+# texto ali corromperia o varint de comprimento que precede a string.
+grep -rl "wa-api/${DEST}/proto" "$NORM" --include="*.go" | while read -r f; do
+  perl -pi -e "s{^(\s*(?:[A-Za-z_][A-Za-z0-9_]*\s+)?)\"\Qwa-api/${DEST}/proto\E((?:/[A-Za-z0-9_.-]+)*)\"(\s*)\$}{\$1\"wa-api/${DEST}/protocol/proto\$2\"\$3}" "$f"
+done
 if [ -f "$SRC/.gitattributes" ]; then
   cp "$SRC/.gitattributes" "$NORM/.gitattributes"
 fi
@@ -77,8 +88,8 @@ gofmt -w "$NORM/proto" 2>/dev/null || true
 # ADR-0004: escopo restrito a proto/ — só o código gerado continua sob a
 # trava de diff-zero. O restante do módulo é fork ativo, comparação
 # byte-a-byte deixou de fazer sentido para ele.
-if [ ! -d "$NORM/proto" ] || [ ! -d "$DEST/proto" ]; then
+if [ ! -d "$NORM/proto" ] || [ ! -d "$DEST/protocol/proto" ]; then
   echo "ERRO: proto/ ausente em um dos lados da comparação." >&2
   exit 1
 fi
-diff -ru "$NORM/proto" "$DEST/proto"
+diff -ru "$NORM/proto" "$DEST/protocol/proto"

@@ -12,12 +12,12 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/armadilloutil"
-	"wa-api/internal/wa-noise/proto/instamadilloTransportPayload"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/proto/waMsgTransport"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/armadilloutil"
+	"wa-api/internal/wa-noise/protocol/proto/instamadilloTransportPayload"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )

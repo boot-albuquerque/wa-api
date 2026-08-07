@@ -10,8 +10,8 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 
 	"google.golang.org/protobuf/proto"
 )

@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"wa-api/internal/wa-noise/media"
-	"wa-api/internal/wa-noise/proto/waMediaTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 )
 
 // A implementacao vive em internal/wa-noise/media/download_file.go

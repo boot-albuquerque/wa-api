@@ -6,7 +6,7 @@
 
 package newsletter
 
-import "wa-api/internal/wa-noise/proto/waWa6"
+import "wa-api/internal/wa-noise/protocol/proto/waWa6"
 
 const (
 	queryFetchNewsletter           = "6563316087068696"

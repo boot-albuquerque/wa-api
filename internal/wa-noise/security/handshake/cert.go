@@ -14,7 +14,7 @@ import (
 	"go.mau.fi/libsignal/ecc"
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waCert"
+	"wa-api/internal/wa-noise/protocol/proto/waCert"
 )
 
 func checkCertValidity(cert *waCert.CertChain_NoiseCertificate_Details) error {

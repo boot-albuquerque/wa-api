@@ -17,7 +17,7 @@ import (
 
 	"go.mau.fi/util/fallocate"
 
-	"wa-api/internal/wa-noise/proto/waMediaTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 	"wa-api/internal/wa-noise/security/cbc"
 )
 

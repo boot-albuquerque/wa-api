@@ -14,9 +14,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waAdv"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 )
 

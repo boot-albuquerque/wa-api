@@ -19,7 +19,7 @@ import (
 	"go.mau.fi/util/exstrings"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 )
 

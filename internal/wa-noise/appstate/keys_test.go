@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/security/hkdf"
 )

@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 )
 
 func mustMarshal(t *testing.T, msg proto.Message) []byte {

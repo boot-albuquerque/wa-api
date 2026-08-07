@@ -17,7 +17,7 @@ import (
 	"go.mau.fi/util/dbutil"
 	"go.mau.fi/util/random"
 
-	"wa-api/internal/wa-noise/proto/waAdv"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/store/sqlstore/upgrades"
 	"wa-api/internal/wa-noise/types"

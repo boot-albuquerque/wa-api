@@ -11,10 +11,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // textMessage devolve uma mensagem de texto com o conteudo dado. E' o "fundo"

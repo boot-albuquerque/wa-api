@@ -10,8 +10,8 @@ import (
 	"context"
 	"errors"
 
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
 )

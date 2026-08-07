@@ -10,7 +10,7 @@ import (
 	"context"
 
 	"wa-api/internal/wa-noise/appstate"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )

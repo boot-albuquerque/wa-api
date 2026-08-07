@@ -23,7 +23,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

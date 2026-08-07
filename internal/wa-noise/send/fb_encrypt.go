@@ -19,7 +19,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/msgpad"
-	"wa-api/internal/wa-noise/proto/waMsgTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )

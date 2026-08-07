@@ -3,7 +3,7 @@ package platform
 import (
 	"testing"
 
-	"wa-api/internal/wa-noise/proto/waCompanionReg"
+	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
 )
 
 // TestGetPlatformTypeEnum_Chrome mapeia "CHROME" para CHROME enum.

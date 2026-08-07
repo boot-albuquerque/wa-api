@@ -10,7 +10,7 @@ import (
 	"context"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waHistorySync"
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/user"
 )

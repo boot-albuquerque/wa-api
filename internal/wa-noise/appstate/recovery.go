@@ -17,9 +17,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waServerSync"
-	"wa-api/internal/wa-noise/proto/waSyncdSnapshotRecovery"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waSyncdSnapshotRecovery"
 	"wa-api/internal/wa-noise/store"
 )
 

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/appstate"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // RequestMissingKeys pede ao dispositivo primario as chaves de app state que

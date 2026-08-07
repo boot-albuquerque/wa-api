@@ -12,10 +12,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waHistorySync"
-	"wa-api/internal/wa-noise/proto/waLidMigrationSyncPayload"
+	"wa-api/internal/wa-noise/protocol/proto/waCommon"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
+	"wa-api/internal/wa-noise/protocol/proto/waLidMigrationSyncPayload"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )

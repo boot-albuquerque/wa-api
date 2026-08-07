@@ -10,8 +10,8 @@ import (
 	"context"
 
 	"wa-api/internal/wa-noise/media"
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waMediaTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 	"wa-api/internal/wa-noise/types"
 )
 

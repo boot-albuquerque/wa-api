@@ -9,8 +9,8 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"

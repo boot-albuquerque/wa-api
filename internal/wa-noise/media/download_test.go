@@ -20,8 +20,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waMediaTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 )
 
 func TestDownloadAnyEscolheAPrimeiraParteNaoNula(t *testing.T) {

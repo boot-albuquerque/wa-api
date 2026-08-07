@@ -9,7 +9,7 @@ package types
 import (
 	"time"
 
-	"wa-api/internal/wa-noise/proto/waVnameCert"
+	"wa-api/internal/wa-noise/protocol/proto/waVnameCert"
 )
 
 // VerifiedName contains verified WhatsApp business details.

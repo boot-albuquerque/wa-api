@@ -15,8 +15,8 @@ import (
 	"hash"
 
 	"wa-api/internal/wa-noise/appstate/lthash"
-	"wa-api/internal/wa-noise/proto/waServerSync"
-	"wa-api/internal/wa-noise/proto/waSyncAction"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 )
 
 type Mutation struct {

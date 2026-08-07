@@ -11,7 +11,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // encodeTag monta a tag varint de um campo protobuf a partir do numero do campo

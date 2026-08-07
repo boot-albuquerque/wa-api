@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"wa-api/internal/wa-noise/appstate/lthash"
-	"wa-api/internal/wa-noise/proto/waServerSync"
+	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 )
 
 func mutationWithBlobs(op waServerSync.SyncdMutation_SyncdOperation, indexMAC, valueMAC []byte) *waServerSync.SyncdMutation {

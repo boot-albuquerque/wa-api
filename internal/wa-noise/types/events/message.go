@@ -9,15 +9,15 @@ package events
 import (
 	"time"
 
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/instamadilloTransportPayload"
-	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waHistorySync"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/proto/waMsgTransport"
-	"wa-api/internal/wa-noise/proto/waWeb"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/instamadilloTransportPayload"
+	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
+	"wa-api/internal/wa-noise/protocol/proto/waWeb"
 	"wa-api/internal/wa-noise/types"
 )
 

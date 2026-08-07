@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/argo"
-	"wa-api/internal/wa-noise/proto/waWa6"
+	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 )
 
 // webPayload e desktopPayload sao os dois estados que ConvertQueryID distingue.

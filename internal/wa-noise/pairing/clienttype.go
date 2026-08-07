@@ -10,8 +10,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"wa-api/internal/wa-noise/proto/waCompanionReg"
-	"wa-api/internal/wa-noise/proto/waWa6"
+	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
+	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/store"
 )
 

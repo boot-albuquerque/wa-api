@@ -87,10 +87,17 @@ grep -rl "^//go:generate.*${MODULE}" "$DEST" --include="*.go" | while read -r f;
   perl -pi -e "s{(^//go:generate.*)\Q${MODULE}\E}{\$1wa-api/${DEST}}g" "$f"
 done
 
+# NOTA (Fase H, etapa 3): este script produz o layout FLAT do upstream
+# (proto/, binary/, types/, store/, util/… na raiz de $DEST). O fork já
+# reorganizou esses diretórios em protocol/, security/, persistence/ e
+# observability/. Rodar este script de novo recria o layout flat e exige
+# reaplicar a reorganização da Fase H. `scripts/waclient-diff.sh` já
+# normaliza os dois layouts para comparar proto/ contra o upstream.
+
 echo "==> Corrigindo referência textual em comentário (binary/proto/doc.go)"
 # Não é import nem dado de descriptor — é um comentário de prosa apontando
 # o path antigo. Ajuste cosmético, mas mantém consistência com o resto.
-DOCGO="$DEST/binary/proto/doc.go"
+DOCGO="$DEST$DEST/binary/proto/doc.go"
 if [ -f "$DOCGO" ]; then
   perl -pi -e "s{\Q${MODULE}\E/proto/wa\* packages}{wa-api/${DEST}/proto/wa* packages}" "$DOCGO"
 fi

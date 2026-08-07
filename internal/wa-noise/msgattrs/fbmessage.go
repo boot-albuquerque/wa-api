@@ -7,9 +7,9 @@
 package msgattrs
 
 import (
-	armadillo "wa-api/internal/wa-noise/proto"
-	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
+	armadillo "wa-api/internal/wa-noise/protocol/proto"
+	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
+	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )

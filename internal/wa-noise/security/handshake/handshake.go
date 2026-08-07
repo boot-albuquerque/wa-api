@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/proto/waWa6"
+	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/security/keys"
 )
