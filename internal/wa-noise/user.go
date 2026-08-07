@@ -137,8 +137,8 @@ func parseFBDeviceList(jid types.JID, deviceList waBinary.Node) deviceCache {
 	return user.ParseFBDeviceList(jid, deviceList)
 }
 
-// parseVerifiedNameContent e' usado por message_parse.go, que continua na raiz
-// (e' o dominio de mensagem — lote 9, pendente).
-func parseVerifiedNameContent(verifiedNameNode waBinary.Node) (*types.VerifiedName, error) {
-	return user.ParseVerifiedNameContent(verifiedNameNode)
-}
+// A fachada parseVerifiedNameContent foi REMOVIDA na Fase F/G lote 9. Ela
+// existia so' para message_parse.go, que era o unico chamador; agora o dominio
+// de mensagem vive em internal/wa-noise/message/ e chama
+// user.ParseVerifiedNameContent por import direto, por ser funcao pura. Divida
+// do lote 7 fechada.

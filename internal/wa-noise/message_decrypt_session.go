@@ -8,22 +8,17 @@ package whatsmeow
 
 import (
 	"context"
-	"crypto/sha256"
-	"errors"
-	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
-	"go.mau.fi/libsignal/groups"
-	"go.mau.fi/libsignal/protocol"
-	"go.mau.fi/libsignal/session"
-	"go.mau.fi/libsignal/signalerror"
-
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/msgpad"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/types"
 )
+
+// Fachadas do nucleo de decifragem Signal, que vive em
+// internal/wa-noise/message/ desde a Fase F/G lote 9. Existem porque
+// internals.go (gerado) cita os tres nomes minusculos em
+// DangerousInternalClient.
 
 func (cli *Client) bufferedDecrypt(
 	ctx context.Context,
@@ -32,131 +27,13 @@ func (cli *Client) bufferedDecrypt(
 	decrypt func(context.Context) ([]byte, error),
 	extraHashData ...string,
 ) (plaintext []byte, ciphertextHash [32]byte, err error) {
-	if !cli.EnableDecryptedEventBuffer {
-		plaintext, err = decrypt(ctx)
-		return
-	}
-	hasher := sha256.New()
-	hasher.Write(ciphertext)
-	for _, part := range extraHashData {
-		hasher.Write([]byte{0})
-		hasher.Write([]byte(part))
-	}
-	hasher.Write([]byte{0, 0})
-	ciphertextHash = *(*[32]byte)(hasher.Sum(nil))
-	var buf *store.BufferedEvent
-	buf, err = cli.Store.EventBuffer.GetBufferedEvent(ctx, ciphertextHash)
-	if err != nil {
-		err = fmt.Errorf("failed to get buffered event: %w", err)
-		return
-	} else if buf != nil {
-		if buf.Plaintext == nil {
-			zerolog.Ctx(ctx).Debug().
-				Hex("ciphertext_hash", ciphertextHash[:]).
-				Time("insertion_time", buf.InsertTime).
-				Msg("Returning event already processed error")
-			err = fmt.Errorf("%w at %s", EventAlreadyProcessed, buf.InsertTime.String())
-			return
-		}
-		zerolog.Ctx(ctx).Debug().
-			Hex("ciphertext_hash", ciphertextHash[:]).
-			Time("insertion_time", buf.InsertTime).
-			Msg("Returning previously decrypted plaintext")
-		plaintext = buf.Plaintext
-		return
-	}
-
-	err = cli.Store.EventBuffer.DoDecryptionTxn(ctx, func(ctx context.Context) (innerErr error) {
-		plaintext, innerErr = decrypt(ctx)
-		if innerErr != nil {
-			return
-		}
-		innerErr = cli.Store.EventBuffer.PutBufferedEvent(ctx, ciphertextHash, plaintext, serverTimestamp)
-		if innerErr != nil {
-			innerErr = fmt.Errorf("failed to save decrypted event to buffer: %w", innerErr)
-		}
-		return
-	})
-	if err == nil {
-		zerolog.Ctx(ctx).Debug().
-			Hex("ciphertext_hash", ciphertextHash[:]).
-			Msg("Successfully decrypted and saved event")
-	}
-	return
+	return message.BufferedDecrypt(ctx, cli.msgT(), ciphertext, serverTimestamp, decrypt, extraHashData...)
 }
 
 func (cli *Client) decryptDM(ctx context.Context, child *waBinary.Node, from types.JID, isPreKey bool, serverTS time.Time) ([]byte, *[32]byte, error) {
-	content, ok := child.Content.([]byte)
-	if !ok {
-		return nil, nil, fmt.Errorf("message content is not a byte slice")
-	}
-
-	builder := session.NewBuilderFromSignal(cli.Store, from.SignalAddress(), pbSerializer)
-	cipher := session.NewCipher(builder, from.SignalAddress())
-	var plaintext []byte
-	var ciphertextHash [32]byte
-	if isPreKey {
-		preKeyMsg, err := protocol.NewPreKeySignalMessageFromBytes(content, pbSerializer.PreKeySignalMessage, pbSerializer.SignalMessage)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse prekey message: %w", err)
-		}
-		plaintext, ciphertextHash, err = cli.bufferedDecrypt(ctx, content, serverTS, func(decryptCtx context.Context) ([]byte, error) {
-			pt, innerErr := cipher.DecryptMessage(decryptCtx, preKeyMsg)
-			if cli.AutoTrustIdentity && errors.Is(innerErr, signalerror.ErrUntrustedIdentity) {
-				cli.Log.Warnf("Got %v error while trying to decrypt prekey message from %s, clearing stored identity and retrying", innerErr, from)
-				if innerErr = cli.clearUntrustedIdentity(decryptCtx, from); innerErr != nil {
-					innerErr = fmt.Errorf("failed to clear untrusted identity: %w", innerErr)
-					return nil, innerErr
-				}
-				pt, innerErr = cipher.DecryptMessage(decryptCtx, preKeyMsg)
-			}
-			return pt, innerErr
-		}, ciphertextHashDomainPreKey, from.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decrypt prekey message: %w", err)
-		}
-	} else {
-		msg, err := protocol.NewSignalMessageFromBytes(content, pbSerializer.SignalMessage)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse normal message: %w", err)
-		}
-		plaintext, ciphertextHash, err = cli.bufferedDecrypt(ctx, content, serverTS, func(decryptCtx context.Context) ([]byte, error) {
-			return cipher.Decrypt(decryptCtx, msg)
-		}, ciphertextHashDomainNormal, from.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decrypt normal message: %w", err)
-		}
-	}
-	var err error
-	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int(encAttrVersion))
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unpad message: %w", err)
-	}
-	return plaintext, &ciphertextHash, nil
+	return message.DecryptDM(ctx, cli.msgT(), child, from, isPreKey, serverTS)
 }
 
 func (cli *Client) decryptGroupMsg(ctx context.Context, child *waBinary.Node, from types.JID, chat types.JID, serverTS time.Time) ([]byte, *[32]byte, error) {
-	content, ok := child.Content.([]byte)
-	if !ok {
-		return nil, nil, fmt.Errorf("message content is not a byte slice")
-	}
-
-	senderKeyName := protocol.NewSenderKeyName(chat.String(), from.SignalAddress())
-	builder := groups.NewGroupSessionBuilder(cli.Store, pbSerializer)
-	cipher := groups.NewGroupCipher(builder, senderKeyName, cli.Store)
-	msg, err := protocol.NewSenderKeyMessageFromBytes(content, pbSerializer.SenderKeyMessage)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse group message: %w", err)
-	}
-	plaintext, ciphertextHash, err := cli.bufferedDecrypt(ctx, content, serverTS, func(decryptCtx context.Context) ([]byte, error) {
-		return cipher.Decrypt(decryptCtx, msg)
-	}, ciphertextHashDomainSenderKey, chat.String(), from.String())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decrypt group message: %w", err)
-	}
-	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int(encAttrVersion))
-	if err != nil {
-		return nil, nil, err
-	}
-	return plaintext, &ciphertextHash, nil
+	return message.DecryptGroupMsg(ctx, cli.msgT(), child, from, chat, serverTS)
 }

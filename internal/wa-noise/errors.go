@@ -14,6 +14,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/pairing"
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/user"
@@ -155,12 +156,16 @@ var (
 	ErrUnknownMediaRetryError = media.ErrUnknownMediaRetryError
 )
 
+// Os cinco sentinelas de segredo de mensagem vivem em message/errors.go desde a
+// Fase F/G lote 9, e sao reexportados aqui por ATRIBUICAO — o MESMO valor, nao
+// copias. Um `errors.New` proprio deste lado quebraria `errors.Is` para quem
+// comparasse com o nome historico. Travado por TestMessageErrorsAreTheSameValues.
 var (
-	ErrOriginalMessageSecretNotFound = errors.New("original message secret key not found")
-	ErrNotEncryptedReactionMessage   = errors.New("given message isn't an encrypted reaction message")
-	ErrNotEncryptedCommentMessage    = errors.New("given message isn't an encrypted comment message")
-	ErrNotSecretEncryptedMessage     = errors.New("given message isn't a secret encrypted message")
-	ErrNotPollUpdateMessage          = errors.New("given message isn't a poll update message")
+	ErrOriginalMessageSecretNotFound = message.ErrOriginalMessageSecretNotFound
+	ErrNotEncryptedReactionMessage   = message.ErrNotEncryptedReactionMessage
+	ErrNotEncryptedCommentMessage    = message.ErrNotEncryptedCommentMessage
+	ErrNotSecretEncryptedMessage     = message.ErrNotSecretEncryptedMessage
+	ErrNotPollUpdateMessage          = message.ErrNotPollUpdateMessage
 )
 
 type wrappedIQError struct {

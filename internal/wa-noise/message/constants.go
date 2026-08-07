@@ -4,11 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import "time"
 
-// Parametros de geracao de ID de mensagem (message_id.go).
+// WebMessageIDPrefix e' o prefixo fixo dos IDs de mensagem do WhatsApp Web.
+const WebMessageIDPrefix = "3EB0"
+
+// Parametros de geracao de ID de mensagem (id.go).
 //
 // O ID "web" e' `WebMessageIDPrefix` seguido do SHA-256, em hex maiusculo, de
 // timestamp || jid || aleatorio. Os tamanhos abaixo sao formato de fio: mudar
@@ -27,7 +30,7 @@ const (
 	// `@s.whatsapp.net`) porque e' o que o WhatsApp Web usa.
 	webMessageIDJIDSuffix = "@c.us"
 	// legacyMessageIDRandomLength e' o tamanho do aleatorio da funcao
-	// GenerateMessageID depreciada, que nao passa por hash.
+	// GenerateID depreciada, que nao passa por hash.
 	legacyMessageIDRandomLength = 8
 )
 
@@ -36,9 +39,9 @@ const (
 // milissegundos deslocado para a esquerda.
 const facebookMessageIDRandomBits = 22
 
-// historySyncLoopIdleTimeout e' quanto tempo handleHistorySyncNotificationLoop
-// espera por uma nova notificacao antes de encerrar. Ao encerrar ele zera
-// historySyncHandlerStarted, e o proximo protocol message religa o loop.
+// historySyncLoopIdleTimeout e' quanto tempo HandleHistorySyncNotificationLoop
+// espera por uma nova notificacao antes de encerrar. Ao encerrar ele zera o
+// flag de loop iniciado, e o proximo protocol message religa o loop.
 const historySyncLoopIdleTimeout = 1 * time.Minute
 
 // decryptedBufferClearInterval e' o intervalo minimo entre duas limpezas de
@@ -47,25 +50,26 @@ const historySyncLoopIdleTimeout = 1 * time.Minute
 // com sucesso depois desse intervalo.
 const decryptedBufferClearInterval = 12 * time.Hour
 
-// Parametros das chaves derivadas de message secret (msgsecret*.go).
+// Parametros das chaves derivadas de message secret (secret_*.go).
 const (
 	// msgSecretKeyLength e' o tamanho em bytes da chave AES-GCM derivada por
 	// HKDF-SHA256 a partir do message secret original, tanto em
-	// generateMsgSecretKey quanto em applyBotMessageHKDF.
+	// GenerateSecretKey quanto em ApplyBotMessageHKDF.
 	msgSecretKeyLength = 32
-	// msgSecretIVSize e' o tamanho do nonce AES-GCM usado por encryptMsgSecret
+	// msgSecretIVSize e' o tamanho do nonce AES-GCM usado por EncryptSecret
 	// (96 bits, o padrao do modo).
 	msgSecretIVSize = 12
 )
 
-// encTypeMsgSecret e' o valor do atributo `type` do <enc> de mensagem de bot,
+// EncTypeMsgSecret e' o valor do atributo `type` do <enc> de mensagem de bot,
 // cujo conteudo e' um waE2E.MessageSecretMessage e nao um ciphertext Signal.
-// Ao contrario de encTypeMsg/encTypePreKeyMsg/encTypeSenderKey
-// (send_constants.go), este so' aparece no caminho de recepcao.
-const encTypeMsgSecret = "msmsg"
+// Ao contrario de send.EncTypeMsg/EncTypePreKeyMsg/EncTypeSenderKey, este so'
+// aparece no caminho de RECEPCAO — e' por isso que ele vive aqui, e nao em
+// send/constants.go junto dos outros tres.
+const EncTypeMsgSecret = "msmsg"
 
 // Separadores de dominio do hash de ciphertext usado como chave do buffer de
-// eventos decriptados (bufferedDecrypt, message_decrypt_session.go).
+// eventos decriptados (bufferedDecrypt, decrypt_session.go).
 //
 // ATENCAO: estes valores sao entrada de hash persistida. Mudar qualquer um
 // deles invalida silenciosamente todo o buffer ja' gravado — as entradas

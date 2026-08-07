@@ -24,6 +24,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/pairing"
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/proto/waE2E"
@@ -62,7 +63,10 @@ type Client struct {
 	// If SynchronousAck is set, acks for messages will only be sent after all event handlers return.
 	SynchronousAck             bool
 	EnableDecryptedEventBuffer bool
-	lastDecryptedBufferClear   time.Time
+	// decryptBuffer guarda o antigo lastDecryptedBufferClear. Virou tipo
+	// proprio no lote 9 (message.DecryptBufferState); a ausencia de
+	// sincronizacao foi preservada literalmente.
+	decryptBuffer message.DecryptBufferState
 
 	DisableLoginAutoReconnect bool
 
@@ -81,8 +85,11 @@ type Client struct {
 	// com os mesmos pontos de aquisicao.
 	appStateSync appstatesync.State
 
-	historySyncNotifications        chan *waE2E.HistorySyncNotification
-	historySyncHandlerStarted       atomic.Bool
+	// historySync reune os antigos historySyncNotifications (canal) e
+	// historySyncHandlerStarted (atomic.Bool). Viraram um tipo proprio no
+	// lote 9 (message.HistorySyncQueue) porque so' fazem sentido juntos: o flag
+	// existe para garantir no maximo um consumidor da fila.
+	historySync                     *message.HistorySyncQueue
 	ManualHistorySyncDownload       bool
 	DisableManualHistorySyncReceipt bool
 
@@ -221,7 +228,7 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		socketWait:         make(chan struct{}),
 		expectedDisconnect: exsync.NewEvent(),
 
-		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
+		historySync: message.NewHistorySyncQueue(historySyncNotificationBufferSize),
 
 		GetMessageForRetry: func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },
 
