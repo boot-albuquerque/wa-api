@@ -2507,3 +2507,349 @@ núcleo do `Client`, junto com `queryMediaConn`/`SendMediaRetryReceipt` (lote
 `WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
 mexer no `Makefile`. `git diff --stat internal/wa-noise/proto/` e
 `git diff --stat internal/wa-noise/appstate/` continuam vazios.
+
+## Fase E — lote 4: pareamento/prekeys/tokens/misc, 2026-08-07
+
+### Contexto
+
+Quarto lote da Fase E (ver o lote 1 para o porquê da fase). É o maior até
+agora e, ao contrário dos anteriores, **não é um domínio só** — são 16
+arquivos da raiz agrupados por não pertencerem a nenhum dos domínios já
+cobertos:
+
+`pair.go`, `pair-code.go`, `qrchan.go`, `prekeys.go`, `presence.go`,
+`privacysettings.go`, `push.go`, `reportingtoken.go`, `request.go`,
+`tctoken.go`, `cstoken.go`, `update.go`, `broadcast.go`, `call.go`,
+`disappearing_timer.go`, `armadillomessage.go`.
+
+Nenhum arquivo foi dividido: o maior tem 277 linhas, abaixo do teto de 300.
+Como o lote mistura concerns distintos, esta entrada é organizada por
+subseção temática, e os commits seguem o mesmo corte (pareamento, prekeys,
+tokens, misc) em vez de um commit único.
+
+### Fora do escopo, explicitamente: `internals.go` e `internals_generate.go`
+
+Os dois **não foram tocados** (`git diff HEAD~4 --stat` não os lista).
+Estão associados ao achado **F29** de `HOUSEKEEP.md` (o gerador e o arquivo
+gerado dessincronizados), cuja correção depende de decisão do usuário.
+Auditá-los para número mágico exigiria ou editar código gerado — que o
+gerador desfaz — ou mexer no gerador, que é exatamente o que F29 pede para
+não fazer sem aval. Ficam pendentes da decisão sobre F29.
+
+---
+
+### Bug real corrigido — panic remoto em `handlePairSuccess` derrubava o processo
+
+`pair.go`, primeira linha de `handlePairSuccess`. Antes:
+
+```go
+func (cli *Client) handlePairSuccess(ctx context.Context, node *waBinary.Node) {
+	id := node.Attrs["id"].(string)   // <- type assertion sem comma-ok
+```
+
+O atributo `id` **vem do servidor**. Um `<iq>` de `pair-success` sem `id`,
+ou com `id` de outro tipo, causava `interface conversion: interface {} is
+nil, not string`.
+
+Por que é fatal e não só um erro: `handlePairSuccess` é alcançado por
+`handleIQ`, que está registrado como **nodeHandler** (`client.go:270`), e
+nodeHandlers são invocados assim em `client_events.go`, `handlerQueueLoop`:
+
+```go
+go func() {
+	cli.nodeHandlers[node.Tag](evtCtx, node)   // goroutine nua, sem recover
+	...
+}()
+```
+
+Não há `recover()` nesse caminho — o `recover` de `dispatchEvent` só protege
+os *event handlers* do usuário, e o panic acontece antes de qualquer evento
+ser despachado. Panic em goroutine sem recover **mata o processo inteiro**;
+num binário de API multi-sessão, derruba todas as sessões.
+
+É a terceira ocorrência da mesma classe em quatro lotes: o `log.Fatalf` do
+lote 2 (`newsletter_mex.go`) e o `index out of range` do lote 3
+(`appstate_dispatch.go`). A diferença aqui é que o caminho é o de
+**pareamento**, ou seja alcançável antes de qualquer autenticação concluída.
+
+Correção — mesma forma que o lote 3 usou, log e retorno em vez de panic:
+
+```go
+id, ok := node.Attrs["id"].(string)
+if !ok {
+	cli.Log.Warnf("Ignoring pair-success node without a string id attribute")
+	return
+}
+```
+
+**Auditado e descartado como falso positivo no mesmo arquivo**:
+`*(*[32]byte)(deviceIdentity.AccountSignatureKey)` (`pair.go:196`) também
+converte slice de origem remota em array, mas é inalcançável com slice
+curto — `paircrypto.VerifyAccountSignature`, chamada imediatamente antes com
+`return` em caso de falha, já recusa `AccountSignatureKey` que não tenha
+exatamente 32 bytes (travado por
+`TestVerifyAccountSignatureRejectsMalformedIdentities`, já existente).
+Deixado como está.
+
+### Bug corrigido — fatiamento sem limite em `extractReportingTokenContent`
+
+`reportingtoken.go`. O extrator caminha pelo protobuf serializado byte a
+byte e fatiava `data` sem conferir limites:
+
+```go
+l, n := binary.Uvarint(data[i:])
+valStart := i + n
+valEnd := valStart + int(l)
+...
+fields = append(fields, field{Num: fieldNum, Bytes: data[fieldStart:valEnd]})
+```
+
+Um campo cujo prefixo de comprimento seja maior que o buffer restante levava
+a `valEnd > len(data)` e panic de slice. Verificado: com a entrada de 2 bytes
+`[tag campo1 wireBytes, 0x7F]`, o original calcula `data[2:129]` sobre um
+buffer de 2. Os `i += 8` / `i += 4` dos wire types de largura fixa e o `n`
+negativo de `binary.Uvarint` tinham o mesmo problema.
+
+**Ressalva honesta**: isso é hoje **inalcançável**. A entrada é sempre
+`msgProtobuf`, saída do nosso próprio `proto.Marshal` no caminho de envio —
+não é dado de rede. A guarda foi adicionada mesmo assim porque a função roda
+no caminho quente de envio de mensagem e um descasamento futuro entre
+serializador e extrator viraria crash em vez de token vazio. Travado por
+`TestExtractReportingTokenContentDoesNotPanicOnTruncatedInput`, com 9
+entradas truncadas.
+
+---
+
+### Constantes extraídas — pareamento (`pair_constants.go`, novo)
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `pairQRDataFormat` | `https://wa.me/settings/linked_devices#%s,%s,%s,%s,%s` | o `fmt.Sprintf` de `makeQRData` |
+| `pairMainDeviceID` | 0 | `mainDeviceLID.Device = 0` |
+| `pairIdentityKeyLength` | 32 | o `*(*[32]byte)` da chave de assinatura de conta |
+| `pairErrCodeInternal` / `pairErrCodeUnauthorized` | 500 / 401 | os 8 `sendPairError` |
+| `pairErrTextInternal` / `...HMACMismatch` / `...SignatureMismatch` | `internal-error` / `hmac-mismatch` / `signature-mismatch` | idem (`internal-error` aparecia 6×) |
+| `pairCodePBKDF2Iterations` | `2 << 16` | os 2 `pbkdf2.Key` |
+| `pairCodeSaltLength` / `pairCodeIVLength` / `pairCodeKeyLength` | 32 / 16 / 32 | os `random.Bytes` e `make([]byte, N)` |
+| `pairCodeSaltEnd` / `pairCodeIVEnd` / `pairCodeWrappedKeyEnd` | 32 / 48 / 80 | as fatias `[0:32] [32:48] [48:80]` e o `len < 80`, agora derivadas por soma |
+| `pairCodeRawLength` / `pairCodeGroupLength` | 5 / 4 | bytes do código e posição do hífen |
+| `pairCodeAdvSecretRandomLength` / `...KeyBundleSaltLength` / `...KeyBundleNonceLength` | 32 / 32 / 12 | os 3 `random.Bytes` de `handleCodePairNotification` |
+| `pairCodeKeyBundleKeyLength` / `pairCodeAdvSecretLength` | 32 / 32 | o tamanho de saída dos 2 HKDF |
+| `pairCodeKeyBundleHKDFInfo` / `pairCodeAdvSecretHKDFInfo` | `link_code_pairing_key_bundle_encryption_key` / `adv_secret` | os rótulos HKDF |
+| `pairCodeBase32Alphabet` | `123456789ABCDEFGHJKLMNPQRSTVWXYZ` | o alfabeto de `linkingBase32` |
+| `pairCodePhoneMinLength` / `pairCodePhoneTrunkPrefix` | 7 / `0` | `len(phone) <= 6` e o `HasPrefix` |
+| `qrChannelBuffer` / `qrCodeTimeout` / `qrCodeFirstTimeout` / `qrCodeFirstBatchSize` | 8 / 20s / 60s / 6 | os literais de `emitQRs` e `GetQRChannel` |
+| `qrChannelEventSuccess` e os outros 4 | `success`, `timeout`, `err-*` | os `Event:` dos `QRChannelItem` sentinela |
+
+`len(phone) <= 6` virou `len(phone) < pairCodePhoneMinLength` (7) para que a
+constante seja o **mínimo aceito**, e não o maior valor recusado — mesmo
+critério que o lote 3 usou nas aridades de índice de app state. Equivalente
+para inteiros.
+
+`QRChannelEventCode`/`QRChannelEventError` (exportadas) mudaram de arquivo,
+não de valor: saíram de `qrchan.go` para o bloco de constantes, ao lado das
+não exportadas irmãs.
+
+### Constantes extraídas — prekeys (`prekeys_constants.go`, novo)
+
+`prekeys.go` é o arquivo mais sensível do lote (gestão de chave do protocolo
+Signal), então aqui a régua foi: **só literal virando constante de valor
+idêntico**, nenhuma reorganização.
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `initialPreKeyCount` | 812 | o `wantedCount = 812` do primeiro upload |
+| `preKeyUploadDebounce` | 10min | o `lastPreKeyUpload.Add(10 * time.Minute)` |
+| `preKeyRegistrationIDLength` | 4 | os 2 `[4]byte` e o `len(registrationBytes) != 4` |
+| `preKeyIDLength` | 3 | o `len(idBytes) != 3` e a mensagem de erro |
+| `preKeyIDPadLength` | 1 (= 4 − 3) | o `keyID[1:]` e o `append([]byte{0}, ...)` |
+| `preKeyPubLength` | 32 | os 3 `len(...) != 32` e os `*(*[32]byte)` |
+| `preKeySignatureLength` | 64 | o `len(sigBytes) != 64` e o `*(*[64]byte)` |
+
+`append([]byte{0}, idBytes...)` virou `append(make([]byte, preKeyIDPadLength),
+idBytes...)`. Com `preKeyIDPadLength == 1`, `make([]byte, 1)` é `[]byte{0}` —
+mesmo resultado, agora ligado ao comprimento do campo em vez de ser um zero
+solto. Travado pelo round trip de `prekeys_test.go`.
+
+**Consistência de tipo**: `getServerPreKeyCount` e `uploadPreKeys` montavam a
+IQ com `Type: "get"` / `"set"` (string crua coagida para `infoQueryType`),
+enquanto o resto da raiz usa `iqGet`/`iqSet`. Passaram às constantes tipadas.
+Mesmo valor de wire — é a mesma correção que o lote 3 fez em `appstate.go`.
+
+### Constantes extraídas — tokens (`token_constants.go`, novo)
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `reportingTokenNodeTag` / `reportingTokenChildTag` | `reporting` / `reporting_token` | as tags do nó enviado |
+| `reportingTokenVersionAttr` / `reportingTokenVersion` | `v` / `2` | o atributo de versão do esquema |
+| `reportingTokenLength` | 16 | o `hasher.Sum(nil)[:16]` |
+| `wireTypeMask` / `wireFieldNumShift` | `0x7` / 3 | o `tag & 0x7` e o `tag >> 3` |
+| `wire64bitLength` / `wire32bitLength` | 8 / 4 | os 4 `i += 8` / `i += 4` |
+| `tcTokenType` | `trusted_contact` | o atributo `type` do `<token>` |
+| `pushMsgIDEncKeyLength` | 32 | o `len(...) != 32` / `random.Bytes(32)` da APNs |
+
+Os quatro `wireVarint`/`wire64bit`/`wireBytes`/`wire32bit` **já eram**
+constantes nomeadas em `reportingtoken.go`; foram movidas para cá para ficar
+ao lado da máscara e do shift que as acompanham, sem mudar valor.
+
+Em `tctoken.go`, `fmt.Sprintf("%d", timestamp.Unix())` virou
+`strconv.FormatInt(timestamp.Unix(), 10)` — mesmo resultado, sem passar por
+reflexão de formatação. O bloco de constantes de bucket (`tcTokenBucketDuration`,
+`tcTokenNumBuckets`, `tcTokenDBPruneInterval`) **já existia e já estava
+correto**; nada a fazer ali.
+
+### Constantes extraídas — misc (locais de arquivo)
+
+Nenhuma destas cruza arquivo, então ficaram junto do código que as justifica,
+em vez de num arquivo de constantes compartilhado:
+
+- `request.go`: `streamErrorAuthCode` (`401`), `conflictTypeReplaced`,
+  `conflictTypeDeviceRemoved` — os três estados terminais que impedem retry —
+  e `retryReconnectWait` (5s). Este último tinha um agravante: o valor
+  aparecia como `5 * time.Second` no código **e** como a string `"5 seconds"`
+  escrita à mão na mensagem de log da linha seguinte. A mensagem passou a
+  formatar a constante, então mudar o timeout não deixa mais o log mentindo.
+- `update.go`: `latestVersionUserAgent`, `latestVersionAccept`,
+  `latestVersionMajor` (2), `latestVersionMinor` (3000); e
+  `resp.StatusCode != 200` virou `!= http.StatusOK`.
+- `presence.go`: `presenceTypeUnavailable`, `presenceTypeSubscribe`,
+  `presenceLastSeenDenied` (`deny`).
+- `call.go`: `callRejectCount` (`"0"`).
+
+### O que *não* foi extraído, e por quê
+
+- Os atributos do `<config>` da APNs em `push.go` (`version: 2`, `reg_push: 1`,
+  `nse_ver: 2`, `voip_payload_type: 2`, `"Opening.m4r"`, `"note.m4r"`, `lg`,
+  `lc`…). São um bloco de configuração declarativa usado uma vez, onde o nome
+  do atributo já documenta o valor ao lado; nomear cada um só afastaria o
+  número do atributo que o explica. O upstream tem inclusive um
+  `// or 0` como comentário em `background_location`, sinal de que os valores
+  são empíricos e não têm nome canônico.
+- Tags e atributos do XML binário usados uma vez no ponto onde o nó é montado
+  (`pair-device`, `pair-success`, `link_code_companion_reg`, `companion_hello`,
+  `companion_finish`, `encrypt`, `count`, `registration`, `skey`, `privacy`,
+  `category`, `tokens`, `disappearing_mode`, `presence`, `chatstate`,
+  `offer`/`accept`/`terminate`…). Mesma convenção dos lotes 1–3.
+- Os `PairClient*` e os `DisappearingTimer*` já eram constantes exportadas.
+- Os aliases de string de `ParseDisappearingTimerString` (`"1week"`, `"7d"`,
+  `"604800s"`…): são o vocabulário de entrada da função, não parâmetros de
+  protocolo. Travados por teste em vez de por constante.
+
+---
+
+### Logging
+
+Auditados os 16 arquivos atrás de escrita de log fora do `waLog.Logger`
+injetado, de `panic`, de `os.Exit` e de uso do `log` da stdlib.
+
+**Nenhum bypass encontrado.** Todo log roteia por `cli.Log` (ou por
+`qrc.log`, que é `cli.Log.Sub("QRChannel")`, atribuído em `GetQRChannel`) —
+a mesma ponte para zerolog montada fora do fork em `pkg/infra/wa-noise/walog/`.
+Não há `fmt.Print*`, `log.*` nem `println`. **Nada foi adicionado, removido
+ou reroteado.**
+
+Dois pontos de panic *indireto*, ambos deixados como estão:
+
+- `reportingtoken.go:29` — `exerrors.PanicIfNotNil` sobre o
+  `json.Unmarshal` de `reportingfields.json`. É `//go:embed` dentro de um
+  `sync.OnceValue`: se o JSON estiver quebrado, o processo morre no primeiro
+  envio de mensagem. Não é corrigível de forma útil (a alternativa seria
+  degradar silenciosamente para "sem reporting token"), mas passou a ser
+  coberto por `TestReportingFieldsJSONIsValid`, que falha no CI em vez de
+  deixar isso chegar em produção.
+- `qrchan.go:144` — `close(qrc.stopQRs)` fora de CAS. Ver a seção de achados.
+
+---
+
+### Testes
+
+Cinco arquivos novos, todos `package whatsmeow`.
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `prekeys_test.go` | round trip `preKeyToNode` ⇄ `nodeToPreKey` (incluindo o corte de 24 bits do key ID e o truncamento silencioso acima disso), `<key>` × `<skey>`, as 10 formas de nó malformado que o parser recusa antes de converter slice em array, `preKeysToNodes` (ordem, vazio não-nil), `nodeToPreKeyBundle` (com/sem prekey opcional, os 4 modos de resposta inválida, formato plano × aninhado em `<keys>`), coerência de `MinPreKeyCount` < `WantedPreKeyCount` < `initialPreKeyCount` |
+| `reportingtoken_test.go` | `extractReportingTokenContent`: descarte de campo não configurado, ordenação por número de campo (com entrada fora de ordem), recursão em subcampos com recálculo do comprimento, campo aninhado que fica vazio some, os 3 wire types de largura fixa, e as **9 entradas truncadas que antes causavam panic**; `getReportingToken` determinista, `getConfigForField`, validade e unicidade de `reportingfields.json`, e os 6 ramos de `shouldIncludeReportingToken` |
+| `tctoken_test.go` | `currentTCTokenCutoffTimestamp` alinhado a bucket e dentro da janela, `isTCTokenExpired` (5 casos, incluindo o cutoff exato), `shouldSendNewTCToken` (emissão só na virada de bucket, não a cada N segundos), a tabela de 7 tipos de JID rodada **nos dois** `shouldSendTCTokenInChatAction` e `shouldSendCsToken`, o mapa em memória chaveado sem device, `validateAndSetTCTokenSenderTS` (4 ramos) e a limpeza do mapa |
+| `misc_test.go` | `ParseDisappearingTimerString` (12 entradas) + coerência entre as constantes `DisappearingTimer*` e os aliases em segundos que a própria função aceita; `GetLatestVersion` contra `httptest` com transporte de reescrita de host (parse do `client_revision`, User-Agent enviado, status inesperado, revisão ausente); `isAuthErrorDisconnect` (7 casos), `isDisconnectNode` incluindo a comparação por **ponteiro** do sentinela, `generateRequestID`; `parsePrivacySettings` (duas categorias + filho não-`<category>` ignorado + categoria desconhecida que não zera nem marca mudança); `DefaultStatusPrivacy` |
+
+Cobertura resultante: 100% em `preKeyToNode`, `nodeToPreKey`,
+`preKeysToNodes`, `nodeToPreKeyBundle`, `getConfigForField`,
+`ParseDisappearingTimerString`, `isDisconnectNode`, `isAuthErrorDisconnect`,
+`generateRequestID`, `parsePrivacySettings`, `shouldIncludeReportingToken`,
+`shouldSendCsToken`, `shouldSendTCTokenInChatAction`, `isTCTokenExpired`,
+`shouldSendNewTCToken` e `currentTCTokenCutoffTimestamp`;
+`extractReportingTokenContent` acima de 90%.
+
+`GetLatestVersion` é a única função de rede do lote realmente testável, e só
+porque aceita um `*http.Client` como parâmetro — a costura de transporte que
+os lotes 1–3 não tinham. O teste redireciona pelo `RoundTripper` em vez de
+mexer em `socket.Origin`.
+
+### Lacunas assumidas, sem teste de fachada
+
+Mesma decisão dos lotes 1–3, e vale nomear o que ficou em 0%:
+
+- **Todo o fluxo de pareamento** — `handleIQ`, `handlePairDevice`,
+  `handlePairSuccess`, `handlePair`, `sendPairError`, `PairPhone`,
+  `handleCodePairNotification`. Cada uma é `sendNode`/`sendIQ` mais leitura
+  da resposta, com escrita no `store.Device` no meio. Exercitar de verdade
+  exige socket Noise aberto, servidor devolvendo identidades ADV **assinadas
+  com chaves válidas** e um container de store. As primitivas criptográficas
+  que dava para isolar já **estão** cobertas, no subpacote onde moram:
+  `paircrypto/` (`ConcatBytes`, `VerifyAccountSignature`,
+  `GenerateDeviceSignature`), extraído na Fase A.
+- **`generateCompanionEphemeralKey`** — ficou sem teste de propósito. Ela
+  usa `random.Bytes` direto, sem costura de aleatoriedade, então um teste só
+  poderia afirmar tamanhos (80 bytes, offsets) — o que as constantes já
+  dizem — e não a correção da cifragem, que só é verificável contra o
+  aparelho principal real. Um teste de tamanho aqui daria falsa confiança
+  num caminho criptográfico.
+- **`qrChannel.emitQRs` / `handleEvent`** — dependem de `cli.Disconnect()`,
+  `cli.RemoveEventHandler` e de temporização real de 20/60 segundos. Testar
+  exigiria injetar relógio, que não existe no fork.
+- **`uploadPreKeys` / `getServerPreKeyCount` / `fetchPreKeys`** — `sendIQ`
+  mais store de prekeys. As partes puras (montagem e parsing de nó) estão
+  100% cobertas; o que sobra é o transporte.
+- **`TryFetchPrivacySettings` / `SetPrivacySetting` / `GetStatusPrivacy` /
+  `RejectCall` / `SendPresence` / `SubscribePresence` /
+  `RegisterForPushNotifications` / `issuePrivacyToken` / `ensureTCToken` /
+  `generateCsToken`** — todas `sendIQ`/`sendNode` ou acesso a sub-store.
+- **`armadillomessage.go` inteiro** — `decodeArmadillo` e as duas variantes
+  precisam de payloads `MessageTransport` válidos, que são protobufs de
+  subprotocolo aninhados; montá-los na mão seria reescrever o decodificador
+  dentro do teste.
+- **`retryFrame` / `sendIQ` / `sendIQAsync`** — o núcleo do transporte, com
+  socket e reconexão.
+
+Tudo isso é a mesma costura de transporte + store que a decisão da Fase D
+deixou na raiz e que não pode ser extraída para subpacote. Fica para o lote
+do núcleo do `Client`, junto com `queryMediaConn`/`SendMediaRetryReceipt`
+(lote 1), o corpo de `sendMexIQ` (lote 2) e `FetchAppState`/`sendAppState`
+(lote 3).
+
+### Achados incidentais (registrados em `HOUSEKEEP.md`, não corrigidos)
+
+- **F33** — `qrchan.go:144`: `close(qrc.stopQRs)` roda fora do
+  `CompareAndSwap`, então dois eventos terminais concorrentes fecham o mesmo
+  canal duas vezes (`close of closed channel`). Não é fatal para o processo
+  (`handleEvent` é *event handler*, coberto pelo `recover` de
+  `dispatchEvent`), mas mata o emissor de QR e deixa o canal do chamador sem
+  item final.
+- **F34** — `armadillomessage.go:88,106`: `protoMsg` e `subData` são
+  declarados, nunca atribuídos, e o `if protoMsg != nil` logo abaixo é
+  portanto código morto — junto com o `proto.Unmarshal` dentro dele. Herdado
+  do upstream.
+- **F35** — `cstoken.go:17` `shouldSendCsToken` e `tctoken.go:50`
+  `shouldSendTCTokenInChatAction` têm corpo **byte a byte idêntico**.
+  Unificar é tentador e seria zero-mudança hoje, mas são políticas de dois
+  protocolos distintos que podem divergir; ficam separadas, com o teste
+  rodando a mesma tabela nas duas para que a divergência apareça.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. Os três arquivos de produção novos
+(`pair_constants.go`, `prekeys_constants.go`, `token_constants.go`) têm 111,
+42 e 48 linhas e carregam o header MPL-2.0.
+`git diff --stat internal/wa-noise/proto/` continua vazio, e
+`internals.go`/`internals_generate.go` não aparecem no diff do lote.

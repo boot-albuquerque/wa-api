@@ -1135,3 +1135,115 @@ vendorizado.
 **Status**: **não corrigido**. Não temos os valores corretos, e chutar IDs
 quebraria também o caminho que hoje ao menos falha de forma previsível. Os
 três testes acima falham de propósito se o upstream mudar, forçando revisão.
+
+## F33 — `close` de canal fora do CAS em `qrchan.go` pode fechar duas vezes
+
+**Data / contexto**: 2026-08-07, Fase E lote 4 (pareamento/prekeys/tokens/misc)
+do ADR-0004.
+
+**Onde**: `internal/wa-noise/qrchan.go:144`
+
+```go
+func (qrc *qrChannel) handleEvent(rawEvt interface{}) {
+	if atomic.LoadUint32(&qrc.closed) == 1 {   // <- checagem
+		return
+	}
+	...
+	close(qrc.stopQRs)                          // <- fora do CAS
+	if atomic.CompareAndSwapUint32(&qrc.closed, 0, 1) {
+		...
+	}
+}
+```
+
+**Problema**: entre o `LoadUint32` e o `close`, outra goroutine pode entrar
+na mesma função com o mesmo resultado na checagem. Os dois caminhos chegam ao
+`close(qrc.stopQRs)` e o segundo entra em pânico com `close of closed
+channel`. O `close` está deliberadamente **fora** do `CompareAndSwap` logo
+abaixo — que é justamente o que serializaria os dois.
+
+Alcançável quando dois eventos terminais chegam próximos (ex.:
+`*events.PairError` seguido de `*events.Disconnected`, que é a sequência
+normal de uma falha de pareamento, já que `handlePairSuccess` chama
+`cli.Disconnect()` no ramo de erro).
+
+Não é fatal para o processo: `handleEvent` é registrado via
+`AddEventHandler` e roda dentro de `dispatchEvent`, que tem `recover()`
+(`client_events.go:227`). O dano é local — o emissor de QR morre, o canal
+devolvido a `GetQRChannel` fica sem item final, e quem estiver lendo dele
+bloqueia até o contexto expirar.
+
+**Correção sugerida**: mover o `close(qrc.stopQRs)` para **dentro** do
+`CompareAndSwap` que já existe logo abaixo, ou proteger com um
+`sync.Once`. A primeira opção é a menor, mas muda a ordem observável
+(hoje o emissor recebe o sinal de parada antes de o item final ir para o
+canal).
+
+**Status**: **não corrigido**. O lote 4 é constantes, logging e testes; a
+única mudança de comportamento feita nele foi o panic de `handlePairSuccess`,
+que é fatal para o processo. Este é recuperável e a correção mexe em ordem de
+operações num caminho concorrente — precisa de decisão consciente.
+
+## F34 — código morto em `decodeFBArmadillo`
+
+**Data / contexto**: 2026-08-07, Fase E lote 4 do ADR-0004.
+
+**Onde**: `internal/wa-noise/armadillomessage.go:88-111`
+
+```go
+var protoMsg proto.Message
+var subData *waCommon.SubProtocol
+switch subProtocol := typedContent.SubProtocol.GetSubProtocol().(type) {
+	// ... nenhum ramo atribui protoMsg nem subData
+}
+if protoMsg != nil {                       // <- sempre falso
+	err = proto.Unmarshal(subData.GetPayload(), protoMsg)
+	...
+}
+```
+
+**Problema**: `protoMsg` e `subData` são declarados e nunca recebem valor em
+nenhum dos 7 ramos do `switch`. O `if protoMsg != nil` é portanto sempre
+falso, e o `proto.Unmarshal` dentro dele é inalcançável. Se algum dia o ramo
+fosse atingido com `subData` nil, `subData.GetPayload()` ainda funcionaria
+(getter de protobuf tolera receptor nil), mas o `proto.Unmarshal` receberia
+payload vazio.
+
+Herdado do upstream — parece resíduo de uma refatoração em que a
+desserialização passou a acontecer dentro de cada `subProtocol.Decode()`.
+
+**Correção sugerida**: remover as duas declarações e o bloco `if`. É deleção
+pura de código inalcançável, sem mudança de comportamento observável.
+
+**Status**: **não corrigido**. Deleção é segura, mas o lote 4 não tocou em
+`armadillomessage.go` além da auditoria, e remover código do upstream aumenta
+a divergência de reconciliação sem ganho funcional. Fica para decisão.
+
+## F35 — `shouldSendCsToken` e `shouldSendTCTokenInChatAction` são idênticas
+
+**Data / contexto**: 2026-08-07, Fase E lote 4 do ADR-0004.
+
+**Onde**: `internal/wa-noise/cstoken.go:17` e `internal/wa-noise/tctoken.go:50`
+
+As duas funções têm corpo byte a byte idêntico:
+
+```go
+jid = jid.ToNonAD()
+return (jid.Server == types.DefaultUserServer || jid.Server == types.HiddenUserServer) &&
+	jid.User != types.PSAJID.User &&
+	!jid.IsBot()
+```
+
+**Problema**: duplicação exata. Uma mudança de política aplicada a uma e
+esquecida na outra passa despercebida.
+
+**Correção sugerida**: manter as duas assinaturas (são o vocabulário de dois
+protocolos) e fazer uma delegar à outra, ou ambas a um helper comum
+`isDirectHumanChat(jid)`.
+
+**Status**: **não corrigido, e provavelmente não deve ser**. São políticas de
+protocolos distintos (trusted contact token × contact safety token) que
+coincidem hoje por acaso; unificar acopla os dois. `TestShouldSendTokenPerJIDType`
+(`internal/wa-noise/tctoken_test.go`) roda a mesma tabela de 7 tipos de JID
+nas duas, então uma divergência futura aparece como falha de teste em vez de
+passar batido. Registrado para visibilidade, não como dívida a pagar.
