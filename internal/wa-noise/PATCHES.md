@@ -1209,3 +1209,447 @@ que **nao** foram mexidas por serem mudanca de comportamento:
   testes — eles rodam sobre SQLite, que e' o dialeto testavel sem Docker. E' a
   maior lacuna dos 89.7%. Cobri-lo exigiria subir um Postgres no `make check`,
   decisao de infraestrutura fora do escopo desta fase.
+
+---
+
+## Fase C — `internal/wa-noise/binary/`, `types/`, `util/`, 2026-08-06
+
+Última fase do ADR-0004. Cobre os três diretórios que faltavam:
+`binary/` (o codec do XML binário do WhatsApp), `types/` com
+`types/events/` (as estruturas de dado e os eventos que o cliente emite) e
+os cinco subpacotes de `util/` (`cbcutil/`, `gcmutil/`, `hkdfutil/`,
+`keys/`, `log/`). Com ela, o fork inteiro passa a respeitar o teto de 300
+linhas, e os dois gates deixam de ser parciais.
+
+### Nota de procedência: commit `c196a68` mistura dois escopos
+
+O trabalho de divisão de `binary/` e `types/events/` desta fase ficou
+**dentro do commit `c196a68`** ("refactor(infra/wa-noise): extrai
+platform/, safego/ e applog/ para subpacotes"), que é de outro escopo.
+Outro agente trabalhando no mesmo worktree usou `git add -A` enquanto estas
+mudanças estavam na árvore e as varreu junto.
+
+Os 14 arquivos de `c196a68` que pertencem a esta fase, e não ao título do
+commit, são:
+
+```
+internal/wa-noise/binary/{constants,decoder,decoder_node,encoder,encoder_node,jid,packing,unpack}.go
+internal/wa-noise/types/events/{events,failure_reasons,group,message,newsletter,user}.go
+```
+
+Nada se perdeu e o conteúdo está correto. Optou-se por **não** reescrever a
+história: `c196a68` já era base de trabalho em voo de outro agente, e um
+`reset --soft` para reparti-lo custaria mais do que o commit mal rotulado.
+Fica o registro para quem for procurar a origem desses arquivos no `git
+log` e não achar.
+
+Os demais commits da fase são corretamente escopados:
+
+| Commit | Escopo |
+|---|---|
+| `c8cc023` | testes de `binary/` |
+| `ee849b6` | constantes e testes de `util/` |
+| `24a43fe` | testes de `types/` e `types/events/` |
+| `86ebfae` | gates (`waclient-filesize-check.sh`, `Makefile`) |
+| `ebc7da1` | achados F24–F28 em `HOUSEKEEP.md` |
+
+### O que estava acima do teto
+
+`wc -l` em tudo antes de começar. Só quatro arquivos passavam de 300, e um
+deles é gerado:
+
+| Arquivo | Linhas | Ação |
+|---|---|---|
+| `binary/proto/legacy.go` | 1084 | **fora do escopo** — gerado por `generatelegacy.sh` |
+| `types/events/events.go` | 623 | dividido em 6 |
+| `binary/decoder.go` | 406 | dividido em 4 (com o encoder) |
+| `binary/encoder.go` | 309 | dividido em 4 (com o decoder) |
+
+Todo o resto já estava dentro: o maior de `types/` é `jid.go` (278), o maior
+de `util/` é `cbcutil/cbc.go` (217), o maior de `binary/` fora dos dois
+acima é `attrs.go` (218).
+
+### `binary/` — divisão
+
+O corte **não** separou encoder de decoder por arquivo. Separou por
+**camada** e, nos dois pontos onde as duas direções são a mesma decisão
+vista de dois lados, juntou-as no mesmo arquivo:
+
+#### `decoder.go` (406 → 159) e `encoder.go` (309 → 148)
+
+Ficaram com a camada de **bytes**: avançar o cursor, ler e escrever
+inteiros de largura fixa, prefixos de tamanho, blocos crus, e o
+empacotamento nibble8/hex8 propriamente dito.
+
+- **Criado** `decoder_node.go` (153): `read` (o despacho por tag),
+  `readAttributes`, `readList`, `readNode` — a camada de **estrutura**.
+- **Criado** `encoder_node.go` (114): `writeNode`, `write` (o despacho por
+  tipo Go), `writeString`, `writeAttributes`, `countAttributes`.
+
+**Por que essa fronteira**: a camada de baixo é a única que toca `r.index` /
+`w.data` diretamente; a de cima é escrita inteiramente em cima da de baixo e
+nunca mexe no cursor. Era uma separação que já existia de fato nos dois
+arquivos e só não tinha nome.
+
+#### `jid.go` (124) — as duas direções juntas
+
+`writeJID` saiu do encoder; `readJIDPair`, `readADJID`, `readFBJID` e
+`readInteropJID` saíram do decoder. **Por que juntos**: qual dos quatro
+formatos o encoder escolhe e como o decoder o lê são a mesma tabela de
+decisão. Um formato novo tem que entrar nas duas metades ou o round trip
+quebra, e com os dois lados na mesma tela a assimetria fica visível.
+
+Vale para este arquivo mais que para qualquer outro do fork: escolher a tag
+de formato errada **não quebra a serialização** — produz um JID que o
+servidor lê como outro usuário.
+
+#### `packing.go` (109) — as duas direções juntas
+
+`packNibble`/`packHex`/`validateNibble`/`validateHex` (do encoder) e
+`unpackByte`/`unpackNibble`/`unpackHex` (do decoder). Mesmo racional: são
+inversas exatas sobre o mesmo alfabeto posicional, e `packNibble` ao lado de
+`unpackNibble` deixa a inversa verificável de relance.
+
+O corte já rendeu: com os dois lados juntos ficou visível que `packHex(0)`
+devolve o valor de padding mas `unpackHex` **não** o reconhece (15 cai no
+ramo `'A'+15-10 = 'F'`). É assimétrico no upstream, não é defeito (o padding
+de hex8 é descartado pelo bit de tamanho ímpar antes de chegar lá), e está
+travado por teste em `packing_test.go`.
+
+### `types/events/events.go` (623 → 165) — divisão por domínio
+
+O diretório já usava nome de domínio por arquivo (`appstate.go`, `call.go`),
+então a divisão só estendeu o critério que já existia.
+
+- `events.go` (165) ficou com o **ciclo de vida da conexão** e a doc do
+  pacote: `QR`, `PairSuccess`/`PairError`, `Connected`, `KeepAlive*`,
+  `LoggedOut`, `StreamReplaced`/`StreamError`, `Disconnected`,
+  `ConnectFailure`, `ClientOutdated`, `CATRefreshError`, `TemporaryBan`, os
+  dois eventos de sync offline, e a interface `PermanentDisconnect` com suas
+  seis implementações.
+- **Criado** `failure_reasons.go` (94): `TempBanReason` e
+  `ConnectFailureReason` com seus mapas de descrição e métodos. **Por que
+  separado do `events.go`**: não são eventos, são as **taxonomias de código
+  de erro do servidor** que os eventos carregam. Mesmo critério que a Fase B
+  usou ao isolar a taxonomia de patches de `appstate/`.
+- **Criado** `message.go` (200): `Message`, `FBMessage`, `UnwrapRaw`,
+  `UndecryptableMessage`, `HistorySync`, `Receipt` e os aliases
+  descontinuados de `ReceiptType`.
+- **Criado** `group.go` (65): `JoinedGroup` e `GroupInfo`.
+- **Criado** `user.go` (130): presença, foto, about, mudança de identidade,
+  privacidade, blocklist e retry de mídia — tudo que é sobre o usuário e
+  seus contatos.
+- **Criado** `newsletter.go` (33): os quatro eventos de newsletter.
+
+**Comportamento não mudou**: verificado mecanicamente. Ordenando todas as
+linhas não vazias e não comentadas do `events.go` original e comparando com
+as dos seis arquivos juntos, a única diferença são as linhas de
+`package events`, `import (`, `)` e os imports repetidos — nenhuma linha de
+declaração entrou, saiu ou mudou.
+
+### Comportamento não mudou em `binary/`: prova por golden do pré-refatoração
+
+Movimentação de arquivo é conferível por leitura, mas esta fase também trocou
+literais por constantes **dentro** do encoder e do decoder, e isso não é.
+Então a prova foi mecânica.
+
+Montou-se um corpus de 26 nós cobrindo cada ramo do formato (os quatro
+formatos de JID, as três larguras de bloco binário, as duas de lista,
+nibble8 e hex8 com tamanho par e ímpar, o nó vazio, o filtro de atributo
+vazio, cada tipo Go que o encoder aceita) mais 19 frames malformados. O
+mesmo corpus foi rodado contra a implementação **anterior** à divisão
+(commit `48b0461`, num `git worktree` separado) e contra a atual, gravando:
+
+- os bytes que cada nó produz (`Marshal`),
+- o nó que cada frame devolve (`Unmarshal`),
+- o **texto do erro** de cada frame malformado,
+- e o resultado de `Unpack` sobre cada um.
+
+**90 linhas de golden, todas idênticas.** Os goldens dos 26 nós ficaram
+gravados em `binary/testsupport_test.go`, então a trava é permanente: se o
+formato de fio mudar, `TestWireFormatMatchesGoldens` acusa.
+
+Detalhe que apareceu na primeira rodada e vale registrar: dois casos
+diferiam entre as duas execuções. Não era regressão — eram os dois nós com
+**mais de um atributo**. `Attrs` é um `map` e `writeAttributes` itera sobre
+ele, então a ordem dos pares no frame é aleatória por execução. O corpus foi
+refeito com no máximo um atributo por nó; nós com vários são exercitados por
+round trip, que independe da ordem.
+
+### Magic numbers e strings extraídos
+
+#### `binary/constants.go` (79) — criado
+
+| Literal original | Constante | Onde estava |
+|---|---|---|
+| `8` | `bitsPerByte` | deslocamento de `readIntN`/`pushIntN` |
+| `0xFF` | `byteMask` | `pushIntN`, `pushInt20` |
+| `1`/`2`/`3`/`4` | `int8Size`/`int16Size`/`int20Size`/`int32Size` | largura de cada inteiro |
+| `15` | `int20HighNibbleMask` | `& 15` de `readInt20` (o `0x0F` de `pushInt20` é o mesmo) |
+| `16` / `8` | `int20HighShift` / `int20MiddleShift` | deslocamentos de `readInt20`/`pushInt20` |
+| `1 << 20` | `int20Max` | fronteira binary20 → binary32 |
+| `4` | `nibbleShift` | `>>4` e `<<4` do par de nibbles |
+| `0xF0` / `0x0F` | `nibbleHighMask` / `nibbleLowMask` | separação do par em `readPacked8` |
+| `2` | `charsPerPackedByte` | dois caracteres por byte empacotado |
+| `128` / `127` | `packedOddLengthFlag` / `packedLengthMask` | bit de paridade e tamanho do bloco empacotado |
+| `10`, `11`, `15` | `nibbleDash`, `nibbleDot`, `nibblePadding` | sentinelas do alfabeto nibble8 |
+| `10` / `16` | `decimalDigitCount` / `hexDigitCount` | tamanho dos alfabetos posicionais |
+| `2` | `attrEntrySize` | posições que um atributo ocupa na lista de um nó |
+| `"0"` | `emptyNodeTag` | `n.Tag == "0"` em `writeNode` |
+| `2` | `zlibCompressedFlag` | `2&dataType` em `Unpack` |
+| `256` | (usa `token.SingleByteMax`) | `length < 256` e `listSize < 256` |
+
+`tagSize` já era constante; foi movida para cá.
+
+Três notas sobre onde a extração **parou de propósito**:
+
+- **As tags do protocolo não foram tocadas.** `ListEmpty`, `Binary8`,
+  `Nibble8`, `Dictionary0`, `JIDPair` e as demais já são constantes nomeadas
+  em `binary/token/`, junto com `PackedMax` e `SingleByteMax`. Verificado
+  antes de escrever `constants.go`: não havia lacuna ali. O que
+  `constants.go` cobre é só o que sobrou sem nome.
+- **`strconv.FormatInt(x, 10)` continua com o `10` literal.** É a base de
+  conversão da stdlib, não um parâmetro do protocolo. Chegou a virar
+  `decimalDigitCount` numa primeira versão e foi revertido: os dois valem 10
+  e não têm relação nenhuma, mesmo racional que a Fase B aplicou a
+  `curve25519KeyLength` × `ciphertextHashLength`.
+- **`math.MaxInt32` e `aes.BlockSize` ficam como estão** — já são constantes
+  nomeadas que dizem exatamente o que são.
+
+#### `util/cbcutil/constants.go` (criado)
+
+| Literal | Constante | Onde estava |
+|---|---|---|
+| `32 * 1024` | `streamBufferSize` | buffer de `DecryptFile` e `EncryptStream` |
+| `10` | `mediaMACLength` | `Sum(nil)[:10]`, `extraSize += 10`, folga de capacidade em `Encrypt` |
+
+O tamanho do MAC faz parte do protocolo de mídia do WhatsApp (o HMAC-SHA256
+é truncado em 10 bytes) e aparecia solto em três lugares.
+
+#### `util/keys/constants.go` (criado)
+
+| Literal | Constante |
+|---|---|
+| `32` | `KeyLength` (os `[32]byte` viraram `[KeyLength]byte`) |
+| `64` | `SignatureLength` |
+| `33` / `1` | `signedKeyLength` / `keyTypePrefixLength` |
+| `248` / `127` / `64` | `clampLowBitsMask` / `clampHighBitMask` / `clampSecondHighBit` |
+| `0` / `31` | `clampFirstByte` / `clampLastByte` |
+
+As três máscaras de clamping eram os literais mais opacos do diretório:
+são exigência da Curve25519 (RFC 7748 §5), não escolha, e mexer nelas produz
+chaves que os outros clientes rejeitam sem dizer por quê. A constante carrega
+a referência ao RFC ao lado.
+
+Trocar `[32]byte` por `[KeyLength]byte` é tipo idêntico em Go — `go build
+./...` na árvore inteira confirma que não houve ripple.
+
+#### `util/log/constants.go` (criado)
+
+Os quatro nomes de nível (`LevelDebug`…`LevelError`), os quatro códigos
+ANSI, o layout de horário, o separador de módulo e o `levelUnset` (-1).
+
+Os nomes de nível mereciam extração mais que o resto: apareciam como literal
+em **três** lugares cada — a chamada de `outputf`, a chave de `colors` e a de
+`levelToInt` — e uma divergência de grafia entre eles não quebraria a
+compilação. O nível simplesmente sairia sem cor e com prioridade -1, ou
+seja, sempre impresso.
+
+#### Onde **não** houve extração
+
+- **`types/` e `types/events/`: nenhuma.** Varridos os 12 arquivos. São
+  quase inteiramente dados declarativos, e cada valor já está ligado a uma
+  constante que o nomeia: `DefaultUserServer = "s.whatsapp.net"`,
+  `EditAttributeSenderRevoke = "7"`, `ConnectFailureLoggedOut = 401`,
+  `TempBanBlockedByUsers = 102`. `botmap.go` são 200 linhas de tabela
+  JID → JID, que é dado, não literal mágico. Não havia o que nomear.
+- **`util/gcmutil/` e `util/hkdfutil/`: nenhuma.** Não há literal numérico
+  nos dois arquivos.
+- **As strings de `token/token.go` não foram tocadas.** São as tabelas de
+  token do protocolo — dado tabelado, não literal solto, mesmo racional do
+  `botmap.go`.
+
+### Auditoria de logging
+
+Varridos `binary/`, `types/`, `types/events/` e os cinco subpacotes de
+`util/` atrás de escrita de log fora do `waLog.Logger` injetado.
+
+Resultado: **nenhum dos três diretórios tem log, e está certo assim.**
+
+- `binary/` é codec puro: recebe bytes, devolve `Node` ou erro. Todos os
+  caminhos de falha já retornam `error` com contexto (posição no buffer,
+  tag encontrada). Quem loga é o chamador, que tem o contexto de sessão que
+  faria a linha ser útil.
+- `types/` e `types/events/` são estrutura de dado. Não há caminho de erro
+  que valha log.
+- `util/cbcutil`, `gcmutil`, `hkdfutil`, `keys`: cripto pura, todos os erros
+  retornados.
+- `util/log/` **é** a infraestrutura de log. `stdoutLogger` usa `fmt.Printf`
+  por definição — é o que ele existe para fazer. `zeroLogger` é o adaptador
+  que o `pkg/infra/wa-noise/walog/` do wa-api usa para plugar o zerolog do
+  projeto.
+
+Único `fmt.Print*` do escopo inteiro: o de `stdoutLogger.outputf`. Não é
+bypass. Nenhuma infraestrutura de log foi adicionada.
+
+### Cobertura de teste
+
+Nenhum dos oito pacotes tinha **nenhum** `_test.go`.
+
+| Pacote | Cobertura |
+|---|---|
+| `internal/wa-noise/binary` | **97.1%** |
+| `internal/wa-noise/types` | **99.2%** |
+| `internal/wa-noise/types/events` | **100%** |
+| `internal/wa-noise/util/cbcutil` | **91.7%** |
+| `internal/wa-noise/util/gcmutil` | **92.9%** |
+| `internal/wa-noise/util/hkdfutil` | **75.0%** |
+| `internal/wa-noise/util/keys` | **100%** |
+| `internal/wa-noise/util/log` | **100%** |
+
+Arquivos criados, 1:1 com os de produção:
+
+- `binary/`: `testsupport_test.go` (132), `decoder_test.go` (200),
+  `decoder_node_test.go` (231), `encoder_test.go` (233),
+  `encoder_node_test.go` (216), `jid_test.go` (158), `packing_test.go` (143),
+  `unpack_test.go` (96), `node_test.go` (191), `attrs_test.go` (251),
+  `xml_test.go` (175).
+- `types/`: `jid_test.go` (403), `message_test.go` (89),
+  `presence_test.go` (88), `newsletter_test.go` (177),
+  `sticker_test.go` (53), `botmap_test.go` (67).
+- `types/events/`: `events_test.go` (133), `failure_reasons_test.go` (153),
+  `message_test.go` (297).
+- `util/`: `cbcutil/cbc_test.go` (322), `gcmutil/gcm_test.go` (114),
+  `hkdfutil/hkdf_test.go` (97), `keys/keypair_test.go` (169),
+  `log/log_test.go` (247), `log/zerolog_test.go` (154).
+
+`types/events/{group,user,newsletter}.go` **não** têm `_test.go`: são
+declarações de struct sem um método sequer. Um teste ali só afirmaria que
+campos existem, o que o compilador já faz.
+
+O que os testes travam, além do round trip óbvio:
+
+- **As fronteiras de tamanho do formato**, onde um `<` virado `<=` produz
+  frame inválido: binary8/binary20/binary32 em 255/256 e 2²⁰−1/2²⁰, e
+  list8/list16 em 255/256. Cada uma testada dos dois lados.
+- **Que `writeAttributes` e `countAttributes` filtram exatamente os mesmos
+  atributos.** São funções separadas e uma alimenta o tamanho de lista que a
+  outra preenche: um par a mais desalinha o frame inteiro, e o erro só
+  apareceria no servidor.
+- **Que atributo com valor `0` numérico ou `false` sobrevive** — só string
+  vazia e `nil` são filtrados. Um `t=0` sumindo mudaria o significado da
+  mensagem.
+- **Que `writeString` escolhe a representação mais curta na ordem certa.**
+  `"0"` é ao mesmo tempo token de 1 byte e nibble8 válido; o token tem que
+  ganhar.
+- **Que `writeJID` escolhe a tag por servidor *e* device**, nos onze casos.
+- **Que `SignalAddressUser` não colide entre PN e LID.** É a chave de sessão
+  do libsignal: uma colisão faria dois usuários compartilharem sessão cripto.
+- **Que `ConnectFailureReason.IsLoggedOut` marca exatamente três dos catorze
+  códigos.** É a decisão mais consequente de `events/`: um `true` apaga os
+  dados de sessão do device. Marcar de menos deixa o cliente em loop de
+  reconexão com credencial morta; de mais destrói uma sessão boa.
+- **Que `UnwrapRaw` marca uma flag por camada removida**, com um caso por
+  camada mais os aninhados. Inclui os dois detalhes que só aparecem em
+  combinação: `DeviceSentMessage` produz metadados em vez de flag (sem ele o
+  eco de outro dispositivo vira mensagem para si mesmo), e o
+  `MessageContextInfo` da camada externa é promovido para dentro — mas só
+  quando a interna não tem o seu.
+- **Que `PermanentDisconnect` é implementada por exatamente seis eventos.**
+  Faltar vira loop infinito de reconexão; sobrar deixa o cliente offline
+  depois de falha transitória.
+- **Que o clamping de Curve25519 vale para qualquer chave gerada** (200
+  amostras) e que `Sign` assina a chave **com** o prefixo de tipo — com
+  verificação real do libsignal, e com o caso negativo provando que a mesma
+  assinatura não valida sobre a chave crua.
+- **Que o GCM autentica de verdade**: cada byte do ciphertext é invertido,
+  um por vez, e todos têm que falhar no `Open`.
+- **Que `streamBufferSize` é múltiplo de `aes.BlockSize`** — `CryptBlocks`
+  entra em pânico se não for, e é uma trava barata sobre uma constante que
+  alguém pode "arredondar".
+- **Que as tabelas escritas à mão são consistentes**: `botmap.go` não tem
+  valor duplicado (dois bots apontando para o mesmo número legado fundiriam
+  conversas) e não diverge da regex de `IsBot`; os códigos de erro e os tipos
+  de recibo são distintos entre si.
+
+Os 75% de `hkdfutil` são o teto: os dois únicos ramos descobertos são panics
+que o próprio upstream documenta como inalcançáveis (o tamanho é `uint8`,
+nunca passa do limite do HKDF-SHA256). Há teste provando a aritmética que os
+torna inalcançáveis.
+
+### Achados NÃO corrigidos (registrados em `HOUSEKEEP.md`)
+
+Cinco, todos travados por teste que falha apontando para a entrada
+correspondente se o comportamento mudar — quem corrigir é avisado de que
+precisa reescrever o teste como prova do fix.
+
+1. **F24 — `binary/` dá panic com bytes da rede.** Quatro type assertions sem
+   checar o `ok`: `rawDesc.(string)` em `readNode` e `user.(string)` em
+   `readADJID`/`readFBJID`/`readInteropJID`. `read()` pode legitimamente
+   devolver `nil`, `types.JID` ou `[]Node`. Um frame com qualquer um deles na
+   posição da tag ou do usuário derruba o decoder. É alcançável de fora —
+   `Unmarshal` roda sobre todo frame recebido.
+2. **F25 — `Unpack` dá panic com frame vazio.** `data[0]` sem checar
+   `len(data)`. Mesma exposição, num caminho ainda mais raso.
+3. **F26 — `GetChildByTag` devolve o nó de partida quando não acha**, não um
+   nó zero (`GetOptionalChildByTag` usa retorno nomeado e faz `return` nu).
+   `n.GetChildByTag("ausente").Tag` devolve a tag de `n`. Quem checa por
+   `.Tag != ""` está checando algo sempre verdadeiro.
+4. **F27 — ramo inalcançável em `xml.go`**: o `ReplaceAll` de `\n` no ramo
+   `[]byte` de `contentString` nunca executa, porque `printable` rejeita `\n`
+   antes e o conteúdo cai no ramo de hex. Cosmético (só afeta o XML de
+   debug), mas é código morto que sugere comportamento que não existe.
+5. **F28 — `errors.Is` nunca casa um `types.GraphQLError`.** O campo
+   `Path []string` torna o tipo não comparável, e `errors.Is` só compara
+   alvos comparáveis: percorre a árvore e devolve `false` sempre, inclusive
+   para um erro que está na lista. `errors.As` funciona. A assimetria é
+   invisível — nada avisa, o `Is` só responde `false`.
+
+Nenhum foi corrigido porque todos são mudança de comportamento (F24/F25) ou
+de API pública (F26/F28), e esta fase é movimentação mais cobertura.
+
+### Gates atualizados
+
+- `scripts/waclient-filesize-check.sh`: `DIRS` ganhou `binary/`,
+  `binary/token/`, `types/`, `types/events/` e os cinco subpacotes de
+  `util/`. Passa de 138 para **177 arquivos em 14 diretórios**. Verificado
+  nos dois sentidos: sai 0 com a árvore atual, sai 1 apontando o arquivo
+  quando se planta um `.go` de 306 linhas em `binary/`.
+- `Makefile`: `WACLIENT_TEST_PKGS` ganhou os oito pacotes novos, chegando a
+  12. `internal/wa-noise/` segue fora de `TEST_PKGS` (achado F17), então sem
+  isso os `_test.go` desta fase nunca rodariam em `make check` — seriam
+  travas que não travam.
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio. **E
+  `internal/wa-noise/binary/proto/` também não foi tocado**: `legacy.go`
+  (1084 linhas) é gerado por `generatelegacy.sh`, mesmo racional que o
+  ADR-0004 aplica a `proto/`.
+
+  Vale a nota que ficou no comentário do gate: o cabeçalho de `legacy.go` diz
+  `"DO NOT MODIFY: Generated by generatelegacy.sh"`, em caixa mista, e a
+  heurística `EXCLUDE_GENERATED` do script procura `"GENERATED BY"` em
+  maiúsculas — ela **não** o pegaria. O arquivo fica de fora por `DIRS` ser
+  explícito e não recursivo. Trocar `DIRS` por um `find` recursivo no futuro
+  reintroduziria `legacy.go` no gate sem que ninguém entendesse por quê.
+- **Nenhum subpacote novo foi criado.** `util/` continua com os cinco que
+  tinha, `binary/` com `token/` e `proto/`. Reorganizar o fork em mais
+  subpacotes é uma decisão bem maior, pendente à parte, e a Fase C se ateve a
+  mover código dentro do mesmo diretório — como as Fases A e B.
+- **`binary/attrs.go` (218) e `binary/xml.go` (108) não foram divididos nem
+  alterados.** Já estão dentro do teto e cada um tem uma responsabilidade só
+  (leitura tipada de atributos com acúmulo de erro; renderização do nó como
+  XML de debug). Ganharam `_test.go` porque o pacote inteiro entrou no gate e
+  deixá-los em 0% enfraqueceria a trava, mas o código de produção não mudou.
+- **`types/` não teve nenhum arquivo dividido.** O maior é `jid.go` (278) e
+  cada um já cobre um domínio (`group.go`, `newsletter.go`, `presence.go`,
+  `sticker.go`, `user.go`, `call.go`). Dividir seria corte mecânico, que o
+  ADR-0004 não pede.
+- **`types/events/appstate.go` (196) e `call.go` (77) não foram tocados** —
+  já estavam dentro do teto e já seguiam a nomenclatura por domínio que a
+  divisão de `events.go` estendeu. Sem `_test.go` novo: são struct e enum de
+  evento, sem método.
+- **Os panics latentes (F24/F25) não foram convertidos em erro** e as
+  armadilhas de API (F26/F28) não foram mexidas — todos são mudança de
+  comportamento observável, documentados acima e em `HOUSEKEEP.md`.
