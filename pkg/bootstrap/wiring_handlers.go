@@ -2,10 +2,14 @@ package bootstrap
 
 import (
 	"slices"
+	wachat "wa-api/pkg/infra/wa-noise/chat"
+	wagroup "wa-api/pkg/infra/wa-noise/group"
+	wamisc "wa-api/pkg/infra/wa-noise/misc"
+	wapresence "wa-api/pkg/infra/wa-noise/presence"
 	wasession "wa-api/pkg/infra/wa-noise/session"
+	wauser "wa-api/pkg/infra/wa-noise/user"
 
 	"wa-api/pkg/infra/db"
-	whatsmeow "wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/applog"
 	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/registry"
@@ -96,13 +100,13 @@ var customHandlerSet = &customHandlers{}
 func initCustomHandlers(s *server) {
 	// Adapters
 	waClientLookup := waclient.ClientForGetter(clientManager.GetWhatsmeowClient)
-	messageComposer := whatsmeow.NewMessageComposerAdapter(waClientLookup)
-	presenceController := whatsmeow.NewPresenceControllerAdapter(waClientLookup)
-	chatMessenger := whatsmeow.NewChatMessengerAdapter(waClientLookup)
+	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
+	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
+	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
-	groupAdapter := whatsmeow.NewGroupAdapter(waClientLookup)
-	miscAdapter := whatsmeow.NewMiscAdapter(waClientLookup)
-	userAdapter := whatsmeow.NewUserAdapter(waClientLookup)
+	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
+	miscAdapter := wamisc.NewMiscAdapter(waClientLookup)
+	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
