@@ -23,7 +23,7 @@ func (cli *Client) requestMissingAppStateKeys(ctx context.Context, patches *apps
 	for _, keyID := range rawKeyIDs {
 		stringKeyID := hex.EncodeToString(keyID)
 		lastRequestTime := cli.appStateKeyRequests[stringKeyID]
-		if lastRequestTime.IsZero() || lastRequestTime.Add(24*time.Hour).Before(now) {
+		if lastRequestTime.IsZero() || lastRequestTime.Add(appStateKeyRequestInterval).Before(now) {
 			cli.appStateKeyRequests[stringKeyID] = now
 			filteredKeyIDs = append(filteredKeyIDs, keyID)
 		}

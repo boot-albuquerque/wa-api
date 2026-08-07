@@ -167,20 +167,20 @@ func (cli *Client) downloadExternalAppStateBlob(ctx context.Context, ref *waServ
 
 func (cli *Client) fetchAppStatePatches(ctx context.Context, name appstate.WAPatchName, fromVersion uint64, snapshot bool) (*appstate.PatchList, error) {
 	attrs := waBinary.Attrs{
-		"name":            string(name),
-		"return_snapshot": snapshot,
+		appStateAttrName:           string(name),
+		appStateAttrReturnSnapshot: snapshot,
 	}
 	if !snapshot {
-		attrs["version"] = fromVersion
+		attrs[appStateAttrVersion] = fromVersion
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:sync:app:state",
-		Type:      "set",
+		Namespace: appStateNamespace,
+		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "sync",
+			Tag: appStateSyncTag,
 			Content: []waBinary.Node{{
-				Tag:   "collection",
+				Tag:   appStateCollectionTag,
 				Attrs: attrs,
 			}},
 		}},
@@ -188,9 +188,9 @@ func (cli *Client) fetchAppStatePatches(ctx context.Context, name appstate.WAPat
 	if err != nil {
 		return nil, err
 	}
-	collection, ok := resp.GetOptionalChildByTag("sync", "collection")
+	collection, ok := resp.GetOptionalChildByTag(appStateSyncTag, appStateCollectionTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "collection", In: "app state patch response"}
+		return nil, &ElementMissingError{Tag: appStateCollectionTag, In: appStateFetchErrContext}
 	}
 	return appstate.ParsePatchList(ctx, &collection, cli.downloadExternalAppStateBlob)
 }

@@ -55,20 +55,20 @@ func (cli *Client) sendAppState(ctx context.Context, patch appstate.PatchInfo, a
 	}
 
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:sync:app:state",
+		Namespace: appStateNamespace,
 		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "sync",
+			Tag: appStateSyncTag,
 			Content: []waBinary.Node{{
-				Tag: "collection",
+				Tag: appStateCollectionTag,
 				Attrs: waBinary.Attrs{
-					"name":            string(patch.Type),
-					"version":         version,
-					"return_snapshot": false,
+					appStateAttrName:           string(patch.Type),
+					appStateAttrVersion:        version,
+					appStateAttrReturnSnapshot: false,
 				},
 				Content: []waBinary.Node{{
-					Tag:     "patch",
+					Tag:     appStatePatchTag,
 					Content: encodedPatch,
 				}},
 			}},
@@ -78,19 +78,19 @@ func (cli *Client) sendAppState(ctx context.Context, patch appstate.PatchInfo, a
 		return err
 	}
 
-	respCollection, ok := resp.GetOptionalChildByTag("sync", "collection")
+	respCollection, ok := resp.GetOptionalChildByTag(appStateSyncTag, appStateCollectionTag)
 	if !ok {
-		return &ElementMissingError{Tag: "collection", In: "app state send response"}
+		return &ElementMissingError{Tag: appStateCollectionTag, In: appStateSendErrContext}
 	}
 	respCollectionAttr := respCollection.AttrGetter()
-	if respCollectionAttr.OptionalString("type") == "error" {
-		errorTag, ok := respCollection.GetOptionalChildByTag("error")
+	if respCollectionAttr.OptionalString(appStateAttrType) == appStateRespTypeError {
+		errorTag, ok := respCollection.GetOptionalChildByTag(appStateErrorTag)
 
 		mainErr := fmt.Errorf("%w: %s", ErrAppStateUpdate, respCollection.XMLString())
 		if ok {
 			mainErr = fmt.Errorf("%w (%s): %s", ErrAppStateUpdate, patch.Type, errorTag.XMLString())
 		}
-		if ok && errorTag.AttrGetter().Int("code") == 409 && allowRetry {
+		if ok && errorTag.AttrGetter().Int(appStateAttrCode) == appStateConflictCode && allowRetry {
 			zerolog.Ctx(ctx).Warn().Err(mainErr).Msg("Failed to update app state, trying to apply conflicts and retry")
 			var eventsToDispatch []any
 			patches, err := appstate.ParsePatchList(ctx, &respCollection, cli.downloadExternalAppStateBlob)
@@ -125,14 +125,14 @@ func (cli *Client) sendAppState(ctx context.Context, patch appstate.PatchInfo, a
 
 func (cli *Client) MarkNotDirty(ctx context.Context, cleanType string, ts time.Time) error {
 	_, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "urn:xmpp:whatsapp:dirty",
+		Namespace: dirtyNamespace,
 		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "clean",
+			Tag: dirtyCleanTag,
 			Attrs: waBinary.Attrs{
-				"type":      cleanType,
-				"timestamp": ts.Unix(),
+				dirtyCleanAttrType:      cleanType,
+				dirtyCleanAttrTimestamp: ts.Unix(),
 			},
 		}},
 	})
