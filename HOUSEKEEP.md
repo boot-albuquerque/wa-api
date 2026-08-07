@@ -967,3 +967,45 @@ que o encontrou (CLAUDE.md: registrar e perguntar antes de corrigir de
 graça). Nenhum gate detecta a regressão hoje: `go generate` não roda em
 `make check`, e não há teste que compare `internals.go` com o que o gerador
 produziria.
+
+### Adendo ao F29 — a Fase D acrescentou uma segunda dependência ao fix, 2026-08-06
+
+**Contexto**: extração de `msgpad/`, `paircrypto/` e `msgattrs/` da raiz de
+`internal/wa-noise/` (commit `d904e78`, documentada em `PATCHES.md` como
+Fase D).
+
+Aquela mudança **editou `internals.go` à mão**, que é arquivo gerado. Três
+assinaturas passaram a referenciar o tipo movido:
+
+```
+internal/wa-noise/internals.go:19    "wa-api/internal/wa-noise/msgattrs"
+internal/wa-noise/internals.go:647   SendGroupV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+internal/wa-noise/internals.go:651   SendDMV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+internal/wa-noise/internals.go:655   PrepareMessageNodeV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+```
+
+**Por que isto importa para quem for corrigir o F29**: a correção sugerida
+acima (trocar a lista literal por varredura do diretório) **não basta mais**.
+O gerador monta o bloco de import copiando apenas os imports do *primeiro*
+arquivo da lista — `internals_generate.go:123`:
+
+```go
+for _, i := range files[0].Imports {
+```
+
+`files[0]` é `appstate.go`, que **não importa `msgattrs`**. Então, mesmo com a
+varredura de diretório funcionando, o `internals.go` regenerado sairia com
+`msgattrs.MessageAttrs` nas três assinaturas e **sem o import correspondente**
+— e desta vez o erro é de compilação, não silencioso como os 96 wrappers
+perdidos.
+
+**Correção sugerida (revisada)**: além da varredura de diretório, o gerador
+precisa juntar os imports de **todos** os arquivos processados, deduplicando
+por caminho e preservando os aliases (`waBinary`, `armadillo`), ou então
+delegar isso ao `goimports` que o `//go:generate` já roda logo depois —
+emitindo um bloco de import vazio e deixando o `goimports -local` resolver.
+A segunda opção é menor e usa maquinário que já está no lugar.
+
+**Status**: **não corrigido**. O `internals.go` commitado está correto e
+compila; o risco é exclusivamente para quem rodar `go generate`. Continua sem
+gate que detecte: `go generate` não roda em `make check`.
