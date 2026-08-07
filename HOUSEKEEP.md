@@ -1726,3 +1726,67 @@ sobre corrigir agora ou depois.
   tem de continuar vazio). Registrado para decisão do usuário. O teste
   `sendPatch()` em `appstatesync/send_test.go` documenta a pré-condição num
   comentário citando `encode.go:50`.
+
+## F50 — `phoneLinkingCache` é lido e escrito de goroutines diferentes sem sincronização
+
+- **Data**: 2026-08-07.
+- **Contexto**: Fase F/G lote 4, ao extrair `internal/wa-noise/pairing/`. O
+  achado é do código ORIGINAL (upstream), não da extração.
+- **Onde**: no `HEAD` anterior ao lote, `internal/wa-noise/client.go:168`
+  (campo `phoneLinkingCache *phoneLinkingCache`), com escrita em
+  `pair-code.go:137` (`PairPhone`) e leitura em `pair-code.go:161`
+  (`handleCodePairNotification`). Hoje o mesmo estado vive em
+  `internal/wa-noise/pairing/state.go` (`State.linking`), com o mesmo desenho.
+- **Problema**: `PairPhone` é chamado pela aplicação; `handleCodePairNotification`
+  roda a partir de um handler de notificação, em **outra goroutine**. O campo é
+  um ponteiro comum — sem mutex, sem atômico, sem canal. É corrida de dados pelo
+  modelo de memória de Go: sem happens-before entre a escrita e a leitura, a
+  goroutine de notificação pode enxergar `nil` (e devolver "received code pair
+  notification without a pending pairing") ou, em tese, um `*LinkingCache`
+  parcialmente publicado. `git grep -n phoneLinkingCache HEAD -- 'internal/wa-noise/*.go'`
+  devolve exatamente quatro ocorrências (declaração do campo, declaração do tipo,
+  a escrita e a leitura) — nenhuma perto de um lock. Confirmado por revisor
+  independente durante o lote 4.
+  Na prática a janela é estreita: o servidor só manda a notificação depois de
+  responder ao `companion_hello`, e a resposta desse IQ é o que destrava
+  `PairPhone` — mas essa ordenação é do protocolo, não do código, e não
+  estabelece happens-before nenhum para o compilador nem para o hardware.
+- **Correção sugerida**: trocar `State.linking` por `atomic.Pointer[LinkingCache]`
+  (`Linking()` vira `Load()`, `SetLinking()` vira `Store()`). É a menor mudança
+  que fecha a corrida: mesma semântica de "último escritor ganha", sem lock e sem
+  alterar o fluxo. Um `sync.RWMutex` também serviria, com mais cerimônia. Um
+  teste sob `-race` com `PairPhone` e `HandleCodeNotification` concorrentes
+  falharia hoje e passaria depois.
+- **Status**: **não corrigido**. É bug pré-existente fora do escopo do lote 4,
+  que era extração; alterar sincronização em código de criptografia de
+  pareamento sem pedir é exatamente o que o CLAUDE.md manda não fazer. O
+  comportamento foi preservado bit a bit e a decisão está documentada no doc de
+  `pairing.State` (`state.go`) e em `PATCHES.md`, seção do lote 4.
+
+## F51 — `prekeys.Upload` indexa `preKeys[len(preKeys)-1]` sem checar lista vazia
+
+- **Data**: 2026-08-07.
+- **Contexto**: Fase F/G lote 4, ao extrair `internal/wa-noise/prekeys/`. Achado
+  do código ORIGINAL.
+- **Onde**: `internal/wa-noise/prekeys/upload.go`, no fim de `Upload`:
+
+  ```go
+  preKeys, err := t.Store().PreKeys.GetOrGenPreKeys(ctx, uint32(wantedCount))
+  if err != nil { ...; return }
+  ...
+  err = t.Store().PreKeys.MarkPreKeysAsUploaded(ctx, preKeys[len(preKeys)-1].KeyID)
+  ```
+
+  Era `internal/wa-noise/prekeys.go:89` antes da extração, com o mesmo corpo.
+- **Problema**: se `GetOrGenPreKeys` devolver slice vazia com `err == nil`, a
+  indexação `preKeys[len(preKeys)-1]` é `preKeys[-1]` e entra em pânico. O
+  `wantedCount` é sempre ≥ 50, então a implementação SQL não devolve vazio hoje;
+  mas `PreKeyStore` é interface pública (`store.PreKeyStore`) e nada no contrato
+  dela proíbe uma implementação de devolver `(nil, nil)`. `Upload` roda em
+  goroutine a partir de `connectionevents.go` e de `notification.go`, sem
+  recover, então o pânico derruba o processo.
+- **Correção sugerida**: `if len(preKeys) == 0 { t.Log().Warnf(...); return }`
+  logo depois da checagem de erro, antes do `Infof` de "Uploading %d new
+  prekeys". Também evita enviar um `<list>` vazio ao servidor.
+- **Status**: **não corrigido**. Bug pré-existente fora do escopo do lote 4, que
+  era extração pura; preservado bit a bit. Registrado para decisão do usuário.

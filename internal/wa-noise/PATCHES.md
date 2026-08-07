@@ -5991,3 +5991,549 @@ escreveu o commit e portanto **não** independente.
   pelo mesmo racional dos lotes 1 e 2.
 - O desenho do lock de sync (consulta ao servidor segurando o mutex) não foi
   mexido.
+
+## Fase F/G — lote 4: pareamento/prekeys/tokens/misc (extração real + cobertura), 2026-08-07
+
+Quarta extração, mesmo padrão dos lotes 1 (`media/`), 2 (`newsletter/`) e 3
+(`appstatesync/`): cada domínio vira um pacote que define uma interface estreita,
+opera sobre ela e **nunca importa a raiz**; a raiz importa o subpacote (uma
+direção só) e mantém métodos-fachada em `*Client`. O racional de por que a
+movimentação simples é impossível está na seção da Fase D.
+
+Diferente dos lotes 1–3, este lote **não é um domínio só**. O escopo era um
+conjunto de 16 arquivos de raiz sem parentesco entre si, e forçá-los num único
+`misc/` derrotaria o objetivo de módulos tópicos atômicos. Foram criados **três
+subpacotes**, e o restante do escopo **não foi extraído** — a seção "O que NÃO
+foi extraído, e por quê" no fim registra cada caso com o motivo, sem maquiar.
+
+### Panorama
+
+| Subpacote | Arquivos de raiz absorvidos | Cobertura (statements, sob `-race`) |
+|---|---|---|
+| `internal/wa-noise/prekeys/` | `prekeys.go`, `prekeys_constants.go` | **100,0%** |
+| `internal/wa-noise/pairing/`  | `pair.go`, `pair-code.go`, parte de `pair_constants.go` | **97,6%** |
+| `internal/wa-noise/tctoken/`  | `tctoken.go`, parte de `token_constants.go` | **100,0%** |
+
+Nenhuma função dos três pacotes ficou com 0% (12, 16 e 15 funções,
+respectivamente, todas exercitadas).
+
+---
+
+### Subpacote 1 — `internal/wa-noise/prekeys/`
+
+O item que a designação do lote marcou como de maior risco, por causa do
+`uploadPreKeysLock`.
+
+#### A interface
+
+`prekeys.Transport`, quatro métodos — a mais estreita dos quatro lotes até aqui:
+
+```go
+type Transport interface {
+    Store() *store.Device
+    State() *State
+    Log() waLog.Logger
+    SendIQ(ctx context.Context, query IQ) (*waBinary.Node, error)
+}
+```
+
+`Store()` aparece inteiro pelo mesmo racional do lote 3: `store` já é subpacote
+folha do fork, expô-lo não cria dependência nova nem ciclo. `prekeys.IQ` existe
+pelo mesmo motivo que `newsletter.IQ` e `appstatesync.IQ` — expor o `infoQuery`
+da raiz arrastaria a raiz para dentro do subpacote. Aqui há **dois** tipos de
+IQ (`IQGet` e `IQSet`), diferente do lote 3 que só tinha `IQSet`.
+
+#### Arquivos
+
+**Criados** (`package prekeys`): `constants.go`, `transport.go`, `state.go`,
+`upload.go`, `fetch.go`, `node.go`.
+**Removido**: `prekeys_constants.go` (as constantes foram para
+`prekeys/constants.go`, com o prefixo `preKey` caído).
+**Reduzido a fachada**: `prekeys.go` (277→69).
+**Criado na raiz**: `prekeys_transport.go` (adaptador, não exportado).
+**Tocados fora do domínio**: `client.go` (dois campos viraram um),
+`retry.go` (um call site), `retry_receipt_send.go` (uma constante).
+
+#### Concorrência — o ponto que exigia atenção
+
+Dois campos de `*Client` viraram `prekeys.State`:
+
+```go
+// antes, em client.go
+uploadPreKeysLock sync.Mutex
+lastPreKeyUpload  time.Time
+// agora
+preKeyState prekeys.State
+```
+
+**A estrutura de aquisição e liberação NÃO mudou.** O corpo inteiro de `Upload`
+roda sob o lock, do primeiro statement ao último — inclusive as duas idas ao
+servidor —, exatamente como `uploadPreKeys` rodava. Não é o desenho ideal
+(segurar um mutex por duas viagens de rede), mas mudá-lo seria mudança de
+comportamento, e este lote é extração.
+
+**`LastUpload()` e `SetLastUpload()` não tomam lock próprio, de propósito.** No
+original a leitura e a escrita de `lastPreKeyUpload` viviam na mesma seção
+crítica do `uploadPreKeysLock`; dar a elas um lock próprio criaria um segundo
+ponto de sincronização que não existia. O contrato ("chamar com o lock de
+`LockUpload` segurado") está no doc de cada método.
+
+#### Compatibilidade de API
+
+`WantedPreKeyCount` e `MinPreKeyCount` continuam existindo na raiz, agora como
+apelidos das constantes do subpacote (`prekeys.WantedCount`, `prekeys.MinCount`),
+com os mesmos valores (50 e 5).
+
+`preKeyResp` virou **apelido de tipo**, `type preKeyResp = prekeys.Resp`, e não
+um tipo novo: `internals.go` (gerado, F29, fora do escopo) cita o nome antigo na
+assinatura de `DangerousInternalClient.FetchPreKeys`, e um apelido faz esse
+arquivo compilar sem ser tocado.
+
+Os campos do tipo passaram de `bundle`/`err` para `Bundle`/`Err`. Isso é
+**alargamento** da superfície de `internals.go` (o tipo antes tinha só campos
+não exportados, logo era inutilizável de fora), não quebra. O único call site
+reverso é `retry.go:196`.
+
+`preKeyRegistrationIDLength` era usada fora do domínio, em
+`retry_receipt_send.go`, que codifica o mesmo `Store.RegistrationID` com a mesma
+codificação big-endian. Em vez de duplicar o literal `4`, a constante foi
+exportada como `prekeys.RegistrationIDLength` e o call site passou a citá-la.
+
+#### Cobertura
+
+**100,0% de statements**, 12/12 funções. Os testes da Fase E lote 4
+(`prekeys_test.go`, 351 linhas) foram **relocados e adaptados**, não descartados:
+viraram `prekeys/node_test.go`, chamando as funções livres direto. O lote
+acrescentou `upload_test.go` e `fetch_test.go`, que cobrem o que antes não tinha
+como ser alcançado sem socket: os quatro caminhos de saída de `Upload`, os dois
+ramos do debounce, a política de erro por dispositivo de `Fetch`, e a
+serialização do lock (`TestUploadIsSerialized`, 8 goroutines;
+`TestLockUploadIsMutuallyExclusive`).
+
+Um detalhe do duble vale nota: depois do primeiro upload, `lastUpload` fica
+dentro da janela de debounce, então **cada** chamada seguinte gasta dois IQs (a
+contagem e o envio). `TestUploadIsSerialized` enfileira `2*goroutines` respostas
+por causa disso — o primeiro teste escrito enfileirava `goroutines` e só quatro
+dos oito uploads concluíam.
+
+#### Estado da revisão — REVISADO INDEPENDENTEMENTE, COM RESSALVAS DECLARADAS
+
+A mudança de concorrência teve revisão independente de fato, por agente revisor
+separado de quem escreveu o código, em modo somente-leitura, com citação de
+`arquivo:linha` para cada afirmação. **Veredito: a alegação se sustenta.**
+
+- **Item 1 — `uploadPreKeys` → `prekeys.Upload`: verificado equivalente.** O
+  revisor produziu a tabela statement-a-statement (HEAD `prekeys.go:46-95` vs
+  `prekeys/upload.go:51-96`): `LockUpload()` e `defer UnlockUpload()` são o
+  primeiro e o segundo statements nos dois; **nada** passou de dentro para fora
+  do lock nem o contrário; os **quatro** retornos antecipados ficam todos depois
+  do `defer`, logo cobertos por ele; `SetLastUpload(time.Now())` é o último
+  statement, dentro do lock. Constantes conferidas uma a uma (50/5/812/10min).
+- **Item 2 — pré-condição de `LastUpload`/`SetLastUpload`: verificada.** O
+  revisor fez o grep completo: os únicos call sites de produção são
+  `upload.go:54` e `upload.go:95`, ambos dentro da seção crítica aberta em
+  `upload.go:52`. Registrou que os testes chamam esses métodos sem o lock —
+  seguro por serem single-goroutine, mas é o único lugar onde a pré-condição
+  documentada não é observada.
+- **Item 3 — reentrância/deadlock: nenhuma encontrada.** `LockUpload` tem um
+  único call site de produção (`upload.go:52`) e é `sync.Mutex` puro, logo não
+  reentrante. `GetServerCount` (chamado **com** o lock segurado) não toca
+  `State()`; `SendIQ` desce pelo adaptador (`prekeys_transport.go:54-60`) até
+  `cli.sendIQ` (`request.go:166`), sem passar por prekeys. Os chamadores da
+  fachada (`connectionevents.go:201`, `notification.go:32`, `internals.go:512`)
+  estão todos fora do lock, e `connectionevents.go:202` recontabiliza **depois**
+  do unlock diferido, não aninhado.
+- **Item 4 — estabilidade de ponteiro e cópia de mutex: seguro.**
+  `preKeyTransport` tem um campo só (`cli *Client`,
+  `prekeys_transport.go:24-26`), então copiá-lo copia um ponteiro e nunca um
+  mutex; `State()` devolve `&t.cli.preKeyState`, endereço estável; os quatro
+  métodos de `State` usam receptor ponteiro; `go vet` (que inclui `copylocks`)
+  saiu limpo.
+- **Item 5 — apelido e renome de campos: verificado.** `type preKeyResp =
+  prekeys.Resp` é apelido de verdade, `internals.go:519` compila sem mudança, e
+  `git status` confirma `internals.go` intocado. O grep por `.bundle`/`.err` em
+  resultados de prekey não deixou resíduo.
+- **Item 6 — `go vet ./internal/wa-noise/...`**: rodado pelo revisor, saída
+  vazia, exit 0.
+
+**O que a revisão declarou NÃO ter checado** (registrado por inteiro; uma
+ressalva omitida vale menos que a revisão toda):
+
+- Não rodou `go test`, com ou sem `-race` — o veredito é por leitura de código
+  mais `go vet`.
+- Não revisou `prekeys/node.go` nem os arquivos de teste além dos greps citados.
+- Não revisou os demais arquivos modificados: `Makefile`,
+  `cmd/logcov/testdata/eligible.golden`, `retry_receipt_send.go`,
+  `scripts/waclient-filesize-check.sh`, nem `retry.go` fora das linhas 183-202.
+- Não verificou equivalência de formato de wire de `ToNode`/`NodeToBundle`
+  contra `preKeyToNode`/`nodeToPreKeyBundle` além de confirmar que a fachada
+  delega.
+- Não avaliou se segurar o lock por duas viagens de rede é desejável — só que
+  não mudou.
+
+**Lacuna fechada por fora (evidência NÃO independente):** a falta de `-race`.
+Rodado por quem escreveu o commit:
+`go test -race -count=1 ./internal/wa-noise/prekeys/ ./internal/wa-noise/` → `ok`
+nos dois, e a cobertura de 100% foi medida sob `-race`. As demais ressalvas
+**seguem em aberto** e estão registradas como tal.
+
+---
+
+### Subpacote 2 — `internal/wa-noise/pairing/`
+
+O item que a designação do lote marcou como sensível à segurança: é a
+criptografia de pareamento de dispositivo.
+
+#### A interface
+
+`pairing.Transport`, treze métodos. Além de `Store()`/`State()`/`Log()`/`SendIQ`
+(iguais aos dos outros lotes), ele expõe `SendNode`, `DispatchEvent`,
+`ConfiguredClientType`, `PrePairAllowed`, `StoreLIDPNMapping`,
+`ExpectDisconnect`, `Disconnect`, `SendUnifiedSession`, `SetServerTimeOffset` e
+`ElementMissing`. É o transporte mais largo dos quatro lotes, e a razão é o
+domínio: o pareamento é o único ponto do fork que mexe em conexão
+(`ExpectDisconnect`/`Disconnect`), em sessão (`SendUnifiedSession`) e em relógio
+(`SetServerTimeOffset`) no mesmo fluxo.
+
+Três decisões valem registro:
+
+1. **`PrePairAllowed(jid, platform, businessName) bool` em vez de expor o
+   callback.** O original era
+   `if cli.PrePairCallback != nil && !cli.PrePairCallback(...)`. A checagem de
+   nil ficou no adaptador (`pair_transport.go`), que devolve `true` quando não há
+   callback. A tabela-verdade é idêntica: nil → permite, `true` → permite,
+   `false` → recusa.
+2. **`DispatchEvent(evt any)` sem retorno.** Nenhum ponto de despacho deste
+   domínio consultava o `handlerFailed` antes da extração.
+3. **`ElementMissing(tag, in string) error`** — mesmo racional dos lotes 1 a 3:
+   o tipo é erro genérico de parsing de XML do fork inteiro, continua na raiz, e
+   só a construção atravessa a interface.
+
+#### Arquivos
+
+**Criados** (`package pairing`): `constants.go`, `errors.go`, `transport.go`,
+`state.go`, `clienttype.go`, `pair.go`, `paircode.go`.
+**Reduzidos a fachada**: `pair.go` (269→79), `pair-code.go` (248→75).
+**Podado**: `pair_constants.go` — as constantes de pareamento saíram; as do
+**canal de QR** (`qrChannelBuffer`, `qrCodeTimeout`, `qrCodeFirstTimeout`,
+`qrCodeFirstBatchSize`, `QRChannelEvent*`) **ficaram**, porque `qrchan.go`
+continua na raiz.
+**Criado na raiz**: `pair_transport.go` (adaptador, não exportado).
+**Tocados fora do domínio**: `client.go` (um campo), `errors.go` (apelidos).
+
+#### Compatibilidade de API
+
+`PairClientType` virou **apelido de tipo** (`= pairing.ClientType`) e as doze
+constantes `PairClient*` viraram apelidos de valor. `internals.go` cita
+`PairClientType` em duas assinaturas e compila sem ser tocado.
+
+Os cinco sentinelas e os dois tipos de erro do domínio passaram a apontar para
+os valores/tipos do subpacote — **o mesmo valor, não cópias**:
+
+```go
+ErrPairInvalidDeviceIdentityHMAC = pairing.ErrInvalidDeviceIdentityHMAC
+ErrPairInvalidDeviceSignature    = pairing.ErrInvalidDeviceSignature
+ErrPairRejectedLocally           = pairing.ErrRejectedLocally
+ErrPhoneNumberTooShort           = pairing.ErrPhoneNumberTooShort
+ErrPhoneNumberIsNotInternational = pairing.ErrPhoneNumberIsNotInternational
+
+type PairProtoError    = pairing.ProtoError
+type PairDatabaseError = pairing.DatabaseError
+```
+
+**Não podem virar `errors.New` próprios** — é a armadilha de aliasing
+documentada no lote 1. Há teste de identidade nos dois sentidos em
+`pair_transport_test.go`. A **ordem dos campos** dos dois structs é load-bearing:
+o código movido usa literais compostos posicionais (`&ProtoError{"msg", err}`).
+
+#### Concorrência — uma corrida PRÉ-EXISTENTE, preservada e registrada
+
+`phoneLinkingCache *phoneLinkingCache` virou `pairState pairing.State`. O tipo
+**não tem mutex nenhum, de propósito**: o campo original também não tinha. O
+revisor independente confirmou por `git grep` no HEAD que os únicos quatro
+pontos de `phoneLinkingCache` são a declaração do campo, a declaração do tipo, a
+escrita em `PairPhone` e a leitura em `handleCodePairNotification` (chamada de um
+handler de notificação, em outra goroutine) — **sem lock, atômico ou qualquer
+sincronização**.
+
+Acrescentar um mutex aqui seria mudança de comportamento em código de
+criptografia de pareamento, e este lote é extração. A corrida foi **registrada em
+`HOUSEKEEP.md` (F50)** em vez de corrigida de graça, como manda o CLAUDE.md.
+
+#### Duas mudanças que NÃO são só encanamento
+
+Registradas porque "só mudou o encanamento" seria generoso demais:
+
+1. **Guardas de receiver nil nas fachadas.** `handleIQ`, `handlePairDevice`,
+   `handlePairSuccess`, `handlePair`, `sendPairError`, `makeQRData`,
+   `getQRClientType`, `PairPhone`, `tryHandleCodePairNotification` e
+   `handleCodePairNotification` passaram a devolver `ErrClientIsNil` (ou o zero
+   equivalente) em vez de estourar nil deref, na mesma linha dos lotes 1 a 3.
+   Inclui as não exportadas, alcançáveis por `DangerousInternalClient`. Coberto
+   por `TestFachadaDePareamentoRecusaClientNil`.
+2. **Dois `fmt.Errorf` inline viraram sentinelas** (`ErrNoPendingPairing`,
+   `ErrPairingRefMismatch`). As **strings de mensagem são idênticas** às do HEAD
+   — conferido pelo revisor —; o ganho é que os dois ramos ficaram testáveis por
+   `errors.Is`.
+
+Uma terceira diferença é puramente cosmética: uma linha já comentada no HEAD
+(`//cli.Store.IsHosted = true`, dentro do ramo HOSTED) foi descartada. O revisor
+confirmou que ela estava comentada no HEAD, logo é no-op.
+
+#### Comportamento preservado de propósito
+
+**`DetectClientType` continua sendo chamado DENTRO do laço de `<ref>`**, e não
+uma vez antes dele. A função lê globais de `store`; içá-la para fora do laço
+seria mudança de comportamento. A primeira versão deste lote a tinha içado, e o
+call site foi devolvido para dentro do laço antes do commit.
+
+**A assimetria `GetAccountType()` vs `GetDeviceType()`.** O prefixo HOSTED do
+HMAC vem de `deviceIdentityContainer.GetAccountType()`; o da verificação de
+assinatura de conta vem de `deviceIdentityDetails.GetDeviceType()`. São dois
+campos diferentes, em dois protos diferentes. A assimetria é do upstream e foi
+preservada verbatim — o revisor a apontou explicitamente. O teste
+`TestConfirmAceitaContaHosted` só passou depois que o duble passou a preencher
+os **dois** campos, o que é a evidência empírica de que a assimetria continua lá.
+
+**A guarda do `id` de pair-success da Fase E lote 4 atravessou a extração.** Um
+`<iq>` de pair-success sem atributo `id` string derrubava o processo inteiro
+(panic em goroutine de nodeHandler, sem recover). A guarda e o comentário que a
+explica estão em `pairing/pair.go`, e
+`TestHandleSuccessNodeSemIDNaoEntraEmPanico` a trava nos dois casos (ausente e
+tipo errado).
+
+**O `Store.Delete` antes do `sendPairError`** na falha de `PutIdentity`, e o
+`Store.Delete` **sem** `sendPairError` na falha do envio final, ficaram na ordem
+original.
+
+#### Cobertura
+
+**97,6% de statements**, 16/16 funções. Os quatro blocos descobertos são
+estruturalmente inalcançáveis, e ficam listados em vez de fabricados:
+
+| Bloco | O que é | Por que não dá para alcançar |
+|---|---|---|
+| `pair.go:157-160` | erro de `proto.Marshal(&deviceIdentity)` | a mensagem é válida e acabou de ser desserializada |
+| `paircode.go:159-161` | erro de `aes.NewCipher(linkCodeKey)` | a chave vem de `pbkdf2.Key` com `codeKeyLength`=32 fixo |
+| `paircode.go:172-174` | erro de `aes.NewCipher(keyBundleEncryptionKey)` | a chave vem de `hkdfutil.SHA256` com 32 fixo |
+| `paircode.go:176-178` | erro de `cipher.NewGCM` | o bloco é sempre um AES de 32 bytes válido |
+
+Alcançá-los exigiria injeção de dependência que o código não tem, ou `unsafe`.
+Nenhum foi "coberto" com truque.
+
+Dois ramos cobertos merecem nota por serem defesa, não caminho normal:
+
+1. **`X25519` com ponto de ordem baixa.** O erro do segredo compartilhado
+   efêmero é alcançável cifrando 32 bytes zerados no lugar da pubkey do
+   aparelho principal — `TestHandleCodeNotificationErros/chave efemera de ordem baixa`.
+2. **`generateCompanionEphemeralKey` cifra a pubkey IN-PLACE.** `kp.Pub` volta
+   **já cifrada**. É comportamento do upstream, preservado (dali em diante só a
+   privada é usada), e travado por `TestGenerateCompanionEphemeralKey` para que
+   uma mudança seja consciente.
+
+#### Estado da revisão — REVISADO INDEPENDENTEMENTE, COM RESSALVAS DECLARADAS
+
+Revisão independente de fato, por agente revisor separado de quem escreveu o
+código, somente-leitura, com `arquivo:linha` em cada afirmação.
+**Veredito: a alegação se sustenta para a criptografia** — `Confirm` vs HEAD
+`handlePair` e `HandleCodeNotification` vs HEAD `handleCodePairNotification` são
+equivalentes em todo aspecto criptográfico checado.
+
+O revisor produziu, entre outras coisas:
+
+- Uma tabela de **dez linhas** casando cada passo de validação do HEAD com o do
+  novo `Confirm`, incluindo o código e o texto do `<error>` de cada falha, e a
+  ordem `Log.Warnf` **antes** do envio no caso de HMAC.
+- Conferência **uma a uma** de todas as constantes de `pairing/constants.go`
+  contra `pair_constants.go` do HEAD, incluindo `codePBKDF2Iterations` (mantida
+  como a expressão `2 << 16`, não substituída por decimal), os dois rótulos HKDF
+  e o alfabeto base32 caractere a caractere.
+- Conferência dos offsets do blob de 80 bytes nos **dois** sentidos
+  (geração e decifragem), das entradas de PBKDF2/HKDF, da ordem de concatenação
+  de `advSecretInput` (efêmero‖identidade‖random) e do key bundle, da ordem e do
+  tamanho dos três sorteios de aleatoriedade, e da ordem dos filhos dos dois IQs.
+- Confirmação de que a **aliasing quirk de `append`** do upstream em
+  `advSecretInput` foi preservada em vez de "limpa" — correto para uma extração.
+
+**O que a revisão declarou NÃO ter checado:**
+
+- **Não leu os arquivos de teste novos** (`pairing/*_test.go`,
+  `pair_transport_test.go`). Rodou-os, mas não pode dizer se eles de fato
+  afirmam a criptografia ou apenas a exercitam.
+- Não revisou `paircrypto` nem `hkdfutil` por dentro (não mudaram neste diff).
+- Não checou chamadores da API de pareamento fora de `internal/wa-noise/`; a
+  compilação do repositório inteiro que ele tentou **falhou por um pacote não
+  relacionado e ainda não comitado** (`tctoken/`, o subpacote 3 deste mesmo lote,
+  que estava em edição naquele instante) — o revisor identificou e atribuiu a
+  causa corretamente.
+- Não revisou `Makefile`, `eligible.golden`, `waclient-filesize-check.sh`, nem o
+  impacto no gate de cobertura.
+- **Não verificou se a entrada de `HOUSEKEEP.md` prometida foi realmente
+  escrita.** (Foi — F50 —, mas a confirmação **não** é independente.)
+
+**Lacuna fechada por fora (evidência NÃO independente):** o build do repositório
+inteiro. Depois que `tctoken/` foi concluído, `go build ./...` e
+`LC_NUMERIC=C LC_ALL=C make check` passaram, exit 0 observado.
+
+---
+
+### Subpacote 3 — `internal/wa-noise/tctoken/`
+
+Trusted contact token: emissão, cache em memória e poda.
+
+#### A interface
+
+`tctoken.Transport`, cinco métodos. O único novo em relação aos outros lotes é
+`BackgroundCtx() context.Context`, que entrega o `Client.BackgroundEventCtx` — o
+contexto que sobrevive ao fim da requisição, usado pela poda assíncrona e pela
+emissão em goroutine. Sem ele, o domínio teria de importar a raiz só para
+alcançar um campo.
+
+`Store()` **pode devolver nil**, e as funções checam: o código original checava
+`cli.Store == nil` em `resolveTCTokenStorageLID` e em `generateCsToken`.
+
+#### Arquivos
+
+**Criados** (`package tctoken`): `transport.go`, `state.go`, `tctoken.go`.
+**Reduzido a fachada**: `tctoken.go` da raiz (201→90).
+**Podado**: `token_constants.go` — `tcTokenType` saiu; as constantes de
+**reporting token** e de **push** ficaram, porque `reportingtoken.go` e `push.go`
+continuam na raiz.
+**Criado na raiz**: `tctoken_transport.go` (adaptador, não exportado).
+**Tocados fora do domínio**: `client.go` (cinco campos viraram um),
+`client_events_test.go` (a asserção de mapa não-nil).
+
+#### Concorrência — dois locks, com um detalhe que não é óbvio
+
+Cinco campos de `*Client` viraram `tctoken.State`:
+
+```go
+// antes
+tcTokenSenderTS            map[types.JID]time.Time
+tcTokenSenderTSLock        sync.Mutex
+lastTCTokenSenderTSCleanup time.Time
+tcTokenDBPruneLock         sync.Mutex
+lastTCTokenDBPrune         time.Time
+// agora
+tcToken tctoken.State
+```
+
+**Os dois locks continuam sendo dois locks distintos**, com os mesmos pontos de
+aquisição e liberação.
+
+O `dbPruneLock` é o interessante, e o motivo do par de métodos
+`TryStartDBPrune`/`FinishDBPrune` em vez de um `Lock`/`Unlock` simétrico: o
+original usa **`TryLock`** (se outra poda está em andamento, desiste calado, sem
+bloquear o caminho de envio de mensagem), e o lock é **segurado através da
+goroutine assíncrona**, liberado por um `defer` lá dentro. `TryStartDBPrune`
+reproduz isso literalmente: devolve `false` e **libera** o lock quando desiste
+pelo intervalo; devolve `true` com o lock **ainda segurado**, e quem chama é
+responsável por `FinishDBPrune` — no `defer` da goroutine de poda, como antes.
+Travado por `TestDeleteExpiredNaoBloqueiaQuandoJaEstaPodando`.
+
+A poda do mapa em memória (`unlockedCleanup`) continua sendo chamada **com o
+`senderTSLock` segurado**, logo depois da gravação, e mantém o mesmo throttle de
+um bucket. O nome perdeu o prefixo mas manteve o `unlocked` justamente porque
+esse contrato é o ponto.
+
+**Mudança de comportamento conhecida e aceita:** o mapa passou a ser criado
+preguiçosamente sob o lock de escrita em vez de eagerly em `NewClient`. É
+exatamente a mesma mudança (e o mesmo racional) do lote 3: uma leitura antes de
+qualquer gravação enxerga mapa nil, o que em Go é leitura válida e devolve o
+zero — mesmo resultado que um mapa vazio.
+
+#### Compatibilidade de API
+
+Este domínio **não tem nada exportado na raiz**: todos os símbolos eram não
+exportados (`shouldSendNewTCToken`, `ensureTCToken`, `issuePrivacyToken`, ...) e
+continuam existindo com as mesmas assinaturas, como delegações. Não há tabela de
+apelidos porque não há o que apelidar.
+
+Guardas de receiver nil foram acrescentadas às fachadas, como nos outros
+subpacotes. Coberto por `TestFachadaDeTCTokenRecusaClientNil`.
+
+#### Cobertura
+
+**100,0% de statements**, 15/15 funções. Os testes da Fase E lote 4
+(`tctoken_test.go`) foram **relocados e adaptados** — passaram a chamar os
+métodos de `State` direto. O lote acrescentou `transport_test.go`, que cobre o
+que antes exigia banco e socket: os quatro fallbacks de `ResolveStorageLID`, os
+cinco caminhos de `Ensure`, o throttle da poda, e os cinco ramos de
+`IssueAndSave`.
+
+Dois comportamentos travados por serem contraintuitivos:
+
+1. **O cache em memória é atualizado ANTES da releitura do banco** em
+   `IssueAndSave`: uma falha ali (ou a ausência de token) não desfaz a
+   atualização. `TestIssueAndSave/falha na releitura mantem o cache`.
+2. **O timestamp do `<token>` vai em SEGUNDOS**, como string
+   (`strconv.FormatInt(timestamp.Unix(), 10)`). `TestIssueMontaONo`.
+
+#### Estado da revisão — NÃO REVISADO INDEPENDENTEMENTE
+
+Diferente dos subpacotes 1 e 2, a mudança de concorrência deste subpacote
+**não** teve revisão independente. O que a sustenta é: `make check` verde (exit 0
+observado), cobertura de 100,0% sob `-race`, e a comparação manual de cada função
+movida contra o original — feita **por quem escreveu o commit**, e portanto
+**não** independente. O ponto que mais mereceria revisão externa é a semântica de
+`TryStartDBPrune` (o lock que atravessa a fronteira da goroutine). Fica
+registrado como pendência, no mesmo espírito do que a retratação do lote 1
+deixou registrado.
+
+---
+
+### O que NÃO foi extraído, e por quê
+
+O escopo designado tinha 16 arquivos. Três domínios foram extraídos; os demais
+**não**, cada um por um motivo concreto. Nenhum deles foi "esquecido".
+
+**`request.go` — obstáculo genuíno, não extraível neste padrão.** É o substrato
+de IQ do fork inteiro: define `infoQuery`, `infoQueryType`, `sendIQ`,
+`sendIQAsync`, `retryFrame`, os response waiters e o `generateRequestID`. Todo
+domínio já extraído (media, newsletter, appstatesync, prekeys, pairing, tctoken)
+depende dele **através da própria interface `Transport`** — é o que o `SendIQ` de
+cada `Transport` traduz. Extraí-lo exigiria arrastar junto o socket, o
+`WaitForConnection`, os erros de IQ e o `Client.socketLock`, ou seja, o núcleo de
+conexão, que é o que a Fase D já identificou como não fatiável. Tentá-lo neste
+lote seria forçar algo frágil no arquivo mais crítico do caminho de rede. **Parado
+de propósito.**
+
+**`qrchan.go` — depende de `*Client` de um jeito que a interface não resolve
+bem.** `qrChannel` guarda um `cli *Client` e chama `RemoveEventHandler`,
+`AddEventHandler`, `Disconnect`, `IsConnected` e lê `Store.ID`; além disso,
+`QRChannelItem` e as cinco variáveis `QRChannel*` são API pública, e **variáveis
+não podem ser reexportadas por apelido preservando identidade de comparação de
+forma tão barata quanto tipos**. Extraível, mas não com o orçamento honesto que
+restava depois dos três domínios acima. Suas constantes ficaram em
+`pair_constants.go`, agora com um comentário dizendo isso.
+
+**`presence.go`, `privacysettings.go`, `push.go`, `broadcast.go`, `call.go`,
+`cstoken.go`, `reportingtoken.go`, `armadillomessage.go`, `update.go`,
+`disappearing_timer.go` — não iniciados.** Todos são extraíveis pelo mesmo padrão
+(nenhum tem obstáculo estrutural conhecido), e vários seriam fáceis
+(`armadillomessage.go` é decodificação quase pura; `reportingtoken.go` já é quase
+tudo função livre). Não foram feitos por **falta de orçamento**, não por
+impedimento técnico. Registrar isso é mais útil que entregá-los sem cobertura e
+sem revisão.
+
+**`internals.go` e `internals_generate.go` — fora do escopo por designação.**
+F29 em `HOUSEKEEP.md`. Confirmado intocados: `git status` não os lista, e os dois
+compilam sem mudança contra as fachadas (é por isso que `preKeyResp` e
+`PairClientType` viraram apelidos de tipo em vez de tipos novos).
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir os três subpacotes novos. Todos os arquivos de
+produção deles ficam abaixo do teto de 300 linhas (maior: `pairing/pair.go`,
+228). `client.go` bateu 302 e depois 301 linhas ao ganhar os campos novos e foi
+encurtado nas duas vezes — o gate pegou, como devia; hoje está em 300.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado duas vezes (uma por lote de
+commit).
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
+com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
+tamanho de arquivo e testes do fork.
