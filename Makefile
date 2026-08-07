@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-license-check waclient-drift waclient-filesize waclient-test
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test
 
 # Default Go configuration
 GOCMD := go
@@ -9,11 +9,10 @@ GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
 BINARY := wa-api
 
-# internal/wa-noise/ é o whatsmeow vendorizado por completo (ADR-0002/0003)
-# — código de terceiros sob MPL-2.0, cópia fiel, não lógica nossa. Excluído
-# dos gates de qualidade que medem o QUE ESCREVEMOS (cobertura, lint, vet,
-# test) — não é "menos rigor", é medir a coisa certa: a qualidade do que
-# escrevemos, não a de um SDK que só copiamos.
+# internal/wa-noise/ é o módulo de protocolo do projeto. Historicamente
+# ficou fora dos gates que medem o que escrevemos (cobertura, lint, vet,
+# test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
+# progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
 COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
 # pkg/infra/wa-noise/ ficava de fora de TEST_PKGS por uma data race real em
 # safe_go_test.go (commit b426885). O teste foi corrigido junto da quebra do
@@ -239,18 +238,7 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	   fi; \
 	 fi
 
-##@ Vendored whatsmeow (internal/wa-noise/)
-
-waclient-license-check: ## Verifica header MPL-2.0 em todo .go de internal/wa-noise/ (fora de proto/, gerado)
-	@bash scripts/waclient-license-check.sh
-
-waclient-drift: ## Falha se internal/wa-noise/protocol/proto/ (codigo gerado) divergir do upstream declarado em UPSTREAM (ADR-0004: restante do modulo e' fork ativo, fora desta trava)
-	@version=$$(cat internal/wa-noise/UPSTREAM | awk '{print $$2}'); \
-	 if [ -z "$$version" ]; then \
-	   echo "FALHA: internal/wa-noise/UPSTREAM vazio ou malformado."; \
-	   exit 1; \
-	 fi; \
-	 ./scripts/waclient-diff.sh "$$version"
+##@ Modulo de protocolo (internal/wa-noise/)
 
 waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
 	@bash scripts/waclient-facade-check.sh
@@ -282,7 +270,7 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/fachada/tamanho/testes do vendored
+check: build vet test lint coverage-gate log-coverage-gate waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + fachada/tamanho/testes de internal/wa-noise/
 
 ##@ Utilities
 

@@ -118,8 +118,8 @@ baseline (fora do escopo deste fix).
 
 ## 2026-08-06 — `.coverage-baseline` `min_coverage=822` estava incorreto/não-reprodutível
 
-**Encontrado durante**: implementação do plano de vendoring do whatsmeow
-(branch `feature/vendor-whatsmeow`, `.omc/plans/vendor-whatsmeow-native-fork.md`).
+**Encontrado durante**: implementação do plano de vendoring do wa-noise
+(branch `feature/vendor-wa-noise`, `.omc/plans/vendor-wa-noise-native-fork.md`).
 
 **Onde**: `.coverage-baseline:40` (na branch-base `feature/native-multisession-architecture`,
 commit `31287b9`).
@@ -144,16 +144,16 @@ de métrica.
 **Correção aplicada**: `min_coverage` ajustado para `819` (o valor honesto
 e reproduzível, confirmado 2x — antes e depois do vendoring), com nota
 explicando a investigação. Ver commit `d11979b` em
-`feature/vendor-whatsmeow`.
+`feature/vendor-wa-noise`.
 
-**Status**: corrigido (branch `feature/vendor-whatsmeow`, ainda não
+**Status**: corrigido (branch `feature/vendor-wa-noise`, ainda não
 mergeada em `develop` no momento deste registro).
 
 ---
 
 ## 2026-08-06 — `.log-coverage-baseline` tinha `min_func_coverage=`/`min_errpath_coverage=` duplicados
 
-**Encontrado durante**: mesma implementação acima (vendoring do whatsmeow).
+**Encontrado durante**: mesma implementação acima (vendoring do wa-noise).
 
 **Onde**: `.log-coverage-baseline`, herdado do commit `ace7770`
 (`feat(contacts): expõe GET /user/contacts/last-activity`, de uma sessão
@@ -173,7 +173,7 @@ as duas ocorrências, concatenadas com newline, inválidas como inteiro
 **Correção aplicada**: removida a linha `min_func_coverage=710`/
 `min_errpath_coverage=856` mais antiga, mantendo só o par final
 (707/856, o valor efetivamente vigente pós-`ace7770`). Ver commit
-`d11979b` em `feature/vendor-whatsmeow`.
+`d11979b` em `feature/vendor-wa-noise`.
 
 **Status**: corrigido nesta branch. **Atenção**: como `ace7770` é de outra
 sessão/branch que pode não ter esse fix, vale confirmar que a duplicata
@@ -183,17 +183,17 @@ o arquivo do mesmo jeito.
 
 ---
 
-## 2026-08-06 — `internal/waclient/` (vendored whatsmeow) sem bridge de log para o padrão do projeto
+## 2026-08-06 — `internal/waclient/` (vendored wa-noise) sem bridge de log para o padrão do projeto
 
-**Encontrado durante**: revisão de arquitetura pós-vendoring do whatsmeow
-(branch `feature/vendor-whatsmeow`), solicitada explicitamente para
+**Encontrado durante**: revisão de arquitetura pós-vendoring do wa-noise
+(branch `feature/vendor-wa-noise`), solicitada explicitamente para
 avaliar se `internal/waclient/` segue os padrões de log/erro já
 estabelecidos no resto do projeto (via agente `architect`).
 
 **Onde**:
 - `internal/waclient/util/log/log.go:17-23` — interface `waLog.Logger`
-  (`Warnf/Errorf/Infof/Debugf/Sub`) que o whatsmeow espera receber.
-- `pkg/infra/whatsmeow/logger.go:12` — `ZerologAdapter`, que implementa
+  (`Warnf/Errorf/Infof/Debugf/Sub`) que o wa-noise espera receber.
+- `pkg/infra/wa-noise/logger.go:12` — `ZerologAdapter`, que implementa
   `appport.Logger` (`Info/Warn/Error(ctx, msg, keyvals...)`), uma
   interface **diferente** — não satisfaz `waLog.Logger`.
 - `pkg/bootstrap/main.go:327-329` e
@@ -216,12 +216,12 @@ estabelecidos no resto do projeto (via agente `architect`).
    `req_id`/`role`/correlação com o resto dos logs da app.
 
 **Achado secundário (severidade média)**: adoção de `apperr` na fronteira
-do port é parcial — `pkg/infra/whatsmeow/user_adapters.go:40,44,67,71,80`
+do port é parcial — `pkg/infra/wa-noise/user_adapters.go:40,44,67,71,80`
 repassa `err` cru vindo do waclient sem `apperr.New(...)`, então esses
 erros chegam no HTTP boundary sem `Code`/`Category`/`Retryable`. Os
 demais pontos da fronteira (`session_provider_adapter.go`,
 `session_guard_adapter.go`, `misc_adapters.go`) já fazem a tradução
-correta com `errors.Is` contra sentinels do whatsmeow — nenhum
+correta com `errors.Is` contra sentinels do wa-noise — nenhum
 string-matching encontrado no repo.
 
 **Confirmado como correto (sem ação necessária)**: `.logcov-exclude`
@@ -248,10 +248,10 @@ em andamento na mesma sessão.
 ## 2026-08-06 — `user_info_failed` classificado como `CategoryInternal` sendo erro de entrada
 
 **Contexto**: execução da Fase 3 (apperr) do plano
-`.omc/plans/whatsmeow-clean-arch-walog-bridge.md`, que fixa código e
+`.omc/plans/wa-noise-clean-arch-walog-bridge.md`, que fixa código e
 categoria dos 5 sites em tabela.
 
-**Onde**: `pkg/infra/whatsmeow/user_adapters.go:63-66` (era
+**Onde**: `pkg/infra/wa-noise/user_adapters.go:63-66` (era
 `user_adapters.go:71` antes dos splits das Fases 0):
 
 ```go
@@ -369,7 +369,7 @@ Medido nesta sessão, com os splits já aplicados:
 - `golangci-lint run ./internal/waclient/` → **92 issues**, distribuídas em
   `gocyclo: 69`, `staticcheck: 19`, `ineffassign: 2`, `errcheck: 1`,
   `goimports: 1`. **Nenhuma** vem dos arquivos criados nesta fase — são
-  todas do estilo do whatsmeow upstream (ex:
+  todas do estilo do wa-noise upstream (ex:
   `download-to-file.go:185` errcheck em `resp.Body.Close`;
   `message_decrypt.go:282` ST1012 em `EventAlreadyProcessed`;
   `client_test.go:16` goimports, arquivo não tocado).
@@ -387,7 +387,7 @@ Medido nesta sessão, com os splits já aplicados:
    `internal/waclient/...` já — vet está limpo hoje.
 3. `LINT_TARGETS`: incluir só depois de um baseline próprio para o
    diretório (o gate de lint hoje trava por `max_complexity`, e o
-   `gocyclo` máximo do whatsmeow é muito acima do baseline do repo).
+   `gocyclo` máximo do wa-noise é muito acima do baseline do repo).
 4. `COVER_PKGS`/`TEST_PKGS`: só quando houver testes reais, por
    subdiretório, à medida que as Fases B/C do ADR-0004 forem cobrindo.
 
@@ -405,7 +405,7 @@ travado por gate novo (`make waclient-filesize`,
 **Data**: 2026-08-06
 **Contexto**: Fase A do ADR-0004, metade `internal/waclient/socket/`. Achado ao
 escrever o primeiro teste de remontagem de frame do pacote — o bug é do
-whatsmeow upstream, não introduzido por nós.
+wa-noise upstream, não introduzido por nós.
 
 **Onde**: `internal/waclient/socket/framesocket.go:161-200`
 (`(*FrameSocket).processData`), especificamente a linha 170:
@@ -462,7 +462,7 @@ fs.receivedLength = len(msg)
 
 E, no mesmo commit, remover o `t.Skip` de `TestProcessDataSplitPayload`, que
 passa a ser a prova da correção. Vale também mandar o patch para o upstream
-(`go.mau.fi/whatsmeow`), já que o bug não é nosso.
+(`wa-api/internal/wa-noise`), já que o bug não é nosso.
 
 **Status**: **não corrigido**. A Fase A do ADR-0004 é estrutural por contrato
 (`PATCHES.md` declara "comportamento não mudou" em todas as entradas) e este é
@@ -477,7 +477,7 @@ leva de correções de comportamento do fork.
 **Data**: 2026-08-06
 **Contexto**: Fase B do ADR-0004, metade `internal/wa-noise/appstate/`. Achado
 na leitura linha a linha para a auditoria de magic numbers; o código é do
-whatsmeow upstream, não introduzido por nós.
+wa-noise upstream, não introduzido por nós.
 
 **Onde**: quatro cortes que assumem, sem checar, que o blob tem pelo menos
 `macLength` (32) bytes:
@@ -530,7 +530,7 @@ O mesmo teto vale para `updateHash`/`generatePatchMAC`, que rodam **antes** de
 `decodeMutation` no fluxo de `validatePatch` — então a validação precisa
 acontecer nos dois lugares, ou `validatePatch` precisa varrer as mutações uma
 vez antes de chamar `updateHash`. Vale mandar o patch para o upstream
-(`go.mau.fi/whatsmeow`), já que o bug não é nosso.
+(`wa-api/internal/wa-noise`), já que o bug não é nosso.
 
 **Status**: **não corrigido**. A Fase B do ADR-0004 é estrutural por contrato
 (`PATCHES.md` declara "comportamento não mudou" nas entradas de divisão) e
@@ -573,7 +573,7 @@ uma limpeza de estado que simplesmente não acontece, e o app state acumula MACs
 órfãos no banco.
 
 **Correção sugerida**: nenhuma imediata — antes é preciso descobrir a intenção
-no upstream (`git log`/issues de `go.mau.fi/whatsmeow` em torno de
+no upstream (`git log`/issues de `wa-api/internal/wa-noise` em torno de
 `fakeIndexesToRemove`). Dois desfechos possíveis: (a) a feature nunca foi
 ligada e o parâmetro deve ser removido das três assinaturas, simplificando;
 (b) deveria estar populado, e aí é bug de verdade no upstream. Não dá para
@@ -606,7 +606,7 @@ func (s *SQLStore) DeleteIdentity(ctx context.Context, address string) error {
 A query de igualdade existe logo acima, declarada e **sem nenhum uso**:
 
 ```go
-deleteIdentityQuery = `DELETE FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id=$2`
+deleteIdentityQuery = `DELETE FROM wa-noise_identity_keys WHERE our_jid=$1 AND their_id=$2`
 ```
 
 **Problema**: `DeleteIdentity` recebe um endereço Signal completo
@@ -834,7 +834,7 @@ n.GetChildByTag("ausente").Tag   // devolve "iq", não ""
 
 Quem checar o resultado por `.Tag != ""` para saber se achou está checando
 algo que é sempre verdadeiro. O padrão correto é `GetOptionalChildByTag` com
-o `ok`, e o resto do whatsmeow em geral faz isso — mas a armadilha não está
+o `ok`, e o resto do wa-noise em geral faz isso — mas a armadilha não está
 escrita em lugar nenhum.
 
 **Correção sugerida**: nenhuma no código. É API pública do upstream e mudar o
@@ -1159,7 +1159,7 @@ Verificação: `TestQueryIDsDesktopTemWireTypeArgo` cobre as outras nove;
 (`internal/wa-noise/newsletter_mex_test.go`) travam as duas anomalias.
 
 **Correção sugerida**: capturar as IDs corretas de um cliente desktop real
-(ou de uma versão mais nova do whatsmeow upstream) e substituir as duas
+(ou de uma versão mais nova do wa-noise upstream) e substituir as duas
 constantes. Não há como derivar os valores corretos a partir do que está
 vendorizado.
 
@@ -2045,7 +2045,7 @@ proibido, e passar nil e' a forma intuitiva de "voltar ao padrao".
 Reproducao (nao adicionada a suite, por ser fora do escopo):
 
 ```go
-cli := whatsmeow.NewClient(store, nil)
+cli := wa-noise.NewClient(store, nil)
 cli.SetMediaHTTPClient(nil)
 cli.SetProxy(nil)  // panic: runtime error: invalid memory address
 ```

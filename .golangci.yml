@@ -32,10 +32,11 @@ linters:
             - "**/pkg/application/usecase/user/*.go"
             - "**/pkg/application/contracts/*.go"
           deny:
-            - pkg: go.mau.fi/whatsmeow
+            - pkg: wa-api/internal/wa-noise
               desc: >-
-                a camada de aplicacao nao conhece o SDK concreto; consuma uma
-                porta de capacidade de pkg/application/contracts (ADR-001)
+                a camada de aplicacao nao conhece o modulo de protocolo
+                concreto; consuma uma porta de capacidade de
+                pkg/application/contracts (ADR-001)
             - pkg: github.com/jmoiron/sqlx
               desc: >-
                 a camada de aplicacao nao fala com o banco direto; consuma uma

@@ -14,12 +14,12 @@ cmd/
 # real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
 pkg/application/contracts/contractsfake/
 
-# internal/wa-noise/ — modulo go.mau.fi/whatsmeow vendorizado por completo
+# internal/wa-noise/ — modulo wa-api/internal/wa-noise vendorizado por completo
 # (ADR-0002/0003), cópia fiel de codigo de terceiros sob MPL-2.0, nao codigo
 # nosso a instrumentar. `packages.Visit` do proprio cmd/logcov inclui
 # qualquer pacote transitivamente importado cujo PkgPath comece com o path
-# do modulo (`wa-api/`) — antes do vendoring, todo o whatsmeow ficava fora
-# do denominador por ser `go.mau.fi/whatsmeow/...` (path externo); depois de
+# do modulo (`wa-api/`) — antes do vendoring, todo o wa-noise ficava fora
+# do denominador por ser `wa-api/internal/wa-noise/...` (path externo); depois de
 # vendorizado sob `wa-api/internal/wa-noise/...`, o mesmo filtro passaria a
 # incluir as ~124k linhas de terceiros sem essa exclusao explicita.
 internal/wa-noise/

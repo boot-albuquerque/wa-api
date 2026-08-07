@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Trava da fachada de internal/wa-noise/ (Fase H, etapa 6).
 #
-# A etapa 6 estabeleceu internal/wa-noise/main.go (package whatsmeow) como a
+# A etapa 6 estabeleceu internal/wa-noise/main.go (package wa-noise) como a
 # UNICA porta de entrada do fork para codigo fora dele. A direcao de dependencia
 # declarada no inventario da Fase H (internal/wa-noise/docs/FASE_H_INVENTORY.md,
 # §"Direcao de dependencia declarada") diz, literalmente: **nada importa `core`**.

@@ -1,6 +1,6 @@
 # Patches locais em internal/wa-noise/
 
-Registro do que divergimos do upstream `go.mau.fi/whatsmeow` e por quê.
+Registro do que divergimos do upstream `wa-api/internal/wa-noise` e por quê.
 
 Desde o [ADR-0004](../../docs/adr/0004-refatorar-internal-waclient-em-fork-intencional.md)
 este diretório **deixou de ser espelho drift-zero** e passou a ser um fork
@@ -23,7 +23,7 @@ passam a valer aqui (ADR-0004, decisão 2): teto de 300 linhas por arquivo de
 produção, zero magic number/string fora de constante nomeada, SOLID.
 
 O padrão de divisão segue o que já foi estabelecido nesta mesma sessão em
-`pkg/infra/whatsmeow/` (commits `e2c6206`, `84e10d3`, `4ebef07`, `59b243e`,
+`pkg/infra/wa-noise/` (commits `e2c6206`, `84e10d3`, `4ebef07`, `59b243e`,
 `3ed1aac`): agrupar por **responsabilidade única**, não por corte mecânico de
 linhas, e nomear o arquivo pelo que ele faz.
 
@@ -31,7 +31,7 @@ linhas, e nomear o arquivo pelo que ele faz.
 
 **Comportamento não mudou em nenhuma entrada abaixo.** Toda divisão é
 movimentação pura de declarações de topo entre arquivos do **mesmo pacote**
-(`package whatsmeow`) e do **mesmo diretório** — nenhuma assinatura pública,
+(`package wa-noise`) e do **mesmo diretório** — nenhuma assinatura pública,
 nenhum tipo, nenhum campo, nenhuma ordem de execução foi alterada. Go não
 distingue em qual arquivo do pacote uma declaração vive, então o binário
 resultante é equivalente. As únicas exceções (extração de helpers privados e
@@ -187,7 +187,7 @@ Todas são **divisão apenas**, sem mudança de comportamento, salvo nota.
 - **Por quê**: `user.go` era o maior catch-all do pacote — links/QR, bots,
   perfil business, lista de dispositivos, avatar, blocklist e o transporte
   `usync` (usado por vários dos anteriores) num arquivo só. O eixo é o mesmo já
-  adotado em `pkg/infra/whatsmeow/user_adapters.go` (commit `59b243e`), que
+  adotado em `pkg/infra/wa-noise/user_adapters.go` (commit `59b243e`), que
   quebrou o adapter espelho deste código em `user_avatar_adapters.go`,
   `user_blocklist_adapters.go` etc. — a nomenclatura foi mantida em paralelo de
   propósito, para que o arquivo do fork e o do adapter tenham o mesmo nome.
@@ -213,7 +213,7 @@ Todas são **divisão apenas**, sem mudança de comportamento, salvo nota.
 - **Criado** `group_notification.go` (214): `Client.parseGroupCreate`,
   `Client.parseGroupChange`, `Client.updateGroupParticipantCache`,
   `Client.parseGroupNotification`.
-- **Por quê**: mesmo eixo do split de `pkg/infra/whatsmeow/group_adapters.go`
+- **Por quê**: mesmo eixo do split de `pkg/infra/wa-noise/group_adapters.go`
   (commit `4ebef07`, que gerou `group_read_adapters.go`,
   `group_write_adapters.go`, `group_participants_adapters.go`) — escrita ×
   participantes × configuração × convite × parsing × notificação. `group.go`
@@ -248,8 +248,8 @@ Todas são **divisão apenas**, sem mudança de comportamento, salvo nota.
   varrido `internal/wa-noise/*.go` atrás de qualquer escrita de log que não
   passe por `cli.Log` / `cli.Log.Sub(...)` — o campo `log waLog.Logger`
   injetado em `NewClient`, que o bootstrap já liga ao `walog.Bridge` sobre
-  zerolog (`pkg/infra/whatsmeow/walog/`, commits `2848388` e `279a68a`).
-  Resultado: o whatsmeow usa `cli.Log` corretamente em toda a raiz, com **uma
+  zerolog (`pkg/infra/wa-noise/walog/`, commits `2848388` e `279a68a`).
+  Resultado: o wa-noise usa `cli.Log` corretamente em toda a raiz, com **uma
   única exceção** — `newsletter_mex.go:137` (`Client.sendMexIQ`, vindo de
   `newsletter.go` original) chama `log.Fatalf` do **stdlib**. Isso é ao mesmo
   tempo um bypass do bridge e um `os.Exit(1)` dentro de código de biblioteca,
@@ -480,7 +480,7 @@ Varrido `internal/wa-noise/socket/*.go` atrás de escrita de log fora do
 `waLog.Logger` injetado. Resultado: **nenhum bypass**. `FrameSocket.log` é
 alimentado por `NewFrameSocket(cli.Log.Sub("Socket"), ...)`
 (`client_connection.go:126`), ou seja já chega no `walog.Bridge` sobre zerolog
-(`pkg/infra/whatsmeow/walog/`, commits `2848388`/`279a68a`). `NoiseSocket` loga
+(`pkg/infra/wa-noise/walog/`, commits `2848388`/`279a68a`). `NoiseSocket` loga
 via `ns.fs.log`, o mesmo logger. Não há `fmt.Print*`, `log.*` do stdlib nem
 `println`. Nada a corrigir.
 
@@ -908,9 +908,9 @@ pacote `store` por arquivo** — porque os blocos de query ja' estavam agrupados
 assim; faltava so' a fronteira de arquivo.
 
 - **Criado** `store_identity.go` (52): as 4 queries de
-  `whatsmeow_identity_keys` e `PutIdentity`, `DeleteAllIdentities`,
+  `wa-noise_identity_keys` e `PutIdentity`, `DeleteAllIdentities`,
   `DeleteIdentity`, `IsTrustedIdentity` (`store.IdentityStore`).
-- **Criado** `store_session.go` (120): as queries de `whatsmeow_sessions`,
+- **Criado** `store_session.go` (120): as queries de `wa-noise_sessions`,
   `addressSessionTuple`, `sessionScanner`, `GetSession`, `HasSession`,
   `GetManySessions`, `PutManySessions`, `PutSession`, `DeleteAllSessions`,
   `deleteAllSessions`, `DeleteSession`.
@@ -926,7 +926,7 @@ assim; faltava so' a fronteira de arquivo.
     verificacao de confianca da proxima mensagem). Isolar deixa isso visivel.
   - `deleteAllSessions` continua em `store_session.go` porque e' chamada tanto
     pelo metodo publico `DeleteAllSessions` quanto pela migracao.
-- **Criado** `store_prekey.go` (128): as 7 queries de `whatsmeow_pre_keys`,
+- **Criado** `store_prekey.go` (128): as 7 queries de `wa-noise_pre_keys`,
   `genOnePreKey`, `getNextPreKeyID`, `GenOnePreKey`, `GetOrGenPreKeys`,
   `scanPreKey`, `GetPreKey`, `RemovePreKey`, `MarkPreKeysAsUploaded`,
   `UploadedPreKeyCount` (`store.PreKeyStore`). Leva junto `preKeyLock`.
@@ -965,7 +965,7 @@ movimentacao, nao mudanca.
   `Device.Delete`, `Device.SetAllStores`, `Device.GetAltJID`.
 - **Por que**: `store.go` misturava **duas coisas de natureza diferente** — o
   catalogo de **interfaces** que o pacote define (o contrato que `sqlstore`
-  implementa e que o resto do whatsmeow consome) com a unica **implementacao
+  implementa e que o resto do wa-noise consome) com a unica **implementacao
   concreta** do pacote, o agregado `Device`. `store.go` ficou so' com as
   interfaces e os tipos de dado que elas trocam (`AppStateSyncKey`,
   `ContactEntry`, `PrivacyToken`, `LIDMapping` etc.); `device.go` com o agregado
@@ -1034,10 +1034,10 @@ Tres notas sobre onde a extracao **parou de proposito**:
   `appStateKeyPartLength`.
 - **As queries SQL nao foram fragmentadas em constantes de nome de tabela e
   coluna.** Uma query e' legivel exatamente porque e' uma string contigua; trocar
-  `SELECT session FROM whatsmeow_sessions WHERE our_jid=$1` por concatenacao de
+  `SELECT session FROM wa-noise_sessions WHERE our_jid=$1` por concatenacao de
   constantes tornaria o codigo ilegivel sem eliminar nenhum valor "magico" — o
   nome da tabela nao e' um numero sem explicacao, e' o proprio SQL. A unica
-  excecao sao os nomes de coluna de `whatsmeow_chat_settings`, que **ja' eram**
+  excecao sao os nomes de coluna de `wa-noise_chat_settings`, que **ja' eram**
   interpolados com `fmt.Sprintf` (SQL nao aceita nome de coluna parametrizado):
   ali o literal solto realmente existia, e virou constante.
 - Os `$%d` calculados em `GetManySessions`, `DeleteAppStateMutationMACs` e
@@ -1128,7 +1128,7 @@ O que os testes travam, alem do round trip obvio de cada getter/setter:
   dedicado: sem o cache, uma sessao nova criada em PN depois da migracao seria
   movida por cima da sessao LID em uso.
 - **Traducao LID <-> PN** nos `CASE` de `getMsgSecret` e `getPrivacyToken`, nas
-  duas direcoes, com o `whatsmeow_lid_map` populado.
+  duas direcoes, com o `wa-noise_lid_map` populado.
 - **Loteamento**: `PutAppStateMutationMACs` e `PutAllContactNames` sao
   exercitados com mais itens que `mutationBatchSize`/`contactBatchSize`,
   conferindo o primeiro e o ultimo item — um bug de chunking gravaria so' o
@@ -1188,7 +1188,7 @@ que **nao** foram mexidas por serem mudanca de comportamento:
 - `git diff --stat internal/wa-noise/proto/` continua vazio.
 - **`internal/wa-noise/store/sqlstore/upgrades/*.sql` nao foi tocado.** Migracao
   de schema e' historico append-only: cada arquivo ja' foi aplicado em bancos de
-  producao e esta' registrado em `whatsmeow_version`. Editar, dividir ou
+  producao e esta' registrado em `wa-noise_version`. Editar, dividir ou
   reformatar um deles nao "melhora" nada — bancos existentes nao reexecutam a
   migracao — e faria o schema divergir entre instalacoes novas e antigas. Alem
   disso sao `.sql`, nao `.go`, e o teto de 300 linhas do ADR-0004 e' sobre
@@ -1202,7 +1202,7 @@ que **nao** foram mexidas por serem mudanca de comportamento:
   cache de sessao, que e' infraestrutura nova.
 - `PostgresArrayWrapper` como variavel global de pacote mutavel e' o mesmo cheiro
   ja' registrado para `argo.Store`: e' API publica documentada do upstream
-  (`whatsmeow.PostgresArrayWrapper = pq.Array`), mudar quebraria consumidores.
+  (`wa-noise.PostgresArrayWrapper = pq.Array`), mudar quebraria consumidores.
   Registrado aqui, nao corrigido.
 - O caminho Postgres (`PostgresArrayWrapper != nil`) de `GetManySessions`,
   `DeleteAppStateMutationMACs` e `GetManyLIDsForPNs` nao e' exercitado pelos
@@ -1739,9 +1739,9 @@ o usuário decidir.
 Dos 94 arquivos, só **10** não têm nenhum método de `*Client`. Destes:
 
 - `download_types.go`, `errors.go`, `msgsecret_keys.go`, `send_types.go`,
-  `send_debug_timings.go` declaram **API exportada** (`whatsmeow.MediaType`,
-  `whatsmeow.SendResponse`, `whatsmeow.SendRequestExtra`,
-  `whatsmeow.ElementMissingError`, `whatsmeow.MsgSecretType`) que **45
+  `send_debug_timings.go` declaram **API exportada** (`wa-noise.MediaType`,
+  `wa-noise.SendResponse`, `wa-noise.SendRequestExtra`,
+  `wa-noise.ElementMissingError`, `wa-noise.MsgSecretType`) que **45
   arquivos** em `pkg/infra/**` importam. Movê-los quebra o caminho de import
   dos consumidores — mudança de API, não de organização.
 - Sobram **4** arquivos genuinamente independentes, todos só funções não
@@ -1847,8 +1847,8 @@ de valor.
 | `msgattrs.GetEditAttribute` | `getEditAttribute` | `msgattrs/message.go:144` | `send_node_build.go:162` |
 
 Dois símbolos **deixaram** de existir como API da raiz e viraram API de
-subpacote — `whatsmeow.RemoveReactionText` → `msgattrs.RemoveReactionText`
-(`msgattrs/message.go:142`) e os quatro `whatsmeow.Adv*SignaturePrefix` →
+subpacote — `wa-noise.RemoveReactionText` → `msgattrs.RemoveReactionText`
+(`msgattrs/message.go:142`) e os quatro `wa-noise.Adv*SignaturePrefix` →
 `paircrypto.Adv*SignaturePrefix` (`paircrypto/signature.go:16-22`). Ambos já
 eram exportados no upstream, então isto é **movimentação** de API, não export
 novo. Foi verificado que nenhum dos dois tem consumidor fora de
@@ -2061,9 +2061,9 @@ silencioso e nenhum estava logando fora do logger do `Client`.
 
 ### Testes (o principal deste lote)
 
-Sete arquivos novos, todos em `package whatsmeow` (interno, para alcançar
+Sete arquivos novos, todos em `package wa-noise` (interno, para alcançar
 `getMediaKeys`, `validateMedia`, `shouldRetryMediaDownload` e afins);
-`client_test.go`, que é `package whatsmeow_test` e só tem um `Example`,
+`client_test.go`, que é `package wa-noise_test` e só tem um `Example`,
 continua intacto ao lado.
 
 O caminho HTTP é exercitado de verdade, não mockado por trás de uma interface
@@ -2241,7 +2241,7 @@ lote de notificações.)
 
 ### Testes
 
-Quatro arquivos novos, `package whatsmeow`:
+Quatro arquivos novos, `package wa-noise`:
 
 | Arquivo de teste | Cobre |
 |---|---|
@@ -2306,7 +2306,7 @@ novo) tem 35 linhas e carrega o header MPL-2.0.
 ### Contexto
 
 Terceiro lote da Fase E (ver o lote 1 para o porquê da fase). Quatro arquivos
-da cola de app state que vive na **raiz** do pacote `whatsmeow`:
+da cola de app state que vive na **raiz** do pacote `wa-noise`:
 
 `appstate.go`, `appstate_dispatch.go`, `appstate_keys.go`, `appstate_send.go`.
 
@@ -2457,7 +2457,7 @@ mudança aqui seja consciente.
 
 ### Testes
 
-Três arquivos novos, `package whatsmeow`:
+Três arquivos novos, `package wa-noise`:
 
 | Arquivo de teste | Cobre |
 |---|---|
@@ -2763,7 +2763,7 @@ Dois pontos de panic *indireto*, ambos deixados como estão:
 
 ### Testes
 
-Cinco arquivos novos, todos `package whatsmeow`.
+Cinco arquivos novos, todos `package wa-noise`.
 
 | Arquivo de teste | Cobre |
 |---|---|
@@ -2861,7 +2861,7 @@ mexer no `Makefile`. Os três arquivos de produção novos
 ### Contexto
 
 Quinto lote da Fase E (ver o lote 1 para o porquê da fase). São 9 arquivos da
-raiz, todos `package whatsmeow`, agrupados em três concerns vizinhos mas
+raiz, todos `package wa-noise`, agrupados em três concerns vizinhos mas
 distintos:
 
 - **notificação** — `notification.go`, `notification_device.go`,
@@ -3101,7 +3101,7 @@ Dois pontos merecem nota, ambos **deixados como estão**:
 
 ### Testes
 
-Três arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+Três arquivos novos, todos `package wa-noise`. A infraestrutura compartilhada
 (`notifTestClient`, `captureEvents`) vive em `receipt_test.go` e é usada pelos
 três — `notifTestClient` monta um `Client` com `waLog.Noop` e um
 `store.Device` só com identidade, que é tudo que estes handlers precisam para
@@ -3179,7 +3179,7 @@ têm 33, 47 e 27 linhas e carregam o header MPL-2.0.
 ### Contexto
 
 Sexto lote da Fase E (ver o lote 1 para o porquê da fase). São os 7 arquivos de
-grupo da **raiz** do pacote, todos `package whatsmeow`:
+grupo da **raiz** do pacote, todos `package wa-noise`:
 
 - **parsing** — `group_parse.go`, `group_notification.go`
 - **ação** — `group.go`, `group_create.go`, `group_invite.go`,
@@ -3432,7 +3432,7 @@ o que faltava para isso ser seguro em vez de sorte.
 
 ### Testes
 
-Três arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+Três arquivos novos, todos `package wa-noise`. A infraestrutura compartilhada
 (`groupTestClient`, `participantNode`, os JIDs `groupTest*`) vive em
 `group_parse_test.go`. `groupTestClient` monta um `Client` com `waLog.Noop` e o
 `groupCache` inicializado — que é o mínimo, já que `cacheGroupInfo` escreve
@@ -3488,7 +3488,7 @@ linhas (maior: `group_notification.go`, 226).
 ### Contexto
 
 Sétimo lote da Fase E (ver o lote 1 para o porquê da fase). São os 8 arquivos de
-usuário da **raiz** do pacote, todos `package whatsmeow`:
+usuário da **raiz** do pacote, todos `package wa-noise`:
 
 - **transporte** — `user_usync.go` (a consulta USync, usada por 4 dos outros)
 - **parsing** — `user_devices.go`, `user_business.go`, `user_blocklist.go`
@@ -3768,7 +3768,7 @@ mudaria a string que alguém pode estar casando em log. Registrado em
 
 ### Testes
 
-Cinco arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+Cinco arquivos novos, todos `package wa-noise`. A infraestrutura compartilhada
 (`userTestClient`, `deviceNode`, `devicesNode`, os JIDs `userTest*`) vive em
 `user_devices_test.go`, seguindo o padrão do lote 6.
 
@@ -3834,7 +3834,7 @@ e `internals.go`/`internals_generate.go` não aparecem no diff do lote.
 ### Contexto
 
 Oitavo lote da Fase E (ver o lote 1 para o porquê da fase). São os 11 arquivos
-do caminho de **saída** da **raiz** do pacote, todos `package whatsmeow`:
+do caminho de **saída** da **raiz** do pacote, todos `package wa-noise`:
 
 - **API pública** — `send.go`, `sendfb.go`, `send_types.go`
 - **preparação** — `send_prepare.go`, `send_node_build.go`,
@@ -4157,7 +4157,7 @@ não reexercitam a derivação.
 
 ## Fase E — lote 9: recepção/decriptação de mensagem, 2026-08-07
 
-Onze arquivos da raiz, todos `package whatsmeow`: `message.go`,
+Onze arquivos da raiz, todos `package wa-noise`: `message.go`,
 `message_builders.go`, `message_decrypt.go`, `message_decrypt_session.go`,
 `message_history_sync.go`, `message_id.go`, `message_parse.go`,
 `message_secrets_store.go`, `msgsecret.go`, `msgsecret_keys.go`,
@@ -4467,7 +4467,7 @@ pelos sete arquivos; difere de `sendTestClient` do lote 8 por já trazer um
 
 ## Fase E — lote 10 (final): núcleo do client/conexão, 2026-08-07
 
-Nove arquivos da raiz, todos `package whatsmeow`: `client.go`,
+Nove arquivos da raiz, todos `package wa-noise`: `client.go`,
 `client_connection.go`, `client_events.go`, `client_proxy.go`,
 `client_session.go`, `handshake.go`, `keepalive.go`, `connectionevents.go`,
 `errors.go`. É o núcleo: a struct `Client`, o ciclo de vida do socket, o
@@ -4931,7 +4931,7 @@ não conseguiu extrair. Nada na Fase E alterou assinatura pública, tipo ou camp
 ### Como esta seção difere das anteriores
 
 As Fases A–E foram melhorias **in loco**: dividir arquivos, nomear constantes,
-adicionar log e teste, corrigir bugs — sempre dentro de `package whatsmeow`, sem
+adicionar log e teste, corrigir bugs — sempre dentro de `package wa-noise`, sem
 mover nada para outro pacote. Esta seção é a primeira **extração de subpacote**:
 código que era método de `*Client` na raiz virou função livre em
 `internal/wa-noise/media/`, e a raiz virou fachada fina.
@@ -5291,7 +5291,7 @@ Quatro decisões de projeto valem registro:
    privacy, business, bots — 20 pontos de construção fora de newsletter).
    Duplicá-lo quebraria o type assert dos chamadores históricos. A construção
    atravessa a interface e o tipo concreto devolvido continua sendo
-   `*whatsmeow.ElementMissingError`, bit-a-bit o de antes. Mesma classe de
+   `*wa-noise.ElementMissingError`, bit-a-bit o de antes. Mesma classe de
    decisão que manteve `parseMediaRetryNotification` na raiz no lote 1.
 
 3. **`ParseMessages` fica na raiz.** `parseNewsletterMessages` vive em
@@ -5556,7 +5556,7 @@ Cinco decisões de projeto valem registro:
    `ElementMissingError`.** Mesmo racional dos lotes 1 e 2: o tipo é erro
    genérico de parsing de XML do fork inteiro (group, usync, newsletter,
    pair-code, blocklist, ...). O tipo concreto devolvido continua sendo
-   `*whatsmeow.ElementMissingError`, bit-a-bit o de antes; só a construção
+   `*wa-noise.ElementMissingError`, bit-a-bit o de antes; só a construção
    atravessa a interface.
 
 4. **`SendPeerMessage` devolve só `error`.** O domínio só usa o erro; devolver
@@ -7084,7 +7084,7 @@ motivo concreto, e nenhum é pass-through gratuito:
   domínio de **ID de mensagem** e não deste; só a operação atravessa a
   interface. Mesmo critério que manteve `ElementMissingError` na raiz nos lotes
   2-5.
-- `ElementMissing(tag, in) error` — preserva o `*whatsmeow.ElementMissingError`
+- `ElementMissing(tag, in) error` — preserva o `*wa-noise.ElementMissingError`
   concreto que os chamadores históricos recebem num type assert.
 - `WrapIQError(human, iq) error` — preserva o `*wrappedIQError` da raiz, cujo
   `Is()` casa contra o erro humano e cujo `Unwrap()` devolve o erro de IQ.
@@ -7151,7 +7151,7 @@ métodos **exportados** de `*Client`, que viraram fachadas finas.
 
 `go build ./...` no repositório inteiro passa **sem uma única mudança fora de
 `internal/wa-noise/`** — verificado. `pkg/infra/wa-noise/group/` (a camada de
-projeto, um projeto diferente e já pronto), que usa `whatsmeow.ReqCreateGroup`,
+projeto, um projeto diferente e já pronto), que usa `wa-noise.ReqCreateGroup`,
 `Client.CreateGroup`, `Client.LeaveGroup`, `Client.SetGroupName`,
 `Client.SetGroupTopic`, `Client.JoinGroupWithLink` e outros, compila e seus
 testes passam intocados.
@@ -7405,7 +7405,7 @@ motivo concreto, e nenhum é pass-through gratuito:
   listas de participantes de grupo tanto quanto listas de dispositivo. Só a
   operação atravessa a interface; a definição fica onde está até o lote de send.
   Mesmo critério que manteve `WebMessageIDPrefix` na raiz no lote 6.
-- `ElementMissing(tag, in) error` — preserva o `*whatsmeow.ElementMissingError`
+- `ElementMissing(tag, in) error` — preserva o `*wa-noise.ElementMissingError`
   concreto que os chamadores históricos recebem num type assert.
 - `WrapIQError(human, iq) error` — preserva o `*wrappedIQError` da raiz.
 - `IQErrors() IQErrors` — entrega os **mesmos ponteiros** dos sentinelas. Aqui a
@@ -7724,7 +7724,7 @@ tamanho de arquivo e testes do fork.
 ### Contexto
 
 Oitavo e último lote grande da Fase F/G: o **caminho de saída** de mensagens.
-São os 11 arquivos de envio da raiz, todos `package whatsmeow`:
+São os 11 arquivos de envio da raiz, todos `package wa-noise`:
 
 - **waE2E** — `send.go`, `send_prepare.go`, `send_node_build.go`,
   `send_encrypt.go`, `send_transport.go`, `send_ack.go`, `send_types.go`,
@@ -7769,7 +7769,7 @@ das duas opções (os quatro são folhas), então a escolha é de desenho:
 **Import direto**, nas duas exceções, ambas por serem **dado**, não comportamento:
 
 - `group` — pelos tipos `*group.Meta` (retorno de `CachedGroupData`) e
-  `group.ErrNotFound` (o valor por trás de `whatsmeow.ErrGroupNotFound`).
+  `group.ErrNotFound` (o valor por trás de `wa-noise.ErrGroupNotFound`).
   Traduzir o `Meta` para uma struct local seria cópia campo a campo sem ganho.
 - `tctoken.ShouldSendInChatAction` / `tctoken.ShouldSendNew` — funções **puras**
   (JID → bool, time → bool), sem transporte nem estado; as próprias fachadas da
@@ -7833,7 +7833,7 @@ seja **deliberada**, e não acidente.
 `SendRequestExtra = send.RequestExtra`,
 `MessageDebugTimings = send.DebugTimings`,
 `nodeExtraParams = send.NodeExtraParams`. Apelido, não definição nova: o apelido
-faz dos dois o **mesmo** tipo, então quem escrevia `whatsmeow.SendResponse{...}`
+faz dos dois o **mesmo** tipo, então quem escrevia `wa-noise.SendResponse{...}`
 continua compilando, e `MessageDebugTimings` continua satisfazendo
 `zerolog.LogObjectMarshaler` com o **mesmo** método — uma definição nova exigiria
 reimplementá-lo, e as duas implementações poderiam divergir. Travado por
@@ -8009,7 +8009,7 @@ fork.
 ### Contexto
 
 Penúltimo lote da Fase F/G: o **caminho de entrada** de mensagens — o espelho
-exato do lote 8. São os 11 arquivos da raiz, todos `package whatsmeow`:
+exato do lote 8. São os 11 arquivos da raiz, todos `package wa-noise`:
 
 - **parsing** — `message_parse.go`
 - **decifragem** — `message_decrypt.go`, `message_decrypt_session.go`
@@ -8335,7 +8335,7 @@ fork.
 
 ### Contexto e resultado em uma linha
 
-Último lote da Fase F/G. Nove arquivos da raiz, todos `package whatsmeow`:
+Último lote da Fase F/G. Nove arquivos da raiz, todos `package wa-noise`:
 `client.go`, `client_connection.go`, `client_events.go`, `client_proxy.go`,
 `client_session.go`, `handshake.go`, `keepalive.go`, `connectionevents.go`,
 `errors.go`.
@@ -8467,9 +8467,9 @@ ser API do subpacote. Verificado com `grep -rn` em todo o repositório que
 
 | Antes | Agora |
 |---|---|
-| `whatsmeow.NoiseHandshakeResponseTimeout` | `handshake.ResponseTimeout` (a raiz mantém uma **const** reexportada, `handshake.go:19`) |
-| `whatsmeow.WACertIssuerSerial` | `handshake.WACertIssuerSerial` (removida da raiz) |
-| `whatsmeow.WACertPubKey` | `handshake.WACertPubKey` (removida da raiz) |
+| `wa-noise.NoiseHandshakeResponseTimeout` | `handshake.ResponseTimeout` (a raiz mantém uma **const** reexportada, `handshake.go:19`) |
+| `wa-noise.WACertIssuerSerial` | `handshake.WACertIssuerSerial` (removida da raiz) |
+| `wa-noise.WACertPubKey` | `handshake.WACertPubKey` (removida da raiz) |
 | `noiseKeyLength`, `certSignatureLength` (não exportados) | `handshake.NoiseKeyLength`, `handshake.CertSignatureLength` |
 | `verifyServerCert` (não exportado) | `handshake.VerifyServerCert` |
 
@@ -8554,7 +8554,7 @@ ficaram na raiz porque **trocam o ponteiro**, e o subpacote só tem cópias dos
 ponteiros — trocar do lado de lá não teria efeito nenhum do lado de cá.
 
 `SetProxyOptions` e `Proxy` viraram **type aliases** (`client_proxy.go:23-26`),
-não tipos novos: `whatsmeow.SetProxyOptions` aparece nas assinaturas de
+não tipos novos: `wa-noise.SetProxyOptions` aparece nas assinaturas de
 `SetProxy`/`SetSOCKSProxy`/`SetProxyAddress` e é usado fora do fork, em
 `pkg/infra/wa-noise/session/provider.go:38-39` e
 `pkg/infra/wa-noise/session/session.go:83,86`. Um tipo distinto quebraria esses
@@ -8758,12 +8758,12 @@ ErrAppStateUpdate                = appstatesync.ErrUpdate         // :53
 ErrPairInvalidDeviceSignature    = pairing.ErrInvalidDeviceSignature  // :61
 ```
 
-O propósito do arquivo **é ser `whatsmeow.ErrX`**. Movê-lo para
+O propósito do arquivo **é ser `wa-noise.ErrX`**. Movê-lo para
 `internal/wa-noise/errors/` não reduziria acoplamento nenhum — só trocaria o
 nome do pacote na única coisa que ele faz, e quebraria os consumidores que já
 usam os nomes históricos (`pkg/infra/wa-noise/session/session.go` usa
-`whatsmeow.ErrQRStoreContainsID`, `whatsmeow.ErrProfilePictureUnauthorized`,
-`whatsmeow.ErrProfilePictureNotSet`).
+`wa-noise.ErrQRStoreContainsID`, `wa-noise.ErrProfilePictureUnauthorized`,
+`wa-noise.ErrProfilePictureNotSet`).
 
 O que **sobra** de genuinamente próprio da raiz são ~10 sentinelas do transporte
 (`ErrClientIsNil`, `ErrIQTimedOut`, `ErrNotConnected`, `ErrNotLoggedIn`,
@@ -8969,9 +8969,9 @@ pacote só, e a tentativa de dividi-lo esbarra nas mesmas 20 aquisições de
 dos arquivos movidos.
 
 Não houve como fazer o movimento em grupos lógicos com `go build` entre cada um,
-como a etapa previa: os 114 arquivos são **um único pacote Go** (`whatsmeow`,
-exceto `client_test.go` que é `whatsmeow_test`). Mover metade deixaria o mesmo
-`package whatsmeow` declarado em dois diretórios — dois pacotes distintos para o
+como a etapa previa: os 114 arquivos são **um único pacote Go** (`wa-noise`,
+exceto `client_test.go` que é `wa-noise_test`). Mover metade deixaria o mesmo
+`package wa-noise` declarado em dois diretórios — dois pacotes distintos para o
 compilador, com o `Client` num e seus métodos no outro. Isso não compila em
 nenhum estado intermediário. O movimento é atômico por construção da linguagem,
 pela mesma razão documentada na análise do lote 10 (`socketLock`).
@@ -9005,25 +9005,25 @@ previsto na árvore-alvo é escopo da etapa 6, não desta.
 resolve caminho **relativo ao diretório do arquivo**; deixar o JSON na raiz
 quebraria a compilação de `core/`. Foi movido no mesmo commit.
 
-### Nome do pacote: mantido `whatsmeow` (não renomeado para `core`)
+### Nome do pacote: mantido `wa-noise` (não renomeado para `core`)
 
-`internal/wa-noise/core/` declara `package whatsmeow`. Go não exige que o nome do
+`internal/wa-noise/core/` declara `package wa-noise`. Go não exige que o nome do
 pacote case com o nome do diretório, e manter o nome:
 
 - preserva a superfície pública inteira (~732 símbolos, §8 do inventário) sem
   tocar em nenhum dos 45 arquivos consumidores além do path de import;
-- mantém `whatsmeow.Client` como identificador em todos os call sites de
+- mantém `wa-noise.Client` como identificador em todos os call sites de
   `pkg/infra/wa-noise/*` e `pkg/infra/history/`;
 - deixa a etapa 6 (`main.go` de aliases) livre para escolher.
 
 Renomear para `package core` exigiria editar os 114 arquivos movidos **e**
-reescrever todas as referências `whatsmeow.X` → `core.X` nos 45 consumidores —
+reescrever todas as referências `wa-noise.X` → `core.X` nos 45 consumidores —
 blast radius incompatível com "preservar API externa, minimizar risco".
 
 Consequência: os imports em `pkg/` ficam com path `…/wa-noise/core` e
-identificador `whatsmeow`. Isso é legal em Go e o `vet`/`lint` passam, mas é uma
+identificador `wa-noise`. Isso é legal em Go e o `vet`/`lint` passam, mas é uma
 divergência nome-vs-diretório que a etapa 6 deve resolver de vez (o `main.go`
-fachada em `internal/wa-noise/` volta a ser `package whatsmeow` e os consumidores
+fachada em `internal/wa-noise/` volta a ser `package wa-noise` e os consumidores
 voltam a importar a raiz).
 
 ### Invariante de direção de import — verificada
@@ -9106,7 +9106,7 @@ está vazio ao final da etapa.
 
 ## Fase H — etapa 6: façade raiz, 2026-08-07
 
-A etapa 6 cria `internal/wa-noise/main.go` (`package whatsmeow`) como fachada do
+A etapa 6 cria `internal/wa-noise/main.go` (`package wa-noise`) como fachada do
 fork e **repõe os 44 consumidores externos no import da raiz**. `core/` volta a
 ser o que o inventário da Fase H sempre disse que ele seria: implementação, não
 caminho de import público.
@@ -9123,7 +9123,7 @@ alternativa de manter `client.go` & cia. na raiz.
 **A premissa estava errada, e a medição mostra por quê.** Os ~732 símbolos são a
 superfície *interna* do núcleo. O que os consumidores realmente nomeiam é outra
 coisa. Resolvendo o alias de import arquivo a arquivo (todos os 44 importam com
-alias — 40 como `whatsmeow`, 4 como `wa` — então um `grep core\.` ingênuo não
+alias — 40 como `wa-noise`, 4 como `wa` — então um `grep core\.` ingênuo não
 enxerga nada) e contando os seletores:
 
 | Símbolo | Ocorrências |
@@ -9176,9 +9176,9 @@ README na raiz explicando isso. Foi descartada:
   concretos: (a) o módulo está sob `internal/`, então não existe consumidor fora
   deste repositório para quebrar; (b) **a migração não toca em uma única
   expressão de código** — os 44 arquivos já importavam com alias, então mudar
-  `whatsmeow "wa-api/internal/wa-noise/core"` para
-  `whatsmeow "wa-api/internal/wa-noise"` deixa todos os seletores
-  `whatsmeow.Client`, `wa.NewClient` etc. **idênticos**. O diff é de 44 linhas de
+  `wa-noise "wa-api/internal/wa-noise/core"` para
+  `wa-noise "wa-api/internal/wa-noise"` deixa todos os seletores
+  `wa-noise.Client`, `wa.NewClient` etc. **idênticos**. O diff é de 44 linhas de
   import e nada mais.
 
 ### Por que a fachada é fina, e como ela continua fina
@@ -9195,7 +9195,7 @@ group.ChangeAdd`; `SendResponse = send.Response`; `DownloadableMessage =
 media.Downloadable`). A etapa 6 aplica uma camada acima a mesma técnica que as
 etapas 4-5 já usavam por baixo. Os comentários deixados no próprio `core/`
 confirmam que a raiz sempre foi o nome esperado: `core/client_proxy.go:18-19`
-justifica o alias dizendo que "`whatsmeow.SetProxyOptions` aparece nas
+justifica o alias dizendo que "`wa-noise.SetProxyOptions` aparece nas
 assinaturas".
 
 Os erros são reexportados por `var`, não redefinidos — são a **mesma** variável
@@ -9224,7 +9224,7 @@ módulo já demonstrou, na etapa anterior, que deriva sozinho na direção contr
 
 | Arquivo | Mudança |
 |---|---|
-| `internal/wa-noise/main.go` | **novo** — fachada, `package whatsmeow`, 20 símbolos |
+| `internal/wa-noise/main.go` | **novo** — fachada, `package wa-noise`, 20 símbolos |
 | `scripts/waclient-facade-check.sh` | **novo** — trava de import |
 | `Makefile` | alvo `waclient-facade` + entrada em `check` |
 | `scripts/waclient-filesize-check.sh:36` | `DIRS` ganha `internal/wa-noise` (não-recursivo → pega `main.go`) |
@@ -9423,14 +9423,14 @@ tinham sido registradas:
 | 3 | **`security/` e `observability/`**: `util/{cbc,gcm,hkdf,keys}util` → `security/`, `util/log` → `observability/log`, `paircrypto/` e `handshake/` → `security/` | `7a9da9a`, `bf62663` |
 | 4 | **`protocol/` e `persistence/`**: `proto/` (gerado, 69 subpacotes), `binary/`+`types/`, `argo/ socket/ msgpad/ msgattrs/ appstate/` → `protocol/`; `store/`+`sqlstore`+`upgrades` → `persistence/store/`; e as 12 capacidades → `capabilities/` | `b9b499f`, `ff58b7a`, `35ae2c3`, `0c19f23`, `7839acf`, `007dacb`…`b2a12d4`, `894acbd` |
 | 5 | **`core/`**: os 114 `.go` da raiz (+`reportingfields.json`) em um único `git mv`, porque são **um** pacote Go e meia migração não compila. Resolveu a decisão §2.3 do inventário (os 12 arquivos órfãos foram para `core/`) | `23a2c98`, `e8de2a3`, `4f7624a`, `2e8d8b9` |
-| 6 | **Fachada raiz**: `main.go` (`package whatsmeow`) sobre `core/`, com `type Client = core.Client` — alias de tipo, que entrega o method set inteiro (inclusive os 178 wrappers de `DangerousInternals`) numa linha. Os 44 consumidores repontados para a fachada, e a regra travada por `scripts/waclient-facade-check.sh` | `741470f`, `0cb4e67`, `bfe5ae2` |
+| 6 | **Fachada raiz**: `main.go` (`package wa-noise`) sobre `core/`, com `type Client = core.Client` — alias de tipo, que entrega o method set inteiro (inclusive os 178 wrappers de `DangerousInternals`) numa linha. Os 44 consumidores repontados para a fachada, e a regra travada por `scripts/waclient-facade-check.sh` | `741470f`, `0cb4e67`, `bfe5ae2` |
 | 7 | **`runtime/` + documentação**: `keepalive/` e `proxyconf/` → `runtime/`; `ARCHITECTURE.md`, `CONTRIBUTING.md`, `LOCKS.md`, `DEPENDENCIES.md`; F58 e o adendo ao F29 no `HOUSEKEEP.md` | `554ea60` + o commit deste registro |
 
 ### A estrutura final
 
 ```
 internal/wa-noise/
-├── main.go               fachada, package whatsmeow — única porta de entrada
+├── main.go               fachada, package wa-noise — única porta de entrada
 ├── core/                 Client, socketLock, conexão, request, composition root
 │                         (15 asserções `var _ X.Transport = …`)
 ├── capabilities/         appstatesync group media message newsletter notification

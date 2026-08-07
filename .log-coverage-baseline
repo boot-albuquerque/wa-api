@@ -118,7 +118,7 @@ rules_frozen=true
 # A remocao de startClient deixou orfa a var webhookTLSSkipVerify em
 # pkg/bootstrap/lifecycle.go (seu unico consumidor era o setup inline de
 # resty dentro de startClient); a copia viva migrou para
-# pkg/infra/whatsmeow/client_manager.go junto com ProvisionWebhookClient.
+# pkg/infra/wa-noise/client_manager.go junto com ProvisionWebhookClient.
 # Deletar a orfa tira 1 funcao do denominador E 1 do numerador (ela logava o
 # Warn de opt-in inseguro), entao a razao cai 1 decimo sem que nenhum site
 # tenha deixado de logar — o log continua existindo, no arquivo novo.

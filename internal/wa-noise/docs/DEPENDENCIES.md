@@ -33,7 +33,7 @@ O racional do próprio script vale citar, porque é a lição da etapa 5:
 
 Os ~44 consumidores externos (`pkg/bootstrap/`, `pkg/infra/wa-noise/*`,
 `pkg/infra/{history,media}/`) importam `wa-api/internal/wa-noise` — a fachada
-`main.go`, `package whatsmeow`. `Client` chega lá por **alias de tipo**
+`main.go`, `package wa-noise`. `Client` chega lá por **alias de tipo**
 (`type Client = core.Client`), que preserva o method set inteiro, inclusive os
 178 wrappers de `DangerousInternals`, em uma linha.
 
@@ -60,7 +60,7 @@ direção `core -> runtime` (e nunca o inverso) se mantém.
                     consumidores externos (pkg/…)
                               │
                               ▼
-                    internal/wa-noise  (main.go — fachada, package whatsmeow)
+                    internal/wa-noise  (main.go — fachada, package wa-noise)
                               │  alias de tipo
                               ▼
                           core/  ──────────────┐

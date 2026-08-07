@@ -10,7 +10,7 @@
 #   *aumenta* a contagem de 1 para 5. Travar na contagem é premiar quem deixa
 #   o monolito de pé. (Achado da revisão de arquitetura da Fase 7.)
 max_complexity=56
-# vendor-whatsmeow-native-fork (2026-08-06): 105->87. golangci-lint fmt
+# vendor-wa-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).

@@ -3,7 +3,7 @@
 Levantamento factual do estado de `internal/wa-noise/` **antes** de qualquer
 movimentação da Fase H. Nada foi movido para produzir este documento; todos os
 números vêm de `grep`/`ls`/leitura dos arquivos no commit corrente da branch
-`feature/vendor-whatsmeow`.
+`feature/vendor-wa-noise`.
 
 Este documento é o contrato de execução das etapas 3-7. Onde ele diverge da
 especificação original da Fase H, a divergência está marcada como
@@ -14,7 +14,7 @@ correspondente.
 
 ```
 internal/wa-noise/
-├── main.go            (fachada, package whatsmeow)
+├── main.go            (fachada, package wa-noise)
 ├── core/              client.go, client_connection.go, request.go, internals*.go
 ├── capabilities/      group user media message newsletter notification pairing
 │                      prekeys retry send tctoken appstatesync
@@ -78,15 +78,15 @@ Direção de dependência declarada:
 
 ### 1.2 Arquivos não-Go na raiz (não movem)
 
-`PATCHES.md`, `PROVENANCE.md`, `UPSTREAM`, `LICENSE-whatsmeow`,
+`PATCHES.md`, `PROVENANCE.md`, `UPSTREAM`, `LICENSE-wa-noise`,
 `reportingfields.json` (lido por `reportingtoken.go`).
 
 ---
 
 ## 2. Inventário dos arquivos `.go` da raiz
 
-114 arquivos: **92 de produção + 22 de teste**. Pacote: `whatsmeow` (exceto
-`client_test.go`, que é `whatsmeow_test`).
+114 arquivos: **92 de produção + 22 de teste**. Pacote: `wa-noise` (exceto
+`client_test.go`, que é `wa-noise_test`).
 
 Legenda de risco:
 - **F** = fachada/adaptador fino sobre um subpacote — movimentação mecânica
@@ -114,7 +114,7 @@ Legenda de risco:
 | `keepalive.go` | 104 | F | Fachada sobre `keepalive/` |
 | `handshake.go` | 60 | F | Fachada sobre `handshake/`; contém `cli.socket = ns` |
 
-Testes pareados: `client_test.go` (80, `whatsmeow_test`), `client_connection_test.go` (241),
+Testes pareados: `client_test.go` (80, `wa-noise_test`), `client_connection_test.go` (241),
 `client_events_test.go` (327), `client_proxy_test.go` (193), `client_session_test.go` (403),
 `connectionevents_test.go` (386), `errors_test.go` (293), `keepalive_test.go` (118).
 
@@ -356,7 +356,7 @@ que realmente importam e são verificáveis:
   `security/{cbc,gcm,hkdf,keys}`: **zero** imports de capacidade. ✅
 - `runtime/keepalive` importa `binary`, `types/events`, `util/log`. ✅
 - **Nada, em pacote nenhum, importa a raiz `wa-api/internal/wa-noise`** exceto
-  `client_test.go` (que é `package whatsmeow_test`, na própria raiz). ✅
+  `client_test.go` (que é `package wa-noise_test`, na própria raiz). ✅
   Portanto a invariante "nada importa `core`" é satisfeita **desde que `core/`
   não seja importado pelos consumidores externos** — ver §8.
 
@@ -364,8 +364,8 @@ que realmente importam e são verificáveis:
 
 ## 7. Censo de arquivos de teste
 
-22 `_test.go` na raiz. Todos em `package whatsmeow` exceto `client_test.go`
-(`package whatsmeow_test`).
+22 `_test.go` na raiz. Todos em `package wa-noise` exceto `client_test.go`
+(`package wa-noise_test`).
 
 | Teste | `.go` pareado | Viaja com |
 |---|---|---|
@@ -406,7 +406,7 @@ junto por construção.
 
 ## 8. Risco maior da Fase H: a superfície pública da raiz
 
-`internal/wa-noise` (`package whatsmeow`) é importado por **30 arquivos** fora
+`internal/wa-noise` (`package wa-noise`) é importado por **30 arquivos** fora
 do fork, em `pkg/infra/wa-noise/*` e `pkg/infra/history/`:
 
 ```

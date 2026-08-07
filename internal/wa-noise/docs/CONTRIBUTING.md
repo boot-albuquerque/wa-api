@@ -34,7 +34,7 @@ internal/wa-noise/capabilities/message/transport.go:111      → 36 métodos
 O doc comment de `notification/transport.go` diz por quê, e é o teste que
 importa:
 
-> Deliberadamente não expõe nada do `*whatsmeow.Client` além disso: é o que
+> Deliberadamente não expõe nada do `*wa-noise.Client` além disso: é o que
 > permite que este pacote não importe o pacote raiz e que os testes usem um
 > dublê em vez de um cliente com socket e sessão Noise.
 

@@ -37,8 +37,8 @@
 # linha 13 ("nao depende de locale") está incorreta na prática. Rode com
 # LC_NUMERIC=C LC_ALL=C make coverage-gate para medir corretamente. Reportado
 # separadamente, não corrigido aqui (fora do escopo deste plano).
-# vendor-whatsmeow-native-fork (2026-08-06): 822->819. `make coverage-gate`
-# nesta branch (feature/vendor-whatsmeow, baseada em 31287b9) mediu 81.9%
+# vendor-wa-noise-native-fork (2026-08-06): 822->819. `make coverage-gate`
+# nesta branch (feature/vendor-wa-noise, baseada em 31287b9) mediu 81.9%
 # (819), abaixo do piso declarado (822) — investigado com um worktree
 # temporário no PRÓPRIO commit 31287b9 (`git worktree add /tmp/... 31287b9`)
 # pra isolar se era regressão desta mudança: a medição honesta nesse commit
@@ -49,19 +49,19 @@
 # import path em 45 arquivos + go.mod, sem lógica nova) é comprovadamente
 # neutro em cobertura (819 -> 819, verificado contra o commit-pai). Ajustado
 # para o número honesto e reprodutível.
-# whatsmeow-clean-arch-walog-bridge (2026-08-06): 819->829. Ratchet-UP, medido
+# wa-noise-clean-arch-walog-bridge (2026-08-06): 819->829. Ratchet-UP, medido
 # com LC_NUMERIC=C LC_ALL=C make coverage-gate (o bug de locale acima continua
 # valendo). O ganho de +10 decimos vem de tres frentes do plano
-# .omc/plans/whatsmeow-clean-arch-walog-bridge.md: (1) testes novos para
+# .omc/plans/wa-noise-clean-arch-walog-bridge.md: (1) testes novos para
 # ClientManager.ProvisionWebhookClient e para o fan-out WS (AddWSConn /
 # RemoveWSConn / BroadcastToUser), que nao tinham teste nenhum antes do split
-# de client_manager.go; (2) o pacote novo pkg/infra/whatsmeow/walog, que nasce
+# de client_manager.go; (2) o pacote novo pkg/infra/wa-noise/walog, que nasce
 # com bridge.go e level.go integralmente cobertos; (3) os testes de apperr dos
 # cinco sites de UserAdapter e o teste de integracao do seam em
 # pkg/bootstrap/walog_seam_test.go. Nenhum arquivo de producao perdeu
 # cobertura: os splits movem funcoes, nao logica.
 min_coverage=829
-# F14 (whatsmeow) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
+# F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,
 # user, misc) e no logger.from(ctx).
