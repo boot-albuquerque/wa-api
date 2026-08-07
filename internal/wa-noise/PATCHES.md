@@ -9101,3 +9101,161 @@ raiz da árvore vendorizada, não para os arquivos da raiz.
 Todos os 114 arquivos tiveram destino determinado e movido. Nenhum caso de
 "não dá para mover limpo" apareceu; nenhum ciclo novo; `internal/wa-noise/*.go`
 está vazio ao final da etapa.
+
+---
+
+## Fase H — etapa 6: façade raiz, 2026-08-07
+
+A etapa 6 cria `internal/wa-noise/main.go` (`package whatsmeow`) como fachada do
+fork e **repõe os 44 consumidores externos no import da raiz**. `core/` volta a
+ser o que o inventário da Fase H sempre disse que ele seria: implementação, não
+caminho de import público.
+
+### A decisão pendente §8 do inventário, resolvida
+
+O §8 do `docs/FASE_H_INVENTORY.md` deixou explícito um **⚠ DECISÃO PENDENTE**:
+se `main.go` valeria a pena, dado que "a raiz expõe ~732 símbolos exportados de
+topo" e que a fachada teria de "reexportar toda essa superfície por alias […] um
+alias por símbolo". Sob essa premissa a fachada custaria centenas de linhas
+escritas à mão sobre um fork ativo — caro o bastante para o §8 sugerir a
+alternativa de manter `client.go` & cia. na raiz.
+
+**A premissa estava errada, e a medição mostra por quê.** Os ~732 símbolos são a
+superfície *interna* do núcleo. O que os consumidores realmente nomeiam é outra
+coisa. Resolvendo o alias de import arquivo a arquivo (todos os 44 importam com
+alias — 40 como `whatsmeow`, 4 como `wa` — então um `grep core\.` ingênuo não
+enxerga nada) e contando os seletores:
+
+| Símbolo | Ocorrências |
+|---|---|
+| `Client` | 83 |
+| `SendResponse` | 19 |
+| `NewClient` | 18 |
+| `SendRequestExtra` | 13 |
+| `SetProxyOptions` / `QRChannelItem` / `GetProfilePictureParams` | 10 cada |
+| `ParticipantRequestChange` | 9 |
+| `ParticipantChange` | 8 |
+| `ReqCreateGroup` | 6 |
+| `EventHandler` | 5 |
+| `DownloadableMessage` | 3 |
+| `QRChannelEventCode`, `ParticipantChange{Add,Remove,Approve,Reject}`, `ErrProfilePicture{Unauthorized,NotSet}` | 2 cada |
+| `ErrQRStoreContainsID` | 1 |
+
+**20 símbolos.** (`MyClient` apareceu no grep e foi descartado: é texto de um
+comentário de exemplo em `core/client_events.go:56`, não um símbolo.)
+
+Dois fatos explicam a distância entre 732 e 20:
+
+1. **`type Client = core.Client` é alias de tipo, não tipo novo** — o method set
+   inteiro vem junto em uma linha. Isso inclui os 178 wrappers de
+   `DangerousInternals`, que são **métodos de `*DangerousInternalClient`**
+   (`grep -oE '^func \(\w+ \*?\w+\)' core/internals.go` → só dois receptores,
+   `*Client` e `*DangerousInternalClient`), alcançados via
+   `cli.DangerousInternals()`. Nenhum consumidor **nomeia** o tipo
+   `DangerousInternalClient`: zero ocorrências fora do fork. Um alias, 178
+   símbolos cobertos.
+2. O resto da superfície de 732 é chamada de dentro do próprio fork, não de fora.
+
+Custo real da fachada: **~20 linhas de alias**, não centenas. Com isso o
+argumento de custo do §8 cai, e a decisão vira a que o inventário já declarava
+como alvo ("nada importa `core`") e que a etapa 5 já prometia ("será
+reencapsulada pelo `main.go` da etapa 6").
+
+### Por que não a Opção A (deixar a raiz vazia e só documentar)
+
+A alternativa era aceitar `core/` como caminho de import público e escrever um
+README na raiz explicando isso. Foi descartada:
+
+- O usuário pediu `main.go` como "porta de entrada […] e, quando necessário,
+  delegar para `core`". Um README não é uma porta de entrada — é uma placa
+  apontando para a ausência dela.
+- A migração da etapa 5 não foi uma escolha de API: foi o **efeito mecânico** de
+  mover os arquivos. Consagrar `core/` como caminho público seria promover um
+  acidente de refatoração a contrato.
+- "Não faça breaking changes gratuitas" não se aplica aqui, por dois motivos
+  concretos: (a) o módulo está sob `internal/`, então não existe consumidor fora
+  deste repositório para quebrar; (b) **a migração não toca em uma única
+  expressão de código** — os 44 arquivos já importavam com alias, então mudar
+  `whatsmeow "wa-api/internal/wa-noise/core"` para
+  `whatsmeow "wa-api/internal/wa-noise"` deixa todos os seletores
+  `whatsmeow.Client`, `wa.NewClient` etc. **idênticos**. O diff é de 44 linhas de
+  import e nada mais.
+
+### Por que a fachada é fina, e como ela continua fina
+
+`main.go` contém **só aliases e uma var de delegação**. Nenhum corpo de função,
+nenhuma lógica. Isso é o que impede a fachada de virar o "novo arquivo
+monolítico" que o usuário pediu para evitar: não há onde escrever lógica ali sem
+que salte aos olhos na review.
+
+O padrão não é novo neste fork — `core/` já faz exatamente isso com as
+capabilities (`core/client_proxy.go:25` `SetProxyOptions = proxyconf.Options`;
+`core/group_participants.go:24` `ParticipantChangeAdd ParticipantChange =
+group.ChangeAdd`; `SendResponse = send.Response`; `DownloadableMessage =
+media.Downloadable`). A etapa 6 aplica uma camada acima a mesma técnica que as
+etapas 4-5 já usavam por baixo. Os comentários deixados no próprio `core/`
+confirmam que a raiz sempre foi o nome esperado: `core/client_proxy.go:18-19`
+justifica o alias dizendo que "`whatsmeow.SetProxyOptions` aparece nas
+assinaturas".
+
+Os erros são reexportados por `var`, não redefinidos — são a **mesma** variável
+de `core`, então `errors.Is`/`==` contra elas continua valendo nos consumidores.
+`NewClient` é `var NewClient = core.NewClient` em vez de um wrapper com corpo:
+preserva a assinatura exata sem transcrevê-la à mão (e sem arrastar os imports de
+`store`/`waLog` para a fachada).
+
+### A trava: `make waclient-facade`
+
+Sem trava, "nada importa `core`" é uma frase num documento. **A etapa 5 é a
+prova**: ela repontou os 44 consumidores para `core/` mecanicamente e ficou
+verde, porque nada no `make check` sabia que a árvore tinha perdido a fachada.
+
+`scripts/waclient-facade-check.sh` (novo) falha se qualquer `.go` fora de
+`internal/wa-noise/` importar `wa-api/internal/wa-noise/core`, e falha se
+`main.go` sumir. Dentro do fork o import segue livre (a própria fachada precisa
+dele; `core/client_test.go` também). Entrou em `check` entre `waclient-drift` e
+`waclient-filesize`.
+
+Isto vai **além** do que a etapa 6 pediu literalmente. Está aqui porque uma regra
+de arquitetura que não quebra o build não é uma regra, é um comentário — e este
+módulo já demonstrou, na etapa anterior, que deriva sozinho na direção contrária.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `internal/wa-noise/main.go` | **novo** — fachada, `package whatsmeow`, 20 símbolos |
+| `scripts/waclient-facade-check.sh` | **novo** — trava de import |
+| `Makefile` | alvo `waclient-facade` + entrada em `check` |
+| `scripts/waclient-filesize-check.sh:36` | `DIRS` ganha `internal/wa-noise` (não-recursivo → pega `main.go`) |
+| 44 arquivos em `pkg/` | só a linha de import; nenhum seletor mudou |
+
+### Gates que **não** precisaram mudar
+
+- `Makefile:17/30` (`COVER_PKGS`, `LINT_TARGETS`): filtram
+  `grep -v '^wa-api/internal/wa-noise'`, prefixo que já casa com o pacote raiz.
+- `.logcov-exclude`: a entrada `internal/wa-noise/` cobre o pacote raiz porque
+  `ruleX5PackageExcluded` (`cmd/logcov/rules.go:24`) compara também com
+  `strings.TrimSuffix(pref, "/")` — `internal/wa-noise` bate exato.
+- `cmd/logcov/testdata/eligible.golden`: `main.go` não declara nenhuma função,
+  então não gera entrada; e o pacote está excluído de qualquer modo.
+- `WACLIENT_TEST_PKGS` (`Makefile:263+`): a lista é de subpacotes "que já têm
+  teste real nosso". A fachada não tem teste — e não deve ganhar um só para
+  entrar na lista: um teste de alias testaria o compilador de Go, não o código.
+  A cobertura real dela é o `go build ./...` dos 44 consumidores.
+- `waclient-{vendor,diff,license-check}.sh`: `DEST="internal/wa-noise"` segue
+  correto. `main.go` é código nosso dentro de árvore MPL-2.0 e carrega o header,
+  consistente com o resto.
+
+### Regra para quem vier depois
+
+Consumidor novo que precise de um símbolo do fork **adiciona a linha de alias em
+`main.go`**. Não importa `core/` direto — o `make check` recusa. Se o símbolo
+pedido for um método de `Client`, não é preciso fazer nada: o alias de tipo já
+o entrega.
+
+### Verificação
+
+`go build ./...` verde a cada um dos 3 grupos de migração (bootstrap+history+media
+→ chat/group/misc/profile → registry/session/user/waclient), `go vet ./...` verde
+ao final, `LC_NUMERIC=C LC_ALL=C make check` **exit 0**.

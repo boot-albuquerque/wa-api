@@ -252,6 +252,9 @@ waclient-drift: ## Falha se internal/wa-noise/protocol/proto/ (codigo gerado) di
 	 fi; \
 	 ./scripts/waclient-diff.sh "$$version"
 
+waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
+	@bash scripts/waclient-facade-check.sh
+
 waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exceto protocol/proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
 	@bash scripts/waclient-filesize-check.sh
 
@@ -279,7 +282,7 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/tamanho/testes do vendored
+check: build vet test lint coverage-gate log-coverage-gate waclient-license-check waclient-drift waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + licenca/deriva/fachada/tamanho/testes do vendored
 
 ##@ Utilities
 
