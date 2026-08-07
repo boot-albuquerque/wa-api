@@ -1,4 +1,4 @@
-package whatsmeow
+package session
 
 import (
 	"context"
@@ -65,3 +65,8 @@ func (s *whatsmeowSession) translatePairingItem(item whatsmeow.QRChannelItem) (a
 		return appport.PairingEvent{}, false
 	}
 }
+
+// codeSessionAlreadyPaired é devolvido por dois caminhos distintos de
+// Pair (checagem local de credenciais e ErrQRStoreContainsID do SDK) que
+// o caller precisa tratar da mesma forma.
+const codeSessionAlreadyPaired = "session_already_paired"

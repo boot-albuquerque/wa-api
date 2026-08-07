@@ -9,7 +9,7 @@ import (
 
 // GetGroupInfo devolve os metadados de um grupo.
 func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group dom
 
 // GetGroupInfoFromLink devolve os metadados a partir de um código de convite.
 func (a *GroupAdapter) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func (a *GroupAdapter) GetGroupInfoFromLink(ctx context.Context, txtID, code str
 
 // GetGroupInviteLink devolve o link de convite de um grupo.
 func (a *GroupAdapter) GetGroupInviteLink(ctx context.Context, txtID string, group domain.JID) (string, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return "", err
 	}
@@ -44,7 +44,7 @@ func (a *GroupAdapter) GetGroupInviteLink(ctx context.Context, txtID string, gro
 
 // ListJoinedGroups devolve os grupos de que a sessão participa e a contagem.
 func (a *GroupAdapter) ListJoinedGroups(ctx context.Context, txtID string) (any, int, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, 0, err
 	}

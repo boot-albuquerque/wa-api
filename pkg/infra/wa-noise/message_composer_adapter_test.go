@@ -9,12 +9,12 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-// TestMessageComposerAdapter_NewMessageID_NoSession devolve ErrNoSession.
+// TestMessageComposerAdapter_NewMessageID_NoSession devolve wasession.ErrNoSession.
 func TestMessageComposerAdapter_NewMessageID_NoSession(t *testing.T) {
 	a := NewMessageComposerAdapter(waclienttest.GetterWith(nil))
 	_, err := a.NewMessageID(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("NewMessageID code = %q, want no_session", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("NewMessageID code = %q, want no_session", waclienttest.AppErrCode(err))
 	}
 }
 

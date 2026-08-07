@@ -34,8 +34,8 @@ func TestGroupAdapter_CreateGroup_OK(t *testing.T) {
 func TestGroupAdapter_CreateGroup_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.CreateGroup(context.Background(), "u1", "X", nil)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("CreateGroup code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("CreateGroup code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -59,8 +59,8 @@ func TestGroupAdapter_JoinGroup_OK(t *testing.T) {
 func TestGroupAdapter_JoinGroup_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.JoinGroup(context.Background(), "u1", "code")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("JoinGroup code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("JoinGroup code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -68,8 +68,8 @@ func TestGroupAdapter_JoinGroup_NoSession(t *testing.T) {
 func TestGroupAdapter_LeaveGroup_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.LeaveGroup(context.Background(), "u1", "g@g.us")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("LeaveGroup code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("LeaveGroup code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -112,8 +112,8 @@ func TestGroupAdapter_SetGroupName_OK(t *testing.T) {
 func TestGroupAdapter_SetGroupName_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetGroupName(context.Background(), "u1", "g@g.us", "X")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetGroupName code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetGroupName code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -140,8 +140,8 @@ func TestGroupAdapter_SetGroupTopic_OK(t *testing.T) {
 func TestGroupAdapter_SetGroupTopic_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetGroupTopic(context.Background(), "u1", "g@g.us", "topic")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetGroupTopic code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetGroupTopic code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -179,8 +179,8 @@ func TestGroupAdapter_SetGroupPhoto_NilPhoto(t *testing.T) {
 func TestGroupAdapter_SetGroupPhoto_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetGroupPhoto(context.Background(), "u1", "g@g.us", nil)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetGroupPhoto code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetGroupPhoto code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -209,8 +209,8 @@ func TestGroupAdapter_SetGroupAnnounce_OK(t *testing.T) {
 func TestGroupAdapter_SetGroupAnnounce_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetGroupAnnounce(context.Background(), "u1", "g@g.us", false)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetGroupAnnounce code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetGroupAnnounce code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -234,8 +234,8 @@ func TestGroupAdapter_SetGroupLocked_OK(t *testing.T) {
 func TestGroupAdapter_SetGroupLocked_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetGroupLocked(context.Background(), "u1", "g@g.us", false)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetGroupLocked code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetGroupLocked code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -262,8 +262,8 @@ func TestGroupAdapter_SetDisappearingTimer_OK(t *testing.T) {
 func TestGroupAdapter_SetDisappearingTimer_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetDisappearingTimer(context.Background(), "u1", "g@g.us", time.Hour, time.Now())
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetDisappearingTimer code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetDisappearingTimer code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -287,7 +287,7 @@ func TestGroupAdapter_SetJoinApprovalMode_OK(t *testing.T) {
 func TestGroupAdapter_SetJoinApprovalMode_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.SetJoinApprovalMode(context.Background(), "u1", "g@g.us", false)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetJoinApprovalMode code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetJoinApprovalMode code = %q", waclienttest.AppErrCode(err))
 	}
 }

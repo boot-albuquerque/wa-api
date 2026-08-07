@@ -20,27 +20,27 @@ func TestNewPresenceControllerAdapter(t *testing.T) {
 	}
 }
 
-// TestPresenceControllerAdapter_SendPresence_NoSession devolve ErrNoSession.
+// TestPresenceControllerAdapter_SendPresence_NoSession devolve wasession.ErrNoSession.
 func TestPresenceControllerAdapter_SendPresence_NoSession(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(nil))
 	err := a.SendPresence(context.Background(), "u1", domain.PresenceAvailable)
 	if err == nil {
 		t.Fatal("SendPresence com nil client returned nil")
 	}
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SendPresence code = %q, want no_session", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SendPresence code = %q, want no_session", waclienttest.AppErrCode(err))
 	}
 }
 
 // TestPresenceControllerAdapter_SendPresence_UnknownPresence devolve erro
-// semântico (não ErrNoSession) para tipo desconhecido.
+// semântico (não wasession.ErrNoSession) para tipo desconhecido.
 func TestPresenceControllerAdapter_SendPresence_UnknownPresence(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	err := a.SendPresence(context.Background(), "u1", "weird")
 	if err == nil {
 		t.Fatal("SendPresence com presence inválida = nil")
 	}
-	if appErrCode(err) == "no_session" {
+	if waclienttest.AppErrCode(err) == "no_session" {
 		t.Errorf("SendPresence devolveu no_session para presença inválida")
 	}
 }
@@ -101,8 +101,8 @@ func TestPresenceControllerAdapter_SendPresence_PropagatesError(t *testing.T) {
 func TestPresenceControllerAdapter_SendChatPresence_NoSession(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(nil))
 	err := a.SendChatPresence(context.Background(), "u1", "x@y.com", "composing", "")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SendChatPresence code = %q, want no_session", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SendChatPresence code = %q, want no_session", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -123,8 +123,8 @@ func TestPresenceControllerAdapter_SendChatPresence_PropagatesError(t *testing.T
 func TestPresenceControllerAdapter_SubscribePresence_NoSession(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(nil))
 	err := a.SubscribePresence(context.Background(), "u1", "x@y.com")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SubscribePresence code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SubscribePresence code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

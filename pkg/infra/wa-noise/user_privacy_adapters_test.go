@@ -13,8 +13,8 @@ import (
 func TestUserAdapter_GetPrivacySettings_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetPrivacySettings(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetPrivacySettings code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetPrivacySettings code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -38,8 +38,8 @@ func TestUserAdapter_GetPrivacySettings_OK(t *testing.T) {
 func TestUserAdapter_SetPrivacySetting_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.SetPrivacySetting(context.Background(), "u1", "last_seen", "everyone")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SetPrivacySetting code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SetPrivacySetting code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

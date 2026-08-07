@@ -9,7 +9,7 @@ import (
 
 // GetPrivacySettings devolve as configurações atuais.
 func (a *UserAdapter) GetPrivacySettings(ctx context.Context, txtID string) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func (a *UserAdapter) GetPrivacySettings(ctx context.Context, txtID string) (any
 
 // SetPrivacySetting altera uma configuração de privacidade.
 func (a *UserAdapter) SetPrivacySetting(ctx context.Context, txtID, name, value string) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}

@@ -234,8 +234,8 @@ func TestUserAdapter_GetAllContacts_OK(t *testing.T) {
 func TestUserAdapter_GetLIDForPN_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetLIDForPN(context.Background(), "u1", "x@s.whatsapp.net")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetLIDForPN code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetLIDForPN code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

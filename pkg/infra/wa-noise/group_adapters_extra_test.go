@@ -22,7 +22,7 @@ func TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID(t *testing.T
 	invalid := []domain.JID{"@@", "@", "x@", "@y.com", domain.JID(string([]byte{0x00}))}
 	for _, jid := range invalid {
 		_, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{jid}, domain.ParticipantAdd)
-		if err != nil && appErrCode(err) != "no_session" {
+		if err != nil && waclienttest.AppErrCode(err) != "no_session" {
 			return
 		}
 	}

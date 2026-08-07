@@ -17,8 +17,8 @@ import (
 func TestUserAdapter_GetProfilePicture_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetProfilePicture(context.Background(), "u1", "x@y.com", false)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetProfilePicture code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetProfilePicture code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

@@ -48,8 +48,8 @@ func TestGroupAdapter_UpdateGroupParticipants_RemoveOK(t *testing.T) {
 func TestGroupAdapter_UpdateGroupParticipants_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", nil, domain.ParticipantAdd)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("UpdateGroupParticipants code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("UpdateGroupParticipants code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -72,8 +72,8 @@ func TestGroupAdapter_GetRequestParticipants_OK(t *testing.T) {
 func TestGroupAdapter_GetRequestParticipants_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetRequestParticipants(context.Background(), "u1", "g@g.us")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetRequestParticipants code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetRequestParticipants code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -122,7 +122,7 @@ func TestGroupAdapter_UpdateRequestParticipants_Unknown(t *testing.T) {
 func TestGroupAdapter_UpdateRequestParticipants_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", nil, domain.RequestApprove)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("UpdateRequestParticipants code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("UpdateRequestParticipants code = %q", waclienttest.AppErrCode(err))
 	}
 }

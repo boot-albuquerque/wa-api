@@ -33,7 +33,7 @@ func TestChatMessengerAdapter_MarkRead_InvalidChatJID(t *testing.T) {
 	}
 	for _, jid := range invalid {
 		err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), jid, "z@y.com")
-		if err != nil && appErrCode(err) != "no_session" {
+		if err != nil && waclienttest.AppErrCode(err) != "no_session" {
 			return
 		}
 	}
@@ -48,7 +48,7 @@ func TestChatMessengerAdapter_MarkRead_InvalidSenderJID(t *testing.T) {
 	}
 	for _, jid := range invalid {
 		err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), "x@y.com", jid)
-		if err != nil && appErrCode(err) != "no_session" {
+		if err != nil && waclienttest.AppErrCode(err) != "no_session" {
 			return
 		}
 	}
@@ -59,8 +59,8 @@ func TestChatMessengerAdapter_MarkRead_InvalidSenderJID(t *testing.T) {
 func TestChatMessengerAdapter_MarkRead_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(nil))
 	err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), "x@y.com", "z@y.com")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("MarkRead code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("MarkRead code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -97,8 +97,8 @@ func TestChatMessengerAdapter_MarkRead_OK(t *testing.T) {
 func TestChatMessengerAdapter_SendReaction_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(nil))
 	_, err := a.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{Text: "👍"})
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SendReaction code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SendReaction code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

@@ -14,8 +14,8 @@ import (
 func TestGroupAdapter_GetGroupInfo_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInfo(context.Background(), "u1", "g@g.us")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetGroupInfo code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetGroupInfo code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -66,8 +66,8 @@ func TestGroupAdapter_GetGroupInfoFromLink_OK(t *testing.T) {
 func TestGroupAdapter_GetGroupInfoFromLink_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInfoFromLink(context.Background(), "u1", "code")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetGroupInfoFromLink code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetGroupInfoFromLink code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -90,8 +90,8 @@ func TestGroupAdapter_GetGroupInviteLink_OK(t *testing.T) {
 func TestGroupAdapter_GetGroupInviteLink_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInviteLink(context.Background(), "u1", "g@g.us")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetGroupInviteLink code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetGroupInviteLink code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -116,7 +116,7 @@ func TestGroupAdapter_ListJoinedGroups_OK(t *testing.T) {
 func TestGroupAdapter_ListJoinedGroups_NoSession(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, _, err := a.ListJoinedGroups(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("ListJoinedGroups code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("ListJoinedGroups code = %q", waclienttest.AppErrCode(err))
 	}
 }

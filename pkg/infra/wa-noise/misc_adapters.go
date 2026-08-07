@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	wajid "wa-api/pkg/infra/wa-noise/jid"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -24,20 +25,12 @@ const appStateFetchTimeout = 45 * time.Second
 // MiscAdapter implementa ChatOperations, ProfileAccessProvider e
 // NewsletterReader sobre o clientManager.
 type MiscAdapter struct {
-	*SessionGuardAdapter
+	*wasession.SessionGuardAdapter
 }
 
 // NewMiscAdapter cria o adapter com a função de lookup.
 func NewMiscAdapter(getClient waclient.Getter) *MiscAdapter {
-	return &MiscAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
-}
-
-func (a *MiscAdapter) client(txtID string) (waclient.Client, error) {
-	client := a.getClient(txtID)
-	if client == nil {
-		return nil, ErrNoSession(txtID, nil)
-	}
-	return client, nil
+	return &MiscAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}
 }
 
 // ArchiveChat arquiva ou desarquiva uma conversa.
@@ -46,7 +39,7 @@ func (a *MiscAdapter) client(txtID string) (waclient.Client, error) {
 // (SendAppState é uma ida ao servidor), não regra de negócio, e por isso
 // desceu junto com a chamada.
 func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain.JID, archive bool) error {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return err
 	}
@@ -63,7 +56,7 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 
 // RejectCall rejeita uma chamada recebida.
 func (a *MiscAdapter) RejectCall(ctx context.Context, txtID string, from domain.JID, callID string) error {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return err
 	}
@@ -76,7 +69,7 @@ func (a *MiscAdapter) RejectCall(ctx context.Context, txtID string, from domain.
 
 // RequestUnavailableMessage pede ao par o reenvio de uma mensagem.
 func (a *MiscAdapter) RequestUnavailableMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string) (domain.UnavailableMessageAck, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.UnavailableMessageAck{}, err
 	}
@@ -103,7 +96,7 @@ func (a *MiscAdapter) RequestUnavailableMessage(ctx context.Context, txtID strin
 
 // ProfileAccess devolve o acesso ao perfil da sessão.
 func (a *MiscAdapter) ProfileAccess(_ context.Context, txtID string) (appport.ProfileDataAccess, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +105,7 @@ func (a *MiscAdapter) ProfileAccess(_ context.Context, txtID string) (appport.Pr
 
 // ListSubscribed devolve as newsletters assinadas pela sessão.
 func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +127,7 @@ func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) (any, er
 // de contatos (critical_unblock_low). Não mexe em histórico de mensagens —
 // capacidade distinta de qualquer fluxo de history sync.
 func (a *MiscAdapter) SyncContactRoster(ctx context.Context, txtID string, mode string) error {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return err
 	}

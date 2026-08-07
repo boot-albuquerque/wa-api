@@ -2,9 +2,10 @@ package bootstrap
 
 import (
 	"slices"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/wa-noise"
+	whatsmeow "wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/applog"
 	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/registry"
@@ -103,7 +104,7 @@ func initCustomHandlers(s *server) {
 	miscAdapter := whatsmeow.NewMiscAdapter(waClientLookup)
 	userAdapter := whatsmeow.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
-	sessionGuard := whatsmeow.NewSessionGuardAdapter(waClientLookup)
+	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase

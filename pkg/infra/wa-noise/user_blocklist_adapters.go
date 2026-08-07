@@ -14,7 +14,7 @@ import (
 
 // GetBlocklist devolve a lista atual de bloqueados.
 func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Blocklist, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.Blocklist{}, err
 	}
@@ -31,7 +31,7 @@ func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Bl
 
 // UpdateBlocklist bloqueia ou desbloqueia um alvo.
 func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target domain.JID, block bool) (domain.BlocklistUpdate, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
 	}

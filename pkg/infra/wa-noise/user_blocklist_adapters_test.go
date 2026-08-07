@@ -15,8 +15,8 @@ import (
 func TestUserAdapter_GetBlocklist_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetBlocklist(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("GetBlocklist code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("GetBlocklist code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -58,8 +58,8 @@ func TestUserAdapter_GetBlocklist_OK(t *testing.T) {
 func TestUserAdapter_UpdateBlocklist_NoSession(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.UpdateBlocklist(context.Background(), "u1", "x@s.whatsapp.net", true)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("UpdateBlocklist code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("UpdateBlocklist code = %q", waclienttest.AppErrCode(err))
 	}
 }
 

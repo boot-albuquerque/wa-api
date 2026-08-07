@@ -1,4 +1,4 @@
-package whatsmeow
+package session
 
 import (
 	"context"
@@ -35,6 +35,20 @@ type SessionGuardAdapter struct {
 // (convertido via clientForGetter).
 func NewSessionGuardAdapter(getClient waclient.Getter) *SessionGuardAdapter {
 	return &SessionGuardAdapter{getClient: getClient}
+}
+
+// Client devolve o cliente da sessão txtID ou o erro tipado de sessão
+// ausente. É o ponto único por onde os adapters de capacidade (group/, user/,
+// chat/, misc/, presence/) resolvem a sessão: antes cada um repetia o par
+// lookup-mais-nil-check, e o getter em si era um campo não exportado — o que
+// deixou de ser viável quando esses adapters passaram a viver em subpacotes
+// próprios.
+func (a *SessionGuardAdapter) Client(txtID string) (waclient.Client, error) {
+	client := a.getClient(txtID)
+	if client == nil {
+		return nil, ErrNoSession(txtID, nil)
+	}
+	return client, nil
 }
 
 // EnsureSession reporta se há cliente whatsmeow para txtID, sem devolvê-lo.

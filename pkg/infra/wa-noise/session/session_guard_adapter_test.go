@@ -1,4 +1,4 @@
-package whatsmeow
+package session
 
 import (
 	"context"

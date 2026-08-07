@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	wajid "wa-api/pkg/infra/wa-noise/jid"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -13,25 +14,17 @@ import (
 // UserAdapter implementa ContactDirectory, BlocklistManager e PrivacyManager
 // sobre o clientManager.
 type UserAdapter struct {
-	*SessionGuardAdapter
+	*wasession.SessionGuardAdapter
 }
 
 // NewUserAdapter cria o adapter com a função de lookup.
 func NewUserAdapter(getClient waclient.Getter) *UserAdapter {
-	return &UserAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
-}
-
-func (a *UserAdapter) client(txtID string) (waclient.Client, error) {
-	client := a.getClient(txtID)
-	if client == nil {
-		return nil, ErrNoSession(txtID, nil)
-	}
-	return client, nil
+	return &UserAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}
 }
 
 // IsOnWhatsApp verifica quais dos telefones informados têm conta.
 func (a *UserAdapter) IsOnWhatsApp(ctx context.Context, txtID string, phones []string) ([]domain.WhatsAppCheck, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
 			"no active session for user", false, err)
@@ -60,7 +53,7 @@ func (a *UserAdapter) IsOnWhatsApp(ctx context.Context, txtID string, phones []s
 
 // GetUserInfo devolve os metadados dos JIDs informados.
 func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
 			"no active session for user", false, err)
@@ -75,7 +68,7 @@ func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []doma
 
 // GetAllContacts devolve a agenda da sessão e a contagem.
 func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, int, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, 0, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
 			"no active session for user", false, err)
@@ -89,7 +82,7 @@ func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, in
 
 // GetLIDForPN resolve o LID correspondente a um número de telefone.
 func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return "", err
 	}

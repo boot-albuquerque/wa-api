@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -14,12 +15,12 @@ import (
 // da capacidade que exerce, não para multiplicar adapters — todos falam com
 // o mesmo cliente.
 type GroupAdapter struct {
-	*SessionGuardAdapter
+	*wasession.SessionGuardAdapter
 }
 
 // NewGroupAdapter cria o adapter com a função de lookup.
 func NewGroupAdapter(getClient waclient.Getter) *GroupAdapter {
-	return &GroupAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
+	return &GroupAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}
 }
 
 // bgCtx é context.Background(), nomeado para deixar explícito que não é
@@ -29,15 +30,6 @@ func NewGroupAdapter(getClient waclient.Getter) *GroupAdapter {
 // lógica, não movimento, e passaria a abortar operações de escrita em grupo
 // quando o cliente HTTP desiste. Fica como follow-up nomeado.
 var bgCtx = context.Background()
-
-// client devolve o cliente da sessão ou o erro tipado de sessão ausente.
-func (a *GroupAdapter) client(txtID string) (waclient.Client, error) {
-	client := a.getClient(txtID)
-	if client == nil {
-		return nil, ErrNoSession(txtID, nil)
-	}
-	return client, nil
-}
 
 // Verificações em tempo de compilação de que o adapter implementa as portas.
 var (

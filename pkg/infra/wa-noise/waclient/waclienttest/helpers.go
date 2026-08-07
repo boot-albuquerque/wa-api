@@ -9,6 +9,7 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 
+	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/wa-noise/waclient"
 )
 
@@ -42,3 +43,14 @@ func (e *ErrClient) SendMessage(ctx context.Context, to types.JID, message *waE2
 // ErrStore simula um *store.Device com Contacts/LIDs para os adapters de
 // usuário.
 type ErrStore struct{ *store.Device }
+
+// AppErrCode devolve o Code de um *apperr.AppError, ou "" se err for de outro
+// tipo. Usado nas asserções de identidade de erro dos testes de adapter, que
+// hoje vivem em vários subpacotes e antes compartilhavam este helper por
+// morarem todos no mesmo pacote.
+func AppErrCode(err error) string {
+	if e, ok := err.(*apperr.AppError); ok {
+		return e.Code
+	}
+	return ""
+}

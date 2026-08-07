@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 
 	"wa-api/internal/wa-noise/store"
 
@@ -9,7 +10,6 @@ import (
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
-	wa "wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/platform"
 	"wa-api/pkg/infra/wa-noise/walog"
 )
@@ -29,7 +29,7 @@ func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 	store.DeviceProps.PlatformType = platform.GetPlatformTypeEnum(*platformType)
 	store.DeviceProps.Os = osName
 
-	provider := wa.NewSessionProviderWithLogger(container, deviceJIDLookup(s), clientLog)
+	provider := wasession.NewSessionProviderWithLogger(container, deviceJIDLookup(s), clientLog)
 
 	return appsession.NewOrchestrator(
 		provider,
@@ -47,7 +47,7 @@ func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 // deviceJIDLookup resolve users.jid, que é como o provider decide entre
 // reaproveitar o device persistido e criar um novo. Substitui o parâmetro
 // textjid que connectOnStartup e o ConnectHandler passavam para startClient.
-func deviceJIDLookup(s *server) wa.DeviceJIDLookup {
+func deviceJIDLookup(s *server) wasession.DeviceJIDLookup {
 	return func(ctx context.Context, userID string) (string, error) {
 		var jid string
 		if err := s.DB.QueryRowContext(ctx, "SELECT COALESCE(jid, '') FROM users WHERE id=$1", userID).Scan(&jid); err != nil {

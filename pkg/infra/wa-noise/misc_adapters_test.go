@@ -24,8 +24,8 @@ func TestNewMiscAdapter(t *testing.T) {
 func TestMiscAdapter_ArchiveChat_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	err := a.ArchiveChat(context.Background(), "u1", "x@y.com", true)
-	if appErrCode(err) != "no_session" {
-		t.Errorf("ArchiveChat code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("ArchiveChat code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -60,8 +60,8 @@ func TestMiscAdapter_ArchiveChat_PropagatesError(t *testing.T) {
 func TestMiscAdapter_RejectCall_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	err := a.RejectCall(context.Background(), "u1", "x@y.com", "call-1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("RejectCall code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("RejectCall code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -88,8 +88,8 @@ func TestMiscAdapter_RejectCall_OK(t *testing.T) {
 func TestMiscAdapter_RequestUnavailableMessage_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	_, err := a.RequestUnavailableMessage(context.Background(), "u1", "x@y.com", "z@y.com", "m1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("RequestUnavailableMessage code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("RequestUnavailableMessage code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -120,8 +120,8 @@ func TestMiscAdapter_RequestUnavailableMessage_OK(t *testing.T) {
 func TestMiscAdapter_ProfileAccess_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	_, err := a.ProfileAccess(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("ProfileAccess code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("ProfileAccess code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -129,8 +129,8 @@ func TestMiscAdapter_ProfileAccess_NoSession(t *testing.T) {
 func TestMiscAdapter_ListSubscribed_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	_, err := a.ListSubscribed(context.Background(), "u1")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("ListSubscribed code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("ListSubscribed code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -173,8 +173,8 @@ func TestMiscAdapter_ListSubscribed_FilterNil(t *testing.T) {
 func TestMiscAdapter_SyncContactRoster_NoSession(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(nil))
 	err := a.SyncContactRoster(context.Background(), "u1", "incremental")
-	if appErrCode(err) != "no_session" {
-		t.Errorf("SyncContactRoster code = %q", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "no_session" {
+		t.Errorf("SyncContactRoster code = %q", waclienttest.AppErrCode(err))
 	}
 }
 
@@ -235,8 +235,8 @@ func TestMiscAdapter_SyncContactRoster_InvalidMode(t *testing.T) {
 	}}
 	a := NewMiscAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	err := a.SyncContactRoster(context.Background(), "u1", "bogus")
-	if appErrCode(err) != "invalid_sync_mode" {
-		t.Errorf("SyncContactRoster code = %q, want invalid_sync_mode", appErrCode(err))
+	if waclienttest.AppErrCode(err) != "invalid_sync_mode" {
+		t.Errorf("SyncContactRoster code = %q, want invalid_sync_mode", waclienttest.AppErrCode(err))
 	}
 	if called {
 		t.Error("SyncContactRoster invocou o SDK com um modo invalido")

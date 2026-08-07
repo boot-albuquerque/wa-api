@@ -25,7 +25,7 @@ import (
 // ExistingID/If-Modified-Since do whatsmeow; nunca ocorre aqui porque
 // ExistingID é sempre "".
 func (a *UserAdapter) GetProfilePicture(ctx context.Context, txtID string, target domain.JID, preview bool) (*domain.AvatarInfo, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}

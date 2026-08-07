@@ -12,7 +12,7 @@ import (
 
 // UpdateGroupParticipants adiciona ou remove participantes.
 func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string
 
 // GetRequestParticipants lista quem solicitou entrar no grupo.
 func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) (any, error) {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string,
 
 // UpdateRequestParticipants aprova ou rejeita solicitações de entrada.
 func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error {
-	client, err := a.client(txtID)
+	client, err := a.Client(txtID)
 	if err != nil {
 		return err
 	}

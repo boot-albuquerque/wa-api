@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	wajid "wa-api/pkg/infra/wa-noise/jid"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -17,19 +18,19 @@ import (
 
 // ChatMessengerAdapter implementa appport.ChatMessenger.
 type ChatMessengerAdapter struct {
-	*SessionGuardAdapter
+	*wasession.SessionGuardAdapter
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
 func NewChatMessengerAdapter(getClient waclient.Getter) *ChatMessengerAdapter {
-	return &ChatMessengerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
+	return &ChatMessengerAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}
 }
 
 // MarkRead confirma a leitura das mensagens ids.
 func (a *ChatMessengerAdapter) MarkRead(ctx context.Context, txtID string, ids []string, at time.Time, chat, sender domain.JID) error {
-	client := a.getClient(txtID)
-	if client == nil {
-		return ErrNoSession(txtID, nil)
+	client, err := a.Client(txtID)
+	if err != nil {
+		return err
 	}
 	jidChat, err := wajid.ToJID(chat)
 	if err != nil {
@@ -48,9 +49,9 @@ func (a *ChatMessengerAdapter) MarkRead(ctx context.Context, txtID string, ids [
 // ReactUseCase. É exatamente o tipo de lógica que a ADR-001 previu migrar
 // para o adapter, e o ponto em que o compilador deixa de cobrir a mudança.
 func (a *ChatMessengerAdapter) SendReaction(ctx context.Context, txtID string, target domain.JID, reaction domain.Reaction) (domain.MessageSendResult, error) {
-	client := a.getClient(txtID)
-	if client == nil {
-		return domain.MessageSendResult{}, ErrNoSession(txtID, nil)
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
 	}
 
 	recipient, err := wajid.ToJID(target)

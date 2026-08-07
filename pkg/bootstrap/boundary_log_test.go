@@ -15,8 +15,8 @@ import (
 
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
-	infrawa "wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/applog"
+	wasession "wa-api/pkg/infra/wa-noise/session"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
 )
@@ -37,7 +37,7 @@ const boundaryTestToken = "boundary-test-token"
 type noSessionGuard struct{}
 
 func (noSessionGuard) EnsureSession(context.Context, string) error {
-	return infrawa.ErrNoSession("boundary-test-user", nil)
+	return wasession.ErrNoSession("boundary-test-user", nil)
 }
 
 // SessionStatus and ListUsers exist only to satisfy the wider
