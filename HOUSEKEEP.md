@@ -1872,3 +1872,66 @@ Os endereços de código citados no corpo de F36 acima (`retry.go:110-113`,
 ao lote 5 e não existem mais nessa forma; os pontos equivalentes hoje são
 `retry/handle.go` (chamada a `IncrementIncoming`), `retry/send.go` (chamada a
 `BumpMessageRetries`) e `retry/state.go` (os dois mapas e suas seções críticas).
+
+---
+
+## F53 — `*groupMetaCache` escapa do lock e é lido sem sincronização pelo caminho de envio
+
+**Data / contexto**: 2026-08-07, durante a Fase F/G lote 6 (extração de
+`internal/wa-noise/group/`). Achado pela revisão de concorrência independente do
+lote, ao auditar o cache de grupo. **Não faz parte do escopo do lote** — é
+pré-existente, herdado do upstream, e idêntico no HEAD anterior à extração.
+
+**Onde** (endereços de hoje, pós-lote 6):
+
+- `internal/wa-noise/group/info.go:200-212` — `GetOrFetch` toma o lock do cache,
+  obtém o `*Meta` da entrada **viva** do mapa e o devolve ao chamador; o
+  `defer cache.Unlock()` roda no return, ou seja, o ponteiro sai da seção
+  crítica.
+- `internal/wa-noise/send_prepare.go:176-195` — lê `cachedData.AddressingMode`,
+  `cachedData.CommunityAnnouncementGroup` e devolve `cachedData.Members`, tudo
+  **sem lock**.
+- `internal/wa-noise/sendfb_transport.go:41-101` — mesma coisa com
+  `groupMeta.Members`, passado adiante a `prepareMessageNodeV3`.
+- `internal/wa-noise/group/notification.go:198-224` — `UpdateParticipantCache`
+  muta `cached.Members` **no lugar** (append nas entradas, swap-remove nas
+  saídas), sob o lock.
+
+**Problema**: o ponteiro `*Meta` é compartilhado entre o caminho de envio (que
+lê sem lock, depois que `GetOrFetch` retornou) e o handler de notificação `w:gp2`
+(que muta `Members` sob o lock). O lock não protege nada nesse par, porque os
+dois lados não o seguram ao mesmo tempo: um envio para um grupo concorrente a
+uma notificação de entrada/saída de participante pode ler um slice header
+rasgado, ou uma lista de membros parcialmente atualizada. É uma corrida de dados
+no sentido do modelo de memória de Go, não só uma inconsistência lógica.
+
+Evidência de que é pré-existente, e não introduzido pela extração:
+`git show HEAD:internal/wa-noise/group.go` (linhas 185-196) mostra o
+`getCachedGroupData` original devolvendo o mesmo `*groupMetaCache` vivo, de
+dentro do mesmo `defer cli.groupCacheLock.Unlock()`, para os mesmos dois
+chamadores. A extração preservou a estrutura bit a bit.
+
+Por que a suíte com `-race` não pega: os testes atuais não dirigem
+`GetOrFetch` e `UpdateParticipantCache` concorrentemente contra o mesmo JID de
+grupo. O detector só reporta o que o teste executa.
+
+**Correção sugerida** (duas opções, em ordem de preferência):
+
+1. `GetOrFetch` devolve uma **cópia** do `Meta`, com `Members` copiado
+   (`slices.Clone`), em vez do ponteiro vivo. É o menor diff e elimina a corrida
+   na origem. Custo: uma alocação por envio de grupo com cache quente; o slice
+   de membros de um grupo grande pode ter milhares de entradas, então convém
+   medir antes.
+2. Manter o ponteiro e dar a `Meta` o seu próprio `sync.RWMutex`, com os
+   chamadores do caminho de envio tomando o lock de leitura. Mais invasivo e
+   espalha sincronização por três arquivos da raiz.
+
+A opção 1 muda a semântica observável de `DangerousInternalClient.GetCachedGroupData`
+(deixaria de devolver o ponteiro vivo), o que é aceitável dado o nome do método,
+mas precisa de decisão.
+
+**Status**: **não corrigido**. O lote 6 é extração, e corrigir isto muda
+comportamento (uma cópia por chamada) num caminho crítico de envio, sem
+medição. Preservado bit a bit; a ressalva está registrada na seção de
+concorrência do lote 6 em `internal/wa-noise/PATCHES.md`. Pendente de decisão do
+usuário.

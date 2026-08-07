@@ -7030,3 +7030,322 @@ linhas. O gate de golden pegou a divergência antes do commit.
 `LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
 com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
 tamanho de arquivo e testes do fork.
+
+---
+
+## Fase F/G — lote 6: `group/` (extração real + cobertura), 2026-08-07
+
+Sexta extração, mesmo padrão dos lotes 1 (`media/`), 2 (`newsletter/`), 3
+(`appstatesync/`), 4 (`prekeys/`, `pairing/`, `tctoken/`) e 5 (`notification/`,
+`retry/`): o domínio vira um pacote que define uma interface estreita, opera
+sobre ela e **nunca importa a raiz**; a raiz importa o subpacote (uma direção
+só) e mantém métodos-fachada em `*Client`. O racional de por que a movimentação
+simples é impossível está na seção da Fase D.
+
+O escopo designado eram 7 arquivos de raiz (`group.go`, `group_create.go`,
+`group_invite.go`, `group_notification.go`, `group_parse.go`,
+`group_participants.go`, `group_settings.go`), mais o `group_constants.go` que a
+Fase E lote 6 criou, mais os testes da Fase E lote 6. **Tudo foi extraído**;
+nada deste escopo ficou na raiz. A seção "O que NÃO foi extraído, e por quê" no
+fim registra o que deliberadamente permaneceu fora do subpacote e por quê.
+
+Este era, pela análise da própria Fase D, **o domínio de maior risco até aqui**:
+ele possui estado mutável compartilhado (`groupCache` + `groupCacheLock`) que é
+lido e escrito por três caminhos diferentes do cliente (envio, notificação e
+ack), e a Fase D o citou junto com `user/` e `prekeys/` como o motivo de a
+extração completa não ter sido tentada na época (249 call sites externos em 29
+métodos exportados de `Client`).
+
+### Panorama
+
+| Subpacote | Arquivos de raiz absorvidos | Cobertura (statements, sob `-race`) |
+|---|---|---|
+| `internal/wa-noise/group/` | `group.go`, `group_constants.go`, `group_create.go`, `group_invite.go`, `group_notification.go`, `group_parse.go`, `group_participants.go`, `group_settings.go` | **100,0%** |
+
+### A interface
+
+`group.Transport` (`group/transport.go`) tem nove métodos. Cada um existe por um
+motivo concreto, e nenhum é pass-through gratuito:
+
+- `SendIQ(ctx, IQ) (*waBinary.Node, error)` — o substrato de IQ. Como nos lotes
+  2, 4 e 5, `group.IQ` é uma cópia estrutural de `infoQuery`, não o tipo da
+  raiz: expor `infoQuery` arrastaria a raiz para dentro do pacote e refaria o
+  ciclo. `group.IQ` tem um campo `Target` que os IQ de `w:g2` nunca preenchem —
+  ele existe só para `SetPhoto`, o único `<iq>` deste domínio que sai por
+  `w:profile:picture`.
+- `Store() *store.Device` — o domínio grava `LIDs.PutManyLIDMappings` e
+  `Contacts.PutManyRedactedPhones`, e lê `LIDs.GetPNForLID` e
+  `PrivacyTokens.GetPrivacyToken`.
+- `Cache() *Cache` — **ponteiro**, não valor. Ver a seção de concorrência.
+- `Log() waLog.Logger`
+- `GenerateMessageID() types.MessageID` — `SetTopic` e `Create` geram IDs.
+- `TrimMessageIDPrefix(id) string` — `Create` remove `WebMessageIDPrefix` da
+  chave de criação. A constante fica em `message_id.go`, na raiz, porque é do
+  domínio de **ID de mensagem** e não deste; só a operação atravessa a
+  interface. Mesmo critério que manteve `ElementMissingError` na raiz nos lotes
+  2-5.
+- `ElementMissing(tag, in) error` — preserva o `*whatsmeow.ElementMissingError`
+  concreto que os chamadores históricos recebem num type assert.
+- `WrapIQError(human, iq) error` — preserva o `*wrappedIQError` da raiz, cujo
+  `Is()` casa contra o erro humano e cujo `Unwrap()` devolve o erro de IQ.
+- `IQErrors() IQErrors` — entrega os **mesmos ponteiros** dos sentinelas
+  `ErrIQNotAuthorized`, `ErrIQForbidden`, `ErrIQNotFound`, `ErrIQNotAcceptable`
+  e `ErrIQGone`. Isso não é cosmético: `IQError.Is` compara `Code` **e** `Text`,
+  então um sentinela reconstruído no subpacote casaria por acidente hoje e
+  divergiria em silêncio se a raiz mudasse um `Text`. Os erros de IQ continuam
+  na raiz porque são genéricos do fork inteiro, junto do substrato de
+  `request.go` — mesmo racional do lote 4.
+
+### O estado — `group.Cache`
+
+Os dois campos soltos em `*Client`
+
+    groupCache     map[types.JID]*groupMetaCache
+    groupCacheLock sync.Mutex
+
+viraram **um** campo, `groupCache group.Cache` (`client.go:123`), com o mutex e o
+mapa dentro. `groupMetaCache` virou `group.Meta`, e a raiz mantém
+`type groupMetaCache = group.Meta` (apelido, não tipo novo) porque `internals.go`
+(gerado, fora de escopo — F29) cita o nome antigo na assinatura de
+`DangerousInternalClient.GetCachedGroupData` e `sendfb_transport.go:37` declara
+uma variável com ele.
+
+`Cache` expõe `Lock`/`Unlock`/`GetLocked`/`SetLocked` além de `Delete`. Os quatro
+primeiros são exportados **de propósito**, e não é um vazamento de encapsulamento:
+a seção crítica original atravessa três funções
+(`getCachedGroupData` → `getGroupInfo` → `cacheGroupInfo`), e dar a cada uma o
+seu próprio lock transformaria uma seção crítica em três, abrindo janelas que não
+existiam. `Delete` é o único que sincroniza sozinho, porque o seu único chamador
+(`invalidateParticipantCache`, em `send_ack.go`) tomava o lock só para o `delete`.
+
+O mapa passou a ser criado **preguiçosamente** dentro de `SetLocked`, sempre sob o
+lock — mesmo racional do lote 3, do `tctoken` do lote 4 e do `retry` do lote 5.
+`NewClient` deixou de criá-lo; `client_events_test.go` foi ajustado e agora
+verifica o comportamento observável (leitura em cache vazio devolve o zero) em
+vez do detalhe de implementação (mapa não-nil).
+
+### Os call sites reversos — encontrados de novo e corrigidos
+
+A Fase D tinha medido quatro pontos em que a raiz chama de volta a lógica de
+grupo. Todos foram **re-verificados nesta sessão** (as linhas tinham andado
+depois dos lotes 1-5) e um quinto, que a Fase D não listou, apareceu:
+
+| # | Antes | Depois | Como foi resolvido |
+|---|---|---|---|
+| 1 | `send_prepare.go:176` `cli.getCachedGroupData(ctx, to)` | `send_prepare.go:176` **idêntico** | Fachada: `cli.getCachedGroupData` sobrevive em `group.go` e delega a `group.GetOrFetch`. Zero mudança no call site. |
+| 2 | `sendfb_transport.go:41` `cli.getCachedGroupData(ctx, to)` (+ `:37` `var groupMeta *groupMetaCache`) | `sendfb_transport.go:41` e `:37` **idênticos** | Fachada + o apelido `groupMetaCache = group.Meta`. Zero mudança. |
+| 3 | `notification.go:169` `cli.parseGroupNotification(node)` | `notification.go:143` `cli.parseGroupNotification(node)` — **mesma chamada, linha deslocada pelos lotes 1-5** | Fachada em `group_notification.go`. Zero mudança no call site. |
+| 4 | `disappearing_timer.go:70` `cli.sendGroupIQ(...)` | `disappearing_timer.go:70` e `:72` **idênticos** | Fachada `cli.sendGroupIQ` → `group.SendIQ`. Zero mudança. |
+| 5 | **não listado pela Fase D**: `send_ack.go:96-98`, que fazia `cli.groupCacheLock.Lock(); delete(cli.groupCache, to); cli.groupCacheLock.Unlock()` — acesso **direto ao campo**, não por método | `send_ack.go:96` `cli.groupCache.Delete(to)` | **Único call site reverso que precisou mudar de fato.** Três linhas viraram uma; o mutex e o mapa passaram a ser privados de `group.Cache`. |
+| 6 | **não listado pela Fase D**: `user_avatar.go:65` `namespace = groupIQNamespace` — a foto de **comunidade** sai pelo namespace de grupo | `user_avatar.go:66` `namespace = group.IQNamespace` | `iqNamespace` foi exportado como `group.IQNamespace`, com um comentário no `constants.go` dizendo por quê. A alternativa (duplicar o literal `"w:g2"` em `user_avatar.go`) foi recusada: é um valor de wire, e duas definições divergem em silêncio. |
+
+O ponto central: **a Fase D estava certa sobre onde estavam os call sites, e
+errada sobre o custo deles**. Com o padrão fachada-sobre-função-livre, quatro dos
+seis não mudaram uma letra, porque continuam chamando o mesmo método não
+exportado de `*Client`. Só os dois que tocavam **estado** ou **constante** —
+`send_ack.go` e `user_avatar.go` — precisaram de edição. Os 249 call sites
+externos que a Fase D contou são, como previsto, um não-problema: eles chamam
+métodos **exportados** de `*Client`, que viraram fachadas finas.
+
+### Compatibilidade de API
+
+`go build ./...` no repositório inteiro passa **sem uma única mudança fora de
+`internal/wa-noise/`** — verificado. `pkg/infra/wa-noise/group/` (a camada de
+projeto, um projeto diferente e já pronto), que usa `whatsmeow.ReqCreateGroup`,
+`Client.CreateGroup`, `Client.LeaveGroup`, `Client.SetGroupName`,
+`Client.SetGroupTopic`, `Client.JoinGroupWithLink` e outros, compila e seus
+testes passam intocados.
+
+O que preservou isso:
+
+- **Apelidos de tipo** (mesmo tipo, não tipo novo): `ReqCreateGroup =
+  group.ReqCreate`, `ParticipantChange = group.ParticipantChange`,
+  `ParticipantRequestChange = group.ParticipantRequestChange`,
+  `groupMetaCache = group.Meta`.
+- **Constantes com o mesmo valor**: `InviteLinkPrefix = group.InviteLinkPrefix`;
+  `ParticipantChangeAdd/Remove/Promote/Demote` e
+  `ParticipantChangeApprove/Reject` apontam para as constantes do subpacote.
+- **Sentinelas de erro por atribuição, não por cópia** (`errors.go:82-98`):
+  `ErrGroupInviteLinkUnauthorized`, `ErrNotInGroup`, `ErrGroupNotFound`,
+  `ErrInviteLinkInvalid`, `ErrInviteLinkRevoked` e `ErrInvalidImageFormat` são o
+  **mesmo valor** de `group.*`. Um `errors.New` próprio na raiz quebraria
+  `errors.Is` para quem compara com o nome da raiz — a mesma armadilha
+  documentada nos erros de mídia, app state e pareamento.
+- **Assinaturas não exportadas preservadas**: `sendGroupIQ`, `cacheGroupInfo`,
+  `getGroupInfo`, `getCachedGroupData`, `parseGroupNode`, `parseGroupCreate`,
+  `parseGroupChange`, `updateGroupParticipantCache` e `parseGroupNotification`
+  continuam existindo em `*Client`, com os mesmos nomes e as mesmas assinaturas.
+  É o que faz `internals.go` compilar sem regeneração.
+
+### Mudança de comportamento deliberada — guardas de receiver nil
+
+Os métodos **exportados** de fachada passaram a recusar receiver nil com
+`ErrClientIsNil`, como nos lotes 1-5. Antes, todos estouravam nil deref.
+
+Os métodos **não exportados** NÃO ganharam essa guarda, e isso é deliberado:
+`internals.go` é gerado a partir das assinaturas deles, e são chamados de dentro
+do próprio cliente, onde `cli` nunca é nil.
+
+### Concorrência — o cache de grupo
+
+O ponto de maior risco do lote. Quatro sítios de aquisição antes, quatro depois:
+
+| Antes | Depois |
+|---|---|
+| `group.go:141-142` `cacheGroupInfo` (condicional em `lock bool`) | `group/info.go:139-140` `CacheInfo` (mesma condicional, mesmo parâmetro) |
+| `group.go:186-187` `getCachedGroupData` (span = função inteira) | `group/info.go:202-203` `GetOrFetch` (span = função inteira) |
+| `group_notification.go:188-189` `updateGroupParticipantCache` | `group/notification.go:200-201` `UpdateParticipantCache` |
+| `send_ack.go:96-98` `invalidateParticipantCache` (`Unlock` explícito) | `group/cache.go:88-91` `Cache.Delete` (`defer Unlock`; a seção crítica é só o `delete`, que não pode entrar em panic) |
+
+O invariante mais delicado foi preservado literalmente: **`GetOrFetch` segura o
+lock através da ida à rede**. Na falta do cache ele chama
+`GetInfo(ctx, t, jid, false)`, e é esse `false` que faz o `CacheInfo` de dentro
+**não** tomar o lock de novo — um segundo `Lock()` num `sync.Mutex` não reentrante
+seria deadlock imediato. Era exatamente assim antes; o parâmetro `lock bool`
+sobreviveu à extração justamente por isso, e está documentado no doc de `Cache`.
+
+Também preservado: `UpdateParticipantCache` recebe de `GetLocked` um ponteiro
+para a entrada **viva** do mapa e muta `cached.Members` no lugar; todo o
+read-modify-write (append de entradas + swap-remove de saídas) continua dentro
+de uma única seção crítica.
+
+**Revisão independente**: revisado por um agente separado, que leu os dois lados
+(`git show HEAD:...` para o antes, árvore de trabalho para o depois) e escreveu
+o parecer em arquivo. Veredito: **PRESERVED WITH CAVEATS**. Enumerou os quatro
+sítios dos dois lados, traçou a cadeia `GetOrFetch → GetInfo → CacheInfo`
+confirmando que nenhum caminho chega a `Lock()` duas vezes, verificou que o mutex
+nunca é copiado por valor (`groupTransport` é um value type que embrulha só um
+`*Client`; `Cache()` devolve `&t.cli.groupCache`; todos os métodos de `Cache` têm
+receptor ponteiro; `go vet`/copylocks limpo), confirmou que `SetLocked` é o único
+caminho de escrita do mapa e que `delete` em mapa nil é no-op, e checou a ordem
+de aninhamento contra `messageSendLock`, `socketLock`, `responseWaitersLock` e
+`userDevicesCacheLock` sem encontrar aresta reversa.
+
+As duas ressalvas, ambas **não bloqueantes**:
+
+1. `Cache.Delete` troca um `Unlock()` explícito por um `defer`. Comportamento
+   idêntico, estritamente mais seguro.
+2. O `*Meta` devolvido por `GetOrFetch` escapa do lock e é lido sem lock por
+   `send_prepare.go:176` e `sendfb_transport.go:41`, o que é uma janela de
+   corrida real contra `UpdateParticipantCache` mutando `cached.Members` no
+   lugar. **É pré-existente e idêntica no HEAD** — o `getCachedGroupData`
+   original devolvia o mesmo ponteiro vivo para os mesmos dois chamadores. Não
+   foi introduzida nem alargada por este lote. Registrada em `HOUSEKEEP.md`
+   (F53) em vez de corrigida de graça, conforme a regra do projeto.
+
+O revisor declarou explicitamente o que **não** conseguiu verificar: não
+construiu um teste de estresse que dirigisse `GetOrFetch` e
+`UpdateParticipantCache` concorrentemente contra um socket vivo; o veredito
+sobre a ressalva 2 é por leitura de código mais a comparação com o HEAD. A suíte
+com `-race` passa, mas não exercita esse interleaving específico.
+
+### As duas correções de bug da Fase E lote 6 — preservadas e travadas por teste
+
+Este domínio é o que a Fase E lote 6 encontrou dois bugs reais. Os dois viajaram
+com a extração e continuam com teste de regressão:
+
+1. **Acumulação de pares LID/PN** — `collectParticipantList`
+   (`group/notification.go:52`) **acumula** em `*lidPairs` com `append` em vez de
+   substituir. Uma mesma `<notification type="w:gp2">` pode trazer `<add>` e
+   `<remove>` juntos, e os pares dos dois precisam chegar ao
+   `PutManyLIDMappings` do chamador. O comentário que explica isso foi movido
+   palavra por palavra. Teste:
+   `TestParseGroupChangeCollectsLIDPairsFromMultipleChildren`, em
+   `group/notification_test.go` (era `group_notification_test.go:143`), passando.
+2. **Vazamento de mapeamento vazio para o store** — `CacheInfo`
+   (`group/info.go:113`) aloca `lidPairs` com `make(..., 0, N)` e preenche por
+   `append`, não por índice. Antes do lote 6 usava `make(..., len(participants))`
+   e só escrevia nos índices dos participantes que tinham LID **e** PN,
+   entregando entradas zeradas ao `PutManyLIDMappings`. A nota de regressão foi
+   escrita no doc da função. Teste:
+   `TestCacheGroupInfoSkipsParticipantsWithoutMapping`, em `group/parse_test.go`
+   (era `group_parse_test.go:443`), passando.
+
+Um terceiro contrato de regressão, do lote 8 da Fase E, também foi travado no
+subpacote: `GetOrFetch` devolve `(nil, nil)` quando o servidor ecoa um `id`
+diferente do consultado (a entrada cai sob outra chave). Antes isso só tinha
+teste do lado dos chamadores (`send_guards_test.go`); agora tem também do lado da
+origem — `TestGetOrFetchReturnsNilNilOnEchoedDifferentID`, em `group/info_test.go`.
+
+### Cobertura
+
+`internal/wa-noise/group/`: **100,0% dos statements**, sob `-race`, medido com
+`go test -race -count=1 -cover ./internal/wa-noise/group/`.
+
+Os testes da Fase E lote 6 foram relocados e adaptados aos dublês
+(`group_parse_test.go` → `group/parse_test.go`, `group_notification_test.go` →
+`group/notification_test.go`, `group_settings_test.go` →
+`group/settings_test.go`), e ganharam quatro arquivos novos —
+`group/testhelpers_test.go` (o dublê de `Transport` e os dublês de store),
+`group/info_test.go`, `group/create_test.go`, `group/invite_test.go`,
+`group/participants_test.go` — para cobrir o que a Fase E não alcançava, que era
+tudo que passava pela rede.
+
+O `fakeTransport` não fabrica os sentinelas de IQ da raiz: usa `errors.New`
+próprios. Os testes deste pacote só precisam que `errors.Is` case por
+identidade, e depender dos valores da raiz reintroduziria o import que a extração
+removeu. O contrato de que a raiz entrega os ponteiros certos fica travado do
+outro lado, pelo `var _ group.Transport = groupTransport{}` em
+`group_transport.go`.
+
+Na raiz, `send_ack_test.go` e `send_guards_test.go` ganharam dois helpers
+(`putGroupCache`/`hasGroupCache`) que encapsulam o par `Lock`/`SetLocked` — o
+cache deixou de ser um mapa nu em `*Client`.
+
+### O que NÃO foi extraído, e por quê
+
+**Nada do escopo designado ficou na raiz.** Os oito arquivos `group*.go` de
+produção viraram fachadas ou desapareceram (`group_constants.go` foi removido; as
+constantes vivem em `group/constants.go`). O que ficou fora do subpacote, ficou
+por um motivo:
+
+**Os erros de IQ (`ErrIQNotFound`, `ErrIQForbidden`, `ErrIQNotAuthorized`,
+`ErrIQNotAcceptable`, `ErrIQGone`) e o `wrapIQError` — pelo mesmo motivo que
+`request.go` no lote 4.** São o substrato de IQ do fork inteiro, não deste
+domínio: `IQError` é o tipo de erro que `parseIQError` produz para **todo**
+`<iq>`, de qualquer namespace. Movê-los para `group/` obrigaria `media/`,
+`newsletter/`, `prekeys/` e todo domínio futuro a importar `group/` para comparar
+um 404. Ficam na raiz e atravessam a interface por `IQErrors()`.
+
+**`ElementMissingError` — mesmo critério, e mesma decisão dos lotes 2, 3 e 4.**
+Erro genérico de parsing de XML do fork (usado por group, usync, appstate,
+pair-code, ...). Só a construção atravessa a interface, por `ElementMissing`.
+
+**`WebMessageIDPrefix` — é do domínio de ID de mensagem.** Vive em
+`message_id.go`, tem teste próprio lá (`message_id_test.go`), e é usado por
+`GenerateMessageID`/`GenerateFacebookMessageID`. A única coisa que `group/`
+precisa dele é remover o prefixo de uma chave de criação; isso atravessa a
+interface por `TrimMessageIDPrefix`.
+
+**`internals.go` e `internals_generate.go` — fora do escopo por designação.**
+F29 em `HOUSEKEEP.md`. Confirmado intocados: `git status` não os lista, e
+`internals.go` compila sem mudança contra as fachadas (é por isso que
+`groupMetaCache`, `ParticipantChange` e `ReqCreateGroup` viraram apelidos de tipo
+em vez de tipos novos). Nota: `internals_generate.go` já estava dessincronizado
+**antes** deste lote — o `fileNames` dele lista `group.go` mas não
+`group_parse.go` nem `group_notification.go`, e ainda assim `internals.go` contém
+`ParseGroupNode`/`ParseGroupCreate`/`ParseGroupChange`/`ParseGroupNotification`,
+que vinham de um layout upstream anterior à Fase E. Este lote não piora isso: o
+conjunto de métodos não exportados em `group.go` é o mesmo de antes.
+
+**`pkg/infra/wa-noise/group/` — outro projeto, outra camada.** É a camada de
+adaptação do wa-api, já pronta, fora do escopo do ADR-0004. Intocada; seus
+testes passam.
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `group/`. Todos os arquivos de produção dele ficam
+abaixo do teto de 300 linhas (maior: `group/notification.go`, 240). A raiz
+**encolheu**: os oito arquivos `group*.go` saíram de 1210 linhas de produção para
+396 (fachadas) + 100 (`group_transport.go`).
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado
+(`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`), +52/-4
+linhas.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
+com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
+tamanho de arquivo e testes do fork.
