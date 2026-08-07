@@ -46,6 +46,7 @@ internal/wa-noise/tctoken \
 internal/wa-noise/notification \
 internal/wa-noise/retry \
 internal/wa-noise/group \
+internal/wa-noise/user \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \
