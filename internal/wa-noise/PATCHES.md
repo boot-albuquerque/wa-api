@@ -8330,3 +8330,630 @@ antigas closures de `*Client` saem. O diff é inteiramente deste lote.
 `echo $?`, não inferido da saída): build, vet, testes com `-race`, lint, gates de
 cobertura e de cobertura de log, licença, deriva, tamanho de arquivo e testes do
 fork.
+
+## Fase F/G — lote 10 (final): núcleo do client/conexão (extração real + cobertura), 2026-08-07
+
+### Contexto e resultado em uma linha
+
+Último lote da Fase F/G. Nove arquivos da raiz, todos `package whatsmeow`:
+`client.go`, `client_connection.go`, `client_events.go`, `client_proxy.go`,
+`client_session.go`, `handshake.go`, `keepalive.go`, `connectionevents.go`,
+`errors.go`.
+
+**Três dos nove foram extraídos** — `handshake.go` → `handshake/`,
+`keepalive.go` → `keepalive/`, `client_proxy.go` → `proxyconf/`. **Os outros
+seis ficam na raiz**, e a justificativa com `arquivo:linha` está abaixo; ela é a
+entrada de referência para "por que o núcleo do client é um pacote só", que é o
+que a Fase H vai precisar ler antes de mover qualquer coisa.
+
+Este lote é diferente de todos os outros nove porque o domínio aqui **define o
+`Client`** e é dono de `socketLock`. A conclusão da Fase D sobre isso
+(`PATCHES.md`, "Fase D — Estágio 3") foi **reverificada arquivo a arquivo**, com
+os números de linha de hoje, e continua valendo — mas com um recorte mais fino
+do que ela tinha: nem tudo no núcleo toca o lock, e o que não toca saiu.
+
+---
+
+### O critério usado, e por que ele é diferente do dos lotes 1-9
+
+Nos lotes 1-9 o critério era "este domínio é consumidor do transporte?". Aqui
+nenhum dos nove é consumidor: eles **são** o transporte. Então o critério virou
+outro, mais estreito:
+
+> Um arquivo sai se, e somente se, (a) não lê nem escreve `cli.socket`,
+> `cli.socketLock` ou `cli.socketWait`, e (b) tudo o que ele precisa do `Client`
+> cabe numa interface de métodos **já atômicos** — isto é, métodos que
+> encapsulam o lock por dentro, nunca o lock em si.
+
+A alínea (b) é literalmente a orientação que a Fase D deixou escrita:
+
+> *"Se algum dia a conexão precisar ser decomposta, o caminho é manter a seção
+> crítica dentro da raiz e expor métodos atômicos que já encapsulem o lock,
+> nunca o lock em si."*
+
+Medido com `grep -n socketLock internal/wa-noise/*.go`, os arquivos de produção
+da raiz que tocam o lock são **cinco**:
+
+| Arquivo | Linhas com `socketLock` |
+|---|---|
+| `client.go` | 50 (a declaração: `socketLock sync.RWMutex`) |
+| `client_connection.go` | 25, 27, 32, 35, 43, 46, 54, 56, 85, 86, 99, 100, 152, 153, 226, 228, 240, 243, 253, 259 |
+| `client_events.go` | 202, 204 |
+| `connectionevents.go` | 58, 59, 126, 127 |
+| `request.go` | 218, 220 |
+
+`handshake.go`, `keepalive.go`, `client_proxy.go`, `client_session.go` e
+`errors.go` **não aparecem**. Dos cinco que não tocam, quatro saíram ou já
+estavam fora de discussão; `client_session.go` ficou por outro motivo (abaixo).
+
+---
+
+## Parte 1 — o que saiu
+
+### `handshake/` — 3 arquivos de produção, 140+77+42 = 259 linhas
+
+O handshake Noise_XX_25519_AESGCM_SHA256 e a verificação da cadeia de
+certificados do servidor. É o candidato mais forte do lote e também o de maior
+valor: é criptografia, é o ponto onde se decide se o servidor do outro lado é
+mesmo a WhatsApp, e estava misturado com a atribuição de `cli.socket`.
+
+**A fronteira é exatamente a última linha do método antigo.** O
+`doHandshake` original terminava assim (`handshake.go:121-128`, antes deste
+lote):
+
+```go
+ns, err := nh.Finish(ctx, fs, cli.handleFrame, cli.onDisconnect)
+if err != nil {
+    return fmt.Errorf("failed to create noise socket: %w", err)
+}
+cli.socket = ns
+return nil
+```
+
+Aquela penúltima linha — `cli.socket = ns` — é uma escrita no campo protegido
+por `socketLock`, feita **sem tomar o lock**, porque o único chamador
+(`unlockedConnect`, `client_connection.go:136`) já o segura em modo escrita
+desde `client_connection.go:85` ou `:99`. É precisamente o tipo de acoplamento
+que a Fase D disse que impedia extração.
+
+A solução foi não extrair aquela linha: `handshake.Do` **devolve** o
+`*socket.NoiseSocket` e a fachada da raiz faz a atribuição. O subpacote não
+conhece `socketLock`, não conhece `*Client`, e não pode nem por acidente tomar o
+lock — ele não tem como referenciá-lo.
+
+```go
+// internal/wa-noise/handshake.go (fachada, 33-46)
+func (cli *Client) doHandshake(ctx context.Context, fs *socket.FrameSocket, ephemeralKP keys.KeyPair) error {
+	ns, err := handshake.Do(ctx, fs, handshake.Config{
+		NoiseKey:          cli.Store.NoiseKey,
+		EphemeralKP:       ephemeralKP,
+		ClientPayload:     cli.clientPayload(),
+		FrameHandler:      cli.handleFrame,
+		DisconnectHandler: cli.onDisconnect,
+	})
+	if err != nil {
+		return err
+	}
+	cli.socket = ns
+	return nil
+}
+```
+
+O doc-comment do método diz, em letras grandes, que ele só pode ser chamado com
+o lock já segurado. Antes isso era um invariante não escrito.
+
+**`Config` é struct de valor, não interface `Transport`.** É a única divergência
+de forma em relação aos lotes 1-9, e é deliberada: o handshake não consulta o
+cliente ao longo do caminho, ele precisa de cinco coisas de uma vez, no começo.
+Uma interface com cinco getters chamados uma vez cada seria cerimônia sem ganho.
+Nenhum dos cinco campos é mutex nem contém mutex — são dois `*keys.KeyPair`, um
+`*waWa6.ClientPayload` e dois valores de função.
+
+**Uma mudança de ordem, registrada porque é observável.** O original lia
+`cli.GetClientPayload` no **meio** do handshake (`handshake.go:95-100`, depois
+da verificação do certificado). A fachada agora lê **antes** de começar
+(`cli.clientPayload()`). `GetClientPayload` é um campo de função pública,
+trocável em tempo de execução; se um consumidor o trocasse durante o handshake,
+a versão antiga poderia pegar o novo valor e a nova pega o antigo. Na prática a
+janela é de milissegundos e o campo é documentado como configuração de
+inicialização (`client.go:149-151`: *"This should NOT be used for WhatsApp"*),
+mas fica registrado. A alternativa — passar `func() *waWa6.ClientPayload` em vez
+do valor — reintroduziria uma dependência viva do `Client` dentro do subpacote
+por um ganho nulo.
+
+**Símbolos que mudaram de casa.** Três eram API exportada da raiz e passaram a
+ser API do subpacote. Verificado com `grep -rn` em todo o repositório que
+**nenhum** tem consumidor fora de `internal/wa-noise/handshake.go`:
+
+| Antes | Agora |
+|---|---|
+| `whatsmeow.NoiseHandshakeResponseTimeout` | `handshake.ResponseTimeout` (a raiz mantém uma **const** reexportada, `handshake.go:19`) |
+| `whatsmeow.WACertIssuerSerial` | `handshake.WACertIssuerSerial` (removida da raiz) |
+| `whatsmeow.WACertPubKey` | `handshake.WACertPubKey` (removida da raiz) |
+| `noiseKeyLength`, `certSignatureLength` (não exportados) | `handshake.NoiseKeyLength`, `handshake.CertSignatureLength` |
+| `verifyServerCert` (não exportado) | `handshake.VerifyServerCert` |
+
+Mesmo racional de movimentação de API que a Fase D aplicou a
+`RemoveReactionText` e aos `Adv*SignaturePrefix`: já eram exportados, não têm
+consumidor externo, então mudar de pacote é movimentação e não export novo.
+`NoiseHandshakeResponseTimeout` continua existindo na raiz porque é `const` —
+não há risco de os dois valores divergirem em tempo de execução, ao contrário do
+que aconteceria com uma `var`.
+
+**Cobertura: 87,1%** (`VerifyServerCert` 94,4%, `checkCertValidity` 100%,
+`Do` 80,7%).
+
+O que tornou isso possível foi uma técnica que a raiz não tinha como usar:
+`handshake/certchain_test.go` **troca `WACertPubKey` por uma chave que o teste
+controla** (`useTestRootKey`, restaurada por `t.Cleanup`) e então monta cadeias
+que **passam** pela primeira verificação de assinatura. Sem isso, todo teste
+parava em "failed to verify intermediate cert signature", porque a chave privada
+correspondente à `WACertPubKey` de produção só existe nos servidores da WhatsApp
+— era exatamente a limitação que a Fase E registrou como lacuna. Com a troca dá
+para exercitar serial do emissor, tamanho da chave, assinatura da folha, janela
+de validade nas duas pontas e a comparação final com a estática decifrada.
+
+`handshake/server_test.go` e `roundtrip_test.go` vão além: rodam o **lado
+servidor** do Noise_XX contra um `httptest` + `coder/websocket`, espelhando a
+sequência de `Do`. Isso dá dois testes de segurança que não existiam:
+
+- `TestDoRejectsServerWithForgedCertChain` — um servidor que executa o Noise
+  corretamente mas apresenta cadeia forjada **para** em `VerifyServerCert`. É o
+  cenário MITM, e é a única defesa que sobra depois de o Noise ter funcionado.
+- `TestDoCompletesAgainstAcceptableServer` — o caminho feliz completo, com a
+  raiz de teste. Cobre toda a metade final de `Do` (cifra da estática do
+  cliente, mix da chave Noise privada, ClientFinish, `nh.Finish`), que a Fase E
+  tinha registrado como não testável.
+
+O que continua **não** coberto em `Do` é só o ramo de timeout
+(`ResponseTimeout` = 20s): um teste dele custaria 20 segundos no `make check`
+por um `select` de duas linhas. Fica registrado como lacuna consciente.
+
+### `keepalive/` — 2 arquivos de produção, 101+61 = 162 linhas
+
+O ping periódico do websocket. **Não toca `socketLock` em ponto nenhum** — as
+três coisas que ele faz com a conexão (`Disconnect`, `resetExpectedDisconnect`,
+`autoReconnect`) já eram chamadas a métodos da raiz que encapsulam o lock por
+dentro. É o caso-modelo da alínea (b) do critério.
+
+`keepalive.Transport` tem 8 métodos, todos correspondendo a algo que o código
+já fazia; nenhum foi inventado. O adaptador `keepAliveTransport` é struct de
+valor com um único campo `cli *Client` — nenhum mutex é copiado.
+
+**As quatro variáveis exportadas ficaram na raiz.**
+`KeepAliveResponseDeadline`, `KeepAliveIntervalMin`, `KeepAliveIntervalMax` e
+`KeepAliveMaxFailTime` são API pública **ajustável em tempo de execução**. Movê-las
+mudaria o nome pelo qual se configura o cliente. Em vez disso elas atravessam
+como **dado**, via `Transport.Timing()`, que é chamado **a cada volta do loop** —
+que é exatamente o que o código original fazia ao ler a variável no ponto de uso.
+Mesmo racional de `group.IQErrors` (lote 6) e `Nacks` (lote 9). Travado por
+`TestKeepAliveTransportTimingReadsExportedVars`, na raiz.
+
+**Cobertura: 97,2%** (`RandomInterval` 100%, `Send` 100%, `Loop` 95%).
+
+Isso é 3 pontos a mais do que o antes-e-depois sugere, porque o dublê de
+`Transport` permite testar o que a raiz não permitia: falha de envio contada mas
+não fatal, timeout de resposta, `KeepAliveRestored` emitido **uma vez só** depois
+da recuperação (e não a cada sucesso), reconexão forçada disparando
+`Disconnect`+`Reset`+`AutoReconnect` na ordem, e — o mais importante — que
+`AutoReconnect` recebe o contexto de **eventos** e não o da **conexão**
+(`TestLoopForcesReconnectAfterMaxFailTime` compara os ponteiros de contexto).
+Trocar esses dois faria toda reconexão automática nascer já cancelada; era um
+invariante que nenhum teste travava.
+
+O bug de janela degenerada que a Fase E corrigiu (`rand.Int64N` com argumento
+`<= 0` derrubando o processo) viajou junto com seus cinco testes.
+
+### `proxyconf/` — 1 arquivo de produção, 154 linhas
+
+Montagem dos `http.Transport` de proxy. Sem lock, sem estado, sem `Client`.
+
+`proxyconf.Apply` recebe os três `*http.Client` num struct `Clients` e escreve o
+campo `Transport` de cada um. Os três **setters** (`SetMediaHTTPClient` e irmãos)
+ficaram na raiz porque **trocam o ponteiro**, e o subpacote só tem cópias dos
+ponteiros — trocar do lado de lá não teria efeito nenhum do lado de cá.
+
+`SetProxyOptions` e `Proxy` viraram **type aliases** (`client_proxy.go:23-26`),
+não tipos novos: `whatsmeow.SetProxyOptions` aparece nas assinaturas de
+`SetProxy`/`SetSOCKSProxy`/`SetProxyAddress` e é usado fora do fork, em
+`pkg/infra/wa-noise/session/provider.go:38-39` e
+`pkg/infra/wa-noise/session/session.go:83,86`. Um tipo distinto quebraria esses
+quatro pontos.
+
+`Apply` foi mantido **literal**, sem guarda de nil, e o motivo está no comentário
+da própria função: `SetMediaHTTPClient(nil)` seguido de qualquer chamada de proxy
+entra em panic. É defeito pré-existente (o `setTransport` original fazia igual),
+fora do escopo, e foi registrado como **F55 em `HOUSEKEEP.md`** em vez de
+corrigido de graça.
+
+**Cobertura: 96,6%.** O único ramo descoberto é o `err != nil` de
+`proxy.FromURL`, que exige uma URL `socks5://` que o parser aceite mas o
+construtor rejeite.
+
+---
+
+## Parte 2 — o que ficou, e a evidência
+
+Esta é a parte que a Fase H precisa ler.
+
+### `client.go` (271 linhas) — define `Client`. Não é extraível por definição.
+
+`client.go:43-183` é a declaração da struct: **34 campos não exportados** e o
+`socketLock sync.RWMutex` (`client.go:50`). Qualquer subpacote que quisesse
+levar este arquivo teria que exportar os 34, incluindo o mutex — que é o
+anti-pattern que a Fase D nomeou e proibiu:
+
+> *"Um `sync.Mutex` como campo público é anti-pattern conhecido em Go — qualquer
+> consumidor pode travar na ordem errada, travar duas vezes, ou esquecer de
+> travar, e o compilador não ajuda."*
+
+Além disso `client.go` é o **implementador** de todas as interfaces
+`Transport` dos nove lotes anteriores. `*Client` é o que `group.Transport`,
+`user.Transport`, `send.Transport`, `message.Transport` e as outras 11 esperam
+receber. Um tipo não pode implementar interfaces de pacotes que o importam se
+ele próprio mora num pacote que aqueles importam — é o ciclo que a Fase D já
+tinha mapeado, agora com 18 subpacotes em vez de zero.
+
+O que este lote **fez** em `client.go`: nada. Zero linhas alteradas.
+
+### `client_connection.go` (270 linhas) — é o dono do lock. O caso mais duro.
+
+Este arquivo tem **20 das 28** aquisições de `socketLock` da raiz. E não são
+aquisições pontuais: são seções críticas read-modify-write de múltiplas
+instruções, das quais três são estruturalmente impossíveis de expressar por
+accessor.
+
+**(1) `WaitForConnection` — lock solto e retomado dentro de um laço**
+(`client_connection.go:43-57`):
+
+```go
+cli.socketLock.RLock()
+for cli.socket == nil || !cli.socket.IsConnected() || !cli.IsLoggedIn() {
+    ch := cli.socketWait
+    cli.socketLock.RUnlock()
+    select {
+    case <-ch:
+    case <-timeoutChan:
+        return false
+    case <-cli.expectedDisconnect.GetChan():
+        return false
+    }
+    cli.socketLock.RLock()
+}
+cli.socketLock.RUnlock()
+```
+
+O lock é tomado fora do laço, **solto no meio** para esperar no canal, e
+retomado. Dois dos três `return` saem com o lock **já solto**. Nenhum accessor
+atômico expressa isso: a leitura de `cli.socketWait` (linha 45) tem que
+acontecer **sob o mesmo lock** que a condição do `for` (linha 44), senão o canal
+lido pode ser um que `closeSocketWaitChan` já substituiu (linhas 32-35) e a
+espera nunca acorda. É um handshake entre a condição e o canal, não uma leitura.
+
+**(2) `ConnectContext` / `connect` / `unlockedConnect` — lock atravessando I/O de
+rede** (`client_connection.go:85-143`):
+
+```go
+cli.socketLock.Lock()
+defer cli.socketLock.Unlock()
+err := cli.unlockedConnect(ctx)
+```
+
+e dentro de `unlockedConnect`, ainda sob o lock: `fs.Connect(ctx)` (linha 133,
+o dial do websocket), `cli.doHandshake(...)` (linha 136, o handshake Noise
+inteiro), e o disparo de dois goroutines (linhas 140-141). O lock de escrita fica
+segurado durante segundos de I/O de rede. É assim no upstream e **não foi
+mexido** — mudar quando o lock é adquirido aqui é a definição de reescrita de
+concorrência.
+
+**(3) `onDisconnect` — comparação de identidade sob o lock**
+(`client_connection.go:150-169`):
+
+```go
+cli.socketLock.Lock()
+defer cli.socketLock.Unlock()
+if cli.socket == ns {
+    cli.socket = nil
+    cli.clearResponseWaiters(xmlStreamEndNode)
+    ...
+}
+```
+
+O `if cli.socket == ns` é o que impede que a desconexão de um socket **antigo**
+zere o socket **novo** de uma reconexão que já aconteceu. Comparar e zerar tem
+que ser atômico. Um `GetSocket()`/`SetSocket()` por accessor abriria exatamente
+essa janela.
+
+Mais dois blocos menores no mesmo padrão: `Disconnect` (240-245, `expectDisconnect`
++ `unlockedDisconnect` sob o mesmo lock) e `ResetConnection` (253-259, `Store(true)`
++ `Stop` + `clearResponseWaiters` sob o mesmo lock).
+
+**Conclusão**: `client_connection.go` fica. A Fase D estava certa e continua
+certa; a única coisa que mudou é que agora o handshake, que era o maior bloco de
+código dentro dessa seção crítica, saiu — e a fachada documenta o invariante que
+antes era tácito.
+
+### `client_events.go` (239 linhas) — fila de nós e despacho de eventos
+
+Dois motivos independentes, ambos com linha:
+
+1. **`sendNodeAndGetData` lê o socket sob `socketLock`**
+   (`client_events.go:202-204`). É o caminho de saída de **todo** nó do fork —
+   todos os `SendIQ` de todos os 18 subpacotes terminam aqui.
+2. **`nodeHandlers` é um mapa de métodos de `*Client`**, montado em
+   `client.go:240-254` com doze entradas (`cli.handleEncryptedMessage`,
+   `cli.handleReceipt`, `cli.handleNotification`, ...). `handlerQueueLoop`
+   (`client_events.go:172`) despacha por esse mapa. Levar isso para um subpacote
+   exigiria que o subpacote conhecesse os doze handlers, que moram em doze
+   domínios diferentes — é a aresta `raiz → domínio` que a Fase D provou ser
+   mútua.
+
+Além disso `eventHandlers`/`eventHandlersLock` (`client.go:106-107`) é o segundo
+mutex do arquivo, com um detalhe de reentrância documentado no próprio doc de
+`RemoveEventHandler` (`client_events.go:86-88`): chamá-lo de dentro de um event
+handler dá deadlock, porque `dispatchEvent` (223) segura o `RLock` enquanto
+chama os handlers. Mover isso mudaria quem é responsável por esse invariante.
+
+### `connectionevents.go` (235 linhas) — handlers de `<stream:error>`, `<failure>`, `<success>`
+
+Toca `socketLock` em dois pontos, e ambos são peculiares o bastante para
+justificarem sozinhos a permanência:
+
+`connectionevents.go:58-59` e `:126-127` fazem `RLock()` seguido de
+`defer RUnlock()` **de dentro de um `case`** — ou seja, o lock de leitura fica
+segurado até o fim da **função inteira**, atravessando `cli.Store.Delete(ctx)`
+(linha 139), `refreshCAT(ctx)` (linha 154) e três `go cli.dispatchEvent(...)`.
+É intencional (o comentário na linha 125 diz: *"lock socket to ensure refresh
+goes through before reconnect"*), mas é exatamente o tipo de escopo de lock que
+não sobrevive a ser fatiado entre pacotes: o `defer` está amarrado ao frame da
+função, não ao bloco.
+
+Além disso o arquivo é o ponto de convergência de quatro domínios já extraídos —
+`cli.getServerPreKeyCount` e `cli.uploadPreKeys` (`:196,201`, prekeys),
+`cli.deleteExpiredPrivacyTokens` (`:192`, tctoken), `cli.StoreLIDPNMapping`
+(`:190`, sessão), `cli.closeSocketWaitChan` (`:211`, conexão) — mais
+`cli.connect(ctx)` (`:35`), que reentra em `client_connection.go`. Um subpacote
+aqui importaria a raiz e seria importado por ela.
+
+### `client_session.go` (174 linhas) — não toca lock, mas fica
+
+É o único dos seis que passa no critério (a) e falha no espírito de (b). Ele
+contém `Logout` (`:31`), `ParseWebMessage` (`:73`), `StoreLIDPNMapping` (`:125`)
+e a telemetria de `unified_session` (`:145-173`).
+
+Os motivos, honestamente:
+
+- **É pequeno demais para virar pacote.** 174 linhas, quatro funções sem relação
+  entre si além de "são do ciclo de vida da sessão". Extrair custaria uma
+  interface `Transport` de 6 métodos (`SendIQ`, `SendNode`, `Disconnect`,
+  `Store`, `OwnID`, `ServerTimeOffset`, `BackgroundCtx`) para mover 174 linhas.
+  A relação custo/benefício é pior que a dos 4 arquivos que a entrada
+  "a raiz não vira subpacotes" já tinha recusado por esse mesmo motivo.
+- **`ParseWebMessage` é chamado por `message/` através da fachada da raiz**
+  (registrado no lote 9). Movê-lo para um pacote novo obrigaria `message/` a
+  importar esse pacote **ou** manteria a fachada, e no segundo caso não se ganha
+  nada.
+- **`Logout` chama `cli.Disconnect()`** (`:56`), que é o método que segura
+  `socketLock`. Passaria pelo critério (b), mas junto com os dois pontos acima
+  não sobra motivo.
+
+**Registro honesto**: este é o único "fica" do lote que é uma decisão de
+custo/benefício e não uma impossibilidade. Se a Fase H quiser um
+`core/session/`, `client_session.go` é o candidato — e é o único.
+
+### `errors.go` (285 linhas) — fica, e mover seria ativamente errado
+
+Este arquivo **já é o resultado** dos nove lotes anteriores. Ele não declara os
+erros do fork: ele os **reexporta por atribuição** dos subpacotes que os
+declaram. Contado no arquivo de hoje, **33 dos ~50 sentinelas** são aliases de
+valor:
+
+```go
+ErrNotInGroup                    = group.ErrNotInGroup            // :93
+ErrProfilePictureUnauthorized    = user.ErrProfilePictureUnauthorized  // :83
+ErrNoSession                     = send.ErrNoSession              // :32
+ErrOriginalMessageSecretNotFound = message.ErrOriginalMessageSecretNotFound  // :164
+ErrMediaDownloadFailedWith404    = media.ErrMediaDownloadFailedWith404  // :142
+ErrAppStateUpdate                = appstatesync.ErrUpdate         // :53
+ErrPairInvalidDeviceSignature    = pairing.ErrInvalidDeviceSignature  // :61
+```
+
+O propósito do arquivo **é ser `whatsmeow.ErrX`**. Movê-lo para
+`internal/wa-noise/errors/` não reduziria acoplamento nenhum — só trocaria o
+nome do pacote na única coisa que ele faz, e quebraria os consumidores que já
+usam os nomes históricos (`pkg/infra/wa-noise/session/session.go` usa
+`whatsmeow.ErrQRStoreContainsID`, `whatsmeow.ErrProfilePictureUnauthorized`,
+`whatsmeow.ErrProfilePictureNotSet`).
+
+O que **sobra** de genuinamente próprio da raiz são ~10 sentinelas do transporte
+(`ErrClientIsNil`, `ErrIQTimedOut`, `ErrNotConnected`, `ErrNotLoggedIn`,
+`ErrAlreadyConnected`, os dois de QR, `ErrNoPushName`, `ErrNoPrivacyToken`) e o
+maquinário de erro de IQ — `IQError` (`:193`), `parseIQError` (`:217`),
+`wrapIQError` (`:188`), `DisconnectedError` (`:269`), `ElementMissingError`
+(`:257`) e a tabela dos treze `ErrIQ*` (`:201-215`). Este maquinário é chamado
+de dentro de `request.go:187,189,178,209,215,222,242,246` — ou seja, é parte do
+substrato de IQ, que o lote 4 já decidiu manter na raiz.
+
+**Recusado.** O ganho seria zero e o custo seria quebrar API.
+
+### `request.go` — reconfirmado na raiz (já era decisão do lote 4)
+
+Toca `socketLock` em `retryFrame` (`request.go:218-220`) e é o substrato por onde
+**todo** `Transport.SendIQ` dos 18 subpacotes passa. `retryFrame` ainda chama
+`cli.WaitForConnection` (`:213`), que é o laço de lock solto-e-retomado descrito
+acima. Nada mudou desde o lote 4.
+
+---
+
+### Revisão de concorrência independente
+
+Conduzida antes do commit, por agente sem contexto prévio, sobre as três
+extrações — com foco em (A) a atribuição `cli.socket = ns` e a janela entre
+`nh.Finish` e ela, (B) o par `ctx`/`connCtx` do keepalive e as leituras das
+quatro variáveis exportadas, (C) captura de mutex por valor nos tipos novos.
+
+**Veredito: SAFE TO COMMIT.** Nenhum risco novo de concorrência introduzido.
+O relatório é longo; o que ele estabeleceu, com `arquivo:linha`:
+
+**(A1) A atribuição `cli.socket = ns` continua sob o mesmo lock, no mesmo ponto.**
+Comparado `git show HEAD:internal/wa-noise/handshake.go:121-128` com
+`internal/wa-noise/handshake.go:33-46`. Entre o retorno de `nh.Finish` e a
+atribuição há, nas duas versões, só instruções não bloqueantes — nenhuma operação
+de canal, lock ou syscall.
+
+**(A2) A janela entre `nh.Finish` e a atribuição não deadlocka, e é idêntica antes
+e depois.** Este foi o ponto mais importante do relatório, e a razão é uma que eu
+não tinha verificado: `nh.Finish` (`socket/noisehandshake.go:90`) instala
+`fs.OnDisconnect` (`socket/noisesocket.go:48-50`) e dispara
+`go ns.consumeFrames` (`:51`) **antes** de `cli.socket = ns` rodar. `onDisconnect`
+toma `socketLock.Lock()` (`client_connection.go:152`), que `unlockedConnect` já
+segura — o que **pareceria** deadlock. Não é: `fs.OnDisconnect` é sempre invocado
+como `go fs.OnDisconnect(...)` (`socket/framesocket.go:85-86`), já num goroutine
+próprio. Ele bloqueia só a si mesmo; `unlockedConnect` nunca espera por ele,
+termina (`client_connection.go:140-142`) e solta o lock. Quando `onDisconnect`
+finalmente roda, `cli.socket == ns` já é verdade e o ramo correto
+(`client_connection.go:154`) é tomado.
+
+Isso mostra que segurar o lock *através* da atribuição não é acidente: é o que
+garante que uma queda durante o handshake não caia no ramo "Ignoring OnDisconnect
+on different socket" (`client_connection.go:166`) e vaze o socket. A extração
+preservou exatamente essa propriedade — e agora ela está escrita.
+
+**(A3) Achado aceito e corrigido antes do commit.** A revisão apontou que passar
+`ClientPayload` já resolvido adiantava a leitura de `cli.GetClientPayload` em até
+um round trip de rede inteiro (20s, o `ResponseTimeout`), porque o original lia o
+campo no **meio** do handshake, depois da verificação do certificado
+(`HEAD:handshake.go:95-100`). Não é corrida nova — o campo nunca foi protegido —
+mas é reordenação observável, e a regra do lote é extração literal.
+
+**Corrigido**: `handshake.Config.ClientPayload` passou a ser
+`func() *waWa6.ClientPayload` em vez do valor, e `Do` a chama exatamente no ponto
+onde o original lia o campo (`handshake/handshake.go:117-118`). A extração voltou
+a ser literal. Esta é a única mudança de código motivada pela revisão.
+
+**(B1, B2) `ctx`/`connCtx` e os três `go` inalterados.** Tabela ponto a ponto no
+relatório: `Send(connCtx, ...)`, `<-connCtx.Done()`, `go t.AutoReconnect(ctx)` —
+mesmas posições de `HEAD:keepalive.go:56,78,69`.
+
+**(B3) `Timing()` não captura, e a corrida sobre as quatro variáveis é
+pré-existente.** Cada valor continua sendo lido no seu ponto de uso, a cada
+iteração. A única diferença é que cada chamada de `Timing()` lê as quatro onde o
+original lia uma — três leituras a mais, descartadas, sem diferença de
+comportamento e sem classe nova de corrida. As variáveis exportadas sempre foram
+lidas do goroutine do keepalive sem sincronização; o lote não introduziu nem
+alargou isso.
+
+**(B4) Ordem de aquisição de lock do goroutine de keepalive inalterada.** Ele
+nunca segura lock ao chamar para dentro da raiz, e `clearDelayedMessageRequests`
+continua sendo chamado **depois** do `Unlock` (`client_connection.go:243-244`).
+
+**(C) Nenhum mutex capturado por valor.** Auditados os cinco tipos novos:
+`keepAliveTransport` (um `*Client`), `keepalive.Timing` (quatro `time.Duration`),
+`handshake.Config` (dois `*keys.KeyPair`, um `*waWa6.ClientPayload` — protobuf
+tem `DoNotCopy`, mas é ponteiro —, dois valores de função), `proxyconf.Clients`
+(três `*http.Client`), `proxyconf.Options` (três bools). `go vet` cobre
+`copylocks` independentemente e está limpo.
+
+**(C4) Nenhum dos três subpacotes novos importa a raiz** —
+`grep -rn 'wa-noise"' internal/wa-noise/{handshake,keepalive,proxyconf}/` não
+devolve nada. Não há ciclo.
+
+**Dois achados incidentais, ambos pré-existentes e fora do escopo**, registrados
+em `HOUSEKEEP.md` em vez de corrigidos de graça:
+
+- **F56** — `fs.OnDisconnect` é escrito (`socket/noisesocket.go:48`) sem
+  sincronização enquanto o read pump, já rodando desde `socket/framesocket.go:112`,
+  pode lê-lo em `socket/framesocket.go:85`. `socket/` não foi tocado por este lote.
+- **F57** — `SetProxy*` escreve os três `http.Client` sem lock enquanto
+  `unlockedConnect` os lê sob `socketLock` (`client_connection.go:118-121`).
+  Consequência possível: uma conexão sair pelo transport antigo, isto é, sem o
+  proxy que acabou de ser pedido.
+
+**O que a revisão declarou não ter verificado** (registrado por honestidade, não
+resolvido): não enumerou exaustivamente todo lock alcançável por `handleFrame`
+(o argumento de A2 não depende disso, porque `unlockedConnect` nunca *espera* o
+goroutine consumidor); não revisou os testes novos linha a linha quanto a
+adequação, só que compilam e passam sob `-race`; não rodou o gate de cobertura;
+e não abriu `PATCHES.md`/`ADR-0004` para conferir que as seções citadas pelos
+comentários existem.
+
+---
+
+### Gates
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` (`Makefile`)
+ganharam `internal/wa-noise/handshake`, `internal/wa-noise/keepalive` e
+`internal/wa-noise/proxyconf`. O gate passa a cobrir **298 arquivos de produção
+em 32 diretórios**, todos dentro do teto de 300 linhas.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+---
+
+## Fase F/G — fechamento dos 10 lotes
+
+### Os subpacotes criados
+
+Antes da Fase F/G a raiz já tinha ganho três subpacotes na Fase D (Estágio 1),
+todos de funções puras. A Fase F/G criou os outros quinze, todos por
+free-function-over-interface:
+
+| Lote | Subpacote | Arquivos de produção | O que é |
+|---|---|---|---|
+| (Fase D) | `msgpad/` | 1 | padding/unpadding de mensagem |
+| (Fase D) | `paircrypto/` | 1 | assinaturas do pareamento |
+| (Fase D) | `msgattrs/` | 2 | atributos derivados da mensagem |
+| 1 | `media/` | 11 | download, upload, retry de mídia |
+| 2 | `newsletter/` | 8 | canais/newsletter |
+| 3 | `appstatesync/` | 9 | sincronização de app state |
+| 4 | `prekeys/` | 6 | prekeys |
+| 4 | `pairing/` | 7 | pareamento (QR e código) |
+| 4 | `tctoken/` | 3 | tokens de privacidade |
+| 5 | `notification/` | 6 | notificações de dispositivo/privacidade/newsletter |
+| 5 | `retry/` | 8 | recibos de retry e mensagens recentes |
+| 6 | `group/` | 11 | grupos |
+| 7 | `user/` | 12 | usuários e dispositivos |
+| 8 | `send/` | 14 | caminho de envio de mensagem |
+| 9 | `message/` | 17 | caminho de recepção/decifragem |
+| 10 | `handshake/` | 3 | handshake Noise e cadeia de certificados |
+| 10 | `keepalive/` | 2 | ping periódico do websocket |
+| 10 | `proxyconf/` | 1 | montagem de transports de proxy |
+
+**18 subpacotes, 122 arquivos de produção.** Somando os que já existiam antes da
+Fase D (`socket/`, `store/`, `store/sqlstore/`, `appstate/`, `binary/`,
+`binary/token/`, `types/`, `types/events/`, `util/*`, `argo/`, `proto/`), o gate
+de tamanho cobre hoje **298 arquivos de produção em 32 diretórios**, contra 177
+em 17 no fim da Fase D.
+
+### O que ficou na raiz, e por quê — em uma tabela
+
+A raiz tem **92 arquivos de produção**. Não é resíduo: cada categoria tem um
+motivo estrutural.
+
+| Categoria | Exemplos | Por quê |
+|---|---|---|
+| Fachadas dos 18 subpacotes | `group_transport.go`, `user_transport.go`, `send_facade.go`, `media_transport.go`, ... | são os adaptadores `*Client → X.Transport`. Existem **para** não haver ciclo; movê-los recriaria o ciclo. |
+| Núcleo do client/conexão | `client.go`, `client_connection.go`, `client_events.go`, `connectionevents.go`, `client_session.go` | definem `Client` e são donos de `socketLock`. Ver Parte 2 acima. |
+| Substrato de IQ | `request.go`, `errors.go` | por onde todo `SendIQ` passa; `errors.go` é a superfície de reexportação de API. |
+| Gerado | `internals.go`, `internals_generate.go` | gerador quebrado (F29), fora de escopo por designação. |
+| Domínios não visitados | `call.go`, `presence.go`, `receipt.go`, `privacysettings.go`, `push.go`, `broadcast.go`, `qrchan.go`, `cstoken.go`, `armadillomessage.go`, ... | não estavam no escopo de nenhum dos 10 lotes. São candidatos legítimos para uma fase futura. |
+
+### O teto que a Fase F/G atingiu, e onde ele está
+
+A Fase D concluiu que "Estágio 2 é impossível" porque as arestas
+`raiz → domínio` e `domínio → raiz` eram mútuas em todos os domínios. A Fase F/G
+mostrou que a conclusão estava certa sobre o **método** (mover arquivo exportando
+campos não funciona) e errada sobre o **limite**: com free functions sobre
+interfaces estreitas, quinze domínios saíram sem exportar um único campo de
+`Client` e sem exportar nenhum mutex.
+
+O que **não** cedeu foi exatamente o que a Fase D previu que não cederia:
+`socketLock` e a struct `Client`. E a razão final é a que a Fase D nomeou e este
+lote reconfirmou com linha: `*Client` é o **implementador** de todas as 18
+interfaces `Transport`. Um implementador não pode morar num pacote-folha.
+
+Isso é o teto real, e é da linguagem. A Fase H pode reorganizar os 18
+subpacotes em `capabilities/`, `core/`, `protocol/` com `git mv` — nenhum deles
+tem impedimento. Mas o conteúdo da raiz descrito na Parte 2 continua sendo um
+pacote só, e a tentativa de dividi-lo esbarra nas mesmas 20 aquisições de
+`socketLock` em `client_connection.go`.

@@ -1981,3 +1981,169 @@ do lote:
 **Status**: não corrigido. `internals.go`/`internals_generate.go` estão fora do
 escopo por designação (F29), e a regra do projeto proíbe corrigir de graça bug
 pré-existente fora do escopo da tarefa. Registrado para decisão do usuário.
+
+---
+
+## F55 — `SetMediaHTTPClient(nil)` (e irmaos) transforma qualquer chamada de proxy posterior em panic
+
+**Data / contexto**: 2026-08-07, durante a Fase F/G lote 10 (extracao de
+`client_proxy.go` para `internal/wa-noise/proxyconf/`). Achado ao decidir se a
+funcao extraida deveria ganhar guarda de nil.
+
+**Onde**: `internal/wa-noise/client_proxy.go:96-110` (os tres setters) e
+`internal/wa-noise/proxyconf/proxyconf.go:150-160` (`Apply`, que e' o antigo
+`setTransport`).
+
+```go
+// client_proxy.go
+func (cli *Client) SetMediaHTTPClient(h *http.Client) { cli.mediaHTTP = h }
+
+// proxyconf.go — Apply
+if !opt.NoMedia {
+    c.Media.Transport = transport   // nil deref se Media for nil
+}
+```
+
+**Problema**: os tres setters aceitam qualquer `*http.Client`, inclusive `nil`,
+e nao validam. `NewClient` sempre preenche os tres campos, entao o estado
+inicial e' seguro; mas depois de `cli.SetMediaHTTPClient(nil)` qualquer
+`SetProxy` / `SetSOCKSProxy` / `SetProxyAddress` subsequente desreferencia nil e
+derruba o processo. Nao ha' nada na documentacao dos setters que diga que nil e'
+proibido, e passar nil e' a forma intuitiva de "voltar ao padrao".
+
+Reproducao (nao adicionada a suite, por ser fora do escopo):
+
+```go
+cli := whatsmeow.NewClient(store, nil)
+cli.SetMediaHTTPClient(nil)
+cli.SetProxy(nil)  // panic: runtime error: invalid memory address
+```
+
+O mesmo vale para `SetWebsocketHTTPClient(nil)` + `SetProxy` e para
+`SetPreLoginHTTPClient(nil)` + `SetProxy`.
+
+**Pre-existente, nao introduzido pelo lote 10**: o `setTransport` original
+(`client_proxy.go:125-135` antes da extracao) escrevia nos tres campos
+exatamente do mesmo jeito, sem guarda. `proxyconf.Apply` foi mantido **literal**
+de proposito, com o defeito anotado no proprio comentario da funcao, para que a
+extracao nao mudasse comportamento.
+
+**Correcao sugerida**: duas opcoes, nenhuma aplicada:
+1. Guarda de nil em `proxyconf.Apply` (`if c.Media != nil { ... }` nos tres). E'
+   a correcao minima, mas silencia o erro: quem passou nil por engano fica sem
+   proxy e sem aviso.
+2. Fazer os tres setters da raiz tratarem nil como "volte ao cliente padrao",
+   substituindo por um `&http.Client{Transport: (http.DefaultTransport.(*http.Transport)).Clone()}`.
+   E' o que a intencao do chamador provavelmente e', e mantem o invariante "os
+   tres campos nunca sao nil", que o resto do codigo (`unlockedConnect`, em
+   `client_connection.go:118-121`) ja' assume.
+
+A opcao 2 e' a preferida: `unlockedConnect` le `cli.websocketHTTP` /
+`cli.preLoginHTTP` e passa direto para `socket.NewFrameSocket`, entao um nil ali
+tambem quebra a conexao, nao so' o proxy.
+
+**Status**: nao corrigido. Bug pre-existente fora do escopo do lote 10, e a
+regra do projeto proibe corrigir de graca. Registrado para decisao do usuario.
+
+---
+
+## F56 — `fs.OnDisconnect` é escrito sem sincronização enquanto o read pump já pode lê-lo
+
+**Data / contexto**: 2026-08-07, Fase F/G lote 10. Achado pela revisão de
+concorrência independente da extração do handshake (item C1 do relatório), ao
+mapear os goroutines que `nh.Finish` dispara.
+
+**Onde**: `internal/wa-noise/socket/noisesocket.go:48-50` (escrita) e
+`internal/wa-noise/socket/framesocket.go:85-87` (leitura), com o goroutine leitor
+iniciado em `internal/wa-noise/socket/framesocket.go:112`.
+
+```go
+// noisesocket.go:48 — escrita, sem lock
+fs.OnDisconnect = func(ctx context.Context, remote bool) {
+    disconnectHandler(ctx, ns, remote)
+}
+
+// framesocket.go:85 — leitura, de dentro de Close(), que roda no goroutine do read pump
+if fs.OnDisconnect != nil {
+    go fs.OnDisconnect(fs.parentCtx, code == statusForceClose)
+}
+```
+
+**Problema**: `fs.Connect` (`framesocket.go:112`) já disparou
+`go fs.readPump(...)` **antes** de `newNoiseSocket` escrever `fs.OnDisconnect`.
+O read pump chama `fs.Close(statusForceClose)` no seu `defer`
+(`framesocket.go:203`), e `Close` lê `fs.OnDisconnect`. Escrita e leitura de um
+campo de struct, em goroutines diferentes, sem mutex nem atomic — é data race
+pelo modelo de memória do Go.
+
+`Close` toma `fs.lock` (`framesocket.go:63`), mas a **escrita** em
+`noisesocket.go:48` não toma lock nenhum, então o mutex não sincroniza o par.
+
+Consequência prática: se o websocket cair durante a janela entre
+`fs.Connect` e `newNoiseSocket` — janela que inclui o handshake Noise inteiro,
+ou seja, um round trip de rede —, o `OnDisconnect` pode ser lido como nil e a
+desconexão passa despercebida, ou o `-race` acusa em produção instrumentada.
+
+**Pré-existente, não introduzido pelo lote 10**: `git status` mostra que nada sob
+`internal/wa-noise/socket/` foi tocado por este lote. A ordem
+`Connect` → `readPump` → `Finish` → escrita de `OnDisconnect` é a do upstream.
+
+**Correção sugerida**: mover a atribuição de `fs.OnDisconnect` para dentro de
+`fs.lock`, expondo um setter em `FrameSocket`
+(`func (fs *FrameSocket) SetOnDisconnect(f func(context.Context, bool))` que
+tome `fs.lock`), e fazer `Close` ler o campo ainda sob o lock que ele já segura.
+É correção local ao pacote `socket/`, sem efeito na API do fork.
+
+**Status**: não corrigido. Fora do escopo do lote 10 (que não tocou `socket/`), e
+a regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo.
+Registrado para decisão do usuário.
+
+---
+
+## F57 — `SetProxy*` concorrente com `Connect()` é corrida sobre o `http.Client` da conexão
+
+**Data / contexto**: 2026-08-07, Fase F/G lote 10. Achado pela revisão de
+concorrência independente (item C2 do relatório).
+
+**Onde**: escrita em `internal/wa-noise/proxyconf/proxyconf.go:150-160`
+(`Apply`, chamado por `Client.setTransport` em
+`internal/wa-noise/client_proxy.go:84-90`); leitura em
+`internal/wa-noise/client_connection.go:118-121`.
+
+```go
+// client_connection.go:118-121 — leitura, sob socketLock
+client := cli.websocketHTTP
+if cli.Store.ID == nil {
+    client = cli.preLoginHTTP
+}
+fs := socket.NewFrameSocket(cli.Log.Sub("Socket"), client)
+```
+
+**Problema**: `SetProxy` / `SetSOCKSProxy` / `SetProxyAddress` escrevem
+`preLoginHTTP.Transport`, `websocketHTTP.Transport` e `mediaHTTP.Transport`
+**sem tomar lock nenhum**. `unlockedConnect` lê os mesmos ponteiros sob
+`socketLock`. Como a escrita não toma o lock, o `socketLock` não sincroniza o
+par: chamar `SetProxy` de um goroutine enquanto outro chama `Connect()` é data
+race, e o resultado pode ser uma conexão que sai pelo transport antigo — ou
+seja, **sem o proxy que acabou de ser pedido**, o que vaza o endereço real do
+cliente.
+
+A documentação de `SetProxy` (`client_proxy.go:51-54`) diz *"Must be called
+before Connect() to take effect in the websocket connection"*, o que cobre o
+caso sequencial, mas não diz nada sobre concorrência.
+
+**Pré-existente, não introduzido pelo lote 10**: o `setTransport` original
+(antes da extração) escrevia nos mesmos três campos, do mesmo goroutine do
+chamador, sem lock. A extração para `proxyconf.Apply` é literal.
+
+**Correção sugerida**: fazer `Client.setTransport` tomar `cli.socketLock.Lock()`
+antes de delegar para `proxyconf.Apply`. Os três `*http.Client` já são lidos sob
+esse lock em `unlockedConnect`, então usar o mesmo mutex fecha o par sem
+introduzir um segundo. Como `setTransport` não faz I/O, a seção crítica é de
+três atribuições — não há risco de segurar o lock de escrita por muito tempo.
+Alternativa mais barata: documentar explicitamente que os setters de proxy só
+podem ser chamados antes do primeiro `Connect()`.
+
+**Status**: não corrigido. Bug pré-existente fora do escopo, e mexer em quando
+`socketLock` é adquirido é exatamente o tipo de mudança que o protocolo do lote
+10 exige passar por revisão dedicada. Registrado para decisão do usuário.
