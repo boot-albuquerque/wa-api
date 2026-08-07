@@ -10,6 +10,12 @@ linha(s) exatos, descrição do problema, e se possível o caminho de correção
 sugerido. Sem isso, o achado se perde ou vira arqueologia de código na
 próxima vez que alguém tropeçar nele.
 
+**Escopo:** o arquivo mora em `internal/wa-noise/` porque é de lá que vem a
+grande maioria dos achados, mas o registro é do **repositório inteiro** — há
+entradas sobre o `Makefile` (o bug de locale do `coverage-gate`), sobre
+`pkg/infra/` e sobre `pkg/domain/apperr`. Não filtre por diretório ao
+registrar.
+
 ## Índice
 
 Situação em 2026-08-07, depois das levas de saneamento (lotes A–I). São 43
