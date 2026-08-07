@@ -18,22 +18,25 @@ registrar.
 
 ## Índice
 
-Situação em 2026-08-07, depois das levas de saneamento (lotes A–I). São 43
-achados: **37 resolvidos** (36 corrigidos + F35 fechado como "não corrigir"),
-**6 abertos**.
+Situação em 2026-08-07, depois das levas de saneamento (lotes A–I) e da
+pesquisa comparativa com o evolution-api/Baileys. São 46 achados:
+**41 resolvidos** (40 corrigidos + F35 fechado como "não corrigir"),
+**5 abertos** — 2 travados por falta de informação externa (F42, F44) e 3
+novos, da reorganização de `pkg/infra/wa-noise/` (F59, F60, F61).
 
-Os 6 abertos têm em comum não faltar trabalho, e sim faltar **informação que não
+> **Correção de registro (2026-08-07):** este índice ficou desatualizado em
+> relação às próprias entradas. Ele listava 6 abertos, mas `user_info_failed`,
+> F22, F32/F31 e F37 já constavam como **CORRIGIDO**/**RESOLVIDO** no corpo de
+> cada entrada. Um índice que contradiz as entradas é pior que não ter índice —
+> ele é o que se lê primeiro. Ao fechar um achado, atualize os dois.
+
+Os 2 abertos têm em comum não faltar trabalho, e sim faltar **informação que não
 está no código**. Nenhum é resolvível por leitura ou refactor:
 
 | Achado                                     | O que falta para resolver                                                                                                                                                                                                                                                                   |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user_info_failed` como `CategoryInternal` | **Decisão de produto.** A classificação decide o status HTTP que o cliente recebe; mudá-la é mudança de contrato de API.                                                                                                                                                                    |
-| F22 — panic em `record.Session.Serialize`  | **Bug em dependência externa** (`go.mau.fi/libsignal`). Não há predicado exportado para checar se o record é serializável sem chamar `Serialize()`, que é o que panica. A defesa local disponível (`recover()`) é pior que o problema. Travado por dois testes que documentam a assimetria. |
-| F32 — duas query IDs de desktop erradas    | **Dado que não temos.** As IDs corretas só saem de uma captura de tráfego de um cliente desktop real. Chutar quebra um caminho que hoje ao menos falha de forma previsível.                                                                                                                 |
-| **F31** (ligado à F32)                     | O nil deref foi corrigido; a comparação de ponteiros inerte **fica**, de propósito. Consertá-la faria clientes MacOS passarem a usar as query IDs que a F32 mostra estarem erradas — trocaria um ramo inerte por um comprovadamente quebrado. As duas só se resolvem juntas.                |
-| F37 — chave de cache em `GetUserDevices`   | **Observação de tráfego real.** Depende de confirmar se o servidor de fato responde com JID diferente do consultado; sem isso a correção é especulação sobre um cache quente.                                                                                                               |
-| F42 — atributo `v` numérico vs string      | **Captura de tráfego.** É formato de fio no caminho de criptografia; decidir por leitura de código é palpite.                                                                                                                                                                               |
-| F44 — envio bloqueante de history sync     | **Decisão de política de produto.** As duas saídas óbvias (envio não-bloqueante, ou com timeout) **descartam** notificações de history sync, perdendo histórico em silêncio — pior que o travamento raro que evitam.                                                                        |
+| F42 — atributo `v` numérico vs string      | **Captura de tráfego.** É formato de fio no caminho de criptografia; decidir por leitura de código é palpite. O Baileys usa string `'2'` nos três pontos onde monta `<enc>`, mas não implementa o caminho v3/FB, que é justamente onde o nosso é numérico.                                   |
+| F44 — envio bloqueante de history sync     | **Decisão de política de produto.** A ordem de partida do loop foi corrigida; resta o timeout de download. As duas saídas óbvias **descartam** notificações de history sync, perdendo histórico em silêncio — pior que o travamento raro que evitam. O Baileys não tem fila: trata inline.   |
 
 Fora da lista, uma pendência que não é achado: **o smoke test manual**
 (pareamento por QR, envio, avatar, criação de grupo, reconexão) continua sem ser
@@ -1327,9 +1330,16 @@ web.
 Atenção: isso **muda comportamento** para clientes MacOS que ainda mandem
 `WebInfo`, que passariam a usar as query IDs de desktop.
 
-**Status**: **não corrigido**. O lote 2 é constantes, logging e testes, sem
-mudança de comportamento; corrigir aqui alteraria qual query ID vai para o
-servidor. O teste acima trava o estado atual.
+**Status**: **RESOLVIDO junto da F32** (2026-08-07), por desativação. A
+comparação de ponteiros inerte e as duas constantes de desktop foram
+comentadas em bloco, com o registro do porquê: o ramo nunca dispara em
+produção (`BaseClientPayload` sempre preenche `WebInfo`) e o caminho Argo que
+indexava aquelas IDs já está desligado no fork (`decodeArgoResult` retorna
+`ErrArgoDecodingBroken` de saída). `ConvertQueryID` passou a ser identidade.
+
+O status anterior ("não corrigido, o lote 2 é constantes e testes") ficou
+desatualizado quando o achado foi de fato fechado — ver a nota de correção de
+registro no índice.
 
 ## F32 — duas query IDs de desktop de newsletter estão erradas no upstream
 
@@ -2732,3 +2742,104 @@ mudança em código crítico de concorrência, e a regra 10 de
 tipo de mexida — revisão que não cabe no fechamento desta etapa. Está citado
 como exceção conhecida na tabela de `internal/wa-noise/docs/LOCKS.md` e na regra
 6 do `CONTRIBUTING.md`. Registrado para decisão do usuário.
+
+## F59 — `ClientLookup` é interface morta: nenhuma referência no repositório
+
+**Data**: 2026-08-07.
+**Contexto**: reorganização de `pkg/infra/wa-noise/` por responsabilidade.
+Ao mover `registry/session_counter.go` para `adapters/sessioncount/adapter.go`,
+o arquivo levou junto duas interfaces; só uma é usada.
+
+**Onde**: `pkg/infra/wa-noise/adapters/sessioncount/adapter.go` (era
+`registry/session_counter.go:16`).
+
+```go
+// ClientLookup is the subset of ClientManager methods needed by adapters
+// that look up WhatsApp clients by user ID. [...]
+type ClientLookup interface {
+	GetWaNoiseClient(id string) *wanoise.Client
+}
+```
+
+**Problema**: `grep -rn 'ClientLookup' --include='*.go' .` devolve apenas esta
+declaração. Nenhum tipo a implementa por nome, nenhuma função a recebe,
+nenhum teste a exercita. O papel que o comentário descreve — "quebrar a
+dependência de tipo concreto entre root main e internal/" — hoje é cumprido
+por `waclient.Getter` (`pkg/infra/wa-noise/client/`), que é o que
+`wiring_handlers.go:102` de fato usa (`waclient.ClientForGetter`).
+
+A interface irmã no mesmo arquivo, `ClientHealthProvider`, é usada de verdade
+(é o parâmetro de `NewSessionCounterAdapter`). Só `ClientLookup` sobrou.
+
+**Correção sugerida**: remover a declaração. Não há caminho de compatibilidade
+a preservar — remover uma interface que ninguém referencia não pode quebrar
+consumidor nenhum, e o compilador prova isso.
+
+**Status**: **não corrigido**. Achado fora do escopo da reorganização, que era
+mover código, não apagá-lo. Registrado para decisão.
+
+## F60 — comentário em `client/testkit/helpers.go` cita um método com nome corrompido
+
+**Data**: 2026-08-07.
+**Contexto**: mesma reorganização. Apareceu ao verificar quem referenciava
+`registry.ClientManager`.
+
+**Onde**: `pkg/infra/wa-noise/client/testkit/helpers.go:18`.
+
+```go
+// o comportamento de registry.ClientManager.Getwa-noiseClient).
+```
+
+**Problema**: `Getwa-noiseClient` não existe e não é um identificador Go
+válido. É resíduo de uma substituição em massa `whatsmeow` -> `wa-noise` que
+alcançou o interior de um nome em CamelCase: o método real é
+`GetWaNoiseClient`. Comentário, então não quebra build — mas é exatamente o
+tipo de string que alguém vai procurar com grep e não achar.
+
+O mesmo padrão aparece em outros comentários do fork (`Getwa-noiseClientsCount`,
+`Iteratewa-noiseClients` em `registry/wa_clients.go` antes da quebra); vale
+uma varredura por `wa-noise` grudado no meio de um identificador, e não uma
+correção pontual.
+
+**Correção sugerida**: `grep -rn '[A-Za-z]wa-noise[A-Z]' --include='*.go' .` e
+corrigir os casos, todos em comentário.
+
+**Status**: **não corrigido**. É correção cosmética fora do escopo; agrupar
+com a F59 numa passada só.
+
+## F61 — `PATCHES.md` e `HOUSEKEEP.md` citam caminhos de `pkg/infra/wa-noise/` que não existem mais
+
+**Data**: 2026-08-07.
+**Contexto**: reorganização de `pkg/infra/wa-noise/` por responsabilidade
+(commit `ca34600`).
+
+**Onde**: ~15 ocorrências, sobretudo em `internal/wa-noise/PATCHES.md`
+(linhas 251, 483, 715, 1065, 1489, 2054, 2747, 3084, 3188, 3421, 3497) e
+`internal/wa-noise/HOUSEKEEP.md:874`.
+
+**Problema**: as referências são a `pkg/infra/wa-noise/walog/`,
+`pkg/infra/wa-noise/group/`, `pkg/infra/wa-noise/user/` e
+`pkg/infra/wa-noise/safego/`, que hoje são `observability/walog/`,
+`adapters/group/`, `adapters/user/` e `runtime/safego/`. Quem seguir o
+caminho não acha nada.
+
+**A tensão, que é o ponto desta entrada**: os dois arquivos são **registro
+histórico** — descrevem o que era verdade quando a análise foi feita.
+Reescrever caminhos dentro deles falsifica o registro: uma entrada datada de
+2026-08-05 passaria a citar uma estrutura de diretórios que só existiu a
+partir de 2026-08-07. Mas deixar como está entrega ao leitor um caminho que
+não resolve.
+
+**Correção sugerida**, em ordem de preferência:
+
+1. **Nota de época no topo de cada arquivo**, mapeando os caminhos antigos
+   para os novos uma vez só, e deixar o corpo intacto. Preserva o registro e
+   resolve a navegação, ao custo de uma indireção na leitura.
+2. Reescrever os caminhos e marcar cada linha alterada. Navegação direta, mas
+   polui o texto e ainda assim reescreve história.
+3. Não fazer nada. Defensável se esses arquivos forem lidos como arqueologia
+   e não como referência viva — mas `PATCHES.md` **é** consultado ao decidir
+   sobre divergências do fork, então não é o caso.
+
+**Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
+escolha é sobre o que esses documentos são, não sobre o texto deles.
