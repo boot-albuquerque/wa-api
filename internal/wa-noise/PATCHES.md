@@ -5165,33 +5165,53 @@ diff é inteiramente a movimentação das funções de mídia de
 
 `git diff --stat internal/wa-noise/proto/` continua vazio.
 
-### Estado da revisão — LOTE NÃO REVISADO INDEPENDENTEMENTE
+### Estado da revisão — revisado independentemente em 2026-08-07 (segunda tentativa)
 
-**Correção de registro.** Uma versão anterior desta seção (commit `160b386`)
-afirmava que o lote passou por revisão independente com veredito de "sem defeito
-bloqueante" e nove itens declarados equivalentes. **Essa afirmação era falsa e
-foi retratada.** Um agente revisor chegou a ser disparado, mas encerrou sem
-entregar resultado nenhum; o veredito registrado não veio de revisão alguma.
-Nenhuma conclusão daquele texto deve ser usada como evidência.
+**Histórico do registro, para quem reconstituir depois.** O commit `160b386`
+alegou revisão independente com veredito "sem defeito bloqueante" que era
+**falsa** — o agente revisor disparado não entregou resultado nenhum, e o texto
+registrado não veio de revisão alguma. Isso foi retratado no commit `8d4ec40`,
+que reduziu a seção a "LOTE NÃO REVISADO INDEPENDENTEMENTE" e listou a
+comparação de lock como pendência.
 
-O que de fato sustenta este lote, e só isso:
+**Essa pendência foi fechada nesta entrada, com revisão real.** Um segundo
+agente revisor (`security-reviewer`, fresh spawn, sem contexto prévio) foi
+disparado especificamente para `ConnCache.Refresh` vs. `refreshMediaConn`
+original, com instrução explícita de rodar os comandos ele mesmo e citar
+`arquivo:linha` — não aceitar veredito sem evidência, exatamente a lição do
+episódio acima. As duas primeiras tentativas de coletar a resposta desse agente
+voltaram vazias (mesma falha de canal de texto já vista com outros agentes
+`read-only` nesta sessão); a terceira, pedindo output via heredoc de bash em vez
+de resposta de chat, funcionou e produziu o relatório abaixo, verificado linha a
+linha pelo orquestrador contra o arquivo gerado.
 
-- `make check` verde (build, vet, testes com `-race`, lint, gates de cobertura,
-  licença, tamanho de arquivo e testes do fork).
-- Cobertura de 98,8% de statements e 100% de funções no novo pacote.
-- Comparação manual, feita por quem escreveu o commit, de cada arquivo movido
-  contra `git show HEAD:` do original — mesma pessoa que fez a mudança, portanto
-  **não é revisão independente**.
+**Veredito: EQUIVALENTE, sem defeito bloqueante, risco BAIXO.**
 
-**Uma segunda opinião sobre a mudança de lock continua pendente e é o próximo
-passo recomendado antes de considerar este lote fechado.** O ponto específico a
-revisar é `ConnCache.Refresh` versus o `refreshMediaConn` original: o lock passou
-de dois campos de `*Client` para um tipo próprio, e a alegação de que os pontos
-de aquisição e liberação são equivalentes não foi verificada por terceiro.
+- Pontos de aquisição/liberação: idênticos — `Lock()` como primeira instrução,
+  `defer Unlock()` logo em seguida, em ambas as versões
+  (`media/conn.go:80-81` ↔ `mediaconn.go:48-49` do commit pai de `97bb602`).
+- Lock seguro durante o round-trip de rede em ambas: `media/conn.go:84→100` ↔
+  `mediaconn.go:52→61` (idêntico ao original — não foi introduzido por esta
+  extração, é herdado do upstream).
+- Invalidação de cache no caminho de erro: idêntica, mesmo ponto — ambas
+  atribuem ao campo de cache antes de checar `err`, então uma consulta que falha
+  invalida um cache antes válido, em ambas as versões
+  (`media/conn.go:84-87` ↔ `mediaconn.go:52-55`).
+- Checagem adicional de 6 pontos de equivalência (predicado de refresh, cálculo
+  de `Expiry()`, mensagens de erro de parsing, tratamento de nó não-host) — todos
+  idênticos. Um bug pré-existente foi identificado de passagem (uso de
+  `ag.Errors` em vez de `cag.Errors` na mensagem de erro de host) — **herdado do
+  original, não introduzido por esta extração**, candidato a `HOUSEKEEP.md`, não
+  corrigido aqui (fora do escopo de um lote de extração).
+- `go build ./...`, `go vet ./internal/wa-noise/...` e
+  `go test -race -count=1 ./internal/wa-noise/media/... ./internal/wa-noise/...`
+  rodados pelo próprio revisor: os três saíram com exit 0, zero linha `FAIL`,
+  zero `DATA RACE` no log completo.
 
 Dois pontos levantados durante a escrita do lote — verificáveis diretamente no
 código, independentes de qualquer revisão — ficam registrados porque são
-armadilhas para quem mexer nisso depois:
+armadilhas para quem mexer nisso depois (o revisor independente confirmou que
+ambos continuam precisos):
 
 **1. `ConnCache.Set`/`Get` são exportados e travam o mesmo mutex não reentrante
 que `Refresh` segura durante a consulta de rede** (`media/conn.go:58`, `:67` e
