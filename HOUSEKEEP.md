@@ -717,3 +717,30 @@ o repositório inteiro é deliberadamente Docker-free nos testes.
 **Status**: **não corrigido**, registrado como lacuna consciente. Também anotado
 na seção "Fora do escopo" da entrada da Fase B em
 `internal/wa-noise/PATCHES.md`.
+
+---
+
+## 2026-08-06 — data race real em `pkg/infra/wa-noise/safe_go_test.go`
+
+**Contexto**: quebra de `pkg/infra/wa-noise/` em subpacotes por domínio. Ao
+incluir os subpacotes novos em `TEST_PKGS` (que roda com `-race`), o gate
+passou a expor uma corrida que o `Makefile` já conhecia mas mantinha
+mascarada por uma exclusão.
+
+**Onde**: `pkg/infra/wa-noise/safe_go_test.go:10-19` (hoje
+`pkg/infra/wa-noise/safego/safego_test.go`) e `Makefile:21`
+(`TEST_PKGS := ... | grep -v '^wa-api/pkg/infra/wa-noise$'`).
+
+**Problema**: `TestSafeGo_NormalExec` escrevia `called = true` dentro da
+goroutine de `SafeGo` e lia a mesma variável na goroutine de teste, sem
+sincronização — `go test -race ./pkg/infra/wa-noise/` falhava com
+`WARNING: DATA RACE`. Pior: quando a leitura acontecia antes da escrita (o
+caso comum), o teste chamava `t.Skip` e passava sem verificar nada. A
+reação anterior tinha sido tirar o pacote inteiro de `TEST_PKGS` — uma
+trava que não trava.
+
+**Correção sugerida**: sincronizar por canal em vez de variável
+compartilhada, e remover a exclusão do `Makefile`.
+
+**Status**: corrigido nesta sessão (commits `c196a68` e `d005ab1`).
+`go test -race` passa em toda a árvore de `pkg/`.
