@@ -20,6 +20,20 @@ func (cli *Client) generateRequestID() string {
 	return cli.uniqueID + strconv.FormatUint(cli.idCounter.Add(1), 10)
 }
 
+const (
+	// streamErrorAuthCode e o code de <stream:error> que significa credencial
+	// invalida: nao adianta reconectar e repetir o request.
+	streamErrorAuthCode = "401"
+	// Tipos de <conflict> que tambem sao terminais: outra sessao assumiu o
+	// dispositivo, ou o dispositivo foi removido da conta.
+	conflictTypeReplaced      = "replaced"
+	conflictTypeDeviceRemoved = "device_removed"
+
+	// retryReconnectWait e quanto tempo retryFrame espera pela reconexao do
+	// websocket antes de desistir do request interrompido.
+	retryReconnectWait = 5 * time.Second
+)
+
 var xmlStreamEndNode = &waBinary.Node{Tag: "xmlstreamend"}
 
 func isDisconnectNode(node *waBinary.Node) bool {
@@ -34,7 +48,7 @@ func isAuthErrorDisconnect(node *waBinary.Node) bool {
 	code, _ := node.Attrs["code"].(string)
 	conflict, _ := node.GetOptionalChildByTag("conflict")
 	conflictType := conflict.AttrGetter().OptionalString("type")
-	if code == "401" || conflictType == "replaced" || conflictType == "device_removed" {
+	if code == streamErrorAuthCode || conflictType == conflictTypeReplaced || conflictType == conflictTypeDeviceRemoved {
 		return true
 	}
 	return false
@@ -196,8 +210,8 @@ func (cli *Client) retryFrame(
 	}
 
 	cli.Log.Debugf("%s (%s) was interrupted by websocket disconnection (%s), waiting for reconnect to retry...", id, reqType, origResp.XMLString())
-	if !cli.WaitForConnection(5 * time.Second) {
-		cli.Log.Debugf("Websocket didn't reconnect within 5 seconds of failed %s (%s)", reqType, id)
+	if !cli.WaitForConnection(retryReconnectWait) {
+		cli.Log.Debugf("Websocket did not reconnect within %s of failed %s (%s)", retryReconnectWait, reqType, id)
 		return nil, &DisconnectedError{Action: reqType, Node: origResp}
 	}
 

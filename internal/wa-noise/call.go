@@ -102,6 +102,10 @@ func (cli *Client) handleCallEvent(ctx context.Context, node *waBinary.Node) {
 	}
 }
 
+// callRejectCount e o atributo "count" do no de recusa: sempre zero, ja que
+// o fork nao reenvia recusas.
+const callRejectCount = "0"
+
 // RejectCall reject an incoming call.
 func (cli *Client) RejectCall(ctx context.Context, callFrom types.JID, callID string) error {
 	ownID := cli.getOwnID()
@@ -114,7 +118,7 @@ func (cli *Client) RejectCall(ctx context.Context, callFrom types.JID, callID st
 		Attrs: waBinary.Attrs{"id": cli.GenerateMessageID(), "from": ownID, "to": callFrom},
 		Content: []waBinary.Node{{
 			Tag:     "reject",
-			Attrs:   waBinary.Attrs{"call-id": callID, "call-creator": callFrom, "count": "0"},
+			Attrs:   waBinary.Attrs{"call-id": callID, "call-creator": callFrom, "count": callRejectCount},
 			Content: nil,
 		}},
 	})

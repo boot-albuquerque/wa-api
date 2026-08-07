@@ -15,6 +15,18 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
+const (
+	// presenceTypeUnavailable e o valor do atributo "type" que indica que o
+	// usuario ficou offline; ausente significa disponivel.
+	presenceTypeUnavailable = "unavailable"
+	// presenceTypeSubscribe e o tipo do no enviado para pedir atualizacoes de
+	// presenca de outro usuario.
+	presenceTypeSubscribe = "subscribe"
+	// presenceLastSeenDenied e o que o servidor manda em vez de um timestamp
+	// quando a privacidade do outro usuario esconde o "visto por ultimo".
+	presenceLastSeenDenied = "deny"
+)
+
 func (cli *Client) handleChatState(ctx context.Context, node *waBinary.Node) {
 	source, err := cli.parseMessageSource(node, true)
 	if err != nil {
@@ -41,13 +53,13 @@ func (cli *Client) handlePresence(ctx context.Context, node *waBinary.Node) {
 	ag := node.AttrGetter()
 	evt.From = ag.JID("from")
 	presenceType := ag.OptionalString("type")
-	if presenceType == "unavailable" {
+	if presenceType == presenceTypeUnavailable {
 		evt.Unavailable = true
 	} else if presenceType != "" {
 		cli.Log.Debugf("Unrecognized presence type '%s' in presence event from %s", presenceType, evt.From)
 	}
 	lastSeen := ag.OptionalString("last")
-	if lastSeen != "" && lastSeen != "deny" {
+	if lastSeen != "" && lastSeen != presenceLastSeenDenied {
 		evt.LastSeen = ag.UnixTime("last")
 	}
 	if !ag.OK() {
@@ -111,7 +123,7 @@ func (cli *Client) SubscribePresence(ctx context.Context, jid types.JID) error {
 	req := waBinary.Node{
 		Tag: "presence",
 		Attrs: waBinary.Attrs{
-			"type": "subscribe",
+			"type": presenceTypeSubscribe,
 			"to":   jid,
 		},
 	}
