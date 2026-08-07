@@ -2128,3 +2128,175 @@ adicionam testes sob esse mesmo alvo, sem precisar mexer no Makefile de novo.
 `scripts/waclient-filesize-check.sh` já listava `internal/wa-noise` em `DIRS`;
 `media_constants.go` (o único arquivo de produção novo) tem 76 linhas e carrega
 o header MPL-2.0. `git diff --stat internal/wa-noise/proto/` continua vazio.
+
+## Fase E — lote 2: newsletter, 2026-08-07
+
+### Contexto
+
+Segundo lote da Fase E (ver o lote 1 acima para o porquê da fase). Quatro
+arquivos do caminho de newsletter (canais do WhatsApp):
+
+`newsletter.go`, `newsletter_info.go`, `newsletter_messages.go`,
+`newsletter_mex.go`.
+
+Nenhum arquivo foi dividido — o maior tem 178 linhas, bem abaixo do teto de
+300. `notification_newsletter.go` (o parser de eventos recebidos) **não** faz
+parte deste lote; ele entra com o lote de notificações.
+
+Ao contrário do lote 1, aqui quase não havia número mágico: as query IDs do
+MEX já eram constantes nomeadas desde o upstream. O que este lote fez de
+substantivo foi **remover um `log.Fatalf`**, nomear os nomes de wire
+repetidos e extrair os construtores puros de nó para que a lógica de
+paginação e de reação virasse testável.
+
+### `newsletter_mex.go` — `log.Fatalf` fora do logger do `Client`
+
+Era o único ponto do lote com problema real de logging:
+
+```go
+data, err := decoder.ArgoToMap(wt)
+if err != nil {
+    log.Fatalf("argo to map error: %v", err)  // stdlib "log", mata o processo
+}
+```
+
+Uma resposta Argo malformada do servidor **derrubaria o processo inteiro** —
+num binário de API, todas as sessões junto. Passou a:
+
+```go
+cli.Log.Errorf("Failed to decode argo mex response for query %s: %v", queryID, err)
+return nil, fmt.Errorf("failed to decode argo mex response: %w", err)
+```
+
+`cli.Log` é o `waLog.Logger` injetado, a mesma ponte para zerolog usada no
+resto da raiz. O import de `log` (stdlib) saiu do arquivo.
+
+Ressalva honesta: esse trecho está hoje **inalcançável**, atrás do
+`if true { return nil, errArgoDecodingBroken }` que o upstream deixou para
+desabilitar a decodificação Argo. O `if true` foi mantido — reabilitar Argo é
+decisão de produto, não de faxina. A correção vale mesmo assim: quando o
+guard sair, o caminho já não derruba o processo.
+
+As duas ocorrências de `fmt.Errorf("argo decoding is currently broken")`
+viraram o sentinela `errArgoDecodingBroken`, com a mesma mensagem, agora
+comparável por `errors.Is`.
+
+### Constantes extraídas
+
+`newsletter_constants.go` (novo) — só os nomes de wire usados em mais de um
+lugar:
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `newsletterNamespace` | `newsletter` | os 3 `Namespace: "newsletter"` de `newsletter.go` e `newsletter_messages.go` |
+| `newsletterLiveUpdatesTag` | `live_updates` | tag de envio + `GetChildByTag` da resposta |
+| `newsletterLiveUpdatesDurationAttr` | `duration` | o `AttrGetter().Int("duration")` |
+| `newsletterMessagesTag` | `messages` | tag do nó, o `GetOptionalChildByTag` e os 2 `ElementMissingError{Tag:}` |
+| `newsletterMessageUpdatesTag` | `message_updates` | tag de envio + leitura da resposta |
+| `newsletterMessagesErrContext` | `newsletter messages response` | o campo `In` dos 2 `ElementMissingError` |
+
+Em `newsletter_mex.go`, bloco novo ao lado da tabela de query IDs:
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `mexNamespace` | `w:mex` | `Namespace: "w:mex"` |
+| `mexQueryTag` / `mexQueryIDAttr` | `query` / `query_id` | o nó de requisição |
+| `mexResultTag` | `result` | `GetOptionalChildByTag("result")` + `ElementMissingError{Tag:}` |
+| `mexFormatAttr` / `mexFormatArgo` | `format` / `argo` | o teste de codificação da resposta |
+
+As query IDs (`queryFetchNewsletter`, `mutation*Desktop`, …) **ficaram em
+`newsletter_mex.go`**, não no arquivo de constantes: são a tabela do protocolo
+MEX e `convertQueryID`, no mesmo arquivo, é o único consumidor delas.
+
+Continuam literais, pela mesma convenção do lote 1 (nome de protocolo usado
+uma vez, no ponto onde o nó é montado): `item`, `server_id`, `list`,
+`receipt`, `view`, `reaction`, `code`, `edit`, `to`, `id`, `type`, `jid`,
+`count`, `before`, `after`, `since`, `notice`, `stage`, e o namespace `tos`.
+`NewsletterLinkPrefix` já era constante exportada em `user_links.go`.
+
+Não foi criada nenhuma constante duplicando `argo.QueryIDToMessageName`: o
+mapa query ID → nome de mensagem Argo continua vindo só de
+`argo/name-to-queryids.json`, via `argo.GetQueryIDToMessageName()`.
+
+### Construtores puros extraídos
+
+Cinco funções, todas **movimento de código sem mudança de comportamento**,
+feitas para que a lógica ficasse alcançável por teste sem socket:
+
+| Função | Arquivo | Extraída de |
+|---|---|---|
+| `newsletterViewedItems` | `newsletter.go` | corpo de `NewsletterMarkViewed` |
+| `newsletterReactionAttrs` | `newsletter.go` | corpo de `NewsletterSendReaction` |
+| `newsletterJIDInput` / `newsletterInviteInput` | `newsletter_info.go` | os literais de `GetNewsletterInfo` / `GetNewsletterInfoWithInvite` |
+| `newsletterMessagesAttrs` | `newsletter_messages.go` | corpo de `GetNewsletterMessages` |
+| `newsletterMessageUpdatesAttrs` | `newsletter_messages.go` | corpo de `GetNewsletterMessageUpdates` |
+
+### Logging
+
+Fora o `log.Fatalf` acima, não há nenhum outro ponto de log nos quatro
+arquivos — e nenhum caminho de erro silencioso: todos os erros sobem para o
+chamador. **Nada foi adicionado.** (O `parseNewsletterMessages` de
+`notification_newsletter.go`, que já usa `cli.Log.Warnf` corretamente, é do
+lote de notificações.)
+
+### Testes
+
+Quatro arquivos novos, `package whatsmeow`:
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `newsletter_test.go` | `newsletterViewedItems` (ordem, tipo de `server_id`, lista vazia não-nil), `newsletterReactionAttrs` (com código; vazio ⇒ revogação do remetente, sem `code`) |
+| `newsletter_messages_test.go` | `newsletterMessagesAttrs` e `newsletterMessageUpdatesAttrs`: params nil, campos zerados omitidos, paginação completa, `Since` em epoch de **segundos**, `time.Time` zerado não vira `since` negativo |
+| `newsletter_info_test.go` | `newsletterJIDInput`, `newsletterInviteInput` (link completo, código puro, prefixo no meio, vazio), tags JSON de `respGetNewsletterInfo` / `respGetSubscribedNewsletters` / `respCreateNewsletter`, `omitempty` de `CreateNewsletterParams` |
+| `newsletter_mex_test.go` | `convertQueryID` nos 3 ramos (web mantém as 10 IDs, desktop traduz as 10, desconhecida passa), o ramo MacOS inerte (F31), cobertura Argo das IDs de desktop, as 2 anomalias de ID (F32), guard de MacOS em `sendMexIQ` |
+
+Cobertura: **100% nas seis funções puras extraídas** e em `convertQueryID`.
+
+`convertQueryID` depende de `cli.Store.GetClientPayload()`, então os testes
+montam um `store.Device` com chaves reais e sem JID (payload de registro) e
+alternam `store.BaseClientPayload.WebInfo` / `.Platform` com restauração via
+`t.Cleanup`. Esses testes **não são paralelos**, de propósito: mexem em
+estado global do pacote `store`.
+
+### Lacunas assumidas, sem teste de fachada
+
+Todas as funções exportadas destes quatro arquivos ficaram em 0%, e isso é
+deliberado — a mesma decisão do lote 1. `NewsletterSubscribeLiveUpdates`,
+`NewsletterMarkViewed`, `NewsletterSendReaction`, `CreateNewsletter`,
+`AcceptTOSNotice`, `NewsletterToggleMute`, `Follow`/`UnfollowNewsletter`,
+`GetNewsletterInfo*`, `GetSubscribedNewsletters`, `GetNewsletterMessages` e
+`GetNewsletterMessageUpdates` são, cada uma, um `sendIQ`/`sendNode` mais a
+leitura da resposta: exigem socket Noise aberto e servidor respondendo. Não
+há costura de transporte na raiz e, pela decisão da Fase D, ela não pode ser
+extraída para subpacote. Um teste que montasse o nó de resposta na mão e
+chamasse o parser seria reescrever a função dentro do próprio teste — daí a
+extração dos construtores puros, que é o pedaço realmente afirmável.
+
+`sendMexIQ` ficou em 4,7%: só o guard de MacOS é alcançável sem socket. O
+resto (montagem do `<query>`, leitura do `<result>`, ramo Argo, ramo GraphQL)
+fica para o lote do núcleo do `Client`, junto com `queryMediaConn` e
+`SendMediaRetryReceipt` do lote 1.
+
+### Achados incidentais
+
+Dois, ambos em `HOUSEKEEP.md`, ambos **não corrigidos** por mudarem
+comportamento de wire:
+
+- **F31** — `convertQueryID` compara `Platform` (ponteiro) com
+  `MACOS.Enum()` (ponteiro novo): comparação sempre falsa, só
+  `GetWebInfo() == nil` decide.
+- **F32** — `mutationFollowNewsletterDesktop` é idêntica a
+  `querySubscribedNewslettersDesktop`, e
+  `mutationUnfollowNewsletterDesktop` mapeia para
+  `WamoSubCancelSubscription`, nome que sequer existe no wire type store do
+  Argo.
+
+Os três testes que travam esses estados falham de propósito se o upstream
+mudar, forçando revisão consciente.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. `newsletter_constants.go` (único arquivo de produção
+novo) tem 35 linhas e carrega o header MPL-2.0.
+`git diff --stat internal/wa-noise/proto/` continua vazio.

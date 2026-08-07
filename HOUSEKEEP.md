@@ -1066,3 +1066,72 @@ logging e testes, sem mudança de comportamento), e a correção altera uma
 assinatura pública. O teste do ramo em
 `internal/wa-noise/download_types_test.go` usa um tipo falso local com
 comentário apontando para este achado.
+
+## F31 — `convertQueryID` compara ponteiros de enum: o ramo de MacOS é inerte
+
+**Data / contexto**: 2026-08-07, Fase E lote 2 (newsletter) do ADR-0004.
+
+**Onde**: `internal/wa-noise/newsletter_mex.go:71`
+
+```go
+if payload := cli.Store.GetClientPayload(); payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
+```
+
+**Problema**: `Platform` é `*ClientPayload_UserAgent_Platform` e
+`MACOS.Enum()` **aloca um ponteiro novo** a cada chamada. A comparação é de
+endereço, nunca de valor, então o primeiro operando do `||` é **sempre
+falso**. Na prática a escolha entre as query IDs web e as de desktop depende
+exclusivamente de `payload.GetWebInfo() == nil`.
+
+Verificação: `TestConvertQueryIDPlatformMacOSNaoDecideSozinho`
+(`internal/wa-noise/newsletter_mex_test.go`) põe
+`store.BaseClientPayload.UserAgent.Platform = MACOS.Enum()` mantendo o
+`WebInfo` presente e observa que `convertQueryID` continua devolvendo a ID
+web.
+
+**Correção sugerida**: comparar valores, não ponteiros —
+`payload.GetUserAgent().GetPlatform() == waWa6.ClientPayload_UserAgent_MACOS`.
+Atenção: isso **muda comportamento** para clientes MacOS que ainda mandem
+`WebInfo`, que passariam a usar as query IDs de desktop.
+
+**Status**: **não corrigido**. O lote 2 é constantes, logging e testes, sem
+mudança de comportamento; corrigir aqui alteraria qual query ID vai para o
+servidor. O teste acima trava o estado atual.
+
+## F32 — duas query IDs de desktop de newsletter estão erradas no upstream
+
+**Data / contexto**: 2026-08-07, Fase E lote 2 (newsletter) do ADR-0004.
+
+**Onde**: `internal/wa-noise/newsletter_mex.go:47,50`
+
+```go
+mutationUnfollowNewsletterDesktop  = "8782612271820087"
+mutationFollowNewsletterDesktop    = "8621797084555037"
+querySubscribedNewslettersDesktop  = "8621797084555037" // mesmo valor
+```
+
+**Problema**: duas anomalias no mesmo bloco, ambas herdadas do upstream:
+
+1. `mutationFollowNewsletterDesktop` é **idêntica** a
+   `querySubscribedNewslettersDesktop`. Em cliente desktop,
+   `FollowNewsletter` dispara a consulta de "canais assinados" em vez da
+   mutation de seguir — a operação silenciosamente não faz nada.
+2. `mutationUnfollowNewsletterDesktop` mapeia, em
+   `argo/name-to-queryids.json`, para `WamoSubCancelSubscription`
+   (cancelamento de assinatura paga do WhatsApp, não "deixar de seguir
+   canal") e esse nome **não existe** no wire type store Argo — é a única
+   das dez IDs de desktop sem wire type.
+
+Verificação: `TestQueryIDsDesktopTemWireTypeArgo` cobre as outras nove;
+`TestQueryIDUnfollowDesktopSemWireTypeArgo` e
+`TestQueryIDsDesktopDuplicadaConhecida`
+(`internal/wa-noise/newsletter_mex_test.go`) travam as duas anomalias.
+
+**Correção sugerida**: capturar as IDs corretas de um cliente desktop real
+(ou de uma versão mais nova do whatsmeow upstream) e substituir as duas
+constantes. Não há como derivar os valores corretos a partir do que está
+vendorizado.
+
+**Status**: **não corrigido**. Não temos os valores corretos, e chutar IDs
+quebraria também o caminho que hoje ao menos falha de forma previsível. Os
+três testes acima falham de propósito se o upstream mudar, forçando revisão.
