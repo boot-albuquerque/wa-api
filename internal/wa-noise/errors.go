@@ -15,7 +15,7 @@ import (
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/message"
-	"wa-api/internal/wa-noise/pairing"
+	"wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/user"
 )

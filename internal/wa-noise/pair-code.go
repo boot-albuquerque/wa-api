@@ -10,7 +10,7 @@ import (
 	"context"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/pairing"
+	"wa-api/internal/wa-noise/capabilities/pairing"
 )
 
 // PairClientType is the type of client to use with PairCode.
