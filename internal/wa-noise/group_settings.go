@@ -40,7 +40,7 @@ func (cli *Client) SetGroupPhoto(ctx context.Context, jid types.JID, avatar []by
 		return "", err
 	}
 	if avatar == nil {
-		return "remove", nil
+		return groupPhotoRemovedID, nil
 	}
 	pictureID, ok := resp.GetChildByTag("picture").Attrs["id"].(string)
 	if !ok {
@@ -52,7 +52,7 @@ func (cli *Client) SetGroupPhoto(ctx context.Context, jid types.JID, avatar []by
 // SetGroupName updates the name (subject) of the given group on WhatsApp.
 func (cli *Client) SetGroupName(ctx context.Context, jid types.JID, name string) error {
 	_, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{
-		Tag:     "subject",
+		Tag:     groupSubjectTag,
 		Content: []byte(name),
 	})
 	return err
@@ -81,7 +81,7 @@ func (cli *Client) SetGroupTopic(ctx context.Context, jid types.JID, previousID,
 		attrs["prev"] = previousID
 	}
 	content := []waBinary.Node{{
-		Tag:     "body",
+		Tag:     groupDescriptionBodyTag,
 		Content: []byte(topic),
 	}}
 	if len(topic) == 0 {
@@ -89,7 +89,7 @@ func (cli *Client) SetGroupTopic(ctx context.Context, jid types.JID, previousID,
 		content = nil
 	}
 	_, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{
-		Tag:     "description",
+		Tag:     groupDescriptionTag,
 		Attrs:   attrs,
 		Content: content,
 	})
@@ -98,9 +98,9 @@ func (cli *Client) SetGroupTopic(ctx context.Context, jid types.JID, previousID,
 
 // SetGroupLocked changes whether the group is locked (i.e. whether only admins can modify group info).
 func (cli *Client) SetGroupLocked(ctx context.Context, jid types.JID, locked bool) error {
-	tag := "locked"
+	tag := groupLockedTag
 	if !locked {
-		tag = "unlocked"
+		tag = groupUnlockedTag
 	}
 	_, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{Tag: tag})
 	return err
@@ -108,9 +108,9 @@ func (cli *Client) SetGroupLocked(ctx context.Context, jid types.JID, locked boo
 
 // SetGroupAnnounce changes whether the group is in announce mode (i.e. whether only admins can send messages).
 func (cli *Client) SetGroupAnnounce(ctx context.Context, jid types.JID, announce bool) error {
-	tag := "announcement"
+	tag := groupAnnouncementTag
 	if !announce {
-		tag = "not_announcement"
+		tag = groupNotAnnouncementTag
 	}
 	_, err := cli.sendGroupIQ(ctx, iqSet, jid, waBinary.Node{Tag: tag})
 	return err
@@ -118,16 +118,16 @@ func (cli *Client) SetGroupAnnounce(ctx context.Context, jid types.JID, announce
 
 // SetGroupJoinApprovalMode sets the group join approval mode to 'on' or 'off'.
 func (cli *Client) SetGroupJoinApprovalMode(ctx context.Context, jid types.JID, mode bool) error {
-	modeStr := "off"
+	modeStr := groupJoinStateOff
 	if mode {
-		modeStr = "on"
+		modeStr = groupJoinStateOn
 	}
 
 	content := waBinary.Node{
-		Tag: "membership_approval_mode",
+		Tag: groupMembershipApprovalModeTag,
 		Content: []waBinary.Node{
 			{
-				Tag:   "group_join",
+				Tag:   groupJoinTag,
 				Attrs: waBinary.Attrs{"state": modeStr},
 			},
 		},
@@ -140,11 +140,11 @@ func (cli *Client) SetGroupJoinApprovalMode(ctx context.Context, jid types.JID, 
 // SetGroupMemberAddMode sets the group member add mode to 'admin_add' or 'all_member_add'.
 func (cli *Client) SetGroupMemberAddMode(ctx context.Context, jid types.JID, mode types.GroupMemberAddMode) error {
 	if mode != types.GroupMemberAddModeAdmin && mode != types.GroupMemberAddModeAllMember {
-		return errors.New("invalid mode, must be 'admin_add' or 'all_member_add'")
+		return fmt.Errorf("invalid mode, must be %q or %q", types.GroupMemberAddModeAdmin, types.GroupMemberAddModeAllMember)
 	}
 
 	content := waBinary.Node{
-		Tag:     "member_add_mode",
+		Tag:     groupMemberAddModeTag,
 		Content: []byte(mode),
 	}
 
@@ -155,10 +155,10 @@ func (cli *Client) SetGroupMemberAddMode(ctx context.Context, jid types.JID, mod
 // SetGroupDescription updates the group description.
 func (cli *Client) SetGroupDescription(ctx context.Context, jid types.JID, description string) error {
 	content := waBinary.Node{
-		Tag: "description",
+		Tag: groupDescriptionTag,
 		Content: []waBinary.Node{
 			{
-				Tag:     "body",
+				Tag:     groupDescriptionBodyTag,
 				Content: []byte(description),
 			},
 		},

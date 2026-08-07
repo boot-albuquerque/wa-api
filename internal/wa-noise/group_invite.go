@@ -26,7 +26,7 @@ func (cli *Client) GetGroupInviteLink(ctx context.Context, jid types.JID, reset 
 	if reset {
 		iqType = iqSet
 	}
-	resp, err := cli.sendGroupIQ(ctx, iqType, jid, waBinary.Node{Tag: "invite"})
+	resp, err := cli.sendGroupIQ(ctx, iqType, jid, waBinary.Node{Tag: groupInviteTag})
 	if errors.Is(err, ErrIQNotAuthorized) {
 		return "", wrapIQError(ErrGroupInviteLinkUnauthorized, err)
 	} else if errors.Is(err, ErrIQNotFound) {
@@ -36,7 +36,7 @@ func (cli *Client) GetGroupInviteLink(ctx context.Context, jid types.JID, reset 
 	} else if err != nil {
 		return "", err
 	}
-	code, ok := resp.GetChildByTag("invite").Attrs["code"].(string)
+	code, ok := resp.GetChildByTag(groupInviteTag).Attrs["code"].(string)
 	if !ok {
 		return "", fmt.Errorf("didn't find invite code in response")
 	}
@@ -50,7 +50,7 @@ func (cli *Client) GetGroupInfoFromInvite(ctx context.Context, jid, inviter type
 	resp, err := cli.sendGroupIQ(ctx, iqGet, jid, waBinary.Node{
 		Tag: "query",
 		Content: []waBinary.Node{{
-			Tag: "add_request",
+			Tag: groupAddRequestTag,
 			Attrs: waBinary.Attrs{
 				"code":       code,
 				"expiration": expiration,
@@ -61,9 +61,9 @@ func (cli *Client) GetGroupInfoFromInvite(ctx context.Context, jid, inviter type
 	if err != nil {
 		return nil, err
 	}
-	groupNode, ok := resp.GetOptionalChildByTag("group")
+	groupNode, ok := resp.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "group", In: "response to invite group info query"}
+		return nil, &ElementMissingError{Tag: groupNodeTag, In: "response to invite group info query"}
 	}
 	return cli.parseGroupNode(&groupNode)
 }
@@ -88,7 +88,7 @@ func (cli *Client) JoinGroupWithInvite(ctx context.Context, jid, inviter types.J
 func (cli *Client) GetGroupInfoFromLink(ctx context.Context, code string) (*types.GroupInfo, error) {
 	code = strings.TrimPrefix(code, InviteLinkPrefix)
 	resp, err := cli.sendGroupIQ(ctx, iqGet, types.GroupServerJID, waBinary.Node{
-		Tag:   "invite",
+		Tag:   groupInviteTag,
 		Attrs: waBinary.Attrs{"code": code},
 	})
 	if errors.Is(err, ErrIQGone) {
@@ -98,9 +98,9 @@ func (cli *Client) GetGroupInfoFromLink(ctx context.Context, code string) (*type
 	} else if err != nil {
 		return nil, err
 	}
-	groupNode, ok := resp.GetOptionalChildByTag("group")
+	groupNode, ok := resp.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "group", In: "response to group link info query"}
+		return nil, &ElementMissingError{Tag: groupNodeTag, In: "response to group link info query"}
 	}
 	return cli.parseGroupNode(&groupNode)
 }
@@ -109,7 +109,7 @@ func (cli *Client) GetGroupInfoFromLink(ctx context.Context, code string) (*type
 func (cli *Client) JoinGroupWithLink(ctx context.Context, code string) (types.JID, error) {
 	code = strings.TrimPrefix(code, InviteLinkPrefix)
 	resp, err := cli.sendGroupIQ(ctx, iqSet, types.GroupServerJID, waBinary.Node{
-		Tag:   "invite",
+		Tag:   groupInviteTag,
 		Attrs: waBinary.Attrs{"code": code},
 	})
 	if errors.Is(err, ErrIQGone) {
@@ -123,9 +123,9 @@ func (cli *Client) JoinGroupWithLink(ctx context.Context, code string) (types.JI
 	if ok {
 		return membershipApprovalModeNode.AttrGetter().JID("jid"), nil
 	}
-	groupNode, ok := resp.GetOptionalChildByTag("group")
+	groupNode, ok := resp.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
-		return types.EmptyJID, &ElementMissingError{Tag: "group", In: "response to group link join query"}
+		return types.EmptyJID, &ElementMissingError{Tag: groupNodeTag, In: "response to group link join query"}
 	}
 	return groupNode.AttrGetter().JID("jid"), nil
 }

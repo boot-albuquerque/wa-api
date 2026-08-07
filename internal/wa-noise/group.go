@@ -18,7 +18,7 @@ import (
 
 func (cli *Client) sendGroupIQ(ctx context.Context, iqType infoQueryType, jid types.JID, content waBinary.Node) (*waBinary.Node, error) {
 	return cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:g2",
+		Namespace: groupIQNamespace,
 		Type:      iqType,
 		To:        jid,
 		Content:   []waBinary.Node{content},
@@ -31,7 +31,7 @@ func (cli *Client) GetJoinedGroups(ctx context.Context) ([]*types.GroupInfo, err
 		Tag: "participating",
 		Content: []waBinary.Node{
 			{Tag: "participants"},
-			{Tag: "description"},
+			{Tag: groupDescriptionTag},
 		},
 	})
 	if err != nil {
@@ -46,7 +46,7 @@ func (cli *Client) GetJoinedGroups(ctx context.Context) ([]*types.GroupInfo, err
 	var allLIDPairs []store.LIDMapping
 	var allRedactedPhones []store.RedactedPhoneEntry
 	for _, child := range children {
-		if child.Tag != "group" {
+		if child.Tag != groupNodeTag {
 			cli.Log.Debugf("Unexpected child in group list response: %s", child.XMLString())
 			continue
 		}
@@ -82,7 +82,7 @@ func (cli *Client) GetSubGroups(ctx context.Context, community types.JID) ([]*ty
 	}
 	var parsedGroups []*types.GroupLinkTarget
 	for _, child := range groups.GetChildren() {
-		if child.Tag == "group" {
+		if child.Tag == groupNodeTag {
 			parsedGroup, err := parseGroupLinkTargetNode(&child)
 			if err != nil {
 				return parsedGroups, fmt.Errorf("failed to parse group in subgroups list: %w", err)
@@ -120,15 +120,15 @@ func (cli *Client) GetGroupInfo(ctx context.Context, jid types.JID) (*types.Grou
 
 func (cli *Client) cacheGroupInfo(groupInfo *types.GroupInfo, lock bool) ([]store.LIDMapping, []store.RedactedPhoneEntry) {
 	participants := make([]types.JID, len(groupInfo.Participants))
-	lidPairs := make([]store.LIDMapping, len(groupInfo.Participants))
+	lidPairs := make([]store.LIDMapping, 0, len(groupInfo.Participants))
 	redactedPhones := make([]store.RedactedPhoneEntry, 0)
 	for i, part := range groupInfo.Participants {
 		participants[i] = part.JID
 		if !part.PhoneNumber.IsEmpty() && !part.LID.IsEmpty() {
-			lidPairs[i] = store.LIDMapping{
+			lidPairs = append(lidPairs, store.LIDMapping{
 				LID: part.LID,
 				PN:  part.PhoneNumber,
-			}
+			})
 		}
 		if part.DisplayName != "" && !part.LID.IsEmpty() {
 			redactedPhones = append(redactedPhones, store.RedactedPhoneEntry{
@@ -162,7 +162,7 @@ func (cli *Client) getGroupInfo(ctx context.Context, jid types.JID, lockParticip
 		return nil, err
 	}
 
-	groupNode, ok := res.GetOptionalChildByTag("group")
+	groupNode, ok := res.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
 		return nil, &ElementMissingError{Tag: "groups", In: "response to group info query"}
 	}

@@ -28,7 +28,7 @@ func (cli *Client) UpdateGroupParticipants(ctx context.Context, jid types.JID, p
 	content := make([]waBinary.Node, len(participantChanges))
 	for i, participantJID := range participantChanges {
 		content[i] = waBinary.Node{
-			Tag:   "participant",
+			Tag:   groupParticipantTag,
 			Attrs: waBinary.Attrs{"jid": participantJID},
 		}
 		if participantJID.Server == types.HiddenUserServer && action == ParticipantChangeAdd {
@@ -51,7 +51,7 @@ func (cli *Client) UpdateGroupParticipants(ctx context.Context, jid types.JID, p
 	if !ok {
 		return nil, &ElementMissingError{Tag: string(action), In: "response to group participants update"}
 	}
-	requestParticipants := requestAction.GetChildrenByTag("participant")
+	requestParticipants := requestAction.GetChildrenByTag(groupParticipantTag)
 	participants := make([]types.GroupParticipant, len(requestParticipants))
 	for i, child := range requestParticipants {
 		participants[i] = parseParticipant(child.AttrGetter(), &child)
@@ -94,7 +94,7 @@ func (cli *Client) UpdateGroupRequestParticipants(ctx context.Context, jid types
 	content := make([]waBinary.Node, len(participantChanges))
 	for i, participantJID := range participantChanges {
 		content[i] = waBinary.Node{
-			Tag:   "participant",
+			Tag:   groupParticipantTag,
 			Attrs: waBinary.Attrs{"jid": participantJID},
 		}
 	}
@@ -116,7 +116,7 @@ func (cli *Client) UpdateGroupRequestParticipants(ctx context.Context, jid types
 	if !ok {
 		return nil, &ElementMissingError{Tag: string(action), In: "response to group request participants update"}
 	}
-	requestParticipants := requestAction.GetChildrenByTag("participant")
+	requestParticipants := requestAction.GetChildrenByTag(groupParticipantTag)
 	participants := make([]types.GroupParticipant, len(requestParticipants))
 	for i, child := range requestParticipants {
 		participants[i] = parseParticipant(child.AttrGetter(), &child)

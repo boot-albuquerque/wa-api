@@ -43,7 +43,7 @@ func (cli *Client) CreateGroup(ctx context.Context, req ReqCreateGroup) (*types.
 	participantNodes := make([]waBinary.Node, len(req.Participants), len(req.Participants)+1)
 	for i, participant := range req.Participants {
 		participantNodes[i] = waBinary.Node{
-			Tag:   "participant",
+			Tag:   groupParticipantTag,
 			Attrs: waBinary.Attrs{"jid": participant},
 		}
 		pt, err := cli.Store.PrivacyTokens.GetPrivacyToken(ctx, participant)
@@ -61,29 +61,29 @@ func (cli *Client) CreateGroup(ctx context.Context, req ReqCreateGroup) (*types.
 	}
 	if req.IsParent {
 		if req.DefaultMembershipApprovalMode == "" {
-			req.DefaultMembershipApprovalMode = "request_required"
+			req.DefaultMembershipApprovalMode = defaultMembershipApprovalMode
 		}
 		participantNodes = append(participantNodes, waBinary.Node{
-			Tag: "parent",
+			Tag: groupParentTag,
 			Attrs: waBinary.Attrs{
 				"default_membership_approval_mode": req.DefaultMembershipApprovalMode,
 			},
 		})
 	} else if !req.LinkedParentJID.IsEmpty() {
 		participantNodes = append(participantNodes, waBinary.Node{
-			Tag:   "linked_parent",
+			Tag:   groupLinkedParentTag,
 			Attrs: waBinary.Attrs{"jid": req.LinkedParentJID},
 		})
 	}
 	if req.IsLocked {
-		participantNodes = append(participantNodes, waBinary.Node{Tag: "locked"})
+		participantNodes = append(participantNodes, waBinary.Node{Tag: groupLockedTag})
 	}
 	if req.IsAnnounce {
-		participantNodes = append(participantNodes, waBinary.Node{Tag: "announcement"})
+		participantNodes = append(participantNodes, waBinary.Node{Tag: groupAnnouncementTag})
 	}
 	if req.IsEphemeral {
 		participantNodes = append(participantNodes, waBinary.Node{
-			Tag: "ephemeral",
+			Tag: groupEphemeralTag,
 			Attrs: waBinary.Attrs{
 				"expiration": req.DisappearingTimer,
 				"trigger":    "1", // TODO what's this?
@@ -92,15 +92,15 @@ func (cli *Client) CreateGroup(ctx context.Context, req ReqCreateGroup) (*types.
 	}
 	if req.IsJoinApprovalRequired {
 		participantNodes = append(participantNodes, waBinary.Node{
-			Tag: "membership_approval_mode",
+			Tag: groupMembershipApprovalModeTag,
 			Content: []waBinary.Node{{
-				Tag:   "group_join",
-				Attrs: waBinary.Attrs{"state": "on"},
+				Tag:   groupJoinTag,
+				Attrs: waBinary.Attrs{"state": groupJoinStateOn},
 			}},
 		})
 	}
 	// WhatsApp web doesn't seem to include the static prefix for these
-	key := strings.TrimPrefix(req.CreateKey, "3EB0")
+	key := strings.TrimPrefix(req.CreateKey, WebMessageIDPrefix)
 	resp, err := cli.sendGroupIQ(ctx, iqSet, types.GroupServerJID, waBinary.Node{
 		Tag: "create",
 		Attrs: waBinary.Attrs{
@@ -112,9 +112,9 @@ func (cli *Client) CreateGroup(ctx context.Context, req ReqCreateGroup) (*types.
 	if err != nil {
 		return nil, err
 	}
-	groupNode, ok := resp.GetOptionalChildByTag("group")
+	groupNode, ok := resp.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "group", In: "response to create group query"}
+		return nil, &ElementMissingError{Tag: groupNodeTag, In: "response to create group query"}
 	}
 	return cli.parseGroupNode(&groupNode)
 }
@@ -122,10 +122,10 @@ func (cli *Client) CreateGroup(ctx context.Context, req ReqCreateGroup) (*types.
 // UnlinkGroup removes a child group from a parent community.
 func (cli *Client) UnlinkGroup(ctx context.Context, parent, child types.JID) error {
 	_, err := cli.sendGroupIQ(ctx, iqSet, parent, waBinary.Node{
-		Tag:   "unlink",
+		Tag:   groupUnlinkTag,
 		Attrs: waBinary.Attrs{"unlink_type": string(types.GroupLinkChangeTypeSub)},
 		Content: []waBinary.Node{{
-			Tag:   "group",
+			Tag:   groupNodeTag,
 			Attrs: waBinary.Attrs{"jid": child},
 		}},
 	})
@@ -139,10 +139,10 @@ func (cli *Client) LinkGroup(ctx context.Context, parent, child types.JID) error
 	_, err := cli.sendGroupIQ(ctx, iqSet, parent, waBinary.Node{
 		Tag: "links",
 		Content: []waBinary.Node{{
-			Tag:   "link",
+			Tag:   groupLinkTag,
 			Attrs: waBinary.Attrs{"link_type": string(types.GroupLinkChangeTypeSub)},
 			Content: []waBinary.Node{{
-				Tag:   "group",
+				Tag:   groupNodeTag,
 				Attrs: waBinary.Attrs{"jid": child},
 			}},
 		}},
@@ -155,7 +155,7 @@ func (cli *Client) LeaveGroup(ctx context.Context, jid types.JID) error {
 	_, err := cli.sendGroupIQ(ctx, iqSet, types.GroupServerJID, waBinary.Node{
 		Tag: "leave",
 		Content: []waBinary.Node{{
-			Tag:   "group",
+			Tag:   groupNodeTag,
 			Attrs: waBinary.Attrs{"id": jid},
 		}},
 	})
