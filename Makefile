@@ -260,7 +260,7 @@ waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exce
 # check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
 # subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
 # fases do ADR-0004 forem cobrindo o resto.
-WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
+WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 	./internal/wa-noise/protocol/msgpad/ ./internal/wa-noise/security/paircrypto/ \
 	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/capabilities/media/ \
 	./internal/wa-noise/capabilities/newsletter/ ./internal/wa-noise/capabilities/appstatesync/ \
