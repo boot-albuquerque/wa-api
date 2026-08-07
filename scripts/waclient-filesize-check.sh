@@ -54,8 +54,8 @@ internal/wa-noise/keepalive \
 internal/wa-noise/proxyconf \
 internal/wa-noise/protocol/socket \
 internal/wa-noise/protocol/appstate \
-internal/wa-noise/store \
-internal/wa-noise/store/sqlstore \
+internal/wa-noise/persistence/store \
+internal/wa-noise/persistence/store/sqlstore \
 internal/wa-noise/protocol/binary \
 internal/wa-noise/protocol/binary/token \
 internal/wa-noise/protocol/types \

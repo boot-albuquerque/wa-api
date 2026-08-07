@@ -26,7 +26,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waWeb"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )

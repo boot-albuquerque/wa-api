@@ -11,7 +11,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 const (

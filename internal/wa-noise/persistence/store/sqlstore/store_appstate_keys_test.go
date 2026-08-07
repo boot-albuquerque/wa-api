@@ -11,7 +11,7 @@ import (
 	"context"
 	"testing"
 
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 func syncKey(data string, ts int64) store.AppStateSyncKey {

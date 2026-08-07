@@ -4,7 +4,7 @@ import (
 	"context"
 	wasession "wa-api/pkg/infra/wa-noise/session"
 
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 
 	"github.com/rs/zerolog/log"
 

@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"wa-api/internal/wa-noise/store/sqlstore"
+	"wa-api/internal/wa-noise/persistence/store/sqlstore"
 
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"

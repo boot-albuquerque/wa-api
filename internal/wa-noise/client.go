@@ -31,7 +31,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"

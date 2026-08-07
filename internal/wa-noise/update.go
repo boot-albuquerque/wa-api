@@ -15,7 +15,7 @@ import (
 	"strconv"
 
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 var clientVersionRegex = regexp.MustCompile(`"client_revision":(\d+),`)

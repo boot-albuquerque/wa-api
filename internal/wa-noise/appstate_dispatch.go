@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 // Fachada da traducao de mutacoes em eventos. A logica vive em

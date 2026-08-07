@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/prekeys"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

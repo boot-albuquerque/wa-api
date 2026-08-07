@@ -16,7 +16,7 @@ import (
 	"go.mau.fi/util/exhttp"
 
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/keys"
 )

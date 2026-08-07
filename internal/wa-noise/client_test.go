@@ -14,7 +14,7 @@ import (
 	"syscall"
 
 	"wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/store/sqlstore"
+	"wa-api/internal/wa-noise/persistence/store/sqlstore"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )

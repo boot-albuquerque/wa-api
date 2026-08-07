@@ -5,7 +5,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 // TestRealWAClient_Store devolve Client.Store.
