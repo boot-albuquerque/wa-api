@@ -340,6 +340,7 @@ internal/wa-noise/capabilities/user.DeviceCache.Len	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.Lock	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.SetLocked	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.Unlock	EXCLUDED	X5
+internal/wa-noise/capabilities/user.DeviceCache.sweepLocked	EXCLUDED	X5
 internal/wa-noise/capabilities/user.GetBlocklist	EXCLUDED	X5
 internal/wa-noise/capabilities/user.GetBotListV2	EXCLUDED	X5
 internal/wa-noise/capabilities/user.GetBotProfiles	EXCLUDED	X5

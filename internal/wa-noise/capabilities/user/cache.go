@@ -2,6 +2,7 @@ package user
 
 import (
 	"sync"
+	"time"
 
 	"wa-api/internal/wa-noise/protocol/types"
 )
@@ -44,9 +45,39 @@ type DeviceEntry struct {
 // Por conter um mutex, DeviceCache NUNCA pode ser copiado por valor depois de
 // usado — sempre passe *DeviceCache.
 type DeviceCache struct {
-	lock    sync.Mutex
-	entries map[types.JID]DeviceEntry
+	lock      sync.Mutex
+	entries   map[types.JID]cachedDevices
+	lastSweep time.Time
 }
+
+// cachedDevices e' a entrada com o carimbo de quando foi gravada.
+type cachedDevices struct {
+	entry DeviceEntry
+	seen  time.Time
+}
+
+// Politica de expiracao do cache de dispositivos.
+//
+// A invalidacao PRIMARIA e' push: o servidor manda notificacao de dispositivo
+// (`handleDeviceNotification`) quando o usuario adiciona ou remove um aparelho
+// vinculado, e o cache e' apagado ali. O TTL abaixo NAO substitui isso — ele
+// existe como rede para dois casos que o push nao cobre:
+//
+//  1. notificacao perdida (desconexao no momento errado), que deixaria a lista
+//     de dispositivos errada ate' o processo reiniciar;
+//  2. chave orfa. GetUserDevices grava o resultado sob o JID que o SERVIDOR
+//     devolveu, que pode nao ser o consultado — se isso acontecer, a entrada
+//     nunca mais e' lida nem apagada e o mapa so' cresce (F37 em HOUSEKEEP.md).
+//
+// 24h e' longo de proposito. GetDevices segura o lock do cache ATRAVESSANDO a
+// consulta usync ao servidor, entao expirar agressivamente troca memoria por
+// idas a' rede com mutex segurado — que e' o recurso mais caro aqui. Para
+// referencia, o evolution-api usa NodeCache com stdTTL de 300000s (~3,5 dias)
+// no mesmo cache.
+const (
+	deviceCacheTTL           = 24 * time.Hour
+	deviceCacheSweepInterval = time.Hour
+)
 
 // Lock/Unlock expoem o mutex do cache. Substituem o par
 // `cli.userDevicesCacheLock.Lock()` / `.Unlock()` da raiz.
@@ -61,22 +92,45 @@ func (c *DeviceCache) Lock() { c.lock.Lock() }
 // Unlock libera o lock tomado por Lock.
 func (c *DeviceCache) Unlock() { c.lock.Unlock() }
 
-// GetLocked devolve a entrada de jid.
+// GetLocked devolve a entrada de jid, tratando entrada expirada como ausente.
 //
 // So' pode ser chamado com o lock segurado.
 func (c *DeviceCache) GetLocked(jid types.JID) (DeviceEntry, bool) {
 	e, ok := c.entries[jid]
-	return e, ok
+	if !ok || time.Since(e.seen) > deviceCacheTTL {
+		return DeviceEntry{}, false
+	}
+	return e.entry, true
 }
 
 // SetLocked grava a entrada de jid, criando o mapa se ainda nao existir.
 //
 // So' pode ser chamado com o lock segurado.
 func (c *DeviceCache) SetLocked(jid types.JID, entry DeviceEntry) {
+	now := time.Now()
+	c.sweepLocked(now)
 	if c.entries == nil {
-		c.entries = make(map[types.JID]DeviceEntry)
+		c.entries = make(map[types.JID]cachedDevices)
 	}
-	c.entries[jid] = entry
+	c.entries[jid] = cachedDevices{entry: entry, seen: now}
+}
+
+// sweepLocked remove entradas expiradas, no maximo uma vez por
+// deviceCacheSweepInterval.
+//
+// GetLocked ja' trata expirada como ausente, entao a varredura nao muda
+// resultado nenhum — ela existe para o caso 2 do comentario da politica: chave
+// orfa, que ninguem consulta e portanto nunca seria expirada pela leitura.
+func (c *DeviceCache) sweepLocked(now time.Time) {
+	if now.Sub(c.lastSweep) < deviceCacheSweepInterval {
+		return
+	}
+	c.lastSweep = now
+	for jid, e := range c.entries {
+		if now.Sub(e.seen) > deviceCacheTTL {
+			delete(c.entries, jid)
+		}
+	}
 }
 
 // DeleteLocked remove a entrada de jid.

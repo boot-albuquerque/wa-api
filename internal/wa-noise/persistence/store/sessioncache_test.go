@@ -341,3 +341,34 @@ func TestPutCachedSessionsClearsCache(t *testing.T) {
 		t.Fatalf("o segundo flush nao deveria escrever nada (calls=%d)", m.putManyCalls)
 	}
 }
+
+// A prova de que PutCachedSessions nao alcanca mais o panic da F22.
+//
+// Marcar um record FRESCO como sujo e' a situacao que a invariante acidental
+// tornava impossivel: putCachedSession so' e' chamado pelo libsignal depois do
+// handshake. Aqui a forcamos direto, que e' o que uma mudanca no libsignal ou
+// no fluxo de handshake faria sem avisar. Antes da correcao isto derrubava o
+// processo; agora a entrada e' apenas ignorada.
+func TestPutCachedSessionsIgnoraRecordFrescoMarcadoComoSujo(t *testing.T) {
+	ctx := context.Background()
+	m := newMemSessionStore()
+	device := newDeviceWithSessions(m)
+
+	_, ctx, err := device.WithCachedSessions(ctx, []string{"fresca:0", "real:0"})
+	if err != nil {
+		t.Fatalf("WithCachedSessions: %v", err)
+	}
+	putCachedSession(ctx, "fresca:0", newEmptySession())
+	putCachedSession(ctx, "real:0", newStoredSession(t))
+
+	// Sem a guarda de IsFresh, isto entra em panic dentro de Serialize().
+	if err = device.PutCachedSessions(ctx); err != nil {
+		t.Fatalf("PutCachedSessions: %v", err)
+	}
+	if _, ok := m.lastPutSession["fresca:0"]; ok {
+		t.Error("a sessao fresca nao pode ser persistida — nao passou por handshake")
+	}
+	if _, ok := m.lastPutSession["real:0"]; !ok {
+		t.Errorf("a sessao completa deveria ter sido persistida, veio %v", m.lastPutSession)
+	}
+}

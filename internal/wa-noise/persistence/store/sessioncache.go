@@ -104,9 +104,27 @@ func (device *Device) PutCachedSessions(ctx context.Context) error {
 	}
 	dirtySessions := make(map[string][]byte)
 	for addr, item := range cache.Iter() {
-		if item.Dirty {
-			dirtySessions[addr] = item.Record.Serialize()
+		if !item.Dirty {
+			continue
 		}
+		// Record.Serialize() entra em PANIC num record "fresco": um
+		// record.NewSession() tem localIdentityPublic, remoteIdentityPublic,
+		// senderBaseKey e senderChain nil, e State.structure() os desreferencia
+		// sem checar (F22 em HOUSEKEEP.md).
+		//
+		// Nao explodia em producao porque Dirty so' e' setado por
+		// putCachedSession, que o libsignal chama DEPOIS do handshake — quando
+		// o state ja' esta' preenchido. Ou seja, a protecao existia, mas era
+		// uma invariante acidental: nada no codigo a declarava, e qualquer
+		// mudanca no libsignal ou no fluxo de handshake a quebraria em silencio.
+		//
+		// IsFresh() e' o predicado exportado que torna a invariante explicita —
+		// true para NewSession, false para NewSessionFromBytes. A entrada da
+		// F22 afirmava que ele nao existia; existe, em SessionRecord.go:113.
+		if item.Record.IsFresh() {
+			continue
+		}
+		dirtySessions[addr] = item.Record.Serialize()
 	}
 	if len(dirtySessions) > 0 {
 		err := device.Sessions.PutManySessions(ctx, dirtySessions)

@@ -763,11 +763,35 @@ não tem state utilizável, mas não há predicado exportado para checar isso se
 chamar `Serialize()` — que é exatamente o que panica. A alternativa honesta é
 `recover()` localizado, que é pior do que o problema.
 
-**Status**: **não corrigido**, documentado. Ficam versionados dois testes que
-travam a assimetria para quem for mexer no cache de sessão:
-`TestFreshSessionIsNotSerializable` (prova o panic) e
-`TestStoredSessionFixtureRoundTrips` (mostra a forma mínima de sessão que
-sobrevive ao round trip, usada como duplo nos demais testes).
+**Status**: **CORRIGIDO** (2026-08-07) — e a afirmação central desta entrada
+estava **errada**.
+
+A entrada dizia: *"não há predicado exportado para checar isso sem chamar
+`Serialize()`"*. Há dois, no próprio `go.mau.fi/libsignal@v0.2.1`:
+
+- `func (r *Session) IsFresh() bool` — `SessionRecord.go:113`. É exatamente a
+  procedência que faltava: `true` para `NewSession`, `false` para
+  `NewSessionFromBytes`.
+- `func (s *State) HasSenderChain() bool` — `SessionState.go:222`, que checa um
+  dos quatro campos nil que fazem `structure()` panicar.
+
+`PutCachedSessions` passou a pular entradas com `IsFresh()`. Não precisa de PR
+upstream nem de vendorizar o libsignal.
+
+O que muda de fato: a proteção **já existia**, mas era acidental — `Dirty` só é
+setado por `putCachedSession`, que o libsignal chama depois do handshake. Nada
+no código declarava essa invariante, e uma mudança no libsignal ou no fluxo de
+handshake a quebraria em silêncio. Agora ela é explícita.
+
+`TestFreshSessionIsNotSerializable` continua versionado: o defeito do libsignal
+não mudou, só deixou de ser alcançável por nós.
+`TestPutCachedSessionsIgnoraRecordFrescoMarcadoComoSujo` força a situação que a
+invariante acidental tornava impossível (record fresco marcado como sujo);
+controle negativo executado — sem a guarda, entra em panic.
+
+Comparação: o Baileys resolve o mesmo problema com `session.haveOpenSession()`
+em `validateSession`. As duas implementações têm o predicado; só a nossa não o
+usava.
 
 ---
 
@@ -1554,9 +1578,28 @@ trabalho repetido silenciosamente — e o mapa cresce com as duas chaves.
 resolver o JID de entrada para a forma canônica (via `cli.Store.LIDs`) antes do
 lookup e da escrita.
 
-**Status**: **não corrigido**. Confirmar se o servidor de fato responde com JID
-diferente do consultado exige tráfego real; sem isso a correção é especulação, e
-mudaria a chave de um cache quente. Pendente de decisão.
+**Status**: **CORRIGIDO** (2026-08-07), por um caminho que torna a pergunta
+desnecessária em vez de respondê-la.
+
+A entrada dizia que confirmar a divergência de JID exige tráfego real. Exige
+mesmo — mas não é preciso saber a resposta para fechar o buraco. `DeviceCache`
+ganhou TTL (`deviceCacheTTL = 24h`) mais varredura periódica: se a chave órfã
+existe, ela expira; se não existe, nada muda.
+
+O padrão veio do `evolution-api`, que injeta no Baileys
+`new NodeCache({ stdTTL: 300000 })` como `userDevicesCache` — cache de
+dispositivos com TTL. Eles também não responderam a pergunta; fizeram ela deixar
+de importar.
+
+Escolha do valor documentada no código: 24h é longo de propósito porque
+`GetDevices` segura o lock do cache **atravessando** a consulta usync ao
+servidor, então expirar agressivamente troca memória por ida à rede com mutex
+segurado. A invalidação primária continua sendo push do servidor; o TTL é rede
+para notificação perdida e chave órfã.
+
+Travado por `TestDeviceCacheEntradaExpiraNaLeitura`,
+`TestDeviceCacheVarreduraRemoveChaveOrfa` e
+`TestDeviceCacheVarreNoMaximoUmaVezPorIntervalo`.
 
 ---
 
