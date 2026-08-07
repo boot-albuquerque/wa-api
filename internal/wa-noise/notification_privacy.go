@@ -11,6 +11,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/types/events"
 )
 
@@ -62,7 +63,7 @@ func (cli *Client) handlePrivacyTokenNotification(ctx context.Context, node *waB
 			cli.Log.Warnf("privacy_token notification contained unexpected <%s> tag", child.Tag)
 			continue
 		}
-		if tokenType := ag.String("type"); tokenType != tcTokenType {
+		if tokenType := ag.String("type"); tokenType != tctoken.TokenType {
 			cli.Log.Warnf("privacy_token notification contained unexpected token type %s", tokenType)
 			continue
 		}

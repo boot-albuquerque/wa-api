@@ -249,7 +249,7 @@ func TestNewClientDefaults(t *testing.T) {
 		cli.groupCache == nil || cli.userDevicesCache == nil ||
 		cli.recentMessagesMap == nil || cli.sessionRecreateHistory == nil ||
 		cli.pendingPhoneRerequests == nil ||
-		cli.incomingRetryRequestCounter == nil || cli.tcTokenSenderTS == nil {
+		cli.incomingRetryRequestCounter == nil {
 		t.Error("algum mapa interno ficou nil")
 	}
 	if cli.handlerQueue == nil || cli.socketWait == nil ||

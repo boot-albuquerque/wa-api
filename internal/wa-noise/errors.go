@@ -13,6 +13,7 @@ import (
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/pairing"
 )
 
 // Miscellaneous errors
@@ -26,8 +27,10 @@ var (
 
 	ErrAlreadyConnected = errors.New("websocket is already connected")
 
-	ErrPhoneNumberTooShort           = errors.New("phone number too short")
-	ErrPhoneNumberIsNotInternational = errors.New("international phone number required (must not start with 0)")
+	// Os dois sao o MESMO valor de pairing.*, nao copias — a mesma armadilha
+	// de aliasing documentada em ErrAppStateUpdate.
+	ErrPhoneNumberTooShort           = pairing.ErrPhoneNumberTooShort
+	ErrPhoneNumberIsNotInternational = pairing.ErrPhoneNumberIsNotInternational
 
 	ErrQRAlreadyConnected = errors.New("GetQRChannel must be called before connecting")
 	ErrQRStoreContainsID  = errors.New("GetQRChannel can only be called when there's no user ID in the client's Store")
@@ -45,38 +48,24 @@ var (
 
 // Errors that happen while confirming device pairing
 var (
-	ErrPairInvalidDeviceIdentityHMAC = errors.New("invalid device identity HMAC in pair success message")
-	ErrPairInvalidDeviceSignature    = errors.New("invalid device signature in pair success message")
-	ErrPairRejectedLocally           = errors.New("local PrePairCallback rejected pairing")
+	// Os tres sao o MESMO valor de pairing.*, pelo mesmo racional de aliasing
+	// dos erros de app state e de midia.
+	ErrPairInvalidDeviceIdentityHMAC = pairing.ErrInvalidDeviceIdentityHMAC
+	ErrPairInvalidDeviceSignature    = pairing.ErrInvalidDeviceSignature
+	ErrPairRejectedLocally           = pairing.ErrRejectedLocally
 )
 
 // PairProtoError is included in an events.PairError if the pairing failed due to a protobuf error.
-type PairProtoError struct {
-	Message  string
-	ProtoErr error
-}
-
-func (err *PairProtoError) Error() string {
-	return fmt.Sprintf("%s: %v", err.Message, err.ProtoErr)
-}
-
-func (err *PairProtoError) Unwrap() error {
-	return err.ProtoErr
-}
+//
+// Apelido de tipo: a definicao vive em internal/wa-noise/pairing/. A ordem dos
+// campos (Message, ProtoErr) e' preservada porque ha' literais compostos
+// posicionais no codigo movido.
+type PairProtoError = pairing.ProtoError
 
 // PairDatabaseError is included in an events.PairError if the pairing failed due to being unable to save the credentials to the device store.
-type PairDatabaseError struct {
-	Message string
-	DBErr   error
-}
-
-func (err *PairDatabaseError) Error() string {
-	return fmt.Sprintf("%s: %v", err.Message, err.DBErr)
-}
-
-func (err *PairDatabaseError) Unwrap() error {
-	return err.DBErr
-}
+//
+// Apelido de tipo, mesmo racional de PairProtoError.
+type PairDatabaseError = pairing.DatabaseError
 
 var (
 	// ErrProfilePictureUnauthorized is returned by GetProfilePictureInfo when trying to get the profile picture of a user

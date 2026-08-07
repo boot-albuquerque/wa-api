@@ -24,11 +24,13 @@ import (
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/pairing"
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/store"
+	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 	waLog "wa-api/internal/wa-noise/util/log"
@@ -111,11 +113,7 @@ type Client struct {
 
 	messageSendLock sync.Mutex
 
-	tcTokenSenderTS            map[types.JID]time.Time
-	tcTokenSenderTSLock        sync.Mutex
-	lastTCTokenSenderTSCleanup time.Time
-	tcTokenDBPruneLock         sync.Mutex
-	lastTCTokenDBPrune         time.Time
+	tcToken tctoken.State // cache de emissao de tctoken e os dois locks dele
 
 	privacySettingsCache atomic.Value
 
@@ -165,8 +163,7 @@ type Client struct {
 
 	BackgroundEventCtx context.Context
 
-	phoneLinkingCache *phoneLinkingCache
-
+	pairState pairing.State // sessao de pareamento por codigo pendente
 	uniqueID  string
 	idCounter atomic.Uint64
 
@@ -242,7 +239,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 
 		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
 
-		tcTokenSenderTS:  make(map[types.JID]time.Time),
 		groupCache:       make(map[types.JID]*groupMetaCache),
 		userDevicesCache: make(map[types.JID]deviceCache),
 
