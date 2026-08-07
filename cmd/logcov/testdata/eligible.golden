@@ -590,6 +590,7 @@ internal/wa-noise.isAuthErrorDisconnect	EXCLUDED	X5
 internal/wa-noise.isDisconnectNode	EXCLUDED	X5
 internal/wa-noise.isRetryableConnectError	EXCLUDED	X5
 internal/wa-noise.isTCTokenExpired	EXCLUDED	X5
+internal/wa-noise.isValidLIDMapping	EXCLUDED	X5
 internal/wa-noise.marshalMessage	EXCLUDED	X5
 internal/wa-noise.newsletterInviteInput	EXCLUDED	X5
 internal/wa-noise.newsletterJIDInput	EXCLUDED	X5
@@ -597,6 +598,7 @@ internal/wa-noise.newsletterMessageUpdatesAttrs	EXCLUDED	X5
 internal/wa-noise.newsletterMessagesAttrs	EXCLUDED	X5
 internal/wa-noise.newsletterReactionAttrs	EXCLUDED	X5
 internal/wa-noise.newsletterViewedItems	EXCLUDED	X5
+internal/wa-noise.nodeContentString	EXCLUDED	X5
 internal/wa-noise.nodeToPreKey	EXCLUDED	X5
 internal/wa-noise.nodeToPreKeyBundle	EXCLUDED	X5
 internal/wa-noise.parseDeviceList	EXCLUDED	X5

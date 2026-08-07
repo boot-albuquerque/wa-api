@@ -3480,3 +3480,349 @@ linhas (maior: `group_notification.go`, 226).
 `.logcov-exclude`) — mesma regeneração mecânica dos lotes anteriores.
 `git diff --stat internal/wa-noise/proto/` continua vazio, e
 `internals.go`/`internals_generate.go` não aparecem no diff do lote.
+
+---
+
+## Fase E — lote 7: usuário (raiz), 2026-08-07
+
+### Contexto
+
+Sétimo lote da Fase E (ver o lote 1 para o porquê da fase). São os 8 arquivos de
+usuário da **raiz** do pacote, todos `package whatsmeow`:
+
+- **transporte** — `user_usync.go` (a consulta USync, usada por 4 dos outros)
+- **parsing** — `user_devices.go`, `user_business.go`, `user_blocklist.go`
+- **ação** — `user.go`, `user_avatar.go`, `user_bots.go`, `user_links.go`
+
+Nada a ver com `pkg/infra/wa-noise/user/`, que é a camada de adaptação do
+projeto e já foi feita em outra frente.
+
+Nenhum arquivo foi dividido: o maior (`user.go`) tem 184 linhas, bem abaixo do
+teto de 300, e a divisão por responsabilidade já foi feita na Fase A (ver a
+entrada de `user.go` 965→172 lá em cima).
+
+A auditoria foi dirigida à mesma classe de bug dos lotes anteriores — type
+assertion sem comma-ok, indexação sem guarda, `nil` não tratado e acumulador de
+mapeamento LID/PN construído errado — com atenção extra em `user_devices.go` e
+`user_usync.go`, como o lote 6 recomendou.
+
+---
+
+### Correções
+
+Três. A primeira é a mais grave já encontrada na Fase E: **panic remoto**, não
+apenas perda de dado.
+
+#### `user_bots.go:72-96` (`GetBotProfiles`) — 11 panics disparáveis por resposta do servidor
+
+Antes:
+
+```go
+name := string(profile.GetChildByTag("name").Content.([]byte))
+attributes := string(profile.GetChildByTag("attributes").Content.([]byte))
+description := string(profile.GetChildByTag("description").Content.([]byte))
+category := string(profile.GetChildByTag("category").Content.([]byte))
+commandDescription := string(commandsNode.GetChildByTag("description").Content.([]byte))
+// + Name/Description de cada <command> e emoji/text de cada <prompt>
+```
+
+Onze `.Content.([]byte)` **sem comma-ok**, todos sobre nós opcionais vindos do
+servidor. `Node.GetChildByTag` devolve o **próprio nó** quando não acha o filho
+(`binary/node.go:116`), e nesse caso `Content` é `[]waBinary.Node` ou `nil` —
+**nunca** `[]byte`. Ou seja: qualquer `<profile>` de bot que venha sem
+`<name>`, sem `<description>`, sem `<category>` etc. derruba o processo com
+`interface conversion: interface {} is nil, not []uint8`. Não é caso exótico:
+basta o servidor mudar o formato ou o bot não ter um dos campos.
+
+Era o **único** ponto da raiz do pacote com esse padrão — os outros 40+ usos de
+`.Content.([]byte)` já eram comma-ok (conferido por grep no lote).
+
+Corrigido com um helper de três linhas, aplicado nos 11 pontos:
+
+```go
+func nodeContentString(node waBinary.Node) string {
+	content, _ := node.Content.([]byte)
+	return string(content)
+}
+```
+
+Travado por `TestNodeContentStringHandlesEveryContentShape` e
+`TestNodeContentStringOnMissingChildDoesNotPanic`, que passam exatamente as
+formas de `Content` que faziam panic (nil, `string`, `[]waBinary.Node`).
+
+O helper foi reaproveitado em `user.go` (`info.Status`) e em
+`user_business.go` (`address`, `email`, nome de categoria, `profile_options`),
+onde a leitura já era comma-ok mas escrita em duas linhas — mesma semântica,
+uma linha a menos, e um só lugar para consertar se o contrato mudar.
+
+#### `user_bots.go:40-43` (`GetBotListV2`) — entrada malformada envenena a consulta seguinte
+
+Antes, cada `<bot>` de `<section type="all">` virava um `BotListInfo` sem
+conferir se os atributos foram lidos:
+
+```go
+ag := bot.AttrGetter()
+list = append(list, types.BotListInfo{
+	PersonaID: ag.String("persona_id"),
+	BotJID:    ag.JID("jid"),
+})
+```
+
+`AttrUtility.JID` devolve `types.JID{}` quando o atributo falta ou é de outro
+tipo, registrando o erro num acumulador que **ninguém lê aqui**. O resultado é
+um JID vazio na lista — e a lista de `GetBotListV2` é justamente o que se passa
+a `GetBotProfiles`, que a repassa a `usync`. Lá, `jid.Server == ""` cai no
+`default:` do `switch` e a função inteira retorna
+`unknown user server ''`. Ou seja: **um único bot malformado na resposta impede
+buscar o perfil de todos os outros.**
+
+Corrigido pulando a entrada e logando em Debug, exatamente como
+`parseBlocklist` (`user_blocklist.go:24`) já fazia no mesmo pacote — os dois
+parsers de lista de JID divergiam sem motivo.
+
+#### `user.go:106` (`GetUserInfo`) — par LID/PN montado com o lado errado
+
+Antes:
+
+```go
+if !info.LID.IsEmpty() {
+	mappings = append(mappings, store.LIDMapping{PN: jid, LID: info.LID})
+}
+```
+
+`jid` vem de `child.Attrs["jid"]`, ou seja é o JID que o **servidor** devolveu.
+Mas `usync` aceita LID como entrada — o `case types.HiddenUserServer` em
+`user_usync.go:44` existe exatamente para isso —, então `jid` pode ser um LID, e
+o par montado seria LID/LID em vez de PN/LID. A única condição verificada era
+`!info.LID.IsEmpty()`, que não diz nada sobre o lado esquerdo.
+
+Mesma família dos dois bugs do lote 6, e com a mesma honestidade sobre o
+impacto: hoje é **mascarado**, não fatal. `CachedLIDMap.PutManyLIDMappings`
+(`store/sqlstore/lidmap.go:220`) descarta e loga em Debug toda entrada cujos
+servers não sejam `lid`/`s.whatsapp.net`. Mas a defesa mora no store, não aqui,
+e qualquer outra implementação de `store.LIDStore` receberia o par invertido.
+Corrigido na origem, com o guarda escrito como uma função nomeada
+(`isValidLIDMapping`) que espelha o contrato do store, travada por
+`TestIsValidLIDMapping` nos 10 formatos de par.
+
+No mesmo trecho, um defeito de log: o `Errorf` de falha ao gravar os mapeamentos
+**não incluía o erro** (`"Failed to place LID mappings from USync call"`, sem
+`%v`). Passou a incluir — é o único sinal que existe desse caminho, já que a
+função deliberadamente não propaga o erro.
+
+### O que a auditoria **não** achou
+
+Registrado porque "procurei e não achei" é informação:
+
+- `parseDeviceList` (`user_devices.go:76`) — a tag do nó externo **e** a do
+  `<device-list>` são conferidas antes de iterar, `GetInt64("id", true)` é
+  comma-ok, e a tag de cada filho é conferida. Nenhuma indexação direta.
+  Travado por `TestParseDeviceListSkipsInvalidChildren` e
+  `TestParseDeviceListRejectsWrongEnvelope`.
+- `parseDeviceList` recebe `user types.JID` **por valor** e escreve em
+  `user.Device` dentro do laço. Está correto (cada `append` copia a struct), mas
+  é o tipo de coisa que quebra num refactor para ponteiro e devolveria N cópias
+  do último dispositivo. Travado explicitamente por
+  `TestParseDeviceListDoesNotAliasUserJID`, que também confere que o JID do
+  chamador não é mutado.
+- `parseFBDeviceList` (`user_devices.go:105`) — mesma forma, também sem
+  indexação. A diferença de comportamento em relação a `parseDeviceList` (não
+  entende `is_hosted`) foi travada por `TestParseFBDeviceListIgnoresIsHosted`
+  para que seja deliberada, e não acidente esperando conserto.
+- `GetUserDevices`/`getFBIDDevices` (`user_devices.go:55,157`) — as duas leituras
+  de `user.Attrs["jid"]` são comma-ok com a tag conferida.
+- `parseBusinessProfile` (`user_business.go:21`) — `jid` é obrigatório e
+  devolve erro; todo o resto é opcional e tolerante. Travado por
+  `TestParseBusinessProfileTolerantesToMissingAndNonByteContent`.
+- `parseVerifiedNameContent` — os dois `proto.Unmarshal` têm erro tratado, e o
+  `Content.([]byte)` é comma-ok que devolve `(nil, nil)`. Isso importa porque
+  `IsOnWhatsApp` e `GetUserInfo` logam Warn quando o erro não é nil, e a
+  ausência de nome verificado (todo usuário não-business) tem que ser silêncio,
+  não ruído. Travado por `TestParseVerifiedNameAbsentIsNotAnError`.
+- `GetProfilePictureInfo` (`user_avatar.go`) — `GetOptionalChildByTag` com `ok`
+  nos dois níveis, `params == nil` tratado logo no início, `ag.OK()`/`ag.Error()`
+  conferidos no fim.
+- `usync` — o `len(extra) > 1` é conferido antes de indexar `extra[0]`, e
+  servidor desconhecido aborta em vez de montar `<user>` incompleto. Travado por
+  `TestUsyncRejectsMoreThanOneExtra` e `TestUsyncRejectsUnknownServer`.
+
+Dois pontos **deixados como estão**, documentados em vez de mudados:
+
+- O godoc de `GetUserDevices` diz "The local device will not be included in the
+  output even if the user's JID is included in the input" — mas **não há**
+  nenhuma exclusão do próprio dispositivo no corpo da função. Ou o comentário
+  está desatualizado no upstream, ou a filtragem mora no chamador. Mudar exigiria
+  decidir qual dos dois, o que é mudança de comportamento observável.
+- `GetUserDevices` usa o JID da **resposta** como chave de `userDevicesCache`,
+  enquanto o hit de cache é procurado pelo JID de **entrada**. Se o servidor
+  responder com um JID diferente do consultado (PN↔LID), a entrada é gravada
+  numa chave que nunca será consultada e a consulta se repete a cada envio. Não
+  foi corrigido porque exige saber se o servidor de fato faz isso — sem tráfego
+  real é especulação. Registrado em `HOUSEKEEP.md`.
+
+---
+
+### Constantes extraídas (`user_constants.go`, novo)
+
+**Namespaces de IQ** — `statusIQNamespace`, `usyncIQNamespace`,
+`blocklistIQNamespace`, `botIQNamespace`, `businessIQNamespace`,
+`qrIQNamespace`, `profilePictureIQNamespace`, `fbidDevicesIQNamespace`.
+
+**Tags de nó** — mesma exceção deliberada aberta pelos lotes 5 e 6, e pelo mesmo
+motivo: cada tag abaixo é **escrita** na consulta e **lida** de volta na
+resposta, em arquivos diferentes. Como literais, um typo em qualquer um dos dois
+lados não é erro de compilação — a lista sai vazia e a consulta falha em
+silêncio.
+
+| Constante | Valor | Escrito em | Lido em |
+|---|---|---|---|
+| `usyncNodeTag` / `usyncListTag` / `usyncQueryTag` | `usync` / `list` / `query` | `usync` | `usync` (`GetOptionalChildByTag`) |
+| `usyncUserTag` | `user` | `usync`, `getFBIDDevicesInternal` | user.go ×2, user_devices.go ×2, user_bots.go |
+| `devicesNodeTag` / `deviceListNodeTag` / `deviceNodeTag` | `devices` / `device-list` / `device` | `GetUserInfo`, `GetUserDevices` | `parseDeviceList`, `parseFBDeviceList` |
+| `usersNodeTag` | `users` | `getFBIDDevicesInternal` | `getFBIDDevicesInternal` |
+| `contactNodeTag` | `contact` | `IsOnWhatsApp`, `usync` | `IsOnWhatsApp` |
+| `lidNodeTag` / `statusNodeTag` | `lid` / `status` | `GetUserInfo`, `SetStatusMessage` | `GetUserInfo` |
+| `pictureNodeTag` / `picturesNodeTag` | `picture` / `pictures` | `GetUserInfo`, `GetProfilePictureInfo` | `GetProfilePictureInfo` |
+| `profileNodeTag` | `profile` | `GetBusinessProfile`, `GetBotProfiles`, `usync` | `parseBusinessProfile`, `GetBotProfiles` |
+| `businessNodeTag` / `verifiedNameNodeTag` | `business` / `verified_name` | `IsOnWhatsApp`, `GetUserInfo` | `parseVerifiedName`, `ResolveBusinessMessageLink` |
+| `businessProfileNodeTag` | `business_profile` | `GetBusinessProfile` | `GetBusinessProfile` |
+| `businessHoursConfigTag` / `businessCategoryTag` | `business_hours_config` / `category` | — | `parseBusinessProfile`, `GetBotProfiles` |
+| `botSectionTag`, `botCommandsTag`, `botCommandTag`, `botPromptsTag`, `botPromptTag` | `section`, `commands`, `command`, `prompts`, `prompt` | — | `GetBotListV2`, `GetBotProfiles` |
+| `profilePictureTokenNodeTag` | `tctoken` | `GetProfilePictureInfo` | — |
+| `qrNodeTag` | `qr` | os 3 de `user_links.go` | os 3 de `user_links.go` |
+
+**Valores de atributo e parâmetros de protocolo**:
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `usyncModeQuery` / `usyncModeFull` | `query` / `full` | o `mode` passado a `usync` pelos 4 chamadores |
+| `usyncContextInteractive` / `...Background` / `...Message` | `interactive` / `background` / `message` | o `context` passado a `usync` |
+| `usyncLastValue` / `usyncIndexValue` | `true` / `0` | os atributos de paginação de `<usync>`, que este fork nunca varia |
+| `deviceListVersion` | `2` | o `version` de `<devices>`, que seleciona o formato que `parseDeviceList` entende |
+| `fbIDDeviceChunkSize` | `15` | o tamanho de lote de `slices.Chunk` em `getFBIDDevices` |
+| `contactTypeIn` | `in` | o `type` de `<contact>` que marca "está na agenda" em `IsOnWhatsApp` |
+| `botListVersion` / `botProfileVersion` | `2` / `1` | o `v` de `<bot>` e de `<profile>` de bot |
+| `botSectionTypeAll` | `all` | a única seção de `GetBotListV2` que vira entrada da lista |
+| `businessProfileVersion` | `244` | o `v` de `<business_profile>` |
+| `profilePictureQueryURL` | `url` | o `query` de `<picture>` |
+| `profilePictureTypePreview` / `...Image` | `preview` / `image` | o `type` de `<picture>` |
+| `profilePictureStatusNotModified` / `...NotSet` | `304` / `204` | os dois status HTTP que vêm dentro de `<picture>` em vez de como erro de IQ |
+| `qrTypeContact`, `qrActionGet`, `qrActionRevoke` | `contact`, `get`, `revoke` | o `type` e o `action` de `GetContactQRLink` |
+
+Três decisões de **não-duplicação**:
+
+- `Type: "get"` literal em `usync` e em `GetProfilePictureInfo` passou a `iqGet`,
+  a constante que `request.go:109` já declara e que todos os outros IQs do
+  pacote usam. Eram os dois únicos pontos da raiz escrevendo o valor à mão.
+- `"w:g2"` em `GetProfilePictureInfo` (foto de comunidade) passou a
+  `groupIQNamespace`, a constante criada no lote 6 — é literalmente o namespace
+  de grupo, e o lote 6 já tinha registrado o caso simétrico (`"w:profile:picture"`
+  em `SetGroupPhoto`) como pendente de unificação. Agora os dois lados apontam
+  para a constante do domínio certo.
+- `profileNodeTag` é um símbolo só para business e bot, em vez de dois: é o mesmo
+  valor de wire lido pelos dois parsers.
+
+### O que *não* foi extraído, e por quê
+
+Mesma convenção dos lotes 1–6:
+
+- **Nomes de atributo** do XML binário: `jid`, `id`, `type`, `sid`, `mode`,
+  `last`, `index`, `context`, `version`, `is_hosted`, `dhash`, `val`,
+  `persona_id`, `v`, `code`, `notify`, `is_signed`, `verified_name`,
+  `verified_level`, `action`, `query`, `invite`, `common_gid`,
+  `parent_group_jid`, `status`, `url`, `direct_path`, `hash`, `timezone`,
+  `day_of_week`, `open_time`, `close_time`. Aparecem uma vez, no ponto onde o nó
+  é lido ou montado, e o campo do struct ao lado já diz o que são.
+- Tags que só existem de **um** lado, sem contraparte: `item` e `list` do
+  blocklist, `message` de `ResolveBusinessMessageLink`, `address`, `email`,
+  `business_hours`, `categories`, `profile_options`, `name`, `attributes`,
+  `description`, `default`, `emoji`, `text`. O risco que as constantes de tag
+  acima mitigam (typo que faz um lado nunca casar com o outro) não existe quando
+  não há dois lados.
+- `BusinessMessageLinkPrefix`, `ContactQRLinkPrefix` e os dois `...DirectPrefix`
+  já eram constantes exportadas em `user_links.go` desde a Fase A.
+
+---
+
+### Logging
+
+Auditados os 8 arquivos atrás de escrita de log fora do `waLog.Logger`
+injetado, de `panic`, de `os.Exit` e de uso do `log` da stdlib.
+
+**Nenhum bypass encontrado.** Todos os pontos de log do lote (`user.go` ×7,
+`user_business.go` ×3, `user_blocklist.go` ×1 e o `Debugf` novo em
+`user_bots.go`) usam `cli.Log`, o campo alimentado em `NewClient` e ligado ao
+`walog.Bridge` sobre zerolog (`pkg/infra/wa-noise/walog/`). Não há `fmt.Print*`,
+`log.*`, `println` nem `panic`. **Nenhuma infraestrutura de log foi adicionada
+ou reroteada** — a única mudança é o `%v` que faltava no `Errorf` de
+`GetUserInfo`, descrito acima.
+
+Uma observação, **deixada como está**: `updateBusinessName`
+(`user_business.go:121`) loga `"Failed to save push name of %s"` ao falhar
+gravando o **business name** do JID alternativo — mensagem copiada de
+`updatePushName` e nunca ajustada. É erro de texto, não de roteamento; corrigir
+mudaria a string que alguém pode estar casando em log. Registrado em
+`HOUSEKEEP.md`.
+
+---
+
+### Testes
+
+Cinco arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+(`userTestClient`, `deviceNode`, `devicesNode`, os JIDs `userTest*`) vive em
+`user_devices_test.go`, seguindo o padrão do lote 6.
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `user_devices_test.go` | `parseDeviceList` (leitura de N dispositivos, não-aliasing do JID de entrada, os dois servers hosted, filhos inválidos nos 3 formatos, envelope errado nos 3 formatos, lista vazia); `parseFBDeviceList` (dispositivos + dhash, filho de outra tag ignorado, `is_hosted` deliberadamente ignorado, nó vazio); `GetUserDevices` (bot JID sem consulta, hit de cache sem consulta, client nil, entrada vazia) |
+| `user_bots_test.go` | `nodeContentString` — **o fix do panic** — nas 5 formas de `Content`, mais a reprodução direta do caso que estourava (`GetChildByTag` de filho ausente devolvendo o próprio nó) |
+| `user_test.go` | `isValidLIDMapping` — **o fix do par LID/PN** — nos 10 formatos de par, incluindo LID/LID, PN/PN, `c.us`, `msgr` e users vazios |
+| `user_blocklist_test.go` | `parseBlocklist` (dhash + JIDs, filhos sem `jid` válido pulados, nó vazio, filho inválido não contaminando os seguintes) |
+| `user_business_test.go` | `parseBusinessProfile` (nó completo com horários/categorias/opções, `jid` ausente virando erro, tolerância a conteúdo ausente ou de tipo errado); `parseVerifiedName`/`parseVerifiedNameContent` (round trip protobuf, os 4 casos de ausência que **não** são erro, protobuf inválido no cert e nos details, certificado vazio) |
+| `user_usync_test.go` | os 3 caminhos de `usync` anteriores à rede: client nil, mais de um `UsyncQueryExtras`, servidor de JID desconhecido nos 4 formatos |
+
+Cobertura resultante (`go tool cover -func`): **100%** em `nodeContentString`,
+`isValidLIDMapping`, `parseBlocklist`, `parseBusinessProfile`,
+`parseVerifiedName`, `parseVerifiedNameContent`, `parseDeviceList` e
+`parseFBDeviceList`; **48,4%** em `GetUserDevices` (o que falta é tudo depois do
+`usync`).
+
+### Lacunas assumidas, sem teste de fachada
+
+Mesma decisão dos lotes 1–6: **todas as 13 funções exportadas de ação estão em
+0%** — `SetStatusMessage`, `IsOnWhatsApp`, `GetUserInfo`, `GetProfilePictureInfo`,
+`GetBlocklist`, `UpdateBlocklist`, `GetBotListV2`, `GetBotProfiles`,
+`GetBusinessProfile`, `GetUserDevicesContext`, `getFBIDDevices`(Internal) e os 3
+de `user_links.go`, mais `usync` além dos guardas iniciais.
+
+Todas têm a mesma forma: montar um nó, chamar `sendIQ` → `sendNode`, e parsear a
+resposta. Vale registrar uma diferença em relação ao lote 6: aqui não dá nem
+para observar `ErrNotConnected` — `waitResponse` (`request.go:73`) escreve em
+`cli.responseWaiters`, que num `Client` montado à mão é mapa nil, então o
+caminho estoura antes de chegar ao socket. `GetUserInfo` ainda precisa de
+`cli.Store.LIDs` e `cli.Store.Contacts` com banco.
+
+**O que dava para isolar — todo o parsing de resposta e os dois guardas onde
+moram os três bugs deste lote — está coberto.** Um teste de fachada aqui
+provaria só que o mock foi chamado. Fica para o lote do núcleo do `Client`,
+junto com o que os lotes 1–6 já empurraram para lá.
+
+Duas lacunas específicas que não são de fachada e mesmo assim ficaram de fora:
+
+- `GetProfilePictureInfo` monta os atributos (preview × image, `common_gid`,
+  `persona_id`, `invite`, o ramo de comunidade) numa função só, sem helper
+  separável, e todos os ramos terminam em `sendIQ`. Não há "construção de URL de
+  avatar" testável isoladamente: a URL vem pronta do servidor em `ag.String("url")`.
+- Os `strings.TrimPrefix` de `user_links.go` (que aceitam link completo ou só o
+  código) estão dentro das funções de rede, pela mesma razão.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. O único arquivo de produção novo (`user_constants.go`) tem
+131 linhas e carrega o header MPL-2.0; nenhum arquivo do lote passou de 300
+linhas (maior: `user.go`, 184). `cmd/logcov/testdata/eligible.golden` ganhou
+duas linhas (`nodeContentString` e `isValidLIDMapping`, ambas `EXCLUDED X5`, já
+que `internal/wa-noise/` está em `.logcov-exclude`) — mesma regeneração mecânica
+dos lotes anteriores. `git diff --stat internal/wa-noise/proto/` continua vazio,
+e `internals.go`/`internals_generate.go` não aparecem no diff do lote.

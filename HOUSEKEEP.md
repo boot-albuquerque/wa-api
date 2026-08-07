@@ -1291,3 +1291,85 @@ mínimo esvaziar ambos em `Disconnect`/`ResetConnection`.
 de despejo — o que é mudança de comportamento observável (um retry legítimo
 depois do despejo volta a ser aceito), e o lote 5 é de qualidade estrutural
 por contrato. Pendente de decisão.
+
+---
+
+## F37 — `GetUserDevices` grava o cache numa chave que pode nunca ser consultada
+
+**Data / contexto**: 2026-08-07, Fase E lote 7 (usuário, raiz de
+`internal/wa-noise/`).
+
+**Onde**: `internal/wa-noise/user_devices.go:34` e `:60`.
+
+```go
+cached, ok := cli.userDevicesCache[jid]        // :34 — lookup pelo JID de ENTRADA
+...
+cli.userDevicesCache[jid] = deviceCache{...}   // :60 — escrita pelo JID da RESPOSTA
+```
+
+**Problema**: o hit de cache é procurado pelo JID que o chamador passou; a
+entrada é gravada com o JID que veio no `<user jid=...>` da resposta usync. Se o
+servidor responder com o outro lado do par LID/PN (o que o protocolo permite —
+`usync` aceita LID como entrada por `user_usync.go:44`), a entrada fica numa
+chave que o `lookup` nunca consulta: o cache nunca acerta, e cada envio para
+aquele contato refaz a consulta de dispositivos. Não é panic nem dado errado, é
+trabalho repetido silenciosamente — e o mapa cresce com as duas chaves.
+
+**Correção sugerida**: gravar sob as duas chaves quando os JIDs divergirem, ou
+resolver o JID de entrada para a forma canônica (via `cli.Store.LIDs`) antes do
+lookup e da escrita.
+
+**Status**: **não corrigido**. Confirmar se o servidor de fato responde com JID
+diferente do consultado exige tráfego real; sem isso a correção é especulação, e
+mudaria a chave de um cache quente. Pendente de decisão.
+
+---
+
+## F38 — godoc de `GetUserDevices` promete exclusão do próprio dispositivo que o código não faz
+
+**Data / contexto**: 2026-08-07, Fase E lote 7.
+
+**Onde**: `internal/wa-noise/user_devices.go:22-24`.
+
+> The local device will not be included in the output even if the user's JID is
+> included in the input.
+
+**Problema**: não há nenhuma filtragem do próprio dispositivo no corpo da
+função. `parseDeviceList` devolve todos os `<device>` que o servidor mandou, e
+`GetUserDevices` só concatena. Ou o comentário está desatualizado desde alguma
+versão do upstream, ou a exclusão passou a morar no chamador — em qualquer caso
+o godoc mente hoje.
+
+**Correção sugerida**: rastrear quem consome `GetUserDevices` (`send.go`,
+`sendfb.go`) e decidir entre (a) reimplementar o filtro aqui, restaurando o
+contrato documentado, ou (b) corrigir o comentário para descrever o que a função
+faz.
+
+**Status**: **não corrigido**. As duas saídas mudam algo observável (o
+comportamento ou o contrato público). Pendente de decisão.
+
+---
+
+## F39 — `updateBusinessName` loga "push name" ao falhar gravando business name
+
+**Data / contexto**: 2026-08-07, Fase E lote 7.
+
+**Onde**: `internal/wa-noise/user_business.go:121-123`.
+
+```go
+_, _, err = cli.Store.Contacts.PutBusinessName(ctx, userAlt, name)
+if err != nil {
+	cli.Log.Errorf("Failed to save push name of %s in device store: %v", userAlt, err)
+}
+```
+
+**Problema**: mensagem copiada de `updatePushName` (`user.go:160`) e nunca
+ajustada — a chamada que falhou é `PutBusinessName`. O log manda investigar o
+lugar errado. As outras duas mensagens da mesma função (`:114` e `:126`) dizem
+"business name" corretamente; só esta divergiu.
+
+**Correção sugerida**: trocar `push name` por `business name` na string.
+
+**Status**: **não corrigido**. É um caractere de risco quase zero, mas altera
+uma string de log que pode estar sendo casada em alerta/dashboard, e o lote 7 é
+de qualidade estrutural por contrato. Pendente de decisão — trivial de aplicar.
