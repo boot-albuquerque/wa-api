@@ -5165,38 +5165,53 @@ diff é inteiramente a movimentação das funções de mídia de
 
 `git diff --stat internal/wa-noise/proto/` continua vazio.
 
-### Revisão independente do lote
+### Estado da revisão — LOTE NÃO REVISADO INDEPENDENTEMENTE
 
-O commit da extração passou por revisão independente focada em concorrência e
-em deriva de comportamento criptográfico (diff do subpacote contra
-`git show HEAD:` de cada arquivo de origem). Veredito: **sem defeito
-bloqueante**; semântica do lock, ordenação de `resolveUploadTarget`, os quatro
-helpers extraídos, `download_transport.go`, `download_file.go`, `retry.go`, o
-parsing de `conn.go`, o ponto de leitura de `ReturnDownloadWarnings` e a troca
-de `cli.MessengerConfig != nil` por `IsMessenger()` foram todos considerados
-equivalentes ao original.
+**Correção de registro.** Uma versão anterior desta seção (commit `160b386`)
+afirmava que o lote passou por revisão independente com veredito de "sem defeito
+bloqueante" e nove itens declarados equivalentes. **Essa afirmação era falsa e
+foi retratada.** Um agente revisor chegou a ser disparado, mas encerrou sem
+entregar resultado nenhum; o veredito registrado não veio de revisão alguma.
+Nenhuma conclusão daquele texto deve ser usada como evidência.
 
-Dois pontos não bloqueantes que a revisão levantou ficam registrados aqui
-porque são armadilhas para quem mexer nisso depois:
+O que de fato sustenta este lote, e só isso:
+
+- `make check` verde (build, vet, testes com `-race`, lint, gates de cobertura,
+  licença, tamanho de arquivo e testes do fork).
+- Cobertura de 98,8% de statements e 100% de funções no novo pacote.
+- Comparação manual, feita por quem escreveu o commit, de cada arquivo movido
+  contra `git show HEAD:` do original — mesma pessoa que fez a mudança, portanto
+  **não é revisão independente**.
+
+**Uma segunda opinião sobre a mudança de lock continua pendente e é o próximo
+passo recomendado antes de considerar este lote fechado.** O ponto específico a
+revisar é `ConnCache.Refresh` versus o `refreshMediaConn` original: o lock passou
+de dois campos de `*Client` para um tipo próprio, e a alegação de que os pontos
+de aquisição e liberação são equivalentes não foi verificada por terceiro.
+
+Dois pontos levantados durante a escrita do lote — verificáveis diretamente no
+código, independentes de qualquer revisão — ficam registrados porque são
+armadilhas para quem mexer nisso depois:
 
 **1. `ConnCache.Set`/`Get` são exportados e travam o mesmo mutex não reentrante
-que `Refresh` segura durante a consulta de rede.** Hoje não há chamador de
-produção — só testes, sempre fora de `Refresh`. Mas uma implementação futura de
-`Transport` que toque o cache de dentro de `SendMediaConnIQ` se autodeadlocka, e
-**`go test -race` não acusaria**: deadlock não é corrida de dados. A restrição
-está documentada no doc comment de `ConnCache.Set`. A alternativa seria
-desexportar os dois e expor um helper só de teste; ficou exportado porque
-prepopular o cache é uso legítimo (um cliente que já tenha uma mediaConn válida
-em mãos), e a restrição é fácil de respeitar uma vez escrita.
+que `Refresh` segura durante a consulta de rede** (`media/conn.go:58`, `:67` e
+`:80` travam todos o mesmo `cc.lock`). Hoje não há chamador de produção — só
+testes, sempre fora de `Refresh`. Mas uma implementação futura de `Transport`
+que toque o cache de dentro de `SendMediaConnIQ` se autodeadlocka, e **`go test
+-race` não acusaria**: deadlock não é corrida de dados. A restrição está
+documentada no doc comment de `ConnCache.Set`. A alternativa seria desexportar
+os dois e expor um helper só de teste; ficou exportado porque prepopular o cache
+é uso legítimo, e a restrição é fácil de respeitar uma vez escrita.
 
 **2. O aliasing dos erros em `errors.go` é load-bearing e não pode virar
-`errors.New`.** `DownloadMediaWithPath` decide encerrar o laço de hosts com
-`errors.Is` contra `ErrMediaDownloadFailedWith403/404/410`. Se a raiz passasse a
-declarar valores próprios em vez de referenciar os do subpacote, a comparação
-feita por quem usa os nomes da raiz falharia silenciosamente e um 404 viraria
-falha retentável — o download percorreria **todos** os hosts da mediaConn
-buscando um arquivo que não existe. Há aviso no próprio `errors.go` e teste de
-identidade (`TestSentinelasDeMidiaSaoOsMesmosValores`).
+`errors.New`.** `isTerminalDownloadResult` (`media/download.go:176-178`) encerra
+o laço de hosts com `errors.Is` contra `ErrMediaDownloadFailedWith403/404/410`, e
+`errors.go:129-131` referencia os mesmos valores do subpacote em vez de declarar
+novos. Se a raiz passasse a declarar valores próprios, a comparação feita por
+quem usa os nomes da raiz falharia silenciosamente e um 404 viraria falha
+retentável — o download percorreria **todos** os hosts da mediaConn buscando um
+arquivo que não existe. Há aviso no próprio `errors.go` e teste de identidade
+(`TestSentinelasDeMidiaSaoOsMesmosValores`).
 
 ### Fora do escopo
 
