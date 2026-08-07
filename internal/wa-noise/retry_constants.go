@@ -6,42 +6,27 @@
 
 package whatsmeow
 
-import "time"
+import "wa-api/internal/wa-noise/retry"
 
-// Politica de retry: quantas vezes cada lado do protocolo pode insistir e por
-// quanto tempo o estado auxiliar sobrevive. Os limites sao contadores de
-// protocolo, nao ajustes de performance — mudar qualquer um deles muda quantas
-// mensagens o servidor consegue nos fazer reprocessar.
+// Apelidos das constantes de politica de retry, que moraram aqui ate' a Fase
+// F/G lote 5 e hoje vivem em internal/wa-noise/retry.
+//
+// Continuam existindo na raiz porque o dominio de retry NAO e' o unico a
+// cita-las: maxOutgoingRetryReceipts e' lida por message_decrypt.go ao decidir
+// se ainda vale pedir retry, e os nomes curtos deixam esse call site legivel.
+// Os valores sao os mesmos objetos, nao copias.
 const (
-	// maxIncomingRetryRequests e' o teto de pedidos de retry que aceitamos do
-	// mesmo par (remetente + ID de mensagem) antes de parar de responder. O
-	// contador e' nosso, interno, e nao o `count` que o servidor manda — que e'
-	// justamente o ponto: sem ele um par malicioso pediria retry da mesma
-	// mensagem indefinidamente, e cada retry custa uma cifragem.
-	maxIncomingRetryRequests = 10
+	maxIncomingRetryRequests        = retry.MaxIncomingRequests
+	minRetryCountForSessionRecreate = retry.MinCountForSessionRecreate
+	maxOutgoingRetryReceipts        = retry.MaxOutgoingReceipts
+	retryReceiptVersion             = retry.ReceiptVersion
 
-	// minRetryCountForSessionRecreate e' a partir de qual `count` do recibo de
-	// retry consideramos recriar a sessao Signal quando ja' temos uma. Abaixo
-	// disso assume-se que a sessao existente ainda serve.
-	minRetryCountForSessionRecreate = 2
+	retryStoreFormatWA = retry.StoreFormatWA
+	retryStoreFormatFB = retry.StoreFormatFB
 
-	// maxOutgoingRetryReceipts e' quantos recibos de retry mandamos para a mesma
-	// mensagem recebida antes de desistir de decifra-la.
-	maxOutgoingRetryReceipts = 5
+	retryStoreClearInterval = retry.StoreClearInterval
 
-	// retryReceiptVersion e' o atributo `v` do no <retry> que enviamos.
-	retryReceiptVersion = 1
-)
-
-// Formato de serializacao do buffer de mensagens recentes persistido
-// (Client.UseRetryMessageStore). O valor e' gravado por addRecentMessage e lido
-// de volta por parseRecentMessage — os dois precisam concordar, entao sao
-// constantes e nao literais.
-const (
-	retryStoreFormatWA = "wa"
-	retryStoreFormatFB = "fb"
-
-	// retryStoreClearInterval e' de quanto em quanto tempo, no maximo, as
-	// mensagens velhas sao apagadas do store de retry.
-	retryStoreClearInterval = 12 * time.Hour
+	// recentMessagesSize continua citada por client_test.go e pelo gate de
+	// tamanho do buffer.
+	recentMessagesSize = retry.RecentMessagesSize
 )

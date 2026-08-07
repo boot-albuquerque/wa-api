@@ -13,7 +13,7 @@
 # store/ e store/sqlstore/) e Fase C (binary/ com seu token/, types/ com
 # types/events/, e os cinco subpacotes de util/) e Fase D (msgpad/, paircrypto/
 # e msgattrs/, extraidos da raiz) e Fase F/G (media/, newsletter/ e
-# appstatesync/, prekeys/, pairing/, tctoken/ e notification/, extracao real).
+# appstatesync/, prekeys/, pairing/, tctoken/, notification/ e retry/, extracao real).
 # Cobre o fork.
 #
 # Dois diretorios ficam de fora, ambos por serem codigo GERADO, pelo mesmo
@@ -43,6 +43,7 @@ internal/wa-noise/prekeys \
 internal/wa-noise/pairing \
 internal/wa-noise/tctoken \
 internal/wa-noise/notification \
+internal/wa-noise/retry \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \

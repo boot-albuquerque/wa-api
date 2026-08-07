@@ -18,7 +18,6 @@ import (
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/random"
-	"golang.org/x/sync/semaphore"
 
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
@@ -28,6 +27,7 @@ import (
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waWa6"
+	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/tctoken"
@@ -77,8 +77,6 @@ type Client struct {
 	AppStateDebugLogs            bool
 
 	AutomaticMessageRerequestFromPhone bool
-	pendingPhoneRerequests             map[types.MessageID]context.CancelFunc
-	pendingPhoneRerequestsLock         sync.RWMutex
 
 	appStateProc *appstate.Processor
 	// appStateSync reune os antigos appStateSyncLock, appStateKeyRequests e
@@ -104,12 +102,13 @@ type Client struct {
 	eventHandlers     []wrappedEventHandler
 	eventHandlersLock sync.RWMutex
 
-	messageRetries     map[string]int
-	messageRetriesLock sync.Mutex
-	retrySema          *semaphore.Weighted
-
-	incomingRetryRequestCounter     map[incomingRetryKey]int
-	incomingRetryRequestCounterLock sync.Mutex
+	// retryState reune os antigos messageRetries/messageRetriesLock,
+	// retrySema, incomingRetryRequestCounter (+lock), o buffer circular de
+	// mensagens recentes (+lock), lastRetryStoreClear, sessionRecreateHistory
+	// (+lock) e pendingPhoneRerequests (+lock). Os cinco locks de dentro
+	// continuam sendo cinco, com os mesmos pontos de aquisicao. F36 (os dois
+	// contadores sem despejo) viajou junto e segue em aberto.
+	retryState retry.State
 
 	messageSendLock sync.Mutex
 
@@ -122,13 +121,6 @@ type Client struct {
 	userDevicesCache     map[types.JID]deviceCache
 	userDevicesCacheLock sync.Mutex
 
-	recentMessagesMap  map[recentMessageKey]RecentMessage
-	recentMessagesList [recentMessagesSize]recentMessageKey
-	recentMessagesPtr  int
-	recentMessagesLock sync.RWMutex
-
-	sessionRecreateHistory     map[types.JID]time.Time
-	sessionRecreateHistoryLock sync.Mutex
 	// GetMessageForRetry is used to find the source message for handling retry receipts
 	// when the message is not found in the recently sent message cache.
 	// Note: in DMs, the "to" field may be different from what you originally sent to (LID vs phone number),
@@ -140,7 +132,6 @@ type Client struct {
 	// Should whatsmeow store recently sent messages in the database so that retry receipts can be accepted
 	// even if the process is restarted? If false, only the in-memory cache and GetMessageForRetry will be used.
 	UseRetryMessageStore bool
-	lastRetryStoreClear  time.Time
 
 	// PrePairCallback is called before pairing is completed. If it returns false, the pairing will be cancelled and
 	// the client will disconnect.
@@ -229,24 +220,17 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		uniqueID:           fmt.Sprintf("%d.%d-", uniqueIDPrefix[0], uniqueIDPrefix[1]),
 		responseWaiters:    make(map[string]chan<- *waBinary.Node),
 		eventHandlers:      make([]wrappedEventHandler, 0, initialEventHandlerCapacity),
-		messageRetries:     make(map[string]int),
 		handlerQueue:       make(chan *waBinary.Node, handlerQueueSize),
 		appStateProc:       appstate.NewProcessor(deviceStore, log.Sub("AppState")),
 		socketWait:         make(chan struct{}),
 		expectedDisconnect: exsync.NewEvent(),
-
-		incomingRetryRequestCounter: make(map[incomingRetryKey]int),
 
 		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
 
 		groupCache:       make(map[types.JID]*groupMetaCache),
 		userDevicesCache: make(map[types.JID]deviceCache),
 
-		recentMessagesMap:      make(map[recentMessageKey]RecentMessage, recentMessagesSize),
-		sessionRecreateHistory: make(map[types.JID]time.Time),
-		GetMessageForRetry:     func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },
-
-		pendingPhoneRerequests: make(map[types.MessageID]context.CancelFunc),
+		GetMessageForRetry: func(requester, to types.JID, id types.MessageID) *waE2E.Message { return nil },
 
 		EnableAutoReconnect: true,
 		AutoTrustIdentity:   true,
@@ -269,16 +253,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		// Apparently there's also an <error> node which can have a code=479 and means "Invalid stanza sent (smax-invalid)"
 	}
 	return cli
-}
-
-// SetMaxParallelRetryReceiptHandling sets how many retry receipts can be handled in parallel.
-// Defaults to unlimited. This should only be set before connecting, changing it afterwards can cause data races.
-func (cli *Client) SetMaxParallelRetryReceiptHandling(n int64) {
-	if n <= 0 {
-		cli.retrySema = nil
-	} else {
-		cli.retrySema = semaphore.NewWeighted(n)
-	}
 }
 
 func (cli *Client) getOwnID() types.JID {

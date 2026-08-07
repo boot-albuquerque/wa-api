@@ -8,276 +8,48 @@ package whatsmeow
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"fmt"
-	"runtime/debug"
-	"time"
-
-	"go.mau.fi/libsignal/groups"
-	"go.mau.fi/libsignal/keys/prekey"
-	"go.mau.fi/libsignal/protocol"
-	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/msgattrs"
-	"wa-api/internal/wa-noise/proto/waCommon"
-	"wa-api/internal/wa-noise/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/proto/waMsgTransport"
+	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )
 
-const recreateSessionTimeout = 1 * time.Hour
+// Fachadas do dominio de retry. A logica vive em internal/wa-noise/retry
+// (Fase F/G, lote 5); aqui ficam so' as delegacoes que preservam as
+// assinaturas usadas pelo caminho de recibo e por DangerousInternalClient.
+
+// incomingRetryKey e' apelido de tipo, e nao tipo novo, porque internals.go
+// (gerado, F29, fora do escopo) nao pode ser tocado.
+type incomingRetryKey = retry.IncomingKey
 
 func (cli *Client) shouldRecreateSession(ctx context.Context, retryCount int, jid types.JID) (reason string, recreate bool) {
-	cli.sessionRecreateHistoryLock.Lock()
-	defer cli.sessionRecreateHistoryLock.Unlock()
-	if contains, err := cli.Store.ContainsSession(ctx, jid.SignalAddress()); err != nil {
-		return "", false
-	} else if !contains {
-		cli.sessionRecreateHistory[jid] = time.Now()
-		return "we don't have a Signal session with them", true
-	} else if retryCount < minRetryCountForSessionRecreate {
+	if cli == nil {
 		return "", false
 	}
-	prevTime, ok := cli.sessionRecreateHistory[jid]
-	if !ok || prevTime.Add(recreateSessionTimeout).Before(time.Now()) {
-		cli.sessionRecreateHistory[jid] = time.Now()
-		return "retry count > 1 and over an hour since last recreation", true
-	}
-	return "", false
-}
-
-type incomingRetryKey struct {
-	jid       types.JID
-	messageID types.MessageID
+	return retry.ShouldRecreateSession(ctx, cli.retryT(), retryCount, jid)
 }
 
 func (cli *Client) tryHandleRetryReceipt(ctx context.Context, receipt *events.Receipt, node *waBinary.Node) {
-	defer func() {
-		err := recover()
-		if err != nil {
-			cli.Log.Errorf("Retry receipt handler panicked: %v\n%s", err, debug.Stack())
-		}
-	}()
-	if cli.retrySema != nil {
-		err := cli.retrySema.Acquire(ctx, 1)
-		if err != nil {
-			return
-		}
-		defer cli.retrySema.Release(1)
+	if cli == nil {
+		return
 	}
-	err := cli.handleRetryReceipt(ctx, receipt, node)
-	if err != nil {
-		// MessageIDs vem de parseReceipt, que sempre devolve pelo menos um ID,
-		// mas o indexar cru aqui e' um panic esperando um chamador futuro que
-		// nao respeite isso — e este e' o caminho de *erro*, o pior lugar para
-		// morrer. Ver PATCHES.md (Fase E, lote 5).
-		var firstID types.MessageID
-		if len(receipt.MessageIDs) > 0 {
-			firstID = receipt.MessageIDs[0]
-		}
-		cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v", receipt.Chat, firstID, receipt.Sender, err)
-	}
+	retry.TryHandleReceipt(ctx, cli.retryT(), receipt, node)
 }
 
 // handleRetryReceipt handles an incoming retry receipt for an outgoing message.
 func (cli *Client) handleRetryReceipt(ctx context.Context, receipt *events.Receipt, node *waBinary.Node) error {
-	retryChild, ok := node.GetOptionalChildByTag("retry")
-	if !ok {
-		return &ElementMissingError{Tag: "retry", In: "retry receipt"}
+	if cli == nil {
+		return ErrClientIsNil
 	}
-	ag := retryChild.AttrGetter()
-	messageID := ag.String("id")
-	timestamp := ag.UnixTime("t")
-	retryCount := ag.Int("count")
-	if !ag.OK() {
-		return ag.Error()
-	}
-	msg, err := cli.getMessageForRetry(ctx, receipt, messageID)
-	if err != nil {
-		return err
-	} else if msg == nil {
-		return fmt.Errorf("couldn't find message %s", messageID)
-	}
-	var fbConsumerMsg *waConsumerApplication.ConsumerApplication
-	if msg.fb != nil {
-		subProto, ok := msg.fb.GetPayload().GetSubProtocol().GetSubProtocol().(*waMsgApplication.MessageApplication_SubProtocolPayload_ConsumerMessage)
-		if ok {
-			fbConsumerMsg, err = subProto.Decode()
-			if err != nil {
-				return fmt.Errorf("failed to decode consumer message for retry: %w", err)
-			}
-		}
-	}
+	return retry.HandleReceipt(ctx, cli.retryT(), receipt, node)
+}
 
-	retryKey := incomingRetryKey{receipt.Sender, messageID}
-	cli.incomingRetryRequestCounterLock.Lock()
-	cli.incomingRetryRequestCounter[retryKey]++
-	internalCounter := cli.incomingRetryRequestCounter[retryKey]
-	cli.incomingRetryRequestCounterLock.Unlock()
-	if internalCounter >= maxIncomingRetryRequests {
-		cli.Log.Warnf("Dropping retry request from %s for %s: internal retry counter is %d", receipt.Sender, messageID, internalCounter)
-		return nil
+// SetMaxParallelRetryReceiptHandling sets how many retry receipts can be handled in parallel.
+// Defaults to unlimited. This should only be set before connecting, changing it afterwards can cause data races.
+func (cli *Client) SetMaxParallelRetryReceiptHandling(n int64) {
+	if cli == nil {
+		return
 	}
-
-	var fbSKDM *waMsgTransport.MessageTransport_Protocol_Ancillary_SenderKeyDistributionMessage
-	var fbDSM *waMsgTransport.MessageTransport_Protocol_Integral_DeviceSentMessage
-	if receipt.IsGroup {
-		builder := groups.NewGroupSessionBuilder(cli.Store, pbSerializer)
-		senderKeyName := protocol.NewSenderKeyName(receipt.Chat.String(), cli.getOwnLID().SignalAddress())
-		signalSKDMessage, err := builder.Create(ctx, senderKeyName)
-		if err != nil {
-			cli.Log.Warnf("Failed to create sender key distribution message to include in retry of %s in %s to %s: %v", messageID, receipt.Chat, receipt.Sender, err)
-		} else if msg.wa != nil {
-			msg.wa.SenderKeyDistributionMessage = &waE2E.SenderKeyDistributionMessage{
-				GroupID:                             proto.String(receipt.Chat.String()),
-				AxolotlSenderKeyDistributionMessage: signalSKDMessage.Serialize(),
-			}
-		} else {
-			fbSKDM = &waMsgTransport.MessageTransport_Protocol_Ancillary_SenderKeyDistributionMessage{
-				GroupID:                             proto.String(receipt.Chat.String()),
-				AxolotlSenderKeyDistributionMessage: signalSKDMessage.Serialize(),
-			}
-		}
-	} else if receipt.IsFromMe {
-		if msg.wa != nil {
-			msg.wa = &waE2E.Message{
-				DeviceSentMessage: &waE2E.DeviceSentMessage{
-					DestinationJID: proto.String(receipt.Chat.String()),
-					Message:        msg.wa,
-				},
-			}
-		} else {
-			fbDSM = &waMsgTransport.MessageTransport_Protocol_Integral_DeviceSentMessage{
-				DestinationJID: proto.String(receipt.Chat.String()),
-			}
-		}
-	}
-
-	// TODO pre-retry callback for fb
-	if cli.PreRetryCallback != nil && !cli.PreRetryCallback(receipt, messageID, retryCount, msg.wa) {
-		cli.Log.Debugf("Cancelled retry receipt in PreRetryCallback")
-		return nil
-	}
-
-	var plaintext, frankingTag []byte
-	if msg.wa != nil {
-		plaintext, err = proto.Marshal(msg.wa)
-		if err != nil {
-			return fmt.Errorf("failed to marshal message: %w", err)
-		}
-	} else {
-		plaintext, err = proto.Marshal(msg.fb)
-		if err != nil {
-			return fmt.Errorf("failed to marshal consumer message: %w", err)
-		}
-		frankingHash := hmac.New(sha256.New, msg.fb.GetMetadata().GetFrankingKey())
-		frankingHash.Write(plaintext)
-		frankingTag = frankingHash.Sum(nil)
-	}
-	_, hasKeys := node.GetOptionalChildByTag("keys")
-	var bundle *prekey.Bundle
-	if hasKeys {
-		bundle, err = nodeToPreKeyBundle(uint32(receipt.Sender.Device), *node)
-		if err != nil {
-			return fmt.Errorf("failed to read prekey bundle in retry receipt: %w", err)
-		}
-	} else if reason, recreate := cli.shouldRecreateSession(ctx, retryCount, receipt.Sender); recreate {
-		cli.Log.Debugf("Fetching prekeys for %s for handling retry receipt with no prekey bundle because %s", receipt.Sender, reason)
-		var keys map[types.JID]preKeyResp
-		keys, err = cli.fetchPreKeys(ctx, []types.JID{receipt.Sender})
-		if err != nil {
-			return err
-		}
-		bundle, err = keys[receipt.Sender].Bundle, keys[receipt.Sender].Err
-		if err != nil {
-			return fmt.Errorf("failed to fetch prekeys: %w", err)
-		} else if bundle == nil {
-			return fmt.Errorf("didn't get prekey bundle for %s (response size: %d)", receipt.Sender, len(keys))
-		}
-	}
-	encAttrs := waBinary.Attrs{}
-	var msgAttrs msgattrs.MessageAttrs
-	if msg.wa != nil {
-		msgAttrs.MediaType = msgattrs.GetMediaTypeFromMessage(msg.wa)
-		msgAttrs.Type = msgattrs.GetTypeFromMessage(msg.wa)
-	} else if fbConsumerMsg != nil {
-		msgAttrs = msgattrs.GetAttrsFromFBMessage(fbConsumerMsg)
-	} else {
-		msgAttrs.Type = "text"
-	}
-	if msgAttrs.MediaType != "" {
-		encAttrs["mediatype"] = msgAttrs.MediaType
-	}
-	var encrypted *waBinary.Node
-	var includeDeviceIdentity bool
-	if msg.wa != nil {
-		encryptionIdentity := receipt.Sender
-		if receipt.Sender.Server == types.DefaultUserServer {
-			lidForPN, err := cli.Store.LIDs.GetLIDForPN(ctx, receipt.Sender)
-			if err != nil {
-				cli.Log.Warnf("Failed to get LID for %s: %v", receipt.Sender, err)
-			} else if !lidForPN.IsEmpty() {
-				cli.migrateSessionStore(ctx, receipt.Sender, lidForPN)
-				encryptionIdentity = lidForPN
-			}
-		}
-		encrypted, includeDeviceIdentity, err = cli.encryptMessageForDevice(ctx, plaintext, encryptionIdentity, bundle, encAttrs, nil)
-	} else {
-		encrypted, err = cli.encryptMessageForDeviceV3(ctx, &waMsgTransport.MessageTransport_Payload{
-			ApplicationPayload: &waCommon.SubProtocol{
-				Payload: plaintext,
-				Version: proto.Int32(FBMessageApplicationVersion),
-			},
-			FutureProof: waCommon.FutureProofBehavior_PLACEHOLDER.Enum(),
-		}, fbSKDM, fbDSM, receipt.Sender, bundle, encAttrs)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to encrypt message for retry: %w", err)
-	}
-	encrypted.Attrs["count"] = retryCount
-
-	attrs := waBinary.Attrs{
-		"to":   node.Attrs["from"],
-		"type": msgAttrs.Type,
-		"id":   messageID,
-		"t":    timestamp.Unix(),
-	}
-	if !receipt.IsGroup {
-		attrs["device_fanout"] = false
-	}
-	if participant, ok := node.Attrs["participant"]; ok {
-		attrs["participant"] = participant
-	}
-	if recipient, ok := node.Attrs["recipient"]; ok {
-		attrs["recipient"] = recipient
-	}
-	if edit, ok := node.Attrs["edit"]; ok {
-		attrs["edit"] = edit
-	}
-	var content []waBinary.Node
-	if msg.wa != nil {
-		content = cli.getMessageContent(
-			*encrypted, msg.wa, attrs, includeDeviceIdentity, nodeExtraParams{},
-		)
-	} else {
-		content = []waBinary.Node{
-			*encrypted,
-			{Tag: "franking", Content: []waBinary.Node{{Tag: "franking_tag", Content: frankingTag}}},
-		}
-	}
-	err = cli.sendNode(ctx, waBinary.Node{
-		Tag:     "message",
-		Attrs:   attrs,
-		Content: content,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to send retry message: %w", err)
-	}
-	cli.Log.Debugf("Sent retry #%d for %s/%s to %s", retryCount, receipt.Chat, messageID, receipt.Sender)
-	return nil
+	cli.retryState.SetMaxParallel(n)
 }

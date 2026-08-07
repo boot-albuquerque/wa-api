@@ -12,6 +12,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/types"
 )
 
 // --- registro e remocao de handlers ---
@@ -245,12 +246,16 @@ func TestNewClientDefaults(t *testing.T) {
 	if cli.BackgroundEventCtx == nil {
 		t.Error("BackgroundEventCtx nao pode ser nil")
 	}
-	if cli.responseWaiters == nil || cli.messageRetries == nil ||
-		cli.groupCache == nil || cli.userDevicesCache == nil ||
-		cli.recentMessagesMap == nil || cli.sessionRecreateHistory == nil ||
-		cli.pendingPhoneRerequests == nil ||
-		cli.incomingRetryRequestCounter == nil {
+	if cli.responseWaiters == nil ||
+		cli.groupCache == nil || cli.userDevicesCache == nil {
 		t.Error("algum mapa interno ficou nil")
+	}
+	// Os mapas do dominio de retry NAO sao mais criados aqui: retry.State os
+	// cria preguicosamente sob o lock de escrita (mesmo racional do lote 3 e do
+	// tctoken do lote 4). Uma leitura antes de qualquer gravacao enxerga mapa
+	// nil, o que em Go devolve o zero — mesmo resultado que um mapa vazio.
+	if got := cli.getRecentMessage(types.EmptyJID, "nao-existe"); !got.IsEmpty() {
+		t.Errorf("leitura em cache vazio = %+v, esperado zero", got)
 	}
 	if cli.handlerQueue == nil || cli.socketWait == nil ||
 		cli.historySyncNotifications == nil || cli.expectedDisconnect == nil {
@@ -287,19 +292,19 @@ func TestNewClientUniqueIDPrefixVaries(t *testing.T) {
 // e' representado por semaforo nil.
 func TestSetMaxParallelRetryReceiptHandling(t *testing.T) {
 	cli := NewClient(nil, nil)
-	if cli.retrySema != nil {
+	if cli.retryState.Sema() != nil {
 		t.Error("o padrao deveria ser ilimitado (semaforo nil)")
 	}
 
 	cli.SetMaxParallelRetryReceiptHandling(4)
-	if cli.retrySema == nil {
+	if cli.retryState.Sema() == nil {
 		t.Error("valor positivo deveria criar o semaforo")
 	}
 
 	for _, n := range []int64{0, -1} {
 		cli.SetMaxParallelRetryReceiptHandling(4)
 		cli.SetMaxParallelRetryReceiptHandling(n)
-		if cli.retrySema != nil {
+		if cli.retryState.Sema() != nil {
 			t.Errorf("%d deveria voltar a ilimitado", n)
 		}
 	}

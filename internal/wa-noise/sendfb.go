@@ -24,11 +24,18 @@ import (
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/proto/waMsgApplication"
+	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/types"
 )
 
 const FBMessageVersion = 3
-const FBMessageApplicationVersion = 2
+
+// FBMessageApplicationVersion e' o `version` do SubProtocol de aplicacao FB.
+// Continua sendo API publica da raiz com o mesmo valor e o mesmo tipo
+// (constante sem tipo); a definicao mora em internal/wa-noise/retry desde a
+// Fase F/G lote 5, para que o caminho de retry e o de envio normal nao possam
+// divergir.
+const FBMessageApplicationVersion = retry.FBApplicationVersion
 const IGMessageApplicationVersion = 3
 const FBConsumerMessageVersion = 1
 const FBArmadilloMessageVersion = 1

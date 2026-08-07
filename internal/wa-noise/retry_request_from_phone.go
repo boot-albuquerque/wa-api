@@ -10,68 +10,58 @@ import (
 	"context"
 	"time"
 
+	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/types"
 )
 
-func (cli *Client) cancelDelayedRequestFromPhone(msgID types.MessageID) {
-	if !cli.AutomaticMessageRerequestFromPhone || cli.MessengerConfig != nil {
-		return
-	}
-	cli.pendingPhoneRerequestsLock.RLock()
-	cancelPendingRequest, ok := cli.pendingPhoneRerequests[msgID]
-	if ok {
-		cancelPendingRequest()
-	}
-	cli.pendingPhoneRerequestsLock.RUnlock()
-}
-
 // RequestFromPhoneDelay specifies how long to wait for the sender to resend the message before requesting from your phone.
 // This is only used if Client.AutomaticMessageRerequestFromPhone is true.
+//
+// Continua sendo uma VARIAVEL da raiz, e nao foi movida para o subpacote, por
+// dois motivos: e' API publica ajustavel em tempo de execucao, e variaveis nao
+// podem ser reexportadas por apelido em Go. O subpacote le' o valor atual a
+// cada chamada, pelo metodo RerequestDelay do Transport.
 var RequestFromPhoneDelay = 5 * time.Second
 
-func (cli *Client) delayedRequestMessageFromPhone(info *types.MessageInfo) {
-	if !cli.AutomaticMessageRerequestFromPhone || cli.MessengerConfig != nil {
-		return
-	}
-	cli.pendingPhoneRerequestsLock.Lock()
-	_, alreadyRequesting := cli.pendingPhoneRerequests[info.ID]
-	if alreadyRequesting {
-		cli.pendingPhoneRerequestsLock.Unlock()
-		return
-	}
-	ctx, cancel := context.WithCancel(cli.BackgroundEventCtx)
-	defer cancel()
-	cli.pendingPhoneRerequests[info.ID] = cancel
-	cli.pendingPhoneRerequestsLock.Unlock()
+// Fachadas do reenvio pelo telefone. A logica e o estado vivem em
+// internal/wa-noise/retry (Fase F/G, lote 5).
 
-	defer func() {
-		cli.pendingPhoneRerequestsLock.Lock()
-		delete(cli.pendingPhoneRerequests, info.ID)
-		cli.pendingPhoneRerequestsLock.Unlock()
-	}()
-	select {
-	case <-time.After(RequestFromPhoneDelay):
-	case <-ctx.Done():
-		cli.Log.Debugf("Cancelled delayed request for message %s from phone", info.ID)
+// retryMessageRef traduz o types.MessageInfo da raiz para a fatia dele que o
+// subpacote usa.
+func retryMessageRef(info *types.MessageInfo) retry.MessageRef {
+	return retry.MessageRef{
+		Chat:     info.Chat,
+		Sender:   info.Sender,
+		ID:       info.ID,
+		Type:     info.Type,
+		IsFromMe: info.IsFromMe,
+	}
+}
+
+func (cli *Client) cancelDelayedRequestFromPhone(msgID types.MessageID) {
+	if cli == nil {
 		return
 	}
-	cli.immediateRequestMessageFromPhone(ctx, info)
+	retry.CancelDelayedFromPhone(cli.retryT(), msgID)
+}
+
+func (cli *Client) delayedRequestMessageFromPhone(info *types.MessageInfo) {
+	if cli == nil {
+		return
+	}
+	retry.DelayedRequestFromPhone(cli.retryT(), retryMessageRef(info))
 }
 
 func (cli *Client) immediateRequestMessageFromPhone(ctx context.Context, info *types.MessageInfo) {
-	_, err := cli.SendPeerMessage(ctx, cli.BuildUnavailableMessageRequest(info.Chat, info.Sender, info.ID))
-	if err != nil {
-		cli.Log.Warnf("Failed to send request for unavailable message %s to phone: %v", info.ID, err)
-	} else {
-		cli.Log.Debugf("Requested message %s from phone", info.ID)
+	if cli == nil {
+		return
 	}
-	return
+	retry.ImmediateRequestFromPhone(ctx, cli.retryT(), retryMessageRef(info))
 }
 
 func (cli *Client) clearDelayedMessageRequests() {
-	cli.pendingPhoneRerequestsLock.Lock()
-	defer cli.pendingPhoneRerequestsLock.Unlock()
-	for _, cancel := range cli.pendingPhoneRerequests {
-		cancel()
+	if cli == nil {
+		return
 	}
+	retry.ClearDelayedRequests(cli.retryT())
 }
