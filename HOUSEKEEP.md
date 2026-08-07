@@ -1373,3 +1373,135 @@ lugar errado. As outras duas mensagens da mesma função (`:114` e `:126`) dizem
 **Status**: **não corrigido**. É um caractere de risco quase zero, mas altera
 uma string de log que pode estar sendo casada em alerta/dashboard, e o lote 7 é
 de qualidade estrutural por contrato. Pendente de decisão — trivial de aplicar.
+
+---
+
+## F40 — `getCachedGroupData` devolve `(nil, nil)` quando o servidor ecoa outro `id`
+
+**Data / contexto**: 2026-08-07, Fase E lote 8 (envio de mensagem).
+
+**Onde**: `internal/wa-noise/group.go:185-196` e `group.go:144`.
+
+```go
+// group.go:144 — grava sob a chave que o SERVIDOR devolveu
+cli.groupCache[groupInfo.JID] = &groupMetaCache{...}
+
+// group.go:185-196 — le sob a chave CONSULTADA
+func (cli *Client) getCachedGroupData(ctx context.Context, jid types.JID) (*groupMetaCache, error) {
+	if val, ok := cli.groupCache[jid]; ok {
+		return val, nil
+	}
+	_, err := cli.getGroupInfo(ctx, jid, false)
+	if err != nil {
+		return nil, err
+	}
+	return cli.groupCache[jid], nil // <- nil, nil se groupInfo.JID != jid
+}
+```
+
+**Problema**: a escrita usa `groupInfo.JID` (o `id` que o servidor devolveu no
+`<group>`) e a leitura usa o `jid` consultado. Se o servidor responder com um
+`id` diferente, o cache é gravado sob outra chave e a última linha devolve
+`nil, nil` — sucesso aparente com ponteiro nulo. Os dois consumidores do lote 8
+desreferenciavam esse nil direto (`cachedData.AddressingMode` em
+`send_prepare.go:181`, `groupMeta.Members` em `sendfb_transport.go:96`): panic
+remoto no caminho de envio. O primeiro ramo (`val, ok := ...`) tem o mesmo
+problema se algum dia um `nil` for gravado no mapa.
+
+**Corrigido nesta sessão apenas nos chamadores** (guarda de `nil` devolvendo
+`ErrGroupNotFound`, travada por `TestResolveGroupSendTargetNilCachedData`,
+`TestSendGroupV3NilCachedData` e `TestSendGroupV3NonGroupDestination`). A causa
+raiz continua em `group.go`.
+
+**Correção sugerida**: em `getCachedGroupData`, devolver
+`nil, ErrGroupNotFound` (ou um erro dedicado) em vez de `nil, nil` quando o
+lookup pós-`getGroupInfo` falhar; ou alinhar a chave de escrita com a de
+consulta. `group.go` é escopo do lote 6, já fechado.
+
+**Status**: **não corrigido na raiz** (fora do escopo do lote 8; os chamadores
+do lote 8 estão protegidos). Pendente de decisão.
+
+---
+
+## F41 — `makeDeviceIdentityNode` faz `panic` dentro do caminho de envio
+
+**Data / contexto**: 2026-08-07, Fase E lote 8.
+
+**Onde**: `internal/wa-noise/send_node_build.go:225-229`.
+
+```go
+deviceIdentity, err := proto.Marshal(cli.Store.Account)
+if err != nil {
+	panic(fmt.Errorf("failed to marshal device identity: %w", err))
+}
+```
+
+**Problema**: `panic` cru num helper chamado de `getMessageContent` e de
+`preparePeerMessageNode` — ou seja, dentro de `SendMessage`. Não é
+disparável por dado do servidor (o argumento é local) e `proto.Marshal` de um
+`*waAdv.ADVSignedDeviceIdentity` bem formado não falha, então na prática é
+inalcançável. Mas é o único `panic` do caminho de envio, e derruba o processo em
+vez de devolver erro. Caso correlato, silencioso: se `cli.Store.Account` for
+`nil`, `proto.Marshal` devolve bytes vazios **sem erro** e o nó
+`<device-identity>` vai vazio para o fio.
+
+**Correção sugerida**: mudar a assinatura para `(waBinary.Node, error)` e
+propagar; os dois chamadores já devolvem erro. Custo: `getMessageContent` passa
+a devolver erro e o `internals.go` gerado precisa ser regerado.
+
+**Status**: **não corrigido**. Muda assinatura de função usada pelo
+`DangerousInternalClient` gerado, e o lote 8 é de qualidade estrutural.
+Pendente de decisão.
+
+---
+
+## F42 — atributo `v` do nó `<enc>` é numérico no caminho v3/FB e string no waE2E
+
+**Data / contexto**: 2026-08-07, Fase E lote 8.
+
+**Onde**: `internal/wa-noise/sendfb_encrypt.go:158` vs
+`internal/wa-noise/send_encrypt.go:180` e `sendfb_transport.go:107`.
+
+```go
+// sendfb_encrypt.go — int
+encAttrs := waBinary.Attrs{encAttrVersion: FBMessageVersion, ...} // 3 (int)
+// send_encrypt.go / sendfb_transport.go — string
+Attrs: waBinary.Attrs{encAttrVersion: encVersionSignal, ...}      // "2"
+Attrs: waBinary.Attrs{encAttrVersion: encVersionFB, ...}          // "3"
+```
+
+**Problema**: o mesmo atributo do mesmo tipo de nó é escrito ora como `int`, ora
+como `string`. O encoder binário aceita ambos, mas a codificação de saída pode
+diferir (token vs. inteiro), e é a única inconsistência do tipo no caminho de
+envio. Ou o servidor tolera as duas formas (e a divergência é acidental), ou uma
+das duas está errada e nunca foi notada porque o caminho v3/FB é pouco usado.
+
+**Correção sugerida**: confirmar contra captura de tráfego real qual forma o
+cliente oficial usa e uniformizar. Não dá para decidir por leitura de código.
+
+**Status**: **não corrigido**. É formato de fio no caminho de criptografia —
+mudar sem evidência é exatamente o tipo de palpite que o lote 8 proíbe.
+Registrado com comentário no código apontando a divergência.
+
+---
+
+## F43 — nomes de tipo de mensagem duplicados entre `msgattrs` e a raiz
+
+**Data / contexto**: 2026-08-07, Fase E lote 8.
+
+**Onde**: `internal/wa-noise/msgattrs/message.go:32-40` (produz `"reaction"`,
+`"poll"`, `"media"`, `"text"` como literais) e
+`internal/wa-noise/send_constants.go` (`msgTypeText`, `msgTypePoll`,
+`msgTypeReaction`, que comparam contra esses valores).
+
+**Problema**: a taxonomia de tipo de mensagem tem duas fontes — `msgattrs`
+produz literais crus, a raiz compara contra constantes próprias. Se um valor
+mudar de um lado, o outro compila e falha em silêncio (o `if` simplesmente
+para de casar, e o `<meta polltype>` some do nó sem erro nenhum).
+
+**Correção sugerida**: exportar as constantes de `msgattrs`
+(`msgattrs.TypeText` etc.) e fazer tanto `GetTypeFromMessage` quanto a raiz
+usarem as mesmas. `msgattrs` é escopo da Fase D, já fechada.
+
+**Status**: **não corrigido** (fora do escopo do lote 8, que é a raiz).
+Pendente de decisão.

@@ -3826,3 +3826,329 @@ duas linhas (`nodeContentString` e `isValidLIDMapping`, ambas `EXCLUDED X5`, já
 que `internal/wa-noise/` está em `.logcov-exclude`) — mesma regeneração mecânica
 dos lotes anteriores. `git diff --stat internal/wa-noise/proto/` continua vazio,
 e `internals.go`/`internals_generate.go` não aparecem no diff do lote.
+
+---
+
+## Fase E — lote 8: envio de mensagem (send/sendfb), 2026-08-07
+
+### Contexto
+
+Oitavo lote da Fase E (ver o lote 1 para o porquê da fase). São os 11 arquivos
+do caminho de **saída** da **raiz** do pacote, todos `package whatsmeow`:
+
+- **API pública** — `send.go`, `sendfb.go`, `send_types.go`
+- **preparação** — `send_prepare.go`, `send_node_build.go`,
+  `sendfb_transport.go` (que também monta nó)
+- **transporte** — `send_transport.go`
+- **criptografia** — `send_encrypt.go`, `sendfb_encrypt.go`
+- **acessórios** — `send_ack.go`, `send_debug_timings.go`
+
+Perfil de risco diferente dos lotes 1-7, que eram quase todos de *entrada*
+(parsing de resposta do servidor). Aqui o dado é majoritariamente local, e as
+duas classes de falha que importam são outras:
+
+1. **criptografia** — `send_encrypt.go` / `sendfb_encrypt.go` tocam a sessão
+   Signal. A régua adotada foi a mesma de `socket/` na Fase A: **só muda o que é
+   provadamente equivalente**. Nesses dois arquivos a única mudança é
+   substituição de literal por constante de valor idêntico. Nenhuma condição,
+   nenhuma ordem de operação, nenhum argumento de `cipher.Encrypt` foi tocado.
+2. **montagem de nó** — um nó malformado não estoura: ele sai pelo fio e a
+   mensagem silenciosamente não chega. Foi onde a auditoria concentrou o esforço
+   de teste.
+
+O dado controlado pelo servidor que **entra** neste caminho é: os prekey bundles
+(`fetchPreKeysNoError`), o nó de ack, e — o achado deste lote — os metadados de
+grupo lidos do cache.
+
+Nenhum arquivo foi dividido: o maior (`send_transport.go`) tem 259 linhas.
+
+---
+
+### Correções
+
+Três. As duas primeiras são **panic remoto**; a terceira é perda silenciosa de
+entrega.
+
+#### `send_prepare.go:176` e `sendfb_transport.go:96` — nil deref disparável pelo servidor
+
+`getCachedGroupData` (`group.go:185`) grava o cache sob `groupInfo.JID` — o `id`
+que o **servidor** ecoa dentro do `<group>` — e lê sob o `jid` que foi
+consultado. Quando os dois divergem, o `return cli.groupCache[jid], nil` final
+devolve **`(nil, nil)`**: sucesso aparente, ponteiro nulo.
+
+Os dois consumidores do caminho de envio desreferenciavam esse nil direto:
+
+```go
+// send_prepare.go (resolveGroupSendTarget)
+cachedData, err := cli.getCachedGroupData(ctx, to)
+if err != nil { ... }
+if cachedData.AddressingMode == types.AddressingModeLID {   // panic
+
+// sendfb_transport.go (sendGroupV3)
+node, allDevices, err := cli.prepareMessageNodeV3(
+	ctx, to, ownID, id, nil, skdm, msgAttrs, frankingTag, groupMeta.Members, timings,  // panic
+)
+```
+
+O caso do `sendGroupV3` é mais largo: `groupMeta` só é atribuído dentro de
+`if to.Server == types.GroupServer`, e `groupMeta.Members` é lido
+**incondicionalmente** — qualquer destino não-grupo já era nil deref, sem
+precisar do servidor colaborar.
+
+Corrigido nos dois chamadores com guarda explícita devolvendo `ErrGroupNotFound`
+embrulhado na mesma mensagem que o caminho de erro vizinho já usa. A causa raiz
+fica em `group.go` (escopo do lote 6, já fechado) e está registrada como F40 em
+`HOUSEKEEP.md`.
+
+Travado por `TestResolveGroupSendTargetNilCachedData`,
+`TestSendGroupV3NilCachedData` e `TestSendGroupV3NonGroupDestination`, que
+reproduzem o `(nil, nil)` gravando um `nil` explícito no `groupCache` — o mesmo
+estado que o servidor produz, sem precisar de rede.
+
+#### `send_node_build.go:52` — LID vazio seguia para a criptografia
+
+```go
+encryptionIdentity, err = cli.Store.LIDs.GetLIDForPN(ctx, to)
+if err != nil {
+	return nil, fmt.Errorf("failed to get LID for PN %s: %w", to, err)
+}
+// ...encryptMessageForDevice(ctx, plaintext, encryptionIdentity, nil, nil, nil)
+```
+
+`GetLIDForPN` devolve **JID zerado sem erro** quando não conhece o mapeamento —
+contrato que o próprio pacote já reconhece em `migrateSendTargetToLID`
+(`send_prepare.go:200`, que checa `toLID.IsEmpty()`). Aqui não havia checagem: o
+zero seguia para `encryptMessageForDevice`, que monta um Signal address de
+usuário vazio e vai procurar sessão nele.
+
+Na prática o resultado já era erro (`ErrNoSession`: nenhuma sessão é guardada
+sob endereço vazio), então **a correção não muda o desfecho observável** —
+troca uma falha por acidente, no fundo da pilha de criptografia, por uma falha
+explícita e nomeada antes de entrar nela. Foi por isso que a correção foi
+considerada aceitável mesmo sob a régua conservadora deste lote: ela não
+transforma um caminho que funcionava em um que falha.
+
+Travado por `TestPreparePeerMessageNodeRejectsEmptyLID` e
+`TestPreparePeerMessageNodePropagatesLIDError`.
+
+#### `sendfb.go:155-201` — mismatch de phash em DM não invalidava cache nenhum
+
+`SendFBMessage` carregava uma cópia inline do bloco de espera e leitura do ack,
+escrita antes de a Fase A extrair `awaitSendAck`/`applySendAck` de
+`SendMessage`. A cópia divergiu:
+
+```go
+// sendfb.go, antes
+expectedPHash := ag.OptionalString("phash")
+if len(expectedPHash) > 0 && phash != expectedPHash {
+	cli.Log.Warnf("Server returned different participant list hash when sending to %s...", to)
+	cli.groupCacheLock.Lock()
+	delete(cli.groupCache, to)      // <- sempre groupCache, mesmo em DM
+	cli.groupCacheLock.Unlock()
+}
+```
+
+`SendFBMessage` envia para `GroupServer` **e** para `DefaultUserServer`/
+`MessengerServer`. Num DM, o `delete(cli.groupCache, to)` é no-op: o
+`userDevicesCache` — que é onde mora a lista de dispositivos que gerou o phash
+divergente — **nunca era invalidado**. O servidor avisava "sua lista de
+dispositivos está desatualizada, alguns destinatários não receberam", o cliente
+descartava o aviso, e o envio seguinte reusava a mesma lista errada. Perda de
+entrega silenciosa e persistente.
+
+`applySendAck` (`send_ack.go:74`) já faz certo, via `invalidateParticipantCache`
+e seu `switch to.Server`. O bloco inline foi **substituído pelas duas funções
+existentes**, o que corrige o bug e ainda alinha três detalhes que a cópia tinha
+perdido: o `retryFrame` volta a receber a constante `retryFrameContext` em vez do
+literal `"message send"`, o warning passa a incluir os dois hashes, e os
+atributos do ack passam a ser lidos pelas constantes `ackAttr*`.
+
+`sendfb.go` foi de 202 para 167 linhas. **Nenhuma outra diferença de
+comportamento**: `awaitSendAck` tem exatamente o mesmo `select`, o mesmo
+tratamento de timeout/ctx e o mesmo retry de frame que o bloco removido, e
+`applySendAck` preserva a peculiaridade de guardar o erro de `error != 0` e
+ainda assim rodar a checagem de phash antes de retornar.
+
+Travado por `TestApplySendAckErrorStillInvalidatesCache`,
+`TestInvalidateParticipantCacheByServer` (que cobre justamente o caso pn/lid ×
+grupo × broadcast) e os três testes de `awaitSendAck`.
+
+---
+
+### Magic numbers e strings extraídos para constantes nomeadas
+
+**Criado** `send_constants.go` (114), compartilhado pelos dois caminhos (waE2E e
+v3/FB) — a duplicação dos mesmos literais entre `send_*.go` e `sendfb_*.go` era
+justamente o que deixou os dois divergirem no bug do phash acima.
+
+Tags de nó:
+
+| Literal | Constante | Onde estava |
+|---|---|---|
+| `"message"` | `messageNodeTag` | `send_node_build.go` ×2, `send_transport.go`, `sendfb_transport.go` |
+| `"participants"` | `participantsNodeTag` | `send_node_build.go`, `sendfb_transport.go` |
+| `"to"` (tag) | `participantToNodeTag` | `send_encrypt.go`, `sendfb_encrypt.go` |
+| `"enc"` | `encNodeTag` | `send_encrypt.go`, `send_transport.go`, `sendfb_encrypt.go`, `sendfb_transport.go` |
+| `"plaintext"` | `plaintextNodeTag` | `send_transport.go` (newsletter) |
+| `"device-identity"` | `deviceIdentityNodeTag` | `send_node_build.go` |
+| `"biz"` | `bizNodeTag` | `send_node_build.go` |
+| `"franking"` / `"franking_tag"` | `frankingNodeTag` / `frankingTagNodeTag` | `sendfb_transport.go` |
+| `"trace"` / `"request_id"` | `traceNodeTag` / `traceRequestIDNodeTag` | `sendfb_transport.go` |
+| `"tctoken"` / `"cstoken"` | `tcTokenNodeTag` / `csTokenNodeTag` | `send_transport.go` |
+
+Atributos do `<message>`:
+
+| Literal | Constante |
+|---|---|
+| `"id"` | `msgAttrID` |
+| `"type"` | `msgAttrType` |
+| `"to"` (atributo) | `msgAttrTo` |
+| `"category"` | `msgAttrCategory` |
+| `"edit"` | `msgAttrEdit` |
+| `"phash"` | `msgAttrPHash` |
+| `"media_id"` | `msgAttrMediaID` |
+| `"addressing_mode"` | `msgAttrAddressingMode` |
+| `"push_priority"` | `msgAttrPushPriority` |
+| `"privacy_sensitive"` | `msgAttrPrivacySensitive` |
+
+Valores desses atributos: `msgTypeText` (`"text"`), `msgTypePoll` (`"poll"`),
+`msgTypeReaction` (`"reaction"`), `msgCategoryPeer` (`"peer"`),
+`pushPriorityHigh` (`"high"`), `pushPriorityHighForce` (`"high_force"`),
+`privacySensitiveOn` (`"1"`).
+
+Atributos e valores do `<enc>`:
+
+| Literal | Constante |
+|---|---|
+| `"v"` | `encAttrVersion` |
+| `"type"` (do `<enc>`) | `encAttrType` |
+| `"mediatype"` | `encAttrMediaType` |
+| `"decrypt-fail"` | `encAttrDecryptFail` |
+| `"jid"` (do `<to>`) | `participantToAttrJID` |
+| `"msg"` | `encTypeMsg` |
+| `"pkmsg"` | `encTypePreKeyMsg` |
+| `"skmsg"` | `encTypeSenderKey` |
+| `"2"` | `encVersionSignal` |
+| `"3"` | `encVersionFB` |
+
+`<meta>` do envio: `metaAttrAppData` (`"appdata"`), `metaAttrPollType`
+(`"polltype"`), `metaAttrDecryptFail` (`"decrypt-fail"`), com os valores
+`metaAppDataDefault` (`"default"`), `pollTypeCreation` (`"creation"`),
+`pollTypeVote` (`"vote"`).
+
+Números:
+
+| Literal | Constante | Onde estava |
+|---|---|---|
+| `"2:"` (prefixo) | `participantListHashPrefix` | `participantListHashV2` |
+| `hash[:6]` | `participantListHashLength` | `participantListHashV2` |
+| `random.Bytes(32)` | `frankingKeySize` | `SendFBMessage`, chave HMAC do franking |
+| `proto.Int32(0)` | `frankingVersion` | `SendFBMessage`, `metadata.FrankingVersion` |
+
+Deixados **de propósito** como estão:
+
+- `FBMessageVersion` e os quatro `*ApplicationVersion` de `sendfb.go` — já eram
+  constantes exportadas nomeadas.
+- `messageSecretSize`, `defaultBotPersonaID`, `botNodeTag`, `metaNodeTag`, os
+  três `metaAttr*` de `send_prepare.go` e os quatro `ackAttr*` /
+  `retryFrameContext` de `send_ack.go` — extraídos na Fase A, reaproveitados.
+- O `v` numérico de `sendfb_encrypt.go` (`FBMessageVersion`, `int`) **não** foi
+  convertido para a string `encVersionFB`, apesar de os dois valerem 3. É
+  formato de fio dentro do caminho de criptografia e a divergência pode ser
+  intencional; ganhou comentário no código e o achado F42 em `HOUSEKEEP.md`.
+- Os valores de tipo de mensagem (`msgTypePoll` etc.) são **comparados**, nunca
+  produzidos, por este pacote — quem produz é `msgattrs.GetTypeFromMessage`, com
+  literais crus. A duplicação da taxonomia entre os dois lugares é o achado F43.
+
+**Comportamento mudou? Não** — os valores das constantes são idênticos aos
+literais que substituíram, em todos os arquivos.
+
+---
+
+### Auditoria de logging
+
+Varridos os 11 arquivos atrás de escrita de log fora do `waLog.Logger` injetado.
+Resultado: **nenhum bypass**. Os 11 pontos de log (`send.go` ×2, `send_ack.go`,
+`send_encrypt.go` ×3, `send_prepare.go`, `send_transport.go`,
+`sendfb_encrypt.go` ×3) usam `cli.Log.{Warnf,Debugf}`, já ligado ao
+`walog.Bridge` sobre zerolog. Não há `fmt.Print*`, `log.*` do stdlib nem
+`println`.
+
+Um `panic` cru: `makeDeviceIdentityNode` (`send_node_build.go:228`). É o único
+do caminho de envio, não é disparável por dado do servidor e na prática é
+inalcançável (`proto.Marshal` de um `ADVSignedDeviceIdentity` bem formado não
+erra). **Não corrigido**: a correção muda a assinatura de `getMessageContent`,
+que o `internals.go` gerado expõe. Registrado como F41.
+
+`MessageDebugTimings.MarshalZerologObject` (`send_debug_timings.go`) não é
+bypass: é o `zerolog.LogObjectMarshaler` que o bridge chama, e passou a ter
+teste (ver abaixo).
+
+---
+
+### Cobertura de teste
+
+O que **não** dá para testar de verdade sem sessão viva, dito com todas as
+letras: `encryptMessageForDevice(V3)`, `encryptMessageForDevices(V3)`,
+`sendGroup`, `sendDM`, `sendDMV3`, `prepareMessageNode(V3)` e `SendMessage` /
+`SendFBMessage` de ponta a ponta dependem de `session.NewBuilderFromSignal` com
+um `store.Device` real, de sessões Signal estabelecidas e de socket. Testar isso
+exigiria um duplo de `AllSessionSpecificStores` inteiro — trabalho de outra
+ordem de grandeza, e um duplo mal feito daria falsa confiança justamente onde
+menos se pode ter. Ficam sem cobertura direta, e é uma lacuna consciente.
+
+O que **dá** e foi coberto — 4 arquivos, 25 testes:
+
+- **Criado** `send_ack_test.go` (222): `sendTestClient` (o `*Client` mínimo
+  reaproveitado pelos outros três arquivos); `applySendAck` (cópia de
+  `server_id`/`t`, `error != 0` virando `ErrServerReturnedError`, o
+  comportamento não-antecipado de invalidar cache mesmo com erro, phash igual e
+  phash ausente não invalidando nada); `invalidateParticipantCache` nos quatro
+  ramos do `switch` (grupo → `groupCache`, pn e lid → `userDevicesCache`,
+  broadcast → nada); e `awaitSendAck` (ack recebido, timeout devolvendo
+  `ErrMessageTimedOut` e removendo o waiter, `ctx` cancelado idem, e `Timeout`
+  negativo desligando o relógio como o godoc de `SendRequestExtra` promete).
+- **Criado** `send_node_build_test.go` (242): `marshalMessage` — a cópia
+  `DeviceSentMessage` presente em pn/lid/broadcast e ausente em grupo/newsletter
+  (tabela por server), o `DestinationJID` e a mensagem interna corretos, o
+  `MessageContextInfo` replicado no envelope externo do DSM (sem isso o próprio
+  dispositivo perde o message secret), e `message == nil` de revoke de
+  newsletter devolvendo vazio sem erro. `getMessageContent` — nó base sozinho,
+  `<meta polltype>` `creation` × `vote`, ausência de `<meta>` quando o `type` não
+  é `poll` mesmo com `PollUpdateMessage` preenchido, a **ordem** exata dos
+  filhos (contrato de protocolo) e `<biz>` sempre por último. `copyAttrs` —
+  sobrescrita do destino e origem vazia/nil.
+- **Criado** `send_transport_test.go` (154): `participantListHashV2` conferido
+  **contra o algoritmo, não contra si mesmo** (prefixo, base64 raw std, 6 bytes,
+  e o SHA-256 recalculado no teste), independência da ordem de entrada — que é o
+  que faz cliente e servidor chegarem ao mesmo hash —, sensibilidade a
+  dispositivo a mais/usuário diferente/device id diferente, e lista vazia.
+  `applyRequestExtraNodes` — request sem `Meta` não criando nó, `Meta` vazio
+  ainda criando o `<meta>` (comportamento do upstream, travado de propósito),
+  os três atributos, o fato de `thread_msg_id`/`thread_msg_sender_jid` serem um
+  par indivisível, e `AdditionalNodes` repassado por referência.
+- **Criado** `send_guards_test.go` (129): `stubLIDStore` (duplo de 5 métodos de
+  `store.LIDStore`) e os cinco testes das três correções acima.
+- **Criado** `send_debug_timings_test.go` (79): `MarshalZerologObject` — os
+  quatro campos opcionais omitidos quando zerados (distinguir "não rodou" de
+  "rodou instantâneo"), os seis obrigatórios sempre presentes, e as dez chaves
+  quando tudo está preenchido. Verificado desserializando o JSON que o zerolog
+  realmente emite, não inspecionando a struct.
+
+Não houve sobreposição a evitar com `msgattrs/message_test.go` (Fase D): aquele
+cobre `GetTypeFromMessage`/`GetMediaTypeFromMessage`/`GetButtonAttributes`, isto
+é, o que **entra** em `attrs`; este lote cobre o que a raiz **faz** com o
+resultado (a forma do nó). Os testes daqui passam os atributos já derivados,
+não reexercitam a derivação.
+
+---
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio.
+- `message_id.go`, `message_builders.go`, `message_attrs.go`,
+  `disappearing_timer.go` e `sendfb_attrs.go` — nascidos do split de `send.go`
+  na Fase A, mas já migrados para `msgattrs/`/`msgpad/` ou cobertos em lotes
+  anteriores.
+- `internals.go` — gerado, isento (ADR-0004). Nenhuma assinatura exposta por ele
+  mudou neste lote.
