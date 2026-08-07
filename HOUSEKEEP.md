@@ -1935,3 +1935,49 @@ comportamento (uma cópia por chamada) num caminho crítico de envio, sem
 medição. Preservado bit a bit; a ressalva está registrada na seção de
 concorrência do lote 6 em `internal/wa-noise/PATCHES.md`. Pendente de decisão do
 usuário.
+
+## F54 — `DangerousInternalClient.GetFBIDDevices` escreve no cache de dispositivos sem tomar o lock
+
+**Data / contexto**: 2026-08-07, durante a Fase F/G lote 7 (extração de
+`internal/wa-noise/user/`). Achado pela revisão independente de concorrência do
+lote, e confirmado por leitura direta do HEAD pré-refactor.
+
+**Onde**:
+- Antes: `internal/wa-noise/user_devices.go:149-167` (`getFBIDDevices`), que faz
+  `cli.userDevicesCache[jid] = userDevices` na linha 162 **sem** tomar
+  `userDevicesCacheLock`.
+- Depois: `internal/wa-noise/user/devices.go:176` (`user.GetFBIDDevices`, via
+  `cache.SetLocked`), alcançado pela fachada `cli.getFBIDDevices`
+  (`internal/wa-noise/user.go:126`).
+- Exposição pública: `internal/wa-noise/internals.go:739`,
+  `DangerousInternalClient.GetFBIDDevices`.
+
+**Problema**: `getFBIDDevices` é seguro pelo seu único chamador de produção,
+`GetUserDevices`/`user.GetDevices`, que segura o lock do cache durante toda a
+chamada — é por isso que ele não toma o lock por conta própria (um segundo
+`Lock()` num `sync.Mutex` não reentrante seria deadlock imediato). Mas
+`internals.go` o expõe **diretamente** em `DangerousInternalClient`, e por esse
+caminho a escrita no mapa acontece sem nenhuma sincronização. Um chamador externo
+que use a fachada `Dangerous` concorrentemente com o caminho de envio ou com
+`handleDeviceNotification` tem uma corrida real de escrita em mapa (que em Go
+pode virar `fatal error: concurrent map writes`, não recuperável).
+
+**Pré-existente, não introduzido pelo lote 7**: o `getFBIDDevices` original
+escrevia no mapa igualmente sem lock, e `internals.go` já o expunha. O lote 7
+mudou uma coisa marginal: como o mapa passou a ser criado preguiçosamente em
+`SetLocked` (antes `NewClient` o criava), a janela de corrida agora inclui também
+a **criação** do mapa, não só a escrita de uma chave. Não é uma classe nova de
+bug — o caminho já era racy — mas a janela é um pouco maior.
+
+**Correção sugerida**: duas opções, nenhuma aplicada aqui por ser fora do escopo
+do lote:
+1. Fazer `DangerousInternalClient.GetFBIDDevices` tomar o lock antes de delegar
+   (`int.c.userDevicesCache.Lock(); defer ...Unlock()`), deixando o contrato
+   "chamado com o lock segurado" explícito na função de domínio. É a correção
+   mínima e não toca no caminho de produção.
+2. Renomear a função de domínio para `GetFBIDDevicesLocked`, tornando o contrato
+   impossível de ignorar por leitura. Exige regenerar `internals.go` (F29).
+
+**Status**: não corrigido. `internals.go`/`internals_generate.go` estão fora do
+escopo por designação (F29), e a regra do projeto proíbe corrigir de graça bug
+pré-existente fora do escopo da tarefa. Registrado para decisão do usuário.

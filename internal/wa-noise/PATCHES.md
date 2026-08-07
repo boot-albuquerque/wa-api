@@ -7349,3 +7349,370 @@ linhas.
 `LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
 com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
 tamanho de arquivo e testes do fork.
+
+## Fase F/G — lote 7: `user/` (extração real + cobertura), 2026-08-07
+
+Sétima extração, mesmo padrão dos lotes 1 (`media/`), 2 (`newsletter/`), 3
+(`appstatesync/`), 4 (`prekeys/`, `pairing/`, `tctoken/`), 5 (`notification/`,
+`retry/`) e 6 (`group/`): o domínio vira um pacote que define uma interface
+estreita, opera sobre ela e **nunca importa a raiz**; a raiz importa o subpacote
+(uma direção só) e mantém métodos-fachada em `*Client`. O racional de por que a
+movimentação simples é impossível está na seção da Fase D.
+
+O escopo designado eram 8 arquivos de raiz (`user.go`, `user_avatar.go`,
+`user_blocklist.go`, `user_bots.go`, `user_business.go`, `user_devices.go`,
+`user_links.go`, `user_usync.go`), mais o `user_constants.go` que a Fase E lote 7
+criou, mais os testes da Fase E lote 7. **Tudo foi extraído**; nada deste escopo
+ficou na raiz. A seção "O que NÃO foi extraído, e por quê" no fim registra o que
+deliberadamente permaneceu fora do subpacote e por quê.
+
+Como o `group/` do lote 6, este domínio tem **estado mutável compartilhado com
+lock** — o cache de listas de dispositivo — e a Fase D o citou junto com `group/`
+e `prekeys/` como motivo de a extração completa não ter sido tentada na época.
+A diferença em relação ao lote 6: aqui o cache é lido e escrito por **cinco**
+caminhos, e três deles ficam num arquivo que **não** é deste domínio
+(`notification_device.go`).
+
+### Panorama
+
+| Subpacote | Arquivos de raiz absorvidos | Cobertura (statements, sob `-race`) |
+|---|---|---|
+| `internal/wa-noise/user/` | `user.go`, `user_avatar.go`, `user_blocklist.go`, `user_bots.go`, `user_business.go`, `user_constants.go`, `user_devices.go`, `user_links.go`, `user_usync.go` | **100,0%** |
+
+### A interface
+
+`user.Transport` (`user/transport.go`) tem dez métodos. Cada um existe por um
+motivo concreto, e nenhum é pass-through gratuito:
+
+- `SendIQ(ctx, IQ) (*waBinary.Node, error)` — o substrato de IQ. Como nos lotes
+  2, 4, 5 e 6, `user.IQ` é uma cópia estrutural de `infoQuery`, não o tipo da
+  raiz: expor `infoQuery` arrastaria a raiz para dentro do pacote e refaria o
+  ciclo. `user.IQ` tem `Target` (usado só por `GetProfilePictureInfo`) e permite
+  `To` no zero — os `<iq>` de `w:qr` saem **sem** `to`, que é como o WhatsApp
+  Android os manda; o comportamento foi preservado literalmente e tem teste
+  (`TestResolveBusinessMessageLinkReadsEveryField`).
+- `Store() *store.Device` — o domínio grava push names, nomes business e
+  mapeamentos LID/PN, e lê privacy tokens ao pedir foto.
+- `DeviceCache() *DeviceCache` — **ponteiro**, não valor. Ver a seção de
+  concorrência.
+- `Log() waLog.Logger`
+- `GenerateRequestID() string` — o `sid` da consulta usync. A função vive em
+  `request.go`, na raiz, porque é do substrato de requisição do fork inteiro.
+- `DispatchEvent(evt any)` — `UpdatePushName` e `UpdateBusinessName` emitem
+  `events.PushName` / `events.BusinessName`.
+- `ParticipantListHash(jids) string` — `participantListHashV2` fica em
+  `send_transport.go`, na raiz, porque é do domínio de **envio**: ele hasheia
+  listas de participantes de grupo tanto quanto listas de dispositivo. Só a
+  operação atravessa a interface; a definição fica onde está até o lote de send.
+  Mesmo critério que manteve `WebMessageIDPrefix` na raiz no lote 6.
+- `ElementMissing(tag, in) error` — preserva o `*whatsmeow.ElementMissingError`
+  concreto que os chamadores históricos recebem num type assert.
+- `WrapIQError(human, iq) error` — preserva o `*wrappedIQError` da raiz.
+- `IQErrors() IQErrors` — entrega os **mesmos ponteiros** dos sentinelas. Aqui a
+  struct tem só **dois** campos (`NotAuthorized`, `NotFound`), não cinco como a
+  do `group/`: são os únicos que este domínio consulta (401 em
+  `GetProfilePictureInfo`; 404 nele e nos dois resolvedores de link). Incluir os
+  outros três seria superfície morta. O motivo de passar os ponteiros originais
+  em vez de reconstruí-los é o mesmo do lote 6: `IQError.Is` compara `Code` **e**
+  `Text`, então um sentinela reconstruído casaria por acidente hoje e divergiria
+  em silêncio se a raiz mudasse um `Text`.
+
+### O estado — `user.DeviceCache`
+
+Os dois campos soltos em `*Client`
+
+    userDevicesCache     map[types.JID]deviceCache
+    userDevicesCacheLock sync.Mutex
+
+viraram **um** campo, `userDevicesCache user.DeviceCache` (`client.go:124`), com
+o mutex e o mapa dentro. `deviceCache` virou `user.DeviceEntry`, e a raiz mantém
+`type deviceCache = user.DeviceEntry` (apelido, não tipo novo).
+
+**Os campos da entrada tiveram que ser exportados** (`devices`/`dhash` →
+`Devices`/`DHash`), e isso é a diferença estrutural em relação ao lote 6:
+`notification_device.go` **monta e lê entradas diretamente** (`deviceCache{...}`
+em três lugares, leitura de `.Devices` em nove), e ele é o domínio de
+**notificação de dispositivo**, não deste — fica na raiz. Manter os campos
+privados obrigaria a inventar construtores e getters só para atravessar a
+fronteira de pacote, o que seria encapsulamento de fachada, não real.
+
+`DeviceCache` expõe `Lock`/`Unlock`/`GetLocked`/`SetLocked`/`DeleteLocked` além
+de `Delete` e `Len`. Os cinco primeiros são exportados **de propósito**, e não é
+vazamento de encapsulamento: `handleDeviceNotification` faz **dezenas** de
+acessos ao mapa dentro de uma única seção crítica, e dar a cada um o seu próprio
+lock transformaria uma seção crítica em muitas, abrindo janelas que não existiam.
+`Delete` é o único que sincroniza sozinho, porque o seu único chamador
+(`invalidateParticipantCache`, em `send_ack.go`) tomava o lock só para o
+`delete`. `Len` também sincroniza sozinho e só tem chamador em teste, onde antes
+se lia `len(cli.userDevicesCache)` no mapa nu **sem lock** — é estritamente mais
+seguro que antes.
+
+O mapa passou a ser criado **preguiçosamente** dentro de `SetLocked`, sempre sob
+o lock — mesmo racional dos lotes 3-6. `NewClient` deixou de criá-lo;
+`client_events_test.go` foi ajustado e agora verifica o comportamento observável
+(`Len() == 0`) em vez do detalhe de implementação (mapa não-nil).
+
+### Os call sites reversos — encontrados de novo e corrigidos
+
+A Fase D tinha medido cinco pontos em que a raiz chama de volta a lógica de
+usuário. Todos foram **re-verificados nesta sessão** (comparando a árvore de
+trabalho com `git show HEAD:...`), e dois que a Fase D não listou apareceram:
+
+| # | Antes | Depois | Como foi resolvido |
+|---|---|---|---|
+| 1 | `send_node_build.go:142` `cli.GetUserDevices(ctx, participants)` | `send_node_build.go:142` **idêntico, mesma linha** | Fachada `cli.GetUserDevices` → `user.GetDevices`. Zero mudança. |
+| 2 | `sendfb_transport.go:178` `cli.GetUserDevices(ctx, participants)` | `sendfb_transport.go:178` **idêntico, mesma linha** | Idem. Zero mudança. |
+| 3 | `send_prepare.go:207` `cli.GetUserInfo(ctx, []types.JID{*to})` | `send_prepare.go:207` **idêntico, mesma linha** | Fachada `cli.GetUserInfo` → `user.GetInfo`. Zero mudança. |
+| 4 | `message_decrypt.go:39` `go cli.updateBusinessName(...)` e `:42` `go cli.updatePushName(...)` | `message_decrypt.go:39` e `:42` **idênticos, mesmas linhas** | Fachadas não exportadas preservadas com a mesma assinatura. Zero mudança — inclusive o `go` na frente, que continua rodando a fachada numa goroutine. |
+| 5 | `message_history_sync.go:143` `cli.handleHistoricalPushNames(ctx, ...)` | `message_history_sync.go:143` **idêntico, mesma linha** | Fachada não exportada preservada. Zero mudança. |
+| 6 | **não listado pela Fase D**: `send_ack.go:100-102`, que fazia `cli.userDevicesCacheLock.Lock(); delete(cli.userDevicesCache, to); cli.userDevicesCacheLock.Unlock()` — acesso **direto ao campo** | `send_ack.go:100` `cli.userDevicesCache.Delete(to)` | Três linhas viraram uma; o mutex e o mapa passaram a ser privados de `user.DeviceCache`. |
+| 7 | **não listado pela Fase D**: `notification_device.go` inteiro (três handlers, ~20 acessos diretos ao mapa e ao lock) | `notification_device.go` reescrito para `cache.Lock()`/`GetLocked`/`SetLocked`/`DeleteLocked` | **O call site reverso mais pesado do lote.** É o domínio de notificação de dispositivo, fora deste escopo, mas é o maior consumidor do cache. Ver a seção de concorrência. |
+
+O ponto central, de novo: **a Fase D estava certa sobre onde estavam os call
+sites, e errada sobre o custo deles**. Com o padrão fachada-sobre-função-livre,
+os cinco que ela listou não mudaram uma letra — nem de linha —, porque continuam
+chamando os mesmos métodos de `*Client`. Só os dois que tocavam **estado**
+precisaram de edição, e a Fase D não tinha listado nenhum dos dois.
+
+### Compatibilidade de API
+
+`go build ./...` no repositório inteiro passa **sem uma única mudança fora de
+`internal/wa-noise/`** — verificado. `git diff HEAD~2 --stat -- pkg/` vazio:
+`pkg/infra/wa-noise/user/` (a camada de projeto, um projeto diferente e já
+pronto) compila e seus testes passam intocados.
+
+O que preservou isso:
+
+- **Apelidos de tipo** (mesmo tipo, não tipo novo): `UsyncQueryExtras =
+  user.QueryExtras`, `GetProfilePictureParams = user.GetProfilePictureParams`,
+  `deviceCache = user.DeviceEntry`.
+- **Constantes com o mesmo valor**: `BusinessMessageLinkPrefix`,
+  `ContactQRLinkPrefix`, `BusinessMessageLinkDirectPrefix` e
+  `ContactQRLinkDirectPrefix` apontam para as do subpacote.
+- **Sentinelas de erro por atribuição, não por cópia** (`errors.go:72-78` e
+  `:93-97`): `ErrProfilePictureUnauthorized`, `ErrProfilePictureNotSet`,
+  `ErrBusinessMessageLinkNotFound` e `ErrContactQRLinkNotFound` são o **mesmo
+  valor** de `user.*`. Um `errors.New` próprio na raiz quebraria `errors.Is` para
+  quem compara com o nome da raiz — a mesma armadilha documentada nos erros de
+  mídia, app state, pareamento e grupo.
+- **Assinaturas não exportadas preservadas**: `usync`, `getFBIDDevices`,
+  `getFBIDDevicesInternal`, `parseBlocklist`, `parseBusinessProfile`,
+  `parseFBDeviceList`, `parseVerifiedNameContent`, `updatePushName`,
+  `updateBusinessName` e `handleHistoricalPushNames` continuam existindo com os
+  mesmos nomes e as mesmas assinaturas. É o que faz `internals.go` compilar sem
+  regeneração — confirmado: `git diff HEAD~2 --stat -- internals.go
+  internals_generate.go` **vazio**.
+
+### Mudança de comportamento deliberada — guardas de receiver nil
+
+Os métodos **exportados** de fachada passaram a recusar receiver nil com
+`ErrClientIsNil`, como nos lotes 1-6. Antes, só `GetUserDevices` e
+`GetProfilePictureInfo` faziam essa checagem; os demais estouravam nil deref.
+
+Os métodos **não exportados** NÃO ganharam essa guarda, e isso é deliberado:
+`internals.go` é gerado a partir das assinaturas deles, e são chamados de dentro
+do próprio cliente, onde `cli` nunca é nil. **A única exceção é `usync`**, que
+**já tinha** a guarda antes desta extração e tem teste de regressão próprio — ela
+foi preservada literalmente na fachada (`user.go:60-62`), não empurrada para
+dentro do subpacote (onde não há `*Client` para ser nil).
+
+### Concorrência — o cache de dispositivos
+
+O ponto de maior risco do lote. Cinco sítios de aquisição antes, cinco depois:
+
+| Antes | Depois |
+|---|---|
+| `user_devices.go:29-30` `GetUserDevices` (span = função inteira, **atravessa a rede**) | `user/devices.go:27-28` `GetDevices` (mesmo span, mesma travessia) |
+| `notification_device.go:18-19` `handleDeviceNotification` | `notification_device.go:19-20` (mesma função, mesmo span) |
+| `notification_device.go:91-92` `handleFBDeviceNotification` | `notification_device.go:93-94` |
+| `notification_device.go:99-100` `handleOwnDevicesNotification` | `notification_device.go:102-103` |
+| `send_ack.go:100-102` `invalidateParticipantCache` (`Unlock` explícito) | `user/cache.go:103-104` `DeviceCache.Delete` (definido em `:102`) (`defer Unlock`; a seção crítica é só o `delete`, que não pode entrar em panic) |
+
+O invariante mais delicado foi preservado literalmente: **`GetDevices` segura o
+lock através da ida à rede** (a consulta usync) e através de `GetFBIDDevices`, que
+escreve no cache **sem** tomar o lock justamente porque ele já está segurado — um
+segundo `Lock()` num `sync.Mutex` não reentrante seria deadlock imediato. Era
+exatamente assim antes; o contrato está documentado no doc de `GetFBIDDevices` e
+no de `DeviceCache`.
+
+Também preservado: `handleDeviceNotification` lê a entrada para um **valor** local
+(`cached, ok := cache.GetLocked(from)`), muta `cached.Devices` e regrava com
+`SetLocked`. Antes era `cached, ok := cli.userDevicesCache[from]` — indexação de
+mapa que **também** devolve cópia da struct. A semântica valor-vs-ponteiro é
+idêntica, inclusive o compartilhamento do array de respaldo do slice. Note que
+este cache guarda **valores**, ao contrário do `group.Cache` do lote 6, que guarda
+`*Meta`: não é divergência de desenho, é o que o `map[types.JID]deviceCache`
+original já fazia.
+
+**Revisão independente**: revisado por um agente separado, que leu os dois lados
+(`git show HEAD:...` para o antes, árvore de trabalho para o depois) e escreveu o
+parecer em arquivo. Veredito: **semântica de locking preservada — nenhum deadlock
+novo, nenhuma cópia de mutex, nenhuma inversão de ordem**. Enumerou os cinco
+sítios dos dois lados confirmando spans idênticos, traçou todos os caminhos até
+`SetLocked`/`GetLocked`/`DeleteLocked` confirmando que nenhum chega a `Lock()`
+duas vezes, verificou que o mutex nunca é copiado por valor (`userTransport` é um
+value type que embrulha só um `*Client`; `DeviceCache()` devolve
+`&t.cli.userDevicesCache`; todos os métodos de `DeviceCache` têm receptor
+ponteiro; `go vet`/copylocks limpo), confirmou que `SetLocked` é o único caminho
+de escrita do mapa e que leitura/`delete`/`Len` em mapa nil são seguros, e checou
+a ordem de aninhamento contra `messageSendLock`, `socketLock`,
+`responseWaitersLock` e o lock do `groupCache` sem encontrar aresta nova nem
+reversa (a aresta `deviceCache → responseWaiters/socket`, criada pela consulta
+usync sob o lock, **já existia no HEAD**).
+
+O revisor encontrou **um** achado real, não bloqueante:
+`DangerousInternalClient.GetFBIDDevices` (`internals.go:739`) expõe
+`cli.getFBIDDevices` **diretamente**, e por esse caminho a escrita no cache
+acontece sem nenhuma sincronização — porque a função de domínio conta com o lock
+do chamador de produção. **Isso é pré-existente**: o `getFBIDDevices` original
+(`user_devices.go:162` no HEAD) escrevia no mapa igualmente sem lock, e
+`internals.go` já o expunha — confirmado por leitura direta do blob do HEAD, não
+só pelo relato do revisor. O lote 7 mudou uma coisa marginal: como o mapa passou
+a ser criado preguiçosamente, a janela agora inclui também a **criação** do mapa,
+não só a escrita de uma chave. Não é classe nova de bug. Registrado em
+`HOUSEKEEP.md` (F54) em vez de corrigido de graça, conforme a regra do projeto —
+e porque a correção limpa mexe em `internals.go`, fora de escopo (F29).
+
+O revisor declarou explicitamente o que **não** conseguiu verificar: não
+construiu um teste de estresse que dirigisse `GetDevices` e
+`handleDeviceNotification` concorrentemente; o veredito é por leitura de código
+mais a comparação com o HEAD. A suíte com `-race` passa, mas não exercita esse
+interleaving específico.
+
+### As correções de bug da Fase E lote 7 — preservadas e travadas por teste
+
+As três viajaram com a extração e continuam com teste de regressão, agora do lado
+da **origem** (antes só tinham teste de unidade dos helpers):
+
+1. **11 panics remotos em `GetBotProfiles`** — `NodeContentString`
+   (`user/bots.go:26`) usa comma-ok. `Node.GetChildByTag` devolve o **próprio nó**
+   quando não acha o filho, e nesse caso `Content` é `[]waBinary.Node` ou `nil`,
+   nunca `[]byte`; `.Content.([]byte)` direto era panic disparável por resposta do
+   servidor. Testes: `TestNodeContentStringHandlesEveryContentShape` e
+   `TestNodeContentStringOnMissingChildDoesNotPanic` (relocados de
+   `user_bots_test.go`), **mais um novo**,
+   `TestGetBotProfilesOnEmptyProfileDoesNotPanic`, que exercita o fix ponta a
+   ponta: um `<profile>` inteiramente vazio atravessa `GetBotProfiles` sem panic.
+   Passando.
+2. **Vazamento de mapeamento LID/LID para o store em `GetUserInfo`** —
+   `IsValidLIDMapping` (`user/info.go:84`) filtra o par antes do
+   `PutManyLIDMappings`. A consulta usync aceita LID como entrada, então o `jid`
+   de `<user>` na resposta pode ser um LID, e o par montado seria LID/LID — que o
+   store só pode descartar logando erro. Testes: `TestIsValidLIDMapping`
+   (relocado de `user_test.go`, 10 casos), **mais um novo**,
+   `TestGetInfoDoesNotPersistLIDLIDMappings`, que trava o contrato em `GetInfo`
+   e não só no helper. Passando.
+3. **`parseVerifiedName` tolerante a nome verificado ausente** —
+   `ParseVerifiedName` (`user/business.go:142`) devolve `(nil, nil)`, não erro,
+   nos quatro formatos de ausência. Importa porque `IsOnWhatsApp` e `GetInfo`
+   logam `Warn` quando o erro não é nil, e **um usuário comum, sem conta
+   business, cai exatamente aí** — sem isso, todo usuário normal gerava ruído de
+   log. Teste: `TestParseVerifiedNameAbsentIsNotAnError` (relocado de
+   `user_business_test.go`, 4 casos), mais
+   `TestIsOnWhatsAppTolerantesToBadVerifiedName` e
+   `TestGetInfoTolerantesToBadVerifiedName`, novos, que travam o comportamento
+   dos dois chamadores. Passando.
+
+### Cobertura
+
+`internal/wa-noise/user/`: **100,0% dos statements**, sob `-race`, medido com
+`go test -race -count=1 -cover ./internal/wa-noise/user/`.
+
+Os testes da Fase E lote 7 foram relocados e adaptados aos dublês
+(`user_test.go` → `user/info_test.go`, `user_usync_test.go` →
+`user/usync_test.go`, `user_bots_test.go` → `user/bots_test.go`,
+`user_blocklist_test.go` → `user/blocklist_test.go`, `user_business_test.go` →
+`user/business_test.go`, `user_devices_test.go` → `user/devices_test.go`), e
+ganharam dois arquivos novos — `user/testhelpers_test.go` (o dublê de `Transport`,
+os dublês de store e os montadores de nó) e `user/avatar_test.go`,
+`user/links_test.go` — para cobrir o que a Fase E não alcançava, que era tudo que
+passava pela rede.
+
+Duas lacunas que a Fase E documentou como impossíveis agora estão cobertas, porque
+o dublê de transporte substitui o socket:
+
+- **"entrada de cache existente mas vazia não conta como hit"**
+  (`len(cached.Devices) > 0`): a Fase E registrou que esse caminho "cai na consulta
+  usync, e sem socket `waitResponse` estoura em mapa nil antes de devolver
+  `ErrNotConnected`". Agora tem teste:
+  `TestGetDevicesEmptyCacheEntryStillQueries`.
+- **Todo o corpo de `usync` depois da montagem do nó**: a Fase E só conseguia
+  testar os três retornos anteriores à rede. Agora o envelope do `<iq>`, as três
+  formas de codificação de servidor, o `persona_id` de bot, o embrulho do erro de
+  transporte e o `ElementMissing` da lista ausente têm teste.
+
+O `fakeTransport` não fabrica os sentinelas de IQ da raiz: usa `errors.New`
+próprios. Os testes deste pacote só precisam que `errors.Is` case por identidade,
+e depender dos valores da raiz reintroduziria o import que a extração removeu. O
+contrato de que a raiz entrega os ponteiros certos fica travado do outro lado,
+pelo `var _ user.Transport = userTransport{}` em `user_transport.go`.
+
+Na raiz, `send_ack_test.go` ganhou dois helpers (`putDeviceCache`/`getDeviceCache`)
+que encapsulam o par `Lock`/`SetLocked` e `Lock`/`GetLocked` — o cache deixou de
+ser um mapa nu em `*Client`, pelo mesmo motivo que o de grupo no lote 6.
+`notification_test.go` e `client_events_test.go` foram adaptados aos mesmos
+helpers e a `Len()`.
+
+### O que NÃO foi extraído, e por quê
+
+**Nada do escopo designado ficou na raiz.** Os nove arquivos `user*.go` de
+produção viraram fachadas ou desapareceram (`user_constants.go` foi removido; as
+constantes vivem em `user/constants.go`). O que ficou fora do subpacote, ficou por
+um motivo:
+
+**`participantListHashV2` — é do domínio de ENVIO.** Vive em
+`send_transport.go`, e hasheia listas de participantes de grupo tanto quanto
+listas de dispositivo. Movê-lo para `user/` obrigaria o caminho de envio a
+importar `user/` para hashear uma lista de participantes de grupo. Fica onde está
+até o lote de send (lote 8) e atravessa a interface por `ParticipantListHash`.
+
+**`notification_device.go` — é do domínio de NOTIFICAÇÃO de dispositivo.** Os três
+handlers (`handleDeviceNotification`, `handleFBDeviceNotification`,
+`handleOwnDevicesNotification`) reagem a `<notification>` do servidor; o que eles
+têm em comum com este lote é **o cache**, não o domínio. Eles são o motivo de
+`DeviceEntry` ter campos exportados e de `DeviceCache` expor os métodos `*Locked`.
+Ficam na raiz, junto do resto do despacho de notificação que o lote 5 já deixou
+lá.
+
+**`NewsletterLinkPrefix` — é do domínio de canais.** Vivia em `user_links.go` por
+acidente de arquivo, não de domínio: é `newsletter.LinkPrefix`. Mudou para
+`newsletter.go`, a fachada do lote 2, junto com o comentário que explica por que é
+o mesmo valor e não uma cópia.
+
+**`parseVerifiedNameContent` continua exposto na raiz como fachada** porque
+`message_parse.go:174` o chama — é o domínio de **mensagem** (lote 9, pendente),
+que recebe o nó de certificado já desembrulhado de dentro de uma mensagem, sem
+passar por usync. A lógica foi para `user/business.go`; só a fachada ficou.
+
+**Os erros de IQ, `wrapIQError` e `ElementMissingError` — pelo mesmo motivo que
+`request.go` no lote 4 e que o lote 6 registrou.** São o substrato de IQ e de
+parsing de XML do fork inteiro, não deste domínio. Ficam na raiz e atravessam a
+interface por `IQErrors()`, `WrapIQError` e `ElementMissing`.
+
+**`internals.go` e `internals_generate.go` — fora do escopo por designação.**
+F29 em `HOUSEKEEP.md`. Confirmado intocados: `git diff HEAD~2 --stat` deles é
+vazio, e `internals.go` compila sem mudança contra as fachadas (é por isso que
+`UsyncQueryExtras` e `deviceCache` viraram apelidos de tipo em vez de tipos
+novos). O achado F54 desta sessão é justamente sobre um método dele.
+
+**`pkg/infra/wa-noise/user/` — outro projeto, outra camada.** É a camada de
+adaptação do wa-api, já pronta, fora do escopo do ADR-0004. Intocada; seus testes
+passam.
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `user/`. Todos os arquivos de produção dele ficam
+abaixo do teto de 300 linhas (maior: `user/devices.go`, 181). A raiz **encolheu**:
+os nove arquivos `user*.go` saíram de 1234 linhas de produção para 264 (fachadas,
+em `user.go` + `user_queries.go`) + 103 (`user_transport.go`).
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado
+(`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`), +45/-4
+linhas.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
+com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
+tamanho de arquivo e testes do fork.
