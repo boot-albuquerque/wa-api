@@ -902,3 +902,68 @@ serialização JSON.
 `TestGraphQLErrorsUnwrapExposesEveryError` em `newsletter_test.go` mostra que
 `errors.As` funciona, que `errors.Is` não, e falha avisando para atualizar
 esta entrada se `GraphQLError` virar comparável.
+
+---
+
+## F29 — `internals_generate.go` tem lista de arquivos hardcoded: `go generate` hoje derruba 96 dos 178 wrappers de `DangerousInternals`
+
+**Data**: 2026-08-06. **Contexto**: avaliação do pedido de reorganizar a raiz
+de `internal/wa-noise/` em subpacotes (resolução da decisão que a Fase C
+deixou pendente em `PATCHES.md`). O achado apareceu ao verificar por que a
+raiz é sensível a movimentação de arquivos.
+
+**Onde**: `internal/wa-noise/internals_generate.go:101-110` — o `main()` não
+escaneia o diretório, ele carrega uma lista literal de 32 nomes de arquivo:
+
+```go
+fileNames := []string{
+    "appstate.go", "armadillomessage.go", "broadcast.go", "call.go", "client.go",
+    ...
+    "presence.go", "privacysettings.go", "push.go", "qrchan.go", "receipt.go", "request.go",
+    "retry.go", "sendfb.go", "send.go", "upload.go", "user.go", "reportingtoken.go",
+}
+```
+
+Esses 32 nomes são os do **upstream**, de antes da Fase A. A Fase A dividiu a
+raiz em 94 arquivos e criou nomes novos (`send_encrypt.go`,
+`message_decrypt.go`, `retry_recent_messages.go`, `client_connection.go`,
+`user_devices.go`, ...) que **nunca foram acrescentados à lista**.
+
+**Problema**: `internals.go` está commitado correto (756 linhas, 178
+wrappers) porque foi gerado antes da Fase A e ninguém rodou `go generate`
+depois. Mas o gerador e a árvore estão dessincronizados: dos 197 métodos não
+exportados de `*Client` que existem hoje, só 82 estão em arquivos que a lista
+alcança. Rodar `go generate` **agora** regenera um `internals.go` menor e
+derruba 96 wrappers em silêncio — sem erro de compilação, porque
+`DangerousInternals` não tem consumidor no repo.
+
+Evidência (reproduzível, sem tocar no repo — copiar `internal/wa-noise/*.go`
+para um diretório temporário com um `go.mod` mínimo requerendo
+`go.mau.fi/util v0.9.9` e rodar o gerador lá):
+
+```
+committed  internals.go: 756 linhas, 178 wrappers
+regenerado internals.go: 361 linhas,  82 wrappers   -> 96 perdidos
+```
+
+Entre os perdidos estão `Connect`, `AutoReconnect`, `DecryptDM`,
+`DecryptGroupMsg`, `DecryptMessages`, `AddRecentMessage`,
+`ClearUntrustedIdentity`, `DispatchAppState`.
+
+Agrava que `PATCHES.md` (Fase A, seção "Fora do escopo") isenta
+`internals.go` do teto de 300 linhas com a justificativa de que "é recriado
+por `go generate`". Na prática **não é** — recriá-lo hoje o quebra. A isenção
+continua correta (é código gerado), mas o motivo declarado está falso.
+
+**Correção sugerida**: trocar a lista literal por varredura do diretório —
+`filepath.Glob("*.go")` menos `internals.go`, `internals_generate.go` e
+`*_test.go`. São ~10 linhas. Risco de runtime zero: o arquivo é
+`//go:build ignore`, não entra em nenhum binário. Depois do fix, rodar
+`go generate` e commitar o `internals.go` resultante, que passaria a cobrir
+os 197 métodos em vez de 82.
+
+**Status**: **não corrigido** — achado incidental, fora do escopo da tarefa
+que o encontrou (CLAUDE.md: registrar e perguntar antes de corrigir de
+graça). Nenhum gate detecta a regressão hoje: `go generate` não roda em
+`make check`, e não há teste que compare `internals.go` com o que o gerador
+produziria.
