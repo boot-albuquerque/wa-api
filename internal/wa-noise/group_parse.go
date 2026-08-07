@@ -15,8 +15,8 @@ import (
 func parseParticipant(childAG *waBinary.AttrUtility, child *waBinary.Node) types.GroupParticipant {
 	pcpType := childAG.OptionalString("type")
 	participant := types.GroupParticipant{
-		IsAdmin:      pcpType == "admin" || pcpType == "superadmin",
-		IsSuperAdmin: pcpType == "superadmin",
+		IsAdmin:      pcpType == participantTypeAdmin || pcpType == participantTypeSuperAdmin,
+		IsSuperAdmin: pcpType == participantTypeSuperAdmin,
 		JID:          childAG.JID("jid"),
 		DisplayName:  childAG.OptionalString("display_name"),
 	}
@@ -29,7 +29,7 @@ func parseParticipant(childAG *waBinary.AttrUtility, child *waBinary.Node) types
 	}
 	if errorCode := childAG.OptionalInt("error"); errorCode != 0 {
 		participant.Error = errorCode
-		addRequest, ok := child.GetOptionalChildByTag("add_request")
+		addRequest, ok := child.GetOptionalChildByTag(groupAddRequestTag)
 		if ok {
 			addAG := addRequest.AttrGetter()
 			participant.AddRequest = &types.GroupParticipantAddRequest{
@@ -65,10 +65,10 @@ func (cli *Client) parseGroupNode(groupNode *waBinary.Node) (*types.GroupInfo, e
 	for _, child := range groupNode.GetChildren() {
 		childAG := child.AttrGetter()
 		switch child.Tag {
-		case "participant":
+		case groupParticipantTag:
 			group.Participants = append(group.Participants, parseParticipant(childAG, &child))
-		case "description":
-			body, bodyOK := child.GetOptionalChildByTag("body")
+		case groupDescriptionTag:
+			body, bodyOK := child.GetOptionalChildByTag(groupDescriptionBodyTag)
 			if bodyOK {
 				topicBytes, _ := body.Content.([]byte)
 				group.Topic = string(topicBytes)
@@ -77,28 +77,28 @@ func (cli *Client) parseGroupNode(groupNode *waBinary.Node) (*types.GroupInfo, e
 				group.TopicSetByPN = childAG.OptionalJIDOrEmpty("participant_pn") // TODO confirm field name
 				group.TopicSetAt = childAG.UnixTime("t")
 			}
-		case "announcement":
+		case groupAnnouncementTag:
 			group.IsAnnounce = true
-		case "locked":
+		case groupLockedTag:
 			group.IsLocked = true
-		case "ephemeral":
+		case groupEphemeralTag:
 			group.IsEphemeral = true
 			group.DisappearingTimer = uint32(childAG.Uint64("expiration"))
-		case "member_add_mode":
+		case groupMemberAddModeTag:
 			modeBytes, _ := child.Content.([]byte)
 			group.MemberAddMode = types.GroupMemberAddMode(modeBytes)
-		case "linked_parent":
+		case groupLinkedParentTag:
 			group.LinkedParentJID = childAG.JID("jid")
-		case "default_sub_group":
+		case groupDefaultSubGroupTag:
 			group.IsDefaultSubGroup = true
-		case "parent":
+		case groupParentTag:
 			group.IsParent = true
 			group.DefaultMembershipApprovalMode = childAG.OptionalString("default_membership_approval_mode")
-		case "incognito":
+		case groupIncognitoTag:
 			group.IsIncognito = true
-		case "membership_approval_mode":
+		case groupMembershipApprovalModeTag:
 			group.IsJoinApprovalRequired = true
-		case "suspended":
+		case groupSuspendedTag:
 			group.Suspended = true
 		default:
 			cli.Log.Debugf("Unknown element in group node %s: %s", group.JID.String(), child.XMLString())
@@ -124,7 +124,7 @@ func parseGroupLinkTargetNode(groupNode *waBinary.Node) (types.GroupLinkTarget, 
 			NameSetAt: ag.OptionalUnixTime("s_t"),
 		},
 		GroupIsDefaultSub: types.GroupIsDefaultSub{
-			IsDefaultSubGroup: groupNode.GetChildByTag("default_sub_group").Tag == "default_sub_group",
+			IsDefaultSubGroup: groupNode.GetChildByTag(groupDefaultSubGroupTag).Tag == groupDefaultSubGroupTag,
 		},
 	}, ag.Error()
 }
@@ -134,7 +134,7 @@ func parseParticipantList(node *waBinary.Node) (participants []types.JID, lidPai
 	participants = make([]types.JID, 0, len(children))
 	for _, child := range children {
 		jid, ok := child.Attrs["jid"].(types.JID)
-		if child.Tag != "participant" || !ok {
+		if child.Tag != groupParticipantTag || !ok {
 			continue
 		}
 		participants = append(participants, jid)

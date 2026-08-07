@@ -566,6 +566,7 @@ internal/wa-noise.applyBotMessageHKDF	EXCLUDED	X5
 internal/wa-noise.applyRequestExtraNodes	EXCLUDED	X5
 internal/wa-noise.buildBaseReceipt	EXCLUDED	X5
 internal/wa-noise.checkCertValidity	EXCLUDED	X5
+internal/wa-noise.collectParticipantList	EXCLUDED	X5
 internal/wa-noise.convertQueryID	EXCLUDED	X5
 internal/wa-noise.copyAttrs	EXCLUDED	X5
 internal/wa-noise.currentTCTokenCutoffTimestamp	EXCLUDED	X5

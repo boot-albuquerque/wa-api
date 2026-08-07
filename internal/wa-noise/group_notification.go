@@ -16,7 +16,7 @@ import (
 )
 
 func (cli *Client) parseGroupCreate(parentNode, node *waBinary.Node) (*events.JoinedGroup, []store.LIDMapping, []store.RedactedPhoneEntry, error) {
-	groupNode, ok := node.GetOptionalChildByTag("group")
+	groupNode, ok := node.GetOptionalChildByTag(groupNodeTag)
 	if !ok {
 		return nil, nil, nil, fmt.Errorf("group create notification didn't contain group info")
 	}
@@ -38,6 +38,17 @@ func (cli *Client) parseGroupCreate(parentNode, node *waBinary.Node) (*events.Jo
 	return &evt, lidPairs, redactedPhones, nil
 }
 
+// collectParticipantList le a lista de participantes de child e **acumula** os
+// pares LID/PN encontrados em lidPairs, em vez de substituir o que ja' estava
+// la'. Um mesmo <notification type="w:gp2"> pode trazer mais de um elemento de
+// participante (por exemplo <add> e <remove> na mesma notificacao), e os pares
+// de todos eles precisam chegar ao PutManyLIDMappings do chamador.
+func collectParticipantList(child *waBinary.Node, lidPairs *[]store.LIDMapping) []types.JID {
+	participants, childPairs := parseParticipantList(child)
+	*lidPairs = append(*lidPairs, childPairs...)
+	return participants
+}
+
 func (cli *Client) parseGroupChange(node *waBinary.Node) (*events.GroupInfo, []store.LIDMapping, error) {
 	var evt events.GroupInfo
 	ag := node.AttrGetter()
@@ -53,38 +64,39 @@ func (cli *Client) parseGroupChange(node *waBinary.Node) (*events.GroupInfo, []s
 	var lidPairs []store.LIDMapping
 	for _, child := range node.GetChildren() {
 		cag := child.AttrGetter()
-		if child.Tag == "add" || child.Tag == "remove" || child.Tag == "promote" || child.Tag == "demote" {
+		switch ParticipantChange(child.Tag) {
+		case ParticipantChangeAdd, ParticipantChangeRemove, ParticipantChangePromote, ParticipantChangeDemote:
 			evt.PrevParticipantVersionID = cag.OptionalString("prev_v_id")
 			evt.ParticipantVersionID = cag.OptionalString("v_id")
 		}
 		switch child.Tag {
-		case "add":
+		case string(ParticipantChangeAdd):
 			evt.JoinReason = cag.OptionalString("reason")
-			evt.Join, lidPairs = parseParticipantList(&child)
-		case "remove":
-			evt.Leave, lidPairs = parseParticipantList(&child)
-		case "promote":
-			evt.Promote, lidPairs = parseParticipantList(&child)
-		case "demote":
-			evt.Demote, lidPairs = parseParticipantList(&child)
-		case "locked":
+			evt.Join = collectParticipantList(&child, &lidPairs)
+		case string(ParticipantChangeRemove):
+			evt.Leave = collectParticipantList(&child, &lidPairs)
+		case string(ParticipantChangePromote):
+			evt.Promote = collectParticipantList(&child, &lidPairs)
+		case string(ParticipantChangeDemote):
+			evt.Demote = collectParticipantList(&child, &lidPairs)
+		case groupLockedTag:
 			evt.Locked = &types.GroupLocked{IsLocked: true}
-		case "unlocked":
+		case groupUnlockedTag:
 			evt.Locked = &types.GroupLocked{IsLocked: false}
-		case "delete":
+		case groupDeleteTag:
 			evt.Delete = &types.GroupDelete{Deleted: true, DeleteReason: cag.String("reason")}
-		case "subject":
+		case groupSubjectTag:
 			evt.Name = &types.GroupName{
 				Name:        cag.String("subject"),
 				NameSetAt:   cag.UnixTime("s_t"),
 				NameSetBy:   cag.OptionalJIDOrEmpty("s_o"),
 				NameSetByPN: cag.OptionalJIDOrEmpty("s_o_pn"),
 			}
-		case "description":
+		case groupDescriptionTag:
 			var topicStr string
-			_, isDelete := child.GetOptionalChildByTag("delete")
+			_, isDelete := child.GetOptionalChildByTag(groupDeleteTag)
 			if !isDelete {
-				topicChild := child.GetChildByTag("body")
+				topicChild := child.GetChildByTag(groupDescriptionBodyTag)
 				topicBytes, ok := topicChild.Content.([]byte)
 				if !ok {
 					return nil, nil, fmt.Errorf("group change description has unexpected body: %s", topicChild.XMLString())
@@ -102,61 +114,61 @@ func (cli *Client) parseGroupChange(node *waBinary.Node) (*events.GroupInfo, []s
 				TopicSetBy:   setBy,
 				TopicDeleted: isDelete,
 			}
-		case "announcement":
+		case groupAnnouncementTag:
 			evt.Announce = &types.GroupAnnounce{
 				IsAnnounce:        true,
 				AnnounceVersionID: cag.String("v_id"),
 			}
-		case "not_announcement":
+		case groupNotAnnouncementTag:
 			evt.Announce = &types.GroupAnnounce{
 				IsAnnounce:        false,
 				AnnounceVersionID: cag.String("v_id"),
 			}
-		case "invite":
+		case groupInviteTag:
 			link := InviteLinkPrefix + cag.String("code")
 			evt.NewInviteLink = &link
-		case "ephemeral":
+		case groupEphemeralTag:
 			timer := uint32(cag.Uint64("expiration"))
 			evt.Ephemeral = &types.GroupEphemeral{
 				IsEphemeral:       true,
 				DisappearingTimer: timer,
 			}
-		case "not_ephemeral":
+		case groupNotEphemeralTag:
 			evt.Ephemeral = &types.GroupEphemeral{IsEphemeral: false}
-		case "link":
+		case groupLinkTag:
 			evt.Link = &types.GroupLinkChange{
 				Type: types.GroupLinkChangeType(cag.String("link_type")),
 			}
-			groupNode, ok := child.GetOptionalChildByTag("group")
+			groupNode, ok := child.GetOptionalChildByTag(groupNodeTag)
 			if !ok {
-				return nil, nil, &ElementMissingError{Tag: "group", In: "group link"}
+				return nil, nil, &ElementMissingError{Tag: groupNodeTag, In: "group link"}
 			}
 			var err error
 			evt.Link.Group, err = parseGroupLinkTargetNode(&groupNode)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse group link node in group change: %w", err)
 			}
-		case "unlink":
+		case groupUnlinkTag:
 			evt.Unlink = &types.GroupLinkChange{
 				Type:         types.GroupLinkChangeType(cag.String("unlink_type")),
 				UnlinkReason: types.GroupUnlinkReason(cag.String("unlink_reason")),
 			}
-			groupNode, ok := child.GetOptionalChildByTag("group")
+			groupNode, ok := child.GetOptionalChildByTag(groupNodeTag)
 			if !ok {
-				return nil, nil, &ElementMissingError{Tag: "group", In: "group unlink"}
+				return nil, nil, &ElementMissingError{Tag: groupNodeTag, In: "group unlink"}
 			}
 			var err error
 			evt.Unlink.Group, err = parseGroupLinkTargetNode(&groupNode)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse group unlink node in group change: %w", err)
 			}
-		case "membership_approval_mode":
+		case groupMembershipApprovalModeTag:
 			evt.MembershipApprovalMode = &types.GroupMembershipApprovalMode{
 				IsJoinApprovalRequired: true,
 			}
-		case "suspended":
+		case groupSuspendedTag:
 			evt.Suspended = true
-		case "unsuspended":
+		case groupUnsuspendedTag:
 			evt.Unsuspended = true
 		default:
 			evt.UnknownChanges = append(evt.UnknownChanges, &child)
@@ -201,7 +213,7 @@ Outer:
 
 func (cli *Client) parseGroupNotification(node *waBinary.Node) (any, []store.LIDMapping, []store.RedactedPhoneEntry, error) {
 	children := node.GetChildren()
-	if len(children) == 1 && children[0].Tag == "create" {
+	if len(children) == 1 && children[0].Tag == groupCreateTag {
 		return cli.parseGroupCreate(node, &children[0])
 	} else {
 		groupChange, lidPairs, err := cli.parseGroupChange(node)
