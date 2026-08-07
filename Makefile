@@ -268,6 +268,8 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
 	./internal/wa-noise/notification/ ./internal/wa-noise/retry/ \
 	./internal/wa-noise/group/ ./internal/wa-noise/user/ \
 	./internal/wa-noise/send/ ./internal/wa-noise/message/ \
+	./internal/wa-noise/handshake/ ./internal/wa-noise/keepalive/ \
+	./internal/wa-noise/proxyconf/ \
 	./internal/wa-noise/socket/ ./internal/wa-noise/appstate/ \
 	./internal/wa-noise/store/ ./internal/wa-noise/store/sqlstore/ \
 	./internal/wa-noise/binary/ ./internal/wa-noise/types/ ./internal/wa-noise/types/events/ \

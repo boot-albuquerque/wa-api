@@ -49,6 +49,9 @@ internal/wa-noise/group \
 internal/wa-noise/user \
 internal/wa-noise/send \
 internal/wa-noise/message \
+internal/wa-noise/handshake \
+internal/wa-noise/keepalive \
+internal/wa-noise/proxyconf \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \
