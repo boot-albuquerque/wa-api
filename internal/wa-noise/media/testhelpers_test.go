@@ -4,9 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package media
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/util/cbcutil"
 	waLog "wa-api/internal/wa-noise/util/log"
 )
@@ -40,10 +42,49 @@ func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return http.DefaultTransport.RoundTrip(clone)
 }
 
-// newMediaTestClient devolve um Client minimo, sem socket nem store, com o
-// mediaHTTP apontado para srv e um mediaConnCache pre-populado (valido) com os
-// hosts dados — o suficiente para os caminhos de download/upload de midia.
-func newMediaTestClient(t *testing.T, srv *httptest.Server, hosts ...string) *Client {
+// fakeTransport e' o duble de media.Transport usado nos testes: implementa a
+// interface inteira sem precisar de um *whatsmeow.Client (nem de socket, store
+// ou sessao). E' exatamente o ganho de testabilidade que a extracao buscava.
+type fakeTransport struct {
+	httpClient *http.Client
+	log        waLog.Logger
+	messenger  bool
+	userAgent  string
+	warnings   bool
+	conn       ConnCache
+	// iq responde ao IQ <media_conn>. Se for nil, o teste falha ao chegar la',
+	// o que denuncia um caminho que deveria ter usado o cache.
+	iq func(ctx context.Context) (*waBinary.Node, error)
+}
+
+var _ Transport = (*fakeTransport)(nil)
+
+func (f *fakeTransport) HTTPClient() *http.Client { return f.httpClient }
+func (f *fakeTransport) Log() waLog.Logger        { return f.log }
+func (f *fakeTransport) IsMessenger() bool        { return f.messenger }
+func (f *fakeTransport) MessengerUserAgent() string {
+	return f.userAgent
+}
+func (f *fakeTransport) ReturnDownloadWarnings() bool { return f.warnings }
+func (f *fakeTransport) MediaConnCache() *ConnCache   { return &f.conn }
+
+func (f *fakeTransport) SendMediaConnIQ(ctx context.Context) (*waBinary.Node, error) {
+	if f.iq == nil {
+		return nil, errNoIQConfigured
+	}
+	return f.iq(ctx)
+}
+
+var errNoIQConfigured = &iqNotConfiguredError{}
+
+type iqNotConfiguredError struct{}
+
+func (*iqNotConfiguredError) Error() string { return "fakeTransport: nenhum IQ configurado" }
+
+// newTestTransport devolve um fakeTransport com o http apontado para srv e o
+// cache de media connection ja' populado (valido) com os hosts dados — o
+// suficiente para os caminhos de download/upload de midia.
+func newTestTransport(t *testing.T, srv *httptest.Server, hosts ...string) *fakeTransport {
 	t.Helper()
 	target, err := url.Parse(srv.URL)
 	if err != nil {
@@ -52,20 +93,22 @@ func newMediaTestClient(t *testing.T, srv *httptest.Server, hosts ...string) *Cl
 	if len(hosts) == 0 {
 		hosts = []string{"mmg.whatsapp.net"}
 	}
-	connHosts := make([]MediaConnHost, len(hosts))
+	connHosts := make([]ConnHost, len(hosts))
 	for i, h := range hosts {
-		connHosts[i] = MediaConnHost{Hostname: h}
+		connHosts[i] = ConnHost{Hostname: h}
 	}
-	return &Client{
-		Log:       waLog.Noop,
-		mediaHTTP: &http.Client{Transport: &rewriteTransport{target: target}},
-		mediaConnCache: &MediaConn{
-			Auth:      "test-auth",
-			TTL:       3600,
-			FetchedAt: time.Now(),
-			Hosts:     connHosts,
-		},
+	tr := &fakeTransport{
+		httpClient: &http.Client{Transport: &rewriteTransport{target: target}},
+		log:        waLog.Noop,
+		warnings:   true,
 	}
+	tr.conn.Set(&Conn{
+		Auth:      "test-auth",
+		TTL:       3600,
+		FetchedAt: time.Now(),
+		Hosts:     connHosts,
+	})
+	return tr
 }
 
 // decryptForTest e' um atalho para cbcutil.Decrypt, usado para conferir que o
@@ -77,9 +120,9 @@ func decryptForTest(cipherKey, iv, ciphertext []byte) ([]byte, error) {
 // encryptedMediaBlob produz o corpo que o servidor de midia devolveria para o
 // plaintext dado: ciphertext CBC + HMAC truncado, junto do hash do ciphertext
 // (fileEncSHA256) e do hash do plaintext (fileSHA256).
-func encryptedMediaBlob(t *testing.T, mediaKey, plaintext []byte, appInfo MediaType) (blob, fileEncSHA256, fileSHA256 []byte) {
+func encryptedMediaBlob(t *testing.T, mediaKey, plaintext []byte, appInfo Type) (blob, fileEncSHA256, fileSHA256 []byte) {
 	t.Helper()
-	iv, cipherKey, macKey, _ := getMediaKeys(mediaKey, appInfo)
+	iv, cipherKey, macKey, _ := GetKeys(mediaKey, appInfo)
 	ciphertext, err := cbcutil.Encrypt(cipherKey, iv, plaintext)
 	if err != nil {
 		t.Fatalf("falha ao cifrar o plaintext de teste: %v", err)

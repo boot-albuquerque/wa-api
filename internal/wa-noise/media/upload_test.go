@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package media
 
 import (
 	"bytes"
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -50,10 +51,10 @@ func TestUploadCifraEPreencheAResposta(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, uploadOKResponse)
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
 	plaintext := []byte("um anexo qualquer para subir")
-	resp, err := cli.Upload(context.Background(), plaintext, MediaImage)
+	resp, err := Upload(context.Background(), tr, plaintext, TypeImage)
 	if err != nil {
 		t.Fatalf("Upload devolveu erro: %v", err)
 	}
@@ -78,8 +79,8 @@ func TestUploadCifraEPreencheAResposta(t *testing.T) {
 
 	// O corpo enviado precisa ser decriptavel de volta ao plaintext.
 	roundTrip := func() []byte {
-		iv, cipherKey, macKey, _ := getMediaKeys(resp.MediaKey, MediaImage)
-		if err := validateMedia(iv, got.body[:len(got.body)-mediaHMACLength], macKey, got.body[len(got.body)-mediaHMACLength:]); err != nil {
+		iv, cipherKey, macKey, _ := GetKeys(resp.MediaKey, TypeImage)
+		if err := ValidateMedia(iv, got.body[:len(got.body)-mediaHMACLength], macKey, got.body[len(got.body)-mediaHMACLength:]); err != nil {
 			t.Fatalf("o HMAC do corpo enviado nao valida: %v", err)
 		}
 		data, err := decryptForTest(cipherKey, iv, got.body[:len(got.body)-mediaHMACLength])
@@ -99,7 +100,7 @@ func TestUploadCifraEPreencheAResposta(t *testing.T) {
 		t.Errorf("Origin = %q, esperado %q", got.origin, socket.Origin)
 	}
 	token := base64.URLEncoding.EncodeToString(resp.FileEncSHA256)
-	wantPath := "/" + uploadPrefixDefault + "/" + mediaTypeToMMSType[MediaImage] + "/" + token
+	wantPath := "/" + uploadPrefixDefault + "/" + mediaTypeToMMSType[TypeImage] + "/" + token
 	if got.path != wantPath {
 		t.Errorf("path = %q, esperado %q", got.path, wantPath)
 	}
@@ -112,10 +113,10 @@ func TestUploadReaderProduzOMesmoContrato(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, uploadOKResponse)
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
 	plaintext := []byte("conteudo lido de um reader")
-	resp, err := cli.UploadReader(context.Background(), bytes.NewReader(plaintext), nil, MediaDocument)
+	resp, err := UploadReader(context.Background(), tr, bytes.NewReader(plaintext), nil, TypeDocument)
 	if err != nil {
 		t.Fatalf("UploadReader devolveu erro: %v", err)
 	}
@@ -126,8 +127,35 @@ func TestUploadReaderProduzOMesmoContrato(t *testing.T) {
 	if !bytes.Equal(resp.FileSHA256, plainHash[:]) {
 		t.Error("FileSHA256 nao e' o hash do plaintext")
 	}
-	if !strings.Contains(got.path, mediaTypeToMMSType[MediaDocument]) {
+	if !strings.Contains(got.path, mediaTypeToMMSType[TypeDocument]) {
 		t.Errorf("path = %q, esperado conter o mms-type de documento", got.path)
+	}
+}
+
+// Passando um tempFile explicito, o arquivo temporario interno nao e' criado e
+// o conteudo cifrado fica no arquivo do chamador.
+func TestUploadReaderComTempFileExplicito(t *testing.T) {
+	var got capturedUpload
+	srv := uploadServer(t, &got, uploadOKResponse)
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+
+	tempFile, err := os.CreateTemp(t.TempDir(), "upload-*")
+	if err != nil {
+		t.Fatalf("falha ao criar arquivo temporario: %v", err)
+	}
+	defer func() { _ = tempFile.Close() }()
+
+	plaintext := []byte("conteudo com arquivo temporario do chamador")
+	resp, err := UploadReader(context.Background(), tr, bytes.NewReader(plaintext), tempFile, TypeImage)
+	if err != nil {
+		t.Fatalf("UploadReader devolveu erro: %v", err)
+	}
+	if resp.FileLength != uint64(len(plaintext)) {
+		t.Errorf("FileLength = %d, esperado %d", resp.FileLength, len(plaintext))
+	}
+	if len(got.body) == 0 {
+		t.Error("nada foi enviado ao servidor")
 	}
 }
 
@@ -135,10 +163,10 @@ func TestUploadNewsletterNaoCifraEUsaOPrefixoDeNewsletter(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, uploadOKResponse)
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
 	data := []byte("midia de newsletter em claro")
-	resp, err := cli.UploadNewsletter(context.Background(), data, MediaImage)
+	resp, err := UploadNewsletter(context.Background(), tr, data, TypeImage)
 	if err != nil {
 		t.Fatalf("UploadNewsletter devolveu erro: %v", err)
 	}
@@ -152,7 +180,7 @@ func TestUploadNewsletterNaoCifraEUsaOPrefixoDeNewsletter(t *testing.T) {
 	if !bytes.Equal(resp.FileSHA256, hash[:]) {
 		t.Error("FileSHA256 nao e' o hash do conteudo")
 	}
-	wantPrefix := "/" + uploadPrefixNewsletter + "/newsletter-" + mediaTypeToMMSType[MediaImage] + "/"
+	wantPrefix := "/" + uploadPrefixNewsletter + "/newsletter-" + mediaTypeToMMSType[TypeImage] + "/"
 	if !strings.HasPrefix(got.path, wantPrefix) {
 		t.Errorf("path = %q, esperado prefixo %q", got.path, wantPrefix)
 	}
@@ -162,10 +190,10 @@ func TestUploadNewsletterReaderRebobinaAntesDeEnviar(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, uploadOKResponse)
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
 	data := []byte("conteudo lido duas vezes: hash e envio")
-	resp, err := cli.UploadNewsletterReader(context.Background(), bytes.NewReader(data), MediaImage)
+	resp, err := UploadNewsletterReader(context.Background(), tr, bytes.NewReader(data), TypeImage)
 	if err != nil {
 		t.Fatalf("UploadNewsletterReader devolveu erro: %v", err)
 	}
@@ -177,38 +205,110 @@ func TestUploadNewsletterReaderRebobinaAntesDeEnviar(t *testing.T) {
 	}
 }
 
+// Um ReadSeeker que falha ao rebobinar produz erro explicito.
+func TestUploadNewsletterReaderFalhaAoRebobinar(t *testing.T) {
+	var got capturedUpload
+	srv := uploadServer(t, &got, uploadOKResponse)
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+
+	_, err := UploadNewsletterReader(context.Background(), tr, failingSeeker{}, TypeImage)
+	if err == nil || !strings.Contains(err.Error(), "failed to seek to start of data") {
+		t.Fatalf("erro = %v, esperado falha de seek", err)
+	}
+}
+
+// Cliente Messenger muda prefixo, mms-type de audio e escolha de host.
+func TestResolveUploadTarget(t *testing.T) {
+	conn := &Conn{Hosts: []ConnHost{{Hostname: "primeiro"}, {Hostname: "ultimo"}}}
+
+	t.Run("padrao usa o primeiro host", func(t *testing.T) {
+		tr := &fakeTransport{}
+		target := resolveUploadTarget(tr, conn, TypeAudio, false)
+		if target.host != "primeiro" || target.prefix != uploadPrefixDefault || target.mmsType != mmsTypeAudio {
+			t.Fatalf("target = %+v", target)
+		}
+	})
+	t.Run("messenger usa o ultimo host e troca audio por ptt", func(t *testing.T) {
+		tr := &fakeTransport{messenger: true}
+		target := resolveUploadTarget(tr, conn, TypeAudio, false)
+		if target.host != "ultimo" || target.prefix != uploadPrefixMessenger || target.mmsType != mmsTypePTT {
+			t.Fatalf("target = %+v", target)
+		}
+	})
+	t.Run("messenger nao troca mms-type de imagem", func(t *testing.T) {
+		tr := &fakeTransport{messenger: true}
+		if target := resolveUploadTarget(tr, conn, TypeImage, false); target.mmsType != "image" {
+			t.Fatalf("mmsType = %q, esperado \"image\"", target.mmsType)
+		}
+	})
+	t.Run("newsletter prefixa o mms-type", func(t *testing.T) {
+		tr := &fakeTransport{}
+		target := resolveUploadTarget(tr, conn, TypeImage, true)
+		if target.prefix != uploadPrefixNewsletter || target.mmsType != "newsletter-image" {
+			t.Fatalf("target = %+v", target)
+		}
+	})
+}
+
 func TestUploadPropagaStatusDeErro(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
-	_, err := cli.Upload(context.Background(), []byte("x"), MediaImage)
+	_, err := Upload(context.Background(), tr, []byte("x"), TypeImage)
 	if err == nil || !strings.Contains(err.Error(), "403") {
 		t.Fatalf("erro = %v, esperado mencao ao status 403", err)
 	}
 }
 
-func TestDeleteMediaMontaAURLDeDelecao(t *testing.T) {
+func TestUploadRejeitaRespostaNaoJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("nao e json"))
+	}))
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+
+	_, err := Upload(context.Background(), tr, []byte("x"), TypeImage)
+	if err == nil || !strings.Contains(err.Error(), "failed to parse upload response") {
+		t.Fatalf("erro = %v, esperado falha de parse da resposta", err)
+	}
+}
+
+func TestRawUploadPropagaErroDaMediaConn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+	tr.conn.Set(nil)
+
+	var resp UploadResponse
+	err := RawUpload(context.Background(), tr, bytes.NewReader(nil), 0, nil, TypeImage, false, &resp)
+	if err == nil || !strings.Contains(err.Error(), "failed to refresh media connections") {
+		t.Fatalf("erro = %v, esperado embrulho de falha na mediaConn", err)
+	}
+}
+
+func TestDeleteMontaAURLDeDelecao(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, "")
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
 	encFileHash := bytes.Repeat([]byte{0x09}, sha256HashLength)
-	// O directPath vem com query string; DeleteMedia precisa corta-la antes de
+	// O directPath vem com query string; Delete precisa corta-la antes de
 	// codificar em d_md.
-	err := cli.DeleteMedia(context.Background(), MediaHistory, "/v/t62/abc?ccb=11-4", encFileHash, "handle-1")
+	err := Delete(context.Background(), tr, TypeHistory, "/v/t62/abc?ccb=11-4", encFileHash, "handle-1")
 	if err != nil {
-		t.Fatalf("DeleteMedia devolveu erro: %v", err)
+		t.Fatalf("Delete devolveu erro: %v", err)
 	}
 
 	if got.method != http.MethodDelete {
 		t.Errorf("metodo = %s, esperado DELETE", got.method)
 	}
 	token := base64.URLEncoding.EncodeToString(encFileHash)
-	wantPath := "/mms/" + mediaTypeToMMSType[MediaHistory] + "/" + token
+	wantPath := "/mms/" + mediaTypeToMMSType[TypeHistory] + "/" + token
 	if got.path != wantPath {
 		t.Errorf("path = %q, esperado %q", got.path, wantPath)
 	}
@@ -221,30 +321,42 @@ func TestDeleteMediaMontaAURLDeDelecao(t *testing.T) {
 	}
 }
 
-func TestDeleteMediaOmiteEHandleQuandoVazio(t *testing.T) {
+func TestDeleteOmiteEHandleQuandoVazio(t *testing.T) {
 	var got capturedUpload
 	srv := uploadServer(t, &got, "")
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
-	err := cli.DeleteMedia(context.Background(), MediaHistory, "/v/x", bytes.Repeat([]byte{0x0A}, sha256HashLength), "")
+	err := Delete(context.Background(), tr, TypeHistory, "/v/x", bytes.Repeat([]byte{0x0A}, sha256HashLength), "")
 	if err != nil {
-		t.Fatalf("DeleteMedia devolveu erro: %v", err)
+		t.Fatalf("Delete devolveu erro: %v", err)
 	}
 	if _, ok := got.query["e_handle"]; ok {
 		t.Error("e_handle vazio nao deveria ir na query")
 	}
 }
 
-func TestDeleteMediaPropagaStatusDeErro(t *testing.T) {
+func TestDeletePropagaStatusDeErro(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	cli := newMediaTestClient(t, srv)
+	tr := newTestTransport(t, srv)
 
-	err := cli.DeleteMedia(context.Background(), MediaHistory, "/v/x", nil, "")
+	err := Delete(context.Background(), tr, TypeHistory, "/v/x", nil, "")
 	if err == nil || !strings.Contains(err.Error(), "500") {
 		t.Fatalf("erro = %v, esperado mencao ao status 500", err)
+	}
+}
+
+func TestDeletePropagaErroDaMediaConn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+	tr.conn.Set(nil)
+
+	err := Delete(context.Background(), tr, TypeHistory, "/v/x", nil, "")
+	if err == nil || !strings.Contains(err.Error(), "failed to refresh media connections") {
+		t.Fatalf("erro = %v, esperado embrulho de falha na mediaConn", err)
 	}
 }

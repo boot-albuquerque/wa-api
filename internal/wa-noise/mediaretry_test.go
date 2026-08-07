@@ -9,7 +9,6 @@ package whatsmeow
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"strconv"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
@@ -24,52 +24,16 @@ import (
 	waLog "wa-api/internal/wa-noise/util/log"
 )
 
-// Golden da chave de retry: ela precisa continuar derivando do mesmo rotulo e
-// tamanho, senao nenhuma notificacao de retry ja' emitida decripta.
-func TestGetMediaRetryKeyGolden(t *testing.T) {
-	mediaKey := bytes.Repeat([]byte{0x11}, mediaKeyLength)
-	key := getMediaRetryKey(mediaKey)
-	if len(key) != mediaRetryKeyLength {
-		t.Fatalf("len(key) = %d, esperado %d", len(key), mediaRetryKeyLength)
-	}
-	const want = "7ab595184e21c4059f35584e68d6eca44cf5968a98a3d90498bd0dfb49da2bd1"
-	if got := hex.EncodeToString(key); got != want {
-		t.Errorf("chave = %s, golden %s", got, want)
-	}
-}
+// A cripto do retry (derivacao da chave, cifragem do receipt e decifragem da
+// notificacao) e' testada em internal/wa-noise/media/retry_test.go. Aqui fica o
+// que so' existe no pacote raiz.
 
-func TestEncryptMediaRetryReceiptEDecriptavel(t *testing.T) {
-	mediaKey := bytes.Repeat([]byte{0x12}, mediaKeyLength)
-	const messageID types.MessageID = "MSG-ID-1"
+const testMediaRetryErrCodeNotAvailable = 2
 
-	ciphertext, iv, err := encryptMediaRetryReceipt(messageID, mediaKey)
-	if err != nil {
-		t.Fatalf("encryptMediaRetryReceipt devolveu erro: %v", err)
-	}
-	if len(iv) != mediaRetryIVLength {
-		t.Fatalf("len(iv) = %d, esperado %d", len(iv), mediaRetryIVLength)
-	}
-
-	plaintext, err := gcmutil.Decrypt(getMediaRetryKey(mediaKey), iv, ciphertext, []byte(messageID))
-	if err != nil {
-		t.Fatalf("falha ao decriptar o receipt: %v", err)
-	}
-	var receipt waMmsRetry.ServerErrorReceipt
-	if err = proto.Unmarshal(plaintext, &receipt); err != nil {
-		t.Fatalf("falha ao desserializar o receipt: %v", err)
-	}
-	if receipt.GetStanzaID() != string(messageID) {
-		t.Errorf("StanzaID = %q, esperado %q", receipt.GetStanzaID(), messageID)
-	}
-
-	// O messageID entra como additional data do GCM: outro ID nao autentica.
-	if _, err = gcmutil.Decrypt(getMediaRetryKey(mediaKey), iv, ciphertext, []byte("OUTRO-ID")); err == nil {
-		t.Error("decriptou com additional data errado")
-	}
-}
-
-func TestDecryptMediaRetryNotification(t *testing.T) {
-	mediaKey := bytes.Repeat([]byte{0x13}, mediaKeyLength)
+// O wrapper exportado do pacote raiz precisa continuar delegando para o pacote
+// media e devolvendo os mesmos sentinelas de erro.
+func TestDecryptMediaRetryNotificationDelegaParaMedia(t *testing.T) {
+	mediaKey := bytes.Repeat([]byte{0x13}, 32)
 	const messageID types.MessageID = "MSG-ID-2"
 
 	notif := &waMmsRetry.MediaRetryNotification{
@@ -81,46 +45,28 @@ func TestDecryptMediaRetryNotification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("falha ao serializar a notificacao: %v", err)
 	}
-	iv := bytes.Repeat([]byte{0x14}, mediaRetryIVLength)
-	ciphertext, err := gcmutil.Encrypt(getMediaRetryKey(mediaKey), iv, plaintext, []byte(messageID))
+	iv := bytes.Repeat([]byte{0x14}, 12)
+	ciphertext, err := gcmutil.Encrypt(media.RetryKey(mediaKey), iv, plaintext, []byte(messageID))
 	if err != nil {
 		t.Fatalf("falha ao cifrar a notificacao: %v", err)
 	}
 
-	t.Run("caminho feliz", func(t *testing.T) {
-		evt := &events.MediaRetry{MessageID: messageID, IV: iv, Ciphertext: ciphertext}
-		got, err := DecryptMediaRetryNotification(evt, mediaKey)
-		if err != nil {
-			t.Fatalf("erro: %v", err)
-		}
-		if got.GetDirectPath() != "/v/novo-caminho" {
-			t.Errorf("DirectPath = %q", got.GetDirectPath())
-		}
-	})
+	evt := &events.MediaRetry{MessageID: messageID, IV: iv, Ciphertext: ciphertext}
+	got, err := DecryptMediaRetryNotification(evt, mediaKey)
+	if err != nil {
+		t.Fatalf("erro: %v", err)
+	}
+	if got.GetDirectPath() != "/v/novo-caminho" {
+		t.Errorf("DirectPath = %q", got.GetDirectPath())
+	}
 
-	t.Run("midia indisponivel no telefone", func(t *testing.T) {
-		evt := &events.MediaRetry{
-			MessageID: messageID,
-			Error:     &events.MediaRetryError{Code: mediaRetryErrCodeNotAvailable},
-		}
-		if _, err := DecryptMediaRetryNotification(evt, mediaKey); !errors.Is(err, ErrMediaNotAvailableOnPhone) {
-			t.Fatalf("erro = %v, esperado ErrMediaNotAvailableOnPhone", err)
-		}
-	})
-
-	t.Run("outro codigo de erro", func(t *testing.T) {
-		evt := &events.MediaRetry{MessageID: messageID, Error: &events.MediaRetryError{Code: 42}}
-		if _, err := DecryptMediaRetryNotification(evt, mediaKey); !errors.Is(err, ErrUnknownMediaRetryError) {
-			t.Fatalf("erro = %v, esperado ErrUnknownMediaRetryError", err)
-		}
-	})
-
-	t.Run("chave errada", func(t *testing.T) {
-		evt := &events.MediaRetry{MessageID: messageID, IV: iv, Ciphertext: ciphertext}
-		if _, err := DecryptMediaRetryNotification(evt, bytes.Repeat([]byte{0x99}, mediaKeyLength)); err == nil {
-			t.Fatal("decriptou com a mediaKey errada")
-		}
-	})
+	semMidia := &events.MediaRetry{
+		MessageID: messageID,
+		Error:     &events.MediaRetryError{Code: testMediaRetryErrCodeNotAvailable},
+	}
+	if _, err = DecryptMediaRetryNotification(semMidia, mediaKey); !errors.Is(err, ErrMediaNotAvailableOnPhone) {
+		t.Fatalf("erro = %v, esperado ErrMediaNotAvailableOnPhone", err)
+	}
 }
 
 func retryNotificationNode(children ...waBinary.Node) *waBinary.Node {
@@ -172,14 +118,14 @@ func TestParseMediaRetryNotification(t *testing.T) {
 	t.Run("notificacao de erro", func(t *testing.T) {
 		node := retryNotificationNode(rmr, waBinary.Node{
 			Tag:   "error",
-			Attrs: waBinary.Attrs{"code": strconv.Itoa(mediaRetryErrCodeNotAvailable)},
+			Attrs: waBinary.Attrs{"code": strconv.Itoa(testMediaRetryErrCodeNotAvailable)},
 		})
 		evt, err := parseMediaRetryNotification(node)
 		if err != nil {
 			t.Fatalf("erro: %v", err)
 		}
-		if evt.Error == nil || evt.Error.Code != mediaRetryErrCodeNotAvailable {
-			t.Fatalf("Error = %+v, esperado codigo %d", evt.Error, mediaRetryErrCodeNotAvailable)
+		if evt.Error == nil || evt.Error.Code != testMediaRetryErrCodeNotAvailable {
+			t.Fatalf("Error = %+v, esperado codigo %d", evt.Error, testMediaRetryErrCodeNotAvailable)
 		}
 		if evt.Ciphertext != nil {
 			t.Error("notificacao de erro nao deveria trazer ciphertext")
@@ -209,4 +155,21 @@ func TestParseMediaRetryNotification(t *testing.T) {
 func TestHandleMediaRetryNotificationIgnoraNodeInvalido(t *testing.T) {
 	cli := &Client{Log: waLog.Noop}
 	cli.handleMediaRetryNotification(context.Background(), retryNotificationNode())
+}
+
+func TestSendMediaRetryReceiptRecusaClientNil(t *testing.T) {
+	var cli *Client
+	err := cli.SendMediaRetryReceipt(context.Background(), &types.MessageInfo{}, nil)
+	if !errors.Is(err, ErrClientIsNil) {
+		t.Fatalf("erro = %v, esperado ErrClientIsNil", err)
+	}
+}
+
+// Sem JID no store, o receipt nao pode ser montado.
+func TestSendMediaRetryReceiptExigeLogin(t *testing.T) {
+	cli := &Client{Log: waLog.Noop}
+	err := cli.SendMediaRetryReceipt(context.Background(), &types.MessageInfo{}, nil)
+	if !errors.Is(err, ErrNotLoggedIn) {
+		t.Fatalf("erro = %v, esperado ErrNotLoggedIn", err)
+	}
 }

@@ -10,47 +10,17 @@ import (
 	"context"
 	"fmt"
 
-	"go.mau.fi/util/random"
-	"google.golang.org/protobuf/proto"
-
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/gcmutil"
-	"wa-api/internal/wa-noise/util/hkdfutil"
 )
 
-const (
-	// mediaRetryKeyInfo e' o rotulo HKDF que deriva a chave do receipt de
-	// retry de midia a partir da mediaKey da mensagem original.
-	mediaRetryKeyInfo   = "WhatsApp Media Retry Notification"
-	mediaRetryKeyLength = 32
-	// mediaRetryIVLength e' o tamanho do nonce AES-GCM do receipt.
-	mediaRetryIVLength = 12
-	// mediaRetryErrCodeNotAvailable e' o codigo que o telefone devolve quando
-	// nao tem mais a midia para reenviar.
-	mediaRetryErrCodeNotAvailable = 2
-)
-
-func getMediaRetryKey(mediaKey []byte) (cipherKey []byte) {
-	return hkdfutil.SHA256(mediaKey, nil, []byte(mediaRetryKeyInfo), mediaRetryKeyLength)
-}
-
-func encryptMediaRetryReceipt(messageID types.MessageID, mediaKey []byte) (ciphertext, iv []byte, err error) {
-	receipt := &waMmsRetry.ServerErrorReceipt{
-		StanzaID: proto.String(messageID),
-	}
-	var plaintext []byte
-	plaintext, err = proto.Marshal(receipt)
-	if err != nil {
-		err = fmt.Errorf("failed to marshal payload: %w", err)
-		return
-	}
-	iv = random.Bytes(mediaRetryIVLength)
-	ciphertext, err = gcmutil.Encrypt(getMediaRetryKey(mediaKey), iv, plaintext, []byte(messageID))
-	return
-}
+// A cripto do retry de midia (derivacao da chave, cifragem e decifragem do
+// receipt) vive em internal/wa-noise/media/retry.go. O que ficou aqui e' o que
+// depende do pacote raiz: o envio do stanza (sendNode/getOwnID) e a leitura do
+// <notification> (que usa ElementMissingError e o dispatch de eventos).
 
 // SendMediaRetryReceipt sends a request to the phone to re-upload the media in a message.
 //
@@ -90,7 +60,7 @@ func (cli *Client) SendMediaRetryReceipt(ctx context.Context, message *types.Mes
 	if cli == nil {
 		return ErrClientIsNil
 	}
-	ciphertext, iv, err := encryptMediaRetryReceipt(message.ID, mediaKey)
+	ciphertext, iv, err := media.EncryptRetryReceipt(message.ID, mediaKey)
 	if err != nil {
 		return fmt.Errorf("failed to prepare encrypted retry receipt: %w", err)
 	}
@@ -112,7 +82,7 @@ func (cli *Client) SendMediaRetryReceipt(ctx context.Context, message *types.Mes
 		{Tag: "enc_iv", Content: iv},
 	}
 
-	err = cli.sendNode(ctx, waBinary.Node{
+	return cli.sendNode(ctx, waBinary.Node{
 		Tag: "receipt",
 		Attrs: waBinary.Attrs{
 			"id":   message.ID,
@@ -124,28 +94,12 @@ func (cli *Client) SendMediaRetryReceipt(ctx context.Context, message *types.Mes
 			{Tag: "rmr", Attrs: rmrAttrs},
 		},
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // DecryptMediaRetryNotification decrypts a media retry notification using the media key.
 // See Client.SendMediaRetryReceipt for more info on how to use this.
 func DecryptMediaRetryNotification(evt *events.MediaRetry, mediaKey []byte) (*waMmsRetry.MediaRetryNotification, error) {
-	var notif waMmsRetry.MediaRetryNotification
-	if evt.Error != nil && evt.Ciphertext == nil {
-		if evt.Error.Code == mediaRetryErrCodeNotAvailable {
-			return nil, ErrMediaNotAvailableOnPhone
-		}
-		return nil, fmt.Errorf("%w (code: %d)", ErrUnknownMediaRetryError, evt.Error.Code)
-	} else if plaintext, err := gcmutil.Decrypt(getMediaRetryKey(mediaKey), evt.IV, evt.Ciphertext, []byte(evt.MessageID)); err != nil {
-		return nil, fmt.Errorf("failed to decrypt notification: %w", err)
-	} else if err = proto.Unmarshal(plaintext, &notif); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal notification (invalid encryption key?): %w", err)
-	} else {
-		return &notif, nil
-	}
+	return media.DecryptRetryNotification(evt, mediaKey)
 }
 
 func parseMediaRetryNotification(node *waBinary.Node) (*events.MediaRetry, error) {

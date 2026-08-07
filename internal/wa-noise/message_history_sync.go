@@ -22,6 +22,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waHistorySync"
 	"wa-api/internal/wa-noise/proto/waWeb"
@@ -84,7 +85,7 @@ func (cli *Client) handleHistorySyncNotificationLoop() {
 // SendHistorySyncServerErrorReceipt sends a history sync server-error receipt, which
 // asks the phone to re-upload the referenced history sync payload.
 func (cli *Client) SendHistorySyncServerErrorReceipt(ctx context.Context, msgID types.MessageID, mediaKey []byte) error {
-	ciphertext, iv, err := encryptMediaRetryReceipt(msgID, mediaKey)
+	ciphertext, iv, err := media.EncryptRetryReceipt(msgID, mediaKey)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt history sync server-error receipt: %w", err)
 	}

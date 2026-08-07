@@ -9,9 +9,9 @@ package whatsmeow
 import (
 	"errors"
 	"fmt"
-	"net/http"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/media"
 )
 
 // Miscellaneous errors
@@ -96,10 +96,6 @@ var (
 	ErrContactQRLinkNotFound = errors.New("that contact QR link does not exist or has been revoked")
 	// ErrInvalidImageFormat is returned by SetGroupPhoto if the given photo is not in the correct format.
 	ErrInvalidImageFormat = errors.New("the given data is not a valid image")
-	// ErrMediaNotAvailableOnPhone is returned by DecryptMediaRetryNotification if the given event contains error code 2.
-	ErrMediaNotAvailableOnPhone = errors.New("media no longer available on phone")
-	// ErrUnknownMediaRetryError is returned by DecryptMediaRetryNotification if the given event contains an unknown error code.
-	ErrUnknownMediaRetryError = errors.New("unknown media retry error")
 	// ErrInvalidDisappearingTimer is returned by SetDisappearingTimer if the given timer is not one of the allowed values.
 	ErrInvalidDisappearingTimer = errors.New("invalid disappearing timer provided")
 )
@@ -113,32 +109,32 @@ var (
 	ErrInvalidInlineBotID       = errors.New("invalid inline bot ID")
 )
 
-type DownloadHTTPError struct {
-	*http.Response
-}
+// DownloadHTTPError is returned when the media server answers with an
+// unexpected status code.
+//
+// A definicao vive em internal/wa-noise/media (ADR-0004, Fase F/G lote 1); aqui
+// fica um apelido para preservar a API historica do pacote raiz.
+type DownloadHTTPError = media.DownloadHTTPError
 
-func (dhe DownloadHTTPError) Error() string {
-	return fmt.Sprintf("download failed with status code %d", dhe.StatusCode)
-}
-
-func (dhe DownloadHTTPError) Is(other error) bool {
-	var otherDHE DownloadHTTPError
-	return errors.As(other, &otherDHE) && dhe.StatusCode == otherDHE.StatusCode
-}
-
-// Some errors that Client.Download can return
+// Some errors that Client.Download can return. Sao os mesmos valores do pacote
+// internal/wa-noise/media — nao copias — entao errors.Is atravessa a fronteira.
 var (
-	ErrMediaDownloadFailedWith403 = DownloadHTTPError{Response: &http.Response{StatusCode: 403}}
-	ErrMediaDownloadFailedWith404 = DownloadHTTPError{Response: &http.Response{StatusCode: 404}}
-	ErrMediaDownloadFailedWith410 = DownloadHTTPError{Response: &http.Response{StatusCode: 410}}
-	ErrNoURLPresent               = errors.New("no url present")
-	ErrFileLengthMismatch         = errors.New("file length does not match")
-	ErrTooShortFile               = errors.New("file too short")
-	ErrInvalidMediaHMAC           = errors.New("invalid media hmac")
-	ErrInvalidMediaEncSHA256      = errors.New("hash of media ciphertext doesn't match")
-	ErrInvalidMediaSHA256         = errors.New("hash of media plaintext doesn't match")
-	ErrUnknownMediaType           = errors.New("unknown media type")
-	ErrNothingDownloadableFound   = errors.New("didn't find any attachments in message")
+	ErrMediaDownloadFailedWith403 = media.ErrMediaDownloadFailedWith403
+	ErrMediaDownloadFailedWith404 = media.ErrMediaDownloadFailedWith404
+	ErrMediaDownloadFailedWith410 = media.ErrMediaDownloadFailedWith410
+	ErrNoURLPresent               = media.ErrNoURLPresent
+	ErrFileLengthMismatch         = media.ErrFileLengthMismatch
+	ErrTooShortFile               = media.ErrTooShortFile
+	ErrInvalidMediaHMAC           = media.ErrInvalidMediaHMAC
+	ErrInvalidMediaEncSHA256      = media.ErrInvalidMediaEncSHA256
+	ErrInvalidMediaSHA256         = media.ErrInvalidMediaSHA256
+	ErrUnknownMediaType           = media.ErrUnknownMediaType
+	ErrNothingDownloadableFound   = media.ErrNothingDownloadableFound
+
+	// ErrMediaNotAvailableOnPhone is returned by DecryptMediaRetryNotification if the given event contains error code 2.
+	ErrMediaNotAvailableOnPhone = media.ErrMediaNotAvailableOnPhone
+	// ErrUnknownMediaRetryError is returned by DecryptMediaRetryNotification if the given event contains an unknown error code.
+	ErrUnknownMediaRetryError = media.ErrUnknownMediaRetryError
 )
 
 var (

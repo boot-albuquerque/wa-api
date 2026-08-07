@@ -8,90 +8,29 @@ package whatsmeow
 
 import (
 	"context"
-	"fmt"
-	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/media"
 )
 
-//type MediaConnIP struct {
-//	IP4 net.IP
-//	IP6 net.IP
-//}
+// A implementacao vive em internal/wa-noise/media/conn.go; aqui ficam so' os
+// apelidos de tipo e os metodos finos de *Client (ADR-0004, Fase F/G lote 1).
 
 // MediaConnHost represents a single host to download media from.
-type MediaConnHost struct {
-	Hostname string
-	//IPs      []MediaConnIP
-}
+type MediaConnHost = media.ConnHost
 
 // MediaConn contains a list of WhatsApp servers from which attachments can be downloaded from.
-type MediaConn struct {
-	Auth       string
-	AuthTTL    int
-	TTL        int
-	MaxBuckets int
-	FetchedAt  time.Time
-	Hosts      []MediaConnHost
-}
-
-// Expiry returns the time when the MediaConn expires.
-func (mc *MediaConn) Expiry() time.Time {
-	return mc.FetchedAt.Add(time.Duration(mc.TTL) * time.Second)
-}
+type MediaConn = media.Conn
 
 func (cli *Client) refreshMediaConn(ctx context.Context, force bool) (*MediaConn, error) {
 	if cli == nil {
 		return nil, ErrClientIsNil
 	}
-	cli.mediaConnLock.Lock()
-	defer cli.mediaConnLock.Unlock()
-	if cli.mediaConnCache == nil || force || time.Now().After(cli.mediaConnCache.Expiry()) {
-		var err error
-		cli.mediaConnCache, err = cli.queryMediaConn(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return cli.mediaConnCache, nil
+	return media.RefreshConn(ctx, cli.mediaT(), force)
 }
 
 func (cli *Client) queryMediaConn(ctx context.Context) (*MediaConn, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:m",
-		Type:      "set",
-		To:        types.ServerJID,
-		Content:   []waBinary.Node{{Tag: "media_conn"}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query media connections: %w", err)
-	} else if len(resp.GetChildren()) == 0 || resp.GetChildren()[0].Tag != "media_conn" {
-		return nil, fmt.Errorf("failed to query media connections: unexpected child tag")
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	respMC := resp.GetChildren()[0]
-	var mc MediaConn
-	ag := respMC.AttrGetter()
-	mc.FetchedAt = time.Now()
-	mc.Auth = ag.String("auth")
-	mc.TTL = ag.Int("ttl")
-	mc.AuthTTL = ag.Int("auth_ttl")
-	mc.MaxBuckets = ag.Int("max_buckets")
-	if !ag.OK() {
-		return nil, fmt.Errorf("failed to parse media connections: %+v", ag.Errors)
-	}
-	for _, child := range respMC.GetChildren() {
-		if child.Tag != "host" {
-			cli.Log.Warnf("Unexpected child in media_conn element: %s", child.XMLString())
-			continue
-		}
-		cag := child.AttrGetter()
-		mc.Hosts = append(mc.Hosts, MediaConnHost{
-			Hostname: cag.String("hostname"),
-		})
-		if !cag.OK() {
-			return nil, fmt.Errorf("failed to parse media connection host: %+v", ag.Errors)
-		}
-	}
-	return &mc, nil
+	return media.QueryConn(ctx, cli.mediaT())
 }

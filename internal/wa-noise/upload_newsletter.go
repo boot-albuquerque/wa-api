@@ -7,12 +7,14 @@
 package whatsmeow
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"io"
+
+	"wa-api/internal/wa-noise/media"
 )
+
+// A implementacao vive em internal/wa-noise/media/upload_newsletter.go
+// (ADR-0004, Fase F/G lote 1).
 
 // UploadNewsletter uploads the given attachment to WhatsApp servers without encrypting it first.
 //
@@ -45,11 +47,10 @@ import (
 //	})
 //	// handle error again
 func (cli *Client) UploadNewsletter(ctx context.Context, data []byte, appInfo MediaType) (resp UploadResponse, err error) {
-	resp.FileLength = uint64(len(data))
-	hash := sha256.Sum256(data)
-	resp.FileSHA256 = hash[:]
-	err = cli.rawUpload(ctx, bytes.NewReader(data), resp.FileLength, resp.FileSHA256, appInfo, true, &resp)
-	return
+	if cli == nil {
+		return resp, ErrClientIsNil
+	}
+	return media.UploadNewsletter(ctx, cli.mediaT(), data, appInfo)
 }
 
 // UploadNewsletterReader uploads the given attachment to WhatsApp servers without encrypting it first.
@@ -58,16 +59,8 @@ func (cli *Client) UploadNewsletter(ctx context.Context, data []byte, appInfo Me
 // Unlike [UploadReader], this does not require a temporary file. However, the data needs to be hashed first,
 // so an [io.ReadSeeker] is required to be able to read the data twice.
 func (cli *Client) UploadNewsletterReader(ctx context.Context, data io.ReadSeeker, appInfo MediaType) (resp UploadResponse, err error) {
-	hasher := sha256.New()
-	var fileLength int64
-	fileLength, err = io.Copy(hasher, data)
-	resp.FileLength = uint64(fileLength)
-	resp.FileSHA256 = hasher.Sum(nil)
-	_, err = data.Seek(0, io.SeekStart)
-	if err != nil {
-		err = fmt.Errorf("failed to seek to start of data: %w", err)
-		return
+	if cli == nil {
+		return resp, ErrClientIsNil
 	}
-	err = cli.rawUpload(ctx, data, resp.FileLength, resp.FileSHA256, appInfo, true, &resp)
-	return
+	return media.UploadNewsletterReader(ctx, cli.mediaT(), data, appInfo)
 }

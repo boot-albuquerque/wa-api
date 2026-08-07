@@ -7,37 +7,17 @@
 package whatsmeow
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
 
-	"go.mau.fi/util/random"
-
-	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/cbcutil"
+	"wa-api/internal/wa-noise/media"
 )
 
-// UploadResponse contains the data from the attachment upload, which can be put into a message to send the attachment.
-type UploadResponse struct {
-	URL        string `json:"url"`
-	DirectPath string `json:"direct_path"`
-	Handle     string `json:"handle"`
-	ObjectID   string `json:"object_id"`
+// A implementacao vive em internal/wa-noise/media/upload.go
+// (ADR-0004, Fase F/G lote 1).
 
-	MediaKey      []byte `json:"-"`
-	FileEncSHA256 []byte `json:"-"`
-	FileSHA256    []byte `json:"-"`
-	FileLength    uint64 `json:"-"`
-}
+// UploadResponse contains the data from the attachment upload, which can be put into a message to send the attachment.
+type UploadResponse = media.UploadResponse
 
 // Upload uploads the given attachment to WhatsApp servers.
 //
@@ -67,31 +47,10 @@ type UploadResponse struct {
 //
 // The same applies to the other message types like DocumentMessage, just replace the struct type and Message field name.
 func (cli *Client) Upload(ctx context.Context, plaintext []byte, appInfo MediaType) (resp UploadResponse, err error) {
-	resp.FileLength = uint64(len(plaintext))
-	resp.MediaKey = random.Bytes(mediaKeyLength)
-
-	plaintextSHA256 := sha256.Sum256(plaintext)
-	resp.FileSHA256 = plaintextSHA256[:]
-
-	iv, cipherKey, macKey, _ := getMediaKeys(resp.MediaKey, appInfo)
-
-	var ciphertext []byte
-	ciphertext, err = cbcutil.Encrypt(cipherKey, iv, plaintext)
-	if err != nil {
-		err = fmt.Errorf("failed to encrypt file: %w", err)
-		return
+	if cli == nil {
+		return resp, ErrClientIsNil
 	}
-
-	h := hmac.New(sha256.New, macKey)
-	h.Write(iv)
-	h.Write(ciphertext)
-	dataToUpload := append(ciphertext, h.Sum(nil)[:mediaHMACLength]...)
-
-	dataHash := sha256.Sum256(dataToUpload)
-	resp.FileEncSHA256 = dataHash[:]
-
-	err = cli.rawUpload(ctx, bytes.NewReader(dataToUpload), uint64(len(dataToUpload)), resp.FileEncSHA256, appInfo, false, &resp)
-	return
+	return media.Upload(ctx, cli.mediaT(), plaintext, appInfo)
 }
 
 // UploadReader uploads the given attachment to WhatsApp servers.
@@ -102,145 +61,22 @@ func (cli *Client) Upload(ctx context.Context, plaintext []byte, appInfo MediaTy
 //
 // To use only one file, pass the same file as both plaintext and tempFile. This will cause the file to be overwritten with encrypted data.
 func (cli *Client) UploadReader(ctx context.Context, plaintext io.Reader, tempFile io.ReadWriteSeeker, appInfo MediaType) (resp UploadResponse, err error) {
-	resp.MediaKey = random.Bytes(mediaKeyLength)
-	iv, cipherKey, macKey, _ := getMediaKeys(resp.MediaKey, appInfo)
-	if tempFile == nil {
-		tempFile, err = os.CreateTemp("", "whatsmeow-upload-*")
-		if err != nil {
-			err = fmt.Errorf("failed to create temporary file: %w", err)
-			return
-		}
-		defer func() {
-			tempFileFile := tempFile.(*os.File)
-			_ = tempFileFile.Close()
-			_ = os.Remove(tempFileFile.Name())
-		}()
+	if cli == nil {
+		return resp, ErrClientIsNil
 	}
-	var uploadSize uint64
-	resp.FileSHA256, resp.FileEncSHA256, resp.FileLength, uploadSize, err = cbcutil.EncryptStream(cipherKey, iv, macKey, plaintext, tempFile)
-	if err != nil {
-		err = fmt.Errorf("failed to encrypt file: %w", err)
-		return
-	}
-	_, err = tempFile.Seek(0, io.SeekStart)
-	if err != nil {
-		err = fmt.Errorf("failed to seek to start of temporary file: %w", err)
-		return
-	}
-	err = cli.rawUpload(ctx, tempFile, uploadSize, resp.FileEncSHA256, appInfo, false, &resp)
-	return
+	return media.UploadReader(ctx, cli.mediaT(), plaintext, tempFile, appInfo)
 }
 
 func (cli *Client) rawUpload(ctx context.Context, dataToUpload io.Reader, uploadSize uint64, fileHash []byte, appInfo MediaType, newsletter bool, resp *UploadResponse) error {
-	mediaConn, err := cli.refreshMediaConn(ctx, false)
-	if err != nil {
-		return fmt.Errorf("failed to refresh media connections: %w", err)
-	}
-
-	token := base64.URLEncoding.EncodeToString(fileHash)
-	q := url.Values{
-		"auth":  []string{mediaConn.Auth},
-		"token": []string{token},
-	}
-	mmsType := mediaTypeToMMSType[appInfo]
-	uploadPrefix := uploadPrefixDefault
-	if cli.MessengerConfig != nil {
-		uploadPrefix = uploadPrefixMessenger
-		// Messenger upload only allows voice messages, not audio files
-		if mmsType == mmsTypeAudio {
-			mmsType = mmsTypePTT
-		}
-	}
-	if newsletter {
-		mmsType = fmt.Sprintf(newsletterMMSTypeFormat, mmsType)
-		uploadPrefix = uploadPrefixNewsletter
-	}
-	var host string
-	// Hacky hack to prefer last option (rupload.facebook.com) for messenger uploads.
-	// For some reason, the primary host doesn't work, even though it has the <upload/> tag.
-	if cli.MessengerConfig != nil {
-		host = mediaConn.Hosts[len(mediaConn.Hosts)-1].Hostname
-	} else {
-		host = mediaConn.Hosts[0].Hostname
-	}
-	uploadURL := url.URL{
-		Scheme:   "https",
-		Host:     host,
-		Path:     fmt.Sprintf(uploadPathFormat, uploadPrefix, mmsType, token),
-		RawQuery: q.Encode(),
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL.String(), dataToUpload)
-	if err != nil {
-		return fmt.Errorf("failed to prepare request: %w", err)
-	}
-
-	req.ContentLength = int64(uploadSize)
-	req.Header.Set("Origin", socket.Origin)
-	req.Header.Set("Referer", socket.Origin+"/")
-
-	httpResp, err := cli.mediaHTTP.Do(req)
-	if err != nil {
-		err = fmt.Errorf("failed to execute request: %w", err)
-	} else if httpResp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("upload failed with status code %d", httpResp.StatusCode)
-	} else if err = json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
-		err = fmt.Errorf("failed to parse upload response: %w", err)
-	}
-	if httpResp != nil {
-		_ = httpResp.Body.Close()
-	}
-	return err
+	return media.RawUpload(ctx, cli.mediaT(), dataToUpload, uploadSize, fileHash, appInfo, newsletter, resp)
 }
 
 // DeleteMedia deletes the media at the given direct path from WhatsApp servers.
 //
 // This is only used for things like history syncs, which should be deleted after processing.
 func (cli *Client) DeleteMedia(ctx context.Context, appInfo MediaType, directPath string, encFileHash []byte, encHandle string) error {
-	mediaConn, err := cli.refreshMediaConn(ctx, false)
-	if err != nil {
-		return fmt.Errorf("failed to refresh media connections: %w", err)
+	if cli == nil {
+		return ErrClientIsNil
 	}
-
-	queryStart := strings.IndexByte(directPath, '?')
-	if queryStart > 0 {
-		directPath = directPath[:queryStart]
-	}
-
-	token := base64.URLEncoding.EncodeToString(encFileHash)
-	query := url.Values{
-		"token": []string{token},
-		"d_md":  []string{base64.RawURLEncoding.EncodeToString([]byte(directPath))},
-		"auth":  []string{mediaConn.Auth},
-	}
-	if encHandle != "" {
-		query.Set("e_handle", encHandle)
-	}
-	deleteURL := url.URL{
-		Scheme:   "https",
-		Host:     mediaConn.Hosts[0].Hostname,
-		Path:     fmt.Sprintf(deletePathFormat, mediaTypeToMMSType[appInfo], token),
-		RawQuery: query.Encode(),
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL.String(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to prepare request: %w", err)
-	}
-
-	req.Header.Set("Origin", socket.Origin)
-	req.Header.Set("Referer", socket.Origin+"/")
-	// TODO non-on-demand backfills may require this? it's in the initial bootstrap payload and may need to be persisted
-	//req.Header.Set("Companion_User_Secret", companionMetaNonce)
-
-	httpResp, err := cli.mediaHTTP.Do(req)
-	if err != nil {
-		err = fmt.Errorf("failed to execute request: %w", err)
-	} else if httpResp.StatusCode < http.StatusOK || httpResp.StatusCode >= http.StatusMultipleChoices {
-		err = fmt.Errorf("media delete failed with status code %d", httpResp.StatusCode)
-	}
-	if httpResp != nil {
-		_ = httpResp.Body.Close()
-	}
-	return err
+	return media.Delete(ctx, cli.mediaT(), appInfo, directPath, encFileHash, encHandle)
 }

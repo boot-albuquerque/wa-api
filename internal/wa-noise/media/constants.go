@@ -4,14 +4,19 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+// Package media implementa o caminho de midia do fork (download, upload,
+// media connection e retry de midia) como funcoes livres sobre a interface
+// estreita [Transport], sem depender do pacote raiz whatsmeow.
+//
+// Ver ADR-0004 (docs/adr/0004-refatorar-internal-waclient-em-fork-intencional.md)
+// e a secao "Fase F/G — lote 1" de internal/wa-noise/PATCHES.md.
+package media
 
 import "time"
 
-// Constantes compartilhadas pelo caminho de midia do fork (download*.go,
-// upload*.go, mediaconn.go, mediaretry.go). Os valores sao exatamente os que
-// estavam embutidos nos literais antes da Fase E do ADR-0004 — nomear nao
-// mudou nenhum deles.
+// Constantes compartilhadas pelo caminho de midia do fork. Os valores sao
+// exatamente os que estavam em internal/wa-noise/media_constants.go (Fase E);
+// a extracao para este pacote nao mudou nenhum deles.
 
 // Layout do material de chave derivado de mediaKey via HKDF-SHA256.
 // O protocolo do WhatsApp expande a mediaKey em 112 bytes e fatia esse buffer
@@ -47,9 +52,9 @@ const (
 	mediaDownloadRetryStep = time.Second
 )
 
-// unknownFileLength e' o sentinela de "tamanho do arquivo desconhecido"
+// UnknownFileLength e' o sentinela de "tamanho do arquivo desconhecido"
 // passado a fileLength; qualquer valor negativo desliga a validacao de tamanho.
-const unknownFileLength = -1
+const UnknownFileLength = -1
 
 // webWhatsappNetURLPrefix marca URLs de midia que o servidor as vezes devolve
 // mas que nao sao baixaveis diretamente — nesse caso o directPath e' obrigatorio.
@@ -74,3 +79,7 @@ const (
 	uploadPathFormat        = "/%s/%s/%s"
 	deletePathFormat        = "/mms/%s/%s"
 )
+
+// stickerPackMetadataURLFormat e' o endpoint estatico (nao passa pela
+// mediaConn) que devolve o JSON de metadados de um pacote de figurinhas.
+const stickerPackMetadataURLFormat = "https://static.whatsapp.net/sticker?lottie=1&cat=sticker_pack_data&id=%s&lg=en"

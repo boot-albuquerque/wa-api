@@ -22,6 +22,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
@@ -86,8 +87,8 @@ type Client struct {
 	uploadPreKeysLock sync.Mutex
 	lastPreKeyUpload  time.Time
 
-	mediaConnCache *MediaConn
-	mediaConnLock  sync.Mutex
+	// mediaConn cacheia a media connection; o lock vive dentro dele.
+	mediaConn media.ConnCache
 
 	responseWaiters     map[string]chan<- *waBinary.Node
 	responseWaitersLock sync.Mutex

@@ -8,43 +8,31 @@ package whatsmeow
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
 
+	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waMediaTransport"
 	"wa-api/internal/wa-noise/types"
 )
 
-// DownloadAny loops through the downloadable parts of the given message and downloads the first non-nil item.
-//
-// Deprecated: it's recommended to find the specific message type you want to download manually and use the Download method instead.
-func (cli *Client) DownloadAny(ctx context.Context, msg *waE2E.Message) (data []byte, err error) {
-	if msg == nil {
-		return nil, ErrNothingDownloadableFound
-	}
-	switch {
-	case msg.ImageMessage != nil:
-		return cli.Download(ctx, msg.ImageMessage)
-	case msg.VideoMessage != nil:
-		return cli.Download(ctx, msg.VideoMessage)
-	case msg.AudioMessage != nil:
-		return cli.Download(ctx, msg.AudioMessage)
-	case msg.DocumentMessage != nil:
-		return cli.Download(ctx, msg.DocumentMessage)
-	case msg.StickerMessage != nil:
-		return cli.Download(ctx, msg.StickerMessage)
-	default:
-		return nil, ErrNothingDownloadableFound
-	}
-}
+// A implementacao vive em internal/wa-noise/media; estes metodos sao apenas a
+// fachada historica de *Client (ADR-0004, Fase F/G lote 1). Todos checam o
+// receiver nil antes de tocar em qualquer campo — antes da extracao so'
+// Download e DownloadToFile faziam isso e os demais estouravam em nil deref.
 
 // ReturnDownloadWarnings controls whether the Download function returns non-fatal validation warnings.
 // Currently, these include [ErrFileLengthMismatch] and [ErrInvalidMediaSHA256].
 var ReturnDownloadWarnings = true
+
+// DownloadAny loops through the downloadable parts of the given message and downloads the first non-nil item.
+//
+// Deprecated: it's recommended to find the specific message type you want to download manually and use the Download method instead.
+func (cli *Client) DownloadAny(ctx context.Context, msg *waE2E.Message) (data []byte, err error) {
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return media.DownloadAny(ctx, cli.mediaT(), msg)
+}
 
 // DownloadThumbnail downloads a thumbnail from a message.
 //
@@ -54,35 +42,18 @@ var ReturnDownloadWarnings = true
 //	...
 //	thumbnailImageBytes, err := cli.DownloadThumbnail(msg.GetExtendedTextMessage())
 func (cli *Client) DownloadThumbnail(ctx context.Context, msg DownloadableThumbnail) ([]byte, error) {
-	mediaType, ok := classToThumbnailMediaType[msg.ProtoReflect().Descriptor().Name()]
-	if !ok {
-		return nil, fmt.Errorf("%w '%s'", ErrUnknownMediaType, string(msg.ProtoReflect().Descriptor().Name()))
-	} else if len(msg.GetThumbnailDirectPath()) > 0 {
-		return cli.DownloadMediaWithPath(ctx, msg.GetThumbnailDirectPath(), msg.GetThumbnailEncSHA256(), msg.GetThumbnailSHA256(), msg.GetMediaKey(), unknownFileLength, mediaType, mediaTypeToMMSType[mediaType])
-	} else {
-		return nil, ErrNoURLPresent
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
+	return media.DownloadThumbnail(ctx, cli.mediaT(), msg)
 }
 
-// stickerPackMetadataURLFormat e' o endpoint estatico (nao passa pela
-// mediaConn) que devolve o JSON de metadados de um pacote de figurinhas.
-const stickerPackMetadataURLFormat = "https://static.whatsapp.net/sticker?lottie=1&cat=sticker_pack_data&id=%s&lg=en"
-
+// FetchStickerPack fetches the metadata of a sticker pack from the static endpoint.
 func (cli *Client) FetchStickerPack(ctx context.Context, packID string) (*types.StickerPack, error) {
-	url := fmt.Sprintf(stickerPackMetadataURLFormat, packID)
-	resp, err := cli.doMediaDownloadRequest(ctx, url)
-	if err != nil {
-		return nil, err
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	var packs []types.StickerPack
-	err = json.NewDecoder(resp.Body).Decode(&packs)
-	_ = resp.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	} else if len(packs) == 0 {
-		return nil, fmt.Errorf("no sticker pack found in response")
-	}
-	return &packs[0], nil
+	return media.FetchStickerPack(ctx, cli.mediaT(), packID)
 }
 
 // Download downloads the attachment from the given protobuf message.
@@ -98,35 +69,19 @@ func (cli *Client) Download(ctx context.Context, msg DownloadableMessage) ([]byt
 	if cli == nil {
 		return nil, ErrClientIsNil
 	}
-	mediaType := GetMediaType(msg)
-	if mediaType == "" {
-		return nil, fmt.Errorf("%w %T", ErrUnknownMediaType, msg)
-	}
-	urlable, ok := msg.(downloadableMessageWithURL)
-	var url string
-	var isWebWhatsappNetURL bool
-	if ok {
-		url = urlable.GetURL()
-		isWebWhatsappNetURL = strings.HasPrefix(url, webWhatsappNetURLPrefix)
-	}
-	if len(url) > 0 && !isWebWhatsappNetURL {
-		return cli.downloadAndDecrypt(ctx, url, msg.GetMediaKey(), mediaType, getSize(msg), msg.GetFileEncSHA256(), msg.GetFileSHA256())
-	} else if len(msg.GetDirectPath()) > 0 {
-		return cli.DownloadMediaWithPath(ctx, msg.GetDirectPath(), msg.GetFileEncSHA256(), msg.GetFileSHA256(), msg.GetMediaKey(), getSize(msg), mediaType, mediaTypeToMMSType[mediaType])
-	} else {
-		if isWebWhatsappNetURL {
-			cli.Log.Warnf("Got a media message with a web.whatsapp.net URL (%s) and no direct path", url)
-		}
-		return nil, ErrNoURLPresent
-	}
+	return media.DownloadMessage(ctx, cli.mediaT(), msg)
 }
 
+// DownloadFB downloads an attachment described by a Messenger media transport.
 func (cli *Client) DownloadFB(
 	ctx context.Context,
 	transport *waMediaTransport.WAMediaTransport_Integral,
 	mediaType MediaType,
 ) ([]byte, error) {
-	return cli.DownloadMediaWithPath(ctx, transport.GetDirectPath(), transport.GetFileEncSHA256(), transport.GetFileSHA256(), transport.GetMediaKey(), unknownFileLength, mediaType, mediaTypeToMMSType[mediaType])
+	if cli == nil {
+		return nil, ErrClientIsNil
+	}
+	return media.DownloadFB(ctx, cli.mediaT(), transport, mediaType)
 }
 
 // DownloadMediaWithPath downloads an attachment by manually specifying the path and encryption details.
@@ -138,33 +93,10 @@ func (cli *Client) DownloadMediaWithPath(
 	mediaType MediaType,
 	mmsType string,
 ) (data []byte, err error) {
-	if !strings.HasPrefix(directPath, "/") {
-		return nil, fmt.Errorf("media download path does not start with slash: %s", directPath)
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	var mediaConn *MediaConn
-	mediaConn, err = cli.refreshMediaConn(ctx, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to refresh media connections: %w", err)
-	}
-	if len(mmsType) == 0 {
-		mmsType = mediaTypeToMMSType[mediaType]
-	}
-	for i, host := range mediaConn.Hosts {
-		// TODO omit hash for unencrypted media?
-		mediaURL := fmt.Sprintf(mediaDownloadURLFormat, host.Hostname, directPath, base64.URLEncoding.EncodeToString(encFileHash), mmsType)
-		data, err = cli.downloadAndDecrypt(ctx, mediaURL, mediaKey, mediaType, fileLength, encFileHash, fileHash)
-		if err == nil ||
-			errors.Is(err, ErrFileLengthMismatch) ||
-			errors.Is(err, ErrInvalidMediaSHA256) ||
-			errors.Is(err, ErrMediaDownloadFailedWith403) ||
-			errors.Is(err, ErrMediaDownloadFailedWith404) ||
-			errors.Is(err, ErrMediaDownloadFailedWith410) ||
-			errors.Is(err, context.Canceled) {
-			return
-		} else if i >= len(mediaConn.Hosts)-1 {
-			return nil, fmt.Errorf("failed to download media from last host: %w", err)
-		}
-		cli.Log.Warnf("Failed to download media: %s, trying with next host...", err)
-	}
-	return
+	return media.DownloadWithPath(
+		ctx, cli.mediaT(), directPath, encFileHash, fileHash, mediaKey, fileLength, mediaType, mmsType,
+	)
 }
