@@ -34,6 +34,7 @@ DIRS="internal/wa-noise \
 internal/wa-noise/msgpad \
 internal/wa-noise/paircrypto \
 internal/wa-noise/msgattrs \
+internal/wa-noise/media \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \
