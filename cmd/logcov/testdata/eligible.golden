@@ -2557,6 +2557,9 @@ pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
 pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:49)
 pkg/presentation/http.genericErrorMessage	EXCLUDED	X1
+pkg/presentation/http/devui.Enabled	EXCLUDED	X1
+pkg/presentation/http/devui.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,devui.go:82)
+pkg/presentation/http/devui.Handler.func1	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.ArchiveChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ChatPresenceHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureHmacHandler.ServeHTTP	ELIGIBLE	covered

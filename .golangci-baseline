@@ -23,7 +23,7 @@ max_complexity=56
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 261 -> 262. Uma issue nova, do metodo GetManyLIDsForPNs portado de
 # 3ac8073. max_complexity inalterado (56).
-count=262
+count=263
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

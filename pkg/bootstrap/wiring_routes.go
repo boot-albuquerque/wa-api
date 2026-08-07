@@ -2,7 +2,9 @@ package bootstrap
 
 import (
 	"net/http"
+	"strings"
 	customhttp "wa-api/pkg/presentation/http"
+	"wa-api/pkg/presentation/http/devui"
 
 	"github.com/gorilla/mux"
 	"github.com/justinas/alice"
@@ -26,6 +28,20 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	customChain := c.Append(securityHeadersMiddleware)
 
 	registry := customhttp.NewHandlerRegistry()
+
+	// Páginas de teste manual (devui). Registradas SÓ com WA_API_DEV_UI
+	// ligado, e deliberadamente FORA de customChain: o que elas servem é
+	// HTML estático, sem dado de usuário. O token é digitado na própria
+	// página e viaja nas chamadas que ela faz à API — essas sim passam pela
+	// chain. Exigir token para baixar o HTML impediria a página de existir
+	// antes de haver token.
+	//
+	// Os headers de segurança CONTINUAM valendo: só a autenticação sai.
+	if devui.Enabled() {
+		devChain := alice.New(securityHeadersMiddleware).Then(devui.Handler())
+		registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")
+		registry.Register(strings.TrimSuffix(devui.BasePath, "/"), devChain, "GET")
+	}
 
 	// Session routes
 	registry.Register("/session/profile", customChain.Then(ch.Profile), "GET")

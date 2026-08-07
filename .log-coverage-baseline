@@ -150,9 +150,19 @@ rules_frozen=true
 # develop: o adapter fino nao loga (padrao aceito neste pacote — adapter nao
 # loga, use case loga), entao entra no denominador sem entrar no numerador.
 # Nenhum site que logava deixou de logar. errpath_coverage SOBE 862->863.
-min_func_coverage=709
-min_errpath_coverage=863
-min_eligible=509
+# justificativa: pkg/presentation/http/devui (2026-08-07), paginas de teste
+# manual servidas pela propria API. min_eligible 509->511 (+2: Enabled e
+# Handler). func_coverage 709->706 e errpath 863->862: nenhuma das duas loga,
+# e nao deveriam — Enabled() le uma env var e Handler() serve arquivo
+# embutido; o unico erro possivel em Handler e' go:embed apontando para
+# diretorio inexistente, que quebra o BUILD antes de virar runtime.
+#
+# devui NAO entrou em .logcov-exclude de proposito: e' codigo que vai no
+# binario, e exclui-lo seria encolher o denominador para embelezar o numero —
+# exatamente o que min_eligible existe para impedir.
+min_func_coverage=706
+min_errpath_coverage=862
+min_eligible=511
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

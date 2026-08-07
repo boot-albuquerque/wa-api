@@ -3257,3 +3257,106 @@ explicitamente entre fail-fast e degradação anunciada.
 
 **Status**: **não corrigido**. O item 1 é uma linha; o item 2 é decisão de
 política de inicialização.
+
+## F68 — o mesmo evento `QR` é despachado com dois formatos de payload
+
+**Data**: 2026-08-07.
+**Contexto**: construção da página de pareamento em
+`pkg/presentation/http/devui/`. Ao escrever o consumidor WebSocket, os dois
+formatos apareceram.
+
+**Onde**: `pkg/application/session/orchestrator.go`.
+
+| Origem | Linha | Payload |
+| --- | --- | --- |
+| `onPairingQR` (fluxo de pareamento, canal de `Pair()`) | 247-267 | `{"event":"code","qrCodeBase64":"data:image/png;base64,…","expiresAt":"<RFC3339>"}` |
+| `translateStatusEvent` → `qrPayload` (fluxo de `Subscribe`) | 382, 416 | `{"event":"qr","code":"2@…"}` |
+
+Os dois despacham com `eventType = "QR"`. Um consumidor de `/session/ws` (ou
+de webhook) recebe o mesmo `type` com schemas incompatíveis: só o primeiro
+traz imagem e validade, só o segundo traz o código cru. Nada no tipo permite
+distinguir de antemão — é preciso testar a presença dos campos.
+
+O campo `event` **também** diverge (`"code"` vs `"qr"`), o que sugere que os
+dois nasceram em momentos diferentes sem que ninguém comparasse.
+
+**Consequência prática**: um cliente que trate só o schema do pareamento
+ignora silenciosamente os QR vindos do `Subscribe`, e vice-versa. A página em
+`devui/` trata os dois e diz no log qual chegou, mas isso é contorno de
+consumidor, não correção.
+
+**Correção sugerida**, em ordem de preferência:
+
+1. Unificar num único payload que sempre traga `code`, e traga
+   `qrCodeBase64`/`expiresAt` quando disponíveis. Mantém um `type` com um
+   schema só.
+2. Separar em dois `type` distintos (`QR` e `QRCode`, por exemplo), deixando
+   a diferença explícita no roteamento em vez de implícita nos campos.
+
+A (1) é menos disruptiva para quem já consome; a (2) é mais honesta sobre
+serem eventos de origens diferentes. Ambas são mudança de contrato de webhook
+e precisam de decisão.
+
+**Status**: **não corrigido**. É contrato externo (webhook + WS), fora do
+escopo de criar a página.
+
+## F69 — janela de pareamento diverge do WhatsApp Web oficial em validade e em política de expiração
+
+**Data**: 2026-08-07.
+**Contexto**: a página de `devui/` precisava de retry, e a pergunta "quanto
+tempo vale um QR" não estava respondida em lugar nenhum do repositório.
+Medido diretamente no `web.whatsapp.com` com automação de navegador,
+observando o atributo `data-ref` de `div[data-testid="link-device-qr-code"]`.
+
+**Medição do oficial** (2026-08-07, 324s de observação, 12 trocas):
+
+- Intervalos entre códigos: `18, 21, 21, 21, 21, 20` segundos — **~20s
+  uniformes**, sem primeiro código mais longo.
+- Aos **122 segundos**, após **6 códigos**, a rotação **parou** e apareceu o
+  overlay com o botão **"Selecione para recarregar o QR code"**.
+- Depois disso os intervalos ficam irregulares (`45, 1, 61, 21, 64`) — é o
+  comportamento pós-expiração, sob demanda.
+
+**Nosso** (`internal/wa-noise/core/pair_constants.go:13-18`,
+`core/qrchan.go:70-73`):
+
+```go
+qrCodeTimeout        = 20 * time.Second  // do 2º em diante
+qrCodeFirstTimeout   = 60 * time.Second  // o 1º
+qrCodeFirstBatchSize = 6
+```
+
+| | Oficial | wa-api |
+| --- | --- | --- |
+| Códigos por janela | ~6 | 6 |
+| Validade | ~20s uniformes | **60s o 1º**, 20s os demais |
+| Janela total | ~120s | ~160s |
+| Ao esgotar | para e espera clique | `QRTimeout` + **desmonta a sessão** |
+
+**Duas divergências, de naturezas diferentes:**
+
+1. **O primeiro código dura 3× mais no wa-api.** Não é bug — herdado do
+   upstream — mas é um QR válido por 60s onde o oficial expira em 20s. QR de
+   pareamento é credencial: quem tiver a tela à vista nesse intervalo pode
+   vincular um aparelho. Vale decidir se os 60s são intencionais.
+
+2. **Ao esgotar, nós destruímos a sessão** (`onPairingTimeout` →
+   `registry.Unregister` + `attach.Detach`), enquanto o oficial só para de
+   girar e oferece recarregar. O nosso é mais seguro por padrão; a
+   consequência é que reabrir exige um `/session/connect` novo, e não um
+   simples "novo QR". Qualquer cliente precisa saber disso — foi o que
+   determinou o desenho do retry na página.
+
+**Erro de documentação encontrado junto**: o comentário em
+`orchestrator.go:263-265` afirma que "wa-noise emite 20s para os 5 primeiros
+e 60s para o último". É o **inverso** do código: `qrchan.go:72` aplica
+`qrCodeFirstTimeout` quando ainda restam `qrCodeFirstBatchSize` códigos, ou
+seja, no **primeiro**. Quem programar um cliente a partir desse comentário
+vai errar a barra de progresso do primeiro QR por 40 segundos.
+
+**Correção sugerida**: corrigir o comentário (uma linha, sem risco) e decidir
+separadamente sobre os 60s do primeiro código.
+
+**Status**: **não corrigido.** O comentário invertido é trivial mas está em
+arquivo fora do escopo desta tarefa; a validade de 60s é decisão de
+segurança, não de implementação.

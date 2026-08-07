@@ -1,0 +1,129 @@
+package devui
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// TestEnabled_PadraoEhDesligado é o teste que mais importa deste pacote: o
+// esquecimento tem de ser seguro. Se alguém inverter a lógica para opt-out,
+// uma página que lista os endpoints da API passa a ser servida em produção
+// sem ninguém ter pedido.
+func TestEnabled_PadraoEhDesligado(t *testing.T) {
+	t.Setenv(EnvEnabled, "")
+	if Enabled() {
+		t.Error("Enabled() = true sem a variável definida; o padrão tem de ser desligado")
+	}
+}
+
+func TestEnabled_ValoresAceitos(t *testing.T) {
+	for _, tc := range []struct {
+		valor string
+		quero bool
+	}{
+		{"true", true}, {"TRUE", true}, {"True", true},
+		{"1", true}, {"yes", true}, {"  true  ", true},
+		{"false", false}, {"0", false}, {"no", false},
+		{"", false}, {"talvez", false},
+		// "2" não é verdadeiro: só os valores da convenção do projeto
+		// contam, senão qualquer lixo na variável liga a página.
+		{"2", false},
+	} {
+		t.Run(tc.valor, func(t *testing.T) {
+			t.Setenv(EnvEnabled, tc.valor)
+			if got := Enabled(); got != tc.quero {
+				t.Errorf("Enabled() com %q = %v, quero %v", tc.valor, got, tc.quero)
+			}
+		})
+	}
+}
+
+// TestHandler_RaizServeOIndex: a URL do próprio BasePath tem de entregar a
+// página, e não um índice de diretório.
+func TestHandler_RaizServeOIndex(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<!doctype html>") {
+		t.Errorf("o corpo não parece HTML: %.80q", body)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q, quero text/html", ct)
+	}
+}
+
+func TestHandler_ArquivoNomeado(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+indexFile, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200", rec.Code)
+	}
+}
+
+// TestHandler_NaoInventaConteudo: pedir um arquivo que não existe tem de dar
+// 404, e não cair no index. Cair no index faria um erro de digitação parecer
+// sucesso.
+func TestHandler_ArquivoInexistenteDa404(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"nao-existe.html", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, quero 404", rec.Code)
+	}
+}
+
+// TestHandler_NaoEscapaDoDiretorioEmbutido: um path traversal não pode
+// alcançar nada fora de assets/. Com embed.FS o alcance máximo já seria o
+// binário, mas o teste trava a propriedade em vez de confiar nela.
+func TestHandler_NaoEscapaDoDiretorio(t *testing.T) {
+	for _, alvo := range []string{
+		BasePath + "../devui.go",
+		BasePath + "..%2fdevui.go",
+		BasePath + "../../bootstrap/wiring_routes.go",
+	} {
+		t.Run(alvo, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, alvo, nil))
+			if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "package devui") {
+				t.Errorf("%s vazou código-fonte", alvo)
+			}
+		})
+	}
+}
+
+// TestHandler_NaoDeixaCachear: a página muda junto do código que ela testa.
+// Uma versão velha em cache faria alguém depurar um comportamento que já não
+// existe — que é o pior modo de falha de uma ferramenta de diagnóstico.
+func TestHandler_NaoDeixaCachear(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+	if got := rec.Header().Get("Cache-Control"); got != cacheControl {
+		t.Errorf("Cache-Control = %q, quero %q", got, cacheControl)
+	}
+}
+
+// TestPaginaTrataOsDoisSchemasDeQR trava o que a página precisa saber sobre
+// a API: o mesmo evento "QR" chega com dois formatos de payload (ver F68).
+// Se alguém simplificar o HTML e tratar só um, o pareamento quebra num dos
+// dois fluxos — e o teste que pegaria isso é este.
+func TestPaginaTrataOsDoisSchemasDeQR(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+	body := rec.Body.String()
+
+	for _, marca := range []string{
+		"qrCodeBase64", // schema do fluxo de pareamento
+		"expiresAt",    // validade real do código atual
+		"qrtimeout",    // fim da janela: exige novo /session/connect
+		"session/ws",   // o WebSocket
+	} {
+		if !strings.Contains(body, marca) {
+			t.Errorf("a página não menciona %q; o tratamento correspondente sumiu", marca)
+		}
+	}
+}
