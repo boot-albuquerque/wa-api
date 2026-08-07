@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"crypto/sha256"
@@ -27,7 +27,7 @@ func device(user string, n uint16) types.JID {
 // ordenada) e' contrato de fio, nao detalhe interno.
 func TestParticipantListHashV2Shape(t *testing.T) {
 	participants := []types.JID{device("1", 0), device("2", 1)}
-	got := participantListHashV2(participants)
+	got := ParticipantListHashV2(participants)
 
 	prefix, encoded, ok := strings.Cut(got, ":")
 	if !ok {
@@ -56,13 +56,13 @@ func TestParticipantListHashV2Shape(t *testing.T) {
 func TestParticipantListHashV2IgnoresInputOrder(t *testing.T) {
 	a := []types.JID{device("1", 0), device("2", 1), device("3", 0)}
 	b := []types.JID{device("3", 0), device("1", 0), device("2", 1)}
-	if participantListHashV2(a) != participantListHashV2(b) {
+	if ParticipantListHashV2(a) != ParticipantListHashV2(b) {
 		t.Error("o hash deve independer da ordem de entrada")
 	}
 }
 
 func TestParticipantListHashV2SensitiveToMembership(t *testing.T) {
-	base := participantListHashV2([]types.JID{device("1", 0)})
+	base := ParticipantListHashV2([]types.JID{device("1", 0)})
 	cases := map[string][]types.JID{
 		"dispositivo a mais": {device("1", 0), device("1", 1)},
 		"outro usuario":      {device("2", 0)},
@@ -70,7 +70,7 @@ func TestParticipantListHashV2SensitiveToMembership(t *testing.T) {
 	}
 	for name, participants := range cases {
 		t.Run(name, func(t *testing.T) {
-			if participantListHashV2(participants) == base {
+			if ParticipantListHashV2(participants) == base {
 				t.Error("hash colidiu com a lista base")
 			}
 		})
@@ -78,11 +78,11 @@ func TestParticipantListHashV2SensitiveToMembership(t *testing.T) {
 }
 
 func TestParticipantListHashV2Empty(t *testing.T) {
-	got := participantListHashV2(nil)
+	got := ParticipantListHashV2(nil)
 	if !strings.HasPrefix(got, participantListHashPrefix+":") {
 		t.Errorf("phash de lista vazia = %q", got)
 	}
-	if got != participantListHashV2([]types.JID{}) {
+	if got != ParticipantListHashV2([]types.JID{}) {
 		t.Error("nil e slice vazio devem dar o mesmo hash")
 	}
 }
@@ -90,8 +90,8 @@ func TestParticipantListHashV2Empty(t *testing.T) {
 // --- applyRequestExtraNodes ---
 
 func TestApplyRequestExtraNodesEmptyRequest(t *testing.T) {
-	var extra nodeExtraParams
-	applyRequestExtraNodes(&SendRequestExtra{}, &extra)
+	var extra NodeExtraParams
+	applyRequestExtraNodes(&RequestExtra{}, &extra)
 	if extra.metaNode != nil || extra.additionalNodes != nil {
 		t.Errorf("request sem Meta/AdditionalNodes nao deve gerar nos: %+v", extra)
 	}
@@ -100,8 +100,8 @@ func TestApplyRequestExtraNodesEmptyRequest(t *testing.T) {
 // Meta presente mas com todos os campos zerados ainda cria o <meta> vazio —
 // comportamento do upstream, travado aqui de proposito.
 func TestApplyRequestExtraNodesEmptyMetaStillCreatesNode(t *testing.T) {
-	var extra nodeExtraParams
-	applyRequestExtraNodes(&SendRequestExtra{Meta: &types.MsgMetaInfo{}}, &extra)
+	var extra NodeExtraParams
+	applyRequestExtraNodes(&RequestExtra{Meta: &types.MsgMetaInfo{}}, &extra)
 	if extra.metaNode == nil {
 		t.Fatal("Meta nao nil deve criar o no <meta>")
 	}
@@ -112,8 +112,8 @@ func TestApplyRequestExtraNodesEmptyMetaStillCreatesNode(t *testing.T) {
 
 func TestApplyRequestExtraNodesMetaAttrs(t *testing.T) {
 	deprecated := true
-	var extra nodeExtraParams
-	applyRequestExtraNodes(&SendRequestExtra{Meta: &types.MsgMetaInfo{
+	var extra NodeExtraParams
+	applyRequestExtraNodes(&RequestExtra{Meta: &types.MsgMetaInfo{
 		DeprecatedLIDSession:   &deprecated,
 		ThreadMessageID:        "THREAD1",
 		ThreadMessageSenderJID: sendTestUserJID,
@@ -135,8 +135,8 @@ func TestApplyRequestExtraNodesMetaAttrs(t *testing.T) {
 
 // ThreadMessageID vazio nao pode escrever nem o id nem o sender — sao um par.
 func TestApplyRequestExtraNodesThreadAttrsAreAPair(t *testing.T) {
-	var extra nodeExtraParams
-	applyRequestExtraNodes(&SendRequestExtra{Meta: &types.MsgMetaInfo{
+	var extra NodeExtraParams
+	applyRequestExtraNodes(&RequestExtra{Meta: &types.MsgMetaInfo{
 		ThreadMessageSenderJID: sendTestUserJID,
 	}}, &extra)
 	if _, ok := extra.metaNode.Attrs[metaAttrThreadMsgSenderJID]; ok {
@@ -146,8 +146,8 @@ func TestApplyRequestExtraNodesThreadAttrsAreAPair(t *testing.T) {
 
 func TestApplyRequestExtraNodesAdditionalNodes(t *testing.T) {
 	nodes := []waBinary.Node{{Tag: "custom"}}
-	var extra nodeExtraParams
-	applyRequestExtraNodes(&SendRequestExtra{AdditionalNodes: &nodes}, &extra)
+	var extra NodeExtraParams
+	applyRequestExtraNodes(&RequestExtra{AdditionalNodes: &nodes}, &extra)
 	if extra.additionalNodes != &nodes {
 		t.Error("AdditionalNodes deve ser repassado por referencia")
 	}

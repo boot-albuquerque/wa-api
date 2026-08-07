@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"testing"
@@ -51,7 +51,7 @@ func TestMarshalMessageDeviceSentCopyPerServer(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			plaintext, dsm, err := marshalMessage(tc.to, msg)
+			plaintext, dsm, err := MarshalMessage(tc.to, msg)
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -87,7 +87,7 @@ func TestMarshalMessageDeviceSentKeepsContextInfo(t *testing.T) {
 		Conversation:       proto.String("oi"),
 		MessageContextInfo: &waE2E.MessageContextInfo{MessageSecret: secret},
 	}
-	_, dsm, err := marshalMessage(types.JID{User: "1", Server: types.DefaultUserServer}, msg)
+	_, dsm, err := MarshalMessage(types.JID{User: "1", Server: types.DefaultUserServer}, msg)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestMarshalMessageDeviceSentKeepsContextInfo(t *testing.T) {
 // Revoke de newsletter chega aqui com message == nil (sendNewsletter zera a
 // mensagem antes de marshalar); isso tem que devolver tudo vazio sem erro.
 func TestMarshalMessageNilNewsletter(t *testing.T) {
-	plaintext, dsm, err := marshalMessage(types.JID{User: "1", Server: types.NewsletterServer}, nil)
+	plaintext, dsm, err := MarshalMessage(types.JID{User: "1", Server: types.NewsletterServer}, nil)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -115,11 +115,11 @@ func TestMarshalMessageNilNewsletter(t *testing.T) {
 // --- getMessageContent ---
 
 func TestGetMessageContentBaseNodeOnly(t *testing.T) {
-	cli := sendTestClient()
+	tr := newFakeTransport()
 	base := waBinary.Node{Tag: participantsNodeTag}
-	content := cli.getMessageContent(
-		base, &waE2E.Message{Conversation: proto.String("oi")},
-		waBinary.Attrs{msgAttrType: msgTypeText}, false, nodeExtraParams{},
+	content := MessageContent(
+		tr, base, &waE2E.Message{Conversation: proto.String("oi")},
+		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
 	)
 	if got := childTags(content); len(got) != 1 || got[0] != participantsNodeTag {
 		t.Errorf("filhos = %v, queria so' <participants>", got)
@@ -127,7 +127,7 @@ func TestGetMessageContentBaseNodeOnly(t *testing.T) {
 }
 
 func TestGetMessageContentPollMeta(t *testing.T) {
-	cli := sendTestClient()
+	tr := newFakeTransport()
 	cases := map[string]struct {
 		message  *waE2E.Message
 		wantType string
@@ -137,9 +137,9 @@ func TestGetMessageContentPollMeta(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			content := cli.getMessageContent(
-				waBinary.Node{Tag: participantsNodeTag}, tc.message,
-				waBinary.Attrs{msgAttrType: msgTypePoll}, false, nodeExtraParams{},
+			content := MessageContent(
+				tr, waBinary.Node{Tag: participantsNodeTag}, tc.message,
+				waBinary.Attrs{msgAttrType: msgTypePoll}, false, NodeExtraParams{},
 			)
 			var meta *waBinary.Node
 			for i := range content {
@@ -160,11 +160,11 @@ func TestGetMessageContentPollMeta(t *testing.T) {
 // Mensagem que nao e' enquete nao pode ganhar <meta polltype>, mesmo tendo
 // PollUpdateMessage preenchido — quem decide e' o atributo `type`.
 func TestGetMessageContentNoPollMetaForNonPollType(t *testing.T) {
-	cli := sendTestClient()
-	content := cli.getMessageContent(
-		waBinary.Node{Tag: participantsNodeTag},
+	tr := newFakeTransport()
+	content := MessageContent(
+		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{PollUpdateMessage: &waE2E.PollUpdateMessage{}},
-		waBinary.Attrs{msgAttrType: msgTypeText}, false, nodeExtraParams{},
+		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
 	)
 	if hasTag(content, metaNodeTag) {
 		t.Errorf("nao deveria haver <meta>, filhos = %v", childTags(content))
@@ -174,14 +174,14 @@ func TestGetMessageContentNoPollMetaForNonPollType(t *testing.T) {
 // A ordem dos filhos e' contrato de protocolo: base, identidade, poll, bot,
 // meta, adicionais, biz.
 func TestGetMessageContentChildOrder(t *testing.T) {
-	cli := sendTestClient()
-	extra := nodeExtraParams{
+	tr := newFakeTransport()
+	extra := NodeExtraParams{
 		botNode:         &waBinary.Node{Tag: botNodeTag},
 		metaNode:        &waBinary.Node{Tag: metaNodeTag},
 		additionalNodes: &[]waBinary.Node{{Tag: "custom"}},
 	}
-	content := cli.getMessageContent(
-		waBinary.Node{Tag: participantsNodeTag},
+	content := MessageContent(
+		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{}},
 		waBinary.Attrs{msgAttrType: msgTypePoll}, false, extra,
 	)
@@ -198,11 +198,11 @@ func TestGetMessageContentChildOrder(t *testing.T) {
 }
 
 func TestGetMessageContentButtonNode(t *testing.T) {
-	cli := sendTestClient()
-	content := cli.getMessageContent(
-		waBinary.Node{Tag: participantsNodeTag},
+	tr := newFakeTransport()
+	content := MessageContent(
+		tr, waBinary.Node{Tag: participantsNodeTag},
 		&waE2E.Message{ButtonsMessage: &waE2E.ButtonsMessage{}},
-		waBinary.Attrs{msgAttrType: msgTypeText}, false, nodeExtraParams{},
+		waBinary.Attrs{msgAttrType: msgTypeText}, false, NodeExtraParams{},
 	)
 	if !hasTag(content, bizNodeTag) {
 		t.Fatalf("faltou <biz>, filhos = %v", childTags(content))

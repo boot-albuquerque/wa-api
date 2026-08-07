@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package send
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func marshalTimings(t *testing.T, mdt MessageDebugTimings) map[string]any {
+func marshalTimings(t *testing.T, mdt DebugTimings) map[string]any {
 	t.Helper()
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
@@ -33,7 +33,7 @@ func marshalTimings(t *testing.T, mdt MessageDebugTimings) map[string]any {
 // aparecem quando nao sao zero — sao etapas que nem todo envio executa, e
 // logar zeros esconderia a diferenca entre "nao rodou" e "rodou instantaneo".
 func TestMessageDebugTimingsOmitsZeroOptionalFields(t *testing.T) {
-	fields := marshalTimings(t, MessageDebugTimings{})
+	fields := marshalTimings(t, DebugTimings{})
 	for _, key := range []string{"lid_fetch", "get_participants", "group_encrypt", "retry"} {
 		if _, ok := fields[key]; ok {
 			t.Errorf("%q nao deveria aparecer quando zerado", key)
@@ -43,7 +43,7 @@ func TestMessageDebugTimingsOmitsZeroOptionalFields(t *testing.T) {
 
 // Os campos obrigatorios aparecem sempre, inclusive zerados.
 func TestMessageDebugTimingsAlwaysLogsMandatoryFields(t *testing.T) {
-	fields := marshalTimings(t, MessageDebugTimings{})
+	fields := marshalTimings(t, DebugTimings{})
 	for _, key := range []string{"queue", "marshal", "get_devices", "peer_encrypt", "send", "resp"} {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("%q deveria aparecer mesmo zerado, campos = %v", key, fields)
@@ -52,7 +52,7 @@ func TestMessageDebugTimingsAlwaysLogsMandatoryFields(t *testing.T) {
 }
 
 func TestMessageDebugTimingsLogsEveryField(t *testing.T) {
-	fields := marshalTimings(t, MessageDebugTimings{
+	fields := marshalTimings(t, DebugTimings{
 		LIDFetch:        1 * time.Millisecond,
 		Queue:           2 * time.Millisecond,
 		Marshal:         3 * time.Millisecond,
