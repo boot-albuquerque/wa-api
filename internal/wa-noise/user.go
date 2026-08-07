@@ -12,7 +12,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/user"
+	"wa-api/internal/wa-noise/capabilities/user"
 )
 
 // Fachada do dominio de usuario. A logica vive em internal/wa-noise/user e

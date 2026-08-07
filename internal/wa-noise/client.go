@@ -35,7 +35,7 @@ import (
 	"wa-api/internal/wa-noise/capabilities/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	"wa-api/internal/wa-noise/user"
+	"wa-api/internal/wa-noise/capabilities/user"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

@@ -17,7 +17,7 @@ import (
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/send"
-	"wa-api/internal/wa-noise/user"
+	"wa-api/internal/wa-noise/capabilities/user"
 )
 
 // Miscellaneous errors

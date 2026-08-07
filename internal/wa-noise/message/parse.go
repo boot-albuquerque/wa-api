@@ -9,7 +9,7 @@ package message
 import (
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/user"
+	"wa-api/internal/wa-noise/capabilities/user"
 )
 
 // ParseSource extrai o remetente, o chat e os flags de origem de um stanza.
