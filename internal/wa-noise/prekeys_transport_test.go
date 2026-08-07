@@ -11,7 +11,7 @@ import (
 	"errors"
 	"testing"
 
-	"wa-api/internal/wa-noise/prekeys"
+	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/persistence/store"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )

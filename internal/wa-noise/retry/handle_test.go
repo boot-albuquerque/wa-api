@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/prekeys"
+	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"

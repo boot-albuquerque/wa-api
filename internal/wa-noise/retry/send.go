@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/prekeys"
+	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

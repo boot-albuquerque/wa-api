@@ -13,7 +13,7 @@ import (
 	"go.mau.fi/libsignal/keys/prekey"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/prekeys"
+	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/persistence/store"

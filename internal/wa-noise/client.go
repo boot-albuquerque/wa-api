@@ -26,7 +26,7 @@ import (
 	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/pairing"
-	"wa-api/internal/wa-noise/prekeys"
+	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/retry"
