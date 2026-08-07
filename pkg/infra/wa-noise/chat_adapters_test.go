@@ -23,8 +23,8 @@ func TestNewChatMessengerAdapter(t *testing.T) {
 	}
 }
 
-// TestChatMessengerAdapter_MarkRead_InvalidChatJID devolve erro de toJID.
-// Tenta várias entradas; quando encontra uma que ParseJID rejeita,
+// TestChatMessengerAdapter_MarkRead_InvalidChatJID devolve erro de wajid.ToJID.
+// Tenta várias entradas; quando encontra uma que wajid.ParseJID rejeita,
 // confirma que MarkRead propaga o erro.
 func TestChatMessengerAdapter_MarkRead_InvalidChatJID(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
@@ -37,10 +37,10 @@ func TestChatMessengerAdapter_MarkRead_InvalidChatJID(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("ParseJID não falhou para nenhuma entrada testada")
+	t.Skip("wajid.ParseJID não falhou para nenhuma entrada testada")
 }
 
-// TestChatMessengerAdapter_MarkRead_InvalidSenderJID devolve erro de toJID.
+// TestChatMessengerAdapter_MarkRead_InvalidSenderJID devolve erro de wajid.ToJID.
 func TestChatMessengerAdapter_MarkRead_InvalidSenderJID(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	invalid := []domain.JID{
@@ -52,7 +52,7 @@ func TestChatMessengerAdapter_MarkRead_InvalidSenderJID(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("ParseJID não falhou para nenhuma entrada testada")
+	t.Skip("wajid.ParseJID não falhou para nenhuma entrada testada")
 }
 
 // TestChatMessengerAdapter_MarkRead_NoSession.
@@ -107,7 +107,7 @@ func TestChatMessengerAdapter_SendReaction_InvalidJID(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	_, err := a.SendReaction(context.Background(), "u1", domain.JID(string([]byte{0x00})), domain.Reaction{Text: "👍"})
 	if err == nil {
-		t.Skip("ParseJID não falhou; caminho de erro raro")
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
 }
 

@@ -1,4 +1,4 @@
-package whatsmeow
+package jid
 
 import (
 	"context"
@@ -75,18 +75,18 @@ func TestResolveQualifiedJID_Qualified(t *testing.T) {
 
 // TestToJID_Empty devolve JID zero.
 func TestToJID_Empty(t *testing.T) {
-	got, err := toJID("")
+	got, err := ToJID("")
 	if err != nil {
-		t.Fatalf("toJID(empty) = %v", err)
+		t.Fatalf("ToJID(empty) = %v", err)
 	}
 	if !got.IsEmpty() {
-		t.Errorf("toJID(empty) = %v, want empty", got)
+		t.Errorf("ToJID(empty) = %v, want empty", got)
 	}
 }
 
 // TestToJID_Invalid devolve erro quando ParseJID falha.
 func TestToJID_Invalid(t *testing.T) {
-	_, err := toJID(domain.JID(string([]byte{0x00})))
+	_, err := ToJID(domain.JID(string([]byte{0x00})))
 	if err == nil {
 		t.Skip("ParseJID não falhou; caminho de erro é raro")
 	}
@@ -95,11 +95,11 @@ func TestToJID_Invalid(t *testing.T) {
 // TestToJID_Valid faz round-trip.
 func TestToJID_Valid(t *testing.T) {
 	in := domain.JID("5511987654321@s.whatsapp.net")
-	got, err := toJID(in)
+	got, err := ToJID(in)
 	if err != nil {
-		t.Fatalf("toJID = %v", err)
+		t.Fatalf("ToJID = %v", err)
 	}
 	if got.String() != string(in) {
-		t.Errorf("toJID round-trip = %q, want %q", got.String(), in)
+		t.Errorf("ToJID round-trip = %q, want %q", got.String(), in)
 	}
 }

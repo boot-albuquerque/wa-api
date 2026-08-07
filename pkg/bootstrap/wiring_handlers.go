@@ -6,6 +6,7 @@ import (
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/applog"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/registry"
 	"wa-api/pkg/infra/wa-noise/waclient"
 	customhttp "wa-api/pkg/presentation/http"
@@ -97,7 +98,7 @@ func initCustomHandlers(s *server) {
 	messageComposer := whatsmeow.NewMessageComposerAdapter(waClientLookup)
 	presenceController := whatsmeow.NewPresenceControllerAdapter(waClientLookup)
 	chatMessenger := whatsmeow.NewChatMessengerAdapter(waClientLookup)
-	jidResolver := whatsmeow.NewJIDResolverAdapter()
+	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := whatsmeow.NewGroupAdapter(waClientLookup)
 	miscAdapter := whatsmeow.NewMiscAdapter(waClientLookup)
 	userAdapter := whatsmeow.NewUserAdapter(waClientLookup)

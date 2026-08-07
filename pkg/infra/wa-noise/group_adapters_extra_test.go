@@ -16,7 +16,7 @@ import (
 )
 
 // TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID cobre
-// o caminho de erro do toJIDs (uma entrada inválida).
+// o caminho de erro do wajid.ToJIDs (uma entrada inválida).
 func TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	invalid := []domain.JID{"@@", "@", "x@", "@y.com", domain.JID(string([]byte{0x00}))}
@@ -26,7 +26,7 @@ func TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID(t *testing.T
 			return
 		}
 	}
-	t.Skip("ParseJID não falhou para nenhuma entrada testada")
+	t.Skip("wajid.ParseJID não falhou para nenhuma entrada testada")
 }
 
 // --- below is original ---

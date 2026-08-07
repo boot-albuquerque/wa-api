@@ -10,8 +10,8 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// TestGroupAdapter_InvalidJIDs cobre os caminhos toJID que falham (ou
-// são pulados quando ParseJID é leniente).
+// TestGroupAdapter_InvalidJIDs cobre os caminhos wajid.ToJID que falham (ou
+// são pulados quando wajid.ParseJID é leniente).
 func TestGroupAdapter_InvalidJIDs(t *testing.T) {
 	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
@@ -42,13 +42,13 @@ func TestGroupAdapter_InvalidJIDs(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.run(); err == nil {
-				t.Skip("ParseJID não falhou; caminho de erro raro")
+				t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 			}
 		})
 	}
 }
 
-// TestUserAdapter_InvalidJIDs cobre os caminhos toJID que falham.
+// TestUserAdapter_InvalidJIDs cobre os caminhos wajid.ToJID que falham.
 func TestUserAdapter_InvalidJIDs(t *testing.T) {
 	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
@@ -63,13 +63,13 @@ func TestUserAdapter_InvalidJIDs(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.run(); err == nil {
-				t.Skip("ParseJID não falhou; caminho de erro raro")
+				t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 			}
 		})
 	}
 }
 
-// TestMiscAdapter_InvalidJIDs cobre os caminhos toJID que falham.
+// TestMiscAdapter_InvalidJIDs cobre os caminhos wajid.ToJID que falham.
 func TestMiscAdapter_InvalidJIDs(t *testing.T) {
 	a := NewMiscAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
@@ -91,7 +91,7 @@ func TestMiscAdapter_InvalidJIDs(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.run(); err == nil {
-				t.Skip("ParseJID não falhou; caminho de erro raro")
+				t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 			}
 		})
 	}
@@ -100,14 +100,14 @@ func TestMiscAdapter_InvalidJIDs(t *testing.T) {
 // TestToJID_EmptyAlreadyInCode: o caminho "vazio" é coberto pelo test direto.
 // Aqui adicionamos o caminho de sucesso via types.ParseJID strict.
 
-// TestChatAdapter_InvalidJIDs cobre os caminhos toJID que falham.
+// TestChatAdapter_InvalidJIDs cobre os caminhos wajid.ToJID que falham.
 func TestChatAdapter_InvalidJIDs(t *testing.T) {
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
 	if err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), badJID, "z@y.com"); err == nil {
-		t.Skip("ParseJID não falhou; caminho de erro raro")
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
 	if _, err := a.SendReaction(context.Background(), "u1", badJID, domain.Reaction{Text: "👍"}); err == nil {
-		t.Skip("ParseJID não falhou; caminho de erro raro")
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -49,7 +50,7 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(chat)
+	jid, err := wajid.ToJID(chat)
 	if err != nil {
 		return err
 	}
@@ -66,7 +67,7 @@ func (a *MiscAdapter) RejectCall(ctx context.Context, txtID string, from domain.
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(from)
+	jid, err := wajid.ToJID(from)
 	if err != nil {
 		return err
 	}
@@ -79,11 +80,11 @@ func (a *MiscAdapter) RequestUnavailableMessage(ctx context.Context, txtID strin
 	if err != nil {
 		return domain.UnavailableMessageAck{}, err
 	}
-	chatJID, err := toJID(chat)
+	chatJID, err := wajid.ToJID(chat)
 	if err != nil {
 		return domain.UnavailableMessageAck{}, err
 	}
-	senderJID, err := toJID(sender)
+	senderJID, err := wajid.ToJID(sender)
 	if err != nil {
 		return domain.UnavailableMessageAck{}, err
 	}

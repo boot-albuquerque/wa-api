@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -64,7 +65,7 @@ func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []doma
 		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
 			"no active session for user", false, err)
 	}
-	parsed, err := toJIDs(jids)
+	parsed, err := wajid.ToJIDs(jids)
 	if err != nil {
 		return nil, apperr.New("user_info_failed", apperr.CategoryInternal,
 			"failed to resolve user info targets", true, err)
@@ -92,7 +93,7 @@ func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.
 	if err != nil {
 		return "", err
 	}
-	parsed, err := toJID(jid)
+	parsed, err := wajid.ToJID(jid)
 	if err != nil {
 		return "", err
 	}

@@ -5,23 +5,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
-
-	"wa-api/internal/wa-noise/types"
 )
-
-// toJIDs converte uma lista de domain.JID para o tipo do SDK.
-func toJIDs(in []domain.JID) ([]types.JID, error) {
-	out := make([]types.JID, len(in))
-	for i, j := range in {
-		parsed, err := toJID(j)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = parsed
-	}
-	return out, nil
-}
 
 // GroupAdapter implementa as quatro portas de grupo sobre o clientManager.
 //

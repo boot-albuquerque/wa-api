@@ -1,4 +1,4 @@
-package whatsmeow
+package jid
 
 import (
 	"context"
@@ -45,10 +45,10 @@ func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (do
 	return domain.JID(jid.String()), nil
 }
 
-// toJID reconverte um domain.JID para o tipo do SDK. O domain.JID sempre vem
+// ToJID reconverte um domain.JID para o tipo do SDK. O domain.JID sempre vem
 // de ResolveJID, portanto já está canônico; o vazio mapeia para o JID zero,
 // que é como o upstream representava "sem remetente" em MarkRead.
-func toJID(j domain.JID) (types.JID, error) {
+func ToJID(j domain.JID) (types.JID, error) {
 	if j == "" {
 		return types.JID{}, nil
 	}
@@ -61,3 +61,16 @@ func toJID(j domain.JID) (types.JID, error) {
 
 // Verificação em tempo de compilação de que o adapter implementa a porta.
 var _ appport.JIDResolver = (*JIDResolverAdapter)(nil)
+
+// ToJIDs converte uma lista de domain.JID para o tipo do SDK.
+func ToJIDs(in []domain.JID) ([]types.JID, error) {
+	out := make([]types.JID, len(in))
+	for i, j := range in {
+		parsed, err := ToJID(j)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = parsed
+	}
+	return out, nil
+}

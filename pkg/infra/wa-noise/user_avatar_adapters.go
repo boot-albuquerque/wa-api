@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"errors"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 
 	"wa-api/pkg/domain"
 
@@ -28,7 +29,7 @@ func (a *UserAdapter) GetProfilePicture(ctx context.Context, txtID string, targe
 	if err != nil {
 		return nil, err
 	}
-	jid, err := toJID(target)
+	jid, err := wajid.ToJID(target)
 	if err != nil {
 		return nil, err
 	}

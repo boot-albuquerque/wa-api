@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
@@ -104,7 +105,7 @@ func (p *SessionProviderAdapter) resolveDevice(ctx context.Context, userID strin
 	}
 
 	if textJID != "" {
-		jid, ok := ParseJID(textJID)
+		jid, ok := wajid.ParseJID(textJID)
 		if ok {
 			if device, derr := p.container.GetDevice(ctx, jid); derr == nil && device != nil {
 				return device, nil

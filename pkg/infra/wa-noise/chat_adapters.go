@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"time"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -30,11 +31,11 @@ func (a *ChatMessengerAdapter) MarkRead(ctx context.Context, txtID string, ids [
 	if client == nil {
 		return ErrNoSession(txtID, nil)
 	}
-	jidChat, err := toJID(chat)
+	jidChat, err := wajid.ToJID(chat)
 	if err != nil {
 		return err
 	}
-	jidSender, err := toJID(sender)
+	jidSender, err := wajid.ToJID(sender)
 	if err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func (a *ChatMessengerAdapter) SendReaction(ctx context.Context, txtID string, t
 		return domain.MessageSendResult{}, ErrNoSession(txtID, nil)
 	}
 
-	recipient, err := toJID(target)
+	recipient, err := wajid.ToJID(target)
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}

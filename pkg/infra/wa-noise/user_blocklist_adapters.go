@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	"wa-api/pkg/domain"
@@ -34,7 +35,7 @@ func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target 
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
 	}
-	parsed, err := toJID(target)
+	parsed, err := wajid.ToJID(target)
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
 	}

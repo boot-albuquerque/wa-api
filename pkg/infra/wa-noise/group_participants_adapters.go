@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 
 	"wa-api/pkg/domain"
 
@@ -15,11 +16,11 @@ func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string
 	if err != nil {
 		return nil, err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return nil, err
 	}
-	jids, err := toJIDs(participants)
+	jids, err := wajid.ToJIDs(participants)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string,
 	if err != nil {
 		return nil, err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +53,11 @@ func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID stri
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
-	jids, err := toJIDs(participants)
+	jids, err := wajid.ToJIDs(participants)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"testing"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
@@ -15,20 +16,20 @@ func TestNewGroupAdapter(t *testing.T) {
 
 // TestToJIDs_Empty devolve slice vazio sem erro.
 func TestToJIDs_Empty(t *testing.T) {
-	got, err := toJIDs(nil)
+	got, err := wajid.ToJIDs(nil)
 	if err != nil {
-		t.Fatalf("toJIDs(nil) = %v", err)
+		t.Fatalf("wajid.ToJIDs(nil) = %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("toJIDs(nil) length = %d, want 0", len(got))
+		t.Errorf("wajid.ToJIDs(nil) length = %d, want 0", len(got))
 	}
 }
 
 // TestToJIDs_PropagatesError.
 func TestToJIDs_PropagatesError(t *testing.T) {
-	// entrada 0x00 deve falhar em toJID (ou pode não falhar — skip).
-	_, err := toJIDs([]domain.JID{domain.JID(string([]byte{0x00}))})
+	// entrada 0x00 deve falhar em wajid.ToJID (ou pode não falhar — skip).
+	_, err := wajid.ToJIDs([]domain.JID{domain.JID(string([]byte{0x00}))})
 	if err == nil {
-		t.Skip("toJIDs não falhou para esta entrada")
+		t.Skip("wajid.ToJIDs não falhou para esta entrada")
 	}
 }

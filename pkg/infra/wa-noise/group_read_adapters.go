@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 
 	"wa-api/pkg/domain"
 )
@@ -12,7 +13,7 @@ func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group dom
 	if err != nil {
 		return nil, err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func (a *GroupAdapter) GetGroupInviteLink(ctx context.Context, txtID string, gro
 	if err != nil {
 		return "", err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return "", err
 	}

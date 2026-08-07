@@ -129,17 +129,17 @@ func TestPresenceControllerAdapter_SubscribePresence_NoSession(t *testing.T) {
 }
 
 // TestPresenceControllerAdapter_SubscribePresence_InvalidJID: cobre
-// o ramo "toJID falhou".
+// o ramo "wajid.ToJID falhou".
 func TestPresenceControllerAdapter_SubscribePresence_InvalidJID(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
-	// Tenta várias entradas até encontrar uma que ParseJID rejeite.
+	// Tenta várias entradas até encontrar uma que wajid.ParseJID rejeite.
 	for _, raw := range []string{string([]byte{0x00}), "@", ""} {
 		err := a.SubscribePresence(context.Background(), "u1", domain.JID(raw))
 		if err != nil {
 			return
 		}
 	}
-	t.Skip("ParseJID não falhou para nenhuma entrada testada")
+	t.Skip("wajid.ParseJID não falhou para nenhuma entrada testada")
 }
 
 // TestPresenceControllerAdapter_SendChatPresence_InvalidJID.
@@ -147,7 +147,7 @@ func TestPresenceControllerAdapter_SendChatPresence_InvalidJID(t *testing.T) {
 	a := NewPresenceControllerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	err := a.SendChatPresence(context.Background(), "u1", domain.JID(string([]byte{0x00})), "c", "")
 	if err == nil {
-		t.Skip("ParseJID não falhou; caminho de erro raro")
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
 }
 

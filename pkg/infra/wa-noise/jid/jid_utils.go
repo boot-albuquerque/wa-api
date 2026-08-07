@@ -1,4 +1,4 @@
-package whatsmeow
+package jid
 
 import (
 	"strings"

@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
@@ -47,7 +48,7 @@ func (a *PresenceControllerAdapter) SendChatPresence(ctx context.Context, txtID 
 	if client == nil {
 		return ErrNoSession(txtID, nil)
 	}
-	jid, err := toJID(chat)
+	jid, err := wajid.ToJID(chat)
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func (a *PresenceControllerAdapter) SubscribePresence(ctx context.Context, txtID
 	if client == nil {
 		return ErrNoSession(txtID, nil)
 	}
-	jid, err := toJID(target)
+	jid, err := wajid.ToJID(target)
 	if err != nil {
 		return err
 	}

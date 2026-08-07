@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"time"
+	wajid "wa-api/pkg/infra/wa-noise/jid"
 
 	"wa-api/pkg/domain"
 
@@ -15,7 +16,7 @@ func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, part
 	if err != nil {
 		return nil, err
 	}
-	jids, err := toJIDs(participants)
+	jids, err := wajid.ToJIDs(participants)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func (a *GroupAdapter) LeaveGroup(ctx context.Context, txtID string, group domai
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func (a *GroupAdapter) SetGroupName(ctx context.Context, txtID string, group dom
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func (a *GroupAdapter) SetGroupTopic(ctx context.Context, txtID string, group do
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -76,7 +77,7 @@ func (a *GroupAdapter) SetGroupPhoto(ctx context.Context, txtID string, group do
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -90,7 +91,7 @@ func (a *GroupAdapter) SetGroupAnnounce(ctx context.Context, txtID string, group
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -103,7 +104,7 @@ func (a *GroupAdapter) SetGroupLocked(ctx context.Context, txtID string, group d
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -116,7 +117,7 @@ func (a *GroupAdapter) SetDisappearingTimer(ctx context.Context, txtID string, g
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
@@ -129,7 +130,7 @@ func (a *GroupAdapter) SetJoinApprovalMode(ctx context.Context, txtID string, gr
 	if err != nil {
 		return err
 	}
-	jid, err := toJID(group)
+	jid, err := wajid.ToJID(group)
 	if err != nil {
 		return err
 	}
