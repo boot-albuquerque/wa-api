@@ -22,7 +22,7 @@ import (
 //     recebe em NewClient. Sem --wadebug — ou seja, no default de produção,
 //     que antes desta mudança era waLog.Noop e descartava o registro.
 //
-//  2. O caminho da aplicação: o myEventHandler real, com um events.Connected
+//  2. O caminho da aplicação: o handleEvent real, com um events.Connected
 //     real, sobre um *wa-noise.Client real construído com o bridge como
 //     logger. É o handler de produção, não um stub.
 //
@@ -66,16 +66,16 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 	}}, 0)
 	t.Cleanup(func() { appCtx.UserInfoCache.Delete(walogSeamToken) })
 
-	mycli := &MyClient{
+	evh := &UserEventHandler{
 		UserID:   walogSeamUser,
 		Token:    walogSeamToken,
 		WAClient: wanoise.NewClient(&store.Device{Log: bridge.Sub("Device")}, bridge),
 	}
-	mycli.myEventHandler(&events.Connected{})
+	evh.handleEvent(&events.Connected{})
 
 	recs = decodeRecords(t, &buf)
 	if len(recs) == 0 {
-		t.Fatal("myEventHandler nao emitiu registro nenhum para events.Connected")
+		t.Fatal("handleEvent nao emitiu registro nenhum para events.Connected")
 	}
 	var sawSubscription bool
 	for _, rec := range recs {

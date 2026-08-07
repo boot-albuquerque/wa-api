@@ -83,11 +83,11 @@ func TestHandleAppStateSyncComplete_ContactRoster_LogsCount(t *testing.T) {
 		types.NewJID("5511900000001", types.DefaultUserServer): {Found: true, PushName: "Alice"},
 		types.NewJID("5511900000002", types.DefaultUserServer): {Found: true, PushName: "Bob"},
 	}}
-	mycli := &MyClient{WAClient: clientWithContacts(cs), UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: clientWithContacts(cs), UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalUnblockLow, Version: 7}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if !strings.Contains(out, `"level":"info"`) {
@@ -119,11 +119,11 @@ func TestHandleAppStateSyncComplete_CriticalBlock_PresenceUnaffected(t *testing.
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
 	client := wanoise.NewClient(deviceStore, nil)
-	mycli := &MyClient{WAClient: client, UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalBlock}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	// SendPresence falha sem uma conexão real (client não conectado), então o
@@ -146,11 +146,11 @@ func TestHandleAppStateSyncComplete_OtherPatch_NoOp(t *testing.T) {
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
 	client := wanoise.NewClient(deviceStore, nil)
-	mycli := &MyClient{WAClient: client, UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchRegularLow}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if out != "" {
@@ -164,11 +164,11 @@ func TestHandleAppStateSyncComplete_OtherPatch_NoOp(t *testing.T) {
 func TestHandleAppStateSyncComplete_ContactRoster_GetAllContactsError(t *testing.T) {
 	boom := errors.New("boom")
 	cs := &fakeContactStore{errOnGet: boom}
-	mycli := &MyClient{WAClient: clientWithContacts(cs), UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: clientWithContacts(cs), UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalUnblockLow, Version: 3}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if !strings.Contains(out, `"level":"warn"`) {

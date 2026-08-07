@@ -16,7 +16,7 @@ import (
 )
 
 // db field declaration as *sqlx.DB
-type MyClient struct {
+type UserEventHandler struct {
 	WAClient       *wanoise.Client
 	EventHandlerID uint32
 	UserID         string

@@ -7,7 +7,7 @@ import "time"
 // precisa observar para gravar users.connected/qrcode e disparar webhook de
 // status: Connected, Disconnected, LoggedOut, PairSuccess, QR,
 // StreamReplaced. Eventos de domínio (mensagem, presença, grupo, histórico)
-// ficam fora — continuam tratados por myEventHandler
+// ficam fora — continuam tratados por handleEvent
 // (pkg/bootstrap/eventhandler.go), que este tipo não substitui.
 //
 // Escolha de design: struct única com Kind + um ponteiro por variante que

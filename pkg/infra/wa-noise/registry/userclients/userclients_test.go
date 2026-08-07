@@ -1,4 +1,4 @@
-package myclients
+package userclients
 
 import (
 	"fmt"
@@ -8,14 +8,14 @@ import (
 	wanoise "wa-api/internal/wa-noise"
 )
 
-type fakeMyClient struct{ userID string }
+type fakeUserClient struct{ userID string }
 
-func (f *fakeMyClient) GetWAClient() *wanoise.Client { return nil }
-func (f *fakeMyClient) GetUserID() string            { return f.userID }
+func (f *fakeUserClient) GetWAClient() *wanoise.Client { return nil }
+func (f *fakeUserClient) GetUserID() string            { return f.userID }
 
 func TestSetGetDelete(t *testing.T) {
 	r := New()
-	r.Set("u", &fakeMyClient{userID: "u"})
+	r.Set("u", &fakeUserClient{userID: "u"})
 	if got := r.Get("u"); got == nil || got.GetUserID() != "u" {
 		t.Fatalf("Get = %v, esperado o cliente gravado", got)
 	}
@@ -26,12 +26,12 @@ func TestSetGetDelete(t *testing.T) {
 }
 
 // TestDeleteDescartaAsEnquetesDoUsuario trava o acoplamento que decidiu o
-// desenho deste pacote: MyClient e o cache de enquetes vivem no mesmo
+// desenho deste pacote: UserClient e o cache de enquetes vivem no mesmo
 // Registry, sob o mesmo lock, porque Delete apaga os dois. Se alguém
 // separar os dois mapas em pacotes distintos, este teste é o que denuncia.
 func TestDeleteDescartaAsEnquetesDoUsuario(t *testing.T) {
 	r := New()
-	r.Set("u", &fakeMyClient{userID: "u"})
+	r.Set("u", &fakeUserClient{userID: "u"})
 	r.SetPollOptions("u", "msg", []string{"sim", "nao"})
 
 	r.Delete("u")
@@ -90,7 +90,7 @@ func TestRegistryConcorrente(t *testing.T) {
 		go func(w int) {
 			defer wg.Done()
 			for i := 0; i < iters; i++ {
-				r.Set(uid(w, i), &fakeMyClient{userID: uid(w, i)})
+				r.Set(uid(w, i), &fakeUserClient{userID: uid(w, i)})
 			}
 		}(w)
 		go func(w int) {

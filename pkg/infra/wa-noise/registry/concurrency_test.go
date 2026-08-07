@@ -18,10 +18,10 @@ import (
 // baseline e nao contra a memoria de quem a fez.
 //
 // O que ele NAO afirma: que os pares (sessions, wanoiseClients) e
-// (myClients, pollOptions) sejam observaveis atomicamente. Nao sao — nenhum
+// (userClients, pollOptions) sejam observaveis atomicamente. Nao sao — nenhum
 // metodo publico le dois mapas, entao qualquer leitor ja' precisa de duas
 // chamadas com dois RLocks e ja' pode intercalar hoje. Register e
-// DeleteMyClient apenas ESCREVEM dois mapas sob o mesmo lock.
+// DeleteUserClient apenas ESCREVEM dois mapas sob o mesmo lock.
 //
 // O que ele afirma e' o que de fato importa preservar: nenhum acesso
 // concorrente as' 21 operacoes produz data race, e o estado resultante
@@ -115,10 +115,10 @@ func TestClientManagerAcessoConcorrenteNaoTemCorrida(t *testing.T) {
 	run(func(w, i int) { _ = cm.GetWaNoiseClientsCount() })
 	run(func(w, i int) { cm.IterateWaNoiseClients(func(*wanoise.Client) bool { return true }) })
 
-	// myClients + pollOptions — DeleteMyClient apaga os dois.
-	run(func(w, i int) { cm.SetMyClient(uid(w, i), &fakeMyClient{}) })
-	run(func(w, i int) { _ = cm.GetMyClient(uid(w, i)) })
-	run(func(w, i int) { cm.DeleteMyClient(uid(w, i)) })
+	// userClients + pollOptions — DeleteUserClient apaga os dois.
+	run(func(w, i int) { cm.SetUserClient(uid(w, i), &fakeUserClient{}) })
+	run(func(w, i int) { _ = cm.GetUserClient(uid(w, i)) })
+	run(func(w, i int) { cm.DeleteUserClient(uid(w, i)) })
 	run(func(w, i int) {
 		cm.SetPollOptions(uid(w, i), fmt.Sprintf("msg-%d", i%4), []string{"a", "b"})
 	})

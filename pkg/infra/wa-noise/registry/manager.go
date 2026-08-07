@@ -21,7 +21,7 @@
 // não há ordem errada — nem hoje nem em código futuro.
 //
 // É por isso que o corte não seguiu os nomes. Os pares (sessions,
-// clientes do SDK) e (MyClient, opções de enquete) ficaram juntos porque
+// clientes do SDK) e (UserClient, opções de enquete) ficaram juntos porque
 // Register e Delete escrevem nos dois membros de cada par sob o mesmo
 // lock; separá-los por afinidade de nome obrigaria esses métodos a tomar
 // dois locks e destruiria o invariante.
@@ -43,19 +43,19 @@ import (
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/infra/wa-noise/registry/broadcast"
 	"wa-api/pkg/infra/wa-noise/registry/clients"
-	"wa-api/pkg/infra/wa-noise/registry/myclients"
+	"wa-api/pkg/infra/wa-noise/registry/userclients"
 	"wa-api/pkg/infra/wa-noise/registry/webhook"
 
 	"github.com/coder/websocket"
 	"github.com/go-resty/resty/v2"
 )
 
-// MyClient é o wrapper de cliente WhatsApp mantido por userID.
+// UserClient é o wrapper de cliente WhatsApp mantido por userID.
 //
 // Alias, e não uma segunda declaração: o tipo passou a viver em
-// registry/myclients, e um alias mantém registry.MyClient válido para quem
+// registry/userclients, e um alias mantém registry.UserClient válido para quem
 // já o referenciava sem criar dois tipos incompatíveis.
-type MyClient = myclients.MyClient
+type UserClient = userclients.UserClient
 
 // ClientManager é a fachada sobre os quatro sub-registries.
 //
@@ -63,20 +63,20 @@ type MyClient = myclients.MyClient
 // o estado e o lock que o protege viajam juntos, dentro do pacote que
 // entende aquele estado.
 type ClientManager struct {
-	clients   *clients.Registry
-	myClients *myclients.Registry
-	webhooks  *webhook.Registry
-	wsConns   *broadcast.Registry
+	clients     *clients.Registry
+	userClients *userclients.Registry
+	webhooks    *webhook.Registry
+	wsConns     *broadcast.Registry
 }
 
 // NewClientManager devolve um ClientManager com os quatro sub-registries
 // prontos.
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients:   clients.New(),
-		myClients: myclients.New(),
-		webhooks:  webhook.New(),
-		wsConns:   broadcast.New(),
+		clients:     clients.New(),
+		userClients: userclients.New(),
+		webhooks:    webhook.New(),
+		wsConns:     broadcast.New(),
 	}
 }
 
@@ -133,32 +133,32 @@ func (cm *ClientManager) IterateWaNoiseClients(callback func(*wanoise.Client) bo
 	cm.clients.Iterate(callback)
 }
 
-// -- MyClient e enquetes ----------------------------------------------------
+// -- UserClient e enquetes ----------------------------------------------------
 
-// SetMyClient guarda o MyClient de userID.
-func (cm *ClientManager) SetMyClient(userID string, client MyClient) {
-	cm.myClients.Set(userID, client)
+// SetUserClient guarda o UserClient de userID.
+func (cm *ClientManager) SetUserClient(userID string, client UserClient) {
+	cm.userClients.Set(userID, client)
 }
 
-// GetMyClient devolve o MyClient de userID, ou nil.
-func (cm *ClientManager) GetMyClient(userID string) MyClient {
-	return cm.myClients.Get(userID)
+// GetUserClient devolve o UserClient de userID, ou nil.
+func (cm *ClientManager) GetUserClient(userID string) UserClient {
+	return cm.userClients.Get(userID)
 }
 
-// DeleteMyClient remove o MyClient de userID e descarta junto o cache de
+// DeleteUserClient remove o UserClient de userID e descarta junto o cache de
 // enquetes dele.
-func (cm *ClientManager) DeleteMyClient(userID string) {
-	cm.myClients.Delete(userID)
+func (cm *ClientManager) DeleteUserClient(userID string) {
+	cm.userClients.Delete(userID)
 }
 
 // SetPollOptions memoriza o texto em claro das opções de uma enquete.
 func (cm *ClientManager) SetPollOptions(userID, msgID string, options []string) {
-	cm.myClients.SetPollOptions(userID, msgID, options)
+	cm.userClients.SetPollOptions(userID, msgID, options)
 }
 
 // GetPollOptions devolve as opções em claro de uma enquete, ou nil.
 func (cm *ClientManager) GetPollOptions(userID, msgID string) []string {
-	return cm.myClients.GetPollOptions(userID, msgID)
+	return cm.userClients.GetPollOptions(userID, msgID)
 }
 
 // -- clientes HTTP de webhook -----------------------------------------------

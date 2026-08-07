@@ -10,7 +10,7 @@ import (
 
 // Eventos de presença: quem está online e quem está digitando.
 
-func (mycli *MyClient) handlePresence(evt *events.Presence, st *eventState) {
+func (evh *UserEventHandler) handlePresence(evt *events.Presence, st *eventState) {
 	st.postmap["type"] = "Presence"
 	st.dowebhook = 1
 	st.postmap["from"] = evt.From.String()
@@ -28,7 +28,7 @@ func (mycli *MyClient) handlePresence(evt *events.Presence, st *eventState) {
 	}
 }
 
-func (mycli *MyClient) handleChatPresence(evt *events.ChatPresence, st *eventState) {
+func (evh *UserEventHandler) handleChatPresence(evt *events.ChatPresence, st *eventState) {
 	st.postmap["type"] = "ChatPresence"
 	st.dowebhook = 1
 	log.Info().Str("state", string(evt.State)).Str("media", string(evt.Media)).Str("chat", evt.MessageSource.Chat.String()).Str("sender", evt.MessageSource.Sender.String()).Msg("Chat Presence received")

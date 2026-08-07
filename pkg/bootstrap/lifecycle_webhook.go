@@ -66,16 +66,16 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 	}
 }
 
-func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
+func updateAndGetUserSubscriptions(evh *UserEventHandler) ([]string, error) {
 	// Get updated events from cache/database
 	currentEvents := ""
-	userinfo2, found2 := appCtx.UserInfoCache.Get(mycli.Token)
+	userinfo2, found2 := appCtx.UserInfoCache.Get(evh.Token)
 	if found2 {
 		currentEvents = userinfo2.(Values).Get("Events")
 	} else {
 		// If not in cache, get from database
-		if err := mycli.DB.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.UserID); err != nil {
-			log.Warn().Err(err).Str("userID", mycli.UserID).Msg("Could not get events from DB")
+		if err := evh.DB.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", evh.UserID); err != nil {
+			log.Warn().Err(err).Str("userID", evh.UserID).Msg("Could not get events from DB")
 			return nil, err // Propagate the error
 		}
 	}
@@ -108,11 +108,11 @@ func getUserWebhookUrl(token string) string {
 	return webhookurl
 }
 
-func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
-	webhookurl := getUserWebhookUrl(mycli.Token)
+func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{}, path string) {
+	webhookurl := getUserWebhookUrl(evh.Token)
 
 	// Get updated events from cache/database
-	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
+	subscribedEvents, err := updateAndGetUserSubscriptions(evh)
 	if err != nil {
 		return
 	}
@@ -125,13 +125,13 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 
 	// Log subscription details for debugging
 	log.Debug().
-		Str("userID", mycli.UserID).
+		Str("userID", evh.UserID).
 		Str("eventType", eventType).
 		Strs("subscribedEvents", subscribedEvents).
 		Msg("Checking event subscription")
 
 	// Check if the current event is in the subscriptions
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.UserID)
+	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), evh.UserID)
 	if !checkIfSubscribedInEvent {
 		return
 	}
@@ -143,12 +143,12 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 	// delivery (BroadcastToUser is itself non-blocking per-connection, see
 	// wsBroadcastTimeout), and REST polling of /session/status and
 	// /session/qr is untouched either way.
-	safeGo("sendToWS", func() { clientManager.BroadcastToUser(mycli.UserID, postmap) })
+	safeGo("sendToWS", func() { clientManager.BroadcastToUser(evh.UserID, postmap) })
 
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
-	if mycli.mode == Stdio {
-		if mycli.NotifyFn != nil {
-			mycli.NotifyFn(eventType, postmap)
+	if evh.mode == Stdio {
+		if evh.NotifyFn != nil {
+			evh.NotifyFn(eventType, postmap)
 		}
 		return
 	}
@@ -162,7 +162,7 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 
 	// Get HMAC key for this user
 	var encryptedHmacKey []byte
-	if userinfo, found := appCtx.UserInfoCache.Get(mycli.Token); found {
+	if userinfo, found := appCtx.UserInfoCache.Get(evh.Token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
 		if encryptedB64 != "" {
 			var err error
@@ -173,10 +173,10 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.UserID, mycli.Token, encryptedHmacKey)
+	sendToUserWebHookWithHmac(webhookurl, path, jsonData, evh.UserID, evh.Token, encryptedHmacKey)
 
 	// Get global webhook if configured
-	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, mycli.Token, mycli.UserID) })
+	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
 
-	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, mycli.Token, mycli.UserID) })
+	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
 }

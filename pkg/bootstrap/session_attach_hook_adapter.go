@@ -10,8 +10,8 @@ import (
 )
 
 // sessionAttachHookAdapter implementa appport.SessionAttachHook. Fica em
-// pkg/bootstrap (não em pkg/infra/wa-noise) porque monta *MyClient e
-// registra myEventHandler — o handler de domínio completo, que depende de
+// pkg/bootstrap (não em pkg/infra/wa-noise) porque monta *UserEventHandler e
+// registra handleEvent — o handler de domínio completo, que depende de
 // estado privado de bootstrap (DB, NotifyFn, mode) e não pode ser movido
 // para infra sem inverter a direção de dependência bootstrap -> infra.
 type sessionAttachHookAdapter struct {
@@ -28,8 +28,8 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 
 // Attach replica exatamente a construção de lifecycle.go:218-232: resolve o
 // *wa-noise.Client já registrado por SessionProvider/SessionRegistry via
-// clientManager.Getwa-noiseClient, monta o MyClient, registra
-// myEventHandler e guarda o handle em clientManager.SetMyClient.
+// clientManager.Getwa-noiseClient, monta o UserEventHandler, registra
+// handleEvent e guarda o handle em clientManager.SetUserClient.
 //
 // Também é dona do kill-channel (lifecycle.go:459-472): a goroutine que
 // bloqueia em <-kill, faz o cleanup dos registros em clientManager e grava
@@ -42,7 +42,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		return fmt.Errorf("sessionAttachHook: no wanoise client registered for userID %s", userID)
 	}
 
-	mycli := &MyClient{
+	evh := &UserEventHandler{
 		WAClient:       client,
 		EventHandlerID: 1,
 		UserID:         userID,
@@ -51,8 +51,8 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		NotifyFn:       h.s.SendNotification,
 		mode:           h.s.Mode,
 	}
-	mycli.EventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
-	clientManager.SetMyClient(userID, mycli)
+	evh.EventHandlerID = evh.WAClient.AddEventHandler(evh.handleEvent)
+	clientManager.SetUserClient(userID, evh)
 
 	kill := make(chan bool, 1)
 	appCtx.KillChannel.Set(userID, kill)
@@ -65,7 +65,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		log.Info().Str("userid", userID).Msg("Received kill signal")
 		client.Disconnect()
 		clientManager.DeleteWaNoiseClient(userID)
-		clientManager.DeleteMyClient(userID)
+		clientManager.DeleteUserClient(userID)
 		clientManager.DeleteHTTPClient(userID)
 		if _, err := h.s.DB.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {
 			log.Error().Err(err).Msg("failed to mark user disconnected on kill")

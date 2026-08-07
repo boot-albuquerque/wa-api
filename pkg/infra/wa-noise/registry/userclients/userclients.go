@@ -1,4 +1,4 @@
-// Package myclients guarda, por userID, o wrapper MyClient e o cache de
+// Package userclients guarda, por userID, o wrapper UserClient e o cache de
 // opções de enquete.
 //
 // Os dois mapas vivem juntos pelo mesmo motivo que sessions e clients vivem
@@ -6,10 +6,10 @@
 // invariante da família é que nenhum método adquira mais de um lock.
 //
 // O agrupamento vem do acoplamento medido no código, não da semântica dos
-// nomes — "MyClient" e "opções de enquete" não parecem pertencer ao mesmo
+// nomes — "UserClient" e "opções de enquete" não parecem pertencer ao mesmo
 // pacote, mas o ciclo de vida do cache de enquete é o do cliente do usuário,
 // e é isso que o Delete comum expressa.
-package myclients
+package userclients
 
 import (
 	"sync"
@@ -17,16 +17,16 @@ import (
 	wanoise "wa-api/internal/wa-noise"
 )
 
-// MyClient é o wrapper de cliente WhatsApp mantido por userID.
-type MyClient interface {
+// UserClient é o wrapper de cliente WhatsApp mantido por userID.
+type UserClient interface {
 	GetWAClient() *wanoise.Client
 	GetUserID() string
 }
 
-// Registry é o registro de MyClient e de opções de enquete por userID.
+// Registry é o registro de UserClient e de opções de enquete por userID.
 type Registry struct {
 	mu      sync.RWMutex
-	clients map[string]MyClient
+	clients map[string]UserClient
 	// polls guarda o texto em claro das opções enviadas em cada enquete,
 	// chaveado por userID e depois pelo ID da mensagem. É isso que permite
 	// ao event handler casar o hash SHA-256 de um voto recebido de volta com
@@ -39,26 +39,26 @@ type Registry struct {
 // New devolve um Registry vazio e pronto para uso.
 func New() *Registry {
 	return &Registry{
-		clients: make(map[string]MyClient),
+		clients: make(map[string]UserClient),
 		polls:   make(map[string]map[string][]string),
 	}
 }
 
-// Set guarda o MyClient de userID.
-func (r *Registry) Set(userID string, c MyClient) {
+// Set guarda o UserClient de userID.
+func (r *Registry) Set(userID string, c UserClient) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.clients[userID] = c
 }
 
-// Get devolve o MyClient de userID, ou nil.
-func (r *Registry) Get(userID string) MyClient {
+// Get devolve o UserClient de userID, ou nil.
+func (r *Registry) Get(userID string) UserClient {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.clients[userID]
 }
 
-// Delete remove o MyClient de userID e descarta junto o cache de enquetes
+// Delete remove o UserClient de userID e descarta junto o cache de enquetes
 // dele — o cache não sobrevive ao cliente que o originou.
 func (r *Registry) Delete(userID string) {
 	r.mu.Lock()

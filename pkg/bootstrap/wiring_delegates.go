@@ -58,12 +58,12 @@ type mediaS3Config struct {
 	MediaDelivery string
 }
 
-// GetUserID / GetWAClient make *MyClient satisfy media.MyClient (= wa-noise.MyClient),
+// GetUserID / GetWAClient make *UserEventHandler satisfy media.UserClient (= wa-noise.UserEventHandler),
 // the interface pkg/infra/media.ProcessMedia consumes.
-func (mycli *MyClient) GetUserID() string            { return mycli.UserID }
-func (mycli *MyClient) GetWAClient() *wanoise.Client { return mycli.WAClient }
+func (evh *UserEventHandler) GetUserID() string            { return evh.UserID }
+func (evh *UserEventHandler) GetWAClient() *wanoise.Client { return evh.WAClient }
 
-var _ media.MyClient = (*MyClient)(nil)
+var _ media.UserClient = (*UserEventHandler)(nil)
 
 // s3MediaUploader adapts storage.S3Manager to media.S3Manager, preserving the
 // lazy per-user client init that the previous media path performed via EnsureS3.
@@ -85,19 +85,19 @@ func init() {
 	})
 }
 
-func (mycli *MyClient) processMedia(
+func (evh *UserEventHandler) processMedia(
 	msg wanoise.DownloadableMessage, mimeType, fallbackExt string, timeout time.Duration,
 	isIncoming bool, chatJID, messageID string, s3cfg mediaS3Config,
 	postmap map[string]interface{}, extraKeys map[string]interface{},
 ) {
-	if mycli.WAClient == nil {
+	if evh.WAClient == nil {
 		log.Warn().
-			Str("userID", mycli.UserID).
+			Str("userID", evh.UserID).
 			Str("messageID", messageID).
 			Msg("media processing skipped: WhatsApp client not configured")
 		return
 	}
-	media.ProcessMedia(mycli, msg, mimeType, fallbackExt, timeout,
+	media.ProcessMedia(evh, msg, mimeType, fallbackExt, timeout,
 		isIncoming, chatJID, messageID,
 		media.MediaS3Config{Enabled: s3cfg.Enabled, MediaDelivery: s3cfg.MediaDelivery},
 		postmap, extraKeys)
@@ -131,6 +131,6 @@ func (s *server) SendNotification(method string, params map[string]interface{}) 
 func syncHistoryForChat(ctx context.Context, db *sqlx.DB, userID string, chatJID types.JID, count int) error {
 	return wahistory.SyncHistoryForChat(ctx, db, wahistory.SyncDeps{
 		GetWA: func(uid string) interface{} { return clientManager.GetWaNoiseClient(uid) },
-		GetMC: func(uid string) wahistory.MyClientGetter { return clientManager.GetMyClient(uid) },
+		GetMC: func(uid string) wahistory.UserClientGetter { return clientManager.GetUserClient(uid) },
 	}, userID, chatJID, count)
 }

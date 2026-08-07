@@ -24,16 +24,16 @@ type historySender interface {
 	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 }
 
-// MyClientGetter e' a interface minima que SyncDeps.GetMC precisa: acesso ao
-// *wa-noise.Client subjacente, sem exigir o tipo concreto de MyClient.
-type MyClientGetter interface {
+// UserClientGetter e' a interface minima que SyncDeps.GetMC precisa: acesso ao
+// *wa-noise.Client subjacente, sem exigir o tipo concreto de UserClient.
+type UserClientGetter interface {
 	GetWAClient() *wanoise.Client
 }
 
 // SyncDeps provides the external callbacks needed for history sync.
 type SyncDeps struct {
 	GetWA func(userID string) interface{} // returns *wanoise.Client
-	GetMC func(userID string) MyClientGetter
+	GetMC func(userID string) UserClientGetter
 }
 
 // SaveMessageFunc saves a message to history.

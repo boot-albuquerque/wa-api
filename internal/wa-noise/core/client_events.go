@@ -35,7 +35,7 @@ const handlerQueueSize = 2048
 // All registered event handlers will receive all events. You should use a type switch statement to
 // filter the events you want:
 //
-//	func myEventHandler(evt interface{}) {
+//	func handleEvent(evt interface{}) {
 //		switch v := evt.(type) {
 //		case *events.Message:
 //			fmt.Println("Received a message!")
@@ -47,17 +47,17 @@ const handlerQueueSize = 2048
 // If you want to access the Client instance inside the event handler, the recommended way is to
 // wrap the whole handler in another struct:
 //
-//	type MyClient struct {
-//		WAClient *wa-noise.Client
+//	type UserEventHandler struct {
+//		WAClient *wanoise.Client
 //		eventHandlerID uint32
 //	}
 //
-//	func (mycli *MyClient) register() {
-//		mycli.eventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
+//	func (h *UserEventHandler) register() {
+//		h.eventHandlerID = h.WAClient.AddEventHandler(h.handleEvent)
 //	}
 //
-//	func (mycli *MyClient) myEventHandler(evt interface{}) {
-//		// Handle event and access mycli.WAClient
+//	func (h *UserEventHandler) handleEvent(evt interface{}) {
+//		// Handle event and access h.WAClient
 //	}
 func (cli *Client) AddEventHandler(handler EventHandler) uint32 {
 	return cli.AddEventHandlerWithSuccessStatus(func(evt any) bool {
@@ -81,9 +81,9 @@ func (cli *Client) AddEventHandlerWithSuccessStatus(handler EventHandlerWithSucc
 // event dispatcher holds a read lock on the event handler list, and this method wants a write lock
 // on the same list. Instead run it in a goroutine:
 //
-//	func (mycli *MyClient) myEventHandler(evt interface{}) {
+//	func (h *UserEventHandler) handleEvent(evt interface{}) {
 //		if noLongerWantEvents {
-//			go mycli.WAClient.RemoveEventHandler(mycli.eventHandlerID)
+//			go h.WAClient.RemoveEventHandler(h.eventHandlerID)
 //		}
 //	}
 func (cli *Client) RemoveEventHandler(id uint32) bool {

@@ -11,8 +11,8 @@ package port
 // Escopo deliberadamente estreito: só CRUD de handle. Nada de Start/Stop/
 // Reconnect — ciclo de vida é do orchestrator, não do registry.
 //
-// O handle de MyClient não aparece aqui: quem o monta e registra é o
-// adapter de SessionAttachHook, em pkg/bootstrap, porque MyClient carrega
+// O handle de UserEventHandler não aparece aqui: quem o monta e registra é o
+// adapter de SessionAttachHook, em pkg/bootstrap, porque UserEventHandler carrega
 // estado de bootstrap que a camada de aplicação não pode enxergar.
 type SessionRegistry interface {
 	// Register associa a sessão viva a userID, substituindo qualquer

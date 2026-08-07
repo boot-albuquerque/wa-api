@@ -6,11 +6,11 @@ import (
 	waclient "wa-api/pkg/infra/wa-noise/client"
 )
 
-// fakeMyClient é um MyClient mínimo para os testes do ClientManager.
-type fakeMyClient struct{}
+// fakeUserClient é um UserClient mínimo para os testes do ClientManager.
+type fakeUserClient struct{}
 
-func (f *fakeMyClient) GetWAClient() *wanoise.Client { return nil }
-func (f *fakeMyClient) GetUserID() string            { return "fake-user" }
+func (f *fakeUserClient) GetWAClient() *wanoise.Client { return nil }
+func (f *fakeUserClient) GetUserID() string            { return "fake-user" }
 
 func TestNewClientManager(t *testing.T) {
 	cm := NewClientManager()

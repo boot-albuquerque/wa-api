@@ -27,8 +27,8 @@ type MediaS3Config struct {
 	MediaDelivery string
 }
 
-// MyClient is an alias to the wa-noise package's MyClient interface
-type MyClient = wamgr.MyClient
+// UserClient is an alias to the wa-noise package's UserClient interface
+type UserClient = wamgr.UserClient
 
 // S3Manager interface for S3 operations
 type S3Manager interface {
@@ -49,7 +49,7 @@ func SetProcessMediaHandler(handler *ProcessMediaHandler) {
 }
 
 func ProcessMedia(
-	mycli MyClient,
+	userClient UserClient,
 	msg wanoise.DownloadableMessage,
 	mimeType string,
 	fallbackExt string,
@@ -61,7 +61,7 @@ func ProcessMedia(
 	postmap map[string]interface{},
 	extraKeys map[string]interface{},
 ) {
-	tmpDir := filepath.Join("/tmp", "user_"+mycli.GetUserID())
+	tmpDir := filepath.Join("/tmp", "user_"+userClient.GetUserID())
 	if err := os.MkdirAll(tmpDir, 0751); err != nil {
 		log.Error().Err(err).Msg("Could not create temporary directory")
 		return
@@ -70,7 +70,7 @@ func ProcessMedia(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	data, err := mycli.GetWAClient().Download(ctx, msg)
+	data, err := userClient.GetWAClient().Download(ctx, msg)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to download media")
 		return
@@ -99,7 +99,7 @@ func ProcessMedia(
 			if defaultHandler.S3Manager != nil {
 				s3Data, err := defaultHandler.S3Manager.ProcessMediaForS3(
 					ctx,
-					mycli.GetUserID(),
+					userClient.GetUserID(),
 					chatJID,
 					messageID,
 					data,
