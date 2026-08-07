@@ -1656,3 +1656,35 @@ extração de pacote com equivalência de comportamento — corrigir aqui mistur
 uma mudança de comportamento numa movimentação que precisa ser auditável como
 "nada mudou". Conforme `CLAUDE.md`, fica registrado para decisão do usuário
 sobre corrigir agora ou depois.
+
+## F48 — `ConvertQueryID` acessa `.Platform` em vez de `GetPlatform()`
+
+- **Data / contexto**: 2026-08-07, durante a extração do subpacote
+  `internal/wa-noise/newsletter/` (Fase F/G, lote 2). O bug apareceu quando o
+  duble de teste montou um `*waWa6.ClientPayload` sem `UserAgent`.
+- **Onde**: `internal/wa-noise/newsletter/queryids.go:50` (era
+  `internal/wa-noise/newsletter_mex.go:71` antes da extração).
+
+  ```go
+  if payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
+  ```
+
+- **Problema**: `GetUserAgent()` devolve `nil` quando o campo está ausente, e
+  `.Platform` é acesso a CAMPO, não ao getter gerado — o programa estoura
+  `SIGSEGV` em vez de ler o zero. Reproduzido em teste:
+  `ConvertQueryID(&waWa6.ClientPayload{}, queryFetchNewsletter)` panica em
+  `queryids.go:50`. Em produção o payload vem de
+  `store.Device.GetClientPayload()`, que sempre preenche `UserAgent`, então o
+  caminho não é alcançado hoje — é fragilidade latente, não falha ativa.
+
+  Note que a comparação em si já é inerte: ela compara dois PONTEIROS
+  diferentes e é sempre falsa (F31). Ou seja, o acesso arriscado não influencia
+  o resultado — só pode panicar.
+- **Correção sugerida**: trocar `.Platform` por `.GetPlatform()` e comparar com
+  `waWa6.ClientPayload_UserAgent_MACOS` (valor, não ponteiro), o que de quebra
+  corrige F31. Atenção: corrigir F31 MUDA comportamento — clientes com
+  plataforma MACOS passariam a usar as query IDs de desktop mesmo com WebInfo
+  presente. Precisa ser decisão deliberada, não conserto de passagem.
+- **Status**: não corrigido. Fora do escopo de uma extração; o teste
+  `TestConvertQueryIDPlatformMacOSNaoDecideSozinho` trava o comportamento atual e
+  os helpers `webPayload`/`desktopPayload` documentam a pré-condição.

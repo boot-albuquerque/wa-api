@@ -5222,3 +5222,247 @@ arquivo que não existe. Há aviso no próprio `errors.go` e teste de identidade
 - `UploadNewsletterReader` engole o erro de `io.Copy` (o `err` é sobrescrito pelo
   `Seek` seguinte). É bug pré-existente, fora do escopo de uma extração;
   registrado em `HOUSEKEEP.md` (F47) e **não corrigido**.
+
+## Fase F/G — lote 2: `newsletter/` (extração real + cobertura), 2026-08-07
+
+Segunda extração de subpacote, mesmo padrão do lote 1 (`media/`): o domínio vira
+um pacote que define uma interface estreita, opera sobre ela e **nunca importa a
+raiz**; a raiz importa o subpacote (uma direção só) e mantém métodos-fachada em
+`*Client`. O racional de por que a movimentação simples é impossível está na
+seção da Fase D.
+
+### A interface
+
+Em `internal/wa-noise/newsletter/transport.go`, uma interface só, com dez
+métodos — o domínio de newsletter toca mais do cliente que o de mídia porque
+usa os três caminhos de saída (IQ síncrono, nó cru com espera manual, e MEX):
+
+```go
+type Transport interface {
+    SendIQ(ctx context.Context, query IQ) (*waBinary.Node, error)
+    SendNode(ctx context.Context, node waBinary.Node) error
+    GenerateRequestID() string
+    WaitResponse(reqID string) chan *waBinary.Node
+    CancelResponse(reqID string, ch chan *waBinary.Node)
+    GenerateMessageID() types.MessageID
+    ParseMessages(node *waBinary.Node) []*types.NewsletterMessage
+    ClientPayload() *waWa6.ClientPayload
+    ElementMissing(tag, in string) error
+    Log() waLog.Logger
+}
+```
+
+Quatro decisões de projeto valem registro:
+
+1. **`newsletter.IQ` em vez de expor `infoQuery`.** `infoQuery` é tipo da raiz;
+   expô-lo na interface arrastaria a raiz para dentro de `newsletter/` e refaria
+   o ciclo — exatamente o problema que o lote 1 resolveu com `SendMediaConnIQ`.
+   Aqui a solução tem de ser mais geral, porque o domínio monta **cinco** IQs
+   diferentes (live updates, mensagens, updates de mensagem, MEX, ToS), e uma
+   interface com cinco métodos de envio seria uma interface vazando o domínio.
+   `newsletter.IQ` é a fatia de `infoQuery` que este domínio usa
+   (`Namespace`, `Type`, `To`, `Content`); o adaptador da raiz traduz campo a
+   campo. Os campos que o domínio nunca preenchia — `Target`, `ID`, `SMaxID`,
+   `Timeout`, `NoRetry` — continuam no zero, como antes.
+
+2. **`ElementMissing(tag, in string) error` em vez de mover
+   `ElementMissingError`.** Mover o tipo seria errado: ele é erro genérico de
+   parsing de XML do fork inteiro (group, usync, appstate, pair-code, blocklist,
+   privacy, business, bots — 20 pontos de construção fora de newsletter).
+   Duplicá-lo quebraria o type assert dos chamadores históricos. A construção
+   atravessa a interface e o tipo concreto devolvido continua sendo
+   `*whatsmeow.ElementMissingError`, bit-a-bit o de antes. Mesma classe de
+   decisão que manteve `parseMediaRetryNotification` na raiz no lote 1.
+
+3. **`ParseMessages` fica na raiz.** `parseNewsletterMessages` vive em
+   `notification_newsletter.go`, que **não** é deste lote (é o pipeline de
+   notificação, não o de consulta) e é chamado também por
+   `handleNewsletterNotification`. Movê-lo arrastaria o dispatch de eventos
+   junto. Fica exposto pela interface — é a única chamada reversa do lote e ela
+   foi resolvida por inversão, não por movimentação.
+
+4. **`ConvertQueryID` recebe o payload, não o `Transport`.** A decisão web x
+   desktop não depende de mais nada do cliente, então a função é livre sobre
+   `*waWa6.ClientPayload` e testável sem duble nenhum.
+
+O adaptador (`newsletter_transport.go`) é **não exportado**: `newsletterTransport`
+embrulha `*Client`, que **não** ganhou nenhum método exportado novo.
+
+### Arquivos
+
+**Criados** (`internal/wa-noise/newsletter/`, `package newsletter`):
+`constants.go`, `errors.go`, `transport.go`, `queryids.go`, `mex.go`, `info.go`,
+`messages.go`, `actions.go`.
+
+**Removidos da raiz**: `newsletter_constants.go`, `newsletter_info.go`,
+`newsletter_messages.go`, `newsletter_mex.go` (e os quatro `_test.go`
+correspondentes, relocados — ver Cobertura).
+
+**Reduzido a fachada**: `newsletter.go` (193→~170, e agora contém os 15 métodos
+do domínio inteiro, não só os 8 que tinha).
+
+**Criado na raiz**: `newsletter_transport.go` — o adaptador.
+
+**Tocado fora do lote**: `user_links.go` — `NewsletterLinkPrefix` passou a
+referenciar `newsletter.LinkPrefix` em vez de repetir a string. As duas pontas
+precisam concordar: `InviteInput` corta esse prefixo antes de mandar a chave
+para o wire, e um prefixo divergente faria o servidor responder "newsletter não
+encontrada".
+
+### Compatibilidade de API
+
+Os três tipos exportados do domínio continuam existindo na raiz como
+**apelidos** (`type X = newsletter.Y`), não como definições novas — apelido é o
+mesmo tipo, então valores atravessam a fronteira sem conversão:
+
+| Nome na raiz | Definição real |
+|---|---|
+| `CreateNewsletterParams` | `newsletter.CreateParams` |
+| `GetNewsletterMessagesParams` | `newsletter.GetMessagesParams` |
+| `GetNewsletterUpdatesParams` | `newsletter.GetUpdatesParams` |
+
+`NewsletterLinkPrefix` é o mesmo **valor** de `newsletter.LinkPrefix`, não uma
+cópia. `errArgoDecodingBroken` (o único sentinela do domínio) era **não
+exportado** e não tinha uso de produção fora do próprio `sendMexIQ`, então não
+virou apelido na raiz — ele agora é `newsletter.ErrArgoDecodingBroken`, e quem
+compara continua comparando com o mesmo valor porque só existe um. **Se algum
+dia a raiz precisar do nome de volta, tem que ser `var errX =
+newsletter.ErrArgoDecodingBroken`, nunca um `errors.New` novo** — a mesma
+armadilha de aliasing documentada no lote 1.
+
+`internals.go` (gerado) compila sem mudança: `sendMexIQ`, `getNewsletterInfo` e
+`parseNewsletterMessages` continuam existindo como métodos não exportados de
+`*Client`; os dois primeiros viraram delegações de uma linha, o terceiro nem foi
+tocado.
+
+`go build ./...` do repositório inteiro passa **sem uma única alteração de call
+site fora de `internal/wa-noise/`** — `pkg/infra/wa-noise/` e afins não foram
+tocados.
+
+### Concorrência — nada a rever
+
+Ao contrário do lote 1, este lote **não tem estado compartilhado**: nenhum
+mutex, nenhum campo de `*Client` movido, nenhum cache. O único ponto de
+sincronização é o par `WaitResponse`/`CancelResponse` de `MarkViewed`, e ele
+continua sendo o mesmo `cli.waitResponse`/`cli.cancelResponse` da raiz,
+chamados na mesma ordem e no mesmo ponto do fluxo (registro **antes** do envio,
+cancelamento no caminho de erro). A ordem é coberta por
+`TestMarkViewedRegistraOCanalAntesDeEnviar` e
+`TestMarkViewedCancelaORegistroSeOEnvioFalha`. Por isso não houve revisão de
+concorrência independente — não há mudança de lock a revisar.
+
+O único estado global tocado é `store.BaseClientPayload`, lido (não escrito) pelo
+guard de MACOS de `SendMexIQ`, exatamente como antes.
+
+### Mudança de comportamento deliberada — guardas de receiver nil
+
+Antes, só `NewsletterMarkViewed` checava `cli == nil`; os outros 14 métodos do
+domínio estouravam nil deref. Todos passaram a devolver `ErrClientIsNil`, na
+mesma linha do que as Fases A–E fizeram nos outros domínios e do que o lote 1
+fez em mídia. Inclui os dois não exportados (`sendMexIQ`, `getNewsletterInfo`),
+que são alcançáveis por `DangerousInternalClient`.
+
+Um efeito de ordem vale nota: `sendMexIQ` com receiver nil **e**
+`store.BaseClientPayload` em MACOS agora devolve `ErrClientIsNil` em vez de
+`ErrArgoDecodingBroken`. Nenhum dos dois panica, e a combinação não ocorre em
+produção.
+
+### Comportamento preservado de propósito
+
+**A política de erro de `GetInfo`/`GetSubscribed` é assimétrica com a de
+`Create`.** Os dois primeiros decodificam o `data` mesmo quando `SendMexIQ`
+devolveu erro (uma resposta GraphQL com erros ainda traz `data` parcial), e o
+erro do servidor tem prioridade sobre o erro de unmarshal; `Create` aborta no
+primeiro erro. É comportamento de origem, mantido, e agora explícito em teste
+(`TestGetInfoErroDoServidorTemPrioridadeSobreUnmarshal` versus
+`TestCreateErroDeUnmarshal`).
+
+**`GetMessages` manda o IQ para `types.ServerJID`, `GetMessageUpdates` manda
+para o JID do canal.** Assimetria do upstream, preservada e travada por teste.
+
+**O `ElementMissingError` de `GetMessageUpdates` reporta a tag `"messages"`, não
+`"message_updates"`.** Também assimetria do upstream, preservada e travada.
+
+**Reação vazia continua virando revogação do próprio remetente** (`edit=
+sender_revoke`) em vez de `code=""`. Mandar código vazio registraria uma reação
+vazia em vez de apagar a existente.
+
+**A comparação de plataforma de `ConvertQueryID` continua inerte.** Ela compara
+dois ponteiros diferentes e é sempre falsa; na prática só `GetWebInfo() == nil`
+decide. Bug herdado (HOUSEKEEP.md F31), preservado. Durante este lote descobriu-
+se que a mesma linha faz `payload.GetUserAgent().Platform` — acesso a **campo**,
+não ao getter — e portanto panica se `UserAgent` for nil. Não acontece em
+produção (`GetClientPayload` sempre preenche), registrado como F48 e **não
+corrigido**: consertá-lo bem implica consertar F31 junto, o que **muda
+comportamento** de clientes MACOS.
+
+### Helpers extraídos (equivalência verificada por leitura)
+
+`sendMexIQ` era uma função de 73 linhas com um `if/else` gigante no fim. Os dois
+ramos viraram `decodeArgoResult` e `decodeGraphQLResult`, sem mudança de lógica.
+O ganho é de testabilidade: `decodeGraphQLResult` não precisa de `Transport`
+nenhum, e as quatro políticas de erro do GraphQL ficam cobertas diretamente.
+
+Na mesma função, a variável local `store` do ramo Argo (que sombreava o pacote
+`store`, importado logo acima para o guard de MACOS) foi renomeada para
+`wireStore`. Renomeação de local, sem efeito.
+
+### Cobertura
+
+`internal/wa-noise/newsletter/` fecha em **88,2% de statements e 100% de
+funções**. Todas as funções exceto uma estão em **100%**.
+
+Os testes que existiam desde a Fase E lote 2 foram **relocados e adaptados**,
+não descartados: passaram a chamar as funções livres direto, com um
+`fakeTransport` (`testhelpers_test.go`) em vez de um `*Client` com `store.Device`
+montado à mão. O duble tem 10 métodos e nenhuma dependência de socket, store ou
+sessão — foi exatamente o ganho que motivou o desenho. Testes que antes só
+exercitavam construtores de atributo (`newsletterMessagesAttrs`,
+`newsletterReactionAttrs`, ...) agora têm companhia: os 15 pontos de entrada do
+domínio são exercitados de ponta a ponta, incluindo os caminhos de erro que
+antes exigiriam uma sessão Noise aberta.
+
+O único bloco fora, e por quê:
+
+**`mex.go` — o corpo de `decodeArgoResult` (10,0%).** A função abre com
+`if true { return nil, ErrArgoDecodingBroken }`: o caminho Argo está
+desabilitado no fork desde a Fase E lote 2, e todo o resto do corpo é
+**inalcançável sem alterar produção**. O early return em si está coberto
+(`TestDecodeArgoResultSempreRecusa`, mais `TestSendMexIQFormatoArgoEstaDesabilitado`
+pelo caminho completo). O corpo fica no lugar porque é a implementação que será
+reabilitada quando o decoder voltar a funcionar — apagá-lo perderia o trabalho.
+
+Sem esse bloco morto, o pacote está em 100%.
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `internal/wa-noise/newsletter`. Todos os 8
+arquivos de produção do novo pacote ficam abaixo do teto de 300 linhas (maior:
+`actions.go`, 188).
+
+`git diff --stat internal/wa-noise/proto/` continua vazio.
+
+### Estado da revisão — LOTE NÃO REVISADO INDEPENDENTEMENTE
+
+Pelo mesmo critério honesto que a correção de registro do lote 1 estabeleceu: o
+que sustenta este lote é `make check` verde, a cobertura acima, e comparação
+manual de cada função movida contra o original — feita por quem escreveu o
+commit, portanto **não é revisão independente**.
+
+Diferente do lote 1, porém, **não há mudança de concorrência pendente de segunda
+opinião**: este lote não move nenhum lock nem nenhum estado compartilhado (ver
+"Concorrência" acima).
+
+### Fora do escopo
+
+- `notification_newsletter.go` (`parseNewsletterMessages`,
+  `handleNewsletterNotification`) continua na raiz — é pipeline de notificação,
+  não de consulta.
+- `ElementMissingError` continua na raiz, pelo mesmo racional que manteve
+  `ElementMissingError` fora de `media/` no lote 1.
+- F31 e F48 (`ConvertQueryID`) **não corrigidos** — ver acima.
+- As query IDs `queryFetchNewsletterDehydrated`, `queryNewslettersDirectory` e as
+  quatro IDs `*Desktop` sem consumidor continuam declaradas sem uso de produção,
+  como no upstream. São documentação do protocolo e ancoram os testes de wire
+  type Argo.
