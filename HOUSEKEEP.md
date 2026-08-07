@@ -1010,6 +1010,37 @@ A segunda opção é menor e usa maquinário que já está no lugar.
 compila; o risco é exclusivamente para quem rodar `go generate`. Continua sem
 gate que detecte: `go generate` não roda em `make check`.
 
+### Adendo ao F29 — a Fase H moveu o par para `core/` e **não** piorou o bug, 2026-08-07
+
+**Contexto**: Fase H etapa 5 (reorganização estrutural de `internal/wa-noise/`),
+que moveu os 114 `.go` da raiz para `core/`. O inventário da etapa 1
+(`internal/wa-noise/docs/FASE_H_INVENTORY.md` §3) pediu explicitamente que o
+impacto sobre o F29 fosse registrado aqui ao executar a etapa de `core/`. Este
+adendo fecha esse pedido — ele estava documentado em `PATCHES.md` (etapa 5,
+seção "Impacto no bug F29") mas nunca replicado neste bloco.
+
+**Onde**: `internal/wa-noise/core/internals.go` e
+`internal/wa-noise/core/internals_generate.go` (antes na raiz do fork).
+
+**Constatação**: os dois arquivos foram movidos por `git mv` **sem uma única
+edição de conteúdo**. O `//go:generate` roda a partir de `core/`, e os 32 nomes
+da lista hardcoded (`internals_generate.go:101-110`) continuam resolvendo
+relativo ao diretório do gerador. Ou seja: a lista **não** ficou mais quebrada do
+que já estava, e não houve dessincronização adicional entre `internals.go` e o
+seu gerador.
+
+**Problema**: nenhum novo. O F29 permanece **exatamente** como descrito acima —
+`go generate` ainda derrubaria 96 dos 178 wrappers, e o adendo da Fase D sobre o
+bloco de import continua valendo.
+
+**Correção sugerida**: inalterada (ver "Correção sugerida (revisada)" acima).
+
+**Status**: **não corrigido**, por decisão explícita da Fase H. Corrigir o F29
+é escopo próprio: toca arquivo gerado, tem duas dependências acopladas, e a
+regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo da
+tarefa. Documentado para quem vier depois em
+`internal/wa-noise/docs/ARCHITECTURE.md` §6 e `docs/CONTRIBUTING.md` regra 9.
+
 ## F30 — `downloadableMessageWithSizeBytes` não tem nenhum implementador: `getSize` cai no default para `StickerPackItem`
 
 **Data / contexto**: 2026-08-07, durante a Fase E do ADR-0004 (lote 1, mídia),
@@ -2147,3 +2178,80 @@ podem ser chamados antes do primeiro `Connect()`.
 **Status**: não corrigido. Bug pré-existente fora do escopo, e mexer em quando
 `socketLock` é adquirido é exatamente o tipo de mudança que o protocolo do lote
 10 exige passar por revisão dedicada. Registrado para decisão do usuário.
+
+## F58 — `messageSendLock` é declarado em `core` e emprestado por ponteiro para `capabilities/send`: única violação de "estado e lock viajam juntos" no fork
+
+**Data**: 2026-08-07. **Contexto**: Fase H etapa 7 (final), ao escrever
+`internal/wa-noise/docs/LOCKS.md` — o documento que torna verificável a regra
+"estado compartilhado e o mutex que o protege moram no mesmo pacote, na mesma
+struct". Ao inventariar os locks por inspeção do código, este é o único que não
+satisfaz a regra. O achado não é novo: o inventário da etapa 1
+(`internal/wa-noise/docs/FASE_H_INVENTORY.md`, seção "O único par estado/lock já
+separado: `messageSendLock`") já o havia identificado e pedido explicitamente que
+fosse registrado aqui e citado em `docs/LOCKS.md`. A citação foi feita; **o
+registro neste arquivo nunca tinha sido feito**. Esta entrada fecha a pendência.
+
+**Onde** (caminhos pós-Fase H, verificados no HEAD):
+
+```go
+// internal/wa-noise/core/client.go:117 — o mutex é campo de *Client
+	messageSendLock sync.Mutex
+
+// internal/wa-noise/core/send_adapter.go:68 — core empresta o ponteiro
+func (t sendTransport) SendLock() *sync.Mutex { return &t.cli.messageSendLock }
+
+// internal/wa-noise/capabilities/send/transport.go:141 — send declara a porta
+	SendLock() *sync.Mutex
+
+// internal/wa-noise/capabilities/send/message.go:80 e fb_message.go:129 — uso
+	lock := t.SendLock()
+	lock.Lock()
+	resp.DebugTimings.Queue = time.Since(start)
+	defer lock.Unlock()
+```
+
+**Problema**: o mutex que serializa **todos** os envios do cliente é declarado
+por um pacote (`core`) e adquirido por outro (`capabilities/send`), através de
+uma interface que exporta um `*sync.Mutex`. Nenhum dos dois pacotes é dono
+completo do par estado/lock:
+
+- `core` declara o mutex mas não sabe qual é a seção crítica que ele protege —
+  ela vive inteira em `send/message.go:80-…` e `send/fb_message.go:129-…`;
+- `send` define e executa a seção crítica mas não pode garantir nada sobre o
+  ciclo de vida do mutex, que pertence a uma struct de outro pacote.
+
+Nada disso está quebrado hoje, e vale ser explícito sobre o que **não** é
+problema: não há ciclo de import (a interface é declarada em `send/` e `core` a
+satisfaz, então a dependência de compilação é só `core → send`); e o ponteiro é
+estável — `sendTransport` embrulha o `*Client`, então o mutex nunca é copiado
+por valor, o que seria o erro clássico. Os dois pontos estão documentados no
+código, em `send/transport.go:133-140` e `core/send_adapter.go:65-67`.
+
+O risco é de manutenção, não de corrida: um refator futuro que mova
+`messageSendLock` para dentro de outra struct, ou que faça `sendTransport`
+deixar de embrulhar um ponteiro, quebra a garantia **em silêncio** — `go vet`
+pega cópia de mutex por valor em alguns casos, mas não pega a mudança de dono.
+E, por ser a exceção à regra, ele é o precedente que alguém vai citar para
+abrir a segunda exceção.
+
+**Correção sugerida**: mover a serialização de envio inteira para
+`capabilities/send`, de modo que o mutex e a sua seção crítica fiquem no mesmo
+pacote. Concretamente: `send` passa a possuir um `State` (como `retry.State`,
+`prekeys.State` e `tctoken.State` já fazem) com o mutex privado, e a interface
+`send.Transport` perde o método `SendLock()`. O `Client` deixa de ter o campo
+`messageSendLock` e passa a guardar o `*send.State`.
+
+O que precisa ser verificado antes: se algum caminho **fora** de `send/` adquire
+o mesmo mutex. Pela inspeção desta etapa não adquire — os únicos dois call sites
+de `SendLock()` são `send/message.go:80` e `send/fb_message.go:129`, e
+`grep -rn "messageSendLock" internal/wa-noise` só devolve a declaração e o
+adaptador. Se isso se confirmar sob revisão, a correção é local e barata.
+
+**Status**: **não corrigido — fora do escopo da Fase H.** A Fase H é
+reorganização de diretórios; isto é mudança de design de API (a interface
+`send.Transport` perde um método e o `Client` perde um campo). Além disso é
+mudança em código crítico de concorrência, e a regra 10 de
+`internal/wa-noise/docs/CONTRIBUTING.md` exige revisão independente para esse
+tipo de mexida — revisão que não cabe no fechamento desta etapa. Está citado
+como exceção conhecida na tabela de `internal/wa-noise/docs/LOCKS.md` e na regra
+6 do `CONTRIBUTING.md`. Registrado para decisão do usuário.

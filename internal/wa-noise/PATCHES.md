@@ -9259,3 +9259,230 @@ o entrega.
 `go build ./...` verde a cada um dos 3 grupos de migração (bootstrap+history+media
 → chat/group/misc/profile → registry/session/user/waclient), `go vet ./...` verde
 ao final, `LC_NUMERIC=C LC_ALL=C make check` **exit 0**.
+
+## Fase H — etapa 7 (final): `runtime/` + documentação, 2026-08-07
+
+Última etapa da Fase H. Duas metades independentes, commitadas separadamente:
+a movimentação que faltava (`runtime/`) e os quatro documentos de arquitetura
+que a fase inteira existia para poder escrever com base factual.
+
+### O que foi movido
+
+```
+internal/wa-noise/keepalive/  ->  internal/wa-noise/runtime/keepalive/
+internal/wa-noise/proxyconf/  ->  internal/wa-noise/runtime/proxy/
+```
+
+Commit `554ea60`. Cinco arquivos (3 + 2), `git mv` puro, zero edição de
+conteúdo nos arquivos movidos. As únicas edições foram nos quatro consumidores
+do import path, todos em `core/`: `client_proxy.go`, `keepalive.go`,
+`keepalive_test.go`, `connection_constants.go` (este último só num comentário).
+
+### Direção de import — verificada, e é o que torna a etapa segura
+
+A regra declarada no inventário é `core -> capabilities + runtime`, **nunca** o
+inverso. Verificado por leitura dos imports dos dois pacotes movidos:
+
+```
+runtime/keepalive/keepalive.go:14   protocol/types/events
+runtime/keepalive/transport.go:20   protocol/binary
+runtime/keepalive/transport.go:21   observability/log
+runtime/proxy/proxyconf.go          (nenhum import de wa-noise)
+```
+
+Nenhum dos dois importa `core/`, e nenhum importa `capabilities/`. `runtime/`
+satisfaz a mesma invariante B que `protocol/`, `security/`, `persistence/` e
+`observability/` já satisfaziam. `proxyconf` não importa **nada** do fork — é o
+pacote mais isolado da árvore.
+
+### O nome do pacote: `proxyconf` mantido, diretório `runtime/proxy/`
+
+A árvore-alvo do usuário diz `runtime/proxy/`. Renomear a cláusula de pacote
+`proxyconf` → `proxy` foi tentado e **revertido**, por um motivo concreto e não
+estético: `core/client_proxy.go:13` já importa `golang.org/x/net/proxy`, e o
+identificador `proxy` está ocupado — `SetSOCKSProxy(px proxy.Dialer, ...)` na
+linha 77 é do pacote da `x/net`. A renomeação criaria colisão de identificador
+no único consumidor.
+
+A orientação da tarefa era explícita sobre o desempate ("o diretório importa
+mais que o identificador interno; na dúvida, mantenha o nome do pacote"), e é o
+que foi feito. O import ganhou alias explícito:
+
+```go
+// core/client_proxy.go:15
+	proxyconf "wa-api/internal/wa-noise/runtime/proxy"
+```
+
+Custo: uma linha de alias. Alternativa recusada: renomear o import da `x/net`
+em vez do nosso, o que mexeria no significado de código de terceiros no arquivo.
+
+### Concorrência: nenhuma — e foi conferido, não presumido
+
+Os dois pacotes foram inspecionados por `grep` de `sync.Mutex`/`sync.RWMutex`/
+`sync.Map` e **não têm nenhum primitivo de concorrência próprio**. `keepalive`
+coordena por `context`, `time.Timer` e canais; o `Disconnect()` que ele chama já
+segura `socketLock` por dentro, o que está documentado na própria interface
+`keepalive.Transport` (`runtime/keepalive/transport.go:40`, 8 métodos).
+`proxyconf` não guarda estado: recebe os três `*http.Client` em `Clients` e
+escreve o campo `Transport` de cada um.
+
+Esta é a única etapa da Fase H que move código sem tocar uma linha do mapa de
+locks — e é exatamente por isso que ela não precisou de revisão de concorrência
+dedicada. O par `ctx`/`connCtx` do keepalive já tinha passado por revisão
+independente no F/G lote 10 (veredito SAFE TO COMMIT), e não foi tocado aqui.
+
+### Gates atualizados
+
+- `scripts/waclient-filesize-check.sh`: `DIRS` repontado para
+  `internal/wa-noise/runtime/{keepalive,proxy}`, mais atualização do comentário
+  de escopo no cabeçalho para mencionar a reorganização da Fase H. Verde: 299
+  arquivos de produção em 33 diretórios dentro do teto de 300 linhas.
+- `Makefile:274-275`: `WACLIENT_TEST_PKGS` repontado para os dois caminhos novos.
+- `cmd/logcov/testdata/eligible.golden`: regenerado
+  (`go run ./cmd/logcov -golden > …`), 10 linhas trocadas — os símbolos de
+  `keepalive` e `proxyconf` mudaram de `PkgPath`.
+- `.logcov-exclude`: **não** precisou mudar. A entrada é o prefixo
+  `internal/wa-noise/`, que cobre `runtime/` por construção.
+- `scripts/waclient-facade-check.sh`: não precisou mudar — a trava é sobre
+  `core`, e nada em `runtime/` o importa.
+
+### Os quatro documentos
+
+Criados em `internal/wa-noise/docs/`, ao lado do `FASE_H_INVENTORY.md` da etapa 1:
+
+| Arquivo | O que estabelece |
+|---|---|
+| `ARCHITECTURE.md` | Por que **não** DDD/Clean (isto é um SDK de protocolo, não um app de domínio); o que cada categoria é, cada uma com a sua pergunta de decisão; o padrão `Transport`; o diagrama de dependência **verificado**; a regra de código gerado |
+| `CONTRIBUTING.md` | As 11 regras numeradas para quem escreve código, cada uma com o caso concreto da Fase F/G ou H que a originou |
+| `LOCKS.md` | Tabela de 20 locks construída por inspeção do código, com dono/leitores/escritores por `arquivo:linha`, mais o placar de quais tiveram revisão independente |
+| `DEPENDENCIES.md` | As 2 invariantes checáveis, as 9 arestas capacidade→capacidade, os call sites reversos dos lotes 6-9, as arestas bidirecionais `protocol`↔`security`, e a distinção `appstate` × `appstatesync` |
+
+**Método**: nenhum dos quatro foi escrito de memória. `LOCKS.md` e
+`DEPENDENCIES.md` saíram de `grep` executado no HEAD, e os comandos estão
+impressos nos próprios documentos para que qualquer um refaça a verificação.
+Os documentos citam `arquivo:linha` real, não descrição abstrata — as 13
+interfaces `Transport` estão listadas com a contagem de métodos de cada uma
+(de 2 em `notification` a 36 em `message`), porque é essa distribuição que prova
+que a regra "sem interface gigante compartilhada" está sendo seguida.
+
+**Onde os documentos são deliberadamente desconfortáveis**, por decisão de honestidade:
+
+- `ARCHITECTURE.md` §4 e `DEPENDENCIES.md` §3 **não** desenham uma pilha limpa.
+  Declaram as duas arestas bidirecionais entre `protocol/` e `security/`
+  (`protocol/socket → security/gcm` e `security/handshake → protocol/socket`,
+  achadas na etapa 1 §6.3) como característica aceita e entendida — e explicam
+  por que compilam (Go proíbe ciclo entre pacotes concretos; o ciclo é entre
+  diretórios-categoria, que não são pacotes) e por que a "correção" seria pior.
+  Também declaram a terceira aresta não prevista, `protocol/appstate →
+  persistence/store`.
+- `LOCKS.md` §3 traz o placar de revisão, incluindo o que **não** foi revisado:
+  `retry.State` (5 locks, a maior mudança de concorrência de toda a Fase F/G) e
+  `tctoken.State` (`TryStartDBPrune`) seguem sem revisão independente. O mesmo
+  critério honesto do resto deste arquivo: comparação manual feita por quem
+  escreveu o commit não é revisão independente.
+- `ARCHITECTURE.md` §6 documenta o F29 como bug conhecido e deliberadamente não
+  corrigido, com as citações do `HOUSEKEEP.md`, em vez de omitir que
+  `internals.go` está dessincronizado do seu gerador.
+
+### Duas pendências de registro fechadas no `HOUSEKEEP.md`
+
+Ambas eram coisas que o inventário da etapa 1 pediu para registrar e que nunca
+tinham sido registradas:
+
+- **`HOUSEKEEP.md` F58** (novo): `messageSendLock` é declarado em
+  `core/client.go:117` e emprestado por ponteiro para `capabilities/send` via
+  `SendLock() *sync.Mutex` (`core/send_adapter.go:68` ↔
+  `send/transport.go:141`). É a **única** violação real de "estado e lock viajam
+  juntos" no fork. Não cria ciclo e o ponteiro é estável; o risco é de
+  manutenção. Correção sugerida registrada (`send` passa a possuir um `State`
+  com o mutex privado, como `retry`/`prekeys`/`tctoken`), status não corrigido —
+  é mudança de API e de código de concorrência, fora do escopo de uma
+  reorganização de diretórios.
+- **Adendo ao F29**: replica no `HOUSEKEEP.md` o que a etapa 5 já tinha apurado
+  — mover `internals.go`/`internals_generate.go` para `core/` **não piorou** o
+  bug, porque os nomes da lista hardcoded resolvem relativo ao diretório do
+  gerador e os dois arquivos foram movidos sem uma única edição.
+
+### Verificação
+
+`go build ./...` verde; `go test -race -count=1` verde nos três pacotes tocados
+(`runtime/keepalive`, `runtime/proxy`, `core`);
+`bash scripts/waclient-filesize-check.sh` verde;
+`LC_NUMERIC=C LC_ALL=C make check` **exit 0**.
+
+---
+
+## Fase H concluída — fechamento das 7 etapas, 2026-08-07
+
+### As 7 etapas
+
+| # | O que fez | Commits |
+|---|---|---|
+| 1 | **Inventário factual** de `internal/wa-noise/` antes de mover nada — 114 arquivos da raiz, mapa de locks, mapa de call sites cruzados, checagem de ciclos, e 7 decisões pendentes com recomendação. Virou o contrato de execução das etapas 3-7 | `5924304` |
+| 2 | **Scaffold** das categorias: diretórios vazios, `go build` verificado sem alteração | `5924304` |
+| 3 | **`security/` e `observability/`**: `util/{cbc,gcm,hkdf,keys}util` → `security/`, `util/log` → `observability/log`, `paircrypto/` e `handshake/` → `security/` | `7a9da9a`, `bf62663` |
+| 4 | **`protocol/` e `persistence/`**: `proto/` (gerado, 69 subpacotes), `binary/`+`types/`, `argo/ socket/ msgpad/ msgattrs/ appstate/` → `protocol/`; `store/`+`sqlstore`+`upgrades` → `persistence/store/`; e as 12 capacidades → `capabilities/` | `b9b499f`, `ff58b7a`, `35ae2c3`, `0c19f23`, `7839acf`, `007dacb`…`b2a12d4`, `894acbd` |
+| 5 | **`core/`**: os 114 `.go` da raiz (+`reportingfields.json`) em um único `git mv`, porque são **um** pacote Go e meia migração não compila. Resolveu a decisão §2.3 do inventário (os 12 arquivos órfãos foram para `core/`) | `23a2c98`, `e8de2a3`, `4f7624a`, `2e8d8b9` |
+| 6 | **Fachada raiz**: `main.go` (`package whatsmeow`) sobre `core/`, com `type Client = core.Client` — alias de tipo, que entrega o method set inteiro (inclusive os 178 wrappers de `DangerousInternals`) numa linha. Os 44 consumidores repontados para a fachada, e a regra travada por `scripts/waclient-facade-check.sh` | `741470f`, `0cb4e67`, `bfe5ae2` |
+| 7 | **`runtime/` + documentação**: `keepalive/` e `proxyconf/` → `runtime/`; `ARCHITECTURE.md`, `CONTRIBUTING.md`, `LOCKS.md`, `DEPENDENCIES.md`; F58 e o adendo ao F29 no `HOUSEKEEP.md` | `554ea60` + o commit deste registro |
+
+### A estrutura final
+
+```
+internal/wa-noise/
+├── main.go               fachada, package whatsmeow — única porta de entrada
+├── core/                 Client, socketLock, conexão, request, composition root
+│                         (15 asserções `var _ X.Transport = …`)
+├── capabilities/         appstatesync group media message newsletter notification
+│                         pairing prekeys retry send tctoken user      (12)
+├── protocol/             argo appstate(+lthash) binary(+token,proto) msgattrs
+│                         msgpad proto socket types(+events)
+├── security/             cbc gcm handshake hkdf keys paircrypto
+├── persistence/          store(+sqlstore, sqlstore/upgrades)
+├── runtime/              keepalive proxy
+├── observability/        log
+└── docs/                 ARCHITECTURE CONTRIBUTING LOCKS DEPENDENCIES
+                          FASE_H_INVENTORY
+```
+
+299 arquivos `.go` de produção em 33 diretórios cobertos pelo gate de tamanho,
+todos dentro do teto de 300 linhas.
+
+### O que a Fase H mudou, e o que ela não mudou
+
+**Não mudou**: nenhum comportamento. As 7 etapas somadas não alteraram uma linha
+de lógica — foram `git mv` mais reescrita de import path, mais a fachada da
+etapa 6 (que é só alias e delegação) e os documentos da etapa 7. O mapa de locks
+saiu da Fase H idêntico ao que entrou.
+
+**Mudou**: a árvore passou a ter uma forma explicável, e — o ponto que importa —
+duas das suas regras passaram a **falhar o build** em vez de serem comentários.
+`scripts/waclient-facade-check.sh` é o exemplo, e o racional dele é a lição da
+etapa 5: os 44 consumidores foram mecanicamente repontados para `core` e ninguém
+percebeu que a árvore tinha perdido a fachada.
+
+### Relação com a Fase F/G
+
+A Fase F/G (10 lotes) fez a **extração real**: tirou a lógica da raiz e criou os
+pacotes com as suas interfaces `Transport` e os seus locks. A Fase H fez a
+**reorganização**: pegou os pacotes que já existiam e os pôs em categorias.
+
+A ordem importa e não é acidental. A Fase H foi barata precisamente porque a
+Fase F/G já tinha pago o preço difícil — separar estado de lock, resolver call
+sites reversos, provar que cada capacidade sobrevive com um dublê no lugar do
+`Client`. Reorganizar diretórios de um código que ainda estivesse todo na raiz
+não teria produzido arquitetura nenhuma, só pastas.
+
+### O que fica em aberto
+
+Registrado, não corrigido, por decisão explícita:
+
+- **F29** — `internals_generate.go` com lista hardcoded; `go generate` derrubaria
+  96 dos 178 wrappers. A Fase H não piorou nem corrigiu.
+- **F58** — `messageSendLock` emprestado por ponteiro de `core` para `send`;
+  única violação de ownership estado/lock.
+- **Revisão de concorrência pendente** — `retry.State` (5 locks) e
+  `tctoken.State` (`TryStartDBPrune`) nunca tiveram revisão independente. É a
+  maior dívida de verificação do fork, e está no placar de `docs/LOCKS.md` §3.
+- **F53, F54, F55, F56, F57** e demais achados incidentais da Fase F/G, todos no
+  `HOUSEKEEP.md`.
