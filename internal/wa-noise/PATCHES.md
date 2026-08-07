@@ -1968,3 +1968,163 @@ exportado nesta fase. O Estágio 1 não chega perto de `socketLock`.
 `Makefile` ganharam `msgpad/`, `paircrypto/` e `msgattrs/`: **177 arquivos de
 produção em 17 diretórios**, todos dentro do teto de 300 linhas.
 `git diff --stat internal/wa-noise/proto/` continua vazio.
+
+## Fase E — lote 1: mídia, 2026-08-07
+
+### Contexto
+
+A Fase A quebrou a raiz de `internal/wa-noise/` em arquivos por domínio, mas
+parou aí: nenhuma auditoria de número mágico, nenhuma verificação de log e
+**nenhum teste**. A raiz sequer estava em `WACLIENT_TEST_PKGS` — um `_test.go`
+escrito lá nunca rodava por `make check`. A Fase E fecha essa lacuna lote a
+lote. Este é o lote 1, os oito arquivos do caminho de mídia:
+
+`download.go`, `download_transport.go`, `download_types.go`,
+`download-to-file.go`, `mediaconn.go`, `mediaretry.go`, `upload.go`,
+`upload_newsletter.go`.
+
+Nenhum arquivo foi dividido: todos já estavam abaixo do teto de 300 linhas e
+nenhum apresentou violação de responsabilidade única que justificasse mexer.
+Nada de mídia mudou de comportamento — a única coisa que trocou de forma foi
+literal virando constante nomeada, sempre com o mesmo valor.
+
+### `media_constants.go` (novo)
+
+Arquivo novo, só com constantes compartilhadas pelos oito arquivos acima.
+Existia um `mediaHMACLength = 10` solto no meio de `download_transport.go`;
+ele foi movido para cá junto do resto. Não existe `constants.go` na raiz — a
+Fase A nunca criou um —, então o lote abriu um arquivo com escopo declarado no
+nome em vez de um balde genérico.
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `mediaKeyLength` | 32 | `random.Bytes(32)` em `upload.go:71,105` |
+| `mediaKeyExpandedLength` | 112 | o `112` do HKDF em `download_transport.go:59` |
+| `mediaIVLength` / `mediaCipherKeyLength` / `mediaMACKeyLength` | 16 / 32 / 32 | as fatias `[:16] [16:48] [48:80] [80:]` |
+| `mediaIVEnd` / `mediaCipherKeyEnd` / `mediaMACKeyEnd` | 16 / 48 / 80 | os offsets acima, agora derivados por soma |
+| `mediaHMACLength` | 10 | movido de `download_transport.go`; passa a nomear também o `[:10]` de `upload.go:88` |
+| `sha256HashLength` | 32 | os quatro `len(x) == 32` / `*(*[32]byte)` de `download_transport.go` e `download-to-file.go` |
+| `mediaDownloadMaxRetries` | 5 | os dois `retryNum < 5` |
+| `mediaDownloadRetryStep` | `time.Second` | os dois `time.Duration(retryNum+1) * time.Second` |
+| `unknownFileLength` | -1 | o sentinela `-1` de `getSize` e das quatro chamadas `DownloadFB*`/`DownloadThumbnail` |
+| `webWhatsappNetURLPrefix` | `https://web.whatsapp.net` | os dois `strings.HasPrefix(url, "https://web.whatsapp.net")` |
+| `mediaDownloadURLFormat` | `https://%s%s&hash=%s&mms-type=%s&__wa-mms=` | os dois `fmt.Sprintf` de URL de download |
+| `mmsTypeAudio` / `mmsTypePTT` | `audio` / `ptt` | a troca de audio→ptt para Messenger em `upload.go` |
+| `uploadPrefixDefault` / `uploadPrefixMessenger` / `uploadPrefixNewsletter` | `mms` / `wa-msgr/mms` / `newsletter` | os três prefixos de caminho de upload |
+| `newsletterMMSTypeFormat` / `uploadPathFormat` / `deletePathFormat` | `newsletter-%s` / `/%s/%s/%s` / `/mms/%s/%s` | os `fmt.Sprintf` de caminho em `upload.go` |
+
+`mediaIVEnd`, `mediaCipherKeyEnd` e `mediaMACKeyEnd` são somas em tempo de
+compilação dos comprimentos, então o fatiamento continua sendo exatamente
+`[:16]`, `[16:48]`, `[48:80]`, `[80:]`. **Comportamento não mudou** — há
+golden de `getMediaKeys` em `download_transport_test.go` travando o IV
+derivado byte a byte.
+
+### Constantes locais de arquivo
+
+Ficaram no arquivo por serem de escopo único:
+
+- `download.go`: `stickerPackMetadataURLFormat` — o endpoint
+  `static.whatsapp.net/sticker?...`, que não passa pela mediaConn e só é usado
+  por `FetchStickerPack`.
+- `mediaretry.go`: `mediaRetryKeyInfo` (`"WhatsApp Media Retry Notification"`,
+  o rótulo HKDF), `mediaRetryKeyLength` (32), `mediaRetryIVLength` (12, o nonce
+  GCM) e `mediaRetryErrCodeNotAvailable` (2, o código que o telefone devolve
+  quando não tem mais a mídia).
+
+### Mudança de forma em `upload.go`
+
+`upload.go:239` comparava `httpResp.StatusCode < 200 || >= 300` com inteiros
+crus; passou a usar `http.StatusOK` e `http.StatusMultipleChoices`, que já
+valiam 200 e 300. **Comportamento não mudou.**
+
+### O que *não* foi extraído, e por quê
+
+- Atributos e tags do XML binário (`"w:m"`, `"set"`, `"media_conn"`, `"host"`,
+  `"rmr"`, `"enc_p"`, `"enc_iv"`, `"server-error"`) continuam literais. São
+  nomes do protocolo do WhatsApp aparecendo uma vez cada, no lugar onde o nó é
+  construído ou lido — nomeá-los só adiciona uma indireção entre o código e o
+  wire format. O resto da raiz segue a mesma convenção.
+- Os cabeçalhos `"Origin"` / `"Referer"` / `"User-Agent"` e o valor
+  `socket.Origin` (que já é constante nomeada em `socket/`).
+
+### Logging
+
+Os quatro pontos de log destes arquivos já usavam o logger injetado
+(`cli.Log`, do tipo `waLog.Logger`, ponte para zerolog montada fora do fork em
+`pkg/infra/wa-noise/walog/`): `download.go:163`, `download-to-file.go:108`
+(troca de host), `download_transport.go:89` e `download-to-file.go:166`
+(retry de rede), `download.go:114` / `download-to-file.go:62` (URL
+`web.whatsapp.net` sem direct path), `mediaconn.go:85` (filho inesperado em
+`<media_conn>`) e `mediaretry.go:181` (notificação de retry malformada).
+**Nada foi adicionado, removido ou reescrito** — nenhum caminho de erro estava
+silencioso e nenhum estava logando fora do logger do `Client`.
+
+### Testes (o principal deste lote)
+
+Sete arquivos novos, todos em `package whatsmeow` (interno, para alcançar
+`getMediaKeys`, `validateMedia`, `shouldRetryMediaDownload` e afins);
+`client_test.go`, que é `package whatsmeow_test` e só tem um `Example`,
+continua intacto ao lado.
+
+O caminho HTTP é exercitado de verdade, não mockado por trás de uma interface
+inventada: `media_testhelpers_test.go` traz um `http.RoundTripper` que
+redireciona qualquer URL `https://<host-da-mediaConn>/...` para um
+`httptest.Server` local, preservando path, query e cabeçalhos, e injeta o host
+original num header de teste. Com isso o `Client` é montado direto por literal
+de struct (`mediaHTTP` + `mediaConnCache` pré-populado), sem socket, sem store
+e sem rede — e os testes conseguem afirmar sobre **a URL que o fork montou**,
+não sobre uma reimplementação dela.
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `media_testhelpers_test.go` | transporte de reescrita, construção do `Client` de teste, geração de blob cifrado |
+| `download_types_test.go` | `GetMediaType` (10 tipos + `MediaTypeable` + default), `getSize` (3 ramos), completude de `mediaTypeToMMSType` vs. `classToMediaType`, unicidade dos `MediaType` |
+| `download_transport_test.go` | golden de `getMediaKeys` + separação por `MediaType`, `validateMedia` (MAC bom/adulterado/conteúdo adulterado), `shouldRetryMediaDownload` (10 casos), `doMediaDownloadRequest` (cabeçalhos + 404→erro tipado), `downloadEncryptedMedia` (corte do MAC, hash divergente, arquivo curto), `downloadAndDecrypt` round-trip + `ErrFileLengthMismatch` + `ErrInvalidMediaSHA256` + `unknownFileLength`, esgotamento de retries e não-retry em 404 |
+| `download_test.go` | `DownloadAny` (5 partes + 2 vazios), `Download` sem URL / com `web.whatsapp.net` / tipo desconhecido, `DownloadThumbnail`, `DownloadMediaWithPath` (barra inicial, URL montada com hash e mms-type, troca de host em 502, ausência de troca em 404), `DownloadFB`, `FetchStickerPack` |
+| `download-to-file_test.go` | round-trip para arquivo, `DownloadToFile` (4 recusas), `downloadAndDecryptToFile` (tamanho, hash, MAC adulterado), `downloadEncryptedMediaToFile` (truncagem do MAC), `validateMediaFile`, `DownloadFBToFile` |
+| `upload_test.go` | `Upload` (chave/hashes/round-trip decifrável do corpo enviado, método, `Origin`, path e query), `UploadReader`, `UploadNewsletter` (não cifra, prefixo `newsletter-`), `UploadNewsletterReader` (rebobina o reader), erro de status, `DeleteMedia` (path, corte da query do directPath em `d_md`, `e_handle` presente/ausente, erro de status) |
+| `mediaconn_test.go` | `MediaConn.Expiry` (TTL normal e TTL zero), reúso do cache por `refreshMediaConn`, recusa de `Client` nil |
+| `mediaretry_test.go` | golden de `getMediaRetryKey`, `encryptMediaRetryReceipt` (decifrável, additional data = messageID), `DecryptMediaRetryNotification` (sucesso, código 2, código desconhecido, chave errada), `parseMediaRetryNotification` (cifrada, de erro, sem `<rmr>`, sem `<enc_p>`), `handleMediaRetryNotification` com nó inválido |
+
+Cobertura resultante nos oito arquivos: entre 64% e 100% por função, exceto os
+dois casos abaixo.
+
+### Lacunas assumidas, sem teste de fachada
+
+Duas funções ficaram em 0% **de propósito**:
+
+- `mediaconn.go:60` `queryMediaConn` — depende de `cli.sendIQ`, ou seja, de um
+  socket Noise aberto e de um servidor respondendo `<iq>`. Não há como
+  exercitá-la sem subir uma sessão real ou sem primeiro extrair uma costura de
+  transporte que hoje não existe (e que, pela decisão registrada na Fase D,
+  não pode ser extraída para subpacote). Um teste que montasse o nó de
+  resposta e chamasse só o parser seria reescrever a função no próprio teste.
+- `mediaretry.go:89` `SendMediaRetryReceipt` — mesma razão: `cli.sendNode`
+  precisa do socket, e `cli.getOwnID()` do store. As partes puras dela
+  (`encryptMediaRetryReceipt`) **estão** cobertas.
+
+Ambas ficam para quando o lote do núcleo do `Client` (último da Fase E)
+decidir se vale criar uma costura de transporte testável na raiz.
+
+### Achado incidental — `downloadableMessageWithSizeBytes` sem implementador
+
+`download_types.go:82` declara `downloadableMessageWithSizeBytes` exigindo
+`GetFileSizeBytes() uint64`, mas o único tipo do fork com esse método é
+`types.StickerPackItem`, cujo `GetFileSizeBytes()` devolve **`int64`**
+(`types/sticker.go:51`). Nenhum tipo de produção satisfaz a interface hoje, e
+`getSize` cai no default para `*types.StickerPackItem`. Não é regressão desta
+fase nem deste fork — está registrado em `HOUSEKEEP.md` e não foi corrigido,
+porque mudar a assinatura mexe em tipo público. O teste do ramo usa um tipo
+falso local, com comentário apontando para cá.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` no `Makefile` ganhou `./internal/wa-noise/` (a raiz).
+Isso passa a rodar **todos** os testes da raiz, não só os deste lote — o que é
+seguro hoje porque os únicos testes que existem lá são os deste lote mais o
+`Example` de `client_test.go`, que não executa. Os lotes seguintes da Fase E
+adicionam testes sob esse mesmo alvo, sem precisar mexer no Makefile de novo.
+
+`scripts/waclient-filesize-check.sh` já listava `internal/wa-noise` em `DIRS`;
+`media_constants.go` (o único arquivo de produção novo) tem 76 linhas e carrega
+o header MPL-2.0. `git diff --stat internal/wa-noise/proto/` continua vazio.

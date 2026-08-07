@@ -1009,3 +1009,60 @@ A segunda opção é menor e usa maquinário que já está no lugar.
 **Status**: **não corrigido**. O `internals.go` commitado está correto e
 compila; o risco é exclusivamente para quem rodar `go generate`. Continua sem
 gate que detecte: `go generate` não roda em `make check`.
+
+## F30 — `downloadableMessageWithSizeBytes` não tem nenhum implementador: `getSize` cai no default para `StickerPackItem`
+
+**Data / contexto**: 2026-08-07, durante a Fase E do ADR-0004 (lote 1, mídia),
+ao escrever teste para os três ramos de `getSize`.
+
+**Onde**:
+
+```go
+// internal/wa-noise/download_types.go:82-85
+type downloadableMessageWithSizeBytes interface {
+	DownloadableMessage
+	GetFileSizeBytes() uint64
+}
+
+// internal/wa-noise/download_types.go:121-130
+func getSize(msg DownloadableMessage) int {
+	switch sized := msg.(type) {
+	case downloadableMessageWithLength:
+		return int(sized.GetFileLength())
+	case downloadableMessageWithSizeBytes:
+		return int(sized.GetFileSizeBytes())
+	default:
+		return -1 // hoje unknownFileLength
+	}
+}
+```
+
+```go
+// internal/wa-noise/types/sticker.go:51
+func (spi *StickerPackItem) GetFileSizeBytes() int64 {
+```
+
+**Problema**: a interface exige `uint64`; o único tipo do fork com um método
+de mesmo nome, `types.StickerPackItem`, devolve `int64`. Assinaturas
+diferentes, logo a interface **não é satisfeita por nenhum tipo de produção**.
+`StickerPackItem` também não tem `GetFileLength()`, então `getSize` cai no
+`default` e devolve `-1` para todo item de pacote de figurinhas — ou seja, a
+validação de tamanho do download (`ErrFileLengthMismatch`) fica desligada
+justamente para esse tipo, silenciosamente.
+
+Verificação: `grep -rn "GetFileSizeBytes" internal/wa-noise` devolve só a
+declaração da interface, o uso em `getSize` e o método `int64` de
+`sticker.go` — nenhum outro implementador. O ramo é inalcançável.
+
+**Correção sugerida**: alinhar as assinaturas. O caminho de menor risco é
+mudar a interface para `GetFileSizeBytes() int64` e converter no `getSize`
+(`int(sized.GetFileSizeBytes())` continua compilando), já que `int64` é o que
+o único candidato real expõe. A alternativa — mudar `StickerPackItem` para
+`uint64` — mexe em tipo público consumido fora do fork e ainda perde a
+distinção de "não informado".
+
+**Status**: **não corrigido**. Fora do escopo do lote 1 (que é constantes,
+logging e testes, sem mudança de comportamento), e a correção altera uma
+assinatura pública. O teste do ramo em
+`internal/wa-noise/download_types_test.go` usa um tipo falso local com
+comentário apontando para este achado.
