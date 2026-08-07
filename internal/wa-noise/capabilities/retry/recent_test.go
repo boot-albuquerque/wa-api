@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -185,17 +186,27 @@ func TestAddRecentWithStore(t *testing.T) {
 	if tr.stores.outgoing["MSG1"][0] != StoreFormatWA {
 		t.Errorf("formato gravado = %v", tr.stores.outgoing["MSG1"][0])
 	}
-	// F52: o throttle de StoreClearInterval e' codigo morto (lastStoreClear
-	// nunca e' escrito), entao o expurgo roda em TODA gravacao. Travado aqui
-	// para que uma correcao futura seja consciente.
+	// O primeiro AddRecent expurga: LastStoreClear ainda e' o zero.
 	if tr.stores.deleteOldCalls != 1 {
-		t.Errorf("expurgos = %d, esperado 1 (throttle morto, F52)", tr.stores.deleteOldCalls)
+		t.Errorf("expurgos = %d, esperado 1", tr.stores.deleteOldCalls)
 	}
+	// O segundo NAO expurga: o carimbo de MarkStoreCleared e' recente. Ate' a
+	// correcao da F52 nada escrevia lastStoreClear, o throttle era decorativo e
+	// DeleteOldOutgoingEvents rodava em TODA gravacao.
 	if err := AddRecent(context.Background(), tr, testPeerJID, "MSG2", waMessage("oi"), nil); err != nil {
 		t.Fatalf("AddRecent 2: %v", err)
 	}
+	if tr.stores.deleteOldCalls != 1 {
+		t.Errorf("expurgos = %d, esperado 1 — o throttle nao segurou o segundo", tr.stores.deleteOldCalls)
+	}
+
+	// E o throttle solta de novo quando o intervalo passa.
+	tr.state.MarkStoreCleared(time.Now().Add(-2 * StoreClearInterval))
+	if err := AddRecent(context.Background(), tr, testPeerJID, "MSG3", waMessage("oi"), nil); err != nil {
+		t.Fatalf("AddRecent 3: %v", err)
+	}
 	if tr.stores.deleteOldCalls != 2 {
-		t.Errorf("expurgos = %d, esperado 2 (F52)", tr.stores.deleteOldCalls)
+		t.Errorf("expurgos = %d, esperado 2 — o throttle nao soltou apos o intervalo", tr.stores.deleteOldCalls)
 	}
 }
 

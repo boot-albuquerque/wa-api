@@ -187,10 +187,14 @@ func GetInfo(ctx context.Context, t Transport, jid types.JID, lockParticipantCac
 // mudar isso trocaria uma secao critica por duas e permitiria duas consultas
 // concorrentes para o mesmo grupo.
 //
-// Pode devolver (nil, nil): quando a consulta teve sucesso mas o servidor
-// ecoou um `id` diferente do consultado, a entrada foi gravada sob outra chave.
-// Os dois chamadores (send_prepare.go e sendfb_transport.go, na raiz) tratam
-// esse caso explicitamente.
+// Devolve ErrNotFound quando a consulta teve sucesso mas o metadado nao
+// apareceu no cache — o que acontece se o servidor ecoar um `id` diferente do
+// consultado e a entrada for gravada sob outra chave.
+//
+// Devolvia (nil, nil) nesse caso (F40 em HOUSEKEEP.md). Os chamadores foram
+// blindados com guarda de nil num lote anterior, mas a raiz continuava
+// devolvendo "sucesso sem resultado" — forma que o compilador nao ajuda a
+// tratar e que o proximo chamador esqueceria de novo.
 func GetOrFetch(ctx context.Context, t Transport, jid types.JID) (*Meta, error) {
 	cache := t.Cache()
 	cache.Lock()
@@ -202,6 +206,9 @@ func GetOrFetch(ctx context.Context, t Transport, jid types.JID) (*Meta, error) 
 	if err != nil {
 		return nil, err
 	}
-	val, _ := cache.GetLocked(jid)
+	val, ok := cache.GetLocked(jid)
+	if !ok || val == nil {
+		return nil, fmt.Errorf("%w: %s nao apareceu no cache apos a consulta", ErrNotFound, jid)
+	}
 	return val, nil
 }

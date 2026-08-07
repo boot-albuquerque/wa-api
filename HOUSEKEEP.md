@@ -944,10 +944,18 @@ adicionar um método `Is(error) bool` em `GraphQLError` que compare por
 `Extensions.ErrorCode`. A segunda é a menos invasiva e não mexe na
 serialização JSON.
 
-**Status**: **não corrigido** (mexer no tipo é mudança de API pública).
-`TestGraphQLErrorsUnwrapExposesEveryError` em `newsletter_test.go` mostra que
-`errors.As` funciona, que `errors.Is` não, e falha avisando para atualizar
-esta entrada se `GraphQLError` virar comparável.
+**Status**: **CORRIGIDO** (lote C, 2026-08-07) pela segunda opção sugerida, a
+menos invasiva: `GraphQLError` ganhou um método `Is(error) bool` que compara por
+`Extensions.ErrorCode`. O tipo continua não comparável e a serialização JSON não
+mudou.
+
+O critério é o código, não a igualdade estrutural, e isso é deliberado: duas
+ocorrências do mesmo erro chegam com `Message` e `Path` diferentes (carregam
+detalhe da requisição), então comparar por eles faria `errors.Is` falhar
+justamente no caso que ele existe para atender. Travado por
+`TestGraphQLErrorIsComparaPeloCodigo`;
+`TestGraphQLErrorsUnwrapExposesEveryError` foi reescrito e agora exige que
+`errors.Is` alcance os dois erros da lista.
 
 ---
 
@@ -1540,8 +1548,13 @@ raiz continua em `group.go`.
 lookup pós-`getGroupInfo` falhar; ou alinhar a chave de escrita com a de
 consulta. `group.go` é escopo do lote 6, já fechado.
 
-**Status**: **não corrigido na raiz** (fora do escopo do lote 8; os chamadores
-do lote 8 estão protegidos). Pendente de decisão.
+**Status**: **CORRIGIDO NA RAIZ** (lote C, 2026-08-07). `group.GetOrFetch`
+devolve `ErrNotFound` (embrulhado, com o JID consultado na mensagem) em vez de
+`(nil, nil)`. As guardas nos chamadores continuam onde estão — são defesa em
+profundidade —, mas a raiz deixou de devolver "sucesso sem resultado", que é a
+forma que o compilador não ajuda a tratar e que o próximo chamador esqueceria de
+novo. `TestGetOrFetchReturnsNilNilOnEchoedDifferentID` foi reescrito como
+`TestGetOrFetchDevolveErroQuandoOServidorEcoaOutroID`.
 
 ---
 
@@ -2013,7 +2026,19 @@ chamada de qualquer goroutine que envie mensagem, então o campo é uma corrida
 de dados latente além de um throttle morto. (Hoje a corrida é benigna na
 prática porque nada escreve; corrigir o throttle a torna real.)
 
-**Status**: **não corrigido**. O lote 5 é extração, e ligar o throttle muda o
+**Status**: **CORRIGIDO** (lote C, 2026-08-07). `AddRecent` carimba
+`State.MarkStoreCleared` depois de cada `DeleteOldOutgoingEvents` bem sucedido —
+o throttle de `StoreClearInterval` passou a valer, em vez de o expurgo rodar em
+toda gravação de mensagem enviada.
+
+O campo virou `atomic.Int64` no mesmo movimento: ele não tinha sincronização
+nenhuma, o que era inofensivo enquanto ninguém escrevia, mas `AddRecent` roda no
+caminho de envio, que é concorrente — ligar a escrita criaria a corrida.
+`TestAddRecentWithStore` foi reescrito e cobre os três estados: primeiro
+expurgo (carimbo zero), segundo segurado pelo throttle, e terceiro liberado
+depois que o intervalo passa.
+
+**Status original**: o lote 5 é extração, e ligar o throttle muda o
 comportamento observável contra o banco (de "expurga sempre" para "expurga a
 cada 12h"), além de exigir uma decisão sobre sincronização. Preservado bit a
 bit, com o comportamento travado por teste para que a correção futura seja

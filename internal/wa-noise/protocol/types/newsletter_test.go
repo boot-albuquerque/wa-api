@@ -139,9 +139,43 @@ func TestGraphQLErrorsUnwrapExposesEveryError(t *testing.T) {
 		t.Errorf("errors.As pegou o codigo %d, esperado 400", target.Extensions.ErrorCode)
 	}
 
-	// E errors.Is nao alcanca nenhum, pelo motivo do comentario acima.
-	if errors.Is(error(list), first) {
-		t.Error("errors.Is passou a funcionar — GraphQLError virou comparavel, atualize HOUSEKEEP F28")
+	// errors.Is tambem alcanca, desde a correcao da F28. GraphQLError continua
+	// NAO comparavel (tem um campo []string), entao errors.Is sozinho devolvia
+	// false SEMPRE — inclusive para um erro que estava na lista. O metodo Is
+	// resolve isso comparando pelo codigo.
+	if !errors.Is(error(list), first) {
+		t.Error("errors.Is nao alcancou o primeiro erro da lista")
+	}
+	if !errors.Is(error(list), second) {
+		t.Error("errors.Is nao alcancou o segundo erro da lista")
+	}
+}
+
+// O criterio de Is e' o ErrorCode, nao a igualdade estrutural: duas ocorrencias
+// do MESMO erro chegam com Message e Path diferentes (carregam detalhe da
+// requisicao), e comparar por eles faria errors.Is falhar justamente no caso
+// que ele existe para atender.
+func TestGraphQLErrorIsComparaPeloCodigo(t *testing.T) {
+	naLista := GraphQLError{
+		Extensions: GraphQLErrorExtensions{ErrorCode: 404},
+		Message:    "not found: abc",
+		Path:       []string{"xwa2_newsletter", "abc"},
+	}
+	mesmoCodigo := GraphQLError{
+		Extensions: GraphQLErrorExtensions{ErrorCode: 404},
+		Message:    "not found: xyz",
+		Path:       []string{"outro", "caminho"},
+	}
+	outroCodigo := GraphQLError{Extensions: GraphQLErrorExtensions{ErrorCode: 500}}
+
+	if !errors.Is(naLista, mesmoCodigo) {
+		t.Error("mesmo ErrorCode com Message/Path diferentes deveria casar")
+	}
+	if errors.Is(naLista, outroCodigo) {
+		t.Error("ErrorCode diferente nao pode casar")
+	}
+	if errors.Is(naLista, errors.New("outro tipo")) {
+		t.Error("erro de outro tipo nao pode casar")
 	}
 }
 

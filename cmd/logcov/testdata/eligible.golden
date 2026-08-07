@@ -262,6 +262,7 @@ internal/wa-noise/capabilities/retry.State.LastSessionRecreate	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.LastStoreClear	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.LockSessionRecreate	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.MarkSessionRecreated	EXCLUDED	X5
+internal/wa-noise/capabilities/retry.State.MarkStoreCleared	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.RegisterPendingPhone	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.Sema	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.State.SetMaxParallel	EXCLUDED	X5
@@ -1616,6 +1617,7 @@ internal/wa-noise/protocol/socket.newNoiseSocket	EXCLUDED	X5
 internal/wa-noise/protocol/socket.newNoiseSocket.func1	EXCLUDED	X6
 internal/wa-noise/protocol/socket.sha256Slice	EXCLUDED	X5
 internal/wa-noise/protocol/types.GraphQLError.Error	EXCLUDED	X5
+internal/wa-noise/protocol/types.GraphQLError.Is	EXCLUDED	X5
 internal/wa-noise/protocol/types.GraphQLErrors.Error	EXCLUDED	X5
 internal/wa-noise/protocol/types.GraphQLErrors.Unwrap	EXCLUDED	X5
 internal/wa-noise/protocol/types.JID.ADString	EXCLUDED	X5

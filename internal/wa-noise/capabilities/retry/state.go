@@ -3,6 +3,7 @@ package retry
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -75,13 +76,20 @@ type State struct {
 	recentPtr  int
 	recentLock sync.RWMutex
 
-	// lastStoreClear e' o carimbo do ultimo expurgo do store de retry.
+	// lastStoreClear e' o carimbo do ultimo expurgo do store de retry, em
+	// nanossegundos unix.
 	//
-	// NUNCA e' escrito — nem antes nem depois da extracao. Ver F52 em
-	// HOUSEKEEP.md: o throttle de StoreClearInterval que o le' e' portanto
-	// codigo morto, e DeleteOldOutgoingEvents roda em toda gravacao. Nao ganhou
-	// lock proprio porque a leitura original tambem nao tinha nenhum.
-	lastStoreClear time.Time
+	// Nunca era escrito, nem antes nem depois da extracao — o throttle de
+	// StoreClearInterval que o le' era codigo morto e DeleteOldOutgoingEvents
+	// rodava em TODA gravacao de mensagem enviada (F52 em HOUSEKEEP.md). Agora
+	// AddRecent o carimba depois de cada expurgo bem sucedido, que e' o que o
+	// throttle sempre pretendeu.
+	//
+	// atomic porque AddRecent roda no caminho de envio, que e' concorrente: o
+	// campo original nao tinha sincronizacao nenhuma, mas tambem nunca era
+	// escrito, entao a corrida nao existia na pratica. Ligar a escrita a
+	// criaria.
+	lastStoreClear atomic.Int64
 
 	// --- pedidos de reenvio pendentes ao telefone ---
 	pendingPhone     map[types.MessageID]context.CancelFunc
@@ -214,9 +222,18 @@ func (s *State) GetRecent(key RecentKey) RecentMessage {
 
 // LastStoreClear devolve o carimbo do ultimo expurgo do store de retry.
 //
-// Devolve sempre o zero na pratica: nada escreve neste campo. Ver F52 em
-// HOUSEKEEP.md e o doc do campo.
-func (s *State) LastStoreClear() time.Time { return s.lastStoreClear }
+// Devolve o zero de time.Time enquanto nenhum expurgo tiver acontecido — o que
+// faz o primeiro AddRecent com store ligado sempre expurgar.
+func (s *State) LastStoreClear() time.Time {
+	nanos := s.lastStoreClear.Load()
+	if nanos == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, nanos)
+}
+
+// MarkStoreCleared carimba o expurgo do store de retry como recem-feito.
+func (s *State) MarkStoreCleared(at time.Time) { s.lastStoreClear.Store(at.UnixNano()) }
 
 // --- pedidos de reenvio ao telefone ---
 

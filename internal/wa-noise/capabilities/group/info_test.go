@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
@@ -410,11 +411,13 @@ func TestGetOrFetchPropagatesQueryError(t *testing.T) {
 	}
 }
 
-// Regressao (bug do lote 8, preservado): quando o servidor ecoa um `id`
-// diferente do consultado, a entrada e' gravada sob OUTRA chave e GetOrFetch
-// devolve (nil, nil). Os dois chamadores da raiz tratam esse caso; o contrato
-// fica travado aqui.
-func TestGetOrFetchReturnsNilNilOnEchoedDifferentID(t *testing.T) {
+// Quando o servidor ecoa um `id` diferente do consultado, a entrada e' gravada
+// sob OUTRA chave e o metadado pedido nao aparece no cache.
+//
+// GetOrFetch devolvia (nil, nil) nesse caso — "sucesso sem resultado", forma
+// que o compilador nao ajuda a tratar (F40). Agora devolve ErrNotFound, com o
+// JID consultado na mensagem.
+func TestGetOrFetchDevolveErroQuandoOServidorEcoaOutroID(t *testing.T) {
 	tr := newFakeTransport()
 	tr.withStores()
 	other := types.NewJID("99999", types.GroupServer)
@@ -423,11 +426,14 @@ func TestGetOrFetchReturnsNilNilOnEchoedDifferentID(t *testing.T) {
 		Attrs: waBinary.Attrs{"id": other.User, "creation": "1"},
 	}}}}
 	got, err := GetOrFetch(context.Background(), tr, groupTestJID)
-	if err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, esperava ErrNotFound", err)
 	}
 	if got != nil {
-		t.Fatalf("meta = %+v, esperado nil (entrada caiu sob %s)", got, other)
+		t.Fatalf("meta = %+v, esperado nil", got)
+	}
+	if !strings.Contains(err.Error(), groupTestJID.String()) {
+		t.Errorf("a mensagem deveria nomear o JID consultado: %v", err)
 	}
 	if _, ok := tr.cached(other); !ok {
 		t.Error("a entrada deveria ter sido gravada sob o id ecoado")

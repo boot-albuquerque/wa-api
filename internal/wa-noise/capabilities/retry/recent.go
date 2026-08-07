@@ -39,9 +39,10 @@ func (rm RecentMessage) IsEmpty() bool {
 // a funcao, ou seja, a mensagem nao entra no cache. Ordem do upstream,
 // preservada: o call site (send.go) propaga esse erro.
 //
-// F52: o `time.Since(LastStoreClear()) > StoreClearInterval` abaixo e' sempre
-// verdadeiro, porque nada escreve em lastStoreClear. O expurgo roda em toda
-// gravacao. Comportamento herdado, preservado de proposito.
+// O expurgo do store de retry e' throttled por StoreClearInterval: AddRecent
+// carimba State.MarkStoreCleared depois de cada DeleteOldOutgoingEvents bem
+// sucedido. Ate' a correcao da F52 o carimbo nao existia e o expurgo rodava em
+// TODA gravacao.
 func AddRecent(
 	ctx context.Context,
 	t Transport,
@@ -74,6 +75,10 @@ func AddRecent(
 				if err != nil {
 					return fmt.Errorf("failed to clear old messages from retry store: %w", err)
 				}
+				// O carimbo que faltava. Sem ele o time.Since acima era sempre
+				// maior que StoreClearInterval e o expurgo rodava em toda
+				// gravacao — o throttle inteiro era decorativo (F52).
+				t.State().MarkStoreCleared(time.Now())
 			}
 		}
 	}

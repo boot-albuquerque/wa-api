@@ -169,6 +169,23 @@ func (gqle GraphQLError) Error() string {
 	return fmt.Sprintf("%d %s (%s)", gqle.Extensions.ErrorCode, gqle.Message, gqle.Extensions.Severity)
 }
 
+// Is compara dois GraphQLError pelo codigo de erro.
+//
+// Existe porque GraphQLError tem um campo `Path []string`, o que o torna
+// NAO COMPARAVEL — e errors.Is so' compara alvos comparaveis. Sem este metodo,
+// errors.Is(resp, algumGraphQLError) percorria a arvore inteira e devolvia
+// false SEMPRE, inclusive para um erro que estava na lista, enquanto
+// errors.As funcionava. A assimetria era invisivel: nada avisava em compilacao
+// nem em runtime (F28 em HOUSEKEEP.md).
+//
+// O criterio e' o ErrorCode, nao a igualdade estrutural: Message e Path
+// carregam detalhe da requisicao especifica, e comparar por eles faria
+// errors.Is falhar entre duas ocorrencias do MESMO erro.
+func (gqle GraphQLError) Is(target error) bool {
+	other, ok := target.(GraphQLError)
+	return ok && gqle.Extensions.ErrorCode == other.Extensions.ErrorCode
+}
+
 type GraphQLErrors []GraphQLError
 
 func (gqles GraphQLErrors) Unwrap() []error {
