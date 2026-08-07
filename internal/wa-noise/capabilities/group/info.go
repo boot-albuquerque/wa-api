@@ -199,8 +199,12 @@ func GetOrFetch(ctx context.Context, t Transport, jid types.JID) (*Meta, error) 
 	cache := t.Cache()
 	cache.Lock()
 	defer cache.Unlock()
+	// Devolve uma COPIA, nao o ponteiro vivo do mapa: o chamador le' Members
+	// depois deste return, ou seja, fora do lock, enquanto
+	// UpdateParticipantCache muta a mesma fatia no lugar (F53). Ver Meta.Clone
+	// para o custo medido.
 	if val, ok := cache.GetLocked(jid); ok {
-		return val, nil
+		return val.Clone(), nil
 	}
 	_, err := GetInfo(ctx, t, jid, false)
 	if err != nil {
@@ -210,5 +214,5 @@ func GetOrFetch(ctx context.Context, t Transport, jid types.JID) (*Meta, error) 
 	if !ok || val == nil {
 		return nil, fmt.Errorf("%w: %s nao apareceu no cache apos a consulta", ErrNotFound, jid)
 	}
-	return val, nil
+	return val.Clone(), nil
 }

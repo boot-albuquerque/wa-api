@@ -231,3 +231,32 @@ func TestSettersDeHTTPClientPreservamOPonteiroRecebido(t *testing.T) {
 		t.Error("o setter deveria guardar o mesmo ponteiro")
 	}
 }
+
+// SetProxy escrevia os transports sem lock nenhum enquanto unlockedConnect lia
+// os mesmos ponteiros sob socketLock — o mutex nao sincronizava o par, e uma
+// conexao concorrente podia sair pelo transport ANTIGO, sem o proxy pedido
+// (F57). Este teste falha sob -race na versao antiga.
+func TestSettersDeProxySaoConcorrentesComLeituraSobSocketLock(t *testing.T) {
+	cli := proxyTestClient()
+	const rodadas = 200
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < rodadas; i++ {
+			if err := cli.SetProxyAddress("http://127.0.0.1:1"); err != nil {
+				t.Errorf("SetProxyAddress: %v", err)
+				return
+			}
+			cli.SetMediaHTTPClient(nil)
+		}
+	}()
+	for i := 0; i < rodadas; i++ {
+		// Mesma leitura que unlockedConnect faz para montar o frame socket.
+		cli.socketLock.RLock()
+		_ = cli.websocketHTTP
+		_ = cli.preLoginHTTP
+		cli.socketLock.RUnlock()
+	}
+	<-done
+}

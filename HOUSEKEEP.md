@@ -2192,11 +2192,25 @@ A opção 1 muda a semântica observável de `DangerousInternalClient.GetCachedG
 (deixaria de devolver o ponteiro vivo), o que é aceitável dado o nome do método,
 mas precisa de decisão.
 
-**Status**: **não corrigido**. O lote 6 é extração, e corrigir isto muda
-comportamento (uma cópia por chamada) num caminho crítico de envio, sem
-medição. Preservado bit a bit; a ressalva está registrada na seção de
-concorrência do lote 6 em `internal/wa-noise/PATCHES.md`. Pendente de decisão do
-usuário.
+**Status**: **CORRIGIDO** (lote G, 2026-08-07) pela opção 1, depois de **fazer
+a medição que a entrada pedia**.
+
+`internal/wa-noise/capabilities/group/cache_bench_test.go` compara devolver o
+ponteiro vivo com devolver uma cópia, em tamanhos de 2 a 4096 membros. No teto
+real do WhatsApp (1024 membros): **~5,5 µs e UMA alocação de 41 KB** por envio
+de grupo com cache quente. O mesmo envio faz criptografia Signal por dispositivo
+para os mesmos 1024 membros, o que custa milissegundos — a cópia é ruído perto
+disso, e o benchmark fica versionado para quem quiser reavaliar.
+
+`Meta.Clone()` copia `Members` com `slices.Clone`, e `GetOrFetch` devolve o
+clone nos dois caminhos (cache quente e pós-consulta). `GetLocked` continua
+devolvendo o ponteiro vivo para uso interno sob o lock, que é o que
+`UpdateParticipantCache` precisa.
+
+Consequência aceita e documentada: `DangerousInternalClient.GetCachedGroupData`
+deixa de devolver o ponteiro vivo. Travado por
+`TestGetOrFetchDevolveCopiaIndependente`, que muta os dois lados e prova que
+nenhum alcança o outro.
 
 ## F54 — `DangerousInternalClient.GetFBIDDevices` escreve no cache de dispositivos sem tomar o lock
 
@@ -2428,9 +2442,23 @@ três atribuições — não há risco de segurar o lock de escrita por muito te
 Alternativa mais barata: documentar explicitamente que os setters de proxy só
 podem ser chamados antes do primeiro `Connect()`.
 
-**Status**: não corrigido. Bug pré-existente fora do escopo, e mexer em quando
-`socketLock` é adquirido é exatamente o tipo de mudança que o protocolo do lote
-10 exige passar por revisão dedicada. Registrado para decisão do usuário.
+**Status**: **CORRIGIDO** (lote G, 2026-08-07) pela correção sugerida, não pela
+alternativa barata: documentar "só chame antes do Connect" não fecha a corrida,
+só a transfere para o usuário da biblioteca.
+
+`setTransport` toma `socketLock` em escrita — o mesmo mutex sob o qual
+`unlockedConnect` lê `websocketHTTP`/`preLoginHTTP`. A seção crítica são três
+atribuições, sem I/O.
+
+Estendido além do que a entrada pedia: os **três setters de `*http.Client`**
+(`SetMediaHTTPClient` e irmãos) também tomam o lock. Eles trocam o **ponteiro**,
+e é o ponteiro que `unlockedConnect` lê — a corrida era a mesma, só que numa
+linha diferente.
+
+Verificado que nenhum caminho interno chama esses métodos com `socketLock` já
+segurado: os únicos chamadores são os setters públicos e o wrapper gerado em
+`internals.go`. Travado por
+`TestSettersDeProxySaoConcorrentesComLeituraSobSocketLock`.
 
 ## F58 — `messageSendLock` é declarado em `core` e emprestado por ponteiro para `capabilities/send`: única violação de "estado e lock viajam juntos" no fork
 

@@ -75,7 +75,19 @@ func (cli *Client) SetSOCKSProxy(px proxy.Dialer, opts ...SetProxyOptions) {
 // setTransport instala transport nos http.Client que opt permitir. Continua
 // existindo com este nome porque internals.go (gerado) o expoe como
 // DangerousInternalClient.SetTransport.
+//
+// Toma socketLock em escrita. E' o MESMO mutex sob o qual unlockedConnect le'
+// websocketHTTP/preLoginHTTP para montar o frame socket; sem ele, chamar
+// SetProxy de um goroutine enquanto outro chama Connect era data race, e a
+// conexao podia sair pelo transport ANTIGO — ou seja, sem o proxy que acabou de
+// ser pedido, vazando o endereco real do cliente (F57 em HOUSEKEEP.md).
+//
+// A secao critica sao tres atribuicoes, sem I/O. Nenhum caminho interno chama
+// setTransport com socketLock ja' segurado: os unicos chamadores sao os setters
+// publicos de proxy e o wrapper gerado em internals.go.
 func (cli *Client) setTransport(transport *http.Transport, opt SetProxyOptions) {
+	cli.socketLock.Lock()
+	defer cli.socketLock.Unlock()
 	proxyconf.Apply(proxyconf.Clients{
 		PreLogin:  cli.preLoginHTTP,
 		Websocket: cli.websocketHTTP,
@@ -86,6 +98,9 @@ func (cli *Client) setTransport(transport *http.Transport, opt SetProxyOptions) 
 // Os tres setters abaixo **trocam o ponteiro** do http.Client, e por isso ficam
 // na raiz: sao escrita direta em campo de Client, nao algo que proxyconf possa
 // fazer a partir de Clients (que carrega copias dos ponteiros).
+//
+// Os tres tomam socketLock pelo mesmo motivo de setTransport (F57):
+// unlockedConnect le' esses ponteiros sob o mesmo mutex.
 
 // orDefaultHTTPClient traduz nil para um http.Client padrao novo.
 //
@@ -109,6 +124,8 @@ func orDefaultHTTPClient(h *http.Client) *http.Client {
 //
 // Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetMediaHTTPClient(h *http.Client) {
+	cli.socketLock.Lock()
+	defer cli.socketLock.Unlock()
 	cli.mediaHTTP = orDefaultHTTPClient(h)
 }
 
@@ -117,6 +134,8 @@ func (cli *Client) SetMediaHTTPClient(h *http.Client) {
 //
 // Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetWebsocketHTTPClient(h *http.Client) {
+	cli.socketLock.Lock()
+	defer cli.socketLock.Unlock()
 	cli.websocketHTTP = orDefaultHTTPClient(h)
 }
 
@@ -125,5 +144,7 @@ func (cli *Client) SetWebsocketHTTPClient(h *http.Client) {
 //
 // Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetPreLoginHTTPClient(h *http.Client) {
+	cli.socketLock.Lock()
+	defer cli.socketLock.Unlock()
 	cli.preLoginHTTP = orDefaultHTTPClient(h)
 }

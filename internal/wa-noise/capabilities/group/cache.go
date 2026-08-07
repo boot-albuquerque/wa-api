@@ -1,6 +1,7 @@
 package group
 
 import (
+	"slices"
 	"sync"
 
 	"wa-api/internal/wa-noise/protocol/types"
@@ -14,6 +15,30 @@ type Meta struct {
 	AddressingMode             types.AddressingMode
 	CommunityAnnouncementGroup bool
 	Members                    []types.JID
+}
+
+// Clone devolve uma copia independente, com Members tambem copiado.
+//
+// Existe para que GetOrFetch nao entregue o *Meta VIVO do mapa. O caminho de
+// envio lia Members DEPOIS de GetOrFetch retornar, ou seja, fora do lock,
+// enquanto UpdateParticipantCache (handler de w:gp2) mutava a mesma fatia no
+// lugar sob o lock — os dois lados nunca seguravam o lock ao mesmo tempo, entao
+// o mutex nao protegia esse par. Um envio concorrente com uma entrada/saida de
+// participante podia ler um slice header rasgado (F53 em HOUSEKEEP.md).
+//
+// Custo medido em cache_bench_test.go, no teto de 1024 membros do WhatsApp:
+// ~5.5us e UMA alocacao de 41KB por envio de grupo com cache quente. O mesmo
+// envio faz criptografia Signal por dispositivo para os mesmos 1024 membros,
+// que custa milissegundos — a copia e' ruido perto disso.
+func (m *Meta) Clone() *Meta {
+	if m == nil {
+		return nil
+	}
+	return &Meta{
+		AddressingMode:             m.AddressingMode,
+		CommunityAnnouncementGroup: m.CommunityAnnouncementGroup,
+		Members:                    slices.Clone(m.Members),
+	}
 }
 
 // Cache e' o cache de metadados de grupo da sessao. Reune os dois campos que

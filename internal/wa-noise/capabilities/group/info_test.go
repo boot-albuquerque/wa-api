@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -373,11 +374,39 @@ func TestGetOrFetchReturnsCachedWithoutQuerying(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if got != want {
-		t.Errorf("meta = %+v, esperado a entrada em cache", got)
+	// Copia, nao o ponteiro vivo: e' o que impede o caminho de envio de ler
+	// Members fora do lock enquanto o handler de w:gp2 o muta (F53).
+	if got == want {
+		t.Error("devolveu o ponteiro vivo do cache; esperava uma copia")
+	}
+	if !slices.Equal(got.Members, want.Members) {
+		t.Errorf("membros = %v, esperado %v", got.Members, want.Members)
 	}
 	if len(tr.sent) != 0 {
 		t.Errorf("consultou o servidor com o cache quente: %+v", tr.sent)
+	}
+}
+
+// A copia precisa ser profunda no que importa: mutar Members do resultado nao
+// pode alcancar o cache, e vice-versa. E' exatamente o compartilhamento que a
+// F53 descreve.
+func TestGetOrFetchDevolveCopiaIndependente(t *testing.T) {
+	tr := newFakeTransport()
+	cached := &Meta{Members: []types.JID{groupTestPNJID, groupTestLIDJID}}
+	tr.putCached(groupTestJID, cached)
+
+	got, err := GetOrFetch(context.Background(), tr, groupTestJID)
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	got.Members[0] = types.NewJID("99999", types.DefaultUserServer)
+	if cached.Members[0] == got.Members[0] {
+		t.Error("mutar a copia alcancou o cache — Members nao foi clonado")
+	}
+
+	cached.Members[1] = types.NewJID("88888", types.DefaultUserServer)
+	if got.Members[1] == cached.Members[1] {
+		t.Error("mutar o cache alcancou a copia")
 	}
 }
 

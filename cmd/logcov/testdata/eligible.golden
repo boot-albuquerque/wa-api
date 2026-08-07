@@ -38,6 +38,7 @@ internal/wa-noise/capabilities/group.JoinWithInvite	EXCLUDED	X5
 internal/wa-noise/capabilities/group.JoinWithLink	EXCLUDED	X5
 internal/wa-noise/capabilities/group.Leave	EXCLUDED	X5
 internal/wa-noise/capabilities/group.Link	EXCLUDED	X5
+internal/wa-noise/capabilities/group.Meta.Clone	EXCLUDED	X5
 internal/wa-noise/capabilities/group.ParseChange	EXCLUDED	X5
 internal/wa-noise/capabilities/group.ParseCreate	EXCLUDED	X5
 internal/wa-noise/capabilities/group.ParseLinkTargetNode	EXCLUDED	X5
