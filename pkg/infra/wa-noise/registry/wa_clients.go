@@ -1,7 +1,7 @@
 package registry
 
 import (
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // Ciclo de vida dos *whatsmeow.Client por usuário.

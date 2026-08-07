@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

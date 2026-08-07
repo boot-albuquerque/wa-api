@@ -7,7 +7,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	wa "wa-api/internal/wa-noise/core"
+	wa "wa-api/internal/wa-noise"
 )
 
 // CreateGroup cria um grupo com os participantes informados.

@@ -8,7 +8,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )

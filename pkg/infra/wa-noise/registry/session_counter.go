@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )

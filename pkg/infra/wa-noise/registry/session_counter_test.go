@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 	"testing"
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 )
 
 // TestSessionCounterAdapter_New devolve adapter não-nil.

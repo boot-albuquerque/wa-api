@@ -4,7 +4,7 @@ import (
 	"testing"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 )
 

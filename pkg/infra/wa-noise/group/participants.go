@@ -7,7 +7,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	wa "wa-api/internal/wa-noise/core"
+	wa "wa-api/internal/wa-noise"
 )
 
 // UpdateGroupParticipants adiciona ou remove participantes.

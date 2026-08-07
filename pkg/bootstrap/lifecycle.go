@@ -8,7 +8,7 @@ import (
 
 	"wa-api/pkg/infra/wa-noise/safego"
 
-	whatsmeow "wa-api/internal/wa-noise/core"
+	whatsmeow "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
