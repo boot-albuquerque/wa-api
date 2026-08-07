@@ -8957,3 +8957,147 @@ subpacotes em `capabilities/`, `core/`, `protocol/` com `git mv` — nenhum dele
 tem impedimento. Mas o conteúdo da raiz descrito na Parte 2 continua sendo um
 pacote só, e a tentativa de dividi-lo esbarra nas mesmas 20 aquisições de
 `socketLock` em `client_connection.go`.
+
+---
+
+## Fase H — etapa 5: `core/`, 2026-08-07
+
+### O que foi movido
+
+**Todos os 114 `.go` da raiz** (92 de produção + 22 de teste) + `reportingfields.json`
+→ `internal/wa-noise/core/`. Um único `git mv`, sem nenhuma edição de conteúdo
+dos arquivos movidos.
+
+Não houve como fazer o movimento em grupos lógicos com `go build` entre cada um,
+como a etapa previa: os 114 arquivos são **um único pacote Go** (`whatsmeow`,
+exceto `client_test.go` que é `whatsmeow_test`). Mover metade deixaria o mesmo
+`package whatsmeow` declarado em dois diretórios — dois pacotes distintos para o
+compilador, com o `Client` num e seus métodos no outro. Isso não compila em
+nenhum estado intermediário. O movimento é atômico por construção da linguagem,
+pela mesma razão documentada na análise do lote 10 (`socketLock`).
+
+Disposição por categoria do inventário (`docs/FASE_H_INVENTORY.md`):
+
+- §2.1 núcleo do client → `core/` (`client.go`, `client_connection.go`,
+  `client_events.go`, `client_session.go`, `connectionevents.go`, `errors.go`,
+  `qrchan.go`, `connection_constants.go`, `update.go`, `request.go`, e as
+  fachadas `client_proxy.go`, `keepalive.go`, `handshake.go` — que continuam na
+  raiz do fork porque são métodos de `*Client`, não os subpacotes já extraídos).
+- `internals.go` + `internals_generate.go` → `core/`, **intactos**. Bug F29 não
+  corrigido (ver abaixo).
+- §2.2 fachadas de capacidade (~70 arquivos) → `core/`. Elas são os `*Client`
+  que implementam cada `Transport`; não podem morar dentro de
+  `capabilities/<cap>/` sem inverter a direção de import.
+- §2.3 os 12 arquivos sem subpacote (`armadillomessage.go`, `broadcast.go`,
+  `call.go`, `cstoken.go`, `disappearing_timer.go`, `presence.go`,
+  `privacysettings.go`, `push.go`, `receipt.go`+`receipt_constants.go`,
+  `reportingtoken.go`, `token_constants.go`) → `core/`, conforme a
+  recomendação (opção 2) do §2.3 do inventário, aprovada pelo orquestrador.
+- Testes: todos os 22 `_test.go` foram junto com seus pares, inclusive o órfão
+  `misc_test.go` (§7) e `receipt_test.go`/`reportingtoken_test.go`.
+
+`internal/wa-noise/` deixou de ter qualquer `.go` na raiz. O `main.go`-fachada
+previsto na árvore-alvo é escopo da etapa 6, não desta.
+
+### `reportingfields.json` viajou junto — obrigatório
+
+`core/reportingtoken.go:26` tem `//go:embed reportingfields.json`. `go:embed`
+resolve caminho **relativo ao diretório do arquivo**; deixar o JSON na raiz
+quebraria a compilação de `core/`. Foi movido no mesmo commit.
+
+### Nome do pacote: mantido `whatsmeow` (não renomeado para `core`)
+
+`internal/wa-noise/core/` declara `package whatsmeow`. Go não exige que o nome do
+pacote case com o nome do diretório, e manter o nome:
+
+- preserva a superfície pública inteira (~732 símbolos, §8 do inventário) sem
+  tocar em nenhum dos 45 arquivos consumidores além do path de import;
+- mantém `whatsmeow.Client` como identificador em todos os call sites de
+  `pkg/infra/wa-noise/*` e `pkg/infra/history/`;
+- deixa a etapa 6 (`main.go` de aliases) livre para escolher.
+
+Renomear para `package core` exigiria editar os 114 arquivos movidos **e**
+reescrever todas as referências `whatsmeow.X` → `core.X` nos 45 consumidores —
+blast radius incompatível com "preservar API externa, minimizar risco".
+
+Consequência: os imports em `pkg/` ficam com path `…/wa-noise/core` e
+identificador `whatsmeow`. Isso é legal em Go e o `vet`/`lint` passam, mas é uma
+divergência nome-vs-diretório que a etapa 6 deve resolver de vez (o `main.go`
+fachada em `internal/wa-noise/` volta a ser `package whatsmeow` e os consumidores
+voltam a importar a raiz).
+
+### Invariante de direção de import — verificada
+
+```
+$ grep -rn 'wa-noise/core' internal/wa-noise/capabilities/ | wc -l
+0
+$ grep -rn 'wa-noise/core' internal/wa-noise/ --include='*.go' | grep -v '^internal/wa-noise/core/'
+(vazio)
+```
+
+Nenhum pacote dentro de `internal/wa-noise/` fora de `core/` importa `core/` —
+nem `capabilities/`, nem `protocol/`, `security/`, `persistence/`,
+`observability/`, `keepalive/`, `proxyconf/`. A direção é `core → capabilities`,
+nunca o inverso, exatamente como o padrão `Transport` da Fase F/G previa.
+
+Os 44 importadores de `core/` são todos externos ao fork (`pkg/infra/wa-noise/*`,
+`pkg/infra/history/`, `pkg/bootstrap/`), o que é a superfície pública esperada
+(§8) e será reencapsulada pelo `main.go` da etapa 6.
+
+### Asserções de interface: nenhuma adicionada — as 13 já existiam
+
+A etapa previa adicionar `var _ <cap>.Transport = (*Client)(nil)`. **Não foi
+feito, e não deve ser**: `*Client` não implementa nenhuma `Transport`
+diretamente. Quem implementa são os 13 structs-adaptadores finos que embrulham
+o `*Client`, e cada um já tem sua asserção — que agora vive em `core/`:
+
+```
+core/appstate_transport.go:32     appstatesync.Transport = appStateTransport{}
+core/group_transport.go:30        group.Transport        = groupTransport{}
+core/keepalive.go:44              keepalive.Transport    = keepAliveTransport{}
+core/media_transport.go:29        media.Transport        = mediaTransport{}
+core/message_adapter.go:35        message.Transport      = messageTransport{}
+core/newsletter_transport.go:29   newsletter.Transport   = newsletterTransport{}
+core/notification_transport.go:25 notification.Transport = notifTransport{}
+core/pair_transport.go:29         pairing.Transport      = pairTransport{}
+core/prekeys_transport.go:28      prekeys.Transport      = preKeyTransport{}
+core/retry_transport.go:38        retry.Transport        = retryTransport{}
+core/send_adapter.go:36           send.Transport         = sendTransport{}
+core/tctoken_transport.go:27      tctoken.Transport      = tcTokenTransport{}
+core/user_transport.go:29         user.Transport         = userTransport{}
+```
+
+Escrever `var _ group.Transport = (*Client)(nil)` não compilaria — seria inventar
+métodos que `*Client` não tem.
+
+### Impacto no bug F29 (`internals_generate.go`)
+
+Conforme §3 do inventário, `internals_generate.go` tem uma **lista hardcoded de
+nomes de arquivo da raiz**. Depois desta etapa esses arquivos estão em `core/`, e
+o gerador roda com `go:generate` a partir de `core/` — os nomes continuam
+resolvendo relativo ao diretório do gerador, então a lista **não** ficou mais
+quebrada do que já estava. O bug F29 (96 de 178 wrappers derrubados) permanece
+exatamente como antes, **não corrigido nesta etapa**, por decisão explícita.
+`internals.go` e `internals_generate.go` foram movidos sem uma única edição — não
+houve dessincronização adicional entre o par.
+
+### Gates atualizados
+
+| Arquivo | Mudança |
+|---|---|
+| `scripts/waclient-filesize-check.sh:36` | `DIRS="internal/wa-noise \` → `internal/wa-noise/core \` |
+| `Makefile:263` | `WACLIENT_TEST_PKGS := ./internal/wa-noise/ \` → `./internal/wa-noise/core/ \` |
+| `cmd/logcov/testdata/eligible.golden` | regenerado: 2670 linhas antes e depois, diff **puramente** o rename `internal/wa-noise.X` → `internal/wa-noise/core.X`; todas continuam `EXCLUDED X5` |
+
+`.logcov-exclude` **não** precisou de mudança: a entrada é o prefixo
+`internal/wa-noise/`, que já cobre `internal/wa-noise/core/`.
+`Makefile:17` (`COVER_PKGS`) e `:30` (`LINT_TARGETS`) também não: filtram por
+`^wa-api/internal/wa-noise`, prefixo que segue válido. Os `DEST="internal/wa-noise"`
+de `waclient-{vendor,diff,license-check}.sh` continuam corretos — apontam para a
+raiz da árvore vendorizada, não para os arquivos da raiz.
+
+### Nada ficou bloqueado
+
+Todos os 114 arquivos tiveram destino determinado e movido. Nenhum caso de
+"não dá para mover limpo" apareceu; nenhum ciclo novo; `internal/wa-noise/*.go`
+está vazio ao final da etapa.
