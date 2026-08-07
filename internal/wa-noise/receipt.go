@@ -116,10 +116,10 @@ func (cli *Client) maybeDeferredAck(ctx context.Context, node *waBinary.Node) fu
 					Msg("Not sending ack for node")
 				return
 			}
-			cli.sendAck(ctx, node, 0)
+			cli.sendAck(ctx, node, ackNoError)
 		}
 	} else {
-		go cli.sendAck(ctx, node, 0)
+		go cli.sendAck(ctx, node, ackNoError)
 		return func(...*bool) {}
 	}
 }
@@ -249,9 +249,9 @@ func (cli *Client) SetForceActiveDeliveryReceipts(active bool) {
 		return
 	}
 	if active {
-		cli.sendActiveReceipts.Store(2)
+		cli.sendActiveReceipts.Store(activeDeliveryReceiptsForced)
 	} else {
-		cli.sendActiveReceipts.Store(0)
+		cli.sendActiveReceipts.Store(activeDeliveryReceiptsOff)
 	}
 }
 
@@ -276,7 +276,7 @@ func (cli *Client) sendMessageReceipt(ctx context.Context, info *types.MessageIn
 		if info.Type == "peer_msg" {
 			attrs["type"] = string(types.ReceiptTypePeerMsg)
 		}
-	} else if cli.sendActiveReceipts.Load() == 0 {
+	} else if cli.sendActiveReceipts.Load() == activeDeliveryReceiptsOff {
 		attrs["type"] = string(types.ReceiptTypeInactive)
 	}
 	err := cli.sendNode(ctx, waBinary.Node{
