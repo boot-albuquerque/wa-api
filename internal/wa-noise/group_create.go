@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/group"
+	"wa-api/internal/wa-noise/capabilities/group"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

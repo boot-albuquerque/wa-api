@@ -12,7 +12,7 @@ import (
 
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/group"
+	"wa-api/internal/wa-noise/capabilities/group"
 	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/capabilities/pairing"
