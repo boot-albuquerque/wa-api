@@ -263,7 +263,7 @@ waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exce
 WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
 	./internal/wa-noise/msgpad/ ./internal/wa-noise/paircrypto/ \
 	./internal/wa-noise/msgattrs/ ./internal/wa-noise/media/ \
-	./internal/wa-noise/newsletter/ \
+	./internal/wa-noise/newsletter/ ./internal/wa-noise/appstatesync/ \
 	./internal/wa-noise/socket/ ./internal/wa-noise/appstate/ \
 	./internal/wa-noise/store/ ./internal/wa-noise/store/sqlstore/ \
 	./internal/wa-noise/binary/ ./internal/wa-noise/types/ ./internal/wa-noise/types/events/ \
