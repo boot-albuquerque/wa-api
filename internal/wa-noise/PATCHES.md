@@ -3171,3 +3171,312 @@ mexer no `Makefile`. Os três arquivos de produção novos
 têm 33, 47 e 27 linhas e carregam o header MPL-2.0.
 `git diff --stat internal/wa-noise/proto/` continua vazio, e
 `internals.go`/`internals_generate.go` não aparecem no diff do lote.
+
+---
+
+## Fase E — lote 6: grupo (raiz), 2026-08-07
+
+### Contexto
+
+Sexto lote da Fase E (ver o lote 1 para o porquê da fase). São os 7 arquivos de
+grupo da **raiz** do pacote, todos `package whatsmeow`:
+
+- **parsing** — `group_parse.go`, `group_notification.go`
+- **ação** — `group.go`, `group_create.go`, `group_invite.go`,
+  `group_participants.go`, `group_settings.go`
+
+Nada a ver com `pkg/infra/wa-noise/group/`, que é a camada de adaptação do
+projeto e já foi feita em outra frente.
+
+Nenhum arquivo foi dividido: o maior (`group_notification.go`) tem 214 linhas,
+abaixo do teto de 300, e a divisão por responsabilidade destes arquivos já foi
+feita na Fase A (ver a entrada de `group.go` 1067→196 lá em cima). Os commits
+seguem o corte parsing × ação.
+
+`group_parse.go` e `group_notification.go` são o ponto onde o servidor empurra
+metadado de grupo e nós indexamos, então a auditoria foi dirigida à mesma
+classe de bug dos lotes anteriores: indexação sem guarda, type assertion sem
+comma-ok, `nil` não tratado e acumulador sobrescrito.
+
+---
+
+### Correções
+
+Duas, ambas da mesma família — **slice de mapeamentos LID/PN construído
+errado** —, ambas alimentando `PutManyLIDMappings`, ou seja escrita
+persistente. Nenhuma é panic; a auditoria não achou nenhum caminho de panic
+alcançável neste lote, e vale dizer isso explicitamente em vez de inflar o
+achado.
+
+#### `group_notification.go:63-69` — pares LID/PN perdidos quando a notificação traz mais de um elemento de participante
+
+Antes, dentro do `for` sobre os filhos de `<notification type="w:gp2">`:
+
+```go
+case "add":
+    evt.Join, lidPairs = parseParticipantList(&child)
+case "remove":
+    evt.Leave, lidPairs = parseParticipantList(&child)
+case "promote":
+    evt.Promote, lidPairs = parseParticipantList(&child)
+case "demote":
+    evt.Demote, lidPairs = parseParticipantList(&child)
+```
+
+`lidPairs` é **atribuído**, não acumulado. Uma notificação com `<add>` e
+`<remove>` no mesmo nó — que é exatamente o que o servidor manda quando alguém
+troca de dispositivo ou quando um admin faz duas operações de uma vez — sai
+daqui só com os pares do **último** elemento. Os anteriores nunca chegam ao
+`cli.Store.LIDs.PutManyLIDMappings` que `handleNotification` chama logo em
+seguida (`notification.go:173`), então o mapeamento LID→PN daqueles
+participantes simplesmente não é aprendido. Não é crash: é perda silenciosa de
+dado persistente, que depois se manifesta como JID não resolvido em outro
+lugar do sistema.
+
+A correção extraiu um helper de uma linha útil, usado nos quatro `case`:
+
+```go
+func collectParticipantList(child *waBinary.Node, lidPairs *[]store.LIDMapping) []types.JID {
+	participants, childPairs := parseParticipantList(child)
+	*lidPairs = append(*lidPairs, childPairs...)
+	return participants
+}
+```
+
+Travado por `TestParseGroupChangeAccumulatesLIDPairsAcrossElements`, que
+**reprova** contra o código anterior (verificado revertendo o fix: devolvia 1
+par em vez de 2).
+
+#### `group.go:121` (`cacheGroupInfo`) — entradas zeradas no slice de mapeamentos
+
+Antes:
+
+```go
+lidPairs := make([]store.LIDMapping, len(groupInfo.Participants))
+for i, part := range groupInfo.Participants {
+    ...
+    if !part.PhoneNumber.IsEmpty() && !part.LID.IsEmpty() {
+        lidPairs[i] = store.LIDMapping{LID: part.LID, PN: part.PhoneNumber}
+    }
+}
+```
+
+O slice é alocado com **comprimento** `len(participants)` e preenchido **por
+índice** só nos participantes que têm os dois lados do par. Todo participante
+sem mapeamento deixa um `store.LIDMapping{}` zerado no slice, e o slice inteiro
+vai para `PutManyLIDMappings`. Num grupo típico (a maioria dos membros sem par
+conhecido) a maior parte do que se entrega ao store é lixo. `redactedPhones`,
+duas linhas abaixo no mesmo laço, já fazia certo (`make(..., 0)` + `append`) —
+os dois acumuladores irmãos divergiam.
+
+Honestidade sobre o impacto: hoje isso é **mascarado**, não fatal.
+`CachedLIDMap.PutManyLIDMappings` (`store/sqlstore/lidmap.go:220`) filtra
+entradas cujo `LID.Server`/`PN.Server` não bate e loga cada uma em Debug, então
+o efeito observável é log ruidoso e trabalho jogado fora — em `GetJoinedGroups`
+o lixo ainda é acumulado através de **todos** os grupos antes de ser filtrado.
+Mas a defesa mora no store, não aqui, e qualquer outra implementação da
+interface `store.LIDStore` receberia os pares vazios. Corrigido na origem, para
+`make(..., 0, len(...))` + `append`. Travado por
+`TestCacheGroupInfoSkipsParticipantsWithoutMapping`, que também **reprova**
+contra o código anterior (devolvia `[{} {8877@lid 5511999@s.whatsapp.net} {}]`).
+
+### O que a auditoria **não** achou
+
+Registrado porque "procurei e não achei" é informação:
+
+- `parseGroupNotification` (`group_notification.go:214`) — `children[0]` é
+  guardado por `len(children) == 1`.
+- `parseParticipantList` (`group_parse.go:136,142,150`) — as três leituras de
+  `child.Attrs[...]` são comma-ok, e a tag é conferida. Travado por
+  `TestParseParticipantListSkipsInvalidChildren`, que passa filho de tag
+  errada, `jid` de tipo errado, filho sem atributo nenhum e `lid`/`phone_number`
+  inválidos.
+- `parseGroupNode` (`group_parse.go:73,88`) — os dois `Content.([]byte)` são
+  comma-ok com `_` descartado; conteúdo inesperado vira string vazia em vez de
+  panic. Travado por `TestParseGroupNodeDescriptionNonByteBody`.
+- `GetGroupInviteLink` (`group_invite.go:39`) e `SetGroupPhoto`
+  (`group_settings.go:45`) — os dois usam `GetChildByTag(...).Attrs[...]` com
+  comma-ok e devolvem erro no ramo de falha. `GetChildByTag` devolve o **próprio
+  nó** quando não acha (`binary/node.go:116`), então o comma-ok é o que segura
+  o caso de resposta sem o elemento.
+- `parseGroupNode` devolve `*types.GroupInfo` **não-nil mesmo com erro** — o que
+  importa porque `GetJoinedGroups` (`group.go:55`) loga `parsed.JID` no ramo de
+  erro. Travado por `TestParseGroupNodeMissingRequiredAttrs`, que afirma
+  explicitamente o não-nil.
+- `updateGroupParticipantCache` — remoção de membro inexistente não estoura
+  índice (`TestUpdateGroupParticipantCacheLeaveOfUnknownMember`), e grupo fora
+  do cache é no-op.
+
+Um ponto **deixado como está**, documentado com teste em vez de mudado:
+`evt.ParticipantVersionID`/`PrevParticipantVersionID` (`group_notification.go:57`)
+são campos **escalares** do evento, reescritos por cada elemento de
+participante — com `<add>` seguido de `<promote>` sem os atributos, os IDs
+voltam a ser vazios. É a mesma forma do bug de `lidPairs`, mas com um campo que
+não é lista: acumular exigiria inventar uma semântica nova (qual das versões
+vale?), o que é mudança de comportamento observável.
+`TestParseGroupChangeParticipantVersionIDsLastElementWins` trava o
+comportamento atual para que a decisão futura seja consciente.
+
+---
+
+### Constantes extraídas (`group_constants.go`, novo)
+
+`groupIQNamespace = "w:g2"` — o namespace de todo IQ de grupo, em
+`sendGroupIQ`.
+
+**Tags de nó** — a mesma exceção deliberada que o lote 5 abriu para
+`notification_constants.go`, e aqui com justificativa mais forte ainda: cada
+tag é **lida** pelo `switch` de `parseGroupNode` ou de `parseGroupChange` e
+**escrita** pelos arquivos de ação, em arquivos diferentes. Como literais, um
+typo em qualquer um dos dois lados não é erro de compilação — o `case`
+simplesmente nunca casa e a mudança de grupo é silenciosamente ignorada.
+
+| Constante | Valor | Lido em | Escrito em |
+|---|---|---|---|
+| `groupNodeTag` | `group` | parse, notification, group.go, invite, create | create |
+| `groupParticipantTag` | `participant` | parse | create, participants |
+| `groupDescriptionTag` | `description` | parse, notification | group.go, settings |
+| `groupDescriptionBodyTag` | `body` | parse, notification | settings |
+| `groupSubjectTag` | `subject` | notification | settings |
+| `groupAnnouncementTag` / `groupNotAnnouncementTag` | `announcement` / `not_announcement` | parse, notification | create, settings |
+| `groupLockedTag` / `groupUnlockedTag` | `locked` / `unlocked` | parse, notification | create, settings |
+| `groupEphemeralTag` / `groupNotEphemeralTag` | `ephemeral` / `not_ephemeral` | parse, notification | create |
+| `groupMemberAddModeTag` | `member_add_mode` | parse | settings |
+| `groupLinkedParentTag` / `groupParentTag` | `linked_parent` / `parent` | parse | create |
+| `groupDefaultSubGroupTag` | `default_sub_group` | parse (×2) | — |
+| `groupIncognitoTag` | `incognito` | parse | — |
+| `groupMembershipApprovalModeTag` / `groupJoinTag` | `membership_approval_mode` / `group_join` | parse, notification | create, settings |
+| `groupSuspendedTag` / `groupUnsuspendedTag` | `suspended` / `unsuspended` | parse, notification | — |
+| `groupCreateTag` | `create` | notification | — |
+| `groupDeleteTag` | `delete` | notification (×2) | — |
+| `groupInviteTag` | `invite` | notification, invite | invite (×3) |
+| `groupLinkTag` / `groupUnlinkTag` | `link` / `unlink` | notification | create |
+| `groupAddRequestTag` | `add_request` | parse | invite |
+
+**Valores de atributo**:
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `participantTypeAdmin` / `participantTypeSuperAdmin` | `admin` / `superadmin` | o `type` de `<participant>` em `parseParticipant` |
+| `groupJoinStateOn` / `groupJoinStateOff` | `on` / `off` | o `state` de `<group_join>`, escrito por `CreateGroup` e por `SetGroupJoinApprovalMode` |
+| `defaultMembershipApprovalMode` | `request_required` | o default de `default_membership_approval_mode` em `CreateGroup` |
+| `groupPhotoRemovedID` | `remove` | o "ID" que `SetGroupPhoto` devolve ao remover a foto |
+
+Três decisões de **não-duplicação**, no mesmo espírito do lote 5:
+
+- O `switch` de `parseGroupChange` sobre `add`/`remove`/`promote`/`demote`
+  passou a usar `ParticipantChange`, o tipo **já exportado** em
+  `group_participants.go` cujos valores `UpdateGroupParticipants` escreve como
+  tag (`Tag: string(action)`). São literalmente os dois sentidos do mesmo valor
+  de wire; criar constantes novas daria dois nomes para um valor só.
+- `strings.TrimPrefix(req.CreateKey, "3EB0")` em `CreateGroup` passou a
+  `WebMessageIDPrefix`, a constante que `message_id.go` já exporta e que
+  `GenerateMessageID` usa para **produzir** a chave que aqui é aparada.
+- `SetGroupMemberAddMode` tinha a mensagem de erro
+  `"invalid mode, must be 'admin_add' or 'all_member_add'"` com os dois valores
+  escritos à mão ao lado da comparação contra `types.GroupMemberAddModeAdmin` /
+  `...AllMember`. Passou a `fmt.Errorf("... %q or %q", ...)` com as próprias
+  constantes, para que a mensagem não possa mentir sobre o que a função aceita.
+  Travado por `TestSetGroupMemberAddModeRejectsInvalidMode`.
+
+### O que *não* foi extraído, e por quê
+
+Mesma convenção dos lotes 1–5:
+
+- **Nomes de atributo** do XML binário: `id`, `jid`, `creator`, `creator_pn`,
+  `subject`, `s_t`, `s_o`, `s_o_pn`, `creation`, `size`, `addressing_mode`,
+  `a_v_id`, `p_v_id`, `v_id`, `prev_v_id`, `type`, `error`, `code`,
+  `expiration`, `display_name`, `lid`, `phone_number`, `reason`, `link_type`,
+  `unlink_type`, `unlink_reason`, `state`, `admin`, `prev`, `delete`,
+  `trigger`, `request`, `request_time`, `default_membership_approval_mode`.
+  Aparecem uma vez, no ponto onde o nó é lido ou montado, e o campo do struct
+  ao lado já diz o que são. Vale aqui a mesma nota do lote 5: os atributos de
+  envelope (`from`, `t`, `id`, `participant`) aparecem em dezenas de arquivos
+  da raiz como literal, e nomeá-los só nestes 7 esconderia qual é a convenção.
+- Tags que só existem no lado da **ação**, sem `case` correspondente do outro
+  lado: `participating`, `participants`, `query`, `sub_groups`,
+  `linked_groups_participants`, `links`, `leave`, `accept`, `picture`,
+  `membership_approval_requests`, `membership_approval_request`,
+  `membership_requests_action`, `membership_approval_request`. O risco que as
+  constantes de tag acima mitigam (typo que faz um `case` nunca casar) não
+  existe quando não há `case`.
+- `InviteLinkPrefix`, `ParticipantChange*`, `ParticipantChangeApprove/Reject`,
+  `types.GroupMemberAddMode*`, `types.GroupLinkChangeTypeSub`,
+  `types.GroupServerJID`, `types.ServerJID` — já eram símbolos nomeados.
+- `"w:profile:picture"` em `SetGroupPhoto`: não é namespace de grupo, é o mesmo
+  namespace de foto de perfil usado em `user_avatar.go`. Nomeá-lo aqui criaria
+  um símbolo de grupo para algo que não é de grupo; se virar constante, tem que
+  ser junto com o lado de usuário.
+
+---
+
+### Logging
+
+Auditados os 7 arquivos atrás de escrita de log fora do `waLog.Logger`
+injetado, de `panic`, de `os.Exit` e de uso do `log` da stdlib.
+
+**Nenhum bypass encontrado.** Todos os pontos de log do lote
+(`group_parse.go:104,107` e `group.go:50,55,64,68,110,176,180`) usam `cli.Log`,
+o campo alimentado em `NewClient` e ligado ao `walog.Bridge` sobre zerolog
+(`pkg/infra/wa-noise/walog/`). Não há `fmt.Print*`, `log.*`, `println` nem
+`panic`. **Nada foi adicionado, removido ou reroteado.**
+
+Uma observação, **deixada como está**: `GetJoinedGroups` (`group.go:53-60`)
+loga o erro de `parseGroupNode` em `Warnf` e **continua** usando o `GroupInfo`
+parcialmente parseado — cacheia e devolve. É comportamento tolerante
+deliberado do upstream (um grupo malformado não pode derrubar a listagem
+inteira), e o não-nil de `parseGroupNode` está agora travado por teste, que era
+o que faltava para isso ser seguro em vez de sorte.
+
+---
+
+### Testes
+
+Três arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+(`groupTestClient`, `participantNode`, os JIDs `groupTest*`) vive em
+`group_parse_test.go`. `groupTestClient` monta um `Client` com `waLog.Noop` e o
+`groupCache` inicializado — que é o mínimo, já que `cacheGroupInfo` escreve
+nesse mapa e escrita em mapa nil é panic.
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `group_parse_test.go` | `parseParticipant` (flags admin/superadmin nos 4 valores de `type`, preenchimento cruzado LID↔PN nos dois sentidos, `<add_request>` presente/ausente/sem `error`); `parseGroupNode` (nó completo com os 11 tipos de filho, parent e linked_parent, `<description>` sem `<body>` e com `<body>` não-binário, filho desconhecido ignorado, atributos obrigatórios ausentes com `info` não-nil); `parseGroupLinkTargetNode` (`jid` vencendo `id`, fallback para `id`, ausência dos dois); `parseParticipantList` (pares nos dois sentidos, os 5 formatos de filho inválido, nó vazio); `cacheGroupInfo` (o fix de entradas zeradas, flag de grupo de anúncio de comunidade, membros no cache) |
+| `group_notification_test.go` | `parseGroupChange` — envelope e envelope faltando; listas de participantes; **o fix de acumulação de pares LID/PN**; os IDs de versão e o "último elemento vence"; as 12 mudanças de configuração em subteste tabelado (locked/unlocked, announce/not, ephemeral/not, membership approval, suspended/unsuspended, delete, invite, subject); tópico setado e apagado, e `<body>` não-binário virando erro; link/unlink com e sem `<group>` (conferindo o `ElementMissingError`); filho desconhecido em `UnknownChanges`; atributo obrigatório ausente no filho. `updateGroupParticipantCache` (add com deduplicação + remove, no-op sem join/leave, grupo fora do cache, remoção de membro inexistente). `parseGroupNotification` (roteamento create × change, `<create>` sem `<group>`, `<group>` inválido, `<create>` acompanhado de outro filho caindo no ramo de mudança, cache atualizado, propagação de erro) |
+| `group_settings_test.go` | `SetGroupMemberAddMode` rejeitando modo inválido antes de tocar a rede, com a mensagem citando as duas constantes válidas |
+
+Cobertura resultante (`go tool cover -func`): **100%** em `parseParticipant`,
+`parseGroupLinkTargetNode`, `parseParticipantList`, `cacheGroupInfo`,
+`parseGroupCreate`, `collectParticipantList`, `updateGroupParticipantCache` e
+`parseGroupNotification`; **97,7%** em `parseGroupNode` e **95,5%** em
+`parseGroupChange` (o que falta nos dois é o ramo de erro de
+`parseGroupLinkTargetNode` aninhado dentro do `case` de link, que exige um nó
+de grupo simultaneamente presente e irrecuperável).
+
+### Lacunas assumidas, sem teste de fachada
+
+Mesma decisão dos lotes 1–5: **todas as 20 funções exportadas de ação estão em
+0%** — `GetJoinedGroups`, `GetSubGroups`, `GetLinkedGroupsParticipants`,
+`GetGroupInfo`/`getGroupInfo`/`getCachedGroupData`, `CreateGroup`,
+`LinkGroup`/`UnlinkGroup`/`LeaveGroup`, os 5 de `group_invite.go`, os 3 de
+`group_participants.go` e 7 dos 8 de `group_settings.go`.
+
+Todas têm a mesma forma: montar um nó, chamar `sendGroupIQ` → `sendIQ` →
+`sendNode`, e parsear a resposta. Sem socket, `sendNode` devolve
+`ErrNotConnected` antes de serializar, então nem os atributos montados dão para
+observar; e `getGroupInfo` ainda precisa de `cli.Store.LIDs` e
+`cli.Store.Contacts` com banco. Um teste aqui provaria só que o mock foi
+chamado. **O que dava para isolar — todo o parsing da resposta, que é onde
+moram os dois bugs deste lote — está coberto.** Fica para o lote do núcleo do
+`Client`, junto com o que os lotes 1–5 já empurraram para lá.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. O único arquivo de produção novo (`group_constants.go`)
+tem 69 linhas e carrega o header MPL-2.0; nenhum arquivo do lote passou de 300
+linhas (maior: `group_notification.go`, 226).
+`cmd/logcov/testdata/eligible.golden` ganhou uma linha
+(`collectParticipantList`, `EXCLUDED X5`, já que `internal/wa-noise/` está em
+`.logcov-exclude`) — mesma regeneração mecânica dos lotes anteriores.
+`git diff --stat internal/wa-noise/proto/` continua vazio, e
+`internals.go`/`internals_generate.go` não aparecem no diff do lote.
