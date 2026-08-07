@@ -32,7 +32,7 @@ const (
 func (cli *Client) getServerPreKeyCount(ctx context.Context) (int, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
 		Namespace: "encrypt",
-		Type:      "get",
+		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{
 			{Tag: "count"},
@@ -50,18 +50,18 @@ func (cli *Client) getServerPreKeyCount(ctx context.Context) (int, error) {
 func (cli *Client) uploadPreKeys(ctx context.Context, initialUpload bool) {
 	cli.uploadPreKeysLock.Lock()
 	defer cli.uploadPreKeysLock.Unlock()
-	if cli.lastPreKeyUpload.Add(10 * time.Minute).After(time.Now()) {
+	if cli.lastPreKeyUpload.Add(preKeyUploadDebounce).After(time.Now()) {
 		sc, _ := cli.getServerPreKeyCount(ctx)
 		if sc >= WantedPreKeyCount {
 			cli.Log.Debugf("Canceling prekey upload request due to likely race condition")
 			return
 		}
 	}
-	var registrationIDBytes [4]byte
+	var registrationIDBytes [preKeyRegistrationIDLength]byte
 	binary.BigEndian.PutUint32(registrationIDBytes[:], cli.Store.RegistrationID)
 	wantedCount := WantedPreKeyCount
 	if initialUpload {
-		wantedCount = 812
+		wantedCount = initialPreKeyCount
 	}
 	preKeys, err := cli.Store.PreKeys.GetOrGenPreKeys(ctx, uint32(wantedCount))
 	if err != nil {
@@ -71,7 +71,7 @@ func (cli *Client) uploadPreKeys(ctx context.Context, initialUpload bool) {
 	cli.Log.Infof("Uploading %d new prekeys to server", len(preKeys))
 	_, err = cli.sendIQ(ctx, infoQuery{
 		Namespace: "encrypt",
-		Type:      "set",
+		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{
 			{Tag: "registration", Content: registrationIDBytes[:]},
@@ -132,7 +132,7 @@ func (cli *Client) fetchPreKeys(ctx context.Context, users []types.JID) (map[typ
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
 		Namespace: "encrypt",
-		Type:      "get",
+		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
 			Tag:     "key",
@@ -158,12 +158,12 @@ func (cli *Client) fetchPreKeys(ctx context.Context, users []types.JID) (map[typ
 }
 
 func preKeyToNode(key *keys.PreKey) waBinary.Node {
-	var keyID [4]byte
+	var keyID [preKeyRegistrationIDLength]byte
 	binary.BigEndian.PutUint32(keyID[:], key.KeyID)
 	node := waBinary.Node{
 		Tag: "key",
 		Content: []waBinary.Node{
-			{Tag: "id", Content: keyID[1:]},
+			{Tag: "id", Content: keyID[preKeyIDPadLength:]},
 			{Tag: "value", Content: key.Pub[:]},
 		},
 	}
@@ -184,7 +184,7 @@ func nodeToPreKeyBundle(deviceID uint32, node waBinary.Node) (*prekey.Bundle, er
 	}
 
 	registrationBytes, ok := node.GetChildByTag("registration").Content.([]byte)
-	if !ok || len(registrationBytes) != 4 {
+	if !ok || len(registrationBytes) != preKeyRegistrationIDLength {
 		return nil, fmt.Errorf("invalid registration ID in prekey response")
 	}
 	registrationID := binary.BigEndian.Uint32(registrationBytes)
@@ -195,10 +195,10 @@ func nodeToPreKeyBundle(deviceID uint32, node waBinary.Node) (*prekey.Bundle, er
 	}
 
 	identityKeyRaw, ok := keysNode.GetChildByTag("identity").Content.([]byte)
-	if !ok || len(identityKeyRaw) != 32 {
+	if !ok || len(identityKeyRaw) != preKeyPubLength {
 		return nil, fmt.Errorf("invalid identity key in prekey response")
 	}
-	identityKeyPub := *(*[32]byte)(identityKeyRaw)
+	identityKeyPub := *(*[preKeyPubLength]byte)(identityKeyRaw)
 
 	preKeyNode, ok := keysNode.GetOptionalChildByTag("key")
 	preKey := &keys.PreKey{}
@@ -240,29 +240,29 @@ func nodeToPreKey(node waBinary.Node) (*keys.PreKey, error) {
 		return nil, fmt.Errorf("prekey node doesn't contain ID tag")
 	} else if idBytes, ok := id.Content.([]byte); !ok {
 		return nil, fmt.Errorf("prekey ID has unexpected content (%T)", id.Content)
-	} else if len(idBytes) != 3 {
-		return nil, fmt.Errorf("prekey ID has unexpected number of bytes (%d, expected 3)", len(idBytes))
+	} else if len(idBytes) != preKeyIDLength {
+		return nil, fmt.Errorf("prekey ID has unexpected number of bytes (%d, expected %d)", len(idBytes), preKeyIDLength)
 	} else {
-		key.KeyID = binary.BigEndian.Uint32(append([]byte{0}, idBytes...))
+		key.KeyID = binary.BigEndian.Uint32(append(make([]byte, preKeyIDPadLength), idBytes...))
 	}
 	if pubkey := node.GetChildByTag("value"); pubkey.Tag != "value" {
 		return nil, fmt.Errorf("prekey node doesn't contain value tag")
 	} else if pubkeyBytes, ok := pubkey.Content.([]byte); !ok {
 		return nil, fmt.Errorf("prekey value has unexpected content (%T)", pubkey.Content)
-	} else if len(pubkeyBytes) != 32 {
-		return nil, fmt.Errorf("prekey value has unexpected number of bytes (%d, expected 32)", len(pubkeyBytes))
+	} else if len(pubkeyBytes) != preKeyPubLength {
+		return nil, fmt.Errorf("prekey value has unexpected number of bytes (%d, expected %d)", len(pubkeyBytes), preKeyPubLength)
 	} else {
-		key.KeyPair.Pub = (*[32]byte)(pubkeyBytes)
+		key.KeyPair.Pub = (*[preKeyPubLength]byte)(pubkeyBytes)
 	}
 	if node.Tag == "skey" {
 		if sig := node.GetChildByTag("signature"); sig.Tag != "signature" {
 			return nil, fmt.Errorf("prekey node doesn't contain signature tag")
 		} else if sigBytes, ok := sig.Content.([]byte); !ok {
 			return nil, fmt.Errorf("prekey signature has unexpected content (%T)", sig.Content)
-		} else if len(sigBytes) != 64 {
-			return nil, fmt.Errorf("prekey signature has unexpected number of bytes (%d, expected 64)", len(sigBytes))
+		} else if len(sigBytes) != preKeySignatureLength {
+			return nil, fmt.Errorf("prekey signature has unexpected number of bytes (%d, expected %d)", len(sigBytes), preKeySignatureLength)
 		} else {
-			key.Signature = (*[64]byte)(sigBytes)
+			key.Signature = (*[preKeySignatureLength]byte)(sigBytes)
 		}
 	}
 	return &key, nil
