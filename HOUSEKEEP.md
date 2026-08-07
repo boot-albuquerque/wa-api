@@ -1778,9 +1778,30 @@ das duas está errada e nunca foi notada porque o caminho v3/FB é pouco usado.
 **Correção sugerida**: confirmar contra captura de tráfego real qual forma o
 cliente oficial usa e uniformizar. Não dá para decidir por leitura de código.
 
-**Status**: **não corrigido**. É formato de fio no caminho de criptografia —
-mudar sem evidência é exatamente o tipo de palpite que o lote 8 proíbe.
-Registrado com comentário no código apontando a divergência.
+**Status**: **não corrigido, ABERTO por decisão** — mas com evidência nova
+levantada em 2026-08-07, para a decisão não recomeçar do zero.
+
+**O que o Baileys faz** (`src/Socket/messages-send.ts`): usa `v: '2'` como
+**string**, uniformemente, nos três pontos em que monta um `<enc>`:
+
+```typescript
+attrs: { v: '2', type, ...(extraAttrs || {}) }              // mensagem normal
+attrs: { v: '2', type: 'skmsg', ...extraAttrs }             // sender key de grupo
+attrs: { v: '2', type, count: participant!.count.toString() } // reenvio de retry
+```
+
+Nenhuma variante numérica em lugar nenhum. E o Baileys é a implementação que o
+`evolution-api` roda em produção em escala, então a forma string é
+comprovadamente aceita pelo servidor.
+
+**Ressalva que impede fechar direto**: isso cobre o caminho waE2E. Não foi
+encontrada implementação do caminho v3/FB (Armadillo) no Baileys — que é
+justamente onde o nosso `v` é numérico. A evidência diz "no caminho que as duas
+implementações têm, string é a forma correta", **não** "o caminho v3/FB deveria
+ser string".
+
+**O que decide**: saber se o caminho v3/FB é exercitado na prática. Se não for,
+uniformizar é barato e sem risco; se for, precisa de captura antes.
 
 ---
 
@@ -1844,8 +1865,35 @@ travamento raro que evitam. O caminho provável é iniciar o loop *antes* do env
 e dar timeout ao download, mas isso é decisão de projeto sobre a política de
 history sync, não patch pontual.
 
-**Status**: **não corrigido** (fora do escopo do lote 9, que é higienização, e
-qualquer correção aqui muda política de entrega). Pendente de decisão.
+**Status**: **PARCIALMENTE corrigido; o resto ABERTO por decisão.**
+
+**Feito** (2026-08-07): `EnqueueHistorySync` passou a ligar o consumidor
+**antes** de enfileirar. Era o contrário — enfileirava e só então ligava o loop,
+ou seja, o primeiro envio acontecia sem consumidor nenhum existir. Verificado
+antes de inverter que não há lost wakeup: o loop bloqueia no `select` esperando
+o canal e não checa `Len()` na entrada, e o `defer` dele já religa se algo
+entrar entre a saída do select e o `Store(false)`.
+
+**O que sobra**: o consumidor pendurado num `Download` HTTP com o buffer cheio.
+Isso ainda bloqueia o goroutine que trata o stanza, e depende de dar timeout ao
+download.
+
+**O que o Baileys faz** — e é um contraste arquitetural, não um detalhe:
+ele **não tem fila**. `processMessage` trata
+`HISTORY_SYNC_NOTIFICATION` chamando `downloadAndProcessHistorySyncNotification`
+**inline**, gated por um booleano de config (`shouldProcessHistoryMsg`). Sem
+canal, sem goroutine de fundo, sem produtor/consumidor. O `evolution-api` só
+acrescenta um callback (`shouldSyncHistoryMessage`) que decide se processa.
+
+Ou seja: o risco descrito aqui é criado pela arquitetura do fork (canal com
+buffer 32 + goroutine consumidora), não é inerente ao protocolo.
+
+**As duas saídas, com o custo de cada uma**:
+
+| Saída | Trade-off |
+|---|---|
+| Timeout no download, mantendo a fila | Menor mudança, preserva o desacoplamento. Falta escolher o valor — e instrumentar ocupação do buffer diria qual |
+| Adotar o modelo do Baileys (inline) | Elimina a classe inteira do bug, mas o download HTTP passa a rodar no caminho de processamento de stanza: troca "goroutine bloqueada raramente" por "processamento serializado sempre" |
 
 ## F45 — `PutManyLIDMappings` chamado com fatia vazia
 
