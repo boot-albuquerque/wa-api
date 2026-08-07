@@ -46,7 +46,14 @@ func (proc *Processor) EncodePatch(ctx context.Context, keyID []byte, state Hash
 	}
 
 	mutations := make([]*waServerSync.SyncdMutation, 0, len(patchInfo.Mutations))
-	for _, mutationInfo := range patchInfo.Mutations {
+	for i, mutationInfo := range patchInfo.Mutations {
+		// Escrita em Value sem checar nil: um patch montado sem Value dava
+		// SIGSEGV aqui, no meio da codificacao (F49). Um patch sem valor e'
+		// erro do chamador, nao algo a preencher em silencio com um
+		// SyncActionValue vazio — por isso erro, nao default.
+		if mutationInfo.Value == nil {
+			return nil, fmt.Errorf("%w: mutacao #%d", ErrNilMutationValue, i+1)
+		}
 		mutationInfo.Value.Timestamp = proto.Int64(patchInfo.Timestamp.UnixMilli())
 
 		indexBytes, err := json.Marshal(mutationInfo.Index)

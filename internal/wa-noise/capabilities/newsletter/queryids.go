@@ -41,7 +41,17 @@ const (
 // decide. E' bug herdado do upstream, registrado em HOUSEKEEP.md (F31) e
 // preservado aqui de proposito.
 func ConvertQueryID(payload *waWa6.ClientPayload, queryID string) string {
-	if payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
+	// GetUserAgent() devolve nil com o campo ausente, e `.Platform` e' acesso a
+	// CAMPO — dava SIGSEGV em vez de ler o zero (F48). GetPlatform() e' o getter
+	// gerado, que trata o receptor nil.
+	//
+	// A comparacao continua entre PONTEIROS e continua sempre falsa (F31), de
+	// proposito: comparar por VALOR faria clientes MacOS passarem a usar as
+	// query IDs de desktop, e a F32 documenta que duas delas estao ERRADAS no
+	// upstream. Consertar a F31 aqui ligaria um caminho comprovadamente
+	// quebrado — as duas so' podem ser resolvidas juntas, com IDs corretas em
+	// maos.
+	if payload.GetUserAgent().GetPlatform().Enum() == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
 		switch queryID {
 		case queryFetchNewsletter:
 			return queryFetchNewsletterDesktop

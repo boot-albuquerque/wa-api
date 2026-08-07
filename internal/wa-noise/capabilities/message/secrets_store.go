@@ -184,6 +184,13 @@ func StoreHistoricalPNLIDMappings(ctx context.Context, t Transport, mappings []*
 			PN:  pn,
 		})
 	}
+	// Com TODOS os pares falhando no ParseJID acima, lidPairs fica vazia e a
+	// gravacao era feita assim mesmo — escrita inutil, e uma linha de log
+	// "Stored PN-LID mappings from history sync" com pair_count: 0, que lida
+	// sozinha sugere sucesso quando nada foi mapeado (F45 em HOUSEKEEP.md).
+	if len(lidPairs) == 0 {
+		return
+	}
 	err := t.Store().LIDs.PutManyLIDMappings(ctx, lidPairs)
 	if err != nil {
 		zerolog.Ctx(ctx).Err(err).

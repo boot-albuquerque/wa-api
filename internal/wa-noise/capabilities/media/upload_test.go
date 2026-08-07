@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -352,5 +353,52 @@ func TestDeletePropagaErroDaMediaConn(t *testing.T) {
 	err := Delete(context.Background(), tr, TypeHistory, "/v/x", nil, "")
 	if err == nil || !strings.Contains(err.Error(), "failed to refresh media connections") {
 		t.Fatalf("erro = %v, esperado embrulho de falha na mediaConn", err)
+	}
+}
+
+// truncadoSeeker devolve alguns bytes e depois falha, com Seek funcional — a
+// forma exata da reproducao registrada na F47.
+type truncadoSeeker struct {
+	data  []byte
+	lidos int
+	falha error
+}
+
+func (s *truncadoSeeker) Read(p []byte) (int, error) {
+	if s.lidos >= len(s.data) {
+		return 0, s.falha
+	}
+	n := copy(p, s.data[s.lidos:])
+	s.lidos += n
+	return n, nil
+}
+
+func (s *truncadoSeeker) Seek(int64, int) (int64, error) {
+	s.lidos = 0
+	return 0, nil
+}
+
+// O erro de io.Copy era sobrescrito pela atribuicao do Seek logo abaixo e sumia
+// sem rastro: FileLength e FileSHA256 saiam calculados sobre conteudo PARCIAL
+// enquanto o RawUpload relia o reader inteiro, publicando midia com hash errado
+// (F47). Agora o erro sai antes de qualquer upload acontecer.
+func TestUploadNewsletterReaderPropagaErroDeLeitura(t *testing.T) {
+	var got capturedUpload
+	srv := uploadServer(t, &got, uploadOKResponse)
+	defer srv.Close()
+	tr := newTestTransport(t, srv)
+
+	sentinela := errors.New("leitura interrompida")
+	reader := &truncadoSeeker{data: []byte("so' o comeco"), falha: sentinela}
+
+	resp, err := UploadNewsletterReader(context.Background(), tr, reader, TypeImage)
+	if !errors.Is(err, sentinela) {
+		t.Fatalf("err = %v, esperava o erro de leitura embrulhado", err)
+	}
+	if resp.FileLength != 0 || resp.FileSHA256 != nil {
+		t.Errorf("resp = %+v, esperava o zero — nada deveria ter sido preenchido", resp)
+	}
+	if got.body != nil {
+		t.Errorf("upload aconteceu mesmo com a leitura falhando: %q", got.body)
 	}
 }

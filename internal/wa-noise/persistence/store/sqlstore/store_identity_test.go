@@ -161,3 +161,49 @@ func TestIsTrustedIdentityRejectsWrongLengthInDatabase(t *testing.T) {
 		t.Fatal("o schema deveria recusar identity com tamanho != 32")
 	}
 }
+
+// DeleteIdentity usava a query de LIKE. O efeito coincidia com igualdade para
+// enderecos normais, mas `_` e `%` sao curingas do LIKE — um endereco com `_`
+// apagava identidades de terceiros (F21). Este teste falha com a query antiga.
+//
+// A assercao NAO pode ser "IsTrustedIdentity devolve false": endereco
+// desconhecido e' confiavel por contrato (ver
+// TestIsTrustedIdentityUnknownAddressIsTrusted), entao uma linha apagada
+// tambem responderia true e o teste passaria dos dois jeitos. A prova de que a
+// linha SOBREVIVEU e' consultar com uma chave DIFERENTE da gravada: so' uma
+// linha presente responde false.
+func TestDeleteIdentityNaoTrataCuringaDeLike(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	gravada, outra := testKey(7), testKey(9)
+
+	for _, addr := range []string{"user_1", "userX1", "userY1"} {
+		if err := s.PutIdentity(ctx, addr, gravada); err != nil {
+			t.Fatalf("PutIdentity(%s): %v", addr, err)
+		}
+	}
+
+	// Sob LIKE, o `_` casa qualquer caractere e isto apagaria os tres.
+	if err := s.DeleteIdentity(ctx, "user_1"); err != nil {
+		t.Fatalf("DeleteIdentity: %v", err)
+	}
+
+	for _, addr := range []string{"userX1", "userY1"} {
+		trusted, err := s.IsTrustedIdentity(ctx, addr, outra)
+		if err != nil {
+			t.Fatalf("IsTrustedIdentity(%s): %v", addr, err)
+		}
+		if trusted {
+			t.Errorf("%s sumiu da tabela — DeleteIdentity ainda usa a query de LIKE", addr)
+		}
+	}
+
+	// E o alvo real precisa ter sido apagado de fato.
+	trusted, err := s.IsTrustedIdentity(ctx, "user_1", outra)
+	if err != nil {
+		t.Fatalf("IsTrustedIdentity(user_1): %v", err)
+	}
+	if !trusted {
+		t.Error("user_1 deveria ter sido apagado, mas a linha continua la'")
+	}
+}

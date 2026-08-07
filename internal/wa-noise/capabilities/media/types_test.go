@@ -64,12 +64,13 @@ func TestGetTypeUsaTypeable(t *testing.T) {
 }
 
 // sizeBytesMessage cobre o ramo downloadableWithSizeBytes de getSize.
-// Nao ha' tipo de producao que o satisfaca hoje: types.StickerPackItem tem
-// GetFileSizeBytes() int64, e a interface exige uint64 (ver PATCHES.md,
-// Fase E lote 1).
+//
+// Devolve int64 porque e' isso que o unico tipo de producao com esse metodo,
+// types.StickerPackItem, devolve. Enquanto a interface exigia uint64 ela nao
+// era satisfeita por ninguem e o ramo era inalcancavel em producao (F30).
 type sizeBytesMessage struct{ notDownloadable }
 
-func (sizeBytesMessage) GetFileSizeBytes() uint64 { return 99 }
+func (sizeBytesMessage) GetFileSizeBytes() int64 { return 99 }
 
 func TestGetSize(t *testing.T) {
 	t.Run("usa FileLength quando existe", func(t *testing.T) {
@@ -81,6 +82,15 @@ func TestGetSize(t *testing.T) {
 	t.Run("usa FileSizeBytes quando e' o campo disponivel", func(t *testing.T) {
 		if got := getSize(sizeBytesMessage{}); got != 99 {
 			t.Fatalf("getSize() = %d, esperado 99", got)
+		}
+	})
+	// O caso que a F30 descreve: antes do alinhamento da assinatura, um
+	// StickerPackItem de verdade caia no default e o download saia com
+	// tamanho desconhecido, desligando ErrFileLengthMismatch em silencio.
+	t.Run("StickerPackItem de producao casa o ramo de FileSizeBytes", func(t *testing.T) {
+		item := &types.StickerPackItem{FileSize: 1234}
+		if got := getSize(item); got != 1234 {
+			t.Fatalf("getSize(StickerPackItem) = %d, esperado 1234", got)
 		}
 	})
 	t.Run("devolve o sentinela quando nao ha' campo de tamanho", func(t *testing.T) {

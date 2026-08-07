@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -172,5 +173,29 @@ func TestEncodePatchWithNoMutations(t *testing.T) {
 	}
 	if len(patch.GetSnapshotMAC()) != macLength || len(patch.GetPatchMAC()) != macLength {
 		t.Error("patch vazio ainda deveria carregar snapshot MAC e patch MAC")
+	}
+}
+
+// EncodePatch escrevia em MutationInfo.Value sem checar nil — SIGSEGV no meio
+// da codificacao (F49). Um patch sem valor e' erro do chamador, entao sai como
+// erro em vez de virar um SyncActionValue vazio em silencio.
+func TestEncodePatchRejeitaMutacaoSemValor(t *testing.T) {
+	proc, _ := newTestProcessor(t)
+	patch := PatchInfo{
+		Type: WAPatchRegular,
+		Mutations: []MutationInfo{
+			{Index: []string{"ok"}, Value: &waSyncAction.SyncActionValue{}},
+			{Index: []string{"sem valor"}},
+		},
+	}
+	out, err := proc.EncodePatch(context.Background(), testKeyID, HashState{Version: 1}, patch)
+	if !errors.Is(err, ErrNilMutationValue) {
+		t.Fatalf("err = %v, esperava ErrNilMutationValue", err)
+	}
+	if out != nil {
+		t.Errorf("out = %x, esperava nil", out)
+	}
+	if err != nil && !strings.Contains(err.Error(), "#2") {
+		t.Errorf("a mensagem deveria apontar a mutacao #2: %v", err)
 	}
 }

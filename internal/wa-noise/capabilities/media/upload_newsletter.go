@@ -29,6 +29,16 @@ func UploadNewsletterReader(ctx context.Context, t Transport, data io.ReadSeeker
 	hasher := sha256.New()
 	var fileLength int64
 	fileLength, err = io.Copy(hasher, data)
+	if err != nil {
+		// O erro era sobrescrito pela atribuicao do Seek logo abaixo e sumia
+		// sem rastro. Com uma leitura que falha no meio, FileLength e
+		// FileSHA256 ficavam calculados sobre conteudo PARCIAL enquanto o
+		// RawUpload relia o reader inteiro — a midia era publicada com hash
+		// errado, e quem validasse o FileSHA256 recusava o anexo (F47 em
+		// HOUSEKEEP.md).
+		err = fmt.Errorf("failed to hash data: %w", err)
+		return
+	}
 	resp.FileLength = uint64(fileLength)
 	resp.FileSHA256 = hasher.Sum(nil)
 	_, err = data.Seek(0, io.SeekStart)

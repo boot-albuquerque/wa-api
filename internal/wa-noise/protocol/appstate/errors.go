@@ -13,4 +13,7 @@ var (
 	// ErrShortMutationBlob: o blob da SyncdValue chegou menor que o layout
 	// minimo (IV + MAC). Ver mutation_blob.go e F19 em HOUSEKEEP.md.
 	ErrShortMutationBlob = errors.New("mutation value blob shorter than the minimum layout")
+	// ErrNilMutationValue: MutationInfo.Value chegou nil em EncodePatch. Ver
+	// F49 em HOUSEKEEP.md.
+	ErrNilMutationValue = errors.New("mutation info has no value")
 )

@@ -10,8 +10,17 @@ import (
 )
 
 // GetDevices gets the list of devices that the given user has. The input should be a list of
-// regular JIDs, and the output will be a list of AD JIDs. The local device will not be included in
-// the output even if the user's JID is included in the input. All other devices will be included.
+// regular JIDs, and the output will be a list of AD JIDs.
+//
+// Todos os dispositivos que o servidor devolver entram na saida, INCLUSIVE o
+// dispositivo local quando o JID do proprio usuario esta' na entrada. O godoc
+// original prometia o contrario ("The local device will not be included in the
+// output"), mas nao ha' filtragem nenhuma no corpo — parseDeviceList devolve
+// tudo e esta funcao so' concatena (F38 em HOUSEKEEP.md).
+//
+// A correcao foi no comentario, nao no codigo: os chamadores do caminho de
+// envio ja' contam com a lista completa, e reintroduzir o filtro aqui mudaria
+// para quem a mensagem e' cifrada.
 //
 // Segura o lock do cache do inicio ao fim, inclusive atraves da consulta usync
 // ao servidor — exatamente como o GetUserDevices original fazia. Ver o doc de

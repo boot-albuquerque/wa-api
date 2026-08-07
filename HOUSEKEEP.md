@@ -465,7 +465,14 @@ o último cortado. Não observado em produção até agora; o comentário do pr�
 upstream na linha 163 ("This probably doesn't happen a lot (if at all), so the
 code is unoptimized") sugere que o caminho nunca foi exercitado a sério.
 
-**Correção sugerida**: mover a contagem para depois do descarte do cabeçalho —
+**Status**: **CORRIGIDO** (lote C, 2026-08-07). `receivedLength` passou a ser
+contado depois do descarte do cabeçalho. `TestProcessDataSplitPayload` saiu do
+`t.Skip` e passa; foi acrescentado
+`TestProcessDataSplitPayloadEmTodosOsPontosDeCorte`, que varre todos os pontos
+de corte possíveis em vez de confiar num só. Controle negativo executado:
+reintroduzir a ordem antiga faz o teste falhar.
+
+**Correção sugerida (texto original)**: mover a contagem para depois do descarte do cabeçalho —
 
 ```go
 length := decodeFrameLength(msg)
@@ -636,6 +643,21 @@ igualdade e o efeito observável coincide — há teste provando isso
 (`TestDeleteIdentityRemovesOnlyThatAddress` em `store_identity_test.go`, que
 confere que `erin:1` sobrevive a `DeleteIdentity("erin:0")`). Duas consequências
 mesmo assim:
+
+**Status**: **CORRIGIDO** (lote C, 2026-08-07). `DeleteIdentity` usa
+`deleteIdentityQuery` (igualdade). A entrada dizia que o efeito coincidia; isso
+vale só enquanto nenhum endereço contiver `_` ou `%`, que são curingas do
+`LIKE`. Travado por `TestDeleteIdentityNaoTrataCuringaDeLike`, cujo controle
+negativo mostra que com a query antiga `DeleteIdentity("user_1")` apaga também
+`userX1` e `userY1`.
+
+Nota sobre a escrita do teste: a primeira versão foi **vacuosa** e passava dos
+dois jeitos, porque `IsTrustedIdentity` devolve `true` para endereço
+desconhecido — uma linha apagada respondia igual a uma presente. A asserção
+correta consulta com uma chave **diferente** da gravada: só uma linha presente
+responde `false`.
+
+**Consequências originais**:
 
 1. `deleteIdentityQuery` é código morto — uma constante declarada que nenhum
    caminho executa, exatamente o tipo de coisa que confunde na próxima leitura.
@@ -1140,11 +1162,14 @@ o único candidato real expõe. A alternativa — mudar `StickerPackItem` para
 `uint64` — mexe em tipo público consumido fora do fork e ainda perde a
 distinção de "não informado".
 
-**Status**: **não corrigido**. Fora do escopo do lote 1 (que é constantes,
-logging e testes, sem mudança de comportamento), e a correção altera uma
-assinatura pública. O teste do ramo em
-`internal/wa-noise/download_types_test.go` usa um tipo falso local com
-comentário apontando para este achado.
+**Status**: **CORRIGIDO** (lote C, 2026-08-07) pelo caminho de menor risco que
+a própria entrada indicava: a **interface** passou a exigir `int64`, alinhando-se
+ao único candidato real. Mudar `StickerPackItem` para `uint64` mexeria num tipo
+consumido fora do pacote e perderia a distinção de "tamanho não informado".
+
+O teste do ramo deixou de usar um tipo falso: `TestGetSize` agora passa um
+`types.StickerPackItem` **de produção** e confere que `getSize` devolve o
+tamanho em vez de cair no `default` — que era exatamente o defeito.
 
 ## F31 — `convertQueryID` compara ponteiros de enum: o ramo de MacOS é inerte
 
@@ -1435,8 +1460,11 @@ o godoc mente hoje.
 contrato documentado, ou (b) corrigir o comentário para descrever o que a função
 faz.
 
-**Status**: **não corrigido**. As duas saídas mudam algo observável (o
-comportamento ou o contrato público). Pendente de decisão.
+**Status**: **CORRIGIDO** (lote C, 2026-08-07) pela saída (b): o comentário
+passou a descrever o que a função faz. A saída (a) — reintroduzir o filtro —
+mudaria **para quem a mensagem é cifrada**, e os chamadores do caminho de envio
+já contam com a lista completa; trocar isso sem evidência de que o contrato
+documentado é o desejado seria palpite num caminho de criptografia.
 
 ---
 
@@ -1658,8 +1686,8 @@ que lida sozinha sugere sucesso quando na verdade nada foi mapeado.
 **Correção sugerida**: `if len(lidPairs) == 0 { return }` antes da chamada, como
 `storeHistoricalMessageSecrets` já faz para `secrets` e `privacyTokens`.
 
-**Status**: **não corrigido** — inofensivo, e o lote 9 se limitou a corrigir o
-que tem consequência real. Pendente de decisão.
+**Status**: **CORRIGIDO** (lote C, 2026-08-07). `if len(lidPairs) == 0 { return }`
+antes da gravação, como `storeHistoricalMessageSecrets` já fazia.
 
 ## F46 — corrida de dados em `LastSuccessfulConnect` e `AutoReconnectErrors`
 
@@ -1762,7 +1790,14 @@ Duas linhas, sem mudança de assinatura. O caminho equivalente com cifra
 (`UploadReader`) já faz isso: checa o erro de `cbcutil.EncryptStream` antes de
 seguir.
 
-**Status**: **não corrigido**. Está fora do escopo do lote 1 da Fase F/G, que é
+**Status**: **CORRIGIDO** (lote C, 2026-08-07). O erro de `io.Copy` é checado
+antes de preencher `resp`. Travado por
+`TestUploadNewsletterReaderPropagaErroDeLeitura`, que usa exatamente a
+reprodução descrita acima (reader que devolve `n>0` e depois falha, com `Seek`
+funcional) e confere as três coisas: o erro sai embrulhado, `resp` fica no zero,
+e **nenhum upload acontece**. Controle negativo executado.
+
+**Status original**: fora do escopo do lote 1 da Fase F/G, que é
 extração de pacote com equivalência de comportamento — corrigir aqui misturaria
 uma mudança de comportamento numa movimentação que precisa ser auditável como
 "nada mudou". Conforme `CLAUDE.md`, fica registrado para decisão do usuário
@@ -1796,7 +1831,18 @@ sobre corrigir agora ou depois.
   corrige F31. Atenção: corrigir F31 MUDA comportamento — clientes com
   plataforma MACOS passariam a usar as query IDs de desktop mesmo com WebInfo
   presente. Precisa ser decisão deliberada, não conserto de passagem.
-- **Status**: não corrigido. Fora do escopo de uma extração; o teste
+- **Status**: **CORRIGIDO PELA METADE, de propósito** (lote C, 2026-08-07). O
+  nil deref foi fechado: `.Platform` virou `.GetPlatform()`, o getter gerado,
+  que trata receptor nil. Travado por
+  `TestConvertQueryIDComPayloadVazioNaoPanica`.
+
+  A **F31 continua aberta de propósito**, e a comparação segue entre ponteiros.
+  A entrada já avisava que corrigi-la muda comportamento; o que fecha a questão
+  é a **F32**: duas das query IDs de desktop estão ERRADAS no upstream. Fazer
+  clientes MacOS passarem a usá-las ligaria um caminho comprovadamente quebrado.
+  F31 e F32 só podem ser resolvidas juntas, com as IDs corretas em mãos.
+
+  **Status original**: fora do escopo de uma extração; o teste
   `TestConvertQueryIDPlatformMacOSNaoDecideSozinho` trava o comportamento atual e
   os helpers `webPayload`/`desktopPayload` documentam a pré-condição.
 
@@ -1832,6 +1878,9 @@ sobre corrigir agora ou depois.
   permissiva: criar um `&waSyncAction.SyncActionValue{}` vazio. A primeira é
   preferível — um patch sem valor é erro do chamador, não algo a preencher em
   silêncio.
+- **Status**: **CORRIGIDO** (lote C, 2026-08-07) pela primeira opção.
+  `EncodePatch` devolve `ErrNilMutationValue` nomeando qual mutação veio sem
+  valor. Travado por `TestEncodePatchRejeitaMutacaoSemValor`.
 - **Status**: **não corrigido**. Está em `internal/wa-noise/appstate/`, que o
   lote 3 explicitamente não toca (`git diff --stat internal/wa-noise/appstate/`
   tem de continuar vazio). Registrado para decisão do usuário. O teste

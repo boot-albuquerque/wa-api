@@ -180,8 +180,17 @@ func (fs *FrameSocket) processData(msg []byte) {
 			if len(msg) >= FrameLengthSize {
 				length := decodeFrameLength(msg)
 				fs.incomingLength = length
-				fs.receivedLength = len(msg)
+				// receivedLength e' contado DEPOIS de descartar o cabecalho.
+				// Era `len(msg)` antes do corte, ou seja, incluia os
+				// FrameLengthSize bytes de cabecalho — enquanto
+				// incomingLength e todos os copy(fs.incoming[receivedLength:])
+				// do ramo de continuacao sao relativos ao PAYLOAD. Com o
+				// payload chegando picado em mais de um websocket message, o
+				// segundo pedaco era escrito FrameLengthSize bytes adiante do
+				// lugar certo, deixando bytes zerados no meio do frame
+				// remontado e truncando o fim (F18 em HOUSEKEEP.md).
 				msg = msg[FrameLengthSize:]
+				fs.receivedLength = len(msg)
 				if len(msg) >= length {
 					fs.incoming = msg[:length]
 					msg = msg[length:]

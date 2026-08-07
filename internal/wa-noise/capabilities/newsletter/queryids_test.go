@@ -161,3 +161,15 @@ func TestQueryIDsDesktopDuplicadaConhecida(t *testing.T) {
 		t.Fatal("a duplicata conhecida sumiu — atualize HOUSEKEEP.md (F32) e este teste")
 	}
 }
+
+// GetUserAgent() devolve nil com o campo ausente, e `.Platform` era acesso a
+// campo — SIGSEGV em vez de zero (F48). Em producao o payload vem de
+// store.Device.GetClientPayload(), que sempre preenche UserAgent, entao era
+// fragilidade latente; este teste garante que continue latente.
+func TestConvertQueryIDComPayloadVazioNaoPanica(t *testing.T) {
+	got := ConvertQueryID(&waWa6.ClientPayload{}, queryFetchNewsletter)
+	// Sem WebInfo o ramo de desktop e' escolhido pelo segundo operando.
+	if got != queryFetchNewsletterDesktop {
+		t.Errorf("= %q, esperava %q", got, queryFetchNewsletterDesktop)
+	}
+}

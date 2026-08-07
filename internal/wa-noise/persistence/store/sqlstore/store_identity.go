@@ -26,8 +26,17 @@ func (s *SQLStore) DeleteAllIdentities(ctx context.Context, phone string) error 
 	return err
 }
 
+// DeleteIdentity remove a identidade de UM endereco Signal (<user>:<device>).
+//
+// Usa deleteIdentityQuery (igualdade). Usava deleteAllIdentitiesQuery, que e' a
+// de LIKE — o efeito observavel coincidia, porque o endereco chega completo e
+// sem curinga, entao o LIKE degenerava em igualdade. Mas deixava
+// deleteIdentityQuery como constante morta e, pior, o comportamento passava a
+// depender de nenhum chamador jamais passar um `%` ou `_` no endereco (F21 em
+// HOUSEKEEP.md). O `_` do LIKE casa qualquer caractere: um endereco terminando
+// em `_1` apagaria tambem `x1`, `y1`... A igualdade nao tem essa aresta.
 func (s *SQLStore) DeleteIdentity(ctx context.Context, address string) error {
-	_, err := s.db.Exec(ctx, deleteAllIdentitiesQuery, s.JID, address)
+	_, err := s.db.Exec(ctx, deleteIdentityQuery, s.JID, address)
 	return err
 }
 

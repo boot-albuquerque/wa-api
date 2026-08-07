@@ -81,18 +81,33 @@ func TestProcessDataMultipleFramesInOneMessage(t *testing.T) {
 // TestProcessDataSplitPayload: um frame cujo payload chega picado em varios
 // websocket messages tem que ser remontado antes de ser emitido.
 //
-// SKIP: este teste FALHA hoje por um bug do upstream — processData escreve
-// `fs.receivedLength = len(msg)` contando os FrameLengthSize bytes de
-// cabecalho, enquanto incomingLength e os copy() seguintes sao relativos ao
-// payload. O frame remontado sai com FrameLengthSize bytes zerados injetados
-// logo apos o primeiro pedaco. Ver o achado F18 em HOUSEKEEP.md: corrigir muda
-// comportamento observavel e a Fase A do ADR-0004 e' estrutural por contrato,
-// entao o teste fica aqui, pronto, esperando a decisao do usuario.
+// Ficou `t.Skip`ado ate' a correcao da F18: receivedLength era contado antes de
+// o cabecalho ser descartado, entao o segundo pedaco era escrito
+// FrameLengthSize bytes adiante do lugar certo. O frame saia como
+// "pay\x00\x00\x00load longo dividido em peda" — bytes zerados no meio e o
+// fim truncado.
 func TestProcessDataSplitPayload(t *testing.T) {
-	t.Skip("bug de remontagem do upstream, ver F18 em HOUSEKEEP.md")
 	payload := []byte("payload longo dividido em pedacos")
 	full := mustFrame(payload)
 	assertFrames(t, collectFrames(t, full[:6], full[6:14], full[14:]), payload)
+}
+
+// A F18 so' aparecia com o payload cortado em pontos especificos, entao vale
+// varrer todos os cortes possiveis em vez de confiar num so'. Qualquer
+// aritmetica de offset errada em processData cai em pelo menos um deles.
+func TestProcessDataSplitPayloadEmTodosOsPontosDeCorte(t *testing.T) {
+	payload := []byte("payload longo dividido em pedacos")
+	full := mustFrame(payload)
+	for corte := 1; corte < len(full); corte++ {
+		got := collectFrames(t, full[:corte], full[corte:])
+		if len(got) != 1 {
+			t.Errorf("corte em %d: %d frames, esperava 1", corte, len(got))
+			continue
+		}
+		if string(got[0]) != string(payload) {
+			t.Errorf("corte em %d: frame = %q, esperava %q", corte, got[0], payload)
+		}
+	}
 }
 
 // TestProcessDataPartialHeader: menos de FrameLengthSize bytes nao dao para

@@ -73,9 +73,22 @@ type downloadableWithLength interface {
 	GetFileLength() uint64
 }
 
+// downloadableWithSizeBytes casa tipos que expoem o tamanho como
+// GetFileSizeBytes.
+//
+// A assinatura e' int64, nao uint64. Com uint64 a interface nao era satisfeita
+// por NENHUM tipo de producao: o unico com um metodo desse nome,
+// types.StickerPackItem, devolve int64. O resultado era getSize caindo no
+// default e devolvendo UnknownFileLength para todo item de pacote de
+// figurinhas — desligando a validacao de ErrFileLengthMismatch justamente
+// para esse tipo, em silencio (F30 em HOUSEKEEP.md).
+//
+// Alinhar a interface ao candidato real e' o caminho de menor risco: mudar
+// StickerPackItem para uint64 mexeria num tipo consumido fora deste pacote e
+// ainda perderia a distincao de "tamanho nao informado" (negativo).
 type downloadableWithSizeBytes interface {
 	Downloadable
-	GetFileSizeBytes() uint64
+	GetFileSizeBytes() int64
 }
 
 type downloadableWithURL interface {
