@@ -90,10 +90,24 @@ func HandleHistorySyncNotificationLoop(t Transport) {
 // handleProtocolMessage.
 func EnqueueHistorySync(t Transport, notif *waE2E.HistorySyncNotification) {
 	q := t.HistorySync()
-	q.notifications <- notif
+	// O consumidor sobe ANTES do envio. Era o contrario: enfileirava e so'
+	// entao ligava o loop, ou seja, o primeiro envio acontecia sem consumidor
+	// nenhum existindo (F44 em HOUSEKEEP.md). Com o buffer cheio — varios
+	// produtores concorrentes, ou um consumidor pendurado num Download — o
+	// goroutine que trata o stanza recebido bloqueava indefinidamente.
+	//
+	// Inverter e' seguro e nao muda semantica de entrega: o loop bloqueia no
+	// select esperando o canal, nao checa Len() na entrada, entao ligar com a
+	// fila vazia so' o deixa esperando. E o defer dele ja' religa o loop se
+	// algo entrar na fila entre a saida do select e o Store(false).
+	//
+	// ISSO NAO FECHA A F44 INTEIRA: some a janela "produz antes de existir
+	// consumidor", mas o risco de o consumidor ficar pendurado num Download
+	// HTTP com o buffer cheio continua, e depende de dar timeout ao download.
 	if q.handlerActive.CompareAndSwap(false, true) {
 		go HandleHistorySyncNotificationLoop(t)
 	}
+	q.notifications <- notif
 }
 
 // SendHistorySyncServerErrorReceipt manda um recibo de server-error de history

@@ -60,8 +60,18 @@ func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []doma
 	}
 	parsed, err := wajid.ToJIDs(jids)
 	if err != nil {
-		return nil, apperr.New("user_info_failed", apperr.CategoryInternal,
-			"failed to resolve user info targets", true, err)
+		// Este erro so' dispara quando os JIDs vieram malformados NO PEDIDO —
+		// e' entrada do chamador, nao falha nossa. Estava como
+		// CategoryInternal e Retryable=true, o que e' errado nas duas pontas:
+		// Category.HTTPStatus() mapeia Internal para 500, e o doc de
+		// AppError.Retryable diz que erro de validacao nunca e' retentavel,
+		// porque repetir a mesma entrada da' o mesmo resultado.
+		//
+		// A troca ainda nao muda nada observavel: nada chama HTTPStatus() hoje
+		// (ver apperr/codes.go). Muda no dia em que o boundary for ligado, que
+		// e' exatamente quando ninguem lembraria de revisitar isto.
+		return nil, apperr.New(codeUserInfoTargetsInvalid, apperr.CategoryValidation,
+			"failed to resolve user info targets", false, err)
 	}
 	return client.GetUserInfo(ctx, parsed)
 }

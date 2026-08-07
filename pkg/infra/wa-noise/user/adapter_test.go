@@ -142,7 +142,7 @@ func TestUserAdapter_GetUserInfo_JIDInvalido(t *testing.T) {
 	fake := &waclienttest.Fake{}
 	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.GetUserInfo(context.Background(), "u1", []domain.JID{"@s.whatsapp.net"})
-	assertAppErr(t, err, "user_info_failed", apperr.CategoryInternal)
+	assertAppErr(t, err, "user_info_targets_invalid", apperr.CategoryValidation)
 }
 
 // TestUserAdapter_GetUserInfo_NoSession.
