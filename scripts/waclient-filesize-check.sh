@@ -35,7 +35,7 @@ cd "$REPO_ROOT"
 
 DIRS="internal/wa-noise \
 internal/wa-noise/msgpad \
-internal/wa-noise/paircrypto \
+internal/wa-noise/security/paircrypto \
 internal/wa-noise/msgattrs \
 internal/wa-noise/media \
 internal/wa-noise/newsletter \
@@ -49,7 +49,7 @@ internal/wa-noise/group \
 internal/wa-noise/user \
 internal/wa-noise/send \
 internal/wa-noise/message \
-internal/wa-noise/handshake \
+internal/wa-noise/security/handshake \
 internal/wa-noise/keepalive \
 internal/wa-noise/proxyconf \
 internal/wa-noise/socket \

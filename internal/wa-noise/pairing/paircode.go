@@ -22,7 +22,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/paircrypto"
+	"wa-api/internal/wa-noise/security/paircrypto"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/security/hkdf"
 	"wa-api/internal/wa-noise/security/keys"

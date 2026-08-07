@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/handshake"
+	"wa-api/internal/wa-noise/security/handshake"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/security/keys"

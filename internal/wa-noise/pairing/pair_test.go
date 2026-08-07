@@ -20,7 +20,7 @@ import (
 	"go.mau.fi/libsignal/ecc"
 	waBinary "wa-api/internal/wa-noise/binary"
 
-	"wa-api/internal/wa-noise/paircrypto"
+	"wa-api/internal/wa-noise/security/paircrypto"
 	"wa-api/internal/wa-noise/proto/waAdv"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
