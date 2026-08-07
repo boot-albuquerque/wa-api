@@ -20,7 +20,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/retry"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func consumerMessage() *waConsumerApplication.ConsumerApplication {

@@ -12,10 +12,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waVnameCert"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // ParseBusinessProfile le o <business_profile> da resposta de w:biz.

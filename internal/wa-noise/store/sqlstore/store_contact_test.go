@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func contactJID(user string) types.JID {

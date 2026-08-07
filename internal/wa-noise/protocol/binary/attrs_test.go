@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // AttrUtility acumula erros em vez de devolve-los. O contrato inteiro depende

@@ -13,7 +13,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Type representa um tipo de arquivo enviado ao WhatsApp. O valor e' a chave

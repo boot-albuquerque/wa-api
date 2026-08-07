@@ -7,9 +7,9 @@
 package whatsmeow
 
 import (
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/message"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // O parsing de stanza <message> vive em internal/wa-noise/message/ desde a Fase

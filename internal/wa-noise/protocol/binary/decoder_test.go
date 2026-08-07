@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 func TestCheckEOSGuardsEveryRead(t *testing.T) {

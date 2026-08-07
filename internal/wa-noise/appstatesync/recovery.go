@@ -11,8 +11,8 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // HandleRecovery processa a resposta do dispositivo primario a um

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func privacyToken(user string, token string, ts time.Time) store.PrivacyToken {

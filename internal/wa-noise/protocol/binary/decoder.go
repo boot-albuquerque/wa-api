@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 // binaryDecoder e' um cursor sobre o frame recebido. Este arquivo tem so' a

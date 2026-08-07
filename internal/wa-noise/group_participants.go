@@ -10,7 +10,7 @@ import (
 	"context"
 
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachada; ver o cabecalho de group.go.

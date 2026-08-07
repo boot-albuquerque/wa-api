@@ -17,11 +17,11 @@ import (
 	"go.mau.fi/libsignal/signalerror"
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Este arquivo e' o caminho de CIFRAGEM v3/FB. Como encrypt.go, a extracao foi

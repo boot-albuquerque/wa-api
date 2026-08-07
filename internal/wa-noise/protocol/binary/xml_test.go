@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // IndentXML e MaxBytesToPrintAsHex sao variaveis GLOBAIS de pacote. Os testes

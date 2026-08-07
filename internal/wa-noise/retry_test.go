@@ -14,11 +14,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/retry"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // A logica de retry vive em internal/wa-noise/retry (Fase F/G, lote 5) e e'

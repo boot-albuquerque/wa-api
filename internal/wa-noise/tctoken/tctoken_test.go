@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A janela de validade e' de NumBuckets buckets de BucketDuration

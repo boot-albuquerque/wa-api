@@ -9,7 +9,7 @@ package events
 import (
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ChatPresence is emitted when a chat state update (also known as typing notification) is received.

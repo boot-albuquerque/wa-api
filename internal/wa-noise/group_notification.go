@@ -7,10 +7,10 @@
 package whatsmeow
 
 import (
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // Fachada; ver o cabecalho de group.go. Os quatro metodos abaixo sao citados

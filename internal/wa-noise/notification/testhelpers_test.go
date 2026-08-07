@@ -7,7 +7,7 @@
 package notification
 
 import (
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

@@ -13,7 +13,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // EditWindow especifica por quanto tempo uma mensagem pode ser editada depois

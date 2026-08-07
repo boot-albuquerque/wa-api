@@ -7,9 +7,9 @@
 package whatsmeow
 
 import (
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachada; ver o cabecalho de group.go. So' parseGroupNode sobrou aqui: as

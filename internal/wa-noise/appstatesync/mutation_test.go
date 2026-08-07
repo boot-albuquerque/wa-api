@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // Testes relocados de internal/wa-noise/appstate_dispatch_test.go (Fase E lote

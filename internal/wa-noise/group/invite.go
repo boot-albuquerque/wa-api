@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // GetInviteLink requests the invite link to the group from the WhatsApp servers.

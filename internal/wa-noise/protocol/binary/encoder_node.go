@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/binary/token"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Camada de estrutura da codificacao: Node, atributos e o despacho por tipo

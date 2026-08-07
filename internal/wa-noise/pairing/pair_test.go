@@ -18,12 +18,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.mau.fi/libsignal/ecc"
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 
 	"wa-api/internal/wa-noise/security/paircrypto"
 	"wa-api/internal/wa-noise/protocol/proto/waAdv"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

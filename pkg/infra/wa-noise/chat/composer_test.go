@@ -6,7 +6,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestMessageComposerAdapter_NewMessageID_NoSession devolve wasession.ErrNoSession.

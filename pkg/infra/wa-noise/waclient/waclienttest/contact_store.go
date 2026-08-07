@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ContactStore devolve um mapa pré-carregado de contatos.

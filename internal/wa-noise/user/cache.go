@@ -9,7 +9,7 @@ package user
 import (
 	"sync"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // DeviceEntry e' a lista de dispositivos cacheada de um usuario, com o dhash

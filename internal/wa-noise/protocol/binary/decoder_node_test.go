@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/binary/token"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func TestReadDispatchesByTag(t *testing.T) {

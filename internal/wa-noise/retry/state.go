@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // IncomingKey identifica um pedido de retry recebido: quem pediu e de qual

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func testJID(t *testing.T, user string, device uint16) types.JID {

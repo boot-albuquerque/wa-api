@@ -10,11 +10,11 @@ import (
 	"context"
 	"fmt"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/protocol/proto/waMmsRetry"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // A cripto do retry de midia (derivacao da chave, cifragem e decifragem do

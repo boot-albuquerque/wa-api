@@ -3,8 +3,8 @@ package binary
 import (
 	"testing"
 
-	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/binary/token"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // encodeJID serializa um JID isolado e devolve os bytes, sem o envelope de

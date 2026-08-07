@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 // binaryEncoder acumula o frame em construcao. Este arquivo tem so' a camada

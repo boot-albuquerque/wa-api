@@ -12,8 +12,8 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Resp e' o resultado da busca de prekey de um unico dispositivo: ou o bundle,

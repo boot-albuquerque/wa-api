@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/binary/token"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A tag "0" nao e' um no': o encoder a substitui por uma lista de um item

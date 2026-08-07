@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // SetMemberAddMode e' a unica funcao de settings.go com logica

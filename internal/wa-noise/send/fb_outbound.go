@@ -16,7 +16,7 @@ import (
 	"go.mau.fi/libsignal/protocol"
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/msgpad"
@@ -24,7 +24,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/retry"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // FBApplicationVersion e' o `version` do SubProtocol de aplicacao FB. O valor

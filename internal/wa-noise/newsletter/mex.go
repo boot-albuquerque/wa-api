@@ -15,10 +15,10 @@ import (
 	"github.com/beeper/argo-go/pkg/buf"
 
 	"wa-api/internal/wa-noise/argo"
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // SendMexIQ manda uma consulta GraphQL/MEX e devolve o campo "data" da resposta.

@@ -21,7 +21,7 @@ import (
 	"go.mau.fi/util/exslices"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 type CachedLIDMap struct {

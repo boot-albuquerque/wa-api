@@ -11,7 +11,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // RandomInterval sorteia o intervalo ate' o proximo ping dentro de

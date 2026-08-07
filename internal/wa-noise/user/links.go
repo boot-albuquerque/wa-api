@@ -11,8 +11,8 @@ import (
 	"errors"
 	"strings"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ResolveBusinessMessageLink resolves a business message short link and returns the target JID, business name and

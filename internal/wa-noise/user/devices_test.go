@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // --- ParseDeviceList (relocado de user_devices_test.go, Fase E lote 7) ---

@@ -11,7 +11,7 @@ import (
 	"context"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func migrationJIDs(t *testing.T) (pn, lid types.JID) {

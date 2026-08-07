@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A logica de recepcao/decifragem de mensagem vive em

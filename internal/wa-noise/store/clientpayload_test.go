@@ -10,7 +10,7 @@ import (
 	"crypto/md5"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

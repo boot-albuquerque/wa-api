@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"slices"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // GetDevices gets the list of devices that the given user has. The input should be a list of

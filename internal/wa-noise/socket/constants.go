@@ -15,7 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 const (

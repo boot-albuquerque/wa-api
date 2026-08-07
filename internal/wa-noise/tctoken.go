@@ -10,9 +10,9 @@ import (
 	"context"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/tctoken"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A logica deste dominio vive em internal/wa-noise/tctoken/. O que sobra aqui

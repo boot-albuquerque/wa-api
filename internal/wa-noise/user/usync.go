@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // QueryExtras sao os parametros opcionais da consulta usync. A raiz mantem

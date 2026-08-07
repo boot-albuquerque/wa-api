@@ -13,7 +13,7 @@ import (
 	"wa-api/internal/wa-noise/appstatesync"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachada do dominio de sincronizacao de app state. A logica vive em

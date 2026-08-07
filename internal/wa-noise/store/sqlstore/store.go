@@ -16,7 +16,7 @@ import (
 	"go.mau.fi/util/exsync"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ErrInvalidLength is returned by some database getters if the database returned a byte array with an unexpected length.

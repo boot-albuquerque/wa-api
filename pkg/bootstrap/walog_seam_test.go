@@ -10,7 +10,7 @@ import (
 
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/pkg/infra/wa-noise/walog"
 )
 

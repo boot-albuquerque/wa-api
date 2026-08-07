@@ -15,8 +15,8 @@ import (
 	"github.com/rs/zerolog"
 
 	"wa-api/internal/wa-noise/appstate"
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ErrUpdate e' o sentinela de falha reportada pelo servidor ao aplicar um patch

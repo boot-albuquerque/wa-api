@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // O zero value de State e' usavel: todos os mapas nascem preguicosamente sob o

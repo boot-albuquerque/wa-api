@@ -10,7 +10,7 @@ import (
 	"context"
 	"fmt"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Migracao de endereco Signal de PN (numero de telefone) para LID. As tres

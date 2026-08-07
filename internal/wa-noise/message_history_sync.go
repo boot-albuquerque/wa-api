@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // O history sync vive em internal/wa-noise/message/ desde a Fase F/G lote 9.

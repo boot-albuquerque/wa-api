@@ -9,7 +9,7 @@ import (
 
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestProfileDataAccess_PushName_NilStore verifica que PushName retorna ""

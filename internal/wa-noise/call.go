@@ -9,9 +9,9 @@ package whatsmeow
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 func (cli *Client) handleCallEvent(ctx context.Context, node *waBinary.Node) {

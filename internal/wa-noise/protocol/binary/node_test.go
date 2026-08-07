@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func TestGetChildrenOnlyReturnsNodeLists(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Attrs is a type alias for the attributes of an XML element (Node).

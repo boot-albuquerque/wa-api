@@ -10,7 +10,7 @@ import (
 
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func TestWhatsmeowSession_Pair_AlreadyHasCredentials(t *testing.T) {

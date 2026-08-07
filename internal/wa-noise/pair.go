@@ -9,9 +9,9 @@ package whatsmeow
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/pairing"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A logica deste dominio vive em internal/wa-noise/pairing/. O que sobra aqui

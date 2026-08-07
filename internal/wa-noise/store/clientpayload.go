@@ -19,7 +19,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // WAVersionContainer is a container for a WhatsApp web version number.

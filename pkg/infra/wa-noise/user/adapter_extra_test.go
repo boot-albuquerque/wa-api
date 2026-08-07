@@ -10,8 +10,8 @@ import (
 	"wa-api/pkg/domain"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // TestResolveBlocklistPNJID_HiddenUserServer_NoLIDs devolve erro.

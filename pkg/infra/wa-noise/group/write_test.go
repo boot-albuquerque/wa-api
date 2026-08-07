@@ -8,7 +8,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestGroupAdapter_CreateGroup_OK.

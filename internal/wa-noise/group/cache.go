@@ -9,7 +9,7 @@ package group
 import (
 	"sync"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Meta e' o metadado de grupo que o caminho de envio consulta. Era o

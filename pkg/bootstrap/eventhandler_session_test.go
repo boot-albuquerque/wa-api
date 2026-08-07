@@ -10,8 +10,8 @@ import (
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

@@ -11,7 +11,7 @@ import (
 	"errors"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // recordingContainer conta as chamadas de PutDevice/DeleteDevice e permite

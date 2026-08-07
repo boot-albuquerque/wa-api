@@ -10,8 +10,8 @@ import (
 	"context"
 	"fmt"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // NodeContentString devolve o conteudo textual de um no do XML binario.

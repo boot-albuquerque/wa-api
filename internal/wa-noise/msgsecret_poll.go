@@ -11,8 +11,8 @@ import (
 
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // O dominio de enquete vive em internal/wa-noise/message/ desde a Fase F/G

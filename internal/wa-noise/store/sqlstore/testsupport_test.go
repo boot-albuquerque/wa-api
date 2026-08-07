@@ -16,7 +16,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Estes testes rodam contra SQLite real em t.TempDir(), com o mesmo schema de

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // State e' o estado mutavel do dominio de tctoken. Reune os cinco campos que

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

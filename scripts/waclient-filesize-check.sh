@@ -21,8 +21,8 @@
 # racional que o ADR-0004 aplica a proto/: dividi-los nao tem valor porque o
 # gerador os recria.
 #
-#   internal/wa-noise/proto/            (protoc)
-#   internal/wa-noise/binary/proto/     (generatelegacy.sh)
+#   internal/wa-noise/protocol/proto/            (protoc)
+#   internal/wa-noise/protocol/binary/proto/     (generatelegacy.sh)
 #
 # O binary/proto/ merece nota: o cabecalho dele diz "DO NOT MODIFY: Generated
 # by generatelegacy.sh", em caixa mista, entao a checagem de EXCLUDE_GENERATED
@@ -56,10 +56,10 @@ internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \
 internal/wa-noise/store/sqlstore \
-internal/wa-noise/binary \
-internal/wa-noise/binary/token \
-internal/wa-noise/types \
-internal/wa-noise/types/events \
+internal/wa-noise/protocol/binary \
+internal/wa-noise/protocol/binary/token \
+internal/wa-noise/protocol/types \
+internal/wa-noise/protocol/types/events \
 internal/wa-noise/security/cbc \
 internal/wa-noise/security/gcm \
 internal/wa-noise/security/hkdf \

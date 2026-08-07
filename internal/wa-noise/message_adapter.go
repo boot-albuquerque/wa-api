@@ -11,14 +11,14 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waWeb"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

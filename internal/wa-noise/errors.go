@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"wa-api/internal/wa-noise/appstatesync"
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/message"

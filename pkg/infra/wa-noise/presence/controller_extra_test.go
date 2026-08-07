@@ -9,7 +9,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestPresenceControllerAdapter_PropagatesAllErrors.

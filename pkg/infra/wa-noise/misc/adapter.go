@@ -15,7 +15,7 @@ import (
 
 	wa "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/appstate"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // appStateFetchTimeout é o teto de espera do pull de app-state — mais

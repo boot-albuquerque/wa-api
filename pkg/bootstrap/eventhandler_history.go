@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 
 	"github.com/rs/zerolog/log"
 )

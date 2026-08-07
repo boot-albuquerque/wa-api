@@ -4,7 +4,7 @@ import (
 	"context"
 	"wa-api/pkg/infra/wa-noise/waclient"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // GetPrivacySettings devolve as configurações atuais.

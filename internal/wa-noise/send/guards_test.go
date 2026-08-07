@@ -17,7 +17,7 @@ import (
 	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Os tres bugs travados aqui foram encontrados e corrigidos na Fase E lote 8.

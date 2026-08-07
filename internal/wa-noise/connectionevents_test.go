@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types/events"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // collectEvents registra um handler que guarda tudo que for despachado. Devolve

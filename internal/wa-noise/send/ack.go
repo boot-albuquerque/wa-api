@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // AwaitAck waits for the server ack of an outgoing message, honouring the

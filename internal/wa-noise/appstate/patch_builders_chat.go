@@ -7,7 +7,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // BuildMute builds an app state patch for muting or unmuting a chat.

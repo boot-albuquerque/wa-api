@@ -3,7 +3,7 @@ package jid
 import (
 	"strings"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 
 	"github.com/rs/zerolog/log"
 )

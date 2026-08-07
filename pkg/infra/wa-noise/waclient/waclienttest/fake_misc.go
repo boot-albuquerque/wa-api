@@ -5,7 +5,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func (f *Fake) RejectCall(ctx context.Context, callFrom types.JID, callID string) error {

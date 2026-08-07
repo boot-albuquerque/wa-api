@@ -5,7 +5,7 @@ import (
 	"time"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func (f *Fake) GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error) {

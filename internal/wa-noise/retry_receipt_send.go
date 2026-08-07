@@ -9,9 +9,9 @@ package whatsmeow
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/retry"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // sendRetryReceipt sends a retry receipt for an incoming message.

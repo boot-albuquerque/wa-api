@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 type respGetNewsletterInfo struct {

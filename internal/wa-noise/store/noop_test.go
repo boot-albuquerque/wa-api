@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // NoopStore existe para dois usos com contratos OPOSTOS:

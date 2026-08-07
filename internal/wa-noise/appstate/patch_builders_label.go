@@ -2,7 +2,7 @@ package appstate
 
 import (
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func newLabelChatMutation(target types.JID, labelID string, labeled bool) MutationInfo {

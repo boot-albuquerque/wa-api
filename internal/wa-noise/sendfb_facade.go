@@ -11,11 +11,11 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/send"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachadas do caminho v3/FB de envio, pelo mesmo motivo das do waE2E: os nomes

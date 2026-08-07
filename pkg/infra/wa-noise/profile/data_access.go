@@ -7,7 +7,7 @@ import (
 	"wa-api/pkg/domain"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ProfileDataAccess adapta *whatsmeow.Client para a interface

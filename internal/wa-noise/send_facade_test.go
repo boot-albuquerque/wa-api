@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/send"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Este arquivo guarda o que sobrou dos testes de envio na raiz depois da

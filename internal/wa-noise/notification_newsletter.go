@@ -9,9 +9,9 @@ package whatsmeow
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/notification"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachadas do dominio de notificacao de newsletter. A logica vive em

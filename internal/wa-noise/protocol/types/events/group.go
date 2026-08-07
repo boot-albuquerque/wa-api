@@ -9,8 +9,8 @@ package events
 import (
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // JoinedGroup is emitted when you join or are added to a group.

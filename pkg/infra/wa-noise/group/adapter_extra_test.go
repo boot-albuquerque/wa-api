@@ -11,7 +11,7 @@ import (
 	"wa-api/pkg/domain"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID cobre

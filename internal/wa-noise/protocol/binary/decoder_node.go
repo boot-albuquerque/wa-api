@@ -3,7 +3,7 @@ package binary
 import (
 	"fmt"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 // Camada de estrutura da decodificacao: despacho de tag, atributos, listas e

@@ -10,8 +10,8 @@ import (
 	"context"
 	"slices"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func (cli *Client) handleDeviceNotification(ctx context.Context, node *waBinary.Node) {

@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // corpus e' o conjunto de nos que exercita cada ramo do formato de fio: os

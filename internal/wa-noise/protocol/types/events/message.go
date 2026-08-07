@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/protocol/proto/waWeb"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // HistorySync is emitted when the phone has sent a blob of historical messages.

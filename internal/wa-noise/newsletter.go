@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/newsletter"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachada do dominio de canais (newsletters). A logica vive em

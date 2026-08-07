@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 func TestGenerateIDFormat(t *testing.T) {

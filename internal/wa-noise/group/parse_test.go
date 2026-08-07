@@ -9,8 +9,8 @@ package group
 import (
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // mustCached devolve a entrada de jid no cache, falhando o teste se ela nao

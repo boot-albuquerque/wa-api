@@ -20,7 +20,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/store/sqlstore/upgrades"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )

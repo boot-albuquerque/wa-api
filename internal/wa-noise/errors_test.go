@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // errors.go e' quase todo declaracao, mas os quatro tipos com Is/Unwrap

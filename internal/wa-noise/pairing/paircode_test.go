@@ -17,8 +17,8 @@ import (
 	"go.mau.fi/util/random"
 	"golang.org/x/crypto/pbkdf2"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

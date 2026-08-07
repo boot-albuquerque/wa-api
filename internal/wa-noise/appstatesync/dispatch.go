@@ -13,8 +13,8 @@ import (
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // CollectEvents percorre as mutacoes de um patch, aplica cada uma ao store e

@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // A gravacao de segredos de mensagem e de mapeamentos LID/PN vive em

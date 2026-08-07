@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 // O primeiro byte de todo frame e' o flag de compressao, que Unpack le' na

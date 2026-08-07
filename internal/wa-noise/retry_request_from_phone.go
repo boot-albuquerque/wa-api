@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/retry"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // RequestFromPhoneDelay specifies how long to wait for the sender to resend the message before requesting from your phone.

@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
 

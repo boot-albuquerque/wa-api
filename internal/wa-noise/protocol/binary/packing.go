@@ -3,7 +3,7 @@ package binary
 import (
 	"fmt"
 
-	"wa-api/internal/wa-noise/binary/token"
+	"wa-api/internal/wa-noise/protocol/binary/token"
 )
 
 // Este arquivo concentra o codec nibble8/hex8 nas DUAS direcoes. Encoder e

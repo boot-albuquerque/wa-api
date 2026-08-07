@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/types"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // SubscribeLiveUpdates assina os updates ao vivo de um canal temporariamente,

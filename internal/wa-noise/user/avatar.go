@@ -11,9 +11,9 @@ import (
 	"encoding/base64"
 	"errors"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // GetProfilePictureParams sao os parametros de GetProfilePictureInfo. A raiz

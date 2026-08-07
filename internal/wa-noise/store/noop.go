@@ -10,7 +10,7 @@ import (
 	"context"
 	"errors"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

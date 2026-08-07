@@ -16,7 +16,7 @@ import (
 
 	"go.mau.fi/util/random"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // GenerateID gera um ID de mensagem novo.

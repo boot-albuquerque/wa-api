@@ -16,7 +16,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // DownloadAny percorre as partes baixaveis da mensagem e baixa a primeira nao

@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waLidMigrationSyncPayload"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // StoreSecret grava o segredo de mensagem embutido no MessageContextInfo, se

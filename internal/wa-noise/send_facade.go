@@ -12,10 +12,10 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/send"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Fachadas do caminho waE2E de envio. Nenhuma tem logica: existem porque tres

@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // CancelDelayedFromPhone cancela o pedido adiado de reenvio da mensagem msgID,

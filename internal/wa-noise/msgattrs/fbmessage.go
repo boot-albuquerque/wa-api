@@ -10,8 +10,8 @@ import (
 	armadillo "wa-api/internal/wa-noise/protocol/proto"
 	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
-	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 type MessageAttrs struct {

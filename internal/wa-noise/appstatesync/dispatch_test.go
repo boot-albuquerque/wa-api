@@ -16,7 +16,7 @@ import (
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/types/events"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // Testes de FilterContacts relocados de appstate_dispatch_test.go (Fase E lote

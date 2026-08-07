@@ -15,7 +15,7 @@ import (
 	mwpkg "wa-api/pkg/presentation/http/middleware"
 
 	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"

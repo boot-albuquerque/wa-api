@@ -8,7 +8,7 @@ package whatsmeow
 
 import (
 	"wa-api/internal/wa-noise/message"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // WebMessageIDPrefix e' reexportado por ATRIBUICAO a partir de message/, e nao

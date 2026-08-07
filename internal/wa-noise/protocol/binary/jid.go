@@ -3,8 +3,8 @@ package binary
 import (
 	"fmt"
 
-	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/binary/token"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Representacao de fio dos quatro formatos de JID que o XML binario conhece,

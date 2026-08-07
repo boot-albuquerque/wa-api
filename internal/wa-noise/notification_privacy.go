@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/tctoken"

@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // EventHandler is a function that can handle events from WhatsApp.

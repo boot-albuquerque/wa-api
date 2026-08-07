@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/binary"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/security/cbc"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )

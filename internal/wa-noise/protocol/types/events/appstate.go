@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/types"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // Contact is emitted when an entry in the user's contact list is modified from another device.
