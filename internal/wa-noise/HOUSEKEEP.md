@@ -23,7 +23,8 @@ pesquisa comparativa com o evolution-api/Baileys. São 49 achados:
 **43 resolvidos** (42 corrigidos + F35 fechado como "não corrigir"),
 **6 abertos** — 2 travados por falta de informação externa (F42, F44), 3 da
 reorganização de `pkg/infra/wa-noise/` (F59, F60, F61) e o inventário de TODOs
-(F64), que é registro de decisão e não trabalho pendente.
+(F64), que é registro de decisão e não trabalho pendente — ela cataloga
+item a item os 38 `// TODO` do projeto, com o critério que resolveria cada um.
 
 > **Correção de registro (2026-08-07):** este índice ficou desatualizado em
 > relação às próprias entradas. Ele listava 6 abertos, mas `user_info_failed`,
@@ -2932,86 +2933,153 @@ quebraria essa comparação em silêncio.
 
 **Status**: **CORRIGIDO** (2026-08-07).
 
-## F64 — inventário dos 39 `// TODO` restantes: o que são e por que não se corrigem
+## F64 — inventário dos 38 `// TODO` restantes, item a item
 
 **Data**: 2026-08-07.
 **Contexto**: varredura completa de `TODO/FIXME/XXX/HACK` no projeto.
 
-**Números**: 42 marcadores reais. Um falso positivo foi descartado —
-`core/user.go:125` não é TODO, é a palavra portuguesa "todo" ("o gerador expõe
-**TODO método** não exportado") quebrada em duas linhas por wrap de comentário.
-**Não tocar nesse.**
+Esta entrada é **registro de decisão, não trabalho pendente**. Ela existe para
+que a próxima varredura não refaça a classificação do zero, e para que cada
+item tenha um critério explícito do que o resolveria — sem isso, "revisar os
+TODOs" volta a ser uma tarefa sem fim de escopo.
 
-**41 dos 42 estão em `internal/wa-noise/`**, ou seja, são anotações do autor
-upstream sobre o protocolo do WhatsApp — não dívida que este projeto criou.
-Apenas 2 foram escritos aqui (`message/secret_keys.go:86`, resolvido abaixo, e
-`pkg/presentation/http/middleware/doc.go:9`).
+### Como reproduzir a varredura
 
-Três foram tratados: F62 (dois sítios), F63 e o de `secret_keys.go`. Restam 39,
-em três categorias.
+```
+grep -rnE '(//|/\*)\s*(TODO|FIXME|XXX|HACK)\b' --include='*.go' .
+```
 
-### A — Incógnitas de protocolo (21). Não resolvíveis por leitura de código
+Hoje isso devolve **39 ocorrências**: 38 marcadores reais e 1 falso positivo.
 
-Perguntas do autor upstream sobre o formato de fio, que só uma captura de
-tráfego responde:
+### O falso positivo — NÃO TOCAR
 
-`appstatesync/mutation.go:86` (`what's index 2 here?`) ·
-`group/create.go:83` (`"trigger":"1"` — o que é?) ·
-`group/notification.go:189` · `group/parse.go:73` (confirmar nome do campo
-`participant_pn`) · `media/download_file.go:89` e `media/download.go:143`
-(omitir hash para mídia não cifrada?) · `media/download_transport.go:123`
-(user agent) · `media/upload.go:224` · `message/decrypt.go:50` (nó `<meta>` de
-edição) · `message/parse.go:68` (`IsFromMe?`) · `notification/picture.go:30` ·
-`user/devices.go:122`, `:124` (blob icdc), `:138` (dhash) ·
-`appstate/patch_builders_chat.go:79` · `msgattrs/fbmessage.go:59` ·
-`waMsgApplication/extra.go:13` (`MultiDeviceApplicationVersion = 1 // check`) ·
-`types/user.go:176` (`DHash` é timestamp?) · `core/receipt.go:206` ·
-`core/broadcast.go:71` · `appstate/hash.go:53`
+`internal/wa-noise/core/user.go:125` não é um marcador. É a palavra portuguesa
+"todo", em caixa alta por ênfase, no meio de uma frase quebrada por wrap de
+comentário:
 
-**Recomendação: manter como estão.** O trade-off é assimétrico — o comentário
-custa uma linha e documenta honestamente o que não se sabe; removê-lo sem
-resposta troca ignorância declarada por ignorância silenciosa. Mesma classe da
-F42 e da F32.
+```go
+// [...] Mas o gerador de internals.go expoe
+// TODO metodo nao exportado de *Client, entao esta fachada virava
+// DangerousInternalClient.GetFBIDDevices: [...]
+```
 
-### B — Funcionalidade não implementada (11). São feature, não dívida
+Lê-se "expõe **todo método** não exportado". Qualquer varredura automatizada
+vai casar de novo; qualquer correção automatizada vai corromper o texto.
 
-`appstatesync/send.go:33` (criar chave nova em vez de reusar a do cliente
-primário) · `newsletter/actions.go:71` (`handle response?`) ·
-`retry/handle.go:133` (callback pré-retry para fb) · `send/ack.go:84`
-(invalidar cache de lista de dispositivos) e `:87` (`do something`) ·
-`send/encrypt.go:57` (consultar LID no servidor para entradas faltantes) ·
-`user/business.go:59` (`parse bot_fields`) · `message/parse.go:222` e `:224`
-(TODOs **vazios**, sem texto, nos ramos `franking` e `trace`) ·
-`core/client_events.go:134` · `pkg/presentation/http/middleware/doc.go:9`
-(stubs de HMAC/idempotência/retry — o único fora de `internal/`)
+### Aritmética
 
-**Recomendação:** se o objetivo for reduzir ruído, converter em entradas deste
+42 marcadores reais na varredura original. Quatro sítios foram corrigidos —
+`send/encrypt.go:93` e `send/fb_encrypt.go:74` (F62), `core/request.go:235`
+(F63) e `message/secret_keys.go:86` (resolvido sem mudar lógica, ver o commit
+da F62). Restam **38**, nas quatro categorias abaixo.
+
+---
+
+### Categoria A — incógnitas de formato de fio (20)
+
+Perguntas do autor upstream sobre o que o servidor do WhatsApp manda ou
+espera. **Nenhuma é resolvível por leitura de código**: exigem captura de
+tráfego de um cliente oficial, ou um teste contra o servidor real.
+
+| # | Local | O que o comentário diz | O que resolveria |
+| --- | --- | --- | --- |
+| A1 | `capabilities/appstatesync/mutation.go:86` | `what's index 2 here?` | Capturar uma mutação de app state real e inspecionar o array de índice além das duas primeiras posições |
+| A2 | `capabilities/group/create.go:83` | `"trigger": "1"` — `what's this?` | Comparar com o atributo que o WhatsApp Web envia hoje ao criar grupo. O Baileys manda o mesmo valor fixo, o que sugere constante de protocolo, não flag |
+| A3 | `capabilities/group/notification.go:189` | `can the addressing mode change here?` | Observar uma notificação de grupo durante migração PN→LID do mesmo participante |
+| A4 | `capabilities/group/parse.go:73` | `confirm field name` (`participant_pn`) | Capturar uma notificação de mudança de tópico em grupo e conferir o nome do atributo no XML |
+| A5 | `capabilities/media/download_file.go:89` | `omit hash for unencrypted media?` | Tentar o download de mídia não cifrada com e sem o hash na query e comparar as respostas |
+| A6 | `capabilities/media/download.go:143` | idem A5, outro caminho | Mesmo teste. **Os dois andam juntos**: resolver um sem o outro deixa os caminhos divergentes |
+| A7 | `capabilities/media/download_transport.go:123` | `user agent for whatsapp downloads?` | Verificar se o CDN de mídia discrimina por User-Agent (hoje vai vazio) |
+| A8 | `capabilities/media/upload.go:224` | `non-on-demand backfills may require this? it's in the initial bootstrap payload and may need to be persisted` | Inspecionar o payload de bootstrap inicial e verificar se o campo é reusado em backfill não sob demanda |
+| A9 | `capabilities/message/decrypt.go:50` | `edits have an additional <meta msg_edit_t=... original_msg_t=.../> node` | Capturar uma edição de mensagem e decidir se os dois timestamps devem virar campos do evento |
+| A10 | `capabilities/message/parse.go:68` | `IsFromMe?` | Determinar se o campo se aplica ao tipo de nó em questão |
+| A11 | `capabilities/notification/picture.go:30` | `sometimes there's a hash and no ID?` | Coletar notificações de troca de foto de perfil até observar o caso, e decidir o comportamento |
+| A12 | `capabilities/user/devices.go:122` | `take identities here too?` | Verificar se a resposta de usync traz identidades aproveitáveis junto da lista de dispositivos |
+| A13 | `capabilities/user/devices.go:124` | `do something with the icdc blob?` | Entender o formato do blob ICDC (Identity Change Detection Client) e se ele deve ser persistido |
+| A14 | `capabilities/user/devices.go:138` | `include dhash for users` | Confirmar se o servidor aceita `dhash` para usuários e não só para o caso já implementado |
+| A15 | `core/receipt.go:206` | `change played to played-self?` | Confirmar qual tipo de recibo o servidor espera para mídia reproduzida pelo próprio remetente |
+| A16 | `protocol/appstate/hash.go:53` | `figure out if there are certain cases that are safe to ignore and others that aren't` | Classificar os modos de falha de verificação de hash de app state. Hoje todos são tratados igual |
+| A17 | `protocol/appstate/patch_builders_chat.go:79` | `set LastSystemMessageTimestamp?` | Verificar se o servidor usa o campo em patches de chat |
+| A18 | `protocol/msgattrs/fbmessage.go:59` | `gifPlayback?` | Confirmar se o atributo existe no caminho FB de mensagem |
+| A19 | `protocol/proto/waMsgApplication/extra.go:13` | `MultiDeviceApplicationVersion = 1 // TODO: check` | Confirmar a versão que o servidor espera. Uma constante errada aqui é formato de fio — **mesma classe da F42** |
+| A20 | `protocol/types/user.go:176` | `DHash string // is this just a timestamp?` | Inspecionar valores reais de `dhash` retornados pelo usync |
+
+**Recomendação: manter todos como estão.** O trade-off é assimétrico — o
+comentário custa uma linha e declara honestamente o que não se sabe; apagá-lo
+sem resposta troca ignorância declarada por ignorância silenciosa. A19 é o de
+maior risco (constante de formato de fio, como a F42) e o primeiro a atacar se
+houver captura de tráfego disponível.
+
+---
+
+### Categoria B — não implementado ou decisão de design nossa (12)
+
+Estes **não dependem de informação externa**. São funcionalidade ausente ou
+escolha de arquitetura que este projeto pode tomar.
+
+| # | Local | O que o comentário diz | Nota |
+| --- | --- | --- | --- |
+| B1 | `capabilities/appstatesync/send.go:33` | `create new key instead of reusing the primary client's keys` | Reuso de chave entre clientes. Tem implicação de segurança: vale avaliar antes de tratar como cosmético |
+| B2 | `capabilities/message/parse.go:222` | `// TODO` — **vazio**, no ramo `franking` | Não diz nada. Não há como saber o que o autor pretendia |
+| B3 | `capabilities/message/parse.go:224` | `// TODO` — **vazio**, no ramo `trace` | Idem B2. Os dois ramos hoje são no-op silencioso |
+| B4 | `capabilities/newsletter/actions.go:71` | `handle response?` | A resposta do servidor é descartada. Decidir se algum erro dela deve virar erro do chamador |
+| B5 | `capabilities/retry/handle.go:133` | `pre-retry callback for fb` | Gancho ausente no caminho FB, presente no caminho normal |
+| B6 | `capabilities/send/ack.go:84` | `also invalidate device list caches` | Invalidação incompleta de cache. **Relacionado à F37**, que fechou o cache de dispositivos por TTL |
+| B7 | `capabilities/send/ack.go:87` | `do something` | Ramo vazio. Precisa de leitura do contexto para saber se é caminho de erro engolido |
+| B8 | `capabilities/send/encrypt.go:57` | `query LID from server for missing entries` | Quando não há mapeamento PN→LID local, o device é cifrado sob a identidade PN. Consultar o servidor fecharia a lacuna |
+| B9 | `capabilities/user/business.go:59` | `parse bot_fields` | Campo do perfil business não parseado |
+| B10 | `core/broadcast.go:71` | `should there be a better way to separate contacts and found push names in the db?` | **Reclassificado de A para B**: não é formato de fio, é design do nosso schema. Resolvível sem captura |
+| B11 | `core/client_events.go:134` | `should we do something else?` | Precisa de leitura do contexto |
+| B12 | `pkg/presentation/http/middleware/doc.go:9` | `Implementar cada middleware quando o roadmap demandar` | **O único fora de `internal/`**. Stubs de HMAC, idempotência e retry. É roadmap declarado, não dívida |
+
+**Recomendação**: se o objetivo for reduzir ruído, converter em entradas deste
 arquivo e apagar o comentário — o registro fica onde é procurado em vez de
-espalhado por 11 arquivos. Os dois TODOs **vazios** de `parse.go` são o caso
-mais claro: não dizem nada e não há como saber o que o autor pretendia.
+espalhado por 12 arquivos. **B2 e B3 são os candidatos mais claros a simples
+remoção**: um TODO vazio não informa nada e não é acionável por ninguém.
 
-### C — Gambiarras assumidas (5). Funcionam, e o risco de mexer é real
+B6 e B8 são os de maior valor real, por tocarem correção e não só completude.
 
-`send/node_build.go:177` (*"very hacky hack for announcement group messages,
-why is it pn anyway?"*) · `send/prepare.go:162` (*"fairly hacky, is there a
-proper way to determine which identity the message is sent with?"*) ·
-`core/receipt.go:149` (*"this hack probably needs to be removed at some
-point"*) · `send/message.go:46` (deduplicar com `sendNewsletter`) ·
-`tctoken/tctoken.go:131` (trocar get+put por UPDATE)
+---
 
-**Recomendação: não mexer.** É código que roda em produção no upstream há
-anos. "Consertar" sem entender por que a gambiarra existe é o mesmo erro que
-reabilitar o ramo desktop da F32 teria sido. As duas últimas
-(`send/message.go`, `tctoken.go`) são as únicas de risco baixo, por serem
-refactor local sem mudança de formato de fio.
+### Categoria C — gambiarras assumidas (5)
 
-### D-bloqueado — `message/decrypt_loop.go:140`
+Código que o autor upstream sabe ser feio e que **funciona em produção há
+anos**. O risco de mexer é assimétrico ao ganho.
 
-*"this probably isn't supposed to ack"*. O ramo assíncrono logo abaixo
-**também** dá ack, então os dois ramos concordam entre si e o TODO questiona
-ambos. Mudar é alterar comportamento de protocolo sem forma de verificar.
-Mesma classe da F42: precisa de captura de tráfego.
+| # | Local | O que o comentário diz | Risco de mexer |
+| --- | --- | --- | --- |
+| C1 | `capabilities/send/node_build.go:177` | `this is a very hacky hack for announcement group messages, why is it pn anyway?` | **Alto.** Muda endereçamento de mensagem em grupo de anúncio |
+| C2 | `capabilities/send/prepare.go:162` | `this is fairly hacky, is there a proper way to determine which identity the message is sent with?` | **Alto.** Escolha de identidade PN vs LID no envio — mesmo domínio da F42 |
+| C3 | `core/receipt.go:149` | `this hack probably needs to be removed at some point` | **Médio.** Precisa entender por que existe antes de remover |
+| C4 | `capabilities/send/message.go:46` | `somehow deduplicate this with the code in sendNewsletter?` | **Baixo.** Refactor local, sem mudança de formato de fio |
+| C5 | `capabilities/tctoken/tctoken.go:131` | `replace with an UPDATE call instead of get+put` | **Baixo.** Refactor local. Get+put também é corrida potencial entre leitura e escrita |
 
-**Status**: **não corrigidos, por decisão registrada acima.** Esta entrada
-existe para que a próxima varredura de TODO não precise refazer a
-classificação do zero.
+**Recomendação: não mexer em C1–C3.** "Consertar" sem entender por que a
+gambiarra existe é o mesmo erro que reabilitar o ramo desktop da F32 teria
+sido. **C4 e C5 são seguros** e podem entrar numa leva de saneamento normal;
+C5 tem valor além do estilo, por eliminar uma janela de corrida.
+
+---
+
+### Categoria D — bloqueado por falta de informação (1)
+
+| # | Local | O que o comentário diz | Por que está travado |
+| --- | --- | --- | --- |
+| D1 | `capabilities/message/decrypt_loop.go:140` | `this probably isn't supposed to ack` | O ramo síncrono dá `SendAck` depois de `SendRetryReceipt`; o ramo assíncrono logo abaixo **também** dá. Os dois concordam entre si, e o TODO questiona ambos. Mudar é alterar comportamento de protocolo sem forma de verificar — **mesma classe da F42** |
+
+---
+
+### Critério de saída desta entrada
+
+F64 fecha quando cada item tiver sido movido para uma destas situações:
+
+1. **Resolvido** — vira achado próprio (F65+) com correção e teste.
+2. **Descartado** — o comentário foi removido porque a pergunta deixou de
+   fazer sentido, com a justificativa registrada aqui.
+3. **Promovido a bloqueado** — passa para a lista de abertos do índice, junto
+   de F42 e F44, por depender de captura de tráfego.
+
+Enquanto isso não acontece, a categoria A inteira permanece como está **por
+decisão**, não por esquecimento.
+
+**Status**: **não corrigidos, por decisão registrada acima.**
