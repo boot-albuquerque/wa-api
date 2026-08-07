@@ -83,8 +83,28 @@ func GenerateSecretKey(
 func OrigSenderFromKey(msg *events.Message, key *waCommon.MessageKey) (types.JID, error) {
 	if key.GetFromMe() {
 		// fromMe sempre quer dizer que a enquete e o voto sairam do mesmo usuario.
-		// TODO isto esta' errado se a MessageKey usou @s.whatsapp.net mas o evento
-		// novo veio de @lid.
+		//
+		// Aqui havia um TODO dizendo que isto "esta' errado se a MessageKey usou
+		// @s.whatsapp.net mas o evento novo veio de @lid". A preocupacao e'
+		// legitima — a forma do JID entra como string na entrada do HKDF de
+		// GenerateSecretKey, entao PN e LID derivam chaves diferentes — mas ela
+		// JA' esta' coberta uma camada acima, e o TODO foi escrito sem
+		// referencia a essa cobertura.
+		//
+		// DecryptSecret (secret_crypto.go:39-44) tenta a derivacao com o
+		// remetente devolvido daqui e, se ela falhar a autenticacao, REFAZ com
+		// o storedOrigSender — a identidade sob a qual o segredo foi de fato
+		// gravado no store. E' precisamente o caso PN/LID divergente.
+		//
+		// Chutar aqui entre ownID e ownLID seria um segundo palpite empilhado
+		// sobre um fallback que ja' funciona, e sem informacao nova: qual das
+		// duas identidades foi usada no envio original nao esta' na MessageKey
+		// quando fromMe.
+		//
+		// O que continua fragil e' o GATILHO do fallback, que compara
+		// substring da mensagem de erro ("message authentication failed") em
+		// vez de um sentinela. Isso ja' esta' registrado no doc de
+		// DecryptSecret e nao e' este o lugar de corrigir.
 		return msg.Info.Sender, nil
 	} else if msg.Info.Chat.Server == types.DefaultUserServer || msg.Info.Chat.Server == types.HiddenUserServer {
 		sender, err := types.ParseJID(key.GetRemoteJID())

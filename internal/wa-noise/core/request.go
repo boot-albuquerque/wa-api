@@ -232,8 +232,26 @@ func (cli *Client) retryFrame(
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-timeoutChan:
-		// FIXME this error isn't technically correct (but works for now - the timeout param is only used from sendIQ)
-		return nil, ErrIQTimedOut
+		// O FIXME que estava aqui dizia que ErrIQTimedOut ("info query timed
+		// out") nao e' o erro tecnicamente correto, "mas funciona por ora
+		// porque o parametro timeout so' e' usado por sendIQ".
+		//
+		// A premissa continua valendo, verificada: dos tres chamadores de
+		// retryFrame, sendIQ (request.go:174) passa query.Timeout, o caminho
+		// de envio de mensagem (send/ack.go:47, via sendTransport.RetryFrame)
+		// passa 0 — e com timeout 0 este case e' inalcancavel, porque
+		// timeoutChan fica sendo um canal que nunca entrega.
+		//
+		// O terceiro chamador e' que torna a premissa fragil:
+		// DangerousInternalClient.RetryFrame (internals.go) expoe o parametro
+		// publicamente, entao qualquer um pode passar timeout > 0 de um
+		// contexto que nao e' IQ e receber um erro dizendo "info query".
+		//
+		// reqType entra no texto para que a mensagem nao minta nesse caso.
+		// O sentinela e' preservado como causa de proposito: quem chama
+		// sendIQ compara com errors.Is(err, ErrIQTimedOut), e trocar o valor
+		// quebraria essa comparacao silenciosamente.
+		return nil, fmt.Errorf("%s: %w", reqType, ErrIQTimedOut)
 	}
 	if isDisconnectNode(resp) {
 		cli.Log.Debugf("Retrying %s %s was interrupted by websocket disconnection (%v), not retrying anymore", reqType, id, resp.XMLString())

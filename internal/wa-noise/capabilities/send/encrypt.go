@@ -78,6 +78,12 @@ func EncryptForDevices(
 	}
 	bundles := t.FetchPreKeysNoError(ctx, retryDevices)
 
+	// attempted conta os dispositivos que de fato entraram na cifragem, e nao
+	// len(allDevices): o proprio device do usuario e' pulado antes de tentar,
+	// e conta-lo faria "todos falharam" nunca ser verdade numa lista que so'
+	// tem ele.
+	attempted, failed := 0, 0
+	var lastEncryptErr error
 	for _, jid := range allDevices {
 		plaintext := msgPlaintext
 		if (jid.User == ownJID.User || jid.User == ownLID.User) && dsmPlaintext != nil {
@@ -86,15 +92,17 @@ func EncryptForDevices(
 			}
 			plaintext = dsmPlaintext
 		}
+		attempted++
 		encrypted, isPreKey, err := encryptForDeviceAndWrap(
 			ctx, t, plaintext, jid, encryptionIdentities[jid], bundles[jid], encAttrs, existingSessions,
 		)
 		if err != nil {
-			// TODO return these errors if it's a fatal one (like context cancellation or database)
 			t.Log().Warnf("Failed to encrypt %s for %s: %v", id, jid, err)
 			if ctx.Err() != nil {
 				return nil, false, err
 			}
+			failed++
+			lastEncryptErr = err
 			continue
 		}
 
@@ -106,6 +114,13 @@ func EncryptForDevices(
 	err = t.Store().PutCachedSessions(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to save cached sessions: %w", err)
+	}
+	// A checagem vem DEPOIS de PutCachedSessions de proposito: as sessoes
+	// tocadas na tentativa precisam ser persistidas mesmo quando a cifragem
+	// falha, senao o proximo envio refaria o mesmo trabalho.
+	if attempted > 0 && failed == attempted {
+		return nil, false, fmt.Errorf("%w (%d/%d): %w",
+			ErrAllDevicesFailedEncryption, failed, attempted, lastEncryptErr)
 	}
 	return participantNodes, includeIdentity, nil
 }

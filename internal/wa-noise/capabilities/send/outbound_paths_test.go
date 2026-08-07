@@ -231,16 +231,30 @@ func TestPeerMessageSendsNode(t *testing.T) {
 
 // Dispositivos hospedados sao removidos APENAS em grupo: em DM eles recebem a
 // mensagem normalmente.
+//
+// Os dois casos provam a mesma coisa por caminhos diferentes, e isso e'
+// consequencia da F62, nao escolha de estilo:
+//
+//   - em GRUPO o hospedado e' removido antes da cifragem, entao nao sobra
+//     dispositivo nenhum para tentar e a chamada termina limpa;
+//   - em DM ele NAO e' removido, chega a' cifragem, e como o fake nao tem
+//     sessao Signal a cifragem falha para o unico dispositivo da lista — o que
+//     agora e' ErrAllDevicesFailedEncryption. O erro CITA o JID do dispositivo,
+//     e e' esse JID que prova que ele nao foi removido.
+//
+// Antes da F62 o caso DM tambem terminava sem erro, com lista vazia, e o teste
+// conferia a contagem de dispositivos. Continuar afirmando isso seria afirmar
+// o contrato que a F62 mostrou estar errado.
 func TestPrepareMessageNodeDropsHostedDevicesOnlyInGroups(t *testing.T) {
 	hosted := types.JID{User: "1", Server: types.HostedServer, Device: 1}
-	cases := map[string]struct {
-		to        types.JID
-		wantCount int
+	for name, tc := range map[string]struct {
+		to              types.JID
+		wantHostedTried bool
+		wantDeviceCount int
 	}{
-		"grupo": {sendTestGroupJID, 0},
-		"dm":    {sendTestUserJID, 1},
-	}
-	for name, tc := range cases {
+		"grupo": {to: sendTestGroupJID, wantHostedTried: false, wantDeviceCount: 0},
+		"dm":    {to: sendTestUserJID, wantHostedTried: true},
+	} {
 		t.Run(name, func(t *testing.T) {
 			tr := loggedIn()
 			tr.devices = []types.JID{hosted}
@@ -249,11 +263,24 @@ func TestPrepareMessageNodeDropsHostedDevicesOnlyInGroups(t *testing.T) {
 				context.Background(), tr, tc.to, "MSG1", textMessage(), nil,
 				[]byte("oi"), nil, &timings, NodeExtraParams{},
 			)
-			if err != nil {
-				t.Fatalf("erro inesperado: %v", err)
+
+			if !tc.wantHostedTried {
+				if err != nil {
+					t.Fatalf("erro inesperado: %v", err)
+				}
+				if len(devices) != tc.wantDeviceCount {
+					t.Errorf("dispositivos = %v, queria %d", devices, tc.wantDeviceCount)
+				}
+				return
 			}
-			if len(devices) != tc.wantCount {
-				t.Errorf("dispositivos = %v, queria %d", devices, tc.wantCount)
+
+			if !errors.Is(err, ErrAllDevicesFailedEncryption) {
+				t.Fatalf("err = %v, queria %v — o hospedado deveria ter chegado a' cifragem",
+					err, ErrAllDevicesFailedEncryption)
+			}
+			if !strings.Contains(err.Error(), hosted.SignalAddress().String()) {
+				t.Errorf("err = %q, queria citar o dispositivo hospedado %s",
+					err, hosted.SignalAddress())
 			}
 		})
 	}

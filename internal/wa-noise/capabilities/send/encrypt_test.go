@@ -127,14 +127,42 @@ func TestEncryptForDevicesPropagatesLIDMappingError(t *testing.T) {
 }
 
 // Um dispositivo sem sessao nao derruba a mensagem inteira: e' logado e
-// pulado, e os outros seguem. Aqui todos falham, entao a lista sai vazia — mas
-// sem erro, que e' o contrato.
-func TestEncryptForDevicesSkipsDevicesWithoutSession(t *testing.T) {
+// pulado, e os outros seguem.
+//
+// O CONTRATO MUDOU AQUI (F62 em HOUSEKEEP.md). A versao anterior deste teste
+// afirmava que, com TODOS os dispositivos falhando, a lista saia vazia "mas
+// sem erro, que e' o contrato". Esse contrato estava errado: node_build.go
+// monta o <participants> com a lista vazia sem checar, o stanza vai para o fio
+// sem destinatario nenhum, e SendMessage devolve sucesso com ID de mensagem.
+// Ninguem recebe e nada no retorno diz isso.
+//
+// A tolerancia a falha PARCIAL continua intacta — e' o caso do teste abaixo.
+func TestEncryptForDevicesTodosSemSessaoEhErro(t *testing.T) {
 	tr := loggedIn()
-	nodes, includeIdentity, err := EncryptForDevices(
+	_, _, err := EncryptForDevices(
 		context.Background(), tr,
 		[]types.JID{{User: "1", Server: types.HiddenUserServer, Device: 1}},
 		"MSG1", []byte("oi"), nil, waBinary.Attrs{},
+	)
+	if !errors.Is(err, ErrAllDevicesFailedEncryption) {
+		t.Fatalf("err = %v, queria %v", err, ErrAllDevicesFailedEncryption)
+	}
+	// A causa por dispositivo tem de sobreviver ao embrulho: sem ela, quem
+	// investigar so' sabe que "tudo falhou", nao por que.
+	if !errors.Is(err, ErrNoSession) {
+		t.Errorf("err = %v, queria preservar %v como causa", err, ErrNoSession)
+	}
+}
+
+// O proprio device do usuario e' pulado ANTES da cifragem, entao uma lista que
+// so' tem ele nao conta como "todos falharam" — sai vazia e sem erro. Sem esta
+// distincao, o contador de F62 acusaria falha total onde nao houve tentativa
+// nenhuma.
+func TestEncryptForDevicesSoODispositivoProprioNaoEhFalhaTotal(t *testing.T) {
+	tr := loggedIn()
+	nodes, includeIdentity, err := EncryptForDevices(
+		context.Background(), tr, []types.JID{tr.ownID},
+		"MSG1", []byte("oi"), []byte("dsm"), waBinary.Attrs{},
 	)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)

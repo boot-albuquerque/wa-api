@@ -33,4 +33,18 @@ var (
 	// esta' vazio. Antes isto passava em silencio — proto.Marshal(nil) devolve
 	// bytes vazios SEM erro, e o no' ia vazio para o fio (F41 em HOUSEKEEP.md).
 	ErrNoDeviceIdentity = errors.New("can't build device identity node: no account in store")
+
+	// ErrAllDevicesFailedEncryption: a cifragem falhou para TODOS os
+	// dispositivos tentados, entao o <participants> sairia vazio.
+	//
+	// Falha por dispositivo e' esperada e continua sendo tolerada — um device
+	// sem sessao Signal (ErrNoSession) e' rotina, e pular so' ele e' o
+	// comportamento correto. O que NAO e' tolerado e' o caso degenerado em que
+	// nao sobrou nenhum: o stanza ia para o fio sem destinatario nenhum,
+	// node_build.go montava o <participants> vazio sem checar, o servidor
+	// respondia, e SendMessage devolvia sucesso com ID de mensagem. Ninguem
+	// recebia, e nada no caminho de retorno dizia isso.
+	//
+	// Ver F62 em HOUSEKEEP.md.
+	ErrAllDevicesFailedEncryption = errors.New("failed to encrypt message for every device")
 )

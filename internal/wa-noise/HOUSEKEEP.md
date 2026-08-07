@@ -19,10 +19,11 @@ registrar.
 ## Índice
 
 Situação em 2026-08-07, depois das levas de saneamento (lotes A–I) e da
-pesquisa comparativa com o evolution-api/Baileys. São 46 achados:
-**41 resolvidos** (40 corrigidos + F35 fechado como "não corrigir"),
-**5 abertos** — 2 travados por falta de informação externa (F42, F44) e 3
-novos, da reorganização de `pkg/infra/wa-noise/` (F59, F60, F61).
+pesquisa comparativa com o evolution-api/Baileys. São 49 achados:
+**43 resolvidos** (42 corrigidos + F35 fechado como "não corrigir"),
+**6 abertos** — 2 travados por falta de informação externa (F42, F44), 3 da
+reorganização de `pkg/infra/wa-noise/` (F59, F60, F61) e o inventário de TODOs
+(F64), que é registro de decisão e não trabalho pendente.
 
 > **Correção de registro (2026-08-07):** este índice ficou desatualizado em
 > relação às próprias entradas. Ele listava 6 abertos, mas `user_info_failed`,
@@ -2843,3 +2844,174 @@ não resolve.
 
 **Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
 escolha é sobre o que esses documentos são, não sobre o texto deles.
+
+## F62 — cifragem que falha para TODOS os dispositivos devolvia sucesso, e o stanza ia sem destinatário
+
+**Data**: 2026-08-07.
+**Contexto**: varredura dos `// TODO` do projeto. O TODO original
+(`send/encrypt.go:93` e `send/fb_encrypt.go:74`) dizia: *"return these errors
+if it's a fatal one (like context cancellation or database)"*.
+
+**Onde**: `internal/wa-noise/capabilities/send/encrypt.go` (`EncryptForDevices`),
+`internal/wa-noise/capabilities/send/fb_encrypt.go` (`EncryptForDevicesV3`) e o
+consumidor em `internal/wa-noise/capabilities/send/node_build.go:197`.
+
+**Problema**: o laço de cifragem por dispositivo tolerava qualquer falha com
+`continue`. Tolerar falha *parcial* está certo — um device sem sessão Signal é
+rotina, e pular só ele é o comportamento correto. O que não estava tratado é o
+caso degenerado em que **nenhum** dispositivo sobra:
+
+```go
+participantNodes, includeIdentity, err := EncryptForDevices(...)  // err == nil
+if err != nil { return nil, nil, err }
+participantNode := waBinary.Node{
+    Tag:     participantsNodeTag,
+    Content: participantNodes,   // <-- vazio, sem checagem
+}
+```
+
+O `<participants>` sai vazio, o stanza vai para o fio sem destinatário nenhum,
+o servidor responde, e `SendMessage` devolve **sucesso com ID de mensagem**.
+Ninguém recebe, e nada no caminho de retorno diz isso.
+
+Não é hipotético: `bundles := t.FetchPreKeysNoError(ctx, retryDevices)` engole
+falha de busca de pre-key por design (está no nome). Se o servidor recusa as
+pre-keys, nenhum dispositivo tem sessão, todos falham com `ErrNoSession`, e o
+resultado é exatamente o acima.
+
+**Por que o TODO original não era acionável como escrito**: ele pede para
+distinguir erro fatal (banco) de erro por dispositivo. Isso não é possível por
+`errors.Is`. `ContainsSession` devolve erro cru do `sql`, mas `ProcessBundle` e
+`cipher.Encrypt` tocam o store por dentro do libsignal e devolvem tudo
+embrulhado como `"failed to process prekey bundle"`. Metade do TODO, aliás, já
+estava feita: `if ctx.Err() != nil { return }` já tratava cancelamento.
+
+**Correção aplicada**: sentinela `ErrAllDevicesFailedEncryption`, disparado
+quando `attempted > 0 && failed == attempted`. `attempted` conta só os
+dispositivos que entraram na cifragem — o device do próprio usuário é pulado
+antes, e contá-lo faria "todos falharam" nunca ser verdade numa lista que só
+tem ele. A causa por dispositivo é preservada via `%w` duplo.
+
+A checagem fica **depois** de `PutCachedSessions`: as sessões tocadas na
+tentativa precisam ser persistidas mesmo quando a cifragem falha, senão o
+próximo envio refaz o mesmo trabalho.
+
+**Contrato que mudou**: `TestEncryptForDevicesSkipsDevicesWithoutSession`
+afirmava, no próprio comentário, que com todos falhando *"a lista sai vazia —
+mas sem erro, que é o contrato"*. Esse contrato era o defeito. O teste foi
+reescrito como `TestEncryptForDevicesTodosSemSessaoEhErro`, e
+`TestPrepareMessageNodeDropsHostedDevicesOnlyInGroups` passou a provar o mesmo
+que provava antes (que o dispositivo hospedado não é removido em DM) pelo JID
+que o erro novo cita.
+
+**Status**: **CORRIGIDO** (2026-08-07). `make check` verde.
+
+## F63 — `retryFrame` devolvia `ErrIQTimedOut` para qualquer tipo de requisição
+
+**Data**: 2026-08-07. **Contexto**: mesma varredura de `// TODO`.
+
+**Onde**: `internal/wa-noise/core/request.go:235`, que trazia um FIXME:
+*"this error isn't technically correct (but works for now - the timeout param
+is only used from sendIQ)"*.
+
+**Problema**: a premissa **se sustenta hoje**, verificada nos três chamadores
+de `retryFrame`: `sendIQ` (`request.go:174`) passa `query.Timeout`; o caminho
+de envio de mensagem (`send/ack.go:47`, via `sendTransport.RetryFrame`) passa
+`0` — e com `0` o `case` é inalcançável, porque `timeoutChan` vira um canal
+que nunca entrega.
+
+O que torna a premissa frágil é o terceiro: `DangerousInternalClient.RetryFrame`
+(`core/internals.go:674`) expõe o parâmetro publicamente. Qualquer chamador
+pode passar timeout > 0 de um contexto que não é IQ e receber um erro dizendo
+"info query timed out".
+
+**Correção aplicada**: `reqType` entra no texto do erro, para que a mensagem
+não minta nesse caso. O sentinela `ErrIQTimedOut` foi **preservado como causa**
+de propósito — quem chama `sendIQ` compara com `errors.Is`, e trocar o valor
+quebraria essa comparação em silêncio.
+
+**Status**: **CORRIGIDO** (2026-08-07).
+
+## F64 — inventário dos 39 `// TODO` restantes: o que são e por que não se corrigem
+
+**Data**: 2026-08-07.
+**Contexto**: varredura completa de `TODO/FIXME/XXX/HACK` no projeto.
+
+**Números**: 42 marcadores reais. Um falso positivo foi descartado —
+`core/user.go:125` não é TODO, é a palavra portuguesa "todo" ("o gerador expõe
+**TODO método** não exportado") quebrada em duas linhas por wrap de comentário.
+**Não tocar nesse.**
+
+**41 dos 42 estão em `internal/wa-noise/`**, ou seja, são anotações do autor
+upstream sobre o protocolo do WhatsApp — não dívida que este projeto criou.
+Apenas 2 foram escritos aqui (`message/secret_keys.go:86`, resolvido abaixo, e
+`pkg/presentation/http/middleware/doc.go:9`).
+
+Três foram tratados: F62 (dois sítios), F63 e o de `secret_keys.go`. Restam 39,
+em três categorias.
+
+### A — Incógnitas de protocolo (21). Não resolvíveis por leitura de código
+
+Perguntas do autor upstream sobre o formato de fio, que só uma captura de
+tráfego responde:
+
+`appstatesync/mutation.go:86` (`what's index 2 here?`) ·
+`group/create.go:83` (`"trigger":"1"` — o que é?) ·
+`group/notification.go:189` · `group/parse.go:73` (confirmar nome do campo
+`participant_pn`) · `media/download_file.go:89` e `media/download.go:143`
+(omitir hash para mídia não cifrada?) · `media/download_transport.go:123`
+(user agent) · `media/upload.go:224` · `message/decrypt.go:50` (nó `<meta>` de
+edição) · `message/parse.go:68` (`IsFromMe?`) · `notification/picture.go:30` ·
+`user/devices.go:122`, `:124` (blob icdc), `:138` (dhash) ·
+`appstate/patch_builders_chat.go:79` · `msgattrs/fbmessage.go:59` ·
+`waMsgApplication/extra.go:13` (`MultiDeviceApplicationVersion = 1 // check`) ·
+`types/user.go:176` (`DHash` é timestamp?) · `core/receipt.go:206` ·
+`core/broadcast.go:71` · `appstate/hash.go:53`
+
+**Recomendação: manter como estão.** O trade-off é assimétrico — o comentário
+custa uma linha e documenta honestamente o que não se sabe; removê-lo sem
+resposta troca ignorância declarada por ignorância silenciosa. Mesma classe da
+F42 e da F32.
+
+### B — Funcionalidade não implementada (11). São feature, não dívida
+
+`appstatesync/send.go:33` (criar chave nova em vez de reusar a do cliente
+primário) · `newsletter/actions.go:71` (`handle response?`) ·
+`retry/handle.go:133` (callback pré-retry para fb) · `send/ack.go:84`
+(invalidar cache de lista de dispositivos) e `:87` (`do something`) ·
+`send/encrypt.go:57` (consultar LID no servidor para entradas faltantes) ·
+`user/business.go:59` (`parse bot_fields`) · `message/parse.go:222` e `:224`
+(TODOs **vazios**, sem texto, nos ramos `franking` e `trace`) ·
+`core/client_events.go:134` · `pkg/presentation/http/middleware/doc.go:9`
+(stubs de HMAC/idempotência/retry — o único fora de `internal/`)
+
+**Recomendação:** se o objetivo for reduzir ruído, converter em entradas deste
+arquivo e apagar o comentário — o registro fica onde é procurado em vez de
+espalhado por 11 arquivos. Os dois TODOs **vazios** de `parse.go` são o caso
+mais claro: não dizem nada e não há como saber o que o autor pretendia.
+
+### C — Gambiarras assumidas (5). Funcionam, e o risco de mexer é real
+
+`send/node_build.go:177` (*"very hacky hack for announcement group messages,
+why is it pn anyway?"*) · `send/prepare.go:162` (*"fairly hacky, is there a
+proper way to determine which identity the message is sent with?"*) ·
+`core/receipt.go:149` (*"this hack probably needs to be removed at some
+point"*) · `send/message.go:46` (deduplicar com `sendNewsletter`) ·
+`tctoken/tctoken.go:131` (trocar get+put por UPDATE)
+
+**Recomendação: não mexer.** É código que roda em produção no upstream há
+anos. "Consertar" sem entender por que a gambiarra existe é o mesmo erro que
+reabilitar o ramo desktop da F32 teria sido. As duas últimas
+(`send/message.go`, `tctoken.go`) são as únicas de risco baixo, por serem
+refactor local sem mudança de formato de fio.
+
+### D-bloqueado — `message/decrypt_loop.go:140`
+
+*"this probably isn't supposed to ack"*. O ramo assíncrono logo abaixo
+**também** dá ack, então os dois ramos concordam entre si e o TODO questiona
+ambos. Mudar é alterar comportamento de protocolo sem forma de verificar.
+Mesma classe da F42: precisa de captura de tráfego.
+
+**Status**: **não corrigidos, por decisão registrada acima.** Esta entrada
+existe para que a próxima varredura de TODO não precise refazer a
+classificação do zero.

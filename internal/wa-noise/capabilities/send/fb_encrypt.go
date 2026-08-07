@@ -61,6 +61,10 @@ func EncryptForDevicesV3(
 	}
 	bundles := t.FetchPreKeysNoError(ctx, retryDevices)
 
+	// Ver o comentario equivalente em encrypt.go: attempted conta so' os
+	// dispositivos que entraram na cifragem, nao len(allDevices).
+	attempted, failed := 0, 0
+	var lastEncryptErr error
 	for _, jid := range allDevices {
 		var dsmForDevice *waMsgTransport.MessageTransport_Protocol_Integral_DeviceSentMessage
 		if jid.User == ownID.User {
@@ -69,13 +73,15 @@ func EncryptForDevicesV3(
 			}
 			dsmForDevice = dsm
 		}
+		attempted++
 		encrypted, err := encryptForDeviceAndWrapV3(ctx, t, payload, skdm, dsmForDevice, jid, bundles[jid], encAttrs)
 		if err != nil {
-			// TODO return these errors if it's a fatal one (like context cancellation or database)
 			t.Log().Warnf("Failed to encrypt %s for %s: %v", id, jid, err)
 			if ctx.Err() != nil {
 				return nil, err
 			}
+			failed++
+			lastEncryptErr = err
 			continue
 		}
 		participantNodes = append(participantNodes, *encrypted)
@@ -83,6 +89,10 @@ func EncryptForDevicesV3(
 	err = t.Store().PutCachedSessions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save cached sessions: %w", err)
+	}
+	if attempted > 0 && failed == attempted {
+		return nil, fmt.Errorf("%w (%d/%d): %w",
+			ErrAllDevicesFailedEncryption, failed, attempted, lastEncryptErr)
 	}
 	return participantNodes, nil
 }
