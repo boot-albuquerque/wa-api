@@ -106,11 +106,19 @@ func (cli *Client) makeQRData(ref []byte, clientType PairClientType) string {
 	noise := base64.StdEncoding.EncodeToString(cli.Store.NoiseKey.Pub[:])
 	identity := base64.StdEncoding.EncodeToString(cli.Store.IdentityKey.Pub[:])
 	adv := base64.StdEncoding.EncodeToString(cli.Store.AdvSecretKey)
-	return fmt.Sprintf("https://wa.me/settings/linked_devices#%s,%s,%s,%s,%s", ref, noise, identity, adv, clientType)
+	return fmt.Sprintf(pairQRDataFormat, ref, noise, identity, adv, clientType)
 }
 
 func (cli *Client) handlePairSuccess(ctx context.Context, node *waBinary.Node) {
-	id := node.Attrs["id"].(string)
+	// O `id` vem do servidor. Sem o comma-ok, um <iq> de pair-success sem o
+	// atributo (ou com tipo inesperado) causava panic aqui — e handlePairSuccess
+	// roda como nodeHandler numa goroutine sem recover, o que derruba o processo
+	// inteiro, nao so a sessao. Ver PATCHES.md, Fase E lote 4.
+	id, ok := node.Attrs["id"].(string)
+	if !ok {
+		cli.Log.Warnf("Ignoring pair-success node without a string id attribute")
+		return
+	}
 	pairSuccess := node.GetChildByTag("pair-success")
 
 	deviceIdentityBytes, _ := pairSuccess.GetChildByTag("device-identity").Content.([]byte)
@@ -138,7 +146,7 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 	var deviceIdentityContainer waAdv.ADVSignedDeviceIdentityHMAC
 	err := proto.Unmarshal(deviceIdentityBytes, &deviceIdentityContainer)
 	if err != nil {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairProtoError{"failed to parse device identity container in pair success message", err}
 	}
 
@@ -151,46 +159,46 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 
 	if !hmac.Equal(h.Sum(nil), deviceIdentityContainer.HMAC) {
 		cli.Log.Warnf("Invalid HMAC from pair success message")
-		cli.sendPairError(ctx, reqID, 401, "hmac-mismatch")
+		cli.sendPairError(ctx, reqID, pairErrCodeUnauthorized, pairErrTextHMACMismatch)
 		return ErrPairInvalidDeviceIdentityHMAC
 	}
 
 	var deviceIdentity waAdv.ADVSignedDeviceIdentity
 	err = proto.Unmarshal(deviceIdentityContainer.Details, &deviceIdentity)
 	if err != nil {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairProtoError{"failed to parse signed device identity in pair success message", err}
 	}
 
 	var deviceIdentityDetails waAdv.ADVDeviceIdentity
 	err = proto.Unmarshal(deviceIdentity.Details, &deviceIdentityDetails)
 	if err != nil {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairProtoError{"failed to parse device identity details in pair success message", err}
 	}
 
 	if !paircrypto.VerifyAccountSignature(&deviceIdentity, cli.Store.IdentityKey, deviceIdentityDetails.GetDeviceType() == waAdv.ADVEncryptionType_HOSTED) {
-		cli.sendPairError(ctx, reqID, 401, "signature-mismatch")
+		cli.sendPairError(ctx, reqID, pairErrCodeUnauthorized, pairErrTextSignatureMismatch)
 		return ErrPairInvalidDeviceSignature
 	}
 
 	deviceIdentity.DeviceSignature = paircrypto.GenerateDeviceSignature(&deviceIdentity, cli.Store.IdentityKey)[:]
 
 	if cli.PrePairCallback != nil && !cli.PrePairCallback(jid, platform, businessName) {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return ErrPairRejectedLocally
 	}
 
 	cli.Store.Account = proto.Clone(&deviceIdentity).(*waAdv.ADVSignedDeviceIdentity)
 
 	mainDeviceLID := lid
-	mainDeviceLID.Device = 0
-	mainDeviceIdentity := *(*[32]byte)(deviceIdentity.AccountSignatureKey)
+	mainDeviceLID.Device = pairMainDeviceID
+	mainDeviceIdentity := *(*[pairIdentityKeyLength]byte)(deviceIdentity.AccountSignatureKey)
 	deviceIdentity.AccountSignatureKey = nil
 
 	selfSignedDeviceIdentity, err := proto.Marshal(&deviceIdentity)
 	if err != nil {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairProtoError{"failed to marshal self-signed device identity", err}
 	}
 
@@ -200,14 +208,14 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 	cli.Store.Platform = platform
 	err = cli.Store.Save(ctx)
 	if err != nil {
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairDatabaseError{"failed to save device store", err}
 	}
 	cli.StoreLIDPNMapping(ctx, lid, jid)
 	err = cli.Store.Identities.PutIdentity(ctx, mainDeviceLID.SignalAddress().String(), mainDeviceIdentity)
 	if err != nil {
 		_ = cli.Store.Delete(ctx)
-		cli.sendPairError(ctx, reqID, 500, "internal-error")
+		cli.sendPairError(ctx, reqID, pairErrCodeInternal, pairErrTextInternal)
 		return &PairDatabaseError{"failed to store main device identity", err}
 	}
 

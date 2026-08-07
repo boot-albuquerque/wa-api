@@ -29,23 +29,20 @@ type QRChannelItem struct {
 	Timeout time.Duration
 }
 
-const QRChannelEventCode = "code"
-const QRChannelEventError = "error"
-
 // Possible final items in the QR channel. In addition to these, an `error` event may be emitted,
 // in which case the Error field will have the error that occurred during pairing.
 var (
 	// QRChannelSuccess is emitted from GetQRChannel when the pairing is successful.
-	QRChannelSuccess = QRChannelItem{Event: "success"}
+	QRChannelSuccess = QRChannelItem{Event: qrChannelEventSuccess}
 	// QRChannelTimeout is emitted from GetQRChannel if the socket gets disconnected by the server before the pairing is successful.
-	QRChannelTimeout = QRChannelItem{Event: "timeout"}
+	QRChannelTimeout = QRChannelItem{Event: qrChannelEventTimeout}
 	// QRChannelErrUnexpectedEvent is emitted from GetQRChannel if an unexpected connection event is received,
 	// as that likely means that the pairing has already happened before the channel was set up.
-	QRChannelErrUnexpectedEvent = QRChannelItem{Event: "err-unexpected-state"}
+	QRChannelErrUnexpectedEvent = QRChannelItem{Event: qrChannelEventUnexpectedState}
 	// QRChannelClientOutdated is emitted from GetQRChannel if events.ClientOutdated is received.
-	QRChannelClientOutdated = QRChannelItem{Event: "err-client-outdated"}
+	QRChannelClientOutdated = QRChannelItem{Event: qrChannelEventClientOutdated}
 	// QRChannelScannedWithoutMultidevice is emitted from GetQRChannel if events.QRScannedWithoutMultidevice is received.
-	QRChannelScannedWithoutMultidevice = QRChannelItem{Event: "err-scanned-without-multidevice"}
+	QRChannelScannedWithoutMultidevice = QRChannelItem{Event: qrChannelEventScannedWithoutMultidevice}
 )
 
 type qrChannel struct {
@@ -77,9 +74,9 @@ func (qrc *qrChannel) emitQRs(codes []string) {
 			qrc.log.Debugf("QR code channel is closed, exiting QR emitter")
 			return
 		}
-		timeout := 20 * time.Second
-		if len(codes) == 6 {
-			timeout = 60 * time.Second
+		timeout := qrCodeTimeout
+		if len(codes) == qrCodeFirstBatchSize {
+			timeout = qrCodeFirstTimeout
 		}
 		nextCode, codes = codes[0], codes[1:]
 		qrc.log.Debugf("Emitting QR code %s", nextCode)
@@ -167,7 +164,7 @@ func (cli *Client) GetQRChannel(ctx context.Context) (<-chan QRChannelItem, erro
 	} else if cli.Store.ID != nil {
 		return nil, ErrQRStoreContainsID
 	}
-	ch := make(chan QRChannelItem, 8)
+	ch := make(chan QRChannelItem, qrChannelBuffer)
 	qrc := qrChannel{
 		output:  ch,
 		stopQRs: make(chan struct{}),

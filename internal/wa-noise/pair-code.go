@@ -48,7 +48,7 @@ const (
 )
 
 var notNumbers = regexp.MustCompile("[^0-9]")
-var linkingBase32 = base32.NewEncoding("123456789ABCDEFGHJKLMNPQRSTVWXYZ")
+var linkingBase32 = base32.NewEncoding(pairCodeBase32Alphabet)
 
 type phoneLinkingCache struct {
 	jid         types.JID
@@ -59,18 +59,18 @@ type phoneLinkingCache struct {
 
 func generateCompanionEphemeralKey() (ephemeralKeyPair *keys.KeyPair, ephemeralKey []byte, encodedLinkingCode string) {
 	ephemeralKeyPair = keys.NewKeyPair()
-	salt := random.Bytes(32)
-	iv := random.Bytes(16)
-	linkingCode := random.Bytes(5)
+	salt := random.Bytes(pairCodeSaltLength)
+	iv := random.Bytes(pairCodeIVLength)
+	linkingCode := random.Bytes(pairCodeRawLength)
 	encodedLinkingCode = linkingBase32.EncodeToString(linkingCode)
-	linkCodeKey := pbkdf2.Key([]byte(encodedLinkingCode), salt, 2<<16, 32, sha256.New)
+	linkCodeKey := pbkdf2.Key([]byte(encodedLinkingCode), salt, pairCodePBKDF2Iterations, pairCodeKeyLength, sha256.New)
 	linkCipherBlock, _ := aes.NewCipher(linkCodeKey)
 	encryptedPubkey := ephemeralKeyPair.Pub[:]
 	cipher.NewCTR(linkCipherBlock, iv).XORKeyStream(encryptedPubkey, encryptedPubkey)
-	ephemeralKey = make([]byte, 80)
-	copy(ephemeralKey[0:32], salt)
-	copy(ephemeralKey[32:48], iv)
-	copy(ephemeralKey[48:80], encryptedPubkey)
+	ephemeralKey = make([]byte, pairCodeWrappedKeyEnd)
+	copy(ephemeralKey[0:pairCodeSaltEnd], salt)
+	copy(ephemeralKey[pairCodeSaltEnd:pairCodeIVEnd], iv)
+	copy(ephemeralKey[pairCodeIVEnd:pairCodeWrappedKeyEnd], encryptedPubkey)
 	return
 }
 
@@ -96,9 +96,9 @@ func (cli *Client) PairPhone(ctx context.Context, phone string, showPushNotifica
 	}
 	ephemeralKeyPair, ephemeralKey, encodedLinkingCode := generateCompanionEphemeralKey()
 	phone = notNumbers.ReplaceAllString(phone, "")
-	if len(phone) <= 6 {
+	if len(phone) < pairCodePhoneMinLength {
 		return "", ErrPhoneNumberTooShort
-	} else if strings.HasPrefix(phone, "0") {
+	} else if strings.HasPrefix(phone, pairCodePhoneTrunkPrefix) {
 		return "", ErrPhoneNumberIsNotInternational
 	}
 	jid := types.NewJID(phone, types.DefaultUserServer)
@@ -140,7 +140,7 @@ func (cli *Client) PairPhone(ctx context.Context, phone string, showPushNotifica
 		linkingCode: encodedLinkingCode,
 		pairingRef:  string(pairingRef),
 	}
-	return encodedLinkingCode[0:4] + "-" + encodedLinkingCode[4:], nil
+	return encodedLinkingCode[0:pairCodeGroupLength] + "-" + encodedLinkingCode[pairCodeGroupLength:], nil
 }
 
 func (cli *Client) tryHandleCodePairNotification(ctx context.Context, parentNode *waBinary.Node) {
@@ -172,7 +172,7 @@ func (cli *Client) handleCodePairNotification(ctx context.Context, parentNode *w
 			Tag: "link_code_pairing_wrapped_primary_ephemeral_pub",
 			In:  "notification",
 		}
-	} else if len(wrappedPrimaryEphemeralPub) < 80 {
+	} else if len(wrappedPrimaryEphemeralPub) < pairCodeWrappedKeyEnd {
 		return fmt.Errorf("unexpected length of link_code_pairing_wrapped_primary_ephemeral_pub: %d", len(wrappedPrimaryEphemeralPub))
 	}
 	primaryIdentityPub, ok := node.GetChildByTag("primary_identity_pub").Content.([]byte)
@@ -183,21 +183,21 @@ func (cli *Client) handleCodePairNotification(ctx context.Context, parentNode *w
 		}
 	}
 
-	advSecretRandom := random.Bytes(32)
-	keyBundleSalt := random.Bytes(32)
-	keyBundleNonce := random.Bytes(12)
+	advSecretRandom := random.Bytes(pairCodeAdvSecretRandomLength)
+	keyBundleSalt := random.Bytes(pairCodeKeyBundleSaltLength)
+	keyBundleNonce := random.Bytes(pairCodeKeyBundleNonceLength)
 
 	// Decrypt the primary device's ephemeral public key, which was encrypted with the 8-character pairing code,
 	// then compute the DH shared secret using our ephemeral private key we generated earlier.
-	primarySalt := wrappedPrimaryEphemeralPub[0:32]
-	primaryIV := wrappedPrimaryEphemeralPub[32:48]
-	primaryEncryptedPubkey := wrappedPrimaryEphemeralPub[48:80]
-	linkCodeKey := pbkdf2.Key([]byte(linkCache.linkingCode), primarySalt, 2<<16, 32, sha256.New)
+	primarySalt := wrappedPrimaryEphemeralPub[0:pairCodeSaltEnd]
+	primaryIV := wrappedPrimaryEphemeralPub[pairCodeSaltEnd:pairCodeIVEnd]
+	primaryEncryptedPubkey := wrappedPrimaryEphemeralPub[pairCodeIVEnd:pairCodeWrappedKeyEnd]
+	linkCodeKey := pbkdf2.Key([]byte(linkCache.linkingCode), primarySalt, pairCodePBKDF2Iterations, pairCodeKeyLength, sha256.New)
 	linkCipherBlock, err := aes.NewCipher(linkCodeKey)
 	if err != nil {
 		return fmt.Errorf("failed to create link cipher: %w", err)
 	}
-	primaryDecryptedPubkey := make([]byte, 32)
+	primaryDecryptedPubkey := make([]byte, pairCodeKeyLength)
 	cipher.NewCTR(linkCipherBlock, primaryIV).XORKeyStream(primaryDecryptedPubkey, primaryEncryptedPubkey)
 	ephemeralSharedSecret, err := curve25519.X25519(linkCache.keyPair.Priv[:], primaryDecryptedPubkey)
 	if err != nil {
@@ -205,7 +205,7 @@ func (cli *Client) handleCodePairNotification(ctx context.Context, parentNode *w
 	}
 
 	// Encrypt and wrap key bundle containing our identity key, the primary device's identity key and the randomness used for the adv key.
-	keyBundleEncryptionKey := hkdfutil.SHA256(ephemeralSharedSecret, keyBundleSalt, []byte("link_code_pairing_key_bundle_encryption_key"), 32)
+	keyBundleEncryptionKey := hkdfutil.SHA256(ephemeralSharedSecret, keyBundleSalt, []byte(pairCodeKeyBundleHKDFInfo), pairCodeKeyBundleKeyLength)
 	keyBundleCipherBlock, err := aes.NewCipher(keyBundleEncryptionKey)
 	if err != nil {
 		return fmt.Errorf("failed to create key bundle cipher: %w", err)
@@ -224,7 +224,7 @@ func (cli *Client) handleCodePairNotification(ctx context.Context, parentNode *w
 		return fmt.Errorf("failed to compute identity shared key: %w", err)
 	}
 	advSecretInput := append(append(ephemeralSharedSecret, identitySharedKey...), advSecretRandom...)
-	advSecret := hkdfutil.SHA256(advSecretInput, nil, []byte("adv_secret"), 32)
+	advSecret := hkdfutil.SHA256(advSecretInput, nil, []byte(pairCodeAdvSecretHKDFInfo), pairCodeAdvSecretLength)
 	cli.Store.AdvSecretKey = advSecret
 
 	_, err = cli.sendIQ(ctx, infoQuery{
