@@ -20,10 +20,10 @@ func (cli *Client) handleStreamError(ctx context.Context, node *waBinary.Node) {
 	cli.isLoggedIn.Store(false)
 	cli.clearResponseWaiters(node)
 	code, _ := node.Attrs["code"].(string)
-	conflict, _ := node.GetOptionalChildByTag("conflict")
+	conflict, _ := node.GetOptionalChildByTag(streamErrorConflictTag)
 	conflictType := conflict.AttrGetter().OptionalString("type")
 	switch {
-	case code == "515":
+	case code == streamErrorRestartRequired:
 		if cli.DisableLoginAutoReconnect {
 			cli.Log.Infof("Got 515 code, but login autoreconnect is disabled, not reconnecting")
 			cli.dispatchEvent(&events.ManualLoginReconnect{})
@@ -37,7 +37,7 @@ func (cli *Client) handleStreamError(ctx context.Context, node *waBinary.Node) {
 				cli.Log.Errorf("Failed to reconnect after 515 code: %v", err)
 			}
 		}()
-	case code == "401" && conflictType == "device_removed":
+	case code == streamErrorAuthCode && conflictType == conflictTypeDeviceRemoved:
 		cli.expectDisconnect()
 		cli.Log.Infof("Got device removed stream error, sending LoggedOut event and deleting session")
 		go cli.dispatchEvent(&events.LoggedOut{OnConnect: false, Reason: events.ConnectFailureLoggedOut})
@@ -45,11 +45,11 @@ func (cli *Client) handleStreamError(ctx context.Context, node *waBinary.Node) {
 		if err != nil {
 			cli.Log.Warnf("Failed to delete store after device_removed error: %v", err)
 		}
-	case conflictType == "replaced":
+	case conflictType == conflictTypeReplaced:
 		cli.expectDisconnect()
 		cli.Log.Infof("Got replaced stream error, sending StreamReplaced event")
 		go cli.dispatchEvent(&events.StreamReplaced{})
-	case code == "503":
+	case code == streamErrorServiceUnavailable:
 		// This seems to happen when the server wants to restart or something.
 		// The disconnection will be emitted as an events.Disconnected and then the auto-reconnect will do its thing.
 		cli.Log.Warnf("Got 503 stream error, assuming automatic reconnect will handle it")
@@ -116,7 +116,7 @@ func (cli *Client) handleConnectFailure(ctx context.Context, node *waBinary.Node
 		cli.socketLock.RLock()
 		defer cli.socketLock.RUnlock()
 	}
-	if reason == 403 {
+	if reason == events.ConnectFailureMainDeviceGone {
 		cli.Log.Debugf(
 			"Message for 403 connect failure: %s / %s",
 			ag.OptionalString("logout_message_header"),

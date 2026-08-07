@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"time"
 
 	"golang.org/x/net/proxy"
 )
@@ -33,8 +32,8 @@ func (cli *Client) SetProxyAddress(addr string, opts ...SetProxyOptions) error {
 		cli.SetProxy(http.ProxyURL(parsed), opts...)
 	} else if parsed.Scheme == "socks5" {
 		px, err := proxy.FromURL(parsed, &net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   socksProxyDialTimeout,
+			KeepAlive: socksProxyKeepAlive,
 		})
 		if err != nil {
 			return err

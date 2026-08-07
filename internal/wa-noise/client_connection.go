@@ -70,12 +70,8 @@ func isRetryableConnectError(err error) bool {
 
 	var statusErr socket.ErrWithStatusCode
 	if errors.As(err, &statusErr) {
-		switch statusErr.StatusCode {
-		case 408, 500, 501, 502, 503, 504:
-			return true
-		default:
-			return false
-		}
+		_, retryable := retryableConnectStatusCodes[statusErr.StatusCode]
+		return retryable
 	}
 
 	return errors.Is(err, socket.ErrDialFailed)
@@ -191,7 +187,7 @@ func (cli *Client) autoReconnect(ctx context.Context) {
 		return
 	}
 	for {
-		autoReconnectDelay := time.Duration(cli.AutoReconnectErrors) * 2 * time.Second
+		autoReconnectDelay := time.Duration(cli.AutoReconnectErrors) * autoReconnectDelayStep
 		cli.Log.Debugf("Automatically reconnecting after %v", autoReconnectDelay)
 		cli.AutoReconnectErrors++
 		if cli.expectedDisconnect.WaitTimeoutCtx(ctx, autoReconnectDelay) == nil {

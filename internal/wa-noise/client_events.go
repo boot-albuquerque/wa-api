@@ -115,7 +115,7 @@ func (cli *Client) RemoveEventHandler(id uint32) bool {
 // RemoveEventHandlers removes all event handlers that have been registered with AddEventHandler
 func (cli *Client) RemoveEventHandlers() {
 	cli.eventHandlersLock.Lock()
-	cli.eventHandlers = make([]wrappedEventHandler, 0, 1)
+	cli.eventHandlers = make([]wrappedEventHandler, 0, initialEventHandlerCapacity)
 	cli.eventHandlersLock.Unlock()
 }
 
@@ -159,7 +159,7 @@ func (cli *Client) handleFrame(ctx context.Context, data []byte) {
 }
 
 func (cli *Client) handlerQueueLoop(evtCtx, connCtx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(handlerQueueSlowNodeWarnInterval)
 	ticker.Stop()
 	cli.Log.Debugf("Starting handler queue loop")
 Loop:
@@ -172,12 +172,12 @@ Loop:
 				cli.nodeHandlers[node.Tag](evtCtx, node)
 				duration := time.Since(start)
 				doneChan <- struct{}{}
-				if duration > 5*time.Second {
+				if duration > handlerQueueSlowNodeThreshold {
 					cli.Log.Warnf("Node handling took %s for %s", duration, node.XMLString())
 				}
 			}()
-			ticker.Reset(30 * time.Second)
-			for i := 0; i < 10; i++ {
+			ticker.Reset(handlerQueueSlowNodeWarnInterval)
+			for i := 0; i < handlerQueueSlowNodeMaxWarnings; i++ {
 				select {
 				case <-doneChan:
 					ticker.Stop()

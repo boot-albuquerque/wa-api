@@ -215,7 +215,7 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 	if log == nil {
 		log = waLog.Noop
 	}
-	uniqueIDPrefix := random.Bytes(2)
+	uniqueIDPrefix := random.Bytes(uniqueIDPrefixLength)
 	baseHTTPClient := &http.Client{
 		Transport: (http.DefaultTransport.(*http.Transport)).Clone(),
 	}
@@ -229,7 +229,7 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		sendLog:            log.Sub("Send"),
 		uniqueID:           fmt.Sprintf("%d.%d-", uniqueIDPrefix[0], uniqueIDPrefix[1]),
 		responseWaiters:    make(map[string]chan<- *waBinary.Node),
-		eventHandlers:      make([]wrappedEventHandler, 0, 1),
+		eventHandlers:      make([]wrappedEventHandler, 0, initialEventHandlerCapacity),
 		messageRetries:     make(map[string]int),
 		handlerQueue:       make(chan *waBinary.Node, handlerQueueSize),
 		appStateProc:       appstate.NewProcessor(deviceStore, log.Sub("AppState")),
@@ -238,7 +238,7 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 
 		incomingRetryRequestCounter: make(map[incomingRetryKey]int),
 
-		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, 32),
+		historySyncNotifications: make(chan *waE2E.HistorySyncNotification, historySyncNotificationBufferSize),
 
 		tcTokenSenderTS:  make(map[types.JID]time.Time),
 		groupCache:       make(map[types.JID]*groupMetaCache),

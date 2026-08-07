@@ -57,10 +57,10 @@ func (cli *Client) doHandshake(ctx context.Context, fs *socket.FrameSocket, ephe
 	serverEphemeral := handshakeResponse.GetServerHello().GetEphemeral()
 	serverStaticCiphertext := handshakeResponse.GetServerHello().GetStatic()
 	certificateCiphertext := handshakeResponse.GetServerHello().GetPayload()
-	if len(serverEphemeral) != 32 || serverStaticCiphertext == nil || certificateCiphertext == nil {
+	if len(serverEphemeral) != noiseKeyLength || serverStaticCiphertext == nil || certificateCiphertext == nil {
 		return fmt.Errorf("missing parts of handshake response")
 	}
-	serverEphemeralArr := *(*[32]byte)(serverEphemeral)
+	serverEphemeralArr := *(*[noiseKeyLength]byte)(serverEphemeral)
 
 	nh.Authenticate(serverEphemeral)
 	err = nh.MixSharedSecretIntoKey(*ephemeralKP.Priv, serverEphemeralArr)
@@ -71,10 +71,10 @@ func (cli *Client) doHandshake(ctx context.Context, fs *socket.FrameSocket, ephe
 	staticDecrypted, err := nh.Decrypt(serverStaticCiphertext)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt server static ciphertext: %w", err)
-	} else if len(staticDecrypted) != 32 {
-		return fmt.Errorf("unexpected length of server static plaintext %d (expected 32)", len(staticDecrypted))
+	} else if len(staticDecrypted) != noiseKeyLength {
+		return fmt.Errorf("unexpected length of server static plaintext %d (expected %d)", len(staticDecrypted), noiseKeyLength)
 	}
-	err = nh.MixSharedSecretIntoKey(*ephemeralKP.Priv, *(*[32]byte)(staticDecrypted))
+	err = nh.MixSharedSecretIntoKey(*ephemeralKP.Priv, *(*[noiseKeyLength]byte)(staticDecrypted))
 	if err != nil {
 		return fmt.Errorf("failed to mix server static key in: %w", err)
 	}
@@ -153,19 +153,19 @@ func verifyServerCert(certDecrypted, staticDecrypted []byte) error {
 	leafCertSignature := certChain.GetLeaf().GetSignature()
 	if intermediateCertDetailsRaw == nil || intermediateCertSignature == nil || leafCertDetailsRaw == nil || leafCertSignature == nil {
 		return fmt.Errorf("missing parts of noise certificate")
-	} else if len(intermediateCertSignature) != 64 {
-		return fmt.Errorf("unexpected length of intermediate cert signature %d (expected 64)", len(intermediateCertSignature))
-	} else if len(leafCertSignature) != 64 {
-		return fmt.Errorf("unexpected length of leaf cert signature %d (expected 64)", len(leafCertSignature))
-	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey(WACertPubKey), intermediateCertDetailsRaw, [64]byte(intermediateCertSignature)) {
+	} else if len(intermediateCertSignature) != certSignatureLength {
+		return fmt.Errorf("unexpected length of intermediate cert signature %d (expected %d)", len(intermediateCertSignature), certSignatureLength)
+	} else if len(leafCertSignature) != certSignatureLength {
+		return fmt.Errorf("unexpected length of leaf cert signature %d (expected %d)", len(leafCertSignature), certSignatureLength)
+	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey(WACertPubKey), intermediateCertDetailsRaw, [certSignatureLength]byte(intermediateCertSignature)) {
 		return fmt.Errorf("failed to verify intermediate cert signature")
 	} else if err = proto.Unmarshal(intermediateCertDetailsRaw, &intermediateCertDetails); err != nil {
 		return fmt.Errorf("failed to unmarshal noise certificate details: %w", err)
 	} else if intermediateCertDetails.GetIssuerSerial() != WACertIssuerSerial {
 		return fmt.Errorf("unexpected intermediate issuer serial %d (expected %d)", intermediateCertDetails.GetIssuerSerial(), WACertIssuerSerial)
-	} else if len(intermediateCertDetails.GetKey()) != 32 {
-		return fmt.Errorf("unexpected length of intermediate cert key %d (expected 32)", len(intermediateCertDetails.GetKey()))
-	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey([32]byte(intermediateCertDetails.GetKey())), leafCertDetailsRaw, [64]byte(leafCertSignature)) {
+	} else if len(intermediateCertDetails.GetKey()) != noiseKeyLength {
+		return fmt.Errorf("unexpected length of intermediate cert key %d (expected %d)", len(intermediateCertDetails.GetKey()), noiseKeyLength)
+	} else if !ecc.VerifySignature(ecc.NewDjbECPublicKey([noiseKeyLength]byte(intermediateCertDetails.GetKey())), leafCertDetailsRaw, [certSignatureLength]byte(leafCertSignature)) {
 		return fmt.Errorf("failed to verify intermediate cert signature")
 	} else if err = checkCertValidity(&intermediateCertDetails); err != nil {
 		return fmt.Errorf("intermediate cert %w", err)
