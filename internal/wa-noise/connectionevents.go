@@ -104,6 +104,11 @@ func (cli *Client) handleConnectFailure(ctx context.Context, node *waBinary.Node
 	reason := events.ConnectFailureReason(ag.Int("reason"))
 	message := ag.OptionalString("message")
 	willAutoReconnect := true
+	// RefreshCAT e' lido uma unica vez: as duas decisoes abaixo (tomar o lock, e
+	// chamar de fato) precisam concordar. Reler o campo arriscaria a segunda
+	// decisao ver nil depois de a primeira ter visto nao-nil, que e' exatamente
+	// o panic que esta guarda existe para eliminar.
+	refreshCAT := cli.RefreshCAT
 	switch {
 	default:
 		// By default, expect a disconnect (i.e. prevent auto-reconnect)
@@ -111,7 +116,12 @@ func (cli *Client) handleConnectFailure(ctx context.Context, node *waBinary.Node
 		willAutoReconnect = false
 	case reason == events.ConnectFailureServiceUnavailable || reason == events.ConnectFailureInternalServerError:
 		// Auto-reconnect for 503s
-	case reason == events.ConnectFailureCATInvalid || reason == events.ConnectFailureCATExpired:
+	// A guarda de nil e' obrigatoria: RefreshCAT so' e' preenchido por
+	// consumidores Messenger, e o `reason` vem do servidor. Sem ela, um
+	// <failure reason="413"> derruba o processo (ver handleStreamError, que ja'
+	// guardava). Com RefreshCAT nil cai no default acima, que e' o mesmo
+	// tratamento que handleStreamError da' ao caso.
+	case refreshCAT != nil && (reason == events.ConnectFailureCATInvalid || reason == events.ConnectFailureCATExpired):
 		// Auto-reconnect when rotating CAT, lock socket to ensure refresh goes through before reconnect
 		cli.socketLock.RLock()
 		defer cli.socketLock.RUnlock()
@@ -139,9 +149,9 @@ func (cli *Client) handleConnectFailure(ctx context.Context, node *waBinary.Node
 	} else if reason == events.ConnectFailureClientOutdated {
 		cli.Log.Errorf("Client outdated (405) connect failure (client version: %s)", store.GetWAVersion().String())
 		go cli.dispatchEvent(&events.ClientOutdated{})
-	} else if reason == events.ConnectFailureCATInvalid || reason == events.ConnectFailureCATExpired {
+	} else if refreshCAT != nil && (reason == events.ConnectFailureCATInvalid || reason == events.ConnectFailureCATExpired) {
 		cli.Log.Infof("Got %d/%s connect failure, refreshing CAT before reconnecting...", int(reason), message)
-		err := cli.RefreshCAT(ctx)
+		err := refreshCAT(ctx)
 		if err != nil {
 			cli.Log.Errorf("Failed to refresh CAT: %v", err)
 			cli.expectDisconnect()
