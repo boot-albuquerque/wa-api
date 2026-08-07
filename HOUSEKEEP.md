@@ -1247,3 +1247,47 @@ coincidem hoje por acaso; unificar acopla os dois. `TestShouldSendTokenPerJIDTyp
 (`internal/wa-noise/tctoken_test.go`) roda a mesma tabela de 7 tipos de JID
 nas duas, então uma divergência futura aparece como falha de teste em vez de
 passar batido. Registrado para visibilidade, não como dívida a pagar.
+
+---
+
+## F36 — os dois contadores de retry crescem sem limite, chaveados por dado do servidor
+
+**Data / contexto**: 2026-08-07, Fase E lote 5 do ADR-0004 (notificação/retry/recibo).
+
+**Onde**:
+
+- `internal/wa-noise/retry.go:110-113` — `cli.incomingRetryRequestCounter`,
+  `map[incomingRetryKey]int` com `incomingRetryKey{jid, messageID}`.
+- `internal/wa-noise/retry_receipt_send.go:29-37` — `cli.messageRetries`,
+  `map[string]int` chaveado pelo ID da mensagem.
+
+```go
+// retry.go
+retryKey := incomingRetryKey{receipt.Sender, messageID}
+cli.incomingRetryRequestCounterLock.Lock()
+cli.incomingRetryRequestCounter[retryKey]++
+```
+
+**Problema**: nenhum dos dois mapas é limpo em lugar nenhum do pacote
+(`grep -rn "incomingRetryRequestCounter\|messageRetries" internal/wa-noise/*.go`
+só acha a criação em `client.go:233,239` e os incrementos acima). As chaves
+são o remetente e o ID da mensagem — **os dois vêm do servidor**. Uma sessão
+longa acumula uma entrada por mensagem que já precisou de retry, para sempre;
+um par malicioso acumula uma entrada por ID inventado. Não é panic, é
+crescimento de memória monotônico proporcional ao que o outro lado mandar, e
+não há reset nem no `Disconnect`.
+
+Contraste: o buffer de mensagens recentes (`recentMessagesList`), no mesmo
+domínio, é circular de `recentMessagesSize` justamente para não ter esse
+problema — o despejo está travado por
+`TestAddRecentMessageEvictsOldestAfterFullCircle`.
+
+**Correção sugerida**: dar aos dois a mesma disciplina do buffer circular, ou
+guardar `time.Time` junto do contador e varrer entradas mais velhas que uma
+janela (a mesma `recreateSessionTimeout` de 1h seria um teto natural), ou no
+mínimo esvaziar ambos em `Disconnect`/`ResetConnection`.
+
+**Status**: **não corrigido**. Herdado do upstream, exige escolher uma política
+de despejo — o que é mudança de comportamento observável (um retry legítimo
+depois do despejo volta a ser aceito), e o lote 5 é de qualidade estrutural
+por contrato. Pendente de decisão.

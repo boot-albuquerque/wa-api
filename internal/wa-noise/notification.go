@@ -131,7 +131,7 @@ func (cli *Client) handleStatusNotification(ctx context.Context, node *waBinary.
 	ag := node.AttrGetter()
 	child, found := node.GetOptionalChildByTag("set")
 	if !found {
-		cli.Log.Debugf("Status notifcation did not contain child with tag 'set'")
+		cli.Log.Debugf("Status notification did not contain child with tag 'set'")
 		return
 	}
 	status, ok := child.Content.([]byte)
@@ -155,17 +155,17 @@ func (cli *Client) handleNotification(ctx context.Context, node *waBinary.Node) 
 	var cancelled bool
 	defer cli.maybeDeferredAck(ctx, node)(&cancelled)
 	switch notifType {
-	case "encrypt":
+	case notificationTypeEncrypt:
 		go cli.handleEncryptNotification(ctx, node)
-	case "server_sync":
+	case notificationTypeServerSync:
 		go cli.handleAppStateNotification(ctx, node)
-	case "account_sync":
+	case notificationTypeAccountSync:
 		go cli.handleAccountSyncNotification(ctx, node)
-	case "devices":
+	case notificationTypeDevices:
 		cli.handleDeviceNotification(ctx, node)
-	case "fbid:devices":
+	case notificationTypeFBIDDevices:
 		cli.handleFBDeviceNotification(ctx, node)
-	case "w:gp2":
+	case notificationTypeGroup:
 		evt, lidPairs, redactedPhones, err := cli.parseGroupNotification(node)
 		if err != nil {
 			cli.Log.Errorf("Failed to parse group notification: %v", err)
@@ -180,19 +180,19 @@ func (cli *Client) handleNotification(ctx context.Context, node *waBinary.Node) 
 			}
 			cancelled = cli.dispatchEvent(evt)
 		}
-	case "picture":
+	case notificationTypePicture:
 		cli.handlePictureNotification(ctx, node)
-	case "mediaretry":
+	case notificationTypeMediaRetry:
 		cli.handleMediaRetryNotification(ctx, node)
-	case "privacy_token":
+	case notificationTypePrivacyToken:
 		cli.handlePrivacyTokenNotification(ctx, node)
-	case "link_code_companion_reg":
+	case notificationTypeLinkCodeCompanionReg:
 		go cli.tryHandleCodePairNotification(ctx, node)
-	case "newsletter":
+	case notificationTypeNewsletter:
 		cli.handleNewsletterNotification(ctx, node)
-	case "mex":
+	case notificationTypeMex:
 		cli.handleMexNotification(ctx, node)
-	case "status":
+	case notificationTypeStatus:
 		cli.handleStatusNotification(ctx, node)
 	// Other types: business, disappearing_mode, server, status, pay, psa
 	default:

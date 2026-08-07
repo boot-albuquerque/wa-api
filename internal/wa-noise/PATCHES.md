@@ -2853,3 +2853,321 @@ mexer no `Makefile`. Os três arquivos de produção novos
 42 e 48 linhas e carregam o header MPL-2.0.
 `git diff --stat internal/wa-noise/proto/` continua vazio, e
 `internals.go`/`internals_generate.go` não aparecem no diff do lote.
+
+---
+
+## Fase E — lote 5: notificação/retry/recibo, 2026-08-07
+
+### Contexto
+
+Quinto lote da Fase E (ver o lote 1 para o porquê da fase). São 9 arquivos da
+raiz, todos `package whatsmeow`, agrupados em três concerns vizinhos mas
+distintos:
+
+- **notificação** — `notification.go`, `notification_device.go`,
+  `notification_newsletter.go`, `notification_privacy.go`
+- **retry** — `retry.go`, `retry_recent_messages.go`,
+  `retry_request_from_phone.go`, `retry_receipt_send.go`
+- **recibo** — `receipt.go`
+
+Nenhum arquivo foi dividido: o maior (`receipt.go`) tem 289 linhas, abaixo do
+teto de 300, e a divisão por responsabilidade destes arquivos já foi feita na
+Fase A (ver as entradas de `notification.go` 500→201 e `retry.go` 537→274 lá
+em cima). Como o lote cruza três concerns, esta entrada é organizada por
+subseção e os commits seguem o mesmo corte.
+
+Este é o conjunto de arquivos onde o servidor empurra dado e nós indexamos: a
+auditoria foi dirigida a *unchecked indexing*, type assertion sem comma-ok e
+`nil` não tratado, que é a classe de bug que os lotes anteriores acharam.
+
+---
+
+### Correções de robustez e de log
+
+Duas, ambas pequenas, ambas em `retry.go`. Nenhuma é o "panic remoto" dos
+lotes 3 e 4 — a auditoria não achou nenhum caminho de panic alcançável neste
+lote, e vale dizer isso explicitamente em vez de inflar o que foi encontrado.
+
+#### `retry.go:75` — indexação crua de `MessageIDs` no caminho de erro
+
+Antes:
+
+```go
+cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v",
+	receipt.Chat, receipt.MessageIDs[0], receipt.Sender, err)
+```
+
+`receipt.MessageIDs[0]` sem checar o tamanho. **Hoje é inalcançável**, e é
+importante ser honesto sobre isso: o único chamador de `tryHandleRetryReceipt`
+é `handleReceipt` (`receipt.go:30`), que só passa recibos vindos de
+`parseReceipt`, e `parseReceipt` sempre preenche `MessageIDs` com pelo menos
+um elemento (`receipt.go:86` e `:94`, os dois ramos). A guarda foi adicionada
+mesmo assim por dois motivos: é o caminho de **erro** — o pior lugar para
+morrer, porque só roda quando algo já deu errado — e a invariante que o
+protege mora em outro arquivo, sem nada que a trave. Passou a ser:
+
+```go
+var firstID types.MessageID
+if len(receipt.MessageIDs) > 0 {
+	firstID = receipt.MessageIDs[0]
+}
+```
+
+Log com ID vazio em vez de crash. `TestParseReceiptSingleMessageID`,
+`TestParseReceiptListAppendsExtraIDs` e `TestParseReceiptGroupedDispatchesPerUser`
+travam a invariante do lado de `parseReceipt`.
+
+#### `retry.go:115` — argumentos trocados na mensagem de log
+
+```go
+cli.Log.Warnf("Dropping retry request from %s for %s: ...", messageID, receipt.Sender, ...)
+```
+
+O formato diz `from <remetente> for <mensagem>` e recebia `(messageID,
+receipt.Sender)` — invertido. Log que mente sobre quem está insistindo, num
+aviso que é justamente sobre abuso de retry. Argumentos reordenados; nenhuma
+mudança de comportamento além do texto.
+
+Também corrigido o typo `"Status notifcation"` → `"Status notification"`
+(`notification.go:134`), puramente cosmético.
+
+### O que a auditoria de indexação **não** achou
+
+Registrado porque "procurei e não achei" é informação:
+
+- `parseReceipt` (`receipt.go:83-95`) — o `receiptChildren[0]` é guardado por
+  `len(receiptChildren) == 1`, e o `item.Attrs["id"].(string)` é comma-ok.
+  Travado por `TestParseReceiptIgnoresNonListChildren` e pelos casos de
+  `<item>` sem `id` / com tag errada em `TestParseReceiptListAppendsExtraIDs`.
+- `handleStatusNotification` (`notification.go:137`) e
+  `handleMexNotification` (`notification_newsletter.go:92`) — as duas type
+  assertions sobre `Content` são comma-ok, com log no ramo de falha. Travadas
+  por `TestHandleStatusNotificationMalformed` e
+  `TestHandleMexNotificationIgnoresBadUpdates`.
+- `sendRetryReceipt` (`retry_receipt_send.go:22,25`) — `node.Attrs["id"]` é
+  comma-ok, e `children[0]` é guardado por `len(children) == 1`.
+- `handlePrivacyTokenNotification` — todo acesso passa por `AttrGetter` e
+  comma-ok; o `tokens.Tag != "tokens"` cobre o caso de `GetChildByTag` não
+  achar nada (que devolve o **próprio nó**, não um nó zerado — detalhe de
+  `binary/node.go:99`).
+
+Um ponto **deixado como está**, por ser cosmético e não bug: em
+`notification_device.go:42`, `deviceChild, _ := child.GetOptionalChildByTag("device")`
+descarta o `ok`. Quando não há `<device>`, `GetOptionalChildByTag` devolve o
+próprio `child`, então o `jid` acaba sendo lido do nó `<add>`/`<remove>` —
+tipicamente ausente, gerando JID vazio. O efeito é uma entrada vazia na lista
+reconstruída, que faz o hash divergir e o cache ser descartado logo abaixo —
+ou seja, o código já se autocorrige pelo caminho do hash. Mudar exigiria
+decidir se é `continue` ou log, e isso é mudança de comportamento.
+
+---
+
+### Constantes extraídas — notificação (`notification_constants.go`, novo)
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `notificationTypeEncrypt` | `encrypt` | `case` do switch de `handleNotification` |
+| `notificationTypeServerSync` | `server_sync` | idem |
+| `notificationTypeAccountSync` | `account_sync` | idem |
+| `notificationTypeDevices` | `devices` | idem |
+| `notificationTypeFBIDDevices` | `fbid:devices` | idem |
+| `notificationTypeGroup` | `w:gp2` | idem |
+| `notificationTypePicture` | `picture` | idem |
+| `notificationTypeMediaRetry` | `mediaretry` | idem |
+| `notificationTypePrivacyToken` | `privacy_token` | idem |
+| `notificationTypeLinkCodeCompanionReg` | `link_code_companion_reg` | idem |
+| `notificationTypeNewsletter` | `newsletter` | idem |
+| `notificationTypeMex` | `mex` | idem |
+| `notificationTypeStatus` | `status` | idem |
+
+Esta é uma exceção deliberada à convenção dos lotes 1–4 ("tag/atributo usado
+uma vez fica literal"): cada string aparece uma vez só, mas juntas elas são a
+**tabela de roteamento** do dispatcher — o conjunto fechado de domínios que o
+servidor pode empurrar —, não um nome solto no ponto onde um nó é montado.
+Nomeá-las deixa a taxonomia legível como lista e impede que um handler novo
+entre com a string escrita à mão errada, que é o tipo de erro que só aparece
+em produção (o `case` simplesmente nunca casa).
+
+Os tipos que o upstream lista no comentário mas **não trata** (`business`,
+`disappearing_mode`, `server`, `pay`, `psa`) não viraram constante: sem
+handler, seriam código morto. O comentário do upstream foi mantido.
+
+Em `notification_privacy.go`, `tokenType != "trusted_contact"` passou a usar
+`tcTokenType`, a constante que o **lote 4** já havia criado em
+`token_constants.go` para o mesmo valor no lado de *envio* do token. Os dois
+lados do protocolo passam a apontar para o mesmo símbolo.
+
+### Constantes extraídas — retry (`retry_constants.go`, novo)
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `maxIncomingRetryRequests` | 10 | `internalCounter >= 10` (`retry.go:114`) |
+| `minRetryCountForSessionRecreate` | 2 | `retryCount < 2` em `shouldRecreateSession` |
+| `maxOutgoingRetryReceipts` | 5 | `retryCount >= 5` em `sendRetryReceipt` |
+| `retryReceiptVersion` | 1 | o atributo `v` do nó `<retry>` |
+| `retryStoreFormatWA` / `retryStoreFormatFB` | `wa` / `fb` | o campo `format` do store de retry |
+| `retryStoreClearInterval` | 12h | `time.Since(cli.lastRetryStoreClear) > 12*time.Hour` |
+
+`retryStoreFormatWA`/`FB` são o caso mais claro de constante justificada do
+lote: o valor é **escrito** por `addRecentMessage` e **lido de volta** por
+`parseRecentMessage`, em pontos distintos do mesmo arquivo. Como literais, um
+typo em qualquer um dos dois lados só apareceria quando um retry real caísse
+no `default` do `switch`.
+
+Duas decisões de não-duplicação:
+
+- `attrs["type"] = "retry"` em `sendRetryReceipt` passou a
+  `string(types.ReceiptTypeRetry)` — a **mesma** constante contra a qual o
+  recibo recebido é comparado em `handleReceipt` (`receipt.go:29`). Uma nova
+  constante local aqui criaria dois nomes para o mesmo valor de wire nos dois
+  sentidos do protocolo.
+- `var registrationIDBytes [4]byte` passou a
+  `[preKeyRegistrationIDLength]byte`, a constante que o lote 4 criou em
+  `prekeys_constants.go`. É literalmente o mesmo campo
+  (`cli.Store.RegistrationID`) com a mesma codificação big-endian; declarar um
+  segundo `4` acoplaria dois nomes a um valor só.
+
+`recentMessagesSize` (256), `recreateSessionTimeout` (1h) e
+`RequestFromPhoneDelay` (5s) **já eram** constantes/variáveis nomeadas e não
+foram tocadas.
+
+### Constantes extraídas — recibo (`receipt_constants.go`, novo)
+
+| Constante | Valor | Substitui |
+|---|---|---|
+| `activeDeliveryReceiptsOff` | 0 | `sendActiveReceipts.Store(0)` e `Load() == 0` |
+| `activeDeliveryReceiptsForced` | 2 | `sendActiveReceipts.Store(2)` |
+| `ackNoError` | 0 | os 2 `cli.sendAck(ctx, node, 0)` de `maybeDeferredAck` |
+
+`sendActiveReceipts` é um `atomic.Uint32` com **três** estados, e os três
+literais estavam espalhados por dois arquivos sem nada dizendo o que
+significam. O estado intermediário `1` é escrito por `SendPresence`
+(`presence.go:84-86`, via `CompareAndSwap(0,1)`/`(1,0)`) — que é escopo do
+lote 4 e não foi tocado; o comentário do bloco documenta a relação entre os
+três, incluindo a consequência prática de que o forçado (2) não é desligado
+por presença, só por `SetForceActiveDeliveryReceipts(false)`.
+
+Os `Nack*` (487–552) **já eram** constantes exportadas em `receipt.go` e
+ficaram onde estavam.
+
+### O que *não* foi extraído, e por quê
+
+Mesma convenção dos lotes 1–4:
+
+- Nomes de tag e atributo do XML binário usados uma vez no ponto onde o nó é
+  lido ou montado: `count`, `identity`, `collection`, `add`/`set`/`delete`,
+  `privacy`, `blocklist`, `tokens`, `token`, `device`, `dhash`,
+  `device_hash`, `device_lid_hash`, `live_updates`, `plaintext`,
+  `views_count`, `reactions`, `participants`, `user`, `list`, `item`,
+  `registration`, `franking`, `franking_tag`, `keys`, `enc`.
+- Os atributos genéricos de envelope (`from`, `t`, `id`, `type`,
+  `participant`, `recipient`): aparecem em dezenas de arquivos da raiz como
+  literal. Nomeá-los **só nestes 9** deixaria metade do pacote com constante e
+  metade com literal, que é pior que a situação atual — a inconsistência
+  esconde qual é a convenção. Se algum dia forem extraídos, tem que ser numa
+  passada única sobre a raiz inteira.
+- `"text"` como tipo de mensagem padrão em `handleRetryReceipt` e `"peer"` /
+  `"peer_msg"` em `sendRetryReceipt`: uso único, no ponto onde o atributo ao
+  lado já explica.
+- `types.ReceiptType*`, `types.BotJIDMap`, `MinPreKeyCount`,
+  `FBMessageApplicationVersion` — já eram símbolos nomeados.
+
+---
+
+### Logging
+
+Auditados os 9 arquivos atrás de escrita de log fora do `waLog.Logger`
+injetado, de `panic`, de `os.Exit` e de uso do `log` da stdlib.
+
+**Nenhum bypass encontrado.** Todo log routeia por `cli.Log`, o campo
+alimentado em `NewClient` e ligado ao `walog.Bridge` sobre zerolog
+(`pkg/infra/wa-noise/walog/`). Não há `fmt.Print*`, `log.*` nem `println`.
+**Nada foi adicionado, removido ou reroteado** — só a correção de ordem de
+argumentos citada acima.
+
+Dois pontos merecem nota, ambos **deixados como estão**:
+
+- `receipt.go:112` (`maybeDeferredAck`) é o único ponto do lote que loga por
+  `zerolog.Ctx(ctx)` em vez de `cli.Log`. Não é bypass: é o logger de
+  contexto que o próprio bootstrap injeta, e o destino é o mesmo zerolog.
+  Está no caminho onde o ack é **suprimido**, e o contexto carrega os campos
+  da requisição — que é justamente o que se quer nesse log.
+- `receipt.go:197` (`MarkRead`) tem um `panic` explícito quando mais de um
+  `types.ReceiptType` é passado no vararg. É panic de **erro de programação
+  do chamador**, documentado no godoc da função ("Providing more than one
+  receipt type will panic"), não de dado do servidor. Fica.
+
+---
+
+### Testes
+
+Três arquivos novos, todos `package whatsmeow`. A infraestrutura compartilhada
+(`notifTestClient`, `captureEvents`) vive em `receipt_test.go` e é usada pelos
+três — `notifTestClient` monta um `Client` com `waLog.Noop` e um
+`store.Device` só com identidade, que é tudo que estes handlers precisam para
+rodar sem socket e sem banco.
+
+| Arquivo de teste | Cobre |
+|---|---|
+| `receipt_test.go` | `parseReceipt`: ID único, `type` ausente = entrega, agregação de `<list>` (incluindo `<item>` sem `id` e filho de tag errada, ambos ignorados), filho que não é `<list>`, `id` obrigatório, `ErrNotLoggedIn` sem sessão, o caminho **agrupado** (retorna `(nil, nil)` e dispara um evento por `<user>`) e `ElementMissingError` sem `<participants>`; `handleGroupedReceipt` descartando as três formas de filho inválido; `buildBaseReceipt` (parâmetro vence o `id` do nó, `from`→`to`, opcionais repassados e omitidos); `SetForceActiveDeliveryReceipts` nos dois sentidos e com receptor nil |
+| `retry_test.go` | `RecentMessage.IsEmpty` nos três estados; `parseRecentMessage` (wa, fb, formato desconhecido nomeado no erro, payload corrompido nos dois formatos, formato vazio); o **buffer circular** — despejo exato na volta completa, com prova de que a entrada despejada sai também do mapa e o mapa fica estável em `recentMessagesSize`; chave composta (JID, ID); cancelamento do pedido ao celular (guarda de feature desligada, `cancelDelayedRequestFromPhone` interrompendo a espera de `RequestFromPhoneDelay` antes da rede, e `clearDelayedMessageRequests`); coerência das constantes de política |
+| `notification_test.go` | `parseNewsletterMessages` (atributos, `<plaintext>` protobuf, `views_count`, `reactions`, filho e subfilho desconhecidos, protobuf inválido e conteúdo não-binário virando `Message` nil sem derrubar a lista, lista vazia não-nil); `handleNewsletterNotification`; `handleMexNotification` (roteamento join/leave/mute + as 4 formas de update inválido); `handleBlocklist`; `handlePictureNotification` (add/set/delete, tag desconhecida, `jid` faltando); `handleStatusNotification` (feliz + 2 malformados); `handleOwnDevicesNotification` (cache do PN **e** do LID derivado device a device, `dhash` divergente esvaziando os dois, remetente inesperado, sessão apagada); `handleDeviceNotification` (add/remove com hash batendo, hash divergente descartando o cache, `update` e tag desconhecida, notificação sem cache prévio); `handleNotification` roteando status/picture/mex e não fazendo nada com `type` ausente ou desconhecido |
+
+Cobertura resultante (`go tool cover -func`): **100%** em `parseReceipt`,
+`handleGroupedReceipt`, `buildBaseReceipt`, `SetForceActiveDeliveryReceipts`,
+`parseNewsletterMessages`, `handleNewsletterNotification`,
+`handleMexNotification`, `handleBlocklist`, `handlePictureNotification`,
+`handleStatusNotification`, `parseRecentMessage`, `getRecentMessage` e
+`RecentMessage.IsEmpty`; **97,1%** em `handleOwnDevicesNotification` e
+**76,5%** em `handleDeviceNotification` (o que falta nos dois é o ramo de
+device LID, que exige `StoreLIDPNMapping` com banco).
+
+### Lacunas assumidas, sem teste de fachada
+
+Mesma decisão dos lotes 1–4:
+
+- **`handleRetryReceipt` / `tryHandleRetryReceipt` / `sendRetryReceipt`** — 0%.
+  São o coração do lote e o que menos dá para testar: cada uma precisa de
+  sessão Signal real (`groups.NewGroupSessionBuilder` sobre `cli.Store`),
+  bundle de prekey válido, `encryptMessageForDevice` e `sendNode` com socket.
+  Um teste de fachada aqui provaria só que os mocks foram chamados. O que
+  dava para isolar — o buffer de mensagens recentes, o parser do formato
+  persistido, o cancelamento do pedido ao celular — **está** coberto.
+- **`shouldRecreateSession`** — 0%. É `cli.Store.ContainsSession`, ou seja
+  banco; a política em si (`< minRetryCountForSessionRecreate`, janela de
+  `recreateSessionTimeout`) está travada por constante nomeada, não por teste.
+- **`handleEncryptNotification` / `handleAppStateNotification` /
+  `handleAccountSyncNotification` / `handlePrivacyTokenNotification` /
+  `handleFBDeviceNotification`** — todas escrevem em sub-store
+  (`Identities`, `Sessions`, `PrivacyTokens`) ou disparam `FetchAppState`,
+  que é IQ. `handleAccountSyncNotification` é só um `switch` de despacho, mas
+  três dos quatro ramos caem nas anteriores.
+- **`sendAck` / `sendMessageReceipt` / `MarkRead` / `backgroundIfAsyncAck`** —
+  montagem de nó seguida de `sendNode`. Sem socket, o `sendNode` devolve
+  `ErrNotConnected` antes de serializar, então nem os atributos montados dão
+  para observar. `maybeDeferredAck` fica em 55,6% porque o teste de
+  `handleNotification` passa pelo ramo síncrono.
+
+Tudo isso é a mesma costura de transporte + store que a Fase D deixou na raiz.
+Fica para o lote do núcleo do `Client`, junto com o que os lotes 1–4 já
+empurraram para lá.
+
+### Achado incidental (registrado em `HOUSEKEEP.md`, não corrigido)
+
+- **F36** — `cli.incomingRetryRequestCounter` (`retry.go:110`) e
+  `cli.messageRetries` (`retry_receipt_send.go:30`) crescem sem limite e nunca
+  são limpos, chaveados por remetente e ID de mensagem — os dois vindos do
+  servidor. Não é panic, é consumo de memória monotônico proporcional ao que o
+  outro lado mandar, sem reset nem no `Disconnect`. Contrasta com
+  `recentMessagesList`, que no mesmo domínio é circular exatamente por isso.
+  Corrigir exige escolher uma política de despejo, o que muda comportamento
+  observável.
+
+### Gates
+
+`WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
+mexer no `Makefile`. Os três arquivos de produção novos
+(`notification_constants.go`, `retry_constants.go`, `receipt_constants.go`)
+têm 33, 47 e 27 linhas e carregam o header MPL-2.0.
+`git diff --stat internal/wa-noise/proto/` continua vazio, e
+`internals.go`/`internals_generate.go` não aparecem no diff do lote.

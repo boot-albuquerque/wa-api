@@ -62,7 +62,7 @@ func (cli *Client) handlePrivacyTokenNotification(ctx context.Context, node *waB
 			cli.Log.Warnf("privacy_token notification contained unexpected <%s> tag", child.Tag)
 			continue
 		}
-		if tokenType := ag.String("type"); tokenType != "trusted_contact" {
+		if tokenType := ag.String("type"); tokenType != tcTokenType {
 			cli.Log.Warnf("privacy_token notification contained unexpected token type %s", tokenType)
 			continue
 		}
