@@ -19,19 +19,19 @@ import (
 )
 
 func (cli *Client) parseBusinessProfile(node *waBinary.Node) (*types.BusinessProfile, error) {
-	profileNode := node.GetChildByTag("profile")
+	profileNode := node.GetChildByTag(profileNodeTag)
 	jid, ok := profileNode.AttrGetter().GetJID("jid", true)
 	if !ok {
 		return nil, errors.New("missing jid in business profile")
 	}
-	address, _ := profileNode.GetChildByTag("address").Content.([]byte)
-	email, _ := profileNode.GetChildByTag("email").Content.([]byte)
+	address := nodeContentString(profileNode.GetChildByTag("address"))
+	email := nodeContentString(profileNode.GetChildByTag("email"))
 	businessHour := profileNode.GetChildByTag("business_hours")
 	businessHourTimezone := businessHour.AttrGetter().String("timezone")
 	businessHoursConfigs := businessHour.GetChildren()
 	businessHours := make([]types.BusinessHoursConfig, 0)
 	for _, config := range businessHoursConfigs {
-		if config.Tag != "business_hours_config" {
+		if config.Tag != businessHoursConfigTag {
 			continue
 		}
 		dow := config.AttrGetter().String("day_of_week")
@@ -48,27 +48,25 @@ func (cli *Client) parseBusinessProfile(node *waBinary.Node) (*types.BusinessPro
 	categoriesNode := profileNode.GetChildByTag("categories")
 	categories := make([]types.Category, 0)
 	for _, category := range categoriesNode.GetChildren() {
-		if category.Tag != "category" {
+		if category.Tag != businessCategoryTag {
 			continue
 		}
 		id := category.AttrGetter().String("id")
-		name, _ := category.Content.([]byte)
 		categories = append(categories, types.Category{
 			ID:   id,
-			Name: string(name),
+			Name: nodeContentString(category),
 		})
 	}
 	profileOptionsNode := profileNode.GetChildByTag("profile_options")
 	profileOptions := make(map[string]string)
 	for _, option := range profileOptionsNode.GetChildren() {
-		optValueBytes, _ := option.Content.([]byte)
-		profileOptions[option.Tag] = string(optValueBytes)
+		profileOptions[option.Tag] = nodeContentString(option)
 		// TODO parse bot_fields
 	}
 	return &types.BusinessProfile{
 		JID:                   jid,
-		Email:                 string(email),
-		Address:               string(address),
+		Email:                 email,
+		Address:               address,
 		Categories:            categories,
 		ProfileOptions:        profileOptions,
 		BusinessHoursTimeZone: businessHourTimezone,
@@ -81,14 +79,14 @@ func (cli *Client) GetBusinessProfile(ctx context.Context, jid types.JID) (*type
 	resp, err := cli.sendIQ(ctx, infoQuery{
 		Type:      iqGet,
 		To:        types.ServerJID,
-		Namespace: "w:biz",
+		Namespace: businessIQNamespace,
 		Content: []waBinary.Node{{
-			Tag: "business_profile",
+			Tag: businessProfileNodeTag,
 			Attrs: waBinary.Attrs{
-				"v": "244",
+				"v": businessProfileVersion,
 			},
 			Content: []waBinary.Node{{
-				Tag: "profile",
+				Tag: profileNodeTag,
 				Attrs: waBinary.Attrs{
 					"jid": jid,
 				},
@@ -98,9 +96,9 @@ func (cli *Client) GetBusinessProfile(ctx context.Context, jid types.JID) (*type
 	if err != nil {
 		return nil, err
 	}
-	node, ok := resp.GetOptionalChildByTag("business_profile")
+	node, ok := resp.GetOptionalChildByTag(businessProfileNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "business_profile", In: "response to business profile query"}
+		return nil, &ElementMissingError{Tag: businessProfileNodeTag, In: "response to business profile query"}
 	}
 	return cli.parseBusinessProfile(&node)
 }
@@ -134,10 +132,10 @@ func (cli *Client) updateBusinessName(ctx context.Context, user, userAlt types.J
 }
 
 func parseVerifiedName(businessNode waBinary.Node) (*types.VerifiedName, error) {
-	if businessNode.Tag != "business" {
+	if businessNode.Tag != businessNodeTag {
 		return nil, nil
 	}
-	verifiedNameNode, ok := businessNode.GetOptionalChildByTag("verified_name")
+	verifiedNameNode, ok := businessNode.GetOptionalChildByTag(verifiedNameNodeTag)
 	if !ok {
 		return nil, nil
 	}

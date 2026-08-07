@@ -34,7 +34,7 @@ func (cli *Client) parseBlocklist(node *waBinary.Node) *types.Blocklist {
 // GetBlocklist gets the list of users that this user has blocked.
 func (cli *Client) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "blocklist",
+		Namespace: blocklistIQNamespace,
 		Type:      iqGet,
 		To:        types.ServerJID,
 	})
@@ -51,7 +51,7 @@ func (cli *Client) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
 // UpdateBlocklist updates the user's block list and returns the updated list.
 func (cli *Client) UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "blocklist",
+		Namespace: blocklistIQNamespace,
 		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{

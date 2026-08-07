@@ -32,13 +32,13 @@ func (cli *Client) usync(ctx context.Context, jids []types.JID, mode, context st
 
 	userList := make([]waBinary.Node, len(jids))
 	for i, jid := range jids {
-		userList[i].Tag = "user"
+		userList[i].Tag = usyncUserTag
 		jid = jid.ToNonAD()
 
 		switch jid.Server {
 		case types.LegacyUserServer:
 			userList[i].Content = []waBinary.Node{{
-				Tag:     "contact",
+				Tag:     contactNodeTag,
 				Content: jid.String(),
 			}}
 		case types.DefaultUserServer, types.HiddenUserServer:
@@ -53,9 +53,9 @@ func (cli *Client) usync(ctx context.Context, jids []types.JID, mode, context st
 					}
 				}
 				userList[i].Content = []waBinary.Node{{
-					Tag: "bot",
+					Tag: botIQNamespace,
 					Content: []waBinary.Node{{
-						Tag:   "profile",
+						Tag:   profileNodeTag,
 						Attrs: waBinary.Attrs{"persona_id": personaID},
 					}},
 				}}
@@ -65,28 +65,28 @@ func (cli *Client) usync(ctx context.Context, jids []types.JID, mode, context st
 		}
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "usync",
-		Type:      "get",
+		Namespace: usyncIQNamespace,
+		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "usync",
+			Tag: usyncNodeTag,
 			Attrs: waBinary.Attrs{
 				"sid":     cli.generateRequestID(),
 				"mode":    mode,
-				"last":    "true",
-				"index":   "0",
+				"last":    usyncLastValue,
+				"index":   usyncIndexValue,
 				"context": context,
 			},
 			Content: []waBinary.Node{
-				{Tag: "query", Content: query},
-				{Tag: "list", Content: userList},
+				{Tag: usyncQueryTag, Content: query},
+				{Tag: usyncListTag, Content: userList},
 			},
 		}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send usync query: %w", err)
-	} else if list, ok := resp.GetOptionalChildByTag("usync", "list"); !ok {
-		return nil, &ElementMissingError{Tag: "list", In: "response to usync query"}
+	} else if list, ok := resp.GetOptionalChildByTag(usyncNodeTag, usyncListTag); !ok {
+		return nil, &ElementMissingError{Tag: usyncListTag, In: "response to usync query"}
 	} else {
 		return &list, err
 	}

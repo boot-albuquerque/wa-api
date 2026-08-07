@@ -38,16 +38,16 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 		return nil, ErrClientIsNil
 	}
 	attrs := waBinary.Attrs{
-		"query": "url",
+		"query": profilePictureQueryURL,
 	}
 	var target, to types.JID
 	if params == nil {
 		params = &GetProfilePictureParams{}
 	}
 	if params.Preview {
-		attrs["type"] = "preview"
+		attrs["type"] = profilePictureTypePreview
 	} else {
-		attrs["type"] = "image"
+		attrs["type"] = profilePictureTypeImage
 	}
 	if params.ExistingID != "" {
 		attrs["id"] = params.ExistingID
@@ -58,17 +58,18 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 
 	var expectWrapped bool
 	var content []waBinary.Node
-	namespace := "w:profile:picture"
+	namespace := profilePictureIQNamespace
 	if params.IsCommunity {
 		target = types.EmptyJID
-		namespace = "w:g2"
+		// Foto de comunidade sai pelo namespace de grupo, não pelo de perfil.
+		namespace = groupIQNamespace
 		to = jid
 		attrs["parent_group_jid"] = jid
 		expectWrapped = true
 		content = []waBinary.Node{{
-			Tag: "pictures",
+			Tag: picturesNodeTag,
 			Content: []waBinary.Node{{
-				Tag:   "picture",
+				Tag:   pictureNodeTag,
 				Attrs: attrs,
 			}},
 		}}
@@ -87,20 +88,20 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 		var pictureContent []waBinary.Node
 		if token, _ := cli.Store.PrivacyTokens.GetPrivacyToken(ctx, jid); token != nil {
 			pictureContent = []waBinary.Node{{
-				Tag:     "tctoken",
+				Tag:     profilePictureTokenNodeTag,
 				Content: token.Token,
 			}}
 		}
 
 		content = []waBinary.Node{{
-			Tag:     "picture",
+			Tag:     pictureNodeTag,
 			Attrs:   attrs,
 			Content: pictureContent,
 		}}
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
 		Namespace: namespace,
-		Type:      "get",
+		Type:      iqGet,
 		To:        to,
 		Target:    target,
 		Content:   content,
@@ -113,24 +114,24 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 		return nil, err
 	}
 	if expectWrapped {
-		pics, ok := resp.GetOptionalChildByTag("pictures")
+		pics, ok := resp.GetOptionalChildByTag(picturesNodeTag)
 		if !ok {
-			return nil, &ElementMissingError{Tag: "pictures", In: "response to profile picture query"}
+			return nil, &ElementMissingError{Tag: picturesNodeTag, In: "response to profile picture query"}
 		}
 		resp = &pics
 	}
-	picture, ok := resp.GetOptionalChildByTag("picture")
+	picture, ok := resp.GetOptionalChildByTag(pictureNodeTag)
 	if !ok {
 		if params.ExistingID != "" {
 			return nil, nil
 		}
-		return nil, &ElementMissingError{Tag: "picture", In: "response to profile picture query"}
+		return nil, &ElementMissingError{Tag: pictureNodeTag, In: "response to profile picture query"}
 	}
 	var info types.ProfilePictureInfo
 	ag := picture.AttrGetter()
-	if ag.OptionalInt("status") == 304 {
+	if ag.OptionalInt("status") == profilePictureStatusNotModified {
 		return nil, nil
-	} else if ag.OptionalInt("status") == 204 {
+	} else if ag.OptionalInt("status") == profilePictureStatusNotSet {
 		return nil, ErrProfilePictureNotSet
 	}
 	info.ID = ag.String("id")

@@ -33,11 +33,11 @@ func (cli *Client) ResolveBusinessMessageLink(ctx context.Context, code string) 
 	code = strings.TrimPrefix(code, BusinessMessageLinkDirectPrefix)
 
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:qr",
+		Namespace: qrIQNamespace,
 		Type:      iqGet,
 		// WhatsApp android doesn't seem to have a "to" field for this one at all, not sure why but it works
 		Content: []waBinary.Node{{
-			Tag: "qr",
+			Tag: qrNodeTag,
 			Attrs: waBinary.Attrs{
 				"code": code,
 			},
@@ -48,9 +48,9 @@ func (cli *Client) ResolveBusinessMessageLink(ctx context.Context, code string) 
 	} else if err != nil {
 		return nil, err
 	}
-	qrChild, ok := resp.GetOptionalChildByTag("qr")
+	qrChild, ok := resp.GetOptionalChildByTag(qrNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "qr", In: "response to business message link query"}
+		return nil, &ElementMissingError{Tag: qrNodeTag, In: "response to business message link query"}
 	}
 	var target types.BusinessMessageLinkTarget
 	ag := qrChild.AttrGetter()
@@ -61,7 +61,7 @@ func (cli *Client) ResolveBusinessMessageLink(ctx context.Context, code string) 
 		messageBytes, _ := messageChild.Content.([]byte)
 		target.Message = string(messageBytes)
 	}
-	businessChild, ok := qrChild.GetOptionalChildByTag("business")
+	businessChild, ok := qrChild.GetOptionalChildByTag(businessNodeTag)
 	if ok {
 		bag := businessChild.AttrGetter()
 		target.IsSigned = bag.OptionalBool("is_signed")
@@ -80,10 +80,10 @@ func (cli *Client) ResolveContactQRLink(ctx context.Context, code string) (*type
 	code = strings.TrimPrefix(code, ContactQRLinkDirectPrefix)
 
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:qr",
+		Namespace: qrIQNamespace,
 		Type:      iqGet,
 		Content: []waBinary.Node{{
-			Tag: "qr",
+			Tag: qrNodeTag,
 			Attrs: waBinary.Attrs{
 				"code": code,
 			},
@@ -94,9 +94,9 @@ func (cli *Client) ResolveContactQRLink(ctx context.Context, code string) (*type
 	} else if err != nil {
 		return nil, err
 	}
-	qrChild, ok := resp.GetOptionalChildByTag("qr")
+	qrChild, ok := resp.GetOptionalChildByTag(qrNodeTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "qr", In: "response to contact link query"}
+		return nil, &ElementMissingError{Tag: qrNodeTag, In: "response to contact link query"}
 	}
 	var target types.ContactQRLinkTarget
 	ag := qrChild.AttrGetter()
@@ -111,17 +111,17 @@ func (cli *Client) ResolveContactQRLink(ctx context.Context, code string) (*type
 //
 // If the revoke parameter is set to true, it will ask the server to revoke the previous link and generate a new one.
 func (cli *Client) GetContactQRLink(ctx context.Context, revoke bool) (string, error) {
-	action := "get"
+	action := qrActionGet
 	if revoke {
-		action = "revoke"
+		action = qrActionRevoke
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:qr",
+		Namespace: qrIQNamespace,
 		Type:      iqSet,
 		Content: []waBinary.Node{{
-			Tag: "qr",
+			Tag: qrNodeTag,
 			Attrs: waBinary.Attrs{
-				"type":   "contact",
+				"type":   qrTypeContact,
 				"action": action,
 			},
 		}},
@@ -129,9 +129,9 @@ func (cli *Client) GetContactQRLink(ctx context.Context, revoke bool) (string, e
 	if err != nil {
 		return "", err
 	}
-	qrChild, ok := resp.GetOptionalChildByTag("qr")
+	qrChild, ok := resp.GetOptionalChildByTag(qrNodeTag)
 	if !ok {
-		return "", &ElementMissingError{Tag: "qr", In: "response to own contact link fetch"}
+		return "", &ElementMissingError{Tag: qrNodeTag, In: "response to own contact link fetch"}
 	}
 	ag := qrChild.AttrGetter()
 	return ag.String("code"), ag.Error()

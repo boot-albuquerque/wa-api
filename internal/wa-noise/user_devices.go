@@ -44,8 +44,8 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 		}
 	}
 	if len(jidsToSync) > 0 {
-		list, err := cli.usync(ctx, jidsToSync, "query", "message", []waBinary.Node{
-			{Tag: "devices", Attrs: waBinary.Attrs{"version": "2"}},
+		list, err := cli.usync(ctx, jidsToSync, usyncModeQuery, usyncContextMessage, []waBinary.Node{
+			{Tag: devicesNodeTag, Attrs: waBinary.Attrs{"version": deviceListVersion}},
 		})
 		if err != nil {
 			return nil, err
@@ -53,10 +53,10 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 
 		for _, user := range list.GetChildren() {
 			jid, jidOK := user.Attrs["jid"].(types.JID)
-			if user.Tag != "user" || !jidOK {
+			if user.Tag != usyncUserTag || !jidOK {
 				continue
 			}
-			userDevices := parseDeviceList(jid, user.GetChildByTag("devices"))
+			userDevices := parseDeviceList(jid, user.GetChildByTag(devicesNodeTag))
 			cli.userDevicesCache[jid] = deviceCache{devices: userDevices, dhash: participantListHashV2(userDevices)}
 			devices = append(devices, userDevices...)
 		}
@@ -74,8 +74,8 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 }
 
 func parseDeviceList(user types.JID, deviceNode waBinary.Node) []types.JID {
-	deviceList := deviceNode.GetChildByTag("device-list")
-	if deviceNode.Tag != "devices" || deviceList.Tag != "device-list" {
+	deviceList := deviceNode.GetChildByTag(deviceListNodeTag)
+	if deviceNode.Tag != devicesNodeTag || deviceList.Tag != deviceListNodeTag {
 		return nil
 	}
 	children := deviceList.GetChildren()
@@ -83,7 +83,7 @@ func parseDeviceList(user types.JID, deviceNode waBinary.Node) []types.JID {
 	for _, device := range children {
 		deviceID, ok := device.AttrGetter().GetInt64("id", true)
 		isHosted := device.AttrGetter().Bool("is_hosted")
-		if device.Tag != "device" || !ok {
+		if device.Tag != deviceNodeTag || !ok {
 			continue
 		}
 		user.Device = uint16(deviceID)
@@ -107,7 +107,7 @@ func parseFBDeviceList(user types.JID, deviceList waBinary.Node) deviceCache {
 	devices := make([]types.JID, 0, len(children))
 	for _, device := range children {
 		deviceID, ok := device.AttrGetter().GetInt64("id", true)
-		if device.Tag != "device" || !ok {
+		if device.Tag != deviceNodeTag || !ok {
 			continue
 		}
 		user.Device = uint16(deviceID)
@@ -124,23 +124,23 @@ func parseFBDeviceList(user types.JID, deviceList waBinary.Node) deviceCache {
 func (cli *Client) getFBIDDevicesInternal(ctx context.Context, jids []types.JID) (*waBinary.Node, error) {
 	users := make([]waBinary.Node, len(jids))
 	for i, jid := range jids {
-		users[i].Tag = "user"
+		users[i].Tag = usyncUserTag
 		users[i].Attrs = waBinary.Attrs{"jid": jid}
 		// TODO include dhash for users
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "fbid:devices",
+		Namespace: fbidDevicesIQNamespace,
 		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag:     "users",
+			Tag:     usersNodeTag,
 			Content: users,
 		}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send usync query: %w", err)
-	} else if list, ok := resp.GetOptionalChildByTag("users"); !ok {
-		return nil, &ElementMissingError{Tag: "users", In: "response to fbid devices query"}
+	} else if list, ok := resp.GetOptionalChildByTag(usersNodeTag); !ok {
+		return nil, &ElementMissingError{Tag: usersNodeTag, In: "response to fbid devices query"}
 	} else {
 		return &list, err
 	}
@@ -148,17 +148,17 @@ func (cli *Client) getFBIDDevicesInternal(ctx context.Context, jids []types.JID)
 
 func (cli *Client) getFBIDDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
 	var devices []types.JID
-	for chunk := range slices.Chunk(jids, 15) {
+	for chunk := range slices.Chunk(jids, fbIDDeviceChunkSize) {
 		list, err := cli.getFBIDDevicesInternal(ctx, chunk)
 		if err != nil {
 			return nil, err
 		}
 		for _, user := range list.GetChildren() {
 			jid, jidOK := user.Attrs["jid"].(types.JID)
-			if user.Tag != "user" || !jidOK {
+			if user.Tag != usyncUserTag || !jidOK {
 				continue
 			}
-			userDevices := parseFBDeviceList(jid, user.GetChildByTag("devices"))
+			userDevices := parseFBDeviceList(jid, user.GetChildByTag(devicesNodeTag))
 			cli.userDevicesCache[jid] = userDevices
 			devices = append(devices, userDevices.devices...)
 		}
