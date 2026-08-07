@@ -5,7 +5,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"

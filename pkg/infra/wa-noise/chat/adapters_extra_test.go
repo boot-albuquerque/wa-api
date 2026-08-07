@@ -10,7 +10,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )

@@ -3,7 +3,7 @@ package registry
 import (
 	"sync"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 
 	"github.com/coder/websocket"
 	"github.com/go-resty/resty/v2"

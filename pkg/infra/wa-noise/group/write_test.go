@@ -7,7 +7,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

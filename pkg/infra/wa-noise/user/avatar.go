@@ -7,7 +7,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	wa "wa-api/internal/wa-noise"
+	wa "wa-api/internal/wa-noise/core"
 )
 
 // GetProfilePicture devolve o avatar de um contato, ou (nil, domain.ErrAvatar*)

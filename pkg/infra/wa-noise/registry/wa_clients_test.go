@@ -2,7 +2,7 @@ package registry
 
 import (
 	"testing"
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 )
 
 // TestClientManager_WhatsmeowLifecycle: Set → Get → Delete.

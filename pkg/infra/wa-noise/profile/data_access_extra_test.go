@@ -3,7 +3,7 @@ package profile
 import (
 	"testing"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	whatsmeow "wa-api/internal/wa-noise/core"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
