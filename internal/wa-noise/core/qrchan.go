@@ -132,8 +132,19 @@ func (qrc *qrChannel) handleEvent(rawEvt interface{}) {
 	default:
 		return
 	}
-	close(qrc.stopQRs)
+	// close(stopQRs) ficava FORA deste CAS. O LoadUint32 la' no topo nao
+	// serializa nada: duas goroutines podiam passar por ele e as duas chegarem
+	// aqui, e a segunda entrava em panic com "close of closed channel" (F33 em
+	// HOUSEKEEP.md). Dois eventos terminais proximos bastam — PairError seguido
+	// de Disconnected e' a sequencia normal de uma falha de pareamento.
+	//
+	// Movido para dentro do CAS, que e' exatamente a exclusao que faltava. A
+	// ordem observavel muda: o emissor de QR agora recebe o sinal de parada
+	// junto com o item final, nao antes dele. Isso e' seguro porque o emissor
+	// so' le' stopQRs no select do loop de emissao, e o item final vai para um
+	// canal com buffer proprio.
 	if atomic.CompareAndSwapUint32(&qrc.closed, 0, 1) {
+		close(qrc.stopQRs)
 		qrc.log.Debugf("Closing channel with status %+v", outputType)
 		qrc.output <- outputType
 		close(qrc.output)

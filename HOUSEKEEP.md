@@ -338,11 +338,15 @@ ser tolerado, o mínimo é `cli.Log.Errorf(...)` **com** `return nil, err` —
 nunca seguir adiante com `data == nil`, que hoje faria `json.Marshal`
 devolver o literal `null` como se fosse sucesso.
 
-**Status**: **não corrigido**. A Fase A do ADR-0004 é estrutural por
-contrato (`PATCHES.md` declara "comportamento não mudou" em todas as
-entradas) e trocar `os.Exit` por retorno de erro é mudança de
-comportamento observável. Pendente de decisão do usuário: corrigir agora
-em commit próprio, ou deixar para a fase que tratar erros de
+**Status**: **CORRIGIDO** — na verdade já havia sido, num lote posterior da
+Fase F/G, e só o status aqui ficou desatualizado. O código de hoje
+(`internal/wa-noise/capabilities/newsletter/mex.go:88-91`) faz
+`t.Log().Errorf(...)` seguido de `return nil, fmt.Errorf(...)`: sai pelo logger
+do cliente e devolve erro, sem `os.Exit`. Verificado em 2026-08-07 com
+`grep -rn "log.Fatalf" internal/wa-noise/` — nenhuma ocorrência em código,
+só citações históricas em `PATCHES.md`. Texto original preservado abaixo
+como registro de por que era grave. (Restante da entrada original: deixar
+para a fase que tratar erros de
 `internal/waclient/` com `apperr`.
 
 ---
@@ -1214,8 +1218,14 @@ Não é fatal para o processo: `handleEvent` é registrado via
 devolvido a `GetQRChannel` fica sem item final, e quem estiver lendo dele
 bloqueia até o contexto expirar.
 
-**Correção sugerida**: mover o `close(qrc.stopQRs)` para **dentro** do
-`CompareAndSwap` que já existe logo abaixo, ou proteger com um
+**Status**: **CORRIGIDO** (lote B, 2026-08-07) pela primeira opção: o
+`close(qrc.stopQRs)` foi movido para **dentro** do `CompareAndSwap`, que é
+exatamente a exclusão que faltava. A mudança de ordem observável é segura — o
+emissor só lê `stopQRs` no `select` do laço de emissão, e o item final vai para
+um canal com buffer próprio.
+
+**Correção sugerida (texto original)**: mover o `close(qrc.stopQRs)` para
+**dentro** do `CompareAndSwap` que já existe logo abaixo, ou proteger com um
 `sync.Once`. A primeira opção é a menor, mas muda a ordem observável
 (hoje o emissor recebe o sinal de parada antes de o item final ir para o
 canal).
@@ -1631,12 +1641,20 @@ vivo).
 `LastSuccessfulConnect` seria guardado sob o `socketLock` já existente, ou num
 `atomic.Pointer[time.Time]`.
 
-**Status**: **não corrigido**. Os dois campos são **exportados** — fazem parte
-da API pública do fork, e `AutoReconnectErrors` é explicitamente documentado em
-`client.go:57-58` como legível pelo `AutoReconnectHook`. Trocar o tipo quebra
-consumidores e cria divergência permanente contra o upstream, que é exatamente o
-que `PATCHES.md` existe para minimizar. Precisa de decisão do usuário sobre
-aceitar a mudança de API.
+**Status**: **CORRIGIDO** (lote B, 2026-08-07). O bloqueio registrado aqui
+deixou de valer: não há mais upstream contra o qual manter compatibilidade, e
+`grep -rn "AutoReconnectErrors\|LastSuccessfulConnect"` mostra que **nenhum**
+consumidor fora de `internal/wa-noise/core/` lia os dois campos — o módulo está
+sob `internal/`, então "API pública" aqui nunca passou dos limites deste repo.
+
+Os campos viraram `lastSuccessfulConnectUnixNano atomic.Int64` e
+`autoReconnectErrors atomic.Int64`, privados, com os leitores
+`Client.LastSuccessfulConnect() time.Time` e `Client.AutoReconnectErrors() int`
+em `client_reconnect_state.go` — o `AutoReconnectHook` continua conseguindo ler
+a contagem, agora sem corrida. Travado por
+`TestContadoresDeReconexaoSuportamAcessoConcorrente`,
+`TestLastSuccessfulConnectZeroQuandoNuncaConectou` e
+`TestLastSuccessfulConnectRoundTrip`.
 
 ---
 
@@ -1798,6 +1816,12 @@ sobre corrigir agora ou depois.
   alterar o fluxo. Um `sync.RWMutex` também serviria, com mais cerimônia. Um
   teste sob `-race` com `PairPhone` e `HandleCodeNotification` concorrentes
   falharia hoje e passaria depois.
+- **Status**: **CORRIGIDO** (lote B, 2026-08-07). `State.linking` é
+  `atomic.Pointer[LinkingCache]`; `Linking()` virou `Load()` e `SetLinking()`
+  virou `Store()`. Atômico e não mutex porque a semântica que o código quer é
+  exatamente "último escritor ganha", sem seção crítica em volta. Travado por
+  `TestStateLinkingSuportaLeituraEEscritaConcorrentes` (que falha sob `-race`
+  na versão antiga) e `TestStateZeroValueTemLinkingNil`.
 - **Status**: **não corrigido**. É bug pré-existente fora do escopo do lote 4,
   que era extração; alterar sincronização em código de criptografia de
   pareamento sem pedir é exatamente o que o CLAUDE.md manda não fazer. O
@@ -2131,6 +2155,13 @@ Consequência prática: se o websocket cair durante a janela entre
 `fs.Connect` e `newNoiseSocket` — janela que inclui o handshake Noise inteiro,
 ou seja, um round trip de rede —, o `OnDisconnect` pode ser lido como nil e a
 desconexão passa despercebida, ou o `-race` acusa em produção instrumentada.
+
+**Status**: **CORRIGIDO** (lote B, 2026-08-07). O campo virou privado
+(`onDisconnect`) e só se mexe nele por `FrameSocket.SetOnDisconnect`, que toma o
+mesmo `fs.lock` que `Close` já segura — é isso que dá o happens-before que
+faltava. Os dois pontos de escrita (`newNoiseSocket` e `NoiseSocket.Stop`, este
+último zerando o callback) passaram a usar o setter. Travado por
+`TestSetOnDisconnectEConcorrenteComClose`.
 
 **Pré-existente, não introduzido pelo lote 10**: `git status` mostra que nada sob
 `internal/wa-noise/socket/` foi tocado por este lote. A ordem

@@ -161,8 +161,8 @@ func (cli *Client) handleConnectFailure(ctx context.Context, node *waBinary.Node
 
 func (cli *Client) handleConnectSuccess(ctx context.Context, node *waBinary.Node) {
 	cli.Log.Infof("Successfully authenticated")
-	cli.LastSuccessfulConnect = time.Now()
-	cli.AutoReconnectErrors = 0
+	cli.lastSuccessfulConnectUnixNano.Store(time.Now().UnixNano())
+	cli.autoReconnectErrors.Store(0)
 	cli.isLoggedIn.Store(true)
 	ag := node.AttrGetter()
 	nodeLID := ag.JID("lid")

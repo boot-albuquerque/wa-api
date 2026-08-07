@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/ptr"
@@ -44,15 +43,20 @@ type Client struct {
 	socketLock sync.RWMutex
 	socketWait chan struct{}
 
-	isLoggedIn            atomic.Bool
-	expectedDisconnect    *exsync.Event
-	forceAutoReconnect    atomic.Bool
-	EnableAutoReconnect   bool
-	InitialAutoReconnect  bool
-	LastSuccessfulConnect time.Time
-	AutoReconnectErrors   int
+	isLoggedIn           atomic.Bool
+	expectedDisconnect   *exsync.Event
+	forceAutoReconnect   atomic.Bool
+	EnableAutoReconnect  bool
+	InitialAutoReconnect bool
+	// Os dois campos abaixo sao escritos por handleConnectSuccess (goroutine do
+	// handlerQueueLoop) e lidos/escritos por autoReconnect (outra goroutine).
+	// Como campos comuns isso era data race: o backoff podia ser calculado
+	// sobre um contador obsoleto (F46 em HOUSEKEEP.md). Sao privados e
+	// atomicos; leia-os por LastSuccessfulConnect() e AutoReconnectErrors().
+	lastSuccessfulConnectUnixNano atomic.Int64
+	autoReconnectErrors           atomic.Int64
 	// AutoReconnectHook is called when auto-reconnection fails. If the function returns false,
-	// the client will not attempt to reconnect. The number of retries can be read from AutoReconnectErrors.
+	// the client will not attempt to reconnect. The number of retries can be read from AutoReconnectErrors().
 	AutoReconnectHook func(error) bool
 	// If SynchronousAck is set, acks for messages will only be sent after all event handlers return.
 	SynchronousAck             bool

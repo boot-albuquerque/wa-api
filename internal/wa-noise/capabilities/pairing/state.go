@@ -1,6 +1,8 @@
 package pairing
 
 import (
+	"sync/atomic"
+
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
 )
@@ -21,21 +23,23 @@ type LinkingCache struct {
 // State e' o estado mutavel do pareamento. Substitui o campo solto
 // `phoneLinkingCache *phoneLinkingCache` de *Client.
 //
-// ATENCAO — sem sincronizacao, de proposito. O campo original tambem nao tinha
-// nenhuma: PairPhone escreve nele e HandleCodeNotification (chamado de um
-// handler de notificacao, em outra goroutine) le'. Essa corrida e'
-// PRE-EXISTENTE e vem do upstream; este lote e' extracao, e acrescentar um
-// mutex aqui mudaria comportamento sob concorrencia em codigo de pareamento
-// (criptografia de dispositivo). Registrada em HOUSEKEEP.md em vez de
-// corrigida de graga.
+// O campo e' atomic.Pointer porque as duas pontas rodam em goroutines
+// diferentes: PairPhone escreve (chamado pela aplicacao) e
+// HandleCodeNotification le' (chamado de um handler de notificacao). Como
+// ponteiro comum — que e' como o upstream deixava — isso era corrida de dados
+// pelo modelo de memoria do Go, e a goroutine de notificacao podia enxergar
+// nil ou um LinkingCache parcialmente publicado (F50 em HOUSEKEEP.md).
+//
+// atomic.Pointer, e nao mutex, porque a semantica que o codigo quer e'
+// exatamente "ultimo escritor ganha", sem secao critica nenhuma em volta.
 //
 // O zero value e' usavel.
 type State struct {
-	linking *LinkingCache
+	linking atomic.Pointer[LinkingCache]
 }
 
 // Linking devolve a sessao de pareamento por codigo pendente, ou nil.
-func (s *State) Linking() *LinkingCache { return s.linking }
+func (s *State) Linking() *LinkingCache { return s.linking.Load() }
 
 // SetLinking registra a sessao de pareamento por codigo pendente.
-func (s *State) SetLinking(c *LinkingCache) { s.linking = c }
+func (s *State) SetLinking(c *LinkingCache) { s.linking.Store(c) }

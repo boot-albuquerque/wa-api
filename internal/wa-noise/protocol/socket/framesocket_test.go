@@ -2,6 +2,7 @@ package socket
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -147,4 +148,28 @@ func TestWAConnHeaderShape(t *testing.T) {
 	if WAConnHeader[0] != 'W' || WAConnHeader[1] != 'A' || WAConnHeader[2] != WAMagicValue {
 		t.Errorf("WAConnHeader = %v, esperado prefixo 'W','A',%d", WAConnHeader, WAMagicValue)
 	}
+}
+
+// O read pump (que chama Close no defer) e o handshake (que registra o
+// callback) rodam em goroutines diferentes, e a janela entre Connect e
+// SetOnDisconnect cobre um round trip de rede inteiro. Como campo exportado sem
+// lock isso era data race (F56); com SetOnDisconnect sob fs.lock, nao e' mais.
+func TestSetOnDisconnectEConcorrenteComClose(t *testing.T) {
+	fs := NewFrameSocket(waLog.Noop, nil)
+	const rodadas = 200
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < rodadas; i++ {
+			fs.SetOnDisconnect(func(context.Context, bool) {})
+			fs.SetOnDisconnect(nil)
+		}
+	}()
+	for i := 0; i < rodadas; i++ {
+		// Close com conn nil sai cedo, mas so' depois de tomar fs.lock — que e'
+		// exatamente o lock que precisa sincronizar com o setter.
+		fs.Close(statusForceClose)
+	}
+	<-done
 }

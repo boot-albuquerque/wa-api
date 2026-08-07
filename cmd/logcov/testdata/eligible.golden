@@ -365,6 +365,7 @@ internal/wa-noise/core.Client.AcceptTOSNotice	EXCLUDED	X5
 internal/wa-noise/core.Client.AddEventHandler	EXCLUDED	X5
 internal/wa-noise/core.Client.AddEventHandler.func1	EXCLUDED	X6
 internal/wa-noise/core.Client.AddEventHandlerWithSuccessStatus	EXCLUDED	X5
+internal/wa-noise/core.Client.AutoReconnectErrors	EXCLUDED	X5
 internal/wa-noise/core.Client.BuildEdit	EXCLUDED	X5
 internal/wa-noise/core.Client.BuildHistorySyncRequest	EXCLUDED	X5
 internal/wa-noise/core.Client.BuildMessageKey	EXCLUDED	X5
@@ -431,6 +432,7 @@ internal/wa-noise/core.Client.IsLoggedIn	EXCLUDED	X5
 internal/wa-noise/core.Client.IsOnWhatsApp	EXCLUDED	X5
 internal/wa-noise/core.Client.JoinGroupWithInvite	EXCLUDED	X5
 internal/wa-noise/core.Client.JoinGroupWithLink	EXCLUDED	X5
+internal/wa-noise/core.Client.LastSuccessfulConnect	EXCLUDED	X5
 internal/wa-noise/core.Client.LeaveGroup	EXCLUDED	X5
 internal/wa-noise/core.Client.LinkGroup	EXCLUDED	X5
 internal/wa-noise/core.Client.Logout	EXCLUDED	X5
@@ -1556,6 +1558,7 @@ internal/wa-noise/protocol/socket.FrameSocket.Connect	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.Context	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.IsConnected	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.SendFrame	EXCLUDED	X5
+internal/wa-noise/protocol/socket.FrameSocket.SetOnDisconnect	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.frameComplete	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.makeDialOptions	EXCLUDED	X5
 internal/wa-noise/protocol/socket.FrameSocket.processData	EXCLUDED	X5

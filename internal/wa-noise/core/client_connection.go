@@ -181,9 +181,9 @@ func (cli *Client) autoReconnect(ctx context.Context) {
 		return
 	}
 	for {
-		autoReconnectDelay := time.Duration(cli.AutoReconnectErrors) * autoReconnectDelayStep
+		autoReconnectDelay := time.Duration(cli.autoReconnectErrors.Load()) * autoReconnectDelayStep
 		cli.Log.Debugf("Automatically reconnecting after %v", autoReconnectDelay)
-		cli.AutoReconnectErrors++
+		cli.autoReconnectErrors.Add(1)
 		if cli.expectedDisconnect.WaitTimeoutCtx(ctx, autoReconnectDelay) == nil {
 			cli.Log.Debugf("Cancelling automatic reconnect due to expected disconnect")
 			return

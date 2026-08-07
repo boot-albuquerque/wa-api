@@ -24,8 +24,17 @@ type FrameSocket struct {
 	HTTPHeaders http.Header
 	HTTPClient  *http.Client
 
-	Frames       chan []byte
-	OnDisconnect func(ctx context.Context, remote bool)
+	Frames chan []byte
+
+	// onDisconnect e' lido por Close, que roda no goroutine do read pump, e
+	// escrito por newNoiseSocket/NoiseSocket.Stop, que rodam em outro. Como
+	// campo exportado sem sincronizacao isso era data race: Connect ja'
+	// disparou o read pump ANTES de newNoiseSocket escrever aqui, e a janela
+	// entre os dois cobre o handshake Noise inteiro (F56 em HOUSEKEEP.md).
+	//
+	// Por isso o campo e' privado e so' se mexe nele por SetOnDisconnect, sob o
+	// mesmo fs.lock que Close ja' toma.
+	onDisconnect func(ctx context.Context, remote bool)
 
 	Header []byte
 
@@ -76,9 +85,19 @@ func (fs *FrameSocket) Close(code websocket.StatusCode) {
 	fs.conn = nil
 	fs.cancel()
 	fs.cancel = nil
-	if fs.OnDisconnect != nil {
-		go fs.OnDisconnect(fs.parentCtx, code == statusForceClose)
+	if fs.onDisconnect != nil {
+		go fs.onDisconnect(fs.parentCtx, code == statusForceClose)
 	}
+}
+
+// SetOnDisconnect registra (ou limpa, com nil) o callback de desconexao.
+//
+// Toma o mesmo lock de Close: e' isso que da' happens-before entre esta escrita
+// e a leitura feita pelo read pump.
+func (fs *FrameSocket) SetOnDisconnect(fn func(ctx context.Context, remote bool)) {
+	fs.lock.Lock()
+	defer fs.lock.Unlock()
+	fs.onDisconnect = fn
 }
 
 func (fs *FrameSocket) Connect(ctx context.Context) error {
