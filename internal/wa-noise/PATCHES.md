@@ -7716,3 +7716,290 @@ linhas.
 `LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
 com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
 tamanho de arquivo e testes do fork.
+
+---
+
+## Fase F/G — lote 8: `send/` (extração real + cobertura), 2026-08-07
+
+### Contexto
+
+Oitavo e último lote grande da Fase F/G: o **caminho de saída** de mensagens.
+São os 11 arquivos de envio da raiz, todos `package whatsmeow`:
+
+- **waE2E** — `send.go`, `send_prepare.go`, `send_node_build.go`,
+  `send_encrypt.go`, `send_transport.go`, `send_ack.go`, `send_types.go`,
+  `send_debug_timings.go`, `send_constants.go`
+- **v3/FB** — `sendfb.go`, `sendfb_encrypt.go`, `sendfb_transport.go`
+
+Ao contrário de `media/` e `newsletter/` (lotes 1 e 2), que eram folhas, este
+domínio é **consumidor** de quatro domínios já extraídos: grupo (lote 6),
+usuário (lote 7), prekeys e tctoken (lote 4). Enviar uma mensagem é o caminho
+que toca todos os outros.
+
+### Um pacote, não dois
+
+`send/` reúne os dois protocolos. Eles não são independentes: compartilham as
+constantes de nó e de atributo do `<message>`, `participantListHashV2`,
+`copyAttrs`, `MessageDebugTimings`, `SendResponse`, `SendRequestExtra` e o par
+`awaitSendAck`/`applySendAck`. Separar em `send` e `sendfb` obrigaria um a
+importar o outro — não seria mais estreito, só teria uma fronteira a mais — ou a
+duplicar o substrato compartilhado. Duplicar constantes de fio e a função de
+phash é exatamente a divergência silenciosa que a Fase F/G existe para evitar.
+
+### Como `send/` alcança grupo/usuário/prekeys/tctoken: **fachada**, com duas exceções
+
+Decisão deliberada, documentada em `send/transport.go`. Não há ciclo em nenhuma
+das duas opções (os quatro são folhas), então a escolha é de desenho:
+
+**Pela fachada da raiz** (métodos de `send.Transport`: `CachedGroupData`,
+`BroadcastListParticipants`, `UserDevices`, `UserInfo`, `FetchPreKeysNoError`,
+`EnsureTCToken`, `ResolveTCTokenStorageLID`, `TCTokenSenderTS`,
+`IssuePrivacyTokenAndSave`) porque:
+
+- as free functions daqueles pacotes recebem os transportes **deles**
+  (`group.Transport`, `user.Transport`, ...). Chamá-las direto obrigaria
+  `send.Transport` a expor quatro interfaces inteiras de outros domínios só para
+  alcançar 2–4 funções de cada: ~40 métodos transitivos contra 9 diretos;
+- os dublês de teste de `send/` teriam que implementar as quatro interfaces
+  alheias — um teste de envio não tem por que saber montar um `<iq>` de usync;
+- as fachadas da raiz são **exatamente** o que o código original chamava
+  (`cli.getCachedGroupData`, `cli.GetUserDevices`, ...). Passar por elas mantém
+  a extração literal: nenhum caminho de chamada novo foi criado.
+
+**Import direto**, nas duas exceções, ambas por serem **dado**, não comportamento:
+
+- `group` — pelos tipos `*group.Meta` (retorno de `CachedGroupData`) e
+  `group.ErrNotFound` (o valor por trás de `whatsmeow.ErrGroupNotFound`).
+  Traduzir o `Meta` para uma struct local seria cópia campo a campo sem ganho.
+- `tctoken.ShouldSendInChatAction` / `tctoken.ShouldSendNew` — funções **puras**
+  (JID → bool, time → bool), sem transporte nem estado; as próprias fachadas da
+  raiz são uma linha de delegação. Fazê-las atravessar a interface transformaria
+  duas funções puras em dois métodos de dublê.
+- `retry.FBApplicationVersion` — a mesma constante do lote 5, importada em vez de
+  redeclarada, para que retry e envio normal não possam divergir. Travado por
+  `TestFBApplicationVersionMatchesRetry`.
+
+`store.SignalProtobufSerializer` é usado **direto**, em vez do `pbSerializer` da
+raiz: são o mesmo valor (`message_decrypt.go:26` é `var pbSerializer =
+store.SignalProtobufSerializer`), e `store` já é folha. Isso dispensou o
+`CreateSKDM` que o lote 5 precisou pôr em `retry.Transport`.
+
+### `send.Transport` — o mais largo da fase
+
+29 métodos, mais largo que o de retry, e o motivo é estrutural: resolver o
+destino consulta grupo e usuário; cifrar consulta prekeys e a sessão Signal; o
+`<message>` carrega reporting token, tctoken e cstoken; o ack invalida os caches
+de grupo e de dispositivo. **Nenhum método foi inventado para conveniência** —
+cada um corresponde a uma chamada que o código fazia em `*Client` antes.
+
+Duas escolhas de forma que merecem registro:
+
+- `InvalidateGroupCache` / `InvalidateDeviceCache` em vez de expor `*group.Cache`
+  e `*user.DeviceCache`: este domínio só faz `delete` nos dois, e `Delete` é
+  justamente o único método dos dois caches que sincroniza sozinho — porque o
+  único chamador (`applySendAck`) tomava o lock só para isso. Ver os docs em
+  `group/cache.go` e `user/cache.go`, escritos nos lotes 6 e 7.
+- `SendLock() *sync.Mutex`: a seção crítica **não** mudou de forma. Continua
+  sendo "trava antes de gravar a mensagem recente, libera no fim da função de
+  envio", cobrindo cifragem e escrita no socket. O ponteiro é estável
+  (`messageSendLock` é campo de `*Client`, e `sendTransport` embrulha o ponteiro
+  do cliente), então o mutex nunca é copiado por valor.
+
+### Conservadorismo máximo nos dois arquivos de cifragem
+
+`send/encrypt.go` e `send/fb_encrypt.go` foram extraídos de forma
+**mecânica**: cada `cli.X` virou `t.X`, e nada mais. Nem a ordem das operações,
+nem o tratamento de erro, nem os atributos escritos no `<enc>`.
+
+Em particular, os dois caminhos **não** foram "harmonizados", apesar de quatro
+diferenças visíveis entre eles:
+
+| Diferença | waE2E | v3/FB |
+|---|---|---|
+| Prefetch de mapeamento LID/PN | sim (`GetManyLIDsForPNs` + `MigrateSessionStore`) | não |
+| Teste de sessão | consulta `existingSessions` antes de `ContainsSession` | sempre `ContainsSession` |
+| `ErrNoSession` | embrulhado com o endereço Signal (`%w with %s`) | **nu** |
+| Atributo `v` do `<enc>` | string `"2"` | número `3` (`FBMessageVersion`) |
+
+Cada uma dessas ou vai para o fio ou muda um erro observável. Nivelá-las seria
+mudança de comportamento disfarçada de limpeza. As duas últimas estão travadas
+por teste (`TestEncryptForDeviceV3WithoutSessionFailsBare`,
+`TestGroupV3SenderKeyNodeUsesStringVersion`) para que uma harmonização futura
+seja **deliberada**, e não acidente.
+
+### Fronteira raiz ↔ `send/`
+
+**Tipos, por apelido** (`send_types.go`): `SendResponse = send.Response`,
+`SendRequestExtra = send.RequestExtra`,
+`MessageDebugTimings = send.DebugTimings`,
+`nodeExtraParams = send.NodeExtraParams`. Apelido, não definição nova: o apelido
+faz dos dois o **mesmo** tipo, então quem escrevia `whatsmeow.SendResponse{...}`
+continua compilando, e `MessageDebugTimings` continua satisfazendo
+`zerolog.LogObjectMarshaler` com o **mesmo** método — uma definição nova exigiria
+reimplementá-lo, e as duas implementações poderiam divergir. Travado por
+`TestSendTypesAreAliases`.
+
+`NodeExtraParams` é exportada (e a raiz mantém o nome minúsculo por apelido)
+porque `internals.go`, que é **gerado** e está fora do escopo do lote, cita
+`nodeExtraParams` em quatro assinaturas de `DangerousInternalClient`. Os
+**campos** continuam minúsculos: ninguém fora do pacote os lê.
+
+**Erros, por atribuição** (`errors.go`): `ErrNoSession`, `ErrMessageTimedOut`,
+`ErrUnknownServer`, `ErrRecipientADJID`, `ErrServerReturnedError` e
+`ErrInvalidInlineBotID` passaram a viver em `send/errors.go`, e a raiz os
+reexporta pelos nomes históricos por **atribuição** — o mesmo valor, não cópias.
+Um `errors.New` próprio na raiz quebraria `errors.Is` para quem compara com o
+nome histórico. Travado por `TestSendErrorsAreTheSameValues`.
+
+Os seis são os que a auditoria confirmou serem exclusivos deste caminho: fora de
+`errors.go` e dos testes, nenhum arquivo da raiz além dos 11 do lote os cita.
+**Ficaram na raiz**, e por quê:
+
+- `ErrClientIsNil` — a checagem de receptor nil só pode existir na raiz (um
+  `*Client` nil não produz `Transport`).
+- `ErrNotLoggedIn` — 15 arquivos da raiz o devolvem (presence, call, msgsecret,
+  mediaretry, ...). Reatribuí-lo faria o domínio de envio "dono" de um erro do
+  fork inteiro. Atravessa a interface via `send.Errors`, mesmo racional de
+  `group.IQErrors` (lote 6) e `user.IQErrors` (lote 7): é o **mesmo ponteiro**.
+
+**Constantes, por atribuição** (`send_constants.go`): nove das constantes de fio
+continuam existindo na raiz porque o caminho de **entrada** (`message_decrypt.go`,
+`message_decrypt_session.go`, `message.go`) e o de segredo de mensagem
+(`msgsecret_poll.go`) as leem de volta: `encNodeTag`, `encAttrVersion`,
+`encAttrType`, `encAttrDecryptFail`, `encTypeMsg`, `encTypePreKeyMsg`,
+`encTypeSenderKey`, `msgCategoryPeer`, `messageSecretSize`. Todas por atribuição
+a partir de `send.*`, para que o valor do fio tenha **um** dono. Travado por
+`TestSendConstantsAreReexported`.
+
+**Fachadas** (`send_facade.go`, `sendfb_facade.go`, 22 métodos sem lógica):
+existem porque três chamadores da raiz continuam citando os nomes minúsculos
+históricos — `internals.go` (gerado), `retry_transport.go` (o adaptador do lote 5,
+que chama `getMessageContent`, `encryptMessageForDevice` e
+`encryptMessageForDeviceV3`) e `notification_device.go`/`user_transport.go` (o
+phash). Zero call sites externos mudaram.
+
+### Call sites reversos
+
+**Nenhum a corrigir.** Este lote é a ponta jusante: os call sites que os lotes 6
+e 7 corrigiram *dentro* de `send_prepare.go`, `sendfb_transport.go` e
+`send_node_build.go` (redirecionando para `group.XXX`/`user.XXX`) continuam
+funcionando, agora através das fachadas `t.CachedGroupData` / `t.UserDevices`.
+A única dívida aberta por um lote anterior foi fechada:
+`user.Transport.ParticipantListHash` (lote 7) documentava que
+`participantListHashV2` "vive em send_transport.go, na raiz, ... até o lote de
+send". Agora vive em `send/outbound.go`; `user_transport.go` continua chamando a
+fachada da raiz, que delega. Travado por
+`TestParticipantListHashFacadeMatchesSubpackage`.
+
+`participantListHashV2` **não** migrou para `user/`: ela hasheia listas de
+participantes de grupo tanto quanto listas de dispositivo, e o `phash` é
+atributo do `<message>` de saída. É do domínio de envio.
+
+### Testes e cobertura
+
+**77,1%** de statements em `internal/wa-noise/send/` (medido, não estimado).
+Os testes da Fase E lote 8 foram relocados e reescritos contra um dublê de
+`send.Transport` (`fakeTransport`), em vez do `*Client` real: nenhum socket,
+nenhuma sessão Noise, nenhum banco.
+
+**As três regressões de bug da Fase E lote 8 continuam travadas**, em
+`send/guards_test.go`, e passam pós-movimentação:
+
+1. `TestPreparePeerMessageNodeRejectsEmptyLID` — `GetLIDForPN` devolve JID zerado
+   *sem erro*; antes esse zero seguia para a cifragem e montaria um endereço
+   Signal de usuário vazio.
+2. `TestResolveGroupSendTargetNilCachedData` — `CachedGroupData` devolve
+   `(nil, nil)` quando o servidor ecoa um `id` diferente do consultado.
+3. `TestSendGroupV3NilCachedData` / `TestSendGroupV3NonGroupDestination` — o
+   mesmo deref de nil no caminho v3.
+
+A invalidação de cache por phash divergente em `SendFBMessage` (a quarta correção
+da Fase E) continua coberta pelos testes de `ApplyAck`, que agora é o mesmo código
+para os dois caminhos.
+
+O dublê usa um `store.Device` com `store.NoopStore` em todos os sub-stores, mais
+um **`memSenderKeys`** que persiste de verdade as chaves de remetente em memória.
+Isso importa: a chave de remetente é simétrica e gerada localmente, não depende
+de sessão com ninguém, então a cifragem de **grupo** nos testes é real, não
+simulada — `Group` e `GroupV3` são exercitados ponta a ponta (84% e 88%).
+
+### O que **não** dá para testar sem sessão viva, e por quê
+
+Registrado porque "não testei, e este é o motivo" é informação:
+
+- **A cifragem por dispositivo** (`session.NewCipher(...).Encrypt`, e o
+  `builder.ProcessBundle` do caminho de prekey) exige uma sessão Signal
+  estabelecida, que só existe após handshake real com o servidor ou um bundle de
+  prekey válido de outro dispositivo. Simular isso exigiria reimplementar metade
+  do libsignal — e um dublê que "cifra" errado passaria verde enquanto o fio
+  recebe lixo. É a origem de praticamente todos os statements não cobertos:
+  `EncryptForDevice` (33%), `EncryptForDeviceV3` (18%),
+  `EncryptForDevicesV3` (41%), `PeerMessage` (33%).
+- **`AutoTrustIdentity` + `ErrUntrustedIdentity`** — o ramo que limpa a
+  identidade e reprocessa o bundle depende do libsignal devolver aquele erro
+  específico a partir de um bundle real.
+- **O modo inline bot** de `prepareBotMessage` (58%) — o trecho pós-reembrulho
+  chama `EncryptForDevices` para o JID do bot, que cai na mesma parede.
+
+O que **dá** para travar sem sessão está travado: a recusa por falta de sessão
+(o caminho de erro mais importante, e o que mais aparece em produção), a
+propagação de erro do store, o curto-circuito de lista vazia, e `copyAttrs`,
+cuja ordem de sobrescrita decide o `type` que vai no `<enc>`.
+
+### Revisão de concorrência
+
+Não foi feita revisão dedicada, e a razão é que **não há concorrência nova**:
+este domínio não ganhou nem mutex, nem goroutine, nem estado próprio. Os dois
+pontos de sincronização são pré-existentes e atravessaram a fronteira sem mudar
+de forma:
+
+- `messageSendLock` — mesmo mutex, mesma seção crítica, agora alcançado por
+  `SendLock()`. `Message` e `FBMessage` continuam fazendo `Lock()` seguido de
+  `defer Unlock()` no mesmo ponto do fluxo.
+- `go IssuePrivacyTokenAndSave(...)` em `DM` — a única goroutine do caminho,
+  disparada exatamente onde era. O dublê de teste precisou de mutex por causa
+  dela (e o `-race` pegou isso durante o lote), o que é confirmação de que o
+  comportamento assíncrono foi preservado.
+
+Os caches de grupo e de dispositivo continuam sincronizados por eles mesmos
+(lotes 6 e 7); `send/` só chama `Delete`.
+
+### O que NÃO foi extraído, e por quê
+
+- **`internals.go`** — gerado por `internals_generate.go`, fora do escopo do
+  lote. É o motivo de 22 fachadas continuarem na raiz e de `NodeExtraParams` ser
+  exportada. Reduzir isso exige mexer no gerador.
+- **`reportingtoken.go`** — a montagem do `<reporting_token>` depende de
+  `generateMsgSecretKey` e da tabela de campos de reporting, que são do domínio
+  de segredo de mensagem, não do de envio. Só a construção atravessa a interface
+  (`MessageReportingToken`).
+- **`applyBotMessageHKDF`** (`msgsecret_keys.go`) — mesma razão: derivação de
+  chave de segredo de mensagem. Atravessa via `ApplyBotMessageHKDF`.
+- **`cstoken.go`** — o `<cstoken>` é alternativa ao `<tctoken>` e tem geração
+  própria não extraída em nenhum lote; atravessa via `GenerateCsToken`.
+- **`isDisconnectNode`, `retryFrame`, `waitResponse`, `cancelResponse`,
+  `defaultRequestTimeout`** — substrato de requisição (`request.go`), genérico do
+  fork inteiro. Atravessam a interface.
+- **`broadcast.go`** — `getBroadcastListParticipants` é o único ponto de contato
+  e hoje sempre erra para listas que não sejam `status`. Extraí-lo seria um lote
+  próprio, de um domínio que quase não existe.
+- **`RevokeMessage`** — continua na raiz porque depende de `cli.BuildRevoke`
+  (`message_builders.go`), que não foi extraído.
+
+### Gates
+
+`scripts/waclient-filesize-check.sh` ganhou `internal/wa-noise/send` em `DIRS`;
+`WACLIENT_TEST_PKGS` (Makefile) ganhou `./internal/wa-noise/send/`. Todos os 14
+arquivos de produção do subpacote estão abaixo do teto de 300 linhas (o maior,
+`outbound.go`, tem 271).
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado (`go run ./cmd/logcov
+-golden`), como nos lotes 6 e 7: as funções livres do subpacote novo entram no
+universo elegível.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado** (medido com
+`echo $?`, não inferido da saída): build, vet, testes com `-race`, lint, gates de
+cobertura e de cobertura de log, licença, deriva, tamanho de arquivo e testes do
+fork.
