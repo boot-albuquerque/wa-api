@@ -274,6 +274,11 @@ internal/wa-noise/capabilities/retry.TryHandleReceipt	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.TryHandleReceipt.func1	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.buildGroupOrSelfExtras	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.buildRetryMessageAttrs	EXCLUDED	X5
+internal/wa-noise/capabilities/retry.counterMap.increment	EXCLUDED	X5
+internal/wa-noise/capabilities/retry.counterMap.len	EXCLUDED	X5
+internal/wa-noise/capabilities/retry.counterMap.maybeSweep	EXCLUDED	X5
+internal/wa-noise/capabilities/retry.counterMap.maybeSweep.func1	EXCLUDED	X6
+internal/wa-noise/capabilities/retry.counterMap.set	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.marshalForRetry	EXCLUDED	X5
 internal/wa-noise/capabilities/retry.resolveBundle	EXCLUDED	X5
 internal/wa-noise/capabilities/send.ApplyAck	EXCLUDED	X5

@@ -47,24 +47,22 @@ type RecentKey struct {
 // Por conter mutexes, State NUNCA pode ser copiado por valor depois de usado —
 // sempre passe *State.
 //
-// AVISO DE DIVIDA HERDADA (F36 em HOUSEKEEP.md): incomingCounter e
-// messageRetries crescem sem limite, chaveados por dado do servidor, e nao sao
-// limpos em lugar nenhum — nem no Disconnect. A extracao MOVEU o problema para
-// ca'; NAO o resolveu. Corrigi-lo exige escolher uma politica de despejo, que e'
-// mudanca de comportamento observavel, e por isso segue pendente de decisao.
-// Contraste deliberado: o buffer de recentes logo abaixo e' circular de
-// RecentMessagesSize justamente para nao ter esse problema.
+// incomingCounter e messageRetries sao chaveados por dado do SERVIDOR e
+// cresciam sem limite (F36 em HOUSEKEEP.md). Hoje sao counterMap, com despejo
+// por idade e teto de tamanho — ver counters.go para a politica e o porque de
+// cada numero. O buffer de recentes logo abaixo continua circular, pelo mesmo
+// motivo de sempre.
 type State struct {
 	// --- recriacao de sessao Signal ---
 	sessionRecreateHistory map[types.JID]time.Time
 	sessionRecreateLock    sync.Mutex
 
-	// --- contador de retries recebidos (F36) ---
-	incomingCounter     map[IncomingKey]int
+	// --- contador de retries recebidos ---
+	incomingCounter     counterMap[IncomingKey]
 	incomingCounterLock sync.Mutex
 
-	// --- contador de recibos de retry enviados (F36) ---
-	messageRetries     map[string]int
+	// --- contador de recibos de retry enviados ---
+	messageRetries     counterMap[string]
 	messageRetriesLock sync.Mutex
 	// sema limita quantos recibos de retry sao tratados em paralelo. nil =
 	// ilimitado, que e' o padrao.
@@ -135,15 +133,12 @@ func (s *State) MarkSessionRecreated(jid types.JID, t time.Time) {
 // para a chave dada. Reproduz, inteira, a secao critica de
 // incomingRetryRequestCounterLock que existia em handleRetryReceipt.
 //
-// F36: este mapa nunca e' esvaziado. Ver o doc de State.
+// O mapa despeja entradas paradas ha' mais de counterTTL e respeita um teto de
+// tamanho; ver counters.go.
 func (s *State) IncrementIncoming(key IncomingKey) int {
 	s.incomingCounterLock.Lock()
 	defer s.incomingCounterLock.Unlock()
-	if s.incomingCounter == nil {
-		s.incomingCounter = make(map[IncomingKey]int)
-	}
-	s.incomingCounter[key]++
-	return s.incomingCounter[key]
+	return s.incomingCounter.increment(key, time.Now())
 }
 
 // BumpMessageRetries incrementa o contador de recibos de retry enviados para a
@@ -156,18 +151,16 @@ func (s *State) IncrementIncoming(key IncomingKey) int {
 // parou de insistir. A gravacao de volta no mapa acontece DENTRO da mesma secao
 // critica, como antes.
 //
-// F36: este mapa nunca e' esvaziado. Ver o doc de State.
+// O mapa despeja entradas paradas ha' mais de counterTTL e respeita um teto de
+// tamanho; ver counters.go.
 func (s *State) BumpMessageRetries(id string, countInMsg int) int {
 	s.messageRetriesLock.Lock()
 	defer s.messageRetriesLock.Unlock()
-	if s.messageRetries == nil {
-		s.messageRetries = make(map[string]int)
-	}
-	s.messageRetries[id]++
-	count := s.messageRetries[id]
+	now := time.Now()
+	count := s.messageRetries.increment(id, now)
 	if count == 1 && countInMsg > 0 {
 		count = countInMsg + 1
-		s.messageRetries[id] = count
+		s.messageRetries.set(id, count, now)
 	}
 	return count
 }

@@ -1459,12 +1459,19 @@ esquecida na outra passa despercebida.
 protocolos) e fazer uma delegar à outra, ou ambas a um helper comum
 `isDirectHumanChat(jid)`.
 
-**Status**: **não corrigido, e provavelmente não deve ser**. São políticas de
-protocolos distintos (trusted contact token × contact safety token) que
-coincidem hoje por acaso; unificar acopla os dois. `TestShouldSendTokenPerJIDType`
-(`internal/wa-noise/tctoken_test.go`) roda a mesma tabela de 7 tipos de JID
-nas duas, então uma divergência futura aparece como falha de teste em vez de
-passar batido. Registrado para visibilidade, não como dívida a pagar.
+**Status**: **FECHADO COMO "NÃO CORRIGIR", por decisão** (2026-08-07) — não é
+mais pendência.
+
+O raciocínio já estava escrito na própria entrada e continua valendo depois da
+revisão: são políticas de **protocolos distintos** (trusted contact token ×
+contact safety token) que coincidem hoje por coincidência, não por serem a mesma
+regra. Extrair um helper comum acopla os dois: no dia em que um dos protocolos
+mudar de política, quem editar o helper muda os dois sem perceber — que é
+exatamente o risco que a entrada queria evitar, só que na direção oposta.
+
+A duplicação está protegida onde importa: `TestShouldSendTokenPerJIDType` roda a
+mesma tabela de 7 tipos de JID nas duas funções, então uma divergência
+acidental aparece como falha de teste.
 
 ---
 
@@ -1505,10 +1512,30 @@ guardar `time.Time` junto do contador e varrer entradas mais velhas que uma
 janela (a mesma `recreateSessionTimeout` de 1h seria um teto natural), ou no
 mínimo esvaziar ambos em `Disconnect`/`ResetConnection`.
 
-**Status**: **não corrigido**. Herdado do upstream, exige escolher uma política
-de despejo — o que é mudança de comportamento observável (um retry legítimo
-depois do despejo volta a ser aceito), e o lote 5 é de qualidade estrutural
-por contrato. Pendente de decisão.
+**Status**: **CORRIGIDO** (lote I, 2026-08-07). A política escolhida combina as
+duas primeiras sugestões da entrada: `counterMap` (em
+`internal/wa-noise/capabilities/retry/counters.go`) guarda um `time.Time` junto
+do contador e varre entradas paradas há mais de `counterTTL`, com
+`counterTTL = 1h` — exatamente o teto de `recreateSessionTimeout` que a entrada
+apontava como natural.
+
+A consequência que travava a decisão (um retry legítimo depois do despejo volta
+a ser contado como primeiro) é aceita e está documentada no código. Recibos de
+retry legítimos chegam em segundos ou minutos, então a janela de uma hora nunca
+é alcançada por tráfego normal; e o mesmo já acontece hoje a cada reinício de
+processo.
+
+O TTL sozinho não cobre tudo: um par pode inundar com IDs distintos **dentro**
+da janela. Daí o teto rígido `counterMaxEntries = 8192`.
+
+**Achado durante a implementação, que virou parte da correção**: a primeira
+versão descia só até o teto, e a inserção seguinte estourava de novo e disparava
+outra ordenação — ou seja, quem inundasse pagaria `O(n log n)` **por mensagem**,
+e a defesa contra abuso viraria o vetor de amplificação. O teste de inundação
+levou **74 segundos**. Com a marca d'água `counterEvictTarget` (75% do teto), a
+ordenação amortiza em uma a cada ~2048 inserções e o mesmo teste roda em ~1,6 s.
+Travado por `TestCounterMapInundacaoNaoEhQuadratica`, que falha se o custo
+voltar a explodir.
 
 ---
 
