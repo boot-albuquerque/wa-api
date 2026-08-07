@@ -14,7 +14,7 @@ import (
 	"wa-api/pkg/domain/apperr"
 
 	wa "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

@@ -20,7 +20,7 @@ import (
 
 	"go.mau.fi/util/retryafter"
 
-	"wa-api/internal/wa-noise/socket"
+	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/security/cbc"
 	"wa-api/internal/wa-noise/security/hkdf"
 )

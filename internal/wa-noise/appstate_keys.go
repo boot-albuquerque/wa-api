@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 )
 

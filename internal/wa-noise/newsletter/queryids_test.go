@@ -9,7 +9,7 @@ package newsletter
 import (
 	"testing"
 
-	"wa-api/internal/wa-noise/argo"
+	"wa-api/internal/wa-noise/protocol/argo"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 )
 

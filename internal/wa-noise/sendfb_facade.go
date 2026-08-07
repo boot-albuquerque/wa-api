@@ -12,7 +12,7 @@ import (
 	"go.mau.fi/libsignal/keys/prekey"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/protocol/types"

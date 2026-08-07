@@ -261,8 +261,8 @@ waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exce
 # subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
 # fases do ADR-0004 forem cobrindo o resto.
 WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
-	./internal/wa-noise/msgpad/ ./internal/wa-noise/security/paircrypto/ \
-	./internal/wa-noise/msgattrs/ ./internal/wa-noise/media/ \
+	./internal/wa-noise/protocol/msgpad/ ./internal/wa-noise/security/paircrypto/ \
+	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/media/ \
 	./internal/wa-noise/newsletter/ ./internal/wa-noise/appstatesync/ \
 	./internal/wa-noise/prekeys/ ./internal/wa-noise/pairing/ ./internal/wa-noise/tctoken/ \
 	./internal/wa-noise/notification/ ./internal/wa-noise/retry/ \
@@ -270,7 +270,7 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
 	./internal/wa-noise/send/ ./internal/wa-noise/message/ \
 	./internal/wa-noise/security/handshake/ ./internal/wa-noise/keepalive/ \
 	./internal/wa-noise/proxyconf/ \
-	./internal/wa-noise/socket/ ./internal/wa-noise/appstate/ \
+	./internal/wa-noise/protocol/socket/ ./internal/wa-noise/protocol/appstate/ \
 	./internal/wa-noise/store/ ./internal/wa-noise/store/sqlstore/ \
 	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
 	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \

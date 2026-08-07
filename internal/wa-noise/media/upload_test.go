@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/socket"
+	"wa-api/internal/wa-noise/protocol/socket"
 )
 
 type capturedUpload struct {

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"

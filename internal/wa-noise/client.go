@@ -19,7 +19,7 @@ import (
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/random"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
@@ -30,7 +30,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/retry"
-	"wa-api/internal/wa-noise/socket"
+	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"

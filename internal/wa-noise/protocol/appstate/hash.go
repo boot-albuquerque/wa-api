@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"hash"
 
-	"wa-api/internal/wa-noise/appstate/lthash"
+	"wa-api/internal/wa-noise/protocol/appstate/lthash"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 )

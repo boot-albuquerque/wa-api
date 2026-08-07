@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"wa-api/internal/wa-noise/socket"
+	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/store"
 )
 

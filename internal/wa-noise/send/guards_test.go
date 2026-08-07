@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/protocol/types"

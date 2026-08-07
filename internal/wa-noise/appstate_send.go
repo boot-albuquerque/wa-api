@@ -13,7 +13,7 @@ import (
 	"go.mau.fi/util/exslices"
 	"go.mau.fi/util/ptr"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )

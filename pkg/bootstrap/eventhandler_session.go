@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 
@@ -31,7 +31,7 @@ func (mycli *MyClient) handleAppStateSyncComplete(evt *events.AppStateSyncComple
 	}
 
 	// WAPatchCriticalUnblockLow carrega a agenda de contatos do usuário
-	// (wa-api/internal/wa-noise/appstate.WAPatchCriticalUnblockLow). Observamos a
+	// (wa-api/internal/wa-noise/protocol/appstate.WAPatchCriticalUnblockLow). Observamos a
 	// conclusão desse patch com uma contagem — não com os contatos em si —
 	// porque é a mesma fonte que GET /user/contacts lê
 	// (mycli.WAClient.Store.Contacts.GetAllContacts), então o número aqui

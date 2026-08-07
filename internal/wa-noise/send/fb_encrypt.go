@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/msgpad"
+	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/protocol/types"

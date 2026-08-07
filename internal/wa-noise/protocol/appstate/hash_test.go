@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/appstate/lthash"
+	"wa-api/internal/wa-noise/protocol/appstate/lthash"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 )
 

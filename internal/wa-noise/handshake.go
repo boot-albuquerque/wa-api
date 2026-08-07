@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/security/handshake"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/socket"
+	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/security/keys"
 )
 

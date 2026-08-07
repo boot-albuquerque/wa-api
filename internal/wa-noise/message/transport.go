@@ -25,7 +25,7 @@ package message
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	"wa-api/internal/wa-noise/store"
 	waLog "wa-api/internal/wa-noise/observability/log"

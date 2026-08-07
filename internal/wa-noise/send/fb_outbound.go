@@ -18,8 +18,8 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/msgattrs"
-	"wa-api/internal/wa-noise/msgpad"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/retry"

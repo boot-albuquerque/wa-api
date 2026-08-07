@@ -13,7 +13,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/group"
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

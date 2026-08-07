@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 

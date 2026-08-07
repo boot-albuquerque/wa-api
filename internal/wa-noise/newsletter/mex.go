@@ -14,7 +14,7 @@ import (
 	"github.com/beeper/argo-go/codec"
 	"github.com/beeper/argo-go/pkg/buf"
 
-	"wa-api/internal/wa-noise/argo"
+	"wa-api/internal/wa-noise/protocol/argo"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/store"

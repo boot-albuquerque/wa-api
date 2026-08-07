@@ -34,9 +34,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 DIRS="internal/wa-noise \
-internal/wa-noise/msgpad \
+internal/wa-noise/protocol/msgpad \
 internal/wa-noise/security/paircrypto \
-internal/wa-noise/msgattrs \
+internal/wa-noise/protocol/msgattrs \
 internal/wa-noise/media \
 internal/wa-noise/newsletter \
 internal/wa-noise/appstatesync \
@@ -52,8 +52,8 @@ internal/wa-noise/message \
 internal/wa-noise/security/handshake \
 internal/wa-noise/keepalive \
 internal/wa-noise/proxyconf \
-internal/wa-noise/socket \
-internal/wa-noise/appstate \
+internal/wa-noise/protocol/socket \
+internal/wa-noise/protocol/appstate \
 internal/wa-noise/store \
 internal/wa-noise/store/sqlstore \
 internal/wa-noise/protocol/binary \

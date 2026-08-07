@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"

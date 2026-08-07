@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/protocol/types"

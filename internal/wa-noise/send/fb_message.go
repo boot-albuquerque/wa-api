@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/protocol/msgattrs"
 	armadillo "wa-api/internal/wa-noise/protocol/proto"
 	"wa-api/internal/wa-noise/protocol/proto/waArmadilloApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"

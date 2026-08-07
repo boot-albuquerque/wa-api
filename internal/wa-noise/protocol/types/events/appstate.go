@@ -9,7 +9,7 @@ package events
 import (
 	"time"
 
-	"wa-api/internal/wa-noise/appstate"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 	"wa-api/internal/wa-noise/protocol/types"
 )
