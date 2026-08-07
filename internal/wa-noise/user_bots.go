@@ -14,33 +14,49 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
+// nodeContentString devolve o conteúdo textual de um nó do XML binário.
+//
+// Existe porque `Node.GetChildByTag` devolve o **próprio nó** quando não acha o
+// filho (`binary/node.go:116`), e nesse caso `Content` é `[]waBinary.Node` ou
+// `nil` — nunca `[]byte`. Fazer `.Content.([]byte)` sem comma-ok num campo
+// opcional é, portanto, um panic disparável por resposta do servidor.
+func nodeContentString(node waBinary.Node) string {
+	content, _ := node.Content.([]byte)
+	return string(content)
+}
+
 func (cli *Client) GetBotListV2(ctx context.Context) ([]types.BotListInfo, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
 		To:        types.ServerJID,
-		Namespace: "bot",
+		Namespace: botIQNamespace,
 		Type:      iqGet,
 		Content: []waBinary.Node{
-			{Tag: "bot", Attrs: waBinary.Attrs{"v": "2"}},
+			{Tag: botIQNamespace, Attrs: waBinary.Attrs{"v": botListVersion}},
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	botNode, ok := resp.GetOptionalChildByTag("bot")
+	botNode, ok := resp.GetOptionalChildByTag(botIQNamespace)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "bot", In: "response to bot list query"}
+		return nil, &ElementMissingError{Tag: botIQNamespace, In: "response to bot list query"}
 	}
 
 	var list []types.BotListInfo
 
-	for _, section := range botNode.GetChildrenByTag("section") {
-		if section.AttrGetter().String("type") == "all" {
-			for _, bot := range section.GetChildrenByTag("bot") {
+	for _, section := range botNode.GetChildrenByTag(botSectionTag) {
+		if section.AttrGetter().String("type") == botSectionTypeAll {
+			for _, bot := range section.GetChildrenByTag(botIQNamespace) {
 				ag := bot.AttrGetter()
-				list = append(list, types.BotListInfo{
+				info := types.BotListInfo{
 					PersonaID: ag.String("persona_id"),
 					BotJID:    ag.JID("jid"),
-				})
+				}
+				if !ag.OK() {
+					cli.Log.Debugf("Ignoring bot list entry with unexpected attributes: %v", ag.Error())
+					continue
+				}
+				list = append(list, info)
 			}
 		}
 	}
@@ -54,8 +70,8 @@ func (cli *Client) GetBotProfiles(ctx context.Context, botInfo []types.BotListIn
 		jids[i] = bot.BotJID
 	}
 
-	list, err := cli.usync(ctx, jids, "query", "interactive", []waBinary.Node{
-		{Tag: "bot", Content: []waBinary.Node{{Tag: "profile", Attrs: waBinary.Attrs{"v": "1"}}}},
+	list, err := cli.usync(ctx, jids, usyncModeQuery, usyncContextInteractive, []waBinary.Node{
+		{Tag: botIQNamespace, Content: []waBinary.Node{{Tag: profileNodeTag, Attrs: waBinary.Attrs{"v": botProfileVersion}}}},
 	}, UsyncQueryExtras{
 		BotListInfo: botInfo,
 	})
@@ -67,33 +83,33 @@ func (cli *Client) GetBotProfiles(ctx context.Context, botInfo []types.BotListIn
 	var profiles []types.BotProfileInfo
 	for _, user := range list.GetChildren() {
 		jid := user.AttrGetter().JID("jid")
-		bot := user.GetChildByTag("bot")
-		profile := bot.GetChildByTag("profile")
-		name := string(profile.GetChildByTag("name").Content.([]byte))
-		attributes := string(profile.GetChildByTag("attributes").Content.([]byte))
-		description := string(profile.GetChildByTag("description").Content.([]byte))
-		category := string(profile.GetChildByTag("category").Content.([]byte))
+		bot := user.GetChildByTag(botIQNamespace)
+		profile := bot.GetChildByTag(profileNodeTag)
+		name := nodeContentString(profile.GetChildByTag("name"))
+		attributes := nodeContentString(profile.GetChildByTag("attributes"))
+		description := nodeContentString(profile.GetChildByTag("description"))
+		category := nodeContentString(profile.GetChildByTag(businessCategoryTag))
 		_, isDefault := profile.GetOptionalChildByTag("default")
 		personaID := profile.AttrGetter().String("persona_id")
-		commandsNode := profile.GetChildByTag("commands")
-		commandDescription := string(commandsNode.GetChildByTag("description").Content.([]byte))
+		commandsNode := profile.GetChildByTag(botCommandsTag)
+		commandDescription := nodeContentString(commandsNode.GetChildByTag("description"))
 		var commands []types.BotProfileCommand
-		for _, commandNode := range commandsNode.GetChildrenByTag("command") {
+		for _, commandNode := range commandsNode.GetChildrenByTag(botCommandTag) {
 			commands = append(commands, types.BotProfileCommand{
-				Name:        string(commandNode.GetChildByTag("name").Content.([]byte)),
-				Description: string(commandNode.GetChildByTag("description").Content.([]byte)),
+				Name:        nodeContentString(commandNode.GetChildByTag("name")),
+				Description: nodeContentString(commandNode.GetChildByTag("description")),
 			})
 		}
 
-		promptsNode := profile.GetChildByTag("prompts")
+		promptsNode := profile.GetChildByTag(botPromptsTag)
 		var prompts []string
-		for _, promptNode := range promptsNode.GetChildrenByTag("prompt") {
+		for _, promptNode := range promptsNode.GetChildrenByTag(botPromptTag) {
 			prompts = append(
 				prompts,
 				fmt.Sprintf(
 					"%s %s",
-					string(promptNode.GetChildByTag("emoji").Content.([]byte)),
-					string(promptNode.GetChildByTag("text").Content.([]byte)),
+					nodeContentString(promptNode.GetChildByTag("emoji")),
+					nodeContentString(promptNode.GetChildByTag("text")),
 				),
 			)
 		}
