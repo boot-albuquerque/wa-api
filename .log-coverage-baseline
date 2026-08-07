@@ -118,12 +118,10 @@ rules_frozen=true
 # A remocao de startClient deixou orfa a var webhookTLSSkipVerify em
 # pkg/bootstrap/lifecycle.go (seu unico consumidor era o setup inline de
 # resty dentro de startClient); a copia viva migrou para
-# pkg/infra/whatsmeow/client_manager.go junto com ProvisionWebhookClient.
+# pkg/infra/wa-noise/client_manager.go junto com ProvisionWebhookClient.
 # Deletar a orfa tira 1 funcao do denominador E 1 do numerador (ela logava o
 # Warn de opt-in inseguro), entao a razao cai 1 decimo sem que nenhum site
 # tenha deixado de logar — o log continua existindo, no arquivo novo.
-min_func_coverage=710
-min_errpath_coverage=856
 #
 # 504->503: connectOnStartup passou a chamar s.startSession direto em vez de
 # repetir o corpo dele numa closure inline — a closure (connectOnStartup.func2)
@@ -144,19 +142,24 @@ min_errpath_coverage=856
 # (os 2 pontos que decidem se e' erro) ja logam. errpath_coverage nao muda
 # (856): o adapter nao tem branch de erro proprio pra contar como S-ret
 # descoberto (so' repassa o retorno de baixo).
-#
-# justificativa: resolucao LID<->PN em GET /user/contacts/last-activity
-# (2026-08-06, fecha o gap medido contra dados reais: 0/1141 contatos
-# casavam por telefone, so' 5/284 por JID bruto, porque whatsmeow_contacts
-# vive majoritariamente em espaco @lid e message_history mistura @lid/PN).
-# min_eligible sobe 509->511 (+2: UserAdapter.GetManyLIDsForPNs + o novo
-# GetContactsLastActivityUseCase.normalizeToLID). func_coverage cai
-# 707->706: SO' GetManyLIDsForPNs fica descoberto — adapter fino que so'
-# inverte o mapa lid->pn do store em pn->lid, mesmo padrao ja aceito
-# (adapter nao loga, use case loga); normalizeToLID loga no branch de erro
-# (resolver falhou) e por isso conta como coberto. errpath_coverage nao
-# muda (856): GetManyLIDsForPNs propaga o erro do SDK sem branch proprio.
-min_func_coverage=706
-min_errpath_coverage=856
-min_eligible=511
+# justificativa: merge de feature/vendor-whatsmeow em feature/macbook-lucas
+# (2026-08-07). min_eligible 507->509 (+2, ratchet-UP honesto): o port de
+# UserAdapter.GetManyLIDsForPNs para pkg/infra/wa-noise/adapters/user/ e o
+# normalizeToLID do use case, ambos vindos de 3ac8073. func_coverage cai
+# 710->709 pelo MESMO motivo que o proprio 3ac8073 ja' havia justificado no
+# develop: o adapter fino nao loga (padrao aceito neste pacote — adapter nao
+# loga, use case loga), entao entra no denominador sem entrar no numerador.
+# Nenhum site que logava deixou de logar. errpath_coverage SOBE 862->863.
+min_func_coverage=709
+min_errpath_coverage=863
+min_eligible=509
 max_exempt_annotations=0
+
+# Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
+#   min_eligible 509 -> 507: os tres helpers privados client() identicos de
+#     GroupAdapter/MiscAdapter/UserAdapter viraram um unico
+#     SessionGuardAdapter.Client exportado (-3 +1). waclienttest/ entrou em
+#     .logcov-exclude pelo mesmo criterio de contractsfake (dublê de teste),
+#     entao os fakes promovidos de _test.go a pacote nao entram no denominador.
+#   min_func_coverage 707 -> 710 e min_errpath_coverage 856 -> 862: efeito
+#     aritmetico da mesma consolidacao — os helpers removidos nao logavam.

@@ -75,8 +75,8 @@ var migrations = []Migration{
 	},
 	{
 		ID:    9,
-		Name:  "add_whatsmeow_message_secrets_message_id_idx",
-		UpSQL: addWhatsmeowMessageSecretsMessageIDIndexSQL,
+		Name:  "add_wanoise_message_secrets_message_id_idx",
+		UpSQL: addWaNoiseMessageSecretsMessageIDIndexSQL,
 	},
 	{
 		ID:    10,
@@ -92,7 +92,43 @@ var migrations = []Migration{
 		// applyTokenHashMigration em vez de tx.Exec(UpSQL).
 		DownSQL: addTokenHashDownSQL,
 	},
+	{
+		ID:      12,
+		Name:    "rename_message_secrets_index",
+		UpSQL:   renameMessageSecretsIndexSQL,
+		DownSQL: renameMessageSecretsIndexDownSQL,
+	},
 }
+
+// renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de
+// protocolo (ver renameLegacyTables em
+// internal/wa-noise/persistence/store/sqlstore/legacy_rename.go). Renomear a
+// tabela não renomeia seus índices, e este índice em particular é criado por
+// esta camada (migração 9), não pelo módulo — por isso o rename mora aqui.
+//
+// É rename puro, guardado por existência: não depende de a tabela existir, só
+// do índice. Em instalação nova o índice ainda não foi criado e o bloco é
+// no-op. No SQLite a migração 9 nunca criou índice nenhum (applyMigration a
+// trata como no-op), então esta também é no-op lá.
+const renameMessageSecretsIndexSQL = `
+-- PostgreSQL version
+DO $$
+BEGIN
+	IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'whatsmeow_message_secrets_message_id_idx') THEN
+		ALTER INDEX whatsmeow_message_secrets_message_id_idx RENAME TO wanoise_message_secrets_message_id_idx;
+	END IF;
+END $$;
+-- SQLite version (handled in code)
+`
+
+const renameMessageSecretsIndexDownSQL = `
+DO $$
+BEGIN
+	IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'wanoise_message_secrets_message_id_idx') THEN
+		ALTER INDEX wanoise_message_secrets_message_id_idx RENAME TO whatsmeow_message_secrets_message_id_idx;
+	END IF;
+END $$;
+`
 
 // addTokenHashDownSQL desfaz a migração 11. Primeiro DownSQL preenchido no
 // repositório: o runner ainda não executa down steps (dados/F1), mas sem o SQL
@@ -244,12 +280,12 @@ END $$;
 -- SQLite version (handled in code)
 `
 
-const addWhatsmeowMessageSecretsMessageIDIndexSQL = `
+const addWaNoiseMessageSecretsMessageIDIndexSQL = `
 -- PostgreSQL version
 DO $$
 BEGIN
-	CREATE INDEX IF NOT EXISTS whatsmeow_message_secrets_message_id_idx
-	ON whatsmeow_message_secrets (message_id);
+	CREATE INDEX IF NOT EXISTS wanoise_message_secrets_message_id_idx
+	ON wanoise_message_secrets (message_id);
 END $$;
 -- SQLite version (handled in code)
 `
@@ -533,6 +569,14 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		}
 	} else if migration.ID == 11 {
 		err = applyTokenHashMigration(tx, db.DriverName())
+	} else if migration.ID == 12 {
+		if db.DriverName() == "sqlite" {
+			// A migração 9 nunca criou o índice no SQLite, então não há o que
+			// renomear aqui.
+			err = nil
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
 	} else {
 		_, err = tx.Exec(migration.UpSQL)
 	}

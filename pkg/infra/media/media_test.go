@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
+	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -20,13 +21,13 @@ import (
 // Duplos
 // ---------------------------------------------------------------------------
 
-type fakeMyClient struct {
+type fakeUserClient struct {
 	userID string
-	wa     *whatsmeow.Client
+	wa     *wanoise.Client
 }
 
-func (f fakeMyClient) GetWAClient() *whatsmeow.Client { return f.wa }
-func (f fakeMyClient) GetUserID() string              { return f.userID }
+func (f fakeUserClient) GetWAClient() *wanoise.Client { return f.wa }
+func (f fakeUserClient) GetUserID() string            { return f.userID }
 
 type fakeS3Manager struct {
 	result map[string]interface{}
@@ -44,7 +45,7 @@ func (f *fakeS3Manager) ProcessMediaForS3(_ context.Context, _, _, _ string, _ [
 }
 
 // mediaServer devolve `body` como midia nao criptografada. Uma mensagem sem
-// MediaKey e sem FileEncSHA256 faz o whatsmeow entregar os bytes crus, o que
+// MediaKey e sem FileEncSHA256 faz o wa-noise entregar os bytes crus, o que
 // da' um seam de download real sem sessao nem criptografia.
 func mediaServer(t *testing.T, body []byte) string {
 	t.Helper()
@@ -57,7 +58,7 @@ func mediaServer(t *testing.T, body []byte) string {
 	return srv.URL
 }
 
-func downloadableFrom(url string) whatsmeow.DownloadableMessage {
+func downloadableFrom(url string) wanoise.DownloadableMessage {
 	return &waE2E.ImageMessage{URL: proto.String(url)}
 }
 
@@ -118,7 +119,7 @@ func TestProcessMediaFalhaAoCriarDiretorio(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: "wa-api-test-blocker"},
+		fakeUserClient{userID: "wa-api-test-blocker"},
 		downloadableFrom(mediaServer(t, []byte("x"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-1",
 		MediaS3Config{}, postmap, nil,
@@ -135,9 +136,9 @@ func TestProcessMediaFalhaNoDownload(t *testing.T) {
 	userID := userIDForTmp(t)
 
 	postmap := map[string]interface{}{}
-	// Cliente whatsmeow nil: Download devolve ErrClientIsNil.
+	// Cliente wa-noise nil: Download devolve ErrClientIsNil.
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: nil},
+		fakeUserClient{userID: userID, wa: nil},
 		downloadableFrom("https://exemplo.invalido/x.png"),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-1",
 		MediaS3Config{}, postmap, nil,
@@ -156,7 +157,7 @@ func TestProcessMediaFalhaAoGravarArquivoTemporario(t *testing.T) {
 	postmap := map[string]interface{}{}
 	// messageID com separador aponta para um subdiretorio inexistente.
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "sub/msg-1",
 		MediaS3Config{}, postmap, nil,
@@ -174,7 +175,7 @@ func TestProcessMediaSemHandlerGlobal(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-1",
 		MediaS3Config{Enabled: "true", MediaDelivery: "both"}, postmap,
@@ -203,7 +204,7 @@ func TestProcessMediaUsaExtensaoDoMimeType(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".fallback", time.Second, true, "chat@s.whatsapp.net", "msg-ext",
 		MediaS3Config{MediaDelivery: "base64"}, postmap, nil,
@@ -234,7 +235,7 @@ func TestProcessMediaUsaFallbackExtQuandoMimeDesconhecido(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"application/x-wa-api-inexistente", ".bin", time.Second, true, "chat@s.whatsapp.net", "msg-fb",
 		MediaS3Config{MediaDelivery: "base64"}, postmap, nil,
@@ -271,7 +272,7 @@ func TestProcessMediaS3(t *testing.T) {
 
 			postmap := map[string]interface{}{}
 			ProcessMedia(
-				fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+				fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 				downloadableFrom(mediaServer(t, []byte("conteudo"))),
 				"image/png", ".png", time.Second, false, "chat@s.whatsapp.net", "msg-s3",
 				MediaS3Config{Enabled: tc.enabled, MediaDelivery: tc.mediaDelivery}, postmap, nil,
@@ -308,7 +309,7 @@ func TestProcessMediaErroDoS3NaoInterrompe(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-s3-err",
 		MediaS3Config{Enabled: "true", MediaDelivery: "both"}, postmap,
@@ -337,7 +338,7 @@ func TestProcessMediaErroNoBase64Interrompe(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-b64-err",
 		MediaS3Config{MediaDelivery: "base64"}, postmap,
@@ -359,7 +360,7 @@ func TestProcessMediaHandlerComFuncoesNulas(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-nulos",
 		MediaS3Config{Enabled: "true", MediaDelivery: "both"}, postmap, nil,
@@ -386,7 +387,7 @@ func TestProcessMediaLimpezaDoTemporarioFalhaSemQuebrar(t *testing.T) {
 
 	postmap := map[string]interface{}{}
 	ProcessMedia(
-		fakeMyClient{userID: userID, wa: whatsmeow.NewClient(nil, nil)},
+		fakeUserClient{userID: userID, wa: wanoise.NewClient(nil, nil)},
 		downloadableFrom(mediaServer(t, []byte("conteudo"))),
 		"image/png", ".png", time.Second, true, "chat@s.whatsapp.net", "msg-limpeza",
 		MediaS3Config{MediaDelivery: "base64"}, postmap, nil,

@@ -6,17 +6,18 @@ import (
 	"slices"
 	"strings"
 
-	wmhelpers "wa-api/pkg/infra/whatsmeow"
+	"wa-api/pkg/infra/wa-noise/runtime/safego"
+
+	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 )
 
 // db field declaration as *sqlx.DB
-type MyClient struct {
-	WAClient       *whatsmeow.Client
+type UserEventHandler struct {
+	WAClient       *wanoise.Client
 	EventHandlerID uint32
 	UserID         string
 	Token          string
@@ -29,7 +30,7 @@ type MyClient struct {
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
 // the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
-var safeGo = wmhelpers.SafeGo
+var safeGo = safego.SafeGo
 
 // Webhook functions extracted to lifecycle_webhook.go
 

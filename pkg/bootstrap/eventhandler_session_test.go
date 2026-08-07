@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // fakeContactStore devolve um mapa pré-carregado de contatos, ou um erro
@@ -53,12 +54,12 @@ func (f *fakeContactStore) GetAllContacts(ctx context.Context) (map[types.JID]ty
 	return f.contacts, nil
 }
 
-// clientWithContacts monta um *whatsmeow.Client real (sem conexão de rede)
+// clientWithContacts monta um *wa-noise.Client real (sem conexão de rede)
 // cujo Store.Contacts é o fake acima. NewClient só popula campos internos a
 // partir do deviceStore — não conecta a nada — então isso é seguro em teste
-// unitário, no mesmo espírito de pkg/infra/whatsmeow/user_adapters_test.go.
-func clientWithContacts(cs store.ContactStore) *whatsmeow.Client {
-	return whatsmeow.NewClient(&store.Device{Contacts: cs}, nil)
+// unitário, no mesmo espírito de pkg/infra/wa-noise/user_adapters_test.go.
+func clientWithContacts(cs store.ContactStore) *wanoise.Client {
+	return wanoise.NewClient(&store.Device{Contacts: cs}, nil)
 }
 
 // captureLog troca o logger global por um buffer durante fn e devolve o que
@@ -82,11 +83,11 @@ func TestHandleAppStateSyncComplete_ContactRoster_LogsCount(t *testing.T) {
 		types.NewJID("5511900000001", types.DefaultUserServer): {Found: true, PushName: "Alice"},
 		types.NewJID("5511900000002", types.DefaultUserServer): {Found: true, PushName: "Bob"},
 	}}
-	mycli := &MyClient{WAClient: clientWithContacts(cs), UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: clientWithContacts(cs), UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalUnblockLow, Version: 7}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if !strings.Contains(out, `"level":"info"`) {
@@ -117,12 +118,12 @@ func TestHandleAppStateSyncComplete_ContactRoster_LogsCount(t *testing.T) {
 func TestHandleAppStateSyncComplete_CriticalBlock_PresenceUnaffected(t *testing.T) {
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
-	client := whatsmeow.NewClient(deviceStore, nil)
-	mycli := &MyClient{WAClient: client, UserID: "user-42"}
+	client := wanoise.NewClient(deviceStore, nil)
+	evh := &UserEventHandler{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalBlock}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	// SendPresence falha sem uma conexão real (client não conectado), então o
@@ -144,12 +145,12 @@ func TestHandleAppStateSyncComplete_CriticalBlock_PresenceUnaffected(t *testing.
 func TestHandleAppStateSyncComplete_OtherPatch_NoOp(t *testing.T) {
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
-	client := whatsmeow.NewClient(deviceStore, nil)
-	mycli := &MyClient{WAClient: client, UserID: "user-42"}
+	client := wanoise.NewClient(deviceStore, nil)
+	evh := &UserEventHandler{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchRegularLow}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if out != "" {
@@ -163,11 +164,11 @@ func TestHandleAppStateSyncComplete_OtherPatch_NoOp(t *testing.T) {
 func TestHandleAppStateSyncComplete_ContactRoster_GetAllContactsError(t *testing.T) {
 	boom := errors.New("boom")
 	cs := &fakeContactStore{errOnGet: boom}
-	mycli := &MyClient{WAClient: clientWithContacts(cs), UserID: "user-42"}
+	evh := &UserEventHandler{WAClient: clientWithContacts(cs), UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalUnblockLow, Version: 3}
 
 	out := captureLog(t, func() {
-		mycli.handleAppStateSyncComplete(evt, &eventState{})
+		evh.handleAppStateSyncComplete(evt, &eventState{})
 	})
 
 	if !strings.Contains(out, `"level":"warn"`) {

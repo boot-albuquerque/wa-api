@@ -2,14 +2,16 @@ package bootstrap
 
 import (
 	"context"
+	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+
+	"wa-api/internal/wa-noise/persistence/store"
 
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/store"
-	waLog "go.mau.fi/whatsmeow/util/log"
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
-	wa "wa-api/pkg/infra/whatsmeow"
+	"wa-api/pkg/infra/wa-noise/mapping/platform"
+	"wa-api/pkg/infra/wa-noise/observability/walog"
 )
 
 // newSessionOrchestrator liga os quatro ports de sessão (Fases 2a-2e) ao
@@ -18,17 +20,16 @@ import (
 // dois adapters de pkg/bootstrap para dispatcher e attach hook. É o que
 // substitui (*server).startClient, removido nesta fase.
 func newSessionOrchestrator(s *server) *appsession.Orchestrator {
-	var clientLog waLog.Logger
-	if *waDebug != "" {
-		clientLog = waLog.Stdout("Client", *waDebug, *colorOutput)
-	}
+	// Nunca nil e nunca um logger nulo: Warn e Error do SDK saem sempre. --wadebug
+	// apenas baixa o piso (ver walog.ParseLevel).
+	clientLog := walog.New(log.Logger, walog.ModuleClient, walog.ParseLevel(*waDebug))
 
 	// DeviceProps é global do SDK e precisa estar definido antes de qualquer
 	// cliente ser criado — antes vivia no topo de startClient.
-	store.DeviceProps.PlatformType = wa.GetPlatformTypeEnum(*platformType)
+	store.DeviceProps.PlatformType = platform.GetPlatformTypeEnum(*platformType)
 	store.DeviceProps.Os = osName
 
-	provider := wa.NewSessionProviderWithLogger(container, deviceJIDLookup(s), clientLog)
+	provider := wasession.NewSessionProviderWithLogger(container, deviceJIDLookup(s), clientLog)
 
 	return appsession.NewOrchestrator(
 		provider,
@@ -46,7 +47,7 @@ func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 // deviceJIDLookup resolve users.jid, que é como o provider decide entre
 // reaproveitar o device persistido e criar um novo. Substitui o parâmetro
 // textjid que connectOnStartup e o ConnectHandler passavam para startClient.
-func deviceJIDLookup(s *server) wa.DeviceJIDLookup {
+func deviceJIDLookup(s *server) wasession.DeviceJIDLookup {
 	return func(ctx context.Context, userID string) (string, error) {
 		var jid string
 		if err := s.DB.QueryRowContext(ctx, "SELECT COALESCE(jid, '') FROM users WHERE id=$1", userID).Scan(&jid); err != nil {

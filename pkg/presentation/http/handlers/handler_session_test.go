@@ -74,7 +74,7 @@ func sessionEnvelope(t *testing.T, rec *httptest.ResponseRecorder) map[string]an
 	return env
 }
 
-// noSessionErr e' o erro tipado que a porta whatsmeow produz quando nao ha
+// noSessionErr e' o erro tipado que a porta wa-noise produz quando nao ha
 // sessao: categoria validation, logo 400 na fronteira.
 func noSessionErr() error {
 	return apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
@@ -258,7 +258,7 @@ func TestSessionHandlers_NoSessionAppErrReachesClient(t *testing.T) {
 // TestSessionHandlers_InternalFailure_500_LogsError: erro sem taxonomia e'
 // 500 e sai em ERROR — o outro lado da escolha de nivel.
 func TestSessionHandlers_InternalFailure_500_LogsError(t *testing.T) {
-	const boom = "connection refused by whatsmeow store"
+	const boom = "connection refused by wanoise store"
 
 	for _, tc := range sessionCases() {
 		if tc.name == "Connect" {

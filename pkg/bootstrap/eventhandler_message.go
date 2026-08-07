@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de mensagem: a mensagem em si e os avisos sobre mensagens
@@ -28,10 +29,10 @@ type messageS3Config struct {
 	MediaDelivery string `db:"media_delivery"`
 }
 
-func (mycli *MyClient) handleMessage(evt *events.Message, st *eventState) {
-	appCtx.LastMessageCache.Set(mycli.UserID, &evt.Info, cache.DefaultExpiration)
+func (evh *UserEventHandler) handleMessage(evt *events.Message, st *eventState) {
+	appCtx.LastMessageCache.Set(evh.UserID, &evt.Info, cache.DefaultExpiration)
 
-	s3Config := mycli.resolveMessageS3Config(st.txtid)
+	s3Config := evh.resolveMessageS3Config(st.txtid)
 
 	// Lazy init S3 client if needed (handles reconnect-after-restart when connectOnStartup skipped this user)
 	if s3Config.Enabled == "true" && (s3Config.MediaDelivery == "s3" || s3Config.MediaDelivery == "both") {
@@ -42,26 +43,26 @@ func (mycli *MyClient) handleMessage(evt *events.Message, st *eventState) {
 	st.dowebhook = 1
 
 	logMessageReceived(evt)
-	mycli.decoratePollVote(evt, st)
-	mycli.decryptSecretEncryptedMessage(evt)
+	evh.decoratePollVote(evt, st)
+	evh.decryptSecretEncryptedMessage(evt)
 
 	if !*skipMedia {
-		mycli.processMessageMedia(evt, s3Config, st)
+		evh.processMessageMedia(evt, s3Config, st)
 	}
 
 	// Save message to history regardless of skipMedia setting
-	mycli.saveMessageHistory(evt, st)
+	evh.saveMessageHistory(evt, st)
 }
 
 // resolveMessageS3Config lê a configuração de S3 do cache de usuário e, se ela
 // não estiver lá, do banco. O fallback em caso de erro de banco é o mesmo de
 // antes: S3 desligado e entrega em base64.
-func (mycli *MyClient) resolveMessageS3Config(txtid string) messageS3Config {
+func (evh *UserEventHandler) resolveMessageS3Config(txtid string) messageS3Config {
 	var s3Config messageS3Config
 
-	myuserinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(evh.Token)
 	if !found {
-		err := mycli.DB.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
+		err := evh.DB.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
 		if err != nil {
 			log.Error().Err(err).Msg("onMessage Failed to get S3 config from DB as it was not on cache")
 			s3Config.Enabled = "false"
@@ -99,13 +100,13 @@ func logMessageReceived(evt *events.Message) {
 // session was restarted between send and vote we cannot resolve plaintext;
 // hashes are still emitted so the consumer can perform matching itself if it
 // has stored options.
-func (mycli *MyClient) decoratePollVote(evt *events.Message, st *eventState) {
+func (evh *UserEventHandler) decoratePollVote(evt *events.Message, st *eventState) {
 	if evt.Message.GetPollUpdateMessage() == nil {
 		return
 	}
 	pollMsgID := evt.Message.GetPollUpdateMessage().GetPollCreationMessageKey().GetID()
 
-	pollVote, perr := mycli.WAClient.DecryptPollVote(context.Background(), evt)
+	pollVote, perr := evh.WAClient.DecryptPollVote(context.Background(), evt)
 	if perr != nil {
 		log.Warn().Err(perr).Str("pollMsgID", pollMsgID).Msg("DecryptPollVote failed")
 	}
@@ -118,7 +119,7 @@ func (mycli *MyClient) decoratePollVote(evt *events.Message, st *eventState) {
 		}
 
 		selected := make([]string, 0, len(hashes))
-		if stored := clientManager.GetPollOptions(mycli.UserID, pollMsgID); len(stored) > 0 {
+		if stored := clientManager.GetPollOptions(evh.UserID, pollMsgID); len(stored) > 0 {
 			optionsByHash := make(map[string]string, len(stored))
 			for _, opt := range stored {
 				sum := sha256.Sum256([]byte(opt))
@@ -142,9 +143,9 @@ func (mycli *MyClient) decoratePollVote(evt *events.Message, st *eventState) {
 // decryptSecretEncryptedMessage troca evt.Message pelo conteúdo decifrado, em
 // vez de devolvê-lo: o ramo original fazia `evt.Message = decrypted`, e tudo
 // que roda depois — mídia, histórico, webhook — lê o campo já trocado.
-func (mycli *MyClient) decryptSecretEncryptedMessage(evt *events.Message) {
+func (evh *UserEventHandler) decryptSecretEncryptedMessage(evt *events.Message) {
 	if encMessage := evt.Message.GetSecretEncryptedMessage(); encMessage != nil {
-		decrypted, derr := mycli.WAClient.DecryptSecretEncryptedMessage(context.Background(), evt)
+		decrypted, derr := evh.WAClient.DecryptSecretEncryptedMessage(context.Background(), evt)
 		if derr != nil {
 			log.Warn().
 				Err(derr).
@@ -161,7 +162,7 @@ func (mycli *MyClient) decryptSecretEncryptedMessage(evt *events.Message) {
 	}
 }
 
-func (mycli *MyClient) processMessageMedia(evt *events.Message, s3Config messageS3Config, st *eventState) {
+func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config messageS3Config, st *eventState) {
 	isIncoming := !evt.Info.IsFromMe
 	chatJID := evt.Info.Sender.String()
 	if evt.Info.IsGroup {
@@ -175,13 +176,13 @@ func (mycli *MyClient) processMessageMedia(evt *events.Message, s3Config message
 	s3cfg := mediaS3Config(s3Config)
 
 	if img := evt.Message.GetImageMessage(); img != nil {
-		mycli.processMedia(img, img.GetMimetype(), ".jpg",
+		evh.processMedia(img, img.GetMimetype(), ".jpg",
 			downloadTimeoutImage, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
 	}
 
 	if audio := evt.Message.GetAudioMessage(); audio != nil {
-		mycli.processMedia(audio, audio.GetMimetype(), ".ogg",
+		evh.processMedia(audio, audio.GetMimetype(), ".ogg",
 			downloadTimeoutAudio, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
 	}
@@ -191,19 +192,19 @@ func (mycli *MyClient) processMessageMedia(evt *events.Message, s3Config message
 		if doc.FileName != nil {
 			ext = filepath.Ext(*doc.FileName)
 		}
-		mycli.processMedia(doc, doc.GetMimetype(), ext,
+		evh.processMedia(doc, doc.GetMimetype(), ext,
 			downloadTimeoutDocument, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
 	}
 
 	if video := evt.Message.GetVideoMessage(); video != nil {
-		mycli.processMedia(video, video.GetMimetype(), ".mp4",
+		evh.processMedia(video, video.GetMimetype(), ".mp4",
 			downloadTimeoutVideo, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
 	}
 
 	if sticker := evt.Message.GetStickerMessage(); sticker != nil {
-		mycli.processMedia(sticker, sticker.GetMimetype(), ".webp",
+		evh.processMedia(sticker, sticker.GetMimetype(), ".webp",
 			downloadTimeoutSticker, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, map[string]interface{}{
 				"isSticker":       true,
@@ -212,15 +213,15 @@ func (mycli *MyClient) processMessageMedia(evt *events.Message, s3Config message
 	}
 }
 
-func (mycli *MyClient) saveMessageHistory(evt *events.Message, st *eventState) {
+func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventState) {
 	// Get user's history setting from cache
 	var historyLimit int
-	userinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
+	userinfo, found := appCtx.UserInfoCache.Get(evh.Token)
 	if found {
 		historyStr := userinfo.(Values).Get("History")
 		historyLimit, _ = strconv.Atoi(historyStr)
 	} else {
-		log.Warn().Str("userID", mycli.UserID).Msg("User info not found in cache, skipping history")
+		log.Warn().Str("userID", evh.UserID).Msg("User info not found in cache, skipping history")
 		historyLimit = 0
 	}
 
@@ -310,8 +311,8 @@ func (mycli *MyClient) saveMessageHistory(evt *events.Message, st *eventState) {
 		}
 
 		err = saveMessageToHistory(
-			mycli.DB,
-			mycli.UserID,
+			evh.DB,
+			evh.UserID,
 			evt.Info.Chat.String(),
 			evt.Info.Sender.String(),
 			evt.Info.ID,
@@ -324,7 +325,7 @@ func (mycli *MyClient) saveMessageHistory(evt *events.Message, st *eventState) {
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to save message to history")
 		} else {
-			err = trimMessageHistory(mycli.DB, mycli.UserID, evt.Info.Chat.String(), historyLimit)
+			err = trimMessageHistory(evh.DB, evh.UserID, evt.Info.Chat.String(), historyLimit)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to trim message history")
 			}
@@ -363,7 +364,7 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 	return textContent
 }
 
-func (mycli *MyClient) handleReceipt(evt *events.Receipt, st *eventState) bool {
+func (evh *UserEventHandler) handleReceipt(evt *events.Receipt, st *eventState) bool {
 	st.postmap["type"] = "ReadReceipt"
 	st.dowebhook = 1
 	switch evt.Type {
@@ -384,19 +385,19 @@ func (mycli *MyClient) handleReceipt(evt *events.Receipt, st *eventState) bool {
 	return true
 }
 
-func (mycli *MyClient) handleUndecryptableMessage(evt *events.UndecryptableMessage, st *eventState) {
+func (evh *UserEventHandler) handleUndecryptableMessage(evt *events.UndecryptableMessage, st *eventState) {
 	st.postmap["type"] = "UndecryptableMessage"
 	st.dowebhook = 1
 	log.Warn().Str("info", evt.Info.SourceString()).Msg("Undecryptable message received")
 }
 
-func (mycli *MyClient) handleMediaRetry(evt *events.MediaRetry, st *eventState) {
+func (evh *UserEventHandler) handleMediaRetry(evt *events.MediaRetry, st *eventState) {
 	st.postmap["type"] = "MediaRetry"
 	st.dowebhook = 1
 	log.Info().Str("messageID", evt.MessageID).Msg("Media retry event")
 }
 
-func (mycli *MyClient) handleFBMessage(evt *events.FBMessage, st *eventState) {
+func (evh *UserEventHandler) handleFBMessage(evt *events.FBMessage, st *eventState) {
 	st.postmap["type"] = "FBMessage"
 	st.dowebhook = 1
 	log.Info().Str("info", evt.Info.SourceString()).Msg("Facebook message received")

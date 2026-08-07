@@ -1,0 +1,262 @@
+package wanoise
+
+import (
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+// proxyTestClient traz so' os tres http.Client que setTransport mexe.
+func proxyTestClient() *Client {
+	return &Client{
+		mediaHTTP:     &http.Client{},
+		websocketHTTP: &http.Client{},
+		preLoginHTTP:  &http.Client{},
+	}
+}
+
+// plainDialer implementa proxy.Dialer e **nao** implementa proxy.ContextDialer.
+// E' o caso que fazia a type assertion crua entrar em panic.
+type plainDialer struct{ called *int }
+
+func (d plainDialer) Dial(network, addr string) (net.Conn, error) {
+	*d.called++
+	return nil, errors.New("plainDialer nao disca de verdade")
+}
+
+// ctxDialer implementa as duas interfaces.
+type ctxDialer struct {
+	dialCalled    *int
+	ctxDialCalled *int
+}
+
+func (d ctxDialer) Dial(network, addr string) (net.Conn, error) {
+	*d.dialCalled++
+	return nil, errors.New("ctxDialer nao disca de verdade")
+}
+
+func (d ctxDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	*d.ctxDialCalled++
+	return nil, errors.New("ctxDialer nao disca de verdade")
+}
+
+// BUG DO LOTE 10: SetSOCKSProxy entrava em panic com um Dialer sem DialContext.
+//
+// SetSOCKSProxy e' API exportada e aceita qualquer proxy.Dialer. A assertion
+// `px.(proxy.ContextDialer)` derrubava o processo para qualquer dialer
+// customizado — e proxy.Dialer, a interface do parametro, nao exige
+// DialContext.
+func TestSetSOCKSProxyWithNonContextDialerDoesNotPanic(t *testing.T) {
+	var called int
+	cli := proxyTestClient()
+
+	cli.SetSOCKSProxy(plainDialer{called: &called})
+
+	transport, ok := cli.websocketHTTP.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport = %T, queria *http.Transport", cli.websocketHTTP.Transport)
+	}
+	if transport.DialContext == nil {
+		t.Fatal("DialContext nao foi instalado; o trafego sairia sem proxy")
+	}
+	// O proxy tem que ser realmente usado: instalar um DialContext que ignora o
+	// dialer vazaria o endereco real do cliente.
+	_, _ = transport.DialContext(t.Context(), "tcp", "example.com:443")
+	if called != 1 {
+		t.Errorf("Dial do proxy chamado %d vezes, queria 1", called)
+	}
+}
+
+// Quando o dialer implementa ContextDialer, e' o DialContext dele que tem que
+// ser usado — o adaptador nao pode descartar o contexto a toa.
+func TestSetSOCKSProxyPrefersContextDialer(t *testing.T) {
+	var dialCalled, ctxDialCalled int
+	cli := proxyTestClient()
+
+	cli.SetSOCKSProxy(ctxDialer{dialCalled: &dialCalled, ctxDialCalled: &ctxDialCalled})
+
+	transport := cli.websocketHTTP.Transport.(*http.Transport)
+	_, _ = transport.DialContext(t.Context(), "tcp", "example.com:443")
+
+	if ctxDialCalled != 1 {
+		t.Errorf("DialContext chamado %d vezes, queria 1", ctxDialCalled)
+	}
+	if dialCalled != 0 {
+		t.Errorf("Dial sem contexto chamado %d vezes, queria 0", dialCalled)
+	}
+}
+
+// --- SetProxyAddress: roteamento por esquema ---
+
+func TestSetProxyAddressSchemes(t *testing.T) {
+	cases := []struct {
+		name    string
+		addr    string
+		wantErr string
+	}{
+		{name: "http", addr: "http://proxy.local:8080"},
+		{name: "https", addr: "https://proxy.local:8443"},
+		{name: "socks5", addr: "socks5://proxy.local:1080"},
+		{name: "esquema desconhecido", addr: "ftp://proxy.local", wantErr: "unsupported proxy scheme"},
+		{name: "url invalida", addr: "://sem-esquema", wantErr: "missing protocol scheme"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cli := proxyTestClient()
+			err := cli.SetProxyAddress(tc.addr)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, queria conter %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v, queria nil", err)
+			}
+			if cli.websocketHTTP.Transport == nil {
+				t.Error("o transport do websocket nao foi configurado")
+			}
+		})
+	}
+}
+
+// Endereco vazio zera o proxy em vez de virar erro de parse — e' como se
+// desliga a leitura de https_proxy do ambiente.
+func TestSetProxyAddressEmptyClearsProxy(t *testing.T) {
+	cli := proxyTestClient()
+	if err := cli.SetProxyAddress(""); err != nil {
+		t.Fatalf("err = %v, queria nil", err)
+	}
+	transport, ok := cli.websocketHTTP.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport = %T, queria *http.Transport", cli.websocketHTTP.Transport)
+	}
+	if transport.Proxy != nil {
+		t.Error("endereco vazio tem que deixar Proxy nil")
+	}
+}
+
+// --- SetProxyOptions ---
+
+// Cada flag desliga exatamente um destino. Errar aqui manda trafego pelo canal
+// errado — por exemplo o websocket por um proxy que so' deveria servir midia.
+func TestSetProxyOptionsSelectTargets(t *testing.T) {
+	cases := []struct {
+		name                            string
+		opt                             SetProxyOptions
+		wantPreLogin, wantWS, wantMedia bool
+	}{
+		{name: "padrao", opt: SetProxyOptions{}, wantPreLogin: true, wantWS: true, wantMedia: true},
+		{name: "NoWebsocket", opt: SetProxyOptions{NoWebsocket: true}, wantMedia: true},
+		{name: "OnlyLogin", opt: SetProxyOptions{OnlyLogin: true}, wantPreLogin: true, wantMedia: true},
+		{name: "NoMedia", opt: SetProxyOptions{NoMedia: true}, wantPreLogin: true, wantWS: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cli := proxyTestClient()
+			cli.SetProxy(http.ProxyURL(nil), tc.opt)
+
+			if got := cli.preLoginHTTP.Transport != nil; got != tc.wantPreLogin {
+				t.Errorf("preLoginHTTP configurado = %v, queria %v", got, tc.wantPreLogin)
+			}
+			if got := cli.websocketHTTP.Transport != nil; got != tc.wantWS {
+				t.Errorf("websocketHTTP configurado = %v, queria %v", got, tc.wantWS)
+			}
+			if got := cli.mediaHTTP.Transport != nil; got != tc.wantMedia {
+				t.Errorf("mediaHTTP configurado = %v, queria %v", got, tc.wantMedia)
+			}
+		})
+	}
+}
+
+// Os setters de http.Client trocam o cliente inteiro, um destino de cada vez.
+func TestSetHTTPClientsAreIndependent(t *testing.T) {
+	cli := proxyTestClient()
+	media, ws, preLogin := &http.Client{}, &http.Client{}, &http.Client{}
+
+	cli.SetMediaHTTPClient(media)
+	cli.SetWebsocketHTTPClient(ws)
+	cli.SetPreLoginHTTPClient(preLogin)
+
+	if cli.mediaHTTP != media || cli.websocketHTTP != ws || cli.preLoginHTTP != preLogin {
+		t.Error("cada setter tem que trocar so' o seu proprio cliente")
+	}
+}
+
+// Os tres campos de http.Client nunca podem virar nil: proxyconf.Apply escreve
+// em h.Transport nos tres, e unlockedConnect passa websocketHTTP e preLoginHTTP
+// direto para o frame socket. Antes da correcao da F55, um setter com nil
+// deixava o campo nil e o proximo SetProxy derrubava o processo.
+func TestSettersDeHTTPClientTraduzemNilParaPadrao(t *testing.T) {
+	casos := map[string]struct {
+		set func(*Client, *http.Client)
+		get func(*Client) *http.Client
+	}{
+		"media":     {(*Client).SetMediaHTTPClient, func(c *Client) *http.Client { return c.mediaHTTP }},
+		"websocket": {(*Client).SetWebsocketHTTPClient, func(c *Client) *http.Client { return c.websocketHTTP }},
+		"prelogin":  {(*Client).SetPreLoginHTTPClient, func(c *Client) *http.Client { return c.preLoginHTTP }},
+	}
+	for name, c := range casos {
+		t.Run(name, func(t *testing.T) {
+			cli := proxyTestClient()
+			c.set(cli, nil)
+
+			got := c.get(cli)
+			if got == nil {
+				t.Fatal("o campo ficou nil apos o setter receber nil")
+			}
+			if got.Transport == nil {
+				t.Error("o cliente padrao deveria vir com Transport preenchido")
+			}
+
+			// A prova de que a F55 foi fechada: com o campo nil, isto era um
+			// nil deref.
+			if err := cli.SetProxyAddress("http://127.0.0.1:1"); err != nil {
+				t.Fatalf("SetProxyAddress apos nil: %v", err)
+			}
+		})
+	}
+}
+
+// O setter com um cliente de verdade continua guardando exatamente o ponteiro
+// que recebeu — a normalizacao de nil nao pode virar uma copia silenciosa.
+func TestSettersDeHTTPClientPreservamOPonteiroRecebido(t *testing.T) {
+	cli := proxyTestClient()
+	meu := &http.Client{}
+	cli.SetMediaHTTPClient(meu)
+	if cli.mediaHTTP != meu {
+		t.Error("o setter deveria guardar o mesmo ponteiro")
+	}
+}
+
+// SetProxy escrevia os transports sem lock nenhum enquanto unlockedConnect lia
+// os mesmos ponteiros sob socketLock — o mutex nao sincronizava o par, e uma
+// conexao concorrente podia sair pelo transport ANTIGO, sem o proxy pedido
+// (F57). Este teste falha sob -race na versao antiga.
+func TestSettersDeProxySaoConcorrentesComLeituraSobSocketLock(t *testing.T) {
+	cli := proxyTestClient()
+	const rodadas = 200
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < rodadas; i++ {
+			if err := cli.SetProxyAddress("http://127.0.0.1:1"); err != nil {
+				t.Errorf("SetProxyAddress: %v", err)
+				return
+			}
+			cli.SetMediaHTTPClient(nil)
+		}
+	}()
+	for i := 0; i < rodadas; i++ {
+		// Mesma leitura que unlockedConnect faz para montar o frame socket.
+		cli.socketLock.RLock()
+		_ = cli.websocketHTTP
+		_ = cli.preLoginHTTP
+		cli.socketLock.RUnlock()
+	}
+	<-done
+}

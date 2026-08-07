@@ -16,7 +16,7 @@ import (
 //
 // Os cinco compartilham a forma sessionUser -> decode -> use case, e diferem
 // so' na porta que consomem. A tabela injeta falha em CADA degrau: guarda de
-// sessao do whatsmeow, resolucao de JID, e a operacao em si — porque um
+// sessao do wa-noise, resolucao de JID, e a operacao em si — porque um
 // handler que colapsasse os tres num unico 500 sem causa continuaria passando
 // num teste que so' olhasse o status.
 
@@ -235,7 +235,7 @@ func TestPresenceHandlers_IncompletePayload(t *testing.T) {
 	}
 }
 
-// TestPresenceHandlers_SessionFailure: sem sessao do whatsmeow.
+// TestPresenceHandlers_SessionFailure: sem sessao do wa-noise.
 func TestPresenceHandlers_SessionFailure(t *testing.T) {
 	for _, tc := range presenceCases() {
 		t.Run(tc.name, func(t *testing.T) {

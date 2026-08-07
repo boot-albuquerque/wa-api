@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test
 
 # Default Go configuration
 GOCMD := go
@@ -9,9 +9,37 @@ GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
 BINARY := wa-api
 
+# internal/wa-noise/ é o módulo de protocolo do projeto. Historicamente
+# ficou fora dos gates que medem o que escrevemos (cobertura, lint, vet,
+# test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
+# progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
+# vet e lint, ao contrario da cobertura, JA' incluem internal/wa-noise/ (F17).
+#
+# A F17 supunha que incluir o modulo quebraria o gate de lint, porque o gocyclo
+# maximo dele estaria "muito acima do baseline do repo". Medido em 2026-08-07:
+# a maior funcao de internal/wa-noise/ tem complexidade 46, e o baseline e' 56 —
+# o gate aguenta sem afrouxar nada. E `go vet ./internal/wa-noise/...` ja' saia
+# limpo (exit 0).
+#
+# A CONTAGEM de issues sobe (83 -> ~284), mas ela e' informativa: o que trava e'
+# a complexidade maxima. Cobertura continua de fora — incluir o modulo mudaria o
+# denominador e obrigaria a BAIXAR min_coverage, que e' afrouxar a catraca em
+# troca de um numero maior de pacotes medidos.
+ALL_PKGS := $(shell $(GOCMD) list ./...)
+# pkg/infra/wa-noise/ ficava de fora de TEST_PKGS por uma data race real em
+# safe_go_test.go (commit b426885). O teste foi corrigido junto da quebra do
+# pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
+# saiu — manter uma trava que não trava é pior que não ter trava.
+TEST_PKGS := $(COVER_PKGS)
+VET_TARGETS := $(ALL_PKGS)
+
 # Lint
+# golangci-lint espera padroes relativos ao filesystem (./pkg/x), nao paths
+# de import Go (wa-api/pkg/x) como go vet/go test aceitam — por isso
+# LINT_TARGETS deriva de COVER_PKGS trocando o prefixo do modulo por "./".
 LINT          := golangci-lint
-LINT_TARGETS  := ./...
+LINT_TARGETS  := $(shell $(GOCMD) list ./... | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
 
 # Coverage ratchet
@@ -39,10 +67,10 @@ docker: ## Build Docker image
 ##@ Test
 
 test: ## Run unit tests with race detection
-	$(GOTEST) -race -count=1 ./...
+	$(GOTEST) -race -count=1 -timeout=20m $(TEST_PKGS)
 
 test-verbose: ## Run unit tests with verbose output
-	$(GOTEST) -race -count=1 -v ./...
+	$(GOTEST) -race -count=1 -v -timeout=20m $(TEST_PKGS)
 
 coverage: ## Run tests and generate coverage report
 	$(GOTEST) -race -count=1 -coverprofile=$(COVERAGE_OUT) ./...
@@ -53,7 +81,7 @@ coverage-html: coverage ## Generate HTML coverage report
 	@echo "Coverage report: $(COVERAGE_HTML)"
 
 coverage-report: ## Cobertura por pacote com DEDUP DE BLOCOS + total que bate com go tool cover
-	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
 	@$(GOCMD) run ./cmd/logcov -coverprofile=$(COVERAGE_OUT)
 	@echo ""
 	@echo "NOTA: o total acima usa deduplicacao de blocos por chave arquivo:range,"
@@ -74,7 +102,7 @@ coverage-domain: ## Show domain + application coverage
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
 
 coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
-	@$(GOTEST) -count=1 ./... -coverpkg=./... -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
 	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
 	 if [ -z "$$pct" ]; then \
 	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \
@@ -82,7 +110,12 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 	   echo "       Este gate FALHA FECHADO de proposito: cobertura ausente nao e' cobertura ok."; \
 	   exit 1; \
 	 fi; \
-	 cur=$$(echo "$$pct" | awk '{printf "%d", $$1*10 + 0.5}'); \
+	 cur=$$(echo "$$pct" | LC_NUMERIC=C LC_ALL=C awk '{printf "%d", $$1*10 + 0.5}'); \
+	 if [ -z "$$cur" ] || [ "$$cur" -eq 0 ]; then \
+	   echo "FALHA: a conversao de '$$pct' para decimos falhou (resultado '$$cur')."; \
+	   echo "       Gate FALHA FECHADO: numero ausente nao e' cobertura ok."; \
+	   exit 1; \
+	 fi; \
 	 base=$$(grep -oE '^min_coverage=[0-9]+' $(COVERAGE_BASELINE_FILE) | grep -oE '[0-9]+'); \
 	 if [ -z "$$base" ]; then \
 	   echo "FALHA: $(COVERAGE_BASELINE_FILE) nao declara min_coverage=<N>. Gate FALHA FECHADO."; \
@@ -146,7 +179,7 @@ lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` quando max_compl
 	$(LINT) run $(LINT_TARGETS)
 
 vet: ## Run go vet
-	$(GOVET) ./...
+	$(GOVET) $(VET_TARGETS)
 
 fmt: ## Format code
 	$(GOFMT) ./...
@@ -223,7 +256,39 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	   fi; \
 	 fi
 
-check: build vet test lint coverage-gate log-coverage-gate ## build + vet + test + lint + cobertura + cobertura de log
+##@ Modulo de protocolo (internal/wa-noise/)
+
+waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
+	@bash scripts/waclient-facade-check.sh
+
+waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exceto protocol/proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
+	@bash scripts/waclient-filesize-check.sh
+
+# internal/wa-noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado
+# F17 em HOUSEKEEP.md), entao um _test.go escrito la' nunca rodaria por `make
+# check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
+# subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
+# fases do ADR-0004 forem cobrindo o resto.
+WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
+	./internal/wa-noise/protocol/msgpad/ ./internal/wa-noise/security/paircrypto/ \
+	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/capabilities/media/ \
+	./internal/wa-noise/capabilities/newsletter/ ./internal/wa-noise/capabilities/appstatesync/ \
+	./internal/wa-noise/capabilities/prekeys/ ./internal/wa-noise/capabilities/pairing/ ./internal/wa-noise/capabilities/tctoken/ \
+	./internal/wa-noise/capabilities/notification/ ./internal/wa-noise/capabilities/retry/ \
+	./internal/wa-noise/capabilities/group/ ./internal/wa-noise/capabilities/user/ \
+	./internal/wa-noise/capabilities/send/ ./internal/wa-noise/capabilities/message/ \
+	./internal/wa-noise/security/handshake/ ./internal/wa-noise/runtime/keepalive/ \
+	./internal/wa-noise/runtime/proxy/ \
+	./internal/wa-noise/protocol/socket/ ./internal/wa-noise/protocol/appstate/ \
+	./internal/wa-noise/persistence/store/ ./internal/wa-noise/persistence/store/sqlstore/ \
+	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/proto/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
+	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \
+	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/
+
+waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
+	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
+
+check: build vet test lint coverage-gate log-coverage-gate waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + fachada/tamanho/testes de internal/wa-noise/
 
 ##@ Utilities
 

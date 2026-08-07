@@ -23,21 +23,21 @@ func NewSessionEventDispatcher() appport.SessionEventDispatcher {
 	return sessionEventDispatcherAdapter{}
 }
 
-// Dispatch resolve userID -> *MyClient via clientManager.GetMyClient
-// (o mesmo registro que lifecycle.go:232 preenche com SetMyClient) e chama
+// Dispatch resolve userID -> *UserEventHandler via clientManager.GetUserClient
+// (o mesmo registro que lifecycle.go:232 preenche com SetUserClient) e chama
 // sendEventWithWebHook com o payload fornecido. eventType é gravado em
 // payload["type"] porque sendEventWithWebHook lê o tipo do próprio postmap,
 // não de um parâmetro separado.
 func (sessionEventDispatcherAdapter) Dispatch(_ context.Context, userID string, eventType string, payload map[string]any) error {
-	handle := clientManager.GetMyClient(userID)
+	handle := clientManager.GetUserClient(userID)
 	if handle == nil {
-		log.Warn().Str("userID", userID).Str("eventType", eventType).Msg("SessionEventDispatcher: no MyClient registered for userID, dropping event")
+		log.Warn().Str("userID", userID).Str("eventType", eventType).Msg("SessionEventDispatcher: no UserEventHandler registered for userID, dropping event")
 		return nil
 	}
 
-	mycli, ok := handle.(*MyClient)
+	evh, ok := handle.(*UserEventHandler)
 	if !ok {
-		log.Error().Str("userID", userID).Str("eventType", eventType).Msg("SessionEventDispatcher: registered MyClient is not *bootstrap.MyClient")
+		log.Error().Str("userID", userID).Str("eventType", eventType).Msg("SessionEventDispatcher: registered UserEventHandler is not *bootstrap.UserEventHandler")
 		return nil
 	}
 
@@ -47,6 +47,6 @@ func (sessionEventDispatcherAdapter) Dispatch(_ context.Context, userID string, 
 	}
 	postmap["type"] = eventType
 
-	sendEventWithWebHook(mycli, postmap, "")
+	sendEventWithWebHook(evh, postmap, "")
 	return nil
 }

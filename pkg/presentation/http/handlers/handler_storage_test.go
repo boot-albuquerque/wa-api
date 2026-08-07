@@ -268,10 +268,10 @@ func TestStorageHandlers_BodyIsNotReadByHandlersThatDoNotDecode(t *testing.T) {
 	}
 }
 
-// TestStorageHandlers_SessionFailure_500: a sessao do whatsmeow falta. E' falha
+// TestStorageHandlers_SessionFailure_500: a sessao do wa-noise falta. E' falha
 // de dependencia, entao vai em error — e a causa do use case chega ao log.
 func TestStorageHandlers_SessionFailure_500(t *testing.T) {
-	sessionErr := errors.New("no whatsmeow session for user")
+	sessionErr := errors.New("no wanoise session for user")
 	for _, tc := range storageCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			sg := storageSession(sessionErr)
@@ -404,7 +404,7 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Sessao quebrada: e' o caminho que MAIS loga, logo o que mais
 			// pode vazar.
-			sg := storageSession(errors.New("no whatsmeow session for user"))
+			sg := storageSession(errors.New("no wanoise session for user"))
 			req := withUser(httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body)), "42")
 
 			rec, recs := serveStorage(t, tc.build(sg), req)

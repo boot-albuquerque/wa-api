@@ -13,3 +13,22 @@ cmd/
 # denominador so dilui o percentual sem significar nada sobre o repositorio
 # real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
 pkg/application/contracts/contractsfake/
+
+# internal/wa-noise/ — modulo wa-api/internal/wa-noise vendorizado por completo
+# (ADR-0002/0003), cópia fiel de codigo de terceiros sob MPL-2.0, nao codigo
+# nosso a instrumentar. `packages.Visit` do proprio cmd/logcov inclui
+# qualquer pacote transitivamente importado cujo PkgPath comece com o path
+# do modulo (`wa-api/`) — antes do vendoring, todo o wa-noise ficava fora
+# do denominador por ser `wa-api/internal/wa-noise/...` (path externo); depois de
+# vendorizado sob `wa-api/internal/wa-noise/...`, o mesmo filtro passaria a
+# incluir as ~124k linhas de terceiros sem essa exclusao explicita.
+internal/wa-noise/
+
+# pkg/infra/wa-noise/client/testkit/ — mesmo caso de contractsfake: e'
+# o dublê de waclient.Client (e do ContactStore) compartilhado pelos testes de
+# todos os subpacotes de pkg/infra/wa-noise/. Era codigo _test.go ate' a quebra
+# do pacote em subpacotes, quando deixou de ser alcancavel de fora do pacote
+# original e virou um pacote de apoio exportado. Continua sendo dublê de teste,
+# nao codigo de producao a instrumentar; contar seus ~45 metodos triviais no
+# denominador so diluiria o percentual.
+pkg/infra/wa-noise/client/testkit/

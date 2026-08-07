@@ -9,7 +9,7 @@ import (
 )
 
 // ProfileDataAccess abstrai a leitura de dados do perfil WhatsApp.
-// Implementação concreta em pkg/infra/whatsmeow.
+// Implementação concreta em pkg/infra/wa-noise.
 type ProfileDataAccess interface {
 	PushName() string
 	OwnJID() (domain.JID, bool)

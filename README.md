@@ -1,9 +1,10 @@
 # DisparaZap
 
-DisparaZap é uma implementação da biblioteca [@tulir/whatsmeow](https://github.com/tulir/whatsmeow) como um serviço
-RESTful com suporte a múltiplos dispositivos e sessões concorrentes.
+DisparaZap expõe o protocolo multidevice do WhatsApp como um serviço RESTful,
+com suporte a múltiplos dispositivos e sessões concorrentes. A implementação do
+protocolo vive em `internal/wa-noise/`.
 
-Whatsmeow não usa Puppeteer no Chrome headless, nem emulador Android. Comunica-se diretamente com os servidores
+O módulo de protocolo não usa Puppeteer no Chrome headless, nem emulador Android. Comunica-se diretamente com os servidores
 WebSocket do WhatsApp, tornando-o significativamente mais rápido e muito menos exigente em memória e CPU do que
 essas soluções. A desvantagem é que mudanças no protocolo do WhatsApp podem quebrar conexões, exigindo atualização
 da biblioteca.
@@ -55,10 +56,12 @@ Quando HMAC está configurado, todos os webhooks incluem o header `x-hmac-signat
 
 ## Atualizando dependências
 
-Este projeto usa a biblioteca whatsmeow para comunicar-se com o WhatsApp. Para atualizar para a versão mais recente:
+O protocolo do WhatsApp é implementado dentro do repositório, em
+`internal/wa-noise/` — não há dependência externa a atualizar para isso. Para as
+demais dependências:
 
 ```bash
-go get -u go.mau.fi/whatsmeow@latest
+go get -u ./...
 go mod tidy
 ```
 
@@ -95,7 +98,7 @@ Por padrão, inicia um serviço REST na porta 8080. Parâmetros disponíveis:
 * `-color` : habilita saída colorida para logs em console
 * `-osname` : nome do SO na conexão do WhatsApp
 * `-skipmedia` : pula download de mídia das mensagens
-* `-wadebug` : habilita debug do whatsmeow, níveis INFO ou DEBUG
+* `-wadebug` : habilita debug do módulo de protocolo, níveis INFO ou DEBUG
 
 * `-sslcertificate` : arquivo de certificado SSL
 * `-sslprivatekey` : arquivo de chave privada SSL

@@ -38,9 +38,9 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 		return nil, fmt.Errorf("missing FileName in payload")
 	}
 
-	// 2. Obter cliente whatsmeow para verificar se existe sessão
+	// 2. Obter cliente wa-noise para verificar se existe sessão
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

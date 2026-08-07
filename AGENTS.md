@@ -1,10 +1,10 @@
 # wa-api — instruções para agentes
 
-## Registro de achados incidentais (HOUSEKEEP.md)
+## Registro de achados incidentais (internal/wa-noise/HOUSEKEEP.md)
 
 Sempre que, durante uma sessão de trabalho, você encontrar um bug, gap,
 comportamento incorreto ou dívida técnica que **não faça parte do escopo
-da tarefa atual**, registre em `HOUSEKEEP.md` (raiz do repo) antes de
+da tarefa atual**, registre em `internal/wa-noise/HOUSEKEEP.md` antes de
 encerrar a sessão — mesmo que decida não corrigir.
 
 Cada entrada deve conter, no mínimo:
@@ -18,9 +18,9 @@ Cada entrada deve conter, no mínimo:
 - **Status**: corrigido nesta sessão / não corrigido (e por quê).
 
 Não registre o que já está coberto por ADRs, planos aprovados, ou que é
-claramente escopo de uma tarefa em andamento — `HOUSEKEEP.md` é para o que
+claramente escopo de uma tarefa em andamento — o HOUSEKEEP é para o que
 foi descoberto de lado, não para o trabalho principal.
 
 Não "corrija de graça" bugs pré-existentes fora do escopo da tarefa atual
-sem perguntar primeiro — registre em `HOUSEKEEP.md` e pergunte ao usuário
+sem perguntar primeiro — registre no HOUSEKEEP e pergunte ao usuário
 se quer que a correção seja feita agora ou fique pendente.

@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"wa-api/internal/wa-noise/protocol/appstate"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/appstate"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de ciclo de vida da sessão: conectar, parear, cair, ser derrubado,
@@ -19,9 +20,9 @@ import (
 // Os handlers que devolvem bool traduzem o `return` do ramo original: false
 // significa "aborte sem disparar webhook".
 
-func (mycli *MyClient) handleAppStateSyncComplete(evt *events.AppStateSyncComplete, st *eventState) {
-	if len(mycli.WAClient.Store.PushName) > 0 && evt.Name == appstate.WAPatchCriticalBlock {
-		err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
+func (evh *UserEventHandler) handleAppStateSyncComplete(evt *events.AppStateSyncComplete, st *eventState) {
+	if len(evh.WAClient.Store.PushName) > 0 && evt.Name == appstate.WAPatchCriticalBlock {
+		err := evh.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to send available presence")
 		} else {
@@ -30,18 +31,18 @@ func (mycli *MyClient) handleAppStateSyncComplete(evt *events.AppStateSyncComple
 	}
 
 	// WAPatchCriticalUnblockLow carrega a agenda de contatos do usuário
-	// (go.mau.fi/whatsmeow/appstate.WAPatchCriticalUnblockLow). Observamos a
+	// (wa-api/internal/wa-noise/protocol/appstate.WAPatchCriticalUnblockLow). Observamos a
 	// conclusão desse patch com uma contagem — não com os contatos em si —
 	// porque é a mesma fonte que GET /user/contacts lê
-	// (mycli.WAClient.Store.Contacts.GetAllContacts), então o número aqui
+	// (evh.WAClient.Store.Contacts.GetAllContacts), então o número aqui
 	// correlaciona diretamente com o que qualquer chamador HTTP vê depois
 	// desse sync.
 	if evt.Name == appstate.WAPatchCriticalUnblockLow {
-		contacts, err := mycli.WAClient.Store.Contacts.GetAllContacts(context.Background())
+		contacts, err := evh.WAClient.Store.Contacts.GetAllContacts(context.Background())
 		if err != nil {
-			log.Warn().Str("userid", mycli.UserID).Str("patch", string(evt.Name)).Err(err).Msg("Failed to get contact count after app state sync")
+			log.Warn().Str("userid", evh.UserID).Str("patch", string(evt.Name)).Err(err).Msg("Failed to get contact count after app state sync")
 		} else {
-			log.Info().Str("userid", mycli.UserID).Str("patch", string(evt.Name)).Uint64("version", evt.Version).Int("contact_count", len(contacts)).Msg("Contact roster app state sync complete")
+			log.Info().Str("userid", evh.UserID).Str("patch", string(evt.Name)).Uint64("version", evt.Version).Int("contact_count", len(contacts)).Msg("Contact roster app state sync complete")
 		}
 	}
 }
@@ -54,22 +55,22 @@ func (mycli *MyClient) handleAppStateSyncComplete(evt *events.AppStateSyncComple
 // switch com dowebhook já em 1, então o webhook era disparado. Trocá-lo por
 // `return false` silenciaria o evento Connected de toda sessão que ainda não
 // tem pushname.
-func (mycli *MyClient) handleConnected(st *eventState) bool {
+func (evh *UserEventHandler) handleConnected(st *eventState) bool {
 	st.postmap["type"] = "Connected"
 	st.dowebhook = 1
-	if len(mycli.WAClient.Store.PushName) == 0 {
+	if len(evh.WAClient.Store.PushName) == 0 {
 		return true
 	}
 	// Send presence available when connecting and when the pushname is changed.
 	// This makes sure that outgoing messages always have the right pushname.
-	err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
+	err := evh.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send available presence")
 	} else {
 		log.Info().Msg("Marked self as available")
 	}
 	sqlStmt := `UPDATE users SET connected=1 WHERE id=$1`
-	_, err = mycli.DB.Exec(sqlStmt, mycli.UserID)
+	_, err = evh.DB.Exec(sqlStmt, evh.UserID)
 	if err != nil {
 		log.Error().Err(err).Msg(sqlStmt)
 		return false
@@ -77,11 +78,11 @@ func (mycli *MyClient) handleConnected(st *eventState) bool {
 	return true
 }
 
-func (mycli *MyClient) handlePairSuccess(evt *events.PairSuccess, st *eventState) bool {
-	log.Info().Str("userid", mycli.UserID).Str("token", mycli.Token).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
+func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *eventState) bool {
+	log.Info().Str("userid", evh.UserID).Str("token", evh.Token).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
 	jid := evt.ID
 	sqlStmt := `UPDATE users SET jid=$1 WHERE id=$2`
-	_, err := mycli.DB.Exec(sqlStmt, jid, mycli.UserID)
+	_, err := evh.DB.Exec(sqlStmt, jid, evh.UserID)
 	if err != nil {
 		log.Error().Err(err).Msg(sqlStmt)
 		return false
@@ -90,7 +91,7 @@ func (mycli *MyClient) handlePairSuccess(evt *events.PairSuccess, st *eventState
 	st.postmap["type"] = "PairSuccess"
 	st.dowebhook = 1
 
-	myuserinfo, found := appCtx.UserInfoCache.Get(mycli.Token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(evh.Token)
 	if !found {
 		log.Warn().Msg("No user info cached on pairing?")
 	} else {
@@ -104,29 +105,29 @@ func (mycli *MyClient) handlePairSuccess(evt *events.PairSuccess, st *eventState
 	// Check if automatic history sync is enabled and trigger it after QR code is scanned
 	var daysToSyncHistory int
 	query := "SELECT COALESCE(days_to_sync_history, 0) FROM users WHERE id=$1"
-	query = mycli.DB.Rebind(query)
-	err = mycli.DB.Get(&daysToSyncHistory, query, mycli.UserID)
+	query = evh.DB.Rebind(query)
+	err = evh.DB.Get(&daysToSyncHistory, query, evh.UserID)
 	if err != nil {
-		log.Warn().Err(err).Str("userID", mycli.UserID).Msg("Failed to get days_to_sync_history from database")
+		log.Warn().Err(err).Str("userID", evh.UserID).Msg("Failed to get days_to_sync_history from database")
 	} else if daysToSyncHistory > 0 {
 		// Trigger history sync in a goroutine to avoid blocking
 		// Wait a bit for the connection to be fully established
-		go mycli.syncHistoryAfterPair(daysToSyncHistory)
+		go evh.syncHistoryAfterPair(daysToSyncHistory)
 	}
 	return true
 }
 
 // syncHistoryAfterPair era o corpo da goroutine anônima disparada por
 // PairSuccess. Continua rodando em goroutine própria — quem a chama é
-// `go mycli.syncHistoryAfterPair(...)` — e o único valor que a closure
-// capturava além de mycli, daysToSyncHistory, virou parâmetro. Nada escreve
+// `go evh.syncHistoryAfterPair(...)` — e o único valor que a closure
+// capturava além de evh, daysToSyncHistory, virou parâmetro. Nada escreve
 // nessa variável depois do `go`, então capturar por referência e receber por
 // valor produzem o mesmo número.
-func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
+func (evh *UserEventHandler) syncHistoryAfterPair(daysToSyncHistory int) {
 	time.Sleep(2 * time.Second) // Give WhatsApp time to fully establish connection
 
 	log.Info().
-		Str("userID", mycli.UserID).
+		Str("userID", evh.UserID).
 		Int("days", daysToSyncHistory).
 		Msg("Triggering automatic history sync after QR code scan")
 
@@ -147,9 +148,9 @@ func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
 	var chatJIDs []string
 
 	// Get all contacts
-	contacts, err := mycli.WAClient.Store.Contacts.GetAllContacts(ctx)
+	contacts, err := evh.WAClient.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
-		log.Error().Err(err).Str("userID", mycli.UserID).Msg("Failed to get contacts for history sync")
+		log.Error().Err(err).Str("userID", evh.UserID).Msg("Failed to get contacts for history sync")
 	} else {
 		for jid := range contacts {
 			chatJIDs = append(chatJIDs, jid.String())
@@ -157,9 +158,9 @@ func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
 	}
 
 	// Get all groups
-	groups, err := mycli.WAClient.GetJoinedGroups(ctx)
+	groups, err := evh.WAClient.GetJoinedGroups(ctx)
 	if err != nil {
-		log.Error().Err(err).Str("userID", mycli.UserID).Msg("Failed to get groups for history sync")
+		log.Error().Err(err).Str("userID", evh.UserID).Msg("Failed to get groups for history sync")
 	} else {
 		for _, group := range groups {
 			chatJIDs = append(chatJIDs, group.JID.String())
@@ -175,7 +176,7 @@ func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
 		}
 
 		// Use the syncHistoryForChat function from handlers.go
-		err = syncHistoryForChat(context.Background(), mycli.DB, mycli.UserID, chatJID, count)
+		err = syncHistoryForChat(context.Background(), evh.DB, evh.UserID, chatJID, count)
 		if err != nil {
 			log.Warn().Err(err).Str("chatJID", chatJIDStr).Msg("Failed to sync history for chat")
 		} else {
@@ -187,7 +188,7 @@ func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
 	}
 
 	log.Info().
-		Str("userID", mycli.UserID).
+		Str("userID", evh.UserID).
 		Int("days", daysToSyncHistory).
 		Int("chatsSynced", len(chatJIDs)).
 		Msg("Automatic history sync completed after QR code scan")
@@ -195,23 +196,23 @@ func (mycli *MyClient) syncHistoryAfterPair(daysToSyncHistory int) {
 
 // handleStreamReplaced sempre aborta: o ramo original era um log seguido de
 // `return`, sem tocar em dowebhook.
-func (mycli *MyClient) handleStreamReplaced(evt *events.StreamReplaced, st *eventState) bool {
+func (evh *UserEventHandler) handleStreamReplaced(evt *events.StreamReplaced, st *eventState) bool {
 	log.Info().Msg("Received StreamReplaced event")
 	return false
 }
 
 // handleLoggedOut NÃO contém o `defer` que sinaliza o KillChannel. Ele
-// permanece no `case` de myEventHandler, de propósito: `defer` adia até o fim
+// permanece no `case` de handleEvent, de propósito: `defer` adia até o fim
 // da FUNÇÃO, não do case, então no arquivo original o sinal era emitido DEPOIS
 // de sendEventWithWebHook. Trazê-lo para cá o anteciparia para antes do
 // webhook — mudança de ordem que compila calada e que o plano nomeia como o
 // risco desta fase.
-func (mycli *MyClient) handleLoggedOut(evt *events.LoggedOut, st *eventState) bool {
+func (evh *UserEventHandler) handleLoggedOut(evt *events.LoggedOut, st *eventState) bool {
 	st.postmap["type"] = "LoggedOut"
 	st.dowebhook = 1
 	log.Info().Str("reason", evt.Reason.String()).Msg("Logged out")
 	sqlStmt := `UPDATE users SET connected=0 WHERE id=$1`
-	_, err := mycli.DB.Exec(sqlStmt, mycli.UserID)
+	_, err := evh.DB.Exec(sqlStmt, evh.UserID)
 	if err != nil {
 		log.Error().Err(err).Msg(sqlStmt)
 		return false
@@ -219,54 +220,54 @@ func (mycli *MyClient) handleLoggedOut(evt *events.LoggedOut, st *eventState) bo
 	return true
 }
 
-func (mycli *MyClient) handleDisconnected(evt *events.Disconnected, st *eventState) {
+func (evh *UserEventHandler) handleDisconnected(evt *events.Disconnected, st *eventState) {
 	st.postmap["type"] = "Disconnected"
 	st.dowebhook = 1
 	log.Info().Str("reason", fmt.Sprintf("%+v", evt)).Msg("Disconnected from Whatsapp")
 }
 
-func (mycli *MyClient) handleConnectFailure(evt *events.ConnectFailure, st *eventState) {
+func (evh *UserEventHandler) handleConnectFailure(evt *events.ConnectFailure, st *eventState) {
 	st.postmap["type"] = "ConnectFailure"
 	st.dowebhook = 1
 	log.Error().Str("reason", fmt.Sprintf("%+v", evt)).Msg("Failed to connect to Whatsapp")
 }
 
-func (mycli *MyClient) handleKeepAliveRestored(evt *events.KeepAliveRestored, st *eventState) {
+func (evh *UserEventHandler) handleKeepAliveRestored(evt *events.KeepAliveRestored, st *eventState) {
 	st.postmap["type"] = "KeepAliveRestored"
 	st.dowebhook = 1
 	log.Info().Msg("Keep alive restored")
 }
 
-func (mycli *MyClient) handleKeepAliveTimeout(evt *events.KeepAliveTimeout, st *eventState) {
+func (evh *UserEventHandler) handleKeepAliveTimeout(evt *events.KeepAliveTimeout, st *eventState) {
 	st.postmap["type"] = "KeepAliveTimeout"
 	st.dowebhook = 1
 	log.Warn().Msg("Keep alive timeout")
 }
 
-func (mycli *MyClient) handleClientOutdated(evt *events.ClientOutdated, st *eventState) {
+func (evh *UserEventHandler) handleClientOutdated(evt *events.ClientOutdated, st *eventState) {
 	st.postmap["type"] = "ClientOutdated"
 	st.dowebhook = 1
 	log.Warn().Msg("Client outdated")
 }
 
-func (mycli *MyClient) handleTemporaryBan(evt *events.TemporaryBan, st *eventState) {
+func (evh *UserEventHandler) handleTemporaryBan(evt *events.TemporaryBan, st *eventState) {
 	st.postmap["type"] = "TemporaryBan"
 	st.dowebhook = 1
 	log.Info().Msg("Temporary ban")
 }
 
-func (mycli *MyClient) handleStreamError(evt *events.StreamError, st *eventState) {
+func (evh *UserEventHandler) handleStreamError(evt *events.StreamError, st *eventState) {
 	st.postmap["type"] = "StreamError"
 	st.dowebhook = 1
 	log.Error().Str("code", evt.Code).Msg("Stream error")
 }
 
-func (mycli *MyClient) handlePairError(evt *events.PairError, st *eventState) {
+func (evh *UserEventHandler) handlePairError(evt *events.PairError, st *eventState) {
 	st.postmap["type"] = "PairError"
 	st.dowebhook = 1
 	log.Error().Msg("Pair error")
 }
 
-func (mycli *MyClient) handleAppState(evt *events.AppState, st *eventState) {
+func (evh *UserEventHandler) handleAppState(evt *events.AppState, st *eventState) {
 	log.Info().Str("index", fmt.Sprintf("%+v", evt.Index)).Str("actionValue", fmt.Sprintf("%+v", evt.SyncActionValue)).Msg("App state event received")
 }

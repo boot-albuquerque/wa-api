@@ -24,7 +24,7 @@ func NewGetAvatarUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, lo
 // Execute retrieves avatar info
 func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req domain.GetAvatarRequest) (map[string]interface{}, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

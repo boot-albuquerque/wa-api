@@ -8,7 +8,7 @@ type GetGroupRequestParticipantsRequest struct {
 
 // GetGroupRequestParticipantsResult representa o resultado da listagem de participantes que solicitaram entrar
 type GetGroupRequestParticipantsResult struct {
-	// Response will be marshaled directly from whatsmeow client response
+	// Response will be marshaled directly from wa-noise client response
 	Details string      `json:"Details,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
 }

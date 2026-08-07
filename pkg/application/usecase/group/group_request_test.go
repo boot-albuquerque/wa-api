@@ -65,7 +65,7 @@ func TestGroupRequest_ExecuteGetGroupRequestParticipants(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no whatsmeow session", []string{"user_id", "error"}},
+			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"user_id", "error"}},
 		},
 		{
 			name: "JID irresolvível",
@@ -178,7 +178,7 @@ func TestGroupRequest_ExecuteUpdateGroupRequestParticipants(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no whatsmeow session", []string{"user_id", "error"}},
+			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"user_id", "error"}},
 		},
 		{
 			name:    "groupJID vazio",
@@ -337,7 +337,7 @@ func TestGroupRequest_ExecuteSetGroupJoinApprovalMode(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no whatsmeow session", []string{"user_id", "error"}},
+			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"user_id", "error"}},
 		},
 		{
 			name:    "groupJID vazio",

@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	errNoSession = errors.New("porta: sem sessao whatsmeow")
+	errNoSession = errors.New("porta: sem sessao wanoise")
 	errPorta     = errors.New("porta: falha do downstream")
 	errJID       = errors.New("resolver: JID invalido")
 )
@@ -64,7 +64,7 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 				t.Error("sessao recusada nao devia chegar ate' o resolver de JID")
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelError, "no whatsmeow session")
+			rec, found := log.FindLevel(contractsfake.LevelError, "no wanoise session")
 			if !found {
 				t.Fatalf("recusa de sessao nao foi logada em nivel error: %v", log.Messages())
 			}

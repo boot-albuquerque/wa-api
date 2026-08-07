@@ -91,7 +91,7 @@ func parseFlexTimestamp(raw string) (time.Time, bool) {
 // recente já persistida em message_history (INCLUINDO o backfill do
 // HistorySync pós-pareamento, que roda automaticamente e sem custo de
 // polling — ver eventhandler_history.go). É a única fonte de "última
-// conversa por contato" disponível hoje: GetAllContacts (whatsmeow_contacts)
+// conversa por contato" disponível hoje: GetAllContacts (wa-noise_contacts)
 // não carrega nenhum timestamp, só identidade/nome (ver ADR-0001 do
 // disparazaap, seção "Limitação conhecida"). Grupos (chat_jid @g.us) e
 // broadcasts ficam incluídos no resultado — filtragem é responsabilidade do
@@ -141,7 +141,7 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	            )`
 
 		querySecrets = `
-	            DELETE FROM whatsmeow_message_secrets
+	            DELETE FROM wanoise_message_secrets
 	            WHERE message_id IN (
 	                SELECT message_id FROM message_history
 	                WHERE user_id = $1 AND chat_jid = $2
@@ -159,7 +159,7 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	            )`
 
 		querySecrets = `
-	            DELETE FROM whatsmeow_message_secrets
+	            DELETE FROM wanoise_message_secrets
 	            WHERE message_id IN (
 	                SELECT message_id FROM message_history
 	                WHERE user_id = ? AND chat_jid = ?
@@ -169,7 +169,7 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	}
 
 	if _, err := db.Exec(querySecrets, userID, chatJID, limit); err != nil {
-		log.Error().Err(err).Str("table", "whatsmeow_message_secrets").Str("user_id", userID).
+		log.Error().Err(err).Str("table", "wanoise_message_secrets").Str("user_id", userID).
 			Str("chat_jid", chatJID).Int("limit", limit).
 			Msg("failed to trim message secrets")
 		return fmt.Errorf("failed to trim message secrets: %w", err)

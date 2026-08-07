@@ -5,45 +5,46 @@ import (
 	"encoding/json"
 	"time"
 
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
+
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow/proto/waHistorySync"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 // Eventos de sincronização de histórico: o blob de conversas antigas que o
 // telefone envia depois do pareamento, e os avisos de fim de sincronização
 // offline.
 
-func (mycli *MyClient) handleHistorySync(evt *events.HistorySync, st *eventState) {
+func (evh *UserEventHandler) handleHistorySync(evt *events.HistorySync, st *eventState) {
 	st.postmap["type"] = "HistorySync"
 	st.dowebhook = 1
 
 	// Save HistorySync messages to message_history table
 	if evt.Data != nil && evt.Data.Conversations != nil {
-		go mycli.persistHistorySync(evt.Data.Conversations)
+		go evh.persistHistorySync(evt.Data.Conversations)
 	}
 }
 
 // persistHistorySync era o corpo da goroutine anônima do ramo HistorySync.
 // Continua rodando em goroutine própria — quem a chama é
-// `go mycli.persistHistorySync(...)` — e a única coisa que a closure
-// capturava além de mycli, evt.Data.Conversations, virou parâmetro.
-func (mycli *MyClient) persistHistorySync(conversations []*waHistorySync.Conversation) {
+// `go evh.persistHistorySync(...)` — e a única coisa que a closure
+// capturava além de evh, evt.Data.Conversations, virou parâmetro.
+func (evh *UserEventHandler) persistHistorySync(conversations []*waHistorySync.Conversation) {
 	// Get the account owner's JID for messages sent by the instance
 	accountOwnerJID := ""
-	if mycli.WAClient.Store != nil && mycli.WAClient.Store.ID != nil {
-		accountOwnerJID = mycli.WAClient.Store.ID.ToNonAD().String()
+	if evh.WAClient.Store != nil && evh.WAClient.Store.ID != nil {
+		accountOwnerJID = evh.WAClient.Store.ID.ToNonAD().String()
 	}
 
 	savedCount := 0
 	for _, conv := range conversations {
-		savedCount += mycli.persistHistorySyncConversation(conv, accountOwnerJID)
+		savedCount += evh.persistHistorySyncConversation(conv, accountOwnerJID)
 	}
 
 	if savedCount > 0 {
 		log.Info().
-			Str("userID", mycli.UserID).
+			Str("userID", evh.UserID).
 			Int("savedCount", savedCount).
 			Msg("Saved HistorySync messages to message_history")
 	}
@@ -53,7 +54,7 @@ func (mycli *MyClient) persistHistorySync(conversations []*waHistorySync.Convers
 // range conversations`. Devolve quantas mensagens daquela conversa foram
 // gravadas — os dois `continue` do corpo original viraram `return 0`, que é o
 // mesmo que não somar nada ao total.
-func (mycli *MyClient) persistHistorySyncConversation(conv *waHistorySync.Conversation, accountOwnerJID string) int {
+func (evh *UserEventHandler) persistHistorySyncConversation(conv *waHistorySync.Conversation, accountOwnerJID string) int {
 	if conv == nil || conv.ID == nil || conv.Messages == nil {
 		return 0
 	}
@@ -66,7 +67,7 @@ func (mycli *MyClient) persistHistorySyncConversation(conv *waHistorySync.Conver
 
 	saved := 0
 	for _, msg := range conv.Messages {
-		if mycli.persistHistorySyncMessage(chatJID, accountOwnerJID, msg) {
+		if evh.persistHistorySyncMessage(chatJID, accountOwnerJID, msg) {
 			saved++
 		}
 	}
@@ -77,7 +78,7 @@ func (mycli *MyClient) persistHistorySyncConversation(conv *waHistorySync.Conver
 // conv.Messages`. Devolve true exatamente quando o corpo original executava
 // `savedCount++`; todos os `continue` viraram `return false`, e a saída normal
 // do laço sem gravação também.
-func (mycli *MyClient) persistHistorySyncMessage(chatJID types.JID, accountOwnerJID string, msg *waHistorySync.HistorySyncMsg) bool {
+func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accountOwnerJID string, msg *waHistorySync.HistorySyncMsg) bool {
 	if msg == nil || msg.Message == nil {
 		return false
 	}
@@ -235,8 +236,8 @@ func (mycli *MyClient) persistHistorySyncMessage(chatJID types.JID, accountOwner
 	// Try to get PushName from store if available
 	pushName := ""
 	if !isFromMe && senderJIDForInfo.User != "" {
-		if mycli.WAClient != nil && mycli.WAClient.Store != nil {
-			if contact, err := mycli.WAClient.Store.Contacts.GetContact(context.Background(), senderJIDForInfo); err == nil {
+		if evh.WAClient != nil && evh.WAClient.Store != nil {
+			if contact, err := evh.WAClient.Store.Contacts.GetContact(context.Background(), senderJIDForInfo); err == nil {
 				pushName = contact.PushName
 			}
 		}
@@ -287,8 +288,8 @@ func (mycli *MyClient) persistHistorySyncMessage(chatJID types.JID, accountOwner
 	// Save message to history
 	// Only save if there's meaningful content
 	if textContent != "" || mediaLink != "" || (messageType != "text" && messageType != "reaction") {
-		err = saveMessageToHistory(mycli.DB,
-			mycli.UserID,
+		err = saveMessageToHistory(evh.DB,
+			evh.UserID,
 			chatJID.String(),
 			senderJID,
 			messageID,
@@ -300,7 +301,7 @@ func (mycli *MyClient) persistHistorySyncMessage(chatJID types.JID, accountOwner
 		)
 		if err != nil {
 			log.Error().Err(err).
-				Str("userID", mycli.UserID).
+				Str("userID", evh.UserID).
 				Str("chatJID", chatJID.String()).
 				Str("messageID", messageID).
 				Msg("Failed to save HistorySync message to history")
@@ -311,13 +312,13 @@ func (mycli *MyClient) persistHistorySyncMessage(chatJID types.JID, accountOwner
 	return false
 }
 
-func (mycli *MyClient) handleOfflineSyncCompleted(evt *events.OfflineSyncCompleted, st *eventState) {
+func (evh *UserEventHandler) handleOfflineSyncCompleted(evt *events.OfflineSyncCompleted, st *eventState) {
 	st.postmap["type"] = "OfflineSyncCompleted"
 	st.dowebhook = 1
 	log.Info().Msg("Offline sync completed")
 }
 
-func (mycli *MyClient) handleOfflineSyncPreview(evt *events.OfflineSyncPreview, st *eventState) {
+func (evh *UserEventHandler) handleOfflineSyncPreview(evt *events.OfflineSyncPreview, st *eventState) {
 	st.postmap["type"] = "OfflineSyncPreview"
 	st.dowebhook = 1
 	log.Info().Msg("Offline sync preview")

@@ -5,19 +5,19 @@ import (
 	"context"
 	"strings"
 	"testing"
+	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mau.fi/whatsmeow"
 )
 
-// TestSessionEventDispatcher_SemMyClient: o dispatcher resolve userID ->
-// *MyClient pelo clientManager. Quando não há handle registrado o evento é
+// TestSessionEventDispatcher_SemUserEventHandler: o dispatcher resolve userID ->
+// *UserEventHandler pelo clientManager. Quando não há handle registrado o evento é
 // DESCARTADO com aviso, e não pode virar erro — o orchestrator despacha em
 // caminhos de teardown (QRTimeout, ConnectFailure) onde o handle já pode ter
 // sido removido, e um erro ali aborta o teardown pela metade.
-func TestSessionEventDispatcher_SemMyClient(t *testing.T) {
-	clientManager.DeleteMyClient("user-sem-handle")
+func TestSessionEventDispatcher_SemUserEventHandler(t *testing.T) {
+	clientManager.DeleteUserClient("user-sem-handle")
 
 	var buf bytes.Buffer
 	orig := log.Logger
@@ -28,24 +28,24 @@ func TestSessionEventDispatcher_SemMyClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch devolveu erro %v, quero nil (evento descartado, não falha)", err)
 	}
-	if !strings.Contains(buf.String(), "no MyClient registered") {
+	if !strings.Contains(buf.String(), "no UserEventHandler registered") {
 		t.Fatalf("esperava aviso de handle ausente, log = %s", buf.String())
 	}
 }
 
-// handleForaDoTipo satisfaz a interface MyClient do clientManager sem ser um
-// *bootstrap.MyClient — o caso que a type assertion do dispatcher defende.
+// handleForaDoTipo satisfaz a interface UserEventHandler do clientManager sem ser um
+// *bootstrap.UserEventHandler — o caso que a type assertion do dispatcher defende.
 type handleForaDoTipo struct{}
 
-func (handleForaDoTipo) GetWAClient() *whatsmeow.Client { return nil }
-func (handleForaDoTipo) GetUserID() string              { return "user-tipo-errado" }
+func (handleForaDoTipo) GetWAClient() *wanoise.Client { return nil }
+func (handleForaDoTipo) GetUserID() string            { return "user-tipo-errado" }
 
 // TestSessionEventDispatcher_HandleDeOutroTipo: se o registro contiver algo
-// que não é *bootstrap.MyClient, o dispatcher loga e desiste em vez de
+// que não é *bootstrap.UserEventHandler, o dispatcher loga e desiste em vez de
 // entrar em pânico com uma asserção de tipo crua.
 func TestSessionEventDispatcher_HandleDeOutroTipo(t *testing.T) {
-	clientManager.SetMyClient("user-tipo-errado", handleForaDoTipo{})
-	defer clientManager.DeleteMyClient("user-tipo-errado")
+	clientManager.SetUserClient("user-tipo-errado", handleForaDoTipo{})
+	defer clientManager.DeleteUserClient("user-tipo-errado")
 
 	var buf bytes.Buffer
 	orig := log.Logger
@@ -56,21 +56,21 @@ func TestSessionEventDispatcher_HandleDeOutroTipo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch devolveu erro %v, quero nil", err)
 	}
-	if !strings.Contains(buf.String(), "not *bootstrap.MyClient") {
+	if !strings.Contains(buf.String(), "not *bootstrap.UserEventHandler") {
 		t.Fatalf("esperava aviso de tipo inesperado, log = %s", buf.String())
 	}
 }
 
 // TestSessionAttachHook_AttachSemClienteRegistrado: Attach depende do
-// *whatsmeow.Client que o SessionRegistry publica no clientManager. Sem ele,
-// falhar alto é obrigatório — montar um MyClient com WAClient nil registraria
+// *wa-noise.Client que o SessionRegistry publica no clientManager. Sem ele,
+// falhar alto é obrigatório — montar um UserEventHandler com WAClient nil registraria
 // um handle que entra em pânico no primeiro evento recebido.
 func TestSessionAttachHook_AttachSemClienteRegistrado(t *testing.T) {
-	clientManager.DeleteWhatsmeowClient("user-sem-cliente")
+	clientManager.DeleteWaNoiseClient("user-sem-cliente")
 
 	err := NewSessionAttachHook(&server{}).Attach(context.Background(), "user-sem-cliente", "token")
 	if err == nil {
-		t.Fatal("Attach sem *whatsmeow.Client registrado deveria falhar")
+		t.Fatal("Attach sem *wanoise.Client registrado deveria falhar")
 	}
 	if !strings.Contains(err.Error(), "user-sem-cliente") {
 		t.Fatalf("erro não identifica o userID: %v", err)

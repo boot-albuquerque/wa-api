@@ -6,9 +6,9 @@ import "context"
 // criada. É simétrico a SessionEventDispatcher: existe para preservar a
 // direção de dependência do outro lado.
 //
-// O handler de domínio (myEventHandler, método de *bootstrap.MyClient) trata
+// O handler de domínio (handleEvent, método de *bootstrap.UserEventHandler) trata
 // mensagem, presença, grupo e histórico e carrega estado de bootstrap
-// (DB, NotifyFn, mode). Registrá-lo a partir de pkg/infra/whatsmeow forçaria
+// (DB, NotifyFn, mode). Registrá-lo a partir de pkg/infra/wa-noise forçaria
 // infra → bootstrap; por isso o adapter que implementa este port fica em
 // pkg/bootstrap, onde bootstrap → infra já é direção legal.
 //
@@ -16,7 +16,7 @@ import "context"
 // Pair/Connect — o handler precisa estar registrado antes que qualquer
 // evento possa chegar.
 type SessionAttachHook interface {
-	// Attach monta o MyClient de userID, registra o handler de eventos de
+	// Attach monta o UserEventHandler de userID, registra o handler de eventos de
 	// domínio na sessão e passa a acompanhar o kill-channel dela, que
 	// permanece propriedade de pkg/bootstrap.
 	Attach(ctx context.Context, userID, token string) error

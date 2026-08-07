@@ -1,0 +1,37 @@
+package sqlstore
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+)
+
+const (
+	putNCTSaltQuery = `
+		INSERT INTO wanoise_nct_salt (our_jid, salt) VALUES ($1, $2)
+		ON CONFLICT (our_jid) DO UPDATE SET salt=excluded.salt
+	`
+	getNCTSaltQuery    = `SELECT salt FROM wanoise_nct_salt WHERE our_jid=$1`
+	deleteNCTSaltQuery = `DELETE FROM wanoise_nct_salt WHERE our_jid=$1`
+)
+
+func (s *SQLStore) PutNCTSalt(ctx context.Context, salt []byte) error {
+	_, err := s.db.Exec(ctx, putNCTSaltQuery, s.JID, salt)
+	return err
+}
+
+func (s *SQLStore) GetNCTSalt(ctx context.Context) ([]byte, error) {
+	var salt []byte
+	err := s.db.QueryRow(ctx, getNCTSaltQuery, s.JID).Scan(&salt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return salt, nil
+}
+
+func (s *SQLStore) DeleteNCTSalt(ctx context.Context) error {
+	_, err := s.db.Exec(ctx, deleteNCTSaltQuery, s.JID)
+	return err
+}

@@ -23,7 +23,7 @@ func NewSubscribePresenceUseCase(pc appport.PresenceController, jr appport.JIDRe
 // Execute subscribes to a contact's presence
 func (uc *SubscribePresenceUseCase) Execute(ctx context.Context, userID string, req domain.SubscribePresenceRequest) error {
 	if err := uc.presence.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return err
 	}
 

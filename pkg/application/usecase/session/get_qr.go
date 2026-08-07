@@ -26,7 +26,7 @@ func NewGetQRUseCase(sg appport.SessionGuard, users appport.UserRepository, l ap
 }
 
 // Execute valida se o cliente está disponível e devolve o QR code persistido
-// pelo listener de eventos do whatsmeow (bootstrap/lifecycle.go grava em
+// pelo listener de eventos do wa-noise (bootstrap/lifecycle.go grava em
 // users.qrcode a cada evento "code" do canal de QR).
 //
 // Antes, Execute só validava a sessão e devolvia GetQRResult{} vazio — o
@@ -37,7 +37,7 @@ func NewGetQRUseCase(sg appport.SessionGuard, users appport.UserRepository, l ap
 // intervalo em que o QR gira.
 func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQRResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

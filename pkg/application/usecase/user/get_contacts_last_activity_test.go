@@ -119,7 +119,7 @@ func TestGetContactsLastActivityUseCase_GreatestNoConflitoLIDePN(t *testing.T) {
 		uc := newLastActivityUC(
 			func(context.Context, string) (map[string]time.Time, error) {
 				return map[string]time.Time{
-					"123456@lid":              older,
+					"123456@lid":             older,
 					"5511999@s.whatsapp.net": newer,
 				}, nil
 			},

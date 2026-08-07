@@ -11,7 +11,7 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// errSession é o erro que a porta devolve quando não há sessão whatsmeow. O
+// errSession é o erro que a porta devolve quando não há sessão wa-noise. O
 // que os testes cobram dos use cases é que ele chegue INTEIRO ao chamador —
 // identidade preservada por errors.Is, e não um texto novo que apague a
 // causa (era o que fmt.Errorf("no session") fazia).
@@ -500,7 +500,7 @@ func requireLog(t *testing.T, logger *contractsfake.Logger, level, msg string) c
 // mensagem canônica, a causa real e o identificador da sessão.
 func assertSessionLog(t *testing.T, logger *contractsfake.Logger, idKey, idValue string) {
 	t.Helper()
-	rec := requireLog(t, logger, contractsfake.LevelError, "no whatsmeow session")
+	rec := requireLog(t, logger, contractsfake.LevelError, "no wanoise session")
 	if got, ok := rec.Keyval("error"); !ok || got != error(errSession) {
 		t.Errorf("log de sessao nao carrega a causa real: %v", rec.Keyvals)
 	}

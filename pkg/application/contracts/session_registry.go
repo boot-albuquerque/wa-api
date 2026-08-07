@@ -3,16 +3,16 @@ package port
 // SessionRegistry guarda os handles vivos de cada sessão. Existe por uma
 // razão estrutural, não numérica: o SessionOrchestrator vive em
 // pkg/application/session e precisa registrar/recuperar esses handles sem
-// importar pkg/infra/whatsmeow, o que inverteria a direção de dependência
+// importar pkg/infra/wa-noise, o que inverteria a direção de dependência
 // application → infra. Implementado por ClientManager
-// (pkg/infra/whatsmeow/client_manager.go), que continua com a mesma
+// (pkg/infra/wa-noise/client_manager.go), que continua com a mesma
 // responsabilidade que já tem hoje.
 //
 // Escopo deliberadamente estreito: só CRUD de handle. Nada de Start/Stop/
 // Reconnect — ciclo de vida é do orchestrator, não do registry.
 //
-// O handle de MyClient não aparece aqui: quem o monta e registra é o
-// adapter de SessionAttachHook, em pkg/bootstrap, porque MyClient carrega
+// O handle de UserEventHandler não aparece aqui: quem o monta e registra é o
+// adapter de SessionAttachHook, em pkg/bootstrap, porque UserEventHandler carrega
 // estado de bootstrap que a camada de aplicação não pode enxergar.
 type SessionRegistry interface {
 	// Register associa a sessão viva a userID, substituindo qualquer

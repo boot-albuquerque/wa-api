@@ -243,11 +243,11 @@ func TestSaveMessageToHistory_ReportsErrorWhenTableIsMissing(t *testing.T) {
 
 func TestTrimMessageHistory_ReportsSecretsFailureFirst(t *testing.T) {
 	db := newHistoryDB(t)
-	mustExec(t, db, "DROP TABLE whatsmeow_message_secrets")
+	mustExec(t, db, "DROP TABLE wanoise_message_secrets")
 
 	err := TrimMessageHistory(db, "u1", "c", 5)
 	if err == nil {
-		t.Fatal("TrimMessageHistory succeeded without whatsmeow_message_secrets")
+		t.Fatal("TrimMessageHistory succeeded without wanoise_message_secrets")
 	}
 	if !strings.Contains(err.Error(), "failed to trim message secrets") {
 		t.Errorf("error = %v, want the secrets failure", err)

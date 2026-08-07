@@ -391,7 +391,7 @@ func TestUserHandlers_SessionRoutes_CorpoMalformado(t *testing.T) {
 // TestUserHandlers_SessionRoutes_SessaoRecusada: a porta recusa a sessao e o
 // 500 leva a causa ao log.
 func TestUserHandlers_SessionRoutes_SessaoRecusada(t *testing.T) {
-	boom := errors.New("uh-no-whatsmeow-session")
+	boom := errors.New("uh-no-wanoise-session")
 
 	for _, tc := range uhSessionRoutes() {
 		t.Run(tc.name, func(t *testing.T) {

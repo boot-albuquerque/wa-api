@@ -1,0 +1,50 @@
+package send
+
+import "errors"
+
+// Os sentinelas deste dominio. A raiz os reexporta pelos nomes historicos
+// (ErrNoSession, ErrUnknownServer, ...) por **atribuicao**, o que faz deles o
+// MESMO valor, nao copias: um errors.New proprio la' quebraria errors.Is para
+// quem compara com o nome da raiz. E' a mesma armadilha de aliasing
+// documentada nos erros de midia, app state, pareamento e grupo (lotes 1, 3, 4
+// e 6).
+//
+// Os seis abaixo sao os que a auditoria confirmou serem exclusivos do caminho
+// de envio: fora de errors.go e dos testes, nenhum arquivo da raiz alem dos 11
+// deste lote os cita. ErrClientIsNil e ErrNotLoggedIn ficaram na raiz por serem
+// do fork inteiro — o primeiro porque a checagem de receptor nil so' pode
+// existir na raiz (um *Client nil nao produz Transport), o segundo pela
+// interface Errors (ver transport.go).
+var (
+	// ErrNoSession is returned by SendMessage if there is no Signal session with the recipient.
+	ErrNoSession = errors.New("can't encrypt message for device: no signal session established")
+	// ErrMessageTimedOut is returned by SendMessage if the server doesn't acknowledge the message within the timeout.
+	ErrMessageTimedOut = errors.New("timed out waiting for message send response")
+	// ErrUnknownServer is returned by SendMessage if the recipient JID has an unknown server.
+	ErrUnknownServer = errors.New("can't send message to unknown server")
+	// ErrRecipientADJID is returned by SendMessage if the recipient JID has a device part.
+	ErrRecipientADJID = errors.New("message recipient must be a user JID with no device part")
+	// ErrServerReturnedError is returned by SendMessage if the server's ack carries an error code.
+	ErrServerReturnedError = errors.New("server returned error")
+	// ErrInvalidInlineBotID is returned by SendMessage if the inline bot JID is not a bot JID.
+	ErrInvalidInlineBotID = errors.New("invalid inline bot ID")
+
+	// ErrNoDeviceIdentity: o <device-identity> foi pedido mas Store.Account
+	// esta' vazio. Antes isto passava em silencio — proto.Marshal(nil) devolve
+	// bytes vazios SEM erro, e o no' ia vazio para o fio (F41 em HOUSEKEEP.md).
+	ErrNoDeviceIdentity = errors.New("can't build device identity node: no account in store")
+
+	// ErrAllDevicesFailedEncryption: a cifragem falhou para TODOS os
+	// dispositivos tentados, entao o <participants> sairia vazio.
+	//
+	// Falha por dispositivo e' esperada e continua sendo tolerada — um device
+	// sem sessao Signal (ErrNoSession) e' rotina, e pular so' ele e' o
+	// comportamento correto. O que NAO e' tolerado e' o caso degenerado em que
+	// nao sobrou nenhum: o stanza ia para o fio sem destinatario nenhum,
+	// node_build.go montava o <participants> vazio sem checar, o servidor
+	// respondia, e SendMessage devolvia sucesso com ID de mensagem. Ninguem
+	// recebia, e nada no caminho de retorno dizia isso.
+	//
+	// Ver F62 em HOUSEKEEP.md.
+	ErrAllDevicesFailedEncryption = errors.New("failed to encrypt message for every device")
+)

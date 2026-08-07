@@ -11,11 +11,11 @@ import (
 
 // GetContactsLastActivityUseCase devolve o timestamp da última mensagem por
 // chat, derivado do backfill local de message_history (HistorySync
-// pós-pareamento + mensagens correntes). Não exige sessão whatsmeow ativa
+// pós-pareamento + mensagens correntes). Não exige sessão wa-noise ativa
 // pro READ em si — é leitura de banco local — mas a NORMALIZAÇÃO de
 // identidade (ver normalizeToLID) precisa da sessão pra consultar o mapa
-// LID↔PN do whatsmeow; sem sessão ativa, devolve o dado cru sem normalizar
-// (degrada, não falha).
+// LID↔PN do módulo de protocolo; sem sessão ativa, devolve o dado cru sem
+// normalizar (degrada, não falha).
 type GetContactsLastActivityUseCase struct {
 	activity appport.ChatActivityReader
 	contacts appport.ContactDirectory
@@ -45,11 +45,11 @@ func (uc *GetContactsLastActivityUseCase) Execute(ctx context.Context, userID st
 }
 
 // normalizeToLID reescreve as chaves `@s.whatsapp.net` de `raw` pro LID
-// equivalente, quando o whatsmeow já conhece o mapeamento (populado pelo
+// equivalente, quando o módulo de protocolo já conhece o mapeamento (populado pelo
 // próprio app-state sync, sem custo de round-trip extra por contato — 1
 // chamada em lote pro store local).
 //
-// Por quê: GetAllContacts (whatsmeow_contacts) devolve majoritariamente
+// Por quê: GetAllContacts (o roster do módulo de protocolo) devolve majoritariamente
 // `@lid` no WhatsApp Multi-Device atual, mas message_history mistura `@lid`
 // e `@s.whatsapp.net` (HistorySync preserva o JID original de cada
 // conversa). Sem normalizar, o caller (wa-worker) tenta casar last-activity
