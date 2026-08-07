@@ -53,7 +53,7 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation) ([]appstate.Mut
 	filteredMutations := mutations[:0]
 	contacts := make([]store.ContactEntry, 0, len(mutations))
 	for _, mutation := range mutations {
-		if mutation.Index[0] == "contact" && len(mutation.Index) > 1 {
+		if mutation.Index[0] == appstate.IndexContact && len(mutation.Index) > 1 {
 			jid, _ := types.ParseJID(mutation.Index[1])
 			act := mutation.Action.GetContactAction()
 			contacts = append(contacts, store.ContactEntry{
@@ -148,7 +148,7 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 		act := mutation.Action.GetClearChatAction()
 		var deleteMedia bool
 		// TODO what's index 2 here?
-		if len(mutation.Index) > 3 && mutation.Index[3] == "1" {
+		if len(mutation.Index) >= appStateIndexMinLenClearChatMedia && mutation.Index[3] == appStateIndexTrue {
 			deleteMedia = true
 		}
 		eventToDispatch = &events.ClearChat{
@@ -161,7 +161,7 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 	case appstate.IndexDeleteChat:
 		act := mutation.Action.GetDeleteChatAction()
 		var deleteMedia bool
-		if len(mutation.Index) > 2 && mutation.Index[2] == "1" {
+		if len(mutation.Index) >= appStateIndexMinLenDeleteChatMedia && mutation.Index[2] == appStateIndexTrue {
 			deleteMedia = true
 		}
 		eventToDispatch = &events.DeleteChat{
@@ -172,7 +172,7 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			FromFullSync: fullSync,
 		}
 	case appstate.IndexStar:
-		if len(mutation.Index) < 5 {
+		if len(mutation.Index) < appStateIndexMinLenStar {
 			return
 		}
 		evt := events.Star{
@@ -180,15 +180,15 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			MessageID:    mutation.Index[2],
 			Timestamp:    ts,
 			Action:       mutation.Action.GetStarAction(),
-			IsFromMe:     mutation.Index[3] == "1",
+			IsFromMe:     mutation.Index[3] == appStateIndexTrue,
 			FromFullSync: fullSync,
 		}
-		if mutation.Index[4] != "0" {
+		if mutation.Index[4] != appStateIndexSelfSender {
 			evt.SenderJID, _ = types.ParseJID(mutation.Index[4])
 		}
 		eventToDispatch = &evt
 	case appstate.IndexDeleteMessageForMe:
-		if len(mutation.Index) < 5 {
+		if len(mutation.Index) < appStateIndexMinLenDeleteForMe {
 			return
 		}
 		evt := events.DeleteForMe{
@@ -196,10 +196,10 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			MessageID:    mutation.Index[2],
 			Timestamp:    ts,
 			Action:       mutation.Action.GetDeleteMessageForMeAction(),
-			IsFromMe:     mutation.Index[3] == "1",
+			IsFromMe:     mutation.Index[3] == appStateIndexTrue,
 			FromFullSync: fullSync,
 		}
-		if mutation.Index[4] != "0" {
+		if mutation.Index[4] != appStateIndexSelfSender {
 			evt.SenderJID, _ = types.ParseJID(mutation.Index[4])
 		}
 		eventToDispatch = &evt
@@ -235,6 +235,12 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			FromFullSync: fullSync,
 		}
 	case appstate.IndexLabelEdit:
+		// O indice vem do servidor: sem esta guarda, um `label_edit` sem o
+		// campo de labelID causaria panico (index out of range) dentro do
+		// handler de nos, que roda em goroutine sem recover.
+		if len(mutation.Index) < appStateIndexMinLenLabelEdit {
+			return
+		}
 		act := mutation.Action.GetLabelEditAction()
 		eventToDispatch = &events.LabelEdit{
 			Timestamp:    ts,
@@ -243,7 +249,7 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			FromFullSync: fullSync,
 		}
 	case appstate.IndexLabelAssociationChat:
-		if len(mutation.Index) < 3 {
+		if len(mutation.Index) < appStateIndexMinLenLabelAssocChat {
 			return
 		}
 		jid, _ = types.ParseJID(mutation.Index[2])
@@ -256,7 +262,7 @@ func (cli *Client) dispatchAppState(ctx context.Context, name appstate.WAPatchNa
 			FromFullSync: fullSync,
 		}
 	case appstate.IndexLabelAssociationMessage:
-		if len(mutation.Index) < 6 {
+		if len(mutation.Index) < appStateIndexMinLenLabelAssocMessage {
 			return
 		}
 		jid, _ = types.ParseJID(mutation.Index[2])
