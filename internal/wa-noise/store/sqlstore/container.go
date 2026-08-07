@@ -21,8 +21,8 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/store/sqlstore/upgrades"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/keys"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Container is a wrapper for a SQL database that can contain multiple whatsmeow sessions.

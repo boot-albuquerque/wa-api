@@ -16,7 +16,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 func TestConnExpiry(t *testing.T) {

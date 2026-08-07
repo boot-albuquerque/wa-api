@@ -13,8 +13,8 @@ import (
 	"sync"
 
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/util/hkdfutil"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/hkdf"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 type Processor struct {

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 func childContent(t *testing.T, node waBinary.Node, tag string) []byte {

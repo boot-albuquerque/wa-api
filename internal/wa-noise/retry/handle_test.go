@@ -25,7 +25,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // --- ShouldRecreateSession ---

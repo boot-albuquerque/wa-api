@@ -14,7 +14,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/hkdfutil"
+	"wa-api/internal/wa-noise/security/hkdf"
 )
 
 // SecretType e' o rotulo de caso de uso que entra na derivacao HKDF da chave de

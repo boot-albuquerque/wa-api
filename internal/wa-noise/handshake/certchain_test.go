@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"wa-api/internal/wa-noise/proto/waCert"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // Os testes deste arquivo trocam WACertPubKey por uma chave que o teste

@@ -20,8 +20,8 @@ import (
 	"wa-api/internal/wa-noise/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/gcmutil"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/gcm"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // A cripto do retry (derivacao da chave, cifragem do receipt e decifragem da

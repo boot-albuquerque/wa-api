@@ -14,7 +14,7 @@ import (
 	"wa-api/internal/wa-noise/group"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // groupTransport adapta *Client a group.Transport. Existe para que o pacote

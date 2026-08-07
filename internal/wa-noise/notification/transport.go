@@ -7,7 +7,7 @@
 package notification
 
 import (
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Transport e' a fatia do cliente de que os handlers de <notification> deste

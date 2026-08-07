@@ -13,7 +13,7 @@ import (
 
 	"wa-api/internal/wa-noise/proto/waServerSync"
 	"wa-api/internal/wa-noise/proto/waSyncAction"
-	"wa-api/internal/wa-noise/util/cbcutil"
+	"wa-api/internal/wa-noise/security/cbc"
 )
 
 func decodeEncodedPatch(t *testing.T, raw []byte) *waServerSync.SyncdPatch {

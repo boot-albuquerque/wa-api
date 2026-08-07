@@ -17,8 +17,8 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/util/cbcutil"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/cbc"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // rewriteTransport redireciona qualquer requisicao (inclusive as https que o

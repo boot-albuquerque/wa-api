@@ -36,7 +36,7 @@ import (
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 	"wa-api/internal/wa-noise/user"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Client contains everything necessary to connect to and interact with the WhatsApp web API.

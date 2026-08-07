@@ -14,7 +14,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // A logica deste dominio vive em internal/wa-noise/prekeys/. O que sobra aqui

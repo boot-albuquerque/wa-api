@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // collectFrames roda processData com as mensagens dadas e devolve os frames

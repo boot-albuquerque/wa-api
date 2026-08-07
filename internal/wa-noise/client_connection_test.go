@@ -19,7 +19,7 @@ import (
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // connTestClient e' o cliente minimo do lote 10. Difere de recvTestClient

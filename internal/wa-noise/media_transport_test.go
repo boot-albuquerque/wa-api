@@ -15,7 +15,7 @@ import (
 
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/proto/waE2E"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // A logica de midia mora em internal/wa-noise/media e e' testada la'. O que

@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/hkdfutil"
+	"wa-api/internal/wa-noise/security/hkdf"
 )
 
 // --- generateMsgSecretKey ---

@@ -17,7 +17,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // ------------------------------------------------------------------ dubles

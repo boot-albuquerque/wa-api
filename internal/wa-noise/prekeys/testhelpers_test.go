@@ -15,8 +15,8 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/util/keys"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/keys"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // testPreKey monta uma prekey determinista (sem aleatoriedade) para que os

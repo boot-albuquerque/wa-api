@@ -15,7 +15,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waServerSync"
 	"wa-api/internal/wa-noise/store"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // appStateTransport adapta *Client a appstatesync.Transport. Existe para que o

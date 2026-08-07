@@ -16,7 +16,7 @@ import (
 	"go.mau.fi/libsignal/util/optional"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // ToNode serializa uma prekey para o no <key> (ou <skey>, quando ela tem

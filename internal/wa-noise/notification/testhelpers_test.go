@@ -8,7 +8,7 @@ package notification
 
 import (
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // fakeTransport e' o duble de Transport. Guarda os eventos despachados na

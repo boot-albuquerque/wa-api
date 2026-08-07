@@ -34,7 +34,7 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Errors reune os sentinelas de erro do pacote RAIZ de que este dominio

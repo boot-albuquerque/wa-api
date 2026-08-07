@@ -15,7 +15,7 @@ import (
 
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // Config e' todo o material que Do precisa do cliente. E' deliberadamente um

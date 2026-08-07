@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/gcmutil"
+	"wa-api/internal/wa-noise/security/gcm"
 )
 
 // --- guardas de nil / pre-condicoes ---

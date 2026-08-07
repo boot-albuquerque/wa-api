@@ -19,7 +19,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waServerSync"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // syncTransport monta um Transport com os sub-stores de app state e um

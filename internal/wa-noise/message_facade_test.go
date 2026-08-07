@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // recvTestClient e' o *Client minimo do lote 9. Difere de sendTestClient por

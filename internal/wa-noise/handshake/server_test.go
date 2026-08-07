@@ -16,7 +16,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waCert"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // serverHello roda o **lado servidor** do Noise_XX ate' o ServerHello, espelhando

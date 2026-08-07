@@ -10,7 +10,7 @@ import (
 	"go.mau.fi/libsignal/ecc"
 
 	"wa-api/internal/wa-noise/proto/waAdv"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 var (

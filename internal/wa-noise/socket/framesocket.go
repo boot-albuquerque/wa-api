@@ -15,7 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 type FrameSocket struct {

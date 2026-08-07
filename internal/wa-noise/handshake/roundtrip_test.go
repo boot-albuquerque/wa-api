@@ -14,7 +14,7 @@ import (
 
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // fullServer roda o lado servidor completo do Noise_XX ate' o ServerHello,

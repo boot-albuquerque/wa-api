@@ -13,7 +13,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // ConnHost representa um host de onde a midia pode ser baixada.

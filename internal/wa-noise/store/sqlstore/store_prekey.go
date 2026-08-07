@@ -14,7 +14,7 @@ import (
 
 	"go.mau.fi/util/dbutil"
 
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 const (

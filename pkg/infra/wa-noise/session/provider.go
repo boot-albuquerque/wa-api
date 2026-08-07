@@ -10,7 +10,7 @@ import (
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 
 	"golang.org/x/net/proxy"
 )

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/store"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // memAppStateStore e' uma implementacao em memoria de store.AppStateStore e

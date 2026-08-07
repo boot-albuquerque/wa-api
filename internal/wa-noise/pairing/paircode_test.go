@@ -19,7 +19,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // --------------------------------------------------------------- PairPhone

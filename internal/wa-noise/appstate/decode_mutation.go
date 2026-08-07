@@ -20,7 +20,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waServerSync"
 	"wa-api/internal/wa-noise/proto/waSyncAction"
 	"wa-api/internal/wa-noise/store"
-	"wa-api/internal/wa-noise/util/cbcutil"
+	"wa-api/internal/wa-noise/security/cbc"
 )
 
 // patchOutput acumula o resultado de decodificar as mutacoes de um patch: as

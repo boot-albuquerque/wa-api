@@ -20,7 +20,7 @@ import (
 	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // sendTransport adapta *Client a send.Transport. Existe para que o pacote

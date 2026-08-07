@@ -21,8 +21,8 @@ import (
 	"go.mau.fi/util/retryafter"
 
 	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/cbcutil"
-	"wa-api/internal/wa-noise/util/hkdfutil"
+	"wa-api/internal/wa-noise/security/cbc"
+	"wa-api/internal/wa-noise/security/hkdf"
 )
 
 // DownloadAndDecrypt baixa a URL dada, valida o HMAC e devolve o plaintext.

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 type IdentityStore interface {

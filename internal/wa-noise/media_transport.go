@@ -13,7 +13,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // mediaTransport adapta *Client a media.Transport. Existe para que o pacote

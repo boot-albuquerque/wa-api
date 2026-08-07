@@ -18,7 +18,7 @@ import (
 	"wa-api/internal/wa-noise/socket"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 func (cli *Client) getSocketWaitChan() <-chan struct{} {

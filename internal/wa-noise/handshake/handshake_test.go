@@ -19,8 +19,8 @@ import (
 
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
-	"wa-api/internal/wa-noise/util/keys"
-	waLog "wa-api/internal/wa-noise/util/log"
+	"wa-api/internal/wa-noise/security/keys"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Estes testes exercitam Do contra um servidor websocket de mentira. O caminho

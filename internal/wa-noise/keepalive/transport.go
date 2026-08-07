@@ -18,7 +18,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Timing sao os quatro parametros de tempo do keepalive. Continuam morando na

@@ -22,7 +22,7 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // retryTransport adapta *Client a retry.Transport. Existe para que o pacote

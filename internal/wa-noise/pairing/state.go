@@ -8,7 +8,7 @@ package pairing
 
 import (
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // LinkingCache guarda a sessao de pareamento por codigo de telefone que esta'

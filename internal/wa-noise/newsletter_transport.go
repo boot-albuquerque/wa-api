@@ -13,7 +13,7 @@ import (
 	"wa-api/internal/wa-noise/newsletter"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // newsletterTransport adapta *Client a newsletter.Transport. Existe para que o

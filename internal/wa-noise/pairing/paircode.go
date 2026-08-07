@@ -24,8 +24,8 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/paircrypto"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/hkdfutil"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/hkdf"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 var notNumbers = regexp.MustCompile("[^0-9]")

@@ -13,7 +13,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/keepalive"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Estas quatro variaveis continuam sendo a fonte da verdade e continuam na raiz

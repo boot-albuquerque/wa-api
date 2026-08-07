@@ -8,7 +8,7 @@ package whatsmeow
 
 import (
 	"wa-api/internal/wa-noise/notification"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // notifTransport adapta *Client a notification.Transport. Existe para que o

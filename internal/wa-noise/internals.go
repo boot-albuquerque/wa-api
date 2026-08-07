@@ -27,7 +27,7 @@ import (
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 type DangerousInternalClient struct {

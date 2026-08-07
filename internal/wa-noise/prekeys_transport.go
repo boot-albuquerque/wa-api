@@ -12,7 +12,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/store"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // preKeyTransport adapta *Client a prekeys.Transport. Existe para que o pacote

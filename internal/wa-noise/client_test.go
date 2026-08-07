@@ -16,7 +16,7 @@ import (
 	"wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store/sqlstore"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 func eventHandler(evt interface{}) {

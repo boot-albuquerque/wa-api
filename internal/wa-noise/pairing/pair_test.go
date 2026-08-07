@@ -24,7 +24,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waAdv"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // ---------------------------------------------------------------- pair-device

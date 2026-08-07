@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Bridge implementa waLog.Logger emitindo no zerolog da aplicação.

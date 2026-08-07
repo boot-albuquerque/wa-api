@@ -15,7 +15,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // fakeTransport e' o dublê de Transport. Todos os contadores sao protegidos por

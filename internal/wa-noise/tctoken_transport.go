@@ -12,7 +12,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/tctoken"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // tcTokenTransport adapta *Client a tctoken.Transport. Existe para que o pacote

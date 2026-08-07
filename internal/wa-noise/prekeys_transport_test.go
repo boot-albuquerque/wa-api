@@ -13,7 +13,7 @@ import (
 
 	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/store"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // TestPreKeyTransportEspelhaOCliente confere que o adaptador entrega os mesmos

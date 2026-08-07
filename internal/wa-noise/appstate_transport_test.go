@@ -15,7 +15,7 @@ import (
 	"wa-api/internal/wa-noise/appstate"
 	"wa-api/internal/wa-noise/appstatesync"
 	"wa-api/internal/wa-noise/store"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // TestErrAppStateUpdateEOMesmoValor trava o aliasing do sentinela: se a raiz

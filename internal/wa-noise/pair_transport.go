@@ -13,7 +13,7 @@ import (
 	"wa-api/internal/wa-noise/pairing"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // pairTransport adapta *Client a pairing.Transport. Existe para que o pacote

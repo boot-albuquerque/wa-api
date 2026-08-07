@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/types/events"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 type QRChannelItem struct {

@@ -17,7 +17,7 @@ import (
 	"wa-api/internal/wa-noise/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
-	"wa-api/internal/wa-noise/util/gcmutil"
+	"wa-api/internal/wa-noise/security/gcm"
 )
 
 // Golden da chave de retry: ela precisa continuar derivando do mesmo rotulo e

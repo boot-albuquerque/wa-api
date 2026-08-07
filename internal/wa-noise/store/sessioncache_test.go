@@ -15,7 +15,7 @@ import (
 	"go.mau.fi/libsignal/keys/chain"
 	"go.mau.fi/libsignal/state/record"
 
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // memSessionStore e' um SessionStore em memoria: SessionStore e' interface,

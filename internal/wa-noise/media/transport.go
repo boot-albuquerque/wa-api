@@ -11,7 +11,7 @@ import (
 	"net/http"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	waLog "wa-api/internal/wa-noise/util/log"
+	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // HTTPTransport e' a fatia do cliente de que o caminho HTTP puro de midia

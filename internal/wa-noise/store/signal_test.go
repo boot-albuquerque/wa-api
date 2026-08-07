@@ -14,7 +14,7 @@ import (
 	groupRecord "go.mau.fi/libsignal/groups/state/record"
 	"go.mau.fi/libsignal/protocol"
 
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // signalDevice monta um Device com chaves reais e stores em memoria — o

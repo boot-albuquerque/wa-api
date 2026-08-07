@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/util/keys"
+	"wa-api/internal/wa-noise/security/keys"
 )
 
 // waVersion, waVersionHash, BaseClientPayload e DeviceProps sao estado GLOBAL
