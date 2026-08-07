@@ -96,5 +96,5 @@ const (
 // lote 10 da Fase F/G. Nenhum arquivo da raiz os le mais.
 
 // Os parametros do dialer SOCKS5 (socksProxyDialTimeout, socksProxyKeepAlive)
-// mudaram para internal/wa-noise/proxyconf no lote 10 da Fase F/G, junto com a
+// mudaram para internal/wa-noise/runtime/proxy no lote 10 da Fase F/G, junto com a
 // montagem dos transports. Nenhum arquivo da raiz os le mais.

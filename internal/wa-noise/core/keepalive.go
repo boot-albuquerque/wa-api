@@ -11,7 +11,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/keepalive"
+	"wa-api/internal/wa-noise/runtime/keepalive"
 	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
@@ -33,7 +33,7 @@ var (
 )
 
 // keepAliveTransport adapta *Client a keepalive.Transport. Existe para que o
-// pacote internal/wa-noise/keepalive possa operar sobre uma interface estreita
+// pacote internal/wa-noise/runtime/keepalive possa operar sobre uma interface estreita
 // sem importar o pacote raiz (o que fecharia um ciclo).
 //
 // Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 10".

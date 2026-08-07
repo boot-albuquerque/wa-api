@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"wa-api/internal/wa-noise/proxyconf"
+	proxyconf "wa-api/internal/wa-noise/runtime/proxy"
 )
 
 // Proxy e SetProxyOptions sao aliases para os tipos de proxyconf. Precisam ser

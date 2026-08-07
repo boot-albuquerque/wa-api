@@ -14,7 +14,10 @@
 # types/events/, e os cinco subpacotes de util/) e Fase D (msgpad/, paircrypto/
 # e msgattrs/, extraidos da raiz) e Fase F/G (media/, newsletter/ e
 # appstatesync/, prekeys/, pairing/, tctoken/, notification/, retry/, group/,
-# user/, send/ e message/, extracao real).
+# user/, send/ e message/, extracao real) e Fase H (reorganizacao estrutural:
+# os caminhos acima passaram a viver sob core/, capabilities/, protocol/,
+# security/, persistence/, observability/ e runtime/ — keepalive/ e proxyconf/
+# viraram runtime/keepalive/ e runtime/proxy/ na etapa 7).
 # Cobre o fork.
 #
 # Dois diretorios ficam de fora, ambos por serem codigo GERADO, pelo mesmo
@@ -51,8 +54,8 @@ internal/wa-noise/capabilities/user \
 internal/wa-noise/capabilities/send \
 internal/wa-noise/capabilities/message \
 internal/wa-noise/security/handshake \
-internal/wa-noise/keepalive \
-internal/wa-noise/proxyconf \
+internal/wa-noise/runtime/keepalive \
+internal/wa-noise/runtime/proxy \
 internal/wa-noise/protocol/socket \
 internal/wa-noise/protocol/appstate \
 internal/wa-noise/persistence/store \
