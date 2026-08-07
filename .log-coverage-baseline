@@ -142,7 +142,16 @@ rules_frozen=true
 # (os 2 pontos que decidem se e' erro) ja logam. errpath_coverage nao muda
 # (856): o adapter nao tem branch de erro proprio pra contar como S-ret
 # descoberto (so' repassa o retorno de baixo).
-min_func_coverage=707
-min_errpath_coverage=856
-min_eligible=509
+min_func_coverage=710
+min_errpath_coverage=862
+min_eligible=507
 max_exempt_annotations=0
+
+# Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
+#   min_eligible 509 -> 507: os tres helpers privados client() identicos de
+#     GroupAdapter/MiscAdapter/UserAdapter viraram um unico
+#     SessionGuardAdapter.Client exportado (-3 +1). waclienttest/ entrou em
+#     .logcov-exclude pelo mesmo criterio de contractsfake (dublê de teste),
+#     entao os fakes promovidos de _test.go a pacote nao entram no denominador.
+#   min_func_coverage 707 -> 710 e min_errpath_coverage 856 -> 862: efeito
+#     aritmetico da mesma consolidacao — os helpers removidos nao logavam.

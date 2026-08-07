@@ -15,10 +15,11 @@ BINARY := wa-api
 # test) — não é "menos rigor", é medir a coisa certa: a qualidade do que
 # escrevemos, não a de um SDK que só copiamos.
 COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
-# test/check também excluem pkg/infra/wa-noise — race pré-existente e
-# não-relacionada a esta mudança (safe_go_test.go, commit b426885),
-# documentada em HOUSEKEEP.md.
-TEST_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | grep -v '^wa-api/pkg/infra/wa-noise$$')
+# pkg/infra/wa-noise/ ficava de fora de TEST_PKGS por uma data race real em
+# safe_go_test.go (commit b426885). O teste foi corrigido junto da quebra do
+# pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
+# saiu — manter uma trava que não trava é pior que não ter trava.
+TEST_PKGS := $(COVER_PKGS)
 VET_TARGETS := $(COVER_PKGS)
 
 # Lint
