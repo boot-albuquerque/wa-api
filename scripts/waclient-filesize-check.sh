@@ -14,7 +14,7 @@
 # types/events/, e os cinco subpacotes de util/) e Fase D (msgpad/, paircrypto/
 # e msgattrs/, extraidos da raiz) e Fase F/G (media/, newsletter/ e
 # appstatesync/, prekeys/, pairing/, tctoken/, notification/, retry/, group/,
-# user/ e send/, extracao real).
+# user/, send/ e message/, extracao real).
 # Cobre o fork.
 #
 # Dois diretorios ficam de fora, ambos por serem codigo GERADO, pelo mesmo
@@ -48,6 +48,7 @@ internal/wa-noise/retry \
 internal/wa-noise/group \
 internal/wa-noise/user \
 internal/wa-noise/send \
+internal/wa-noise/message \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \
