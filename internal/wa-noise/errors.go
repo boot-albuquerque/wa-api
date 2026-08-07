@@ -118,6 +118,13 @@ type DownloadHTTPError = media.DownloadHTTPError
 
 // Some errors that Client.Download can return. Sao os mesmos valores do pacote
 // internal/wa-noise/media — nao copias — entao errors.Is atravessa a fronteira.
+//
+// NAO troque nenhuma destas linhas por um errors.New proprio. A identidade e'
+// load-bearing: DownloadMediaWithPath decide encerrar o laco de hosts com
+// errors.Is contra ErrMediaDownloadFailedWith403/404/410. Se a raiz declarasse
+// valores proprios, a comparacao feita por quem usa os nomes da raiz falharia e
+// um 404 passaria a ser tratado como falha retentavel — o download tentaria
+// todos os hosts da mediaConn para um arquivo que nao existe.
 var (
 	ErrMediaDownloadFailedWith403 = media.ErrMediaDownloadFailedWith403
 	ErrMediaDownloadFailedWith404 = media.ErrMediaDownloadFailedWith404

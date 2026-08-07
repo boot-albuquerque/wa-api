@@ -5165,6 +5165,39 @@ diff é inteiramente a movimentação das funções de mídia de
 
 `git diff --stat internal/wa-noise/proto/` continua vazio.
 
+### Revisão independente do lote
+
+O commit da extração passou por revisão independente focada em concorrência e
+em deriva de comportamento criptográfico (diff do subpacote contra
+`git show HEAD:` de cada arquivo de origem). Veredito: **sem defeito
+bloqueante**; semântica do lock, ordenação de `resolveUploadTarget`, os quatro
+helpers extraídos, `download_transport.go`, `download_file.go`, `retry.go`, o
+parsing de `conn.go`, o ponto de leitura de `ReturnDownloadWarnings` e a troca
+de `cli.MessengerConfig != nil` por `IsMessenger()` foram todos considerados
+equivalentes ao original.
+
+Dois pontos não bloqueantes que a revisão levantou ficam registrados aqui
+porque são armadilhas para quem mexer nisso depois:
+
+**1. `ConnCache.Set`/`Get` são exportados e travam o mesmo mutex não reentrante
+que `Refresh` segura durante a consulta de rede.** Hoje não há chamador de
+produção — só testes, sempre fora de `Refresh`. Mas uma implementação futura de
+`Transport` que toque o cache de dentro de `SendMediaConnIQ` se autodeadlocka, e
+**`go test -race` não acusaria**: deadlock não é corrida de dados. A restrição
+está documentada no doc comment de `ConnCache.Set`. A alternativa seria
+desexportar os dois e expor um helper só de teste; ficou exportado porque
+prepopular o cache é uso legítimo (um cliente que já tenha uma mediaConn válida
+em mãos), e a restrição é fácil de respeitar uma vez escrita.
+
+**2. O aliasing dos erros em `errors.go` é load-bearing e não pode virar
+`errors.New`.** `DownloadMediaWithPath` decide encerrar o laço de hosts com
+`errors.Is` contra `ErrMediaDownloadFailedWith403/404/410`. Se a raiz passasse a
+declarar valores próprios em vez de referenciar os do subpacote, a comparação
+feita por quem usa os nomes da raiz falharia silenciosamente e um 404 viraria
+falha retentável — o download percorreria **todos** os hosts da mediaConn
+buscando um arquivo que não existe. Há aviso no próprio `errors.go` e teste de
+identidade (`TestSentinelasDeMidiaSaoOsMesmosValores`).
+
 ### Fora do escopo
 
 - O desenho do lock (consulta segurando o mutex) não foi mexido — ver acima.

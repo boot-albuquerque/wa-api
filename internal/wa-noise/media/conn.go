@@ -47,6 +47,13 @@ type ConnCache struct {
 
 // Set substitui a Conn em cache sem consultar o servidor. Serve para prepopular
 // o cache (testes, ou um cliente que ja' tenha uma mediaConn valida em maos).
+//
+// ATENCAO — restricao de reentrancia: Set e Get travam o MESMO mutex nao
+// reentrante que Refresh segura durante toda a consulta ao servidor. Portanto
+// nenhuma implementacao de [Transport] pode chamar Set ou Get de dentro de
+// SendMediaConnIQ: seria autodeadlock, e `go test -race` nao acusaria isso
+// (deadlock nao e' corrida). Hoje nao ha' nenhum chamador de producao — so'
+// testes, sempre fora de Refresh.
 func (cc *ConnCache) Set(mc *Conn) {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
@@ -54,6 +61,8 @@ func (cc *ConnCache) Set(mc *Conn) {
 }
 
 // Get devolve a Conn em cache sem renovar nem validar a expiracao.
+//
+// Vale a mesma restricao de reentrancia documentada em [ConnCache.Set].
 func (cc *ConnCache) Get() *Conn {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
