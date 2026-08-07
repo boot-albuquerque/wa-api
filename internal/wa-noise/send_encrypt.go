@@ -122,8 +122,8 @@ func (cli *Client) encryptMessageForDeviceAndWrap(
 		return nil, false, err
 	}
 	return &waBinary.Node{
-		Tag:     "to",
-		Attrs:   waBinary.Attrs{"jid": wireIdentity},
+		Tag:     participantToNodeTag,
+		Attrs:   waBinary.Attrs{participantToAttrJID: wireIdentity},
 		Content: []waBinary.Node{*node},
 	}, includeDeviceIdentity, nil
 }
@@ -177,17 +177,17 @@ func (cli *Client) encryptMessageForDevice(
 	}
 
 	encAttrs := waBinary.Attrs{
-		"v":    "2",
-		"type": "msg",
+		encAttrVersion: encVersionSignal,
+		encAttrType:    encTypeMsg,
 	}
 	if ciphertext.Type() == protocol.PREKEY_TYPE {
-		encAttrs["type"] = "pkmsg"
+		encAttrs[encAttrType] = encTypePreKeyMsg
 	}
 	copyAttrs(extraAttrs, encAttrs)
 
-	includeDeviceIdentity := encAttrs["type"] == "pkmsg" && cli.MessengerConfig == nil
+	includeDeviceIdentity := encAttrs[encAttrType] == encTypePreKeyMsg && cli.MessengerConfig == nil
 	return &waBinary.Node{
-		Tag:     "enc",
+		Tag:     encNodeTag,
 		Attrs:   encAttrs,
 		Content: ciphertext.Serialize(),
 	}, includeDeviceIdentity, nil

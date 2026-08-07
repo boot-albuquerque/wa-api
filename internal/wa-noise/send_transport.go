@@ -34,7 +34,11 @@ func participantListHashV2(participants []types.JID) string {
 
 	sort.Strings(participantsStrings)
 	hash := sha256.Sum256([]byte(strings.Join(participantsStrings, "")))
-	return fmt.Sprintf("2:%s", base64.RawStdEncoding.EncodeToString(hash[:6]))
+	return fmt.Sprintf(
+		"%s:%s",
+		participantListHashPrefix,
+		base64.RawStdEncoding.EncodeToString(hash[:participantListHashLength]),
+	)
 }
 
 func (cli *Client) sendNewsletter(
@@ -46,18 +50,18 @@ func (cli *Client) sendNewsletter(
 	timings *MessageDebugTimings,
 ) ([]byte, error) {
 	attrs := waBinary.Attrs{
-		"to":   to,
-		"id":   id,
-		"type": msgattrs.GetTypeFromMessage(message),
+		msgAttrTo:   to,
+		msgAttrID:   id,
+		msgAttrType: msgattrs.GetTypeFromMessage(message),
 	}
 	if mediaID != "" {
-		attrs["media_id"] = mediaID
+		attrs[msgAttrMediaID] = mediaID
 	}
 	if message.EditedMessage != nil {
-		attrs["edit"] = string(types.EditAttributeAdminEdit)
+		attrs[msgAttrEdit] = string(types.EditAttributeAdminEdit)
 		message = message.GetEditedMessage().GetMessage().GetProtocolMessage().GetEditedMessage()
 	} else if message.ProtocolMessage != nil && message.ProtocolMessage.GetType() == waE2E.ProtocolMessage_REVOKE {
-		attrs["edit"] = string(types.EditAttributeAdminRevoke)
+		attrs[msgAttrEdit] = string(types.EditAttributeAdminRevoke)
 		message = nil
 	}
 	start := time.Now()
@@ -67,17 +71,17 @@ func (cli *Client) sendNewsletter(
 		return nil, err
 	}
 	plaintextNode := waBinary.Node{
-		Tag:     "plaintext",
+		Tag:     plaintextNodeTag,
 		Content: plaintext,
 		Attrs:   waBinary.Attrs{},
 	}
 	if message != nil {
 		if mediaType := msgattrs.GetMediaTypeFromMessage(message); mediaType != "" {
-			plaintextNode.Attrs["mediatype"] = mediaType
+			plaintextNode.Attrs[encAttrMediaType] = mediaType
 		}
 	}
 	node := waBinary.Node{
-		Tag:     "message",
+		Tag:     messageNodeTag,
 		Attrs:   attrs,
 		Content: []waBinary.Node{plaintextNode},
 	}
@@ -148,14 +152,17 @@ func (cli *Client) sendGroup(
 	}
 
 	phash := participantListHashV2(allDevices)
-	node.Attrs["phash"] = phash
+	node.Attrs[msgAttrPHash] = phash
 	skMsg := waBinary.Node{
-		Tag:     "enc",
+		Tag:     encNodeTag,
 		Content: ciphertext,
-		Attrs:   waBinary.Attrs{"v": "2", "type": "skmsg"},
+		Attrs: waBinary.Attrs{
+			encAttrVersion: encVersionSignal,
+			encAttrType:    encTypeSenderKey,
+		},
 	}
 	if mediaType := msgattrs.GetMediaTypeFromMessage(message); mediaType != "" {
-		skMsg.Attrs["mediatype"] = mediaType
+		skMsg.Attrs[encAttrMediaType] = mediaType
 	}
 	node.Content = append(node.GetChildren(), skMsg)
 	if cli.shouldIncludeReportingToken(message) && message.GetMessageContextInfo().GetMessageSecret() != nil {
@@ -226,12 +233,12 @@ func (cli *Client) sendDM(
 	}
 	if len(tcTokenBytes) > 0 {
 		node.Content = append(node.GetChildren(), waBinary.Node{
-			Tag:     "tctoken",
+			Tag:     tcTokenNodeTag,
 			Content: tcTokenBytes,
 		})
 	} else if csToken := cli.generateCsToken(ctx, to); len(csToken) > 0 {
 		node.Content = append(node.GetChildren(), waBinary.Node{
-			Tag:     "cstoken",
+			Tag:     csTokenNodeTag,
 			Content: csToken,
 		})
 	}

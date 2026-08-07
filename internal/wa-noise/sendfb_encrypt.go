@@ -94,8 +94,8 @@ func (cli *Client) encryptMessageForDeviceAndWrapV3(
 		return nil, err
 	}
 	return &waBinary.Node{
-		Tag:     "to",
-		Attrs:   waBinary.Attrs{"jid": to},
+		Tag:     participantToNodeTag,
+		Attrs:   waBinary.Attrs{participantToAttrJID: to},
 		Content: []waBinary.Node{*node},
 	}, nil
 }
@@ -153,17 +153,19 @@ func (cli *Client) encryptMessageForDeviceV3(
 		return nil, fmt.Errorf("cipher encryption failed: %w", err)
 	}
 
+	// NOTE: unlike the waE2E path, `v` here is the *numeric* FBMessageVersion,
+	// not a string. Kept verbatim: it is what goes on the wire.
 	encAttrs := waBinary.Attrs{
-		"v":    FBMessageVersion,
-		"type": "msg",
+		encAttrVersion: FBMessageVersion,
+		encAttrType:    encTypeMsg,
 	}
 	if ciphertext.Type() == protocol.PREKEY_TYPE {
-		encAttrs["type"] = "pkmsg"
+		encAttrs[encAttrType] = encTypePreKeyMsg
 	}
 	copyAttrs(extraAttrs, encAttrs)
 
 	return &waBinary.Node{
-		Tag:     "enc",
+		Tag:     encNodeTag,
 		Attrs:   encAttrs,
 		Content: ciphertext.Serialize(),
 	}, nil
