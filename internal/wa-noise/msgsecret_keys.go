@@ -7,7 +7,7 @@
 package whatsmeow
 
 import (
-	"wa-api/internal/wa-noise/message"
+	"wa-api/internal/wa-noise/capabilities/message"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"

@@ -14,7 +14,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
 	"wa-api/internal/wa-noise/capabilities/media"
-	"wa-api/internal/wa-noise/message"
+	"wa-api/internal/wa-noise/capabilities/message"
 	"wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/capabilities/user"

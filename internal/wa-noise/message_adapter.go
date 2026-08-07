@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/message"
+	"wa-api/internal/wa-noise/capabilities/message"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waWeb"
