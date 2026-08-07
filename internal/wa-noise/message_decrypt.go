@@ -159,11 +159,17 @@ func (cli *Client) decryptMessages(ctx context.Context, info *types.MessageInfo,
 			}
 			var msMsg waE2E.MessageSecretMessage
 			var messageSecret []byte
-			if messageSecret, _, err = cli.Store.MsgSecrets.GetMessageSecret(ctx, info.Chat, targetSenderJID, info.MsgMetaInfo.TargetID); err != nil {
+			// decryptDM/decryptGroupMsg checam o tipo do Content antes de usar;
+			// este ramo nao checava e um <enc type="msmsg"> com filhos (ou sem
+			// conteudo) derrubava o cliente inteiro por type assertion.
+			msSecretContent, msSecretContentOK := child.Content.([]byte)
+			if !msSecretContentOK {
+				err = fmt.Errorf("message content is not a byte slice")
+			} else if messageSecret, _, err = cli.Store.MsgSecrets.GetMessageSecret(ctx, info.Chat, targetSenderJID, info.MsgMetaInfo.TargetID); err != nil {
 				err = fmt.Errorf("failed to get message secret for %s: %v", info.MsgMetaInfo.TargetID, err)
 			} else if messageSecret == nil {
 				err = fmt.Errorf("message secret for %s not found", info.MsgMetaInfo.TargetID)
-			} else if err = proto.Unmarshal(child.Content.([]byte), &msMsg); err != nil {
+			} else if err = proto.Unmarshal(msSecretContent, &msMsg); err != nil {
 				err = fmt.Errorf("failed to unmarshal MessageSecretMessage protobuf: %v", err)
 			} else {
 				decrypted, err = cli.decryptBotMessage(ctx, messageSecret, &msMsg, decryptMessageID, targetSenderJID, info)

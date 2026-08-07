@@ -7,6 +7,7 @@
 package whatsmeow
 
 import (
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
@@ -59,6 +60,11 @@ func generateMsgSecretKey(
 	return secretKey, additionalData
 }
 
+// errUnexpectedOrigSenderServer indica que o participante da MessageKey do
+// grupo nao esta' nem em @s.whatsapp.net nem em @lid — servidor que este
+// pacote nao sabe usar como remetente original.
+var errUnexpectedOrigSenderServer = errors.New("unexpected server")
+
 func getOrigSenderFromKey(msg *events.Message, key *waCommon.MessageKey) (types.JID, error) {
 	if key.GetFromMe() {
 		// fromMe always means the poll and vote were sent by the same user
@@ -71,12 +77,15 @@ func getOrigSenderFromKey(msg *events.Message, key *waCommon.MessageKey) (types.
 		}
 		return sender, nil
 	} else {
+		// A ordem importa: antes o erro do ParseJID era sobrescrito pelo
+		// "unexpected server" derivado do JID zerado que ele devolve, e a causa
+		// real do parse quebrado nunca chegava ao log.
 		sender, err := types.ParseJID(key.GetParticipant())
-		if sender.Server != types.DefaultUserServer && sender.Server != types.HiddenUserServer {
-			err = fmt.Errorf("unexpected server")
-		}
 		if err != nil {
 			return types.EmptyJID, fmt.Errorf("failed to parse JID %q of original message sender: %w", key.GetParticipant(), err)
+		}
+		if sender.Server != types.DefaultUserServer && sender.Server != types.HiddenUserServer {
+			return types.EmptyJID, fmt.Errorf("failed to parse JID %q of original message sender: %w", key.GetParticipant(), errUnexpectedOrigSenderServer)
 		}
 		return sender, nil
 	}

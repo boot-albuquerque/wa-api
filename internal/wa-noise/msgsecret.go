@@ -198,7 +198,12 @@ func (cli *Client) EncryptComment(ctx context.Context, rootMsgInfo *types.Messag
 
 func (cli *Client) EncryptReaction(ctx context.Context, rootMsgInfo *types.MessageInfo, reaction *waE2E.ReactionMessage) (*waE2E.EncReactionMessage, error) {
 	reactionKey := reaction.Key
+	// A chave sai do payload cifrado (vai em claro no TargetMessageKey), mas o
+	// waE2E.ReactionMessage e' do chamador: sem restaurar, quem reusasse a
+	// mesma struct — para reenviar, para outro chat — mandaria uma reacao sem
+	// alvo. Restaurar antes de qualquer return.
 	reaction.Key = nil
+	defer func() { reaction.Key = reactionKey }()
 	plaintext, err := proto.Marshal(reaction)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal reaction protobuf: %w", err)
