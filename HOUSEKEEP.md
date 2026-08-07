@@ -438,12 +438,26 @@ Medido nesta sessão, com os splits já aplicados:
 4. `COVER_PKGS`/`TEST_PKGS`: só quando houver testes reais, por
    subdiretório, à medida que as Fases B/C do ADR-0004 forem cobrindo.
 
-**Status**: **não corrigido** — a instrução da tarefa era explícita em não
-incluir se aparecesse enxurrada de lint pré-existente, e apareceram 92
-issues não relacionadas às mudanças. O teto de 300 linhas, esse sim, ficou
-travado por gate novo (`make waclient-filesize`,
-`scripts/waclient-filesize-check.sh`), que roda independente de
-`COVER_PKGS`/`LINT_TARGETS` justamente por causa desta exclusão.
+**Status**: **CORRIGIDO PARCIALMENTE** (lote H, 2026-08-07) — e a premissa
+registrada aqui estava **errada**.
+
+A entrada supunha que incluir o módulo quebraria o gate de lint, porque "o
+`gocyclo` máximo do wa-noise é muito acima do baseline do repo". Medido:
+a maior função de `internal/wa-noise/` tem complexidade **46**, contra os **56**
+do baseline. O gate aguenta sem afrouxar nada. E `go vet ./internal/wa-noise/...`
+já saía limpo (exit 0).
+
+Então:
+
+- **vet**: incluído (`VET_TARGETS` passou a ser `ALL_PKGS`). Custo zero.
+- **lint**: incluído (`LINT_TARGETS` deixou de filtrar o módulo). A trava real
+  (`max_complexity`) não mudou; a **contagem** subiu de 83 para 284, mas ela é
+  informativa por construção — o gate de lint trava na complexidade máxima, não
+  no número de issues.
+- **cobertura**: continua de fora, agora por um motivo positivo em vez de
+  inércia. Incluir o módulo mudaria o denominador e obrigaria a **baixar**
+  `min_coverage` — afrouxar a catraca em troca de medir mais pacotes. Só faz
+  sentido quando a cobertura do módulo subir por conta própria.
 
 ---
 
@@ -797,9 +811,29 @@ ou um serviço no CI) e parametrizar `newTestContainer` por dialeto, rodando a
 mesma suíte duas vezes. É decisão de infraestrutura de CI, não de código — hoje
 o repositório inteiro é deliberadamente Docker-free nos testes.
 
-**Status**: **não corrigido**, registrado como lacuna consciente. Também anotado
-na seção "Fora do escopo" da entrada da Fase B em
-`internal/wa-noise/PATCHES.md`.
+**Status**: **CORRIGIDO** (lote H, 2026-08-07), por um caminho diferente do
+sugerido. A entrada propunha subir um Postgres efêmero dentro do `make check`
+via testcontainers; isso trocaria a política Docker-free dos testes do
+repositório inteiro por causa de três ramos.
+
+`postgres_test.go` cobre os três pontos (mais as migrações do zero) contra um
+Postgres **de verdade**, e dá `t.Skip` quando `WA_TEST_POSTGRES_DSN` não está no
+ambiente. `make check` local fica exatamente como estava; o ramo passa a ser
+executável em CI ou na máquina de quem estiver mexendo nessas queries:
+
+```
+WA_TEST_POSTGRES_DSN='postgres://user:pass@host:5432/wa_test?sslmode=disable' \
+  go test ./internal/wa-noise/persistence/store/sqlstore/ -run Postgres -v
+```
+
+**Os testes foram executados de verdade** contra `postgres:16-alpine` antes de
+serem commitados — e isso pegou três erros nos próprios testes que um `t.Skip`
+teria escondido para sempre: uma asserção errada sobre `GetManySessions` (ele
+pré-popula o mapa com `nil` para cada endereço pedido, por contrato, então a
+chave ausente aparece), e dois `CHECK`/FK do schema que os dados de teste
+violavam (`length(index_mac) = 32` e a FK para `wanoise_app_state_version`).
+Nenhum defeito no código de produção — os três ramos de dialeto se comportam
+como o esperado.
 
 ---
 

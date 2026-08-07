@@ -14,19 +14,32 @@ BINARY := wa-api
 # test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
 # progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
 COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
+# vet e lint, ao contrario da cobertura, JA' incluem internal/wa-noise/ (F17).
+#
+# A F17 supunha que incluir o modulo quebraria o gate de lint, porque o gocyclo
+# maximo dele estaria "muito acima do baseline do repo". Medido em 2026-08-07:
+# a maior funcao de internal/wa-noise/ tem complexidade 46, e o baseline e' 56 —
+# o gate aguenta sem afrouxar nada. E `go vet ./internal/wa-noise/...` ja' saia
+# limpo (exit 0).
+#
+# A CONTAGEM de issues sobe (83 -> ~284), mas ela e' informativa: o que trava e'
+# a complexidade maxima. Cobertura continua de fora — incluir o modulo mudaria o
+# denominador e obrigaria a BAIXAR min_coverage, que e' afrouxar a catraca em
+# troca de um numero maior de pacotes medidos.
+ALL_PKGS := $(shell $(GOCMD) list ./...)
 # pkg/infra/wa-noise/ ficava de fora de TEST_PKGS por uma data race real em
 # safe_go_test.go (commit b426885). O teste foi corrigido junto da quebra do
 # pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
 # saiu — manter uma trava que não trava é pior que não ter trava.
 TEST_PKGS := $(COVER_PKGS)
-VET_TARGETS := $(COVER_PKGS)
+VET_TARGETS := $(ALL_PKGS)
 
 # Lint
 # golangci-lint espera padroes relativos ao filesystem (./pkg/x), nao paths
 # de import Go (wa-api/pkg/x) como go vet/go test aceitam — por isso
 # LINT_TARGETS deriva de COVER_PKGS trocando o prefixo do modulo por "./".
 LINT          := golangci-lint
-LINT_TARGETS  := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | sed 's|^wa-api/|./|')
+LINT_TARGETS  := $(shell $(GOCMD) list ./... | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
 
 # Coverage ratchet

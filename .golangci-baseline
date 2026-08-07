@@ -14,4 +14,12 @@ max_complexity=56
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).
-count=83
+count=284
+
+# f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
+# real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
+# LINT_TARGETS (F17 em HOUSEKEEP.md). A premissa registrada na F17 era que o
+# gocyclo maximo do modulo estaria muito acima do baseline; medido, ele e' 46
+# contra os 56 do repo, entao o gate aguenta sem afrouxar nada. `go vet` no
+# modulo ja' saia limpo. Cobertura continua de fora, de proposito: incluir o
+# modulo obrigaria a BAIXAR min_coverage.
