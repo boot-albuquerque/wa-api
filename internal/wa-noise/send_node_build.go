@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
@@ -109,12 +110,12 @@ func (cli *Client) getMessageContent(
 		content = append(content, *extraParams.additionalNodes...)
 	}
 
-	if buttonType := getButtonTypeFromMessage(message); buttonType != "" {
+	if buttonType := msgattrs.GetButtonTypeFromMessage(message); buttonType != "" {
 		content = append(content, waBinary.Node{
 			Tag: "biz",
 			Content: []waBinary.Node{{
 				Tag:   buttonType,
-				Attrs: getButtonAttributes(message),
+				Attrs: msgattrs.GetButtonAttributes(message),
 			}},
 		})
 	}
@@ -144,10 +145,10 @@ func (cli *Client) prepareMessageNode(
 		})
 	}
 
-	msgType := getTypeFromMessage(message)
+	msgType := msgattrs.GetTypeFromMessage(message)
 	encAttrs := waBinary.Attrs{}
 	// Only include encMediaType for 1:1 messages (groups don't have a device-sent message plaintext)
-	if encMediaType := getMediaTypeFromMessage(message); dsmPlaintext != nil && encMediaType != "" {
+	if encMediaType := msgattrs.GetMediaTypeFromMessage(message); dsmPlaintext != nil && encMediaType != "" {
 		encAttrs["mediatype"] = encMediaType
 	}
 	attrs := waBinary.Attrs{
@@ -159,7 +160,7 @@ func (cli *Client) prepareMessageNode(
 	if extraParams.addressingMode != "" {
 		attrs["addressing_mode"] = string(extraParams.addressingMode)
 	}
-	if editAttr := getEditAttribute(message); editAttr != "" {
+	if editAttr := msgattrs.GetEditAttribute(message); editAttr != "" {
 		attrs["edit"] = string(editAttr)
 		encAttrs["decrypt-fail"] = string(events.DecryptFailHide)
 	}

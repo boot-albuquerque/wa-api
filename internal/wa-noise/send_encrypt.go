@@ -17,6 +17,7 @@ import (
 	"go.mau.fi/libsignal/signalerror"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/types"
 )
 
@@ -170,7 +171,7 @@ func (cli *Client) encryptMessageForDevice(
 		}
 	}
 	cipher := session.NewCipher(builder, to.SignalAddress())
-	ciphertext, err := cipher.Encrypt(ctx, padMessage(plaintext))
+	ciphertext, err := cipher.Encrypt(ctx, msgpad.Pad(plaintext))
 	if err != nil {
 		return nil, false, fmt.Errorf("cipher encryption failed: %w", err)
 	}

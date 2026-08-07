@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package msgattrs
 
 import (
 	armadillo "wa-api/internal/wa-noise/proto"
@@ -14,7 +14,7 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-type messageAttrs struct {
+type MessageAttrs struct {
 	Type        string
 	MediaType   string
 	Edit        types.EditAttribute
@@ -22,7 +22,7 @@ type messageAttrs struct {
 	PollType    string
 }
 
-func getAttrsFromFBMessage(msg armadillo.MessageApplicationSub) (attrs messageAttrs) {
+func GetAttrsFromFBMessage(msg armadillo.MessageApplicationSub) (attrs MessageAttrs) {
 	switch typedMsg := msg.(type) {
 	case *waConsumerApplication.ConsumerApplication:
 		return getAttrsFromFBConsumerMessage(typedMsg)
@@ -35,7 +35,7 @@ func getAttrsFromFBMessage(msg armadillo.MessageApplicationSub) (attrs messageAt
 	return
 }
 
-func getAttrsFromFBConsumerMessage(msg *waConsumerApplication.ConsumerApplication) (attrs messageAttrs) {
+func getAttrsFromFBConsumerMessage(msg *waConsumerApplication.ConsumerApplication) (attrs MessageAttrs) {
 	switch payload := msg.GetPayload().GetPayload().(type) {
 	case *waConsumerApplication.ConsumerApplication_Payload_Content:
 		switch content := payload.Content.GetContent().(type) {

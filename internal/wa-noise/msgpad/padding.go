@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package msgpad
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ func isValidPadding(plaintext []byte) bool {
 	return bytes.HasSuffix(plaintext, expectedPadding)
 }
 
-func unpadMessage(plaintext []byte, version int) ([]byte, error) {
+func Unpad(plaintext []byte, version int) ([]byte, error) {
 	if version == 3 {
 		return plaintext, nil
 	} else if len(plaintext) == 0 {
@@ -33,7 +33,7 @@ func unpadMessage(plaintext []byte, version int) ([]byte, error) {
 	}
 }
 
-func padMessage(plaintext []byte) []byte {
+func Pad(plaintext []byte) []byte {
 	pad := random.Bytes(1)
 	pad[0] &= 0xf
 	if pad[0] == 0 {

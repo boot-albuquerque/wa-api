@@ -11,7 +11,8 @@
 #
 # Escopo: Fase A (raiz de internal/wa-noise/ e socket/), Fase B (appstate/,
 # store/ e store/sqlstore/) e Fase C (binary/ com seu token/, types/ com
-# types/events/, e os cinco subpacotes de util/). Cobre todo o fork.
+# types/events/, e os cinco subpacotes de util/) e Fase D (msgpad/, paircrypto/
+# e msgattrs/, extraidos da raiz). Cobre todo o fork.
 #
 # Dois diretorios ficam de fora, ambos por serem codigo GERADO, pelo mesmo
 # racional que o ADR-0004 aplica a proto/: dividi-los nao tem valor porque o
@@ -30,6 +31,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 DIRS="internal/wa-noise \
+internal/wa-noise/msgpad \
+internal/wa-noise/paircrypto \
+internal/wa-noise/msgattrs \
 internal/wa-noise/socket \
 internal/wa-noise/appstate \
 internal/wa-noise/store \

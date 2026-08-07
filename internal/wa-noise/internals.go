@@ -16,6 +16,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waHistorySync"
@@ -643,15 +644,15 @@ func (int *DangerousInternalClient) SendRetryReceipt(ctx context.Context, node *
 	int.c.sendRetryReceipt(ctx, node, info, forceIncludeIdentity)
 }
 
-func (int *DangerousInternalClient) SendGroupV3(ctx context.Context, to, ownID types.JID, id types.MessageID, messageApp []byte, msgAttrs messageAttrs, frankingTag []byte, timings *MessageDebugTimings) (string, []byte, error) {
+func (int *DangerousInternalClient) SendGroupV3(ctx context.Context, to, ownID types.JID, id types.MessageID, messageApp []byte, msgAttrs msgattrs.MessageAttrs, frankingTag []byte, timings *MessageDebugTimings) (string, []byte, error) {
 	return int.c.sendGroupV3(ctx, to, ownID, id, messageApp, msgAttrs, frankingTag, timings)
 }
 
-func (int *DangerousInternalClient) SendDMV3(ctx context.Context, to, ownID types.JID, id types.MessageID, messageApp []byte, msgAttrs messageAttrs, frankingTag []byte, timings *MessageDebugTimings) ([]byte, string, error) {
+func (int *DangerousInternalClient) SendDMV3(ctx context.Context, to, ownID types.JID, id types.MessageID, messageApp []byte, msgAttrs msgattrs.MessageAttrs, frankingTag []byte, timings *MessageDebugTimings) ([]byte, string, error) {
 	return int.c.sendDMV3(ctx, to, ownID, id, messageApp, msgAttrs, frankingTag, timings)
 }
 
-func (int *DangerousInternalClient) PrepareMessageNodeV3(ctx context.Context, to, ownID types.JID, id types.MessageID, payload *waMsgTransport.MessageTransport_Payload, skdm *waMsgTransport.MessageTransport_Protocol_Ancillary_SenderKeyDistributionMessage, msgAttrs messageAttrs, frankingTag []byte, participants []types.JID, timings *MessageDebugTimings) (*waBinary.Node, []types.JID, error) {
+func (int *DangerousInternalClient) PrepareMessageNodeV3(ctx context.Context, to, ownID types.JID, id types.MessageID, payload *waMsgTransport.MessageTransport_Payload, skdm *waMsgTransport.MessageTransport_Protocol_Ancillary_SenderKeyDistributionMessage, msgAttrs msgattrs.MessageAttrs, frankingTag []byte, participants []types.JID, timings *MessageDebugTimings) (*waBinary.Node, []types.JID, error) {
 	return int.c.prepareMessageNodeV3(ctx, to, ownID, id, payload, skdm, msgAttrs, frankingTag, participants, timings)
 }
 

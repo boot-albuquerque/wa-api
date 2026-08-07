@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/types"
 )
@@ -46,7 +48,7 @@ func (cli *Client) sendNewsletter(
 	attrs := waBinary.Attrs{
 		"to":   to,
 		"id":   id,
-		"type": getTypeFromMessage(message),
+		"type": msgattrs.GetTypeFromMessage(message),
 	}
 	if mediaID != "" {
 		attrs["media_id"] = mediaID
@@ -70,7 +72,7 @@ func (cli *Client) sendNewsletter(
 		Attrs:   waBinary.Attrs{},
 	}
 	if message != nil {
-		if mediaType := getMediaTypeFromMessage(message); mediaType != "" {
+		if mediaType := msgattrs.GetMediaTypeFromMessage(message); mediaType != "" {
 			plaintextNode.Attrs["mediatype"] = mediaType
 		}
 	}
@@ -131,7 +133,7 @@ func (cli *Client) sendGroup(
 	}
 
 	cipher := groups.NewGroupCipher(builder, senderKeyName, cli.Store)
-	encrypted, err := cipher.Encrypt(ctx, padMessage(plaintext))
+	encrypted, err := cipher.Encrypt(ctx, msgpad.Pad(plaintext))
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to encrypt group message to send %s to %s: %w", id, to, err)
 	}
@@ -152,7 +154,7 @@ func (cli *Client) sendGroup(
 		Content: ciphertext,
 		Attrs:   waBinary.Attrs{"v": "2", "type": "skmsg"},
 	}
-	if mediaType := getMediaTypeFromMessage(message); mediaType != "" {
+	if mediaType := msgattrs.GetMediaTypeFromMessage(message); mediaType != "" {
 		skMsg.Attrs["mediatype"] = mediaType
 	}
 	node.Content = append(node.GetChildren(), skMsg)

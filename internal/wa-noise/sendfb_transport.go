@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
+	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/types"
@@ -28,7 +30,7 @@ func (cli *Client) sendGroupV3(
 	ownID types.JID,
 	id types.MessageID,
 	messageApp []byte,
-	msgAttrs messageAttrs,
+	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
 	timings *MessageDebugTimings,
 ) (string, []byte, error) {
@@ -66,7 +68,7 @@ func (cli *Client) sendGroupV3(
 		},
 		Protocol: &waMsgTransport.MessageTransport_Protocol{
 			Integral: &waMsgTransport.MessageTransport_Protocol_Integral{
-				Padding: padMessage(nil),
+				Padding: msgpad.Pad(nil),
 				DSM:     nil,
 			},
 			Ancillary: &waMsgTransport.MessageTransport_Protocol_Ancillary{
@@ -124,7 +126,7 @@ func (cli *Client) sendDMV3(
 	ownID types.JID,
 	id types.MessageID,
 	messageApp []byte,
-	msgAttrs messageAttrs,
+	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
 	timings *MessageDebugTimings,
 ) ([]byte, string, error) {
@@ -156,7 +158,7 @@ func (cli *Client) prepareMessageNodeV3(
 	id types.MessageID,
 	payload *waMsgTransport.MessageTransport_Payload,
 	skdm *waMsgTransport.MessageTransport_Protocol_Ancillary_SenderKeyDistributionMessage,
-	msgAttrs messageAttrs,
+	msgAttrs msgattrs.MessageAttrs,
 	frankingTag []byte,
 	participants []types.JID,
 	timings *MessageDebugTimings,

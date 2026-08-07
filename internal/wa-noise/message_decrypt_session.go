@@ -20,6 +20,7 @@ import (
 	"go.mau.fi/libsignal/signalerror"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )
@@ -127,7 +128,7 @@ func (cli *Client) decryptDM(ctx context.Context, child *waBinary.Node, from typ
 		}
 	}
 	var err error
-	plaintext, err = unpadMessage(plaintext, child.AttrGetter().Int("v"))
+	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int("v"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to unpad message: %w", err)
 	}
@@ -153,7 +154,7 @@ func (cli *Client) decryptGroupMsg(ctx context.Context, child *waBinary.Node, fr
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decrypt group message: %w", err)
 	}
-	plaintext, err = unpadMessage(plaintext, child.AttrGetter().Int("v"))
+	plaintext, err = msgpad.Unpad(plaintext, child.AttrGetter().Int("v"))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package paircrypto
 
 import (
 	"go.mau.fi/libsignal/ecc"
@@ -21,7 +21,7 @@ var (
 	AdvHostedDeviceSignaturePrefix  = []byte{6, 6}
 )
 
-func concatBytes(data ...[]byte) []byte {
+func ConcatBytes(data ...[]byte) []byte {
 	length := 0
 	for _, item := range data {
 		length += len(item)
@@ -34,7 +34,7 @@ func concatBytes(data ...[]byte) []byte {
 	return output
 }
 
-func verifyAccountSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair, isHosted bool) bool {
+func VerifyAccountSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair, isHosted bool) bool {
 	if len(deviceIdentity.AccountSignatureKey) != 32 || len(deviceIdentity.AccountSignature) != 64 {
 		return false
 	}
@@ -46,14 +46,14 @@ func verifyAccountSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *
 	if isHosted {
 		prefix = AdvHostedAccountSignaturePrefix
 	}
-	message := concatBytes(prefix, deviceIdentity.Details, ikp.Pub[:])
+	message := ConcatBytes(prefix, deviceIdentity.Details, ikp.Pub[:])
 
 	return ecc.VerifySignature(signatureKey, message, signature)
 }
 
-func generateDeviceSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair) *[64]byte {
+func GenerateDeviceSignature(deviceIdentity *waAdv.ADVSignedDeviceIdentity, ikp *keys.KeyPair) *[64]byte {
 	prefix := AdvDeviceSignaturePrefix
-	message := concatBytes(prefix, deviceIdentity.Details, ikp.Pub[:], deviceIdentity.AccountSignatureKey)
+	message := ConcatBytes(prefix, deviceIdentity.Details, ikp.Pub[:], deviceIdentity.AccountSignatureKey)
 	sig := ecc.CalculateSignature(ecc.NewDjbECPrivateKey(*ikp.Priv), message)
 	return &sig
 }

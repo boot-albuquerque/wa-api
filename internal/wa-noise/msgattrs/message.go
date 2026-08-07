@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package msgattrs
 
 import (
 	"strings"
@@ -14,25 +14,25 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-func getTypeFromMessage(msg *waE2E.Message) string {
+func GetTypeFromMessage(msg *waE2E.Message) string {
 	switch {
 	case msg.ViewOnceMessage != nil:
-		return getTypeFromMessage(msg.ViewOnceMessage.Message)
+		return GetTypeFromMessage(msg.ViewOnceMessage.Message)
 	case msg.ViewOnceMessageV2 != nil:
-		return getTypeFromMessage(msg.ViewOnceMessageV2.Message)
+		return GetTypeFromMessage(msg.ViewOnceMessageV2.Message)
 	case msg.ViewOnceMessageV2Extension != nil:
-		return getTypeFromMessage(msg.ViewOnceMessageV2Extension.Message)
+		return GetTypeFromMessage(msg.ViewOnceMessageV2Extension.Message)
 	case msg.LottieStickerMessage != nil:
-		return getTypeFromMessage(msg.LottieStickerMessage.Message)
+		return GetTypeFromMessage(msg.LottieStickerMessage.Message)
 	case msg.EphemeralMessage != nil:
-		return getTypeFromMessage(msg.EphemeralMessage.Message)
+		return GetTypeFromMessage(msg.EphemeralMessage.Message)
 	case msg.DocumentWithCaptionMessage != nil:
-		return getTypeFromMessage(msg.DocumentWithCaptionMessage.Message)
+		return GetTypeFromMessage(msg.DocumentWithCaptionMessage.Message)
 	case msg.ReactionMessage != nil, msg.EncReactionMessage != nil:
 		return "reaction"
 	case msg.PollCreationMessage != nil, msg.PollUpdateMessage != nil:
 		return "poll"
-	case getMediaTypeFromMessage(msg) != "":
+	case GetMediaTypeFromMessage(msg) != "":
 		return "media"
 	case msg.Conversation != nil, msg.ExtendedTextMessage != nil, msg.ProtocolMessage != nil:
 		return "text"
@@ -41,20 +41,20 @@ func getTypeFromMessage(msg *waE2E.Message) string {
 	}
 }
 
-func getMediaTypeFromMessage(msg *waE2E.Message) string {
+func GetMediaTypeFromMessage(msg *waE2E.Message) string {
 	switch {
 	case msg.ViewOnceMessage != nil:
-		return getMediaTypeFromMessage(msg.ViewOnceMessage.Message)
+		return GetMediaTypeFromMessage(msg.ViewOnceMessage.Message)
 	case msg.ViewOnceMessageV2 != nil:
-		return getMediaTypeFromMessage(msg.ViewOnceMessageV2.Message)
+		return GetMediaTypeFromMessage(msg.ViewOnceMessageV2.Message)
 	case msg.ViewOnceMessageV2Extension != nil:
-		return getMediaTypeFromMessage(msg.ViewOnceMessageV2Extension.Message)
+		return GetMediaTypeFromMessage(msg.ViewOnceMessageV2Extension.Message)
 	case msg.LottieStickerMessage != nil:
-		return getMediaTypeFromMessage(msg.LottieStickerMessage.Message)
+		return GetMediaTypeFromMessage(msg.LottieStickerMessage.Message)
 	case msg.EphemeralMessage != nil:
-		return getMediaTypeFromMessage(msg.EphemeralMessage.Message)
+		return GetMediaTypeFromMessage(msg.EphemeralMessage.Message)
 	case msg.DocumentWithCaptionMessage != nil:
-		return getMediaTypeFromMessage(msg.DocumentWithCaptionMessage.Message)
+		return GetMediaTypeFromMessage(msg.DocumentWithCaptionMessage.Message)
 	case msg.ExtendedTextMessage != nil && msg.ExtendedTextMessage.Title != nil:
 		return "url"
 	case msg.ImageMessage != nil:
@@ -96,14 +96,14 @@ func getMediaTypeFromMessage(msg *waE2E.Message) string {
 	}
 }
 
-func getButtonTypeFromMessage(msg *waE2E.Message) string {
+func GetButtonTypeFromMessage(msg *waE2E.Message) string {
 	switch {
 	case msg.ViewOnceMessage != nil:
-		return getButtonTypeFromMessage(msg.ViewOnceMessage.Message)
+		return GetButtonTypeFromMessage(msg.ViewOnceMessage.Message)
 	case msg.ViewOnceMessageV2 != nil:
-		return getButtonTypeFromMessage(msg.ViewOnceMessageV2.Message)
+		return GetButtonTypeFromMessage(msg.ViewOnceMessageV2.Message)
 	case msg.EphemeralMessage != nil:
-		return getButtonTypeFromMessage(msg.EphemeralMessage.Message)
+		return GetButtonTypeFromMessage(msg.EphemeralMessage.Message)
 	case msg.ButtonsMessage != nil:
 		return "buttons"
 	case msg.ButtonsResponseMessage != nil:
@@ -119,14 +119,14 @@ func getButtonTypeFromMessage(msg *waE2E.Message) string {
 	}
 }
 
-func getButtonAttributes(msg *waE2E.Message) waBinary.Attrs {
+func GetButtonAttributes(msg *waE2E.Message) waBinary.Attrs {
 	switch {
 	case msg.ViewOnceMessage != nil:
-		return getButtonAttributes(msg.ViewOnceMessage.Message)
+		return GetButtonAttributes(msg.ViewOnceMessage.Message)
 	case msg.ViewOnceMessageV2 != nil:
-		return getButtonAttributes(msg.ViewOnceMessageV2.Message)
+		return GetButtonAttributes(msg.ViewOnceMessageV2.Message)
 	case msg.EphemeralMessage != nil:
-		return getButtonAttributes(msg.EphemeralMessage.Message)
+		return GetButtonAttributes(msg.EphemeralMessage.Message)
 	case msg.TemplateMessage != nil:
 		return waBinary.Attrs{}
 	case msg.ListMessage != nil:
@@ -141,10 +141,10 @@ func getButtonAttributes(msg *waE2E.Message) waBinary.Attrs {
 
 const RemoveReactionText = ""
 
-func getEditAttribute(msg *waE2E.Message) types.EditAttribute {
+func GetEditAttribute(msg *waE2E.Message) types.EditAttribute {
 	switch {
 	case msg.EditedMessage != nil && msg.EditedMessage.Message != nil:
-		return getEditAttribute(msg.EditedMessage.Message)
+		return GetEditAttribute(msg.EditedMessage.Message)
 	case msg.ProtocolMessage != nil && msg.ProtocolMessage.GetKey() != nil:
 		switch msg.ProtocolMessage.GetType() {
 		case waE2E.ProtocolMessage_REVOKE:

@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgpad"
 	"wa-api/internal/wa-noise/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/types"
 )
@@ -133,7 +134,7 @@ func (cli *Client) encryptMessageForDeviceV3(
 		Payload: payload,
 		Protocol: &waMsgTransport.MessageTransport_Protocol{
 			Integral: &waMsgTransport.MessageTransport_Protocol_Integral{
-				Padding: padMessage(nil),
+				Padding: msgpad.Pad(nil),
 				DSM:     dsm,
 			},
 			Ancillary: &waMsgTransport.MessageTransport_Protocol_Ancillary{

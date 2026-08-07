@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/paircrypto"
 	"wa-api/internal/wa-noise/proto/waAdv"
 	"wa-api/internal/wa-noise/proto/waCompanionReg"
 	"wa-api/internal/wa-noise/proto/waWa6"
@@ -143,7 +144,7 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 
 	h := hmac.New(sha256.New, cli.Store.AdvSecretKey)
 	if deviceIdentityContainer.GetAccountType() == waAdv.ADVEncryptionType_HOSTED {
-		h.Write(AdvHostedAccountSignaturePrefix)
+		h.Write(paircrypto.AdvHostedAccountSignaturePrefix)
 		//cli.Store.IsHosted = true
 	}
 	h.Write(deviceIdentityContainer.Details)
@@ -168,12 +169,12 @@ func (cli *Client) handlePair(ctx context.Context, deviceIdentityBytes []byte, r
 		return &PairProtoError{"failed to parse device identity details in pair success message", err}
 	}
 
-	if !verifyAccountSignature(&deviceIdentity, cli.Store.IdentityKey, deviceIdentityDetails.GetDeviceType() == waAdv.ADVEncryptionType_HOSTED) {
+	if !paircrypto.VerifyAccountSignature(&deviceIdentity, cli.Store.IdentityKey, deviceIdentityDetails.GetDeviceType() == waAdv.ADVEncryptionType_HOSTED) {
 		cli.sendPairError(ctx, reqID, 401, "signature-mismatch")
 		return ErrPairInvalidDeviceSignature
 	}
 
-	deviceIdentity.DeviceSignature = generateDeviceSignature(&deviceIdentity, cli.Store.IdentityKey)[:]
+	deviceIdentity.DeviceSignature = paircrypto.GenerateDeviceSignature(&deviceIdentity, cli.Store.IdentityKey)[:]
 
 	if cli.PrePairCallback != nil && !cli.PrePairCallback(jid, platform, businessName) {
 		cli.sendPairError(ctx, reqID, 500, "internal-error")

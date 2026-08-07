@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/paircrypto"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/util/hkdfutil"
 	"wa-api/internal/wa-noise/util/keys"
@@ -213,9 +214,9 @@ func (cli *Client) handleCodePairNotification(ctx context.Context, parentNode *w
 	if err != nil {
 		return fmt.Errorf("failed to create key bundle GCM: %w", err)
 	}
-	plaintextKeyBundle := concatBytes(cli.Store.IdentityKey.Pub[:], primaryIdentityPub, advSecretRandom)
+	plaintextKeyBundle := paircrypto.ConcatBytes(cli.Store.IdentityKey.Pub[:], primaryIdentityPub, advSecretRandom)
 	encryptedKeyBundle := keyBundleGCM.Seal(nil, keyBundleNonce, plaintextKeyBundle, nil)
-	wrappedKeyBundle := concatBytes(keyBundleSalt, keyBundleNonce, encryptedKeyBundle)
+	wrappedKeyBundle := paircrypto.ConcatBytes(keyBundleSalt, keyBundleNonce, encryptedKeyBundle)
 
 	// Compute the adv secret key (which is used to authenticate the pair-success event later)
 	identitySharedKey, err := curve25519.X25519(cli.Store.IdentityKey.Priv[:], primaryIdentityPub)

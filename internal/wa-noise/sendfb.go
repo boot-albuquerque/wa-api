@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
 	armadillo "wa-api/internal/wa-noise/proto"
 	"wa-api/internal/wa-noise/proto/waArmadilloApplication"
 	"wa-api/internal/wa-noise/proto/waCommon"
@@ -89,7 +90,7 @@ func (cli *Client) SendFBMessage(
 	}
 	metadata.FrankingVersion = proto.Int32(0)
 	metadata.FrankingKey = random.Bytes(32)
-	msgAttrs := getAttrsFromFBMessage(message)
+	msgAttrs := msgattrs.GetAttrsFromFBMessage(message)
 	messageAppProto := &waMsgApplication.MessageApplication{
 		Payload: &waMsgApplication.MessageApplication_Payload{
 			Content: &waMsgApplication.MessageApplication_Payload_SubProtocol{

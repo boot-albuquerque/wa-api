@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/msgattrs"
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/proto/waE2E"
@@ -192,12 +193,12 @@ func (cli *Client) handleRetryReceipt(ctx context.Context, receipt *events.Recei
 		}
 	}
 	encAttrs := waBinary.Attrs{}
-	var msgAttrs messageAttrs
+	var msgAttrs msgattrs.MessageAttrs
 	if msg.wa != nil {
-		msgAttrs.MediaType = getMediaTypeFromMessage(msg.wa)
-		msgAttrs.Type = getTypeFromMessage(msg.wa)
+		msgAttrs.MediaType = msgattrs.GetMediaTypeFromMessage(msg.wa)
+		msgAttrs.Type = msgattrs.GetTypeFromMessage(msg.wa)
 	} else if fbConsumerMsg != nil {
-		msgAttrs = getAttrsFromFBMessage(fbConsumerMsg)
+		msgAttrs = msgattrs.GetAttrsFromFBMessage(fbConsumerMsg)
 	} else {
 		msgAttrs.Type = "text"
 	}
