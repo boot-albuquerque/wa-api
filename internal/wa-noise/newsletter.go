@@ -18,28 +18,24 @@ import (
 // NewsletterSubscribeLiveUpdates subscribes to receive live updates from a WhatsApp channel temporarily (for the duration returned).
 func (cli *Client) NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "newsletter",
+		Namespace: newsletterNamespace,
 		Type:      iqSet,
 		To:        jid,
 		Content: []waBinary.Node{{
-			Tag: "live_updates",
+			Tag: newsletterLiveUpdatesTag,
 		}},
 	})
 	if err != nil {
 		return 0, err
 	}
-	child := resp.GetChildByTag("live_updates")
-	dur := child.AttrGetter().Int("duration")
+	child := resp.GetChildByTag(newsletterLiveUpdatesTag)
+	dur := child.AttrGetter().Int(newsletterLiveUpdatesDurationAttr)
 	return time.Duration(dur) * time.Second, nil
 }
 
-// NewsletterMarkViewed marks a channel message as viewed, incrementing the view counter.
-//
-// This is not the same as marking the channel as read on your other devices, use the usual MarkRead function for that.
-func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error {
-	if cli == nil {
-		return ErrClientIsNil
-	}
+// newsletterViewedItems monta a lista de <item server_id="..."/> do recibo de
+// visualização. Lista vazia continua produzindo um <list> vazio, como antes.
+func newsletterViewedItems(serverIDs []types.MessageServerID) []waBinary.Node {
 	items := make([]waBinary.Node, len(serverIDs))
 	for i, id := range serverIDs {
 		items[i] = waBinary.Node{
@@ -49,6 +45,17 @@ func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serv
 			},
 		}
 	}
+	return items
+}
+
+// NewsletterMarkViewed marks a channel message as viewed, incrementing the view counter.
+//
+// This is not the same as marking the channel as read on your other devices, use the usual MarkRead function for that.
+func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	items := newsletterViewedItems(serverIDs)
 	reqID := cli.generateRequestID()
 	resp := cli.waitResponse(reqID)
 	err := cli.sendNode(ctx, waBinary.Node{
@@ -72,16 +79,12 @@ func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serv
 	return nil
 }
 
-// NewsletterSendReaction sends a reaction to a channel message.
-// To remove a reaction sent earlier, set reaction to an empty string.
-//
-// The last parameter is the message ID of the reaction itself. It can be left empty to let whatsmeow generate a random one.
-func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
-	if messageID == "" {
-		messageID = cli.GenerateMessageID()
-	}
-	reactionAttrs := waBinary.Attrs{}
-	messageAttrs := waBinary.Attrs{
+// newsletterReactionAttrs monta os atributos do <message> e do <reaction>.
+// Reação vazia significa remover a reação enviada antes: em vez de mandar um
+// código vazio, o nó vira uma edição de revogação do próprio remetente.
+func newsletterReactionAttrs(jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) (messageAttrs, reactionAttrs waBinary.Attrs) {
+	reactionAttrs = waBinary.Attrs{}
+	messageAttrs = waBinary.Attrs{
 		"to":        jid,
 		"id":        messageID,
 		"server_id": serverID,
@@ -92,6 +95,18 @@ func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, se
 	} else {
 		messageAttrs["edit"] = string(types.EditAttributeSenderRevoke)
 	}
+	return messageAttrs, reactionAttrs
+}
+
+// NewsletterSendReaction sends a reaction to a channel message.
+// To remove a reaction sent earlier, set reaction to an empty string.
+//
+// The last parameter is the message ID of the reaction itself. It can be left empty to let whatsmeow generate a random one.
+func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
+	if messageID == "" {
+		messageID = cli.GenerateMessageID()
+	}
+	messageAttrs, reactionAttrs := newsletterReactionAttrs(jid, serverID, reaction, messageID)
 	return cli.sendNode(ctx, waBinary.Node{
 		Tag:   "message",
 		Attrs: messageAttrs,

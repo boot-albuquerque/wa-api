@@ -19,8 +19,10 @@ type GetNewsletterMessagesParams struct {
 	Before types.MessageServerID
 }
 
-// GetNewsletterMessages gets messages in a WhatsApp channel.
-func (cli *Client) GetNewsletterMessages(ctx context.Context, jid types.JID, params *GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error) {
+// newsletterMessagesAttrs monta os atributos do nó <messages>. Params nil ou
+// com campos zerados omite o atributo correspondente, deixando o servidor usar
+// o padrão dele.
+func newsletterMessagesAttrs(jid types.JID, params *GetNewsletterMessagesParams) waBinary.Attrs {
 	attrs := waBinary.Attrs{
 		"type": "jid",
 		"jid":  jid,
@@ -33,21 +35,26 @@ func (cli *Client) GetNewsletterMessages(ctx context.Context, jid types.JID, par
 			attrs["before"] = params.Before
 		}
 	}
+	return attrs
+}
+
+// GetNewsletterMessages gets messages in a WhatsApp channel.
+func (cli *Client) GetNewsletterMessages(ctx context.Context, jid types.JID, params *GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "newsletter",
+		Namespace: newsletterNamespace,
 		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag:   "messages",
-			Attrs: attrs,
+			Tag:   newsletterMessagesTag,
+			Attrs: newsletterMessagesAttrs(jid, params),
 		}},
 	})
 	if err != nil {
 		return nil, err
 	}
-	messages, ok := resp.GetOptionalChildByTag("messages")
+	messages, ok := resp.GetOptionalChildByTag(newsletterMessagesTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "messages", In: "newsletter messages response"}
+		return nil, &ElementMissingError{Tag: newsletterMessagesTag, In: newsletterMessagesErrContext}
 	}
 	return cli.parseNewsletterMessages(&messages), nil
 }
@@ -58,10 +65,9 @@ type GetNewsletterUpdatesParams struct {
 	After types.MessageServerID
 }
 
-// GetNewsletterMessageUpdates gets updates in a WhatsApp channel.
-//
-// These are the same kind of updates that NewsletterSubscribeLiveUpdates triggers (reaction and view counts).
-func (cli *Client) GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error) {
+// newsletterMessageUpdatesAttrs monta os atributos do nó <message_updates>.
+// Assim como em newsletterMessagesAttrs, campo zerado vira atributo ausente.
+func newsletterMessageUpdatesAttrs(params *GetNewsletterUpdatesParams) waBinary.Attrs {
 	attrs := waBinary.Attrs{}
 	if params != nil {
 		if params.Count != 0 {
@@ -74,21 +80,28 @@ func (cli *Client) GetNewsletterMessageUpdates(ctx context.Context, jid types.JI
 			attrs["after"] = params.After
 		}
 	}
+	return attrs
+}
+
+// GetNewsletterMessageUpdates gets updates in a WhatsApp channel.
+//
+// These are the same kind of updates that NewsletterSubscribeLiveUpdates triggers (reaction and view counts).
+func (cli *Client) GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error) {
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "newsletter",
+		Namespace: newsletterNamespace,
 		Type:      iqGet,
 		To:        jid,
 		Content: []waBinary.Node{{
-			Tag:   "message_updates",
-			Attrs: attrs,
+			Tag:   newsletterMessageUpdatesTag,
+			Attrs: newsletterMessageUpdatesAttrs(params),
 		}},
 	})
 	if err != nil {
 		return nil, err
 	}
-	messages, ok := resp.GetOptionalChildByTag("message_updates", "messages")
+	messages, ok := resp.GetOptionalChildByTag(newsletterMessageUpdatesTag, newsletterMessagesTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "messages", In: "newsletter messages response"}
+		return nil, &ElementMissingError{Tag: newsletterMessagesTag, In: newsletterMessagesErrContext}
 	}
 	return cli.parseNewsletterMessages(&messages), nil
 }

@@ -18,6 +18,23 @@ type respGetNewsletterInfo struct {
 	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter"`
 }
 
+// newsletterJIDInput e newsletterInviteInput montam o campo "input" da consulta
+// MEX de metadados. O convite aceita tanto o link completo quanto só o código,
+// então o prefixo é removido antes de ir para o wire.
+func newsletterJIDInput(jid types.JID) map[string]any {
+	return map[string]any{
+		"key":  jid.String(),
+		"type": types.NewsletterKeyTypeJID,
+	}
+}
+
+func newsletterInviteInput(key string) map[string]any {
+	return map[string]any{
+		"key":  strings.TrimPrefix(key, NewsletterLinkPrefix),
+		"type": types.NewsletterKeyTypeInvite,
+	}
+}
+
 func (cli *Client) getNewsletterInfo(ctx context.Context, input map[string]any, fetchViewerMeta bool) (*types.NewsletterMetadata, error) {
 	data, err := cli.sendMexIQ(ctx, queryFetchNewsletter, map[string]any{
 		"fetch_creation_time":   true,
@@ -37,10 +54,7 @@ func (cli *Client) getNewsletterInfo(ctx context.Context, input map[string]any, 
 
 // GetNewsletterInfo gets the info of a newsletter that you're joined to.
 func (cli *Client) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error) {
-	return cli.getNewsletterInfo(ctx, map[string]any{
-		"key":  jid.String(),
-		"type": types.NewsletterKeyTypeJID,
-	}, true)
+	return cli.getNewsletterInfo(ctx, newsletterJIDInput(jid), true)
 }
 
 // GetNewsletterInfoWithInvite gets the info of a newsletter with an invite link.
@@ -49,10 +63,7 @@ func (cli *Client) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types
 //
 // Note that the ViewerMeta field of the returned NewsletterMetadata will be nil.
 func (cli *Client) GetNewsletterInfoWithInvite(ctx context.Context, key string) (*types.NewsletterMetadata, error) {
-	return cli.getNewsletterInfo(ctx, map[string]any{
-		"key":  strings.TrimPrefix(key, NewsletterLinkPrefix),
-		"type": types.NewsletterKeyTypeInvite,
-	}, false)
+	return cli.getNewsletterInfo(ctx, newsletterInviteInput(key), false)
 }
 
 type respGetSubscribedNewsletters struct {
