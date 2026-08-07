@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"bytes"
@@ -16,78 +16,29 @@ import (
 
 	"wa-api/internal/wa-noise/proto/waCommon"
 	"wa-api/internal/wa-noise/proto/waE2E"
-	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 	"wa-api/internal/wa-noise/util/gcmutil"
 )
 
-// stubMsgSecretStore devolve sempre o mesmo segredo e o mesmo remetente
-// original gravado. `secret == nil` reproduz "segredo nao encontrado", que e' o
-// que o sqlstore devolve para uma mensagem que nunca vimos.
-type stubMsgSecretStore struct {
-	secret     []byte
-	origSender types.JID
-	err        error
-
-	putChat   types.JID
-	putSender types.JID
-	putID     types.MessageID
-	putSecret []byte
-	putMany   []store.MessageSecretInsert
-}
-
-func (s *stubMsgSecretStore) PutMessageSecrets(_ context.Context, inserts []store.MessageSecretInsert) error {
-	s.putMany = append(s.putMany, inserts...)
-	return s.err
-}
-
-func (s *stubMsgSecretStore) PutMessageSecret(_ context.Context, chat, sender types.JID, id types.MessageID, secret []byte) error {
-	s.putChat, s.putSender, s.putID, s.putSecret = chat, sender, id, secret
-	return s.err
-}
-
-func (s *stubMsgSecretStore) GetMessageSecret(context.Context, types.JID, types.JID, types.MessageID) ([]byte, types.JID, error) {
-	return s.secret, s.origSender, s.err
-}
-
-// recvSecretClient monta um cliente cujo unico store real e' o de message
-// secrets — o suficiente para exercitar toda a criptografia de msgsecret.
-func recvSecretClient(t *testing.T, secretStore *stubMsgSecretStore) *Client {
-	t.Helper()
-	cli := recvTestClient(t)
-	cli.Store.MsgSecrets = secretStore
-	return cli
-}
-
 // --- guardas de nil / pre-condicoes ---
 
-func TestMsgSecretNilClient(t *testing.T) {
-	var cli *Client
-	if _, err := cli.decryptMsgSecret(context.Background(), &events.Message{}, EncSecretReaction, &waE2E.EncReactionMessage{}, &waCommon.MessageKey{}); !errors.Is(err, ErrClientIsNil) {
-		t.Errorf("decryptMsgSecret: err = %v", err)
-	}
-	if _, _, err := cli.encryptMsgSecret(context.Background(), types.EmptyJID, recvTestGroupJID, recvTestOtherJID, "MSG1", EncSecretReaction, nil); !errors.Is(err, ErrClientIsNil) {
-		t.Errorf("encryptMsgSecret: err = %v", err)
-	}
-}
-
 func TestEncryptMsgSecretNotLoggedIn(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret})
-	_, _, err := cli.encryptMsgSecret(context.Background(), types.EmptyJID, recvTestGroupJID, recvTestOtherJID, "MSG1", EncSecretReaction, []byte("oi"))
-	if !errors.Is(err, ErrNotLoggedIn) {
-		t.Fatalf("err = %v, want ErrNotLoggedIn", err)
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret})
+	_, _, err := EncryptSecret(context.Background(), f, types.EmptyJID, testGroupJID, testOtherJID, "MSG1", EncSecretReaction, []byte("oi"))
+	if !errors.Is(err, errNotLoggedIn) {
+		t.Fatalf("err = %v, want errNotLoggedIn", err)
 	}
 }
 
 func TestMsgSecretNotFound(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: nil})
-	if _, _, err := cli.encryptMsgSecret(context.Background(), cli.getOwnLID(), recvTestGroupJID, recvTestOtherJID, "MSG1", EncSecretReaction, []byte("oi")); !errors.Is(err, ErrOriginalMessageSecretNotFound) {
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: nil})
+	if _, _, err := EncryptSecret(context.Background(), f, testOwnLID, testGroupJID, testOtherJID, "MSG1", EncSecretReaction, []byte("oi")); !errors.Is(err, ErrOriginalMessageSecretNotFound) {
 		t.Errorf("encryptMsgSecret: err = %v", err)
 	}
 
-	evt := msgEvent(recvTestGroupJID, cli.getOwnLID())
-	_, err := cli.decryptMsgSecret(context.Background(), evt, EncSecretReaction, &waE2E.EncReactionMessage{}, &waCommon.MessageKey{FromMe: proto.Bool(true)})
+	evt := msgEvent(testGroupJID, testOwnLID)
+	_, err := DecryptSecret(context.Background(), f, evt, EncSecretReaction, &waE2E.EncReactionMessage{}, &waCommon.MessageKey{FromMe: proto.Bool(true)})
 	if !errors.Is(err, ErrOriginalMessageSecretNotFound) {
 		t.Errorf("decryptMsgSecret: err = %v", err)
 	}
@@ -95,8 +46,8 @@ func TestMsgSecretNotFound(t *testing.T) {
 
 func TestMsgSecretStoreError(t *testing.T) {
 	sentinel := errors.New("boom")
-	cli := recvSecretClient(t, &stubMsgSecretStore{err: sentinel})
-	if _, _, err := cli.encryptMsgSecret(context.Background(), cli.getOwnLID(), recvTestGroupJID, recvTestOtherJID, "MSG1", EncSecretReaction, []byte("oi")); !errors.Is(err, sentinel) {
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{err: sentinel})
+	if _, _, err := EncryptSecret(context.Background(), f, testOwnLID, testGroupJID, testOtherJID, "MSG1", EncSecretReaction, []byte("oi")); !errors.Is(err, sentinel) {
 		t.Errorf("encryptMsgSecret: err = %v", err)
 	}
 }
@@ -107,15 +58,15 @@ func TestMsgSecretStoreError(t *testing.T) {
 // verdade: chave derivada, IV de msgSecretIVSize bytes e o mesmo AAD dos dois
 // lados.
 func TestMsgSecretRoundTrip(t *testing.T) {
-	origSender := recvTestOtherJID
-	stub := &stubMsgSecretStore{secret: recvTestSecret, origSender: origSender}
-	cli := recvSecretClient(t, stub)
-	ownID := cli.getOwnLID()
+	origSender := testOtherJID
+	stub := &stubMsgSecretStore{secret: testSecret, origSender: origSender}
+	f := newFakeTransport().withSecrets(stub)
+	ownID := testOwnLID
 	plaintext := []byte("mensagem secreta")
 
-	for _, useCase := range []MsgSecretType{EncSecretReaction, EncSecretPollVote, EncSecretComment} {
+	for _, useCase := range []SecretType{EncSecretReaction, EncSecretPollVote, EncSecretComment} {
 		t.Run(string(useCase), func(t *testing.T) {
-			ciphertext, iv, err := cli.encryptMsgSecret(context.Background(), ownID, recvTestGroupJID, origSender, "MSG1", useCase, plaintext)
+			ciphertext, iv, err := EncryptSecret(context.Background(), f, ownID, testGroupJID, origSender, "MSG1", useCase, plaintext)
 			if err != nil {
 				t.Fatalf("encrypt: %v", err)
 			}
@@ -126,12 +77,12 @@ func TestMsgSecretRoundTrip(t *testing.T) {
 				t.Fatal("o texto claro aparece no ciphertext")
 			}
 
-			evt := msgEvent(recvTestGroupJID, ownID)
-			got, err := cli.decryptMsgSecret(context.Background(), evt, useCase, &waE2E.EncReactionMessage{
+			evt := msgEvent(testGroupJID, ownID)
+			got, err := DecryptSecret(context.Background(), f, evt, useCase, &waE2E.EncReactionMessage{
 				EncPayload: ciphertext,
 				EncIV:      iv,
 			}, &waCommon.MessageKey{
-				RemoteJID:   proto.String(recvTestGroupJID.String()),
+				RemoteJID:   proto.String(testGroupJID.String()),
 				Participant: proto.String(origSender.String()),
 				ID:          proto.String("MSG1"),
 			})
@@ -148,19 +99,19 @@ func TestMsgSecretRoundTrip(t *testing.T) {
 // Decriptar com o use case errado tem que falhar: os tipos sao separados por
 // dominio justamente para que uma reacao nao possa ser lida como voto.
 func TestMsgSecretWrongUseCaseFails(t *testing.T) {
-	origSender := recvTestOtherJID
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret, origSender: origSender})
-	ownID := cli.getOwnLID()
+	origSender := testOtherJID
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret, origSender: origSender})
+	ownID := testOwnLID
 
-	ciphertext, iv, err := cli.encryptMsgSecret(context.Background(), ownID, recvTestGroupJID, origSender, "MSG1", EncSecretReaction, []byte("oi"))
+	ciphertext, iv, err := EncryptSecret(context.Background(), f, ownID, testGroupJID, origSender, "MSG1", EncSecretReaction, []byte("oi"))
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
-	evt := msgEvent(recvTestGroupJID, ownID)
-	if _, err = cli.decryptMsgSecret(context.Background(), evt, EncSecretComment, &waE2E.EncReactionMessage{
+	evt := msgEvent(testGroupJID, ownID)
+	if _, err = DecryptSecret(context.Background(), f, evt, EncSecretComment, &waE2E.EncReactionMessage{
 		EncPayload: ciphertext, EncIV: iv,
 	}, &waCommon.MessageKey{
-		RemoteJID:   proto.String(recvTestGroupJID.String()),
+		RemoteJID:   proto.String(testGroupJID.String()),
 		Participant: proto.String(origSender.String()),
 		ID:          proto.String("MSG1"),
 	}); err == nil {
@@ -174,22 +125,22 @@ func TestMsgSecretWrongUseCaseFails(t *testing.T) {
 // permanentemente ilegiveis.
 func TestMsgSecretFallsBackToStoredOrigSender(t *testing.T) {
 	storedSender := types.NewJID("55443322", types.HiddenUserServer)
-	keySender := recvTestOtherJID
-	stub := &stubMsgSecretStore{secret: recvTestSecret, origSender: storedSender}
-	cli := recvSecretClient(t, stub)
-	ownID := cli.getOwnLID()
+	keySender := testOtherJID
+	stub := &stubMsgSecretStore{secret: testSecret, origSender: storedSender}
+	f := newFakeTransport().withSecrets(stub)
+	ownID := testOwnLID
 
 	// Cifra usando o remetente *gravado*...
-	ciphertext, iv, err := cli.encryptMsgSecret(context.Background(), ownID, recvTestGroupJID, storedSender, "MSG1", EncSecretReaction, []byte("oi"))
+	ciphertext, iv, err := EncryptSecret(context.Background(), f, ownID, testGroupJID, storedSender, "MSG1", EncSecretReaction, []byte("oi"))
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 	// ...e decripta com uma chave que aponta para o *outro* JID do mesmo usuario.
-	evt := msgEvent(recvTestGroupJID, ownID)
-	got, err := cli.decryptMsgSecret(context.Background(), evt, EncSecretReaction, &waE2E.EncReactionMessage{
+	evt := msgEvent(testGroupJID, ownID)
+	got, err := DecryptSecret(context.Background(), f, evt, EncSecretReaction, &waE2E.EncReactionMessage{
 		EncPayload: ciphertext, EncIV: iv,
 	}, &waCommon.MessageKey{
-		RemoteJID:   proto.String(recvTestGroupJID.String()),
+		RemoteJID:   proto.String(testGroupJID.String()),
 		Participant: proto.String(keySender.String()),
 		ID:          proto.String("MSG1"),
 	})
@@ -206,22 +157,22 @@ func TestMsgSecretFallsBackToStoredOrigSender(t *testing.T) {
 // A mensagem de bot usa o segredo passado por HKDF adicional e use case vazio
 // (que leva AAD). Cifrar a mao com a mesma derivacao tem que fechar.
 func TestDecryptBotMessageRoundTrip(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{})
-	target := cli.getOwnLID()
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{})
+	target := testOwnLID
 	info := &types.MessageInfo{
 		MessageSource: types.MessageSource{Sender: types.NewJID("1234", types.BotServer)},
 		ID:            "MSG1",
 	}
 	plaintext := []byte("resposta do bot")
 
-	key, aad := generateMsgSecretKey("", info.Sender, "MSG1", target, applyBotMessageHKDF(recvTestSecret))
+	key, aad := GenerateSecretKey("", info.Sender, "MSG1", target, ApplyBotMessageHKDF(testSecret))
 	iv := bytes.Repeat([]byte{7}, msgSecretIVSize)
 	ciphertext, err := gcmutil.Encrypt(key, iv, plaintext, aad)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	got, err := cli.decryptBotMessage(context.Background(), recvTestSecret, &waE2E.MessageSecretMessage{
+	got, err := DecryptBotMessage(f, testSecret, &waE2E.MessageSecretMessage{
 		EncPayload: ciphertext, EncIV: iv,
 	}, "MSG1", target, info)
 	if err != nil {
@@ -233,15 +184,15 @@ func TestDecryptBotMessageRoundTrip(t *testing.T) {
 }
 
 func TestDecryptBotMessageWrongSecret(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{})
 	info := &types.MessageInfo{
 		MessageSource: types.MessageSource{Sender: types.NewJID("1234", types.BotServer)},
 		ID:            "MSG1",
 	}
-	_, err := cli.decryptBotMessage(context.Background(), recvTestSecret, &waE2E.MessageSecretMessage{
+	_, err := DecryptBotMessage(f, testSecret, &waE2E.MessageSecretMessage{
 		EncPayload: bytes.Repeat([]byte{0}, 32),
 		EncIV:      bytes.Repeat([]byte{0}, msgSecretIVSize),
-	}, "MSG1", cli.getOwnLID(), info)
+	}, "MSG1", testOwnLID, info)
 	if err == nil {
 		t.Fatal("esperava falha de autenticacao")
 	}
@@ -250,19 +201,19 @@ func TestDecryptBotMessageWrongSecret(t *testing.T) {
 // --- guardas de tipo dos wrappers publicos ---
 
 func TestDecryptWrappersRejectWrongMessageType(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret})
 	empty := &events.Message{Message: &waE2E.Message{}}
 
-	if _, err := cli.DecryptReaction(context.Background(), empty); !errors.Is(err, ErrNotEncryptedReactionMessage) {
+	if _, err := DecryptReaction(context.Background(), f, empty); !errors.Is(err, ErrNotEncryptedReactionMessage) {
 		t.Errorf("DecryptReaction: err = %v", err)
 	}
-	if _, err := cli.DecryptComment(context.Background(), empty); !errors.Is(err, ErrNotEncryptedCommentMessage) {
+	if _, err := DecryptComment(context.Background(), f, empty); !errors.Is(err, ErrNotEncryptedCommentMessage) {
 		t.Errorf("DecryptComment: err = %v", err)
 	}
-	if _, err := cli.DecryptSecretEncryptedMessage(context.Background(), empty); !errors.Is(err, ErrNotSecretEncryptedMessage) {
+	if _, err := DecryptSecretEncrypted(context.Background(), f, empty); !errors.Is(err, ErrNotSecretEncryptedMessage) {
 		t.Errorf("DecryptSecretEncryptedMessage: err = %v", err)
 	}
-	if _, err := cli.DecryptPollVote(context.Background(), empty); !errors.Is(err, ErrNotPollUpdateMessage) {
+	if _, err := DecryptPollVote(context.Background(), f, empty); !errors.Is(err, ErrNotPollUpdateMessage) {
 		t.Errorf("DecryptPollVote: err = %v", err)
 	}
 }
@@ -271,7 +222,7 @@ func TestDecryptWrappersRejectWrongMessageType(t *testing.T) {
 // um tipo desconhecido tem que virar erro em vez de derivar com use case vazio
 // (que e' o do bot, e traz AAD).
 func TestDecryptSecretEncryptedMessageTypeMapping(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: nil})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: nil})
 
 	tests := []struct {
 		encType waE2E.SecretEncryptedMessage_SecretEncType
@@ -289,13 +240,13 @@ func TestDecryptSecretEncryptedMessageTypeMapping(t *testing.T) {
 	}
 	for _, tc := range tests {
 		evt := &events.Message{
-			Info: types.MessageInfo{MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID}},
+			Info: types.MessageInfo{MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID}},
 			Message: &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
 				SecretEncType:    tc.encType.Enum(),
 				TargetMessageKey: &waCommon.MessageKey{FromMe: proto.Bool(true)},
 			}},
 		}
-		_, err := cli.DecryptSecretEncryptedMessage(context.Background(), evt)
+		_, err := DecryptSecretEncrypted(context.Background(), f, evt)
 		if tc.want == nil {
 			// tipo desconhecido: erro proprio, antes de tocar no store
 			if err == nil || errors.Is(err, ErrOriginalMessageSecretNotFound) {
@@ -310,15 +261,15 @@ func TestDecryptSecretEncryptedMessageTypeMapping(t *testing.T) {
 // --- EncryptComment / EncryptReaction ---
 
 func TestEncryptCommentShape(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret, origSender: recvTestOtherJID})
-	sender := recvTestOtherJID
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret, origSender: testOtherJID})
+	sender := testOtherJID
 	sender.Device = 4
 	root := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: sender, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: sender, IsGroup: true},
 		ID:            "MSG1",
 	}
 
-	msg, err := cli.EncryptComment(context.Background(), root, &waE2E.Message{Conversation: proto.String("comentario")})
+	msg, err := EncryptComment(context.Background(), f, root, &waE2E.Message{Conversation: proto.String("comentario")})
 	if err != nil {
 		t.Fatalf("erro: %v", err)
 	}
@@ -327,8 +278,8 @@ func TestEncryptCommentShape(t *testing.T) {
 		t.Fatalf("payload/iv = %d/%d", len(enc.GetEncPayload()), len(enc.GetEncIV()))
 	}
 	// O participante da chave alvo vai sem device.
-	if got := enc.GetTargetMessageKey().GetParticipant(); got != recvTestOtherJID.ToNonAD().String() {
-		t.Errorf("Participant = %q, queria %q", got, recvTestOtherJID.ToNonAD().String())
+	if got := enc.GetTargetMessageKey().GetParticipant(); got != testOtherJID.ToNonAD().String() {
+		t.Errorf("Participant = %q, queria %q", got, testOtherJID.ToNonAD().String())
 	}
 	if enc.GetTargetMessageKey().GetID() != "MSG1" {
 		t.Errorf("ID = %q", enc.GetTargetMessageKey().GetID())
@@ -339,15 +290,15 @@ func TestEncryptCommentShape(t *testing.T) {
 // payload cifrado, mas a struct e' do chamador. Sem restaurar, reusar a mesma
 // reacao produzia uma reacao sem alvo.
 func TestEncryptReactionRestoresCallerKey(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret, origSender: recvTestOtherJID})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret, origSender: testOtherJID})
 	root := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "MSG1",
 	}
 	key := &waCommon.MessageKey{ID: proto.String("MSG1"), FromMe: proto.Bool(false)}
 	reaction := &waE2E.ReactionMessage{Key: key, Text: proto.String("🐈️")}
 
-	enc, err := cli.EncryptReaction(context.Background(), root, reaction)
+	enc, err := EncryptReaction(context.Background(), f, root, reaction)
 	if err != nil {
 		t.Fatalf("erro: %v", err)
 	}
@@ -365,15 +316,15 @@ func TestEncryptReactionRestoresCallerKey(t *testing.T) {
 // A chave tem que voltar tambem quando a criptografia falha — o erro nao pode
 // deixar a struct do chamador mutilada.
 func TestEncryptReactionRestoresCallerKeyOnError(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: nil})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: nil})
 	root := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "MSG1",
 	}
 	key := &waCommon.MessageKey{ID: proto.String("MSG1")}
 	reaction := &waE2E.ReactionMessage{Key: key, Text: proto.String("🐈️")}
 
-	if _, err := cli.EncryptReaction(context.Background(), root, reaction); err == nil {
+	if _, err := EncryptReaction(context.Background(), f, root, reaction); err == nil {
 		t.Fatal("esperava erro")
 	}
 	if reaction.Key != key {
@@ -384,27 +335,27 @@ func TestEncryptReactionRestoresCallerKeyOnError(t *testing.T) {
 // A chave nao pode entrar no payload cifrado: ela viaja em claro no
 // TargetMessageKey, e duplica-la vazaria o alvo dentro do texto autenticado.
 func TestEncryptReactionExcludesKeyFromPayload(t *testing.T) {
-	stub := &stubMsgSecretStore{secret: recvTestSecret, origSender: recvTestOtherJID}
-	cli := recvSecretClient(t, stub)
+	stub := &stubMsgSecretStore{secret: testSecret, origSender: testOtherJID}
+	f := newFakeTransport().withSecrets(stub)
 	root := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "MSG1",
 	}
 	reaction := &waE2E.ReactionMessage{
 		Key:  &waCommon.MessageKey{ID: proto.String("MSG1")},
 		Text: proto.String("🐈️"),
 	}
-	enc, err := cli.EncryptReaction(context.Background(), root, reaction)
+	enc, err := EncryptReaction(context.Background(), f, root, reaction)
 	if err != nil {
 		t.Fatalf("erro: %v", err)
 	}
 
-	evt := msgEvent(recvTestGroupJID, cli.getOwnLID())
-	plaintext, err := cli.decryptMsgSecret(context.Background(), evt, EncSecretReaction, &waE2E.EncReactionMessage{
+	evt := msgEvent(testGroupJID, testOwnLID)
+	plaintext, err := DecryptSecret(context.Background(), f, evt, EncSecretReaction, &waE2E.EncReactionMessage{
 		EncPayload: enc.GetEncPayload(), EncIV: enc.GetEncIV(),
 	}, &waCommon.MessageKey{
-		RemoteJID:   proto.String(recvTestGroupJID.String()),
-		Participant: proto.String(recvTestOtherJID.String()),
+		RemoteJID:   proto.String(testGroupJID.String()),
+		Participant: proto.String(testOtherJID.String()),
 		ID:          proto.String("MSG1"),
 	})
 	if err != nil {

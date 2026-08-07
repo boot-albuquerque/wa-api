@@ -272,15 +272,17 @@ func TestNewClientDefaults(t *testing.T) {
 		t.Errorf("leitura em cache vazio = %+v, esperado zero", got)
 	}
 	if cli.handlerQueue == nil || cli.socketWait == nil ||
-		cli.historySyncNotifications == nil || cli.expectedDisconnect == nil {
+		!cli.historySync.Ready() || cli.expectedDisconnect == nil {
 		t.Error("algum canal/evento interno ficou nil")
 	}
 	if cap(cli.handlerQueue) != handlerQueueSize {
 		t.Errorf("cap(handlerQueue) = %d, queria %d", cap(cli.handlerQueue), handlerQueueSize)
 	}
-	if cap(cli.historySyncNotifications) != historySyncNotificationBufferSize {
-		t.Errorf("cap(historySyncNotifications) = %d, queria %d",
-			cap(cli.historySyncNotifications), historySyncNotificationBufferSize)
+	// A fila de history sync virou message.HistorySyncQueue no lote 9; Cap()
+	// expoe a capacidade do canal que antes era lida direto.
+	if cli.historySync.Cap() != historySyncNotificationBufferSize {
+		t.Errorf("historySync.Cap() = %d, queria %d",
+			cli.historySync.Cap(), historySyncNotificationBufferSize)
 	}
 	// GetMessageForRetry tem default nao-nil: o caminho de retry o chama sem
 	// checar.

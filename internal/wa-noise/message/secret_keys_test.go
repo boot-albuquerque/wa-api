@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"bytes"
@@ -16,12 +16,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"wa-api/internal/wa-noise/proto/waCommon"
+	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
 	"wa-api/internal/wa-noise/util/hkdfutil"
 )
-
-var recvTestSecret = bytes.Repeat([]byte{0xAB}, messageSecretSize)
 
 // --- generateMsgSecretKey ---
 
@@ -35,14 +33,14 @@ func TestGenerateMsgSecretKeyMatchesHKDF(t *testing.T) {
 	origSender := types.NewJID("5511777777777", types.DefaultUserServer)
 	origSender.Device = 9
 
-	key, aad := generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", origSender, recvTestSecret)
+	key, aad := GenerateSecretKey(EncSecretPollVote, sender, "MSG1", origSender, testSecret)
 
 	var want []byte
 	want = append(want, "MSG1"...)
 	want = append(want, origSender.ToNonAD().String()...)
 	want = append(want, sender.ToNonAD().String()...)
 	want = append(want, EncSecretPollVote...)
-	expectedKey := hkdfutil.SHA256(recvTestSecret, nil, want, msgSecretKeyLength)
+	expectedKey := hkdfutil.SHA256(testSecret, nil, want, msgSecretKeyLength)
 
 	if !bytes.Equal(key, expectedKey) {
 		t.Fatalf("chave = %X, queria %X", key, expectedKey)
@@ -65,10 +63,10 @@ func TestGenerateMsgSecretKeyIgnoresDevice(t *testing.T) {
 	sender := types.NewJID("5511888888888", types.DefaultUserServer)
 	origSender := types.NewJID("5511777777777", types.DefaultUserServer)
 
-	base, _ := generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", origSender, recvTestSecret)
+	base, _ := GenerateSecretKey(EncSecretPollVote, sender, "MSG1", origSender, testSecret)
 	sender.Device = 12
 	origSender.Device = 3
-	withDevice, _ := generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", origSender, recvTestSecret)
+	withDevice, _ := GenerateSecretKey(EncSecretPollVote, sender, "MSG1", origSender, testSecret)
 
 	if !bytes.Equal(base, withDevice) {
 		t.Fatal("o device do JID mudou a chave derivada")
@@ -82,20 +80,20 @@ func TestGenerateMsgSecretKeyAdditionalDataByType(t *testing.T) {
 	sender := types.NewJID("5511888888888", types.DefaultUserServer)
 	origSender := types.NewJID("5511777777777", types.DefaultUserServer)
 
-	withAAD := []MsgSecretType{EncSecretPollVote, EncSecretEventResponse, ""}
-	withoutAAD := []MsgSecretType{
+	withAAD := []SecretType{EncSecretPollVote, EncSecretEventResponse, ""}
+	withoutAAD := []SecretType{
 		EncSecretReaction, EncSecretComment, EncSecretReportToken,
 		EncSecretEventEdit, EncSecretMessageEdit, EncSecretPollEdit,
 		EncSecretPollAddOption, EncSecretBotMsg,
 	}
 
 	for _, useCase := range withAAD {
-		if _, aad := generateMsgSecretKey(useCase, sender, "MSG1", origSender, recvTestSecret); aad == nil {
+		if _, aad := GenerateSecretKey(useCase, sender, "MSG1", origSender, testSecret); aad == nil {
 			t.Errorf("%q: aad = nil, queria preenchido", useCase)
 		}
 	}
 	for _, useCase := range withoutAAD {
-		if _, aad := generateMsgSecretKey(useCase, sender, "MSG1", origSender, recvTestSecret); aad != nil {
+		if _, aad := GenerateSecretKey(useCase, sender, "MSG1", origSender, testSecret); aad != nil {
 			t.Errorf("%q: aad = %q, queria nil", useCase, aad)
 		}
 	}
@@ -106,14 +104,14 @@ func TestGenerateMsgSecretKeyAdditionalDataByType(t *testing.T) {
 func TestGenerateMsgSecretKeyIsDomainSeparated(t *testing.T) {
 	sender := types.NewJID("5511888888888", types.DefaultUserServer)
 	origSender := types.NewJID("5511777777777", types.DefaultUserServer)
-	base, _ := generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", origSender, recvTestSecret)
+	base, _ := GenerateSecretKey(EncSecretPollVote, sender, "MSG1", origSender, testSecret)
 
 	variants := map[string][]byte{}
-	variants["outro tipo"], _ = generateMsgSecretKey(EncSecretReaction, sender, "MSG1", origSender, recvTestSecret)
-	variants["outro id"], _ = generateMsgSecretKey(EncSecretPollVote, sender, "MSG2", origSender, recvTestSecret)
-	variants["outro remetente"], _ = generateMsgSecretKey(EncSecretPollVote, origSender, "MSG1", origSender, recvTestSecret)
-	variants["outro remetente original"], _ = generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", sender, recvTestSecret)
-	variants["outro segredo"], _ = generateMsgSecretKey(EncSecretPollVote, sender, "MSG1", origSender, bytes.Repeat([]byte{0xCD}, messageSecretSize))
+	variants["outro tipo"], _ = GenerateSecretKey(EncSecretReaction, sender, "MSG1", origSender, testSecret)
+	variants["outro id"], _ = GenerateSecretKey(EncSecretPollVote, sender, "MSG2", origSender, testSecret)
+	variants["outro remetente"], _ = GenerateSecretKey(EncSecretPollVote, origSender, "MSG1", origSender, testSecret)
+	variants["outro remetente original"], _ = GenerateSecretKey(EncSecretPollVote, sender, "MSG1", sender, testSecret)
+	variants["outro segredo"], _ = GenerateSecretKey(EncSecretPollVote, sender, "MSG1", origSender, bytes.Repeat([]byte{0xCD}, send.MessageSecretSize))
 
 	for name, got := range variants {
 		if bytes.Equal(base, got) {
@@ -123,8 +121,8 @@ func TestGenerateMsgSecretKeyIsDomainSeparated(t *testing.T) {
 }
 
 func TestApplyBotMessageHKDF(t *testing.T) {
-	got := applyBotMessageHKDF(recvTestSecret)
-	want := hkdfutil.SHA256(recvTestSecret, nil, []byte(EncSecretBotMsg), msgSecretKeyLength)
+	got := ApplyBotMessageHKDF(testSecret)
+	want := hkdfutil.SHA256(testSecret, nil, []byte(EncSecretBotMsg), msgSecretKeyLength)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("got %X, want %X", got, want)
 	}
@@ -135,55 +133,49 @@ func TestApplyBotMessageHKDF(t *testing.T) {
 
 // --- getOrigSenderFromKey ---
 
-func msgEvent(chat, sender types.JID) *events.Message {
-	return &events.Message{Info: types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: chat, Sender: sender},
-	}}
-}
-
 // fromMe significa que quem mandou a enquete e quem mandou o voto sao o mesmo
 // usuario, entao o remetente original e' o do proprio evento.
 func TestGetOrigSenderFromKeyFromMe(t *testing.T) {
-	evt := msgEvent(recvTestGroupJID, recvTestOtherJID)
-	got, err := getOrigSenderFromKey(evt, &waCommon.MessageKey{FromMe: proto.Bool(true)})
+	evt := msgEvent(testGroupJID, testOtherJID)
+	got, err := OrigSenderFromKey(evt, &waCommon.MessageKey{FromMe: proto.Bool(true)})
 	if err != nil {
 		t.Fatalf("erro: %v", err)
 	}
-	if got != recvTestOtherJID {
-		t.Fatalf("got %s, want %s", got, recvTestOtherJID)
+	if got != testOtherJID {
+		t.Fatalf("got %s, want %s", got, testOtherJID)
 	}
 }
 
 // Em DM o remetente original sai do RemoteJID; em grupo, do Participant.
 func TestGetOrigSenderFromKeyDMUsesRemoteJID(t *testing.T) {
 	for _, chat := range []types.JID{
-		recvTestOtherJID,
+		testOtherJID,
 		types.NewJID("55443322", types.HiddenUserServer),
 	} {
-		evt := msgEvent(chat, recvTestOtherJID)
-		got, err := getOrigSenderFromKey(evt, &waCommon.MessageKey{
-			RemoteJID:   proto.String(recvTestOtherJID.String()),
-			Participant: proto.String(recvTestGroupJID.String()),
+		evt := msgEvent(chat, testOtherJID)
+		got, err := OrigSenderFromKey(evt, &waCommon.MessageKey{
+			RemoteJID:   proto.String(testOtherJID.String()),
+			Participant: proto.String(testGroupJID.String()),
 		})
 		if err != nil {
 			t.Fatalf("chat %s: erro: %v", chat, err)
 		}
-		if got != recvTestOtherJID {
+		if got != testOtherJID {
 			t.Fatalf("chat %s: got %s", chat, got)
 		}
 	}
 }
 
 func TestGetOrigSenderFromKeyGroupUsesParticipant(t *testing.T) {
-	evt := msgEvent(recvTestGroupJID, recvTestOtherJID)
-	got, err := getOrigSenderFromKey(evt, &waCommon.MessageKey{
-		RemoteJID:   proto.String(recvTestGroupJID.String()),
-		Participant: proto.String(recvTestOtherJID.String()),
+	evt := msgEvent(testGroupJID, testOtherJID)
+	got, err := OrigSenderFromKey(evt, &waCommon.MessageKey{
+		RemoteJID:   proto.String(testGroupJID.String()),
+		Participant: proto.String(testOtherJID.String()),
 	})
 	if err != nil {
 		t.Fatalf("erro: %v", err)
 	}
-	if got != recvTestOtherJID {
+	if got != testOtherJID {
 		t.Fatalf("got %s", got)
 	}
 }
@@ -193,8 +185,8 @@ func TestGetOrigSenderFromKeyGroupUsesParticipant(t *testing.T) {
 // pelo "unexpected server" e nunca chegava ao log. Este JID cai exatamente
 // nesse caso: user com pontos demais e server de grupo.
 func TestGetOrigSenderFromKeyGroupInvalidJIDKeepsParseError(t *testing.T) {
-	evt := msgEvent(recvTestGroupJID, recvTestOtherJID)
-	_, err := getOrigSenderFromKey(evt, &waCommon.MessageKey{
+	evt := msgEvent(testGroupJID, testOtherJID)
+	_, err := OrigSenderFromKey(evt, &waCommon.MessageKey{
 		Participant: proto.String("1.2.3@g.us"),
 	})
 	if err == nil {
@@ -211,9 +203,9 @@ func TestGetOrigSenderFromKeyGroupInvalidJIDKeepsParseError(t *testing.T) {
 // Servidor que este pacote nao sabe usar como remetente continua sendo erro,
 // agora com sentinela propria.
 func TestGetOrigSenderFromKeyGroupUnexpectedServer(t *testing.T) {
-	evt := msgEvent(recvTestGroupJID, recvTestOtherJID)
-	_, err := getOrigSenderFromKey(evt, &waCommon.MessageKey{
-		Participant: proto.String(recvTestGroupJID.String()),
+	evt := msgEvent(testGroupJID, testOtherJID)
+	_, err := OrigSenderFromKey(evt, &waCommon.MessageKey{
+		Participant: proto.String(testGroupJID.String()),
 	})
 	if !errors.Is(err, errUnexpectedOrigSenderServer) {
 		t.Fatalf("erro = %v, want errUnexpectedOrigSenderServer", err)
@@ -226,22 +218,22 @@ func TestGetOrigSenderFromKeyGroupUnexpectedServer(t *testing.T) {
 // de BuildMessageKey) aqui ele vai *com* device, porque e' o que a chave de
 // criacao da enquete gravou.
 func TestGetKeyFromInfoParticipantOnlyInGroup(t *testing.T) {
-	sender := recvTestOtherJID
+	sender := testOtherJID
 	sender.Device = 5
 
-	group := getKeyFromInfo(&types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: sender, IsGroup: true, IsFromMe: true},
+	group := KeyFromInfo(&types.MessageInfo{
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: sender, IsGroup: true, IsFromMe: true},
 		ID:            "MSG1",
 	})
 	if group.GetParticipant() != sender.String() {
 		t.Errorf("Participant = %q, queria %q", group.GetParticipant(), sender.String())
 	}
-	if !group.GetFromMe() || group.GetID() != "MSG1" || group.GetRemoteJID() != recvTestGroupJID.String() {
+	if !group.GetFromMe() || group.GetID() != "MSG1" || group.GetRemoteJID() != testGroupJID.String() {
 		t.Errorf("chave = %+v", group)
 	}
 
-	dm := getKeyFromInfo(&types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestOtherJID, Sender: sender},
+	dm := KeyFromInfo(&types.MessageInfo{
+		MessageSource: types.MessageSource{Chat: testOtherJID, Sender: sender},
 		ID:            "MSG1",
 	})
 	if dm.Participant != nil {

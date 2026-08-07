@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"testing"
@@ -16,31 +16,30 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-var (
-	recvTestOtherJID = types.NewJID("5511888888888", types.DefaultUserServer)
-	recvTestGroupJID = types.NewJID("123456789-987654321", types.GroupServer)
-)
+// buildKey aplica os dois JIDs da sessao de teste, para os testes lerem como
+// liam antes da extracao.
+func buildKey(chat, sender types.JID, id types.MessageID) *waE2E.Message {
+	return BuildRevoke(testOwnJID, testOwnLID, chat, sender, id)
+}
 
-// --- BuildMessageKey ---
+// --- BuildKey ---
 
 // A chave e' o que liga revoke/reaction/edit a' mensagem original. Errar
 // FromMe ou Participant faz o servidor rejeitar ou aplicar no alvo errado.
-func TestBuildMessageKeyFromMe(t *testing.T) {
-	cli := recvTestClient(t)
-
+func TestBuildKeyFromMe(t *testing.T) {
 	for _, sender := range []types.JID{
 		types.EmptyJID,
-		cli.getOwnID(),
-		cli.getOwnLID(),
+		testOwnJID,
+		testOwnLID,
 	} {
-		key := cli.BuildMessageKey(recvTestGroupJID, sender, "MSG1")
+		key := BuildKey(testOwnJID, testOwnLID, testGroupJID, sender, "MSG1")
 		if !key.GetFromMe() {
 			t.Errorf("sender %s: FromMe = false, queria true", sender)
 		}
 		if key.Participant != nil {
 			t.Errorf("sender %s: Participant = %q, queria ausente", sender, key.GetParticipant())
 		}
-		if key.GetRemoteJID() != recvTestGroupJID.String() {
+		if key.GetRemoteJID() != testGroupJID.String() {
 			t.Errorf("RemoteJID = %q", key.GetRemoteJID())
 		}
 		if key.GetID() != "MSG1" {
@@ -51,44 +50,41 @@ func TestBuildMessageKeyFromMe(t *testing.T) {
 
 // Em grupo, revogar mensagem alheia precisa do Participant; em DM ele nao vai,
 // porque o RemoteJID ja' identifica o remetente.
-func TestBuildMessageKeyOtherSenderParticipantOnlyInGroup(t *testing.T) {
-	cli := recvTestClient(t)
-
+func TestBuildKeyOtherSenderParticipantOnlyInGroup(t *testing.T) {
 	tests := []struct {
 		name            string
 		chat            types.JID
 		wantParticipant bool
 	}{
-		{"grupo", recvTestGroupJID, true},
+		{"grupo", testGroupJID, true},
 		{"broadcast", types.NewJID("status", types.BroadcastServer), true},
-		{"dm pn", recvTestOtherJID, false},
+		{"dm pn", testOtherJID, false},
 		{"dm lid", types.NewJID("99887766", types.HiddenUserServer), false},
 		{"messenger", types.NewJID("1234", types.MessengerServer), false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			key := cli.BuildMessageKey(tc.chat, recvTestOtherJID, "MSG1")
+			key := BuildKey(testOwnJID, testOwnLID, tc.chat, testOtherJID, "MSG1")
 			if key.GetFromMe() {
 				t.Errorf("FromMe = true, queria false")
 			}
 			if got := key.Participant != nil; got != tc.wantParticipant {
 				t.Fatalf("Participant presente = %v, queria %v", got, tc.wantParticipant)
 			}
-			if tc.wantParticipant && key.GetParticipant() != recvTestOtherJID.ToNonAD().String() {
-				t.Errorf("Participant = %q, queria %q", key.GetParticipant(), recvTestOtherJID.ToNonAD().String())
+			if tc.wantParticipant && key.GetParticipant() != testOtherJID.ToNonAD().String() {
+				t.Errorf("Participant = %q, queria %q", key.GetParticipant(), testOtherJID.ToNonAD().String())
 			}
 		})
 	}
 }
 
 // O Participant vai sempre sem device: e' o usuario que mandou, nao o aparelho.
-func TestBuildMessageKeyParticipantIsNonAD(t *testing.T) {
-	cli := recvTestClient(t)
-	sender := recvTestOtherJID
+func TestBuildKeyParticipantIsNonAD(t *testing.T) {
+	sender := testOtherJID
 	sender.Device = 7
 
-	key := cli.BuildMessageKey(recvTestGroupJID, sender, "MSG1")
-	if key.GetParticipant() != recvTestOtherJID.ToNonAD().String() {
+	key := BuildKey(testOwnJID, testOwnLID, testGroupJID, sender, "MSG1")
+	if key.GetParticipant() != testOtherJID.ToNonAD().String() {
 		t.Fatalf("Participant = %q, queria sem device", key.GetParticipant())
 	}
 }
@@ -96,8 +92,7 @@ func TestBuildMessageKeyParticipantIsNonAD(t *testing.T) {
 // --- BuildRevoke / BuildReaction / BuildEdit ---
 
 func TestBuildRevoke(t *testing.T) {
-	cli := recvTestClient(t)
-	msg := cli.BuildRevoke(recvTestGroupJID, types.EmptyJID, "MSG1")
+	msg := buildKey(testGroupJID, types.EmptyJID, "MSG1")
 
 	if msg.GetProtocolMessage().GetType() != waE2E.ProtocolMessage_REVOKE {
 		t.Fatalf("tipo = %s", msg.GetProtocolMessage().GetType())
@@ -108,9 +103,8 @@ func TestBuildRevoke(t *testing.T) {
 }
 
 func TestBuildReaction(t *testing.T) {
-	cli := recvTestClient(t)
 	before := time.Now().UnixMilli()
-	msg := cli.BuildReaction(recvTestGroupJID, recvTestOtherJID, "MSG1", "🐈️")
+	msg := BuildReaction(testOwnJID, testOwnLID, testGroupJID, testOtherJID, "MSG1", "🐈️")
 	after := time.Now().UnixMilli()
 
 	reaction := msg.GetReactionMessage()
@@ -127,8 +121,7 @@ func TestBuildReaction(t *testing.T) {
 
 // Reacao vazia e' o jeito de *remover* a reacao — nao pode virar nil.
 func TestBuildReactionEmptyRemoves(t *testing.T) {
-	cli := recvTestClient(t)
-	msg := cli.BuildReaction(recvTestGroupJID, recvTestOtherJID, "MSG1", "")
+	msg := BuildReaction(testOwnJID, testOwnLID, testGroupJID, testOtherJID, "MSG1", "")
 	if msg.GetReactionMessage().Text == nil {
 		t.Fatal("Text = nil, queria string vazia explicita")
 	}
@@ -137,10 +130,9 @@ func TestBuildReactionEmptyRemoves(t *testing.T) {
 // A edicao e' um ProtocolMessage dentro de um EditedMessage, e a chave e'
 // sempre FromMe: so' se edita mensagem propria.
 func TestBuildEditShape(t *testing.T) {
-	cli := recvTestClient(t)
 	content := &waE2E.Message{Conversation: proto.String("editado")}
 	before := time.Now().UnixMilli()
-	msg := cli.BuildEdit(recvTestGroupJID, "MSG1", content)
+	msg := BuildEdit(testGroupJID, "MSG1", content)
 	after := time.Now().UnixMilli()
 
 	inner := msg.GetEditedMessage().GetMessage().GetProtocolMessage()
@@ -167,11 +159,10 @@ func TestEditWindowValue(t *testing.T) {
 	}
 }
 
-// --- BuildUnavailableMessageRequest / BuildHistorySyncRequest ---
+// --- BuildUnavailableRequest / BuildHistorySyncRequest ---
 
-func TestBuildUnavailableMessageRequest(t *testing.T) {
-	cli := recvTestClient(t)
-	msg := cli.BuildUnavailableMessageRequest(recvTestGroupJID, recvTestOtherJID, "MSG1")
+func TestBuildUnavailableRequest(t *testing.T) {
+	msg := BuildUnavailableRequest(testOwnJID, testOwnLID, testGroupJID, testOtherJID, "MSG1")
 
 	pdo := msg.GetProtocolMessage().GetPeerDataOperationRequestMessage()
 	if pdo.GetPeerDataOperationRequestType() != waE2E.PeerDataOperationRequestType_PLACEHOLDER_MESSAGE_RESEND {
@@ -188,15 +179,14 @@ func TestBuildUnavailableMessageRequest(t *testing.T) {
 // O campo se chama OldestMsgTimestampMS mas o servidor espera *segundos*. O
 // comentario no codigo diz isso; este teste trava o comportamento.
 func TestBuildHistorySyncRequestTimestampIsSeconds(t *testing.T) {
-	cli := recvTestClient(t)
 	ts := time.Unix(1700000000, 0)
 	info := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, IsFromMe: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, IsFromMe: true},
 		ID:            "MSG1",
 		Timestamp:     ts,
 	}
 
-	req := cli.BuildHistorySyncRequest(info, 50).GetProtocolMessage().GetPeerDataOperationRequestMessage()
+	req := BuildHistorySyncRequest(info, 50).GetProtocolMessage().GetPeerDataOperationRequestMessage()
 	od := req.GetHistorySyncOnDemandRequest()
 	if got := od.GetOldestMsgTimestampMS(); got != ts.Unix() {
 		t.Fatalf("timestamp = %d, queria %d (segundos, nao ms)", got, ts.Unix())
@@ -204,7 +194,7 @@ func TestBuildHistorySyncRequestTimestampIsSeconds(t *testing.T) {
 	if od.GetOnDemandMsgCount() != 50 {
 		t.Errorf("count = %d", od.GetOnDemandMsgCount())
 	}
-	if od.GetChatJID() != recvTestGroupJID.String() {
+	if od.GetChatJID() != testGroupJID.String() {
 		t.Errorf("chat = %q", od.GetChatJID())
 	}
 	if !od.GetOldestMsgFromMe() {

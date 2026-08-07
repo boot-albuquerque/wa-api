@@ -4,13 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"bytes"
 	"context"
 	"testing"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -18,26 +17,8 @@ import (
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waHistorySync"
 	"wa-api/internal/wa-noise/proto/waWeb"
-	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
 )
-
-type stubPrivacyTokenStore struct {
-	tokens []store.PrivacyToken
-}
-
-func (s *stubPrivacyTokenStore) PutPrivacyTokens(_ context.Context, tokens ...store.PrivacyToken) error {
-	s.tokens = append(s.tokens, tokens...)
-	return nil
-}
-
-func (s *stubPrivacyTokenStore) GetPrivacyToken(context.Context, types.JID) (*store.PrivacyToken, error) {
-	return nil, nil
-}
-
-func (s *stubPrivacyTokenStore) DeleteExpiredPrivacyTokens(context.Context, time.Time) (int64, error) {
-	return 0, nil
-}
 
 // --- storeMessageSecret ---
 
@@ -45,24 +26,24 @@ func (s *stubPrivacyTokenStore) DeleteExpiredPrivacyTokens(context.Context, time
 // pode virar uma linha vazia no banco.
 func TestStoreMessageSecretOnlyWhenPresent(t *testing.T) {
 	stub := &stubMsgSecretStore{}
-	cli := recvSecretClient(t, stub)
+	f := newFakeTransport().withSecrets(stub)
 	info := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID},
 		ID:            "MSG1",
 	}
 
-	cli.storeMessageSecret(context.Background(), info, &waE2E.Message{})
+	StoreSecret(context.Background(), f, info, &waE2E.Message{})
 	if stub.putSecret != nil {
 		t.Fatalf("gravou %X sem segredo na mensagem", stub.putSecret)
 	}
 
-	cli.storeMessageSecret(context.Background(), info, &waE2E.Message{
-		MessageContextInfo: &waE2E.MessageContextInfo{MessageSecret: recvTestSecret},
+	StoreSecret(context.Background(), f, info, &waE2E.Message{
+		MessageContextInfo: &waE2E.MessageContextInfo{MessageSecret: testSecret},
 	})
-	if !bytes.Equal(stub.putSecret, recvTestSecret) {
+	if !bytes.Equal(stub.putSecret, testSecret) {
 		t.Fatalf("segredo = %X", stub.putSecret)
 	}
-	if stub.putChat != recvTestGroupJID || stub.putSender != recvTestOtherJID || stub.putID != "MSG1" {
+	if stub.putChat != testGroupJID || stub.putSender != testOtherJID || stub.putID != "MSG1" {
 		t.Errorf("chave gravada = %s/%s/%s", stub.putChat, stub.putSender, stub.putID)
 	}
 }
@@ -95,9 +76,11 @@ func historyMsg(id string, fromMe bool, participant, msgParticipant string, secr
 // desiste inteira em vez de gravar segredos com remetente errado.
 func TestStoreHistoricalMessageSecretsRequiresOwnJID(t *testing.T) {
 	stub := &stubMsgSecretStore{}
-	cli := &Client{Log: recvTestClient(t).Log, Store: &store.Device{MsgSecrets: stub}}
-	cli.storeHistoricalMessageSecrets(context.Background(), []*waHistorySync.Conversation{
-		historyConv(recvTestGroupJID.String(), historyMsg("MSG1", true, "", "", recvTestSecret)),
+	f := newFakeTransport().withSecrets(stub)
+	// Sem JID proprio: e' o estado de antes do pareamento.
+	f.ownID = types.EmptyJID
+	StoreHistoricalSecrets(context.Background(), f, []*waHistorySync.Conversation{
+		historyConv(testGroupJID.String(), historyMsg("MSG1", true, "", "", testSecret)),
 	})
 	if len(stub.putMany) != 0 {
 		t.Fatalf("gravou %d segredos sem JID proprio", len(stub.putMany))
@@ -109,21 +92,21 @@ func TestStoreHistoricalMessageSecretsRequiresOwnJID(t *testing.T) {
 // correspondente fica permanentemente ilegivel.
 func TestStoreHistoricalMessageSecretsSenderResolution(t *testing.T) {
 	stub := &stubMsgSecretStore{}
-	cli := recvSecretClient(t, stub)
-	own := cli.getOwnID().ToNonAD()
-	participant := recvTestOtherJID
+	f := newFakeTransport().withSecrets(stub)
+	own := testOwnJID.ToNonAD()
+	participant := testOtherJID
 
 	convs := []*waHistorySync.Conversation{
 		// grupo, mensagem propria -> remetente e' o proprio JID
-		historyConv(recvTestGroupJID.String(), historyMsg("G_ME", true, "", "", recvTestSecret)),
+		historyConv(testGroupJID.String(), historyMsg("G_ME", true, "", "", testSecret)),
 		// grupo, mensagem alheia com Key.Participant
-		historyConv(recvTestGroupJID.String(), historyMsg("G_KEY", false, participant.String(), "", recvTestSecret)),
+		historyConv(testGroupJID.String(), historyMsg("G_KEY", false, participant.String(), "", testSecret)),
 		// grupo, mensagem alheia so' com Message.Participant
-		historyConv(recvTestGroupJID.String(), historyMsg("G_MSG", false, "", participant.String(), recvTestSecret)),
+		historyConv(testGroupJID.String(), historyMsg("G_MSG", false, "", participant.String(), testSecret)),
 		// DM alheia -> remetente e' o proprio chat
-		historyConv(participant.String(), historyMsg("DM", false, "", "", recvTestSecret)),
+		historyConv(participant.String(), historyMsg("DM", false, "", "", testSecret)),
 	}
-	cli.storeHistoricalMessageSecrets(context.Background(), convs)
+	StoreHistoricalSecrets(context.Background(), f, convs)
 
 	got := map[string]types.JID{}
 	for _, ins := range stub.putMany {
@@ -148,17 +131,17 @@ func TestStoreHistoricalMessageSecretsSenderResolution(t *testing.T) {
 // Mensagem sem segredo, sem remetente resolvivel ou sem ID nao gera insercao.
 func TestStoreHistoricalMessageSecretsSkipsIncomplete(t *testing.T) {
 	stub := &stubMsgSecretStore{}
-	cli := recvSecretClient(t, stub)
+	f := newFakeTransport().withSecrets(stub)
 
-	cli.storeHistoricalMessageSecrets(context.Background(), []*waHistorySync.Conversation{
+	StoreHistoricalSecrets(context.Background(), f, []*waHistorySync.Conversation{
 		// conversa com ID que nao e' JID
-		historyConv("", historyMsg("X", true, "", "", recvTestSecret)),
+		historyConv("", historyMsg("X", true, "", "", testSecret)),
 		// sem segredo
-		historyConv(recvTestGroupJID.String(), historyMsg("SEM_SEGREDO", true, "", "", nil)),
+		historyConv(testGroupJID.String(), historyMsg("SEM_SEGREDO", true, "", "", nil)),
 		// grupo, alheia, sem participant em lugar nenhum
-		historyConv(recvTestGroupJID.String(), historyMsg("SEM_SENDER", false, "", "", recvTestSecret)),
+		historyConv(testGroupJID.String(), historyMsg("SEM_SENDER", false, "", "", testSecret)),
 		// sem ID de mensagem
-		historyConv(recvTestGroupJID.String(), historyMsg("", true, "", "", recvTestSecret)),
+		historyConv(testGroupJID.String(), historyMsg("", true, "", "", testSecret)),
 	})
 	if len(stub.putMany) != 0 {
 		t.Fatalf("gravou %d segredos incompletos: %+v", len(stub.putMany), stub.putMany)
@@ -170,23 +153,23 @@ func TestStoreHistoricalMessageSecretsSkipsIncomplete(t *testing.T) {
 func TestStoreHistoricalMessageSecretsPrivacyTokens(t *testing.T) {
 	stub := &stubMsgSecretStore{}
 	tokens := &stubPrivacyTokenStore{}
-	cli := recvSecretClient(t, stub)
-	cli.Store.PrivacyTokens = tokens
+	f := newFakeTransport().withSecrets(stub)
+	f.dev.PrivacyTokens = tokens
 
-	dm := historyConv(recvTestOtherJID.String())
+	dm := historyConv(testOtherJID.String())
 	dm.TcToken = []byte("token")
 	dm.TcTokenTimestamp = proto.Uint64(1700000000)
 	dm.TcTokenSenderTimestamp = proto.Uint64(1700000001)
-	group := historyConv(recvTestGroupJID.String())
+	group := historyConv(testGroupJID.String())
 	group.TcToken = []byte("token")
 
-	cli.storeHistoricalMessageSecrets(context.Background(), []*waHistorySync.Conversation{dm, group})
+	StoreHistoricalSecrets(context.Background(), f, []*waHistorySync.Conversation{dm, group})
 
 	if len(tokens.tokens) != 1 {
 		t.Fatalf("%d tokens, queria 1 (so' o de DM)", len(tokens.tokens))
 	}
 	tok := tokens.tokens[0]
-	if tok.User != recvTestOtherJID {
+	if tok.User != testOtherJID {
 		t.Errorf("user = %s", tok.User)
 	}
 	if tok.Timestamp.Unix() != 1700000000 || tok.SenderTimestamp.Unix() != 1700000001 {

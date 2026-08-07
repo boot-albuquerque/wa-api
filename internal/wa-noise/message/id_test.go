@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"encoding/hex"
@@ -13,30 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/types"
-	waLog "wa-api/internal/wa-noise/util/log"
 )
 
-// recvTestClient e' o *Client minimo do lote 9. Difere de sendTestClient por
-// ja' vir com um Store: quase tudo do caminho de recepcao passa por
-// getOwnID/getOwnLID.
-func recvTestClient(t *testing.T) *Client {
-	t.Helper()
-	ownID := types.NewJID("5511999999999", types.DefaultUserServer)
-	ownID.Device = 0
-	return &Client{
-		Log: waLog.Noop,
-		Store: &store.Device{
-			ID:  &ownID,
-			LID: types.NewJID("11223344556677", types.HiddenUserServer),
-		},
-	}
-}
-
-func TestGenerateMessageIDFormat(t *testing.T) {
-	cli := recvTestClient(t)
-	id := cli.GenerateMessageID()
+func TestGenerateIDFormat(t *testing.T) {
+	id := GenerateID(testOwnJID, false)
 
 	if !strings.HasPrefix(string(id), WebMessageIDPrefix) {
 		t.Fatalf("id %q nao comeca com %q", id, WebMessageIDPrefix)
@@ -56,11 +37,10 @@ func TestGenerateMessageIDFormat(t *testing.T) {
 
 // O ID carrega 16 bytes aleatorios; duas chamadas no mesmo segundo, com o mesmo
 // JID, ainda tem que divergir.
-func TestGenerateMessageIDIsRandom(t *testing.T) {
-	cli := recvTestClient(t)
+func TestGenerateIDIsRandom(t *testing.T) {
 	seen := make(map[types.MessageID]struct{}, 64)
 	for i := 0; i < 64; i++ {
-		id := cli.GenerateMessageID()
+		id := GenerateID(testOwnJID, false)
 		if _, dup := seen[id]; dup {
 			t.Fatalf("id repetido na iteracao %d: %s", i, id)
 		}
@@ -68,22 +48,19 @@ func TestGenerateMessageIDIsRandom(t *testing.T) {
 	}
 }
 
-// Sem JID (antes do pareamento) o material do hash nao leva o sufixo @c.us, mas
-// o ID continua bem formado.
-func TestGenerateMessageIDWithoutOwnJID(t *testing.T) {
-	cli := &Client{Log: waLog.Noop, Store: &store.Device{}}
-	id := cli.GenerateMessageID()
+// Sem JID (antes do pareamento, ou com cliente nil na raiz) o material do hash
+// nao leva o sufixo @c.us, mas o ID continua bem formado.
+func TestGenerateIDWithoutOwnJID(t *testing.T) {
+	id := GenerateID(types.EmptyJID, false)
 	if len(id) != len(WebMessageIDPrefix)+webMessageIDHashLength*2 {
 		t.Fatalf("id = %q (len %d)", id, len(id))
 	}
 }
 
-// Com MessengerConfig o ID passa a ser o inteiro do Facebook em base 10, sem
-// prefixo nenhum.
-func TestGenerateMessageIDMessengerConfig(t *testing.T) {
-	cli := recvTestClient(t)
-	cli.MessengerConfig = &MessengerConfig{}
-	id := cli.GenerateMessageID()
+// Com Messenger o ID passa a ser o inteiro do Facebook em base 10, sem prefixo
+// nenhum.
+func TestGenerateIDMessenger(t *testing.T) {
+	id := GenerateID(testOwnJID, true)
 	if strings.HasPrefix(string(id), WebMessageIDPrefix) {
 		t.Fatalf("id do messenger %q nao devia ter prefixo web", id)
 	}
@@ -92,21 +69,11 @@ func TestGenerateMessageIDMessengerConfig(t *testing.T) {
 	}
 }
 
-// Client nil e' um caminho suportado (getOwnID trata nil); nao pode entrar no
-// ramo do Messenger nem entrar em panico.
-func TestGenerateMessageIDNilClient(t *testing.T) {
-	var cli *Client
-	id := cli.GenerateMessageID()
-	if !strings.HasPrefix(string(id), WebMessageIDPrefix) {
-		t.Fatalf("id = %q", id)
-	}
-}
-
 // O ID do Messenger e' (unix ms << 22) | aleatorio de 22 bits. Confere-se o
 // desmembramento contra o relogio, nao contra a propria funcao.
-func TestGenerateFacebookMessageIDLayout(t *testing.T) {
+func TestGenerateFacebookIDLayout(t *testing.T) {
 	before := time.Now().UnixMilli()
-	id := GenerateFacebookMessageID()
+	id := GenerateFacebookID()
 	after := time.Now().UnixMilli()
 
 	ts := id >> facebookMessageIDRandomBits
@@ -121,10 +88,10 @@ func TestGenerateFacebookMessageIDLayout(t *testing.T) {
 	}
 }
 
-func TestGenerateFacebookMessageIDIsRandom(t *testing.T) {
+func TestGenerateFacebookIDIsRandom(t *testing.T) {
 	seen := make(map[int64]struct{}, 64)
 	for i := 0; i < 64; i++ {
-		id := GenerateFacebookMessageID()
+		id := GenerateFacebookID()
 		if _, dup := seen[id]; dup {
 			t.Fatalf("id repetido na iteracao %d", i)
 		}
@@ -134,8 +101,8 @@ func TestGenerateFacebookMessageIDIsRandom(t *testing.T) {
 
 // A funcao depreciada nao passa por hash: sao legacyMessageIDRandomLength bytes
 // crus em hex.
-func TestGenerateMessageIDDeprecated(t *testing.T) {
-	id := GenerateMessageID()
+func TestGenerateLegacyID(t *testing.T) {
+	id := GenerateLegacyID()
 	suffix := strings.TrimPrefix(string(id), WebMessageIDPrefix)
 	if len(suffix) != legacyMessageIDRandomLength*2 {
 		t.Fatalf("len(sufixo) = %d, queria %d", len(suffix), legacyMessageIDRandomLength*2)

@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package message
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/send"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )
@@ -71,8 +72,8 @@ func TestBuildPollCreationShape(t *testing.T) {
 	}
 	// Sem o message secret no MessageContextInfo ninguem consegue cifrar um
 	// voto para esta enquete.
-	if len(msg.GetMessageContextInfo().GetMessageSecret()) != messageSecretSize {
-		t.Fatalf("len(segredo) = %d, queria %d", len(msg.GetMessageContextInfo().GetMessageSecret()), messageSecretSize)
+	if len(msg.GetMessageContextInfo().GetMessageSecret()) != send.MessageSecretSize {
+		t.Fatalf("len(segredo) = %d, queria %d", len(msg.GetMessageContextInfo().GetMessageSecret()), send.MessageSecretSize)
 	}
 }
 
@@ -111,7 +112,7 @@ func TestBuildPollCreationSelectableCountClamping(t *testing.T) {
 
 func cliBuildPoll(t *testing.T, name string, options []string, count int) *waE2E.Message {
 	t.Helper()
-	return recvTestClient(t).BuildPollCreation(name, options, count)
+	return BuildPollCreation(name, options, count)
 }
 
 // --- EncryptPollVote / DecryptPollVote ---
@@ -120,14 +121,14 @@ func cliBuildPoll(t *testing.T, name string, options []string, count int) *waE2E
 // DecryptPollVote os devolve. E' o unico caminho de msgsecret que da' para
 // exercitar de ponta a ponta sem sessao Signal.
 func TestPollVoteRoundTrip(t *testing.T) {
-	stub := &stubMsgSecretStore{secret: recvTestSecret, origSender: recvTestOtherJID}
-	cli := recvSecretClient(t, stub)
+	stub := &stubMsgSecretStore{secret: testSecret, origSender: testOtherJID}
+	f := newFakeTransport().withSecrets(stub)
 	pollInfo := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "POLL1",
 	}
 
-	voteMsg, err := cli.BuildPollVote(context.Background(), pollInfo, []string{"pizza"})
+	voteMsg, err := BuildPollVote(context.Background(), f, pollInfo, []string{"pizza"})
 	if err != nil {
 		t.Fatalf("BuildPollVote: %v", err)
 	}
@@ -144,11 +145,11 @@ func TestPollVoteRoundTrip(t *testing.T) {
 	// um JID de telefone... nao: veio de pn, entao usa o proprio pn).
 	voteEvt := &events.Message{
 		Info: types.MessageInfo{MessageSource: types.MessageSource{
-			Chat: recvTestGroupJID, Sender: cli.getOwnID(),
+			Chat: testGroupJID, Sender: testOwnJID,
 		}},
 		Message: voteMsg,
 	}
-	vote, err := cli.DecryptPollVote(context.Background(), voteEvt)
+	vote, err := DecryptPollVote(context.Background(), f, voteEvt)
 	if err != nil {
 		t.Fatalf("DecryptPollVote: %v", err)
 	}
@@ -165,19 +166,19 @@ func TestEncryptPollVoteOwnJIDFollowsPollSender(t *testing.T) {
 	tests := []struct {
 		name       string
 		pollSender types.JID
-		wantOwn    func(*Client) types.JID
+		wantOwn    func(Transport) types.JID
 	}{
-		{"enquete de pn vota com pn", recvTestOtherJID, (*Client).getOwnID},
-		{"enquete de lid vota com lid", types.NewJID("55443322", types.HiddenUserServer), (*Client).getOwnLID},
+		{"enquete de pn vota com pn", testOtherJID, Transport.OwnID},
+		{"enquete de lid vota com lid", types.NewJID("55443322", types.HiddenUserServer), Transport.OwnLID},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret, origSender: tc.pollSender})
+			f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret, origSender: tc.pollSender})
 			pollInfo := &types.MessageInfo{
-				MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: tc.pollSender, IsGroup: true},
+				MessageSource: types.MessageSource{Chat: testGroupJID, Sender: tc.pollSender, IsGroup: true},
 				ID:            "POLL1",
 			}
-			update, err := cli.EncryptPollVote(context.Background(), pollInfo, &waE2E.PollVoteMessage{
+			update, err := EncryptPollVote(context.Background(), f, pollInfo, &waE2E.PollVoteMessage{
 				SelectedOptions: HashPollOptions([]string{"pizza"}),
 			})
 			if err != nil {
@@ -186,10 +187,10 @@ func TestEncryptPollVoteOwnJIDFollowsPollSender(t *testing.T) {
 			// Decripta declarando como votante o JID esperado; se a escolha
 			// interna tivesse sido a outra, o AAD nao bateria.
 			voteEvt := &events.Message{
-				Info:    types.MessageInfo{MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: tc.wantOwn(cli)}},
+				Info:    types.MessageInfo{MessageSource: types.MessageSource{Chat: testGroupJID, Sender: tc.wantOwn(f)}},
 				Message: &waE2E.Message{PollUpdateMessage: update},
 			}
-			if _, err = cli.DecryptPollVote(context.Background(), voteEvt); err != nil {
+			if _, err = DecryptPollVote(context.Background(), f, voteEvt); err != nil {
 				t.Fatalf("decrypt com o JID esperado falhou: %v", err)
 			}
 		})
@@ -197,13 +198,13 @@ func TestEncryptPollVoteOwnJIDFollowsPollSender(t *testing.T) {
 }
 
 func TestEncryptPollVoteTimestamp(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: recvTestSecret, origSender: recvTestOtherJID})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: testSecret, origSender: testOtherJID})
 	pollInfo := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "POLL1",
 	}
 	before := time.Now().UnixMilli()
-	update, err := cli.EncryptPollVote(context.Background(), pollInfo, &waE2E.PollVoteMessage{})
+	update, err := EncryptPollVote(context.Background(), f, pollInfo, &waE2E.PollVoteMessage{})
 	after := time.Now().UnixMilli()
 	if err != nil {
 		t.Fatalf("erro: %v", err)
@@ -217,12 +218,12 @@ func TestEncryptPollVoteTimestamp(t *testing.T) {
 // (envelope com PollUpdateMessage nil) — comportamento do upstream, travado
 // aqui para que uma mudanca acidental apareca.
 func TestBuildPollVotePropagatesError(t *testing.T) {
-	cli := recvSecretClient(t, &stubMsgSecretStore{secret: nil})
+	f := newFakeTransport().withSecrets(&stubMsgSecretStore{secret: nil})
 	pollInfo := &types.MessageInfo{
-		MessageSource: types.MessageSource{Chat: recvTestGroupJID, Sender: recvTestOtherJID, IsGroup: true},
+		MessageSource: types.MessageSource{Chat: testGroupJID, Sender: testOtherJID, IsGroup: true},
 		ID:            "POLL1",
 	}
-	msg, err := cli.BuildPollVote(context.Background(), pollInfo, []string{"pizza"})
+	msg, err := BuildPollVote(context.Background(), f, pollInfo, []string{"pizza"})
 	if err == nil {
 		t.Fatal("esperava erro")
 	}
