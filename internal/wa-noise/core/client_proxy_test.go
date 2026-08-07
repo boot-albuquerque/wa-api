@@ -185,3 +185,49 @@ func TestSetHTTPClientsAreIndependent(t *testing.T) {
 		t.Error("cada setter tem que trocar so' o seu proprio cliente")
 	}
 }
+
+// Os tres campos de http.Client nunca podem virar nil: proxyconf.Apply escreve
+// em h.Transport nos tres, e unlockedConnect passa websocketHTTP e preLoginHTTP
+// direto para o frame socket. Antes da correcao da F55, um setter com nil
+// deixava o campo nil e o proximo SetProxy derrubava o processo.
+func TestSettersDeHTTPClientTraduzemNilParaPadrao(t *testing.T) {
+	casos := map[string]struct {
+		set func(*Client, *http.Client)
+		get func(*Client) *http.Client
+	}{
+		"media":     {(*Client).SetMediaHTTPClient, func(c *Client) *http.Client { return c.mediaHTTP }},
+		"websocket": {(*Client).SetWebsocketHTTPClient, func(c *Client) *http.Client { return c.websocketHTTP }},
+		"prelogin":  {(*Client).SetPreLoginHTTPClient, func(c *Client) *http.Client { return c.preLoginHTTP }},
+	}
+	for name, c := range casos {
+		t.Run(name, func(t *testing.T) {
+			cli := proxyTestClient()
+			c.set(cli, nil)
+
+			got := c.get(cli)
+			if got == nil {
+				t.Fatal("o campo ficou nil apos o setter receber nil")
+			}
+			if got.Transport == nil {
+				t.Error("o cliente padrao deveria vir com Transport preenchido")
+			}
+
+			// A prova de que a F55 foi fechada: com o campo nil, isto era um
+			// nil deref.
+			if err := cli.SetProxyAddress("http://127.0.0.1:1"); err != nil {
+				t.Fatalf("SetProxyAddress apos nil: %v", err)
+			}
+		})
+	}
+}
+
+// O setter com um cliente de verdade continua guardando exatamente o ponteiro
+// que recebeu — a normalizacao de nil nao pode virar uma copia silenciosa.
+func TestSettersDeHTTPClientPreservamOPonteiroRecebido(t *testing.T) {
+	cli := proxyTestClient()
+	meu := &http.Client{}
+	cli.SetMediaHTTPClient(meu)
+	if cli.mediaHTTP != meu {
+		t.Error("o setter deveria guardar o mesmo ponteiro")
+	}
+}

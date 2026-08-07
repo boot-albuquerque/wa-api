@@ -532,10 +532,17 @@ acontecer nos dois lugares, ou `validatePatch` precisa varrer as mutações uma
 vez antes de chamar `updateHash`. Vale mandar o patch para o upstream
 (`wa-api/internal/wa-noise`), já que o bug não é nosso.
 
-**Status**: **não corrigido**. A Fase B do ADR-0004 é estrutural por contrato
-(`PATCHES.md` declara "comportamento não mudou" nas entradas de divisão) e
-trocar panic por erro é mudança de comportamento observável. Pendente de
-decisão do usuário — candidato natural à mesma leva de F16/F18.
+**Status**: **CORRIGIDO** (lote A da leva de saneamento, 2026-08-07). Os
+quatro cortes passam agora por `trailingValueMAC`/`splitValueMAC` em
+`internal/wa-noise/protocol/appstate/mutation_blob.go`, que devolvem
+`ErrShortMutationBlob` com o índice da mutação na mensagem.
+`generatePatchMAC` mudou de assinatura para `([]byte, error)` (dois chamadores
+ajustados). `splitValueMAC` exige `macLength+cbcIVLength`, não só o MAC: quem
+chama corta `content[:cbcIVLength]` logo depois, e validar só o MAC apenas
+mudaria o panic de lugar. Travado por `TestSplitValueMACExigeIVEMac`,
+`TestTrailingValueMACExigeApenasOMac`,
+`TestGeneratePatchMACRejeitaBlobCurtoSemPanic` e
+`TestUpdateHashRejeitaBlobCurtoSemPanic`.
 
 ---
 
@@ -783,12 +790,14 @@ não houver, é derrubada de processo por frame malformado.
 `binary/errors.go` e os chamadores já tratam erro nesses pontos, então o
 fix é local e não muda a assinatura de nada.
 
-**Status**: **não corrigido**. É mudança de comportamento (panic vira erro)
-e a Fase C é movimentação mais cobertura. O comportamento atual está travado
-por `TestReadNodePanicsOnNonStringTag` e `TestJIDReadersPanicOnNonStringUser`
-em `decoder_node_test.go`, que falham com uma mensagem apontando para esta
-entrada se o panic deixar de acontecer — ou seja, quem corrigir vai ser
-avisado de que precisa reescrever os dois testes como prova do fix.
+**Status**: **CORRIGIDO** (lote A, 2026-08-07). A tag do nó passou a usar
+assertion com `ok` devolvendo `ErrInvalidNode`; os quatro pontos de JID passam
+pelo helper `jidString`, que devolve `ErrInvalidJIDType` nomeando o campo. Os
+dois testes que travavam o panic foram reescritos como prova do erro:
+`TestReadNodeRejeitaTagNaoStringSemPanic`,
+`TestJIDReadersRejeitamUserNaoStringSemPanic` e
+`TestJIDStringClassificaTipoErrado`. Também foram cobertos os
+`server.(string)` de `readJIDPair`, que a entrada original não listava.
 
 ---
 
@@ -810,8 +819,9 @@ a primeira coisa que roda sobre o payload decifrado.
 **Correção sugerida**: `if len(data) == 0 { return nil, io.ErrUnexpectedEOF }`
 no topo. `Unpack` já devolve erro, então nenhum chamador muda.
 
-**Status**: **não corrigido**, mesmo racional da F24. Travado por
-`TestUnpackPanicsOnEmptyFrame` em `unpack_test.go`.
+**Status**: **CORRIGIDO** (lote A, 2026-08-07). `Unpack` devolve
+`io.ErrUnexpectedEOF` com frame vazio. Travado por
+`TestUnpackRejeitaFrameVazioSemPanic`, que cobre `nil` e `[]byte{}`.
 
 ---
 
@@ -1819,8 +1829,10 @@ sobre corrigir agora ou depois.
 - **Correção sugerida**: `if len(preKeys) == 0 { t.Log().Warnf(...); return }`
   logo depois da checagem de erro, antes do `Infof` de "Uploading %d new
   prekeys". Também evita enviar um `<list>` vazio ao servidor.
-- **Status**: **não corrigido**. Bug pré-existente fora do escopo do lote 4, que
-  era extração pura; preservado bit a bit. Registrado para decisão do usuário.
+- **Status**: **CORRIGIDO** (lote A, 2026-08-07). `Upload` sai cedo com
+  `Warnf` quando `GetOrGenPreKeys` devolve fatia vazia, antes do `Infof` e do
+  IQ — o que também evita mandar um `<list>` vazio ao servidor. Travado por
+  `TestUploadComListaVaziaNaoEntraEmPanicNemEnviaIQ`.
 
 ---
 
@@ -2073,8 +2085,13 @@ A opcao 2 e' a preferida: `unlockedConnect` le `cli.websocketHTTP` /
 `cli.preLoginHTTP` e passa direto para `socket.NewFrameSocket`, entao um nil ali
 tambem quebra a conexao, nao so' o proxy.
 
-**Status**: nao corrigido. Bug pre-existente fora do escopo do lote 10, e a
-regra do projeto proibe corrigir de graca. Registrado para decisao do usuario.
+**Status**: **CORRIGIDO** (lote A, 2026-08-07) pela opcao 2, a preferida da
+entrada. Os tres setters passam por `orDefaultHTTPClient`, que traduz `nil`
+para um `http.Client` padrao novo — mantendo o invariante "os tres campos nunca
+sao nil" que `proxyconf.Apply` e `unlockedConnect` assumem. Travado por
+`TestSettersDeHTTPClientTraduzemNilParaPadrao` (que termina chamando
+`SetProxyAddress`, o nil deref original) e
+`TestSettersDeHTTPClientPreservamOPonteiroRecebido`.
 
 ---
 

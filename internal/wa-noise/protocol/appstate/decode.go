@@ -90,8 +90,8 @@ func (proc *Processor) validatePatch(
 		for i := maxIndex - 1; i >= 0; i-- {
 			if hmac.Equal(patch.Mutations[i].GetRecord().GetIndex().GetBlob(), indexMAC) {
 				if patch.Mutations[i].GetOperation() == waServerSync.SyncdMutation_SET {
-					value := patch.Mutations[i].GetRecord().GetValue().GetBlob()
-					return value[len(value)-macLength:], nil
+					return trailingValueMAC(patch.Mutations[i].GetRecord().GetValue().GetBlob(),
+						fmt.Sprintf("blob SET anterior da mutacao #%d", i+1))
 				}
 				// Found a REMOVE operation, no previous value
 				return nil, nil
@@ -111,7 +111,11 @@ func (proc *Processor) validatePatch(
 		if err != nil {
 			return
 		}
-		patchMAC := generatePatchMAC(patch, patchName, keys.PatchMAC, patch.GetVersion().GetVersion())
+		var patchMAC []byte
+		patchMAC, err = generatePatchMAC(patch, patchName, keys.PatchMAC, patch.GetVersion().GetVersion())
+		if err != nil {
+			return
+		}
 		if !hmac.Equal(patchMAC, patch.GetPatchMAC()) {
 			err = fmt.Errorf("failed to verify patch v%d: %w", version, ErrMismatchingPatchMAC)
 			return

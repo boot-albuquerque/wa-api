@@ -3,6 +3,8 @@ package binary
 import (
 	"bytes"
 	"compress/zlib"
+	"errors"
+	"io"
 	"testing"
 )
 
@@ -86,11 +88,19 @@ func TestUnpackReportsBrokenZlibStream(t *testing.T) {
 // ACHADO (HOUSEKEEP F25): Unpack indexa data[0] sem checar o tamanho, entao um
 // frame VAZIO vindo da rede entra em panic em vez de devolver erro. O teste
 // trava o comportamento atual, como o F24 em decoder_node_test.go.
-func TestUnpackPanicsOnEmptyFrame(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("Unpack(nil) nao entrou em panic — atualize HOUSEKEEP F25")
-		}
-	}()
-	_, _ = Unpack(nil)
+// Unpack roda sobre o payload decifrado do socket, antes de qualquer parsing:
+// e' o ponto mais raso exposto a dado nao confiavel. Um frame de zero bytes
+// dava panic no data[0] ate' a correcao da F25.
+func TestUnpackRejeitaFrameVazioSemPanic(t *testing.T) {
+	for name, data := range map[string][]byte{"nil": nil, "vazio": {}} {
+		t.Run(name, func(t *testing.T) {
+			out, err := Unpack(data)
+			if !errors.Is(err, io.ErrUnexpectedEOF) {
+				t.Errorf("err = %v, esperava io.ErrUnexpectedEOF", err)
+			}
+			if out != nil {
+				t.Errorf("out = %v, esperava nil", out)
+			}
+		})
+	}
 }

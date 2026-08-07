@@ -13,6 +13,11 @@ import (
 // (without the first byte). There's currently no corresponding Pack function because Marshal
 // already returns the data with a leading zero (i.e. not compressed).
 func Unpack(data []byte) ([]byte, error) {
+	// data vem decifrado do socket: e' entrada nao confiavel, e um frame de
+	// zero bytes chegava aqui e dava panic no data[0] (F25 em HOUSEKEEP.md).
+	if len(data) == 0 {
+		return nil, io.ErrUnexpectedEOF
+	}
 	dataType, data := data[0], data[1:]
 	if zlibCompressedFlag&dataType > 0 {
 		if decompressor, err := zlib.NewReader(bytes.NewReader(data)); err != nil {

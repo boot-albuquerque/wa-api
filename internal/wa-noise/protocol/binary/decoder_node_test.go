@@ -183,33 +183,52 @@ func TestReadNodeRejectsEmptyListAndEmptyTag(t *testing.T) {
 // fique explicita e para que consertar seja uma mudanca deliberada, com este
 // teste virando a prova do fix. Mesmo tratamento que a Fase B deu ao panic
 // latente de record.Session.
-func TestReadNodePanicsOnNonStringTag(t *testing.T) {
+// read() pode devolver nil (ListEmpty), types.JID ou []Node na posicao da tag
+// do no'. Antes da correcao da F24 a assercao `rawDesc.(string)` entrava em
+// panic com esses bytes, que vem direto do socket.
+func TestReadNodeRejeitaTagNaoStringSemPanic(t *testing.T) {
 	nonStringTags := map[string][]byte{
 		"lista vazia (nil)": {token.List8, 0x01, token.ListEmpty},
 		"JID":               {token.List8, 0x01, token.JIDPair, 0x01, 0x01},
 	}
 	for name, data := range nonStringTags {
 		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Error("readNode nao entrou em panic — o comportamento mudou, atualize HOUSEKEEP F24")
-				}
-			}()
-			_, _ = newDecoder(data).readNode()
+			n, err := newDecoder(data).readNode()
+			if !errors.Is(err, ErrInvalidNode) {
+				t.Errorf("err = %v, esperava ErrInvalidNode", err)
+			}
+			if n != nil {
+				t.Errorf("no' = %v, esperava nil", n)
+			}
 		})
 	}
 }
 
-// A mesma falta de checagem existe nos leitores de JID: readADJID, readFBJID e
-// readInteropJID fazem `user.(string)`. Mesmo achado F24.
-func TestJIDReadersPanicOnNonStringUser(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("readADJID nao entrou em panic — atualize HOUSEKEEP F24")
-		}
-	}()
-	// agente, device e, na posicao do user, uma lista vazia.
-	_, _ = newDecoder([]byte{0x00, 0x00, token.ListEmpty}).readADJID()
+// A mesma falta de checagem existia nos leitores de JID: readADJID, readFBJID
+// e readInteropJID faziam `user.(string)`. Mesmo achado F24, mesma correcao —
+// agora todos passam por jidString e devolvem ErrInvalidJIDType.
+func TestJIDReadersRejeitamUserNaoStringSemPanic(t *testing.T) {
+	casos := map[string]struct {
+		data []byte
+		read func(*binaryDecoder) (interface{}, error)
+	}{
+		"readADJID": {
+			// agente, device e, na posicao do user, uma lista vazia.
+			data: []byte{0x00, 0x00, token.ListEmpty},
+			read: (*binaryDecoder).readADJID,
+		},
+	}
+	for name, c := range casos {
+		t.Run(name, func(t *testing.T) {
+			v, err := c.read(newDecoder(c.data))
+			if err == nil {
+				t.Fatalf("esperava erro, veio %v", v)
+			}
+			if !errors.Is(err, ErrInvalidJIDType) {
+				t.Errorf("err = %v, esperava ErrInvalidJIDType", err)
+			}
+		})
+	}
 }
 
 func TestReadNodePropagatesTruncationAtEveryStage(t *testing.T) {
@@ -258,5 +277,38 @@ func TestUnmarshalReadsNestedStructure(t *testing.T) {
 	}
 	if got := item.Attrs["jid"].(types.JID).User; got != "5511999999999" {
 		t.Errorf("jid do item = %q", got)
+	}
+}
+
+// jidString e' o ponto unico por onde os quatro leitores de JID passam desde a
+// correcao da F24. Testado direto porque montar bytes que facam CADA leitor
+// receber um tipo especifico na posicao do user e' mais fragil do que
+// util — o que importa e' que o helper nunca entre em panic e sempre
+// classifique o erro como ErrInvalidJIDType.
+func TestJIDStringClassificaTipoErrado(t *testing.T) {
+	naoStrings := map[string]interface{}{
+		"nil":   nil,
+		"JID":   types.NewJID("5511", types.DefaultUserServer),
+		"nodes": []Node{{Tag: "x"}},
+		"int":   42,
+	}
+	for name, v := range naoStrings {
+		t.Run(name, func(t *testing.T) {
+			got, err := jidString(v, "user")
+			if !errors.Is(err, ErrInvalidJIDType) {
+				t.Errorf("err = %v, esperava ErrInvalidJIDType", err)
+			}
+			if got != "" {
+				t.Errorf("got = %q, esperava vazio", got)
+			}
+			if err != nil && !strings.Contains(err.Error(), "user") {
+				t.Errorf("a mensagem deveria nomear o campo: %v", err)
+			}
+		})
+	}
+
+	got, err := jidString("5511", "user")
+	if err != nil || got != "5511" {
+		t.Errorf("jidString(string) = %q, %v; esperava passar direto", got, err)
 	}
 }

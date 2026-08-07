@@ -257,3 +257,24 @@ func TestLockUploadIsMutuallyExclusive(t *testing.T) {
 		t.Fatal("segunda goroutine nao entrou depois do Unlock")
 	}
 }
+
+// GetOrGenPreKeys e' contrato de interface publica (store.PreKeyStore) e nada
+// nele proibe devolver fatia vazia sem erro. Antes da correcao da F51, isso
+// virava preKeys[-1] la' no fim de Upload — e Upload roda em goroutine, sem
+// recover, entao o panic derrubava o processo. Agora sai cedo, sem mandar um
+// <list> vazio para o servidor.
+func TestUploadComListaVaziaNaoEntraEmPanicNemEnviaIQ(t *testing.T) {
+	for _, keys := range map[string][]*keys.PreKey{"nil": nil, "vazia": {}} {
+		tr := newFakeTransport(t)
+		tr.preKeyStore().genKeys = keys
+
+		Upload(t.Context(), tr, false)
+
+		if n := len(tr.calls()); n != 0 {
+			t.Errorf("esperava nenhum IQ enviado, vieram %d", n)
+		}
+		if n := tr.preKeyStore().markCalls; n != 0 {
+			t.Errorf("esperava nenhuma marcacao de upload, vieram %d", n)
+		}
+	}
+}

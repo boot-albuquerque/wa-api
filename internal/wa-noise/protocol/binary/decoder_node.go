@@ -134,7 +134,14 @@ func (r *binaryDecoder) readNode() (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret.Tag = rawDesc.(string)
+	// read() devolve interface{} e pode legitimamente trazer nil (ListEmpty),
+	// types.JID ou []Node. A assercao sem `ok` virava panic com bytes do
+	// socket (F24 em HOUSEKEEP.md).
+	tag, ok := rawDesc.(string)
+	if !ok {
+		return nil, fmt.Errorf("%w: expected string tag, got %T", ErrInvalidNode, rawDesc)
+	}
+	ret.Tag = tag
 	if listSize == 0 || ret.Tag == "" {
 		return nil, ErrInvalidNode
 	}

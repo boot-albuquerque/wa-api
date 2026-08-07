@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -101,20 +102,29 @@ func TestGeneratePatchMACCoversAllValueMACs(t *testing.T) {
 		},
 	}
 
-	mac := generatePatchMAC(patch, WAPatchRegular, key, 3)
+	mustPatchMAC := func(p *waServerSync.SyncdPatch, name WAPatchName, version uint64) []byte {
+		t.Helper()
+		mac, err := generatePatchMAC(p, name, key, version)
+		if err != nil {
+			t.Fatalf("generatePatchMAC: %v", err)
+		}
+		return mac
+	}
+
+	mac := mustPatchMAC(patch, WAPatchRegular, 3)
 	if len(mac) != macLength {
 		t.Fatalf("patch MAC tem %d bytes", len(mac))
 	}
-	if hmac.Equal(mac, generatePatchMAC(patch, WAPatchRegular, key, 4)) {
+	if hmac.Equal(mac, mustPatchMAC(patch, WAPatchRegular, 4)) {
 		t.Error("versao deveria entrar no patch MAC")
 	}
-	if hmac.Equal(mac, generatePatchMAC(patch, WAPatchRegularLow, key, 3)) {
+	if hmac.Equal(mac, mustPatchMAC(patch, WAPatchRegularLow, 3)) {
 		t.Error("nome deveria entrar no patch MAC")
 	}
 
 	altered := proto.Clone(patch).(*waServerSync.SyncdPatch)
 	altered.Mutations[1].Record.Value.Blob = fillBytes(macLength, 9)
-	if hmac.Equal(mac, generatePatchMAC(altered, WAPatchRegular, key, 3)) {
+	if hmac.Equal(mac, mustPatchMAC(altered, WAPatchRegular, 3)) {
 		t.Error("value MAC de uma mutacao deveria entrar no patch MAC")
 	}
 }
@@ -243,5 +253,52 @@ func TestUpdateHashPassesMutationIndexAsMaxIndex(t *testing.T) {
 		if got != i {
 			t.Errorf("maxIndex da mutacao #%d = %d, esperado %d", i, got, i)
 		}
+	}
+}
+
+// generatePatchMAC roda ANTES de qualquer decodificacao, sobre mutacoes que
+// vieram do servidor. Um blob curto derrubava o processo aqui (F19); agora sai
+// como ErrShortMutationBlob e a mensagem diz qual mutacao veio curta.
+func TestGeneratePatchMACRejeitaBlobCurtoSemPanic(t *testing.T) {
+	key := fillBytes(macLength, 0x11)
+	curtos := map[string][]byte{
+		"nil":     nil,
+		"vazio":   {},
+		"1 byte":  fillBytes(1, 7),
+		"MAC - 1": fillBytes(macLength-1, 7),
+	}
+	for name, blob := range curtos {
+		t.Run(name, func(t *testing.T) {
+			patch := &waServerSync.SyncdPatch{
+				SnapshotMAC: fillBytes(macLength, 0xAA),
+				Mutations: []*waServerSync.SyncdMutation{
+					mutationWithBlobs(waServerSync.SyncdMutation_SET, fillBytes(macLength, 1), fillBytes(macLength, 2)),
+					mutationWithBlobs(waServerSync.SyncdMutation_SET, fillBytes(macLength, 3), blob),
+				},
+			}
+			mac, err := generatePatchMAC(patch, WAPatchRegular, key, 3)
+			if !errors.Is(err, ErrShortMutationBlob) {
+				t.Fatalf("err = %v, esperava ErrShortMutationBlob", err)
+			}
+			if mac != nil {
+				t.Errorf("mac = %x, esperava nil", mac)
+			}
+			if !strings.Contains(err.Error(), "#2") {
+				t.Errorf("a mensagem deveria apontar a mutacao #2: %v", err)
+			}
+		})
+	}
+}
+
+// updateHash percorre as mesmas mutacoes cruas, num caminho independente do de
+// generatePatchMAC — a checagem precisa existir nos dois.
+func TestUpdateHashRejeitaBlobCurtoSemPanic(t *testing.T) {
+	var hs HashState
+	mutations := []*waServerSync.SyncdMutation{
+		mutationWithBlobs(waServerSync.SyncdMutation_SET, fillBytes(macLength, 1), fillBytes(macLength-1, 2)),
+	}
+	_, err := hs.updateHash(mutations, func([]byte, int) ([]byte, error) { return nil, nil })
+	if !errors.Is(err, ErrShortMutationBlob) {
+		t.Fatalf("err = %v, esperava ErrShortMutationBlob", err)
 	}
 }

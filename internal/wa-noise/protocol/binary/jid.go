@@ -42,6 +42,19 @@ func (w *binaryEncoder) writeJID(jid types.JID) {
 	}
 }
 
+// jidString extrai a string de um valor devolvido por read(). read() devolve
+// interface{} e pode legitimamente trazer nil (ListEmpty), types.JID ou
+// []Node — as assercoes diretas `v.(string)` viravam panic com bytes vindos do
+// socket (F24 em HOUSEKEEP.md). O nome do campo entra na mensagem para que o
+// erro diga QUAL posicao do JID veio com o tipo errado.
+func jidString(v interface{}, field string) (string, error) {
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("%w: %s: expected string, got %T", ErrInvalidJIDType, field, v)
+	}
+	return s, nil
+}
+
 func (r *binaryDecoder) readJIDPair() (interface{}, error) {
 	user, err := r.read(true)
 	if err != nil {
@@ -52,10 +65,19 @@ func (r *binaryDecoder) readJIDPair() (interface{}, error) {
 		return nil, err
 	} else if server == nil {
 		return nil, ErrInvalidJIDType
-	} else if user == nil {
-		return types.NewJID("", server.(string)), nil
 	}
-	return types.NewJID(user.(string), server.(string)), nil
+	serverStr, err := jidString(server, "server")
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return types.NewJID("", serverStr), nil
+	}
+	userStr, err := jidString(user, "user")
+	if err != nil {
+		return nil, err
+	}
+	return types.NewJID(userStr, serverStr), nil
 }
 
 func (r *binaryDecoder) readInteropJID() (interface{}, error) {
@@ -77,8 +99,12 @@ func (r *binaryDecoder) readInteropJID() (interface{}, error) {
 	} else if server != types.InteropServer {
 		return nil, fmt.Errorf("%w: expected %q, got %q", ErrInvalidJIDType, types.InteropServer, server)
 	}
+	userStr, err := jidString(user, "user")
+	if err != nil {
+		return nil, err
+	}
 	return types.JID{
-		User:       user.(string),
+		User:       userStr,
 		Device:     uint16(device),
 		Integrator: uint16(integrator),
 		Server:     types.InteropServer,
@@ -100,10 +126,18 @@ func (r *binaryDecoder) readFBJID() (interface{}, error) {
 	} else if server != types.MessengerServer {
 		return nil, fmt.Errorf("%w: expected %q, got %q", ErrInvalidJIDType, types.MessengerServer, server)
 	}
+	userStr, err := jidString(user, "user")
+	if err != nil {
+		return nil, err
+	}
+	serverStr, err := jidString(server, "server")
+	if err != nil {
+		return nil, err
+	}
 	return types.JID{
-		User:   user.(string),
+		User:   userStr,
 		Device: uint16(device),
-		Server: server.(string),
+		Server: serverStr,
 	}, nil
 }
 
@@ -120,5 +154,9 @@ func (r *binaryDecoder) readADJID() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return types.NewADJID(user.(string), agent, device), nil
+	userStr, err := jidString(user, "user")
+	if err != nil {
+		return nil, err
+	}
+	return types.NewADJID(userStr, agent, device), nil
 }

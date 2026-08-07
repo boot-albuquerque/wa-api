@@ -117,7 +117,11 @@ func TestEncodePatchBumpsVersionForMACs(t *testing.T) {
 	if !hmac.Equal(patch.GetSnapshotMAC(), expected.generateSnapshotMAC(WAPatchCriticalBlock, keys.SnapshotMAC)) {
 		t.Error("snapshot MAC nao corresponde a versao incrementada")
 	}
-	if !hmac.Equal(patch.GetPatchMAC(), generatePatchMAC(patch, WAPatchCriticalBlock, keys.PatchMAC, expected.Version)) {
+	wantMAC, err := generatePatchMAC(patch, WAPatchCriticalBlock, keys.PatchMAC, expected.Version)
+	if err != nil {
+		t.Fatalf("generatePatchMAC: %v", err)
+	}
+	if !hmac.Equal(patch.GetPatchMAC(), wantMAC) {
 		t.Error("patch MAC nao corresponde a versao incrementada")
 	}
 }

@@ -10,4 +10,7 @@ var (
 	ErrMismatchingContentMAC            = errors.New("mismatching content MAC")
 	ErrMismatchingIndexMAC              = errors.New("mismatching index MAC")
 	ErrKeyNotFound                      = errors.New("didn't find app state key")
+	// ErrShortMutationBlob: o blob da SyncdValue chegou menor que o layout
+	// minimo (IV + MAC). Ver mutation_blob.go e F19 em HOUSEKEEP.md.
+	ErrShortMutationBlob = errors.New("mutation value blob shorter than the minimum layout")
 )

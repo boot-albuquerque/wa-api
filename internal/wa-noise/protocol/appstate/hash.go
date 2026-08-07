@@ -36,8 +36,12 @@ func (hs *HashState) updateHash(mutations []*waServerSync.SyncdMutation, getPrev
 
 	for i, mutation := range mutations {
 		if mutation.GetOperation() == waServerSync.SyncdMutation_SET {
-			value := mutation.GetRecord().GetValue().GetBlob()
-			added = append(added, value[len(value)-macLength:])
+			mac, err := trailingValueMAC(mutation.GetRecord().GetValue().GetBlob(),
+				fmt.Sprintf("blob SET da mutacao #%d", i+1))
+			if err != nil {
+				return warnings, err
+			}
+			added = append(added, mac)
 		}
 		indexMAC := mutation.GetRecord().GetIndex().GetBlob()
 		removal, err := getPrevSetValueMAC(indexMAC, i)
@@ -76,16 +80,20 @@ func (hs *HashState) generateSnapshotMAC(name WAPatchName, key []byte) []byte {
 	return concatAndHMAC(sha256.New, key, hs.Hash[:], uint64ToBytes(hs.Version), []byte(name))
 }
 
-func generatePatchMAC(patch *waServerSync.SyncdPatch, name WAPatchName, key []byte, version uint64) []byte {
+func generatePatchMAC(patch *waServerSync.SyncdPatch, name WAPatchName, key []byte, version uint64) ([]byte, error) {
 	dataToHash := make([][]byte, len(patch.GetMutations())+3)
 	dataToHash[0] = patch.GetSnapshotMAC()
 	for i, mutation := range patch.Mutations {
-		val := mutation.GetRecord().GetValue().GetBlob()
-		dataToHash[i+1] = val[len(val)-macLength:]
+		mac, err := trailingValueMAC(mutation.GetRecord().GetValue().GetBlob(),
+			fmt.Sprintf("blob da mutacao #%d do patch", i+1))
+		if err != nil {
+			return nil, err
+		}
+		dataToHash[i+1] = mac
 	}
 	dataToHash[len(dataToHash)-2] = uint64ToBytes(version)
 	dataToHash[len(dataToHash)-1] = []byte(name)
-	return concatAndHMAC(sha256.New, key, dataToHash...)
+	return concatAndHMAC(sha256.New, key, dataToHash...), nil
 }
 
 func generateContentMAC(operation waServerSync.SyncdMutation_SyncdOperation, data, keyID, key []byte) []byte {

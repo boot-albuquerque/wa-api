@@ -1007,6 +1007,7 @@ internal/wa-noise/core.newsletterTransport.WaitResponse	EXCLUDED	X5
 internal/wa-noise/core.nodeToPreKeyBundle	EXCLUDED	X5
 internal/wa-noise/core.notifTransport.DispatchEvent	EXCLUDED	X5
 internal/wa-noise/core.notifTransport.Log	EXCLUDED	X5
+internal/wa-noise/core.orDefaultHTTPClient	EXCLUDED	X5
 internal/wa-noise/core.pairTransport.ConfiguredClientType	EXCLUDED	X5
 internal/wa-noise/core.pairTransport.Disconnect	EXCLUDED	X5
 internal/wa-noise/core.pairTransport.DispatchEvent	EXCLUDED	X5
@@ -1398,6 +1399,8 @@ internal/wa-noise/protocol/appstate.parseSnapshotInternal	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.patchOutput.AddMAC	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.patchOutput.RemoveMAC	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.patchOutput.RemoveMAC.func1	EXCLUDED	X6
+internal/wa-noise/protocol/appstate.splitValueMAC	EXCLUDED	X5
+internal/wa-noise/protocol/appstate.trailingValueMAC	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.uint64ToBytes	EXCLUDED	X5
 internal/wa-noise/protocol/appstate/lthash.LTHash.SubtractThenAdd	EXCLUDED	X5
 internal/wa-noise/protocol/appstate/lthash.LTHash.SubtractThenAddInPlace	EXCLUDED	X5
@@ -1484,6 +1487,7 @@ internal/wa-noise/protocol/binary.binaryEncoder.writeNode	EXCLUDED	X5
 internal/wa-noise/protocol/binary.binaryEncoder.writePackedBytes	EXCLUDED	X5
 internal/wa-noise/protocol/binary.binaryEncoder.writeString	EXCLUDED	X5
 internal/wa-noise/protocol/binary.binaryEncoder.writeStringRaw	EXCLUDED	X5
+internal/wa-noise/protocol/binary.jidString	EXCLUDED	X5
 internal/wa-noise/protocol/binary.newDecoder	EXCLUDED	X5
 internal/wa-noise/protocol/binary.newEncoder	EXCLUDED	X5
 internal/wa-noise/protocol/binary.packHex	EXCLUDED	X5

@@ -63,6 +63,15 @@ func Upload(ctx context.Context, t Transport, initialUpload bool) {
 		t.Log().Errorf("Failed to get prekeys to upload: %v", err)
 		return
 	}
+	// PreKeyStore e' interface publica e nada no contrato dela proibe devolver
+	// uma fatia vazia sem erro. Sem esta guarda, o
+	// preKeys[len(preKeys)-1] la' embaixo seria preKeys[-1] e derrubaria o
+	// processo — Upload roda em goroutine, sem recover (F51 em HOUSEKEEP.md).
+	// Sair aqui tambem evita mandar um <list> vazio ao servidor.
+	if len(preKeys) == 0 {
+		t.Log().Warnf("Prekey store returned no keys to upload; skipping upload")
+		return
+	}
 	t.Log().Infof("Uploading %d new prekeys to server", len(preKeys))
 	_, err = t.SendIQ(ctx, IQ{
 		Namespace: "encrypt",

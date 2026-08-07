@@ -53,7 +53,10 @@ func (proc *Processor) decodeMutation(
 		return
 	}
 	content := bytes.Clone(mutation.GetRecord().GetValue().GetBlob())
-	content, valueMAC = content[:len(content)-macLength], content[len(content)-macLength:]
+	content, valueMAC, err = splitValueMAC(content, fmt.Sprintf("blob da mutacao #%d", i+1))
+	if err != nil {
+		return
+	}
 	if validateMACs {
 		expectedValueMAC := generateContentMAC(mutation.GetOperation(), content, keyID, keys.ValueMAC)
 		if !hmac.Equal(expectedValueMAC, valueMAC) {

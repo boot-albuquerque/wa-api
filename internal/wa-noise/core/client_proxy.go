@@ -87,20 +87,43 @@ func (cli *Client) setTransport(transport *http.Transport, opt SetProxyOptions) 
 // na raiz: sao escrita direta em campo de Client, nao algo que proxyconf possa
 // fazer a partir de Clients (que carrega copias dos ponteiros).
 
+// orDefaultHTTPClient traduz nil para um http.Client padrao novo.
+//
+// Os tres campos de http.Client do Client nunca podem ser nil: proxyconf.Apply
+// escreve em h.Transport nos tres, e unlockedConnect passa websocketHTTP e
+// preLoginHTTP direto para socket.NewFrameSocket. NewClient garante isso no
+// nascimento, mas os setters aceitavam nil e transformavam o proximo SetProxy
+// (ou a proxima conexao) em nil deref — F55 em HOUSEKEEP.md.
+//
+// Passar nil e' a forma intuitiva de dizer "volte ao padrao", entao e' isso
+// que os setters fazem, em vez de silenciarem o pedido ou entrarem em panic.
+func orDefaultHTTPClient(h *http.Client) *http.Client {
+	if h != nil {
+		return h
+	}
+	return &http.Client{Transport: (http.DefaultTransport.(*http.Transport)).Clone()}
+}
+
 // SetMediaHTTPClient sets the HTTP client used to download media.
 // This will overwrite any set proxy calls.
+//
+// Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetMediaHTTPClient(h *http.Client) {
-	cli.mediaHTTP = h
+	cli.mediaHTTP = orDefaultHTTPClient(h)
 }
 
 // SetWebsocketHTTPClient sets the HTTP client used to establish the websocket connection for logged-in sessions.
 // This will overwrite any set proxy calls.
+//
+// Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetWebsocketHTTPClient(h *http.Client) {
-	cli.websocketHTTP = h
+	cli.websocketHTTP = orDefaultHTTPClient(h)
 }
 
 // SetPreLoginHTTPClient sets the HTTP client used to establish the websocket connection before login.
 // This will overwrite any set proxy calls.
+//
+// Passing nil restores a fresh default client rather than clearing the field.
 func (cli *Client) SetPreLoginHTTPClient(h *http.Client) {
-	cli.preLoginHTTP = h
+	cli.preLoginHTTP = orDefaultHTTPClient(h)
 }
