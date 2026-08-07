@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/retry"
+	"wa-api/internal/wa-noise/capabilities/retry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )

@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"wa-api/internal/wa-noise/retry"
+	"wa-api/internal/wa-noise/capabilities/retry"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

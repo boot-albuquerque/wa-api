@@ -6,7 +6,7 @@
 
 package whatsmeow
 
-import "wa-api/internal/wa-noise/retry"
+import "wa-api/internal/wa-noise/capabilities/retry"
 
 // Apelidos das constantes de politica de retry, que moraram aqui ate' a Fase
 // F/G lote 5 e hoje vivem em internal/wa-noise/retry.

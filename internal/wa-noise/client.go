@@ -29,7 +29,7 @@ import (
 	"wa-api/internal/wa-noise/capabilities/prekeys"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/retry"
+	"wa-api/internal/wa-noise/capabilities/retry"
 	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/capabilities/tctoken"
