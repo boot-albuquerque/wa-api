@@ -8,282 +8,56 @@ package whatsmeow
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
-
-	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
-	"wa-api/internal/wa-noise/proto/waE2E"
+	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/types"
-	"wa-api/internal/wa-noise/types/events"
 )
 
-// --- parseNewsletterMessages ---
+// --- fachadas para internal/wa-noise/notification ---
 
-func TestParseNewsletterMessages(t *testing.T) {
-	cli := notifTestClient()
-	plaintext, err := proto.Marshal(&waE2E.Message{Conversation: proto.String("oi")})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	node := waBinary.Node{
-		Tag: "live_updates",
-		Content: []waBinary.Node{
-			// Filho que nao e' <message> e' ignorado.
-			{Tag: "ruido"},
-			{
-				Tag: "message",
-				Attrs: waBinary.Attrs{
-					"server_id": "42",
-					"id":        "MSG1",
-					"type":      "text",
-					"t":         "1700000000",
-				},
-				Content: []waBinary.Node{
-					{Tag: "plaintext", Content: plaintext},
-					{Tag: "views_count", Attrs: waBinary.Attrs{"count": "7"}},
-					{Tag: "reactions", Content: []waBinary.Node{
-						{Tag: "reaction", Attrs: waBinary.Attrs{"code": "\U0001F44D", "count": "3"}},
-						{Tag: "reaction", Attrs: waBinary.Attrs{"code": "❤", "count": "1"}},
-					}},
-					// Subfilho desconhecido nao atrapalha.
-					{Tag: "desconhecido"},
-				},
-			},
-		},
-	}
-	msgs := cli.parseNewsletterMessages(&node)
-	if len(msgs) != 1 {
-		t.Fatalf("mensagens = %d, esperado 1", len(msgs))
-	}
-	msg := msgs[0]
-	if msg.MessageServerID != 42 || msg.MessageID != "MSG1" || msg.Type != "text" {
-		t.Errorf("atributos mal lidos: %+v", msg)
-	}
-	if !msg.Timestamp.Equal(time.Unix(1700000000, 0)) {
-		t.Errorf("Timestamp = %v", msg.Timestamp)
-	}
-	if msg.Message.GetConversation() != "oi" {
-		t.Errorf("Conversation = %q", msg.Message.GetConversation())
-	}
-	if msg.ViewsCount != 7 {
-		t.Errorf("ViewsCount = %d, esperado 7", msg.ViewsCount)
-	}
-	if msg.ReactionCounts["\U0001F44D"] != 3 || msg.ReactionCounts["❤"] != 1 {
-		t.Errorf("ReactionCounts = %v", msg.ReactionCounts)
-	}
-}
-
-// Protobuf quebrado dentro de <plaintext> nao pode derrubar o parse da lista
-// inteira: a mensagem entra com Message nil.
-func TestParseNewsletterMessagesInvalidPlaintext(t *testing.T) {
-	cli := notifTestClient()
-	msgs := cli.parseNewsletterMessages(&waBinary.Node{Content: []waBinary.Node{{
-		Tag:   "message",
-		Attrs: waBinary.Attrs{"server_id": "1", "id": "MSG1", "type": "text", "t": "1"},
-		Content: []waBinary.Node{
-			// Conteudo nao-binario e' ignorado sem sequer tentar desserializar.
-			{Tag: "plaintext", Content: "texto"},
-		},
-	}, {
-		Tag:     "message",
-		Attrs:   waBinary.Attrs{"server_id": "2", "id": "MSG2", "type": "text", "t": "1"},
-		Content: []waBinary.Node{{Tag: "plaintext", Content: []byte{0xFF, 0xFF, 0xFF}}},
-	}}})
-	if len(msgs) != 2 {
-		t.Fatalf("mensagens = %d, esperado 2", len(msgs))
-	}
-	for i, msg := range msgs {
-		if msg.Message != nil {
-			t.Errorf("mensagem %d deveria ficar com Message nil", i)
-		}
-	}
-}
-
-func TestParseNewsletterMessagesEmptyIsNonNil(t *testing.T) {
-	cli := notifTestClient()
-	msgs := cli.parseNewsletterMessages(&waBinary.Node{})
-	if msgs == nil {
-		t.Error("lista vazia deveria ser slice nao-nil")
-	}
-	if len(msgs) != 0 {
-		t.Errorf("mensagens = %d, esperado 0", len(msgs))
-	}
-}
-
-func TestHandleNewsletterNotification(t *testing.T) {
+// A logica de blocklist/picture/status/newsletter/mex vive no subpacote
+// (Fase F/G, lote 5) e e' testada la'. O que a raiz precisa travar e' a
+// delegacao: que o adaptador entregue o evento ao dispatchEvent do cliente e
+// que um receptor nil nao estoure.
+func TestFachadaDeNotificacaoDelegaAoSubpacote(t *testing.T) {
 	cli := notifTestClient()
 	captured := captureEvents(cli)
-	newsletterJID := types.NewJID("555", types.NewsletterServer)
-	cli.handleNewsletterNotification(context.Background(), &waBinary.Node{
-		Tag:   "notification",
-		Attrs: waBinary.Attrs{"from": newsletterJID, "t": "1700000000"},
-		Content: []waBinary.Node{{Tag: "live_updates", Content: []waBinary.Node{
-			{Tag: "message", Attrs: waBinary.Attrs{"server_id": "1", "id": "MSG1", "type": "text", "t": "1"}},
-		}}},
+	ctx := context.Background()
+	cli.handleBlocklist(ctx, &waBinary.Node{Attrs: waBinary.Attrs{"dhash": "h"}})
+	cli.handlePictureNotification(ctx, &waBinary.Node{
+		Attrs:   waBinary.Attrs{"t": "1"},
+		Content: []waBinary.Node{{Tag: "add", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID, "id": "P"}}},
 	})
-	if len(*captured) != 1 {
-		t.Fatalf("eventos = %d, esperado 1", len(*captured))
-	}
-	evt, ok := (*captured)[0].(*events.NewsletterLiveUpdate)
-	if !ok {
-		t.Fatalf("evento = %T, esperado *events.NewsletterLiveUpdate", (*captured)[0])
-	}
-	if evt.JID != newsletterJID || len(evt.Messages) != 1 {
-		t.Errorf("evento mal montado: %+v", evt)
-	}
-}
-
-// --- handleMexNotification ---
-
-func TestHandleMexNotificationRouting(t *testing.T) {
-	for name, tc := range map[string]struct {
-		json string
-		want any
-	}{
-		"join":  {`{"data":{"xwa2_notify_newsletter_on_join":{}}}`, &events.NewsletterJoin{}},
-		"leave": {`{"data":{"xwa2_notify_newsletter_on_leave":{}}}`, &events.NewsletterLeave{}},
-		"mute":  {`{"data":{"xwa2_notify_newsletter_on_mute_change":{}}}`, &events.NewsletterMuteChange{}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			cli := notifTestClient()
-			captured := captureEvents(cli)
-			cli.handleMexNotification(context.Background(), &waBinary.Node{
-				Content: []waBinary.Node{{Tag: "update", Content: []byte(tc.json)}},
-			})
-			if len(*captured) != 1 {
-				t.Fatalf("eventos = %d, esperado 1", len(*captured))
-			}
-			if got, want := fmt.Sprintf("%T", (*captured)[0]), fmt.Sprintf("%T", tc.want); got != want {
-				t.Errorf("evento = %s, esperado %s", got, want)
-			}
-		})
-	}
-}
-
-func TestHandleMexNotificationIgnoresBadUpdates(t *testing.T) {
-	cli := notifTestClient()
-	captured := captureEvents(cli)
-	cli.handleMexNotification(context.Background(), &waBinary.Node{Content: []waBinary.Node{
-		// Tag errada.
-		{Tag: "outro", Content: []byte(`{"data":{"xwa2_notify_newsletter_on_join":{}}}`)},
-		// Conteudo nao-binario.
-		{Tag: "update", Content: "texto"},
-		// JSON invalido: loga e segue.
-		{Tag: "update", Content: []byte(`{`)},
-		// JSON valido mas sem nenhum dos tres eventos conhecidos.
-		{Tag: "update", Content: []byte(`{"data":{"xwa2_notify_newsletter_on_state_change":{}}}`)},
+	cli.handleStatusNotification(ctx, &waBinary.Node{
+		Attrs:   waBinary.Attrs{"from": receiptTestPeerJID, "t": "1"},
+		Content: []waBinary.Node{{Tag: "set", Content: []byte("oi")}},
+	})
+	cli.handleNewsletterNotification(ctx, &waBinary.Node{
+		Attrs: waBinary.Attrs{"from": receiptTestPeerJID, "t": "1"},
+	})
+	cli.handleMexNotification(ctx, &waBinary.Node{Content: []waBinary.Node{
+		{Tag: "update", Content: []byte(`{"data":{"xwa2_notify_newsletter_on_join":{}}}`)},
 	}})
-	if len(*captured) != 0 {
-		t.Errorf("eventos = %d, esperado 0", len(*captured))
+	if len(*captured) != 5 {
+		t.Fatalf("eventos = %d, esperado 5 (um por fachada)", len(*captured))
+	}
+	if msgs := cli.parseNewsletterMessages(&waBinary.Node{}); msgs == nil || len(msgs) != 0 {
+		t.Errorf("parseNewsletterMessages = %v, esperado slice vazio nao-nil", msgs)
 	}
 }
 
-// --- handleBlocklist ---
-
-func TestHandleBlocklist(t *testing.T) {
-	cli := notifTestClient()
-	captured := captureEvents(cli)
-	cli.handleBlocklist(context.Background(), &waBinary.Node{
-		Attrs: waBinary.Attrs{"action": "modify", "dhash": "hash-novo", "prev_dhash": "hash-velho"},
-		Content: []waBinary.Node{
-			{Tag: "item", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID, "action": "block"}},
-			// Sem `action`: atributo obrigatorio faltando, filho descartado.
-			{Tag: "item", Attrs: waBinary.Attrs{"jid": receiptTestOwnJID}},
-		},
-	})
-	if len(*captured) != 1 {
-		t.Fatalf("eventos = %d, esperado 1", len(*captured))
-	}
-	evt := (*captured)[0].(*events.Blocklist)
-	if evt.DHash != "hash-novo" || evt.PrevDHash != "hash-velho" {
-		t.Errorf("hashes = %q/%q", evt.DHash, evt.PrevDHash)
-	}
-	if len(evt.Changes) != 1 {
-		t.Fatalf("mudancas = %d, esperado 1 (a incompleta e' descartada)", len(evt.Changes))
-	}
-	if evt.Changes[0].JID != receiptTestPeerJID {
-		t.Errorf("JID = %v", evt.Changes[0].JID)
-	}
-}
-
-// --- handlePictureNotification ---
-
-func TestHandlePictureNotification(t *testing.T) {
-	cli := notifTestClient()
-	captured := captureEvents(cli)
-	cli.handlePictureNotification(context.Background(), &waBinary.Node{
-		Attrs: waBinary.Attrs{"t": "1700000000"},
-		Content: []waBinary.Node{
-			{Tag: "add", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID, "id": "PIC1"}},
-			{Tag: "set", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID, "id": "PIC2", "author": receiptTestOwnJID}},
-			{Tag: "delete", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID}},
-			// Tag desconhecida: nao gera evento.
-			{Tag: "rename", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID}},
-			// Sem jid: atributo obrigatorio faltando, descartado.
-			{Tag: "add", Attrs: waBinary.Attrs{"id": "PIC3"}},
-		},
-	})
-	if len(*captured) != 3 {
-		t.Fatalf("eventos = %d, esperado 3", len(*captured))
-	}
-	add := (*captured)[0].(*events.Picture)
-	if add.PictureID != "PIC1" || add.Remove {
-		t.Errorf("evento de add = %+v", add)
-	}
-	if !add.Timestamp.Equal(time.Unix(1700000000, 0)) {
-		t.Errorf("Timestamp = %v", add.Timestamp)
-	}
-	set := (*captured)[1].(*events.Picture)
-	if set.PictureID != "PIC2" || set.Author != receiptTestOwnJID {
-		t.Errorf("evento de set = %+v", set)
-	}
-	del := (*captured)[2].(*events.Picture)
-	if !del.Remove || del.PictureID != "" {
-		t.Errorf("evento de delete = %+v", del)
-	}
-}
-
-// --- handleStatusNotification ---
-
-func TestHandleStatusNotification(t *testing.T) {
-	cli := notifTestClient()
-	captured := captureEvents(cli)
-	cli.handleStatusNotification(context.Background(), &waBinary.Node{
-		Attrs:   waBinary.Attrs{"from": receiptTestPeerJID, "t": "1700000000"},
-		Content: []waBinary.Node{{Tag: "set", Content: []byte("na praia")}},
-	})
-	if len(*captured) != 1 {
-		t.Fatalf("eventos = %d, esperado 1", len(*captured))
-	}
-	evt := (*captured)[0].(*events.UserAbout)
-	if evt.Status != "na praia" || evt.JID != receiptTestPeerJID {
-		t.Errorf("evento = %+v", evt)
-	}
-}
-
-func TestHandleStatusNotificationMalformed(t *testing.T) {
-	for name, node := range map[string]waBinary.Node{
-		"sem filho set": {
-			Attrs:   waBinary.Attrs{"from": receiptTestPeerJID, "t": "1"},
-			Content: []waBinary.Node{{Tag: "outro", Content: []byte("x")}},
-		},
-		"conteudo nao binario": {
-			Attrs:   waBinary.Attrs{"from": receiptTestPeerJID, "t": "1"},
-			Content: []waBinary.Node{{Tag: "set", Content: "texto"}},
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			cli := notifTestClient()
-			captured := captureEvents(cli)
-			node := node
-			cli.handleStatusNotification(context.Background(), &node)
-			if len(*captured) != 0 {
-				t.Errorf("eventos = %d, esperado 0", len(*captured))
-			}
-		})
+func TestFachadaDeNotificacaoRecusaClientNil(t *testing.T) {
+	var cli *Client
+	ctx := context.Background()
+	cli.handleBlocklist(ctx, &waBinary.Node{})
+	cli.handlePictureNotification(ctx, &waBinary.Node{})
+	cli.handleStatusNotification(ctx, &waBinary.Node{})
+	cli.handleNewsletterNotification(ctx, &waBinary.Node{})
+	cli.handleMexNotification(ctx, &waBinary.Node{})
+	if msgs := cli.parseNewsletterMessages(&waBinary.Node{}); msgs != nil {
+		t.Errorf("parseNewsletterMessages = %v, esperado nil", msgs)
 	}
 }
 
@@ -488,7 +262,7 @@ func TestHandleNotificationRouting(t *testing.T) {
 			node: waBinary.Node{
 				Tag: "notification",
 				Attrs: waBinary.Attrs{
-					"from": receiptTestPeerJID, "type": notificationTypeStatus, "id": "N1", "t": "1700000000",
+					"from": receiptTestPeerJID, "type": notification.TypeStatus, "id": "N1", "t": "1700000000",
 				},
 				Content: []waBinary.Node{{Tag: "set", Content: []byte("oi")}},
 			},
@@ -498,7 +272,7 @@ func TestHandleNotificationRouting(t *testing.T) {
 			node: waBinary.Node{
 				Tag: "notification",
 				Attrs: waBinary.Attrs{
-					"from": receiptTestPeerJID, "type": notificationTypePicture, "id": "N1", "t": "1700000000",
+					"from": receiptTestPeerJID, "type": notification.TypePicture, "id": "N1", "t": "1700000000",
 				},
 				Content: []waBinary.Node{{Tag: "add", Attrs: waBinary.Attrs{"jid": receiptTestPeerJID, "id": "PIC"}}},
 			},
@@ -508,7 +282,7 @@ func TestHandleNotificationRouting(t *testing.T) {
 			node: waBinary.Node{
 				Tag: "notification",
 				Attrs: waBinary.Attrs{
-					"from": receiptTestPeerJID, "type": notificationTypeMex, "id": "N1",
+					"from": receiptTestPeerJID, "type": notification.TypeMex, "id": "N1",
 				},
 				Content: []waBinary.Node{{
 					Tag:     "update",

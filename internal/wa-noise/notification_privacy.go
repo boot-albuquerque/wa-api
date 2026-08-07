@@ -10,32 +10,24 @@ import (
 	"context"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/store"
 	"wa-api/internal/wa-noise/tctoken"
-	"wa-api/internal/wa-noise/types/events"
 )
 
+// handleBlocklist e' fachada: a logica vive em internal/wa-noise/notification
+// (Fase F/G, lote 5).
 func (cli *Client) handleBlocklist(ctx context.Context, node *waBinary.Node) {
-	ag := node.AttrGetter()
-	evt := events.Blocklist{
-		Action:    events.BlocklistAction(ag.OptionalString("action")),
-		DHash:     ag.String("dhash"),
-		PrevDHash: ag.OptionalString("prev_dhash"),
+	if cli == nil {
+		return
 	}
-	for _, child := range node.GetChildren() {
-		ag := child.AttrGetter()
-		change := events.BlocklistChange{
-			JID:    ag.JID("jid"),
-			Action: events.BlocklistChangeAction(ag.String("action")),
-		}
-		if !ag.OK() {
-			cli.Log.Warnf("Unexpected data in blocklist event child %v: %v", child.XMLString(), ag.Error())
-			continue
-		}
-		evt.Changes = append(evt.Changes, change)
-	}
-	cli.dispatchEvent(&evt)
+	notification.HandleBlocklist(cli.notifT(), node)
 }
+
+// handlePrivacyTokenNotification NAO foi extraido junto: ele grava no
+// Store.PrivacyTokens e depende de resolveTCTokenStorageLID, ou seja, e' o
+// dominio de tctoken chegando por uma notificacao, nao parsing de notificacao.
+// Ver PATCHES.md, lote 5, "O que NAO foi extraido, e por que".
 
 func (cli *Client) handlePrivacyTokenNotification(ctx context.Context, node *waBinary.Node) {
 	if cli.getOwnID().IsEmpty() {

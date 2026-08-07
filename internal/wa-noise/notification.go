@@ -13,6 +13,7 @@ import (
 
 	"wa-api/internal/wa-noise/appstate"
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/types/events"
 )
@@ -81,30 +82,13 @@ func (cli *Client) handleAppStateNotification(ctx context.Context, node *waBinar
 	}
 }
 
+// handlePictureNotification e' fachada: a logica vive em
+// internal/wa-noise/notification (Fase F/G, lote 5).
 func (cli *Client) handlePictureNotification(ctx context.Context, node *waBinary.Node) {
-	ts := node.AttrGetter().UnixTime("t")
-	for _, child := range node.GetChildren() {
-		ag := child.AttrGetter()
-		var evt events.Picture
-		evt.Timestamp = ts
-		evt.JID = ag.JID("jid")
-		evt.Author = ag.OptionalJIDOrEmpty("author")
-		if child.Tag == "delete" {
-			evt.Remove = true
-		} else if child.Tag == "add" {
-			evt.PictureID = ag.String("id")
-		} else if child.Tag == "set" {
-			// TODO sometimes there's a hash and no ID?
-			evt.PictureID = ag.String("id")
-		} else {
-			continue
-		}
-		if !ag.OK() {
-			cli.Log.Debugf("Ignoring picture change notification with unexpected attributes: %v", ag.Error())
-			continue
-		}
-		cli.dispatchEvent(&evt)
+	if cli == nil {
+		return
 	}
+	notification.HandlePicture(cli.notifT(), node)
 }
 
 func (cli *Client) handleAccountSyncNotification(ctx context.Context, node *waBinary.Node) {
@@ -127,23 +111,13 @@ func (cli *Client) handleAccountSyncNotification(ctx context.Context, node *waBi
 	}
 }
 
+// handleStatusNotification e' fachada: a logica vive em
+// internal/wa-noise/notification (Fase F/G, lote 5).
 func (cli *Client) handleStatusNotification(ctx context.Context, node *waBinary.Node) {
-	ag := node.AttrGetter()
-	child, found := node.GetOptionalChildByTag("set")
-	if !found {
-		cli.Log.Debugf("Status notification did not contain child with tag 'set'")
+	if cli == nil {
 		return
 	}
-	status, ok := child.Content.([]byte)
-	if !ok {
-		cli.Log.Warnf("Set status notification has unexpected content (%T)", child.Content)
-		return
-	}
-	cli.dispatchEvent(&events.UserAbout{
-		JID:       ag.JID("from"),
-		Timestamp: ag.UnixTime("t"),
-		Status:    string(status),
-	})
+	notification.HandleStatus(cli.notifT(), node)
 }
 
 func (cli *Client) handleNotification(ctx context.Context, node *waBinary.Node) {
@@ -155,17 +129,17 @@ func (cli *Client) handleNotification(ctx context.Context, node *waBinary.Node) 
 	var cancelled bool
 	defer cli.maybeDeferredAck(ctx, node)(&cancelled)
 	switch notifType {
-	case notificationTypeEncrypt:
+	case notification.TypeEncrypt:
 		go cli.handleEncryptNotification(ctx, node)
-	case notificationTypeServerSync:
+	case notification.TypeServerSync:
 		go cli.handleAppStateNotification(ctx, node)
-	case notificationTypeAccountSync:
+	case notification.TypeAccountSync:
 		go cli.handleAccountSyncNotification(ctx, node)
-	case notificationTypeDevices:
+	case notification.TypeDevices:
 		cli.handleDeviceNotification(ctx, node)
-	case notificationTypeFBIDDevices:
+	case notification.TypeFBIDDevices:
 		cli.handleFBDeviceNotification(ctx, node)
-	case notificationTypeGroup:
+	case notification.TypeGroup:
 		evt, lidPairs, redactedPhones, err := cli.parseGroupNotification(node)
 		if err != nil {
 			cli.Log.Errorf("Failed to parse group notification: %v", err)
@@ -180,19 +154,19 @@ func (cli *Client) handleNotification(ctx context.Context, node *waBinary.Node) 
 			}
 			cancelled = cli.dispatchEvent(evt)
 		}
-	case notificationTypePicture:
+	case notification.TypePicture:
 		cli.handlePictureNotification(ctx, node)
-	case notificationTypeMediaRetry:
+	case notification.TypeMediaRetry:
 		cli.handleMediaRetryNotification(ctx, node)
-	case notificationTypePrivacyToken:
+	case notification.TypePrivacyToken:
 		cli.handlePrivacyTokenNotification(ctx, node)
-	case notificationTypeLinkCodeCompanionReg:
+	case notification.TypeLinkCodeCompanionReg:
 		go cli.tryHandleCodePairNotification(ctx, node)
-	case notificationTypeNewsletter:
+	case notification.TypeNewsletter:
 		cli.handleNewsletterNotification(ctx, node)
-	case notificationTypeMex:
+	case notification.TypeMex:
 		cli.handleMexNotification(ctx, node)
-	case notificationTypeStatus:
+	case notification.TypeStatus:
 		cli.handleStatusNotification(ctx, node)
 	// Other types: business, disappearing_mode, server, status, pay, psa
 	default:
