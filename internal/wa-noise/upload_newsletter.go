@@ -10,7 +10,7 @@ import (
 	"context"
 	"io"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 )
 
 // A implementacao vive em internal/wa-noise/media/upload_newsletter.go

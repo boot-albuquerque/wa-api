@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 )
 
 // A implementacao vive em internal/wa-noise/media/conn.go; aqui ficam so' os

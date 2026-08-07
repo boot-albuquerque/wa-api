@@ -7,7 +7,7 @@
 package whatsmeow
 
 import (
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 )
 
 // Os tipos do dominio de midia vivem em internal/wa-noise/media; aqui ficam

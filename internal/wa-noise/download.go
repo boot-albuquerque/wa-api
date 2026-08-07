@@ -9,7 +9,7 @@ package whatsmeow
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 	"wa-api/internal/wa-noise/protocol/types"

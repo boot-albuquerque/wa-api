@@ -10,7 +10,7 @@ import (
 	"context"
 	"io"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
 )
 

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )

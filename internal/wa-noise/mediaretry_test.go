@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/protocol/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"

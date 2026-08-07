@@ -10,7 +10,7 @@ import (
 	"context"
 	"net/http"
 
-	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/capabilities/media"
 )
 
 // Metodos finos que mantem a superficie interna historica de *Client viva para
