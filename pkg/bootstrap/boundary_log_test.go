@@ -16,6 +16,7 @@ import (
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
 	infrawa "wa-api/pkg/infra/wa-noise"
+	"wa-api/pkg/infra/wa-noise/applog"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
 )
@@ -86,7 +87,7 @@ func boundaryDeps(t *testing.T, buf *bytes.Buffer) Deps {
 			noSessionGuard{},
 			noSessionGuard{},
 			noSessionGuard{},
-			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
+			applog.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
 	d.CustomHandlers = ch
@@ -104,7 +105,7 @@ func boundaryPanicDeps(t *testing.T, buf *bytes.Buffer) Deps {
 			panicSessionGuard{},
 			panicSessionGuard{},
 			panicSessionGuard{},
-			infrawa.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
+			applog.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
 	return d

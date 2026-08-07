@@ -1,4 +1,4 @@
-package whatsmeow
+package safego
 
 import (
 	"runtime/debug"

@@ -10,6 +10,7 @@ import (
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
 	wa "wa-api/pkg/infra/wa-noise"
+	"wa-api/pkg/infra/wa-noise/platform"
 	"wa-api/pkg/infra/wa-noise/walog"
 )
 
@@ -25,7 +26,7 @@ func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 
 	// DeviceProps é global do SDK e precisa estar definido antes de qualquer
 	// cliente ser criado — antes vivia no topo de startClient.
-	store.DeviceProps.PlatformType = wa.GetPlatformTypeEnum(*platformType)
+	store.DeviceProps.PlatformType = platform.GetPlatformTypeEnum(*platformType)
 	store.DeviceProps.Os = osName
 
 	provider := wa.NewSessionProviderWithLogger(container, deviceJIDLookup(s), clientLog)

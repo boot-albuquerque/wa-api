@@ -3,12 +3,17 @@ package binary
 import (
 	"fmt"
 	"math"
-	"strconv"
 
 	"wa-api/internal/wa-noise/binary/token"
-	"wa-api/internal/wa-noise/types"
 )
 
+// binaryEncoder acumula o frame em construcao. Este arquivo tem so' a camada
+// de bytes: empilhar bytes/inteiros, escrever prefixos de tamanho e empacotar
+// blocos nibble8/hex8. A escrita da estrutura (Node, atributos, despacho por
+// tipo) esta' em encoder_node.go.
+//
+// O primeiro byte e' sempre 0: e' o flag de compressao que Unpack le' na
+// ponta oposta, e Marshal nunca comprime.
 type binaryEncoder struct {
 	data []byte
 }
@@ -37,35 +42,41 @@ func (w *binaryEncoder) pushIntN(value, n int, littleEndian bool) {
 		} else {
 			curShift = n - i - 1
 		}
-		w.pushByte(byte((value >> uint(curShift*8)) & 0xFF))
+		w.pushByte(byte((value >> uint(curShift*bitsPerByte)) & byteMask))
 	}
 }
 
 func (w *binaryEncoder) pushInt20(value int) {
-	w.pushBytes([]byte{byte((value >> 16) & 0x0F), byte((value >> 8) & 0xFF), byte(value & 0xFF)})
+	w.pushBytes([]byte{
+		byte((value >> int20HighShift) & int20HighNibbleMask),
+		byte((value >> int20MiddleShift) & byteMask),
+		byte(value & byteMask),
+	})
 }
 
 func (w *binaryEncoder) pushInt8(value int) {
-	w.pushIntN(value, 1, false)
+	w.pushIntN(value, int8Size, false)
 }
 
 func (w *binaryEncoder) pushInt16(value int) {
-	w.pushIntN(value, 2, false)
+	w.pushIntN(value, int16Size, false)
 }
 
 func (w *binaryEncoder) pushInt32(value int) {
-	w.pushIntN(value, 4, false)
+	w.pushIntN(value, int32Size, false)
 }
 
 func (w *binaryEncoder) pushString(value string) {
 	w.pushBytes([]byte(value))
 }
 
+// writeByteLength escolhe a menor das tres tags de bloco binario que comporta
+// o tamanho dado.
 func (w *binaryEncoder) writeByteLength(length int) {
-	if length < 256 {
+	if length < token.SingleByteMax {
 		w.pushByte(token.Binary8)
 		w.pushInt8(length)
-	} else if length < (1 << 20) {
+	} else if length < int20Max {
 		w.pushByte(token.Binary20)
 		w.pushInt20(length)
 	} else if length < math.MaxInt32 {
@@ -76,75 +87,17 @@ func (w *binaryEncoder) writeByteLength(length int) {
 	}
 }
 
-const tagSize = 1
-
-func (w *binaryEncoder) writeNode(n Node) {
-	if n.Tag == "0" {
-		w.pushByte(token.List8)
-		w.pushByte(token.ListEmpty)
-		return
-	}
-
-	hasContent := 0
-	if n.Content != nil {
-		hasContent = 1
-	}
-
-	w.writeListStart(2*w.countAttributes(n.Attrs) + tagSize + hasContent)
-	w.writeString(n.Tag)
-	w.writeAttributes(n.Attrs)
-	if n.Content != nil {
-		w.write(n.Content)
-	}
-}
-
-func (w *binaryEncoder) write(data interface{}) {
-	switch typedData := data.(type) {
-	case nil:
-		w.pushByte(token.ListEmpty)
-	case types.JID:
-		w.writeJID(typedData)
-	case string:
-		w.writeString(typedData)
-	case int:
-		w.writeString(strconv.Itoa(typedData))
-	case int32:
-		w.writeString(strconv.FormatInt(int64(typedData), 10))
-	case uint:
-		w.writeString(strconv.FormatUint(uint64(typedData), 10))
-	case uint32:
-		w.writeString(strconv.FormatUint(uint64(typedData), 10))
-	case int64:
-		w.writeString(strconv.FormatInt(typedData, 10))
-	case uint64:
-		w.writeString(strconv.FormatUint(typedData, 10))
-	case bool:
-		w.writeString(strconv.FormatBool(typedData))
-	case []byte:
-		w.writeBytes(typedData)
-	case []Node:
-		w.writeListStart(len(typedData))
-		for _, n := range typedData {
-			w.writeNode(n)
-		}
-	default:
-		panic(fmt.Errorf("%w: %T", ErrInvalidType, typedData))
-	}
-}
-
-func (w *binaryEncoder) writeString(data string) {
-	var dictIndex byte
-	if tokenIndex, ok := token.IndexOfSingleToken(data); ok {
-		w.pushByte(tokenIndex)
-	} else if dictIndex, tokenIndex, ok = token.IndexOfDoubleByteToken(data); ok {
-		w.pushByte(token.Dictionary0 + dictIndex)
-		w.pushByte(tokenIndex)
-	} else if validateNibble(data) {
-		w.writePackedBytes(data, token.Nibble8)
-	} else if validateHex(data) {
-		w.writePackedBytes(data, token.Hex8)
+// writeListStart escolhe entre lista vazia, lista de tamanho em 1 byte e
+// lista de tamanho em 2 bytes.
+func (w *binaryEncoder) writeListStart(listSize int) {
+	if listSize == 0 {
+		w.pushByte(byte(token.ListEmpty))
+	} else if listSize < token.SingleByteMax {
+		w.pushByte(byte(token.List8))
+		w.pushInt8(listSize)
 	} else {
-		w.writeStringRaw(data)
+		w.pushByte(byte(token.List16))
+		w.pushInt16(listSize)
 	}
 }
 
@@ -158,68 +111,9 @@ func (w *binaryEncoder) writeStringRaw(value string) {
 	w.pushString(value)
 }
 
-func (w *binaryEncoder) writeJID(jid types.JID) {
-	if ((jid.Server == types.DefaultUserServer || jid.Server == types.HiddenUserServer) && jid.Device > 0) ||
-		jid.Server == types.HostedServer || jid.Server == types.HostedLIDServer {
-		w.pushByte(token.ADJID)
-		w.pushByte(jid.ActualAgent())
-		w.pushByte(uint8(jid.Device))
-		w.writeString(jid.User)
-	} else if jid.Server == types.MessengerServer {
-		w.pushByte(token.FBJID)
-		w.write(jid.User)
-		w.pushInt16(int(jid.Device))
-		w.write(jid.Server)
-	} else if jid.Server == types.InteropServer {
-		w.pushByte(token.InteropJID)
-		w.write(jid.User)
-		w.pushInt16(int(jid.Device))
-		w.pushInt16(int(jid.Integrator))
-		w.write(jid.Server)
-	} else {
-		w.pushByte(token.JIDPair)
-		if len(jid.User) == 0 {
-			w.pushByte(token.ListEmpty)
-		} else {
-			w.write(jid.User)
-		}
-		w.write(jid.Server)
-	}
-}
-
-func (w *binaryEncoder) writeAttributes(attributes Attrs) {
-	for key, val := range attributes {
-		if val == "" || val == nil {
-			continue
-		}
-
-		w.writeString(key)
-		w.write(val)
-	}
-}
-
-func (w *binaryEncoder) countAttributes(attributes Attrs) (count int) {
-	for _, val := range attributes {
-		if val == "" || val == nil {
-			continue
-		}
-		count += 1
-	}
-	return
-}
-
-func (w *binaryEncoder) writeListStart(listSize int) {
-	if listSize == 0 {
-		w.pushByte(byte(token.ListEmpty))
-	} else if listSize < 256 {
-		w.pushByte(byte(token.List8))
-		w.pushInt8(listSize)
-	} else {
-		w.pushByte(byte(token.List16))
-		w.pushInt16(listSize)
-	}
-}
-
+// writePackedBytes escreve a string com dois caracteres por byte. Quando o
+// numero de caracteres e' impar, o tamanho vai com packedOddLengthFlag ligado
+// e o ultimo nibble leva padding — e' isso que readPacked8 desfaz.
 func (w *binaryEncoder) writePackedBytes(value string, dataType int) {
 	if len(value) > token.PackedMax {
 		panic(fmt.Errorf("too many bytes to pack: %d", len(value)))
@@ -227,9 +121,9 @@ func (w *binaryEncoder) writePackedBytes(value string, dataType int) {
 
 	w.pushByte(byte(dataType))
 
-	roundedLength := byte(math.Ceil(float64(len(value)) / 2.0))
-	if len(value)%2 != 0 {
-		roundedLength |= 128
+	roundedLength := byte(math.Ceil(float64(len(value)) / float64(charsPerPackedByte)))
+	if len(value)%charsPerPackedByte != 0 {
+		roundedLength |= packedOddLengthFlag
 	}
 	w.pushByte(roundedLength)
 	var packer func(byte) byte
@@ -241,69 +135,14 @@ func (w *binaryEncoder) writePackedBytes(value string, dataType int) {
 		// This should only be called with the correct values
 		panic(fmt.Errorf("invalid packed byte data type %v", dataType))
 	}
-	for i, l := 0, len(value)/2; i < l; i++ {
-		w.pushByte(w.packBytePair(packer, value[2*i], value[2*i+1]))
+	for i, l := 0, len(value)/charsPerPackedByte; i < l; i++ {
+		w.pushByte(w.packBytePair(packer, value[charsPerPackedByte*i], value[charsPerPackedByte*i+1]))
 	}
-	if len(value)%2 != 0 {
+	if len(value)%charsPerPackedByte != 0 {
 		w.pushByte(w.packBytePair(packer, value[len(value)-1], '\x00'))
 	}
 }
 
 func (w *binaryEncoder) packBytePair(packer func(byte) byte, part1, part2 byte) byte {
-	return (packer(part1) << 4) | packer(part2)
-}
-
-func validateNibble(value string) bool {
-	if len(value) > token.PackedMax {
-		return false
-	}
-	for _, char := range value {
-		if !(char >= '0' && char <= '9') && char != '-' && char != '.' {
-			return false
-		}
-	}
-	return true
-}
-
-func packNibble(value byte) byte {
-	switch value {
-	case '-':
-		return 10
-	case '.':
-		return 11
-	case 0:
-		return 15
-	default:
-		if value >= '0' && value <= '9' {
-			return value - '0'
-		}
-		// This should be validated beforehand
-		panic(fmt.Errorf("invalid string to pack as nibble: %d / '%s'", value, string(value)))
-	}
-}
-
-func validateHex(value string) bool {
-	if len(value) > token.PackedMax {
-		return false
-	}
-	for _, char := range value {
-		if !(char >= '0' && char <= '9') && !(char >= 'A' && char <= 'F') {
-			return false
-		}
-	}
-	return true
-}
-
-func packHex(value byte) byte {
-	switch {
-	case value >= '0' && value <= '9':
-		return value - '0'
-	case value >= 'A' && value <= 'F':
-		return 10 + value - 'A'
-	case value == 0:
-		return 15
-	default:
-		// This should be validated beforehand
-		panic(fmt.Errorf("invalid string to pack as hex: %d / '%s'", value, string(value)))
-	}
+	return (packer(part1) << nibbleShift) | packer(part2)
 }

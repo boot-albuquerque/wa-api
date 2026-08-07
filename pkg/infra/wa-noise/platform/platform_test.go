@@ -1,4 +1,4 @@
-package whatsmeow
+package platform
 
 import (
 	"testing"

@@ -5,6 +5,7 @@ import (
 
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/wa-noise"
+	"wa-api/pkg/infra/wa-noise/applog"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
@@ -100,7 +101,7 @@ func initCustomHandlers(s *server) {
 	userAdapter := whatsmeow.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := whatsmeow.NewSessionGuardAdapter(waClientLookup)
-	logger := whatsmeow.NewZerologAdapter(log.Logger)
+	logger := applog.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase
 	getProfileUC := profile.NewGetProfileUseCase(miscAdapter, logger)

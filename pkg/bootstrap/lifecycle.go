@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	wmhelpers "wa-api/pkg/infra/wa-noise"
+	"wa-api/pkg/infra/wa-noise/safego"
 
 	whatsmeow "wa-api/internal/wa-noise"
 
@@ -30,7 +30,7 @@ type MyClient struct {
 // fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
 // the whole process. Losing one delivery is preferable to taking wa-api
 // down for every connected user.
-var safeGo = wmhelpers.SafeGo
+var safeGo = safego.SafeGo
 
 // Webhook functions extracted to lifecycle_webhook.go
 

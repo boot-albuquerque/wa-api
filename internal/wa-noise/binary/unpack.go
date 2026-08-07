@@ -20,7 +20,7 @@ import (
 // already returns the data with a leading zero (i.e. not compressed).
 func Unpack(data []byte) ([]byte, error) {
 	dataType, data := data[0], data[1:]
-	if 2&dataType > 0 {
+	if zlibCompressedFlag&dataType > 0 {
 		if decompressor, err := zlib.NewReader(bytes.NewReader(data)); err != nil {
 			return nil, fmt.Errorf("failed to create zlib reader: %w", err)
 		} else if data, err = io.ReadAll(decompressor); err != nil {
