@@ -568,6 +568,8 @@ internal/wa-noise.applyRequestExtraNodes	EXCLUDED	X5
 internal/wa-noise.buildBaseReceipt	EXCLUDED	X5
 internal/wa-noise.checkCertValidity	EXCLUDED	X5
 internal/wa-noise.collectParticipantList	EXCLUDED	X5
+internal/wa-noise.contextDialerFor	EXCLUDED	X5
+internal/wa-noise.contextDialerFor.func1	EXCLUDED	X6
 internal/wa-noise.convertQueryID	EXCLUDED	X5
 internal/wa-noise.copyAttrs	EXCLUDED	X5
 internal/wa-noise.currentTCTokenCutoffTimestamp	EXCLUDED	X5
@@ -617,6 +619,7 @@ internal/wa-noise.preKeyToNode	EXCLUDED	X5
 internal/wa-noise.preKeysToNodes	EXCLUDED	X5
 internal/wa-noise.qrChannel.emitQRs	EXCLUDED	X5
 internal/wa-noise.qrChannel.handleEvent	EXCLUDED	X5
+internal/wa-noise.randomKeepAliveInterval	EXCLUDED	X5
 internal/wa-noise.shouldRetryMediaDownload	EXCLUDED	X5
 internal/wa-noise.shouldSendCsToken	EXCLUDED	X5
 internal/wa-noise.shouldSendNewTCToken	EXCLUDED	X5

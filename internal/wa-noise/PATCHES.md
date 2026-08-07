@@ -4462,3 +4462,464 @@ pelos sete arquivos; difere de `sendTestClient` do lote 8 por já trazer um
   `go run ./cmd/logcov -golden`, como o próprio teste instrui.
 - `internals.go` — gerado, isento (ADR-0004). Nenhuma assinatura exposta por ele
   mudou neste lote.
+
+---
+
+## Fase E — lote 10 (final): núcleo do client/conexão, 2026-08-07
+
+Nove arquivos da raiz, todos `package whatsmeow`: `client.go`,
+`client_connection.go`, `client_events.go`, `client_proxy.go`,
+`client_session.go`, `handshake.go`, `keepalive.go`, `connectionevents.go`,
+`errors.go`. É o núcleo: a struct `Client`, o ciclo de vida do socket, o
+handshake Noise e a classificação de erro do fork inteiro.
+
+Este é o lote de maior risco da Fase E, e foi conduzido com um protocolo
+explícito, combinado antes de começar:
+
+1. Mudança **nominal** (literal → constante de valor idêntico) e ajuste de log
+   entram normalmente: não alteram fluxo de controle.
+2. Correção de bug entra só quando a equivalência de comportamento é verificável
+   por leitura direta.
+3. Qualquer mudança perto de `socketLock` — inclusive só mudar **quando** o lock
+   é adquirido — passa por revisão de concorrência independente, por um agente
+   sem contexto prévio, **antes** do commit.
+
+A separação está nos próprios commits: `refactor(...)` para o que é nominal,
+`fix(...)` separado por natureza de risco, e o commit que toca lock diz isso na
+primeira linha do corpo.
+
+---
+
+### Bugs encontrados e corrigidos
+
+#### 1. Panic remoto: `RefreshCAT` nil em `handleConnectFailure` — o mais grave do lote
+
+`connectionevents.go:142` (antes da correção):
+
+```go
+} else if reason == events.ConnectFailureCATInvalid || reason == events.ConnectFailureCATExpired {
+    cli.Log.Infof("Got %d/%s connect failure, refreshing CAT before reconnecting...", int(reason), message)
+    err := cli.RefreshCAT(ctx)
+```
+
+`cli.RefreshCAT` é chamado sem checagem de nil. Três fatos, juntos, tornam isso
+um panic remoto:
+
+- `RefreshCAT` (`client.go:183`) só é preenchido por consumidores **Messenger**.
+  Em todo o repositório — verificado com `grep -rn "RefreshCAT" --include='*.go'`
+  — não existe nenhuma atribuição: ele é **sempre nil** neste fork.
+- `reason` vem de `ag.Int("reason")`, atributo do `<failure>`, ou seja, dado
+  100% controlado pelo servidor. Os valores são 413 (`ConnectFailureCATExpired`)
+  e 414 (`ConnectFailureCATInvalid`), em `types/events/failure_reasons.go:55-56`.
+- O handler roda dentro do goroutine de `handlerQueueLoop`
+  (`client_events.go:171`), que **não tem `recover`**.
+
+Ou seja: um `<failure reason="413"/>` derruba o **processo inteiro**.
+
+O que torna o achado inequívoco — o mesmo padrão dos lotes anteriores — é a
+inconsistência interna: o irmão `handleStreamError`, no **mesmo arquivo**
+(`connectionevents.go:56`), já abre exatamente com a guarda que faltava aqui:
+
+```go
+case cli.RefreshCAT != nil && (code == events.ConnectFailureCATInvalid.NumberString() || ...):
+```
+
+Só o caminho de `<failure>` não checava.
+
+**Correção**: a guarda de nil entra nos **dois** pontos que decidiam sobre CAT —
+o `case` do `switch` (que é o único ramo que toma `socketLock.RLock()`) e o
+`else if` que chama de fato. E `RefreshCAT` passou a ser lido **uma única vez**
+para as duas decisões:
+
+```go
+refreshCAT := cli.RefreshCAT
+```
+
+Sem isso, as duas leituras poderiam divergir — a segunda vendo `nil` depois de a
+primeira ter visto não-nil — reabrindo exatamente o panic que a guarda existe
+para eliminar. Esse ponto foi levantado pela revisão de concorrência (ver
+abaixo) e aceito.
+
+Com `RefreshCAT` nil o motivo cai no `default` do `switch` — disconnect esperado
+e um `events.ConnectFailure` com o nó bruto —, que é **o mesmo tratamento que
+`handleStreamError` já dava** ao caso. Nenhum comportamento novo foi inventado.
+
+Travado por `TestHandleConnectFailureCATWithNilRefreshCATDoesNotPanic`, que
+sem a correção morre com `SIGSEGV` em `connectionevents.go`. Verificado
+revertendo a correção numa cópia e rodando o teste.
+
+#### 2. Panic por configuração: `rand.Int64N` com janela não-positiva no keepalive
+
+`keepalive.go:34` (antes da correção):
+
+```go
+interval := rand.Int64N(KeepAliveIntervalMax.Milliseconds()-KeepAliveIntervalMin.Milliseconds()) + KeepAliveIntervalMin.Milliseconds()
+```
+
+`rand.Int64N` entra em **panic** com argumento `<= 0`. E `KeepAliveIntervalMin`
+/ `KeepAliveIntervalMax` (`keepalive.go:20-24`) são variáveis **exportadas** do
+pacote — existem para serem ajustadas.
+
+Igualar as duas é a forma óbvia de pedir *"pingue de 20 em 20 segundos, sem
+jitter"*. Isso dá `rand.Int64N(0)` → panic. Inverter as pontas por engano dá
+argumento negativo → panic. Em ambos os casos dentro de `keepAliveLoop`, um
+goroutine **sem recover**: uma linha de configuração aparentemente inocente
+derruba o processo na primeira iteração do keepalive.
+
+**Correção**: o sorteio saiu para `randomKeepAliveInterval()`, que trata a
+janela degenerada devolvendo o próprio mínimo — que é precisamente o
+comportamento que quem configurou `Min == Max` esperava. Travado por
+`TestRandomKeepAliveIntervalEqualBoundsDoesNotPanic` e
+`...InvertedBoundsDoesNotPanic`, mais os testes de que a janela normal continua
+sorteando dentro de `[Min, Max)` e com variação real.
+
+#### 3. Panic em API exportada: type assertion crua em `SetSOCKSProxy`
+
+`client_proxy.go:99` (antes da correção):
+
+```go
+pxc := px.(proxy.ContextDialer)
+transport.DialContext = pxc.DialContext
+```
+
+Type assertion sem comma-ok sobre um `proxy.Dialer` **vindo do chamador**.
+`proxy.Dialer` só exige `Dial`; `ContextDialer` é outra interface. Qualquer
+dialer customizado que não implemente `DialContext` derruba o processo — numa
+função **exportada**. O caminho interno (`proxy.FromURL` em `SetProxyAddress`)
+devolve um dialer que implementa, então o bug só aparece para quem chama
+`SetSOCKSProxy` direto, que é justamente o motivo de a função ser pública.
+
+**Correção**: `contextDialerFor` faz comma-ok e, no fallback, adapta o `Dial`
+sem contexto. A escolha do fallback é deliberada e está comentada no código: a
+alternativa — não instalar o proxy — faria o tráfego sair **direto, sem proxy e
+sem aviso**, vazando o endereço real do cliente. Perder o cancelamento por
+contexto é o mal menor. Travado por
+`TestSetSOCKSProxyWithNonContextDialerDoesNotPanic`, que verifica também que o
+dialer do proxy é **de fato** usado, e por `TestSetSOCKSProxyPrefersContextDialer`.
+
+---
+
+### Revisão de concorrência (obrigatória neste lote)
+
+Das três correções, **só a #1** toca código perto de `socketLock`: ela muda a
+condição do único `case` que faz `cli.socketLock.RLock()`. As #2 e #3 não
+encostam em mutex nenhum, e foram commitadas separadamente por isso.
+
+Antes do commit da #1, o diff ainda não commitado foi entregue a um revisor
+independente, **sem contexto prévio**, com as perguntas exigidas: se a mudança
+altera quais goroutines podem observar estado parcialmente atualizado, se pode
+introduzir deadlock ou corrida que não existia, e se o lock é adquirido e
+liberado exatamente nos mesmos pontos.
+
+**Veredito: seguro.** Sem novo deadlock, sem nova corrida. O único ramo que
+tomava o `RLock` continua tomando-o e liberando-o exatamente nos mesmos pontos;
+o caminho novo (`RefreshCAT` nil) simplesmente **não toma lock nenhum**, e o
+`cli.expectDisconnect()` do `default` já era chamado sem o lock em todos os
+outros motivos de falha — não é um caminho novo, é o caminho que 90% dos
+`<failure>` já percorriam.
+
+A revisão levantou **um ponto**, que foi aceito e corrigido antes do commit: a
+leitura dupla de `cli.RefreshCAT` (uma no `switch`, outra no `else if`) permitia
+que as duas divergissem. Virou uma leitura única em variável local. Sem essa
+observação, a correção teria deixado aberta uma janela — estreita, mas do exato
+tipo que ela existe para fechar.
+
+---
+
+### Suspeitas deliberadamente **não** tocadas
+
+**`cli.nodeHandlers[node.Tag](evtCtx, node)` sem comma-ok**
+(`client_events.go:172`). Indexação de mapa seguida de chamada, sem checagem —
+o padrão que este arquivo inteiro documenta como perigoso. Aqui, porém, é
+seguro: `handleFrame` (`client_events.go:143`) **só enfileira** nós cujo Tag já
+foi encontrado no mesmo mapa, e `handlerQueue` não tem outro produtor (conferido
+com `grep -n "handlerQueue <-"`). O mapa também nunca é escrito depois de
+`NewClient`. Adicionar a checagem aqui seria defesa contra um caminho que não
+existe, e escondê-la-ia se um produtor novo aparecesse — melhor que quebre alto.
+Travado indiretamente por `TestNewClientRegistersNodeHandlers`, que exige que
+todo Tag esperado exista.
+
+**Envio bloqueante para `cli.handlerQueue` no ramo de fila cheia**
+(`client_events.go:149-154`). Quando a fila enche, o nó é despachado num
+goroutine que espera indefinidamente por espaço (ou pelo fim do contexto). É o
+mesmo formato do F44 do lote 9: as saídas óbvias descartam nós recebidos, o que
+é pior que o travamento raro que evitam. O `ctx.Done()` no `select` limita o
+estrago ao tempo de vida da conexão. Não corrigido — precisa de decisão de
+projeto sobre política de descarte, não de patch.
+
+**`cli.LastSuccessfulConnect` e `cli.AutoReconnectErrors` escritos sem lock**
+(`connectionevents.go:160-161`, e lidos em `client_connection.go:194`). São
+campos exportados, escritos em `handleConnectSuccess` (goroutine do handler) e
+lidos em `autoReconnect` (outro goroutine). É uma corrida de dados real segundo
+o modelo de memória do Go. **Não corrigida de propósito**: são campos
+**exportados**, então trocá-los por `atomic` muda a API pública do fork —
+exatamente o tipo de divergência permanente contra o upstream que este arquivo
+existe para minimizar. E `go test -race` não a acusa porque não há teste que
+exercite os dois caminhos ao mesmo tempo (o que exigiria socket vivo). Registrado
+como **F46** em `HOUSEKEEP.md` para o usuário decidir.
+
+**`doHandshake` escreve `cli.socket = ns` sem tomar `socketLock`**
+(`handshake.go:126`). Parece grave e não é: o único chamador é
+`unlockedConnect` (`client_connection.go:140`), cujo nome declara o contrato — o
+lock **já está tomado** pelos dois chamadores dele (`ConnectContext:89` e
+`connect:103`). Está correto como está. Não mexido, e não "melhorado" com um
+lock redundante, que causaria deadlock imediato.
+
+**A ordem `RUnlock` antes de `recover()` em `dispatchEvent`**
+(`client_events.go:225-231`). Parece invertida à primeira vista, mas está certa:
+as duas rodam no mesmo `defer`, e `recover()` continua válido porque é chamado
+diretamente pela função deferida. Liberar o lock primeiro é o que impede o lock
+de vazar quando um handler entra em panic. Confirmado por
+`TestDispatchEventRecoversFromPanickingHandler`, que prova que um
+`AddEventHandler` posterior não trava.
+
+**`checkCertValidity` usa `time.Now()` local, não o relógio do servidor**
+(`handshake.go:134`). O cliente já mantém `serverTimeOffset`
+(`connectionevents.go:165`), mas ele só é preenchido **depois** do handshake —
+no `<success>` —, então não está disponível aqui. Um relógio local muito errado
+faz o handshake falhar por certificado "expirado". É o comportamento seguro
+(falhar fechado), e a alternativa exigiria confiar no relógio de quem ainda não
+foi autenticado. Correto como está.
+
+---
+
+### Magic numbers e strings extraídos
+
+**Criado** `connection_constants.go` (110 linhas).
+
+Erros de stream e conexão (`connectionevents.go`):
+
+| Literal | Constante |
+|---|---|
+| `"515"` | `streamErrorRestartRequired` |
+| `"503"` | `streamErrorServiceUnavailable` |
+| `"conflict"` | `streamErrorConflictTag` |
+| `reason == 403` | `events.ConnectFailureMainDeviceGone` (enum que já existia) |
+
+**Reuso**, não duplicação: `"401"`, `"device_removed"` e `"replaced"` já tinham
+sido extraídos por um lote anterior em `request.go:26-30` como
+`streamErrorAuthCode`, `conflictTypeDeviceRemoved` e `conflictTypeReplaced`.
+`handleStreamError` passou a usar aqueles nomes em vez de criar um segundo nome
+para o mesmo valor — a primeira tentativa criou duplicatas e o compilador
+recusou, o que foi útil.
+
+Conexão e reconexão (`client_connection.go`):
+
+| Literal | Constante |
+|---|---|
+| `2 * time.Second` (passo do backoff) | `autoReconnectDelayStep` |
+| `case 408, 500, 501, 502, 503, 504` | `retryableConnectStatusCodes` (mapa, com os nomes de `net/http`) |
+
+O `switch` de status virou consulta a mapa: a lista de códigos passa a ser
+**dado**, legível de uma vez, e cada entrada carrega o nome simbólico do
+`net/http` no comentário.
+
+Fila de handlers (`client_events.go`):
+
+| Literal | Constante |
+|---|---|
+| `5 * time.Second` | `handlerQueueSlowNodeThreshold` |
+| `30 * time.Second` (×2) | `handlerQueueSlowNodeWarnInterval` |
+| `10` (iterações de espera) | `handlerQueueSlowNodeMaxWarnings` |
+
+Struct `Client` (`client.go`, `client_events.go`):
+
+| Literal | Constante |
+|---|---|
+| `random.Bytes(2)` | `uniqueIDPrefixLength` |
+| `make(chan ..., 32)` | `historySyncNotificationBufferSize` |
+| `make([]wrappedEventHandler, 0, 1)` (×2) | `initialEventHandlerCapacity` |
+
+Handshake Noise (`handshake.go`) — os mais importantes, porque as conversões de
+fatia para array (`*(*[32]byte)(...)`, `[64]byte(...)`) só são seguras porque
+esses comprimentos são conferidos antes:
+
+| Literal | Constante |
+|---|---|
+| `32` (×5: ephemeral, static, chave do cert, duas conversões) | `noiseKeyLength` |
+| `64` (×4: dois `len`, duas conversões) | `certSignatureLength` |
+
+As mensagens de erro que citavam os números literais (`"expected 32"`,
+`"expected 64"`) passaram a interpolar a constante, então não podem mais
+divergir do valor real.
+
+Proxy (`client_proxy.go`): `30 * time.Second` ×2 → `socksProxyDialTimeout` e
+`socksProxyKeepAlive`.
+
+Deixados **de propósito** como literais: os nomes de atributo e as tags de nó
+lidos ou montados em um único ponto — `"reason"`, `"code"`, `"expire"`,
+`"message"`, `"count"`, `"appdata"` (`connectionevents.go`), `"md"`,
+`"remove-companion-device"`, `"user_initiated"`, `"unified_session"`
+(`client_session.go`), `"passive"`/`"active"` (`SetPassive`), e os tags filhos do
+`<ib>`. É a convenção registrada em `receipt_constants.go` desde os lotes 1-4.
+`unifiedOffset` e `week` (`client_session.go:142-143`) já eram constantes.
+
+**Comportamento mudou? Não** — todo valor de constante é idêntico ao literal que
+substituiu, e o `switch`→mapa de status cobre exatamente os mesmos seis códigos.
+
+---
+
+### Auditoria de logging
+
+Varridos os 9 arquivos. **Nenhum bypass do logger injetado**: todos os pontos de
+log usam `cli.Log.{Debugf,Infof,Warnf,Errorf}` ou os sub-loggers `cli.recvLog` /
+`cli.sendLog`, todos derivados por `log.Sub(...)` do logger passado a
+`NewClient` e ligados ao `walog.Bridge`. Não há `fmt.Print*`, `log.*` do stdlib
+nem `println`. `NewClient` já converte logger nil em `waLog.Noop`
+(`client.go:215-217`), travado por `TestNewClientDefaults`.
+
+**Nenhum `panic` cru** e nenhum `log.Fatal*` nos 9 arquivos — o achado que abriu
+a Fase E não se repete aqui. O único `recover()` é o de `dispatchEvent`
+(`client_events.go:227`), que existe para que um handler de evento da aplicação
+não derrube a conexão, e cujo `debug.Stack()` vai para `cli.Log.Errorf`. Correto
+como está (ver "não tocadas").
+
+Os níveis não foram uniformizados: `handleConnectSuccess` loga `Infof`,
+`handleStreamError` alterna `Infof`/`Warnf`/`Errorf` conforme a gravidade do
+código, e o loop de reconexão é quase todo `Debugf`. A gradação é herdada do
+upstream e é coerente; mexer nela mudaria o volume de log de quem já consome
+essas linhas, sem ganho funcional.
+
+---
+
+### Cobertura de teste
+
+Como previsto, **este é o lote com a maior lista de lacunas** — e elas são
+reais, não preguiça.
+
+O que **não** dá para testar sem WebSocket cifrado e vivo, dito com todas as
+letras: `Connect`/`ConnectContext`/`connect`/`unlockedConnect`, `doHandshake`
+inteiro (exige as quatro rodadas do Noise contra um servidor que possua a chave
+privada da WhatsApp), `onDisconnect`, `unlockedDisconnect`, `ResetConnection`
+com socket ativo, `handleFrame`, `handlerQueueLoop`, `sendNodeAndGetData` no
+caminho de sucesso, `Logout` além dos guardas, `sendUnifiedSession`,
+`SetPassive`, `handleConnectSuccess` (que faz IQ de prekeys e IQ de passive), e
+o ramo de `handleStreamError` que reconecta no 515. Todos dependem de alguma
+combinação de: `socket.NoiseSocket` estabelecido, `FrameSocket` conectado,
+handshake concluído e `store.Device` completo. Um duplo de socket daria falsa
+confiança exatamente no lugar mais caro — a correção do `RefreshCAT`, por
+exemplo, é verificável por leitura e **foi** testável sem socket, mas o
+handshake não é nenhum dos dois.
+
+O caminho de **aceitação** de `verifyServerCert` merece menção à parte: montar
+uma cadeia que passe exigiria a chave privada do emissor da WhatsApp. Testar com
+outra chave testaria o duplo, não o código. Ficou só o **lado da rejeição** —
+que é justamente o que decide se um servidor que não é a WhatsApp consegue
+terminar o handshake.
+
+O que **dá** e foi coberto — 6 arquivos novos:
+
+- **`client_connection_test.go`**: `isRetryableConnectError` numa tabela de 13
+  status (os 6 retentáveis e 7 que não são), erro de rede, `ErrDialFailed`
+  embrulhado e erro genérico — classificar um 403 como transitório faria o
+  cliente insistir para sempre contra uma conta banida. Mais os guardas de
+  `*Client` nil dos seis métodos públicos de conexão, `WaitForConnection`
+  desistindo no prazo e abortando por disconnect esperado, a troca de canal em
+  `closeSocketWaitChan` (sem ela a próxima conexão acordaria os esperadores na
+  hora), e as duas saídas imediatas de `autoReconnect`. `connTestClient` é o
+  cliente mínimo compartilhado do lote.
+- **`connectionevents_test.go`**: a regressão do bug #1 nos dois motivos, os
+  dois lados da correção (com `RefreshCAT` preenchido, sucesso e falha), os
+  ramos transitórios que **não** podem marcar disconnect esperado, banimento
+  temporário (incluindo `expire` em segundos, que tratado como nanossegundos
+  viraria 3.6 µs), cliente desatualizado, motivo desconhecido, e
+  `handleStreamError` em `replaced`, 503, CAT com `RefreshCAT` nil, código
+  desconhecido e 515 com autoreconnect desligado. Mais `handleIB` nos dois
+  eventos de offline sync e a prova de que `<ib>` vazio, desconhecido ou
+  `dirty` continua inerte.
+- **`keepalive_test.go`**: as duas regressões do bug #2, a janela normal
+  (dentro de `[Min, Max)` em 200 sorteios, e com variação real em 100), a janela
+  mínima de 1 ms, `keepAliveLoop` voltando no cancelamento do contexto da
+  conexão, e `sendKeepAlive` pedindo parada em vez de contar falha quando o
+  contexto já morreu.
+- **`client_proxy_test.go`**: as duas regressões do bug #3 (com a verificação de
+  que o dialer do proxy é **de fato** chamado — instalar um `DialContext` que o
+  ignorasse vazaria o endereço real), roteamento de `SetProxyAddress` pelos
+  cinco esquemas, endereço vazio zerando o proxy, e a matriz de `SetProxyOptions`
+  × três destinos, onde errar manda tráfego pelo canal errado.
+- **`handshake_test.go`**: o lado da rejeição de `verifyServerCert` — cadeia
+  ilegível, partes faltando em cinco combinações, os cinco casos de tamanho de
+  assinatura errado (que são o que impede as conversões de fatia para array de
+  entrar em panic) e assinatura forjada com tamanho **certo**, que tem que
+  reprovar na verificação contra `WACertPubKey` — provando que a assinatura é
+  conferida, não apenas medida. Mais `checkCertValidity` nas duas pontas da
+  janela e o caso sem janela, que tem que contar como **expirado**, nunca como
+  "sempre válido".
+- **`errors_test.go`**: `IQError.Is` nos 13 sentinelas, cada um conferido também
+  contra **todos os outros** (um `Is` frouxo trataria "grupo não existe" como
+  "sem permissão"); `text` divergente com o mesmo `code` não casando; as três
+  formas da mensagem; `wrappedIQError` guardando os dois lados;
+  `DownloadHTTPError` por status inclusive embrulhado; `DisconnectedError` por
+  `Action` ignorando o nó anexado; e o unwrap dos dois erros de pareamento.
+- **`client_events_test.go`** e **`client_session_test.go`**: ordem dos
+  handlers, curto-circuito no primeiro que devolve `false` (o que sustenta
+  `SynchronousAck`), remoção nas três posições — primeira, meio e última são
+  ramos distintos, e o erro clássico é deslocar errado e perder um vizinho —,
+  recover de handler que entra em panic **com a prova de que o `RLock` da lista
+  não vaza**, e os defaults e mapas de `NewClient`. Do lado da sessão: a
+  normalização da orientação LID/PN em ambas as ordens e a recusa dos cinco
+  pares inválidos, `getUnifiedSessionID` dentro da janela de uma semana e
+  sensível ao `serverTimeOffset`, e `ParseWebMessage` nos ramos de resolução de
+  remetente, no desembrulho de edição (sem o qual o histórico mostraria o
+  envelope de protocolo em vez do texto novo) e nos metadados de comentário.
+
+---
+
+### Fora do escopo
+
+- `git diff --stat internal/wa-noise/proto/` continua vazio.
+- Arquivos já abaixo de 300 linhas; nenhuma divisão forçada (Fase A já
+  dimensionou estes nove).
+- `internals.go` — gerado, isento (ADR-0004). Nenhuma assinatura exposta por ele
+  mudou neste lote: as três correções são internas às funções, e
+  `randomKeepAliveInterval` / `contextDialerFor` são não exportadas.
+- **F46** registrado em `HOUSEKEEP.md`: corrida de dados em
+  `LastSuccessfulConnect` / `AutoReconnectErrors`, não corrigida porque a
+  correção mudaria a API pública do fork.
+
+---
+
+## Fase E concluída — fechamento dos 10 lotes, 2026-08-07
+
+Com o lote 10 a Fase E cobre os 90 arquivos da raiz de `internal/wa-noise/`.
+Cada lote tem sua própria seção acima com o detalhe; o resumo é um por linha:
+
+- **Lote 1 — mídia**: download, upload e criptografia de anexo.
+- **Lote 2 — newsletter**: canais, MEX e mensagens de newsletter.
+- **Lote 3 — appstate (raiz)**: sincronização e despacho de app state.
+- **Lote 4 — pareamento/prekeys/tokens/misc**: pareamento por QR e por telefone.
+- **Lote 5 — notificação/retry/recibo**: notificações, política de retry, recibos.
+- **Lote 6 — grupo (raiz)**: metadados, participantes e configurações de grupo.
+- **Lote 7 — usuário (raiz)**: usync, dispositivos, bloqueio, perfil comercial.
+- **Lote 8 — envio de mensagem**: `send*` e `sendfb*`.
+- **Lote 9 — recepção/decriptação**: o caminho Signal de toda mensagem que entra.
+- **Lote 10 — núcleo do client/conexão**: `Client`, socket, handshake, erros.
+
+**O que a Fase E encontrou.** A intenção declarada era qualidade de código —
+constantes nomeadas, logging consistente, cobertura de teste. Os bugs foram
+subproduto da leitura atenta que isso exigiu, e apareceram em **todos os dez
+lotes, sem exceção**: um `log.Fatalf` que derrubava o processo, múltiplos panics
+remotamente disparáveis (um único ramo de parsing concentrava onze), nil derefs,
+invalidação de cache que não invalidava, mapeamentos LID/PN invertidos,
+verificações de limite ausentes, crescimento de mapa sem teto, mutação do estado
+do chamador, e — neste lote — três panics no núcleo da conexão, sendo um
+disparável por um único stanza do servidor.
+
+O padrão é consistente e vale registrar como conclusão da fase: **este fork tem
+validação de entrada sistematicamente ausente nos pontos onde o servidor é a
+fonte do dado**. A defesa que funcionou, repetidamente, foi comparar ramos
+irmãos: quase todo bug foi encontrado percebendo que um caminho checava algo que
+o caminho ao lado, no mesmo arquivo, não checava — `decryptDM` versus o ramo de
+bot no lote 9, `handleStreamError` versus `handleConnectFailure` neste.
+
+**O que a Fase E deliberadamente não fez.** Cada lote tem sua seção "não
+tocadas", e elas são parte do resultado. O critério foi constante: mudança cuja
+equivalência de comportamento não pudesse ser verificada por leitura direta não
+entrou, mesmo parecendo óbvia — sobretudo em `message_decrypt.go` (lote 9) e no
+caminho de `socketLock` (lote 10). As suspeitas que exigem decisão de projeto,
+não patch, foram registradas em `HOUSEKEEP.md` (F29, F42, F44, F45, F46).
+
+**Decisões estruturais permanecem como registradas.** A raiz continua sendo um
+pacote único em torno de `Client` — a análise que sustenta isso está em "a raiz
+de `internal/wa-noise/` **não** vira subpacotes" e no que a Fase D conseguiu e
+não conseguiu extrair. Nada na Fase E alterou assinatura pública, tipo ou campo.

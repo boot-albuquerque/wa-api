@@ -1557,3 +1557,42 @@ que lida sozinha sugere sucesso quando na verdade nada foi mapeado.
 
 **Status**: **não corrigido** — inofensivo, e o lote 9 se limitou a corrigir o
 que tem consequência real. Pendente de decisão.
+
+## F46 — corrida de dados em `LastSuccessfulConnect` e `AutoReconnectErrors`
+
+**Data / contexto**: 2026-08-07, Fase E lote 10 (núcleo do client/conexão).
+
+**Onde**: `internal/wa-noise/connectionevents.go:160-161` (escrita) e
+`internal/wa-noise/client_connection.go:194,196` (leitura e escrita).
+
+```go
+// connectionevents.go, handleConnectSuccess — goroutine do handler de nó
+cli.LastSuccessfulConnect = time.Now()
+cli.AutoReconnectErrors = 0
+
+// client_connection.go, autoReconnect — outro goroutine
+autoReconnectDelay := time.Duration(cli.AutoReconnectErrors) * autoReconnectDelayStep
+cli.AutoReconnectErrors++
+```
+
+**Problema**: os dois campos são escritos por `handleConnectSuccess`, que roda
+no goroutine do `handlerQueueLoop`, e lidos/escritos por `autoReconnect`, que
+roda em outro goroutine (disparado por `go cli.autoReconnect(ctx)` em
+`onDisconnect` e em `ConnectContext`). Não há mutex nem `atomic` protegendo
+nenhum dos dois. É corrida de dados pelo modelo de memória do Go: o backoff pode
+ser calculado sobre um contador obsoleto, e `LastSuccessfulConnect` pode ser lido
+rasgado. Na prática o efeito visível é um atraso de reconexão errado, não perda
+de dados — mas é comportamento indefinido, e `go test -race` não acusa porque
+nenhum teste exercita os dois caminhos ao mesmo tempo (o que exigiria socket
+vivo).
+
+**Correção sugerida**: `AutoReconnectErrors` viraria `atomic.Int64` e
+`LastSuccessfulConnect` seria guardado sob o `socketLock` já existente, ou num
+`atomic.Pointer[time.Time]`.
+
+**Status**: **não corrigido**. Os dois campos são **exportados** — fazem parte
+da API pública do fork, e `AutoReconnectErrors` é explicitamente documentado em
+`client.go:57-58` como legível pelo `AutoReconnectHook`. Trocar o tipo quebra
+consumidores e cria divergência permanente contra o upstream, que é exatamente o
+que `PATCHES.md` existe para minimizar. Precisa de decisão do usuário sobre
+aceitar a mudança de API.
