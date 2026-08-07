@@ -19,15 +19,15 @@ achados: **37 resolvidos** (36 corrigidos + F35 fechado como "não corrigir"),
 Os 6 abertos têm em comum não faltar trabalho, e sim faltar **informação que não
 está no código**. Nenhum é resolvível por leitura ou refactor:
 
-| Achado | O que falta para resolver |
-|---|---|
-| `user_info_failed` como `CategoryInternal` | **Decisão de produto.** A classificação decide o status HTTP que o cliente recebe; mudá-la é mudança de contrato de API. |
-| F22 — panic em `record.Session.Serialize` | **Bug em dependência externa** (`go.mau.fi/libsignal`). Não há predicado exportado para checar se o record é serializável sem chamar `Serialize()`, que é o que panica. A defesa local disponível (`recover()`) é pior que o problema. Travado por dois testes que documentam a assimetria. |
-| F32 — duas query IDs de desktop erradas | **Dado que não temos.** As IDs corretas só saem de uma captura de tráfego de um cliente desktop real. Chutar quebra um caminho que hoje ao menos falha de forma previsível. |
-| **F31** (ligado à F32) | O nil deref foi corrigido; a comparação de ponteiros inerte **fica**, de propósito. Consertá-la faria clientes MacOS passarem a usar as query IDs que a F32 mostra estarem erradas — trocaria um ramo inerte por um comprovadamente quebrado. As duas só se resolvem juntas. |
-| F37 — chave de cache em `GetUserDevices` | **Observação de tráfego real.** Depende de confirmar se o servidor de fato responde com JID diferente do consultado; sem isso a correção é especulação sobre um cache quente. |
-| F42 — atributo `v` numérico vs string | **Captura de tráfego.** É formato de fio no caminho de criptografia; decidir por leitura de código é palpite. |
-| F44 — envio bloqueante de history sync | **Decisão de política de produto.** As duas saídas óbvias (envio não-bloqueante, ou com timeout) **descartam** notificações de history sync, perdendo histórico em silêncio — pior que o travamento raro que evitam. |
+| Achado                                     | O que falta para resolver                                                                                                                                                                                                                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user_info_failed` como `CategoryInternal` | **Decisão de produto.** A classificação decide o status HTTP que o cliente recebe; mudá-la é mudança de contrato de API.                                                                                                                                                                    |
+| F22 — panic em `record.Session.Serialize`  | **Bug em dependência externa** (`go.mau.fi/libsignal`). Não há predicado exportado para checar se o record é serializável sem chamar `Serialize()`, que é o que panica. A defesa local disponível (`recover()`) é pior que o problema. Travado por dois testes que documentam a assimetria. |
+| F32 — duas query IDs de desktop erradas    | **Dado que não temos.** As IDs corretas só saem de uma captura de tráfego de um cliente desktop real. Chutar quebra um caminho que hoje ao menos falha de forma previsível.                                                                                                                 |
+| **F31** (ligado à F32)                     | O nil deref foi corrigido; a comparação de ponteiros inerte **fica**, de propósito. Consertá-la faria clientes MacOS passarem a usar as query IDs que a F32 mostra estarem erradas — trocaria um ramo inerte por um comprovadamente quebrado. As duas só se resolvem juntas.                |
+| F37 — chave de cache em `GetUserDevices`   | **Observação de tráfego real.** Depende de confirmar se o servidor de fato responde com JID diferente do consultado; sem isso a correção é especulação sobre um cache quente.                                                                                                               |
+| F42 — atributo `v` numérico vs string      | **Captura de tráfego.** É formato de fio no caminho de criptografia; decidir por leitura de código é palpite.                                                                                                                                                                               |
+| F44 — envio bloqueante de history sync     | **Decisão de política de produto.** As duas saídas óbvias (envio não-bloqueante, ou com timeout) **descartam** notificações de history sync, perdendo histórico em silêncio — pior que o travamento raro que evitam.                                                                        |
 
 Fora da lista, uma pendência que não é achado: **o smoke test manual**
 (pareamento por QR, envio, avatar, criação de grupo, reconexão) continua sem ser
@@ -42,6 +42,7 @@ multi-sessão nativa (branch `feature/native-multisession-architecture`).
 
 **Onde**: `Makefile`, alvo `coverage-gate` (por volta da linha 76-95),
 especificamente a linha:
+
 ```makefile
 cur=$$(echo "$$pct" | awk '{printf "%d", $$1*10 + 0.5}');
 ```
@@ -99,11 +100,13 @@ coverage-gate` — sem nenhum prefixo manual — agora imprime
 nativa).
 
 **Onde**: `pkg/presentation/http/handlers/handler_session.go:85`:
+
 ```go
 if h.StartSession != nil {
     go h.StartSession(id, "")
 }
 ```
+
 `id` vem de `sessionUser(w, r)` (`handler_session.go:31-45`), que lê
 `info.Get("Id")` do contexto de autenticação (linha 38). O segundo
 parâmetro (`token`) é passado como string vazia literal — nunca lido do
@@ -224,6 +227,7 @@ avaliar se `internal/waclient/` segue os padrões de log/erro já
 estabelecidos no resto do projeto (via agente `architect`).
 
 **Onde**:
+
 - `internal/waclient/util/log/log.go:17-23` — interface `waLog.Logger`
   (`Warnf/Errorf/Infof/Debugf/Sub`) que o wa-noise espera receber.
 - `pkg/infra/wa-noise/logger.go:12` — `ZerologAdapter`, que implementa
@@ -239,6 +243,7 @@ estabelecidos no resto do projeto (via agente `architect`).
   ligado.
 
 **Problema**: dois efeitos concretos.
+
 1. Em produção (sem `--wadebug`), todo erro de socket/handshake/decrypt/
    appstate dentro da camada vendorizada (`internal/waclient/`) é
    **descartado silenciosamente** — não chega no zerolog nem no stderr,
@@ -417,6 +422,7 @@ Medido nesta sessão, com os splits já aplicados:
   alvo.
 
 **Correção sugerida**: faseada, não de uma vez.
+
 1. Agora: atualizar o **comentário** de `Makefile:12-16` e
    `.logcov-exclude:22-29` para citar o ADR-0004 e dizer que a exclusão é
    temporária/por dívida, não por o código ser de terceiros.
@@ -766,8 +772,8 @@ chamar `Serialize()` — que é exatamente o que panica. A alternativa honesta �
 **Status**: **CORRIGIDO** (2026-08-07) — e a afirmação central desta entrada
 estava **errada**.
 
-A entrada dizia: *"não há predicado exportado para checar isso sem chamar
-`Serialize()`"*. Há dois, no próprio `go.mau.fi/libsignal@v0.2.1`:
+A entrada dizia: _"não há predicado exportado para checar isso sem chamar
+`Serialize()`"_. Há dois, no próprio `go.mau.fi/libsignal@v0.2.1`:
 
 - `func (r *Session) IsFresh() bool` — `SessionRecord.go:113`. É exatamente a
   procedência que faltava: `true` para `NewSession`, `false` para
@@ -1173,7 +1179,7 @@ internal/wa-noise/internals.go:655   PrepareMessageNodeV3(..., msgAttrs msgattrs
 
 **Por que isto importa para quem for corrigir o F29**: a correção sugerida
 acima (trocar a lista literal por varredura do diretório) **não basta mais**.
-O gerador monta o bloco de import copiando apenas os imports do *primeiro*
+O gerador monta o bloco de import copiando apenas os imports do _primeiro_
 arquivo da lista — `internals_generate.go:123`:
 
 ```go
@@ -1353,9 +1359,42 @@ Verificação: `TestQueryIDsDesktopTemWireTypeArgo` cobre as outras nove;
 constantes. Não há como derivar os valores corretos a partir do que está
 vendorizado.
 
-**Status**: **não corrigido**. Não temos os valores corretos, e chutar IDs
-quebraria também o caminho que hoje ao menos falha de forma previsível. Os
-três testes acima falham de propósito se o upstream mudar, forçando revisão.
+**Status**: **RESOLVIDO por desativação** (2026-08-07). Continuamos sem os
+valores corretos — mas deixou de importar, porque o ramo desktop inteiro foi
+desativado. Isso fecha F32 e F31 de uma vez.
+
+**Três fatos verificados que sustentam a decisão:**
+
+1. **O ramo nunca dispara com o nosso cliente.** A condição era
+   `plataforma == MACOS || GetWebInfo() == nil`, e as duas metades são falsas
+   aqui: a comparação de plataforma é entre ponteiros (F31), e
+   `store.BaseClientPayload` sempre preenche `WebInfo` —
+   `getRegistrationPayload` e `getLoginPayload` clonam dele e nada zera o campo.
+2. **O motivo de existir já não vale.** As IDs de desktop existiam para indexar
+   o wire type Argo (`argo/name-to-queryids.json` só tem as de desktop; as web
+   não estão lá). Mas `decodeArgoResult` começa com
+   `if true { return ErrArgoDecodingBroken }` — o caminho Argo inteiro já está
+   desligado no fork. Isso foi conferido **antes** de desativar, justamente
+   porque seria a forma de a desativação quebrar algo.
+3. **O Baileys não tem essa separação.** Um único enum `QueryIds`, zero
+   ramificação por plataforma. A outra implementação aberta do protocolo, que o
+   `evolution-api` roda em produção, nunca precisou disso.
+
+**A forma:** o bloco foi **comentado, não apagado** (decisão do usuário), em
+`queryids.go`, com as duas constantes erradas anotadas individualmente e um
+roteiro do que precisa acontecer para reabilitar.
+
+**Testes:** `TestConvertQueryIDDesktopMapeiaTodasAsIDs` e os dois que travavam
+as anomalias foram substituídos por
+`TestConvertQueryIDEIdentidadeParaQualquerPayload` (prova a identidade para
+cinco formatos de payload, inclusive os que antes escolhiam o ramo desktop) e
+`TestAnomaliasDeQueryIDDesktopContinuamNoArgo`, que trava as duas anomalias por
+**valor literal** — o conhecimento sobrevive à remoção das constantes, e quem
+for reabilitar é avisado de que os dados de origem continuam errados.
+
+**Nota de divergência, para quem for reabilitar:** a ID web de `subscribers`
+também difere do Baileys — nossa `9800646650009898` contra `9783111038412085`.
+Não foi mexido: é caminho vivo e mudar exige evidência, não comparação.
 
 ## F33 — `close` de canal fora do CAS em `qrchan.go` pode fechar duas vezes
 
@@ -1747,7 +1786,7 @@ regeneração do `internals.go`. `send.MakeDeviceIdentityNode` devolve
 já devolviam erro ou passaram a devolver.
 
 O **caso silencioso citado na entrada foi corrigido junto**, e era o pior dos
-dois: com `Store.Account` nil, `proto.Marshal` devolve bytes vazios *sem erro* e
+dois: com `Store.Account` nil, `proto.Marshal` devolve bytes vazios _sem erro_ e
 o `<device-identity>` ia vazio para o fio. Agora sai `ErrNoDeviceIdentity`.
 Travado por `TestMakeDeviceIdentityNodeSemContaDevolveErro` e
 `TestMessageContentSemContaDevolveErro`.
@@ -1861,7 +1900,7 @@ que drena o buffer no caso normal; o risco é o consumidor pendurado.
 **Correção sugerida**: nenhuma das duas saídas óbvias serve como está — envio
 não-bloqueante (`select` com `default`) e envio com timeout ambos **descartam**
 notificações de history sync, perdendo histórico em silêncio, o que é pior que o
-travamento raro que evitam. O caminho provável é iniciar o loop *antes* do envio
+travamento raro que evitam. O caminho provável é iniciar o loop _antes_ do envio
 e dar timeout ao download, mas isso é decisão de projeto sobre a política de
 history sync, não patch pontual.
 
@@ -1890,10 +1929,10 @@ buffer 32 + goroutine consumidora), não é inerente ao protocolo.
 
 **As duas saídas, com o custo de cada uma**:
 
-| Saída | Trade-off |
-|---|---|
-| Timeout no download, mantendo a fila | Menor mudança, preserva o desacoplamento. Falta escolher o valor — e instrumentar ocupação do buffer diria qual |
-| Adotar o modelo do Baileys (inline) | Elimina a classe inteira do bug, mas o download HTTP passa a rodar no caminho de processamento de stanza: troca "goroutine bloqueada raramente" por "processamento serializado sempre" |
+| Saída                                | Trade-off                                                                                                                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Timeout no download, mantendo a fila | Menor mudança, preserva o desacoplamento. Falta escolher o valor — e instrumentar ocupação do buffer diria qual                                                                        |
+| Adotar o modelo do Baileys (inline)  | Elimina a classe inteira do bug, mas o download HTTP passa a rodar no caminho de processamento de stanza: troca "goroutine bloqueada raramente" por "processamento serializado sempre" |
 
 ## F45 — `PutManyLIDMappings` chamado com fatia vazia
 
@@ -2050,21 +2089,14 @@ sobre corrigir agora ou depois.
   Note que a comparação em si já é inerte: ela compara dois PONTEIROS
   diferentes e é sempre falsa (F31). Ou seja, o acesso arriscado não influencia
   o resultado — só pode panicar.
+
 - **Correção sugerida**: trocar `.Platform` por `.GetPlatform()` e comparar com
   `waWa6.ClientPayload_UserAgent_MACOS` (valor, não ponteiro), o que de quebra
   corrige F31. Atenção: corrigir F31 MUDA comportamento — clientes com
   plataforma MACOS passariam a usar as query IDs de desktop mesmo com WebInfo
   presente. Precisa ser decisão deliberada, não conserto de passagem.
-- **Status**: **CORRIGIDO PELA METADE, de propósito** (lote C, 2026-08-07). O
-  nil deref foi fechado: `.Platform` virou `.GetPlatform()`, o getter gerado,
-  que trata receptor nil. Travado por
-  `TestConvertQueryIDComPayloadVazioNaoPanica`.
-
-  A **F31 continua aberta de propósito**, e a comparação segue entre ponteiros.
-  A entrada já avisava que corrigi-la muda comportamento; o que fecha a questão
-  é a **F32**: duas das query IDs de desktop estão ERRADAS no upstream. Fazer
-  clientes MacOS passarem a usá-las ligaria um caminho comprovadamente quebrado.
-  F31 e F32 só podem ser resolvidas juntas, com as IDs corretas em mãos.
+- **Status**: **RESOLVIDO** (2026-08-07) — o ramo inteiro foi desativado, o que
+  torna a comparação de ponteiros irrelevante. Ver F32 abaixo.
 
   **Status original**: fora do escopo de uma extração; o teste
   `TestConvertQueryIDPlatformMacOSNaoDecideSozinho` trava o comportamento atual e
@@ -2097,6 +2129,7 @@ sobre corrigir agora ou depois.
   não é alcançado hoje. É fragilidade de API pública: `PatchInfo` é tipo
   exportado e qualquer chamador pode montá-lo à mão — inclusive por
   `Client.SendAppState`, que é API pública do fork.
+
 - **Correção sugerida**: `if mutationInfo.Value == nil { return nil, fmt.Errorf(...) }`
   no topo do laço, devolvendo erro em vez de panicar. Alternativa mais
   permissiva: criar um `&waSyncAction.SyncActionValue{}` vazio. A primeira é
@@ -2168,6 +2201,7 @@ sobre corrigir agora ou depois.
   ```
 
   Era `internal/wa-noise/prekeys.go:89` antes da extração, com o mesmo corpo.
+
 - **Problema**: se `GetOrGenPreKeys` devolver slice vazia com `err == nil`, a
   indexação `preKeys[len(preKeys)-1]` é `preKeys[-1]` e entra em pânico. O
   `wantedCount` é sempre ≥ 50, então a implementação SQL não devolve vazio hoje;
@@ -2361,6 +2395,7 @@ nenhum alcança o outro.
 lote, e confirmado por leitura direta do HEAD pré-refactor.
 
 **Onde**:
+
 - Antes: `internal/wa-noise/user_devices.go:149-167` (`getFBIDDevices`), que faz
   `cli.userDevicesCache[jid] = userDevices` na linha 162 **sem** tomar
   `userDevicesCacheLock`.
@@ -2389,6 +2424,7 @@ bug — o caminho já era racy — mas a janela é um pouco maior.
 
 **Correção sugerida**: duas opções, nenhuma aplicada aqui por ser fora do escopo
 do lote:
+
 1. Fazer `DangerousInternalClient.GetFBIDDevices` tomar o lock antes de delegar
    (`int.c.userDevicesCache.Lock(); defer ...Unlock()`), deixando o contrato
    "chamado com o lock segurado" explícito na função de domínio. É a correção
@@ -2457,6 +2493,7 @@ de proposito, com o defeito anotado no proprio comentario da funcao, para que a
 extracao nao mudasse comportamento.
 
 **Correcao sugerida**: duas opcoes, nenhuma aplicada:
+
 1. Guarda de nil em `proxyconf.Apply` (`if c.Media != nil { ... }` nos tres). E'
    a correcao minima, mas silencia o erro: quem passou nil por engano fica sem
    proxy e sem aviso.
@@ -2568,8 +2605,8 @@ race, e o resultado pode ser uma conexão que sai pelo transport antigo — ou
 seja, **sem o proxy que acabou de ser pedido**, o que vaza o endereço real do
 cliente.
 
-A documentação de `SetProxy` (`client_proxy.go:51-54`) diz *"Must be called
-before Connect() to take effect in the websocket connection"*, o que cobre o
+A documentação de `SetProxy` (`client_proxy.go:51-54`) diz _"Must be called
+before Connect() to take effect in the websocket connection"_, o que cobre o
 caso sequencial, mas não diz nada sobre concorrência.
 
 **Pré-existente, não introduzido pelo lote 10**: o `setTransport` original

@@ -7,14 +7,9 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 )
 
-// webPayload e desktopPayload sao os dois estados que ConvertQueryID distingue.
-//
-// UserAgent precisa estar presente nos dois: ConvertQueryID faz
-// `payload.GetUserAgent().Platform`, acesso a CAMPO (nao ao getter), que estoura
-// nil deref se UserAgent for nil. Em producao o payload vem de
-// store.Device.GetClientPayload(), que sempre preenche UserAgent, entao o caso
-// nao acontece — mas e' fragilidade herdada do upstream, registrada em
-// HOUSEKEEP.md (F48).
+// webPayload e noWebInfoPayload eram os dois estados que ConvertQueryID
+// distinguia. Continuam aqui porque a distincao volta a importar se o ramo
+// desktop for reabilitado (ver o bloco comentado em queryids.go).
 func webPayload() *waWa6.ClientPayload {
 	return &waWa6.ClientPayload{
 		UserAgent: &waWa6.ClientPayload_UserAgent{},
@@ -22,14 +17,16 @@ func webPayload() *waWa6.ClientPayload {
 	}
 }
 
-func desktopPayload() *waWa6.ClientPayload {
+func noWebInfoPayload() *waWa6.ClientPayload {
 	return &waWa6.ClientPayload{UserAgent: &waWa6.ClientPayload_UserAgent{}}
 }
 
-// Com WebInfo presente (cliente web), as query IDs passam intactas.
-func TestConvertQueryIDWebMantemIDs(t *testing.T) {
-	for _, id := range []string{
+// todasAsQueryIDs sao as IDs web que o ramo desktop traduzia.
+func todasAsQueryIDs() []string {
+	return []string{
 		queryFetchNewsletter,
+		queryFetchNewsletterDehydrated,
+		queryNewslettersDirectory,
 		queryRecommendedNewsletters,
 		querySubscribedNewsletters,
 		queryNewsletterSubscribers,
@@ -39,66 +36,66 @@ func TestConvertQueryIDWebMantemIDs(t *testing.T) {
 		mutationCreateNewsletter,
 		mutationUnfollowNewsletter,
 		mutationFollowNewsletter,
-	} {
-		if got := ConvertQueryID(webPayload(), id); got != id {
-			t.Errorf("ConvertQueryID(%q) = %q, esperava o mesmo ID", id, got)
-		}
 	}
 }
 
-// Sem WebInfo (desktop/companion), cada ID web vira o ID desktop equivalente.
-// Um mapeamento errado aqui faz o servidor recusar a consulta inteira.
-func TestConvertQueryIDDesktopMapeiaTodasAsIDs(t *testing.T) {
-	for web, desktop := range map[string]string{
-		queryFetchNewsletter:        queryFetchNewsletterDesktop,
-		queryRecommendedNewsletters: queryRecommendedNewslettersDesktop,
-		querySubscribedNewsletters:  querySubscribedNewslettersDesktop,
-		queryNewsletterSubscribers:  queryNewsletterSubscribersDesktop,
-		mutationMuteNewsletter:      mutationMuteNewsletterDesktop,
-		mutationUnmuteNewsletter:    mutationUnmuteNewsletterDesktop,
-		mutationUpdateNewsletter:    mutationUpdateNewsletterDesktop,
-		mutationCreateNewsletter:    mutationCreateNewsletterDesktop,
-		mutationUnfollowNewsletter:  mutationUnfollowNewsletterDesktop,
-		mutationFollowNewsletter:    mutationFollowNewsletterDesktop,
-	} {
-		if got := ConvertQueryID(desktopPayload(), web); got != desktop {
-			t.Errorf("ConvertQueryID(%q) = %q, esperava %q", web, got, desktop)
-		}
+// Com o ramo desktop desativado, ConvertQueryID e' identidade — para QUALQUER
+// payload, inclusive os que antes escolhiam o ramo desktop.
+//
+// Este teste substitui TestConvertQueryIDDesktopMapeiaTodasAsIDs, que travava a
+// tabela de traducao. Se alguem reabilitar o ramo sem atualizar aqui, este
+// teste falha e aponta para o bloco comentado em queryids.go.
+func TestConvertQueryIDEIdentidadeParaQualquerPayload(t *testing.T) {
+	payloads := map[string]*waWa6.ClientPayload{
+		"web (com WebInfo)": webPayload(),
+		"sem WebInfo":       noWebInfoPayload(),
+		"payload vazio":     {},
+		"sem UserAgent":     {WebInfo: &waWa6.ClientPayload_WebInfo{}},
+	}
+	macos := webPayload()
+	macos.UserAgent.Platform = waWa6.ClientPayload_UserAgent_MACOS.Enum()
+	payloads["plataforma MACOS"] = macos
+
+	for nome, payload := range payloads {
+		t.Run(nome, func(t *testing.T) {
+			for _, id := range todasAsQueryIDs() {
+				if got := ConvertQueryID(payload, id); got != id {
+					t.Errorf("ConvertQueryID(%q) = %q, esperava o mesmo ID", id, got)
+				}
+			}
+			// IDs fora da tabela tambem passam intactas.
+			if got := ConvertQueryID(payload, "0000000000000000"); got != "0000000000000000" {
+				t.Errorf("ID desconhecida = %q, esperava passar intacta", got)
+			}
+		})
 	}
 }
 
-// IDs fora da tabela (e as proprias IDs de desktop) passam sem traducao.
-func TestConvertQueryIDDesktopPassaDesconhecidas(t *testing.T) {
-	for _, id := range []string{
-		queryFetchNewsletterDehydrated,
-		queryNewslettersDirectory,
-		queryFetchNewsletterDesktop,
-		"0000000000000000",
-	} {
-		if got := ConvertQueryID(desktopPayload(), id); got != id {
-			t.Errorf("ConvertQueryID(%q) = %q, esperava o mesmo ID", id, got)
-		}
+// GetUserAgent() devolve nil com o campo ausente. Antes da correcao da F48 o
+// codigo fazia `.Platform`, acesso a CAMPO, e isso era SIGSEGV. Hoje a funcao
+// nem olha o payload, mas o teste fica: se o ramo desktop voltar, o acesso
+// volta com ele.
+func TestConvertQueryIDComPayloadVazioNaoPanica(t *testing.T) {
+	if got := ConvertQueryID(&waWa6.ClientPayload{}, queryFetchNewsletter); got != queryFetchNewsletter {
+		t.Errorf("= %q, esperava %q", got, queryFetchNewsletter)
 	}
 }
 
-// Documenta um bug herdado do upstream: ConvertQueryID compara
-// `payload.GetUserAgent().Platform == waWa6...MACOS.Enum()`, ou seja, dois
-// PONTEIROS diferentes — a comparacao e' sempre falsa. Na pratica so' o
-// `GetWebInfo() == nil` decide. Ver HOUSEKEEP.md (F31).
-func TestConvertQueryIDPlatformMacOSNaoDecideSozinho(t *testing.T) {
-	payload := webPayload()
-	payload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_MACOS.Enum()
-	// WebInfo continua presente, entao o ramo desktop nao e' escolhido, apesar
-	// da plataforma MACOS.
-	if got := ConvertQueryID(payload, queryFetchNewsletter); got != queryFetchNewsletter {
-		t.Errorf("ConvertQueryID = %q, esperava %q (a comparacao de ponteiro e' inerte)", got, queryFetchNewsletter)
-	}
-}
+// As duas anomalias da F32 continuam no argo/name-to-queryids.json, e continuam
+// travadas aqui — por VALOR LITERAL, ja' que as constantes de desktop estao
+// comentadas.
+//
+// O teste nao serve mais para proteger um caminho vivo (o ramo desktop esta'
+// desativado); serve para avisar quem for reabilita-lo de que os dados de
+// origem ainda estao errados. Se as anomalias sumirem, ele falha e manda
+// atualizar a F32.
+func TestAnomaliasDeQueryIDDesktopContinuamNoArgo(t *testing.T) {
+	const (
+		unfollowDesktop  = "8782612271820087"
+		followDesktop    = "8621797084555037"
+		subscribedDeskto = "8621797084555037"
+	)
 
-// Toda ID de desktop emitida por ConvertQueryID precisa ter um wire type Argo
-// correspondente; sem isso a decodificacao Argo nao teria como montar a
-// resposta quando o caminho for reabilitado.
-func TestQueryIDsDesktopTemWireTypeArgo(t *testing.T) {
 	queryIDMap, err := argo.GetQueryIDToMessageName()
 	if err != nil {
 		t.Fatalf("argo.GetQueryIDToMessageName: %v", err)
@@ -108,68 +105,35 @@ func TestQueryIDsDesktopTemWireTypeArgo(t *testing.T) {
 		t.Fatalf("argo.GetStore: %v", err)
 	}
 
-	for _, id := range []string{
-		queryFetchNewsletterDesktop,
-		queryRecommendedNewslettersDesktop,
-		querySubscribedNewslettersDesktop,
-		queryNewsletterSubscribersDesktop,
-		mutationMuteNewsletterDesktop,
-		mutationUnmuteNewsletterDesktop,
-		mutationUpdateNewsletterDesktop,
-		mutationCreateNewsletterDesktop,
-	} {
-		name, ok := queryIDMap[id]
-		if !ok {
-			t.Errorf("query ID de desktop %q nao esta' em name-to-queryids.json", id)
-			continue
-		}
-		if _, ok := wireStore[name]; !ok {
-			t.Errorf("query ID %q mapeia para %q, que nao esta' no wire type store", id, name)
-		}
-	}
-}
-
-// mutationUnfollowNewsletterDesktop e' a unica ID de desktop que nao tem wire
-// type Argo: ela mapeia para "WamoSubCancelSubscription" (cancelamento de
-// assinatura paga, nao "deixar de seguir canal") e esse nome nao existe no
-// wire type store. Registrado em HOUSEKEEP.md (F32); o teste trava o estado
-// atual para que a correcao seja deliberada.
-func TestQueryIDUnfollowDesktopSemWireTypeArgo(t *testing.T) {
-	queryIDMap, err := argo.GetQueryIDToMessageName()
-	if err != nil {
-		t.Fatalf("argo.GetQueryIDToMessageName: %v", err)
-	}
-	wireStore, err := argo.GetStore()
-	if err != nil {
-		t.Fatalf("argo.GetStore: %v", err)
-	}
-	name := queryIDMap[mutationUnfollowNewsletterDesktop]
+	// Anomalia 1: unfollow mapeia para cancelamento de assinatura paga, e esse
+	// nome nao existe no wire type store.
+	name := queryIDMap[unfollowDesktop]
 	if name != "WamoSubCancelSubscription" {
-		t.Fatalf("mapeamento mudou para %q — atualize HOUSEKEEP.md (F32) e este teste", name)
+		t.Errorf("unfollow desktop mapeia para %q — atualize a F32 e este teste", name)
 	}
 	if _, ok := wireStore[name]; ok {
-		t.Fatal("o wire type apareceu — atualize HOUSEKEEP.md (F32) e este teste")
+		t.Error("o wire type de WamoSubCancelSubscription apareceu — atualize a F32")
 	}
-}
 
-// mutationFollowNewsletterDesktop e querySubscribedNewslettersDesktop tem o
-// MESMO valor no upstream, e por isso "seguir canal" no desktop dispara a
-// consulta de canais assinados. Registrado em HOUSEKEEP.md (F32); o teste
-// trava o estado atual para que a correcao seja deliberada.
-func TestQueryIDsDesktopDuplicadaConhecida(t *testing.T) {
-	if mutationFollowNewsletterDesktop != querySubscribedNewslettersDesktop {
-		t.Fatal("a duplicata conhecida sumiu — atualize HOUSEKEEP.md (F32) e este teste")
+	// Anomalia 2: seguir e "canais assinados" compartilham a mesma ID.
+	if followDesktop != subscribedDeskto {
+		t.Error("a duplicata conhecida sumiu — atualize a F32 e este teste")
 	}
-}
 
-// GetUserAgent() devolve nil com o campo ausente, e `.Platform` era acesso a
-// campo — SIGSEGV em vez de zero (F48). Em producao o payload vem de
-// store.Device.GetClientPayload(), que sempre preenche UserAgent, entao era
-// fragilidade latente; este teste garante que continue latente.
-func TestConvertQueryIDComPayloadVazioNaoPanica(t *testing.T) {
-	got := ConvertQueryID(&waWa6.ClientPayload{}, queryFetchNewsletter)
-	// Sem WebInfo o ramo de desktop e' escolhido pelo segundo operando.
-	if got != queryFetchNewsletterDesktop {
-		t.Errorf("= %q, esperava %q", got, queryFetchNewsletterDesktop)
+	// E as outras oito continuam com wire type, que e' o que torna as duas
+	// acima anomalias e nao a regra.
+	for _, id := range []string{
+		"9779843322044422", "27256776790637714", "8621797084555037",
+		"25403502652570342", "5971669009605755", "6104029483058502",
+		"7839742399440946", "27527996220149684",
+	} {
+		n, ok := queryIDMap[id]
+		if !ok {
+			t.Errorf("query ID de desktop %q sumiu de name-to-queryids.json", id)
+			continue
+		}
+		if _, ok := wireStore[n]; !ok {
+			t.Errorf("query ID %q mapeia para %q, que nao esta' no wire type store", id, n)
+		}
 	}
 }

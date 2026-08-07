@@ -15,68 +15,95 @@ const (
 	mutationCreateNewsletter       = "6234210096708695"
 	mutationUnfollowNewsletter     = "6392786840836363"
 	mutationFollowNewsletter       = "9926858900719341"
-
-	// desktop & mobile
-	queryFetchNewsletterDesktop        = "9779843322044422"
-	queryRecommendedNewslettersDesktop = "27256776790637714"
-	querySubscribedNewslettersDesktop  = "8621797084555037"
-	queryNewsletterSubscribersDesktop  = "25403502652570342"
-	mutationMuteNewsletterDesktop      = "5971669009605755" // variables -> {newsletter_id, updates->{description, settings}}, output: xwa2_newsletter_update -> NewsletterMetadata without viewer meta
-	mutationUnmuteNewsletterDesktop    = "6104029483058502"
-	mutationUpdateNewsletterDesktop    = "7839742399440946"
-	mutationCreateNewsletterDesktop    = "27527996220149684"
-	mutationUnfollowNewsletterDesktop  = "8782612271820087"
-	mutationFollowNewsletterDesktop    = "8621797084555037"
 )
 
-// ConvertQueryID traduz uma query ID web para a equivalente de desktop quando o
-// payload indica um cliente desktop/companion. IDs fora da tabela passam
-// intactas.
+// ---------------------------------------------------------------------------
+// RAMO DESKTOP DESATIVADO (F31 e F32 em HOUSEKEEP.md)
+// ---------------------------------------------------------------------------
 //
-// Recebe o payload em vez de um Transport de proposito: a decisao nao depende
-// de mais nada do cliente, e assim a funcao e' testavel sem duble.
+// O bloco abaixo traduzia cada query ID web para a equivalente de desktop. Foi
+// desativado em 2026-08-07, nao apagado, para que os valores continuem visiveis
+// para quem precisar reabilita-lo.
 //
-// Cuidado ao mexer: a comparacao de plataforma abaixo compara dois PONTEIROS
-// diferentes e por isso e' sempre falsa — na pratica so' o GetWebInfo() == nil
-// decide. E' bug herdado do upstream, registrado em HOUSEKEEP.md (F31) e
-// preservado aqui de proposito.
-func ConvertQueryID(payload *waWa6.ClientPayload, queryID string) string {
-	// GetUserAgent() devolve nil com o campo ausente, e `.Platform` e' acesso a
-	// CAMPO — dava SIGSEGV em vez de ler o zero (F48). GetPlatform() e' o getter
-	// gerado, que trata o receptor nil.
-	//
-	// A comparacao continua entre PONTEIROS e continua sempre falsa (F31), de
-	// proposito: comparar por VALOR faria clientes MacOS passarem a usar as
-	// query IDs de desktop, e a F32 documenta que duas delas estao ERRADAS no
-	// upstream. Consertar a F31 aqui ligaria um caminho comprovadamente
-	// quebrado — as duas so' podem ser resolvidas juntas, com IDs corretas em
-	// maos.
-	if payload.GetUserAgent().GetPlatform().Enum() == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
-		switch queryID {
-		case queryFetchNewsletter:
-			return queryFetchNewsletterDesktop
-		case queryRecommendedNewsletters:
-			return queryRecommendedNewslettersDesktop
-		case querySubscribedNewsletters:
-			return querySubscribedNewslettersDesktop
-		case queryNewsletterSubscribers:
-			return queryNewsletterSubscribersDesktop
-		case mutationMuteNewsletter:
-			return mutationMuteNewsletterDesktop
-		case mutationUnmuteNewsletter:
-			return mutationUnmuteNewsletterDesktop
-		case mutationUpdateNewsletter:
-			return mutationUpdateNewsletterDesktop
-		case mutationCreateNewsletter:
-			return mutationCreateNewsletterDesktop
-		case mutationUnfollowNewsletter:
-			return mutationUnfollowNewsletterDesktop
-		case mutationFollowNewsletter:
-			return mutationFollowNewsletterDesktop
-		default:
-			return queryID
-		}
-	} else {
-		return queryID
-	}
+// POR QUE FOI DESATIVADO
+//
+//  1. Ele nunca dispara com o nosso cliente. A condicao era
+//     `plataforma == MACOS || GetWebInfo() == nil`, e as duas metades sao falsas
+//     aqui: a comparacao de plataforma e' entre dois PONTEIROS diferentes, logo
+//     sempre falsa (F31), e store.BaseClientPayload sempre preenche WebInfo —
+//     getRegistrationPayload e getLoginPayload clonam dele, e nada zera o campo.
+//  2. Duas das dez constantes estao ERRADAS (F32), e estao anotadas abaixo.
+//  3. O motivo original de existirem — alimentar o wire type Argo, que so' e'
+//     indexado por ID de desktop em argo/name-to-queryids.json — nao vale mais:
+//     decodeArgoResult comeca com `if true { return ErrArgoDecodingBroken }`,
+//     ou seja, o caminho Argo inteiro ja' esta' desligado no fork.
+//
+// O QUE PRECISA ACONTECER PARA REABILITAR
+//
+//   - substituir as duas constantes erradas por valores capturados de um
+//     cliente desktop real (o bundle JS do WhatsApp Web carrega as query IDs
+//     como constantes; e' a rota usual de extracao);
+//   - decidir se a comparacao de plataforma deve passar a ser por VALOR
+//     (`GetPlatform() == waWa6.ClientPayload_UserAgent_MACOS`), que e' o que
+//     consertaria a F31 — e que so' faz sentido depois de (1), porque hoje
+//     ligaria um caminho com IDs comprovadamente quebradas;
+//   - reabilitar decodeArgoResult, sem o que a resposta nao tem como ser
+//     decodificada.
+//
+// Para referencia: o Baileys, a outra implementacao aberta do protocolo, NAO
+// tem separacao desktop/web nenhuma — usa um unico enum QueryIds, sem
+// ramificacao por plataforma.
+//
+//	const (
+//		queryFetchNewsletterDesktop        = "9779843322044422"
+//		queryRecommendedNewslettersDesktop = "27256776790637714"
+//		querySubscribedNewslettersDesktop  = "8621797084555037"
+//		queryNewsletterSubscribersDesktop  = "25403502652570342"
+//		mutationMuteNewsletterDesktop      = "5971669009605755"
+//		mutationUnmuteNewsletterDesktop    = "6104029483058502"
+//		mutationUpdateNewsletterDesktop    = "7839742399440946"
+//		mutationCreateNewsletterDesktop    = "27527996220149684"
+//
+//		// ERRADA (F32): mapeia, em argo/name-to-queryids.json, para
+//		// "WamoSubCancelSubscription" — cancelamento de assinatura PAGA, nao
+//		// "deixar de seguir canal" — e esse nome nao existe no wire type store.
+//		// E' a unica das dez sem wire type.
+//		mutationUnfollowNewsletterDesktop = "8782612271820087"
+//
+//		// ERRADA (F32): valor IDENTICO a querySubscribedNewslettersDesktop.
+//		// Em cliente desktop, "seguir canal" dispararia a consulta de canais
+//		// assinados e a operacao nao faria nada, em silencio.
+//		mutationFollowNewsletterDesktop = "8621797084555037"
+//	)
+//
+//	switch queryID {
+//	case queryFetchNewsletter:
+//		return queryFetchNewsletterDesktop
+//	case queryRecommendedNewsletters:
+//		return queryRecommendedNewslettersDesktop
+//	case querySubscribedNewsletters:
+//		return querySubscribedNewslettersDesktop
+//	case queryNewsletterSubscribers:
+//		return queryNewsletterSubscribersDesktop
+//	case mutationMuteNewsletter:
+//		return mutationMuteNewsletterDesktop
+//	case mutationUnmuteNewsletter:
+//		return mutationUnmuteNewsletterDesktop
+//	case mutationUpdateNewsletter:
+//		return mutationUpdateNewsletterDesktop
+//	case mutationCreateNewsletter:
+//		return mutationCreateNewsletterDesktop
+//	case mutationUnfollowNewsletter:
+//		return mutationUnfollowNewsletterDesktop
+//	case mutationFollowNewsletter:
+//		return mutationFollowNewsletterDesktop
+//	}
+
+// ConvertQueryID devolve a query ID inalterada.
+//
+// A funcao continua existindo, com o payload no lugar, porque SendMexIQ a chama
+// e porque e' aqui que a traducao para desktop voltaria caso seja reabilitada —
+// ver o bloco comentado acima.
+func ConvertQueryID(_ *waWa6.ClientPayload, queryID string) string {
+	return queryID
 }

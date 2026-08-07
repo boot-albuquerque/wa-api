@@ -44,7 +44,7 @@ func TestSendMexIQErroDeMarshalDasVariaveis(t *testing.T) {
 // O IQ montado carrega o namespace, o tipo, o destino e a query ID convertida.
 func TestSendMexIQMontaOIQEConverteAQueryID(t *testing.T) {
 	f := newFakeTransport()
-	f.payload = desktopPayload() // forca a conversao web -> desktop
+	f.payload = noWebInfoPayload() // forca a conversao web -> desktop
 	f.iqResp = mexJSON(`{"data":{"ok":true}}`)
 
 	data, err := SendMexIQ(context.Background(), f, queryFetchNewsletter, map[string]any{"a": 1})
@@ -68,8 +68,8 @@ func TestSendMexIQMontaOIQEConverteAQueryID(t *testing.T) {
 	if nodes[0].Tag != mexQueryTag {
 		t.Errorf("tag = %q, esperava %q", nodes[0].Tag, mexQueryTag)
 	}
-	if nodes[0].Attrs[mexQueryIDAttr] != queryFetchNewsletterDesktop {
-		t.Errorf("query_id = %v, esperava a ID de desktop %q", nodes[0].Attrs[mexQueryIDAttr], queryFetchNewsletterDesktop)
+	if nodes[0].Attrs[mexQueryIDAttr] != queryFetchNewsletter {
+		t.Errorf("query_id = %v, esperava %q — o ramo desktop esta' desativado", nodes[0].Attrs[mexQueryIDAttr], queryFetchNewsletter)
 	}
 	// As variaveis vao embrulhadas em {"variables": ...}.
 	if string(nodes[0].Content.([]byte)) != `{"variables":{"a":1}}` {
@@ -180,7 +180,7 @@ func TestDecodeGraphQLResultSucesso(t *testing.T) {
 // estiver quebrado; o resto do corpo e' inalcancavel hoje. O teste trava o
 // estado atual para que a reabilitacao seja deliberada.
 func TestDecodeArgoResultSempreRecusa(t *testing.T) {
-	data, err := decodeArgoResult(newFakeTransport(), queryFetchNewsletterDesktop, []byte("x"))
+	data, err := decodeArgoResult(newFakeTransport(), queryFetchNewsletter, []byte("x"))
 	if data != nil {
 		t.Errorf("esperava data nil, veio %s", data)
 	}
