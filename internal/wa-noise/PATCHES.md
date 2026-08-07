@@ -8003,3 +8003,330 @@ universo elegível.
 `echo $?`, não inferido da saída): build, vet, testes com `-race`, lint, gates de
 cobertura e de cobertura de log, licença, deriva, tamanho de arquivo e testes do
 fork.
+
+## Fase F/G — lote 9: `message/` (recepção/decriptação) (extração real + cobertura), 2026-08-07
+
+### Contexto
+
+Penúltimo lote da Fase F/G: o **caminho de entrada** de mensagens — o espelho
+exato do lote 8. São os 11 arquivos da raiz, todos `package whatsmeow`:
+
+- **parsing** — `message_parse.go`
+- **decifragem** — `message_decrypt.go`, `message_decrypt_session.go`
+- **partes de protocolo** — `message.go`
+- **history sync** — `message_history_sync.go`
+- **segredo de mensagem** — `msgsecret.go`, `msgsecret_keys.go`,
+  `msgsecret_poll.go`, `message_secrets_store.go`
+- **composição** — `message_builders.go`, `message_id.go`
+
+Mais `message_constants.go`, que **deixou de existir** (todas as constantes
+migraram; nenhum arquivo de produção da raiz as lia mais).
+
+### Por que `message/` e não `decrypt/`
+
+A orientação já dada era: só se chamaria `decrypt` um componente que fizesse
+*exclusivamente* parsing criptográfico. Este faz muito mais — `parse.go` não
+decifra nada, `id.go`/`builders.go` são do caminho de composição,
+`history_sync.go` baixa e descomprime blob, `secrets_store.go` grava
+mapeamentos LID/PN. Decifrar é **uma** das responsabilidades, não a única.
+`message/` também é o nome que a Fase H já reservou (`capabilities/message/`),
+então a relocação futura é um `git mv` e nada mais.
+
+### Como `message/` alcança os subpacotes já extraídos: **fachada**, com exceções
+
+Mesma decisão do lote 8, e pelas mesmas razões — documentada em
+`message/transport.go`.
+
+**Pela fachada da raiz** (`UpdatePushName`, `UpdateBusinessName`,
+`HandleHistoricalPushNames` do lote 7; `FetchAppState` /
+`HandleAppStateRecovery` de appstate/appstatesync; `DownloadHistorySyncBlob` /
+`DeleteHistorySyncMedia` de media/download; `StoreLIDPNMapping`,
+`ParseWebMessage`, `StoreNCTSalt`, `HandleDecryptedArmadillo` e todo o substrato
+de recibo) porque as free functions daqueles pacotes recebem os transportes
+**deles**: chamá-las direto obrigaria `message.Transport` a expor três
+interfaces alheias inteiras para alcançar duas ou três funções de cada, e
+obrigaria o dublê de teste deste pacote a saber montar um `<iq>` de usync ou um
+download de mídia. Além disso, as fachadas são **exatamente** o que o código
+original chamava (`cli.updatePushName`, `cli.FetchAppState`, ...).
+
+**Import direto**, nas exceções, todas por serem **dado** ou função **pura**:
+
+- `user.ParseVerifiedNameContent` — pura (`Node -> *types.VerifiedName`). Isso
+  **fecha a dívida que o lote 7 deixou anotada** em `user.go`: "usado por
+  message_parse.go, que continua na raiz ... lote 9, pendente". A fachada
+  `parseVerifiedNameContent` da raiz foi **removida** (não tinha outro chamador).
+- `send.*` — `EncNodeTag`, `EncAttrVersion`, `EncAttrType`, `EncAttrDecryptFail`,
+  `EncTypeMsg`, `EncTypePreKeyMsg`, `EncTypeSenderKey`, `MsgCategoryPeer`,
+  `MessageSecretSize`, importadas em vez de redeclaradas, para que entrada e
+  saída não possam divergir. Mesmo racional de `retry.FBApplicationVersion`
+  (lote 8). Consequência: `send_constants.go`, na raiz, **não é mais lido por
+  este caminho** — ele permanece porque é reexportação por atribuição, mas o
+  subpacote vai direto na fonte.
+- `msgpad.Unpad`, `media.EncryptRetryReceipt`, `gcmutil`, `hkdfutil` — puras, de
+  pacotes folha.
+- `appstate.AllPatchNames` — dado.
+- `appstatesync.State` — estado com mutex próprio, alcançado por ponteiro
+  estável (`AppStateSync() *appstatesync.State`), mesmo racional de
+  `group.Cache`/`user.DeviceCache` nos lotes 6/7.
+- `store.SignalProtobufSerializer` — direto, e não pelo `pbSerializer` da raiz:
+  são o **mesmo** valor e `store` já é folha. O lote 8 fez igual. `pbSerializer`
+  continua declarado na raiz porque `retry_transport.go` o lê; travado por
+  `TestPBSerializerMatchesStore`.
+
+### `message.Transport` — 33 métodos
+
+Largo pelo mesmo motivo estrutural do de envio, espelhado: **receber** uma
+mensagem toca todos os outros domínios. Parsear consulta o próprio JID; decifrar
+consulta a sessão Signal e o buffer de eventos; falhar em decifrar dispara
+recibo de retry e nack; a mensagem decifrada atualiza push name e nome business
+(usuário), distribui sender key (grupo), religa o app state (appstatesync) e
+baixa history sync (mídia). **Nenhum método foi inventado** — cada um
+corresponde a uma chamada que o código fazia em `*Client` antes.
+
+Duas escolhas de forma que merecem registro:
+
+- **`Nacks() Nacks`** — os três códigos de nack usados aqui (488/491/495) são
+  valores de fio, e a tabela inteira dos treze vive em `receipt.go`, na raiz, que
+  é o domínio de recibo e está **fora do escopo do lote**. Redeclarar três deles
+  deste lado da fronteira é exatamente a divergência silenciosa que a Fase F/G
+  existe para impedir — então atravessam como **dado**, mesmo racional de
+  `group.IQErrors` (lote 6) e `user.IQErrors` (lote 7).
+- **`DownloadHistorySyncBlob`**, e não um `Download` genérico, para que
+  `Transport` não precise expor `media.Downloadable`.
+
+### Estado próprio: dois tipos novos
+
+- **`HistorySyncQueue`** (`message/state.go`) reúne os antigos
+  `historySyncNotifications` (canal) e `historySyncHandlerStarted`
+  (`atomic.Bool`), que eram dois campos soltos de `*Client`. Viraram um tipo
+  porque **só fazem sentido juntos**: o flag existe para garantir no máximo um
+  consumidor da fila, e o encerramento do loop reexamina a fila depois de zerar o
+  flag. A sincronização **não mudou de forma**: canal com buffer + `atomic.Bool`
+  com `CompareAndSwap`, nos mesmos pontos. `client_events_test.go` passou a ler
+  `historySync.Cap()`/`Ready()` no lugar de `cap(canal)`/`canal == nil`.
+- **`DecryptBufferState`** guarda o antigo `lastDecryptedBufferClear`. É um campo
+  simples, **sem mutex** — literal ao original. Ver a dívida registrada abaixo.
+
+`ShouldClear()` junta o teste de intervalo e a atribuição de `time.Now()` que
+eram duas linhas coladas. O teste de contexto veio para a **frente** de
+propósito, em `decrypt_loop.go`, para que o curto-circuito preserve exatamente o
+caso em que o original **não** atualizava o marcador (contexto cancelado).
+
+### Conservadorismo máximo nos arquivos de decifragem
+
+`message/decrypt.go`, `decrypt_loop.go` e `decrypt_session.go` foram extraídos de
+forma **mecânica**: cada `cli.X` virou `t.X` (ou a free function
+correspondente), e nada mais. Vale registrar o que **não** mudou, porque cada um
+destes é observável:
+
+- a ordem dos ramos de tipo de `<enc>` (pkmsg/msg, depois skmsg só em grupo,
+  depois msmsg só de bot);
+- quais erros são ignorados em silêncio e com qual nível de log
+  (`EventAlreadyProcessed` em Debug, `ErrOldCounter` em Warn, ambos com
+  `continue`, **sem** retry receipt);
+- o `return` — e não `continue` — no caminho de erro de decifragem, que faz um
+  `<message>` com vários `<enc>` **parar no primeiro que falha**;
+- o ack sair no `BackgroundIfAsyncAck` do fim mesmo depois de um `continue`, mas
+  **não** depois de um `return`;
+- a assimetria de embrulho do erro de `Unpad`: em `DecryptDM` ele vira "failed to
+  unpad message", em `DecryptGroupMsg` volta **nu**. Está anotada no código.
+- o ramo de `AutoTrustIdentity` acontecer **dentro** do fechamento passado a
+  `BufferedDecrypt` — ou seja, dentro da transação de decifragem.
+
+Igualmente **não** foi mexido o hack de migração LID em `DecryptSecret`, que
+tenta os dois remetentes possíveis disparado por comparação de **substring** na
+mensagem de erro ("message authentication failed"). É frágil, e está anotado como
+tal no código; trocar mudaria quais mensagens conseguem ser lidas.
+
+Também **não** foi "corrigido" o mapeamento de `POLL_ADD_OPTION` para
+`EncSecretPollEdit` (e não `EncSecretPollAddOption`) em `DecryptSecretEncrypted`.
+Se for engano do upstream, corrigi-lo mudaria a chave derivada.
+
+### Fronteira raiz ↔ `message/`
+
+**Tipos, por apelido** (`msgsecret_keys.go`): `MsgSecretType = message.SecretType`
+e `messageEncryptedSecret = message.EncryptedSecret`. Apelido, não definição
+nova, porque `internals.go` (**gerado**, fora do escopo) cita os dois nas
+assinaturas de `DangerousInternalClient`. Travado por
+`TestMsgSecretTypesAreAliases`.
+
+**Erros, por atribuição** (`errors.go`, `message_decrypt.go`):
+`ErrOriginalMessageSecretNotFound`, `ErrNotEncryptedReactionMessage`,
+`ErrNotEncryptedCommentMessage`, `ErrNotSecretEncryptedMessage`,
+`ErrNotPollUpdateMessage` e `EventAlreadyProcessed` passaram a viver em
+`message/errors.go`; a raiz os reexporta pelos nomes históricos por
+**atribuição** — o mesmo valor, não cópias. Travado por
+`TestMessageErrorsAreTheSameValues`.
+
+Os seis são os que a auditoria confirmou serem exclusivos deste caminho.
+`ErrNotLoggedIn` e `ErrClientIsNil` **ficaram na raiz**, pelo mesmo racional do
+lote 8: o primeiro é devolvido por 15 arquivos da raiz e atravessa via
+`message.Errors` (mesmo ponteiro); o segundo só pode ser checado na raiz, porque
+um `*Client` nil não produz `Transport`.
+
+**Constantes, por atribuição**: `WebMessageIDPrefix`, `EditWindow` e as dez
+`EncSecret*`. São entrada de HKDF e prefixo de fio — um dono só. Travado por
+`TestMsgSecretConstantsAreReexported`.
+
+**Fachadas** (28 métodos sem lógica, distribuídos pelos 11 arquivos originais):
+existem porque `internals.go` (gerado) cita ~25 dos nomes minúsculos, e porque
+`client.go` (`handleEncryptedMessage`), `presence.go`/`receipt.go`
+(`parseMessageSource`), `armadillomessage.go`
+(`handleSenderKeyDistributionMessage`), `retry_transport.go`
+(`BuildUnavailableMessageRequest`, `pbSerializer`, `migrateSessionStore`),
+`send_adapter.go` (`GenerateMessageID`, `migrateSessionStore`,
+`clearUntrustedIdentity`, `applyBotMessageHKDF`), `send.go` (`BuildRevoke`),
+`reportingtoken.go` (`generateMsgSecretKey`) e quatro arquivos de
+call/group/newsletter (`GenerateMessageID`, `WebMessageIDPrefix`) continuam
+citando os nomes históricos. **Zero call sites externos mudaram.**
+
+### Call sites reversos
+
+**Um só, e já estava previsto.** `parseVerifiedNameContent`, em `user.go`, cuja
+única razão de existir era `message_parse.go`; foi removido e o comentário
+substituído pela nota de dívida fechada. Todos os demais citadores continuam
+chamando as fachadas, que delegam.
+
+### Guardas de receptor nil: uma divergência consciente
+
+As fachadas exportadas dos lotes 1-7 ganharam `cli == nil -> ErrClientIsNil`. Aqui
+a regra foi aplicada **parcialmente**, e de propósito:
+
+- `decryptMsgSecret` e `encryptMsgSecret` **já tinham** a guarda antes da
+  extração; ela foi preservada literalmente, com o teste de regressão original
+  (`TestMsgSecretNilClient`, agora em `message_facade_test.go`).
+- `DecryptReaction`, `DecryptComment`, `DecryptSecretEncryptedMessage`,
+  `EncryptComment`, `EncryptReaction`, `DecryptPollVote`, `BuildPollVote` e
+  `EncryptPollVote` **ganharam** a guarda. Antes da extração elas alcançavam
+  `ErrClientIsNil` indiretamente (pelas duas de cima) e o devolviam **embrulhado**;
+  agora o devolvem nu. `errors.Is` continua casando — só a mensagem muda. Sem a
+  guarda, o caminho extraído devolveria `ErrNotLoggedIn` no lugar, que seria uma
+  mudança **pior**.
+- `SendProtocolMessageReceipt` **não** ganhou a guarda, e a ausência está anotada
+  no código: hoje um receptor nil entra em pânico em `sendNode`, e a guarda seria
+  mudança de comportamento que a extração não exige, em pleno caminho de
+  recepção.
+
+### Testes e cobertura
+
+**83,5%** de statements em `internal/wa-noise/message/` (medido, não estimado) —
+acima dos 77,1% do lote 8, apesar da cautela, porque a extração **destravou**
+caminhos que antes eram intestáveis.
+
+Os testes da Fase E lote 9 foram relocados e reescritos contra um dublê de
+`message.Transport` (`fakeTransport`), em vez do `*Client` real: nenhum socket,
+nenhuma sessão Noise, nenhum banco.
+
+**As duas regressões de bug da Fase E lote 9 continuam travadas e passam
+pós-movimentação:**
+
+1. **caller-mutation-fix** — `TestEncryptReactionRestoresCallerKey` e
+   `TestEncryptReactionRestoresCallerKeyOnError`
+   (`message/secret_crypto_test.go`): `EncryptReaction` zera `reaction.Key` para
+   tirá-la do payload cifrado, mas a struct é do chamador; sem restaurar (também
+   no caminho de erro), reusar a mesma reação produziria uma reação sem alvo.
+2. **parse-error-shadowing-fix** —
+   `TestGetOrigSenderFromKeyGroupInvalidJIDKeepsParseError`
+   (`message/secret_keys_test.go`): a causa real do `ParseJID` quebrado era
+   sobrescrita pelo "unexpected server" derivado do JID zerado.
+
+**O remote-panic-fix ganhou o teste de regressão que a Fase E não conseguiu
+escrever.** O `<enc type="msmsg">` com filhos (ou sem conteúdo) derrubava o
+cliente inteiro por type assertion; a Fase E corrigiu, mas testá-lo exigiria um
+`*Client` real com socket para chegar em `decryptMessages`. Com o transporte,
+`TestDecryptMessagesMsgSecretNonByteContentDoesNotPanic` cobre os três formatos
+de conteúdo inválido e confirma que o erro vira nack `MissingMessageSecret`, sem
+retry receipt.
+
+O caminho de bot é o **único** `<enc>` que dá para decifrar de verdade sem sessão
+Signal — a chave sai de HKDF sobre um segredo que o store devolve. Por isso
+`TestDecryptMessagesMsgSecretRoundTrip` exercita `DecryptMessages` **ponta a
+ponta**: `<enc>` cifrado à mão, decifrado, protobuf desserializado, evento
+despachado, pedido ao telefone cancelado, recibo de entrega enviado.
+
+### O que **não** dá para testar sem sessão viva, e por quê
+
+Registrado porque "não testei, e este é o motivo" é informação:
+
+- **A decifragem por dispositivo e por sender key** (`session.NewCipher(...).Decrypt`,
+  `groups.NewGroupCipher(...).Decrypt`) exige uma sessão Signal estabelecida, que
+  só existe após handshake real ou uma SKDM válida de outro dispositivo. Simular
+  isso exigiria reimplementar metade do libsignal — e um dublê que "decifra"
+  errado passaria verde enquanto o fio recebe lixo. É a origem dos statements não
+  cobertos de `DecryptDM` (42,9%) e `DecryptGroupMsg` (55,6%).
+- **`AutoTrustIdentity` + `ErrUntrustedIdentity`** — o ramo que limpa a
+  identidade e reprocessa depende do libsignal devolver aquele erro específico a
+  partir de uma sessão real. `ClearUntrustedIdentity` **em si** está coberta
+  (75%), só não o ramo que a chama.
+- **`HandleSenderKeyDistributionMessage`** (54,5%) — só o caminho de SKDM
+  malformada é alcançável; processar uma SKDM válida exige o material de grupo.
+
+O que **dá** para travar sem sessão está travado: a recusa por conteúdo não-byte
+(a classe de bug do pânico remoto), o caminho `unavailable`, o stanza não
+reconhecido, o `<enc>` sem `type`, o tipo desconhecido, a falha de decifragem
+com retry receipt e `DecryptFailMode`, o retorno antecipado por contexto
+cancelado, o roteamento para armadillo na versão 3, os três estados do buffer de
+eventos (ausente / já processado / já decifrado), a separação de domínio do hash
+de ciphertext, e todo o domínio de segredo de mensagem ponta a ponta.
+
+### Revisão de concorrência
+
+Não foi feita revisão dedicada, e a razão é que **não há concorrência nova**:
+este domínio não ganhou goroutine nem ponto de sincronização. Os pré-existentes
+atravessaram a fronteira sem mudar de forma — as seis goroutines
+(`updateBusinessName`, `updatePushName`, os dois recibos de protocol message, o
+`handleAppStateSyncKeyShare`, o `dispatchEvent` de `IdentityChange`, os dois
+`go` do caminho de erro de decifragem, o `doStorage` do history sync) foram
+disparadas exatamente onde eram, e o par canal + `atomic.Bool` do loop de
+history sync continua idêntico. O dublê de teste precisou de mutex por causa
+delas (e o `-race` pegou isso durante o lote), o que é confirmação de que o
+comportamento assíncrono foi preservado. A suíte roda com `-race`, verde.
+
+**Uma dívida de concorrência pré-existente, registrada e NÃO corrigida:**
+`lastDecryptedBufferClear` (agora `DecryptBufferState.lastClear`) é lido e
+escrito **sem sincronização** dentro de `DecryptMessages`. Se dois `<message>`
+forem decifrados concorrentemente com `EnableDecryptedEventBuffer` ligado, há
+corrida. Era assim antes da extração; introduzir mutex aqui seria mudança de
+comportamento em um caminho que este lote se comprometeu a não mexer. O tipo
+novo preserva o campo simples de propósito, e o doc dele diz isso.
+
+### O que NÃO foi extraído, e por quê
+
+- **`internals.go`** — gerado por `internals_generate.go`, fora do escopo. É o
+  motivo de ~25 fachadas continuarem na raiz e de `MsgSecretType`/
+  `messageEncryptedSecret` serem apelidos. Reduzir isso exige mexer no gerador.
+- **`armadillomessage.go`** (`handleDecryptedArmadillo`) — é o protocolo v3, um
+  domínio próprio; atravessa via `HandleDecryptedArmadillo`.
+- **`reportingtoken.go`** — continua na raiz (o lote 8 já registrou o porquê) e
+  agora chama `generateMsgSecretKey`, que é fachada para `message/`.
+- **`ParseWebMessage`** (`client_session.go`) — é do domínio de sessão/cliente,
+  alvo do lote 10; atravessa a interface.
+- **`cstoken.go`** (`storeNCTSalt`) — geração própria não extraída em nenhum
+  lote; atravessa a interface.
+- **Substrato de recibo** (`backgroundIfAsyncAck`, `maybeDeferredAck`, `sendAck`,
+  `sendMessageReceipt`, a tabela de nacks) e **de pedido ao telefone**
+  (`immediateRequestMessageFromPhone`, `cancelDelayedRequestFromPhone`,
+  `sendRetryReceipt`) — genéricos do fork; `receipt.go` e
+  `retry_request_from_phone.go` são de outros domínios.
+- **`send_constants.go`** — permanece como reexportação por atribuição para quem
+  ainda lê os nomes minúsculos na raiz, mas `message/` vai direto em `send.*`.
+- **`parseVerifiedNameContent`** — **removido** da raiz (era o único chamador que
+  o justificava). Ver "Call sites reversos".
+
+### Gates
+
+`scripts/waclient-filesize-check.sh` ganhou `internal/wa-noise/message` em
+`DIRS`; `WACLIENT_TEST_PKGS` (Makefile) ganhou `./internal/wa-noise/message/`.
+Todos os 17 arquivos de produção do subpacote estão abaixo do teto de 300 linhas
+(o maior, `history_sync.go`, tem 247).
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado (`go run ./cmd/logcov
+-golden`): as funções livres do subpacote novo entram no universo elegível e as
+antigas closures de `*Client` saem. O diff é inteiramente deste lote.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado** (medido com
+`echo $?`, não inferido da saída): build, vet, testes com `-race`, lint, gates de
+cobertura e de cobertura de log, licença, deriva, tamanho de arquivo e testes do
+fork.
