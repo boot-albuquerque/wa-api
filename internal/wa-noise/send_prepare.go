@@ -176,6 +176,12 @@ func (cli *Client) resolveGroupSendTarget(
 	cachedData, err := cli.getCachedGroupData(ctx, to)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group members: %w", err)
+	} else if cachedData == nil {
+		// getCachedGroupData returns (nil, nil) when the group info query
+		// succeeded but the response was cached under a different JID than the
+		// one requested (the cache is keyed by the `id` the *server* echoes
+		// back). Dereferencing it here would be a server-triggerable panic.
+		return nil, fmt.Errorf("failed to get group members: %w", ErrGroupNotFound)
 	}
 	// TODO this is fairly hacky, is there a proper way to determine which identity the message is sent with?
 	if cachedData.AddressingMode == types.AddressingModeLID {

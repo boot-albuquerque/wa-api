@@ -44,6 +44,14 @@ func (cli *Client) sendGroupV3(
 		}
 	}
 	timings.GetParticipants = time.Since(start)
+	// groupMeta stays nil both when `to` is not a group JID and when
+	// getCachedGroupData returns (nil, nil) — which it does if the server
+	// echoed a different group `id` than the one queried, so the cache entry
+	// landed under another key. Reading groupMeta.Members below would then be a
+	// server-triggerable nil dereference.
+	if groupMeta == nil {
+		return "", nil, fmt.Errorf("failed to get group members: %w", ErrGroupNotFound)
+	}
 
 	start = time.Now()
 	builder := groups.NewGroupSessionBuilder(cli.Store, pbSerializer)
@@ -100,14 +108,17 @@ func (cli *Client) sendGroupV3(
 	}
 
 	phash := participantListHashV2(allDevices)
-	node.Attrs["phash"] = phash
+	node.Attrs[msgAttrPHash] = phash
 	skMsg := waBinary.Node{
-		Tag:     "enc",
+		Tag:     encNodeTag,
 		Content: ciphertext,
-		Attrs:   waBinary.Attrs{"v": "3", "type": "skmsg"},
+		Attrs: waBinary.Attrs{
+			encAttrVersion: encVersionFB,
+			encAttrType:    encTypeSenderKey,
+		},
 	}
 	if msgAttrs.MediaType != "" {
-		skMsg.Attrs["mediatype"] = msgAttrs.MediaType
+		skMsg.Attrs[encAttrMediaType] = msgAttrs.MediaType
 	}
 	node.Content = append(node.GetChildren(), skMsg)
 
@@ -172,19 +183,19 @@ func (cli *Client) prepareMessageNodeV3(
 
 	encAttrs := waBinary.Attrs{}
 	attrs := waBinary.Attrs{
-		"id":   id,
-		"type": msgAttrs.Type,
-		"to":   to,
+		msgAttrID:   id,
+		msgAttrType: msgAttrs.Type,
+		msgAttrTo:   to,
 	}
 	// Only include mediatype on DMs, for groups it's in the skmsg node
 	if payload != nil && msgAttrs.MediaType != "" {
-		encAttrs["mediatype"] = msgAttrs.MediaType
+		encAttrs[encAttrMediaType] = msgAttrs.MediaType
 	}
 	if msgAttrs.Edit != "" {
-		attrs["edit"] = string(msgAttrs.Edit)
+		attrs[msgAttrEdit] = string(msgAttrs.Edit)
 	}
 	if msgAttrs.DecryptFail != "" {
-		encAttrs["decrypt-fail"] = string(msgAttrs.DecryptFail)
+		encAttrs[encAttrDecryptFail] = string(msgAttrs.DecryptFail)
 	}
 
 	dsm := &waMsgTransport.MessageTransport_Protocol_Integral_DeviceSentMessage{
@@ -200,38 +211,38 @@ func (cli *Client) prepareMessageNodeV3(
 	timings.PeerEncrypt = time.Since(start)
 	content := make([]waBinary.Node, 0, 4)
 	content = append(content, waBinary.Node{
-		Tag:     "participants",
+		Tag:     participantsNodeTag,
 		Content: participantNodes,
 	})
 	metaAttrs := make(waBinary.Attrs)
 	if msgAttrs.PollType != "" {
-		metaAttrs["polltype"] = msgAttrs.PollType
+		metaAttrs[metaAttrPollType] = msgAttrs.PollType
 	}
 	if msgAttrs.DecryptFail != "" {
-		metaAttrs["decrypt-fail"] = string(msgAttrs.DecryptFail)
+		metaAttrs[metaAttrDecryptFail] = string(msgAttrs.DecryptFail)
 	}
 	if len(metaAttrs) > 0 {
 		content = append(content, waBinary.Node{
-			Tag:   "meta",
+			Tag:   metaNodeTag,
 			Attrs: metaAttrs,
 		})
 	}
 	traceRequestID := uuid.New()
 	content = append(content, waBinary.Node{
-		Tag: "franking",
+		Tag: frankingNodeTag,
 		Content: []waBinary.Node{{
-			Tag:     "franking_tag",
+			Tag:     frankingTagNodeTag,
 			Content: frankingTag,
 		}},
 	}, waBinary.Node{
-		Tag: "trace",
+		Tag: traceNodeTag,
 		Content: []waBinary.Node{{
-			Tag:     "request_id",
+			Tag:     traceRequestIDNodeTag,
 			Content: traceRequestID[:],
 		}},
 	})
 	return &waBinary.Node{
-		Tag:     "message",
+		Tag:     messageNodeTag,
 		Attrs:   attrs,
 		Content: content,
 	}, allDevices, nil
