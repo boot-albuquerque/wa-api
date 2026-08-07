@@ -39,8 +39,8 @@ type APNsPushConfig struct {
 }
 
 func (apc *APNsPushConfig) GetPushConfigAttrs() waBinary.Attrs {
-	if len(apc.MsgIDEncKey) != 32 {
-		apc.MsgIDEncKey = random.Bytes(32)
+	if len(apc.MsgIDEncKey) != pushMsgIDEncKeyLength {
+		apc.MsgIDEncKey = random.Bytes(pushMsgIDEncKeyLength)
 	}
 	attrs := waBinary.Attrs{
 		"id":                  apc.Token,

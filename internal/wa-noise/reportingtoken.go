@@ -59,11 +59,11 @@ func (cli *Client) getMessageReportingToken(
 	hasher := hmac.New(sha256.New, reportingSecret)
 	hasher.Write(getReportingToken(msgProtobuf))
 	return waBinary.Node{
-		Tag: "reporting",
+		Tag: reportingTokenNodeTag,
 		Content: []waBinary.Node{{
-			Tag:     "reporting_token",
-			Attrs:   waBinary.Attrs{"v": "2"},
-			Content: hasher.Sum(nil)[:16],
+			Tag:     reportingTokenChildTag,
+			Attrs:   waBinary.Attrs{reportingTokenVersionAttr: reportingTokenVersion},
+			Content: hasher.Sum(nil)[:reportingTokenLength],
 		}},
 	}
 }
@@ -82,15 +82,13 @@ func getConfigForField(fields []reportingField, fieldNum int) *reportingField {
 	return nil
 }
 
-// Protobuf wire types
-const (
-	wireVarint = 0
-	wire64bit  = 1
-	wireBytes  = 2
-	wire32bit  = 5
-)
-
-// Extracts the reporting token content recursively
+// Extracts the reporting token content recursively.
+//
+// Toda leitura abaixo confere os limites antes de fatiar `data`. Hoje a entrada
+// e sempre um protobuf que nos mesmos serializamos, entao malformado e
+// inalcancavel — mas sem as guardas qualquer descasamento futuro entre o
+// serializador e este extrator viraria panico de slice, e esta funcao roda no
+// caminho de envio de mensagem. Ver PATCHES.md, Fase E lote 4.
 func extractReportingTokenContent(data []byte, config []reportingField) []byte {
 	type field struct {
 		Num   int
@@ -104,8 +102,8 @@ func extractReportingTokenContent(data []byte, config []reportingField) []byte {
 		if tagLen <= 0 {
 			break // malformed
 		}
-		fieldNum := int(tag >> 3)
-		wireType := int(tag & 0x7)
+		fieldNum := int(tag >> wireFieldNumShift)
+		wireType := int(tag & wireTypeMask)
 		fieldCfg := getConfigForField(config, fieldNum)
 		fieldStart := i
 		i += tagLen
@@ -114,15 +112,24 @@ func extractReportingTokenContent(data []byte, config []reportingField) []byte {
 			switch wireType {
 			case wireVarint:
 				_, n := binary.Uvarint(data[i:])
+				if n <= 0 {
+					return nil
+				}
 				i += n
 			case wire64bit:
-				i += 8
+				i += wire64bitLength
 			case wireBytes:
 				l, n := binary.Uvarint(data[i:])
+				if n <= 0 {
+					return nil
+				}
 				i += n + int(l)
 			case wire32bit:
-				i += 4
+				i += wire32bitLength
 			default:
+				return nil
+			}
+			if i > len(data) || i < 0 {
 				return nil
 			}
 			continue
@@ -130,15 +137,27 @@ func extractReportingTokenContent(data []byte, config []reportingField) []byte {
 		switch wireType {
 		case wireVarint:
 			_, n := binary.Uvarint(data[i:])
+			if n <= 0 {
+				return nil
+			}
 			i += n
 			fields = append(fields, field{Num: fieldNum, Bytes: data[fieldStart:i]})
 		case wire64bit:
-			i += 8
+			i += wire64bitLength
+			if i > len(data) {
+				return nil
+			}
 			fields = append(fields, field{Num: fieldNum, Bytes: data[fieldStart:i]})
 		case wireBytes:
 			l, n := binary.Uvarint(data[i:])
+			if n <= 0 {
+				return nil
+			}
 			valStart := i + n
 			valEnd := valStart + int(l)
+			if valEnd > len(data) || valEnd < valStart {
+				return nil
+			}
 			if fieldCfg.IsMessage || len(fieldCfg.Subfields) > 0 {
 				// Recursively extract subfields
 				sub := extractReportingTokenContent(data[valStart:valEnd], fieldCfg.Subfields)
@@ -159,7 +178,10 @@ func extractReportingTokenContent(data []byte, config []reportingField) []byte {
 			}
 			i = valEnd
 		case wire32bit:
-			i += 4
+			i += wire32bitLength
+			if i > len(data) {
+				return nil
+			}
 			fields = append(fields, field{Num: fieldNum, Bytes: data[fieldStart:i]})
 		default:
 			return nil

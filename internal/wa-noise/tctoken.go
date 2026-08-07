@@ -9,6 +9,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/binary"
@@ -191,8 +192,8 @@ func (cli *Client) issuePrivacyToken(ctx context.Context, jid types.JID, timesta
 				Tag: "token",
 				Attrs: waBinary.Attrs{
 					"jid":  jid.ToNonAD(),
-					"t":    fmt.Sprintf("%d", timestamp.Unix()),
-					"type": "trusted_contact",
+					"t":    strconv.FormatInt(timestamp.Unix(), 10),
+					"type": tcTokenType,
 				},
 			}},
 		}},
