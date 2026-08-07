@@ -9,8 +9,8 @@ package whatsmeow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 
 	"github.com/beeper/argo-go/codec"
 	"github.com/beeper/argo-go/pkg/buf"
@@ -49,6 +49,24 @@ const (
 	mutationFollowNewsletterDesktop    = "8621797084555037"
 )
 
+const (
+	// mexNamespace é o namespace <iq> das consultas GraphQL/MEX do WhatsApp.
+	mexNamespace = "w:mex"
+	// mexQueryTag / mexQueryIDAttr / mexResultTag nomeiam o nó de requisição e
+	// o de resposta do MEX, que aparecem tanto na construção quanto na leitura.
+	mexQueryTag    = "query"
+	mexQueryIDAttr = "query_id"
+	mexResultTag   = "result"
+	// mexFormatAttr / mexFormatArgo identificam a resposta codificada em Argo
+	// (em vez de JSON puro).
+	mexFormatAttr = "format"
+	mexFormatArgo = "argo"
+)
+
+// errArgoDecodingBroken é devolvido enquanto o caminho de decodificação Argo
+// estiver desabilitado no fork. Ver PATCHES.md (Fase E, lote 2).
+var errArgoDecodingBroken = errors.New("argo decoding is currently broken")
+
 func convertQueryID(cli *Client, queryID string) string {
 	if payload := cli.Store.GetClientPayload(); payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
 		switch queryID {
@@ -82,7 +100,7 @@ func convertQueryID(cli *Client, queryID string) string {
 
 func (cli *Client) sendMexIQ(ctx context.Context, queryID string, variables any) (json.RawMessage, error) {
 	if store.BaseClientPayload.GetUserAgent().GetPlatform() == waWa6.ClientPayload_UserAgent_MACOS {
-		return nil, fmt.Errorf("argo decoding is currently broken")
+		return nil, errArgoDecodingBroken
 	}
 	queryID = convertQueryID(cli, queryID)
 	payload, err := json.Marshal(map[string]any{
@@ -92,13 +110,13 @@ func (cli *Client) sendMexIQ(ctx context.Context, queryID string, variables any)
 		return nil, err
 	}
 	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "w:mex",
+		Namespace: mexNamespace,
 		Type:      iqGet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "query",
+			Tag: mexQueryTag,
 			Attrs: waBinary.Attrs{
-				"query_id": queryID,
+				mexQueryIDAttr: queryID,
 			},
 			Content: payload,
 		}},
@@ -106,17 +124,17 @@ func (cli *Client) sendMexIQ(ctx context.Context, queryID string, variables any)
 	if err != nil {
 		return nil, err
 	}
-	result, ok := resp.GetOptionalChildByTag("result")
+	result, ok := resp.GetOptionalChildByTag(mexResultTag)
 	if !ok {
-		return nil, &ElementMissingError{Tag: "result", In: "mex response"}
+		return nil, &ElementMissingError{Tag: mexResultTag, In: "mex response"}
 	}
 	resultContent, ok := result.Content.([]byte)
 	if !ok {
 		return nil, fmt.Errorf("unexpected content type %T in mex response", result.Content)
 	}
-	if result.AttrGetter().OptionalString("format") == "argo" {
+	if result.AttrGetter().OptionalString(mexFormatAttr) == mexFormatArgo {
 		if true {
-			return nil, fmt.Errorf("argo decoding is currently broken")
+			return nil, errArgoDecodingBroken
 		}
 		store, err := argo.GetStore()
 		if err != nil {
@@ -134,7 +152,8 @@ func (cli *Client) sendMexIQ(ctx context.Context, queryID string, variables any)
 		}
 		data, err := decoder.ArgoToMap(wt)
 		if err != nil {
-			log.Fatalf("argo to map error: %v", err)
+			cli.Log.Errorf("Failed to decode argo mex response for query %s: %v", queryID, err)
+			return nil, fmt.Errorf("failed to decode argo mex response: %w", err)
 		}
 		b, err := json.Marshal(data)
 		if err != nil {
