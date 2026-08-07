@@ -23,11 +23,11 @@ import (
 // such messages.
 func (cli *Client) SetStatusMessage(ctx context.Context, msg string) error {
 	_, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "status",
+		Namespace: statusIQNamespace,
 		Type:      iqSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag:     "status",
+			Tag:     statusNodeTag,
 			Content: msg,
 		}},
 	})
@@ -41,9 +41,9 @@ func (cli *Client) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.I
 	for i := range jids {
 		jids[i] = types.NewJID(phones[i], types.LegacyUserServer)
 	}
-	list, err := cli.usync(ctx, jids, "query", "interactive", []waBinary.Node{
-		{Tag: "business", Content: []waBinary.Node{{Tag: "verified_name"}}},
-		{Tag: "contact"},
+	list, err := cli.usync(ctx, jids, usyncModeQuery, usyncContextInteractive, []waBinary.Node{
+		{Tag: businessNodeTag, Content: []waBinary.Node{{Tag: verifiedNameNodeTag}}},
+		{Tag: contactNodeTag},
 	})
 	if err != nil {
 		return nil, err
@@ -52,17 +52,17 @@ func (cli *Client) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.I
 	querySuffix := "@" + types.LegacyUserServer
 	for _, child := range list.GetChildren() {
 		jid, jidOK := child.Attrs["jid"].(types.JID)
-		if child.Tag != "user" || !jidOK {
+		if child.Tag != usyncUserTag || !jidOK {
 			continue
 		}
 		var info types.IsOnWhatsAppResponse
 		info.JID = jid
-		info.VerifiedName, err = parseVerifiedName(child.GetChildByTag("business"))
+		info.VerifiedName, err = parseVerifiedName(child.GetChildByTag(businessNodeTag))
 		if err != nil {
 			cli.Log.Warnf("Failed to parse %s's verified name details: %v", jid, err)
 		}
-		contactNode := child.GetChildByTag("contact")
-		info.IsIn = contactNode.AttrGetter().String("type") == "in"
+		contactNode := child.GetChildByTag(contactNodeTag)
+		info.IsIn = contactNode.AttrGetter().String("type") == contactTypeIn
 		contactQuery, _ := contactNode.Content.([]byte)
 		info.Query = strings.TrimSuffix(string(contactQuery), querySuffix)
 		output = append(output, info)
@@ -70,14 +70,27 @@ func (cli *Client) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.I
 	return output, nil
 }
 
+// isValidLIDMapping diz se o par (PN, LID) é um mapeamento que
+// `store.LIDStore.PutManyLIDMappings` aceita: PN em `s.whatsapp.net` e LID em
+// `lid`, ambos não vazios.
+//
+// A consulta usync aceita LID como entrada (ver o `case` de `HiddenUserServer`
+// em `usync`), então o `jid` de `<user>` na resposta pode ser um LID — e nesse
+// caso o par montado seria LID/LID, não PN/LID. Filtrar aqui evita entregar ao
+// store um mapeamento que ele só pode descartar.
+func isValidLIDMapping(pn, lid types.JID) bool {
+	return pn.Server == types.DefaultUserServer && lid.Server == types.HiddenUserServer &&
+		pn.User != "" && lid.User != ""
+}
+
 // GetUserInfo gets basic user info (avatar, status, verified business name, device list).
 func (cli *Client) GetUserInfo(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error) {
-	list, err := cli.usync(ctx, jids, "full", "background", []waBinary.Node{
-		{Tag: "business", Content: []waBinary.Node{{Tag: "verified_name"}}},
-		{Tag: "status"},
-		{Tag: "picture"},
-		{Tag: "devices", Attrs: waBinary.Attrs{"version": "2"}},
-		{Tag: "lid"},
+	list, err := cli.usync(ctx, jids, usyncModeFull, usyncContextBackground, []waBinary.Node{
+		{Tag: businessNodeTag, Content: []waBinary.Node{{Tag: verifiedNameNodeTag}}},
+		{Tag: statusNodeTag},
+		{Tag: pictureNodeTag},
+		{Tag: devicesNodeTag, Attrs: waBinary.Attrs{"version": deviceListVersion}},
+		{Tag: lidNodeTag},
 	})
 	if err != nil {
 		return nil, err
@@ -86,23 +99,22 @@ func (cli *Client) GetUserInfo(ctx context.Context, jids []types.JID) (map[types
 	mappings := make([]store.LIDMapping, 0, len(jids))
 	for _, child := range list.GetChildren() {
 		jid, jidOK := child.Attrs["jid"].(types.JID)
-		if child.Tag != "user" || !jidOK {
+		if child.Tag != usyncUserTag || !jidOK {
 			continue
 		}
 		var info types.UserInfo
-		verifiedName, err := parseVerifiedName(child.GetChildByTag("business"))
+		verifiedName, err := parseVerifiedName(child.GetChildByTag(businessNodeTag))
 		if err != nil {
 			cli.Log.Warnf("Failed to parse %s's verified name details: %v", jid, err)
 		}
-		status, _ := child.GetChildByTag("status").Content.([]byte)
-		info.Status = string(status)
-		info.PictureID, _ = child.GetChildByTag("picture").Attrs["id"].(string)
-		info.Devices = parseDeviceList(jid, child.GetChildByTag("devices"))
+		info.Status = nodeContentString(child.GetChildByTag(statusNodeTag))
+		info.PictureID, _ = child.GetChildByTag(pictureNodeTag).Attrs["id"].(string)
+		info.Devices = parseDeviceList(jid, child.GetChildByTag(devicesNodeTag))
 
-		lidTag := child.GetChildByTag("lid")
+		lidTag := child.GetChildByTag(lidNodeTag)
 		info.LID = lidTag.AttrGetter().OptionalJIDOrEmpty("val")
 
-		if !info.LID.IsEmpty() {
+		if isValidLIDMapping(jid, info.LID) {
 			mappings = append(mappings, store.LIDMapping{PN: jid, LID: info.LID})
 		}
 
@@ -115,7 +127,7 @@ func (cli *Client) GetUserInfo(ctx context.Context, jids []types.JID) (map[types
 	err = cli.Store.LIDs.PutManyLIDMappings(ctx, mappings)
 	if err != nil {
 		// not worth returning on the error, instead just post a log
-		cli.Log.Errorf("Failed to place LID mappings from USync call")
+		cli.Log.Errorf("Failed to place LID mappings from USync call: %v", err)
 	}
 
 	return respData, nil
