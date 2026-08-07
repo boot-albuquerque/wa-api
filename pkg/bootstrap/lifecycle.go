@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"wa-api/pkg/infra/wa-noise/safego"
+	"wa-api/pkg/infra/wa-noise/runtime/safego"
 
 	wanoise "wa-api/internal/wa-noise"
 

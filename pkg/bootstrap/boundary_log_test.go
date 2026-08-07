@@ -15,8 +15,8 @@ import (
 
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/wa-noise/applog"
-	wasession "wa-api/pkg/infra/wa-noise/session"
+	"wa-api/pkg/infra/wa-noise/observability/applog"
+	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
 )

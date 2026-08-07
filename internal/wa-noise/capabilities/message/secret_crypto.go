@@ -10,7 +10,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	"wa-api/internal/wa-noise/security/gcm"
+	gcmutil "wa-api/internal/wa-noise/security/gcm"
 )
 
 // DecryptSecret decifra um payload protegido por segredo de mensagem.

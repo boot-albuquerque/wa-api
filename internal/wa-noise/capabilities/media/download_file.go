@@ -12,7 +12,7 @@ import (
 	"go.mau.fi/util/fallocate"
 
 	"wa-api/internal/wa-noise/protocol/proto/waMediaTransport"
-	"wa-api/internal/wa-noise/security/cbc"
+	cbcutil "wa-api/internal/wa-noise/security/cbc"
 )
 
 // File e' o destino de um download para arquivo. *os.File o satisfaz.

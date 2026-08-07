@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/pkg/infra/wa-noise/waclient"
+	waclient "wa-api/pkg/infra/wa-noise/client"
 )
 
 // TestTimeouts_SaoPositivos: um timeout zero em context.WithTimeout expira

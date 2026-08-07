@@ -14,7 +14,7 @@ import (
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
-	wasession "wa-api/pkg/infra/wa-noise/session"
+	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 )
 
 // Este arquivo cobre a FRONTEIRA compartilhada por praticamente todos os

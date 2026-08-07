@@ -17,7 +17,7 @@ import (
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/security/hkdf"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 	"wa-api/internal/wa-noise/security/keys"
 	"wa-api/internal/wa-noise/security/paircrypto"
 )

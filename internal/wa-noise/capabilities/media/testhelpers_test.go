@@ -12,7 +12,7 @@ import (
 
 	waLog "wa-api/internal/wa-noise/observability/log"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/security/cbc"
+	cbcutil "wa-api/internal/wa-noise/security/cbc"
 )
 
 // rewriteTransport redireciona qualquer requisicao (inclusive as https que o

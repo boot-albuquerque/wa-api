@@ -3,7 +3,7 @@ package registry
 import (
 	"testing"
 	wanoise "wa-api/internal/wa-noise"
-	"wa-api/pkg/infra/wa-noise/waclient"
+	waclient "wa-api/pkg/infra/wa-noise/client"
 )
 
 // fakeMyClient é um MyClient mínimo para os testes do ClientManager.

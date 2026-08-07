@@ -9,8 +9,8 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	"wa-api/internal/wa-noise/security/gcm"
-	"wa-api/internal/wa-noise/security/hkdf"
+	gcmutil "wa-api/internal/wa-noise/security/gcm"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 )
 
 const (

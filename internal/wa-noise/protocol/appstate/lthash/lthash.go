@@ -7,7 +7,7 @@ package lthash
 import (
 	"encoding/binary"
 
-	"wa-api/internal/wa-noise/security/hkdf"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 )
 
 type LTHash struct {

@@ -8,7 +8,7 @@ import (
 
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/security/hkdf"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 )
 
 func TestExpandAppStateKeysSplitsHKDFOutput(t *testing.T) {

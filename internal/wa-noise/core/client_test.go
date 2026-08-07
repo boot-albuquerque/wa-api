@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"wa-api/internal/wa-noise/core"
+	wanoise "wa-api/internal/wa-noise/core"
 	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store/sqlstore"
 	"wa-api/internal/wa-noise/protocol/types/events"

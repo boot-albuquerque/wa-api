@@ -11,8 +11,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"go.mau.fi/libsignal/ecc"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
+
+	"go.mau.fi/libsignal/ecc"
 
 	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/protocol/types"

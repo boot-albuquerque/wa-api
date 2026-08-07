@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/security/hkdf"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 )
 
 // --- generateMsgSecretKey ---

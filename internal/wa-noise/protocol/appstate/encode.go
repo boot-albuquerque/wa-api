@@ -11,7 +11,7 @@ import (
 
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/security/cbc"
+	cbcutil "wa-api/internal/wa-noise/security/cbc"
 )
 
 // MutationInfo contains information about a single mutation to the app state.

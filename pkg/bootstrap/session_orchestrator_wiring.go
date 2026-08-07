@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"context"
-	wasession "wa-api/pkg/infra/wa-noise/session"
+	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/internal/wa-noise/persistence/store"
 
@@ -10,8 +10,8 @@ import (
 
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
-	"wa-api/pkg/infra/wa-noise/platform"
-	"wa-api/pkg/infra/wa-noise/walog"
+	"wa-api/pkg/infra/wa-noise/mapping/platform"
+	"wa-api/pkg/infra/wa-noise/observability/walog"
 )
 
 // newSessionOrchestrator liga os quatro ports de sessão (Fases 2a-2e) ao

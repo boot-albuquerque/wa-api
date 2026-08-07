@@ -8,7 +8,7 @@ import (
 
 	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/security/hkdf"
+	hkdfutil "wa-api/internal/wa-noise/security/hkdf"
 )
 
 type Processor struct {

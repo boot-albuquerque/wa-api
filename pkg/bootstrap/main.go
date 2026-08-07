@@ -29,7 +29,7 @@ import (
 	appsession "wa-api/pkg/application/session"
 	dbmig "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
-	"wa-api/pkg/infra/wa-noise/walog"
+	"wa-api/pkg/infra/wa-noise/observability/walog"
 )
 
 // ServerMode represents the server operating mode

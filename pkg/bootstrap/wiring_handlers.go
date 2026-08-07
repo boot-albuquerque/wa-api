@@ -2,18 +2,18 @@ package bootstrap
 
 import (
 	"slices"
-	wachat "wa-api/pkg/infra/wa-noise/chat"
-	wagroup "wa-api/pkg/infra/wa-noise/group"
-	wamisc "wa-api/pkg/infra/wa-noise/misc"
-	wapresence "wa-api/pkg/infra/wa-noise/presence"
-	wasession "wa-api/pkg/infra/wa-noise/session"
-	wauser "wa-api/pkg/infra/wa-noise/user"
+	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
+	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
+	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
+	wapresence "wa-api/pkg/infra/wa-noise/adapters/presence"
+	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
+	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/wa-noise/applog"
-	wajid "wa-api/pkg/infra/wa-noise/jid"
-	"wa-api/pkg/infra/wa-noise/registry"
-	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
+	waclient "wa-api/pkg/infra/wa-noise/client"
+	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
+	"wa-api/pkg/infra/wa-noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
@@ -220,7 +220,7 @@ func initCustomHandlers(s *server) {
 	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(groupAdapter, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
-	sessionCounter := registry.NewSessionCounterAdapter(clientManager)
+	sessionCounter := sessioncount.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)

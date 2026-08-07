@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	"wa-api/internal/wa-noise/security/gcm"
+	gcmutil "wa-api/internal/wa-noise/security/gcm"
 )
 
 func encNode(encType string, content any, extra ...string) waBinary.Node {

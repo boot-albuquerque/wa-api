@@ -17,7 +17,7 @@ import (
 	"go.mau.fi/util/random"
 
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/security/cbc"
+	cbcutil "wa-api/internal/wa-noise/security/cbc"
 )
 
 // UploadResponse tem os dados do upload do anexo, que devem ser copiados para
