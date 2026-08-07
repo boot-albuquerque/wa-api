@@ -12,7 +12,7 @@ import (
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/notification"
 	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/tctoken"
+	"wa-api/internal/wa-noise/capabilities/tctoken"
 )
 
 // handleBlocklist e' fachada: a logica vive em internal/wa-noise/notification

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/tctoken"
+	"wa-api/internal/wa-noise/capabilities/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

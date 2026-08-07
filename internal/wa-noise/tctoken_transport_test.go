@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/tctoken"
+	"wa-api/internal/wa-noise/capabilities/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
 )
