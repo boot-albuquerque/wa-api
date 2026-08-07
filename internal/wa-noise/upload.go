@@ -68,7 +68,7 @@ type UploadResponse struct {
 // The same applies to the other message types like DocumentMessage, just replace the struct type and Message field name.
 func (cli *Client) Upload(ctx context.Context, plaintext []byte, appInfo MediaType) (resp UploadResponse, err error) {
 	resp.FileLength = uint64(len(plaintext))
-	resp.MediaKey = random.Bytes(32)
+	resp.MediaKey = random.Bytes(mediaKeyLength)
 
 	plaintextSHA256 := sha256.Sum256(plaintext)
 	resp.FileSHA256 = plaintextSHA256[:]
@@ -85,7 +85,7 @@ func (cli *Client) Upload(ctx context.Context, plaintext []byte, appInfo MediaTy
 	h := hmac.New(sha256.New, macKey)
 	h.Write(iv)
 	h.Write(ciphertext)
-	dataToUpload := append(ciphertext, h.Sum(nil)[:10]...)
+	dataToUpload := append(ciphertext, h.Sum(nil)[:mediaHMACLength]...)
 
 	dataHash := sha256.Sum256(dataToUpload)
 	resp.FileEncSHA256 = dataHash[:]
@@ -102,7 +102,7 @@ func (cli *Client) Upload(ctx context.Context, plaintext []byte, appInfo MediaTy
 //
 // To use only one file, pass the same file as both plaintext and tempFile. This will cause the file to be overwritten with encrypted data.
 func (cli *Client) UploadReader(ctx context.Context, plaintext io.Reader, tempFile io.ReadWriteSeeker, appInfo MediaType) (resp UploadResponse, err error) {
-	resp.MediaKey = random.Bytes(32)
+	resp.MediaKey = random.Bytes(mediaKeyLength)
 	iv, cipherKey, macKey, _ := getMediaKeys(resp.MediaKey, appInfo)
 	if tempFile == nil {
 		tempFile, err = os.CreateTemp("", "whatsmeow-upload-*")
@@ -143,17 +143,17 @@ func (cli *Client) rawUpload(ctx context.Context, dataToUpload io.Reader, upload
 		"token": []string{token},
 	}
 	mmsType := mediaTypeToMMSType[appInfo]
-	uploadPrefix := "mms"
+	uploadPrefix := uploadPrefixDefault
 	if cli.MessengerConfig != nil {
-		uploadPrefix = "wa-msgr/mms"
+		uploadPrefix = uploadPrefixMessenger
 		// Messenger upload only allows voice messages, not audio files
-		if mmsType == "audio" {
-			mmsType = "ptt"
+		if mmsType == mmsTypeAudio {
+			mmsType = mmsTypePTT
 		}
 	}
 	if newsletter {
-		mmsType = fmt.Sprintf("newsletter-%s", mmsType)
-		uploadPrefix = "newsletter"
+		mmsType = fmt.Sprintf(newsletterMMSTypeFormat, mmsType)
+		uploadPrefix = uploadPrefixNewsletter
 	}
 	var host string
 	// Hacky hack to prefer last option (rupload.facebook.com) for messenger uploads.
@@ -166,7 +166,7 @@ func (cli *Client) rawUpload(ctx context.Context, dataToUpload io.Reader, upload
 	uploadURL := url.URL{
 		Scheme:   "https",
 		Host:     host,
-		Path:     fmt.Sprintf("/%s/%s/%s", uploadPrefix, mmsType, token),
+		Path:     fmt.Sprintf(uploadPathFormat, uploadPrefix, mmsType, token),
 		RawQuery: q.Encode(),
 	}
 
@@ -219,7 +219,7 @@ func (cli *Client) DeleteMedia(ctx context.Context, appInfo MediaType, directPat
 	deleteURL := url.URL{
 		Scheme:   "https",
 		Host:     mediaConn.Hosts[0].Hostname,
-		Path:     fmt.Sprintf("/mms/%s/%s", mediaTypeToMMSType[appInfo], token),
+		Path:     fmt.Sprintf(deletePathFormat, mediaTypeToMMSType[appInfo], token),
 		RawQuery: query.Encode(),
 	}
 
@@ -236,7 +236,7 @@ func (cli *Client) DeleteMedia(ctx context.Context, appInfo MediaType, directPat
 	httpResp, err := cli.mediaHTTP.Do(req)
 	if err != nil {
 		err = fmt.Errorf("failed to execute request: %w", err)
-	} else if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+	} else if httpResp.StatusCode < http.StatusOK || httpResp.StatusCode >= http.StatusMultipleChoices {
 		err = fmt.Errorf("media delete failed with status code %d", httpResp.StatusCode)
 	}
 	if httpResp != nil {

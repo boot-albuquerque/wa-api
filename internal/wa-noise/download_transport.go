@@ -48,7 +48,7 @@ func (cli *Client) downloadAndDecrypt(
 	} else if ReturnDownloadWarnings {
 		if fileLength >= 0 && len(data) != fileLength {
 			err = fmt.Errorf("%w: expected %d, got %d", ErrFileLengthMismatch, fileLength, len(data))
-		} else if len(fileSHA256) == 32 && sha256.Sum256(data) != *(*[32]byte)(fileSHA256) {
+		} else if len(fileSHA256) == sha256HashLength && sha256.Sum256(data) != *(*[sha256HashLength]byte)(fileSHA256) {
 			err = ErrInvalidMediaSHA256
 		}
 	}
@@ -56,8 +56,11 @@ func (cli *Client) downloadAndDecrypt(
 }
 
 func getMediaKeys(mediaKey []byte, appInfo MediaType) (iv, cipherKey, macKey, refKey []byte) {
-	mediaKeyExpanded := hkdfutil.SHA256(mediaKey, nil, []byte(appInfo), 112)
-	return mediaKeyExpanded[:16], mediaKeyExpanded[16:48], mediaKeyExpanded[48:80], mediaKeyExpanded[80:]
+	mediaKeyExpanded := hkdfutil.SHA256(mediaKey, nil, []byte(appInfo), mediaKeyExpandedLength)
+	return mediaKeyExpanded[:mediaIVEnd],
+		mediaKeyExpanded[mediaIVEnd:mediaCipherKeyEnd],
+		mediaKeyExpanded[mediaCipherKeyEnd:mediaMACKeyEnd],
+		mediaKeyExpanded[mediaMACKeyEnd:]
 }
 
 func shouldRetryMediaDownload(err error) bool {
@@ -72,7 +75,7 @@ func shouldRetryMediaDownload(err error) bool {
 }
 
 func (cli *Client) downloadPossiblyEncryptedMediaWithRetries(ctx context.Context, url string, checksum []byte) (file, mac []byte, err error) {
-	for retryNum := 0; retryNum < 5; retryNum++ {
+	for retryNum := 0; retryNum < mediaDownloadMaxRetries; retryNum++ {
 		if checksum == nil {
 			file, err = cli.downloadMedia(ctx, url)
 		} else {
@@ -81,7 +84,7 @@ func (cli *Client) downloadPossiblyEncryptedMediaWithRetries(ctx context.Context
 		if err == nil || !shouldRetryMediaDownload(err) {
 			return
 		}
-		retryDuration := time.Duration(retryNum+1) * time.Second
+		retryDuration := time.Duration(retryNum+1) * mediaDownloadRetryStep
 		var httpErr DownloadHTTPError
 		if errors.As(err, &httpErr) {
 			retryDuration = retryafter.Parse(httpErr.Response.Header.Get("Retry-After"), retryDuration)
@@ -128,8 +131,6 @@ func (cli *Client) downloadMedia(ctx context.Context, url string) ([]byte, error
 	return data, err
 }
 
-const mediaHMACLength = 10
-
 func (cli *Client) downloadEncryptedMedia(ctx context.Context, url string, checksum []byte) (file, mac []byte, err error) {
 	data, err := cli.downloadMedia(ctx, url)
 	if err != nil {
@@ -139,7 +140,7 @@ func (cli *Client) downloadEncryptedMedia(ctx context.Context, url string, check
 		return
 	}
 	file, mac = data[:len(data)-mediaHMACLength], data[len(data)-mediaHMACLength:]
-	if len(checksum) == 32 && sha256.Sum256(data) != *(*[32]byte)(checksum) {
+	if len(checksum) == sha256HashLength && sha256.Sum256(data) != *(*[sha256HashLength]byte)(checksum) {
 		err = ErrInvalidMediaEncSHA256
 	}
 	return

@@ -51,7 +51,7 @@ func (cli *Client) DownloadToFile(ctx context.Context, msg DownloadableMessage, 
 	var isWebWhatsappNetURL bool
 	if ok {
 		url = urlable.GetURL()
-		isWebWhatsappNetURL = strings.HasPrefix(url, "https://web.whatsapp.net")
+		isWebWhatsappNetURL = strings.HasPrefix(url, webWhatsappNetURLPrefix)
 	}
 	if len(url) > 0 && !isWebWhatsappNetURL {
 		return cli.downloadAndDecryptToFile(ctx, url, msg.GetMediaKey(), mediaType, getSize(msg), msg.GetFileEncSHA256(), msg.GetFileSHA256(), file)
@@ -71,7 +71,7 @@ func (cli *Client) DownloadFBToFile(
 	mediaType MediaType,
 	file File,
 ) error {
-	return cli.DownloadMediaWithPathToFile(ctx, transport.GetDirectPath(), transport.GetFileEncSHA256(), transport.GetFileSHA256(), transport.GetMediaKey(), -1, mediaType, mediaTypeToMMSType[mediaType], file)
+	return cli.DownloadMediaWithPathToFile(ctx, transport.GetDirectPath(), transport.GetFileEncSHA256(), transport.GetFileSHA256(), transport.GetMediaKey(), unknownFileLength, mediaType, mediaTypeToMMSType[mediaType], file)
 }
 
 func (cli *Client) DownloadMediaWithPathToFile(
@@ -92,7 +92,7 @@ func (cli *Client) DownloadMediaWithPathToFile(
 	}
 	for i, host := range mediaConn.Hosts {
 		// TODO omit hash for unencrypted media?
-		mediaURL := fmt.Sprintf("https://%s%s&hash=%s&mms-type=%s&__wa-mms=", host.Hostname, directPath, base64.URLEncoding.EncodeToString(encFileHash), mmsType)
+		mediaURL := fmt.Sprintf(mediaDownloadURLFormat, host.Hostname, directPath, base64.URLEncoding.EncodeToString(encFileHash), mmsType)
 		err = cli.downloadAndDecryptToFile(ctx, mediaURL, mediaKey, mediaType, fileLength, encFileHash, fileHash, file)
 		if err == nil ||
 			errors.Is(err, ErrFileLengthMismatch) ||
@@ -149,7 +149,7 @@ func (cli *Client) downloadAndDecryptToFile(
 }
 
 func (cli *Client) downloadPossiblyEncryptedMediaWithRetriesToFile(ctx context.Context, url string, checksum []byte, file File) (mac []byte, err error) {
-	for retryNum := 0; retryNum < 5; retryNum++ {
+	for retryNum := 0; retryNum < mediaDownloadMaxRetries; retryNum++ {
 		if checksum == nil {
 			_, _, err = cli.downloadMediaToFile(ctx, url, file)
 		} else {
@@ -158,7 +158,7 @@ func (cli *Client) downloadPossiblyEncryptedMediaWithRetriesToFile(ctx context.C
 		if err == nil || !shouldRetryMediaDownload(err) {
 			return
 		}
-		retryDuration := time.Duration(retryNum+1) * time.Second
+		retryDuration := time.Duration(retryNum+1) * mediaDownloadRetryStep
 		var httpErr DownloadHTTPError
 		if errors.As(err, &httpErr) {
 			retryDuration = retryafter.Parse(httpErr.Response.Header.Get("Retry-After"), retryDuration)
@@ -201,7 +201,7 @@ func (cli *Client) downloadEncryptedMediaToFile(ctx context.Context, url string,
 		return nil, err
 	} else if size <= mediaHMACLength {
 		return nil, ErrTooShortFile
-	} else if len(checksum) == 32 && !hmac.Equal(checksum, hash) {
+	} else if len(checksum) == sha256HashLength && !hmac.Equal(checksum, hash) {
 		return nil, ErrInvalidMediaEncSHA256
 	}
 	mac := make([]byte, mediaHMACLength)

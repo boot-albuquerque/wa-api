@@ -125,7 +125,7 @@ func getSize(msg DownloadableMessage) int {
 	case downloadableMessageWithSizeBytes:
 		return int(sized.GetFileSizeBytes())
 	default:
-		return -1
+		return unknownFileLength
 	}
 }
 

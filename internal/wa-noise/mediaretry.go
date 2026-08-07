@@ -21,8 +21,20 @@ import (
 	"wa-api/internal/wa-noise/util/hkdfutil"
 )
 
+const (
+	// mediaRetryKeyInfo e' o rotulo HKDF que deriva a chave do receipt de
+	// retry de midia a partir da mediaKey da mensagem original.
+	mediaRetryKeyInfo   = "WhatsApp Media Retry Notification"
+	mediaRetryKeyLength = 32
+	// mediaRetryIVLength e' o tamanho do nonce AES-GCM do receipt.
+	mediaRetryIVLength = 12
+	// mediaRetryErrCodeNotAvailable e' o codigo que o telefone devolve quando
+	// nao tem mais a midia para reenviar.
+	mediaRetryErrCodeNotAvailable = 2
+)
+
 func getMediaRetryKey(mediaKey []byte) (cipherKey []byte) {
-	return hkdfutil.SHA256(mediaKey, nil, []byte("WhatsApp Media Retry Notification"), 32)
+	return hkdfutil.SHA256(mediaKey, nil, []byte(mediaRetryKeyInfo), mediaRetryKeyLength)
 }
 
 func encryptMediaRetryReceipt(messageID types.MessageID, mediaKey []byte) (ciphertext, iv []byte, err error) {
@@ -35,7 +47,7 @@ func encryptMediaRetryReceipt(messageID types.MessageID, mediaKey []byte) (ciphe
 		err = fmt.Errorf("failed to marshal payload: %w", err)
 		return
 	}
-	iv = random.Bytes(12)
+	iv = random.Bytes(mediaRetryIVLength)
 	ciphertext, err = gcmutil.Encrypt(getMediaRetryKey(mediaKey), iv, plaintext, []byte(messageID))
 	return
 }
@@ -123,7 +135,7 @@ func (cli *Client) SendMediaRetryReceipt(ctx context.Context, message *types.Mes
 func DecryptMediaRetryNotification(evt *events.MediaRetry, mediaKey []byte) (*waMmsRetry.MediaRetryNotification, error) {
 	var notif waMmsRetry.MediaRetryNotification
 	if evt.Error != nil && evt.Ciphertext == nil {
-		if evt.Error.Code == 2 {
+		if evt.Error.Code == mediaRetryErrCodeNotAvailable {
 			return nil, ErrMediaNotAvailableOnPhone
 		}
 		return nil, fmt.Errorf("%w (code: %d)", ErrUnknownMediaRetryError, evt.Error.Code)

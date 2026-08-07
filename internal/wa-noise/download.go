@@ -58,14 +58,18 @@ func (cli *Client) DownloadThumbnail(ctx context.Context, msg DownloadableThumbn
 	if !ok {
 		return nil, fmt.Errorf("%w '%s'", ErrUnknownMediaType, string(msg.ProtoReflect().Descriptor().Name()))
 	} else if len(msg.GetThumbnailDirectPath()) > 0 {
-		return cli.DownloadMediaWithPath(ctx, msg.GetThumbnailDirectPath(), msg.GetThumbnailEncSHA256(), msg.GetThumbnailSHA256(), msg.GetMediaKey(), -1, mediaType, mediaTypeToMMSType[mediaType])
+		return cli.DownloadMediaWithPath(ctx, msg.GetThumbnailDirectPath(), msg.GetThumbnailEncSHA256(), msg.GetThumbnailSHA256(), msg.GetMediaKey(), unknownFileLength, mediaType, mediaTypeToMMSType[mediaType])
 	} else {
 		return nil, ErrNoURLPresent
 	}
 }
 
+// stickerPackMetadataURLFormat e' o endpoint estatico (nao passa pela
+// mediaConn) que devolve o JSON de metadados de um pacote de figurinhas.
+const stickerPackMetadataURLFormat = "https://static.whatsapp.net/sticker?lottie=1&cat=sticker_pack_data&id=%s&lg=en"
+
 func (cli *Client) FetchStickerPack(ctx context.Context, packID string) (*types.StickerPack, error) {
-	url := fmt.Sprintf("https://static.whatsapp.net/sticker?lottie=1&cat=sticker_pack_data&id=%s&lg=en", packID)
+	url := fmt.Sprintf(stickerPackMetadataURLFormat, packID)
 	resp, err := cli.doMediaDownloadRequest(ctx, url)
 	if err != nil {
 		return nil, err
@@ -103,7 +107,7 @@ func (cli *Client) Download(ctx context.Context, msg DownloadableMessage) ([]byt
 	var isWebWhatsappNetURL bool
 	if ok {
 		url = urlable.GetURL()
-		isWebWhatsappNetURL = strings.HasPrefix(url, "https://web.whatsapp.net")
+		isWebWhatsappNetURL = strings.HasPrefix(url, webWhatsappNetURLPrefix)
 	}
 	if len(url) > 0 && !isWebWhatsappNetURL {
 		return cli.downloadAndDecrypt(ctx, url, msg.GetMediaKey(), mediaType, getSize(msg), msg.GetFileEncSHA256(), msg.GetFileSHA256())
@@ -122,7 +126,7 @@ func (cli *Client) DownloadFB(
 	transport *waMediaTransport.WAMediaTransport_Integral,
 	mediaType MediaType,
 ) ([]byte, error) {
-	return cli.DownloadMediaWithPath(ctx, transport.GetDirectPath(), transport.GetFileEncSHA256(), transport.GetFileSHA256(), transport.GetMediaKey(), -1, mediaType, mediaTypeToMMSType[mediaType])
+	return cli.DownloadMediaWithPath(ctx, transport.GetDirectPath(), transport.GetFileEncSHA256(), transport.GetFileSHA256(), transport.GetMediaKey(), unknownFileLength, mediaType, mediaTypeToMMSType[mediaType])
 }
 
 // DownloadMediaWithPath downloads an attachment by manually specifying the path and encryption details.
@@ -147,7 +151,7 @@ func (cli *Client) DownloadMediaWithPath(
 	}
 	for i, host := range mediaConn.Hosts {
 		// TODO omit hash for unencrypted media?
-		mediaURL := fmt.Sprintf("https://%s%s&hash=%s&mms-type=%s&__wa-mms=", host.Hostname, directPath, base64.URLEncoding.EncodeToString(encFileHash), mmsType)
+		mediaURL := fmt.Sprintf(mediaDownloadURLFormat, host.Hostname, directPath, base64.URLEncoding.EncodeToString(encFileHash), mmsType)
 		data, err = cli.downloadAndDecrypt(ctx, mediaURL, mediaKey, mediaType, fileLength, encFileHash, fileHash)
 		if err == nil ||
 			errors.Is(err, ErrFileLengthMismatch) ||
