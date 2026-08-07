@@ -1688,3 +1688,41 @@ sobre corrigir agora ou depois.
 - **Status**: não corrigido. Fora do escopo de uma extração; o teste
   `TestConvertQueryIDPlatformMacOSNaoDecideSozinho` trava o comportamento atual e
   os helpers `webPayload`/`desktopPayload` documentam a pré-condição.
+
+## F49 — `EncodePatch` escreve em `MutationInfo.Value` sem checar nil
+
+- **Data / contexto**: 2026-08-07, durante a extração do subpacote
+  `internal/wa-noise/appstatesync/` (Fase F/G, lote 3). Apareceu quando um teste
+  do envio montou um `appstate.PatchInfo` com `Mutations[i].Value` nil.
+- **Onde**: `internal/wa-noise/appstate/encode.go:50`.
+
+  ```go
+  for _, mutationInfo := range patchInfo.Mutations {
+      mutationInfo.Value.Timestamp = proto.Int64(patchInfo.Timestamp.UnixMilli())
+  ```
+
+- **Problema**: `Value` é `*waSyncAction.SyncActionValue` e a linha grava um
+  campo dele sem checar nil — `SIGSEGV` se o chamador não preencher. Não é
+  acesso via getter gerado (que toleraria nil), é escrita direta. Reproduzido:
+
+  ```
+  panic: runtime error: invalid memory address or nil pointer dereference
+  wa-api/internal/wa-noise/appstate.(*Processor).EncodePatch(...)
+      internal/wa-noise/appstate/encode.go:50
+  ```
+
+  Em produção os patches vêm dos construtores `appstate.Build*`
+  (`BuildMute`, `BuildPin`, ...), que sempre preenchem `Value`, então o caminho
+  não é alcançado hoje. É fragilidade de API pública: `PatchInfo` é tipo
+  exportado e qualquer chamador pode montá-lo à mão — inclusive por
+  `Client.SendAppState`, que é API pública do fork.
+- **Correção sugerida**: `if mutationInfo.Value == nil { return nil, fmt.Errorf(...) }`
+  no topo do laço, devolvendo erro em vez de panicar. Alternativa mais
+  permissiva: criar um `&waSyncAction.SyncActionValue{}` vazio. A primeira é
+  preferível — um patch sem valor é erro do chamador, não algo a preencher em
+  silêncio.
+- **Status**: **não corrigido**. Está em `internal/wa-noise/appstate/`, que o
+  lote 3 explicitamente não toca (`git diff --stat internal/wa-noise/appstate/`
+  tem de continuar vazio). Registrado para decisão do usuário. O teste
+  `sendPatch()` em `appstatesync/send_test.go` documenta a pré-condição num
+  comentário citando `encode.go:50`.

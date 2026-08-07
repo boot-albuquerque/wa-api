@@ -5486,3 +5486,418 @@ opinião**: este lote não move nenhum lock nem nenhum estado compartilhado (ver
   quatro IDs `*Desktop` sem consumidor continuam declaradas sem uso de produção,
   como no upstream. São documentação do protocolo e ancoram os testes de wire
   type Argo.
+
+## Fase F/G — lote 3: appstate (raiz) (extração real + cobertura), 2026-08-07
+
+Terceira extração de subpacote, mesmo padrão dos lotes 1 (`media/`) e 2
+(`newsletter/`): o domínio vira um pacote que define uma interface estreita,
+opera sobre ela e **nunca importa a raiz**; a raiz importa o subpacote (uma
+direção só) e mantém métodos-fachada em `*Client`. O racional de por que a
+movimentação simples é impossível está na seção da Fase D.
+
+### Por que `appstatesync/` e não `appstate/`
+
+`internal/wa-noise/appstate/` **já existe** desde a Fase B e é outra coisa: é a
+camada de baixo do protocolo — decodificação/codificação de patches, hash chain
+(lthash), derivação e busca de chaves. O que este lote extrai é a camada de
+cima, a "cola" que vivia na raiz: buscar patches do servidor, aplicá-los,
+traduzir cada mutação em evento, enviar patches locais, pedir as chaves que
+faltam.
+
+O nome `appstatesync` descreve exatamente isso (a *sincronização* de app state,
+não o formato de app state) e a direção de dependência fica óbvia:
+`appstatesync/` importa `appstate/`, nunca o contrário. `internal/wa-noise/appstate/`
+**não foi tocado neste lote** — `git diff --stat internal/wa-noise/appstate/`
+continua vazio, como `internal/wa-noise/proto/`.
+
+### A interface
+
+Em `internal/wa-noise/appstatesync/transport.go`, uma interface com treze
+métodos:
+
+```go
+type Transport interface {
+    Store() *store.Device
+    Proc() *appstate.Processor
+    State() *State
+    Log() waLog.Logger
+    DispatchEvent(evt any) (handlerFailed bool)
+    SendIQ(ctx context.Context, query IQ) (*waBinary.Node, error)
+    SendPeerMessage(ctx context.Context, msg *waE2E.Message) error
+    DownloadExternalBlob(ctx context.Context, ref *waServerSync.ExternalBlobReference) ([]byte, error)
+    EmitEventsOnFullSync() bool
+    DebugLogs() bool
+    StoreNCTSalt(ctx context.Context, salt []byte) error
+    ClearNCTSalt(ctx context.Context) error
+    ElementMissing(tag, in string) error
+}
+```
+
+Cinco decisões de projeto valem registro:
+
+1. **`Store() *store.Device` e `Proc() *appstate.Processor` aparecem inteiros.**
+   Os dois são tipos de **subpacotes folha** do fork, não da raiz: expô-los não
+   cria dependência nova nem ciclo. Fatiar `Store()` nos oito métodos de
+   sub-store que este domínio usa (`AppState`, `AppStateKeys`, `Contacts`,
+   `ChatSettings`, `NCTSalt`, `PushName`, `Save`) custaria oito métodos de
+   interface sem isolar nada — o duble teria de implementar os mesmos
+   sub-stores de qualquer jeito. É a mesma classe de decisão que fez o lote 1
+   expor `MediaConnCache() *ConnCache`.
+
+2. **`appstatesync.IQ` em vez de expor `infoQuery`.** Idêntico ao lote 2:
+   `infoQuery` é tipo da raiz, e expô-lo arrastaria a raiz para dentro do
+   subpacote. `IQ` é a fatia que este domínio usa (`Namespace`, `Type`, `To`,
+   `Content`); o adaptador traduz campo a campo, e os campos que o domínio nunca
+   preenchia (`Target`, `ID`, `SMaxID`, `Timeout`, `NoRetry`) continuam no zero.
+   Só existe `IQSet`: os três IQs deste domínio (fetch, send, dirty) são todos
+   `type="set"`.
+
+3. **`ElementMissing(tag, in string) error` em vez de mover
+   `ElementMissingError`.** Mesmo racional dos lotes 1 e 2: o tipo é erro
+   genérico de parsing de XML do fork inteiro (group, usync, newsletter,
+   pair-code, blocklist, ...). O tipo concreto devolvido continua sendo
+   `*whatsmeow.ElementMissingError`, bit-a-bit o de antes; só a construção
+   atravessa a interface.
+
+4. **`SendPeerMessage` devolve só `error`.** O domínio só usa o erro; devolver
+   `SendResponse` colocaria mais um tipo da raiz na interface. O adaptador
+   descarta a resposta (`appstate_transport.go`).
+
+5. **`State() *State` em vez de métodos de lock na interface.** O estado
+   mutável é um tipo real com donos claros (ver "Concorrência"), não um punhado
+   de métodos soltos no Transport.
+
+O adaptador (`appstate_transport.go`) é **não exportado**: `appStateTransport`
+embrulha `*Client`, que **não** ganhou nenhum método exportado novo.
+
+### Arquivos
+
+**Criados** (`internal/wa-noise/appstatesync/`, `package appstatesync`):
+`constants.go`, `transport.go`, `state.go`, `fetch.go`, `recovery.go`,
+`dispatch.go`, `mutation.go`, `keys.go`, `send.go`.
+
+**Removido**: `appstate_constants.go` (as 40 constantes foram para
+`appstatesync/constants.go`; nenhuma tinha uso fora dos quatro arquivos deste
+lote — verificado por grep antes de mover). O prefixo `appState` caiu, já que
+agora é o nome do pacote: `appStateNamespace` → `namespace`,
+`appStateIndexMinLenLabelEdit` → `indexMinLenLabelEdit`, e assim por diante. Os
+**valores** não mudaram.
+
+**Reduzidos a fachada**: `appstate.go` (196→81), `appstate_dispatch.go`
+(283→45), `appstate_keys.go` (58→31), `appstate_send.go` (177→86).
+
+**Criado na raiz**: `appstate_transport.go` — o adaptador.
+
+**Tocados fora do lote**: `client.go` (os três campos de estado viraram um),
+`errors.go` (`ErrAppStateUpdate` virou apelido do valor do subpacote) e
+`message_history_sync.go` (único ponto de leitura do mapa de pedidos de chave
+fora do domínio — ver "Concorrência").
+
+### Compatibilidade de API
+
+Este domínio **não tem tipo exportado próprio** — os tipos que ele manipula
+(`appstate.WAPatchName`, `appstate.PatchInfo`, `appstate.HashState`,
+`appstate.Mutation`, `appstate.PatchList`) já vinham do subpacote `appstate/`
+desde a Fase B e continuam vindo de lá. Não há tabela de apelidos como nos lotes
+1 e 2 porque não há o que apelidar.
+
+O único sentinela do domínio, `ErrAppStateUpdate`, virou
+`appstatesync.ErrUpdate`, e a raiz passou a referenciar **o mesmo valor**:
+
+```go
+// errors.go
+ErrAppStateUpdate = appstatesync.ErrUpdate
+```
+
+**Não pode virar um `errors.New` próprio** — é a mesma armadilha de aliasing
+documentada no lote 1. Há teste de identidade nos dois sentidos em
+`appstate_transport_test.go` (`TestErrAppStateUpdateEOMesmoValor`).
+
+As duas funções públicas que não dependem de `*Client` —
+`BuildFatalAppStateExceptionNotification` e `BuildAppStateRecoveryRequest` —
+**ficaram na raiz**. Funções, ao contrário de tipos, não podem ser reexportadas
+por apelido; movê-las quebraria todo chamador externo. Os testes delas
+(`appstate_send_test.go`) também ficaram e não foram alterados.
+
+`internals.go` (gerado) compila sem mudança: os onze métodos não exportados que
+ele embrulha (`fetchAppState`, `handleAppStateRecovery`, `applyAppStatePatches`,
+`collectEventsToDispatch`, `filterContacts`, `dispatchAppState`,
+`downloadExternalAppStateBlob`, `fetchAppStatePatches`,
+`requestMissingAppStateKeys`, `requestAppStateKeys`, `sendAppState`) continuam
+existindo em `*Client` com as mesmas assinaturas, agora como delegações.
+
+`go build ./...` do repositório inteiro passa **sem uma única alteração de call
+site fora de `internal/wa-noise/`**.
+
+### Concorrência — o ponto que exige atenção
+
+Diferente do lote 2 (que não movia estado nenhum), este lote move **três** campos
+de `*Client` para um tipo próprio, `appstatesync.State` (`state.go`):
+
+```go
+// antes, em client.go
+appStateSyncLock        sync.Mutex
+appStateKeyRequests     map[string]time.Time
+appStateKeyRequestsLock sync.RWMutex
+
+// agora
+appStateSync appstatesync.State
+```
+
+**Os dois locks continuam sendo dois locks distintos** — não foram fundidos. Os
+pontos de aquisição e liberação de cada um:
+
+**1. O lock de sync** (`LockSync`/`UnlockSync`). `Fetch` (`fetch.go`) abre com
+`t.State().LockSync()` + `defer UnlockSync()`, exatamente como
+`fetchAppState` fazia. O lock permanece segurado durante todas as consultas ao
+servidor e escritas no store — igual ao original. Não é o desenho ideal, mas
+mudá-lo seria mudança de comportamento, e este lote é extração. `Send`
+(`send.go`) **não** segura esse lock; ele chama `Fetch` depois de enviar, e
+`Fetch` toma o lock ali, como antes.
+
+**2. O lock do histórico de pedidos de chave** (`FilterKeyIDs`,
+`ReadKeyRequests`). Aqui a assinatura mudou de propósito, e o motivo importa:
+
+- `FilterKeyIDs(now, rawKeyIDs func() [][]byte)` recebe uma **função**, não uma
+  slice. No original, `appStateProc.GetMissingKeyIDs` era chamado **dentro** da
+  seção crítica. Receber a lista pronta moveria essa chamada para fora e mudaria
+  o comportamento sob concorrência: duas goroutines poderiam calcular a mesma
+  lista de chaves faltantes e as duas passarem no filtro. Coberto por
+  `TestFilterKeyIDsCalculaSobOLock` (8 goroutines, uma única chave passa).
+  O envio (`RequestKeys`) fica **fora** do lock, como antes.
+
+- `ReadKeyRequests(fn)` executa `fn` com o `RLock` segurado do início ao fim.
+  A forma de callback existe para preservar a duração da seção crítica: o
+  chamador (`handleAppStateSyncKeyShare`, em `message_history_sync.go`) segurava
+  o `RLock` por todo o laço de chaves, **incluindo as gravações no store**, e não
+  só pela consulta ao mapa. Um método que respondesse uma chave por vez
+  encurtaria o hold.
+
+**Mudança de comportamento conhecida e aceita:** o mapa passou a ser criado
+preguiçosamente sob o lock de escrita (`FilterKeyIDs`) em vez de eagerly em
+`NewClient`. Uma leitura antes de qualquer gravação enxerga mapa nil, o que em
+Go é leitura válida e devolve o zero — mesmo resultado que um mapa vazio.
+Coberto por `TestReadKeyRequests`.
+
+O ponteiro do estado é estável: `appStateTransport.State()` devolve
+`&t.cli.appStateSync`, e `appStateTransport` embrulha `*Client` (o mutex nunca é
+copiado por valor). Travado por `TestAppStateTransportEspelhaOCliente`. A suíte
+inteira roda sob `-race` em `make check`.
+
+### Mudança de comportamento deliberada — guardas de receiver nil
+
+Antes, **nenhum** dos métodos deste domínio checava `cli == nil` a não ser
+`fetchAppState` e `sendAppState`. Os demais estouravam nil deref. Todos passaram
+a devolver `ErrClientIsNil` (ou o zero equivalente, quando a assinatura não tem
+erro), na mesma linha do que as Fases A–E fizeram nos outros domínios e do que
+os lotes 1 e 2 fizeram em mídia e newsletter. Inclui os não exportados, que são
+alcançáveis por `DangerousInternalClient`. Coberto por
+`TestFachadaDeAppStateRecusaClientNil`.
+
+Dois casos têm retorno que não é erro e merecem nota:
+
+- `handleAppStateRecovery` devolve `true` ("nada a reprocessar") — o retorno é
+  usado só para decidir se dá ack na mensagem, e `false` significaria pedir
+  reenvio de algo que voltaria a falhar.
+- `dispatchAppState` devolve `nil` (nenhum evento).
+
+### O panico de `label_edit` da Fase E lote 3 — preservado
+
+A guarda que a Fase E lote 3 acrescentou continua no lugar, agora em
+`mutation.go`, com o mesmo comentário explicando por quê:
+
+```go
+case appstate.IndexLabelEdit:
+    if len(mutation.Index) < indexMinLenLabelEdit {
+        return
+    }
+```
+
+Os dois testes que a travavam foram **relocados, não reescritos**:
+`TestDispatchAppStateMalformedIndexDoesNotPanic` (15 índices curtos, contrato de
+"não entra em pânico") e `TestDispatchAppStateLabelEditShortIndex` (o caso
+específico do bug: índice mínimo válido produz evento, um a menos produz nil).
+As sete constantes de comprimento mínimo (`indexMinLen*`) atravessaram a
+extração com os mesmos valores.
+
+### Comportamento preservado de propósito
+
+**A posição da flag `deleteMedia` difere entre `clear_chat` (índice 3) e
+`delete_chat` (índice 2).** Assimetria do upstream, preservada e travada caso a
+caso por `TestDispatchAppStateDeleteMediaFlags`.
+
+**`MuteEndTimestamp` negativo vira `store.MutedForever`**, e não um
+`time.UnixMilli` de valor negativo. Travado por
+`TestDispatchAppStateMuteForever`.
+
+**Um `contact` sem JID no índice não vira `ContactEntry`** — fica entre as
+mutações e passa pelo caminho individual. Travado por `TestFilterContacts`.
+
+**`types.ParseJID` sem "@" trata a string inteira como servidor**, e o erro é
+descartado de propósito: o contato entra assim mesmo. Não é o ideal, é o que o
+código faz; `TestFilterContactsJIDSemServidor` existe para que uma mudança aqui
+seja consciente.
+
+**Uma falha ao persistir no store não impede o evento de sair.** O evento é o
+dado do protocolo, o store é cache. Vale para os quatro ramos que persistem e
+para o `Save` do push name. Travado por `TestDispatchAppStateErroDeStoreSoLoga` e
+`TestDispatchAppStatePushNameSaveFalha`.
+
+**A insersão em massa de contatos só acontece para `critical_unblock_low`, em
+full sync, com a emissão desligada** — e é o **único** erro que `CollectEvents`
+propaga (os demais são logados). Travado por `TestCollectEventsSnapshotDeContatos`,
+`TestCollectEventsSnapshotSoComEmissaoDesligada` e
+`TestCollectEventsSnapshotDeContatosAborta`.
+
+**O timestamp de `MarkNotDirty` vai em segundos**, enquanto o de
+`BuildFatalAppStateExceptionNotification` vai em milissegundos. Travado nos dois
+lados.
+
+**A retentativa de conflito é exatamente uma.** `Send` com `allowRetry=true`
+aplica os patches conflitantes e reenvia com `allowRetry=false`, o que impede
+recursão infinita contra um servidor que insista em conflitar. Travado por
+`TestHandleSendErrorConflitoRetenta` e `TestHandleSendErrorConflitoSemRetentativa`.
+
+### Helpers extraídos (equivalência verificada por leitura)
+
+- `logMutation` (`mutation.go`) — o bloco de log que abria `dispatchAppState`.
+  Sai da função de 210 linhas sem mudar o que é logado nem em que nível.
+- `handleSendError` (`send.go`) — o `if respCollectionAttr.OptionalString(...)
+  == respTypeError { ... }` de `sendAppState`, que tinha um `if/else` aninhado
+  de 30 linhas dentro de uma função de 90. A política de erro da resposta ficou
+  testável sem precisar chegar até lá pelo caminho completo (que exige uma chave
+  de app state real e criptografia de verdade).
+- `dispatchAll` (`send.go`) — as duas closures idênticas
+  (`for _, evt := range eventsToDispatch { cli.dispatchEvent(evt) }`) que
+  `sendAppState` disparava em goroutine nos dois pontos. É por isso que
+  `cmd/logcov/testdata/eligible.golden` perdeu `sendAppState.func1` e
+  `sendAppState.func2`.
+
+Uma diferença de forma, sem efeito: no ramo de conflito, o original fazia
+`state, err = cli.applyAppStatePatches(...)`; o novo faz `_, err = ApplyPatches(...)`.
+A atribuição a `state` era morta — o caminho seguinte é a chamada recursiva de
+`Send`, que relê versão e hash do store.
+
+### Cobertura
+
+`internal/wa-noise/appstatesync/` fecha em **100,0% de statements e 100% de
+funções** (`go test -race -coverprofile`, saída real: `coverage: 100.0% of
+statements`). Não há bloco descoberto.
+
+Os testes que existiam desde a Fase E lote 3 foram **relocados e adaptados**,
+não descartados: passaram a chamar as funções livres direto, com um
+`fakeTransport` (`testhelpers_test.go`) em vez de um `*Client`. Foi exatamente o
+ganho de testabilidade que motivou o desenho — o duble tem 13 métodos e nenhuma
+dependência de socket ou sessão Noise, e os sub-stores são dubles em memória.
+
+Além da adaptação, o lote acrescentou os caminhos que antes não tinham como ser
+alcançados: o laço de páginas de `Fetch`, as duas guardas de snapshot
+inesperado, a política de erro do envio (conflito com e sem retentativa, parse
+falhando, aplicação falhando), o `HandleRecovery` inteiro (incluindo gzip,
+versão antiga, falha de processamento e o único caminho que devolve `false`), e
+o throttle de pedidos de chave.
+
+Dois dos ramos cobertos merecem nota por serem defesa contra estado
+inconsistente, não caminho normal:
+
+1. **`fetch.go` — "unexpected non-empty input state when applying snapshot".**
+   Em produção o full sync apaga a versão antes de pedir o snapshot, então o
+   estado é sempre zero ali. Chegar nessa guarda exige um store que aceite o
+   `DELETE` sem zerar; o duble simula isso (`keepOnDelete`).
+2. **`recovery.go` — falha de `CollectEvents`.** Só alcançável quando o recovery
+   é de `critical_unblock_low` (o recovery sempre passa `fullSync=true`) e a
+   inserção em massa de contatos falha.
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `internal/wa-noise/appstatesync`. Todos os 9
+arquivos de produção do novo pacote ficam abaixo do teto de 300 linhas (maior:
+`mutation.go`, 248). `client.go` bateu 301 linhas com o comentário do campo novo
+e o comentário foi encurtado — o gate pegou, como devia.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado: 35 linhas a mais (as
+funções do pacote novo, todas `EXCLUDED` como o resto do fork) e 2 a menos (as
+closures que viraram `dispatchAll`). Nenhuma mudança de piso.
+
+`git diff --stat internal/wa-noise/proto/` e
+`git diff --stat internal/wa-noise/appstate/` continuam **ambos vazios**.
+
+### Estado da revisão — REVISADO INDEPENDENTEMENTE, COM RESSALVAS DECLARADAS
+
+Diferente dos lotes 1 e 2, este lote **teve revisão independente de fato** da
+mudança de concorrência — que era o item que o lote 1 deixou explicitamente
+pendente. A revisão foi feita por um agente revisor separado, com citações de
+arquivo:linha e comandos efetivamente rodados, e o veredito chegou por
+intermédio do coordenador da sessão. Ela **não** é a mesma pessoa que escreveu o
+código.
+
+**Veredito: equivalente**, nos três pontos centrais:
+
+1. **`fetchAppState` → `appstatesync.Fetch`: equivalente.** Aquisição e
+   liberação nos mesmos pontos, corpo é transcrição statement-a-statement do
+   original, e o despacho de eventos continua acontecendo **fora** do lock. Grep
+   confirmou que só `Fetch` chama `LockSync` — não há caminho novo de
+   self-deadlock (a preocupação era `Send` → `Fetch`).
+
+2. **`requestMissingAppStateKeys` → `State.FilterKeyIDs`: equivalente**, com uma
+   diferença benigna que vale registrar: `time.Now()` passou a ser capturado
+   **antes** da aquisição do lock (`keys.go`, no chamador), enquanto o original
+   o computava **depois** do `Lock()`. O efeito possível é o timestamp ficar
+   mais *cedo* pela duração da espera do lock; como não há I/O dentro dessa
+   janela (o envio de rede fica fora do lock), não é regressão do throttle de
+   24h.
+
+3. **`handleAppStateSyncKeyShare` → `State.ReadKeyRequests`: equivalente.**
+   `RLock`/`RUnlock` nos mesmos pontos, predicado idêntico, e os dois `continue`
+   dentro da closure se comportam igual — em Go o `continue` liga ao `for` mais
+   interno, que continua sendo o mesmo laço.
+
+Itens adicionais verificados pela revisão: o mapa `keyRequests` preguiçoso é
+seguro (só é escrito sob o lock de escrita); `appStateTransport` nunca copia o
+mutex (carrega só um `*Client`); nenhuma cópia de `*Client` por valor no
+repositório.
+
+**O que a revisão declarou NÃO ter checado** — registrado aqui porque uma
+ressalva omitida vale menos que a revisão inteira:
+
+- O corpo de `mutation.go`, `dispatch.go` e `recovery.go` além de grep por lock:
+  **não houve diff linha-a-linha contra `HEAD`** por parte do revisor. Essa
+  lacuna foi fechada depois, mecanicamente, por quem escreveu o commit (portanto
+  **não** é evidência independente): um diff normalizado — whitespace e
+  comentários removidos, receptor `cli.X` reescrito para o `t.X()` equivalente,
+  constantes desprefixadas — entre `git show <commit>^:internal/wa-noise/appstate_dispatch.go`
+  e `appstatesync/{mutation,dispatch}.go` sai **vazio** para todo o `switch` de
+  `DispatchMutation` (as 165 linhas de `case appstate.IndexMute:` até o fim), e o
+  resíduo no resto do arquivo é exatamente: linhas de `import`/`package`, as
+  assinaturas (que ganharam `t Transport`), e a extração de `logMutation` com sua
+  chamada. O mesmo diff contra `appstate.go` (para `fetch.go` e `recovery.go`)
+  tem como resíduo apenas os renomes (`sendIQ`→`SendIQ`, `infoQuery`→`IQ`,
+  `&ElementMissingError{...}`→`t.ElementMissing(...)`,
+  `SyncLock.Lock()`→`LockSync()`) e os dois wrappers que **ficaram** na raiz
+  (`FetchAppState`, `downloadExternalAppStateBlob`) mais a guarda de `cli == nil`
+  que subiu para a fachada. Nenhum statement de corpo ficou sem explicação.
+- **Nenhum `go test -race` foi rodado pelo revisor**: o veredito é por leitura de
+  código, não evidência dinâmica. Essa lacuna específica é coberta por fora — o
+  `make check` deste lote roda `go test -race` sobre o pacote novo e passou
+  (exit 0), e a cobertura de 100% também foi medida sob `-race`.
+- Não foi traçado se `cli.SendPeerMessage` tem algum caminho de volta para a
+  sincronização de app state. Se existir, seria comportamento pré-existente, não
+  regressão desta extração — mas fica registrado como não verificado.
+
+O que sustenta este lote, então: `make check` verde (build, vet, testes com
+`-race`, lint, gates de cobertura, licença, deriva, tamanho de arquivo e testes
+do fork), cobertura de 100,0% de statements e funções no pacote novo, a revisão
+independente de concorrência acima com suas ressalvas, e comparação manual de
+cada função movida contra o original — esta última feita por quem escreveu o
+commit e portanto **não** independente.
+
+### Fora do escopo
+
+- `internal/wa-noise/appstate/` (o subpacote da Fase B) não foi tocado.
+- `cstoken.go` (`storeNCTSalt`/`clearNCTSalt`) continua na raiz: é o domínio de
+  token de chat, não de app state; este lote só o chama pela interface.
+- `parseNewsletterMessages`, `ElementMissingError` e afins continuam na raiz,
+  pelo mesmo racional dos lotes 1 e 2.
+- O desenho do lock de sync (consulta ao servidor segurando o mutex) não foi
+  mexido.
