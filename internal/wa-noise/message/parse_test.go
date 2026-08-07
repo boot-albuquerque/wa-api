@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/send"
+	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

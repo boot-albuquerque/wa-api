@@ -6,7 +6,7 @@
 
 package whatsmeow
 
-import "wa-api/internal/wa-noise/send"
+import "wa-api/internal/wa-noise/capabilities/send"
 
 // As constantes de wire do stanza <message> moram em
 // internal/wa-noise/send/constants.go desde a Fase F/G lote 8. As nove abaixo

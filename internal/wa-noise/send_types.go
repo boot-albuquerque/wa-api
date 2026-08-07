@@ -6,7 +6,7 @@
 
 package whatsmeow
 
-import "wa-api/internal/wa-noise/send"
+import "wa-api/internal/wa-noise/capabilities/send"
 
 // Os quatro tipos do dominio de envio moram em internal/wa-noise/send desde a
 // Fase F/G lote 8. A raiz os reexporta por APELIDO DE TIPO, nao por definicao
