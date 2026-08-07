@@ -118,7 +118,9 @@ func UpdateBusinessName(
 		if !jidAlt.IsEmpty() {
 			_, _, err = t.Store().Contacts.PutBusinessName(ctx, jidAlt, name)
 			if err != nil {
-				t.Log().Errorf("Failed to save push name of %s in device store: %v", jidAlt, err)
+				// Dizia "push name" aqui, o que mandava quem investiga o log
+				// para o caminho errado — a chamada e' PutBusinessName (F39).
+				t.Log().Errorf("Failed to save business name of %s in device store: %v", jidAlt, err)
 			}
 		}
 		t.Log().Debugf("Business name of %s changed from %s to %s, dispatching event", jid, previousName, name)

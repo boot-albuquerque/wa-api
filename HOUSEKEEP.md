@@ -56,7 +56,17 @@ qualquer outro alvo do Makefile que faça parsing de decimal, ex.
 `LC_ALL=C`, ou trocar por uma conversão que não dependa de locale (ex.
 `printf`/`bc` com formatação explícita).
 
-**Status**: não corrigido — fora do escopo da feature que o encontrou.
+**Status**: **CORRIGIDO** (lote D, 2026-08-07). O `awk` do alvo
+`coverage-gate` é prefixado com `LC_NUMERIC=C LC_ALL=C`, e o gate passou a
+falhar fechado se a conversão devolver vazio ou zero. O comentário errado em
+`.coverage-baseline` (que afirmava que a conversão não dependia de locale) foi
+reescrito para descrever o bug real. `log-coverage-gate` foi auditado e não usa
+o padrão — lê inteiros direto do baseline com `grep -oE`, sem conversão decimal.
+
+Verificação: `echo "81.6" | LC_ALL=pt_BR.UTF-8 awk '{printf "%d", $1*10+0.5}'`
+devolve `810`; com o prefixo, `816`. E `LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8 make
+coverage-gate` — sem nenhum prefixo manual — agora imprime
+`coverage: 829 decimos de %` e sai 0.
 
 ---
 
@@ -1266,7 +1276,12 @@ desserialização passou a acontecer dentro de cada `subProtocol.Decode()`.
 **Correção sugerida**: remover as duas declarações e o bloco `if`. É deleção
 pura de código inalcançável, sem mudança de comportamento observável.
 
-**Status**: **não corrigido**. Deleção é segura, mas o lote 4 não tocou em
+**Status**: **CORRIGIDO** (lote D, 2026-08-07). As duas variáveis e o bloco
+`if protoMsg != nil` foram removidos, com comentário no lugar registrando o que
+havia ali e por que era inalcançável. Nenhum ramo do `switch` as atribuía; cada
+um já decodifica direto para `dec.Message`.
+
+**Status original**: Deleção é segura, mas o lote 4 não tocou em
 `armadillomessage.go` além da auditoria, e remover código do upstream aumenta
 a divergência de reconciliação sem ganho funcional. Fica para decisão.
 
@@ -1421,7 +1436,11 @@ lugar errado. As outras duas mensagens da mesma função (`:114` e `:126`) dizem
 
 **Correção sugerida**: trocar `push name` por `business name` na string.
 
-**Status**: **não corrigido**. É um caractere de risco quase zero, mas altera
+**Status**: **CORRIGIDO** (lote D, 2026-08-07). A mensagem passou a dizer
+"business name", que é o que `PutBusinessName` grava — quem investigasse o log
+era mandado para o caminho errado.
+
+**Status original**: É um caractere de risco quase zero, mas altera
 uma string de log que pode estar sendo casada em alerta/dashboard, e o lote 7 é
 de qualidade estrutural por contrato. Pendente de decisão — trivial de aplicar.
 

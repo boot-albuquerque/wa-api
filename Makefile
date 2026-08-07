@@ -97,7 +97,12 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 	   echo "       Este gate FALHA FECHADO de proposito: cobertura ausente nao e' cobertura ok."; \
 	   exit 1; \
 	 fi; \
-	 cur=$$(echo "$$pct" | awk '{printf "%d", $$1*10 + 0.5}'); \
+	 cur=$$(echo "$$pct" | LC_NUMERIC=C LC_ALL=C awk '{printf "%d", $$1*10 + 0.5}'); \
+	 if [ -z "$$cur" ] || [ "$$cur" -eq 0 ]; then \
+	   echo "FALHA: a conversao de '$$pct' para decimos falhou (resultado '$$cur')."; \
+	   echo "       Gate FALHA FECHADO: numero ausente nao e' cobertura ok."; \
+	   exit 1; \
+	 fi; \
 	 base=$$(grep -oE '^min_coverage=[0-9]+' $(COVERAGE_BASELINE_FILE) | grep -oE '[0-9]+'); \
 	 if [ -z "$$base" ]; then \
 	   echo "FALHA: $(COVERAGE_BASELINE_FILE) nao declara min_coverage=<N>. Gate FALHA FECHADO."; \

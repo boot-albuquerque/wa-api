@@ -9,8 +9,14 @@
 #   go test ./... -coverpkg=./... -coverprofile=coverage.out
 #   go tool cover -func=coverage.out | tail -1
 #
-# Decimos, e nao float, porque o gate e' shell: comparacao inteira e' exata e
-# nao depende de locale para o separador decimal.
+# Decimos, e nao float, porque o gate e' shell: a COMPARACAO inteira e' exata.
+#
+# Atencao: a comparacao nao depende de locale, mas a CONVERSAO de "82.9" para
+# 829 depende — awk le' o "." como separador decimal so' com LC_NUMERIC=C. Sob
+# pt_BR.UTF-8 ele parava no ponto e devolvia 820, e o gate falhava com a
+# cobertura acima do piso. Este comentario afirmava o contrario ate' 2026-08-07;
+# a correcao esta' no proprio alvo coverage-gate, que agora prefixa o awk com
+# LC_NUMERIC=C LC_ALL=C e falha fechado se a conversao devolver vazio ou zero.
 # justificativa: fix de contact-roster-sync (2026-08-05, RALPLAN-DR
 # wa-api-contact-roster-sync-fix). O piso declarado (818) estava desatualizado
 # em relacao a `develop`: medi a cobertura ANTES desta mudanca (git stash -u,

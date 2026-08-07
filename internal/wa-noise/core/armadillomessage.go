@@ -9,7 +9,6 @@ import (
 	armadillo "wa-api/internal/wa-noise/protocol/proto"
 	"wa-api/internal/wa-noise/protocol/proto/armadilloutil"
 	"wa-api/internal/wa-noise/protocol/proto/instamadilloTransportPayload"
-	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/protocol/types"
@@ -79,8 +78,12 @@ func decodeFBArmadillo(transport *waMsgTransport.MessageTransport) (dec events.F
 	case *waMsgApplication.MessageApplication_Payload_ApplicationData:
 		err = fmt.Errorf("unsupported application data payload")
 	case *waMsgApplication.MessageApplication_Payload_SubProtocol:
-		var protoMsg proto.Message
-		var subData *waCommon.SubProtocol
+		// Havia aqui um `var protoMsg proto.Message` / `var subData
+		// *waCommon.SubProtocol` seguido, depois do switch, de um
+		// `if protoMsg != nil { proto.Unmarshal(subData.GetPayload(), ...) }`.
+		// Nenhum ramo do switch atribuia as duas variaveis, entao a condicao
+		// era sempre falsa e o bloco inteiro era inalcancavel — cada ramo ja'
+		// decodifica direto para dec.Message (F34 em HOUSEKEEP.md). Removido.
 		switch subProtocol := typedContent.SubProtocol.GetSubProtocol().(type) {
 		case *waMsgApplication.MessageApplication_SubProtocolPayload_ConsumerMessage:
 			dec.Message, err = subProtocol.Decode()
@@ -96,12 +99,6 @@ func decodeFBArmadillo(transport *waMsgTransport.MessageTransport) (dec events.F
 			dec.Message, err = subProtocol.Decode()
 		default:
 			return dec, fmt.Errorf("unsupported subprotocol type: %T", subProtocol)
-		}
-		if protoMsg != nil {
-			err = proto.Unmarshal(subData.GetPayload(), protoMsg)
-			if err != nil {
-				return dec, fmt.Errorf("failed to unmarshal application subprotocol payload (%T v%d): %w", protoMsg, subData.GetVersion(), err)
-			}
 		}
 	default:
 		err = fmt.Errorf("unsupported application payload content type: %T", typedContent)
