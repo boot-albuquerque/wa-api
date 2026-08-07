@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -26,11 +27,11 @@ type MiscAdapter struct {
 }
 
 // NewMiscAdapter cria o adapter com a função de lookup.
-func NewMiscAdapter(getClient waClientGetter) *MiscAdapter {
+func NewMiscAdapter(getClient waclient.Getter) *MiscAdapter {
 	return &MiscAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
-func (a *MiscAdapter) client(txtID string) (waClient, error) {
+func (a *MiscAdapter) client(txtID string) (waclient.Client, error) {
 	client := a.getClient(txtID)
 	if client == nil {
 		return nil, ErrNoSession(txtID, nil)
@@ -53,7 +54,7 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 		return err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 
 	return client.SendAppState(ctxWithTimeout, appstate.BuildArchive(jid, archive, time.Time{}, nil))
@@ -89,7 +90,7 @@ func (a *MiscAdapter) RequestUnavailableMessage(ctx context.Context, txtID strin
 
 	unavailableMessage := client.BuildUnavailableMessageRequest(chatJID, senderJID, messageID)
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 
 	resp, err := client.SendMessage(ctxWithTimeout, chatJID, unavailableMessage, wa.SendRequestExtra{Peer: true})

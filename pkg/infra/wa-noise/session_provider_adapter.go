@@ -16,7 +16,7 @@ import (
 
 // deviceContainer é a superfície do sqlstore.Container que o provider usa
 // para materializar o device de uma sessão. Estreita por testabilidade,
-// pelo mesmo motivo de waClient em wa_client_seam.go.
+// pelo mesmo motivo de waclient.Client em wa_client_seam.go.
 type deviceContainer interface {
 	GetDevice(ctx context.Context, jid types.JID) (*store.Device, error)
 	NewDevice() *store.Device

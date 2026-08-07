@@ -1,4 +1,4 @@
-package whatsmeow
+package registry
 
 import (
 	whatsmeow "wa-api/internal/wa-noise"

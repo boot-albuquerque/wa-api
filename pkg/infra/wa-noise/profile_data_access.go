@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	"wa-api/pkg/domain"
 
@@ -20,13 +21,13 @@ func NewProfileDataAccess(client *whatsmeow.Client) *ProfileDataAccess {
 	return &ProfileDataAccess{client: client}
 }
 
-// NewProfileDataAccessFromInterface aceita a interface waClient (usada pelos
+// NewProfileDataAccessFromInterface aceita a interface waclient.Client (usada pelos
 // adapters) e desembrulha para o tipo concreto que ProfileDataAccess
-// requer. Falha com segurança: se o waClient não for um realWAClient
+// requer. Falha com segurança: se o waclient.Client não for um waclient.RealClient
 // (improvável em produção), devolve ProfileDataAccess com client nil —
 // o que reproduz o comportamento anterior de "Store ausente é vazio".
-func NewProfileDataAccessFromInterface(c waClient) *ProfileDataAccess {
-	if r, ok := c.(realWAClient); ok {
+func NewProfileDataAccessFromInterface(c waclient.Client) *ProfileDataAccess {
+	if r, ok := c.(waclient.RealClient); ok {
 		return &ProfileDataAccess{client: r.Client}
 	}
 	return &ProfileDataAccess{}

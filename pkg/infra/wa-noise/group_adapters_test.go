@@ -2,12 +2,13 @@ package whatsmeow
 
 import (
 	"testing"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
 )
 
 func TestNewGroupAdapter(t *testing.T) {
-	if NewGroupAdapter(getterWith(nil)) == nil {
+	if NewGroupAdapter(waclienttest.GetterWith(nil)) == nil {
 		t.Fatal("NewGroupAdapter returned nil")
 	}
 }

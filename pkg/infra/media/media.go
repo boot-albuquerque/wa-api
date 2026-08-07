@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	wamgr "wa-api/pkg/infra/wa-noise"
+	wamgr "wa-api/pkg/infra/wa-noise/registry"
 
 	whatsmeow "wa-api/internal/wa-noise"
 

@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/internal/wa-noise/types"
 )
 
 // TestGroupAdapter_GetGroupInfo_NoSession.
 func TestGroupAdapter_GetGroupInfo_NoSession(t *testing.T) {
-	a := NewGroupAdapter(getterWith(nil))
+	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInfo(context.Background(), "u1", "g@g.us")
 	if appErrCode(err) != "no_session" {
 		t.Errorf("GetGroupInfo code = %q", appErrCode(err))
@@ -20,10 +22,10 @@ func TestGroupAdapter_GetGroupInfo_NoSession(t *testing.T) {
 // TestGroupAdapter_GetGroupInfo_OK.
 func TestGroupAdapter_GetGroupInfo_OK(t *testing.T) {
 	info := &types.GroupInfo{JID: types.JID{User: "g", Server: "g.us"}}
-	fake := &fakeWAClient{GetGroupInfoFn: func(ctx context.Context, jid types.JID) (*types.GroupInfo, error) {
+	fake := &waclienttest.Fake{GetGroupInfoFn: func(ctx context.Context, jid types.JID) (*types.GroupInfo, error) {
 		return info, nil
 	}}
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetGroupInfo(context.Background(), "u1", "g@g.us")
 	if err != nil {
 		t.Fatalf("GetGroupInfo = %v", err)
@@ -36,8 +38,8 @@ func TestGroupAdapter_GetGroupInfo_OK(t *testing.T) {
 // TestGroupAdapter_GetGroupInfo_PropagatesError.
 func TestGroupAdapter_GetGroupInfo_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("network")
-	fake := &fakeWAClient{GetGroupInfoFn: func(ctx context.Context, jid types.JID) (*types.GroupInfo, error) { return nil, sdkErr }}
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{GetGroupInfoFn: func(ctx context.Context, jid types.JID) (*types.GroupInfo, error) { return nil, sdkErr }}
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.GetGroupInfo(context.Background(), "u1", "g@g.us")
 	if err == nil {
 		t.Fatal("GetGroupInfo não propagou erro")
@@ -47,11 +49,11 @@ func TestGroupAdapter_GetGroupInfo_PropagatesError(t *testing.T) {
 // TestGroupAdapter_GetGroupInfoFromLink_OK.
 func TestGroupAdapter_GetGroupInfoFromLink_OK(t *testing.T) {
 	called := false
-	fake := &fakeWAClient{GetGroupInfoFromLinkFn: func(ctx context.Context, code string) (*types.GroupInfo, error) {
+	fake := &waclienttest.Fake{GetGroupInfoFromLinkFn: func(ctx context.Context, code string) (*types.GroupInfo, error) {
 		called = true
 		return &types.GroupInfo{}, nil
 	}}
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	if _, err := a.GetGroupInfoFromLink(context.Background(), "u1", "ABCD"); err != nil {
 		t.Fatalf("GetGroupInfoFromLink = %v", err)
 	}
@@ -62,7 +64,7 @@ func TestGroupAdapter_GetGroupInfoFromLink_OK(t *testing.T) {
 
 // TestGroupAdapter_GetGroupInfoFromLink_NoSession.
 func TestGroupAdapter_GetGroupInfoFromLink_NoSession(t *testing.T) {
-	a := NewGroupAdapter(getterWith(nil))
+	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInfoFromLink(context.Background(), "u1", "code")
 	if appErrCode(err) != "no_session" {
 		t.Errorf("GetGroupInfoFromLink code = %q", appErrCode(err))
@@ -71,10 +73,10 @@ func TestGroupAdapter_GetGroupInfoFromLink_NoSession(t *testing.T) {
 
 // TestGroupAdapter_GetGroupInviteLink_OK.
 func TestGroupAdapter_GetGroupInviteLink_OK(t *testing.T) {
-	fake := &fakeWAClient{GetGroupInviteLinkFn: func(ctx context.Context, jid types.JID, reset bool) (string, error) {
+	fake := &waclienttest.Fake{GetGroupInviteLinkFn: func(ctx context.Context, jid types.JID, reset bool) (string, error) {
 		return "https://chat.whatsapp.com/XYZ", nil
 	}}
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetGroupInviteLink(context.Background(), "u1", "g@g.us")
 	if err != nil {
 		t.Fatalf("GetGroupInviteLink = %v", err)
@@ -86,7 +88,7 @@ func TestGroupAdapter_GetGroupInviteLink_OK(t *testing.T) {
 
 // TestGroupAdapter_GetGroupInviteLink_NoSession.
 func TestGroupAdapter_GetGroupInviteLink_NoSession(t *testing.T) {
-	a := NewGroupAdapter(getterWith(nil))
+	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetGroupInviteLink(context.Background(), "u1", "g@g.us")
 	if appErrCode(err) != "no_session" {
 		t.Errorf("GetGroupInviteLink code = %q", appErrCode(err))
@@ -96,8 +98,8 @@ func TestGroupAdapter_GetGroupInviteLink_NoSession(t *testing.T) {
 // TestGroupAdapter_ListJoinedGroups_OK.
 func TestGroupAdapter_ListJoinedGroups_OK(t *testing.T) {
 	groups := []*types.GroupInfo{{}, {}}
-	fake := &fakeWAClient{GetJoinedGroupsFn: func(ctx context.Context) ([]*types.GroupInfo, error) { return groups, nil }}
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{GetJoinedGroupsFn: func(ctx context.Context) ([]*types.GroupInfo, error) { return groups, nil }}
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, count, err := a.ListJoinedGroups(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("ListJoinedGroups = %v", err)
@@ -112,7 +114,7 @@ func TestGroupAdapter_ListJoinedGroups_OK(t *testing.T) {
 
 // TestGroupAdapter_ListJoinedGroups_NoSession.
 func TestGroupAdapter_ListJoinedGroups_NoSession(t *testing.T) {
-	a := NewGroupAdapter(getterWith(nil))
+	a := NewGroupAdapter(waclienttest.GetterWith(nil))
 	_, _, err := a.ListJoinedGroups(context.Background(), "u1")
 	if appErrCode(err) != "no_session" {
 		t.Errorf("ListJoinedGroups code = %q", appErrCode(err))

@@ -1,8 +1,9 @@
-package whatsmeow
+package registry
 
 import (
 	"testing"
 	whatsmeow "wa-api/internal/wa-noise"
+	"wa-api/pkg/infra/wa-noise/waclient"
 )
 
 // fakeMyClient é um MyClient mínimo para os testes do ClientManager.
@@ -21,23 +22,23 @@ func TestNewClientManager(t *testing.T) {
 	}
 }
 
-// Verifica que ClientForGetter devolve getter que mapeia para realWAClient.
+// Verifica que waclient.ClientForGetter devolve getter que mapeia para waclient.RealClient.
 func TestClientForGetter_NilLookup(t *testing.T) {
-	getter := ClientForGetter(func(uid string) *whatsmeow.Client { return nil })
+	getter := waclient.ClientForGetter(func(uid string) *whatsmeow.Client { return nil })
 	if c := getter("u1"); c != nil {
-		t.Error("ClientForGetter(nil lookup) should return nil")
+		t.Error("waclient.ClientForGetter(nil lookup) should return nil")
 	}
 }
 
 func TestClientForGetter_ConcreteClient(t *testing.T) {
 	wac := &whatsmeow.Client{}
-	getter := ClientForGetter(func(uid string) *whatsmeow.Client { return wac })
+	getter := waclient.ClientForGetter(func(uid string) *whatsmeow.Client { return wac })
 	got := getter("u1")
 	if got == nil {
-		t.Fatal("ClientForGetter(concrete) returned nil")
+		t.Fatal("waclient.ClientForGetter(concrete) returned nil")
 	}
-	_, ok := got.(realWAClient)
+	_, ok := got.(waclient.RealClient)
 	if !ok {
-		t.Errorf("ClientForGetter did not return realWAClient, got %T", got)
+		t.Errorf("waclient.ClientForGetter did not return waclient.RealClient, got %T", got)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
 
@@ -16,7 +18,7 @@ import (
 // TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID cobre
 // o caminho de erro do toJIDs (uma entrada inválida).
 func TestGroupAdapter_UpdateGroupParticipants_InvalidParticipantJID(t *testing.T) {
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": &fakeWAClient{}}))
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	invalid := []domain.JID{"@@", "@", "x@", "@y.com", domain.JID(string([]byte{0x00}))}
 	for _, jid := range invalid {
 		_, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{jid}, domain.ParticipantAdd)
@@ -36,7 +38,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 	sdkErr := errors.New("sdk boom")
 	type fnCall func(a *GroupAdapter) error
 	type fakeSpec struct {
-		setup func() *fakeWAClient
+		setup func() *waclienttest.Fake
 		call  fnCall
 	}
 	cases := []struct {
@@ -44,8 +46,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 		spec fakeSpec
 	}{
 		{"GetGroupInfoFromLink", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{GetGroupInfoFromLinkFn: func(ctx context.Context, code string) (*types.GroupInfo, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{GetGroupInfoFromLinkFn: func(ctx context.Context, code string) (*types.GroupInfo, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -55,8 +57,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"GetGroupInviteLink", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{GetGroupInviteLinkFn: func(ctx context.Context, jid types.JID, reset bool) (string, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{GetGroupInviteLinkFn: func(ctx context.Context, jid types.JID, reset bool) (string, error) {
 					return "", sdkErr
 				}}
 			},
@@ -66,8 +68,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"ListJoinedGroups", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{GetJoinedGroupsFn: func(ctx context.Context) ([]*types.GroupInfo, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{GetJoinedGroupsFn: func(ctx context.Context) ([]*types.GroupInfo, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -77,8 +79,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"CreateGroup", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{CreateGroupFn: func(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{CreateGroupFn: func(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -88,8 +90,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"JoinGroup", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{JoinGroupWithLinkFn: func(ctx context.Context, code string) (types.JID, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{JoinGroupWithLinkFn: func(ctx context.Context, code string) (types.JID, error) {
 					return types.JID{}, sdkErr
 				}}
 			},
@@ -99,32 +101,32 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"LeaveGroup", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{LeaveGroupFn: func(ctx context.Context, jid types.JID) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{LeaveGroupFn: func(ctx context.Context, jid types.JID) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.LeaveGroup(context.Background(), "u1", "g@g.us")
 			},
 		}},
 		{"SetGroupName", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupNameFn: func(ctx context.Context, jid types.JID, name string) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupNameFn: func(ctx context.Context, jid types.JID, name string) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetGroupName(context.Background(), "u1", "g@g.us", "n")
 			},
 		}},
 		{"SetGroupTopic", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupTopicFn: func(ctx context.Context, jid types.JID, prev, new, topic string) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupTopicFn: func(ctx context.Context, jid types.JID, prev, new, topic string) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetGroupTopic(context.Background(), "u1", "g@g.us", "t")
 			},
 		}},
 		{"SetGroupPhoto", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupPhotoFn: func(ctx context.Context, jid types.JID, avatar []byte) (string, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupPhotoFn: func(ctx context.Context, jid types.JID, avatar []byte) (string, error) {
 					return "", sdkErr
 				}}
 			},
@@ -133,24 +135,24 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"SetGroupAnnounce", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupAnnounceFn: func(ctx context.Context, jid types.JID, announce bool) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupAnnounceFn: func(ctx context.Context, jid types.JID, announce bool) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetGroupAnnounce(context.Background(), "u1", "g@g.us", true)
 			},
 		}},
 		{"SetGroupLocked", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupLockedFn: func(ctx context.Context, jid types.JID, locked bool) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupLockedFn: func(ctx context.Context, jid types.JID, locked bool) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetGroupLocked(context.Background(), "u1", "g@g.us", true)
 			},
 		}},
 		{"SetDisappearingTimer", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetDisappearingTimerFn: func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetDisappearingTimerFn: func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error {
 					return sdkErr
 				}}
 			},
@@ -159,8 +161,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"UpdateGroupParticipants", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -170,8 +172,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"GetRequestParticipants", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{GetGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{GetGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -181,8 +183,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"UpdateRequestParticipants", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -191,8 +193,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 			},
 		}},
 		{"SetJoinApprovalMode", fakeSpec{
-			setup: func() *fakeWAClient {
-				return &fakeWAClient{SetGroupJoinApprovalModeFn: func(ctx context.Context, jid types.JID, mode bool) error { return sdkErr }}
+			setup: func() *waclienttest.Fake {
+				return &waclienttest.Fake{SetGroupJoinApprovalModeFn: func(ctx context.Context, jid types.JID, mode bool) error { return sdkErr }}
 			},
 			call: func(a *GroupAdapter) error {
 				return a.SetJoinApprovalMode(context.Background(), "u1", "g@g.us", true)
@@ -202,7 +204,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := tc.spec.setup()
-			a := NewGroupAdapter(getterWith(map[string]waClient{"u1": fake}))
+			a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 			err := tc.spec.call(a)
 			if err == nil {
 				t.Fatalf("%s did not propagate error", tc.name)
@@ -214,18 +216,18 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 // TestChatAdapter_PropagatesErrors.
 func TestChatAdapter_PropagatesErrors(t *testing.T) {
 	sdkErr := errors.New("sdk boom")
-	fake := &fakeWAClient{MarkReadFn: func(ctx context.Context, ids []types.MessageID, ts time.Time, chat, sender types.JID, extra ...types.ReceiptType) error {
+	fake := &waclienttest.Fake{MarkReadFn: func(ctx context.Context, ids []types.MessageID, ts time.Time, chat, sender types.JID, extra ...types.ReceiptType) error {
 		return sdkErr
 	}}
-	a := NewChatMessengerAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	if err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), "x@y.com", "z@y.com"); err == nil {
 		t.Fatal("MarkRead não propagou erro")
 	}
 
-	fake2 := &fakeWAClient{SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+	fake2 := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
 		return whatsmeow.SendResponse{}, sdkErr
 	}}
-	a2 := NewChatMessengerAdapter(getterWith(map[string]waClient{"u1": fake2}))
+	a2 := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake2}))
 	if _, err := a2.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{Text: "👍"}); err == nil {
 		t.Fatal("SendReaction não propagou erro")
 	}
@@ -234,14 +236,14 @@ func TestChatAdapter_PropagatesErrors(t *testing.T) {
 // TestPresenceControllerAdapter_PropagatesAllErrors.
 func TestPresenceControllerAdapter_PropagatesAllErrors(t *testing.T) {
 	sdkErr := errors.New("sdk boom")
-	fake := &fakeWAClient{
+	fake := &waclienttest.Fake{
 		SendPresenceFn: func(ctx context.Context, state types.Presence) error { return sdkErr },
 		SendChatPresenceFn: func(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
 			return sdkErr
 		},
 		SubscribePresenceFn: func(ctx context.Context, jid types.JID) error { return sdkErr },
 	}
-	a := NewPresenceControllerAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewPresenceControllerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	if err := a.SendPresence(context.Background(), "u1", domain.PresenceAvailable); err == nil {
 		t.Fatal("SendPresence não propagou erro")
 	}

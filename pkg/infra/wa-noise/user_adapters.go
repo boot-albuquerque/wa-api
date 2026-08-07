@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -15,11 +16,11 @@ type UserAdapter struct {
 }
 
 // NewUserAdapter cria o adapter com a função de lookup.
-func NewUserAdapter(getClient waClientGetter) *UserAdapter {
+func NewUserAdapter(getClient waclient.Getter) *UserAdapter {
 	return &UserAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 
-func (a *UserAdapter) client(txtID string) (waClient, error) {
+func (a *UserAdapter) client(txtID string) (waclient.Client, error) {
 	client := a.getClient(txtID)
 	if client == nil {
 		return nil, ErrNoSession(txtID, nil)

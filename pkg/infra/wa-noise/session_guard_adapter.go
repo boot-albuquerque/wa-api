@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
@@ -26,13 +27,13 @@ func ErrNoSession(txtID string, cause error) *apperr.AppError {
 
 // SessionGuardAdapter implementa appport.SessionGuard sobre o clientManager.
 type SessionGuardAdapter struct {
-	getClient waClientGetter
+	getClient waclient.Getter
 }
 
 // NewSessionGuardAdapter cria o adapter com a função de lookup.
 // O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient
 // (convertido via clientForGetter).
-func NewSessionGuardAdapter(getClient waClientGetter) *SessionGuardAdapter {
+func NewSessionGuardAdapter(getClient waclient.Getter) *SessionGuardAdapter {
 	return &SessionGuardAdapter{getClient: getClient}
 }
 

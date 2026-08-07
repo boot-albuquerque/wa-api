@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"time"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -19,7 +20,7 @@ type ChatMessengerAdapter struct {
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
-func NewChatMessengerAdapter(getClient waClientGetter) *ChatMessengerAdapter {
+func NewChatMessengerAdapter(getClient waclient.Getter) *ChatMessengerAdapter {
 	return &ChatMessengerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 

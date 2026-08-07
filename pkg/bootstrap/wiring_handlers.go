@@ -6,6 +6,8 @@ import (
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/wa-noise"
 	"wa-api/pkg/infra/wa-noise/applog"
+	"wa-api/pkg/infra/wa-noise/registry"
+	"wa-api/pkg/infra/wa-noise/waclient"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
@@ -91,7 +93,7 @@ var customHandlerSet = &customHandlers{}
 // customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	waClientLookup := whatsmeow.ClientForGetter(clientManager.GetWhatsmeowClient)
+	waClientLookup := waclient.ClientForGetter(clientManager.GetWhatsmeowClient)
 	messageComposer := whatsmeow.NewMessageComposerAdapter(waClientLookup)
 	presenceController := whatsmeow.NewPresenceControllerAdapter(waClientLookup)
 	chatMessenger := whatsmeow.NewChatMessengerAdapter(waClientLookup)
@@ -212,7 +214,7 @@ func initCustomHandlers(s *server) {
 	getGroupInviteInfoUC := group.NewGetGroupInviteInfoUseCase(groupAdapter, logger)
 
 	// Misc UseCases (Health, Newsletter, Privacy, Call, Archive, DeleteUserComplete)
-	sessionCounter := whatsmeow.NewSessionCounterAdapter(clientManager)
+	sessionCounter := registry.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)

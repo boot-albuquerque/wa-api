@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
@@ -13,7 +15,7 @@ import (
 )
 
 func TestNewUserAdapter(t *testing.T) {
-	if NewUserAdapter(getterWith(nil)) == nil {
+	if NewUserAdapter(waclienttest.GetterWith(nil)) == nil {
 		t.Fatal("NewUserAdapter returned nil")
 	}
 }
@@ -107,21 +109,21 @@ func storeWith(lids store.LIDStore, contacts store.ContactStore) *store.Device {
 
 // TestUserAdapter_IsOnWhatsApp_NoSession.
 func TestUserAdapter_IsOnWhatsApp_NoSession(t *testing.T) {
-	a := NewUserAdapter(getterWith(nil))
+	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.IsOnWhatsApp(context.Background(), "u1", []string{"5511"})
 	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
 
 // TestUserAdapter_IsOnWhatsApp_OK mapeia resposta do SDK para domain.
 func TestUserAdapter_IsOnWhatsApp_OK(t *testing.T) {
-	fake := &fakeWAClient{IsOnWhatsAppFn: func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+	fake := &waclienttest.Fake{IsOnWhatsAppFn: func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
 		return []types.IsOnWhatsAppResponse{{
 			Query: "5511",
 			IsIn:  true,
 			JID:   types.NewJID("5511", types.DefaultUserServer),
 		}}, nil
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.IsOnWhatsApp(context.Background(), "u1", []string{"5511"})
 	if err != nil {
 		t.Fatalf("IsOnWhatsApp = %v", err)
@@ -137,10 +139,10 @@ func TestUserAdapter_IsOnWhatsApp_OK(t *testing.T) {
 // TestUserAdapter_IsOnWhatsApp_PropagatesError.
 func TestUserAdapter_IsOnWhatsApp_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("sdk fail")
-	fake := &fakeWAClient{IsOnWhatsAppFn: func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+	fake := &waclienttest.Fake{IsOnWhatsAppFn: func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
 		return nil, sdkErr
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.IsOnWhatsApp(context.Background(), "u1", nil)
 	if err == nil {
 		t.Fatal("IsOnWhatsApp não propagou erro")
@@ -171,15 +173,15 @@ func assertAppErr(t *testing.T, err error, code string, category apperr.Category
 // TestUserAdapter_GetUserInfo_JIDInvalido é o quinto site envolvido: um JID
 // que não parseia não pode subir cru do adapter.
 func TestUserAdapter_GetUserInfo_JIDInvalido(t *testing.T) {
-	fake := &fakeWAClient{}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{}
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.GetUserInfo(context.Background(), "u1", []domain.JID{"@s.whatsapp.net"})
 	assertAppErr(t, err, "user_info_failed", apperr.CategoryInternal)
 }
 
 // TestUserAdapter_GetUserInfo_NoSession.
 func TestUserAdapter_GetUserInfo_NoSession(t *testing.T) {
-	a := NewUserAdapter(getterWith(nil))
+	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetUserInfo(context.Background(), "u1", nil)
 	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
@@ -187,11 +189,11 @@ func TestUserAdapter_GetUserInfo_NoSession(t *testing.T) {
 // TestUserAdapter_GetUserInfo_OK.
 func TestUserAdapter_GetUserInfo_OK(t *testing.T) {
 	called := false
-	fake := &fakeWAClient{GetUserInfoFn: func(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error) {
+	fake := &waclienttest.Fake{GetUserInfoFn: func(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error) {
 		called = true
 		return map[types.JID]types.UserInfo{}, nil
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.GetUserInfo(context.Background(), "u1", []domain.JID{"x@s.whatsapp.net"})
 	if err != nil {
 		t.Fatalf("GetUserInfo = %v", err)
@@ -203,7 +205,7 @@ func TestUserAdapter_GetUserInfo_OK(t *testing.T) {
 
 // TestUserAdapter_GetAllContacts_NoSession.
 func TestUserAdapter_GetAllContacts_NoSession(t *testing.T) {
-	a := NewUserAdapter(getterWith(nil))
+	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, _, err := a.GetAllContacts(context.Background(), "u1")
 	assertAppErr(t, err, codeUserSessionUnavailable, apperr.CategoryValidation)
 }
@@ -213,8 +215,8 @@ func TestUserAdapter_GetAllContacts_OK(t *testing.T) {
 	cs := &fakeContactStore{contacts: map[types.JID]types.ContactInfo{
 		types.NewJID("5511", types.DefaultUserServer): {Found: true, PushName: "Alice"},
 	}}
-	fake := &fakeWAClient{StoreFn: func() *store.Device { return storeWith(nil, cs) }}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{StoreFn: func() *store.Device { return storeWith(nil, cs) }}
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, count, err := a.GetAllContacts(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("GetAllContacts = %v", err)
@@ -230,7 +232,7 @@ func TestUserAdapter_GetAllContacts_OK(t *testing.T) {
 
 // TestUserAdapter_GetLIDForPN_NoSession.
 func TestUserAdapter_GetLIDForPN_NoSession(t *testing.T) {
-	a := NewUserAdapter(getterWith(nil))
+	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetLIDForPN(context.Background(), "u1", "x@s.whatsapp.net")
 	if appErrCode(err) != "no_session" {
 		t.Errorf("GetLIDForPN code = %q", appErrCode(err))
@@ -242,7 +244,7 @@ func TestUserAdapter_GetLIDForPN_NoSession(t *testing.T) {
 // porque client() garante não-nil antes); aqui validamos diretamente
 // que getCachedPNForLID devolve erro em vez de panic.
 func TestUserAdapter_GetLIDForPN_NilStore_RawViaGetCachedPNForLID(t *testing.T) {
-	fake := &fakeWAClient{StoreFn: func() *store.Device { return nil }}
+	fake := &waclienttest.Fake{StoreFn: func() *store.Device { return nil }}
 	_, err := getCachedPNForLID(context.Background(), fake, types.NewJID("x", types.HiddenUserServer))
 	if err == nil {
 		t.Fatal("getCachedPNForLID com nil store = nil")
@@ -255,8 +257,8 @@ func TestUserAdapter_GetLIDForPN_OK(t *testing.T) {
 	dev := storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{
 		types.NewJID("lid-x", types.HiddenUserServer): types.NewJID("1234", types.DefaultUserServer),
 	}}, nil)
-	fake := &fakeWAClient{StoreFn: func() *store.Device { return dev }}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{StoreFn: func() *store.Device { return dev }}
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetLIDForPN(context.Background(), "u1", "1234@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("GetLIDForPN = %v", err)
@@ -269,8 +271,8 @@ func TestUserAdapter_GetLIDForPN_OK(t *testing.T) {
 // TestUserAdapter_GetLIDForPN_NotMapped devolve "", nil.
 func TestUserAdapter_GetLIDForPN_NotMapped(t *testing.T) {
 	dev := storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{}}, nil)
-	fake := &fakeWAClient{StoreFn: func() *store.Device { return dev }}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	fake := &waclienttest.Fake{StoreFn: func() *store.Device { return dev }}
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetLIDForPN(context.Background(), "u1", "x@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("GetLIDForPN = %v", err)

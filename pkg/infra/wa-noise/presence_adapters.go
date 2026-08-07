@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -16,7 +17,7 @@ type PresenceControllerAdapter struct {
 }
 
 // NewPresenceControllerAdapter cria o adapter com a função de lookup.
-func NewPresenceControllerAdapter(getClient waClientGetter) *PresenceControllerAdapter {
+func NewPresenceControllerAdapter(getClient waclient.Getter) *PresenceControllerAdapter {
 	return &PresenceControllerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 

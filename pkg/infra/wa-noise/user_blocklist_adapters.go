@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	"wa-api/pkg/domain"
 
@@ -17,7 +18,7 @@ func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Bl
 		return domain.Blocklist{}, err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, waRequestTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 
 	blocklist, err := client.GetBlocklist(ctxWithTimeout)
@@ -91,9 +92,9 @@ func normalizeBlocklistJID(jid types.JID) types.JID {
 // resolveBlocklistPNJID traduz um LID para o número de telefone, que é a
 // forma que a lista de bloqueio aceita. Migrado literalmente de block_user.go,
 // menos a asserção de tipo `client.(*whatsmeow.Client)`, que existia só
-// porque o helper recebia interface{} — aqui o tipo é a interface waClient
+// porque o helper recebia interface{} — aqui o tipo é a interface waclient.Client
 // e o Store é acessado pelo método Store().
-func resolveBlocklistPNJID(ctx context.Context, client waClient, jid types.JID) (types.JID, error) {
+func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
 	jid = normalizeBlocklistJID(jid)
 	switch jid.Server {
 	case types.DefaultUserServer:
@@ -109,7 +110,7 @@ func resolveBlocklistPNJID(ctx context.Context, client waClient, jid types.JID) 
 	}
 }
 
-func getCachedPNForLID(ctx context.Context, client waClient, jid types.JID) (types.JID, error) {
+func getCachedPNForLID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
 	store := client.Store()
 	if store == nil || store.LIDs == nil {
 		return types.JID{}, fmt.Errorf("LID-to-PN mapping store is not available")

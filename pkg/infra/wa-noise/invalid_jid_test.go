@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
 )
@@ -11,7 +13,7 @@ import (
 // TestGroupAdapter_InvalidJIDs cobre os caminhos toJID que falham (ou
 // são pulados quando ParseJID é leniente).
 func TestGroupAdapter_InvalidJIDs(t *testing.T) {
-	a := NewGroupAdapter(getterWith(map[string]waClient{"u1": &fakeWAClient{}}))
+	a := NewGroupAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
 	cases := []struct {
 		name string
@@ -48,7 +50,7 @@ func TestGroupAdapter_InvalidJIDs(t *testing.T) {
 
 // TestUserAdapter_InvalidJIDs cobre os caminhos toJID que falham.
 func TestUserAdapter_InvalidJIDs(t *testing.T) {
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": &fakeWAClient{}}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
 	cases := []struct {
 		name string
@@ -69,7 +71,7 @@ func TestUserAdapter_InvalidJIDs(t *testing.T) {
 
 // TestMiscAdapter_InvalidJIDs cobre os caminhos toJID que falham.
 func TestMiscAdapter_InvalidJIDs(t *testing.T) {
-	a := NewMiscAdapter(getterWith(map[string]waClient{"u1": &fakeWAClient{}}))
+	a := NewMiscAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
 	cases := []struct {
 		name string
@@ -100,7 +102,7 @@ func TestMiscAdapter_InvalidJIDs(t *testing.T) {
 
 // TestChatAdapter_InvalidJIDs cobre os caminhos toJID que falham.
 func TestChatAdapter_InvalidJIDs(t *testing.T) {
-	a := NewChatMessengerAdapter(getterWith(map[string]waClient{"u1": &fakeWAClient{}}))
+	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": &waclienttest.Fake{}}))
 	badJID := domain.JID(string([]byte{0x00}))
 	if err := a.MarkRead(context.Background(), "u1", []string{"m1"}, time.Now(), badJID, "z@y.com"); err == nil {
 		t.Skip("ParseJID não falhou; caminho de erro raro")

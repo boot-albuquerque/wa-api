@@ -1,4 +1,4 @@
-package whatsmeow
+package registry
 
 // SetPollOptions remembers the plaintext options of a poll we just sent so
 // that incoming votes (which arrive as SHA-256 hashes of the option text)

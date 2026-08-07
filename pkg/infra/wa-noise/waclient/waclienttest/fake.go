@@ -1,4 +1,4 @@
-package whatsmeow
+package waclienttest
 
 import (
 	"context"
@@ -12,14 +12,14 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-// fakeWAClient é o fake mínimo de waClient. Cada campo é um override
+// Fake é o fake mínimo de Client. Cada campo é um override
 // opcional que o teste pode setar; o default é um valor zero seguro
 // (nil para ponteiros, retorno zero para os tipos restantes).
 //
 // Os métodos do fake DEVEM existir com a assinatura exata da interface.
 // Não tentamos cobrir todos os usos aqui — só o que cada adapter chama no
 // caminho feliz e no caminho ErrNoSession, que é o alvo desta fase.
-type fakeWAClient struct {
+type Fake struct {
 	SendPresenceFn                   func(ctx context.Context, state types.Presence) error
 	SendChatPresenceFn               func(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
 	SubscribePresenceFn              func(ctx context.Context, jid types.JID) error
@@ -62,49 +62,49 @@ type fakeWAClient struct {
 	StoreFn                          func() *store.Device
 }
 
-func (f *fakeWAClient) SendPresence(ctx context.Context, state types.Presence) error {
+func (f *Fake) SendPresence(ctx context.Context, state types.Presence) error {
 	if f.SendPresenceFn != nil {
 		return f.SendPresenceFn(ctx, state)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
+func (f *Fake) SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
 	if f.SendChatPresenceFn != nil {
 		return f.SendChatPresenceFn(ctx, jid, state, media)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) SubscribePresence(ctx context.Context, jid types.JID) error {
+func (f *Fake) SubscribePresence(ctx context.Context, jid types.JID) error {
 	if f.SubscribePresenceFn != nil {
 		return f.SubscribePresenceFn(ctx, jid)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) MarkRead(ctx context.Context, ids []types.MessageID, timestamp time.Time, chat, sender types.JID, receiptTypeExtra ...types.ReceiptType) error {
+func (f *Fake) MarkRead(ctx context.Context, ids []types.MessageID, timestamp time.Time, chat, sender types.JID, receiptTypeExtra ...types.ReceiptType) error {
 	if f.MarkReadFn != nil {
 		return f.MarkReadFn(ctx, ids, timestamp, chat, sender, receiptTypeExtra...)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+func (f *Fake) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
 	if f.SendMessageFn != nil {
 		return f.SendMessageFn(ctx, to, message, extra...)
 	}
 	return whatsmeow.SendResponse{}, nil
 }
 
-func (f *fakeWAClient) GenerateMessageID() types.MessageID {
+func (f *Fake) GenerateMessageID() types.MessageID {
 	if f.GenerateMessageIDFn != nil {
 		return f.GenerateMessageIDFn()
 	}
 	return "FAKE-MSG-ID"
 }
 
-func (f *fakeWAClient) BuildUnavailableMessageRequest(chat, sender types.JID, id string) *waE2E.Message {
+func (f *Fake) BuildUnavailableMessageRequest(chat, sender types.JID, id string) *waE2E.Message {
 	if f.BuildUnavailableMessageFn != nil {
 		return f.BuildUnavailableMessageFn(chat, sender, id)
 	}

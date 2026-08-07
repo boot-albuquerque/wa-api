@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	whatsmeow "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/store"
@@ -120,7 +122,7 @@ func TestNewProfileDataAccessFromInterface_NilClient(t *testing.T) {
 // TestNewProfileDataAccessFromInterface_RealClient desembrulva o cliente.
 func TestNewProfileDataAccessFromInterface_RealClient(t *testing.T) {
 	wac := &whatsmeow.Client{}
-	rc := realWAClient{Client: wac}
+	rc := waclient.RealClient{Client: wac}
 	da := NewProfileDataAccessFromInterface(rc)
 	if da.client != wac {
 		t.Error("expected unwrapped *whatsmeow.Client")
@@ -129,9 +131,9 @@ func TestNewProfileDataAccessFromInterface_RealClient(t *testing.T) {
 
 // TestNewProfileDataAccessFromInterface_FakeNotRealClient devolve com client nil.
 func TestNewProfileDataAccessFromInterface_FakeNotRealClient(t *testing.T) {
-	fake := &fakeWAClient{}
+	fake := &waclienttest.Fake{}
 	da := NewProfileDataAccessFromInterface(fake)
 	if da.client != nil {
-		t.Error("expected nil client when interface is not realWAClient")
+		t.Error("expected nil client when interface is not waclient.RealClient")
 	}
 }

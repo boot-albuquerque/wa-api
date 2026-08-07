@@ -1,4 +1,4 @@
-package whatsmeow
+package waclient
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/types/events"
 )
 
-// waClient é a superfície mínima de *whatsmeow.Client exercitada pelos
+// Client é a superfície mínima de *whatsmeow.Client exercitada pelos
 // adapters deste pacote. Existe para que os caminhos de erro dos adapters
 // (especialmente o ramo ErrNoSession) sejam testáveis sem inicializar um
 // cliente real do SDK — o que exigiria conexão com servidores do WhatsApp.
@@ -25,7 +25,7 @@ import (
 //
 // Store() aparece como método (não campo) porque Go proíbe campos em
 // interfaces, e o tipo concreto é *store.Device.
-type waClient interface {
+type Client interface {
 	// Família de presença
 	SendPresence(ctx context.Context, state types.Presence) error
 	SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
@@ -91,32 +91,32 @@ type waClient interface {
 	Store() *store.Device
 }
 
-// waClientGetter é a função de lookup que os adapters recebem no construtor.
+// Getter é a função de lookup que os adapters recebem no construtor.
 // Em produção é clientManager.GetWhatsmeowClient; nos testes é uma função
 // controlada pelo caso.
-type waClientGetter func(txtID string) waClient
+type Getter func(txtID string) Client
 
-// realWAClient adapta *whatsmeow.Client para a interface waClient. O método
+// RealClient adapta *whatsmeow.Client para a interface Client. O método
 // Store() existe para uniformizar o campo `Store *store.Device` com os
 // demais métodos virtuais (Go proíbe campos em interfaces).
-type realWAClient struct {
+type RealClient struct {
 	*whatsmeow.Client
 }
 
-func (r realWAClient) Store() *store.Device { return r.Client.Store }
+func (r RealClient) Store() *store.Device { return r.Client.Store }
 
 // ClientForGetter converte o getter de produção (devolve *whatsmeow.Client)
 // para o getter da interface. Em produção é a única ponte entre o tipo
 // concreto e o seam. Exportado porque pkg/bootstrap é quem o chama.
-func ClientForGetter(getConcrete func(txtID string) *whatsmeow.Client) waClientGetter {
-	return func(txtID string) waClient {
+func ClientForGetter(getConcrete func(txtID string) *whatsmeow.Client) Getter {
+	return func(txtID string) Client {
 		c := getConcrete(txtID)
 		if c == nil {
 			return nil
 		}
-		return realWAClient{c}
+		return RealClient{c}
 	}
 }
 
 // Compilação: garante que o tipo concreto satisfaz a interface.
-var _ waClient = realWAClient{}
+var _ Client = RealClient{}

@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"wa-api/pkg/infra/wa-noise/waclient"
 
 	appport "wa-api/pkg/application/contracts"
 )
@@ -15,7 +16,7 @@ type MessageComposerAdapter struct {
 // NewMessageComposerAdapter cria o adapter com a função de lookup.
 // O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient
 // (convertido via clientForGetter).
-func NewMessageComposerAdapter(getClient waClientGetter) *MessageComposerAdapter {
+func NewMessageComposerAdapter(getClient waclient.Getter) *MessageComposerAdapter {
 	return &MessageComposerAdapter{SessionGuardAdapter: NewSessionGuardAdapter(getClient)}
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"wa-api/pkg/infra/wa-noise/waclient"
+	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
 	"wa-api/pkg/domain"
 
@@ -13,7 +15,7 @@ import (
 
 // TestUserAdapter_GetProfilePicture_NoSession.
 func TestUserAdapter_GetProfilePicture_NoSession(t *testing.T) {
-	a := NewUserAdapter(getterWith(nil))
+	a := NewUserAdapter(waclienttest.GetterWith(nil))
 	_, err := a.GetProfilePicture(context.Background(), "u1", "x@y.com", false)
 	if appErrCode(err) != "no_session" {
 		t.Errorf("GetProfilePicture code = %q", appErrCode(err))
@@ -25,10 +27,10 @@ func TestUserAdapter_GetProfilePicture_NoSession(t *testing.T) {
 // que ExistingID é sempre "") também devolve domain.ErrAvatarNotFound, pela
 // mesma razão do caso NotSet: nada pra mostrar, não é falha.
 func TestUserAdapter_GetProfilePicture_NilPictureInfo(t *testing.T) {
-	fake := &fakeWAClient{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+	fake := &waclienttest.Fake{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 		return nil, nil
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetProfilePicture(context.Background(), "u1", "x@s.whatsapp.net", false)
 	if !errors.Is(err, domain.ErrAvatarNotFound) {
 		t.Fatalf("GetProfilePicture err = %v, want domain.ErrAvatarNotFound", err)
@@ -40,10 +42,10 @@ func TestUserAdapter_GetProfilePicture_NilPictureInfo(t *testing.T) {
 
 // TestUserAdapter_GetProfilePicture_OK mapeia ID e URL.
 func TestUserAdapter_GetProfilePicture_OK(t *testing.T) {
-	fake := &fakeWAClient{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+	fake := &waclienttest.Fake{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 		return &types.ProfilePictureInfo{ID: "abc", URL: "https://example/pic"}, nil
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetProfilePicture(context.Background(), "u1", "x@s.whatsapp.net", false)
 	if err != nil {
 		t.Fatalf("GetProfilePicture = %v", err)
@@ -58,10 +60,10 @@ func TestUserAdapter_GetProfilePicture_OK(t *testing.T) {
 // era indistinguível de falha real antes desta correção, subia como 500 no
 // handler HTTP para o caso mais comum (maioria dos contatos sem foto).
 func TestUserAdapter_GetProfilePicture_NotSet(t *testing.T) {
-	fake := &fakeWAClient{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+	fake := &waclienttest.Fake{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 		return nil, whatsmeow.ErrProfilePictureNotSet
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetProfilePicture(context.Background(), "u1", "x@s.whatsapp.net", false)
 	if !errors.Is(err, domain.ErrAvatarNotFound) {
 		t.Fatalf("GetProfilePicture err = %v, want domain.ErrAvatarNotFound", err)
@@ -76,10 +78,10 @@ func TestUserAdapter_GetProfilePicture_NotSet(t *testing.T) {
 // domain.ErrAvatarUnauthorized) — distinto de ErrAvatarNotFound, pelo mesmo
 // motivo: não é falha de servidor, mas também não é "nunca vai ter foto".
 func TestUserAdapter_GetProfilePicture_Unauthorized(t *testing.T) {
-	fake := &fakeWAClient{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+	fake := &waclienttest.Fake{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 		return nil, whatsmeow.ErrProfilePictureUnauthorized
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, err := a.GetProfilePicture(context.Background(), "u1", "x@s.whatsapp.net", false)
 	if !errors.Is(err, domain.ErrAvatarUnauthorized) {
 		t.Fatalf("GetProfilePicture err = %v, want domain.ErrAvatarUnauthorized", err)
@@ -92,10 +94,10 @@ func TestUserAdapter_GetProfilePicture_Unauthorized(t *testing.T) {
 // TestUserAdapter_GetProfilePicture_PropagatesError.
 func TestUserAdapter_GetProfilePicture_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("not found")
-	fake := &fakeWAClient{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+	fake := &waclienttest.Fake{GetProfilePictureInfoFn: func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 		return nil, sdkErr
 	}}
-	a := NewUserAdapter(getterWith(map[string]waClient{"u1": fake}))
+	a := NewUserAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.GetProfilePicture(context.Background(), "u1", "x@s.whatsapp.net", false)
 	if err == nil {
 		t.Fatal("GetProfilePicture não propagou erro")

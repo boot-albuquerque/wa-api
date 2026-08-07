@@ -1,4 +1,4 @@
-package whatsmeow
+package waclienttest
 
 import (
 	"context"
@@ -8,67 +8,64 @@ import (
 	"wa-api/internal/wa-noise/types"
 )
 
-func (f *fakeWAClient) RejectCall(ctx context.Context, callFrom types.JID, callID string) error {
+func (f *Fake) RejectCall(ctx context.Context, callFrom types.JID, callID string) error {
 	if f.RejectCallFn != nil {
 		return f.RejectCallFn(ctx, callFrom, callID)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) SendAppState(ctx context.Context, patch appstate.PatchInfo) error {
+func (f *Fake) SendAppState(ctx context.Context, patch appstate.PatchInfo) error {
 	if f.SendAppStateFn != nil {
 		return f.SendAppStateFn(ctx, patch)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
+func (f *Fake) FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	if f.FetchAppStateFn != nil {
 		return f.FetchAppStateFn(ctx, name, fullSync, onlyIfNotSynced)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error) {
+func (f *Fake) GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error) {
 	if f.GetSubscribedNewslettersFn != nil {
 		return f.GetSubscribedNewslettersFn(ctx)
 	}
 	return nil, nil
 }
 
-func (f *fakeWAClient) IsConnected() bool {
+func (f *Fake) IsConnected() bool {
 	if f.IsConnectedFn != nil {
 		return f.IsConnectedFn()
 	}
 	return false
 }
 
-func (f *fakeWAClient) IsLoggedIn() bool {
+func (f *Fake) IsLoggedIn() bool {
 	if f.IsLoggedInFn != nil {
 		return f.IsLoggedInFn()
 	}
 	return false
 }
 
-func (f *fakeWAClient) Logout(ctx context.Context) error {
+func (f *Fake) Logout(ctx context.Context) error {
 	if f.LogoutFn != nil {
 		return f.LogoutFn(ctx)
 	}
 	return nil
 }
 
-func (f *fakeWAClient) Disconnect() {
+func (f *Fake) Disconnect() {
 	if f.DisconnectFn != nil {
 		f.DisconnectFn()
 	}
 }
 
-func (f *fakeWAClient) Store() *store.Device {
+func (f *Fake) Store() *store.Device {
 	if f.StoreFn != nil {
 		return f.StoreFn()
 	}
 	return nil
 }
-
-// getterWith devolve uma waClientGetter que mapeia txtID para o cliente
-// correspondente em clients. txtIDs ausentes devolvem nil (que é
