@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package whatsmeow
+package prekeys
 
 import (
 	"bytes"
@@ -15,19 +15,6 @@ import (
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/util/keys"
 )
-
-// testPreKey monta uma prekey determinista (sem aleatoriedade) para que os
-// goldens de wire abaixo sejam estaveis.
-func testPreKey(t *testing.T, keyID uint32, signed bool) *keys.PreKey {
-	t.Helper()
-	key := &keys.PreKey{KeyID: keyID}
-	key.Pub = (*[preKeyPubLength]byte)(bytes.Repeat([]byte{0xAB}, preKeyPubLength))
-	key.Priv = (*[preKeyPubLength]byte)(bytes.Repeat([]byte{0xCD}, preKeyPubLength))
-	if signed {
-		key.Signature = (*[preKeySignatureLength]byte)(bytes.Repeat([]byte{0xEF}, preKeySignatureLength))
-	}
-	return key
-}
 
 func childContent(t *testing.T, node waBinary.Node, tag string) []byte {
 	t.Helper()
@@ -41,20 +28,20 @@ func childContent(t *testing.T, node waBinary.Node, tag string) []byte {
 // O key ID vai para o wire truncado em 24 bits: o byte mais significativo do
 // uint32 e' descartado. Se isso mudar, o servidor deixa de reconhecer as chaves.
 func TestPreKeyToNodeWritesA24BitKeyID(t *testing.T) {
-	node := preKeyToNode(testPreKey(t, 0x00ABCDEF, false))
+	node := ToNode(testPreKey(t, 0x00ABCDEF, false))
 
 	if node.Tag != "key" {
 		t.Errorf("tag = %q, esperado \"key\"", node.Tag)
 	}
 	idBytes := childContent(t, node, "id")
-	if len(idBytes) != preKeyIDLength {
-		t.Fatalf("len(id) = %d, esperado %d", len(idBytes), preKeyIDLength)
+	if len(idBytes) != idLength {
+		t.Fatalf("len(id) = %d, esperado %d", len(idBytes), idLength)
 	}
 	if want := []byte{0xAB, 0xCD, 0xEF}; !bytes.Equal(idBytes, want) {
 		t.Errorf("id = %x, esperado %x (big-endian, sem o byte mais alto)", idBytes, want)
 	}
-	if got := childContent(t, node, "value"); len(got) != preKeyPubLength {
-		t.Errorf("len(value) = %d, esperado %d", got, preKeyPubLength)
+	if got := childContent(t, node, "value"); len(got) != pubLength {
+		t.Errorf("len(value) = %d, esperado %d", got, pubLength)
 	}
 	if _, ok := node.GetOptionalChildByTag("signature"); ok {
 		t.Error("prekey sem assinatura nao deveria ter no <signature>")
@@ -64,13 +51,13 @@ func TestPreKeyToNodeWritesA24BitKeyID(t *testing.T) {
 // Uma prekey assinada vira <skey> com o no de assinatura; uma comum vira <key>.
 // Os dois casos sao lidos de volta por nodeToPreKey, que decide pela tag.
 func TestPreKeyToNodeSignedUsesSkeyTag(t *testing.T) {
-	node := preKeyToNode(testPreKey(t, 1, true))
+	node := ToNode(testPreKey(t, 1, true))
 
 	if node.Tag != "skey" {
 		t.Errorf("tag = %q, esperado \"skey\"", node.Tag)
 	}
-	if got := childContent(t, node, "signature"); len(got) != preKeySignatureLength {
-		t.Errorf("len(signature) = %d, esperado %d", len(got), preKeySignatureLength)
+	if got := childContent(t, node, "signature"); len(got) != signatureLength {
+		t.Errorf("len(signature) = %d, esperado %d", len(got), signatureLength)
 	}
 }
 
@@ -89,7 +76,7 @@ func TestPreKeyNodeRoundTrip(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			original := testPreKey(t, tc.keyID, tc.signed)
 
-			decoded, err := nodeToPreKey(preKeyToNode(original))
+			decoded, err := NodeToPreKey(ToNode(original))
 			if err != nil {
 				t.Fatalf("nodeToPreKey: %v", err)
 			}
@@ -112,9 +99,9 @@ func TestPreKeyNodeRoundTrip(t *testing.T) {
 
 // Um key ID acima de 24 bits perde silenciosamente o byte alto no wire. Nao e'
 // bug alcancavel (o store nunca gera IDs tao altos), mas o comportamento fica
-// travado para que uma mudanca em preKeyIDLength seja consciente.
+// travado para que uma mudanca em idLength seja consciente.
 func TestPreKeyIDAbove24BitsIsTruncated(t *testing.T) {
-	decoded, err := nodeToPreKey(preKeyToNode(testPreKey(t, 0xFF000001, false)))
+	decoded, err := NodeToPreKey(ToNode(testPreKey(t, 0xFF000001, false)))
 	if err != nil {
 		t.Fatalf("nodeToPreKey: %v", err)
 	}
@@ -127,7 +114,7 @@ func TestPreKeyIDAbove24BitsIsTruncated(t *testing.T) {
 // guardas, uma conversao *(*[N]byte) sobre slice curto entraria em panico —
 // e este parser roda sobre dado vindo do servidor.
 func TestNodeToPreKeyRejectsMalformedNodes(t *testing.T) {
-	valid := func() waBinary.Node { return preKeyToNode(testPreKey(t, 1, true)) }
+	valid := func() waBinary.Node { return ToNode(testPreKey(t, 1, true)) }
 	replaceChild := func(node waBinary.Node, tag string, content any) waBinary.Node {
 		children := append([]waBinary.Node(nil), node.GetChildren()...)
 		for i := range children {
@@ -165,7 +152,7 @@ func TestNodeToPreKeyRejectsMalformedNodes(t *testing.T) {
 		"signature curta":       {replaceChild(valid(), "signature", []byte{1, 2, 3}), "unexpected number of bytes"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			key, err := nodeToPreKey(tc.node)
+			key, err := NodeToPreKey(tc.node)
 			if err == nil {
 				t.Fatalf("aceitou no malformado, devolveu %+v", key)
 			}
@@ -179,7 +166,7 @@ func TestNodeToPreKeyRejectsMalformedNodes(t *testing.T) {
 // Uma prekey comum (tag "key") sem no <signature> e' valida: o parser so' exige
 // assinatura quando a tag e' "skey".
 func TestNodeToPreKeyPlainKeyDoesNotRequireSignature(t *testing.T) {
-	key, err := nodeToPreKey(preKeyToNode(testPreKey(t, 9, false)))
+	key, err := NodeToPreKey(ToNode(testPreKey(t, 9, false)))
 	if err != nil {
 		t.Fatalf("nodeToPreKey: %v", err)
 	}
@@ -191,14 +178,14 @@ func TestNodeToPreKeyPlainKeyDoesNotRequireSignature(t *testing.T) {
 func TestPreKeysToNodesPreservesOrder(t *testing.T) {
 	input := []*keys.PreKey{testPreKey(t, 1, false), testPreKey(t, 2, false), testPreKey(t, 3, false)}
 
-	nodes := preKeysToNodes(input)
+	nodes := ToNodes(input)
 
 	if len(nodes) != len(input) {
 		t.Fatalf("len = %d, esperado %d", len(nodes), len(input))
 	}
 	for i, node := range nodes {
 		idBytes := childContent(t, node, "id")
-		got := binary.BigEndian.Uint32(append(make([]byte, preKeyIDPadLength), idBytes...))
+		got := binary.BigEndian.Uint32(append(make([]byte, idPadLength), idBytes...))
 		if got != input[i].KeyID {
 			t.Errorf("nodes[%d].id = %d, esperado %d", i, got, input[i].KeyID)
 		}
@@ -206,7 +193,7 @@ func TestPreKeysToNodesPreservesOrder(t *testing.T) {
 }
 
 func TestPreKeysToNodesEmptyIsNonNil(t *testing.T) {
-	if nodes := preKeysToNodes(nil); nodes == nil || len(nodes) != 0 {
+	if nodes := ToNodes(nil); nodes == nil || len(nodes) != 0 {
 		t.Errorf("= %v, esperado slice vazio nao-nil", nodes)
 	}
 }
@@ -215,15 +202,15 @@ func TestPreKeysToNodesEmptyIsNonNil(t *testing.T) {
 // dispositivo. Monta um no completo e confere o bundle resultante.
 func preKeyBundleNode(t *testing.T, registrationID uint32, withPreKey bool) waBinary.Node {
 	t.Helper()
-	var regBytes [preKeyRegistrationIDLength]byte
+	var regBytes [RegistrationIDLength]byte
 	binary.BigEndian.PutUint32(regBytes[:], registrationID)
 	children := []waBinary.Node{
 		{Tag: "registration", Content: regBytes[:]},
-		{Tag: "identity", Content: bytes.Repeat([]byte{0x11}, preKeyPubLength)},
-		preKeyToNode(testPreKey(t, 77, true)),
+		{Tag: "identity", Content: bytes.Repeat([]byte{0x11}, pubLength)},
+		ToNode(testPreKey(t, 77, true)),
 	}
 	if withPreKey {
-		children = append(children, preKeyToNode(testPreKey(t, 33, false)))
+		children = append(children, ToNode(testPreKey(t, 33, false)))
 	}
 	return waBinary.Node{Tag: "user", Content: children}
 }
@@ -232,7 +219,7 @@ func TestNodeToPreKeyBundle(t *testing.T) {
 	const deviceID = 3
 
 	t.Run("com prekey opcional", func(t *testing.T) {
-		bundle, err := nodeToPreKeyBundle(deviceID, preKeyBundleNode(t, 12345, true))
+		bundle, err := NodeToBundle(deviceID, preKeyBundleNode(t, 12345, true))
 		if err != nil {
 			t.Fatalf("nodeToPreKeyBundle: %v", err)
 		}
@@ -254,7 +241,7 @@ func TestNodeToPreKeyBundle(t *testing.T) {
 	})
 
 	t.Run("sem prekey opcional", func(t *testing.T) {
-		bundle, err := nodeToPreKeyBundle(deviceID, preKeyBundleNode(t, 1, false))
+		bundle, err := NodeToBundle(deviceID, preKeyBundleNode(t, 1, false))
 		if err != nil {
 			t.Fatalf("nodeToPreKeyBundle: %v", err)
 		}
@@ -288,12 +275,26 @@ func TestNodeToPreKeyBundleRejectsMalformedResponses(t *testing.T) {
 			waBinary.Node{Tag: "user", Content: []waBinary.Node{{Tag: "error", Attrs: waBinary.Attrs{"code": "404"}}}},
 			"got error getting prekeys",
 		},
+		"prekey opcional malformada": {
+			func() waBinary.Node {
+				node := preKeyBundleNode(t, 1, true)
+				children := append([]waBinary.Node(nil), node.GetChildren()...)
+				for i := range children {
+					if children[i].Tag == "key" {
+						children[i].Content = []waBinary.Node{{Tag: "id", Content: []byte{1}}}
+					}
+				}
+				node.Content = children
+				return node
+			}(),
+			"invalid prekey in prekey response",
+		},
 		"sem registration":  {withoutChild("registration"), "invalid registration ID"},
 		"sem identity":      {withoutChild("identity"), "invalid identity key"},
 		"sem signed prekey": {withoutChild("skey"), "invalid signed prekey"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := nodeToPreKeyBundle(1, tc.node); err == nil {
+			if _, err := NodeToBundle(1, tc.node); err == nil {
 				t.Fatal("aceitou resposta malformada")
 			} else if !strings.Contains(err.Error(), tc.wantErr) {
 				t.Errorf("erro = %q, esperado conter %q", err, tc.wantErr)
@@ -320,7 +321,7 @@ func TestNodeToPreKeyBundleAcceptsNestedKeysNode(t *testing.T) {
 		{Tag: "keys", Content: rest},
 	}}
 
-	bundle, err := nodeToPreKeyBundle(1, nested)
+	bundle, err := NodeToBundle(1, nested)
 	if err != nil {
 		t.Fatalf("nodeToPreKeyBundle: %v", err)
 	}
@@ -333,19 +334,18 @@ func TestNodeToPreKeyBundleAcceptsNestedKeysNode(t *testing.T) {
 // inicial precisa ser muito maior que o lote regular, e o lote regular maior
 // que o limiar que dispara um novo upload.
 func TestPreKeyCountPolicyIsCoherent(t *testing.T) {
-	if MinPreKeyCount >= WantedPreKeyCount {
-		t.Errorf("MinPreKeyCount (%d) deveria ser menor que WantedPreKeyCount (%d)", MinPreKeyCount, WantedPreKeyCount)
+	if MinCount >= WantedCount {
+		t.Errorf("MinCount (%d) deveria ser menor que WantedCount (%d)", MinCount, WantedCount)
 	}
-	if initialPreKeyCount <= WantedPreKeyCount {
-		t.Errorf("initialPreKeyCount (%d) deveria ser maior que WantedPreKeyCount (%d)", initialPreKeyCount, WantedPreKeyCount)
+	if InitialCount <= WantedCount {
+		t.Errorf("InitialCount (%d) deveria ser maior que WantedCount (%d)", InitialCount, WantedCount)
 	}
 }
 
-func TestFetchPreKeysNoErrorWithNoDevicesDoesNotTouchTheSocket(t *testing.T) {
-	// cli nil de proposito: se a guarda de lista vazia sumir, o teste entra em
-	// panico em vez de passar silenciosamente.
-	var cli *Client
-	if got := cli.fetchPreKeysNoError(t.Context(), nil); got != nil {
+func TestFetchNoErrorWithNoDevicesDoesNotTouchTheSocket(t *testing.T) {
+	// Transport nil de proposito: se a guarda de lista vazia sumir, o teste
+	// entra em panico em vez de passar silenciosamente.
+	if got := FetchNoError(t.Context(), nil, nil); got != nil {
 		t.Errorf("= %v, esperado nil", got)
 	}
 }

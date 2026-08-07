@@ -301,6 +301,7 @@ internal/wa-noise.Client.parseMsgMetaInfo	EXCLUDED	X5
 internal/wa-noise.Client.parseNewsletterMessages	EXCLUDED	X5
 internal/wa-noise.Client.parsePrivacySettings	EXCLUDED	X5
 internal/wa-noise.Client.parseReceipt	EXCLUDED	X5
+internal/wa-noise.Client.preKeyT	EXCLUDED	X5
 internal/wa-noise.Client.prepareBotMessage	EXCLUDED	X5
 internal/wa-noise.Client.prepareMessageNode	EXCLUDED	X5
 internal/wa-noise.Client.prepareMessageNode.func1	EXCLUDED	X6
@@ -619,7 +620,6 @@ internal/wa-noise.newsletterTransport.SendIQ	EXCLUDED	X5
 internal/wa-noise.newsletterTransport.SendNode	EXCLUDED	X5
 internal/wa-noise.newsletterTransport.WaitResponse	EXCLUDED	X5
 internal/wa-noise.nodeContentString	EXCLUDED	X5
-internal/wa-noise.nodeToPreKey	EXCLUDED	X5
 internal/wa-noise.nodeToPreKeyBundle	EXCLUDED	X5
 internal/wa-noise.parseDeviceList	EXCLUDED	X5
 internal/wa-noise.parseFBDeviceList	EXCLUDED	X5
@@ -633,7 +633,10 @@ internal/wa-noise.parseVerifiedName	EXCLUDED	X5
 internal/wa-noise.parseVerifiedNameContent	EXCLUDED	X5
 internal/wa-noise.participantListHashV2	EXCLUDED	X5
 internal/wa-noise.preKeyToNode	EXCLUDED	X5
-internal/wa-noise.preKeysToNodes	EXCLUDED	X5
+internal/wa-noise.preKeyTransport.Log	EXCLUDED	X5
+internal/wa-noise.preKeyTransport.SendIQ	EXCLUDED	X5
+internal/wa-noise.preKeyTransport.State	EXCLUDED	X5
+internal/wa-noise.preKeyTransport.Store	EXCLUDED	X5
 internal/wa-noise.qrChannel.emitQRs	EXCLUDED	X5
 internal/wa-noise.qrChannel.handleEvent	EXCLUDED	X5
 internal/wa-noise.randomKeepAliveInterval	EXCLUDED	X5
@@ -899,6 +902,18 @@ internal/wa-noise/newsletter.viewedItems	EXCLUDED	X5
 internal/wa-noise/paircrypto.ConcatBytes	EXCLUDED	X5
 internal/wa-noise/paircrypto.GenerateDeviceSignature	EXCLUDED	X5
 internal/wa-noise/paircrypto.VerifyAccountSignature	EXCLUDED	X5
+internal/wa-noise/prekeys.Fetch	EXCLUDED	X5
+internal/wa-noise/prekeys.FetchNoError	EXCLUDED	X5
+internal/wa-noise/prekeys.GetServerCount	EXCLUDED	X5
+internal/wa-noise/prekeys.NodeToBundle	EXCLUDED	X5
+internal/wa-noise/prekeys.NodeToPreKey	EXCLUDED	X5
+internal/wa-noise/prekeys.State.LastUpload	EXCLUDED	X5
+internal/wa-noise/prekeys.State.LockUpload	EXCLUDED	X5
+internal/wa-noise/prekeys.State.SetLastUpload	EXCLUDED	X5
+internal/wa-noise/prekeys.State.UnlockUpload	EXCLUDED	X5
+internal/wa-noise/prekeys.ToNode	EXCLUDED	X5
+internal/wa-noise/prekeys.ToNodes	EXCLUDED	X5
+internal/wa-noise/prekeys.Upload	EXCLUDED	X5
 internal/wa-noise/proto.Unsupported_BusinessApplication.IsMessageApplicationSub	EXCLUDED	X5
 internal/wa-noise/proto.Unsupported_PaymentApplication.IsMessageApplicationSub	EXCLUDED	X5
 internal/wa-noise/proto.Unsupported_Voip.IsMessageApplicationSub	EXCLUDED	X5

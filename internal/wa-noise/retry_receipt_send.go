@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/types"
 )
 
@@ -50,7 +51,7 @@ func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, in
 	// Mesmo campo (Store.RegistrationID) e mesma codificacao big-endian do
 	// upload de prekeys, entao reutiliza a constante de la' em vez de declarar
 	// um segundo 4.
-	var registrationIDBytes [preKeyRegistrationIDLength]byte
+	var registrationIDBytes [prekeys.RegistrationIDLength]byte
 	binary.BigEndian.PutUint32(registrationIDBytes[:], cli.Store.RegistrationID)
 	attrs := buildBaseReceipt(info.ID, node)
 	attrs["type"] = string(types.ReceiptTypeRetry)

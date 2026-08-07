@@ -8,270 +8,62 @@ package whatsmeow
 
 import (
 	"context"
-	"encoding/binary"
-	"fmt"
-	"time"
 
-	"go.mau.fi/libsignal/ecc"
-	"go.mau.fi/libsignal/keys/identity"
 	"go.mau.fi/libsignal/keys/prekey"
-	"go.mau.fi/libsignal/util/optional"
 
 	waBinary "wa-api/internal/wa-noise/binary"
+	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/types"
 	"wa-api/internal/wa-noise/util/keys"
 )
 
+// A logica deste dominio vive em internal/wa-noise/prekeys/. O que sobra aqui
+// sao fachadas: elas guardam o contrato historico (nomes, assinaturas e o
+// receptor *Client) e delegam. Ver PATCHES.md, "Fase F/G — lote 4".
 const (
 	// WantedPreKeyCount is the number of prekeys that the client should upload to the WhatsApp servers in a single batch.
-	WantedPreKeyCount = 50
+	WantedPreKeyCount = prekeys.WantedCount
 	// MinPreKeyCount is the number of prekeys when the client will upload a new batch of prekeys to the WhatsApp servers.
-	MinPreKeyCount = 5
+	MinPreKeyCount = prekeys.MinCount
 )
 
+// preKeyResp e' apelido de tipo, e nao um tipo novo, porque internals.go
+// (gerado, fora do escopo deste lote) cita o nome antigo na assinatura de
+// DangerousInternalClient.FetchPreKeys.
+type preKeyResp = prekeys.Resp
+
 func (cli *Client) getServerPreKeyCount(ctx context.Context) (int, error) {
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "encrypt",
-		Type:      iqGet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{
-			{Tag: "count"},
-		},
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to get prekey count on server: %w", err)
+	if cli == nil {
+		return 0, ErrClientIsNil
 	}
-	count := resp.GetChildByTag("count")
-	ag := count.AttrGetter()
-	val := ag.Int("value")
-	return val, ag.Error()
+	return prekeys.GetServerCount(ctx, cli.preKeyT())
 }
 
 func (cli *Client) uploadPreKeys(ctx context.Context, initialUpload bool) {
-	cli.uploadPreKeysLock.Lock()
-	defer cli.uploadPreKeysLock.Unlock()
-	if cli.lastPreKeyUpload.Add(preKeyUploadDebounce).After(time.Now()) {
-		sc, _ := cli.getServerPreKeyCount(ctx)
-		if sc >= WantedPreKeyCount {
-			cli.Log.Debugf("Canceling prekey upload request due to likely race condition")
-			return
-		}
-	}
-	var registrationIDBytes [preKeyRegistrationIDLength]byte
-	binary.BigEndian.PutUint32(registrationIDBytes[:], cli.Store.RegistrationID)
-	wantedCount := WantedPreKeyCount
-	if initialUpload {
-		wantedCount = initialPreKeyCount
-	}
-	preKeys, err := cli.Store.PreKeys.GetOrGenPreKeys(ctx, uint32(wantedCount))
-	if err != nil {
-		cli.Log.Errorf("Failed to get prekeys to upload: %v", err)
+	if cli == nil {
 		return
 	}
-	cli.Log.Infof("Uploading %d new prekeys to server", len(preKeys))
-	_, err = cli.sendIQ(ctx, infoQuery{
-		Namespace: "encrypt",
-		Type:      iqSet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{
-			{Tag: "registration", Content: registrationIDBytes[:]},
-			{Tag: "type", Content: []byte{ecc.DjbType}},
-			{Tag: "identity", Content: cli.Store.IdentityKey.Pub[:]},
-			{Tag: "list", Content: preKeysToNodes(preKeys)},
-			preKeyToNode(cli.Store.SignedPreKey),
-		},
-	})
-	if err != nil {
-		cli.Log.Errorf("Failed to send request to upload prekeys: %v", err)
-		return
-	}
-	cli.Log.Debugf("Got response to uploading prekeys")
-	err = cli.Store.PreKeys.MarkPreKeysAsUploaded(ctx, preKeys[len(preKeys)-1].KeyID)
-	if err != nil {
-		cli.Log.Warnf("Failed to mark prekeys as uploaded: %v", err)
-		return
-	}
-	cli.lastPreKeyUpload = time.Now()
-	return
+	prekeys.Upload(ctx, cli.preKeyT(), initialUpload)
 }
 
 func (cli *Client) fetchPreKeysNoError(ctx context.Context, retryDevices []types.JID) map[types.JID]*prekey.Bundle {
-	if len(retryDevices) == 0 {
+	if cli == nil {
 		return nil
 	}
-	bundlesResp, err := cli.fetchPreKeys(ctx, retryDevices)
-	if err != nil {
-		cli.Log.Warnf("Failed to fetch prekeys for %v with no existing session: %v", retryDevices, err)
-		return nil
-	}
-	bundles := make(map[types.JID]*prekey.Bundle, len(retryDevices))
-	for _, jid := range retryDevices {
-		resp := bundlesResp[jid]
-		if resp.err != nil {
-			cli.Log.Warnf("Failed to fetch prekey for %s: %v", jid, resp.err)
-			continue
-		}
-		bundles[jid] = resp.bundle
-	}
-	return bundles
-}
-
-type preKeyResp struct {
-	bundle *prekey.Bundle
-	err    error
+	return prekeys.FetchNoError(ctx, cli.preKeyT(), retryDevices)
 }
 
 func (cli *Client) fetchPreKeys(ctx context.Context, users []types.JID) (map[types.JID]preKeyResp, error) {
-	requests := make([]waBinary.Node, len(users))
-	for i, user := range users {
-		requests[i].Tag = "user"
-		requests[i].Attrs = waBinary.Attrs{
-			"jid":    user,
-			"reason": "identity",
-		}
+	if cli == nil {
+		return nil, ErrClientIsNil
 	}
-	resp, err := cli.sendIQ(ctx, infoQuery{
-		Namespace: "encrypt",
-		Type:      iqGet,
-		To:        types.ServerJID,
-		Content: []waBinary.Node{{
-			Tag:     "key",
-			Content: requests,
-		}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to send prekey request: %w", err)
-	} else if len(resp.GetChildren()) == 0 {
-		return nil, fmt.Errorf("got empty response to prekey request")
-	}
-	list := resp.GetChildByTag("list")
-	respData := make(map[types.JID]preKeyResp)
-	for _, child := range list.GetChildren() {
-		if child.Tag != "user" {
-			continue
-		}
-		jid := child.AttrGetter().JID("jid")
-		bundle, err := nodeToPreKeyBundle(uint32(jid.Device), child)
-		respData[jid] = preKeyResp{bundle, err}
-	}
-	return respData, nil
+	return prekeys.Fetch(ctx, cli.preKeyT(), users)
 }
 
 func preKeyToNode(key *keys.PreKey) waBinary.Node {
-	var keyID [preKeyRegistrationIDLength]byte
-	binary.BigEndian.PutUint32(keyID[:], key.KeyID)
-	node := waBinary.Node{
-		Tag: "key",
-		Content: []waBinary.Node{
-			{Tag: "id", Content: keyID[preKeyIDPadLength:]},
-			{Tag: "value", Content: key.Pub[:]},
-		},
-	}
-	if key.Signature != nil {
-		node.Tag = "skey"
-		node.Content = append(node.GetChildren(), waBinary.Node{
-			Tag:     "signature",
-			Content: key.Signature[:],
-		})
-	}
-	return node
+	return prekeys.ToNode(key)
 }
 
 func nodeToPreKeyBundle(deviceID uint32, node waBinary.Node) (*prekey.Bundle, error) {
-	errorNode, ok := node.GetOptionalChildByTag("error")
-	if ok && errorNode.Tag == "error" {
-		return nil, fmt.Errorf("got error getting prekeys: %s", errorNode.XMLString())
-	}
-
-	registrationBytes, ok := node.GetChildByTag("registration").Content.([]byte)
-	if !ok || len(registrationBytes) != preKeyRegistrationIDLength {
-		return nil, fmt.Errorf("invalid registration ID in prekey response")
-	}
-	registrationID := binary.BigEndian.Uint32(registrationBytes)
-
-	keysNode, ok := node.GetOptionalChildByTag("keys")
-	if !ok {
-		keysNode = node
-	}
-
-	identityKeyRaw, ok := keysNode.GetChildByTag("identity").Content.([]byte)
-	if !ok || len(identityKeyRaw) != preKeyPubLength {
-		return nil, fmt.Errorf("invalid identity key in prekey response")
-	}
-	identityKeyPub := *(*[preKeyPubLength]byte)(identityKeyRaw)
-
-	preKeyNode, ok := keysNode.GetOptionalChildByTag("key")
-	preKey := &keys.PreKey{}
-	if ok {
-		var err error
-		preKey, err = nodeToPreKey(preKeyNode)
-		if err != nil {
-			return nil, fmt.Errorf("invalid prekey in prekey response: %w", err)
-		}
-	}
-
-	signedPreKey, err := nodeToPreKey(keysNode.GetChildByTag("skey"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid signed prekey in prekey response: %w", err)
-	}
-
-	var bundle *prekey.Bundle
-	if ok {
-		bundle = prekey.NewBundle(registrationID, deviceID,
-			optional.NewOptionalUint32(preKey.KeyID), signedPreKey.KeyID,
-			ecc.NewDjbECPublicKey(*preKey.Pub), ecc.NewDjbECPublicKey(*signedPreKey.Pub), *signedPreKey.Signature,
-			identity.NewKey(ecc.NewDjbECPublicKey(identityKeyPub)))
-	} else {
-		bundle = prekey.NewBundle(registrationID, deviceID, optional.NewEmptyUint32(), signedPreKey.KeyID,
-			nil, ecc.NewDjbECPublicKey(*signedPreKey.Pub), *signedPreKey.Signature,
-			identity.NewKey(ecc.NewDjbECPublicKey(identityKeyPub)))
-	}
-
-	return bundle, nil
-}
-
-func nodeToPreKey(node waBinary.Node) (*keys.PreKey, error) {
-	key := keys.PreKey{
-		KeyPair:   keys.KeyPair{},
-		KeyID:     0,
-		Signature: nil,
-	}
-	if id := node.GetChildByTag("id"); id.Tag != "id" {
-		return nil, fmt.Errorf("prekey node doesn't contain ID tag")
-	} else if idBytes, ok := id.Content.([]byte); !ok {
-		return nil, fmt.Errorf("prekey ID has unexpected content (%T)", id.Content)
-	} else if len(idBytes) != preKeyIDLength {
-		return nil, fmt.Errorf("prekey ID has unexpected number of bytes (%d, expected %d)", len(idBytes), preKeyIDLength)
-	} else {
-		key.KeyID = binary.BigEndian.Uint32(append(make([]byte, preKeyIDPadLength), idBytes...))
-	}
-	if pubkey := node.GetChildByTag("value"); pubkey.Tag != "value" {
-		return nil, fmt.Errorf("prekey node doesn't contain value tag")
-	} else if pubkeyBytes, ok := pubkey.Content.([]byte); !ok {
-		return nil, fmt.Errorf("prekey value has unexpected content (%T)", pubkey.Content)
-	} else if len(pubkeyBytes) != preKeyPubLength {
-		return nil, fmt.Errorf("prekey value has unexpected number of bytes (%d, expected %d)", len(pubkeyBytes), preKeyPubLength)
-	} else {
-		key.KeyPair.Pub = (*[preKeyPubLength]byte)(pubkeyBytes)
-	}
-	if node.Tag == "skey" {
-		if sig := node.GetChildByTag("signature"); sig.Tag != "signature" {
-			return nil, fmt.Errorf("prekey node doesn't contain signature tag")
-		} else if sigBytes, ok := sig.Content.([]byte); !ok {
-			return nil, fmt.Errorf("prekey signature has unexpected content (%T)", sig.Content)
-		} else if len(sigBytes) != preKeySignatureLength {
-			return nil, fmt.Errorf("prekey signature has unexpected number of bytes (%d, expected %d)", len(sigBytes), preKeySignatureLength)
-		} else {
-			key.Signature = (*[preKeySignatureLength]byte)(sigBytes)
-		}
-	}
-	return &key, nil
-}
-
-func preKeysToNodes(prekeys []*keys.PreKey) []waBinary.Node {
-	nodes := make([]waBinary.Node, len(prekeys))
-	for i, key := range prekeys {
-		nodes[i] = preKeyToNode(key)
-	}
-	return nodes
+	return prekeys.NodeToBundle(deviceID, node)
 }

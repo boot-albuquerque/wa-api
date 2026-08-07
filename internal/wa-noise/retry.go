@@ -193,7 +193,7 @@ func (cli *Client) handleRetryReceipt(ctx context.Context, receipt *events.Recei
 		if err != nil {
 			return err
 		}
-		bundle, err = keys[receipt.Sender].bundle, keys[receipt.Sender].err
+		bundle, err = keys[receipt.Sender].Bundle, keys[receipt.Sender].Err
 		if err != nil {
 			return fmt.Errorf("failed to fetch prekeys: %w", err)
 		} else if bundle == nil {

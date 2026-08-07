@@ -24,6 +24,7 @@ import (
 	"wa-api/internal/wa-noise/appstatesync"
 	waBinary "wa-api/internal/wa-noise/binary"
 	"wa-api/internal/wa-noise/media"
+	"wa-api/internal/wa-noise/prekeys"
 	"wa-api/internal/wa-noise/proto/waE2E"
 	"wa-api/internal/wa-noise/proto/waWa6"
 	"wa-api/internal/wa-noise/socket"
@@ -88,8 +89,7 @@ type Client struct {
 	ManualHistorySyncDownload       bool
 	DisableManualHistorySyncReceipt bool
 
-	uploadPreKeysLock sync.Mutex
-	lastPreKeyUpload  time.Time
+	preKeyState prekeys.State // lock de upload e horario do ultimo upload
 
 	// mediaConn cacheia a media connection; o lock vive dentro dele.
 	mediaConn media.ConnCache
