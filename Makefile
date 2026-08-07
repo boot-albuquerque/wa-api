@@ -262,12 +262,12 @@ waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exce
 # fases do ADR-0004 forem cobrindo o resto.
 WACLIENT_TEST_PKGS := ./internal/wa-noise/ \
 	./internal/wa-noise/protocol/msgpad/ ./internal/wa-noise/security/paircrypto/ \
-	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/media/ \
-	./internal/wa-noise/newsletter/ ./internal/wa-noise/appstatesync/ \
-	./internal/wa-noise/prekeys/ ./internal/wa-noise/pairing/ ./internal/wa-noise/tctoken/ \
-	./internal/wa-noise/notification/ ./internal/wa-noise/retry/ \
-	./internal/wa-noise/group/ ./internal/wa-noise/user/ \
-	./internal/wa-noise/send/ ./internal/wa-noise/message/ \
+	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/capabilities/media/ \
+	./internal/wa-noise/capabilities/newsletter/ ./internal/wa-noise/capabilities/appstatesync/ \
+	./internal/wa-noise/capabilities/prekeys/ ./internal/wa-noise/capabilities/pairing/ ./internal/wa-noise/capabilities/tctoken/ \
+	./internal/wa-noise/capabilities/notification/ ./internal/wa-noise/capabilities/retry/ \
+	./internal/wa-noise/capabilities/group/ ./internal/wa-noise/capabilities/user/ \
+	./internal/wa-noise/capabilities/send/ ./internal/wa-noise/capabilities/message/ \
 	./internal/wa-noise/security/handshake/ ./internal/wa-noise/keepalive/ \
 	./internal/wa-noise/proxyconf/ \
 	./internal/wa-noise/protocol/socket/ ./internal/wa-noise/protocol/appstate/ \
