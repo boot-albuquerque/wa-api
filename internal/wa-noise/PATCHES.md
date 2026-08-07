@@ -6537,3 +6537,496 @@ commit).
 `LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
 com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
 tamanho de arquivo e testes do fork.
+
+---
+
+## Fase F/G — lote 5: notificação/retry/recibo (extração real + cobertura), 2026-08-07
+
+Quinta extração, mesmo padrão dos lotes 1 (`media/`), 2 (`newsletter/`), 3
+(`appstatesync/`) e 4 (`prekeys/`, `pairing/`, `tctoken/`): cada domínio vira um
+pacote que define uma interface estreita, opera sobre ela e **nunca importa a
+raiz**; a raiz importa o subpacote (uma direção só) e mantém métodos-fachada em
+`*Client`. O racional de por que a movimentação simples é impossível está na
+seção da Fase D.
+
+O escopo designado eram 9 arquivos de raiz mais os testes da Fase E lote 5.
+Foram criados **dois** subpacotes; `receipt.go` **não foi extraído**, e a seção
+"O que NÃO foi extraído, e por quê" no fim registra cada caso com o motivo.
+
+### Panorama
+
+| Subpacote | Arquivos de raiz absorvidos | Cobertura (statements, sob `-race`) |
+|---|---|---|
+| `internal/wa-noise/notification/` | parte de `notification.go`, `notification_newsletter.go`, parte de `notification_privacy.go`, `notification_constants.go` | **100,0%** |
+| `internal/wa-noise/retry/` | `retry.go`, `retry_recent_messages.go`, `retry_request_from_phone.go`, `retry_receipt_send.go`, `retry_constants.go` | **98,1%** |
+
+---
+
+### Subpacote 1 — `internal/wa-noise/notification/`
+
+#### A interface
+
+`notification.Transport`, **dois** métodos — a mais estreita de todos os cinco
+lotes:
+
+```go
+type Transport interface {
+    Log() waLog.Logger
+    DispatchEvent(evt any)
+}
+```
+
+A estreiteza não é elegância acidental: ela **delimita o escopo**. Só entraram
+no pacote os handlers de `<notification>` que parseiam um nó e despacham um
+evento, sem tocar em estado do cliente, em store, em socket ou em outro domínio.
+Assim que um handler precisaria de um terceiro método, ele ficou na raiz — e a
+seção final diz qual e por quê.
+
+`DispatchEvent` não devolve nada, mesmo racional do lote 4: nenhum dos pontos de
+despacho absorvidos consultava o `handlerFailed` do `dispatchEvent` da raiz.
+
+#### Arquivos
+
+**Criados** (`package notification`): `constants.go`, `transport.go`,
+`blocklist.go`, `picture.go`, `status.go`, `newsletter.go`.
+**Removido**: `notification_constants.go` — a taxonomia do atributo `type` virou
+`notification.Type*`, e o switch de `handleNotification` na raiz passou a citá-la
+diretamente (`case notification.TypeEncrypt:` etc.), sem camada de apelidos.
+**Reduzidos a fachada**: `notification_newsletter.go` (110→40),
+`notification.go` (201→175, só as três funções extraídas),
+`notification_privacy.go` (só `handleBlocklist`).
+**Criado na raiz**: `notification_transport.go` (adaptador, não exportado).
+
+#### Concorrência
+
+**Nenhuma.** Este subpacote não tem estado mutável nenhum: as seis funções são
+puras sobre o nó de entrada mais o `Transport`. Não há `State`, não há lock, não
+há campo de `*Client` movido. É a razão de ele não ter seção de revisão de
+concorrência.
+
+#### Compatibilidade de API
+
+Nada deste domínio era exportado na raiz. Os seis símbolos
+(`handleBlocklist`, `handlePictureNotification`, `handleStatusNotification`,
+`parseNewsletterMessages`, `handleNewsletterNotification`,
+`handleMexNotification`) continuam existindo com as mesmas assinaturas, como
+delegações — `internals.go` (gerado, F29, fora do escopo) cita os seis e compila
+sem ser tocado. Confirmado: `git status` não o lista.
+
+Os dois tipos de envelope JSON do mex (`newsLetterEventWrapper`,
+`newsletterEvent`) foram renomeados para `eventWrapper`/`mexEvent` dentro do
+subpacote. Não são citados por `internals.go` nem por nada fora do arquivo
+original — grep conferido antes do rename.
+
+Guardas de receptor nil foram acrescentadas às seis fachadas, na mesma linha dos
+lotes 1 a 4. Coberto por `TestFachadaDeNotificacaoRecusaClientNil`.
+
+#### Cobertura
+
+**100,0% de statements**. Os testes da Fase E lote 5 (`notification_test.go`,
+534 linhas) foram **relocados e adaptados**, não descartados: as seis famílias
+de teste dos handlers extraídos viraram `notification/handlers_test.go` e
+`notification/newsletter_test.go`, chamando as funções livres com um duble de
+dois métodos. O que ficou em `notification_test.go` na raiz são os testes dos
+handlers **não** extraídos (own devices, device list, o roteador) mais duas
+fachadas novas.
+
+O lote acrescentou quatro casos que o teste original não tinha:
+
+1. `TestHandleNewsletterWithoutLiveUpdates` — sem o filho `<live_updates>`,
+   `GetChildByTag` devolve o nó zero e o evento sai com lista **vazia**, não erro.
+2. `TestHandleMexDispatchesAtMostOnePerUpdate` — a cadeia `else if` do upstream
+   despacha **um** evento por `<update>` mesmo com três campos preenchidos, e a
+   ordem (join, leave, mute) é a prioridade efetiva.
+3. `TestHandleBlocklistWithoutChanges` — um `<blocklist>` sem filho ainda
+   despacha o evento, com `Changes` nil. É como o snapshot inicial chega.
+4. `TestTypeConstants` — a taxonomia é contrato de wire: cada constante bate com
+   o literal, e nenhuma colide com outra (duas iguais fariam um ramo do switch
+   virar código morto silenciosamente).
+
+---
+
+### Subpacote 2 — `internal/wa-noise/retry/`
+
+O domínio pesado do lote.
+
+#### A interface
+
+`retry.Transport`, **dezenove** métodos — o transporte mais largo dos cinco
+lotes, superando os treze de `pairing` (lote 4). A razão é o domínio: atender um
+recibo de retry significa **reconstruir e recifrar uma mensagem já enviada**,
+então o caminho toca sessão Signal, prekeys, montagem de nó, envio e o caminho
+de reenvio pelo telefone. Cada método corresponde a uma chamada que o código
+fazia em `*Client` antes da extração; nenhum foi inventado por conveniência.
+
+Cinco decisões valem registro:
+
+1. **`RerequestFromPhoneEnabled() bool` em vez de dois métodos.** O original era
+   `if !cli.AutomaticMessageRerequestFromPhone || cli.MessengerConfig != nil`,
+   e as duas condições apareciam **sempre em par**, nos dois pontos de entrada.
+   Travado por `TestRetryTransportRerequestFromPhoneEnabled`, com as quatro
+   combinações.
+2. **`RerequestDelay() time.Duration` em vez de constante do subpacote.**
+   `RequestFromPhoneDelay` é uma **variável pública** ajustável em tempo de
+   execução, e variáveis não podem ser reexportadas por apelido em Go. Ela
+   continua na raiz e é lida a cada chamada — `TestRetryTransportTraduzConfiguracao`
+   troca o valor e verifica que o transporte enxerga a troca.
+3. **`PreRetryAllowed(...) bool` em vez de expor o callback.** Mesmo padrão do
+   `PrePairAllowed` do lote 4: a checagem de nil ficou no adaptador, com
+   tabela-verdade idêntica (nil → permite, `true` → permite, `false` → recusa).
+4. **`CreateSKDM(ctx, chat) ([]byte, error)`.** O original montava um
+   `groups.NewGroupSessionBuilder(cli.Store, pbSerializer)` inline. `pbSerializer`
+   é variável de pacote da raiz, então não pode atravessar a fronteira como dado
+   — o adaptador encapsula a construção inteira.
+5. **`MessageContent(...)` sem `nodeExtraParams`.** O call site de retry sempre
+   passava o zero desse struct da raiz; o adaptador o fornece.
+
+`MessageRef` é uma fatia de `types.MessageInfo` com os cinco campos que o
+domínio usa (`Chat`, `Sender`, `ID`, `Type`, `IsFromMe`), traduzida por
+`retryMessageRef` na raiz. Existe para as assinaturas não arrastarem o
+`MessageInfo` inteiro. Travado por `TestRetryMessageRef`.
+
+#### Arquivos
+
+**Criados** (`package retry`): `constants.go`, `transport.go`, `state.go`,
+`recent.go`, `phone.go`, `send.go`, `handle.go`, `handle_parts.go`.
+**Reduzidos a fachada**: `retry.go` (283→54), `retry_recent_messages.go`
+(143→59), `retry_request_from_phone.go` (77→68), `retry_receipt_send.go` (97→25).
+**Podado**: `retry_constants.go` (47→33) — virou um bloco de apelidos.
+**Criado na raiz**: `retry_transport.go` (adaptador, não exportado).
+**Tocados fora do domínio**: `client.go` (sete campos e cinco locks viraram um),
+`sendfb.go` (uma constante), `client_events_test.go` (duas asserções).
+
+`handle_parts.go` existe **só** por causa do teto de 300 linhas do ADR-0004:
+`handle.go` bateu 355 e o gate pegou, como devia. Os quatro auxiliares
+(`buildGroupOrSelfExtras`, `marshalForRetry`, `resolveBundle`,
+`buildRetryMessageAttrs`) foram para lá; nenhum é chamado de fora do pacote.
+
+#### Concorrência — cinco locks, e continuam sendo cinco
+
+Sete campos e cinco locks de `*Client` viraram `retry.State`:
+
+```go
+// antes, em client.go
+messageRetries     map[string]int
+messageRetriesLock sync.Mutex
+retrySema          *semaphore.Weighted
+incomingRetryRequestCounter     map[incomingRetryKey]int
+incomingRetryRequestCounterLock sync.Mutex
+recentMessagesMap  map[recentMessageKey]RecentMessage
+recentMessagesList [recentMessagesSize]recentMessageKey
+recentMessagesPtr  int
+recentMessagesLock sync.RWMutex
+sessionRecreateHistory     map[types.JID]time.Time
+sessionRecreateHistoryLock sync.Mutex
+pendingPhoneRerequests     map[types.MessageID]context.CancelFunc
+pendingPhoneRerequestsLock sync.RWMutex
+lastRetryStoreClear        time.Time
+// agora
+retryState retry.State
+```
+
+**Os cinco locks continuam sendo cinco locks distintos**, com os mesmos pontos
+de aquisição e liberação. Cada método de `State` reproduz **uma** seção crítica
+que já existia, inteira. Cinco detalhes que não são óbvios e foram preservados
+de propósito:
+
+1. **`ShouldRecreateSession` segura o lock durante a ida ao store.** O corpo
+   inteiro roda sob o lock de recriação de sessão, incluindo
+   `Store().ContainsSession(...)`, exatamente como `shouldRecreateSession`
+   rodava. Não é o desenho ideal (mutex segurado por uma consulta ao banco), mas
+   mudá-lo seria mudança de comportamento. Por isso `LastSessionRecreate` e
+   `MarkSessionRecreated` **não tomam lock próprio**, mesmo racional e mesmo
+   contrato documentado do `LastUpload`/`SetLastUpload` do `prekeys` (lote 4).
+2. **`CancelPendingPhone` chama o `cancel()` COM o `RLock` segurado.** O
+   original fazia isso, e manter é o que preserva a semântica. É seguro porque a
+   função de cancelamento de um `context.WithCancel` não reentra no `State`: quem
+   observa o `Done()` é a goroutine do pedido, que só volta a tocar o mapa depois,
+   pelo `UnregisterPendingPhone` diferido.
+3. **`CancelAllPendingPhone` NÃO apaga o mapa.** O
+   `clearDelayedMessageRequests` original também não apagava — cada goroutine
+   cancelada remove a própria entrada pelo `defer` dela. Travado por
+   `TestCancelAllPendingPhoneKeepsTheMap`, que existe justamente porque "cancelar
+   tudo" parece que deveria limpar.
+4. **`AddRecent` mantém a ordem despejo → gravação → avanço do ponteiro →
+   wrap**, e usa `Unlock` explícito em vez de `defer`, como o original. A ordem é
+   load-bearing: o despejo precisa ver o ponteiro **antes** do avanço.
+5. **`BumpMessageRetries` faz a releitura do `count` do servidor DENTRO da mesma
+   seção crítica**, como antes: incrementa, lê, e — se este é o primeiro recibo
+   nosso mas a mensagem já se declara retry — regrava o valor derivado, tudo sob
+   o mesmo `Lock`.
+
+**Mudança de comportamento conhecida e aceita:** os mapas passaram a ser criados
+preguiçosamente sob o lock de escrita em vez de eagerly em `NewClient`. É
+exatamente a mesma mudança (e o mesmo racional) dos lotes 3 e 4: uma leitura
+antes de qualquer gravação enxerga mapa nil, o que em Go é leitura válida e
+devolve o zero — mesmo resultado que um mapa vazio. A asserção de
+`client_events_test.go` que checava "nenhum mapa interno ficou nil" foi ajustada
+para os mapas que **continuam** sendo criados em `NewClient`, e ganhou no lugar
+uma asserção de que a leitura em cache vazio devolve o zero.
+
+Serialização travada por teste: `TestCountersAreSerialized` (64 goroutines nos
+dois contadores de F36), `TestAddRecentIsSerialized` (64 goroutines no anel),
+`TestSessionRecreateLockIsMutuallyExclusive`,
+`TestTryHandleReceiptRespectsSemaphore`.
+
+#### F36 — a dívida VIAJOU JUNTO e NÃO foi resolvida
+
+Isto é o ponto mais importante desta seção, e está escrito por extenso para que
+ninguém leia o commit e conclua o contrário.
+
+`incomingRetryRequestCounter` virou `State.incomingCounter`; `messageRetries`
+virou `State.messageRetries`. **Nenhuma política de despejo foi implementada.**
+As chaves continuam vindo do servidor (remetente e ID de mensagem), nada
+esvazia os mapas, e não há reset no `Disconnect`. A movimentação não resolve nem
+atenua o problema — só muda de endereço.
+
+O que mudou é onde a dívida está documentada: o doc do tipo `retry.State`
+(`retry/state.go`) traz o aviso por extenso, e os dois campos carregam a
+referência a F36 individualmente. `HOUSEKEEP.md` ganhou uma "Nota sobre F36 após
+a Fase F/G lote 5" que registra os endereços novos e reafirma que a entrada
+segue **em aberto**, pendente de decisão sobre a política de despejo (que é
+mudança de comportamento observável: um retry legítimo depois do despejo volta a
+ser aceito).
+
+O contraste que F36 já apontava continua valendo e agora está no mesmo arquivo:
+o buffer de recentes, logo abaixo dos dois contadores em `state.go`, é circular
+de `RecentMessagesSize` justamente para não ter esse problema.
+
+#### F52 — um achado NOVO deste lote
+
+Ao mover `lastRetryStoreClear` para o `State`, o compilador não acusou nenhum
+ponto de escrita. `git grep` no HEAD anterior confirma: duas linhas, a declaração
+e uma leitura, **nenhuma atribuição**. O campo fica permanentemente no zero de
+`time.Time`, logo `time.Since(...) > 12h` é sempre verdadeiro e
+`DeleteOldOutgoingEvents` roda a **cada** mensagem enviada com o store de retry
+ligado, e não uma vez a cada doze horas.
+
+**Não foi corrigido** — o lote é extração, e ligar o throttle muda o
+comportamento observável contra o banco. Foi registrado em `HOUSEKEEP.md` (F52) e
+o comportamento atual foi **travado por teste** (`TestAddRecentWithStore` afirma
+dois expurgos em duas gravações consecutivas), para que a correção futura seja
+uma decisão consciente e não uma surpresa.
+
+#### Compatibilidade de API
+
+`RecentMessage`, `recentMessageKey` e `incomingRetryKey` viraram **apelidos de
+tipo**, e não tipos novos:
+
+```go
+type (
+    RecentMessage    = retry.RecentMessage
+    recentMessageKey = retry.RecentKey
+)
+type incomingRetryKey = retry.IncomingKey
+```
+
+`internals.go` cita `RecentMessage` na assinatura de dois métodos de
+`DangerousInternalClient` (`GetRecentMessage`, `GetMessageForRetry`) e um apelido
+faz esse arquivo compilar sem ser tocado. Confirmado: `git status` não o lista.
+Travado por `TestRecentMessageEhApelidoDeTipo`, que faz a atribuição cruzada nos
+dois sentidos — só compila se for apelido de verdade.
+
+Os campos do tipo passaram de `wa`/`fb` para `WA`/`FB`. Isso é **alargamento** da
+superfície de `internals.go` (o tipo antes só tinha campos não exportados, logo
+era inutilizável de fora), não quebra.
+
+`RequestFromPhoneDelay` **continua sendo variável da raiz**. Variáveis não podem
+ser reexportadas por apelido em Go preservando identidade, e esta é API pública
+ajustável em tempo de execução — mover o valor para o subpacote quebraria quem
+já a ajusta. O subpacote lê o valor atual a cada chamada, pelo `RerequestDelay`
+do `Transport`.
+
+`FBMessageApplicationVersion` passou a ser definida como
+`= retry.FBApplicationVersion`, em `sendfb.go`. Continua sendo API pública da
+raiz, com o mesmo valor (2) e o mesmo tipo (constante sem tipo); o ganho é fonte
+única — antes o caminho de retry e o de envio normal poderiam divergir sem
+quebrar o build. Travado por `TestConstantesDeRetrySaoApelidos`.
+
+As sete constantes de `retry_constants.go` viraram apelidos das do subpacote e
+**continuaram existindo na raiz**, porque o domínio de retry não é o único a
+citá-las: `maxOutgoingRetryReceipts` é lida por `message_decrypt.go`.
+
+Guardas de receptor nil foram acrescentadas a todas as fachadas. Coberto por
+`TestFachadaDeRetryRecusaClientNil`.
+
+#### Comportamento preservado de propósito
+
+Registrado porque "só mudou o encanamento" seria generoso demais:
+
+- **A guarda de `MessageIDs[0]` da Fase E lote 5 atravessou a extração.** O
+  caminho de *erro* de `TryHandleReceipt` indexava `receipt.MessageIDs[0]` cru; a
+  guarda e o comentário que a explicam estão em `retry/handle.go`, e
+  `TestTryHandleReceiptWithoutMessageIDs` a trava.
+- **O `recover` de `TryHandleReceipt` continua sendo o primeiro `defer`**, antes
+  da aquisição do semáforo. O call site chama a função com `go`, sem ninguém para
+  pegar o pânico. Travado por `TestTryHandleReceiptRecoversFromPanic`.
+- **A assimetria dos erros de chave em `SendReceipt`**: falha ao gerar a prekey é
+  logada e o recibo sai **sem** `<keys>`; falha ao serializar a conta **aborta**.
+  É do upstream. Travado por `TestSendReceiptKeyErrorsAreAsymmetric`.
+- **O ramo do store persistente em `GetForRetry` é TERMINAL**: com
+  `UseRetryMessageStore` ligado, o callback `GetMessageForRetry` não é consultado
+  — nem quando o store não acha nada (nesse caso o formato vazio cai no `default`
+  de `ParseRecent` e vira erro). Travado por
+  `TestGetForRetryFromStoreIsTerminal`.
+- **`ImmediateRequestFromPhone` não checa `RerequestFromPhoneEnabled`**, ao
+  contrário da versão adiada: o caminho de decriptação a chama direto quando
+  `SynchronousAck` está ligado. Travado por
+  `TestImmediateRequestFromPhoneIgnoresTheFlag`.
+- **Falha ao consultar o LID na hora de cifrar é tolerada**, enquanto o mesmo
+  erro dentro de `GetForRetry` **aborta**. A assimetria é do upstream. Travado por
+  `TestHandleReceiptLIDLookupErrorAtEncryptIsTolerated`.
+- **`device_fanout=false` só entra fora de grupo**, e os três atributos opcionais
+  (`participant`, `recipient`, `edit`) são copiados do nó original quando
+  presentes.
+
+#### Cobertura
+
+**98,1% de statements**, sob `-race`. Os testes da Fase E lote 5
+(`retry_test.go`, 297 linhas) foram **relocados e adaptados**: viraram
+`retry/recent_test.go`, `retry/phone_test.go` e `retry/state_test.go`, chamando
+as funções livres com um duble de `Transport`. O lote acrescentou
+`retry/handle_test.go` e `retry/send_test.go`, que cobrem o que antes não tinha
+como ser alcançado sem socket, banco e sessão Signal — o caminho completo de
+`HandleReceipt` nos dois protocolos (WA e FB), os três caminhos de bundle, os
+quatro caminhos de `GetForRetry`, e a montagem do recibo de retry.
+
+Os **cinco** blocos descobertos são todos ramos de erro de `proto.Marshal` sobre
+mensagens válidas já em memória, e ficam listados em vez de fabricados:
+
+| Bloco | O que é | Por que não dá para alcançar |
+|---|---|---|
+| `handle.go` (marshal na `HandleReceipt`) | erro devolvido por `marshalForRetry` | os dois `proto.Marshal` de baixo nunca falham |
+| `handle_parts.go` (×2) | `proto.Marshal(msg.WA)` / `proto.Marshal(msg.FB)` | mensagem válida em memória; `proto.Marshal` só falha com campos required faltando em proto2, que estes não têm |
+| `recent.go` | `proto.Marshal` da mensagem a guardar | idem |
+| `send.go` | `proto.Marshal(Store.Account)` | idem; nem mesmo um `Account` nil produz erro (`proto.Marshal` de mensagem tipada nil devolve `[]byte{}, nil`) |
+
+Alcançá-los exigiria injeção de dependência que o código não tem. Nenhum foi
+"coberto" com truque. O teste `TestSendReceiptKeyErrorsAreAsymmetric/falha ao
+serializar a conta aborta` documenta explicitamente essa impossibilidade no
+próprio corpo, em vez de fingir que exercita o ramo.
+
+Um bloco que **era** inalcançável no primeiro rascunho e deixou de ser: o
+`return bundle, nil` do ramo `<keys>` de `resolveBundle`. Ele exige um nó de
+bundle de prekey estruturalmente válido; `TestHandleReceiptUsesValidBundleFromNode`
+monta um (registro de 4 bytes big-endian, `<identity>` de 32 bytes e um `<skey>`
+gerado por `prekeys.ToNode`) em vez de deixar o caminho normal do protocolo
+descoberto.
+
+Uma armadilha do duble vale nota: `HasSession` do store falso começa devolvendo
+`true`. Sem isso, **todo** teste do caminho feliz cairia no ramo de recriação de
+sessão e precisaria de um bundle — a primeira versão do arquivo tinha o padrão
+`false` e treze testes falhavam com "didn't get prekey bundle".
+
+Outra: os atributos do XML binário chegam como **string**, sempre. Montar
+`Attrs{"count": 2}` com um `int` faz o `AttrGetter` recusar com "expected
+attribute 'count' to be string, but was int". Os helpers dos testes usam
+`strconv.Itoa`.
+
+#### Estado da revisão — NÃO REVISADO INDEPENDENTEMENTE
+
+A mudança de concorrência deste lote — a maior de todos, cinco locks e sete
+campos — **não** teve revisão independente. O que a sustenta é: `make check`
+verde com **exit 0 observado**, cobertura de 98,1% e 100,0% medida sob `-race`,
+`go vet ./internal/wa-noise/...` limpo, e a comparação manual de cada função
+movida contra o original — feita **por quem escreveu o commit**, e portanto
+**não** independente.
+
+Isto está escrito aqui exatamente com a franqueza que a retratação do lote 1
+(o "review independente" fabricado, commits `8d4ec40`/`d664dbe`) tornou
+obrigatória. **Nenhuma revisão externa foi produzida para este lote, e nada
+abaixo deve ser lido como se tivesse sido.**
+
+Os pontos que mais mereceriam revisão externa, em ordem de risco:
+
+1. **`ShouldRecreateSession` segurando o lock durante `ContainsSession`.** É o
+   único lugar do domínio onde um mutex atravessa uma ida ao banco. A alegação é
+   que a estrutura não mudou; ela merece ser conferida statement a statement
+   contra o HEAD anterior.
+2. **`CancelPendingPhone` chamando `cancel()` sob `RLock`.** O argumento de
+   ausência de reentrância está escrito no doc do método, mas não foi verificado
+   por ninguém além de quem o escreveu.
+3. **A criação preguiçosa dos cinco mapas.** O racional é o mesmo dos lotes 3 e
+   4, já revisado lá, mas aqui são cinco mapas e não um.
+4. **`buildGroupOrSelfExtras` mutando `msg.WA` de entrada.** O original mutava o
+   mesmo campo no mesmo ponto; a extração para uma função separada torna a mutação
+   menos visível no call site.
+
+---
+
+### O que NÃO foi extraído, e por quê
+
+**`receipt.go` — obstáculo genuíno, pelo mesmo motivo que `request.go` no lote 4.**
+É o substrato de **ack** do fork inteiro. `sendAck`, `maybeDeferredAck` e
+`backgroundIfAsyncAck` são chamados de `message_decrypt.go` (nove call sites),
+de `call.go`, de `notification.go` e do mapa de `nodeHandlers` em `client.go`;
+`buildBaseReceipt` é usado pelo caminho de retry **e** por `sendMessageReceipt`.
+Extraí-lo exigiria arrastar junto o socket e o `sendNode`, ou seja, o núcleo de
+conexão que a Fase D já identificou como não fatiável — e, pior, obrigaria todo
+domínio que hoje só chama `cli.sendAck(...)` a ganhar mais uma interface. Além
+disso `parseReceipt` depende de `parseMessageSource`, que é o núcleo de parsing
+de mensagem (lote 9 da Fase E, também na raiz), e `MarkRead` depende de
+`GetPrivacySettings`.
+
+O que **foi** feito em vez disso: `retry.Transport` expõe `BuildBaseReceipt`, o
+único ponto em que o domínio de retry precisa do arquivo. `receipt_test.go` na
+raiz ficou intocado. **Parado de propósito**, com o mesmo critério que parou
+`request.go` no lote 4.
+
+**`handleNotification` (o roteador) — extraí-lo não isolaria nada.** É um
+`switch` de treze ramos que despacha para treze **outros** domínios da raiz
+(prekeys, appstate, grupo, mídia, tctoken, pareamento...). Um `Transport` para
+ele teria quinze métodos que são pass-through puro para `*Client`; o subpacote
+"isolado" dependeria de tudo. O que fazia sentido extrair dali — a **taxonomia**
+do atributo `type` — foi extraído, e o switch cita `notification.Type*`.
+
+**`notification_device.go` — a state não é dele.** `handleDeviceNotification`,
+`handleFBDeviceNotification` e `handleOwnDevicesNotification` operam inteiramente
+sobre `cli.userDevicesCache` e `cli.userDevicesCacheLock`, que são **propriedade
+de `user_devices.go`** (não extraído; ver F37 em `HOUSEKEEP.md`, que é sobre esse
+mesmo cache). Os três seguram o lock do cache durante a função inteira e fazem
+read-modify-write sobre ele. Mover os handlers sem mover o dono do estado
+significaria expor o mapa e o lock por uma interface — o oposto de encapsular.
+**A extração correta é junto com `user_devices.go`, num lote de usuário.**
+
+**`handleEncryptNotification` e `handleAppStateNotification` — são cola
+entre domínios.** O primeiro chama `uploadPreKeys`, mexe em
+`Store.Identities`/`Store.Sessions`, chama três funções de tctoken e despacha um
+evento; o segundo chama `FetchAppState` e compara contra dois sentinelas de erro
+da raiz. Um `Transport` para eles seria pass-through para os subpacotes que já
+existem, sem ganho.
+
+**`handleAccountSyncNotification` — é um sub-roteador**, pelo mesmo motivo do
+roteador principal: despacha para privacidade, dispositivos próprios, foto e
+blocklist. Só o ramo de blocklist foi extraído.
+
+**`handlePrivacyTokenNotification` — é tctoken chegando por notificação.**
+Grava em `Store.PrivacyTokens`, depende de `resolveTCTokenStorageLID` e cita
+`tctoken.TokenType`. Se for extraído, o destino natural é `tctoken/` (lote 4), e
+não `notification/`. Não foi feito neste lote por orçamento; não há impedimento
+técnico conhecido.
+
+**`internals.go` e `internals_generate.go` — fora do escopo por designação.**
+F29 em `HOUSEKEEP.md`. Confirmado intocados: `git status` não os lista nos dois
+commits, e compilam sem mudança contra as fachadas (é por isso que
+`RecentMessage`, `recentMessageKey` e `incomingRetryKey` viraram apelidos de tipo
+em vez de tipos novos).
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `notification/` e `retry/`. Todos os arquivos de
+produção deles ficam abaixo do teto de 300 linhas (maior: `retry/state.go`, 278).
+`retry/handle.go` bateu 355 linhas e foi dividido em `handle.go` +
+`handle_parts.go` — o gate pegou, como devia. `client.go` **encolheu** de 300
+para 270 linhas ao trocar sete campos por um.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado
+(`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`), +65/-3
+linhas. O gate de golden pegou a divergência antes do commit.
+
+`git diff --stat internal/wa-noise/proto/` **vazio**.
+
+`LC_NUMERIC=C LC_ALL=C make check` verde, **exit 0 observado**: build, vet, testes
+com `-race`, lint, gates de cobertura e de cobertura de log, licença, deriva,
+tamanho de arquivo e testes do fork.

@@ -1790,3 +1790,85 @@ sobre corrigir agora ou depois.
   prekeys". Também evita enviar um `<list>` vazio ao servidor.
 - **Status**: **não corrigido**. Bug pré-existente fora do escopo do lote 4, que
   era extração pura; preservado bit a bit. Registrado para decisão do usuário.
+
+---
+
+## F52 — o throttle de expurgo do store de retry é código morto: `lastRetryStoreClear` nunca é escrito
+
+**Data / contexto**: 2026-08-07, Fase F/G lote 5 do ADR-0004
+(notificação/retry/recibo). Achado ao mover o campo para `retry.State`, quando
+o compilador não acusou nenhum ponto de escrita.
+
+**Onde**: antes da extração, `internal/wa-noise/client.go:143` (declaração do
+campo) e `internal/wa-noise/retry_recent_messages.go:59` (a única leitura).
+Hoje, `internal/wa-noise/retry/state.go` (campo `lastStoreClear`) e
+`internal/wa-noise/retry/recent.go` (a leitura, dentro de `AddRecent`).
+
+```go
+// retry_recent_messages.go:59, no HEAD anterior ao lote
+if time.Since(cli.lastRetryStoreClear) > retryStoreClearInterval {
+    err = cli.Store.EventBuffer.DeleteOldOutgoingEvents(ctx)
+    ...
+}
+```
+
+**Problema**: `git grep -n "lastRetryStoreClear" internal/wa-noise/` no HEAD
+anterior devolve exatamente duas linhas — a declaração e a leitura acima.
+**Nenhuma atribuição, em lugar nenhum.** O campo fica permanentemente no zero
+de `time.Time`, `time.Since(zero)` é da ordem de dois mil anos, e a comparação
+contra `retryStoreClearInterval` (12h) é sempre verdadeira. Consequência
+observada: `DeleteOldOutgoingEvents` roda a **cada** mensagem enviada com
+`UseRetryMessageStore` ligado, e não uma vez a cada 12 horas.
+
+Evidência empírica produzida nesta sessão:
+`TestAddRecentWithStore` (`internal/wa-noise/retry/recent_test.go`) afirma
+`deleteOldCalls == 1` depois da primeira gravação e `== 2` depois da segunda —
+duas gravações consecutivas, dois expurgos, sem qualquer espera.
+
+Não é corrupção de dados nem pânico: é um DELETE indo ao banco por mensagem
+enviada, num caminho quente (envio), com o custo escondido atrás de uma
+condição que aparenta ser um throttle.
+
+**Correção sugerida**: escrever o carimbo logo depois do expurgo bem-sucedido,
+dentro do mesmo `if`:
+
+```go
+if err = t.Store().EventBuffer.DeleteOldOutgoingEvents(ctx); err != nil {
+    return fmt.Errorf(...)
+}
+t.State().SetLastStoreClear(time.Now())
+```
+
+O campo precisaria ganhar um setter e, muito provavelmente, um lock próprio —
+a leitura de hoje já é feita sem sincronização nenhuma, e `AddRecent` é
+chamada de qualquer goroutine que envie mensagem, então o campo é uma corrida
+de dados latente além de um throttle morto. (Hoje a corrida é benigna na
+prática porque nada escreve; corrigir o throttle a torna real.)
+
+**Status**: **não corrigido**. O lote 5 é extração, e ligar o throttle muda o
+comportamento observável contra o banco (de "expurga sempre" para "expurga a
+cada 12h"), além de exigir uma decisão sobre sincronização. Preservado bit a
+bit, com o comportamento travado por teste para que a correção futura seja
+consciente. Pendente de decisão.
+
+---
+
+## Nota sobre F36 após a Fase F/G lote 5
+
+F36 (os dois contadores de retry que crescem sem limite) continua **em
+aberto**. O lote 5 **moveu** os dois mapas de `*Client` para
+`internal/wa-noise/retry.State` — `incomingRetryRequestCounter` virou
+`State.incomingCounter` e `messageRetries` virou `State.messageRetries` — e
+**não** implementou política de despejo nenhuma.
+
+A movimentação não resolve nem atenua o problema: as chaves continuam vindo do
+servidor, nada esvazia os mapas, e não há reset no `Disconnect`. O que mudou é
+onde a dívida está documentada — o doc do tipo `retry.State`
+(`internal/wa-noise/retry/state.go`) traz o aviso por extenso, e os dois campos
+carregam a referência a F36 individualmente.
+
+Os endereços de código citados no corpo de F36 acima (`retry.go:110-113`,
+`retry_receipt_send.go:29-37`, `client.go:233,239`) referem-se ao HEAD anterior
+ao lote 5 e não existem mais nessa forma; os pontos equivalentes hoje são
+`retry/handle.go` (chamada a `IncrementIncoming`), `retry/send.go` (chamada a
+`BumpMessageRetries`) e `retry/state.go` (os dois mapas e suas seções críticas).
