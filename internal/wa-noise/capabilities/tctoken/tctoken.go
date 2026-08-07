@@ -1,9 +1,3 @@
-// Copyright (c) 2025 Tulir Asokan
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 // Package tctoken implementa o trusted contact token: a emissao, o cache em
 // memoria e a poda dos tokens que acompanham mensagens enviadas.
 package tctoken

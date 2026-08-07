@@ -1,9 +1,3 @@
-// Copyright (c) 2021 Tulir Asokan
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 // Este arquivo e o decrypt_loop.go/decrypt_session.go sao o caminho de
 // decifragem Signal de TODA mensagem que entra. Foram extraidos de forma
 // MECANICA: cada `cli.X` virou `t.X` (ou a free function correspondente) e nada

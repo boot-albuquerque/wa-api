@@ -1,9 +1,3 @@
-// Copyright (c) 2026 Tulir Asokan
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 // Package send reune o caminho de SAIDA de mensagens do fork: o fluxo waE2E
 // (SendMessage) e o fluxo v3/FB (SendFBMessage).
 //

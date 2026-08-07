@@ -1,9 +1,3 @@
-// Copyright (c) 2026 Tulir Asokan
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 // Package message reune o caminho de ENTRADA de mensagens do fork: parsing do
 // stanza <message>, decifragem Signal (DM, grupo e bot), o tratamento das
 // partes de protocolo da mensagem ja' decifrada, o history sync, os segredos de
