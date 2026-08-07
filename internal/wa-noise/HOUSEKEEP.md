@@ -3156,3 +3156,104 @@ para esta entrada nos dois arquivos.
 `@s.whatsapp.net` sem normalizar — exatamente o comportamento anterior a
 `3ac8073`. Não há regressão em relação ao que já estava em `develop`; o que há
 é uma feature que nunca chegou a funcionar.
+
+## F66 — payload incompleto devolve HTTP 500; 67 validações de use case não têm categoria
+
+**Data**: 2026-08-07.
+**Contexto**: smoke HTTP após o merge em `feature/macbook-lucas`.
+
+**Como reproduzir**:
+
+```
+curl -X POST 'http://localhost:8080/chat/send/text?token=t1' \
+     -H 'Content-Type: application/json' -d '{}'
+{"code":500,"error":"internal server error","success":false}
+```
+
+Log do servidor no mesmo request:
+
+```
+"error":"missing Phone in payload","message":"send message use case failed"
+"status":500,"outcome":"server_error"
+```
+
+**Problema**: campo obrigatório ausente no corpo enviado pelo cliente é erro
+**do cliente** (400), não do servidor. O servidor identifica a causa
+corretamente — a mensagem de log é exata — e mesmo assim responde 500 e
+classifica o `outcome` como `server_error`.
+
+O contraste dentro do MESMO endpoint mostra que não é regra, é acidente:
+
+| Entrada | Resposta | Onde é rejeitada |
+| --- | --- | --- |
+| `{"Phone":"nao-e-um-jid","Body":"oi"}` | **400** | handler, que já usa `apperr` |
+| `{}` | **500** | use case, `fmt.Errorf` sem categoria |
+
+**Alcance**: 67 ocorrências de `fmt.Errorf("missing ...")` /
+`errors.New("missing ...")` em `pkg/application/usecase/`, contra apenas 4
+arquivos de use case que usam `apperr.New`. Exemplos:
+`chat/reject_call.go:31,35`, `chat/request_unavailable_message.go:31,35,39`,
+`group/group_request.go:32,71,76,81,131`, `group/get_group_invite_info.go:30`,
+`chat/archive_chat.go:31`.
+
+**Por que importa mais que um número errado**: 5xx tem semântica de retry.
+Um cliente HTTP bem comportado (e todo SDK de fila) trata 500 como falha
+transitória do servidor e **retenta**. Um payload permanentemente malformado
+seria retentado indefinidamente, sem nunca poder dar certo. 400 encerra a
+tentativa.
+
+**Correção sugerida**: envolver as validações em
+`apperr.New(<code>, apperr.CategoryValidation, <msg>, false, nil)` e ligar
+`Category.HTTPStatus()` no caminho de resposta.
+
+Vale notar: `Category.HTTPStatus()` **já existe e já tem teste**, mas nada o
+chama ainda — o mesmo achado que apareceu ao classificar
+`user_info_failed` (que foi corrigido para `CategoryValidation` nesta leva,
+mas cuja tradução para status HTTP depende desta mesma ligação). Esta entrada
+é a evidência de produção de que a ligação faz falta, e não só de que está
+pendente no plano.
+
+**Status**: **não corrigido**. São 67 sítios mais a ligação do
+`HTTPStatus()`; é mudança de contrato de API (respostas que hoje são 500
+passam a ser 400) e merece commit próprio, fora do merge.
+
+## F67 — o `.env` que o `run.sh` gera tem chave AES de tamanho inválido
+
+**Data**: 2026-08-07. **Contexto**: subir o ambiente para o smoke HTTP.
+
+**Onde**: `run.sh:24-25`.
+
+```
+WA_API_GLOBAL_ENCRYPTION_KEY=MinhaChaveDe32Caracteres1234567890   # 34 bytes
+WA_API_GLOBAL_HMAC_KEY=MinhaHMACKeyDe32Caracteres1234567         # 33 bytes
+```
+
+**Problema**: AES aceita chave de 16, 24 ou 32 bytes. A primeira tem **34**,
+a segunda **33** — apesar de ambas dizerem "De32Caracteres" no próprio valor.
+No startup:
+
+```
+{"level":"error","error":"failed to create cipher: crypto/aes: invalid key size 34",
+ "message":"Failed to encrypt global HMAC key"}
+```
+
+E o servidor **continua subindo**. A chave HMAC global nunca é gravada, então
+todo o caminho de HMAC fica silenciosamente inerte para quem seguir o
+`run.sh` — que é o caminho documentado para levantar o ambiente local.
+
+**Dois defeitos, não um**:
+
+1. As constantes do template estão erradas (trivial).
+2. Falha ao inicializar material criptográfico é logada e **ignorada**. Se a
+   chave global é requisito, o startup deveria abortar; se é opcional, o log
+   deveria ser `warn` com a consequência explícita ("HMAC global desativado"),
+   não um `error` que ninguém trata.
+
+O item 2 é o que interessa: com a chave corrigida o sintoma some, mas o
+comportamento de engolir falha de cifra continua lá.
+
+**Correção sugerida**: cortar as duas chaves para 32 bytes E decidir
+explicitamente entre fail-fast e degradação anunciada.
+
+**Status**: **não corrigido**. O item 1 é uma linha; o item 2 é decisão de
+política de inicialização.
