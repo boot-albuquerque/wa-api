@@ -1596,3 +1596,63 @@ da API pública do fork, e `AutoReconnectErrors` é explicitamente documentado e
 consumidores e cria divergência permanente contra o upstream, que é exatamente o
 que `PATCHES.md` existe para minimizar. Precisa de decisão do usuário sobre
 aceitar a mudança de API.
+
+---
+
+## F47 — `UploadNewsletterReader` engole o erro de `io.Copy`
+
+**Data / contexto**: 2026-08-07, durante a Fase F/G lote 1 do ADR-0004
+(extração de `internal/wa-noise/media/`). Achado ao mover o arquivo, não ao
+procurar bugs.
+
+**Onde**: `internal/wa-noise/media/upload_newsletter.go:35-44` (era
+`internal/wa-noise/upload_newsletter.go:60-72` antes da extração).
+
+```go
+hasher := sha256.New()
+var fileLength int64
+fileLength, err = io.Copy(hasher, data)   // <- err atribuido aqui...
+resp.FileLength = uint64(fileLength)
+resp.FileSHA256 = hasher.Sum(nil)
+_, err = data.Seek(0, io.SeekStart)       // <- ...e sobrescrito aqui, sem ser checado
+if err != nil {
+    err = fmt.Errorf("failed to seek to start of data: %w", err)
+    return
+}
+```
+
+**Problema**: o erro de `io.Copy` nunca é checado — é sobrescrito pela
+atribuição seguinte. Se a leitura do `io.ReadSeeker` do chamador falhar no meio,
+`resp.FileLength` e `resp.FileSHA256` ficam calculados sobre um conteúdo
+**parcial**, o `Seek` volta ao início e o upload segue normalmente. O servidor
+recebe o conteúdo completo (o `RawUpload` relê o mesmo reader) mas com um
+`FileSHA256` e um `FileLength` que descrevem só o pedaço lido antes da falha.
+O resultado é uma mídia de newsletter publicada com hash errado: o destinatário
+que validar o `FileSHA256` recusa o anexo, e o erro original desaparece sem
+rastro nenhum — nem log.
+
+**Reprodução**: passar um `io.ReadSeeker` que devolve `n>0` e depois um erro
+(um `iotest.TimeoutReader` sobre um `bytes.Reader`, com `Seek` funcional).
+`UploadNewsletterReader` devolve `err == nil` e um `FileSHA256` que não é o hash
+do conteúdo completo.
+
+**Correção sugerida**: checar o erro logo após o `io.Copy`, antes de preencher
+`resp`:
+
+```go
+fileLength, err = io.Copy(hasher, data)
+if err != nil {
+    err = fmt.Errorf("failed to hash data: %w", err)
+    return
+}
+```
+
+Duas linhas, sem mudança de assinatura. O caminho equivalente com cifra
+(`UploadReader`) já faz isso: checa o erro de `cbcutil.EncryptStream` antes de
+seguir.
+
+**Status**: **não corrigido**. Está fora do escopo do lote 1 da Fase F/G, que é
+extração de pacote com equivalência de comportamento — corrigir aqui misturaria
+uma mudança de comportamento numa movimentação que precisa ser auditável como
+"nada mudou". Conforme `CLAUDE.md`, fica registrado para decisão do usuário
+sobre corrigir agora ou depois.

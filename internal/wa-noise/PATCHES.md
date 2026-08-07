@@ -4923,3 +4923,254 @@ não patch, foram registradas em `HOUSEKEEP.md` (F29, F42, F44, F45, F46).
 pacote único em torno de `Client` — a análise que sustenta isso está em "a raiz
 de `internal/wa-noise/` **não** vira subpacotes" e no que a Fase D conseguiu e
 não conseguiu extrair. Nada na Fase E alterou assinatura pública, tipo ou campo.
+
+---
+
+## Fase F/G — lote 1: `media/` (extração real + cobertura), 2026-08-07
+
+### Como esta seção difere das anteriores
+
+As Fases A–E foram melhorias **in loco**: dividir arquivos, nomear constantes,
+adicionar log e teste, corrigir bugs — sempre dentro de `package whatsmeow`, sem
+mover nada para outro pacote. Esta seção é a primeira **extração de subpacote**:
+código que era método de `*Client` na raiz virou função livre em
+`internal/wa-noise/media/`, e a raiz virou fachada fina.
+
+O que tornou isso possível é exatamente o que a **Fase D** havia medido e
+concluído ser impossível por movimentação simples. A Fase D registrou que mover
+os arquivos de domínio da raiz para subpacotes fecha ciclo de import, porque o
+pipeline de envio/recepção (que fica na raiz) chama de volta a lógica de domínio
+por métodos não exportados de `*Client`. A saída que a Fase D apontou — e que
+este lote executa — é **inverter a dependência**: o subpacote define uma
+interface estreita, opera sobre ela, e **nunca importa a raiz**. A raiz importa
+o subpacote (uma direção só) e mantém métodos-fachada em `*Client`.
+
+### As interfaces
+
+Em `internal/wa-noise/media/transport.go`, duas interfaces, deliberadamente
+pequenas:
+
+```go
+// o que o caminho HTTP puro precisa
+type HTTPTransport interface {
+    HTTPClient() *http.Client
+    Log() waLog.Logger
+    IsMessenger() bool
+    MessengerUserAgent() string
+    ReturnDownloadWarnings() bool
+}
+
+// + resolução da lista de hosts de mídia
+type Transport interface {
+    HTTPTransport
+    MediaConnCache() *ConnCache
+    SendMediaConnIQ(ctx context.Context) (*waBinary.Node, error)
+}
+```
+
+Duas decisões de projeto valem registro:
+
+1. **`SendMediaConnIQ` em vez de expor `sendIQ`.** `infoQuery` é tipo da raiz;
+   expô-lo na interface arrastaria a raiz para dentro de `media/` e refaria o
+   ciclo. A interface expõe só "mande o IQ `<media_conn>` e me devolva o nó"; a
+   interpretação do nó (`ParseConnNode`) ficou em `media/`, onde é testável sem
+   socket.
+
+2. **O adaptador é não exportado.** `mediaTransport` (`media_transport.go`) é um
+   tipo privado da raiz que embrulha `*Client`. `*Client` **não** ganhou nenhum
+   método exportado novo — a API pública do fork é bit-a-bit a de antes.
+
+### Arquivos
+
+**Criados** (`internal/wa-noise/media/`, `package media`): `constants.go`,
+`errors.go`, `transport.go`, `conn.go`, `types.go`, `download.go`,
+`download_transport.go`, `download_file.go`, `upload.go`,
+`upload_newsletter.go`, `retry.go`.
+
+**Removido**: `media_constants.go` (as constantes foram para
+`media/constants.go`; nenhuma era usada fora do domínio de mídia).
+
+**Reduzidos a fachada** (só apelidos de tipo e métodos que delegam):
+`download.go` (170→102), `download_types.go` (144→52),
+`download_transport.go` (157→46), `download-to-file.go` (234→86),
+`mediaconn.go` (97→36), `upload.go` (246→82), `upload_newsletter.go` (73→66).
+
+**Parcialmente mantido**: `mediaretry.go` (197→151). A cripto do receipt foi
+para `media/retry.go`; ficaram na raiz `SendMediaRetryReceipt` (precisa de
+`sendNode`/`getOwnID`), `parseMediaRetryNotification` (usa `ElementMissingError`,
+que é erro genérico de XML da raiz, não de mídia) e
+`handleMediaRetryNotification` (usa `dispatchEvent`).
+
+**Criado na raiz**: `media_transport.go` — o adaptador.
+
+**Tocados fora do lote**: `client.go` (os dois campos `mediaConnCache`/
+`mediaConnLock` viraram um `mediaConn media.ConnCache`), `errors.go` (os erros
+de mídia viraram apelidos dos do subpacote) e `message_history_sync.go` (única
+chamada reversa: `encryptMediaRetryReceipt` → `media.EncryptRetryReceipt`).
+
+### Compatibilidade de API — o ponto central
+
+Os tipos do domínio de mídia continuam existindo na raiz como **apelidos**
+(`type X = media.Y`), não como definições novas. Isso importa: apelido é o mesmo
+tipo, então valores atravessam a fronteira dos dois pacotes sem conversão e
+qualquer chamador externo continua compilando.
+
+| Nome na raiz | Definição real |
+|---|---|
+| `MediaType` | `media.Type` |
+| `MediaImage`, `MediaVideo`, … | `media.TypeImage`, `media.TypeVideo`, … |
+| `DownloadableMessage` | `media.Downloadable` |
+| `DownloadableThumbnail` | `media.DownloadableThumbnail` |
+| `MediaTypeable` | `media.Typeable` |
+| `MediaConn`, `MediaConnHost` | `media.Conn`, `media.ConnHost` |
+| `UploadResponse` | `media.UploadResponse` |
+| `File` | `media.File` |
+| `DownloadHTTPError` | `media.DownloadHTTPError` |
+
+Os sentinelas de erro (`ErrNoURLPresent`, `ErrMediaDownloadFailedWith404`, …)
+são **atribuições dos mesmos valores**, não `errors.New` duplicados — se fossem
+cópias, `errors.Is` falharia para quem compara com os nomes da raiz. Há teste
+explícito disso em `media_transport_test.go`.
+
+`go build ./...` do repositório inteiro passa **sem uma única alteração de call
+site fora de `internal/wa-noise/`** — os 249 pontos de chamada em
+`pkg/infra/wa-noise/` e afins não foram tocados. `internals.go` (gerado) também
+compila sem mudança: todos os métodos não exportados que ele embrulha continuam
+existindo em `*Client` como wrappers.
+
+### Concorrência — o lock da media connection
+
+Único ponto de estado compartilhado do lote. Antes:
+
+```go
+// client.go
+mediaConnCache *MediaConn
+mediaConnLock  sync.Mutex
+
+// mediaconn.go
+func (cli *Client) refreshMediaConn(ctx context.Context, force bool) (*MediaConn, error) {
+    cli.mediaConnLock.Lock()
+    defer cli.mediaConnLock.Unlock()
+    if cli.mediaConnCache == nil || force || time.Now().After(cli.mediaConnCache.Expiry()) {
+        var err error
+        cli.mediaConnCache, err = cli.queryMediaConn(ctx)
+        ...
+```
+
+Agora o par vira um tipo dono do próprio lock, `media.ConnCache`
+(`media/conn.go`), e `*Client` tem um campo só. **Os pontos de aquisição e
+liberação são os mesmos**: um `Lock()` no topo de `Refresh`, `defer Unlock()`, e
+o lock permanece segurado durante a consulta ao servidor — igual ao original.
+Não é o desenho ideal (uma consulta lenta bloqueia todo download concorrente),
+mas mudá-lo seria mudança de comportamento, e este lote é extração, não
+redesenho. `ConnCache` tem `Set`/`Get` próprios, cada um com seu
+`Lock`/`defer Unlock`, e nenhum deles é chamado de dentro de `Refresh` — não há
+reentrância.
+
+O ponteiro do cache é estável: `mediaTransport.MediaConnCache()` devolve
+`&t.cli.mediaConn`, e `mediaTransport` é um wrapper de `*Client` (o mutex nunca
+é copiado por valor). Teste de concorrência real em `conn_test.go`
+(`TestRefreshSerializaConcorrencia`: 8 goroutines, cache vazio, exatamente 1
+consulta) e a suíte inteira roda sob `-race` em `make check`.
+
+### Comportamento preservado de propósito
+
+**O cache é zerado quando a consulta falha.** O original fazia
+`cli.mediaConnCache, err = cli.queryMediaConn(ctx)` — atribuição antes da
+checagem de erro, então uma falha transitória do IQ descartava a mediaConn em
+cache. É discutível (sobretudo com `force=true`, onde uma conn ainda válida é
+perdida), mas é o comportamento de origem e foi mantido byte-a-byte. Está
+documentado no doc comment de `ConnCache.Refresh` e coberto por
+`TestRefreshZeraOCacheEmFalha`, para que a decisão seja explícita e não acidente.
+
+**`DownloadMediaWithPathToFile` não valida a barra inicial do `directPath`**,
+enquanto `DownloadMediaWithPath` valida. Assimetria do upstream, preservada e
+documentada no doc comment de `DownloadWithPathToFile`.
+
+**`ReturnDownloadWarnings` continua sendo a variável global da raiz.** Ela é
+lida pelo adaptador (`Transport.ReturnDownloadWarnings()`) no mesmo ponto do
+fluxo em que era lida antes. Não virou campo nem parâmetro: quem escreve nela
+hoje continua funcionando.
+
+### Mudança de comportamento deliberada — guardas de receiver nil
+
+Antes, só `Download`, `DownloadToFile`, `SendMediaRetryReceipt` e
+`refreshMediaConn` checavam `cli == nil`; os demais métodos exportados de mídia
+estouravam nil deref (`FetchStickerPack`, `DownloadFB`, `DownloadMediaWithPath`,
+`Upload`, `UploadReader`, `UploadNewsletter`, `UploadNewsletterReader`,
+`DeleteMedia`, `DownloadThumbnail`, `DownloadAny`, `DownloadFBToFile`,
+`DownloadMediaWithPathToFile`, `queryMediaConn`). Todos passaram a devolver
+`ErrClientIsNil`, na mesma linha do que as Fases A–E fizeram para nil derefs em
+outros domínios. Coberto por `TestWrappersDeMidiaRecusamClientNil`.
+
+### Helpers extraídos (equivalência verificada por leitura)
+
+- `retryDelay(err, retryNum)` — o cálculo de backoff estava duplicado
+  literalmente nos dois laços de retry (memória e arquivo).
+- `isTerminalDownloadResult(err)` — a mesma cadeia de sete `errors.Is` aparecia
+  em `DownloadMediaWithPath` e `DownloadMediaWithPathToFile`.
+- `buildDownloadURL(...)` — o mesmo `fmt.Sprintf` nos dois laços de host.
+- `directURL(msg)` — o mesmo `msg.(downloadableMessageWithURL)` + prefixo
+  `web.whatsapp.net` em `Download` e `DownloadToFile`.
+- `resolveUploadTarget(...)` — a decisão de mms-type/prefixo/host de
+  `rawUpload`. **A ordem das mutações foi preservada**: Messenger troca
+  `audio`→`ptt` primeiro, e só depois newsletter prefixa `newsletter-`; inverter
+  isso produziria `newsletter-audio` em vez de `newsletter-ptt` para Messenger.
+  Coberto caso a caso em `TestResolveUploadTarget`.
+
+`getMediaKeys` virou `media.GetKeys` sem mudança: continua HKDF-SHA256 com
+`appInfo` como info, 112 bytes, fatiados em 16/32/32/32. O golden de vetor
+(`TestGetKeysGolden`, IV `26cd9086…`) atravessou a extração intacto, assim como
+o golden da chave de retry (`TestRetryKeyGolden`).
+
+### Cobertura
+
+`internal/wa-noise/media/` fecha em **98,8% de statements e 100% de funções**
+(`go test -coverprofile`). Os testes que existiam desde a Fase E lote 1 foram
+**relocados e adaptados**, não descartados: passaram a chamar as funções livres
+direto, passando um `fakeTransport` (`testhelpers_test.go`) em vez de precisar de
+um `*Client`. Foi exatamente o ganho de testabilidade que motivou o desenho — o
+duble tem 7 métodos e nenhuma dependência de socket, store ou sessão.
+
+Além da adaptação, o lote acrescentou testes para caminhos que antes não tinham
+como ser alcançados: `failpaths_test.go` usa um `RoundTripper` que sempre falha e
+implementações de `File` que falham seletivamente (em `Seek`, `ReadAt`,
+`Truncate`, `Stat`, e por fase do fluxo) para cobrir os ramos de erro de I/O.
+
+Os três blocos restantes, e por que ficam de fora:
+
+1. **`upload.go` — `cbcutil.Encrypt` devolvendo erro.** `GetKeys` sempre devolve
+   uma `cipherKey` de exatamente 32 bytes derivada por HKDF; `aes.NewCipher` não
+   falha para esse tamanho. O ramo é inalcançável sem alterar produção.
+2. **`retry.go` — `proto.Marshal` devolvendo erro.** `ServerErrorReceipt` só tem
+   um campo `string` opcional; a serialização não tem como falhar. Mesmo caso.
+3. **`download_file.go` — `fallocate.Fallocate` devolvendo erro.** Exigiria um
+   `*os.File` real cuja pré-alocação falhe **e** uma resposta com
+   `ContentLength > 0` — no macOS e no Linux não há como forçar isso de dentro do
+   teste sem mexer no sistema de arquivos do runner. É o único dos três que é
+   "difícil" e não "inalcançável"; fica registrado como dívida honesta.
+
+Note que os três são ramos de tratamento de erro de operações que não podem
+falhar (1 e 2) ou de uma otimização não essencial (3) — nenhum é caminho de
+protocolo ou de cripto.
+
+### Infra
+
+`scripts/waclient-filesize-check.sh` (`DIRS`) e `WACLIENT_TEST_PKGS` no
+`Makefile` passaram a incluir `internal/wa-noise/media`. Todos os 11 arquivos de
+produção do novo pacote ficam abaixo do teto de 300 linhas (maior:
+`upload.go`, 243). `cmd/logcov/testdata/eligible.golden` foi regenerado — o
+diff é inteiramente a movimentação das funções de mídia de
+`internal/wa-noise` para `internal/wa-noise/media`.
+
+`git diff --stat internal/wa-noise/proto/` continua vazio.
+
+### Fora do escopo
+
+- O desenho do lock (consulta segurando o mutex) não foi mexido — ver acima.
+- `parseMediaRetryNotification` e `ElementMissingError` continuam na raiz. Mover
+  `ElementMissingError` para `media/` seria errado (é erro genérico de parsing de
+  XML, usado por todo o fork); mover só a função exigiria duplicar o tipo.
+- `UploadNewsletterReader` engole o erro de `io.Copy` (o `err` é sobrescrito pelo
+  `Seek` seguinte). É bug pré-existente, fora do escopo de uma extração;
+  registrado em `HOUSEKEEP.md` (F47) e **não corrigido**.
