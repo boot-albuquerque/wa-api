@@ -153,7 +153,7 @@ func HandleReceipt(ctx context.Context, t Transport, receipt *events.Receipt, no
 	} else if fbConsumerMsg != nil {
 		msgAttrs = msgattrs.GetAttrsFromFBMessage(fbConsumerMsg)
 	} else {
-		msgAttrs.Type = "text"
+		msgAttrs.Type = msgattrs.TypeText
 	}
 	if msgAttrs.MediaType != "" {
 		encAttrs["mediatype"] = msgAttrs.MediaType

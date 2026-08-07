@@ -640,10 +640,17 @@ ligada e o parâmetro deve ser removido das três assinaturas, simplificando;
 (b) deveria estar populado, e aí é bug de verdade no upstream. Não dá para
 escolher sem a intenção.
 
-**Status**: **não corrigido**. O ramo fica coberto por
-`TestDecodeMutationsRemovesFakeIndex` (que passa o mapa direto para
-`decodeMutations`), de modo que ele não se degrade silenciosamente caso venha a
-ser ligado. Pendente de investigação no upstream.
+**Status**: **CORRIGIDO** (lote F, 2026-08-07) pela saída (a). A escolha entre
+(a) e (b) dependia de descobrir a intenção no upstream — e essa dependência
+deixou de existir: o código é nosso, então a decisão é nossa. Um parâmetro que
+nenhum chamador popula é pior que a ausência da funcionalidade, porque sugere um
+comportamento que não existe.
+
+O parâmetro saiu das três assinaturas, junto com `indexMACToArray` (que só ele
+usava). `TestDecodeMutationsRemovesFakeIndex` e `TestIndexMACToArray` foram
+substituídos por `TestDecodeMutationsRemoveRemoveApenasUmMAC`, que trava o
+comportamento que de fato existe. Quem precisar da limpeza de MACs legados
+reintroduz com um chamador de verdade.
 
 ---
 
@@ -920,9 +927,24 @@ escrita em lugar nenhum.
 retorno quebraria silenciosamente qualquer chamador que hoje dependa de
 receber o nó de partida. O que faltava era documentação.
 
-**Status**: **não corrigido, documentado**.
-`TestGetChildByTagReturnsTheStartNodeWhenMissing` em `node_test.go` trava e
-explica o comportamento.
+**Status**: **CORRIGIDO** (lote F, 2026-08-07). `GetOptionalChildByTag`
+devolve o `Node` zero na falha, não o nó alcançado até ali.
+
+O aviso da entrada — "mudar o retorno quebraria silenciosamente qualquer
+chamador que hoje dependa de receber o nó de partida" — **estava certo, e
+aconteceu**: `ParseBotInfo` e `ParseMetaInfo` faziam
+`node.GetChildByTag("bot")` / `("meta")` sobre um nó que **já era** o `<bot>` /
+`<meta>`. O lookup sempre errava, e o defeito devolvia o nó de partida — que era
+exatamente o que se queria. Com a correção, todos os atributos passaram a sair
+vazios, e quatro testes de parse acusaram.
+
+A tolerância às duas formas de chamada (o próprio nó ou o pai que o contém) foi
+mantida, agora declarada num helper `nodeOrChild` em vez de herdada de um bug.
+Os outros 63 call sites de `GetChildByTag` passaram sem alteração.
+
+`TestGetChildByTagReturnsTheStartNodeWhenMissing` virou
+`TestGetChildByTagDevolveNodeZeroQuandoNaoAcha`, mais
+`TestGetOptionalChildByTagSinalizaAusenciaPeloOk`.
 
 ---
 
@@ -947,9 +969,15 @@ comportamento que não existe.
 `printable` aceitar `\n` — a segunda muda a saída de log de mensagens de
 texto multilinha, que hoje saem em hex.
 
-**Status**: **não corrigido**. Documentado no comentário de
-`TestNewlinesAreEscapedWhenNotIndenting` em `xml_test.go`, que exercita os
-dois ramos e mostra qual é qual.
+**Status**: **CORRIGIDO** (lote F, 2026-08-07) pela primeira opção: o
+`ReplaceAll` saiu do ramo `[]byte`, com comentário no lugar explicando por que
+ele era inalcançável. A segunda opção (fazer `printable` aceitar `\n`) mudaria
+a saída de log de mensagens de texto multilinha, que hoje saem em hex — mudança
+observável sem benefício claro.
+
+`TestNewlinesAreEscapedWhenNotIndenting` continua válido sem alteração: ele já
+provava que `[]byte` com quebra de linha vai para hex, que é justamente a razão
+de o ramo removido nunca executar.
 
 ---
 
@@ -1680,8 +1708,16 @@ para de casar, e o `<meta polltype>` some do nó sem erro nenhum).
 (`msgattrs.TypeText` etc.) e fazer tanto `GetTypeFromMessage` quanto a raiz
 usarem as mesmas. `msgattrs` é escopo da Fase D, já fechada.
 
-**Status**: **não corrigido** (fora do escopo do lote 8, que é a raiz).
-Pendente de decisão.
+**Status**: **CORRIGIDO** (lote F, 2026-08-07). A taxonomia passou a ter um
+dono: `msgattrs` exporta `TypeText`, `TypePoll`, `TypeMedia` e `TypeReaction`, e
+tanto `GetTypeFromMessage` quanto os consumidores usam as mesmas constantes —
+`send/constants.go` virou alias delas, e `retry/handle.go` deixou de escrever o
+literal `"text"`.
+
+Não confundidas com as outras ocorrências de `"media"`/`"text"`/`"reaction"` no
+módulo: o atributo `media` de presença de chat, o `media` de chamada e a tag
+`<reaction>` de newsletter são taxonomias diferentes que por acaso usam as
+mesmas palavras, e ficaram intocadas.
 
 ## F44 — envio bloqueante para `historySyncNotifications` antes de iniciar o loop
 

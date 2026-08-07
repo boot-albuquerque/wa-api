@@ -183,6 +183,7 @@ internal/wa-noise/capabilities/message.StoreHistoricalPNLIDMappings	EXCLUDED	X5
 internal/wa-noise/capabilities/message.StoreHistoricalSecrets	EXCLUDED	X5
 internal/wa-noise/capabilities/message.StoreLIDSyncMessage	EXCLUDED	X5
 internal/wa-noise/capabilities/message.StoreSecret	EXCLUDED	X5
+internal/wa-noise/capabilities/message.nodeOrChild	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.AcceptTOSNotice	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.ConvertQueryID	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.Create	EXCLUDED	X5
@@ -1418,7 +1419,6 @@ internal/wa-noise/protocol/appstate.concatAndHMAC	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.expandAppStateKeys	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.generateContentMAC	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.generatePatchMAC	EXCLUDED	X5
-internal/wa-noise/protocol/appstate.indexMACToArray	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.newLabelChatMutation	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.newLabelEditMutation	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.newLabelMessageMutation	EXCLUDED	X5

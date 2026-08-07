@@ -1,5 +1,7 @@
 package send
 
+import "wa-api/internal/wa-noise/protocol/msgattrs"
+
 // Nove constantes deste arquivo sao EXPORTADAS. Nao e' API nova: sao exatamente
 // as que a raiz continua usando fora do caminho de envio (message_decrypt.go,
 // message_decrypt_session.go, message.go, msgsecret_poll.go). A raiz as
@@ -48,9 +50,13 @@ const (
 // msgattrs.GetTypeFromMessage devolve; sao comparados, nunca produzidos, por
 // este pacote.
 const (
-	msgTypeText     = "text"
-	msgTypePoll     = "poll"
-	msgTypeReaction = "reaction"
+	// Aliases das constantes de msgattrs, que e' o dono da taxonomia. Eram
+	// literais proprios, duplicando os valores que msgattrs.GetTypeFromMessage
+	// produz — se um lado mudasse, o outro compilava e parava de casar em
+	// silencio (F43 em HOUSEKEEP.md).
+	msgTypeText     = msgattrs.TypeText
+	msgTypePoll     = msgattrs.TypePoll
+	msgTypeReaction = msgattrs.TypeReaction
 
 	// MsgCategoryPeer e' o `category` das mensagens de protocolo entre os
 	// proprios dispositivos. Lido tambem por message.go, na raiz.

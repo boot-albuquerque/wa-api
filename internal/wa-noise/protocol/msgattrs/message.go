@@ -8,6 +8,25 @@ import (
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
+// A taxonomia de tipo de mensagem vive AQUI, e so' aqui.
+//
+// Antes, GetTypeFromMessage devolvia literais crus e os consumidores comparavam
+// contra constantes proprias, declaradas em outro pacote — duas fontes para a
+// mesma verdade. Mudar um valor de um lado compilava e falhava em silencio: o
+// `if` simplesmente parava de casar e o <meta polltype> sumia do no' sem erro
+// nenhum (F43 em HOUSEKEEP.md).
+//
+// Nao confundir com as outras ocorrencias de "media"/"text"/"reaction" no
+// modulo: o atributo `media` de presenca de chat, o `media` de chamada e a tag
+// <reaction> de newsletter sao taxonomias diferentes, que por acaso usam as
+// mesmas palavras.
+const (
+	TypeText     = "text"
+	TypePoll     = "poll"
+	TypeMedia    = "media"
+	TypeReaction = "reaction"
+)
+
 func GetTypeFromMessage(msg *waE2E.Message) string {
 	switch {
 	case msg.ViewOnceMessage != nil:
@@ -23,15 +42,15 @@ func GetTypeFromMessage(msg *waE2E.Message) string {
 	case msg.DocumentWithCaptionMessage != nil:
 		return GetTypeFromMessage(msg.DocumentWithCaptionMessage.Message)
 	case msg.ReactionMessage != nil, msg.EncReactionMessage != nil:
-		return "reaction"
+		return TypeReaction
 	case msg.PollCreationMessage != nil, msg.PollUpdateMessage != nil:
-		return "poll"
+		return TypePoll
 	case GetMediaTypeFromMessage(msg) != "":
-		return "media"
+		return TypeMedia
 	case msg.Conversation != nil, msg.ExtendedTextMessage != nil, msg.ProtocolMessage != nil:
-		return "text"
+		return TypeText
 	default:
-		return "text"
+		return TypeText
 	}
 }
 

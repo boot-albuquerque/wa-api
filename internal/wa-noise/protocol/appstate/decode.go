@@ -40,7 +40,6 @@ func (proc *Processor) decodeSnapshot(
 		}
 	}
 
-	var fakeIndexesToRemove map[[macLength]byte][]byte
 	var warn []error
 	warn, err = currentState.updateHash(encryptedMutations, func(indexMAC []byte, maxIndex int) ([]byte, error) {
 		return nil, nil
@@ -63,7 +62,7 @@ func (proc *Processor) decodeSnapshot(
 
 	var out patchOutput
 	out.Mutations = newMutationsInput
-	err = proc.decodeMutations(ctx, encryptedMutations, &out, validateMACs, currentState.Version, fakeIndexesToRemove)
+	err = proc.decodeMutations(ctx, encryptedMutations, &out, validateMACs, currentState.Version)
 	if err != nil {
 		err = fmt.Errorf("failed to decode snapshot of v%d: %w", currentState.Version, err)
 		return
@@ -152,7 +151,6 @@ func (proc *Processor) DecodePatches(
 		var out patchOutput
 		var warn []error
 		var newState HashState
-		var fakeIndexesToRemove map[[macLength]byte][]byte
 		newState, warn, err = proc.validatePatch(ctx, list.Name, patch, currentState, validateMACs)
 		if err != nil {
 			if len(warn) > 0 {
@@ -162,7 +160,7 @@ func (proc *Processor) DecodePatches(
 		}
 
 		out.Mutations = newMutations
-		err = proc.decodeMutations(ctx, patch.GetMutations(), &out, validateMACs, newState.Version, fakeIndexesToRemove)
+		err = proc.decodeMutations(ctx, patch.GetMutations(), &out, validateMACs, newState.Version)
 		if err != nil {
 			return
 		}

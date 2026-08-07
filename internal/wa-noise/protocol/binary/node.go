@@ -91,20 +91,28 @@ func (n *Node) GetChildrenByTag(tag string) (children []Node) {
 // Each provided tag will recurse in, so this is useful for getting a specific nested element.
 func (n *Node) GetOptionalChildByTag(tags ...string) (val Node, ok bool) {
 	val = *n
-Outer:
 	for _, tag := range tags {
+		found := false
 		for _, child := range val.GetChildren() {
 			if child.Tag == tag {
-				val = child
-				continue Outer
+				val, found = child, true
+				break
 			}
 		}
-		// If no matching children are found, return false
-		return
+		if !found {
+			// Node ZERO, nao o no' alcancado ate' aqui.
+			//
+			// O `return` nu que existia neste ponto devolvia `val`, que comeca
+			// como *n e vai descendo — ou seja, quem nao achasse a tag recebia
+			// o no' de partida. `n.GetChildByTag("ausente").Tag` devolvia "iq",
+			// nao "". Quem checasse o resultado por `.Tag != ""` para saber se
+			// achou estava checando algo sempre verdadeiro, e quem chamasse
+			// GetChildren() no resultado recebia os filhos do no' errado
+			// (F26 em HOUSEKEEP.md).
+			return Node{}, false
+		}
 	}
-	// All iterations of loop found a matching child, return it
-	ok = true
-	return
+	return val, true
 }
 
 // GetChildByTag does the same thing as GetOptionalChildByTag, but returns the Node directly without the ok boolean.

@@ -91,20 +91,12 @@ func (proc *Processor) decodeMutation(
 	return
 }
 
-func indexMACToArray(indexMAC []byte) [macLength]byte {
-	if len(indexMAC) != macLength {
-		return [macLength]byte{}
-	}
-	return *(*[macLength]byte)(indexMAC)
-}
-
 func (proc *Processor) decodeMutations(
 	ctx context.Context,
 	mutations []*waServerSync.SyncdMutation,
 	out *patchOutput,
 	validateMACs bool,
 	patchVersion uint64,
-	fakeIndexesToRemove map[[macLength]byte][]byte,
 ) error {
 	for i, mutation := range mutations {
 		indexMAC, valueMAC, index, syncAction, _, err := proc.decodeMutation(ctx, mutation, i, validateMACs)
@@ -112,11 +104,18 @@ func (proc *Processor) decodeMutations(
 			return err
 		}
 		if mutation.GetOperation() == waServerSync.SyncdMutation_REMOVE {
+			// Havia aqui uma segunda remocao, por "index MAC alternativo",
+			// guardada por um mapa fakeIndexesToRemove que os dois chamadores
+			// declaravam e NUNCA populavam — leitura de mapa nil devolve sempre
+			// ok == false, entao o ramo jamais executou (F20 em HOUSEKEEP.md).
+			//
+			// O parametro atravessava tres funcoes sem fazer nada. Foi removido
+			// em vez de populado porque a decisao agora e' nossa: nao ha
+			// upstream de onde herdar a intencao, e um parametro que nenhum
+			// chamador usa e' pior que a ausencia da funcionalidade — sugere um
+			// comportamento que nao existe. Quem precisar da limpeza de MACs
+			// legados reintroduz com um chamador de verdade.
 			out.RemoveMAC(indexMAC)
-			altIndexMAC, ok := fakeIndexesToRemove[indexMACToArray(indexMAC)]
-			if ok && len(indexMAC) == macLength {
-				out.RemoveMAC(altIndexMAC)
-			}
 		} else if mutation.GetOperation() == waServerSync.SyncdMutation_SET {
 			out.AddMAC(indexMAC, valueMAC)
 		}

@@ -63,11 +63,16 @@ func (n *Node) contentString() []string {
 			split = append(split, strings.Split(item.XMLString(), "\n")...)
 		}
 	case []byte:
+		// Nao ha' escape de "\n" aqui, ao contrario do ramo default: printable()
+		// rejeita qualquer rune que nao passe em unicode.IsPrint, e "\n" e' um
+		// deles. Conteudo []byte com quebra de linha sempre cai no ramo de hex
+		// abaixo, entao o ReplaceAll que existia aqui era inalcancavel e
+		// sugeria um tratamento que nao acontece (F27 em HOUSEKEEP.md).
 		if strContent := printable(content); len(strContent) > 0 {
 			if IndentXML {
 				split = append(split, strings.Split(string(content), "\n")...)
 			} else {
-				split = append(split, strings.ReplaceAll(string(content), "\n", "\\n"))
+				split = append(split, string(content))
 			}
 		} else if len(content) > MaxBytesToPrintAsHex {
 			split = append(split, fmt.Sprintf("<!-- %d bytes -->", len(content)))

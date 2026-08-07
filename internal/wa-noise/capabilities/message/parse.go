@@ -116,10 +116,34 @@ func ParseSource(t Transport, node *waBinary.Node, requireParticipant bool) (sou
 	return
 }
 
-// ParseBotInfo le o no' <bot> de uma mensagem de bot.
-func ParseBotInfo(node waBinary.Node) (botInfo types.MsgBotInfo, err error) {
-	botNode := node.GetChildByTag("bot")
+// nodeOrChild devolve o proprio no' quando ele ja' E' a tag procurada, e o
+// filho com essa tag caso contrario.
+//
+// ParseBotInfo e ParseMetaInfo sao chamadas das duas formas: ParseInfo passa o
+// proprio <bot>/<meta> (o child do switch), enquanto quem entra por
+// DangerousInternalClient pode passar o no' que os CONTEM.
+//
+// As duas sempre funcionaram, mas por acidente: o codigo fazia
+// `node.GetChildByTag("bot")` incondicionalmente, e quando o no' recebido ja'
+// era o <bot> o lookup errava e devolvia o no' de partida — que era exatamente
+// o que se queria, mas so' porque GetChildByTag tinha o defeito da F26. Com a
+// F26 corrigida o lookup passou a devolver o Node zero e todos os atributos
+// saiam vazios.
+//
+// Este helper e' a mesma tolerancia, agora declarada em vez de herdada de um
+// bug.
+func nodeOrChild(node waBinary.Node, tag string) waBinary.Node {
+	if node.Tag == tag {
+		return node
+	}
+	return node.GetChildByTag(tag)
+}
 
+// ParseBotInfo le os atributos do no' <bot> de uma mensagem de bot.
+//
+// Aceita tanto o proprio <bot> quanto um no' que o contenha — ver nodeOrChild.
+func ParseBotInfo(node waBinary.Node) (botInfo types.MsgBotInfo, err error) {
+	botNode := nodeOrChild(node, "bot")
 	ag := botNode.AttrGetter()
 	botInfo.EditType = types.BotEditType(ag.String("edit"))
 	if botInfo.EditType == types.EditTypeInner || botInfo.EditType == types.EditTypeLast {
@@ -130,10 +154,11 @@ func ParseBotInfo(node waBinary.Node) (botInfo types.MsgBotInfo, err error) {
 	return
 }
 
-// ParseMetaInfo le o no' <meta> de uma mensagem.
+// ParseMetaInfo le os atributos do no' <meta> de uma mensagem.
+//
+// Aceita tanto o proprio <meta> quanto um no' que o contenha — ver nodeOrChild.
 func ParseMetaInfo(node waBinary.Node) (metaInfo types.MsgMetaInfo, err error) {
-	metaNode := node.GetChildByTag("meta")
-
+	metaNode := nodeOrChild(node, "meta")
 	ag := metaNode.AttrGetter()
 	metaInfo.TargetID = types.MessageID(ag.OptionalString("target_id"))
 	metaInfo.TargetSender = ag.OptionalJIDOrEmpty("target_sender_jid")

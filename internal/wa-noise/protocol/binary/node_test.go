@@ -69,17 +69,46 @@ func TestGetOptionalChildByTagRecursesPerTag(t *testing.T) {
 // nao "". Quem quiser saber se achou TEM que usar GetOptionalChildByTag e olhar
 // o ok. Este teste trava o comportamento atual para que a armadilha fique
 // escrita em algum lugar.
-func TestGetChildByTagReturnsTheStartNodeWhenMissing(t *testing.T) {
-	root := &Node{Tag: "iq", Attrs: Attrs{"id": "1"}}
+// Tag ausente devolve o Node ZERO, nao o no' de partida.
+//
+// Devolvia o no' alcancado ate' ali: `root.GetChildByTag("ausente").Tag` dava
+// "iq". Quem checasse o resultado por `.Tag != ""` para saber se achou estava
+// checando algo sempre verdadeiro, e quem chamasse GetChildren() no resultado
+// recebia os filhos do no' errado (F26 em HOUSEKEEP.md).
+func TestGetChildByTagDevolveNodeZeroQuandoNaoAcha(t *testing.T) {
+	root := &Node{Tag: "iq", Attrs: Attrs{"id": "1"}, Content: []Node{{Tag: "list"}}}
+
 	got := root.GetChildByTag("ausente")
-	if got.Tag != "iq" {
-		t.Errorf("tag = %q, esperado \"iq\" (o proprio no' de partida)", got.Tag)
+	if got.Tag != "" {
+		t.Errorf("tag = %q, esperado vazio", got.Tag)
+	}
+	if got.Attrs != nil || got.Content != nil {
+		t.Errorf("= %+v, esperado o Node zero", got)
 	}
 
-	// Com duas tags, devolve o no' do ultimo nivel que existiu.
-	nested := &Node{Tag: "iq", Content: []Node{{Tag: "list"}}}
-	if got := nested.GetChildByTag("list", "ausente"); got.Tag != "list" {
+	// Com varias tags, a falha em QUALQUER nivel devolve o zero — nao o no' do
+	// ultimo nivel que existiu.
+	if got := root.GetChildByTag("list", "ausente"); got.Tag != "" {
+		t.Errorf("tag = %q, esperado vazio", got.Tag)
+	}
+
+	// E o caminho que acha continua devolvendo o no' certo.
+	if got := root.GetChildByTag("list"); got.Tag != "list" {
 		t.Errorf("tag = %q, esperado \"list\"", got.Tag)
+	}
+}
+
+// A forma correta de distinguir "achou o no' vazio" de "nao achou" continua
+// sendo o ok de GetOptionalChildByTag — agora o `.Tag != ""` tambem funciona,
+// mas o ok e' explicito.
+func TestGetOptionalChildByTagSinalizaAusenciaPeloOk(t *testing.T) {
+	root := &Node{Tag: "iq", Content: []Node{{Tag: "vazio"}}}
+
+	if got, ok := root.GetOptionalChildByTag("vazio"); !ok || got.Tag != "vazio" {
+		t.Errorf("= %+v, %v; esperava achar o no' vazio", got, ok)
+	}
+	if got, ok := root.GetOptionalChildByTag("ausente"); ok || got.Tag != "" {
+		t.Errorf("= %+v, %v; esperava (zero, false)", got, ok)
 	}
 }
 

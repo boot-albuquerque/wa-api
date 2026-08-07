@@ -59,21 +59,6 @@ func TestPatchOutputRemoveMACWithoutMatchingAdd(t *testing.T) {
 	}
 }
 
-func TestIndexMACToArray(t *testing.T) {
-	full := fillBytes(macLength, 0x5A)
-	arr := indexMACToArray(full)
-	if !bytes.Equal(arr[:], full) {
-		t.Errorf("indexMACToArray = %X, esperado %X", arr, full)
-	}
-
-	var zero [macLength]byte
-	for _, bad := range [][]byte{nil, {}, fillBytes(macLength-1, 1), fillBytes(macLength+1, 1)} {
-		if indexMACToArray(bad) != zero {
-			t.Errorf("indexMACToArray(%d bytes) deveria devolver o array zerado", len(bad))
-		}
-	}
-}
-
 func TestDecodeMutationRoundTrip(t *testing.T) {
 	proc, _ := newTestProcessor(t)
 	patch := encodePatchForTest(t, proc, HashState{}, BuildSettingPushName("Beltrano"))
@@ -148,7 +133,7 @@ func TestDecodeMutationsRecordsSetAndRemove(t *testing.T) {
 	err := proc.decodeMutations(
 		context.Background(),
 		[]*waServerSync.SyncdMutation{setMut, removeMut},
-		&out, false, 3, nil,
+		&out, false, 3,
 	)
 	if err != nil {
 		t.Fatalf("decodeMutations: %v", err)
@@ -168,30 +153,35 @@ func TestDecodeMutationsRecordsSetAndRemove(t *testing.T) {
 	}
 }
 
-func TestDecodeMutationsRemovesFakeIndex(t *testing.T) {
+// Um REMOVE remove exatamente UM index MAC.
+//
+// Havia aqui um TestDecodeMutationsRemovesFakeIndex, que exercitava a segunda
+// remocao por "index MAC alternativo" passando o mapa direto para
+// decodeMutations. O mapa nunca era populado por nenhum chamador de producao,
+// entao o ramo era inalcancavel e o teste provava apenas que o codigo morto
+// funcionaria se fosse ligado (F20). O parametro saiu; este teste ficou no
+// lugar, travando o comportamento que de fato existe.
+func TestDecodeMutationsRemoveRemoveApenasUmMAC(t *testing.T) {
 	proc, _ := newTestProcessor(t)
 	patch := encodePatchForTest(t, proc, HashState{}, BuildSettingPushName("a"))
 	removeMut := proto.Clone(patch.GetMutations()[0]).(*waServerSync.SyncdMutation)
 	removeMut.Operation = waServerSync.SyncdMutation_REMOVE.Enum()
-
 	realIndexMAC := removeMut.GetRecord().GetIndex().GetBlob()
-	altIndexMAC := fillBytes(macLength, 0xEE)
-	fakes := map[[macLength]byte][]byte{indexMACToArray(realIndexMAC): altIndexMAC}
 
 	var out patchOutput
 	err := proc.decodeMutations(
 		context.Background(),
 		[]*waServerSync.SyncdMutation{removeMut},
-		&out, false, 1, fakes,
+		&out, false, 1,
 	)
 	if err != nil {
 		t.Fatalf("decodeMutations: %v", err)
 	}
-	if len(out.RemovedMACs) != 2 {
-		t.Fatalf("len(RemovedMACs) = %d, esperado 2 (real + alternativo)", len(out.RemovedMACs))
+	if len(out.RemovedMACs) != 1 {
+		t.Fatalf("len(RemovedMACs) = %d, esperado 1", len(out.RemovedMACs))
 	}
-	if !bytes.Equal(out.RemovedMACs[1], altIndexMAC) {
-		t.Errorf("segundo MAC removido = %X, esperado %X", out.RemovedMACs[1], altIndexMAC)
+	if !bytes.Equal(out.RemovedMACs[0], realIndexMAC) {
+		t.Errorf("MAC removido = %X, esperado %X", out.RemovedMACs[0], realIndexMAC)
 	}
 }
 
