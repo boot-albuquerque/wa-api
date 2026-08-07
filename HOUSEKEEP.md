@@ -12,36 +12,26 @@ próxima vez que alguém tropeçar nele.
 
 ## Índice
 
-Situação em 2026-08-07, depois da leva de saneamento (lotes A–E). São 43
-achados: **29 corrigidos**, 14 abertos.
+Situação em 2026-08-07, depois das levas de saneamento (lotes A–I). São 43
+achados: **37 resolvidos** (36 corrigidos + F35 fechado como "não corrigir"),
+**6 abertos**.
 
-Os abertos **não** são pendências esquecidas — cada um está aberto por um
-motivo registrado no próprio bloco. Em resumo:
+Os 6 abertos têm em comum não faltar trabalho, e sim faltar **informação que não
+está no código**. Nenhum é resolvível por leitura ou refactor:
 
-| Achado | Por que continua aberto |
+| Achado | O que falta para resolver |
 |---|---|
-| `ConnectHandler` com token vazio | corrigido em `ae11dc3`; entrada mantida como registro |
-| `user_info_failed` como `CategoryInternal` | classificação de erro é contrato de API do produto |
-| F17 — `wa-noise` fora de cobertura/lint | decisão de política de gate; muda o baseline do repo inteiro |
-| F20 — `fakeIndexesToRemove` sempre nil | não dá para escolher entre remover o parâmetro e popular o mapa sem saber a intenção do upstream |
-| F22 — panic em `record.Session.Serialize` | bug em dependência externa (`libsignal`); a defesa local disponível é pior que o problema |
-| F23 — Postgres sem teste | exige infra de teste (container/CI), não é mudança de código |
-| F26 — `GetChildByTag` devolve o nó de partida | mudar o retorno quebraria silenciosamente quem hoje depende dele; travado e documentado por teste |
-| F27 — ramo inalcançável em `contentString` | inofensivo; documentado no código |
-| **F31** — comparação de ponteiros inerte | **acoplado à F32**: corrigir ligaria as query IDs de desktop, que a F32 mostra estarem erradas |
-| **F32** — query IDs de desktop erradas | não temos os valores corretos; chutar quebra em produção |
-| F35 — duas funções de política idênticas | são políticas distintas que hoje coincidem; unificar é decisão de produto |
-| F36 — contadores de retry sem limite | exige escolher política de expurgo/TTL |
-| F37 — chave de cache em `GetUserDevices` | depende de confirmar o comportamento real do servidor |
-| F42 — atributo `v` numérico vs string | formato de fio; mudar sem captura real arrisca quebrar envio |
-| F43 — nomes de tipo duplicados | cosmético |
-| F44 — envio bloqueante de history sync | qualquer correção muda política de entrega de histórico |
-| F53 — `*groupMetaCache` escapa do lock | a correção (clonar o `Meta`) custa uma alocação por envio de grupo num caminho quente, e a entrada pede medição antes |
-| F57 — `SetProxy*` concorrente com `Connect` | mexer em quando o `http.Client` é lido muda o ciclo de vida da conexão |
+| `user_info_failed` como `CategoryInternal` | **Decisão de produto.** A classificação decide o status HTTP que o cliente recebe; mudá-la é mudança de contrato de API. |
+| F22 — panic em `record.Session.Serialize` | **Bug em dependência externa** (`go.mau.fi/libsignal`). Não há predicado exportado para checar se o record é serializável sem chamar `Serialize()`, que é o que panica. A defesa local disponível (`recover()`) é pior que o problema. Travado por dois testes que documentam a assimetria. |
+| F32 — duas query IDs de desktop erradas | **Dado que não temos.** As IDs corretas só saem de uma captura de tráfego de um cliente desktop real. Chutar quebra um caminho que hoje ao menos falha de forma previsível. |
+| **F31** (ligado à F32) | O nil deref foi corrigido; a comparação de ponteiros inerte **fica**, de propósito. Consertá-la faria clientes MacOS passarem a usar as query IDs que a F32 mostra estarem erradas — trocaria um ramo inerte por um comprovadamente quebrado. As duas só se resolvem juntas. |
+| F37 — chave de cache em `GetUserDevices` | **Observação de tráfego real.** Depende de confirmar se o servidor de fato responde com JID diferente do consultado; sem isso a correção é especulação sobre um cache quente. |
+| F42 — atributo `v` numérico vs string | **Captura de tráfego.** É formato de fio no caminho de criptografia; decidir por leitura de código é palpite. |
+| F44 — envio bloqueante de history sync | **Decisão de política de produto.** As duas saídas óbvias (envio não-bloqueante, ou com timeout) **descartam** notificações de history sync, perdendo histórico em silêncio — pior que o travamento raro que evitam. |
 
 Fora da lista, uma pendência que não é achado: **o smoke test manual**
-(pareamento por QR, envio, avatar, criação de grupo, reconexão) continua sem
-ser executado — exige ambiente com sessão real, e é bloqueador de merge.
+(pareamento por QR, envio, avatar, criação de grupo, reconexão) continua sem ser
+executado — exige ambiente com sessão real, e é bloqueador de merge.
 
 ---
 
