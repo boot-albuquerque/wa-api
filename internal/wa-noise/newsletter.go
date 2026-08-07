@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"wa-api/internal/wa-noise/newsletter"
+	"wa-api/internal/wa-noise/capabilities/newsletter"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
