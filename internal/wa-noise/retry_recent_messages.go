@@ -43,10 +43,10 @@ func (cli *Client) addRecentMessage(ctx context.Context, to types.JID, id types.
 		var err error
 		if wa != nil {
 			buf, err = proto.Marshal(wa)
-			format = "wa"
+			format = retryStoreFormatWA
 		} else if fb != nil {
 			buf, err = proto.Marshal(fb)
-			format = "fb"
+			format = retryStoreFormatFB
 		}
 		if err != nil {
 			return fmt.Errorf("failed to marshal message for retry store: %w", err)
@@ -56,7 +56,7 @@ func (cli *Client) addRecentMessage(ctx context.Context, to types.JID, id types.
 			if err != nil {
 				return fmt.Errorf("failed to add message to retry store: %w", err)
 			}
-			if time.Since(cli.lastRetryStoreClear) > 12*time.Hour {
+			if time.Since(cli.lastRetryStoreClear) > retryStoreClearInterval {
 				err = cli.Store.EventBuffer.DeleteOldOutgoingEvents(ctx)
 				if err != nil {
 					return fmt.Errorf("failed to clear old messages from retry store: %w", err)
@@ -127,10 +127,10 @@ func parseRecentMessage(format string, buf []byte) (*RecentMessage, error) {
 	var rm RecentMessage
 	var err error
 	switch format {
-	case "wa":
+	case retryStoreFormatWA:
 		rm.wa = &waE2E.Message{}
 		err = proto.Unmarshal(buf, rm.wa)
-	case "fb":
+	case retryStoreFormatFB:
 		rm.fb = &waMsgApplication.MessageApplication{}
 		err = proto.Unmarshal(buf, rm.fb)
 	default:

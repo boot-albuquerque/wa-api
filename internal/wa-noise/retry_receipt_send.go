@@ -35,7 +35,7 @@ func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, in
 		cli.messageRetries[id] = retryCount
 	}
 	cli.messageRetriesLock.Unlock()
-	if retryCount >= 5 {
+	if retryCount >= maxOutgoingRetryReceipts {
 		cli.Log.Warnf("Not sending any more retry receipts for %s", id)
 		return
 	}
@@ -47,10 +47,13 @@ func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, in
 		}
 	}
 
-	var registrationIDBytes [4]byte
+	// Mesmo campo (Store.RegistrationID) e mesma codificacao big-endian do
+	// upload de prekeys, entao reutiliza a constante de la' em vez de declarar
+	// um segundo 4.
+	var registrationIDBytes [preKeyRegistrationIDLength]byte
 	binary.BigEndian.PutUint32(registrationIDBytes[:], cli.Store.RegistrationID)
 	attrs := buildBaseReceipt(info.ID, node)
-	attrs["type"] = "retry"
+	attrs["type"] = string(types.ReceiptTypeRetry)
 	if info.Type == "peer_msg" && info.IsFromMe {
 		attrs["category"] = "peer"
 	}
@@ -62,7 +65,7 @@ func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, in
 				"count": retryCount,
 				"id":    id,
 				"t":     node.Attrs["t"],
-				"v":     1,
+				"v":     retryReceiptVersion,
 			}},
 			{Tag: "registration", Content: registrationIDBytes[:]},
 		},

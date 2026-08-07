@@ -40,7 +40,7 @@ func (cli *Client) shouldRecreateSession(ctx context.Context, retryCount int, ji
 	} else if !contains {
 		cli.sessionRecreateHistory[jid] = time.Now()
 		return "we don't have a Signal session with them", true
-	} else if retryCount < 2 {
+	} else if retryCount < minRetryCountForSessionRecreate {
 		return "", false
 	}
 	prevTime, ok := cli.sessionRecreateHistory[jid]
@@ -72,7 +72,15 @@ func (cli *Client) tryHandleRetryReceipt(ctx context.Context, receipt *events.Re
 	}
 	err := cli.handleRetryReceipt(ctx, receipt, node)
 	if err != nil {
-		cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v", receipt.Chat, receipt.MessageIDs[0], receipt.Sender, err)
+		// MessageIDs vem de parseReceipt, que sempre devolve pelo menos um ID,
+		// mas o indexar cru aqui e' um panic esperando um chamador futuro que
+		// nao respeite isso — e este e' o caminho de *erro*, o pior lugar para
+		// morrer. Ver PATCHES.md (Fase E, lote 5).
+		var firstID types.MessageID
+		if len(receipt.MessageIDs) > 0 {
+			firstID = receipt.MessageIDs[0]
+		}
+		cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v", receipt.Chat, firstID, receipt.Sender, err)
 	}
 }
 
@@ -111,8 +119,8 @@ func (cli *Client) handleRetryReceipt(ctx context.Context, receipt *events.Recei
 	cli.incomingRetryRequestCounter[retryKey]++
 	internalCounter := cli.incomingRetryRequestCounter[retryKey]
 	cli.incomingRetryRequestCounterLock.Unlock()
-	if internalCounter >= 10 {
-		cli.Log.Warnf("Dropping retry request from %s for %s: internal retry counter is %d", messageID, receipt.Sender, internalCounter)
+	if internalCounter >= maxIncomingRetryRequests {
+		cli.Log.Warnf("Dropping retry request from %s for %s: internal retry counter is %d", receipt.Sender, messageID, internalCounter)
 		return nil
 	}
 
