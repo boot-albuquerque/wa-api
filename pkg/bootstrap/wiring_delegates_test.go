@@ -18,7 +18,7 @@ import (
 // The full event-handler boundary test is not viable here: myEventHandler
 // dereferences mycli.WAClient (DecryptSecretEncryptedMessage), reads appCtx
 // caches and writes message history to a *sqlx.DB, none of which can be
-// stood up without a real whatsmeow SDK session and a database. The
+// stood up without a real wa-noise SDK session and a database. The
 // observable proxy for the fix is the WARN line below plus the absence of a
 // panic across the call.
 func TestProcessMediaGuardsNilCtx(t *testing.T) {
@@ -30,7 +30,7 @@ func TestProcessMediaGuardsNilCtx(t *testing.T) {
 	mycli := &MyClient{UserID: "user-42", Token: "tok"}
 	postmap := map[string]interface{}{}
 
-	// Belt-and-suspenders: whatsmeow's Client.Download on a nil receiver
+	// Belt-and-suspenders: wa-noise's Client.Download on a nil receiver
 	// returns an error rather than panicking, so this guard is defense in
 	// depth, not the mechanism that prevents a panic here. It still must
 	// fire and skip cleanly instead of falling through to a real download.

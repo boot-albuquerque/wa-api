@@ -10,9 +10,9 @@ import (
 	"go.mau.fi/libsignal/session"
 	"go.mau.fi/libsignal/signalerror"
 
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/msgpad"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

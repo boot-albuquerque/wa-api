@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/protocol/appstate"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 
@@ -54,12 +54,12 @@ func (f *fakeContactStore) GetAllContacts(ctx context.Context) (map[types.JID]ty
 	return f.contacts, nil
 }
 
-// clientWithContacts monta um *whatsmeow.Client real (sem conexão de rede)
+// clientWithContacts monta um *wa-noise.Client real (sem conexão de rede)
 // cujo Store.Contacts é o fake acima. NewClient só popula campos internos a
 // partir do deviceStore — não conecta a nada — então isso é seguro em teste
 // unitário, no mesmo espírito de pkg/infra/wa-noise/user_adapters_test.go.
-func clientWithContacts(cs store.ContactStore) *whatsmeow.Client {
-	return whatsmeow.NewClient(&store.Device{Contacts: cs}, nil)
+func clientWithContacts(cs store.ContactStore) *wanoise.Client {
+	return wanoise.NewClient(&store.Device{Contacts: cs}, nil)
 }
 
 // captureLog troca o logger global por um buffer durante fn e devolve o que
@@ -118,7 +118,7 @@ func TestHandleAppStateSyncComplete_ContactRoster_LogsCount(t *testing.T) {
 func TestHandleAppStateSyncComplete_CriticalBlock_PresenceUnaffected(t *testing.T) {
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
-	client := whatsmeow.NewClient(deviceStore, nil)
+	client := wanoise.NewClient(deviceStore, nil)
 	mycli := &MyClient{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchCriticalBlock}
 
@@ -145,7 +145,7 @@ func TestHandleAppStateSyncComplete_CriticalBlock_PresenceUnaffected(t *testing.
 func TestHandleAppStateSyncComplete_OtherPatch_NoOp(t *testing.T) {
 	deviceStore := &store.Device{Contacts: &fakeContactStore{}}
 	deviceStore.PushName = "Alice"
-	client := whatsmeow.NewClient(deviceStore, nil)
+	client := wanoise.NewClient(deviceStore, nil)
 	mycli := &MyClient{WAClient: client, UserID: "user-42"}
 	evt := &events.AppStateSyncComplete{Name: appstate.WAPatchRegularLow}
 

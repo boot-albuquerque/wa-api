@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 
 	"wa-api/pkg/domain/apperr"
@@ -15,7 +15,7 @@ import (
 
 // GetterWith devolve uma waclient.Getter que mapeia txtID para o cliente
 // correspondente em clients. txtIDs ausentes devolvem nil (que é exatamente
-// o comportamento de registry.ClientManager.GetWhatsmeowClient).
+// o comportamento de registry.ClientManager.Getwa-noiseClient).
 func GetterWith(clients map[string]waclient.Client) waclient.Getter {
 	return func(txtID string) waclient.Client {
 		return clients[txtID]
@@ -33,9 +33,9 @@ type ErrClient struct {
 	Err   error
 }
 
-func (e *ErrClient) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+func (e *ErrClient) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
 	if e.ErrOp == "SendMessage" {
-		return whatsmeow.SendResponse{}, e.Err
+		return wanoise.SendResponse{}, e.Err
 	}
 	return e.Fake.SendMessage(ctx, to, message, extra...)
 }

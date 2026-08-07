@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 // Parametros numericos do caminho de recibo. Tags e atributos do XML binario
 // usados uma unica vez no ponto onde o no e' montado continuam literais — ver

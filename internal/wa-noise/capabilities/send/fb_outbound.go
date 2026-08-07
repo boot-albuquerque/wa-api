@@ -10,21 +10,21 @@ import (
 	"go.mau.fi/libsignal/protocol"
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
+	"wa-api/internal/wa-noise/capabilities/retry"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
-	"wa-api/internal/wa-noise/capabilities/retry"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // FBApplicationVersion e' o `version` do SubProtocol de aplicacao FB. O valor
 // mora em internal/wa-noise/retry desde a Fase F/G lote 5, para que o caminho
 // de retry e o de envio normal nao possam divergir; a raiz o reexporta como
-// whatsmeow.FBMessageApplicationVersion.
+// wa-noise.FBMessageApplicationVersion.
 const FBApplicationVersion = retry.FBApplicationVersion
 
 // GroupV3 envia uma mensagem v3/FB a um grupo. Era Client.sendGroupV3.

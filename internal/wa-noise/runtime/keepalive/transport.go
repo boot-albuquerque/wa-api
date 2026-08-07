@@ -11,12 +11,12 @@ import (
 	"context"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // Timing sao os quatro parametros de tempo do keepalive. Continuam morando na
-// raiz como variaveis exportadas (whatsmeow.KeepAlive*), e por isso sao lidos
+// raiz como variaveis exportadas (wa-noise.KeepAlive*), e por isso sao lidos
 // atraves de Transport.Timing() **a cada iteracao** do loop, e nao capturados
 // no comeco: um consumidor pode ajusta-los com o cliente ja' rodando, que era o
 // comportamento antes da extracao.

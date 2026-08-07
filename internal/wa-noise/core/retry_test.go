@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"wa-api/internal/wa-noise/capabilities/retry"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/capabilities/retry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )

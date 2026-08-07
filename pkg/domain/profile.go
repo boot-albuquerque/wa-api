@@ -3,7 +3,7 @@
 package domain
 
 // Profile representa o perfil público de uma conta WhatsApp conectada.
-// Todos os campos são strings (podem ser vazias se o whatsmeow não retornar o campo).
+// Todos os campos são strings (podem ser vazias se o wa-noise não retornar o campo).
 type Profile struct {
 	Pushname     string `json:"pushname"`
 	AvatarURL    string `json:"avatar_url"`

@@ -49,7 +49,7 @@ func (cm *ClientManager) RemoveWSConn(userID string, conn *websocket.Conn) {
 // (removed from the registry, closed) without affecting siblings or the
 // caller — mirrors the webhook delivery path's fire-and-forget semantics.
 // Call via safeGo from the same places that already call
-// sendEventWithWebHook, never synchronously from the whatsmeow event loop.
+// sendEventWithWebHook, never synchronously from the wa-noise event loop.
 func (cm *ClientManager) BroadcastToUser(userID string, payload interface{}) {
 	cm.RLock()
 	conns := make([]*websocket.Conn, 0, len(cm.wsConns[userID]))

@@ -8,7 +8,7 @@ import (
 
 	"wa-api/pkg/infra/wa-noise/safego"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
@@ -17,7 +17,7 @@ import (
 
 // db field declaration as *sqlx.DB
 type MyClient struct {
-	WAClient       *whatsmeow.Client
+	WAClient       *wanoise.Client
 	EventHandlerID uint32
 	UserID         string
 	Token          string

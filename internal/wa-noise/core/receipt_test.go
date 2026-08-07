@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"errors"
@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // --- infraestrutura compartilhada dos testes do lote 5 ---

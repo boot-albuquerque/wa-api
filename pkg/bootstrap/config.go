@@ -13,7 +13,7 @@ import (
 var (
 	address = flag.String("address", "0.0.0.0", "Bind IP Address")
 	port    = flag.String("port", "8080", "Listen Port")
-	waDebug = flag.String("wadebug", "", "Enable whatsmeow debug (INFO or DEBUG)")
+	waDebug = flag.String("wadebug", "", "Enable wanoise debug (INFO or DEBUG)")
 	logType = flag.String("logtype", "console", "Type of log output (console or json)")
 	// logLevel defaults to info deliberately. Before this flag existed there
 	// was no SetGlobalLevel call anywhere in the repo, so zerolog's implicit

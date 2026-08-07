@@ -8799,7 +8799,7 @@ const file_waSyncAction_WAWebProtobufSyncAction_proto_rawDesc = "" +
 	"PROCESSING\x10\x03\x12\n" +
 	"\n" +
 	"\x06FAILED\x10\x04\x12\b\n" +
-	"\x04SENT\x10\x05B(Z&go.mau.fi/whatsmeow/proto/waSyncAction"
+	"\x04SENT\x10\x05B\x36Z\x34wa-api/internal/wa-noise/protocol/proto/waSyncAction"
 
 var (
 	file_waSyncAction_WAWebProtobufSyncAction_proto_rawDescOnce sync.Once

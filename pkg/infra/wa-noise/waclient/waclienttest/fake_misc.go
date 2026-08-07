@@ -3,8 +3,8 @@ package waclienttest
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

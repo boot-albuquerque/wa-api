@@ -7,14 +7,14 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestGroupAdapter_CreateGroup_OK.
 func TestGroupAdapter_CreateGroup_OK(t *testing.T) {
 	called := false
-	fake := &waclienttest.Fake{CreateGroupFn: func(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error) {
+	fake := &waclienttest.Fake{CreateGroupFn: func(ctx context.Context, req wanoise.ReqCreateGroup) (*types.GroupInfo, error) {
 		called = true
 		if req.Name != "MyGroup" {
 			t.Errorf("CreateGroup name = %q, want MyGroup", req.Name)

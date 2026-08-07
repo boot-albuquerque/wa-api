@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
+	"wa-api/internal/wa-noise/capabilities/send"
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/capabilities/send"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // sendTransport adapta *Client a send.Transport. Existe para que o pacote

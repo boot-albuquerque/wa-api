@@ -7,7 +7,7 @@
 //
 // Seam e apoio:
 //
-//	waclient/             a superfície de *whatsmeow.Client que os adapters
+//	waclient/             a superfície de *wa-noise.Client que os adapters
 //	                      exercitam (waclient.Client), o getter por userID e a
 //	                      ponte para o tipo concreto do SDK
 //	waclient/waclienttest/ fakes exportados de waclient.Client e do ContactStore,

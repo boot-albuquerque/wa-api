@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // fakeTransport e' o dublê de Transport. Todos os contadores sao protegidos por

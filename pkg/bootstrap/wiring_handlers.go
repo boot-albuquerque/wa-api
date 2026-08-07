@@ -99,7 +99,7 @@ var customHandlerSet = &customHandlers{}
 // customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	waClientLookup := waclient.ClientForGetter(clientManager.GetWhatsmeowClient)
+	waClientLookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
 	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
 	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)

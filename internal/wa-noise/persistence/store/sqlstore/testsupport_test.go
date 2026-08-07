@@ -8,8 +8,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
@@ -43,7 +43,7 @@ func newTestContainer(t *testing.T) *Container {
 
 // newTestDevice cria e persiste um device, devolvendo o container e o SQLStore
 // ja' ligado a ele. Persistir e' obrigatorio: quase toda tabela tem FK para
-// whatsmeow_device(jid).
+// wa-noise_device(jid).
 func newTestDevice(t *testing.T) (*Container, *store.Device, *SQLStore) {
 	t.Helper()
 	container := newTestContainer(t)

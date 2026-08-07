@@ -23,7 +23,7 @@ func NewRejectCallUseCase(co appport.ChatOperations, jr appport.JIDResolver, log
 // Execute rejects a call
 func (uc *RejectCallUseCase) Execute(ctx context.Context, userID string, req domain.RejectCallRequest) (*domain.RejectCallResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "error", err, "user_id", userID)
+		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

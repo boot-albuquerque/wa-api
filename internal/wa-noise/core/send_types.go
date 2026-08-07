@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import "wa-api/internal/wa-noise/capabilities/send"
 
 // Os quatro tipos do dominio de envio moram em internal/wa-noise/send desde a
 // Fase F/G lote 8. A raiz os reexporta por APELIDO DE TIPO, nao por definicao
 // nova: o apelido faz dos dois o MESMO tipo, entao todo chamador externo que
-// escrevia whatsmeow.SendResponse{...} continua compilando, e
+// escrevia wa-noise.SendResponse{...} continua compilando, e
 // MessageDebugTimings continua satisfazendo zerolog.LogObjectMarshaler com o
 // mesmo metodo. Uma definicao nova seria um tipo distinto e quebraria a API.
 
@@ -20,7 +20,7 @@ type SendResponse = send.Response
 //
 // When providing optional parameters, add a single instance of this struct as the last parameter:
 //
-//	cli.SendMessage(ctx, to, message, whatsmeow.SendRequestExtra{...})
+//	cli.SendMessage(ctx, to, message, wa-noise.SendRequestExtra{...})
 //
 // Trying to add multiple extra parameters will return an error.
 type SendRequestExtra = send.RequestExtra

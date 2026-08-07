@@ -37,7 +37,7 @@ func (a *PresenceControllerAdapter) SendPresence(ctx context.Context, txtID stri
 	case domain.PresenceUnavailable:
 		p = types.PresenceUnavailable
 	default:
-		return fmt.Errorf("whatsmeow: unknown presence type %q", string(presence))
+		return fmt.Errorf("wanoise: unknown presence type %q", string(presence))
 	}
 
 	return client.SendPresence(ctx, p)

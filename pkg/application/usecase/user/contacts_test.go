@@ -18,7 +18,7 @@ var errNoSession = errors.New("session not found")
 // assertNoSessionLog verifica a forma do log padronizado de sessão ausente.
 func assertNoSessionLog(t *testing.T, logger *contractsfake.Logger, userID string) {
 	t.Helper()
-	rec, ok := logger.FindLevel(contractsfake.LevelError, "no whatsmeow session")
+	rec, ok := logger.FindLevel(contractsfake.LevelError, "no wanoise session")
 	if !ok {
 		t.Fatalf("log de sessão ausente não emitido; houve %v", logger.Messages())
 	}

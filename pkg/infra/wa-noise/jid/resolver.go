@@ -21,7 +21,7 @@ func NewJIDResolverAdapter() *JIDResolverAdapter { return &JIDResolverAdapter{} 
 func (JIDResolverAdapter) ResolveJID(_ context.Context, raw string) (domain.JID, error) {
 	jid, ok := ParseJID(raw)
 	if !ok {
-		return "", fmt.Errorf("whatsmeow: could not parse JID %q", raw)
+		return "", fmt.Errorf("wanoise: could not parse JID %q", raw)
 	}
 	return domain.JID(jid.String()), nil
 }
@@ -32,7 +32,7 @@ func (JIDResolverAdapter) ResolveJID(_ context.Context, raw string) (domain.JID,
 func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID, error) {
 	jid, err := types.ParseJID(raw)
 	if err != nil {
-		return "", fmt.Errorf("whatsmeow: could not parse JID %q: %w", raw, err)
+		return "", fmt.Errorf("wanoise: could not parse JID %q: %w", raw, err)
 	}
 	// types.ParseJID não falha para uma string sem "@": ela devolve o texto
 	// inteiro em Server e User vazio. Sem esta checagem o resultado volta a
@@ -40,7 +40,7 @@ func (JIDResolverAdapter) ResolveQualifiedJID(_ context.Context, raw string) (do
 	// leniente aplicaria o servidor padrão — exatamente o que "qualificado"
 	// existe para impedir.
 	if jid.User == "" {
-		return "", fmt.Errorf("whatsmeow: JID %q has no server", raw)
+		return "", fmt.Errorf("wanoise: JID %q has no server", raw)
 	}
 	return domain.JID(jid.String()), nil
 }
@@ -54,7 +54,7 @@ func ToJID(j domain.JID) (types.JID, error) {
 	}
 	parsed, ok := ParseJID(string(j))
 	if !ok {
-		return types.JID{}, fmt.Errorf("whatsmeow: could not parse JID %q", string(j))
+		return types.JID{}, fmt.Errorf("wanoise: could not parse JID %q", string(j))
 	}
 	return parsed, nil
 }

@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
@@ -24,14 +24,14 @@ type Fake struct {
 	SendChatPresenceFn               func(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
 	SubscribePresenceFn              func(ctx context.Context, jid types.JID) error
 	MarkReadFn                       func(ctx context.Context, ids []types.MessageID, timestamp time.Time, chat, sender types.JID, receiptTypeExtra ...types.ReceiptType) error
-	SendMessageFn                    func(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
+	SendMessageFn                    func(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 	GenerateMessageIDFn              func() types.MessageID
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLinkFn           func(ctx context.Context, code string) (*types.GroupInfo, error)
 	GetGroupInviteLinkFn             func(ctx context.Context, jid types.JID, reset bool) (string, error)
 	GetJoinedGroupsFn                func(ctx context.Context) ([]*types.GroupInfo, error)
-	CreateGroupFn                    func(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error)
+	CreateGroupFn                    func(ctx context.Context, req wanoise.ReqCreateGroup) (*types.GroupInfo, error)
 	JoinGroupWithLinkFn              func(ctx context.Context, code string) (types.JID, error)
 	LeaveGroupFn                     func(ctx context.Context, jid types.JID) error
 	SetGroupNameFn                   func(ctx context.Context, jid types.JID, name string) error
@@ -40,13 +40,13 @@ type Fake struct {
 	SetGroupAnnounceFn               func(ctx context.Context, jid types.JID, announce bool) error
 	SetGroupLockedFn                 func(ctx context.Context, jid types.JID, locked bool) error
 	SetDisappearingTimerFn           func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error
-	UpdateGroupParticipantsFn        func(ctx context.Context, jid types.JID, participantChanges []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error)
+	UpdateGroupParticipantsFn        func(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error)
 	GetGroupRequestParticipantsFn    func(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error)
-	UpdateGroupRequestParticipantsFn func(ctx context.Context, jid types.JID, participantChanges []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error)
+	UpdateGroupRequestParticipantsFn func(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error)
 	SetGroupJoinApprovalModeFn       func(ctx context.Context, jid types.JID, mode bool) error
 	IsOnWhatsAppFn                   func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
 	GetUserInfoFn                    func(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error)
-	GetProfilePictureInfoFn          func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error)
+	GetProfilePictureInfoFn          func(ctx context.Context, jid types.JID, params *wanoise.GetProfilePictureParams) (*types.ProfilePictureInfo, error)
 	GetBlocklistFn                   func(ctx context.Context) (*types.Blocklist, error)
 	UpdateBlocklistFn                func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 	TryFetchPrivacySettingsFn        func(ctx context.Context, ignoreCache bool) (*types.PrivacySettings, error)
@@ -90,11 +90,11 @@ func (f *Fake) MarkRead(ctx context.Context, ids []types.MessageID, timestamp ti
 	return nil
 }
 
-func (f *Fake) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+func (f *Fake) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
 	if f.SendMessageFn != nil {
 		return f.SendMessageFn(ctx, to, message, extra...)
 	}
-	return whatsmeow.SendResponse{}, nil
+	return wanoise.SendResponse{}, nil
 }
 
 func (f *Fake) GenerateMessageID() types.MessageID {

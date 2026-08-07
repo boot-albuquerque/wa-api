@@ -1,10 +1,10 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/types"

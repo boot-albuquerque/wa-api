@@ -85,7 +85,7 @@ const file_waChatLockSettings_WAWebProtobufsChatLockSettings_proto_rawDesc = "" 
 	"\x0fhideLockedChats\x18\x01 \x01(\bR\x0fhideLockedChats\x12H\n" +
 	"\n" +
 	"secretCode\x18\x02 \x01(\v2(.WAWebProtobufsUserPassword.UserPasswordR\n" +
-	"secretCodeB.Z,go.mau.fi/whatsmeow/proto/waChatLockSettings"
+	"secretCodeB\x3cZ\x3awa-api/internal/wa-noise/protocol/proto/waChatLockSettings"
 
 var (
 	file_waChatLockSettings_WAWebProtobufsChatLockSettings_proto_rawDescOnce sync.Once

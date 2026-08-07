@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/message"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

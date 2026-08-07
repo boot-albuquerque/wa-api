@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"wa-api/internal/wa-noise/capabilities/message"
@@ -13,7 +13,7 @@ import (
 // MsgSecretType e' APELIDO de tipo, e nao um tipo novo, porque internals.go
 // (gerado) cita o nome antigo nas assinaturas de DangerousInternalClient e
 // porque e' parte da API publica do pacote. Apelido faz dos dois o MESMO tipo,
-// entao quem escrevia `whatsmeow.EncSecretPollVote` continua compilando e
+// entao quem escrevia `wa-noise.EncSecretPollVote` continua compilando e
 // continua podendo passar o valor as funcoes de message/.
 type MsgSecretType = message.SecretType
 

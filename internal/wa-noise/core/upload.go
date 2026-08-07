@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type UploadResponse = media.UploadResponse
 //
 // For example, to send an image:
 //
-//	resp, err := cli.Upload(context.Background(), yourImageBytes, whatsmeow.MediaImage)
+//	resp, err := cli.Upload(context.Background(), yourImageBytes, wa-noise.MediaImage)
 //	// handle error
 //
 //	imageMsg := &waE2E.ImageMessage{

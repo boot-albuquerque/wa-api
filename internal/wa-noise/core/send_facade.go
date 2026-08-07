@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
+	"wa-api/internal/wa-noise/capabilities/send"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

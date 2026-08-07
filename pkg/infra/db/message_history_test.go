@@ -18,7 +18,7 @@ import (
 // OFFSET sem LIMIT -1 — registrado como pendencia, nao como coberto.
 
 // newHistoryDB aplica o schema de producao e cria a tabela que o SDK do
-// whatsmeow normalmente cria por conta propria — TrimMessageHistory apaga
+// wa-noise normalmente cria por conta propria — TrimMessageHistory apaga
 // dela, entao ela precisa existir.
 func newHistoryDB(t *testing.T) *sqlx.DB {
 	t.Helper()
@@ -227,7 +227,7 @@ func TestTrimMessageHistory_IsScopedToUserAndChat(t *testing.T) {
 }
 
 // TestTrimMessageHistory_AlsoTrimsMessageSecrets: as duas tabelas tem que
-// andar juntas, senao whatsmeow_message_secrets cresce sem teto — o vazamento
+// andar juntas, senao wa-noise_message_secrets cresce sem teto — o vazamento
 // que a funcao existe para evitar.
 func TestTrimMessageHistory_AlsoTrimsMessageSecrets(t *testing.T) {
 	db := newHistoryDB(t)

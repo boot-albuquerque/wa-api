@@ -10,7 +10,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )
@@ -26,8 +26,8 @@ func TestChatAdapter_PropagatesErrors(t *testing.T) {
 		t.Fatal("MarkRead não propagou erro")
 	}
 
-	fake2 := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
-		return whatsmeow.SendResponse{}, sdkErr
+	fake2 := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		return wanoise.SendResponse{}, sdkErr
 	}}
 	a2 := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake2}))
 	if _, err := a2.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{Text: "👍"}); err == nil {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
@@ -36,7 +36,7 @@ func (f *Fake) GetJoinedGroups(ctx context.Context) ([]*types.GroupInfo, error) 
 	return nil, nil
 }
 
-func (f *Fake) CreateGroup(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error) {
+func (f *Fake) CreateGroup(ctx context.Context, req wanoise.ReqCreateGroup) (*types.GroupInfo, error) {
 	if f.CreateGroupFn != nil {
 		return f.CreateGroupFn(ctx, req)
 	}
@@ -99,7 +99,7 @@ func (f *Fake) SetDisappearingTimer(ctx context.Context, chat types.JID, timer t
 	return nil
 }
 
-func (f *Fake) UpdateGroupParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
+func (f *Fake) UpdateGroupParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
 	if f.UpdateGroupParticipantsFn != nil {
 		return f.UpdateGroupParticipantsFn(ctx, jid, participantChanges, action)
 	}
@@ -113,7 +113,7 @@ func (f *Fake) GetGroupRequestParticipants(ctx context.Context, jid types.JID) (
 	return nil, nil
 }
 
-func (f *Fake) UpdateGroupRequestParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
+func (f *Fake) UpdateGroupRequestParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 	if f.UpdateGroupRequestParticipantsFn != nil {
 		return f.UpdateGroupRequestParticipantsFn(ctx, jid, participantChanges, action)
 	}

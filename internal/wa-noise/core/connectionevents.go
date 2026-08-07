@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
@@ -209,7 +209,7 @@ func (cli *Client) handleConnectSuccess(ctx context.Context, node *waBinary.Node
 // SetPassive tells the WhatsApp server whether this device is passive or not.
 //
 // This seems to mostly affect whether the device receives certain events.
-// By default, whatsmeow will automatically do SetPassive(false) after connecting.
+// By default, wa-noise will automatically do SetPassive(false) after connecting.
 func (cli *Client) SetPassive(ctx context.Context, passive bool) error {
 	tag := "active"
 	if passive {

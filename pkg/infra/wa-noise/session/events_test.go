@@ -5,17 +5,17 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
-func TestWhatsmeowSession_Subscribe(t *testing.T) {
-	var handler whatsmeow.EventHandler
+func TestWaNoiseSession_Subscribe(t *testing.T) {
+	var handler wanoise.EventHandler
 	removed := false
 	client := &fakeSessionClient{
-		AddEventHandlerFn: func(h whatsmeow.EventHandler) uint32 {
+		AddEventHandlerFn: func(h wanoise.EventHandler) uint32 {
 			handler = h
 			return 42
 		},
@@ -27,7 +27,7 @@ func TestWhatsmeowSession_Subscribe(t *testing.T) {
 			return true
 		},
 	}
-	s := &whatsmeowSession{device: &store.Device{}, client: client}
+	s := &wanoiseSession{device: &store.Device{}, client: client}
 
 	var got []appport.SessionEvent
 	unsubscribe, err := s.Subscribe(func(evt appport.SessionEvent) {
@@ -77,8 +77,8 @@ func TestWhatsmeowSession_Subscribe(t *testing.T) {
 	}
 }
 
-func TestWhatsmeowSession_Subscribe_NilHandler(t *testing.T) {
-	s := &whatsmeowSession{device: &store.Device{}, client: &fakeSessionClient{}}
+func TestWaNoiseSession_Subscribe_NilHandler(t *testing.T) {
+	s := &wanoiseSession{device: &store.Device{}, client: &fakeSessionClient{}}
 	if _, err := s.Subscribe(nil); err == nil {
 		t.Error("expected error subscribing with nil handler")
 	}

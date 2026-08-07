@@ -8,14 +8,14 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestGroupAdapter_UpdateGroupParticipants_AddOK.
 func TestGroupAdapter_UpdateGroupParticipants_AddOK(t *testing.T) {
-	var seen whatsmeow.ParticipantChange
-	fake := &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
+	var seen wanoise.ParticipantChange
+	fake := &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
 		seen = action
 		return nil, nil
 	}}
@@ -23,15 +23,15 @@ func TestGroupAdapter_UpdateGroupParticipants_AddOK(t *testing.T) {
 	if _, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"u2@s.whatsapp.net"}, domain.ParticipantAdd); err != nil {
 		t.Fatalf("UpdateGroupParticipants = %v", err)
 	}
-	if seen != whatsmeow.ParticipantChangeAdd {
+	if seen != wanoise.ParticipantChangeAdd {
 		t.Errorf("UpdateGroupParticipants action = %v, want Add", seen)
 	}
 }
 
 // TestGroupAdapter_UpdateGroupParticipants_RemoveOK.
 func TestGroupAdapter_UpdateGroupParticipants_RemoveOK(t *testing.T) {
-	var seen whatsmeow.ParticipantChange
-	fake := &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
+	var seen wanoise.ParticipantChange
+	fake := &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
 		seen = action
 		return nil, nil
 	}}
@@ -39,7 +39,7 @@ func TestGroupAdapter_UpdateGroupParticipants_RemoveOK(t *testing.T) {
 	if _, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"u2@s.whatsapp.net"}, domain.ParticipantRemove); err != nil {
 		t.Fatalf("UpdateGroupParticipants = %v", err)
 	}
-	if seen != whatsmeow.ParticipantChangeRemove {
+	if seen != wanoise.ParticipantChangeRemove {
 		t.Errorf("UpdateGroupParticipants action = %v, want Remove", seen)
 	}
 }
@@ -79,8 +79,8 @@ func TestGroupAdapter_GetRequestParticipants_NoSession(t *testing.T) {
 
 // TestGroupAdapter_UpdateRequestParticipants_Approve.
 func TestGroupAdapter_UpdateRequestParticipants_Approve(t *testing.T) {
-	var seen whatsmeow.ParticipantRequestChange
-	fake := &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
+	var seen wanoise.ParticipantRequestChange
+	fake := &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 		seen = action
 		return nil, nil
 	}}
@@ -88,15 +88,15 @@ func TestGroupAdapter_UpdateRequestParticipants_Approve(t *testing.T) {
 	if err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove); err != nil {
 		t.Fatalf("UpdateRequestParticipants approve = %v", err)
 	}
-	if seen != whatsmeow.ParticipantChangeApprove {
+	if seen != wanoise.ParticipantChangeApprove {
 		t.Errorf("action = %v, want approve", seen)
 	}
 }
 
 // TestGroupAdapter_UpdateRequestParticipants_Reject.
 func TestGroupAdapter_UpdateRequestParticipants_Reject(t *testing.T) {
-	var seen whatsmeow.ParticipantRequestChange
-	fake := &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
+	var seen wanoise.ParticipantRequestChange
+	fake := &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 		seen = action
 		return nil, nil
 	}}
@@ -104,7 +104,7 @@ func TestGroupAdapter_UpdateRequestParticipants_Reject(t *testing.T) {
 	if err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestReject); err != nil {
 		t.Fatalf("UpdateRequestParticipants reject = %v", err)
 	}
-	if seen != whatsmeow.ParticipantChangeReject {
+	if seen != wanoise.ParticipantChangeReject {
 		t.Errorf("action = %v, want reject", seen)
 	}
 }

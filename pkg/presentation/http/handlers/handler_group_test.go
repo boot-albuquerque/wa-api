@@ -28,7 +28,7 @@ import (
 var grpErrPort = errors.New("group port exploded")
 
 // grpErrNoSession e' a recusa da guarda de sessao.
-var grpErrNoSession = errors.New("no whatsmeow session for user")
+var grpErrNoSession = errors.New("no wanoise session for user")
 
 // grpFakes reune os fakes da F11 que os use cases de grupo consomem. O
 // zero-value de cada um e' o caminho feliz; os casos negativos injetam Func.

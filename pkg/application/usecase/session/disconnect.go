@@ -24,7 +24,7 @@ func NewDisconnectUseCase(sg appport.SessionGuard, l appport.Logger) *Disconnect
 // Execute valida se o cliente está conectado.
 func (uc *DisconnectUseCase) Execute(ctx context.Context, txtID string, req domain.DisconnectRequest) (*domain.DisconnectResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

@@ -9,7 +9,7 @@ import (
 
 // GetContactsLastActivityUseCase devolve o timestamp da última mensagem por
 // chat, derivado do backfill local de message_history (HistorySync
-// pós-pareamento + mensagens correntes). Não exige sessão whatsmeow ativa —
+// pós-pareamento + mensagens correntes). Não exige sessão wa-noise ativa —
 // é leitura de banco local, funciona mesmo com a sessão em standby.
 type GetContactsLastActivityUseCase struct {
 	activity appport.ChatActivityReader

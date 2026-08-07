@@ -31,9 +31,9 @@ const boundaryTestToken = "boundary-test-token"
 // noSessionGuard satisfies appport.SessionGuard and always reports "no
 // session". It exists so a real use case (session.GetStatusUseCase) runs and
 // logs through the real ZerologAdapter during a router-driven request —
-// without needing a live whatsmeow connection. Que ele seja trivial de
+// without needing a live wa-noise connection. Que ele seja trivial de
 // escrever é o ponto da ADR-001: com a porta antiga, a mesma fake tinha que
-// produzir um *whatsmeow.Client.
+// produzir um *wa-noise.Client.
 type noSessionGuard struct{}
 
 func (noSessionGuard) EnsureSession(context.Context, string) error {
@@ -252,7 +252,7 @@ func boundaryLogReqIDCorrelates(t *testing.T) {
 		switch rec.str("message") {
 		case boundaryLogMsg:
 			boundaryID = rec.str("req_id")
-		case "no whatsmeow session": // emitted by session.GetStatusUseCase
+		case "no wanoise session": // emitted by session.GetStatusUseCase
 			usecaseID = rec.str("req_id")
 		}
 	}

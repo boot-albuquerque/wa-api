@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/pkg/infra/wa-noise/walog"
@@ -17,13 +17,13 @@ import (
 // TestWalogSeam_ErroDoSDKSaiSemWadebug exercita os dois lados do seam de log
 // numa execução só, sem mock de logger nenhum:
 //
-//  1. O caminho que o whatsmeow percorre: bridge.Sub(...).Errorf(...), que é
+//  1. O caminho que o wa-noise percorre: bridge.Sub(...).Errorf(...), que é
 //     literalmente o que internal/wa-noise/client.go faz com o sublogger que
 //     recebe em NewClient. Sem --wadebug — ou seja, no default de produção,
 //     que antes desta mudança era waLog.Noop e descartava o registro.
 //
 //  2. O caminho da aplicação: o myEventHandler real, com um events.Connected
-//     real, sobre um *whatsmeow.Client real construído com o bridge como
+//     real, sobre um *wa-noise.Client real construído com o bridge como
 //     logger. É o handler de produção, não um stub.
 //
 // Ambos escrevem no mesmo buffer, que é o ponto: SDK e aplicação saem no
@@ -69,7 +69,7 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 	mycli := &MyClient{
 		UserID:   walogSeamUser,
 		Token:    walogSeamToken,
-		WAClient: whatsmeow.NewClient(&store.Device{Log: bridge.Sub("Device")}, bridge),
+		WAClient: wanoise.NewClient(&store.Device{Log: bridge.Sub("Device")}, bridge),
 	}
 	mycli.myEventHandler(&events.Connected{})
 

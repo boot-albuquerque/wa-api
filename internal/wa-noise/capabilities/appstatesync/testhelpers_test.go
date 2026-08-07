@@ -6,13 +6,13 @@ import (
 	"sync"
 	"time"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // fakeTransport e' o duble de Transport usado por todos os testes deste
@@ -104,7 +104,7 @@ func (f *fakeTransport) ClearNCTSalt(context.Context) error {
 }
 
 // ElementMissing devolve um erro simples: o tipo concreto de verdade
-// (*whatsmeow.ElementMissingError) vive na raiz, que este pacote nao importa.
+// (*wa-noise.ElementMissingError) vive na raiz, que este pacote nao importa.
 func (f *fakeTransport) ElementMissing(tag, in string) error {
 	f.elementCalls = append(f.elementCalls, tag+"/"+in)
 	return fmt.Errorf("elemento <%s> ausente em %s", tag, in)

@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 //
 // Example:
 //
-//	resp, err := cli.UploadNewsletter(context.Background(), yourImageBytes, whatsmeow.MediaImage)
+//	resp, err := cli.UploadNewsletter(context.Background(), yourImageBytes, wa-noise.MediaImage)
 //	// handle error
 //
 //	imageMsg := &waE2E.ImageMessage{
@@ -35,7 +35,7 @@ import (
 //	}
 //	_, err = cli.SendMessage(context.Background(), newsletterJID, &waE2E.Message{
 //		ImageMessage: imageMsg,
-//	}, whatsmeow.SendRequestExtra{
+//	}, wa-noise.SendRequestExtra{
 //		// Unlike normal media, newsletters also include a "media handle" in the send request.
 //		MediaHandle: resp.Handle,
 //	})

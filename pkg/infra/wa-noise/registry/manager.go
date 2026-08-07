@@ -3,7 +3,7 @@ package registry
 import (
 	"sync"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/coder/websocket"
 	"github.com/go-resty/resty/v2"
@@ -13,9 +13,9 @@ import (
 
 type ClientManager struct {
 	sync.RWMutex
-	whatsmeowClients map[string]*whatsmeow.Client
-	httpClients      map[string]*resty.Client
-	myClients        map[string]MyClient
+	wanoiseClients map[string]*wanoise.Client
+	httpClients    map[string]*resty.Client
+	myClients      map[string]MyClient
 	// pollOptions stores the plaintext options sent for each poll, keyed on
 	// userID then on the poll's message ID. This lets the event handler
 	// SHA-256-match incoming vote hashes back to the original option text
@@ -30,35 +30,35 @@ type ClientManager struct {
 	wsConns map[string]map[*websocket.Conn]struct{}
 	// sessions backs the port.SessionRegistry implementation (Fase 2c):
 	// CRUD of Session handles for SessionOrchestrator, kept separate from
-	// whatsmeowClients since a Session (port.Session) wraps more than the
-	// raw *whatsmeow.Client during the migration.
+	// wa-noiseClients since a Session (port.Session) wraps more than the
+	// raw *wa-noise.Client during the migration.
 	sessions map[string]port.Session
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		whatsmeowClients: make(map[string]*whatsmeow.Client),
-		httpClients:      make(map[string]*resty.Client),
-		myClients:        make(map[string]MyClient),
-		pollOptions:      make(map[string]map[string][]string),
-		wsConns:          make(map[string]map[*websocket.Conn]struct{}),
-		sessions:         make(map[string]port.Session),
+		wanoiseClients: make(map[string]*wanoise.Client),
+		httpClients:    make(map[string]*resty.Client),
+		myClients:      make(map[string]MyClient),
+		pollOptions:    make(map[string]map[string][]string),
+		wsConns:        make(map[string]map[*websocket.Conn]struct{}),
+		sessions:       make(map[string]port.Session),
 	}
 }
 
 // Register associa a Session ao userID, satisfazendo port.SessionRegistry.
 //
-// Também publica o *whatsmeow.Client subjacente em whatsmeowClients: os
+// Também publica o *wa-noise.Client subjacente em wa-noiseClients: os
 // adapters de domínio (e o SessionAttachHook) resolvem o cliente por
-// GetWhatsmeowClient, e o orchestrator — que só conhece port.Session — não
+// Getwa-noiseClient, e o orchestrator — que só conhece port.Session — não
 // teria como preenchê-lo.
 func (cm *ClientManager) Register(userID string, sess port.Session) {
 	cm.Lock()
 	defer cm.Unlock()
 	cm.sessions[userID] = sess
-	if exposer, ok := sess.(interface{ WhatsmeowClient() *whatsmeow.Client }); ok {
-		if client := exposer.WhatsmeowClient(); client != nil {
-			cm.whatsmeowClients[userID] = client
+	if exposer, ok := sess.(interface{ WaNoiseClient() *wanoise.Client }); ok {
+		if client := exposer.WaNoiseClient(); client != nil {
+			cm.wanoiseClients[userID] = client
 		}
 	}
 }

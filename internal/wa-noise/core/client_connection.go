@@ -1,5 +1,5 @@
-// Package whatsmeow implements a client for interacting with the WhatsApp web multidevice API.
-package whatsmeow
+// Package wanoise implements a client for interacting with the WhatsApp web multidevice API.
+package wanoise
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"go.mau.fi/util/exhttp"
 
-	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/keys"
 )

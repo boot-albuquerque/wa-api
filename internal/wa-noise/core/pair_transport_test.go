@@ -1,15 +1,15 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/pairing"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // TestPairTransportEspelhaOCliente confere que o adaptador entrega os mesmos

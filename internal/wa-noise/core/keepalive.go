@@ -1,13 +1,13 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/runtime/keepalive"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/runtime/keepalive"
 )
 
 // Estas quatro variaveis continuam sendo a fonte da verdade e continuam na raiz

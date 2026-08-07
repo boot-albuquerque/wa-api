@@ -24,7 +24,7 @@ func NewLogoutUseCase(sg appport.SessionGuard, l appport.Logger) *LogoutUseCase 
 // Execute valida se o cliente está disponível e logado.
 func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.LogoutRequest) (*domain.LogoutResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

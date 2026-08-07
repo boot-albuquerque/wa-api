@@ -1,4 +1,4 @@
-// Package types contains various structs and other types used by whatsmeow.
+// Package types contains various structs and other types used by wa-noise.
 package types
 
 import (

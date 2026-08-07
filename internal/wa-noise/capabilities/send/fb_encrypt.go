@@ -11,10 +11,10 @@ import (
 	"go.mau.fi/libsignal/signalerror"
 	"google.golang.org/protobuf/proto"
 
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

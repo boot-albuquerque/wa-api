@@ -8,29 +8,29 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
-func TestWhatsmeowSession_Pair_AlreadyHasCredentials(t *testing.T) {
+func TestWaNoiseSession_Pair_AlreadyHasCredentials(t *testing.T) {
 	jid := types.NewJID("5511999999999", types.DefaultUserServer)
-	s := &whatsmeowSession{device: &store.Device{ID: &jid}, client: &fakeSessionClient{}}
+	s := &wanoiseSession{device: &store.Device{ID: &jid}, client: &fakeSessionClient{}}
 	if _, err := s.Pair(context.Background()); err == nil {
 		t.Error("expected error pairing a session that already has credentials")
 	}
 }
 
-func TestWhatsmeowSession_Pair_TranslatesEvents(t *testing.T) {
-	items := make(chan whatsmeow.QRChannelItem, 3)
-	items <- whatsmeow.QRChannelItem{Event: whatsmeow.QRChannelEventCode, Code: "abc", Timeout: 20 * time.Second}
-	items <- whatsmeow.QRChannelItem{Event: "timeout"}
-	items <- whatsmeow.QRChannelItem{Event: "success"}
+func TestWaNoiseSession_Pair_TranslatesEvents(t *testing.T) {
+	items := make(chan wanoise.QRChannelItem, 3)
+	items <- wanoise.QRChannelItem{Event: wanoise.QRChannelEventCode, Code: "abc", Timeout: 20 * time.Second}
+	items <- wanoise.QRChannelItem{Event: "timeout"}
+	items <- wanoise.QRChannelItem{Event: "success"}
 	close(items)
 
 	connected := false
 	client := &fakeSessionClient{
-		GetQRChannelFn: func(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
+		GetQRChannelFn: func(ctx context.Context) (<-chan wanoise.QRChannelItem, error) {
 			return items, nil
 		},
 		ConnectFn: func() error {
@@ -38,7 +38,7 @@ func TestWhatsmeowSession_Pair_TranslatesEvents(t *testing.T) {
 			return nil
 		},
 	}
-	s := &whatsmeowSession{device: &store.Device{}, client: client}
+	s := &wanoiseSession{device: &store.Device{}, client: client}
 
 	out, err := s.Pair(context.Background())
 	if err != nil {
@@ -66,13 +66,13 @@ func TestWhatsmeowSession_Pair_TranslatesEvents(t *testing.T) {
 	}
 }
 
-func TestWhatsmeowSession_Pair_GetQRChannelError(t *testing.T) {
+func TestWaNoiseSession_Pair_GetQRChannelError(t *testing.T) {
 	client := &fakeSessionClient{
-		GetQRChannelFn: func(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
+		GetQRChannelFn: func(ctx context.Context) (<-chan wanoise.QRChannelItem, error) {
 			return nil, errors.New("boom")
 		},
 	}
-	s := &whatsmeowSession{device: &store.Device{}, client: client}
+	s := &wanoiseSession{device: &store.Device{}, client: client}
 	if _, err := s.Pair(context.Background()); err == nil {
 		t.Error("expected error when GetQRChannel fails")
 	}

@@ -6,7 +6,7 @@ import "context"
 // delegar o envio propriamente dito ao wrapper: garantir que há sessão e
 // obter um identificador de mensagem quando o cliente não forneceu um.
 //
-// Os 12 use cases send_* usavam o *whatsmeow.Client para exatamente essas
+// Os 12 use cases send_* usavam o *wa-noise.Client para exatamente essas
 // duas coisas — comparar com nil e chamar GenerateMessageID(). Duas operações
 // de uma superfície de ~200 métodos, e o preço era a camada de aplicação
 // inteira conhecer o SDK. Ver ADR-001.

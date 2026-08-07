@@ -69,7 +69,7 @@ func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID stri
 	case domain.RequestReject:
 		change = wa.ParticipantChangeReject
 	default:
-		return fmt.Errorf("whatsmeow: unknown request action %q", string(action))
+		return fmt.Errorf("wanoise: unknown request action %q", string(action))
 	}
 
 	_, err = client.UpdateGroupRequestParticipants(ctx, jid, jids, change)

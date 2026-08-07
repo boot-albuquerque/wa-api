@@ -7,10 +7,10 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 
 	"golang.org/x/net/proxy"
 )
@@ -23,20 +23,20 @@ type deviceContainer interface {
 	NewDevice() *store.Device
 }
 
-// sessionClient é a superfície de *whatsmeow.Client que uma Session exercita.
+// sessionClient é a superfície de *wa-noise.Client que uma Session exercita.
 // Store.ID não aparece aqui: o adapter guarda o *store.Device com que criou o
 // cliente (é o mesmo ponteiro de client.Store) e lê as credenciais de lá.
 type sessionClient interface {
-	GetQRChannel(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error)
+	GetQRChannel(ctx context.Context) (<-chan wanoise.QRChannelItem, error)
 	Connect() error
 	Disconnect()
 	IsConnected() bool
 	IsLoggedIn() bool
 	Logout(ctx context.Context) error
-	AddEventHandler(handler whatsmeow.EventHandler) uint32
+	AddEventHandler(handler wanoise.EventHandler) uint32
 	RemoveEventHandler(id uint32) bool
-	SetSOCKSProxy(px proxy.Dialer, opts ...whatsmeow.SetProxyOptions)
-	SetProxyAddress(addr string, opts ...whatsmeow.SetProxyOptions) error
+	SetSOCKSProxy(px proxy.Dialer, opts ...wanoise.SetProxyOptions)
+	SetProxyAddress(addr string, opts ...wanoise.SetProxyOptions) error
 }
 
 // DeviceJIDLookup resolve o JID do device já persistido para um userID (hoje
@@ -44,7 +44,7 @@ type sessionClient interface {
 // pareamento — nesse caso o provider cria um device novo.
 type DeviceJIDLookup func(ctx context.Context, userID string) (string, error)
 
-// SessionProviderAdapter implementa appport.SessionProvider sobre o whatsmeow,
+// SessionProviderAdapter implementa appport.SessionProvider sobre o wa-noise,
 // encapsulando NewClient/GetQRChannel/Connect/AddEventHandler.
 type SessionProviderAdapter struct {
 	container deviceContainer
@@ -53,7 +53,7 @@ type SessionProviderAdapter struct {
 }
 
 // NewSessionProviderAdapter cria o provider. newClient permite injetar a
-// construção do cliente; quando nil, usa whatsmeow.NewClient sem logger.
+// construção do cliente; quando nil, usa wa-noise.NewClient sem logger.
 func NewSessionProviderAdapter(
 	container deviceContainer,
 	lookupJID DeviceJIDLookup,
@@ -61,7 +61,7 @@ func NewSessionProviderAdapter(
 ) *SessionProviderAdapter {
 	if newClient == nil {
 		newClient = func(dev *store.Device) sessionClient {
-			return whatsmeow.NewClient(dev, nil)
+			return wanoise.NewClient(dev, nil)
 		}
 	}
 	return &SessionProviderAdapter{container: container, lookupJID: lookupJID, newClient: newClient}
@@ -71,10 +71,10 @@ func NewSessionProviderAdapter(
 // clientes criados. Existe porque o parâmetro newClient de
 // NewSessionProviderAdapter usa o tipo não-exportado sessionClient e por isso
 // não pode ser construído fora deste pacote. logger nil equivale a cliente sem
-// log, como whatsmeow.NewClient(dev, nil).
+// log, como wa-noise.NewClient(dev, nil).
 func NewSessionProviderWithLogger(container deviceContainer, lookupJID DeviceJIDLookup, logger waLog.Logger) *SessionProviderAdapter {
 	return NewSessionProviderAdapter(container, lookupJID, func(dev *store.Device) sessionClient {
-		return whatsmeow.NewClient(dev, logger)
+		return wanoise.NewClient(dev, logger)
 	})
 }
 
@@ -84,7 +84,7 @@ func (p *SessionProviderAdapter) NewSession(ctx context.Context, spec appport.Se
 	if err != nil {
 		return nil, err
 	}
-	return &whatsmeowSession{
+	return &wanoiseSession{
 		userID: spec.UserID,
 		token:  spec.Token,
 		device: device,

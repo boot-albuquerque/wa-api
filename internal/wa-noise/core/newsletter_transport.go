@@ -1,13 +1,13 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/newsletter"
+	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // newsletterTransport adapta *Client a newsletter.Transport. Existe para que o

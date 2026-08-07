@@ -25,7 +25,7 @@ func NewDeleteS3ConfigUseCase(sg appport.SessionGuard, l appport.Logger) *Delete
 func (uc *DeleteS3ConfigUseCase) Execute(ctx context.Context, txtID string) (*domain.S3ConfigResult, error) {
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

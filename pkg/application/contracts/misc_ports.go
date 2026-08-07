@@ -24,7 +24,7 @@ type ChatOperations interface {
 
 // ProfileAccessProvider entrega o ProfileDataAccess da sessão.
 //
-// Substitui a fábrica func(*whatsmeow.Client) ProfileDataAccess que
+// Substitui a fábrica func(*wa-noise.Client) ProfileDataAccess que
 // GetProfileUseCase recebia no construtor: a porta existia, mas o use case
 // precisava do cliente concreto do SDK para poder construí-la, o que anulava
 // o isolamento que ela deveria dar.

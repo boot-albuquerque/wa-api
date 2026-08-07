@@ -6,18 +6,18 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
-// ProfileDataAccess adapta *whatsmeow.Client para a interface
+// ProfileDataAccess adapta *wa-noise.Client para a interface
 // usecase.ProfileDataAccess, permitindo mock em testes unitários.
 type ProfileDataAccess struct {
-	client *whatsmeow.Client
+	client *wanoise.Client
 }
 
 // NewProfileDataAccess cria o adapter.
-func NewProfileDataAccess(client *whatsmeow.Client) *ProfileDataAccess {
+func NewProfileDataAccess(client *wanoise.Client) *ProfileDataAccess {
 	return &ProfileDataAccess{client: client}
 }
 
@@ -49,14 +49,14 @@ func (d *ProfileDataAccess) OwnJID() (domain.JID, bool) {
 	return "", false
 }
 
-// toTypesJID converte domain.JID para types.JID (whatsmeow).
+// toTypesJID converte domain.JID para types.JID (wa-noise).
 func toTypesJID(jid domain.JID) (types.JID, error) {
 	return types.ParseJID(string(jid))
 }
 
 // ProfilePictureURL retorna URL e ID da foto de perfil.
 //
-// O caminho real desta função exige um *whatsmeow.Client inicializado
+// O caminho real desta função exige um *wa-noise.Client inicializado
 // pelo SDK (que abre websocket). Esta refatoração fica limitada: o
 // adaptador continua a chamar o método concreto porque o SDK não
 // oferece uma interface alternativa. Testes diretos desta função
@@ -69,7 +69,7 @@ func (d *ProfileDataAccess) ProfilePictureURL(ctx context.Context, jid domain.JI
 	if d.client == nil {
 		return "", "", nil
 	}
-	pic, err := d.client.GetProfilePictureInfo(ctx, tj, &whatsmeow.GetProfilePictureParams{Preview: false})
+	pic, err := d.client.GetProfilePictureInfo(ctx, tj, &wanoise.GetProfilePictureParams{Preview: false})
 	if err != nil || pic == nil {
 		return "", "", err
 	}

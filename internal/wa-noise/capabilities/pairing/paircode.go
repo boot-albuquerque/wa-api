@@ -16,10 +16,10 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/security/paircrypto"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/hkdf"
 	"wa-api/internal/wa-noise/security/keys"
+	"wa-api/internal/wa-noise/security/paircrypto"
 )
 
 var notNumbers = regexp.MustCompile("[^0-9]")

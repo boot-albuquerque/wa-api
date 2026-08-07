@@ -6,9 +6,9 @@ import (
 	"encoding/base64"
 	"sync"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/security/hkdf"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 type Processor struct {

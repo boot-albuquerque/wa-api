@@ -1,4 +1,4 @@
-package whatsmeow_test
+package wanoise_test
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"syscall"
 
 	"wa-api/internal/wa-noise/core"
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store/sqlstore"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 func eventHandler(evt interface{}) {
@@ -37,7 +37,7 @@ func Example() {
 		panic(err)
 	}
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
+	client := wanoise.NewClient(deviceStore, clientLog)
 	client.AddEventHandler(eventHandler)
 
 	if client.Store.ID == nil {

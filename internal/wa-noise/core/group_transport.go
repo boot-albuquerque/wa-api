@@ -1,14 +1,14 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"strings"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // groupTransport adapta *Client a group.Transport. Existe para que o pacote

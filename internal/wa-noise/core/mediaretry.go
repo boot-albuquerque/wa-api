@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"fmt"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/media"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
@@ -26,7 +26,7 @@ import (
 //	evt, err := cli.ParseWebMessage(chatJID, historyMsg.GetMessage())
 //	imageMsg := evt.Message.GetImageMessage() // replace this with the part of the message you want to download
 //	data, err := cli.Download(imageMsg)
-//	if errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410) {
+//	if errors.Is(err, wa-noise.ErrMediaDownloadFailedWith404) || errors.Is(err, wa-noise.ErrMediaDownloadFailedWith410) {
 //	  err = cli.SendMediaRetryReceipt(&evt.Info, imageMsg.GetMediaKey())
 //	  // You need to store the event data somewhere as it's necessary for handling the retry response.
 //	  mediaRetryCache[evt.Info.ID] = imageMsg
@@ -40,7 +40,7 @@ import (
 //	  switch evt := rawEvt.(type) {
 //	  case *events.MediaRetry:
 //	    imageMsg := mediaRetryCache[evt.MessageID]
-//	    retryData, err := whatsmeow.DecryptMediaRetryNotification(evt, imageMsg.GetMediaKey())
+//	    retryData, err := wa-noise.DecryptMediaRetryNotification(evt, imageMsg.GetMediaKey())
 //	    if err != nil || retryData.GetResult != waMmsRetry.MediaRetryNotification_SUCCESS {
 //	      return
 //	    }

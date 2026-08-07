@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"wa-api/internal/wa-noise/capabilities/media"
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // A logica de midia mora em internal/wa-noise/media e e' testada la'. O que

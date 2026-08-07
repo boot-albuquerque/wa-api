@@ -1,6 +1,6 @@
 // Package media implementa o caminho de midia do fork (download, upload,
 // media connection e retry de midia) como funcoes livres sobre a interface
-// estreita [Transport], sem depender do pacote raiz whatsmeow.
+// estreita [Transport], sem depender do pacote raiz wa-noise.
 //
 // Ver ADR-0004 (docs/adr/0004-refatorar-internal-waclient-em-fork-intencional.md)
 // e a secao "Fase F/G — lote 1" de internal/wa-noise/PATCHES.md.

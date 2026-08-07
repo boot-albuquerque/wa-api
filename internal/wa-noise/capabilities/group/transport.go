@@ -3,10 +3,10 @@ package group
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // IQType e' o atributo "type" de um <iq>. Espelha o infoQueryType do pacote
@@ -57,7 +57,7 @@ type IQErrors struct {
 
 // Transport e' a fatia do cliente de que o dominio de grupo precisa.
 //
-// Deliberadamente nao expoe nada do *whatsmeow.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {
@@ -74,12 +74,12 @@ type Transport interface {
 	// GenerateMessageID gera um ID de mensagem quando o chamador nao fornece.
 	GenerateMessageID() types.MessageID
 	// TrimMessageIDPrefix remove o prefixo estatico dos IDs de mensagem "web"
-	// (whatsmeow.WebMessageIDPrefix). O WhatsApp Web nao inclui esse prefixo na
+	// (wa-noise.WebMessageIDPrefix). O WhatsApp Web nao inclui esse prefixo na
 	// chave de criacao de grupo. A constante continua em message_id.go, na
 	// raiz, porque e' do dominio de ID de mensagem e nao deste.
 	TrimMessageIDPrefix(id types.MessageID) string
 	// ElementMissing monta o erro de elemento XML ausente. O tipo concreto
-	// (*whatsmeow.ElementMissingError) e' generico do fork inteiro, nao do
+	// (*wa-noise.ElementMissingError) e' generico do fork inteiro, nao do
 	// dominio de grupo, entao continua definido na raiz; a construcao passa por
 	// aqui para preservar o tipo exato que os chamadores historicos recebem em
 	// um type assert.

@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/types/events"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 type QRChannelItem struct {

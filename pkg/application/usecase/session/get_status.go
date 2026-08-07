@@ -28,14 +28,14 @@ func NewGetStatusUseCase(sg appport.SessionGuard, status appport.SessionStatusRe
 }
 
 // Execute valida se o cliente está disponível e devolve o status ao vivo da
-// sessão (connected/loggedIn, via whatsmeow) somado ao registro persistido
+// sessão (connected/loggedIn, via wa-noise) somado ao registro persistido
 // (jid, webhook, qrcode, ...). Antes, Execute só validava a sessão e devolvia
 // GetStatusResult{} vazio — todo caller via connected=false/loggedIn=false
 // sempre, mesmo com a sessão pareada; um adapter cliente que dependa deste
 // endpoint para detectar a transição QR→autenticado nunca via a mudança.
 func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.GetStatusResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

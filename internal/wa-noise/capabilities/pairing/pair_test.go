@@ -14,11 +14,11 @@ import (
 	"go.mau.fi/libsignal/ecc"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 
-	"wa-api/internal/wa-noise/security/paircrypto"
 	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/keys"
+	"wa-api/internal/wa-noise/security/paircrypto"
 )
 
 // ---------------------------------------------------------------- pair-device

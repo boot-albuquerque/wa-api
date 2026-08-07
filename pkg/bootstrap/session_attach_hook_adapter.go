@@ -27,8 +27,8 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 }
 
 // Attach replica exatamente a construção de lifecycle.go:218-232: resolve o
-// *whatsmeow.Client já registrado por SessionProvider/SessionRegistry via
-// clientManager.GetWhatsmeowClient, monta o MyClient, registra
+// *wa-noise.Client já registrado por SessionProvider/SessionRegistry via
+// clientManager.Getwa-noiseClient, monta o MyClient, registra
 // myEventHandler e guarda o handle em clientManager.SetMyClient.
 //
 // Também é dona do kill-channel (lifecycle.go:459-472): a goroutine que
@@ -37,9 +37,9 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 // um único escritor dessa coluna no caminho de desconexão — o orchestrator
 // só observa SessionEvent, nunca escreve nela.
 func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token string) error {
-	client := clientManager.GetWhatsmeowClient(userID)
+	client := clientManager.GetWaNoiseClient(userID)
 	if client == nil {
-		return fmt.Errorf("sessionAttachHook: no whatsmeow client registered for userID %s", userID)
+		return fmt.Errorf("sessionAttachHook: no wanoise client registered for userID %s", userID)
 	}
 
 	mycli := &MyClient{
@@ -64,7 +64,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		<-kill
 		log.Info().Str("userid", userID).Msg("Received kill signal")
 		client.Disconnect()
-		clientManager.DeleteWhatsmeowClient(userID)
+		clientManager.DeleteWaNoiseClient(userID)
 		clientManager.DeleteMyClient(userID)
 		clientManager.DeleteHTTPClient(userID)
 		if _, err := h.s.DB.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {

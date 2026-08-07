@@ -339,7 +339,7 @@ func TestParseGroupChangeLinkWithoutGroupNode(t *testing.T) {
 			Tag:   tag,
 			Attrs: waBinary.Attrs{"link_type": "sub", "unlink_type": "sub", "unlink_reason": "delete"},
 		}))
-		// testElementMissing e' o duble de *whatsmeow.ElementMissingError; o
+		// testElementMissing e' o duble de *wa-noise.ElementMissingError; o
 		// contrato de que a raiz entrega o tipo historico esta' em
 		// group_transport.go.
 		var missing *testElementMissing

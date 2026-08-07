@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 
@@ -14,25 +14,25 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// historySender e' o recorte de *whatsmeow.Client que SyncHistoryForChat usa.
+// historySender e' o recorte de *wa-noise.Client que SyncHistoryForChat usa.
 // A costura existe para que o envio do pedido de sync possa ser exercitado sem
-// socket; *whatsmeow.Client a satisfaz e continua sendo o unico implementador
+// socket; *wa-noise.Client a satisfaz e continua sendo o unico implementador
 // em producao. A assercao de tipo permanece de valor unico, entao o
 // comportamento para um valor de tipo inesperado e' o mesmo de antes.
 type historySender interface {
 	BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageInfo, count int) *waE2E.Message
-	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
+	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 }
 
 // MyClientGetter e' a interface minima que SyncDeps.GetMC precisa: acesso ao
-// *whatsmeow.Client subjacente, sem exigir o tipo concreto de MyClient.
+// *wa-noise.Client subjacente, sem exigir o tipo concreto de MyClient.
 type MyClientGetter interface {
-	GetWAClient() *whatsmeow.Client
+	GetWAClient() *wanoise.Client
 }
 
 // SyncDeps provides the external callbacks needed for history sync.
 type SyncDeps struct {
-	GetWA func(userID string) interface{} // returns *whatsmeow.Client
+	GetWA func(userID string) interface{} // returns *wanoise.Client
 	GetMC func(userID string) MyClientGetter
 }
 
@@ -93,7 +93,7 @@ func SyncHistoryForChat(ctx context.Context, db *sqlx.DB, deps SyncDeps, userID 
 		return errors.New("client store not available")
 	}
 
-	_, err = waClient.SendMessage(ctx, waclient.Store.ID.ToNonAD(), historyMsg, whatsmeow.SendRequestExtra{Peer: true})
+	_, err = waClient.SendMessage(ctx, waclient.Store.ID.ToNonAD(), historyMsg, wanoise.SendRequestExtra{Peer: true})
 	if err != nil {
 		log.Error().Str("userID", userID).Str("chatJID", chatJIDStr).Err(err).Msg("Failed to send WhatsApp history sync request")
 		return fmt.Errorf("failed to send history sync request: %w", err)

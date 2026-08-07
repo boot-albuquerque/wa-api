@@ -10,10 +10,10 @@ import (
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
-// Subscribe traduz os 6 eventos de sessão/transporte do whatsmeow para
+// Subscribe traduz os 6 eventos de sessão/transporte do wa-noise para
 // appport.SessionEvent. Eventos de domínio (mensagem, presença, grupo) não
 // passam por aqui: seguem no handler registrado via SessionAttachHook.
-func (s *whatsmeowSession) Subscribe(fn func(appport.SessionEvent)) (func(), error) {
+func (s *wanoiseSession) Subscribe(fn func(appport.SessionEvent)) (func(), error) {
 	if fn == nil {
 		return nil, apperr.New("session_subscribe_nil_handler", apperr.CategoryValidation, "subscriber must not be nil", false, nil)
 	}

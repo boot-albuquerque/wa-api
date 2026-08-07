@@ -35,7 +35,7 @@ func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

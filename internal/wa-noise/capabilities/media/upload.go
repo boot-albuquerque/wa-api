@@ -74,7 +74,7 @@ func UploadReader(
 	resp.MediaKey = random.Bytes(mediaKeyLength)
 	iv, cipherKey, macKey, _ := GetKeys(resp.MediaKey, appInfo)
 	if tempFile == nil {
-		tempFile, err = os.CreateTemp("", "whatsmeow-upload-*")
+		tempFile, err = os.CreateTemp("", "wanoise-upload-*")
 		if err != nil {
 			err = fmt.Errorf("failed to create temporary file: %w", err)
 			return

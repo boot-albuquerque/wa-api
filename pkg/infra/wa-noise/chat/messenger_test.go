@@ -10,7 +10,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )
@@ -114,8 +114,8 @@ func TestChatMessengerAdapter_SendReaction_InvalidJID(t *testing.T) {
 // TestChatMessengerAdapter_SendReaction_PropagatesError.
 func TestChatMessengerAdapter_SendReaction_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("boom")
-	fake := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
-		return whatsmeow.SendResponse{}, sdkErr
+	fake := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		return wanoise.SendResponse{}, sdkErr
 	}}
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	_, err := a.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{Text: "👍"})
@@ -127,8 +127,8 @@ func TestChatMessengerAdapter_SendReaction_PropagatesError(t *testing.T) {
 // TestChatMessengerAdapter_SendReaction_OK devolve MessageSendResult.
 func TestChatMessengerAdapter_SendReaction_OK(t *testing.T) {
 	now := time.Now()
-	fake := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
-		return whatsmeow.SendResponse{Timestamp: now, ID: types.MessageID("msg-1")}, nil
+	fake := &waclienttest.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("msg-1")}, nil
 	}}
 	a := NewChatMessengerAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))
 	res, err := a.SendReaction(context.Background(), "u1", "x@y.com", domain.Reaction{

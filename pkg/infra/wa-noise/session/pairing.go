@@ -7,20 +7,20 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 )
 
 // Pair inicia o fluxo de QR e conecta o transporte (a conexão é o que faz o
-// whatsmeow emitir os códigos). O canal devolvido é fechado quando o canal
+// wa-noise emitir os códigos). O canal devolvido é fechado quando o canal
 // do SDK fecha.
-func (s *whatsmeowSession) Pair(ctx context.Context) (<-chan appport.PairingEvent, error) {
+func (s *wanoiseSession) Pair(ctx context.Context) (<-chan appport.PairingEvent, error) {
 	if s.HasCredentials() {
 		return nil, apperr.New(codeSessionAlreadyPaired, apperr.CategoryValidation, "session already has credentials", false, nil)
 	}
 
 	qrChan, err := s.client.GetQRChannel(ctx)
 	if err != nil {
-		if errors.Is(err, whatsmeow.ErrQRStoreContainsID) {
+		if errors.Is(err, wanoise.ErrQRStoreContainsID) {
 			return nil, apperr.New(codeSessionAlreadyPaired, apperr.CategoryValidation, "session already has credentials", false, err)
 		}
 		return nil, apperr.New("qr_channel_failed", apperr.CategoryInternal, "failed to get QR channel", true, err)
@@ -48,9 +48,9 @@ func (s *whatsmeowSession) Pair(ctx context.Context) (<-chan appport.PairingEven
 	return out, nil
 }
 
-func (s *whatsmeowSession) translatePairingItem(item whatsmeow.QRChannelItem) (appport.PairingEvent, bool) {
+func (s *wanoiseSession) translatePairingItem(item wanoise.QRChannelItem) (appport.PairingEvent, bool) {
 	switch item.Event {
-	case whatsmeow.QRChannelEventCode:
+	case wanoise.QRChannelEventCode:
 		return appport.PairingEvent{
 			Kind:    appport.PairingEventKindQR,
 			Code:    item.Code,

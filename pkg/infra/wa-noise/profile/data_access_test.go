@@ -7,7 +7,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 )
@@ -15,7 +15,7 @@ import (
 // TestProfileDataAccess_PushName_NilStore verifica que PushName retorna ""
 // quando o Store é nil, sem panic.
 func TestProfileDataAccess_PushName_NilStore(t *testing.T) {
-	da := &ProfileDataAccess{client: &whatsmeow.Client{}}
+	da := &ProfileDataAccess{client: &wanoise.Client{}}
 	if got := da.PushName(); got != "" {
 		t.Errorf("expected empty PushName with nil Store, got %q", got)
 	}
@@ -24,7 +24,7 @@ func TestProfileDataAccess_PushName_NilStore(t *testing.T) {
 // TestProfileDataAccess_OwnJID_NilStore verifica que OwnJID retorna
 // ("", false) quando o Store é nil.
 func TestProfileDataAccess_OwnJID_NilStore(t *testing.T) {
-	da := &ProfileDataAccess{client: &whatsmeow.Client{}}
+	da := &ProfileDataAccess{client: &wanoise.Client{}}
 	jid, ok := da.OwnJID()
 	if ok {
 		t.Error("expected ok=false with nil Store")
@@ -37,7 +37,7 @@ func TestProfileDataAccess_OwnJID_NilStore(t *testing.T) {
 // TestProfileDataAccess_OwnJID_NilID verifica que OwnJID retorna
 // ("", false) quando Store.ID é nil.
 func TestProfileDataAccess_OwnJID_NilID(t *testing.T) {
-	da := &ProfileDataAccess{client: &whatsmeow.Client{}}
+	da := &ProfileDataAccess{client: &wanoise.Client{}}
 	_, ok := da.OwnJID()
 	if ok {
 		t.Error("expected ok=false with nil Store.ID")
@@ -47,7 +47,7 @@ func TestProfileDataAccess_OwnJID_NilID(t *testing.T) {
 // TestProfileDataAccess_ContactInfo_NilContacts verifica que ContactInfo
 // retorna ("", "", nil) quando Store.Contacts é nil.
 func TestProfileDataAccess_ContactInfo_NilContacts(t *testing.T) {
-	da := &ProfileDataAccess{client: &whatsmeow.Client{}}
+	da := &ProfileDataAccess{client: &wanoise.Client{}}
 	fullName, businessName, err := da.ContactInfo(context.Background(), "5511987654321@s.whatsapp.net")
 	if err != nil {
 		t.Errorf("expected nil error with nil contacts, got %v", err)
@@ -61,7 +61,7 @@ func TestProfileDataAccess_ContactInfo_NilContacts(t *testing.T) {
 // retorna strings vazias quando o JID não está nos contatos.
 func TestProfileDataAccess_ContactInfo_NoSuchContact(t *testing.T) {
 	cs := &waclienttest.ContactStore{Contacts: map[types.JID]types.ContactInfo{}}
-	da := &ProfileDataAccess{client: &whatsmeow.Client{Store: &store.Device{Contacts: cs}}}
+	da := &ProfileDataAccess{client: &wanoise.Client{Store: &store.Device{Contacts: cs}}}
 	fullName, businessName, err := da.ContactInfo(context.Background(), "5511900000000@s.whatsapp.net")
 	if err != nil {
 		t.Errorf("expected nil error for missing contact, got %v", err)
@@ -76,7 +76,7 @@ func TestProfileDataAccess_ContactInfo_OK(t *testing.T) {
 	cs := &waclienttest.ContactStore{Contacts: map[types.JID]types.ContactInfo{
 		types.NewJID("5511987654321", types.DefaultUserServer): {FullName: "Alice", BusinessName: "Acme"},
 	}}
-	da := &ProfileDataAccess{client: &whatsmeow.Client{Store: &store.Device{Contacts: cs}}}
+	da := &ProfileDataAccess{client: &wanoise.Client{Store: &store.Device{Contacts: cs}}}
 	fullName, businessName, err := da.ContactInfo(context.Background(), "5511987654321@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("ContactInfo = %v", err)
@@ -89,7 +89,7 @@ func TestProfileDataAccess_ContactInfo_OK(t *testing.T) {
 // TestProfileDataAccess_ContactInfo_PropagatesError.
 func TestProfileDataAccess_ContactInfo_PropagatesError(t *testing.T) {
 	cs := &waclienttest.ContactStore{ErrOnGet: errors.New("contacts fail")}
-	da := &ProfileDataAccess{client: &whatsmeow.Client{Store: &store.Device{Contacts: cs}}}
+	da := &ProfileDataAccess{client: &wanoise.Client{Store: &store.Device{Contacts: cs}}}
 	_, _, err := da.ContactInfo(context.Background(), "5511987654321@s.whatsapp.net")
 	if err == nil {
 		t.Fatal("ContactInfo não propagou erro")
@@ -121,11 +121,11 @@ func TestNewProfileDataAccessFromInterface_NilClient(t *testing.T) {
 
 // TestNewProfileDataAccessFromInterface_RealClient desembrulva o cliente.
 func TestNewProfileDataAccessFromInterface_RealClient(t *testing.T) {
-	wac := &whatsmeow.Client{}
+	wac := &wanoise.Client{}
 	rc := waclient.RealClient{Client: wac}
 	da := NewProfileDataAccessFromInterface(rc)
 	if da.client != wac {
-		t.Error("expected unwrapped *whatsmeow.Client")
+		t.Error("expected unwrapped *wanoise.Client")
 	}
 }
 

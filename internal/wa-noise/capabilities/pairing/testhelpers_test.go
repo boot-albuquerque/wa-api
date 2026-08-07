@@ -7,14 +7,14 @@ import (
 	"sync"
 	"testing"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
-// missingElementError e' o duble do *whatsmeow.ElementMissingError da raiz. O
+// missingElementError e' o duble do *wa-noise.ElementMissingError da raiz. O
 // tipo concreto continua la'; aqui so' interessa que a construcao atravessa a
 // interface e devolve um erro identificavel.
 type missingElementError struct {

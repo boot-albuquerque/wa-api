@@ -9,7 +9,7 @@ import (
 )
 
 // newZerolog devolve o Logger e o buffer para onde ele escreve. E' o caminho de
-// producao do wa-api: o bootstrap embrulha um zerolog e o passa ao whatsmeow.
+// producao do wa-api: o bootstrap embrulha um zerolog e o passa ao wa-noise.
 func newZerolog(t *testing.T) (Logger, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer

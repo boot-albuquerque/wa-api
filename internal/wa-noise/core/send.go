@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"errors"
 
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/capabilities/send"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

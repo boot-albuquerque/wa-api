@@ -1,5 +1,5 @@
-// Package whatsmeow implements a client for interacting with the WhatsApp web multidevice API.
-package whatsmeow
+// Package wanoise implements a client for interacting with the WhatsApp web multidevice API.
+package wanoise
 
 import (
 	"context"
@@ -48,7 +48,7 @@ const handlerQueueSize = 2048
 // wrap the whole handler in another struct:
 //
 //	type MyClient struct {
-//		WAClient *whatsmeow.Client
+//		WAClient *wa-noise.Client
 //		eventHandlerID uint32
 //	}
 //

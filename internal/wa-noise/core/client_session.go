@@ -1,5 +1,5 @@
-// Package whatsmeow implements a client for interacting with the WhatsApp web multidevice API.
-package whatsmeow
+// Package wanoise implements a client for interacting with the WhatsApp web multidevice API.
+package wanoise
 
 import (
 	"context"

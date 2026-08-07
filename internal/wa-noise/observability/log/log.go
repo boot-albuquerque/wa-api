@@ -1,4 +1,4 @@
-// Package waLog contains a simple logger interface used by the other whatsmeow packages.
+// Package waLog contains a simple logger interface used by the other wa-noise packages.
 package waLog
 
 import (

@@ -4716,7 +4716,7 @@ const file_waWeb_WAWebProtobufsWeb_proto_rawDesc = "" +
 	"\x18ScheduledMessageMetadata\x12 \n" +
 	"\vrevealKeyID\x18\x01 \x01(\tR\vrevealKeyID\x12\x1c\n" +
 	"\trevealKey\x18\x02 \x01(\fR\trevealKey\x12$\n" +
-	"\rscheduledTime\x18\x03 \x01(\x04R\rscheduledTimeB!Z\x1fgo.mau.fi/whatsmeow/proto/waWeb"
+	"\rscheduledTime\x18\x03 \x01(\x04R\rscheduledTimeB\x2fZ\x2dwa-api/internal/wa-noise/protocol/proto/waWeb"
 
 var (
 	file_waWeb_WAWebProtobufsWeb_proto_rawDescOnce sync.Once

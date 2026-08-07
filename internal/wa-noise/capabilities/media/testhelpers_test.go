@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/security/cbc"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // rewriteTransport redireciona qualquer requisicao (inclusive as https que o
@@ -37,7 +37,7 @@ func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error)
 }
 
 // fakeTransport e' o duble de media.Transport usado nos testes: implementa a
-// interface inteira sem precisar de um *whatsmeow.Client (nem de socket, store
+// interface inteira sem precisar de um *wa-noise.Client (nem de socket, store
 // ou sessao). E' exatamente o ganho de testabilidade que a extracao buscava.
 type fakeTransport struct {
 	httpClient *http.Client

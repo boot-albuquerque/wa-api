@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // ------------------------------------------------------------------ dubles

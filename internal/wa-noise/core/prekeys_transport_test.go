@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"wa-api/internal/wa-noise/capabilities/prekeys"
-	"wa-api/internal/wa-noise/persistence/store"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 )
 
 // TestPreKeyTransportEspelhaOCliente confere que o adaptador entrega os mesmos

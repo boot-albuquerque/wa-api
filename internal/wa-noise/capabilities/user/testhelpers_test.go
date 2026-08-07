@@ -8,11 +8,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waVnameCert"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 var (
@@ -33,7 +33,7 @@ var testIQErrors = IQErrors{
 	NotFound:      errors.New("iq 404"),
 }
 
-// testElementMissing espelha *whatsmeow.ElementMissingError.
+// testElementMissing espelha *wa-noise.ElementMissingError.
 type testElementMissing struct {
 	Tag string
 	In  string

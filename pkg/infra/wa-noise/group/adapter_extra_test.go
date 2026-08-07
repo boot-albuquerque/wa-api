@@ -10,7 +10,7 @@ import (
 
 	"wa-api/pkg/domain"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
@@ -77,7 +77,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 		}},
 		{"CreateGroup", fakeSpec{
 			setup: func() *waclienttest.Fake {
-				return &waclienttest.Fake{CreateGroupFn: func(ctx context.Context, req whatsmeow.ReqCreateGroup) (*types.GroupInfo, error) {
+				return &waclienttest.Fake{CreateGroupFn: func(ctx context.Context, req wanoise.ReqCreateGroup) (*types.GroupInfo, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -159,7 +159,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 		}},
 		{"UpdateGroupParticipants", fakeSpec{
 			setup: func() *waclienttest.Fake {
-				return &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantChange) ([]types.GroupParticipant, error) {
+				return &waclienttest.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
 					return nil, sdkErr
 				}}
 			},
@@ -181,7 +181,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 		}},
 		{"UpdateRequestParticipants", fakeSpec{
 			setup: func() *waclienttest.Fake {
-				return &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action whatsmeow.ParticipantRequestChange) ([]types.GroupParticipant, error) {
+				return &waclienttest.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 					return nil, sdkErr
 				}}
 			},

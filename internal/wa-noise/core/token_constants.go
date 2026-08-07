@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 // Constantes dos varios tokens que acompanham mensagens enviadas:
 // tctoken (trusted contact), cstoken (contact safety) e reporting token.

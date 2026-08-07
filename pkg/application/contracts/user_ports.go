@@ -31,7 +31,7 @@ type ContactDirectory interface {
 // ChatActivityReader expõe o histórico de atividade por chat já persistido
 // localmente (message_history) — em particular o backfill automático do
 // HistorySync pós-pareamento. Não estende SessionGuard: é leitura de banco
-// local, não chamada ao whatsmeow, então não exige sessão whatsmeow ativa
+// local, não chamada ao wa-noise, então não exige sessão wa-noise ativa
 // (funciona mesmo com a sessão em standby).
 type ChatActivityReader interface {
 	// GetLastActivityByUser devolve, por JID de chat (string bruta — pode

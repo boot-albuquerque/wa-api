@@ -45,7 +45,7 @@ func format(msg string, args []any) string {
 // …) para que o log continue rastreável até o call site pelas mesmas regras
 // que valem no resto do repositório. O teste de piso vem antes de format
 // porque Sprintf no caminho de Debug desligado — o default, e onde o
-// whatsmeow é mais verboso — seria custo puro.
+// wa-noise é mais verboso — seria custo puro.
 
 func (b *Bridge) Errorf(msg string, args ...any) {
 	if zerolog.ErrorLevel < b.min {

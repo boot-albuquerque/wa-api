@@ -3,10 +3,10 @@ package tctoken
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // IQType e' o atributo "type" de um <iq>. Espelha o infoQueryType da raiz.

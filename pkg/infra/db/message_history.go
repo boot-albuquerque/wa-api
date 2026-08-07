@@ -91,7 +91,7 @@ func parseFlexTimestamp(raw string) (time.Time, bool) {
 // recente já persistida em message_history (INCLUINDO o backfill do
 // HistorySync pós-pareamento, que roda automaticamente e sem custo de
 // polling — ver eventhandler_history.go). É a única fonte de "última
-// conversa por contato" disponível hoje: GetAllContacts (whatsmeow_contacts)
+// conversa por contato" disponível hoje: GetAllContacts (wa-noise_contacts)
 // não carrega nenhum timestamp, só identidade/nome (ver ADR-0001 do
 // disparazaap, seção "Limitação conhecida"). Grupos (chat_jid @g.us) e
 // broadcasts ficam incluídos no resultado — filtragem é responsabilidade do

@@ -1,12 +1,12 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/notification"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/capabilities/tctoken"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // handleBlocklist e' fachada: a logica vive em internal/wa-noise/notification

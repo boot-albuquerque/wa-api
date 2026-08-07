@@ -1,12 +1,12 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/capabilities/tctoken"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // tcTokenTransport adapta *Client a tctoken.Transport. Existe para que o pacote

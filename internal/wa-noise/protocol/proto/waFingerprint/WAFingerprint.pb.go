@@ -241,7 +241,7 @@ const file_waFingerprint_WAFingerprint_proto_rawDesc = "" +
 	"\vHostedState\x12\b\n" +
 	"\x04E2EE\x10\x00\x12\n" +
 	"\n" +
-	"\x06HOSTED\x10\x01B)Z'go.mau.fi/whatsmeow/proto/waFingerprint"
+	"\x06HOSTED\x10\x01B\x37Z\x35wa-api/internal/wa-noise/protocol/proto/waFingerprint"
 
 var (
 	file_waFingerprint_WAFingerprint_proto_rawDescOnce sync.Once

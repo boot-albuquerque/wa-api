@@ -11,15 +11,15 @@ import (
 	"go.mau.fi/util/dbutil"
 	"go.mau.fi/util/random"
 
-	"wa-api/internal/wa-noise/protocol/proto/waAdv"
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/persistence/store/sqlstore/upgrades"
+	"wa-api/internal/wa-noise/protocol/proto/waAdv"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/security/keys"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
-// Container is a wrapper for a SQL database that can contain multiple whatsmeow sessions.
+// Container is a wrapper for a SQL database that can contain multiple wa-noise sessions.
 type Container struct {
 	db     *dbutil.Database
 	log    waLog.Logger

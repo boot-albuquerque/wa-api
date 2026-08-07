@@ -18,13 +18,13 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Errors reune os sentinelas de erro do pacote RAIZ de que este dominio
@@ -77,7 +77,7 @@ type Errors struct {
 //
 //   - `group` e' importado aqui para os tipos *group.Meta (retorno de
 //     CachedGroupData) e group.ErrNotFound (o valor por tras de
-//     whatsmeow.ErrGroupNotFound). Traduzir o Meta para uma struct local seria
+//     wa-noise.ErrGroupNotFound). Traduzir o Meta para uma struct local seria
 //     uma copia campo a campo sem ganho.
 //   - `tctoken.ShouldSendInChatAction` e `tctoken.ShouldSendNew` sao chamadas
 //     direto em outbound.go. Sao funcoes PURAS (JID -> bool, time -> bool), sem
@@ -85,7 +85,7 @@ type Errors struct {
 //     delegacao. Faze-las atravessar a interface seria transformar duas funcoes
 //     puras em dois metodos de duble.
 //
-// Deliberadamente nao expoe nada do *whatsmeow.Client alem disso: e' o que
+// Deliberadamente nao expoe nada do *wa-noise.Client alem disso: e' o que
 // permite que este pacote nao importe o pacote raiz (o que fecharia um ciclo) e
 // que os testes usem um duble em vez de um cliente com socket e sessao Noise.
 type Transport interface {

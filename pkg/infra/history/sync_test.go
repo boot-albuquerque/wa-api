@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 
 	"github.com/jmoiron/sqlx"
@@ -21,7 +21,7 @@ import (
 // A costura aqui e' a propria assinatura: SyncHistoryForChat recebe o *sqlx.DB e
 // o SyncDeps, e SaveOutgoingMessageToHistory recebe as funcoes de persistencia.
 // Nada disto precisa de socket. O que NAO da' para exercitar sem conexao real e'
-// o retorno de sucesso de whatsmeow.Client.SendMessage — um *Client nil devolve
+// o retorno de sucesso de wa-noise.Client.SendMessage — um *Client nil devolve
 // ErrClientIsNil antes de qualquer I/O, o que cobre o ramo de erro, e o ramo de
 // sucesso fica descoberto por construcao (esta' declarado no PR da fase).
 //
@@ -68,9 +68,9 @@ func insertMessage(t *testing.T, conn *sqlx.DB, userID, chatJID, senderJID, mess
 }
 
 // mcWithClient implementa MyClientGetter, esperado por SyncHistoryForChat.
-type mcWithClient struct{ client *whatsmeow.Client }
+type mcWithClient struct{ client *wanoise.Client }
 
-func (m mcWithClient) GetWAClient() *whatsmeow.Client { return m.client }
+func (m mcWithClient) GetWAClient() *wanoise.Client { return m.client }
 
 // fakeSender implementa historySender sem socket: e' o que torna o ramo de
 // sucesso (e o de pedido nao construido) alcancavel em teste.
@@ -94,13 +94,13 @@ func (f *fakeSender) BuildHistorySyncRequest(info *types.MessageInfo, count int)
 	return &waE2E.Message{}
 }
 
-func (f *fakeSender) SendMessage(_ context.Context, to types.JID, _ *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+func (f *fakeSender) SendMessage(_ context.Context, to types.JID, _ *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
 	f.sends++
 	f.gotTo = to
 	if len(extra) > 0 {
 		f.gotPeer = extra[0].Peer
 	}
-	return whatsmeow.SendResponse{}, f.sendErr
+	return wanoise.SendResponse{}, f.sendErr
 }
 
 func depsWith(wa interface{}, mc MyClientGetter) SyncDeps {
@@ -110,15 +110,15 @@ func depsWith(wa interface{}, mc MyClientGetter) SyncDeps {
 	}
 }
 
-// clientWithStore devolve um *whatsmeow.Client cujo Store.ID esta' preenchido —
+// clientWithStore devolve um *wa-noise.Client cujo Store.ID esta' preenchido —
 // o suficiente para passar da validacao e chegar no SendMessage.
-func clientWithStore(t *testing.T) *whatsmeow.Client {
+func clientWithStore(t *testing.T) *wanoise.Client {
 	t.Helper()
 	jid, err := types.ParseJID("5511999999999:1@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("ParseJID: %v", err)
 	}
-	return &whatsmeow.Client{Store: &store.Device{ID: &jid}}
+	return &wanoise.Client{Store: &store.Device{ID: &jid}}
 }
 
 func TestSyncHistoryForChat_ErroDeConsultaPropagaCausa(t *testing.T) {
@@ -207,8 +207,8 @@ func TestSyncHistoryForChat_SemStoreDoCliente(t *testing.T) {
 		mc   MyClientGetter
 	}{
 		{name: "GetWAClient devolve nil", mc: mcWithClient{}},
-		{name: "cliente sem store", mc: mcWithClient{client: &whatsmeow.Client{}}},
-		{name: "store sem ID", mc: mcWithClient{client: &whatsmeow.Client{Store: &store.Device{}}}},
+		{name: "cliente sem store", mc: mcWithClient{client: &wanoise.Client{}}},
+		{name: "store sem ID", mc: mcWithClient{client: &wanoise.Client{Store: &store.Device{}}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

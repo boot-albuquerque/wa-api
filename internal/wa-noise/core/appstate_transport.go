@@ -1,15 +1,15 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/persistence/store"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // appStateTransport adapta *Client a appstatesync.Transport. Existe para que o

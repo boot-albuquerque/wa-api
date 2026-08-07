@@ -35,7 +35,7 @@ func TestListNewsletterExecute(t *testing.T) {
 			// o handler acima distingue "sem sessão" de "SDK quebrado" por
 			// ela, e a string opaca destruía essa distinção.
 			wantErr:       errSession,
-			wantErrorLog:  "no whatsmeow session",
+			wantErrorLog:  "no wanoise session",
 			wantListCalls: 0,
 		},
 		{

@@ -3,10 +3,10 @@ package user
 import (
 	"context"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // IQType e' o atributo "type" de um <iq>. Espelha o infoQueryType do pacote
@@ -59,7 +59,7 @@ type IQErrors struct {
 
 // Transport e' a fatia do cliente de que o dominio de usuario precisa.
 //
-// Deliberadamente nao expoe nada do *whatsmeow.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {
@@ -87,7 +87,7 @@ type Transport interface {
 	// interface; a definicao fica onde esta' ate' o lote de send.
 	ParticipantListHash(jids []types.JID) string
 	// ElementMissing monta o erro de elemento XML ausente. O tipo concreto
-	// (*whatsmeow.ElementMissingError) e' generico do fork inteiro, nao do
+	// (*wa-noise.ElementMissingError) e' generico do fork inteiro, nao do
 	// dominio de usuario, entao continua definido na raiz; a construcao passa
 	// por aqui para preservar o tipo exato que os chamadores historicos
 	// recebem em um type assert.

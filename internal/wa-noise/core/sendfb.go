@@ -1,12 +1,12 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"errors"
 
+	"wa-api/internal/wa-noise/capabilities/send"
 	armadillo "wa-api/internal/wa-noise/protocol/proto"
 	"wa-api/internal/wa-noise/protocol/proto/waMsgApplication"
-	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

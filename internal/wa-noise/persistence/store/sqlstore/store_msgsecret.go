@@ -16,7 +16,7 @@ const (
 		ON CONFLICT (our_jid, chat_jid, sender_jid, message_id) DO NOTHING
 	`
 	// getMsgSecret busca tambem pelo JID equivalente do outro espaco de
-	// enderecamento (LID <-> PN, via whatsmeow_lid_map), porque o segredo pode
+	// enderecamento (LID <-> PN, via wa-noise_lid_map), porque o segredo pode
 	// ter sido gravado antes ou depois da migracao do chat para LID.
 	getMsgSecret = `
 		SELECT key, sender_jid

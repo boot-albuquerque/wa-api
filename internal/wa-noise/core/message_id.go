@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"wa-api/internal/wa-noise/capabilities/message"
@@ -13,7 +13,7 @@ const WebMessageIDPrefix = message.WebMessageIDPrefix
 // GenerateMessageID generates a random string that can be used as a message ID on WhatsApp.
 //
 //	msgID := cli.GenerateMessageID()
-//	cli.SendMessage(context.Background(), targetJID, &waE2E.Message{...}, whatsmeow.SendRequestExtra{ID: msgID})
+//	cli.SendMessage(context.Background(), targetJID, &waE2E.Message{...}, wa-noise.SendRequestExtra{ID: msgID})
 //
 // O receptor nil continua sendo valido, como antes da extracao: getOwnID
 // devolve EmptyJID e a checagem de MessengerConfig e' guardada por `cli != nil`.
@@ -28,8 +28,8 @@ func GenerateFacebookMessageID() int64 {
 
 // GenerateMessageID generates a random string that can be used as a message ID on WhatsApp.
 //
-//	msgID := whatsmeow.GenerateMessageID()
-//	cli.SendMessage(context.Background(), targetJID, &waE2E.Message{...}, whatsmeow.SendRequestExtra{ID: msgID})
+//	msgID := wa-noise.GenerateMessageID()
+//	cli.SendMessage(context.Background(), targetJID, &waE2E.Message{...}, wa-noise.SendRequestExtra{ID: msgID})
 //
 // Deprecated: WhatsApp web has switched to using a hash of the current timestamp, user id and random bytes. Use Client.GenerateMessageID instead.
 func GenerateMessageID() types.MessageID {

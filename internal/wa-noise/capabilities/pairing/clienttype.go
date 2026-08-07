@@ -4,9 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/persistence/store"
 )
 
 // ClientType is the type of client to use with PairCode.

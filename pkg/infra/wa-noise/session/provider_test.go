@@ -6,7 +6,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 
@@ -35,19 +35,19 @@ func (f *fakeDeviceContainer) NewDevice() *store.Device {
 
 // fakeSessionClient é o fake mínimo de sessionClient.
 type fakeSessionClient struct {
-	GetQRChannelFn    func(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error)
+	GetQRChannelFn    func(ctx context.Context) (<-chan wanoise.QRChannelItem, error)
 	ConnectFn         func() error
 	DisconnectFn      func()
 	IsConnectedFn     func() bool
 	IsLoggedInFn      func() bool
 	LogoutFn          func(ctx context.Context) error
-	AddEventHandlerFn func(handler whatsmeow.EventHandler) uint32
+	AddEventHandlerFn func(handler wanoise.EventHandler) uint32
 	RemoveHandlerFn   func(id uint32) bool
-	SetSOCKSProxyFn   func(px proxy.Dialer, opts ...whatsmeow.SetProxyOptions)
-	SetProxyAddressFn func(addr string, opts ...whatsmeow.SetProxyOptions) error
+	SetSOCKSProxyFn   func(px proxy.Dialer, opts ...wanoise.SetProxyOptions)
+	SetProxyAddressFn func(addr string, opts ...wanoise.SetProxyOptions) error
 }
 
-func (f *fakeSessionClient) GetQRChannel(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
+func (f *fakeSessionClient) GetQRChannel(ctx context.Context) (<-chan wanoise.QRChannelItem, error) {
 	return f.GetQRChannelFn(ctx)
 }
 func (f *fakeSessionClient) Connect() error { return f.ConnectFn() }
@@ -74,7 +74,7 @@ func (f *fakeSessionClient) Logout(ctx context.Context) error {
 	}
 	return nil
 }
-func (f *fakeSessionClient) AddEventHandler(handler whatsmeow.EventHandler) uint32 {
+func (f *fakeSessionClient) AddEventHandler(handler wanoise.EventHandler) uint32 {
 	if f.AddEventHandlerFn != nil {
 		return f.AddEventHandlerFn(handler)
 	}
@@ -86,12 +86,12 @@ func (f *fakeSessionClient) RemoveEventHandler(id uint32) bool {
 	}
 	return true
 }
-func (f *fakeSessionClient) SetSOCKSProxy(px proxy.Dialer, opts ...whatsmeow.SetProxyOptions) {
+func (f *fakeSessionClient) SetSOCKSProxy(px proxy.Dialer, opts ...wanoise.SetProxyOptions) {
 	if f.SetSOCKSProxyFn != nil {
 		f.SetSOCKSProxyFn(px, opts...)
 	}
 }
-func (f *fakeSessionClient) SetProxyAddress(addr string, opts ...whatsmeow.SetProxyOptions) error {
+func (f *fakeSessionClient) SetProxyAddress(addr string, opts ...wanoise.SetProxyOptions) error {
 	if f.SetProxyAddressFn != nil {
 		return f.SetProxyAddressFn(addr, opts...)
 	}
@@ -151,5 +151,5 @@ func TestSessionProviderAdapter_NewSession_ReusesDeviceForKnownJID(t *testing.T)
 
 var (
 	_ appport.SessionProvider = (*SessionProviderAdapter)(nil)
-	_ appport.Session         = (*whatsmeowSession)(nil)
+	_ appport.Session         = (*wanoiseSession)(nil)
 )

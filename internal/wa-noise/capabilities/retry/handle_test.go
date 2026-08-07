@@ -12,8 +12,8 @@ import (
 	"go.mau.fi/libsignal/keys/prekey"
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/prekeys"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waConsumerApplication"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"

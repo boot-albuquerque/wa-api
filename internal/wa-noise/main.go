@@ -1,6 +1,3 @@
-// Package whatsmeow e' a porta de entrada de internal/wa-noise/ (fork ativo do
-// whatsmeow, ADR-0004).
-//
 // A Fase H reorganizou a arvore em camadas:
 //
 //	core/          o nucleo (Client, conexao, request) — implementacao
@@ -27,7 +24,7 @@
 // Regra de escrita: este arquivo so' contem aliases e delegacao. Nenhuma logica
 // nova mora aqui — se algo precisa de corpo, mora em `core/` ou em
 // `capabilities/`.
-package whatsmeow
+package wanoise
 
 import (
 	core "wa-api/internal/wa-noise/core"

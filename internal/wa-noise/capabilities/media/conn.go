@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 // ConnHost representa um host de onde a midia pode ser baixada.
@@ -33,7 +33,7 @@ func (mc *Conn) Expiry() time.Time {
 
 // ConnCache guarda a media connection corrente e serializa as renovacoes.
 // O zero value e' utilizavel; o lock que antes era o campo mediaConnLock do
-// *whatsmeow.Client vive aqui, com os mesmos pontos de aquisicao e liberacao.
+// *wa-noise.Client vive aqui, com os mesmos pontos de aquisicao e liberacao.
 type ConnCache struct {
 	lock  sync.Mutex
 	cache *Conn

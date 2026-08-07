@@ -13,12 +13,12 @@ import (
 	"go.mau.fi/libsignal/protocol"
 	"google.golang.org/protobuf/proto"
 
+	"wa-api/internal/wa-noise/capabilities/tctoken"
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/msgattrs"
 	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/capabilities/tctoken"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

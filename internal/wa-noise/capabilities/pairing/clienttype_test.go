@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/proto/waCompanionReg"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/persistence/store"
 )
 
 // O tipo configurado pelo chamador tem precedencia sobre qualquer deducao.

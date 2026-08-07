@@ -7,9 +7,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"wa-api/internal/wa-noise/capabilities/send"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/gcm"

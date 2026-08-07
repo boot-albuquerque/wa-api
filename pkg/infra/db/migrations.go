@@ -76,7 +76,7 @@ var migrations = []Migration{
 	{
 		ID:    9,
 		Name:  "add_whatsmeow_message_secrets_message_id_idx",
-		UpSQL: addWhatsmeowMessageSecretsMessageIDIndexSQL,
+		UpSQL: addWaNoiseMessageSecretsMessageIDIndexSQL,
 	},
 	{
 		ID:    10,
@@ -244,7 +244,7 @@ END $$;
 -- SQLite version (handled in code)
 `
 
-const addWhatsmeowMessageSecretsMessageIDIndexSQL = `
+const addWaNoiseMessageSecretsMessageIDIndexSQL = `
 -- PostgreSQL version
 DO $$
 BEGIN

@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func (cli *Client) SendHistorySyncServerErrorReceipt(ctx context.Context, msgID 
 // DownloadHistorySync will download and parse the history sync blob from the given history sync notification.
 //
 // You only need to call this manually if you set [Client.ManualHistorySyncDownload] to true.
-// By default, whatsmeow will call this automatically and dispatch an [events.HistorySync] with the parsed data.
+// By default, wa-noise will call this automatically and dispatch an [events.HistorySync] with the parsed data.
 func (cli *Client) DownloadHistorySync(ctx context.Context, notif *waE2E.HistorySyncNotification, synchronousStorage bool) (*waHistorySync.HistorySync, error) {
 	return message.DownloadHistorySync(ctx, cli.msgT(), notif, synchronousStorage)
 }

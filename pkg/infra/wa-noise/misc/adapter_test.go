@@ -8,7 +8,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
@@ -98,9 +98,9 @@ func TestMiscAdapter_RequestUnavailableMessage_OK(t *testing.T) {
 	called := false
 	fake := &waclienttest.Fake{
 		BuildUnavailableMessageFn: func(chat, sender types.JID, id string) *waE2E.Message { return nil },
-		SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+		SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
 			called = true
-			return whatsmeow.SendResponse{ID: "x", Timestamp: time.Now()}, nil
+			return wanoise.SendResponse{ID: "x", Timestamp: time.Now()}, nil
 		},
 	}
 	a := NewMiscAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))

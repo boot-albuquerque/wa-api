@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"testing"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
-// elementMissingError replica o *whatsmeow.ElementMissingError da raiz (que
+// elementMissingError replica o *wa-noise.ElementMissingError da raiz (que
 // este pacote nao pode importar) para que os testes possam afirmar que o erro
 // devolvido veio de Transport.ElementMissing, com tag e contexto corretos.
 type elementMissingError struct {

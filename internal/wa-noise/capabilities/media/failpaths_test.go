@@ -17,8 +17,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 )
 
 // Este arquivo cobre os ramos de erro que so' aparecem quando o transporte HTTP

@@ -1,10 +1,10 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
+	"wa-api/internal/wa-noise/protocol/appstate"
 )
 
 // Fachada do pedido de chaves de app state ao dispositivo primario. A logica

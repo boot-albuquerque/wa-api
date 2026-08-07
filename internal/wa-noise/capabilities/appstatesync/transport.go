@@ -3,13 +3,13 @@ package appstatesync
 import (
 	"context"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // IQType e' o atributo "type" de um <iq>. Espelha o infoQueryType do pacote
@@ -35,7 +35,7 @@ type IQ struct {
 
 // Transport e' a fatia do cliente de que a sincronizacao de app state precisa.
 //
-// Deliberadamente nao expoe nada do *whatsmeow.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {
@@ -74,7 +74,7 @@ type Transport interface {
 	// ClearNCTSalt apaga o salt de NCT.
 	ClearNCTSalt(ctx context.Context) error
 	// ElementMissing monta o erro de elemento XML ausente. O tipo concreto
-	// (*whatsmeow.ElementMissingError) e' generico do fork inteiro, nao deste
+	// (*wa-noise.ElementMissingError) e' generico do fork inteiro, nao deste
 	// dominio, entao continua definido na raiz; so' a construcao passa por
 	// aqui, para preservar o tipo exato que os chamadores historicos recebem em
 	// um type assert. Mesma decisao do lote 2.

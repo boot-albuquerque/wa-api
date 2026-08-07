@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 )
 
 func TestConnExpiry(t *testing.T) {

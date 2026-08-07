@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 	"testing"
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 )
 
 // TestSessionCounterAdapter_New devolve adapter não-nil.
@@ -15,11 +15,11 @@ func TestSessionCounterAdapter_New(t *testing.T) {
 
 // fakeCM implementa ClientHealthProvider para os testes do SessionCounter.
 type fakeCM struct {
-	clients []*whatsmeow.Client
+	clients []*wanoise.Client
 }
 
-func (f *fakeCM) GetWhatsmeowClientsCount() int { return len(f.clients) }
-func (f *fakeCM) IterateWhatsmeowClients(cb func(*whatsmeow.Client) bool) {
+func (f *fakeCM) GetWaNoiseClientsCount() int { return len(f.clients) }
+func (f *fakeCM) IterateWaNoiseClients(cb func(*wanoise.Client) bool) {
 	for _, c := range f.clients {
 		if !cb(c) {
 			return
@@ -45,7 +45,7 @@ func TestSessionCounterAdapter_CountSessions_Zero(t *testing.T) {
 
 // TestSessionCounterAdapter_CountSessions_NilClientsEntries não panic.
 func TestSessionCounterAdapter_CountSessions_NilClientsEntries(t *testing.T) {
-	cm := &fakeCM{clients: []*whatsmeow.Client{nil}}
+	cm := &fakeCM{clients: []*wanoise.Client{nil}}
 	a := NewSessionCounterAdapter(cm)
 	counts, err := a.CountSessions(context.Background())
 	if err != nil {

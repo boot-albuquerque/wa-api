@@ -263,7 +263,7 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 	./internal/wa-noise/runtime/proxy/ \
 	./internal/wa-noise/protocol/socket/ ./internal/wa-noise/protocol/appstate/ \
 	./internal/wa-noise/persistence/store/ ./internal/wa-noise/persistence/store/sqlstore/ \
-	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
+	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/proto/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
 	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \
 	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/
 

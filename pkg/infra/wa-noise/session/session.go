@@ -7,32 +7,32 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 
 	"golang.org/x/net/proxy"
 )
 
-// whatsmeowSession implementa appport.Session sobre um cliente whatsmeow.
-type whatsmeowSession struct {
+// wa-noiseSession implementa appport.Session sobre um cliente wa-noise.
+type wanoiseSession struct {
 	userID string
 	token  string
 	device *store.Device
 	client sessionClient
 }
 
-func (s *whatsmeowSession) HasCredentials() bool { return s.device.ID != nil }
+func (s *wanoiseSession) HasCredentials() bool { return s.device.ID != nil }
 
-// WhatsmeowClient expõe o cliente do SDK por trás da sessão. É o que permite
-// ao ClientManager.Register manter whatsmeowClients em dia sem que o
+// wa-noiseClient expõe o cliente do SDK por trás da sessão. É o que permite
+// ao ClientManager.Register manter wa-noiseClients em dia sem que o
 // orchestrator (que só conhece port.Session) conheça o SDK. Devolve nil quando
 // a sessão foi criada com um cliente falso (testes).
-func (s *whatsmeowSession) WhatsmeowClient() *whatsmeow.Client {
-	client, _ := s.client.(*whatsmeow.Client)
+func (s *wanoiseSession) WaNoiseClient() *wanoise.Client {
+	client, _ := s.client.(*wanoise.Client)
 	return client
 }
 
-func (s *whatsmeowSession) JID() (string, bool) {
+func (s *wanoiseSession) JID() (string, bool) {
 	if s.device.ID == nil {
 		return "", false
 	}
@@ -40,7 +40,7 @@ func (s *whatsmeowSession) JID() (string, bool) {
 }
 
 // Connect estabelece o transporte de uma sessão já pareada.
-func (s *whatsmeowSession) Connect(_ context.Context) error {
+func (s *wanoiseSession) Connect(_ context.Context) error {
 	if !s.HasCredentials() {
 		return apperr.New("session_not_paired", apperr.CategoryValidation, "session has no credentials", false, nil)
 	}
@@ -50,11 +50,11 @@ func (s *whatsmeowSession) Connect(_ context.Context) error {
 	return nil
 }
 
-func (s *whatsmeowSession) Disconnect()       { s.client.Disconnect() }
-func (s *whatsmeowSession) IsConnected() bool { return s.client.IsConnected() }
-func (s *whatsmeowSession) IsLoggedIn() bool  { return s.client.IsLoggedIn() }
+func (s *wanoiseSession) Disconnect()       { s.client.Disconnect() }
+func (s *wanoiseSession) IsConnected() bool { return s.client.IsConnected() }
+func (s *wanoiseSession) IsLoggedIn() bool  { return s.client.IsLoggedIn() }
 
-func (s *whatsmeowSession) Logout(ctx context.Context) error {
+func (s *wanoiseSession) Logout(ctx context.Context) error {
 	if err := s.client.Logout(ctx); err != nil {
 		return apperr.New("session_logout_failed", apperr.CategoryInternal, "failed to logout session", true, err)
 	}
@@ -64,7 +64,7 @@ func (s *whatsmeowSession) Logout(ctx context.Context) error {
 // SetProxy aplica o proxy no transporte. Invariante do port: só vale antes de
 // Connect/Pair — com o transporte de pé devolve erro em vez de aplicar
 // silenciosamente na próxima reconexão.
-func (s *whatsmeowSession) SetProxy(cfg appport.ProxyConfig) error {
+func (s *wanoiseSession) SetProxy(cfg appport.ProxyConfig) error {
 	if s.client.IsConnected() {
 		return apperr.New("session_proxy_after_connect", apperr.CategoryValidation, "proxy must be set before connecting", false, nil)
 	}
@@ -80,10 +80,10 @@ func (s *whatsmeowSession) SetProxy(cfg appport.ProxyConfig) error {
 		if derr != nil {
 			return apperr.New("session_proxy_dialer_failed", apperr.CategoryInternal, "failed to build SOCKS proxy dialer", true, derr)
 		}
-		s.client.SetSOCKSProxy(dialer, whatsmeow.SetProxyOptions{})
+		s.client.SetSOCKSProxy(dialer, wanoise.SetProxyOptions{})
 		return nil
 	case appport.ProxyModeHTTP:
-		if perr := s.client.SetProxyAddress(parsed.String(), whatsmeow.SetProxyOptions{}); perr != nil {
+		if perr := s.client.SetProxyAddress(parsed.String(), wanoise.SetProxyOptions{}); perr != nil {
 			return apperr.New("session_proxy_address_failed", apperr.CategoryInternal, "failed to set HTTP proxy address", true, perr)
 		}
 		return nil
@@ -92,4 +92,4 @@ func (s *whatsmeowSession) SetProxy(cfg appport.ProxyConfig) error {
 	}
 }
 
-var _ appport.Session = (*whatsmeowSession)(nil)
+var _ appport.Session = (*wanoiseSession)(nil)

@@ -7,9 +7,9 @@ import (
 	"wa-api/pkg/infra/wa-noise/waclient"
 	"wa-api/pkg/infra/wa-noise/waclient/waclienttest"
 
-	whatsmeow "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
@@ -31,8 +31,8 @@ func TestMiscAdapter_RequestUnavailableMessage_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("boom")
 	fake := &waclienttest.Fake{
 		BuildUnavailableMessageFn: func(chat, sender types.JID, id string) *waE2E.Message { return nil },
-		SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
-			return whatsmeow.SendResponse{}, sdkErr
+		SendMessageFn: func(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			return wanoise.SendResponse{}, sdkErr
 		},
 	}
 	a := NewMiscAdapter(waclienttest.GetterWith(map[string]waclient.Client{"u1": fake}))

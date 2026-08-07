@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strconv"
 
-	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/socket"
 )
 
 var clientVersionRegex = regexp.MustCompile(`"client_revision":(\d+),`)

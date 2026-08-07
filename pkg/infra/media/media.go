@@ -9,7 +9,7 @@ import (
 
 	wamgr "wa-api/pkg/infra/wa-noise/registry"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/rs/zerolog/log"
 )
@@ -27,7 +27,7 @@ type MediaS3Config struct {
 	MediaDelivery string
 }
 
-// MyClient is an alias to the whatsmeow package's MyClient interface
+// MyClient is an alias to the wa-noise package's MyClient interface
 type MyClient = wamgr.MyClient
 
 // S3Manager interface for S3 operations
@@ -50,7 +50,7 @@ func SetProcessMediaHandler(handler *ProcessMediaHandler) {
 
 func ProcessMedia(
 	mycli MyClient,
-	msg whatsmeow.DownloadableMessage,
+	msg wanoise.DownloadableMessage,
 	mimeType string,
 	fallbackExt string,
 	timeout time.Duration,

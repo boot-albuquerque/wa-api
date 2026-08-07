@@ -116,7 +116,7 @@ var BaseClientPayload = &waWa6.ClientPayload{
 }
 
 var DeviceProps = &waCompanionReg.DeviceProps{
-	Os: proto.String("whatsmeow"),
+	Os: proto.String("wanoise"),
 	Version: &waCompanionReg.DeviceProps_AppVersion{
 		Primary:   proto.Uint32(0),
 		Secondary: proto.Uint32(1),

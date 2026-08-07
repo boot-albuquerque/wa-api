@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"testing"
@@ -34,7 +34,7 @@ func getDeviceCache(cli *Client, jid types.JID) (deviceCache, bool) {
 
 // A fronteira raiz <-> send e' feita de apelidos de tipo, nao de tipos novos.
 // Se alguem trocar `=` por definicao, os quatro tipos viram tipos distintos e a
-// API publica quebra em silencio para quem monta um whatsmeow.SendResponse.
+// API publica quebra em silencio para quem monta um wa-noise.SendResponse.
 func TestSendTypesAreAliases(t *testing.T) {
 	var resp SendResponse = send.Response{}
 	var req SendRequestExtra = send.RequestExtra{}

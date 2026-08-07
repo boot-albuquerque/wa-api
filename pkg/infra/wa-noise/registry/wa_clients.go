@@ -1,52 +1,52 @@
 package registry
 
 import (
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 )
 
-// Ciclo de vida dos *whatsmeow.Client por usuário.
+// Ciclo de vida dos *wa-noise.Client por usuário.
 
-func (cm *ClientManager) SetWhatsmeowClient(userID string, client *whatsmeow.Client) {
+func (cm *ClientManager) SetWaNoiseClient(userID string, client *wanoise.Client) {
 	cm.Lock()
 	defer cm.Unlock()
-	cm.whatsmeowClients[userID] = client
+	cm.wanoiseClients[userID] = client
 }
 
-func (cm *ClientManager) GetWhatsmeowClient(userID string) *whatsmeow.Client {
+func (cm *ClientManager) GetWaNoiseClient(userID string) *wanoise.Client {
 	cm.RLock()
 	defer cm.RUnlock()
-	return cm.whatsmeowClients[userID]
+	return cm.wanoiseClients[userID]
 }
 
-func (cm *ClientManager) DeleteWhatsmeowClient(userID string) {
+func (cm *ClientManager) DeleteWaNoiseClient(userID string) {
 	cm.Lock()
 	defer cm.Unlock()
-	delete(cm.whatsmeowClients, userID)
+	delete(cm.wanoiseClients, userID)
 }
 
-// GetAllClients returns a snapshot of all whatsmeow clients (read-only copy of keys)
-func (cm *ClientManager) GetAllClients() map[string]*whatsmeow.Client {
+// GetAllClients returns a snapshot of all wa-noise clients (read-only copy of keys)
+func (cm *ClientManager) GetAllClients() map[string]*wanoise.Client {
 	cm.RLock()
 	defer cm.RUnlock()
-	result := make(map[string]*whatsmeow.Client)
-	for k, v := range cm.whatsmeowClients {
+	result := make(map[string]*wanoise.Client)
+	for k, v := range cm.wanoiseClients {
 		result[k] = v
 	}
 	return result
 }
 
-// GetWhatsmeowClientsCount returns the count of whatsmeow clients
-func (cm *ClientManager) GetWhatsmeowClientsCount() int {
+// Getwa-noiseClientsCount returns the count of wa-noise clients
+func (cm *ClientManager) GetWaNoiseClientsCount() int {
 	cm.RLock()
 	defer cm.RUnlock()
-	return len(cm.whatsmeowClients)
+	return len(cm.wanoiseClients)
 }
 
-// IterateWhatsmeowClients safely iterates over all whatsmeow clients with a callback
-func (cm *ClientManager) IterateWhatsmeowClients(callback func(*whatsmeow.Client) bool) {
+// Iteratewa-noiseClients safely iterates over all wa-noise clients with a callback
+func (cm *ClientManager) IterateWaNoiseClients(callback func(*wanoise.Client) bool) {
 	cm.RLock()
 	defer cm.RUnlock()
-	for _, client := range cm.whatsmeowClients {
+	for _, client := range cm.wanoiseClients {
 		if !callback(client) {
 			break
 		}

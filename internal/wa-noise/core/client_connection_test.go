@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"errors"
@@ -9,11 +9,11 @@ import (
 
 	"go.mau.fi/util/exsync"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // connTestClient e' o cliente minimo do lote 10. Difere de recvTestClient

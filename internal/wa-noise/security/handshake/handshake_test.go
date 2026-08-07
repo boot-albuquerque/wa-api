@@ -11,10 +11,10 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/protocol/socket"
 	"wa-api/internal/wa-noise/security/keys"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // Estes testes exercitam Do contra um servidor websocket de mentira. O caminho

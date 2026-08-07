@@ -25,7 +25,7 @@ func NewConfigureHmacUseCase(sg appport.SessionGuard, l appport.Logger) *Configu
 func (uc *ConfigureHmacUseCase) Execute(ctx context.Context, txtID string, req domain.HmacConfigRequest) (*domain.HmacConfigResult, error) {
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no whatsmeow session", "txtID", txtID, "error", err)
+		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

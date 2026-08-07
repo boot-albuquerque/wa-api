@@ -486,7 +486,7 @@ func TestSenderKeyWrapsStoreErrors(t *testing.T) {
 	}
 }
 
-// Os metodos abaixo sao declaradamente nao implementados: o whatsmeow nunca os
+// Os metodos abaixo sao declaradamente nao implementados: o wa-noise nunca os
 // chama, mas eles precisam existir para satisfazer store.SignalProtocol. O
 // teste trava que a ausencia e' um panic explicito, nao um retorno silencioso
 // que pareceria sucesso.

@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serv
 // NewsletterSendReaction sends a reaction to a channel message.
 // To remove a reaction sent earlier, set reaction to an empty string.
 //
-// The last parameter is the message ID of the reaction itself. It can be left empty to let whatsmeow generate a random one.
+// The last parameter is the message ID of the reaction itself. It can be left empty to let wa-noise generate a random one.
 func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
 	if cli == nil {
 		return ErrClientIsNil

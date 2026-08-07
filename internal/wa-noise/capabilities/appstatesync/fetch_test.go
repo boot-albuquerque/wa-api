@@ -8,12 +8,12 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // syncTransport monta um Transport com os sub-stores de app state e um

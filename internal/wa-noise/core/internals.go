@@ -3,7 +3,7 @@
 //go:generate go run internals_generate.go
 //go:generate goimports -local wa-api/internal/wa-noise -w internals.go
 
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"go.mau.fi/libsignal/keys/prekey"
 
+	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/msgattrs"
@@ -24,7 +25,6 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waMsgTransport"
 	"wa-api/internal/wa-noise/protocol/proto/waServerSync"
 	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/keys"

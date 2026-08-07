@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 // ParticipantChange e' apelido de tipo, e as quatro constantes sao os MESMOS
 // valores de group.Change* — nao copias. Chamadores externos que passam
-// whatsmeow.ParticipantChangeAdd continuam compilando sem conversao.
+// wa-noise.ParticipantChangeAdd continuam compilando sem conversao.
 type ParticipantChange = group.ParticipantChange
 
 const (

@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"net/http"
@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	waLog "wa-api/internal/wa-noise/observability/log"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // --- disappearing_timer.go ---

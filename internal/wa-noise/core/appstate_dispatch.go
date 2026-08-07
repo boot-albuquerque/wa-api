@@ -1,11 +1,11 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
 	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
 )
 
 // Fachada da traducao de mutacoes em eventos. A logica vive em

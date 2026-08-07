@@ -1,13 +1,13 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 	"net/http"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/media"
-	"wa-api/internal/wa-noise/protocol/types"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/types"
 )
 
 // mediaTransport adapta *Client a media.Transport. Existe para que o pacote

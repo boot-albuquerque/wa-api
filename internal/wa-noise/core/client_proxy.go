@@ -1,5 +1,5 @@
-// Package whatsmeow implements a client for interacting with the WhatsApp web multidevice API.
-package whatsmeow
+// Package wanoise implements a client for interacting with the WhatsApp web multidevice API.
+package wanoise
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ import (
 )
 
 // Proxy e SetProxyOptions sao aliases para os tipos de proxyconf. Precisam ser
-// **aliases**, e nao tipos novos: `whatsmeow.SetProxyOptions` aparece nas
+// **aliases**, e nao tipos novos: `wa-noise.SetProxyOptions` aparece nas
 // assinaturas de SetProxy/SetSOCKSProxy/SetProxyAddress e e' usado por
 // consumidores fora do fork (pkg/infra/wa-noise/session). Um tipo distinto
 // quebraria esses chamadores.

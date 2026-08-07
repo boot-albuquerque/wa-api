@@ -31,7 +31,7 @@ type SessionGuardAdapter struct {
 }
 
 // NewSessionGuardAdapter cria o adapter com a função de lookup.
-// O parâmetro getClient é tipicamente clientManager.GetWhatsmeowClient
+// O parâmetro getClient é tipicamente clientManager.Getwa-noiseClient
 // (convertido via clientForGetter).
 func NewSessionGuardAdapter(getClient waclient.Getter) *SessionGuardAdapter {
 	return &SessionGuardAdapter{getClient: getClient}
@@ -51,7 +51,7 @@ func (a *SessionGuardAdapter) Client(txtID string) (waclient.Client, error) {
 	return client, nil
 }
 
-// EnsureSession reporta se há cliente whatsmeow para txtID, sem devolvê-lo.
+// EnsureSession reporta se há cliente wa-noise para txtID, sem devolvê-lo.
 func (a *SessionGuardAdapter) EnsureSession(_ context.Context, txtID string) error {
 	if a.getClient(txtID) == nil {
 		return ErrNoSession(txtID, nil)
@@ -65,7 +65,7 @@ var _ appport.SessionGuard = (*SessionGuardAdapter)(nil)
 // SessionStatus devolve se a sessão de userID está conectada e autenticada.
 //
 // Substitui a interface ClientManagerAdapter que list_users.go declarava
-// localmente, cujo GetWhatsmeowClient(id) devolvia interface{} — segundo o
+// localmente, cujo Getwa-noiseClient(id) devolvia interface{} — segundo o
 // comentário do próprio arquivo, "to avoid circular deps" — apenas para ser
 // comparado com nil antes das duas chamadas seguintes. Aqui o cliente não
 // atravessa a fronteira.

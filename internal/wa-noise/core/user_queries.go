@@ -1,12 +1,12 @@
-package whatsmeow
+package wanoise
 
 import (
 	"context"
 
+	"wa-api/internal/wa-noise/capabilities/user"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-	"wa-api/internal/wa-noise/capabilities/user"
 )
 
 // Continuacao da fachada do dominio de usuario (ver user.go): as consultas de

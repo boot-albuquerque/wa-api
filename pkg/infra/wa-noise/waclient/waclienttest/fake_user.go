@@ -3,7 +3,7 @@ package waclienttest
 import (
 	"context"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
@@ -22,7 +22,7 @@ func (f *Fake) GetUserInfo(ctx context.Context, jids []types.JID) (map[types.JID
 	return nil, nil
 }
 
-func (f *Fake) GetProfilePictureInfo(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
+func (f *Fake) GetProfilePictureInfo(ctx context.Context, jid types.JID, params *wanoise.GetProfilePictureParams) (*types.ProfilePictureInfo, error) {
 	if f.GetProfilePictureInfoFn != nil {
 		return f.GetProfilePictureInfoFn(ctx, jid, params)
 	}

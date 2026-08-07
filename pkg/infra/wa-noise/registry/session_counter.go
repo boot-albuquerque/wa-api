@@ -3,31 +3,31 @@ package registry
 import (
 	"context"
 
-	whatsmeow "wa-api/internal/wa-noise"
+	wanoise "wa-api/internal/wa-noise"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
 // ClientLookup is the subset of ClientManager methods needed by adapters
 // that look up WhatsApp clients by user ID. Both the root-level (package
-// main) ClientManager and the internal/whatsmeow ClientManager satisfy it
+// main) ClientManager and the internal/wa-noise ClientManager satisfy it
 // implicitly, which breaks the circular concrete-type dependency between
 // root main and internal/.
 type ClientLookup interface {
-	GetWhatsmeowClient(id string) *whatsmeow.Client
+	GetWaNoiseClient(id string) *wanoise.Client
 }
 
 // ClientHealthProvider is the interface the root-level ClientManager
 // satisfies for health-related queries. Extracted to break the concrete
 // type dependency between internal/ and package main.
 type ClientHealthProvider interface {
-	GetWhatsmeowClientsCount() int
-	IterateWhatsmeowClients(func(*whatsmeow.Client) bool)
+	GetWaNoiseClientsCount() int
+	IterateWaNoiseClients(func(*wanoise.Client) bool)
 }
 
 // SessionCounterAdapter adapta o ClientManager para appport.SessionCounter.
 //
-// A iteração sobre *whatsmeow.Client — que antes vivia dentro do use case de
+// A iteração sobre *wa-noise.Client — que antes vivia dentro do use case de
 // health — passou para cá: é aqui que conhecer o tipo do SDK é legítimo.
 type SessionCounterAdapter struct {
 	cm ClientHealthProvider
@@ -40,9 +40,9 @@ func NewSessionCounterAdapter(cm ClientHealthProvider) *SessionCounterAdapter {
 
 // CountSessions agrega total, conectadas e autenticadas numa única passada.
 func (a *SessionCounterAdapter) CountSessions(_ context.Context) (domain.SessionCounts, error) {
-	counts := domain.SessionCounts{Total: a.cm.GetWhatsmeowClientsCount()}
+	counts := domain.SessionCounts{Total: a.cm.GetWaNoiseClientsCount()}
 
-	a.cm.IterateWhatsmeowClients(func(client *whatsmeow.Client) bool {
+	a.cm.IterateWaNoiseClients(func(client *wanoise.Client) bool {
 		if client != nil {
 			if client.IsConnected() {
 				counts.Connected++

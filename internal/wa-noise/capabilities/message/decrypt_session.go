@@ -13,10 +13,10 @@ import (
 	"go.mau.fi/libsignal/session"
 	"go.mau.fi/libsignal/signalerror"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
-	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/capabilities/send"
 	"wa-api/internal/wa-noise/persistence/store"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/msgpad"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 

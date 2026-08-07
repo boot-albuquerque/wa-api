@@ -3,7 +3,7 @@
 // reacoes, criacao e as mutations de seguir/silenciar.
 //
 // Todo o pacote opera sobre a interface Transport (ver transport.go) em vez de
-// sobre *whatsmeow.Client. E' o que permite que ele nao importe o pacote raiz —
+// sobre *wa-noise.Client. E' o que permite que ele nao importe o pacote raiz —
 // o inverso fecharia ciclo, porque a raiz precisa chamar de volta o dominio.
 // Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 2".
 package newsletter

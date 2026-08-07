@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	errNoSession = errors.New("porta: sem sessao whatsmeow")
+	errNoSession = errors.New("porta: sem sessao wanoise")
 	errDB        = errors.New("repo: banco indisponivel")
 )
 
@@ -84,7 +84,7 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 				t.Errorf("EnsureSession: %+v", sg.EnsureSessionCalls)
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelError, "no whatsmeow session")
+			rec, found := log.FindLevel(contractsfake.LevelError, "no wanoise session")
 			if !found {
 				t.Fatalf("recusa de sessao nao foi logada em nivel error: %v", log.Messages())
 			}

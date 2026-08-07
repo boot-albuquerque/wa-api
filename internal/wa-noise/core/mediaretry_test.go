@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import (
 	"bytes"
@@ -9,13 +9,13 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/media"
+	waLog "wa-api/internal/wa-noise/observability/log"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/protocol/proto/waMmsRetry"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/security/gcm"
-	waLog "wa-api/internal/wa-noise/observability/log"
 )
 
 // A cripto do retry (derivacao da chave, cifragem do receipt e decifragem da

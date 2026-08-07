@@ -1,5 +1,5 @@
-// Package whatsmeow implements a client for interacting with the WhatsApp web multidevice API.
-package whatsmeow
+// Package wanoise implements a client for interacting with the WhatsApp web multidevice API.
+package wanoise
 
 import (
 	"context"
@@ -13,24 +13,24 @@ import (
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/random"
 
-	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/capabilities/appstatesync"
-	waBinary "wa-api/internal/wa-noise/protocol/binary"
 	"wa-api/internal/wa-noise/capabilities/group"
 	"wa-api/internal/wa-noise/capabilities/media"
 	"wa-api/internal/wa-noise/capabilities/message"
 	"wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/capabilities/prekeys"
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/proto/waWa6"
 	"wa-api/internal/wa-noise/capabilities/retry"
-	"wa-api/internal/wa-noise/protocol/socket"
-	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/capabilities/tctoken"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/internal/wa-noise/capabilities/user"
 	waLog "wa-api/internal/wa-noise/observability/log"
+	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/wa-noise/protocol/appstate"
+	waBinary "wa-api/internal/wa-noise/protocol/binary"
+	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waWa6"
+	"wa-api/internal/wa-noise/protocol/socket"
+	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
 // Client contains everything necessary to connect to and interact with the WhatsApp web API.
@@ -132,7 +132,7 @@ type Client struct {
 	// PreRetryCallback is called before a retry receipt is accepted.
 	// If it returns false, the accepting will be cancelled and the retry receipt will be ignored.
 	PreRetryCallback func(receipt *events.Receipt, id types.MessageID, retryCount int, msg *waE2E.Message) bool
-	// Should whatsmeow store recently sent messages in the database so that retry receipts can be accepted
+	// Should wa-noise store recently sent messages in the database so that retry receipts can be accepted
 	// even if the process is restarted? If false, only the in-memory cache and GetMessageForRetry will be used.
 	UseRetryMessageStore bool
 
@@ -197,7 +197,7 @@ type MessengerConfig struct {
 //	if err != nil {
 //		panic(err)
 //	}
-//	client := whatsmeow.NewClient(deviceStore, nil)
+//	client := wa-noise.NewClient(deviceStore, nil)
 func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 	if log == nil {
 		log = waLog.Noop

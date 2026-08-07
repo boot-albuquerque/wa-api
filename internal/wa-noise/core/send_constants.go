@@ -1,4 +1,4 @@
-package whatsmeow
+package wanoise
 
 import "wa-api/internal/wa-noise/capabilities/send"
 

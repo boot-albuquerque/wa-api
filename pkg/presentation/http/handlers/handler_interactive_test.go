@@ -243,7 +243,7 @@ func TestInteractiveHandlers_RejectIncompletePayload(t *testing.T) {
 	}
 }
 
-// TestInteractiveHandlers_SessionFailure: a sessao do whatsmeow nao existe.
+// TestInteractiveHandlers_SessionFailure: a sessao do wa-noise nao existe.
 func TestInteractiveHandlers_SessionFailure(t *testing.T) {
 	for _, tc := range interactiveCases() {
 		t.Run(tc.name, func(t *testing.T) {
