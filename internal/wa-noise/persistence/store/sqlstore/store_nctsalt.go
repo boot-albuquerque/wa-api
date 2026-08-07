@@ -8,11 +8,11 @@ import (
 
 const (
 	putNCTSaltQuery = `
-		INSERT INTO whatsmeow_nct_salt (our_jid, salt) VALUES ($1, $2)
+		INSERT INTO wanoise_nct_salt (our_jid, salt) VALUES ($1, $2)
 		ON CONFLICT (our_jid) DO UPDATE SET salt=excluded.salt
 	`
-	getNCTSaltQuery    = `SELECT salt FROM whatsmeow_nct_salt WHERE our_jid=$1`
-	deleteNCTSaltQuery = `DELETE FROM whatsmeow_nct_salt WHERE our_jid=$1`
+	getNCTSaltQuery    = `SELECT salt FROM wanoise_nct_salt WHERE our_jid=$1`
+	deleteNCTSaltQuery = `DELETE FROM wanoise_nct_salt WHERE our_jid=$1`
 )
 
 func (s *SQLStore) PutNCTSalt(ctx context.Context, salt []byte) error {

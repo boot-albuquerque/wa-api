@@ -1343,8 +1343,11 @@ internal/wa-noise/persistence/store/sqlstore.SQLStore.genOnePreKey	EXCLUDED	X5
 internal/wa-noise/persistence/store/sqlstore.SQLStore.getContact	EXCLUDED	X5
 internal/wa-noise/persistence/store/sqlstore.SQLStore.getNextPreKeyID	EXCLUDED	X5
 internal/wa-noise/persistence/store/sqlstore.SQLStore.putAppStateMutationMACs	EXCLUDED	X5
+internal/wa-noise/persistence/store/sqlstore.renameLegacyTables	EXCLUDED	X5
+internal/wa-noise/persistence/store/sqlstore.renameLegacyTables.func1	EXCLUDED	X6
 internal/wa-noise/persistence/store/sqlstore.scanPreKey	EXCLUDED	X5
 internal/wa-noise/persistence/store/sqlstore.sessionScanner.func1	EXCLUDED	X6
+internal/wa-noise/persistence/store/sqlstore.tableExistsQuery	EXCLUDED	X5
 internal/wa-noise/persistence/store/sqlstore/upgrades.init	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.BuildArchive	EXCLUDED	X5
 internal/wa-noise/protocol/appstate.BuildDeleteChat	EXCLUDED	X5

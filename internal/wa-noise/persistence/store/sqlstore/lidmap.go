@@ -39,15 +39,15 @@ func NewCachedLIDMap(db *dbutil.Database) *CachedLIDMap {
 }
 
 const (
-	deleteExistingLIDMappingQuery = `DELETE FROM whatsmeow_lid_map WHERE (lid<>$1 AND pn=$2)`
+	deleteExistingLIDMappingQuery = `DELETE FROM wanoise_lid_map WHERE (lid<>$1 AND pn=$2)`
 	putLIDMappingQuery            = `
-		INSERT INTO whatsmeow_lid_map (lid, pn)
+		INSERT INTO wanoise_lid_map (lid, pn)
 		VALUES ($1, $2)
-		ON CONFLICT (lid) DO UPDATE SET pn=excluded.pn WHERE whatsmeow_lid_map.pn<>excluded.pn
+		ON CONFLICT (lid) DO UPDATE SET pn=excluded.pn WHERE wanoise_lid_map.pn<>excluded.pn
 	`
-	getLIDForPNQuery       = `SELECT lid FROM whatsmeow_lid_map WHERE pn=$1`
-	getPNForLIDQuery       = `SELECT pn FROM whatsmeow_lid_map WHERE lid=$1`
-	getAllLIDMappingsQuery = `SELECT lid, pn FROM whatsmeow_lid_map`
+	getLIDForPNQuery       = `SELECT lid FROM wanoise_lid_map WHERE pn=$1`
+	getPNForLIDQuery       = `SELECT pn FROM wanoise_lid_map WHERE lid=$1`
+	getAllLIDMappingsQuery = `SELECT lid, pn FROM wanoise_lid_map`
 )
 
 func (s *CachedLIDMap) FillCache(ctx context.Context) error {
@@ -165,7 +165,7 @@ func (s *CachedLIDMap) GetManyLIDsForPNs(ctx context.Context, pns []types.JID) (
 	if s.db.Dialect == dbutil.Postgres && PostgresArrayWrapper != nil {
 		rows, err = s.db.Query(
 			ctx,
-			`SELECT lid, pn FROM whatsmeow_lid_map WHERE pn = ANY($1)`,
+			`SELECT lid, pn FROM wanoise_lid_map WHERE pn = ANY($1)`,
 			PostgresArrayWrapper(missingPNs),
 		)
 	} else {
@@ -175,7 +175,7 @@ func (s *CachedLIDMap) GetManyLIDsForPNs(ctx context.Context, pns []types.JID) (
 		}
 		rows, err = s.db.Query(
 			ctx,
-			fmt.Sprintf(`SELECT lid, pn FROM whatsmeow_lid_map WHERE pn IN (%s)`, strings.Join(placeholders, ",")),
+			fmt.Sprintf(`SELECT lid, pn FROM wanoise_lid_map WHERE pn IN (%s)`, strings.Join(placeholders, ",")),
 			exslices.CastToAny(missingPNs)...,
 		)
 	}

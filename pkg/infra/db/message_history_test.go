@@ -26,9 +26,9 @@ func newHistoryDB(t *testing.T) *sqlx.DB {
 	if err := InitializeSchema(db); err != nil {
 		t.Fatalf("InitializeSchema: %v", err)
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS whatsmeow_message_secrets (
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS wanoise_message_secrets (
 		our_jid TEXT, chat_jid TEXT, sender_jid TEXT, message_id TEXT, key BLOB)`); err != nil {
-		t.Fatalf("create whatsmeow_message_secrets: %v", err)
+		t.Fatalf("create wanoise_message_secrets: %v", err)
 	}
 	return db
 }
@@ -234,7 +234,7 @@ func TestTrimMessageHistory_AlsoTrimsMessageSecrets(t *testing.T) {
 	ids := seedMessages(t, db, "u1", "chat@s", 4)
 	for _, id := range ids {
 		if _, err := db.Exec(
-			"INSERT INTO whatsmeow_message_secrets (our_jid, chat_jid, sender_jid, message_id, key) VALUES ('', 'chat@s', '', ?, x'00')",
+			"INSERT INTO wanoise_message_secrets (our_jid, chat_jid, sender_jid, message_id, key) VALUES ('', 'chat@s', '', ?, x'00')",
 			id); err != nil {
 			t.Fatalf("seed secret: %v", err)
 		}
@@ -245,7 +245,7 @@ func TestTrimMessageHistory_AlsoTrimsMessageSecrets(t *testing.T) {
 	}
 
 	var n int
-	if err := db.Get(&n, "SELECT COUNT(*) FROM whatsmeow_message_secrets"); err != nil {
+	if err := db.Get(&n, "SELECT COUNT(*) FROM wanoise_message_secrets"); err != nil {
 		t.Fatalf("count secrets: %v", err)
 	}
 	if n != 1 {

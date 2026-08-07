@@ -11,16 +11,16 @@ import (
 )
 
 const (
-	getSessionQuery             = `SELECT session FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id=$2`
-	hasSessionQuery             = `SELECT true FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id=$2`
-	getManySessionQueryPostgres = `SELECT their_id, session FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id = ANY($2)`
-	getManySessionQueryGeneric  = `SELECT their_id, session FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id IN (%s)`
+	getSessionQuery             = `SELECT session FROM wanoise_sessions WHERE our_jid=$1 AND their_id=$2`
+	hasSessionQuery             = `SELECT true FROM wanoise_sessions WHERE our_jid=$1 AND their_id=$2`
+	getManySessionQueryPostgres = `SELECT their_id, session FROM wanoise_sessions WHERE our_jid=$1 AND their_id = ANY($2)`
+	getManySessionQueryGeneric  = `SELECT their_id, session FROM wanoise_sessions WHERE our_jid=$1 AND their_id IN (%s)`
 	putSessionQuery             = `
-		INSERT INTO whatsmeow_sessions (our_jid, their_id, session) VALUES ($1, $2, $3)
+		INSERT INTO wanoise_sessions (our_jid, their_id, session) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_id) DO UPDATE SET session=excluded.session
 	`
-	deleteAllSessionsQuery = `DELETE FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id LIKE $2`
-	deleteSessionQuery     = `DELETE FROM whatsmeow_sessions WHERE our_jid=$1 AND their_id=$2`
+	deleteAllSessionsQuery = `DELETE FROM wanoise_sessions WHERE our_jid=$1 AND their_id LIKE $2`
+	deleteSessionQuery     = `DELETE FROM wanoise_sessions WHERE our_jid=$1 AND their_id=$2`
 )
 
 func (s *SQLStore) GetSession(ctx context.Context, address string) (session []byte, err error) {

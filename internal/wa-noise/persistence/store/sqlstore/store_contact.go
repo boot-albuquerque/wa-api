@@ -16,27 +16,27 @@ import (
 
 const (
 	putContactNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name) VALUES ($1, $2, $3, $4)
+		INSERT INTO wanoise_contacts (our_jid, their_jid, first_name, full_name) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
 	putRedactedPhoneQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, redacted_phone)
+		INSERT INTO wanoise_contacts (our_jid, their_jid, redacted_phone)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET redacted_phone=excluded.redacted_phone
 	`
 	putPushNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, push_name) VALUES ($1, $2, $3)
+		INSERT INTO wanoise_contacts (our_jid, their_jid, push_name) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET push_name=excluded.push_name
 	`
 	putBusinessNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, business_name) VALUES ($1, $2, $3)
+		INSERT INTO wanoise_contacts (our_jid, their_jid, business_name) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET business_name=excluded.business_name
 	`
 	getContactQuery = `
-		SELECT first_name, full_name, push_name, business_name, redacted_phone FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2
+		SELECT first_name, full_name, push_name, business_name, redacted_phone FROM wanoise_contacts WHERE our_jid=$1 AND their_jid=$2
 	`
 	getAllContactsQuery = `
-		SELECT their_jid, first_name, full_name, push_name, business_name, redacted_phone FROM whatsmeow_contacts WHERE our_jid=$1
+		SELECT their_jid, first_name, full_name, push_name, business_name, redacted_phone FROM wanoise_contacts WHERE our_jid=$1
 	`
 )
 

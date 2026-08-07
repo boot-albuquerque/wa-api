@@ -15,15 +15,15 @@ import (
 
 const (
 	putAppStateVersionQuery = `
-		INSERT INTO whatsmeow_app_state_version (jid, name, version, hash) VALUES ($1, $2, $3, $4)
+		INSERT INTO wanoise_app_state_version (jid, name, version, hash) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (jid, name) DO UPDATE SET version=excluded.version, hash=excluded.hash
 	`
-	getAppStateVersionQuery                 = `SELECT version, hash FROM whatsmeow_app_state_version WHERE jid=$1 AND name=$2`
-	deleteAppStateVersionQuery              = `DELETE FROM whatsmeow_app_state_version WHERE jid=$1 AND name=$2`
-	putAppStateMutationMACsQuery            = `INSERT INTO whatsmeow_app_state_mutation_macs (jid, name, version, index_mac, value_mac) VALUES `
-	deleteAppStateMutationMACsQueryPostgres = `DELETE FROM whatsmeow_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac=ANY($3::bytea[])`
-	deleteAppStateMutationMACsQueryGeneric  = `DELETE FROM whatsmeow_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac IN `
-	getAppStateMutationMACQuery             = `SELECT value_mac FROM whatsmeow_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac=$3 ORDER BY version DESC LIMIT 1`
+	getAppStateVersionQuery                 = `SELECT version, hash FROM wanoise_app_state_version WHERE jid=$1 AND name=$2`
+	deleteAppStateVersionQuery              = `DELETE FROM wanoise_app_state_version WHERE jid=$1 AND name=$2`
+	putAppStateMutationMACsQuery            = `INSERT INTO wanoise_app_state_mutation_macs (jid, name, version, index_mac, value_mac) VALUES `
+	deleteAppStateMutationMACsQueryPostgres = `DELETE FROM wanoise_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac=ANY($3::bytea[])`
+	deleteAppStateMutationMACsQueryGeneric  = `DELETE FROM wanoise_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac IN `
+	getAppStateMutationMACQuery             = `SELECT value_mac FROM wanoise_app_state_mutation_macs WHERE jid=$1 AND name=$2 AND index_mac=$3 ORDER BY version DESC LIMIT 1`
 )
 
 func (s *SQLStore) PutAppStateVersion(ctx context.Context, name string, version uint64, hash [appStateHashLength]byte) error {

@@ -75,7 +75,7 @@ func NewWithDB(db *sql.DB, dialect string, log waLog.Logger) *Container {
 		panic(err)
 	}
 	wrapped.UpgradeTable = upgrades.Table
-	wrapped.VersionTable = "whatsmeow_version"
+	wrapped.VersionTable = "wanoise_version"
 	return NewWithWrappedDB(wrapped, log)
 }
 
@@ -102,6 +102,13 @@ func (c *Container) Upgrade(ctx context.Context) error {
 		}
 	}
 
+	// Antes de qualquer leitura de versao: normaliza o prefixo das tabelas
+	// legadas. Ver o comentario de legacyTables em legacy_rename.go para o
+	// motivo de isto nao ser um arquivo em upgrades/.
+	if err := renameLegacyTables(ctx, c.db); err != nil {
+		return err
+	}
+
 	return c.db.Upgrade(ctx)
 }
 
@@ -110,7 +117,7 @@ SELECT jid, lid, registration_id, noise_key, identity_key,
        signed_pre_key, signed_pre_key_id, signed_pre_key_sig,
        adv_key, adv_details, adv_account_sig, adv_account_sig_key, adv_device_sig,
        platform, business_name, push_name, facebook_uuid, lid_migration_ts
-FROM whatsmeow_device
+FROM wanoise_device
 `
 
 const getDeviceQuery = getAllDevicesQuery + " WHERE jid=$1"
@@ -193,7 +200,7 @@ func (c *Container) GetDevice(ctx context.Context, jid types.JID) (*store.Device
 
 const (
 	insertDeviceQuery = `
-		INSERT INTO whatsmeow_device (jid, lid, registration_id, noise_key, identity_key,
+		INSERT INTO wanoise_device (jid, lid, registration_id, noise_key, identity_key,
 									  signed_pre_key, signed_pre_key_id, signed_pre_key_sig,
 									  adv_key, adv_details, adv_account_sig, adv_account_sig_key, adv_device_sig,
 									  platform, business_name, push_name, facebook_uuid, lid_migration_ts)
@@ -205,7 +212,7 @@ const (
 				push_name=excluded.push_name,
 				lid_migration_ts=excluded.lid_migration_ts
 	`
-	deleteDeviceQuery = `DELETE FROM whatsmeow_device WHERE jid=$1`
+	deleteDeviceQuery = `DELETE FROM wanoise_device WHERE jid=$1`
 )
 
 // NewDevice creates a new device in this database.

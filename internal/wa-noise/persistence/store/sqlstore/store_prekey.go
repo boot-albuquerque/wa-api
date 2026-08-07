@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	getLastPreKeyIDQuery        = `SELECT MAX(key_id) FROM whatsmeow_pre_keys WHERE jid=$1`
-	insertPreKeyQuery           = `INSERT INTO whatsmeow_pre_keys (jid, key_id, key, uploaded) VALUES ($1, $2, $3, $4)`
-	getUnuploadedPreKeysQuery   = `SELECT key_id, key FROM whatsmeow_pre_keys WHERE jid=$1 AND uploaded=false ORDER BY key_id LIMIT $2`
-	getPreKeyQuery              = `SELECT key_id, key FROM whatsmeow_pre_keys WHERE jid=$1 AND key_id=$2`
-	deletePreKeyQuery           = `DELETE FROM whatsmeow_pre_keys WHERE jid=$1 AND key_id=$2`
-	markPreKeysAsUploadedQuery  = `UPDATE whatsmeow_pre_keys SET uploaded=true WHERE jid=$1 AND key_id<=$2`
-	getUploadedPreKeyCountQuery = `SELECT COUNT(*) FROM whatsmeow_pre_keys WHERE jid=$1 AND uploaded=true`
+	getLastPreKeyIDQuery        = `SELECT MAX(key_id) FROM wanoise_pre_keys WHERE jid=$1`
+	insertPreKeyQuery           = `INSERT INTO wanoise_pre_keys (jid, key_id, key, uploaded) VALUES ($1, $2, $3, $4)`
+	getUnuploadedPreKeysQuery   = `SELECT key_id, key FROM wanoise_pre_keys WHERE jid=$1 AND uploaded=false ORDER BY key_id LIMIT $2`
+	getPreKeyQuery              = `SELECT key_id, key FROM wanoise_pre_keys WHERE jid=$1 AND key_id=$2`
+	deletePreKeyQuery           = `DELETE FROM wanoise_pre_keys WHERE jid=$1 AND key_id=$2`
+	markPreKeysAsUploadedQuery  = `UPDATE wanoise_pre_keys SET uploaded=true WHERE jid=$1 AND key_id<=$2`
+	getUploadedPreKeyCountQuery = `SELECT COUNT(*) FROM wanoise_pre_keys WHERE jid=$1 AND uploaded=true`
 )
 
 func (s *SQLStore) genOnePreKey(ctx context.Context, id uint32, markUploaded bool) (*keys.PreKey, error) {

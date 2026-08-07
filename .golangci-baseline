@@ -14,4 +14,4 @@ max_complexity=56
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).
-count=87
+count=83

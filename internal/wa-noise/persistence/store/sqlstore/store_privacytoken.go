@@ -14,30 +14,30 @@ import (
 
 const (
 	putPrivacyTokens = `
-		INSERT INTO whatsmeow_privacy_tokens (our_jid, their_jid, token, timestamp, sender_timestamp)
+		INSERT INTO wanoise_privacy_tokens (our_jid, their_jid, token, timestamp, sender_timestamp)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET
 			token=EXCLUDED.token,
 			timestamp=EXCLUDED.timestamp,
-			sender_timestamp=COALESCE(EXCLUDED.sender_timestamp, whatsmeow_privacy_tokens.sender_timestamp)
-		WHERE EXCLUDED.timestamp >= whatsmeow_privacy_tokens.timestamp
+			sender_timestamp=COALESCE(EXCLUDED.sender_timestamp, wanoise_privacy_tokens.sender_timestamp)
+		WHERE EXCLUDED.timestamp >= wanoise_privacy_tokens.timestamp
 	`
 	// getPrivacyToken tambem casa o JID equivalente no outro espaco de
 	// enderecamento (LID <-> PN), pelo mesmo motivo que getMsgSecret.
 	getPrivacyToken = `
-		SELECT token, timestamp, sender_timestamp FROM whatsmeow_privacy_tokens WHERE our_jid=$1 AND (their_jid=$2 OR their_jid=(
+		SELECT token, timestamp, sender_timestamp FROM wanoise_privacy_tokens WHERE our_jid=$1 AND (their_jid=$2 OR their_jid=(
 			CASE
 				WHEN $2 LIKE '%@lid'
-					THEN (SELECT pn || '@s.whatsapp.net' FROM whatsmeow_lid_map WHERE lid=replace($2, '@lid', ''))
+					THEN (SELECT pn || '@s.whatsapp.net' FROM wanoise_lid_map WHERE lid=replace($2, '@lid', ''))
 				WHEN $2 LIKE '%@s.whatsapp.net'
-					THEN (SELECT lid || '@lid' FROM whatsmeow_lid_map WHERE pn=replace($2, '@s.whatsapp.net', ''))
+					THEN (SELECT lid || '@lid' FROM wanoise_lid_map WHERE pn=replace($2, '@s.whatsapp.net', ''))
 				ELSE $2
 			END
 		))
 		ORDER BY timestamp DESC LIMIT 1
 	`
 	deleteExpiredPrivacyTokens = `
-		DELETE FROM whatsmeow_privacy_tokens
+		DELETE FROM wanoise_privacy_tokens
 		WHERE our_jid=$1 AND timestamp < $2
 	`
 )

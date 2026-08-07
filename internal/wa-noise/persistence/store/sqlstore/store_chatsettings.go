@@ -16,11 +16,11 @@ const (
 	// nao aceita como parametro. So' as constantes chatSettingColumn* podem
 	// preencher esse buraco.
 	putChatSettingQuery = `
-		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, %[1]s) VALUES ($1, $2, $3)
+		INSERT INTO wanoise_chat_settings (our_jid, chat_jid, %[1]s) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET %[1]s=excluded.%[1]s
 	`
 	getChatSettingsQuery = `
-		SELECT muted_until, pinned, archived FROM whatsmeow_chat_settings WHERE our_jid=$1 AND chat_jid=$2
+		SELECT muted_until, pinned, archived FROM wanoise_chat_settings WHERE our_jid=$1 AND chat_jid=$2
 	`
 )
 

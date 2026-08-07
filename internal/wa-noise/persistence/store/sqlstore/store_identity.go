@@ -8,12 +8,12 @@ import (
 
 const (
 	putIdentityQuery = `
-		INSERT INTO whatsmeow_identity_keys (our_jid, their_id, identity) VALUES ($1, $2, $3)
+		INSERT INTO wanoise_identity_keys (our_jid, their_id, identity) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_id) DO UPDATE SET identity=excluded.identity
 	`
-	deleteAllIdentitiesQuery = `DELETE FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id LIKE $2`
-	deleteIdentityQuery      = `DELETE FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id=$2`
-	getIdentityQuery         = `SELECT identity FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id=$2`
+	deleteAllIdentitiesQuery = `DELETE FROM wanoise_identity_keys WHERE our_jid=$1 AND their_id LIKE $2`
+	deleteIdentityQuery      = `DELETE FROM wanoise_identity_keys WHERE our_jid=$1 AND their_id=$2`
+	getIdentityQuery         = `SELECT identity FROM wanoise_identity_keys WHERE our_jid=$1 AND their_id=$2`
 )
 
 func (s *SQLStore) PutIdentity(ctx context.Context, address string, key [curve25519KeyLength]byte) error {

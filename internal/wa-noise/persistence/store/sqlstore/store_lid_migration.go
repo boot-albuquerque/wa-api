@@ -13,25 +13,25 @@ import (
 // apontando para um endereco cuja identity key nao existe mais.
 const (
 	migratePNToLIDSessionsQuery = `
-		INSERT INTO whatsmeow_sessions (our_jid, their_id, session)
+		INSERT INTO wanoise_sessions (our_jid, their_id, session)
 		SELECT our_jid, replace(their_id, $2, $3), session
-		FROM whatsmeow_sessions
+		FROM wanoise_sessions
 		WHERE our_jid=$1 AND their_id LIKE $2 || ':%'
 		ON CONFLICT (our_jid, their_id) DO UPDATE SET session=excluded.session
 	`
-	deleteAllIdentityKeysQuery      = `DELETE FROM whatsmeow_identity_keys WHERE our_jid=$1 AND their_id LIKE $2`
+	deleteAllIdentityKeysQuery      = `DELETE FROM wanoise_identity_keys WHERE our_jid=$1 AND their_id LIKE $2`
 	migratePNToLIDIdentityKeysQuery = `
-		INSERT INTO whatsmeow_identity_keys (our_jid, their_id, identity)
+		INSERT INTO wanoise_identity_keys (our_jid, their_id, identity)
 		SELECT our_jid, replace(their_id, $2, $3), identity
-		FROM whatsmeow_identity_keys
+		FROM wanoise_identity_keys
 		WHERE our_jid=$1 AND their_id LIKE $2 || ':%'
 		ON CONFLICT (our_jid, their_id) DO UPDATE SET identity=excluded.identity
 	`
-	deleteAllSenderKeysQuery      = `DELETE FROM whatsmeow_sender_keys WHERE our_jid=$1 AND sender_id LIKE $2`
+	deleteAllSenderKeysQuery      = `DELETE FROM wanoise_sender_keys WHERE our_jid=$1 AND sender_id LIKE $2`
 	migratePNToLIDSenderKeysQuery = `
-		INSERT INTO whatsmeow_sender_keys (our_jid, chat_id, sender_id, sender_key)
+		INSERT INTO wanoise_sender_keys (our_jid, chat_id, sender_id, sender_key)
 		SELECT our_jid, chat_id, replace(sender_id, $2, $3), sender_key
-		FROM whatsmeow_sender_keys
+		FROM wanoise_sender_keys
 		WHERE our_jid=$1 AND sender_id LIKE $2 || ':%'
 		ON CONFLICT (our_jid, chat_id, sender_id) DO UPDATE SET sender_key=excluded.sender_key
 	`

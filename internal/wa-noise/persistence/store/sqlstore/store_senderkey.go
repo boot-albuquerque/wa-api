@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	getSenderKeyQuery = `SELECT sender_key FROM whatsmeow_sender_keys WHERE our_jid=$1 AND chat_id=$2 AND sender_id=$3`
+	getSenderKeyQuery = `SELECT sender_key FROM wanoise_sender_keys WHERE our_jid=$1 AND chat_id=$2 AND sender_id=$3`
 	putSenderKeyQuery = `
-		INSERT INTO whatsmeow_sender_keys (our_jid, chat_id, sender_id, sender_key) VALUES ($1, $2, $3, $4)
+		INSERT INTO wanoise_sender_keys (our_jid, chat_id, sender_id, sender_key) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (our_jid, chat_id, sender_id) DO UPDATE SET sender_key=excluded.sender_key
 	`
 )

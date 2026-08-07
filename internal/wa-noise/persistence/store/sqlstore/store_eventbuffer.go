@@ -14,17 +14,17 @@ import (
 
 const (
 	getBufferedEventQuery = `
-		SELECT plaintext, server_timestamp, insert_timestamp FROM whatsmeow_event_buffer WHERE our_jid = $1 AND ciphertext_hash = $2
+		SELECT plaintext, server_timestamp, insert_timestamp FROM wanoise_event_buffer WHERE our_jid = $1 AND ciphertext_hash = $2
 	`
 	putBufferedEventQuery = `
-		INSERT INTO whatsmeow_event_buffer (our_jid, ciphertext_hash, plaintext, server_timestamp, insert_timestamp)
+		INSERT INTO wanoise_event_buffer (our_jid, ciphertext_hash, plaintext, server_timestamp, insert_timestamp)
 		VALUES ($1, $2, $3, $4, $5)
 	`
 	clearBufferedEventPlaintextQuery = `
-		UPDATE whatsmeow_event_buffer SET plaintext = NULL WHERE our_jid = $1 AND ciphertext_hash = $2
+		UPDATE wanoise_event_buffer SET plaintext = NULL WHERE our_jid = $1 AND ciphertext_hash = $2
 	`
 	deleteOldBufferedHashesQuery = `
-		DELETE FROM whatsmeow_event_buffer WHERE insert_timestamp < $1
+		DELETE FROM wanoise_event_buffer WHERE insert_timestamp < $1
 	`
 )
 
@@ -66,16 +66,16 @@ func (s *SQLStore) DeleteOldBufferedHashes(ctx context.Context) error {
 
 const (
 	getOutgoingEventQuery = `
-		SELECT format, plaintext FROM whatsmeow_retry_buffer WHERE our_jid=$1 AND (chat_jid=$2 OR chat_jid=$3) AND message_id=$4
+		SELECT format, plaintext FROM wanoise_retry_buffer WHERE our_jid=$1 AND (chat_jid=$2 OR chat_jid=$3) AND message_id=$4
 	`
 	addOutgoingEventQuery = `
-		INSERT INTO whatsmeow_retry_buffer (our_jid, chat_jid, message_id, format, plaintext, timestamp)
+		INSERT INTO wanoise_retry_buffer (our_jid, chat_jid, message_id, format, plaintext, timestamp)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (our_jid, chat_jid, message_id) DO UPDATE
 			SET format=excluded.format, plaintext=excluded.plaintext, timestamp=excluded.timestamp
 	`
 	deleteOldOutgoingEventsQuery = `
-		DELETE FROM whatsmeow_retry_buffer WHERE our_jid=$1 AND timestamp < $2
+		DELETE FROM wanoise_retry_buffer WHERE our_jid=$1 AND timestamp < $2
 	`
 )
 
