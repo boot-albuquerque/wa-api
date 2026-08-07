@@ -27,13 +27,32 @@ var (
 	KeepAliveMaxFailTime = 3 * time.Minute
 )
 
+// randomKeepAliveInterval sorteia o intervalo ate' o proximo ping dentro de
+// [KeepAliveIntervalMin, KeepAliveIntervalMax).
+//
+// A guarda de janela nao-positiva e' o que impede um panic: `rand.Int64N`
+// entra em panic com argumento <= 0, e as duas pontas sao variaveis
+// *exportadas* do pacote. Configurar um intervalo fixo — KeepAliveIntervalMin
+// == KeepAliveIntervalMax, o jeito obvio de pedir "pingue de 20 em 20s" — ou
+// inverter as pontas por engano derrubava o processo inteiro, porque este
+// sorteio roda num goroutine sem recover. Com a janela degenerada o intervalo
+// passa a ser o proprio minimo, que e' o comportamento que quem configurou
+// assim esperava.
+func randomKeepAliveInterval() time.Duration {
+	minMS := KeepAliveIntervalMin.Milliseconds()
+	window := KeepAliveIntervalMax.Milliseconds() - minMS
+	if window <= 0 {
+		return time.Duration(minMS) * time.Millisecond
+	}
+	return time.Duration(rand.Int64N(window)+minMS) * time.Millisecond
+}
+
 func (cli *Client) keepAliveLoop(ctx, connCtx context.Context) {
 	lastSuccess := time.Now()
 	var errorCount int
 	for {
-		interval := rand.Int64N(KeepAliveIntervalMax.Milliseconds()-KeepAliveIntervalMin.Milliseconds()) + KeepAliveIntervalMin.Milliseconds()
 		select {
-		case <-time.After(time.Duration(interval) * time.Millisecond):
+		case <-time.After(randomKeepAliveInterval()):
 			isSuccess, shouldContinue := cli.sendKeepAlive(connCtx)
 			if !shouldContinue {
 				return

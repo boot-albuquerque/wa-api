@@ -8,6 +8,7 @@
 package whatsmeow
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -95,9 +96,30 @@ func (cli *Client) SetSOCKSProxy(px proxy.Dialer, opts ...SetProxyOptions) {
 		opt = opts[0]
 	}
 	transport := (http.DefaultTransport.(*http.Transport)).Clone()
-	pxc := px.(proxy.ContextDialer)
-	transport.DialContext = pxc.DialContext
+	transport.DialContext = contextDialerFor(px)
 	cli.setTransport(transport, opt)
+}
+
+// contextDialerFor adapta um proxy.Dialer qualquer para a assinatura de
+// http.Transport.DialContext.
+//
+// A type assertion crua que estava aqui (`px.(proxy.ContextDialer)`) entrava em
+// panic para qualquer Dialer que nao implementasse ContextDialer — e
+// SetSOCKSProxy e' API *exportada*, entao o Dialer vem do chamador. O caminho
+// interno (proxy.FromURL em SetProxyAddress) devolve um dialer que implementa,
+// mas isso nao vale para um dialer customizado.
+//
+// O fallback disca sem contexto de proposito. A alternativa — nao instalar o
+// proxy — faria o trafego sair direto, sem proxy e sem aviso, o que e' pior que
+// perder o cancelamento: um proxy pedido e silenciosamente ignorado vaza o
+// endereco real do cliente.
+func contextDialerFor(px proxy.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	if pxc, ok := px.(proxy.ContextDialer); ok {
+		return pxc.DialContext
+	}
+	return func(_ context.Context, network, addr string) (net.Conn, error) {
+		return px.Dial(network, addr)
+	}
 }
 
 func (cli *Client) setTransport(transport *http.Transport, opt SetProxyOptions) {
