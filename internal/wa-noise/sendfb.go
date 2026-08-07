@@ -88,8 +88,8 @@ func (cli *Client) SendFBMessage(
 	if metadata == nil {
 		metadata = &waMsgApplication.MessageApplication_Metadata{}
 	}
-	metadata.FrankingVersion = proto.Int32(0)
-	metadata.FrankingKey = random.Bytes(32)
+	metadata.FrankingVersion = proto.Int32(frankingVersion)
+	metadata.FrankingKey = random.Bytes(frankingKeySize)
 	msgAttrs := msgattrs.GetAttrsFromFBMessage(message)
 	messageAppProto := &waMsgApplication.MessageApplication{
 		Payload: &waMsgApplication.MessageApplication_Payload{
@@ -158,45 +158,10 @@ func (cli *Client) SendFBMessage(
 		return
 	}
 	var respNode *waBinary.Node
-	var timeoutChan <-chan time.Time
-	if req.Timeout > 0 {
-		timeoutChan = time.After(req.Timeout)
-	} else {
-		timeoutChan = make(<-chan time.Time)
-	}
-	select {
-	case respNode = <-respChan:
-	case <-timeoutChan:
-		cli.cancelResponse(req.ID, respChan)
-		err = ErrMessageTimedOut
-		return
-	case <-ctx.Done():
-		cli.cancelResponse(req.ID, respChan)
-		err = ctx.Err()
+	respNode, err = cli.awaitSendAck(ctx, &req, &resp, respChan, data, start)
+	if err != nil {
 		return
 	}
-	resp.DebugTimings.Resp = time.Since(start)
-	if isDisconnectNode(respNode) {
-		start = time.Now()
-		respNode, err = cli.retryFrame(ctx, "message send", req.ID, data, respNode, 0)
-		resp.DebugTimings.Retry = time.Since(start)
-		if err != nil {
-			return
-		}
-	}
-	ag := respNode.AttrGetter()
-	resp.ServerID = types.MessageServerID(ag.OptionalInt("server_id"))
-	resp.Timestamp = ag.UnixTime("t")
-	if errorCode := ag.Int("error"); errorCode != 0 {
-		err = fmt.Errorf("%w %d", ErrServerReturnedError, errorCode)
-	}
-	expectedPHash := ag.OptionalString("phash")
-	if len(expectedPHash) > 0 && phash != expectedPHash {
-		cli.Log.Warnf("Server returned different participant list hash when sending to %s. Some devices may not have received the message.", to)
-		// TODO also invalidate device list caches
-		cli.groupCacheLock.Lock()
-		delete(cli.groupCache, to)
-		cli.groupCacheLock.Unlock()
-	}
+	err = cli.applySendAck(respNode, to, phash, &resp)
 	return
 }
