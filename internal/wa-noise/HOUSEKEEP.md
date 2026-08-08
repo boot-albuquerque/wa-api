@@ -20,6 +20,39 @@ para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 > vieram integralmente; nenhuma foi perdida.
 
 
+
+## Convenção de status
+
+Toda entrada termina com um `**Status**:` cujo **veredito vem em negrito**,
+para que uma varredura mecânica o encontre. Ele pode estar no início da linha
+ou como item de lista (`- **Status**: ...`) — os dois layouts convivem no
+arquivo, e **uma varredura tem de aceitar os dois**:
+
+- `**Status**: **corrigido**` — com os testes que o travam e o controle
+  negativo executado (ver a política anti-regressão em `CLAUDE.md`).
+- `**Status**: **não corrigido**` — seguido do motivo.
+- `**Status**: **fechado — não corrigir**` — decisão registrada, não pendência.
+- `**Status**: **parcialmente corrigido**` — com o que ficou aberto e por quê.
+
+O formato importa, e a varredura também: em 2026-08-08 três varreduras
+seguidas minhas erraram — uma leu cinco entradas como "sem status" porque o
+veredito estava em texto simples, outra perdeu quatro porque o `**Status**`
+era item de lista. Em todos os casos **o documento estava certo e o método
+errado**, e eu quase "corrigi" entradas íntegras.
+
+Entradas com MAIS de um `**Status**` são legítimas: o achado tem sub-itens
+com desfechos diferentes (ver F29, F49, F69). O veredito que vale é o do
+sub-item; não existe um status único para elas.
+
+Seções que são **nota** e não achado — evidência nova para entradas
+existentes, observação de acompanhamento — não levam status. Dê a elas um
+título que diga isso ("Nota sobre…", "Evidências novas…"), para que a
+varredura as distinga de um achado que esqueceu o status.
+
+Referências entre entradas são por **título**, nunca por número de linha —
+ver a F61, cuja própria referência ficou obsoleta quando estes arquivos
+foram divididos.
+
 ## F16 — `log.Fatalf` do stdlib dentro de `sendMexIQ` derruba o processo
 
 **Data**: 2026-08-06
@@ -990,7 +1023,7 @@ web.
 Atenção: isso **muda comportamento** para clientes MacOS que ainda mandem
 `WebInfo`, que passariam a usar as query IDs de desktop.
 
-**Status**: **RESOLVIDO junto da F32** (2026-08-07), por desativação. A
+**Status**: **corrigido** — resolvido junto da F32 (2026-08-07), por desativação. A
 comparação de ponteiros inerte e as duas constantes de desktop foram
 comentadas em bloco, com o registro do porquê: o ramo nunca dispara em
 produção (`BaseClientPayload` sempre preenche `WebInfo`) e o caminho Argo que
@@ -1035,7 +1068,7 @@ Verificação: `TestQueryIDsDesktopTemWireTypeArgo` cobre as outras nove;
 constantes. Não há como derivar os valores corretos a partir do que está
 vendorizado.
 
-**Status**: **RESOLVIDO por desativação** (2026-08-07). Continuamos sem os
+**Status**: **corrigido** — resolvido por desativação (2026-08-07). Continuamos sem os
 valores corretos — mas deixou de importar, porque o ramo desktop inteiro foi
 desativado. Isso fecha F32 e F31 de uma vez.
 
@@ -1188,7 +1221,7 @@ esquecida na outra passa despercebida.
 protocolos) e fazer uma delegar à outra, ou ambas a um helper comum
 `isDirectHumanChat(jid)`.
 
-**Status**: **FECHADO COMO "NÃO CORRIGIR", por decisão** (2026-08-07) — não é
+**Status**: **fechado — não corrigir**, por decisão (2026-08-07) — não é
 mais pendência.
 
 O raciocínio já estava escrito na própria entrada e continua valendo depois da
@@ -1493,7 +1526,7 @@ das duas está errada e nunca foi notada porque o caminho v3/FB é pouco usado.
 **Correção sugerida**: confirmar contra captura de tráfego real qual forma o
 cliente oficial usa e uniformizar. Não dá para decidir por leitura de código.
 
-**Status**: **RESOLVIDO por documentacao** (2026-08-07), depois de a medicao mostrar que a pergunta original era a errada.
+**Status**: **corrigido** — resolvido por documentação (2026-08-07), depois de a medicao mostrar que a pergunta original era a errada.
 
 Nao se uniformizou o `v`, e a razao nao e' mais "falta captura de trafego": o ramo v3/FB de ENVIO e' **inalcancavel** a partir do wa-api (ver a secao de evidencias no fim deste arquivo). Sem o ramo rodar, nenhum teste de integracao poderia confirmar que trocar para string e' inocuo — mexer as cegas em codigo morto seria pior que anotar.
 
@@ -2295,7 +2328,7 @@ faltava. Os dois pontos de escrita (`newNoiseSocket` e `NoiseSocket.Stop`, este
 tome `fs.lock`), e fazer `Close` ler o campo ainda sob o lock que ele já segura.
 É correção local ao pacote `socket/`, sem efeito na API do fork.
 
-**Status**: não corrigido. Fora do escopo do lote 10 (que não tocou `socket/`), e
+**Status**: **não corrigido**. Fora do escopo do lote 10 (que não tocou `socket/`), e
 a regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo.
 Registrado para decisão do usuário.
 
@@ -2595,7 +2628,24 @@ vai errar a barra de progresso do primeiro QR por 40 segundos.
 **Correção sugerida**: corrigir o comentário (uma linha, sem risco) e decidir
 separadamente sobre os 60s do primeiro código.
 
-**Status**: **item 1 (comentario invertido) CORRIGIDO** (2026-08-07). **item 2 (a validade de 60s do primeiro codigo) ABERTO** — e' decisao de seguranca, nao de implementacao.
-arquivo fora do escopo desta tarefa; a validade de 60s é decisão de
-segurança, não de implementação.
+**Confirmação independente (2026-08-08)**: a divergência foi RE-MEDIDA, agora
+contra a nossa própria implementação num pareamento real, e não só lida no
+código. Rotação observada no log:
+
+```
+23:52:32  1º código   (expiresAt 23:53:32)  -> 60s
+23:53:32  2º código                          -> 20s
+23:53:52  3º código                          -> 20s
+23:54:12  4º código                          -> 20s
+23:54:32  5º código                          -> 20s
+```
+
+Isto CONFIRMA o item 2 em vez de resolvê-lo, e refina o alcance: a
+divergência existe **só na primeira exibição**. Do segundo código em diante
+somos idênticos ao oficial.
+
+**Status**: **item 1 (comentário invertido) corrigido** (2026-08-07).
+**item 2 (a validade de 60s do primeiro código) ABERTO** — é decisão de
+segurança, não de implementação, e a medição de 2026-08-08 mostra que o
+custo de decidir é menor do que parecia: afeta um código, não a janela toda.
 

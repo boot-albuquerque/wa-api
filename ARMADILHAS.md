@@ -192,3 +192,28 @@ decisão estava errada independentemente do tamanho do estrago.
 
 **Regra**: antes de sobrescrever, `diff`. O aviso de que os arquivos diferem
 é o momento de parar, não de continuar.
+
+---
+
+## 13. O seu método de medição também é suspeito
+
+Três varreduras seguidas erraram em 2026-08-08, todas minhas, todas sobre
+documentos que estavam corretos:
+
+| o que a varredura disse | por quê | risco |
+|---|---|---|
+| "LID→PN recupera **zero**" | JOIN comparava `90937@lid` com `90937` — a tabela guarda **sem sufixo** | quase descartei um caminho que recuperava 73 |
+| "5 entradas **sem status**" | regex exigia veredito em **negrito**; estavam em texto simples | quase acrescentei status a entradas que já o tinham |
+| "4 entradas **sem status**" | regex exigia `**Status**` no início da linha; eram item de lista | quase reescrevi entradas íntegras |
+
+Nos três casos o dado estava certo e a ferramenta errada — e nos três a
+conclusão parecia acionável.
+
+**Regra**: antes de agir sobre o resultado de uma varredura, rode-a num caso
+que você SABE que deveria casar. Se ele não casar, o problema é a varredura.
+Uma contagem **zero** ou um "não encontrado" é sinal de suspeita, não
+conclusão.
+
+**Corolário**: quando a varredura contradiz o que o documento aparenta,
+abra o documento antes de "corrigi-lo". Documento bem escrito perdendo para
+regex ingênua é o caso comum, não o raro.
