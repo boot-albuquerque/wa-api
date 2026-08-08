@@ -3899,5 +3899,25 @@ mais. O default continua útil para eventos de fato desconhecidos; o problema
 é um evento **conhecido e sensível** cair nele. Vale varrer os outros tipos
 que hoje caem no default à procura de campos com o mesmo perfil.
 
-**Status**: **não corrigido** — descoberto fora do escopo do teste E2E, e a
-correção mexe no handler de eventos, que não era o alvo da sessão.
+**Status**: **corrigido** em `pkg/bootstrap/eventhandler.go` — `*events.QR`
+ganhou `case` próprio, que loga apenas `Int("codes", len(evt.Codes))` em
+Debug e retorna. Nem o código nem o dump saem em nível nenhum.
+
+Coberto por `pkg/bootstrap/eventhandler_qr_test.go`, com três testes que se
+sustentam mutuamente:
+
+- `..._NaoVazaOsCodigosNoLog` — o `captureLog` usa `zerolog.New` sem filtro,
+  então enxerga até Debug: é o ajuste mais severo possível para a asserção.
+- `..._NaoCaiNoRamoDefault` — fixa a causa, não o sintoma. Sem ele, silenciar
+  o `default` inteiro faria o primeiro teste passar.
+- `..._DefaultContinuaAvisando` — controle negativo do anterior: remover o
+  `default` faria os dois primeiros passarem, e o aviso de "apareceu algo que
+  não previmos" sumiria sem que nada acusasse.
+
+Controle negativo executado: com o `case` removido, os dois primeiros testes
+falham exibindo o código de pareamento no dump (`&{Codes:[...SEGREDO...]}`).
+
+Varredura dos demais tipos que ainda caem no `default`, feita na mesma
+sessão: `CATRefreshError` (só um `error`), `ManualLoginReconnect` e
+`QRScannedWithoutMultidevice` (ambos `struct{}`). Nenhum carrega credencial —
+`QR` era o único caso sensível.

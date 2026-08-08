@@ -45,6 +45,23 @@ func (evh *UserEventHandler) handleEvent(rawEvt interface{}) {
 	// Se um dia esses eventos virarem webhook, e' aqui que entram. Ver F73.
 	case *events.PushName, *events.BusinessName:
 		return
+	// QR NAO pode cair no `default`: o ramo default dumpa a struct inteira, e
+	// `Codes` sao os codigos de pareamento. Um deles, lido no log, vincula um
+	// aparelho a conta — e' credencial, nao diagnostico. Foram 6 codigos e
+	// 1678 bytes num unico log.Warn no pareamento medido em 2026-08-07. Ver
+	// F76.
+	//
+	// A entrega do QR ao cliente nao passa por aqui: quem a faz e'
+	// pkg/infra/wa-noise/runtime/session/events.go:54, pelo canal da sessao.
+	// Este ramo so' existia como log.
+	//
+	// Fica em Debug, e nao em Info, porque o evento e' rotineiro (um por
+	// Connect nao autenticado) e a contagem so' serve quando se esta' olhando
+	// o pareamento de perto. O que importa e' que nem o codigo nem o dump
+	// saem em nivel nenhum.
+	case *events.QR:
+		log.Debug().Int("codes", len(evt.Codes)).Msg("QR codes recebidos")
+		return
 	case *events.Connected, *events.PushNameSetting:
 		if !evh.handleConnected(st) {
 			return
