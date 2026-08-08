@@ -67,6 +67,16 @@ type ChatActivityReader interface {
 	// incluir grupos/broadcasts, filtragem é do caller), o timestamp da
 	// mensagem mais recente já persistida.
 	GetLastActivityByUser(ctx context.Context, userID string) (map[string]time.Time, error)
+
+	// GetChatPushNames devolve, por chat, o pushName mais recente que chegou
+	// naquela conversa.
+	//
+	// É a fonte de nome mais completa que temos: o WhatsApp manda o pushName
+	// junto de CADA mensagem, enquanto o roster só conhece quem está na
+	// agenda — e para identidades `@lid` está vazio na maioria dos casos
+	// (F84). Como GetLastActivityByUser, é leitura de banco local e não
+	// exige sessão ativa.
+	GetChatPushNames(ctx context.Context, userID string) (map[string]string, error)
 }
 
 // BlocklistManager expõe a lista de bloqueados.

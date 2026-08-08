@@ -232,3 +232,90 @@ func TestNomeMelhor_Preferencia(t *testing.T) {
 		})
 	}
 }
+
+// --- F84: o pushName do histórico como fonte de nome ---------------------
+
+// TestLista_NomeVemDoHistoricoQuandoRosterNaoSabe é o ganho da F84 na lista.
+// Para identidades @lid o roster está vazio na maioria dos casos, e o
+// pushName que o WhatsApp manda em cada mensagem é a fonte mais completa.
+func TestLista_NomeVemDoHistoricoQuandoRosterNaoSabe(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	ar.GetChatPushNamesFunc = func(context.Context, string) (map[string]string, error) {
+		return map[string]string{"222@lid": "Bruno do Historico"}, nil
+	}
+
+	page := listar(t, ar, cd, gd, 0, 0)
+
+	for _, c := range page.Chats {
+		if c.JID == "222@lid" {
+			if c.Name != "Bruno do Historico" {
+				t.Fatalf("name = %q, quero o do historico — a fonte da F84 nao esta ligada", c.Name)
+			}
+			return
+		}
+	}
+	t.Fatal("222@lid sumiu da lista")
+}
+
+// TestLista_RosterVenceOHistorico fixa a ORDEM. O roster é o nome que QUEM
+// CONSULTA escolheu; o pushName é o que o contato escolheu para si. Inverter
+// faria "Maria Contadora" da agenda virar o apelido que a pessoa usa.
+func TestLista_RosterVenceOHistorico(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	ar.GetChatPushNamesFunc = func(context.Context, string) (map[string]string, error) {
+		return map[string]string{"111@lid": "Apelido Dela"}, nil
+	}
+
+	page := listar(t, ar, cd, gd, 0, 0)
+
+	for _, c := range page.Chats {
+		if c.JID == "111@lid" {
+			if c.Name != "Alice Agenda" {
+				t.Fatalf("name = %q, quero o da agenda — a ordem das fontes inverteu", c.Name)
+			}
+			return
+		}
+	}
+	t.Fatal("111@lid sumiu da lista")
+}
+
+// TestLista_HistoricoIndisponivelNaoDerruba: a terceira fonte também degrada.
+func TestLista_HistoricoDeNomesIndisponivelDegrada(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	ar.GetChatPushNamesFunc = func(context.Context, string) (map[string]string, error) {
+		return nil, errors.New("banco fora do ar")
+	}
+
+	page := listar(t, ar, cd, gd, 0, 0)
+
+	if len(page.Chats) != 3 {
+		t.Fatalf("a lista sumiu: %d conversas", len(page.Chats))
+	}
+	// O roster continua valendo para quem ele conhece.
+	for _, c := range page.Chats {
+		if c.JID == "111@lid" && c.Name != "Alice Agenda" {
+			t.Errorf("o roster parou de valer quando o historico falhou: %q", c.Name)
+		}
+	}
+}
+
+// TestLista_GrupoNaoUsaOHistorico: grupo tem nome próprio, e o pushName de um
+// participante NÃO é o nome do grupo. Usar o histórico ali batizaria o grupo
+// com o nome de quem falou por último.
+func TestLista_GrupoNaoUsaOHistorico(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	gd.GroupNamesFunc = func(context.Context, string) (map[domain.JID]string, error) {
+		return map[domain.JID]string{}, nil // grupo desconhecido
+	}
+	ar.GetChatPushNamesFunc = func(context.Context, string) (map[string]string, error) {
+		return map[string]string{"120363@g.us": "Participante Qualquer"}, nil
+	}
+
+	page := listar(t, ar, cd, gd, 0, 0)
+
+	for _, c := range page.Chats {
+		if c.JID == "120363@g.us" && c.Name != "" {
+			t.Fatalf("grupo batizado com %q, que e' o pushName de um participante", c.Name)
+		}
+	}
+}

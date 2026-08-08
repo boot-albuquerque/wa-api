@@ -49,7 +49,7 @@ func TestSaveMessageToHistory_PersistsEveryColumn(t *testing.T) {
 	db := newHistoryDB(t)
 
 	err := SaveMessageToHistory(db, "u1", "chat@s.whatsapp.net", "sender@s.whatsapp.net",
-		"MSG-1", "image", "legenda", "https://cdn.example.com/img.jpg", "QUOTED-1", `{"k":"v"}`)
+		"MSG-1", "image", "legenda", "https://cdn.example.com/img.jpg", "QUOTED-1", `{"k":"v"}`, "")
 	if err != nil {
 		t.Fatalf("SaveMessageToHistory: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSaveMessageToHistory_IsIdempotentPerUserAndMessage(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		if err := SaveMessageToHistory(db, "u1", "chat@s", "sender@s",
-			"MSG-1", "text", "oi", "", "", "{}"); err != nil {
+			"MSG-1", "text", "oi", "", "", "{}", ""); err != nil {
 			t.Fatalf("insercao %d: %v", i, err)
 		}
 	}
@@ -113,10 +113,10 @@ func TestSaveMessageToHistory_IsIdempotentPerUserAndMessage(t *testing.T) {
 func TestSaveMessageToHistory_ConflictIsScopedToUser(t *testing.T) {
 	db := newHistoryDB(t)
 
-	if err := SaveMessageToHistory(db, "u1", "chat@s", "sender@s", "MSG-1", "text", "a", "", "", "{}"); err != nil {
+	if err := SaveMessageToHistory(db, "u1", "chat@s", "sender@s", "MSG-1", "text", "a", "", "", "{}", ""); err != nil {
 		t.Fatalf("u1: %v", err)
 	}
-	if err := SaveMessageToHistory(db, "u2", "chat@s", "sender@s", "MSG-1", "text", "b", "", "", "{}"); err != nil {
+	if err := SaveMessageToHistory(db, "u2", "chat@s", "sender@s", "MSG-1", "text", "b", "", "", "{}", ""); err != nil {
 		t.Fatalf("u2: %v", err)
 	}
 
@@ -528,7 +528,7 @@ func TestGetLastActivityByUser_ComRelogioMonotonico(t *testing.T) {
 	db := newHistoryDB(t)
 	before := time.Now()
 	if err := SaveMessageToHistory(db, "u1", "a@s.whatsapp.net", "a@s.whatsapp.net",
-		"MSG-1", "text", "oi", "", "", ""); err != nil {
+		"MSG-1", "text", "oi", "", "", "", ""); err != nil {
 		t.Fatalf("SaveMessageToHistory: %v", err)
 	}
 	after := time.Now()

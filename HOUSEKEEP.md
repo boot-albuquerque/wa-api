@@ -1866,9 +1866,56 @@ wanoise_lid_map:   5364 mapeamentos LID<->PN
 O histórico já gravado não se recupera sozinho — o nome foi perdido na
 escrita. Um novo HistorySync repovoaria.
 
-**Status**: **não corrigido**. `GET /chat/list` foi entregue com este
-comportamento e é honesto sobre não saber o nome (campo vazio, conversa
-presente).
+**Status**: **corrigido** nos três eixos.
+
+1. `resolverPushName` (`eventhandler_history.go`) passa a ler o pushName do
+   protobuf e só cai para o roster quando ele vier vazio — nunca ao
+   contrário, e nunca gravando vazio por cima de um nome que existe (a
+   guarda da Evolution API).
+2. Migração 13 dá coluna própria (`message_history.sender_push_name`),
+   NULLABLE de propósito: as linhas já gravadas não têm o nome, e inventar
+   string vazia apagaria a distinção entre "não sabemos" e "sabemos que não
+   tem".
+3. `ListChatsUseCase` ganhou a terceira fonte, atrás do roster: o nome da
+   agenda vence o pushName, porque é o nome que QUEM CONSULTA escolheu.
+
+**Testes** (política anti-regressão):
+
+- `pkg/bootstrap/pushname_test.go` — o nome vem do protobuf com roster
+  vazio; o protobuf vence o roster; o **vazio não vence** o roster; mensagem
+  própria não resolve; sem cliente não entra em pânico.
+- `pkg/infra/db/push_name_column_test.go` — a coluna existe após as
+  migrações (contra o schema REAL, pela via de `newHistoryDB`); grava e lê;
+  pega o pushName MAIS RECENTE; **mensagem recente sem nome não apaga** o
+  nome anterior; chat sem nome nenhum fica fora do mapa.
+- `pkg/application/usecase/user/list_chats_test.go` — o histórico nomeia
+  quem o roster não conhece; o **roster vence** o histórico; a terceira
+  fonte degrada; grupo NÃO usa o histórico (o pushName de um participante
+  não é o nome do grupo).
+
+**Controles negativos executados**, cinco, todos com a mensagem do defeito:
+
+```
+CN-1 so' o roster        -> pushName = "", quero o do protobuf
+CN-2 sem guarda de vazio -> pushName = "", quero o do roster — o vazio venceu um nome que existia
+CN-3 historico vence     -> name = "Apelido Dela", quero o da agenda — a ordem das fontes inverteu
+CN-4 sem filtro na query -> pushName = ""; a mensagem recente sem nome apagou o nome anterior
+CN-5 sem a migracao 13   -> coluna sender_push_name ausente apos as migracoes (0)
+```
+
+**Verificado ao vivo**: migração 13 aplicada (`coluna presente: 1`,
+`migracao 13 registrada: 1`), lista respondendo com as 728 conversas.
+
+**Limite honesto**: o histórico JÁ GRAVADO não se recupera — o nome foi
+perdido na escrita, e `datajson` guarda `''`. Só um novo HistorySync (ou
+mensagens novas) popula a coluna. A verificação de que os nomes de fato
+aparecem exige um pareamento novo, e está pendente.
+
+**Não implementado do plano original**: o item 3 da correção sugerida
+(LID→PN antes da junção, +73 conversas medidas). Com o pushName do
+histórico funcionando, ele deixa de ser o caminho principal e vira ganho
+marginal — vale remedir depois de um HistorySync novo, quando se souber
+quanto o pushName já resolve.
 
 **Nota operacional**: um laço de 6 chamadas a `/user/profile` disparou
 `429: rate-overlimit` do usync do WhatsApp. Aquela rota faz chamadas de rede

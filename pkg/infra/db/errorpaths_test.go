@@ -232,7 +232,7 @@ func TestSaveMessageToHistory_ReportsErrorWhenTableIsMissing(t *testing.T) {
 	db := newHistoryDB(t)
 	mustExec(t, db, "DROP TABLE message_history")
 
-	err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}")
+	err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", "")
 	if err == nil {
 		t.Fatal("SaveMessageToHistory succeeded without message_history")
 	}
@@ -261,7 +261,7 @@ func TestTrimMessageHistory_ReportsHistoryFailure(t *testing.T) {
 	// deixa a leitura passar e aborta só o DELETE, que é o ramo sob teste.
 	mustExec(t, db, `CREATE TRIGGER block_history_delete BEFORE DELETE ON message_history
 		BEGIN SELECT RAISE(ABORT, 'deletes are blocked'); END`)
-	if err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}"); err != nil {
+	if err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

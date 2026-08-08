@@ -1706,6 +1706,7 @@ pkg/application/contracts/contractsfake.AppStateSyncer.SyncContactRoster	EXCLUDE
 pkg/application/contracts/contractsfake.BlocklistManager.GetBlocklist	EXCLUDED	X5
 pkg/application/contracts/contractsfake.BlocklistManager.UpdateBlocklist	EXCLUDED	X5
 pkg/application/contracts/contractsfake.CallRecorder.Record	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatActivityReader.GetChatPushNames	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatActivityReader.GetLastActivityByUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.MarkRead	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
@@ -1993,6 +1994,7 @@ pkg/application/usecase/user.GetUserUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.nomesDeContato	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.nomesDeGrupo	ELIGIBLE	covered
+pkg/application/usecase/user.ListChatsUseCase.nomesDoHistorico	ELIGIBLE	covered
 pkg/application/usecase/user.ListUsersUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.NewAddUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewBlockUserUseCase	EXCLUDED	X1
@@ -2078,8 +2080,8 @@ pkg/bootstrap.UserEventHandler.handleNewsletterJoin	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleNewsletterLeave	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleNewsletterLiveUpdate	ELIGIBLE	uncovered:L3(zerolog,eventhandler_group.go:47)
 pkg/bootstrap.UserEventHandler.handleNewsletterMuteChange	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:330)
-pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:336)
+pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:323)
+pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:329)
 pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:288)
 pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:109)
 pkg/bootstrap.UserEventHandler.handlePicture	ELIGIBLE	covered
@@ -2097,6 +2099,7 @@ pkg/bootstrap.UserEventHandler.persistHistorySyncMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.processMedia	EXCLUDED	X1
 pkg/bootstrap.UserEventHandler.processMessageMedia	ELIGIBLE	uncovered:L1
 pkg/bootstrap.UserEventHandler.resolveMessageS3Config	ELIGIBLE	covered
+pkg/bootstrap.UserEventHandler.resolverPushName	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.saveMessageHistory	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.syncHistoryAfterPair	ELIGIBLE	covered
 pkg/bootstrap.accessLogRoute	EXCLUDED	X1
@@ -2214,8 +2217,10 @@ pkg/infra/auth.ValidateAdminToken	ELIGIBLE	covered
 pkg/infra/auth.WithUserInfo	EXCLUDED	X1
 pkg/infra/constants.IsValidEventType	EXCLUDED	X1
 pkg/infra/constants.init	EXCLUDED	X3
+pkg/infra/db.ChatActivityRepository.GetChatPushNames	ELIGIBLE	uncovered:L1
 pkg/infra/db.ChatActivityRepository.GetLastActivityByUser	ELIGIBLE	uncovered:L1
 pkg/infra/db.GenerateRandomID	ELIGIBLE	covered
+pkg/infra/db.GetChatPushNamesByUser	ELIGIBLE	covered
 pkg/infra/db.GetDatabaseConfig	ELIGIBLE	covered
 pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
 pkg/infra/db.InitializeDatabase	ELIGIBLE	covered
@@ -2239,7 +2244,7 @@ pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
 pkg/infra/db.createMigrationsTable	ELIGIBLE	covered
 pkg/infra/db.createTableIfNotExistsSQLite	ELIGIBLE	covered
-pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:58)
+pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:64)
 pkg/infra/db.getAppliedMigrations	ELIGIBLE	covered
 pkg/infra/db.initializePostgres	ELIGIBLE	covered
 pkg/infra/db.initializeSQLite	ELIGIBLE	covered

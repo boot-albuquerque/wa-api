@@ -236,9 +236,20 @@ rules_frozen=true
 #     nao loga e o use case loga — o mesmo argumento das justificativas de
 #     2026-08-06 e 2026-08-07 acima.
 # Nenhum site que logava deixou de logar.
-min_func_coverage=704
+# justificativa: F84 (2026-08-08), o pushName que o WhatsApp manda em cada
+# mensagem deixa de ser descartado.
+#
+# min_eligible sobe 531->535 (+4, ratchet-UP honesto):
+# UserEventHandler.resolverPushName, GetChatPushNamesByUser,
+# ChatActivityRepository.GetChatPushNames e ListChatsUseCase.nomesDoHistorico.
+#
+# func_coverage SOBE 704->705: resolverPushName loga em Warn quando o roster
+# recusa a consulta (antes o erro era descartado com `err == nil` mudo), e
+# nomesDoHistorico loga a indisponibilidade antes de degradar.
+# errpath_coverage fica em 864.
+min_func_coverage=705
 min_errpath_coverage=864
-min_eligible=531
+min_eligible=535
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -14,11 +14,17 @@ import (
 // silently skipped via ON CONFLICT DO NOTHING (see #292).
 //
 // Moved from db_methods.go as part of Clean Architecture migration.
-func SaveMessageToHistory(db *sqlx.DB, userID, chatJID, senderJID, messageID, messageType, textContent, mediaLink, quotedMessageID, dataJson string) error {
-	query := db.Rebind(`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type, text_content, media_link, quoted_message_id, datajson)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+// senderPushName entra no FIM da lista, e não ao lado de senderJID onde
+// leria melhor, porque esta função já recebe dez strings posicionais:
+// inserir no meio deslocaria todos os argumentos seguintes de todos os
+// chamadores, e uma transposição entre `textContent`, `mediaLink` e
+// `quotedMessageID` compila em silêncio. No fim, o único argumento que pode
+// estar errado é o novo.
+func SaveMessageToHistory(db *sqlx.DB, userID, chatJID, senderJID, messageID, messageType, textContent, mediaLink, quotedMessageID, dataJson, senderPushName string) error {
+	query := db.Rebind(`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type, text_content, media_link, quoted_message_id, datajson, sender_push_name)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT (user_id, message_id) DO NOTHING`)
-	_, err := db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson)
+	_, err := db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson, senderPushName)
 	if err != nil {
 		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
 			Str("chat_jid", chatJID).Str("message_id", messageID).
@@ -183,4 +189,45 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	}
 
 	return nil
+}
+
+// GetChatPushNamesByUser devolve, por chat_jid, o pushName mais RECENTE que
+// já chegou naquela conversa.
+//
+// É a terceira fonte de nome da lista de conversas, e na prática a mais
+// completa: o WhatsApp manda o pushName junto de cada mensagem, enquanto o
+// roster local só conhece quem está na agenda — e para identidades `@lid`
+// está vazio na maioria dos casos (F84).
+//
+// "Mais recente" e não "qualquer um" porque pushName é o nome que a PESSOA
+// escolheu para si e ela pode tê-lo mudado; o último que ela usou é o que
+// vale. Linhas sem nome são filtradas na consulta, para que uma mensagem
+// recente sem pushName não apague um nome que chegou antes.
+func GetChatPushNamesByUser(db *sqlx.DB, userID string) (map[string]string, error) {
+	query := db.Rebind(`
+		SELECT chat_jid, sender_push_name FROM (
+		    SELECT chat_jid, sender_push_name,
+		           ROW_NUMBER() OVER (PARTITION BY chat_jid ORDER BY timestamp DESC) AS rn
+		      FROM message_history
+		     WHERE user_id = ?
+		       AND sender_push_name IS NOT NULL
+		       AND sender_push_name <> ''
+		) AS recentes
+		WHERE rn = 1`)
+
+	type row struct {
+		ChatJID  string `db:"chat_jid"`
+		PushName string `db:"sender_push_name"`
+	}
+	var rows []row
+	if err := db.Select(&rows, query, userID); err != nil {
+		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
+			Msg("failed to get push names by chat")
+		return nil, fmt.Errorf("failed to get push names by chat: %w", err)
+	}
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		out[r.ChatJID] = r.PushName
+	}
+	return out, nil
 }
