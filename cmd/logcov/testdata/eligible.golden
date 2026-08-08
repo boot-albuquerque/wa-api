@@ -1928,7 +1928,11 @@ pkg/application/usecase/notification.GetHealthUseCase.Execute.func1	EXCLUDED	X1
 pkg/application/usecase/notification.ListNewsletterUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/notification.NewGetHealthUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewListNewsletterUseCase	EXCLUDED	X1
+pkg/application/usecase/profile.GetProfileFullUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/profile.GetProfileFullUseCase.preencherPrivacidade	ELIGIBLE	covered
+pkg/application/usecase/profile.GetProfileFullUseCase.preencherUserInfo	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/profile.NewGetProfileFullUseCase	EXCLUDED	X1
 pkg/application/usecase/profile.NewGetProfileUseCase	EXCLUDED	X1
 pkg/application/usecase/profile.NewProfileError	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,get_profile.go:134)
 pkg/application/usecase/profile.ProfileError.Error	EXCLUDED	X4
@@ -2585,8 +2589,10 @@ pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
 pkg/presentation/http.NewHandlerRegistry	EXCLUDED	X1
+pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
-pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:68)
+pkg/presentation/http.ProfileFullHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:142)
+pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:74)
 pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:49)
 pkg/presentation/http.genericErrorMessage	EXCLUDED	X1
 pkg/presentation/http/devui.Enabled	EXCLUDED	X1

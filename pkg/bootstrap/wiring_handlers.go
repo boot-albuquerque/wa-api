@@ -75,20 +75,21 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
-	Profile   *customhttp.ProfileHandler
-	Message   *MessageHandlers
-	Session   *SessionHandlers
-	Webhook   *WebhookHandlers
-	User      *handlers.UserHandlers
-	Group     *handlers.GroupHandlers
-	Storage   *handlers.StorageHandlers
-	Misc      *handlers.MiscHandlers
-	Blocklist *handlers.BlocklistHandlers
-	Download  *handlers.DownloadHandlers
-	Presence  *handlers.PresenceHandlers
-	Reaction  *handlers.ReactionHandlers
-	Contact   *handlers.ContactHandlers
-	GroupMgmt *handlers.GroupManagementHandlers
+	Profile     *customhttp.ProfileHandler
+	ProfileFull *customhttp.ProfileFullHandler
+	Message     *MessageHandlers
+	Session     *SessionHandlers
+	Webhook     *WebhookHandlers
+	User        *handlers.UserHandlers
+	Group       *handlers.GroupHandlers
+	Storage     *handlers.StorageHandlers
+	Misc        *handlers.MiscHandlers
+	Blocklist   *handlers.BlocklistHandlers
+	Download    *handlers.DownloadHandlers
+	Presence    *handlers.PresenceHandlers
+	Reaction    *handlers.ReactionHandlers
+	Contact     *handlers.ContactHandlers
+	GroupMgmt   *handlers.GroupManagementHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -149,6 +150,10 @@ func initCustomHandlers(s *server) {
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
+	// userAdapter satisfaz ContactDirectory E PrivacyManager; e' o mesmo
+	// adapter que /user/privacy ja consome.
+	profileFullHandler := customhttp.NewProfileFullHandler(
+		profile.NewGetProfileFullUseCase(miscAdapter, userAdapter, userAdapter, logger))
 	messageHandlers := &MessageHandlers{
 		SendMessage:     handlers.NewSendMessageHandler(sendMessageUC),
 		SendImage:       handlers.NewSendImageHandler(sendImageUC),
@@ -329,20 +334,21 @@ func initCustomHandlers(s *server) {
 	}
 
 	customHandlerSet = &customHandlers{
-		Profile:   profileHandler,
-		Message:   messageHandlers,
-		Session:   sessionHandlers,
-		Webhook:   webhookHandlers,
-		User:      userHandlers,
-		Group:     groupHandlers,
-		Storage:   storageHandlers,
-		Misc:      miscHandlers,
-		Blocklist: blocklistHandlers,
-		Download:  downloadHandlers,
-		Presence:  presenceHandlers,
-		Reaction:  reactionHandlers,
-		Contact:   contactHandlers,
-		GroupMgmt: groupMgmtHandlers,
+		Profile:     profileHandler,
+		ProfileFull: profileFullHandler,
+		Message:     messageHandlers,
+		Session:     sessionHandlers,
+		Webhook:     webhookHandlers,
+		User:        userHandlers,
+		Group:       groupHandlers,
+		Storage:     storageHandlers,
+		Misc:        miscHandlers,
+		Blocklist:   blocklistHandlers,
+		Download:    downloadHandlers,
+		Presence:    presenceHandlers,
+		Reaction:    reactionHandlers,
+		Contact:     contactHandlers,
+		GroupMgmt:   groupMgmtHandlers,
 	}
 }
 

@@ -45,6 +45,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 
 	// Session routes
 	registry.Register("/session/profile", customChain.Then(ch.Profile), "GET")
+	registry.Register("/session/profile/full", customChain.Then(ch.ProfileFull), "GET")
 	registry.Register("/session/connect", customChain.Then(ch.Session.Connect), "GET")
 	registry.Register("/session/disconnect", customChain.Then(ch.Session.Disconnect), "GET")
 	registry.Register("/session/qr", customChain.Then(ch.Session.GetQR), "GET")

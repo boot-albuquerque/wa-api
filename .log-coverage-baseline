@@ -247,9 +247,20 @@ rules_frozen=true
 # recusa a consulta (antes o erro era descartado com `err == nil` mudo), e
 # nomesDoHistorico loga a indisponibilidade antes de degradar.
 # errpath_coverage fica em 864.
-min_func_coverage=705
+# justificativa: GET /session/profile/full (2026-08-08), perfil da sessao
+# agregando as consultas de REDE (recado e privacidade) sobre a base local.
+#
+# min_eligible sobe 535->539 (+4, ratchet-UP honesto):
+# GetProfileFullUseCase.Execute, os dois helpers que consultam a rede
+# (preencherUserInfo, preencherPrivacidade) e ProfileFullHandler.ServeHTTP.
+#
+# func_coverage SOBE 705->707: os dois helpers logam em Warn a
+# indisponibilidade antes de degradar, e o handler escolhe o nivel pela
+# categoria do apperr (warn para recusa de cliente, error para falha nossa),
+# como a rota irma passou a fazer na F83. errpath_coverage fica em 864.
+min_func_coverage=707
 min_errpath_coverage=864
-min_eligible=535
+min_eligible=539
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
