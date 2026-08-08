@@ -1,11 +1,22 @@
 # wa-api — instruções do projeto
 
-## Registro de achados incidentais (internal/wa-noise/HOUSEKEEP.md)
+## Registro de achados incidentais (dois HOUSEKEEP)
 
 Sempre que, durante uma sessão de trabalho, você encontrar um bug, gap,
 comportamento incorreto ou dívida técnica que **não faça parte do escopo
-da tarefa atual**, registre em `internal/wa-noise/HOUSEKEEP.md` antes de
-encerrar a sessão — mesmo que decida não corrigir.
+da tarefa atual**, registre antes de encerrar a sessão — mesmo que decida
+não corrigir.
+
+São **dois** arquivos, e a escolha entre eles não é organizacional:
+
+- **`HOUSEKEEP.md`** (raiz) — o wa-api como um todo: `pkg/`, build, gates,
+  configuração, rotas HTTP. É código nosso, e só nós corrigimos.
+- **`internal/wa-noise/HOUSEKEEP.md`** — a biblioteca vendorizada. Acompanha
+  o upstream, e um achado ali é candidato a virar patch ou a sumir num
+  rebase.
+
+O achado fica no arquivo de quem **causa** o problema, com referência cruzada
+no outro quando atravessar a fronteira.
 
 Cada entrada deve conter, no mínimo:
 - **Data** e **contexto**: em que tarefa/feature o achado surgiu.
@@ -22,7 +33,7 @@ claramente escopo de uma tarefa em andamento — o HOUSEKEEP é para o que
 foi descoberto de lado, não para o trabalho principal.
 
 Não "corrija de graça" bugs pré-existentes fora do escopo da tarefa atual
-sem perguntar primeiro — registre no HOUSEKEEP e pergunte ao usuário
+sem perguntar primeiro — registre no HOUSEKEEP certo e pergunte ao usuário
 se quer que a correção seja feita agora ou fique pendente.
 
 ## Consultar as implementações de referência antes de resolver
@@ -58,3 +69,41 @@ os bugs deles junto.
 
 Não copie código: as licenças e a arquitetura são outras. Copie o
 ENTENDIMENTO.
+
+## Política anti-regressão para achados do HOUSEKEEP
+
+Todo achado do `HOUSEKEEP.md` que for **corrigido** precisa sair da sessão
+com teste que o trave. A entrada só muda para "corrigido" quando isto
+estiver feito, e a entrada diz **quais** testes o cobrem.
+
+O mínimo, para qualquer achado:
+
+1. **Teste do defeito**: reproduz a condição exata que foi medida em campo,
+   com os valores observados quando houver. Não uma aproximação.
+2. **Controle negativo EXECUTADO**: reintroduza o defeito e confirme que o
+   teste falha, colando a saída da falha na entrada do HOUSEKEEP. Um teste
+   que passa mas não morde é pior que nenhum — dá confiança falsa.
+3. **Teste da causa, não só do sintoma**: se o sintoma tem mais de uma
+   causa possível, trave a causa. Silenciar o sintoma faria o teste passar
+   com o defeito no lugar.
+
+Acrescente, conforme o achado exigir:
+
+- **Ordem e efeito colateral**: quando a correção depende de uma sequência
+  (agir só depois de validar, não soltar recurso após falha), teste a
+  ORDEM. Inverter chamadas costuma passar em todos os outros testes.
+- **Caminho pelo roteador**: defeito de rota se testa pela rota registrada,
+  não pelo handler cru. Um handler montado sem padrão de rota não exercita
+  extração de parâmetro — foi assim que a F81 sobreviveu.
+- **Fronteira medida contra a produção**: dublê mais permissivo que a
+  implementação real esconde defeito em vez de revelá-lo. Quando o dublê
+  imita uma regra (parsing, normalização, resolução), ele tem de imitar a
+  regra REAL, e o comentário do dublê deve dizer de onde ela vem.
+- **Contrato de resposta**: envelope, status e forma do corpo quando o
+  achado for de fronteira HTTP.
+- **Determinismo**: quando houver ordenação, mapa ou concorrência, rode a
+  asserção várias vezes — ordem de mapa em Go é aleatória por desenho.
+
+A verificação em produção NÃO substitui o teste: ela prova que funciona
+hoje, o teste impede que pare de funcionar amanhã. Quando as duas existirem,
+registre as duas na entrada.
