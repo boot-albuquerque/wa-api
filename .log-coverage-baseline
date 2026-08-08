@@ -164,9 +164,16 @@ rules_frozen=true
 # func_coverage SOBE 706->709 e errpath 862->862: a funcao nova loga tanto o
 # carregamento quanto a falha, e o Attach loga quando nao consegue popular o
 # cache. Ratchet-UP honesto — codigo novo que ja nasce instrumentado.
-min_func_coverage=709
+# justificativa: F74 (2026-08-07), paralelizacao do fan-out WebSocket.
+# min_eligible 512->513 (+1: a closure da goroutine por conexao).
+# func_coverage 709->708 pela aritmetica, nao por perda de instrumentacao: o
+# log.Warn de falha de escrita MIGROU de Broadcast para dentro da closure.
+# Broadcast deixou de ter chamada direta e virou descoberta; a closure nasceu
+# coberta. Numerador igual, denominador +1. Nenhum site que logava deixou de
+# logar — o mesmo aviso sai, do mesmo ponto logico.
+min_func_coverage=708
 min_errpath_coverage=862
-min_eligible=512
+min_eligible=513
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

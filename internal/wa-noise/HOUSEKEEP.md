@@ -3767,7 +3767,28 @@ use of closed network connection`. Ela diz "failed to marshal JSON" para uma
 falha de ESCRITA — o embrulho vem da biblioteca e induz a erro quem for
 investigar. Vale envolver com contexto próprio.
 
-**Status**: **não corrigido**.
+**Status**: **CORRIGIDO** (2026-08-07) pela opcao (1): uma goroutine por conexao, com WaitGroup. O teto passou de writeTimeout POR conexao para writeTimeout no total.
+
+Antes de paralelizar foi verificado que o `payload` e' somente lido depois de
+despachado — `sendEventWithWebHook` nao escreve no mapa apos o `safeGo`
+(conferido por varredura de atribuicoes a `postmap[...]`), entao serializa-lo
+de varias goroutines e' seguro.
+
+`Broadcast` continua esperando todas as escritas: nao esperar mudaria o
+contrato ("tentou entregar a todo mundo e terminou") e deixaria goroutines
+escrevendo depois de a funcao retornar.
+
+**Sem teste de tempo, de proposito.** Um teste que medisse "N conexoes lentas
+levam ~1x writeTimeout em vez de Nx" seria flaky: `wsjson.Write` retorna
+quando o frame entra no buffer do socket, nao quando o outro lado le, entao
+nao ha como produzir lentidao deterministica sem seam artificial em codigo de
+producao. A correcao esta coberta pelo teste de corrida do pacote e pelo teste
+com WebSocket real que exercita o descarte de conexao morta; a paralelizacao
+em si e' estrutural e visivel no codigo. Um teste flaky aqui corroeria a
+confianca na suite mais do que o teste agregaria.
+
+A ressalva sobre o texto do erro ("failed to marshal JSON" para uma falha de
+ESCRITA) continua valendo e nao foi tocada.
 
 ## F75 — remover o token da query string vai quebrar todo cliente WebSocket de navegador
 

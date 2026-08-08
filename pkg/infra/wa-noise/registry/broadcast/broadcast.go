@@ -98,15 +98,33 @@ func (r *Registry) Broadcast(userID string, payload interface{}) {
 	// existe: wsjson.Write pode bloquear até writeTimeout por conexão, e
 	// segurar o lock durante isso serializaria todo Add/Remove atrás do
 	// cliente mais lento.
+	//
+	// E acontece em PARALELO, uma goroutine por conexão (F74). O laço era
+	// serial, e como cada conexão tem seu próprio teto de writeTimeout, N
+	// clientes lentos custavam N × writeTimeout ao broadcast inteiro —
+	// observado em produção com 6 conexões obsoletas do mesmo usuário, uma
+	// delas estourando o deadline. Agora o teto é writeTimeout no total.
+	//
+	// payload é lido, nunca escrito: json.Marshal concorrente sobre o mesmo
+	// valor é seguro. Verificado que o produtor (sendEventWithWebHook) não
+	// muta o mapa depois de despachar.
+	var wg sync.WaitGroup
+	wg.Add(len(conns))
 	for _, c := range conns {
-		ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
-		err := wsjson.Write(ctx, c, payload)
-		cancel()
-		if err != nil {
-			log.Warn().Err(err).Str("userID", userID).
-				Msg("websocket broadcast write failed; dropping connection")
-			r.Remove(userID, c)
-			c.Close(websocket.StatusInternalError, "broadcast write failed")
-		}
+		go func(c *websocket.Conn) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+			defer cancel()
+			if err := wsjson.Write(ctx, c, payload); err != nil {
+				log.Warn().Err(err).Str("userID", userID).
+					Msg("websocket broadcast write failed; dropping connection")
+				r.Remove(userID, c)
+				c.Close(websocket.StatusInternalError, "broadcast write failed")
+			}
+		}(c)
 	}
+	// Espera todas: Broadcast continua significando "tentou entregar a todo
+	// mundo e terminou". Não esperar mudaria o contrato e deixaria goroutines
+	// escrevendo depois de a função retornar.
+	wg.Wait()
 }
