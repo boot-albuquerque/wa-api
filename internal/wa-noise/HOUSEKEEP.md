@@ -3861,3 +3861,43 @@ A (2) é a resposta técnica correta; a (1) é a que cabe numa release.
 **Status**: **não corrigido — mas é bloqueador da remoção anunciada.** O
 `devui` já migrou os `fetch` para header e mantém a query só no WebSocket,
 com comentário apontando para esta entrada.
+
+## F76 — o log grava os códigos de pareamento em texto puro
+
+**Data / contexto**: 2026-08-07, teste E2E do `devui` no Chrome, pareando a
+sessão `TesteQR`.
+
+**Onde**: `pkg/bootstrap/eventhandler.go:146`
+
+```go
+log.Warn().Str("event", fmt.Sprintf("%+v", evt)).Msg("Unhandled event")
+```
+
+**Problema**: `*events.QR` não tem `case` no switch e cai no ramo default, que
+dumpa a struct inteira. O campo `Codes []string` traz **todos os códigos de
+pareamento da sessão de uma vez** — no pareamento medido, 6 códigos, 1678
+bytes numa única linha de log:
+
+```
+{"level":"warn","message":"Unhandled event",
+ "event":"&{Codes:[https://wa.me/settings/linked_devices#2@B+o1E1qrtMni2Ojvg…"}
+```
+
+Um código desses, lido por quem tiver acesso ao arquivo de log, **vincula um
+aparelho à conta** — é credencial, não diagnóstico. A janela é curta (o
+primeiro código vale 60s, os seguintes ~20s, e o conjunto morre quando um é
+consumido), mas o log persiste indefinidamente e costuma ir para agregadores
+com público bem mais amplo que o do banco de sessões.
+
+Note o que isto **não** é: não é um por rotação de QR. É um evento só, no
+`Connect`, carregando a lista inteira. Foi medido: 5 rotações de QR na tela,
+1 linha de log.
+
+**Correção sugerida**: dar um `case *events.QR:` ao switch — nem que seja
+para logar `Msg("QR codes recebidos")` com `Int("n", len(evt.Codes))` e nada
+mais. O default continua útil para eventos de fato desconhecidos; o problema
+é um evento **conhecido e sensível** cair nele. Vale varrer os outros tipos
+que hoje caem no default à procura de campos com o mesmo perfil.
+
+**Status**: **não corrigido** — descoberto fora do escopo do teste E2E, e a
+correção mexe no handler de eventos, que não era o alvo da sessão.
