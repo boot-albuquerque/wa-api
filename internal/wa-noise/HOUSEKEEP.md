@@ -4243,3 +4243,89 @@ GET mesmo caminho + corpo {"JID":"5599999999999@s.whatsapp.net"}
 **Fica aberto**: um número sem servidor (`/user/lid/5511912345678`) devolve
 **500**, não 400 — `invalid jid format` é erro de cliente. É a F66 (23/25
 endpoints devolvendo 500) aparecendo aqui, e não uma regressão desta correção.
+
+## F82 — sessão pareada por QR não sobrevive a um restart
+
+**Data / contexto**: 2026-08-08, ao reiniciar o servidor para validar o
+perfil de sessão enriquecido.
+
+**Onde**: `pkg/bootstrap/eventhandler_session.go:58-72`
+
+```go
+func (evh *UserEventHandler) handleConnected(st *eventState) bool {
+	st.postmap["type"] = "Connected"
+	st.dowebhook = 1
+	if len(evh.WAClient.Store.PushName) == 0 {
+		return true                                   // <-- sai ANTES do UPDATE
+	}
+	...
+	sqlStmt := `UPDATE users SET connected=1 WHERE id=$1`
+```
+
+**Problema**: a saída antecipada existe pelo motivo declarado logo acima dela
+— não mandar presença disponível sem pushname. Mas ela leva junto o
+`UPDATE users SET connected=1`, que não tem relação nenhuma com pushname.
+
+Num pareamento novo por QR, o evento `Connected` chega ANTES de o pushname
+estar populado. Resultado: `users.connected` fica em 0 numa sessão que está
+viva e autenticada. Como `connectOnStartup` (`lifecycle.go:54`) itera
+`WHERE connected=1`, **a sessão não é reconectada no próximo start**.
+
+**Evidência**:
+
+```
+07:59  TesteQR pareado por QR; /session/status -> connected=true loggedIn=true
+       (nenhum kill signal, nenhum logout entre isto e o restart)
+08:16  Stopping server... / Server started...
+       NENHUM "Connect to Whatsapp on startup"
+08:17  /admin/users -> TesteQR connected=False
+       /session/status -> sem sessao
+```
+
+A sessão voltou com um `/session/connect` manual, sem QR — a credencial
+estava intacta. O que faltava era só a coluna.
+
+**Correção sugerida**: mover o `UPDATE connected=1` para ANTES da guarda de
+pushname, ou trocar a guarda por um `if` que envolva só o bloco de presença.
+O estado de conexão persistido não deveria depender de o contato já ter
+nome.
+
+**Status**: **não corrigido** — descoberto fora do escopo (implementação dos
+endpoints novos), e mexe no ciclo de vida da sessão.
+
+## F83 — os erros de `/session/profile` escapam do envelope
+
+**Data / contexto**: 2026-08-08, mesma sessão.
+
+**Onde**: `pkg/presentation/http/profile_handler.go:44-62`
+
+```go
+http.Error(w, "missing session id", http.StatusBadRequest)
+...
+http.Error(w, "internal server error", http.StatusInternalServerError)
+```
+
+**Problema**: o caminho de sucesso usa `customhttp.RespondJSON` e devolve o
+envelope `{code,data,success}` do ADR-002 — foi o que o commit 7f89d49
+corrigiu. Os caminhos de ERRO continuaram em `http.Error`, que escreve
+`text/plain`. Um cliente que sempre desserializa o envelope quebra em
+qualquer falha desta rota.
+
+Junto vem um erro de classificação: "não há sessão" é condição esperada,
+causada pelo cliente, e sai como **500**.
+
+**Evidência**:
+
+```
+$ curl -i /session/profile   (sem sessao)
+HTTP/1.1 500 Internal Server Error
+Content-Type: text/plain; charset=utf-8
+Content-Length: 22
+```
+
+**Correção sugerida**: trocar os três `http.Error` por `RespondJSON` com o
+erro tipado, e mapear `ErrNoSession` para 400 como os handlers de
+`/session/*` já fazem via `isClientCausedSessionError`. É a F66 aparecendo
+nesta rota; o envelope, porém, é problema à parte e mais barato de resolver.
+
+**Status**: **não corrigido** — achado ao testar o perfil enriquecido.

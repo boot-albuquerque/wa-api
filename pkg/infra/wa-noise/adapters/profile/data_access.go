@@ -94,3 +94,36 @@ func (d *ProfileDataAccess) ContactInfo(ctx context.Context, jid domain.JID) (st
 	}
 	return "", "", nil
 }
+
+// DeviceInfo lê identidade e estado do aparelho direto do store.
+//
+// Sem chamada de rede e sem erro: tudo aqui já está em memória. Store
+// ausente devolve o zero-value, que reproduz o comportamento das demais
+// funções deste adapter ("Store ausente é vazio") em vez de inventar uma
+// falha que o chamador não teria como tratar.
+func (d *ProfileDataAccess) DeviceInfo() domain.SessionDeviceInfo {
+	if d.client == nil {
+		return domain.SessionDeviceInfo{}
+	}
+
+	// Connected e LoggedIn vêm do cliente, não do store: descrevem a conexão
+	// viva, e continuam respondendo mesmo com o store zerado.
+	info := domain.SessionDeviceInfo{
+		Connected: d.client.IsConnected(),
+		LoggedIn:  d.client.IsLoggedIn(),
+	}
+	if d.client.Store == nil {
+		return info
+	}
+
+	st := d.client.Store
+	info.Platform = st.Platform
+	info.RegistrationID = st.RegistrationID
+	info.LIDMigrationTimestamp = st.LIDMigrationTimestamp
+	info.Initialized = st.Initialized
+	// Sem guarda IsEmpty: types.JID.String() de um JID zerado ja devolve "".
+	// A guarda que estava aqui era um ramo que nenhum teste conseguia
+	// distinguir — medido, nao suposto.
+	info.LID = st.LID.String()
+	return info
+}

@@ -190,6 +190,9 @@ type ProfileDataAccessContactInfoCall struct {
 // um contador ali não responderia a nenhuma pergunta que o teste faça. Use os
 // campos PushNameValue / OwnJIDValue / OwnJIDOK para configurá-los.
 type ProfileDataAccess struct {
+	DeviceInfoFunc  func() domain.SessionDeviceInfo
+	DeviceInfoCalls int
+
 	PushNameValue string
 	OwnJIDValue   domain.JID
 	OwnJIDOK      bool
@@ -199,6 +202,17 @@ type ProfileDataAccess struct {
 
 	ContactInfoFunc  func(ctx context.Context, jid domain.JID) (string, string, error)
 	ContactInfoCalls []ProfileDataAccessContactInfoCall
+}
+
+// DeviceInfoFunc permite ao teste ditar identidade e estado do aparelho.
+// Zero-value devolve o zero-value de SessionDeviceInfo, que e' o que um
+// store vazio produz em producao.
+func (f *ProfileDataAccess) DeviceInfo() domain.SessionDeviceInfo {
+	f.DeviceInfoCalls++
+	if f.DeviceInfoFunc != nil {
+		return f.DeviceInfoFunc()
+	}
+	return domain.SessionDeviceInfo{}
 }
 
 var _ port.ProfileDataAccess = (*ProfileDataAccess)(nil)

@@ -38,6 +38,15 @@ func fullAccess() *contractsfake.ProfileDataAccess {
 	}
 }
 
+// camposDeAparelho sao as chaves que domain.SessionDeviceInfo acrescenta ao
+// corpo. Ficam num conjunto proprio porque a tabela wantFields e' de valores
+// textuais, e estes nao sao todos texto.
+var camposDeAparelho = map[string]struct{}{
+	"lid": {}, "platform": {}, "registration_id": {},
+	"lid_migration_timestamp": {}, "initialized": {},
+	"connected": {}, "logged_in": {},
+}
+
 func TestGetProfileExecute(t *testing.T) {
 	errNoSession := errors.New("connection refused")
 
@@ -188,9 +197,14 @@ func TestGetProfileExecute(t *testing.T) {
 			// passam a valer alguma coisa. A asserção que estava aqui antes
 			// (len(result) >= 10) não distinguia o perfil correto de
 			// "{\"a\":1234}".
-			var got map[string]string
+			// map[string]any, e nao map[string]string: o corpo deixou de ser
+			// so' de strings quando os campos de aparelho entraram
+			// (registration_id e' numero, connected/logged_in sao bool). As
+			// assercoes de valor abaixo continuam exigindo string para as
+			// chaves de wantFields, que sao justamente as textuais.
+			var got map[string]any
 			if err := json.Unmarshal([]byte(result), &got); err != nil {
-				t.Fatalf("resultado nao e' um objeto JSON de strings: %v (%q)", err, result)
+				t.Fatalf("resultado nao e' um objeto JSON: %v (%q)", err, result)
 			}
 			for key, wantVal := range tt.wantFields {
 				gotVal, present := got[key]
@@ -198,13 +212,29 @@ func TestGetProfileExecute(t *testing.T) {
 					t.Errorf("chave %q sumiu do corpo da rota (contrato publico): %s", key, result)
 					continue
 				}
-				if gotVal != wantVal {
-					t.Errorf("%s: got %q, want %q", key, gotVal, wantVal)
+				texto, ehTexto := gotVal.(string)
+				if !ehTexto {
+					t.Errorf("%s: got %T, want string", key, gotVal)
+					continue
+				}
+				if texto != wantVal {
+					t.Errorf("%s: got %q, want %q", key, texto, wantVal)
 				}
 			}
 			for key := range got {
-				if _, esperada := tt.wantFields[key]; !esperada {
-					t.Errorf("chave inesperada %q no corpo da rota: %s", key, result)
+				if _, esperada := tt.wantFields[key]; esperada {
+					continue
+				}
+				if _, deAparelho := camposDeAparelho[key]; deAparelho {
+					continue
+				}
+				t.Errorf("chave inesperada %q no corpo da rota: %s", key, result)
+			}
+			// A presenca dos campos de aparelho e' contrato tambem: sem esta
+			// checagem, remove-los do ProfileResult passaria batido aqui.
+			for key := range camposDeAparelho {
+				if _, present := got[key]; !present {
+					t.Errorf("campo de aparelho %q sumiu do corpo da rota: %s", key, result)
 				}
 			}
 

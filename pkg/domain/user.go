@@ -96,3 +96,35 @@ type UserResponse struct {
 	Events         string                 `json:"events,omitempty"`
 	HmacConfigured bool                   `json:"hmac_configured,omitempty"`
 }
+
+// SessionDeviceInfo carrega os dados de identidade e estado do aparelho
+// pareado que já vivem no store local — nenhum deles custa chamada de rede.
+//
+// Estão num struct só, e não em seis métodos da porta, porque são lidos de
+// uma vez e sempre juntos: quebrar em métodos separados multiplicaria a
+// superfície da porta sem dar a ninguém a chance de pedir só um.
+type SessionDeviceInfo struct {
+	// LID é a identidade do próprio aparelho no espaço @lid, distinta do
+	// JID de telefone. Ver a nota sobre identidade dupla em GetLIDForPN.
+	LID string `json:"lid"`
+
+	// Platform é o que o WhatsApp reporta do aparelho pareado ("iphone",
+	// "android", ...).
+	Platform string `json:"platform"`
+
+	// RegistrationID identifica esta instalação no protocolo Signal.
+	RegistrationID uint32 `json:"registration_id"`
+
+	// LIDMigrationTimestamp marca quando a conta migrou para o espaço @lid.
+	// Zero significa que não houve migração registrada.
+	LIDMigrationTimestamp int64 `json:"lid_migration_timestamp"`
+
+	// Initialized indica se o store completou o handshake inicial.
+	Initialized bool `json:"initialized"`
+
+	// Connected e LoggedIn são estados distintos, e a diferença importa:
+	// pode haver credencial válida com o transporte caído (Desconectar), e
+	// nesse caso Connected=false com LoggedIn=true.
+	Connected bool `json:"connected"`
+	LoggedIn  bool `json:"logged_in"`
+}

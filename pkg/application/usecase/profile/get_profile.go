@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
 )
 
 // GetProfileUseCase implementa a lógica de obtenção de perfil WhatsApp.
@@ -32,6 +33,10 @@ type ProfileResult struct {
 	JID          string `json:"jid"`
 	FullName     string `json:"full_name"`
 	BusinessName string `json:"business_name"`
+
+	// Campos de aparelho, embutidos para que a resposta continue sendo um
+	// objeto plano — o cliente que só lia os seis primeiros não quebra.
+	domain.SessionDeviceInfo
 }
 
 // Execute obtém o perfil WhatsApp para o txtID informado.
@@ -44,12 +49,12 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 
 	result := buildProfile(ctx, da, uc.logger)
 
-	// ProfileResult é composto exclusivamente de campos string, e json.Marshal
+	// ProfileResult é composto de strings, números e bools, e json.Marshal
 	// não tem como falhar para esse conjunto de tipos — UTF-8 inválido é
 	// substituído, não rejeitado. O tratamento de erro que existia aqui era
 	// inalcançável: nenhuma execução o atingia e nenhum teste podia cobri-lo.
-	// Se ProfileResult ganhar um campo que não seja string (map, chan, func,
-	// interface), reintroduza a verificação de erro junto com o campo.
+	// Se ProfileResult ganhar um map, chan, func ou interface, reintroduza a
+	// verificação de erro junto com o campo.
 	responseJSON, _ := json.Marshal(result)
 	return string(responseJSON), nil
 }
@@ -75,6 +80,10 @@ func buildProfile(ctx context.Context, da appport.ProfileDataAccess, logger appp
 		}()
 
 		result.Pushname = da.PushName()
+		// Antes de OwnJID de propósito: DeviceInfo não depende de haver JID e
+		// não pode entrar em pânico, então o painel continua mostrando estado
+		// de conexão mesmo numa sessão sem identidade.
+		result.SessionDeviceInfo = da.DeviceInfo()
 
 		j, ok := da.OwnJID()
 		if ok {
