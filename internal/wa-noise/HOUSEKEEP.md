@@ -4380,67 +4380,98 @@ Content-Type: application/json
 {"code":400,"error":{"code":"no_session","message":"no session"},"success":false}
 ```
 
-## F84 — a lista de conversas nomeia 3% dos contatos: roster e histórico vivem em espaços de identidade quase disjuntos
+## F84 — descartamos o pushName que o WhatsApp manda em cada mensagem
 
 **Data / contexto**: 2026-08-08, ao validar `GET /chat/list` contra dados
-reais.
+reais e depois investigar por que quase nenhum contato tinha nome.
 
-**Onde**: não é um defeito de um arquivo — é a junção entre
-`message_history` (via `ChatActivityReader`) e o roster
-(`ContactDirectory.ContactNames`), feita em
-`pkg/application/usecase/user/list_chats.go`.
+**Onde**: `pkg/bootstrap/eventhandler_history.go:248-256`
 
-**Problema**: a lista funciona, ordena e pagina corretamente, mas quase
-nenhuma conversa individual sai com nome. Medido na sessão real:
-
-```
-roster:                 3362 entradas (2478 @lid, 883 @s.whatsapp.net)
-chats de contato:        481
-chats que casam:          17   (3,5%)
-chats com nome:           16
-```
-
-E o teto é baixo mesmo com junção perfeita:
-
-```
-entradas do roster COM algum nome:   1158 de 3362
-  destas, com chave @lid:             274 de 2478
+```go
+// Try to get PushName from store if available
+pushName := ""
+if !isFromMe && senderJIDForInfo.User != "" {
+    if evh.WAClient != nil && evh.WAClient.Store != nil {
+        if contact, err := evh.WAClient.Store.Contacts.GetContact(ctx, senderJIDForInfo); err == nil {
+            pushName = contact.PushName        // <- store, quase sempre vazio para @lid
+        }
+    }
+}
 ```
 
-Ou seja: **89% das entradas `@lid` do roster não têm nome nenhum**, e as
-chaves `@lid` do histórico praticamente não coincidem com as do roster,
-embora ambas usem o mesmo formato.
+**Problema**: o `WebMessageInfo` que o HistorySync entrega **já carrega o
+pushName** (campo 19 do protobuf, `WAWebProtobufsWeb.pb.go:1436`). O handler
+o ignora e vai buscar o nome no roster local, que para identidades `@lid`
+está vazio na esmagadora maioria dos casos. O valor vazio é então gravado em
+`datajson`.
 
-Os GRUPOS não sofrem disso — saem todos nomeados, porque vêm de
-`GetJoinedGroups`, que traz o nome junto e não depende de junção.
+Confirmado no dado persistido:
 
-Isto é a mesma condição que a justificativa de `GET
-/user/contacts/last-activity` já registrava em `.log-coverage-baseline`
-("0/1141 contatos casaram por telefone, e só 5/284 por JID bruto"). A
-`normalizeToLID` melhorou o caso `@s.whatsapp.net` → `@lid`; o caso
-`@lid` do histórico ≠ `@lid` do roster continua aberto.
+```
+$ sqlite3 users.db "SELECT datajson FROM message_history WHERE chat_jid LIKE '%@lid' LIMIT 1"
+  .Info.PushName = ''
+```
 
-**Correção sugerida**, em ordem de custo:
+O WhatsApp nos manda o nome em toda mensagem, e nós o substituímos por uma
+consulta que falha.
 
-1. **Fallback por PN**: para chat `@lid` sem acerto no roster, resolver
-   LID→PN (`GetPNForLID`, leitura de store LOCAL, sem rede) e tentar as 883
-   chaves `@s.whatsapp.net` do roster. Amostra de 6 LIDs resolveu 6 PNs, o
-   que mostra que o mapeamento existe — falta medir quantos desses PNs estão
-   no roster. Exige um método em LOTE: 481 chamadas individuais são baratas
-   por serem locais, mas continuam sendo 481.
-2. **Preencher o roster**: 89% das entradas `@lid` sem nome sugere que o
-   `PutPushName` do app-state não está populando esse espaço. Se for isso, é
-   a correção de maior alcance — e a de maior risco.
-3. **Nome pelo próprio histórico**: `message_history` guarda o pushname do
-   remetente por mensagem. Seria a fonte mais direta para "com quem eu
-   falei", e não depende do roster.
+**Medições** (sessão real, `dbdata/`):
+
+```
+chats individuais no historico:                    1717
+com nome pela juncao direta (o que a rota faz hoje): 261   (15%)
+recuperaveis por LID->PN antes da juncao:            +73   (total 334, 19%)
+
+wanoise_contacts:  3368 entradas   (2481 @lid, 886 @s.whatsapp.net)
+wanoise_lid_map:   5364 mapeamentos LID<->PN
+```
+
+**Duas correções minhas durante esta investigação**, ambas de medição:
+
+1. Os primeiros números (`17 de 481`) vieram de amostrar a API, não o banco.
+   Contra o banco inteiro são 261 de 1717.
+2. A primeira consulta SQL disse que LID→PN recuperava **zero**. Estava
+   errada: `wanoise_lid_map` guarda LID e PN **sem sufixo** (`lid` =
+   `90000000000002`, e não `90000000000002@lid`), então o JOIN com
+   `chat_jid` nunca casava. Com o sufixo removido, recupera 73. Quase
+   descartei o caminho por causa do meu próprio JOIN.
+
+**Como os projetos de referência tratam isto**:
+
+- **Baileys** (issue #2414, "LID Mapping Best Practices") recomenda resolução
+  em três camadas — JID de telefone direto, cache `store.contacts`, e mapa
+  persistente `lid-mapping-*.json` — e adverte que **`store.contacts` é
+  pouco confiável sozinho**, porque só eventos `contacts.upsert` o
+  alimentam. É exatamente o erro deste handler: confiar só no store.
+- **Evolution API** (issue #2426) teve o MESMO sintoma por causa diferente:
+  `Contact.pushName` era sobrescrito com string vazia a cada mensagem
+  enviada, porque o upsert não tinha guarda contra valor vazio — enquanto
+  `Chat.name` tinha. A lição que serve aqui é a guarda: **nunca sobrescrever
+  um nome existente com vazio**.
+- **whatsapp-mcp** (issue #198) descreve nosso caso com as mesmas tabelas do
+  whatsmeow (`whatsmeow_contacts`, `whatsmeow_lid_map` — aqui renomeadas
+  para `wanoise_*`) e propõe normalizar o JID do remetente ANTES de gravar,
+  em vez de tentar casar na leitura.
+
+**Correção sugerida**, na ordem em que resolve mais:
+
+1. **Usar o pushName do protobuf** em vez do store, com a guarda da Evolution
+   API: só cai para o store se o protobuf vier vazio, e nunca grava vazio
+   por cima de um nome que já existe. Resolve na origem e vale para toda
+   mensagem nova.
+2. **Persistir o pushName** em coluna própria de `message_history` (hoje só
+   existe dentro de `datajson`), para a lista de conversas lê-lo sem
+   desserializar JSON por linha.
+3. **LID→PN antes da junção** na lista (+73 medidos). Complementar, não
+   substituto.
+
+O histórico já gravado não se recupera sozinho — o nome foi perdido na
+escrita. Um novo HistorySync repovoaria.
 
 **Status**: **não corrigido**. `GET /chat/list` foi entregue com este
-comportamento — ordena e pagina corretamente, e é honesto sobre não saber o
-nome (campo vazio, conversa presente). Fechar isto é trabalho próprio, com
-medição antes de escolher entre as três saídas.
+comportamento e é honesto sobre não saber o nome (campo vazio, conversa
+presente).
 
-**Nota operacional**: ao medir isto, um laço de 6 chamadas a
-`/user/profile` disparou `429: rate-overlimit` do usync do WhatsApp. A rota
-de perfil faz chamadas de rede por consulta e NÃO deve ser usada em laço
-sobre uma lista.
+**Nota operacional**: um laço de 6 chamadas a `/user/profile` disparou
+`429: rate-overlimit` do usync do WhatsApp. Aquela rota faz chamadas de rede
+por consulta e NÃO deve ser usada em laço sobre uma lista.
