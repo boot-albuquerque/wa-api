@@ -2117,6 +2117,7 @@ pkg/bootstrap.atrasoDaTentativa	ELIGIBLE	uncovered:L1
 pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
 pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
+pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildRouter	ELIGIBLE	uncovered:L1
 pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:254)
 pkg/bootstrap.buildRouter.func2	ELIGIBLE	uncovered:L1
@@ -2153,10 +2154,17 @@ pkg/bootstrap.initCustomHandlers	ELIGIBLE	uncovered:L1
 pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
-pkg/bootstrap.lerInteiroDoAmbiente	ELIGIBLE	covered
+pkg/bootstrap.leaseManager.Claim	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.ReleaseAll	ELIGIBLE	covered
+pkg/bootstrap.leaseManager.RunHeartbeat	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:234);uncovered:L2(S-ret,lease.go:238)
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
 pkg/bootstrap.montarRequisicaoWebhook	ELIGIBLE	covered
 pkg/bootstrap.newDispatchPool	ELIGIBLE	uncovered:L1
+pkg/bootstrap.newLeaseManager	EXCLUDED	X1
 pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6
@@ -2166,6 +2174,7 @@ pkg/bootstrap.prepararCluster.func1	EXCLUDED	X6
 pkg/bootstrap.rateLimitObserver.limiterFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.rateLimitObserver.middleware	EXCLUDED	X1
 pkg/bootstrap.rateLimitObserver.middleware.func1	ELIGIBLE	covered
+pkg/bootstrap.readIntFromEnv	ELIGIBLE	covered
 pkg/bootstrap.recordUserIDHandler	EXCLUDED	X1
 pkg/bootstrap.recordUserIDHandler.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware	EXCLUDED	X1
@@ -2257,8 +2266,12 @@ pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
 pkg/infra/db.InitializeDatabase	ELIGIBLE	covered
 pkg/infra/db.InitializeSchema	ELIGIBLE	covered
 pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
+pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
+pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:80);uncovered:L2(S-consume,session_lease.go:84)
+pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:109)
+pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:96)
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
 pkg/infra/db.TrimMessageHistory	ELIGIBLE	covered
 pkg/infra/db.UserRepository.CreateUser	ELIGIBLE	covered

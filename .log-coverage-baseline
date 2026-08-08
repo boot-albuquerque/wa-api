@@ -322,8 +322,54 @@ rules_frozen=true
 # importa porque carrega a decisao de derrubar o processo. O padrao aqui e' o
 # mesmo ja' aceito neste repo para adapters — quem decide se e' erro e' que
 # loga.
-min_func_coverage=704
-min_errpath_coverage=862
+# justificativa: ADR-0005 D2 (2026-08-08), posse de sessao por lease —
+# pkg/infra/db/session_lease.go (repositorio) e pkg/bootstrap/lease.go
+# (gerenciador com heartbeat e regra de cerca).
+#
+# min_eligible 554->564 (+10, ratchet-UP): NewSessionLeaseRepository, Claim,
+# Release e CurrentOwner no repositorio; newLeaseManager, buildOwnerID, Claim,
+# renewOne, RunHeartbeat, ownedSessions, forget, ReleaseAll e leaseSettings no
+# gerenciador.
+#
+# func_coverage cai 704->695 e errpath 862->859. As descobertas foram
+# conferidas uma a uma com `logcov -list-uncovered`, e NAO justificadas em
+# bloco — uma delas era lacuna de verdade e foi CORRIGIDA em vez de
+# justificada:
+#
+#   buildOwnerID   engolia em silencio a falha de os.Hostname(). O owner_id e'
+#                  exatamente o que um operador procura para saber quem esta'
+#                  com uma sessao, e cair para "unknown-host" sem aviso
+#                  transforma essa busca em beco sem saida. Agora loga Warn.
+#                  Isso subiu func_coverage de 693 para 695.
+#
+# As oito restantes seguem o padrao ja' aceito neste repositorio:
+#
+#   SessionLeaseRepository.Claim/Release/CurrentOwner
+#       Adapters. Envelopam o erro do banco com ErrLeaseUnavailable e propagam
+#       SEM logar; quem decide se aquilo e' erro (e loga) e' o gerenciador —
+#       mesmo argumento das justificativas de 2026-08-06 e 2026-08-07.
+#
+#   leaseManager.Claim
+#       Repassa o erro ao chamador, que loga ao decidir se conecta ou pula a
+#       sessao. Logar aqui duplicaria.
+#
+#   leaseSettings
+#       Validador PURO que devolve erro com mensagem acionavel ("must be at
+#       most HALF of ..."); quem loga e' o main.go, em Fatal. Mesmo caso de
+#       clusterModeConfigurado, justificado no D1 acima.
+#
+#   RunHeartbeat
+#       E' o laco. Todo log de decisao esta' em renewOne, que ele chama e que
+#       JA' e' coberta (loga perda de posse, tolerancia dentro do TTL e
+#       expiracao alem do TTL, com niveis distintos).
+#
+#   ownedSessions, forget
+#       Acessores puros sobre um mapa protegido por mutex. Nao ha erro.
+#
+# errpath 862->859: os tres S-consume do repositorio (Claim tem dois, Release e
+# CurrentOwner um cada) e os dois S-ret de leaseSettings, pelos mesmos motivos.
+min_func_coverage=695
+min_errpath_coverage=859
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -333,6 +379,8 @@ min_errpath_coverage=862
 # +4 (542->546): o teto virou pool com fila por bytes na segunda rodada da
 # F86 — ver a justificativa de min_func_coverage acima para a lista nominal.
 #
+# +10 (554->564): ADR-0005 D2, lease de posse — ver a justificativa de
+# min_func_coverage acima para a lista nominal e para a lacuna corrigida.
 # +4 (550->554): ADR-0005 D1, modo de cluster e trava de instancia — ver a
 # justificativa de min_func_coverage acima para a lista nominal.
 # +4 (546->550): F88, a espera do backoff de webhook saiu de dentro do worker
@@ -351,7 +399,7 @@ min_errpath_coverage=862
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-min_eligible=554
+min_eligible=564
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

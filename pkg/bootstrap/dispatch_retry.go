@@ -96,7 +96,7 @@ func agendarProximaTentativa(myurl string, payload map[string]string, userID str
 	}
 
 	tamanho := tamanhoDoPayload(payload)
-	teto := int64(lerInteiroDoAmbiente(envRetryMaxPendingBytes, retryDefaultMaxPendingBytes))
+	teto := int64(readIntFromEnv(envRetryMaxPendingBytes, retryDefaultMaxPendingBytes))
 	if retryBytesPendentes.Add(int64(tamanho)) > teto {
 		retryBytesPendentes.Add(-int64(tamanho))
 		retryDescartados.Add(1)

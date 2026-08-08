@@ -523,6 +523,14 @@ func TestApplyMigration_PostgresBranchExecutesUpSQL(t *testing.T) {
 		if m.ID == 11 {
 			continue // roteada para applyTokenHashMigration, coberta à parte
 		}
+		// Migration 14 is portable DDL on purpose (CREATE TABLE with a type
+		// name SQLite happily accepts), so SQLite does NOT reject it and the
+		// rejection this loop uses as evidence never happens. Skipping it here
+		// would silently drop coverage of its branch, so it gets its own
+		// assertion below: TestApplyMigration_PortableDDLBranchStillRuns.
+		if m.ID == migrationIDSessionLeases {
+			continue
+		}
 		err := applyMigration(pg, m)
 		if err == nil {
 			t.Errorf("migration %d: PL/pgSQL body ran on sqlite", m.ID)
@@ -1254,5 +1262,42 @@ func TestUserRepositoryDeleteUser_PropagatesQueryFailure(t *testing.T) {
 
 	if _, err := NewUserRepository(db).DeleteUser(context.Background(), "u1"); err == nil {
 		t.Fatal("DeleteUser succeeded without a users table")
+	}
+}
+
+// TestApplyMigration_PortableDDLBranchStillRuns covers what the loop above
+// cannot.
+//
+// TestApplyMigration_PostgresBranchExecutesUpSQL proves the postgres branch
+// runs by watching SQLite reject PL/pgSQL. Migration 14 is portable DDL, so
+// there is no rejection to watch — and "no error" is indistinguishable from
+// "the branch never ran". This test uses the EFFECT as evidence instead: the
+// table has to exist afterwards.
+func TestApplyMigration_PortableDDLBranchStillRuns(t *testing.T) {
+	raw := openTestDB(t)
+	if err := createMigrationsTable(raw); err != nil {
+		t.Fatalf("create migrations table: %v", err)
+	}
+	pg := sqlx.NewDb(raw.DB, "postgres")
+
+	var leaseMigration Migration
+	for _, m := range migrations {
+		if m.ID == migrationIDSessionLeases {
+			leaseMigration = m
+			break
+		}
+	}
+	if leaseMigration.ID == 0 {
+		t.Fatalf("migration %d not found in the list", migrationIDSessionLeases)
+	}
+
+	if err := applyMigration(pg, leaseMigration); err != nil {
+		t.Fatalf("applying migration %d on the postgres branch: %v", migrationIDSessionLeases, err)
+	}
+
+	var name string
+	err := raw.Get(&name, "SELECT name FROM sqlite_master WHERE type='table' AND name='session_leases'")
+	if err != nil {
+		t.Fatalf("the postgres branch ran but session_leases does not exist: %v", err)
 	}
 }
