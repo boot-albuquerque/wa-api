@@ -2239,10 +2239,121 @@ Por isso o limitador entrou com **padrão 0 (desligado)**: o código é
 mensurável e não muda comportamento até a forma de aquisição ser decidida
 entre bloquear, descartar ou enfileirar.
 
-**Status**: **parcialmente corrigido** — o teto está implementado, testado
-sob `-race` e medido, porém DESLIGADO por padrão. Falta decidir a forma de
-aquisição (o dado que falta é o atraso induzido no handler), e as camadas 2
-(circuit breaker) e 3 (backpressure no broadcast) seguem abertas.
+### Segunda rodada (2026-08-08): a forma de aquisição, decidida por medição
+
+O teto bloqueante da primeira rodada **saiu**. Ele foi medido e perdeu.
+
+**Quatro formas, mesma rajada, HTTP real, 3 rodadas** (2.000 entregas):
+
+| | handler | atraso p95 | dreno | goroutines | heap | perdidas |
+|---|---|---|---|---|---|---|
+| sem teto | 121ms | 55µs | 290ms | ~7.931 | 63,0MB | 0% |
+| bloqueia-64 | 3,165s | 51,2ms | 3,266s | ~344 | 39,4MB | 0% |
+| descarta-64 | 128ms | 3µs | 216ms | ~330 | 11,6MB | **93,6%** |
+| fila-64w | 113ms | 3µs | 3,244s | ~341 | 18,0MB | 0% |
+
+Bloquear custa **26×** no handler. Descartar perde **93,6%** — e 70,5% mesmo
+com fila de 8MB, porque o handler enfileira ordens de magnitude mais rápido do
+que a rede entrega.
+
+**A prova de que só muda quem espera**: `bloqueia-256` e `fila-256w` têm dreno
+idêntico (3,232s contra 3,234s) e goroutines quase iguais. A única diferença é
+o handler — 3,131s contra 402ms. O custo de entrega não muda com a forma de
+aquisição; muda sobre quem ele recai.
+
+**Fila limitada NÃO é uma terceira opção**: com orçamento apertado ela vira a
+forma bloqueante (handler 9,257s com 8MB, 401ms com 32MB, mesma implementação).
+É bloquear com amortecedor, e o orçamento move o ponto onde o backpressure
+começa.
+
+**Calibração do orçamento** (8.000 entregas, pool 256): a troca é uma RETA, sem
+joelho. ~1,4MB de heap compra ~110ms a menos de handler travado, até cobrir a
+rajada (26,8MB de marca d'água), depois não compra mais nada. O dreno é
+CONSTANTE (~3,22s) em todos os orçamentos.
+
+**Não existe orçamento "suficiente"**: a demanda cresce com a rajada (7,4MB →
+13,8MB → ≥16MB), então o orçamento só escolhe em que tamanho o handler começa
+a absorver.
+
+### A rajada real, medida em produção (15,1h, 5 sessões)
+
+O que decidiu os padrões. Estado estacionário: **0,030 evento/s**. Pico de
+**PAREAMENTO**, que é o caso perigoso:
+
+| janela | pico de eventos |
+|---|---|
+| 100ms | **23** |
+| 1s | 38 |
+| 120s (1 pareamento) | **129** |
+
+O HistorySync entra como **13 eventos em 5 min**, não milhares: o LOTE vira
+evento, não a mensagem — 23.856 mensagens chegaram em 44 lotes ao longo de 15h.
+
+Um pareamento é ~40× o estado estacionário, e N pareamentos simultâneos
+multiplicam linearmente. Isso recalibra a rajada de laboratório: **8.000
+entregas ≈ 87 pareamentos simultâneos**. Não era cenário inventado; era o
+cenário de novos usuários lendo QR ao mesmo tempo.
+
+### O que foi implementado
+
+Pool de workers com fila limitada por BYTES, esperando na saturação. É uma
+ESCADA de degradação, e em nenhum degrau se descarta entrega:
+
+| condição | comportamento |
+|---|---|
+| rajada ≤ pool | indistinguível de não ter mecanismo |
+| rajada > pool | enfileira: entrega mais lenta, COMPLETA |
+| rajada > orçamento | handler absorve backpressure, ainda SEM PERDA |
+
+**Sem detector de rajada**, de propósito: a escada degrada sozinha, e um
+detector seria limiar para calibrar, histerese para acertar e oscilação na
+fronteira para depurar — para produzir o comportamento que a estrutura já
+produz.
+
+Padrões (`WA_API_DISPATCH_WORKERS=256`, `WA_API_DISPATCH_QUEUE_BYTES=32MB`)
+dimensionados para que o estado estacionário e um pareamento isolado **nunca
+encostem no mecanismo**. `WORKERS=0` desliga e é o rollback.
+`TestPool_PadroesCobremARajadaMedida` trava os padrões contra a medição que os
+escolheu.
+
+O `json.Marshal` subiu para antes do primeiro despacho
+(`lifecycle_webhook.go:150`): a contabilidade é por bytes, e `len(jsonData)` é
+a única medida honesta do payload que cada closure mantém vivo. Sem isso o
+despacho do WS — justamente quem carrega os lotes de HistorySync, os maiores
+medidos — entraria com tamanho estimado, furando a proteção na rajada que ela
+existe para conter. Custa um Marshal a mais no modo Stdio.
+
+O `recover` é **por trabalho**, não por goroutine como em `SafeGo`: num pool
+permanente, a semântica do SafeGo encolheria o pool a cada pânico até não
+sobrar worker. Controle negativo executado:
+
+```
+--- FAIL: TestPool_PanicoNaoMataOWorker (10.00s)
+    so' 4 de 12 panicos rodaram: os workers morreram e o pool encolheu
+```
+
+`4 de 12` = exatamente o número de workers. Outros dois controles executados:
+
+```
+--- FAIL: TestPool_NuncaDescarta (30.00s)
+    so' 3 de 500 executaram: o despacho travou
+--- FAIL: TestPool_RespeitaOOrcamentoDeBytes (0.00s)
+    bytes em voo chegaram a 131072 com orcamento 8192
+```
+
+**Status**: **corrigido** — pool com fila por bytes implementado, LIGADO por
+padrão, 10 testes verdes sob `-race`, três controles negativos executados com
+saída registrada acima, e padrões derivados da rajada medida em produção.
+
+O limitador bloqueante foi preservado como INSTRUMENTO em
+`dispatch_carga_test.go` (`limitadorBloqueante`), porque os números dele são a
+evidência que levou ao pool.
+
+**Segue aberto**: camada 2 (circuit breaker por destino) e camada 3
+(backpressure no broadcast). Nenhuma das duas tem, hoje, evidência de produção
+de que seja necessária — o webhook do usuário está desligado nesta instalação,
+então o caminho caro (HTTP com retry) não foi exercitado em nenhuma janela
+medida. **Medir com webhook ligado antes de implementar qualquer uma.**
 
 > **Ponteiros e corrida**: `Broadcast` já documenta que `payload` é lido e
 > nunca escrito, e que o produtor não muta o mapa depois de despachar
