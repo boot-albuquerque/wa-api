@@ -3360,3 +3360,117 @@ separadamente sobre os 60s do primeiro código.
 **Status**: **não corrigido.** O comentário invertido é trivial mas está em
 arquivo fora do escopo desta tarefa; a validade de 60s é decisão de
 segurança, não de implementação.
+
+## F70 — webhook nunca dispara para usuário integrado depois da subida do servidor
+
+**Data**: 2026-08-07.
+**Contexto**: primeiro pareamento real com celular. Dos 74 warns do log, 42
+eram consequência deste único defeito.
+
+**Sintomas no log** (todos com o usuário existindo e conectado):
+
+```
+[29x] "Could not call webhook as there is no user for this token"  token=t1
+[12x] "User info not found in cache, skipping history"
+ [1x] "No user info cached on pairing?"
+```
+
+**Onde**:
+
+- `pkg/bootstrap/lifecycle_webhook.go:100-109` — `getUserWebhookUrl`
+- `pkg/bootstrap/lifecycle.go:97` — único `UserInfoCache.Set` que CRIA entrada
+- `pkg/bootstrap/eventhandler_session.go:94-103` — o `Set` do pareamento
+
+**A cadeia**:
+
+1. `UserInfoCache.Set` que **cria** a entrada vive dentro de
+   `connectOnStartup()` (`lifecycle.go:97`), que só roda na subida do
+   servidor, iterando usuários já `connected=1`.
+2. Um usuário criado por `POST /admin/users` **depois** da subida nunca passa
+   por lá — e esse é o caminho normal de onboarding.
+3. No `PairSuccess`, `eventhandler_session.go:94` faz
+   `myuserinfo, found := ...Get(token)`; o `Set` está dentro do **`else`**.
+   Sem entrada prévia, ele apenas loga `"No user info cached on pairing?"` e
+   **não cria nada**.
+4. A partir daí, todo evento chama `getUserWebhookUrl`, que lê **só do
+   cache** — nunca do banco — e devolve `""` no miss.
+
+**Consequência**: um webhook configurado na tabela `users` é **silenciosamente
+ignorado** para qualquer usuário integrado após a subida do servidor. Só um
+restart do processo (que reexecuta `connectOnStartup` com o usuário já
+`connected=1`) faz a entrega passar a funcionar.
+
+Não foi observado com webhook real porque o usuário de teste estava sem
+webhook — mas o defeito independe disso: `getUserWebhookUrl` devolve `""`
+antes de qualquer consulta ao banco.
+
+**Agravante: a mensagem mente.** *"there is no user for this token"* é falso —
+o usuário existe, está conectado e autenticado. O que faltou foi a entrada no
+cache. Quem investigar vai procurar o usuário no banco, encontrá-lo, e
+descartar a pista certa.
+
+**Correção sugerida**:
+
+1. Fazer `eventhandler_session.go` **criar** a entrada quando não existir, em
+   vez de só atualizar — os dados necessários estão todos na tabela `users`.
+2. Ou dar a `getUserWebhookUrl` um caminho de leitura do banco no miss,
+   populando o cache de passagem.
+3. Independente da escolha, corrigir a mensagem para dizer *"user info not in
+   cache"*, que é o que de fato aconteceu.
+
+A (1) é mais barata e ataca a origem; a (2) torna o cache irrelevante para
+correção, o que é mais robusto.
+
+**Status**: **não corrigido**. É caminho de produção e merece commit próprio
+com teste de integração cobrindo "usuário criado após a subida recebe
+webhook".
+
+## F71 — sync automático de histórico após pareamento nunca executa: coluna inexistente
+
+**Data**: 2026-08-07. **Contexto**: mesmo pareamento.
+
+**Sintoma**:
+
+```
+"Failed to get days_to_sync_history from database"
+error="SQL logic error: no such column: days_to_sync_history (1)"
+```
+
+**Onde**: `pkg/bootstrap/eventhandler_session.go:107`.
+
+```go
+query := "SELECT COALESCE(days_to_sync_history, 0) FROM users WHERE id=$1"
+...
+if err != nil {
+    log.Warn()...Msg("Failed to get days_to_sync_history from database")
+} else if daysToSyncHistory > 0 {
+    go evh.syncHistoryAfterPair(daysToSyncHistory)
+}
+```
+
+**Problema**: a coluna chama-se **`history`**, não `days_to_sync_history`. A
+migração que a cria é explícita (`pkg/infra/db/migrations.go:254`):
+
+```sql
+ALTER TABLE users ADD COLUMN history INTEGER DEFAULT 0;
+```
+
+O campo da API também é `history` (`domain.AddUserRequest.History`, tag
+`json:"history"`), e `GET /session/status` devolve `"history":"0"`.
+
+**Consequência**: a query falha **sempre**, em qualquer banco, para qualquer
+usuário. O `else if` nunca é alcançado e `syncHistoryAfterPair` **nunca é
+chamado** — o sync automático de histórico após leitura do QR é código morto
+em produção. Como a falha é apenas um `Warn`, ninguém percebeu.
+
+Quem configurar `history: 30` ao criar o usuário vê o valor persistido e
+devolvido por `/session/status`, e conclui que a funcionalidade está ativa.
+
+**Correção sugerida**: trocar o nome da coluna na query para `history`. É uma
+linha. O teste que a trava é de integração: criar usuário com `history > 0`,
+parear, e afirmar que `syncHistoryAfterPair` rodou.
+
+Vale checar de passagem se a migração de `migrations.go:236-254` roda em
+SQLite — ela usa `information_schema`, que é de Postgres.
+
+**Status**: **não corrigido.**
