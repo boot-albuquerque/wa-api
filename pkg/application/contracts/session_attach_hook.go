@@ -16,11 +16,21 @@ import "context"
 // Pair/Connect — o handler precisa estar registrado antes que qualquer
 // evento possa chegar.
 type SessionAttachHook interface {
+	SessionDetacher
+
 	// Attach monta o UserEventHandler de userID, registra o handler de eventos de
 	// domínio na sessão e passa a acompanhar o kill-channel dela, que
 	// permanece propriedade de pkg/bootstrap.
 	Attach(ctx context.Context, userID, token string) error
+}
 
+// SessionDetacher encerra o acompanhamento de uma sessão.
+//
+// Está separado de SessionAttachHook porque há quem precise DESFAZER sem ter
+// nada a ver com montar: LogoutUseCase desvincula o aparelho e em seguida
+// solta a sessão, e não tem o que fazer com Attach. Injetar a interface
+// inteira lhe daria uma capacidade que ele não deve exercer.
+type SessionDetacher interface {
 	// Detach remove o handler e encerra o acompanhamento do kill-channel.
 	// É o único escritor de users.connected no caminho de desconexão —
 	// o orchestrator observa SessionEvent, mas nunca escreve essa coluna.

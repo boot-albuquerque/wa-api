@@ -8,6 +8,9 @@ var (
 	errMissingSessionID = &simpleErr{"missing session id"}
 	errMissingID        = &simpleErr{"missing ID"}
 	errDecodePayload    = &simpleErr{"could not decode payload"}
+	// errMissingJID cobre o parametro {jid} do caminho, e nao um campo de
+	// corpo — distinto de errDecodePayload de proposito (F81).
+	errMissingJID = &simpleErr{"missing jid in path"}
 )
 
 type simpleErr struct {

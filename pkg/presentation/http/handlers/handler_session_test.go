@@ -120,7 +120,7 @@ func sessionCases() []sessionCase {
 		},
 		{
 			name:   "Logout",
-			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), log)) },
+			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), &contractsfake.SessionDetacher{}, log)) },
 			method: http.MethodPost,
 			path:   "/session/logout",
 		},
@@ -532,7 +532,7 @@ func TestGetQRAndStatus_RepositoryFailure_500_LogsError(t *testing.T) {
 // que nao satisfaz userInfo tem de virar 401 com causa — nao panico, e nao
 // seguir com ID vazio.
 func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
-	h := NewLogoutHandler(session.NewLogoutUseCase(&contractsfake.SessionController{}, &contractsfake.Logger{}))
+	h := NewLogoutHandler(session.NewLogoutUseCase(&contractsfake.SessionController{}, &contractsfake.SessionDetacher{}, &contractsfake.Logger{}))
 	wrapped, capture := logassert.Wrap(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/session/logout", nil)

@@ -1792,6 +1792,7 @@ pkg/application/contracts/contractsfake.SessionAttachHook.Detach	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionController.Disconnect	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionController.Logout	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionCounter.CountSessions	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SessionDetacher.Detach	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionEventDispatcher.Dispatch	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionEventDispatcher.DispatchedTypes	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionGuard.EnsureSession	EXCLUDED	X5

@@ -17,13 +17,15 @@ import (
 // desvincular coisa alguma.
 type LogoutUseCase struct {
 	sessions appport.SessionController
+	detacher appport.SessionDetacher
 	logger   appport.Logger
 }
 
 // NewLogoutUseCase cria uma nova instância do usecase.
-func NewLogoutUseCase(sc appport.SessionController, l appport.Logger) *LogoutUseCase {
+func NewLogoutUseCase(sc appport.SessionController, d appport.SessionDetacher, l appport.Logger) *LogoutUseCase {
 	return &LogoutUseCase{
 		sessions: sc,
+		detacher: d,
 		logger:   l,
 	}
 }
@@ -39,6 +41,20 @@ func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.L
 		uc.logger.Warn(ctx, "logout failed", "txtID", txtID, "error", err)
 		return nil, err
 	}
+
+	// Solta a sessão DEPOIS do logout bem-sucedido (F80).
+	//
+	// O logout iniciado pelo TELEFONE emite *events.LoggedOut, que aciona o
+	// kill-channel e tira o cliente dos registries. O iniciado pela API não
+	// emite evento nenhum: o store é apagado, mas o cliente continua
+	// registrado com estado em memória obsoleto, e /session/status seguia
+	// respondendo loggedIn=true para uma sessão que já não existia.
+	//
+	// Detach é idempotente e é o único escritor de users.connected neste
+	// caminho, então chamá-lo aqui alinha os dois fluxos sem duplicar
+	// escrita: o do telefone continua passando pelo kill-channel, este passa
+	// direto, e ambos terminam no mesmo lugar.
+	uc.detacher.Detach(txtID)
 
 	uc.logger.Info(ctx, "logged out", "txtID", txtID)
 	return &domain.LogoutResult{}, nil

@@ -63,7 +63,7 @@ func guardCases() []guardCase {
 			return session.NewDisconnectUseCase(ctlDe(sg), log).Execute(context.Background(), txtID, domain.DisconnectRequest{})
 		}},
 		{"Logout", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewLogoutUseCase(ctlDe(sg), log).Execute(context.Background(), txtID, domain.LogoutRequest{})
+			return session.NewLogoutUseCase(ctlDe(sg), &contractsfake.SessionDetacher{}, log).Execute(context.Background(), txtID, domain.LogoutRequest{})
 		}},
 		{"RequestHistorySync", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewRequestHistorySyncUseCase(sg, log).Execute(context.Background(), txtID, domain.RequestHistorySyncRequest{})

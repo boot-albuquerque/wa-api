@@ -45,9 +45,10 @@ func TestDisconnectUseCase_DerrubaOTransporte(t *testing.T) {
 
 func TestLogoutUseCase_DesvinculaOAparelho(t *testing.T) {
 	sc := &contractsfake.SessionController{}
+	det := &contractsfake.SessionDetacher{}
 	log := &contractsfake.Logger{}
 
-	if _, err := session.NewLogoutUseCase(sc, log).
+	if _, err := session.NewLogoutUseCase(sc, det, log).
 		Execute(context.Background(), txtID, domain.LogoutRequest{}); err != nil {
 		t.Fatalf("Execute devolveu erro no caminho feliz: %v", err)
 	}
@@ -83,9 +84,10 @@ func TestLogoutUseCase_FalhaDaPortaPropaga(t *testing.T) {
 	sc := &contractsfake.SessionController{
 		LogoutFunc: func(context.Context, string) error { return errPorta },
 	}
+	det := &contractsfake.SessionDetacher{}
 	log := &contractsfake.Logger{}
 
-	_, err := session.NewLogoutUseCase(sc, log).
+	_, err := session.NewLogoutUseCase(sc, det, log).
 		Execute(context.Background(), txtID, domain.LogoutRequest{})
 
 	if !errors.Is(err, errPorta) {
@@ -116,7 +118,7 @@ func TestEncerramento_SemSessao_NaoAgeSobreAPorta(t *testing.T) {
 		{
 			"Logout",
 			func(sc *contractsfake.SessionController, l *contractsfake.Logger) error {
-				_, err := session.NewLogoutUseCase(sc, l).Execute(context.Background(), txtID, domain.LogoutRequest{})
+				_, err := session.NewLogoutUseCase(sc, &contractsfake.SessionDetacher{}, l).Execute(context.Background(), txtID, domain.LogoutRequest{})
 				return err
 			},
 			func(sc *contractsfake.SessionController) int { return len(sc.LogoutCalls) },
@@ -133,5 +135,92 @@ func TestEncerramento_SemSessao_NaoAgeSobreAPorta(t *testing.T) {
 				t.Errorf("agiu sobre a porta %d vezes apesar de não haver sessão", n)
 			}
 		})
+	}
+}
+
+// --- F80 ---------------------------------------------------------------
+
+// TestLogoutUseCase_SoltaASessao trava a F80.
+//
+// O logout iniciado pelo TELEFONE emite *events.LoggedOut, que aciona o
+// kill-channel e tira o cliente dos registries. O iniciado pela API não
+// emite evento nenhum: o store era apagado, mas o cliente continuava
+// registrado com estado obsoleto, e /session/status respondia
+// loggedIn=true para uma sessão que já não existia.
+//
+// Medido antes da correção: POST /session/logout devolveu 200 e logou
+// "logged out" para duas sessões; /session/status e /admin/users seguiram
+// reportando loggedIn=true nas duas.
+func TestLogoutUseCase_SoltaASessao(t *testing.T) {
+	sc := &contractsfake.SessionController{}
+	det := &contractsfake.SessionDetacher{}
+	log := &contractsfake.Logger{}
+
+	if _, err := session.NewLogoutUseCase(sc, det, log).
+		Execute(context.Background(), txtID, domain.LogoutRequest{}); err != nil {
+		t.Fatalf("Execute devolveu erro no caminho feliz: %v", err)
+	}
+
+	if len(det.DetachCalls) != 1 {
+		t.Fatalf("Detach chamado %d vezes, quero 1 — a sessao ficou registrada apos o logout", len(det.DetachCalls))
+	}
+	if got := det.DetachCalls[0].UserID; got != txtID {
+		t.Errorf("Detach recebeu userID %q, quero %q", got, txtID)
+	}
+}
+
+// TestLogoutUseCase_NaoSoltaSeOLogoutFalhou: soltar uma sessao que continua
+// autenticada no WhatsApp seria pior que o defeito original — o aparelho
+// segue pareado e a API perde o cliente que o representa. Foi exatamente o
+// que aconteceria no 500 de "websocket not connected" medido em campo.
+func TestLogoutUseCase_NaoSoltaSeOLogoutFalhou(t *testing.T) {
+	for _, tc := range []struct {
+		nome string
+		sc   *contractsfake.SessionController
+		erro error
+	}{
+		{
+			"porta recusa",
+			&contractsfake.SessionController{
+				LogoutFunc: func(context.Context, string) error { return errPorta },
+			},
+			errPorta,
+		},
+		{
+			"sem sessao",
+			&contractsfake.SessionController{SessionGuard: contractsfake.FailSession(errNoSession)},
+			errNoSession,
+		},
+	} {
+		t.Run(tc.nome, func(t *testing.T) {
+			det := &contractsfake.SessionDetacher{}
+
+			_, err := session.NewLogoutUseCase(tc.sc, det, &contractsfake.Logger{}).
+				Execute(context.Background(), txtID, domain.LogoutRequest{})
+
+			if !errors.Is(err, tc.erro) {
+				t.Fatalf("erro esperado se perdeu: %v", err)
+			}
+			if n := len(det.DetachCalls); n != 0 {
+				t.Errorf("soltou a sessao %d vezes apesar de o logout ter falhado", n)
+			}
+		})
+	}
+}
+
+// TestDisconnectUseCase_NaoSoltaASessao: Desconectar MANTEM o pareamento, e
+// portanto a sessao registrada — e' o que permite reconectar sem QR novo.
+// Se alguem replicar o Detach da F80 aqui por simetria, /session/status
+// passa a responder "no session" onde deveria dizer connected=false,
+// loggedIn=true, e o proprio contraste entre as duas acoes se perde.
+func TestDisconnectUseCase_NaoSoltaASessao(t *testing.T) {
+	sc := &contractsfake.SessionController{}
+
+	if _, err := session.NewDisconnectUseCase(sc, &contractsfake.Logger{}).
+		Execute(context.Background(), txtID, domain.DisconnectRequest{}); err != nil {
+		t.Fatalf("Execute devolveu erro: %v", err)
+	}
+	if len(sc.DisconnectCalls) != 1 {
+		t.Fatalf("Disconnect chamado %d vezes, quero 1", len(sc.DisconnectCalls))
 	}
 }
