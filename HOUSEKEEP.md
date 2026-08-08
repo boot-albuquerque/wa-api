@@ -2110,3 +2110,96 @@ sessões, fora do escopo do que estava em andamento.
 > projetada — o fan-out paralelo derrubou a conexão morta em vez de travar.
 > O defeito não é a queda; é o painel ter provocado a queda, e a
 > consequência dela ser perder a observação.
+
+## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
+
+**Data / contexto**: 2026-08-08, ao investigar as quedas de WebSocket da F85.
+A queda do painel era o sintoma visível de algo maior.
+
+**Onde**: a cadeia inteira de entrega de eventos.
+
+- `pkg/infra/wa-noise/runtime/safego/safego.go:13-26` — `SafeGo`
+- `pkg/bootstrap/lifecycle_webhook.go:58,146,179,181` — os quatro despachos
+- `pkg/infra/wa-noise/registry/broadcast/broadcast.go:111-125` — fan-out
+- `pkg/bootstrap/config.go:39-41` — retry do webhook
+
+**Problema**: um único evento de domínio dispara **até quatro goroutines
+irrestritas**, e cada uma faz E/S de rede:
+
+```go
+safeGo("callHookWithHmac",     ...)  // HTTP para o webhook do usuário
+safeGo("sendToWS",             ...)  // fan-out WebSocket
+safeGo("sendToGlobalWebHook",  ...)  // HTTP para o webhook global
+safeGo("sendToGlobalRabbit",   ...)  // publicação no RabbitMQ
+```
+
+`SafeGo` **não tem teto**: é `go func()` com `recover`, sem semáforo, sem
+pool, sem fila. O `recover` protege contra pânico, não contra volume — e o
+comentário dele fala só de pânico, então a ausência de limite não está
+declarada em lugar nenhum.
+
+O fan-out do WebSocket acrescenta **mais uma goroutine por conexão**, por
+evento (a paralelização da F74, correta em si).
+
+**Os multiplicadores, medidos no repositório:**
+
+| fator | valor | onde |
+|---|---|---|
+| sites que marcam `dowebhook = 1` | **38** | `eventhandler_*.go` |
+| goroutines por evento entregue | até **4** | `lifecycle_webhook.go` |
+| goroutines adicionais por conexão WS | 1 cada | `broadcast.go:113` |
+| tentativas por webhook que falha | **5**, a cada 30s | `config.go:40-41` |
+
+Um webhook lento ou fora do ar multiplica cada evento por 5 ao longo de 150
+segundos, **sem que nada perceba que ele está fora do ar** — não há circuit
+breaker em lugar nenhum do projeto (`grep -riE "circuit|breaker|semaphore|
+rate.?limit"` em `lifecycle_webhook.go` e `infra/messaging/` não devolve
+nada).
+
+**As rajadas que os usuários provocam, sem nenhuma intenção:**
+
+1. **HistorySync pós-pareamento** — o caso medido. Foi o que derrubou 7
+   conexões WS em 32 segundos (F85). Todo pareamento novo produz um.
+2. **Grupo movimentado** — cada mensagem passa por `handleMessage`, marca
+   `dowebhook = 1` e vira 4+N goroutines. Um grupo com centenas de
+   participantes em conversa ativa é uma rajada contínua.
+3. **`OfflineSyncPreview`/`OfflineSyncCompleted`** — o acúmulo de quem ficou
+   desconectado chega de uma vez. Medido nesta sessão: `{"Total":71,...}`
+   numa reconexão comum.
+4. **App-state sync** — os eventos de `appstate.go` (Archive, Mute, Pin,
+   Star, Label*) chegam em lote a cada sincronização.
+5. **Muitas sessões simultâneas** — os multiplicadores acima são POR SESSÃO.
+   Cinco sessões pareando juntas, como aconteceu hoje, multiplicam tudo por
+   cinco. O projeto não tem teto de sessões.
+
+**Por que isso não apareceu antes**: em operação normal o volume é baixo e o
+GC absorve. O problema é de CAUDA — aparece no pareamento, na reconexão e no
+pico —, que é exatamente quando a observabilidade importa mais.
+
+**Correção sugerida**, em camadas independentes:
+
+1. **Teto de concorrência no despacho** (menor risco, maior efeito): semáforo
+   com capacidade fixa em torno dos quatro `safeGo` de entrega, e métrica de
+   quantas vezes o teto foi atingido. Sem mudar o contrato — o despacho
+   continua fire-and-forget, só deixa de ser ilimitado.
+2. **Circuit breaker por destino** (webhook do usuário, webhook global,
+   RabbitMQ): depois de N falhas consecutivas, abrir por T segundos e
+   descartar em vez de tentar. Hoje um endpoint morto consome 5 tentativas
+   por evento indefinidamente.
+3. **Backpressure no broadcast** — ver F85 item 3. Fila limitada por conexão
+   com descarte do mais antigo. Muda o contrato; decidir separado.
+
+**Anti-regressão**: os três precisam de teste que prove o LIMITE, não só o
+caminho feliz — disparar mais trabalho que o teto e verificar que a
+concorrência observada não passa dele; e, para o breaker, que depois de N
+falhas o destino deixa de ser chamado. Teste de teto sem `-race` não vale:
+`make check` já roda `-race` nos pacotes de infra.
+
+**Status**: **não corrigido** — descoberto ao investigar a F85.
+
+> **Ponteiros e corrida**: `Broadcast` já documenta que `payload` é lido e
+> nunca escrito, e que o produtor não muta o mapa depois de despachar
+> (`broadcast.go:108-110`). Essa garantia passa a valer para os quatro
+> despachos quando houver fila: enfileirar um `map` que o produtor ainda
+> pode tocar transforma backpressure em corrida. Qualquer fila aqui guarda
+> cópia ou valor imutável.
