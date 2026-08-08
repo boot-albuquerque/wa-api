@@ -113,12 +113,18 @@ func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.
 // GetManyLIDsForPNs resolve em lote (1 chamada ao store local, não 1 por
 // JID) o LID de cada telefone informado.
 //
-// ATENÇÃO — ver F65 em HOUSEKEEP.md. Este corpo foi PORTADO FIELMENTE do
-// caminho antigo (pkg/infra/whatsmeow/user_adapters.go, commit 3ac8073) na
-// integração da branch, INCLUSIVE a inversão de mapa que o achado descreve.
-// Não corrija aqui sem ler a F65: o teste que acompanha este método usa um
-// dublê cuja orientação diverge do store real, então "consertar" só um dos
-// dois lados troca um no-op silencioso por um teste vermelho enganoso.
+// A ORIENTAÇÃO DO MAPA IMPORTA (F65 em HOUSEKEEP.md).
+// CachedLIDMap.GetManyLIDsForPNs devolve map[PN]LID — `result[pn] = lid`
+// (sqlstore/lidmap.go:148). A chave do range é o PN; o valor, o LID.
+//
+// Até a F65 este laço estava escrito como `for lid, pn := range resolved`,
+// invertendo o mapa de saída. O dublê de teste do pacote estava invertido do
+// mesmo jeito, então os dois combinavam e o teste ficava verde enquanto a
+// normalização LID↔PN não acontecia em produção. Medido no ambiente real:
+// 419 dos 421 telefones não normalizados TINHAM mapeamento no store.
+//
+// PN e LID são o mesmo tipo Go (types.JID), distintos só pelo Server em
+// tempo de execução — o compilador não pode ajudar aqui.
 func (a *UserAdapter) GetManyLIDsForPNs(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
@@ -133,8 +139,8 @@ func (a *UserAdapter) GetManyLIDsForPNs(ctx context.Context, txtID string, jids 
 		return nil, err
 	}
 	out := make(map[domain.JID]domain.JID, len(resolved))
-	for lid, pn := range resolved {
-		if lid.IsEmpty() || pn.IsEmpty() {
+	for pn, lid := range resolved {
+		if pn.IsEmpty() || lid.IsEmpty() {
 			continue
 		}
 		out[domain.JID(pn.String())] = domain.JID(lid.String())

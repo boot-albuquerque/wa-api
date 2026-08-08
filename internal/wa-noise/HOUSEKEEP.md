@@ -3147,10 +3147,26 @@ Vale acrescentar um teste que exercite o adapter contra o store **real**
 (sqlite em memória, como os outros do pacote de persistência), que é a única
 forma de o dublê não poder mentir de novo.
 
-**Status**: **não corrigido, PORTADO FIELMENTE.** A correção não entrou no
-merge de propósito: um merge que carrega mudança de comportamento embutida
-deixa de ser revisável como merge. O código portado leva comentário apontando
-para esta entrada nos dois arquivos.
+**Status**: **CORRIGIDO** (2026-08-07), com prova contra dados reais.
+
+Os tres pontos mudaram na mesma alteracao, como a entrada previa: o dube
+passou a devolver `map[PN]LID` (honrando o contrato da interface que dubla) e
+o adapter passou a iterar `for pn, lid := range resolved`.
+
+Medido no ambiente pareado, `GET /user/contacts/last-activity`:
+
+| | Antes | Depois |
+| --- | ---: | ---: |
+| chaves `@lid` | 287 | **706** |
+| chaves `@s.whatsapp.net` | 421 | **2** |
+| PNs nao normalizados COM mapeamento no store | **419** | **0** |
+
+287 + 419 = 706: cada telefone com LID conhecido foi reescrito, e os 2 que
+sobraram sao exatamente os sem mapeamento — o comportamento documentado.
+
+Controle negativo: revertendo SO' o adapter (com o dube ja' correto), o teste
+acusa `1234@s.whatsapp.net = "", want lid-x@lid`. Antes da correcao os dois
+lados invertidos combinavam e o teste ficava verde sobre codigo quebrado.
 
 **Impacto**: `GET /user/contacts/last-activity` devolve hoje as chaves
 `@s.whatsapp.net` sem normalizar — exatamente o comportamento anterior a

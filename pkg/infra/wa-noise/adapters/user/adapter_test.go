@@ -58,10 +58,14 @@ func (f *fakeLIDStore) GetLIDForPN(ctx context.Context, pn types.JID) (types.JID
 }
 func (f *fakeLIDStore) GetManyLIDsForPNs(ctx context.Context, pns []types.JID) (map[types.JID]types.JID, error) {
 	out := map[types.JID]types.JID{}
+	// map[PN]LID, como o CachedLIDMap real (`result[pn] = lid`,
+	// sqlstore/lidmap.go:148). Este dublê já devolveu map[LID]PN, e foi
+	// isso que escondeu a F65: ele contradizia a implementação que dubla, e
+	// o adapter foi escrito contra ele.
 	for _, pn := range pns {
 		for lid, mapped := range f.mapping {
 			if mapped == pn {
-				out[lid] = pn
+				out[pn] = lid
 			}
 		}
 	}
