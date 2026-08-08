@@ -2649,9 +2649,44 @@ distinga "processo de pé" de "sessão de pé". O `connected` da tabela `users` 
 intenção, não estado observado, e hoje qualquer readiness probe baseada nele
 mentiria.
 
-**Status**: **não corrigido** — validado, não implementado. Os três
-experimentos rodaram e os números estão acima. Nenhuma linha de código de posse
-escrita ainda.
+### D1 implementado (2026-08-08)
+
+`pkg/bootstrap/cluster.go`: `WA_API_CLUSTER_MODE` (`single` padrão | `multi`),
+validação de stack e trava de instância única por `flock` no diretório de
+dados, tudo ANTES de o banco ser aberto — configuração impossível morre sem ter
+tocado em estado.
+
+- **`multi` sem Postgres é FATAL**, não `warn`. A mensagem diz quais variáveis
+  definir, e um teste trava isso: erro que só informa que falhou obriga o
+  operador a ler o código.
+- **Valor desconhecido é erro**, não cai no padrão. `WA_API_CLUSTER_MODE=mutli`
+  num manifesto não pode virar `single` em silêncio.
+- **`single` recusa o segundo processo** por `flock`, que o SO libera sozinho
+  inclusive em `kill -9` — arquivo com PID exigiria detectar trava obsoleta, e
+  é aí que esse tipo de mecanismo costuma falhar liberando quando não devia.
+
+Verificação ponta a ponta com dois processos reais, **em portas diferentes de
+propósito** (mesma porta faria o segundo morrer por colisão e eu estaria
+medindo outra coisa):
+
+| | antes (Exp 1) | depois |
+|---|---|---|
+| segundo processo sobe? | sim | **não** — `fatal` com motivo e saída |
+| o incumbente sobrevive? | **não**, sessão morta para sempre | **sim**, HTTP 200 |
+
+Três controles negativos executados: typo caindo no padrão, `multi` aceitando
+SQLite, e ausência de `flock` — os três produziram falha com mensagem.
+
+**Limitação conhecida e documentada no código**: o `flock` protege contra um
+segundo processo NA MESMA MÁQUINA. Duas máquinas apontando para o mesmo
+Postgres em modo `single` não são detectadas — é para isso que existe `multi`
+com lease (D2). O caso coberto é o que de fato acontece: alguém sobe um segundo
+processo sem perceber.
+
+**Status**: **parcialmente corrigido** — D1 do ADR-0005 implementado e
+verificado. D2 (lease), D3 (outbox) e D6 (saúde separada) seguem abertos. Em
+`multi` o processo avisa em `Warn` que a posse por lease ainda não existe e que
+não se deve subir mais de uma réplica.
 
 ---
 
