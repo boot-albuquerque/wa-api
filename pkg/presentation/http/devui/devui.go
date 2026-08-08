@@ -49,7 +49,7 @@ const (
 	assetDir = "assets"
 
 	// indexFile é servido quando a URL aponta para o próprio BasePath.
-	indexFile = "qr.html"
+	indexFile = "sessions.html"
 
 	// cacheControl desliga o cache. Estas páginas mudam junto do código que
 	// elas testam, e uma versão velha em cache faria alguém depurar um

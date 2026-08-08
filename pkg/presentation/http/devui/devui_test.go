@@ -58,6 +58,28 @@ func TestHandler_RaizServeOIndex(t *testing.T) {
 	}
 }
 
+// TestPaginaSuportaMultiplasSessoes trava o que a pagina precisa oferecer:
+// varias sessoes simultaneas e as DUAS formas de encerrar, que nao sao
+// equivalentes — desconectar mantem o pareamento, logout desvincula o
+// aparelho e exige QR novo. Uma pagina que ofereca so' uma das duas leva o
+// operador a desvincular quando queria apenas derrubar a conexao.
+func TestPaginaSuportaMultiplasSessoes(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+	body := rec.Body.String()
+
+	for _, marca := range []string{
+		"/session/disconnect", // derruba o transporte, mantem o pareamento
+		"/session/logout",     // desvincula o aparelho
+		"/admin/users",        // criacao de sessao nova
+		"localStorage",        // registro local dos tokens (a API os redige)
+	} {
+		if !strings.Contains(body, marca) {
+			t.Errorf("a pagina nao menciona %q", marca)
+		}
+	}
+}
+
 func TestHandler_ArquivoNomeado(t *testing.T) {
 	rec := httptest.NewRecorder()
 	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+indexFile, nil))
@@ -120,7 +142,7 @@ func TestPaginaTrataOsDoisSchemasDeQR(t *testing.T) {
 		"qrCodeBase64", // schema do fluxo de pareamento
 		"expiresAt",    // validade real do código atual
 		"qrtimeout",    // fim da janela: exige novo /session/connect
-		"session/ws",   // o WebSocket
+		"session/ws",   // o WebSocket, um por sessão
 	} {
 		if !strings.Contains(body, marca) {
 			t.Errorf("a página não menciona %q; o tratamento correspondente sumiu", marca)
