@@ -369,9 +369,7 @@ func medirHandler(nome string, d despachante, eventos, porEvento int, tamanhos [
 // pode atrasar o handler mais que a que bloqueia. Se isso deixar de valer, o
 // harness está medindo ruído e nenhum número dele vale.
 func TestMedicaoAtrasoNoHandler(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	const latenciaServidor = 100 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -486,9 +484,7 @@ func TestMedicaoAtrasoNoHandler(t *testing.T) {
 //
 //	go test ./pkg/bootstrap/ -run TestMedicaoFilaNaSaturacao -v -timeout 20m
 func TestMedicaoFilaNaSaturacao(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	const latenciaServidor = 100 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -612,9 +608,7 @@ func TestMedicaoFilaNaSaturacao(t *testing.T) {
 //
 //	go test ./pkg/bootstrap/ -run TestMedicaoWorkersVsDreno -v -timeout 25m
 func TestMedicaoWorkersVsDreno(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	const latenciaServidor = 100 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -736,9 +730,7 @@ func TestMedicaoWorkersVsDreno(t *testing.T) {
 //
 //	go test ./pkg/bootstrap/ -run TestMedicaoCalibracaoOrcamento -v -timeout 25m
 func TestMedicaoCalibracaoOrcamento(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	const latenciaServidor = 100 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

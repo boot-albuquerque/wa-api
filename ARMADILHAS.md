@@ -309,3 +309,67 @@ controle não achou defeito no `dispatch.go`; achou defeito no
 `dispatch_test.go`. Se o controle não produzir uma FALHA COM MENSAGEM em
 tempo hábil, o problema pode ser o teste (ver também a entrada 4, sobre
 controle que não compila).
+
+---
+
+## 17. A correção mede onde ela ajuda, e quebra onde ninguém olhou
+
+O pool de despacho da F86 foi medido em três harnesses, testado sob `-race`,
+teve três controles negativos e passou no `make check`. E tornou um cenário
+**estritamente pior**: um webhook morto passou a segurar um worker por 7,5
+minutos, e dois pareamentos simultâneos paravam toda a entrega da instalação —
+inclusive WebSocket e RabbitMQ, que não tinham relação com o destino quebrado.
+
+O defeito não estava no código novo. Estava na **interação** dele com um
+comportamento antigo e inofensivo: o `time.Sleep` do backoff de retry, que
+antes rodava numa goroutine solta.
+
+Por que nenhuma das medições pegou: todas comparavam cenários em que o pool
+AJUDA (rajada, memória, goroutines). Nenhuma perguntou onde ele cobra.
+
+**Regra**: para todo mecanismo que limita um recurso, meça também o cenário em
+que ele vira o problema. A pergunta que faz o cenário aparecer é *qual entrada
+faz esta proteção virar o defeito?* — e a resposta costuma ser "algo que segura
+o recurso por muito tempo", não "algo que chega em volume".
+
+**Corolário — enumere os detentores.** Ao converter recurso ilimitado em
+limitado, liste tudo que passa a disputá-lo e o pior caso de ocupação de cada
+um. A conta é aritmética simples e teria pego este caso em minutos:
+`5 tentativas × backoff exponencial de base 30s = 450s por evento`.
+
+**Corolário 2 — o conserto do conserto é um mecanismo novo.** Trocar `Sleep`
+por `time.AfterFunc` remove a goroutine, e mantém o payload vivo no timer:
+sem teto, seria a mesma memória ilimitada com outra roupa. Por isso o conjunto
+de pendentes nasceu limitado por bytes.
+
+A política completa está em `CLAUDE.md`, seção "regressão introduzida pela
+PRÓPRIA correção".
+
+---
+
+## 18. Instrumento de medida na suíte padrão mede a máquina, não o mecanismo
+
+Os harnesses de carga da F86 rodavam junto com o resto da suíte. Duas
+consequências, e a segunda é pior que a primeira:
+
+**Quebrou o `make check`.** `TestMedicaoCalibracaoOrcamento` leva 132s sozinho
+e levou **10m26s** dentro da suíte, estourando o orçamento de 20 min do pacote.
+E derrubou junto `cmd/logcov`, que `go test` roda em PARALELO: de 195s para
+9m49s, morto por inanição de CPU. Um pacote que não tem relação nenhuma com a
+mudança falhou por causa dela.
+
+**E invalidou a própria medição.** Contenção de CPU é exatamente a variável sob
+medida. Rodando disputando núcleo com outros pacotes, o número que sai descreve
+a máquina naquele instante, não o mecanismo. Pior: passou numa execução e
+falhou na seguinte sem nenhuma mudança relevante — instrumento intermitente
+produzindo número com cara de dado.
+
+**Regra**: harness de medição não roda na suíte padrão. Guarde atrás de uma
+variável de ambiente (`WA_API_MEDICAO=1` neste repo) e não atrás de build tag:
+com env var ele continua COMPILANDO no `make check` e não apodrece em silêncio
+quando a API muda.
+
+**Corolário**: ao adicionar um teste que leva minutos, pergunte o que mais roda
+em paralelo com ele. `go test ./...` paraleliza por pacote, então um teste
+faminto de CPU faz um pacote vizinho falhar por timeout — e o diagnóstico
+aponta para o lugar errado.

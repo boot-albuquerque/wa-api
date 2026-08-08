@@ -304,7 +304,24 @@ min_errpath_coverage=864
 # pode desligar a protecao em silencio.
 # +4 (542->546): o teto virou pool com fila por bytes na segunda rodada da
 # F86 — ver a justificativa de min_func_coverage acima para a lista nominal.
-min_eligible=546
+#
+# +4 (546->550): F88, a espera do backoff de webhook saiu de dentro do worker
+# do pool. Entram atrasoDaTentativa, tamanhoDoPayload, agendarProximaTentativa
+# e MetricasRetry (dispatch_retry.go), mais a quebra de callHookWithHmac em
+# montarRequisicaoWebhook / tentarWebhook / entregarWebhookNaFilaDeErro, que
+# substituem o laço unico anterior.
+#
+# As DUAS razoes ficam INALTERADAS (func 705, errpath 864) e `covered` sobe
+# 383->388: o codigo novo nasce mais instrumentado que a media do repo —
+# agendarProximaTentativa loga o reagendamento e o estouro do orcamento de
+# pendentes, e tentarWebhook preserva os logs de falha de rede e de status
+# nao-2xx que o laco antigo ja tinha.
+#
+# Uma unica funcao nova entra descoberta, conferida com `logcov
+# -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
+# que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
+# erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
+min_eligible=550
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

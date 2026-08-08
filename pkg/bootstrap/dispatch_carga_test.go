@@ -6,12 +6,41 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// envModoMedicao liga os harnesses de medição. Eles NÃO rodam em `make check`.
+//
+// Dois motivos, e o segundo é o que importa:
+//
+//  1. São minutos de CPU saturada. Dentro do `make check` a calibração levou
+//     10m26s (sozinha: 132s) e estourou o orçamento de 20min do pacote — e de
+//     quebra matou `cmd/logcov`, que `go test` roda em PARALELO e que passou de
+//     195s para 9m49s por inanição de CPU.
+//  2. Contenção de CPU é exatamente a variável sob medida. Rodando junto com o
+//     resto da suíte, o número que sai não descreve o mecanismo: descreve a
+//     máquina naquele instante. Instrumento de medida que corre disputando CPU
+//     mede outra coisa — a mesma lição da entrada 14 de ARMADILHAS.md.
+//
+// Para medir:
+//
+//	WA_API_MEDICAO=1 go test ./pkg/bootstrap/ -run TestMedicao -v -timeout 30m
+//
+// Sem build tag de propósito: assim os harnesses continuam COMPILANDO no
+// `make check` e não apodrecem em silêncio quando a API muda.
+const envModoMedicao = "WA_API_MEDICAO"
+
+func exigirModoMedicao(t *testing.T) {
+	t.Helper()
+	if os.Getenv(envModoMedicao) == "" {
+		t.Skipf("harness de medicao: defina %s=1 para rodar (ver comentario em dispatch_carga_test.go)", envModoMedicao)
+	}
+}
 
 // limitadorBloqueante é a PRIMEIRA tentativa da F86: um teto que, ao saturar,
 // SEGURA o chamador até vagar slot. Ele saiu de produção — o pool com fila
@@ -171,9 +200,7 @@ func medirRajada(t *testing.T, teto int, c cenarioCarga) medida {
 // pico tem de ser MAIOR que com teto. Se isso deixar de valer, o limitador
 // parou de limitar, e aí é defeito e não variação.
 func TestMedicaoCargaDespacho(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	cenarios := []cenarioCarga{
 		// Espelha a rajada medida em produção: o HistorySync das quatro
@@ -219,9 +246,7 @@ func TestMedicaoCargaDespacho(t *testing.T) {
 // Esta segunda medição faz requisição HTTP de verdade contra um servidor
 // deliberadamente lento, que é o que um webhook mal-comportado parece.
 func TestMedicaoCargaDespachoHTTPReal(t *testing.T) {
-	if testing.Short() {
-		t.Skip("medicao de carga: pulada em -short")
-	}
+	exigirModoMedicao(t)
 
 	const latenciaServidor = 100 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
