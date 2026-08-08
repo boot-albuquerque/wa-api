@@ -112,6 +112,30 @@ func (f *SessionController) Disconnect(ctx context.Context, txtID string) error 
 	return nil
 }
 
+// --- SessionDetacher ---------------------------------------------------
+
+// SessionDetacherCall é uma chamada a Detach.
+type SessionDetacherCall struct {
+	UserID string
+}
+
+// SessionDetacher é o fake de port.SessionDetacher. Zero-value não faz nada
+// além de registrar a chamada, que é o que os testes da F80 precisam medir.
+type SessionDetacher struct {
+	DetachFunc  func(userID string)
+	DetachCalls []SessionDetacherCall
+}
+
+var _ port.SessionDetacher = (*SessionDetacher)(nil)
+
+// Detach implementa port.SessionDetacher.
+func (f *SessionDetacher) Detach(userID string) {
+	f.DetachCalls = append(f.DetachCalls, SessionDetacherCall{UserID: userID})
+	if f.DetachFunc != nil {
+		f.DetachFunc(userID)
+	}
+}
+
 // --- SessionCounter ----------------------------------------------------
 
 // SessionCounterCountSessionsCall é uma chamada a CountSessions.

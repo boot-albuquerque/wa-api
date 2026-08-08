@@ -118,7 +118,10 @@ func initCustomHandlers(s *server) {
 	connectUC := session.NewConnectUseCase(logger)
 	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
 	getQRUC := session.NewGetQRUseCase(sessionGuard, userRepo, logger)
-	logoutUC := session.NewLogoutUseCase(sessionGuard, logger)
+	// O detacher e' o MESMO adapter que o orchestrator usa (Fase 2f): sem
+	// ele, o logout pela API apagava o store e deixava o cliente
+	// registrado, com /session/status mentindo loggedIn=true (F80).
+	logoutUC := session.NewLogoutUseCase(sessionGuard, NewSessionAttachHook(s), logger)
 	pairPhoneUC := session.NewPairPhoneUseCase(sessionGuard, logger)
 	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
 	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)

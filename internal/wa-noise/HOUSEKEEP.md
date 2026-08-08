@@ -4096,8 +4096,30 @@ deveriam ser emitidos sinteticamente, já que hoje **nenhum dos dois** sai
 quando a ação parte da API — ver também a observação da F79 sobre
 `Disconnected`.
 
-**Status**: **não corrigido** — descoberto ao validar a F79, e a correção
-mexe no ciclo de vida da sessão, que não era o alvo.
+**Status**: **corrigido**. `LogoutUseCase` passou a receber
+`appport.SessionDetacher` — porta estreita extraída de `SessionAttachHook`,
+porque quem desfaz não tem o que fazer com `Attach` — e chama `Detach(txtID)`
+DEPOIS do logout bem-sucedido. `Detach` é idempotente e já era o único
+escritor de `users.connected` neste caminho, então os dois fluxos (telefone
+via kill-channel, API direto) terminam no mesmo lugar sem duplicar escrita.
+
+Coberto por `encerramento_test.go`, com três testes que se cercam:
+
+- `TestLogoutUseCase_SoltaASessao` — o caminho feliz solta.
+- `TestLogoutUseCase_NaoSoltaSeOLogoutFalhou` — nas duas formas de falha
+  (porta recusa, sem sessão) NÃO solta. Soltar após falha seria pior que o
+  defeito: o aparelho segue pareado e a API perde o cliente que o representa.
+- `TestDisconnectUseCase_NaoSoltaASessao` — Desconectar continua NÃO
+  soltando. Replicar o Detach aqui por simetria faria `/session/status`
+  responder "no session" onde deve dizer `connected=false, loggedIn=true`.
+
+Controle negativo executado: sem a chamada a `Detach`, o primeiro falha com
+`Detach chamado 0 vezes, quero 1 — a sessao ficou registrada apos o logout`.
+
+Verificado ao vivo no caminho de FALHA: logout numa sessão já deslogada
+devolve 500 (`logout failed | the store doesn't contain a device JID`) e a
+sessão permanece registrada. O caminho de sucesso exige desvincular um
+aparelho pareado real — pendente de decisão.
 
 ## F81 — `GET /user/lid/{jid}` ignora o parâmetro da URL e exige corpo JSON
 
@@ -4149,4 +4171,43 @@ handler que diz POST. É o que a rota e o struct já prometem. Um teste de
 handler que exercite a rota REGISTRADA (e não só o handler isolado) teria
 pego — os testes atuais montam o handler direto, sem o path param.
 
-**Status**: **não corrigido** — fora do escopo da rodada de testes.
+**Status**: **corrigido**. O handler passou a ler `mux.Vars(r)["jid"]`.
+
+**A armadilha que quase entrou no lugar do defeito**: a correção óbvia é
+`r.PathValue("jid")`. Ela estaria igualmente quebrada — o router é
+**gorilla/mux** (`pkg/bootstrap/router.go:237`), que guarda as variáveis no
+contexto sob chave própria; `PathValue` só funciona com o `ServeMux` nativo e
+devolveria string vazia. Seria um 400 diferente, igualmente inútil. Pego
+antes de commitar, e travado por controle negativo próprio.
+
+Coberto por `pkg/presentation/http/handlers/handler_user_lid_test.go`, que
+monta o handler sob um `mux.NewRouter()` com o MESMO padrão de
+`wiring_routes.go:92` — passar pelo router de verdade é o ponto:
+
+- `..._LeOJIDDoCaminho` — o JID do caminho chega ao use case.
+- `..._NaoExigeCorpo` — a chamada natural de um GET, sem corpo, funciona.
+- `..._CaminhoVenceOCorpo` — caminho e corpo discordam e o caminho vence,
+  para a correção não trocar uma fonte errada por duas concorrentes.
+
+Controles negativos, os dois falhando os três testes: (a) voltar a decodificar
+o corpo, (b) usar `r.PathValue` com o router gorilla.
+
+**Por que ninguém tinha visto**: `handler_user_test.go` listava GetUserLID
+como rota `POST /user/lid` com corpo, servindo o handler CRU, sem padrão de
+rota. O teste mandava corpo, o handler lia corpo, e passava — enquanto a rota
+registrada dava 400. A tabela agora serve esta rota sob o router e ganhou
+`readsBody`, que a exclui do teste de corpo malformado.
+
+Verificado ao vivo:
+
+```
+GET /user/lid/5516981818244@s.whatsapp.net   (sem corpo)
+  -> 200 {"jid":"5516981818244@s.whatsapp.net","lid":"29343770251463@lid"}
+
+GET mesmo caminho + corpo {"JID":"5599999999999@s.whatsapp.net"}
+  -> 200 com o LID do CAMINHO (o corpo não teve efeito)
+```
+
+**Fica aberto**: um número sem servidor (`/user/lid/5516981818244`) devolve
+**500**, não 400 — `invalid jid format` é erro de cliente. É a F66 (23/25
+endpoints devolvendo 500) aparecendo aqui, e não uma regressão desta correção.

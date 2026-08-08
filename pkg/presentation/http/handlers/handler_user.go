@@ -223,7 +223,7 @@ func (h *UserHandlers) GetUser() http.Handler {
 	})
 }
 
-// GetUserLID retorna o handler para POST /user/lid.
+// GetUserLID retorna o handler para GET /user/lid/{jid}.
 func (h *UserHandlers) GetUserLID() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
@@ -242,12 +242,22 @@ func (h *UserHandlers) GetUserLID() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
-		var req domain.GetUserLIDRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			hlog.FromRequest(r).Warn().Err(err).
+		// O JID vem do CAMINHO, como a rota (`/user/lid/{jid}`) e o próprio
+		// campo do domínio (`JID string // from URL`) sempre disseram. Até a
+		// F81 este handler decodificava o corpo: um GET não tem corpo, o
+		// decode falhava com EOF e a rota devolvia 400 em toda chamada.
+		//
+		// mux.Vars, e NÃO r.PathValue: o router é gorilla/mux
+		// (bootstrap/router.go:237), que guarda as variáveis no contexto sob
+		// chave própria. r.PathValue só funciona com o ServeMux nativo, e
+		// aqui devolveria string vazia — um 400 diferente, igualmente
+		// inútil. ListUsers, neste mesmo arquivo, já usa mux.Vars.
+		req := domain.GetUserLIDRequest{JID: mux.Vars(r)["jid"]}
+		if req.JID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingJID).
 				Str("path", r.URL.Path).
-				Msg("could not decode payload")
-			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
+				Msg("request without jid in path")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingJID)
 			return
 		}
 		result, err := h.getUserLID.Execute(r.Context(), txtID, req)

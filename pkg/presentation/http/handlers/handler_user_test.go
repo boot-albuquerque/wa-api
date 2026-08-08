@@ -284,20 +284,33 @@ type uhSessionRoute struct {
 	method string
 	path   string
 	body   string
+	// readsBody diz se a rota decodifica JSON do corpo. GetUserLID deixou de
+	// ler corpo na F81 — o JID vem do caminho —, e uma rota que nao le corpo
+	// nao pode ser exercitada com JSON malformado.
+	readsBody bool
 }
 
 func uhSessionRoutes() []uhSessionRoute {
 	return []uhSessionRoute{
 		{"CheckUser", func(h *UserHandlers) http.Handler { return h.CheckUser() },
-			http.MethodPost, "/user/check", `{"phone":["5511999"]}`},
+			http.MethodPost, "/user/check", `{"phone":["5511999"]}`, true},
 		{"GetUser", func(h *UserHandlers) http.Handler { return h.GetUser() },
-			http.MethodPost, "/user/info", `{"phone":["5511999"]}`},
-		{"GetUserLID", func(h *UserHandlers) http.Handler { return h.GetUserLID() },
-			http.MethodPost, "/user/lid", `{"JID":"5511999"}`},
+			http.MethodPost, "/user/info", `{"phone":["5511999"]}`, true},
+		// GetUserLID e' servido sob o ROTEADOR, e nao cru como os demais: o
+		// JID vem de {jid}, e mux.Vars so' enxerga o que o router preencheu.
+		// Servi-lo cru — como esta tabela fazia ate' a F81 — e' precisamente
+		// o que escondeu o defeito: o handler lia o corpo, a tabela mandava
+		// corpo, e o teste passava enquanto a rota real dava 400.
+		{"GetUserLID", func(h *UserHandlers) http.Handler {
+			r := mux.NewRouter()
+			r.Handle("/user/lid/{jid}", h.GetUserLID()).Methods(http.MethodGet)
+			return r
+		},
+			http.MethodGet, "/user/lid/5511999", "", false},
 		{"BlockUser", func(h *UserHandlers) http.Handler { return h.BlockUser() },
-			http.MethodPost, "/user/block", `{"Phone":"5511999"}`},
+			http.MethodPost, "/user/block", `{"Phone":"5511999"}`, true},
 		{"UnblockUser", func(h *UserHandlers) http.Handler { return h.UnblockUser() },
-			http.MethodPost, "/user/unblock", `{"Phone":"5511999"}`},
+			http.MethodPost, "/user/unblock", `{"Phone":"5511999"}`, true},
 	}
 }
 
@@ -374,6 +387,9 @@ func TestUserHandlers_SessionRoutes_SessionIDVazio(t *testing.T) {
 func TestUserHandlers_SessionRoutes_CorpoMalformado(t *testing.T) {
 	for _, tc := range uhSessionRoutes() {
 		t.Run(tc.name, func(t *testing.T) {
+			if !tc.readsBody {
+				t.Skip("rota nao decodifica corpo; o parametro vem do caminho (F81)")
+			}
 			f := uhNewFakes()
 
 			rec, capture := uhServe(tc.build(f.handlers()),

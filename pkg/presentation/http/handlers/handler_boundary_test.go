@@ -53,6 +53,11 @@ func (s *spyPort) Logout(context.Context, string) error {
 	return s.err
 }
 
+// Detach entrou com a F80: o logout pela API agora solta a sessao depois de
+// desvincular. Nao conta como toque na porta — o boundary test mede se o
+// handler chegou a AGIR, e Detach so' ocorre depois de Logout ja ter agido.
+func (s *spyPort) Detach(string) {}
+
 func (s *spyPort) NewMessageID(context.Context, string) (string, error) {
 	s.calls++
 	return "generated-id", s.err
@@ -339,7 +344,7 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "Logout",
-			build:     func(s *spyPort) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(s, s, log)) },
 			method:    http.MethodPost,
 			path:      "/session/logout",
 			readsBody: false,
