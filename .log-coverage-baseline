@@ -187,8 +187,20 @@ rules_frozen=true
 # deste adapter. Nao ha o que logar, e um log ali seria ruido por chamada.
 # errpath_coverage nao muda (863): nenhum caminho de saida novo — a funcao
 # tem um unico retorno por ramo e nenhum erro a propagar.
-min_func_coverage=706
-min_errpath_coverage=863
+# justificativa: F82 + F83 (2026-08-08). func_coverage SOBE 706->708
+# (ratchet-UP): buildProfile passou a LOGAR as falhas de avatar e de contato,
+# que antes eram descartadas com `err == nil` silencioso — um avatar_url
+# vazio por falha de rede era indistinguivel de um vazio por nao haver foto.
+#
+# errpath_coverage cai 863->862, e a causa e' o buraco conhecido documentado
+# no topo deste arquivo: GetProfileUseCase.Execute deixou de devolver
+# ErrNoSession cru e passa a devolver apperr.New(...) com a categoria. O
+# S-consume daquele bloco desapareceu porque o caminho mudou de forma —
+# denominador -1 e numerador -1 ao mesmo tempo. Nenhum site que logava deixou
+# de logar: o Warn "no session for txtID" continua exatamente onde estava,
+# uma linha acima do return.
+min_func_coverage=708
+min_errpath_coverage=862
 min_eligible=514
 max_exempt_annotations=0
 

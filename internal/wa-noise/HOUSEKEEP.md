@@ -4290,8 +4290,28 @@ pushname, ou trocar a guarda por um `if` que envolva só o bloco de presença.
 O estado de conexão persistido não deveria depender de o contato já ter
 nome.
 
-**Status**: **não corrigido** — descoberto fora do escopo (implementação dos
-endpoints novos), e mexe no ciclo de vida da sessão.
+**Status**: **corrigido**. O `UPDATE connected=1` foi movido para ANTES da
+guarda de pushname, que passou a envolver só o bloco de presença — o motivo
+declarado dela.
+
+Coberto por `pkg/bootstrap/connected_persistence_test.go`: persiste com
+pushname VAZIO (o caso do pareamento novo), persiste com pushname (o caminho
+que já funcionava, para a mudança não quebrar o que ninguém suspeitava), e
+`dowebhook=1` continua valendo nos dois — o comentário histórico da função
+registra que trocar a saída antecipada por `return false` silenciaria o
+evento Connected de toda sessão sem pushname.
+
+Controle negativo executado: devolvendo o UPDATE para depois da guarda, o
+primeiro teste falha com `users.connected = 0, quero 1`.
+
+Efeito colateral honesto: `TestWalogSeam_ErroDoSDKSaiSemWadebug` montava o
+handler SEM banco, e o comentário dizia "sem banco, sem HTTP". Aquilo só era
+verdade por causa deste defeito — a guarda saía antes da escrita. O teste
+ganhou um `schemaDB` real, e o comentário passou a dizer por quê.
+
+Verificado ao vivo: restart às 08:47 produziu `Connect to Whatsapp on
+startup` e `/session/status` respondeu `connected=true loggedIn=true` sem
+nenhuma intervenção.
 
 ## F83 — os erros de `/session/profile` escapam do envelope
 
@@ -4328,4 +4348,34 @@ erro tipado, e mapear `ErrNoSession` para 400 como os handlers de
 `/session/*` já fazem via `isClientCausedSessionError`. É a F66 aparecendo
 nesta rota; o envelope, porém, é problema à parte e mais barato de resolver.
 
-**Status**: **não corrigido** — achado ao testar o perfil enriquecido.
+**Status**: **corrigido**. Os três `http.Error` viraram `RespondJSON`, e
+`GetProfileUseCase.Execute` passou a devolver
+`apperr.New("no_session", CategoryValidation, ...)` com `ErrNoSession` como
+causa — então `RespondJSON` deriva o 400 da taxonomia sozinho, sem o handler
+precisar conhecer o pacote do use case, e `errors.Is(err, ErrNoSession)`
+continua valendo para quem dependia dele.
+
+O nível do log passou a seguir a categoria, como nos handlers de
+`/session/*`: recusa de cliente em warn, falha nossa em error. Sem isso, um
+alerta calibrado sobre `error` dispararia a cada consulta de perfil sem
+sessão.
+
+Coberto por `pkg/presentation/http/profile_envelope_test.go` (os três
+caminhos de erro no envelope, o 400 vindo da categoria, e o 500 preservado
+para erro SEM taxonomia — sem esta última, mapear tudo para 400 passaria) e
+por `TestExecute_SemSessao_ErroTipado`.
+
+Este último existe por causa de um controle negativo que NÃO disparou: o
+teste de handler constrói o apperr ele mesmo, então provava que o handler
+REAGE à taxonomia, não que o use case a PRODUZ. Removendo o apperr do use
+case, handler e rota ficariam verdes com a rota errada. Com o teste novo, o
+controle negativo falha com `erro nao carrega taxonomia: *profile.ProfileError`.
+
+Verificado ao vivo:
+
+```
+$ curl -i /session/profile   (sessao inexistente)
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+{"code":400,"error":{"code":"no_session","message":"no session"},"success":false}
+```
