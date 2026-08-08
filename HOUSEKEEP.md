@@ -2821,3 +2821,166 @@ mesmos números de gate.
 (`lease.go`, `session_lease.go` e testes) já nasceram em inglês; `cluster.go` e
 `dispatch*.go`, escritos nesta sessão antes da política, ficam para um commit
 de conversão pura. O restante aguarda decisão sobre mutirão.
+
+---
+
+## F93 — logout de sessão desconectada devolve 500 e deixa `users.connected=1` preso
+
+**Data**: 2026-08-08
+
+**Contexto**: o usuário usou o devui para **desconectar** e, dois segundos
+depois, **deslogar** a sessão `TesteQR` (`1dde2515346fa4c2c3e4a7b2eda351c2`).
+O disconnect respondeu 200; o logout respondeu **500**. Investigação feita
+sobre o log da instância viva (`/tmp/wa-ses.log`, 77 MB) e sobre
+`dbdata/users.db` em modo somente leitura.
+
+**Onde**:
+- `pkg/infra/wa-noise/runtime/session/guard.go:88-94` —
+  `SessionGuardAdapter.Logout` devolve o erro **cru** do SDK
+  (`client.Logout(...)`), sem embrulhar em `apperr`.
+- `internal/wa-noise/core/client_session.go:25-46` — `Client.Logout` manda um
+  IQ `remove-companion-device` **antes** de qualquer coisa; sem websocket o
+  `sendIQ` falha e a função retorna cedo:
+  `return fmt.Errorf("error sending logout request: %w", err)`.
+- `pkg/application/usecase/session/logout.go:40-57` — se `sessions.Logout`
+  falha, o use case retorna e **nunca chega em `uc.detacher.Detach(txtID)`**
+  (linha 57).
+- `pkg/bootstrap/session_attach_hook_adapter.go:84` — `Detach` é o único
+  escritor de `users.connected=0` neste caminho
+  (`UPDATE users SET qrcode='', connected=0 WHERE id=$1`).
+- `pkg/presentation/http/handlers/handler_session.go:151-160` — os dois ramos
+  do `if err != nil` chamam `RespondJSON(w, 500, nil, err)`; o status só é
+  corrigido para 4xx por `pkg/presentation/http/response.go:50-57`, que lê a
+  categoria **quando o erro é um `*apperr.AppError`**. Como o erro que vem de
+  `guard.go:93` é `fmt.Errorf` puro, o 500 literal prevalece e o corpo vira a
+  mensagem genérica de `genericErrorMessage(500)`.
+
+**Problema**: a sequência exata, reconstruída por `req_id` (linhas reais do
+log, não paráfrase):
+
+```
+{"req_id":"d9rqgo6hokiibhhb282g","txtID":"1dde2515346fa4c2c3e4a7b2eda351c2",
+ "time":"2026-08-08T18:06:24-04:00","message":"disconnected"}
+{"req_id":"d9rqgo6hokiibhhb282g","method":"GET","url":"/session/disconnect",
+ "status":200,"outcome":"success","time":"2026-08-08T18:06:24-04:00","message":"Got API Request"}
+{"level":"warn","req_id":"d9rqgomhokiibhhb286g","txtID":"1dde2515346fa4c2c3e4a7b2eda351c2",
+ "error":"error sending logout request: websocket not connected",
+ "time":"2026-08-08T18:06:26-04:00","message":"logout failed"}
+{"level":"error","req_id":"d9rqgomhokiibhhb286g","handler":"Logout",
+ "error":"error sending logout request: websocket not connected",
+ "time":"2026-08-08T18:06:26-04:00","message":"session use case failed"}
+{"req_id":"d9rqgomhokiibhhb286g","method":"POST","url":"/session/logout",
+ "status":500,"size":61,"outcome":"server_error","time":"2026-08-08T18:06:26-04:00","message":"Got API Request"}
+```
+
+Não é caso isolado. Todas as ocorrências de `logout failed` no log (4 no
+total, contadas — não estimadas), com 4 respostas 500 correspondentes em
+`/session/logout` contra 5 respostas 200:
+
+```
+2026-08-08T00:48:22 c3ad762d... | error sending logout request: websocket not connected
+2026-08-08T00:48:22 dffc90b2... | error sending logout request: websocket not connected
+2026-08-08T01:07:12 c3ad762d... | the store doesn't contain a device JID
+2026-08-08T18:06:26 1dde2515... | error sending logout request: websocket not connected
+```
+
+Os dois efeitos colaterais:
+
+1. **Estado divergente e persistido.** Como `Detach` não roda, `users.connected`
+   fica em 1 para uma sessão que o próprio runtime reporta desconectada.
+   Evidência cruzada — leitura do banco de produção:
+
+   ```
+   id                                name      connected  jid
+   1dde2515346fa4c2c3e4a7b2eda351c2  TesteQR   1          554192421234:20@s.whatsapp.net
+   ```
+
+   contra o `/session/status` da mesma sessão, no mesmo minuto:
+
+   ```
+   {"txtID":"1dde2515346fa4c2c3e4a7b2eda351c2","connected":false,"loggedIn":true,
+    "time":"2026-08-08T18:08:52-04:00","message":"get status validated"}
+   ```
+
+   O flag mentiroso não é cosmético: `connectOnStartup`
+   (`pkg/bootstrap/lifecycle.go:54`) itera `SELECT ... FROM users WHERE
+   connected=1` para decidir o que religar na subida do processo.
+
+2. **O usuário não tem caminho óbvio para sair.** Não existe rota de logout
+   forçado: `/session/logout` é o único caminho, e ele exige websocket vivo
+   por construção do SDK. **Não é beco sem saída absoluto** — `GET
+   /session/connect` chama `Orchestrator.Start`
+   (`pkg/application/session/orchestrator.go:139-167`), que cria uma sessão
+   nova a partir das credenciais ainda presentes no store e a re-registra;
+   com o transporte de pé, o logout volta a funcionar. Mas isso é
+   conhecimento de implementação: a API responde 500 com corpo genérico
+   ("internal server error"), sem dizer que o remédio é reconectar antes.
+   Quem só olha a resposta conclui, razoavelmente, que a sessão travou.
+
+**O 500 é a categoria errada.** "Cliente pediu logout de uma sessão que ele
+mesmo acabou de desconectar" é pré-condição violada pelo chamador, não falha
+do servidor. A taxonomia para isso já existe e está em uso no repositório —
+`pkg/domain/apperr/codes.go` mapeia `CategoryValidation` para 400 e
+`response.go:50-57` aplica esse mapa sozinho **desde que o erro seja um
+`AppError`**. O caminho de logout simplesmente não participa: `guard.go:93`
+devolve erro cru. Repare que `wanoiseSession.Logout`
+(`pkg/infra/wa-noise/runtime/session/session.go:57-62`) até embrulha em
+`apperr`, mas escolhe `CategoryInternal` com `Retryable: true` — ou seja,
+mesmo o caminho que já migrou classificaria isto como 500 e ainda diria ao
+cliente que vale a pena repetir a mesma requisição, que produzirá o mesmo
+erro. Não é o adaptador que está no caminho desta rota (o texto de erro do log
+é o cru, não a `Message` do `AppError`), mas é a mesma decisão errada escrita
+duas vezes.
+
+**Correção sugerida**, em três pedaços independentes:
+
+1. **Classificar.** Em `guard.go:88-94`, embrulhar a falha em `apperr` e
+   distinguir os dois casos observados: websocket ausente
+   (`session_not_connected`, `CategoryValidation`, `Retryable: false`) e store
+   sem device JID (`session_not_logged_in`, `CategoryValidation`). Ajustar
+   junto `session.go:57-62`, que hoje classifica tudo como
+   `CategoryInternal`/retryable. Com isso o status vira 409/400 e o corpo passa
+   a carregar `code` e `message` úteis, sem tocar em `handler_session.go` — o
+   mapa de `response.go` faz o resto.
+
+2. **Não deixar estado preso.** Quando o logout falhar por ausência de
+   transporte, o use case (`logout.go:40-46`) ainda deve alinhar o estado
+   local antes de retornar o erro: chamar `uc.detacher.Detach(txtID)` zera
+   `users.connected` e limpa os registries, de modo que o banco pare de
+   afirmar `connected=1` para uma sessão morta e `connectOnStartup` pare de
+   religá-la. O pareamento no telefone continua existindo — e é exatamente
+   isso que a resposta 4xx precisa dizer.
+
+3. **Dar saída explícita.** Ou o `LogoutUseCase` reconecta antes de deslogar
+   quando detecta transporte caído (o SDK preserva credenciais; o custo é a
+   latência de um Connect), ou a mensagem de erro instrui a chamar
+   `/session/connect` primeiro. A primeira opção é a que remove a pegadinha;
+   a segunda é a barata. Qualquer uma é melhor que 500 opaco.
+
+**Status**: **não corrigido** — só diagnosticado, a pedido do dono do
+repositório. Nada foi alterado no código nem no banco.
+
+> **Verificação da F93 (2026-08-08)** — o diagnóstico acima foi produzido por
+> um agente delegado e as afirmações que o sustentam foram conferidas contra o
+> código e o banco, não aceitas de saída:
+>
+> - `guard.go:88-94` devolve mesmo `client.Logout(context.Background())` cru,
+>   sem `apperr`. **Confere.**
+> - `logout.go` retorna no `if err != nil` **antes** de `uc.detacher.Detach`.
+>   **Confere** — e o comentário do próprio código afirma que `Detach` é "o
+>   único escritor de `users.connected` neste caminho", o que fecha a terceira
+>   afirmação sem precisar de outra busca.
+> - `users.connected=1` para `1dde2515…` (`TesteQR`). **Confere**, lido do
+>   `dbdata/users.db` em cópia somente leitura.
+>
+> **ATENÇÃO ao aplicar a correção 2** (chamar `Detach` também quando o logout
+> falha por falta de transporte): a posição atual do `Detach` é DELIBERADA e
+> está justificada pela F80 — ele fica depois do sucesso porque o logout
+> iniciado pelo TELEFONE já passa pelo kill-channel, e duplicar escrita
+> quebraria o alinhamento dos dois fluxos. A correção não é mover o `Detach`,
+> é ADICIONAR uma chamada no ramo de falha por transporte ausente,
+> preservando a do ramo de sucesso. Quem trocar a ordem reabre a F80.
+>
+> Observação colhida na verificação: há **sete** sessões com `connected=1`, não
+> cinco — além das cinco de trabalho, `TesteQR` (presa pelo defeito acima) e
+> `instanciaA`, pareada por engano durante a validação da F89.
