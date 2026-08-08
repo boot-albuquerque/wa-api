@@ -78,6 +78,20 @@ func (s *server) connectOnStartup() {
 			log.Error().Err(err).Msg("DB Problem")
 			return
 		} else {
+			// Posse ANTES de qualquer outra coisa (ADR-0005 D2).
+			//
+			// O filtro fica aqui, e nao junto do Connect, porque o bloco
+			// abaixo popula o UserInfoCache: filtrar so' na hora de conectar
+			// deixaria este processo com dados de sessoes que nao sao dele em
+			// memoria, e qualquer caminho que consulte o cache passaria a
+			// responder por sessao alheia.
+			//
+			// Em `single` claimSessionOwnership devolve true sempre — nao ha
+			// com quem competir.
+			if !claimSessionOwnership(s.Leases, txtid) {
+				continue
+			}
+
 			hmacKeyEncrypted := ""
 			if len(hmac_key) > 0 {
 				hmacKeyEncrypted = base64.StdEncoding.EncodeToString(hmac_key)

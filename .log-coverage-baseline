@@ -368,7 +368,28 @@ rules_frozen=true
 #
 # errpath 862->859: os tres S-consume do repositorio (Claim tem dois, Release e
 # CurrentOwner um cada) e os dois S-ret de leaseSettings, pelos mesmos motivos.
-min_func_coverage=695
+# ratchet-UP: ADR-0005 D2, fiacao (2026-08-08). min_eligible 564->568 (+4:
+# buildLeaseManager, releaseSessionLocally, claimSessionOwnership,
+# startLeaseHeartbeat e releaseLeasesOnShutdown — cinco funcoes novas, quatro
+# elegiveis).
+#
+# func_coverage SOBE 695->697 e NENHUMA fica descoberta. A fiacao nasce
+# instrumentada porque cada decisao dela e' observavel: posse negada por outra
+# replica, posse nao confirmada por falha de banco, sessao largada apos perder
+# a posse, e o balanco de leases devolvidos no desligamento.
+#
+# Uma delas so' passou depois de corrigida, nao justificada:
+# releaseLeasesOnShutdown logava "session leases released" sem campo nenhum
+# (uncovered:L3). Log sem estrutura ali nao e' acionavel — o que um operador
+# precisa saber e' se ALGUM lease ficou para tras, porque cada um custa um TTL
+# inteiro a' replica seguinte. Agora reporta released/still_held/budget.
+#
+# errpath fica em 859.
+# +1 (697->698) e min_eligible 568->569: setupSessionOwnership, extraida do
+# Main para baixar a complexidade maxima de 57 para 56 (o gate de lint trava o
+# TETO, nao a contagem — decompor sobe a contagem e melhora o repo). Ela nasce
+# coberta: loga o Fatal da configuracao invalida de posse.
+min_func_coverage=698
 min_errpath_coverage=859
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
@@ -399,7 +420,7 @@ min_errpath_coverage=859
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-min_eligible=564
+min_eligible=569
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
