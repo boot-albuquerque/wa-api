@@ -46,6 +46,11 @@ type server struct {
 	ExPath              string
 	Mode                ServerMode
 	SessionOrchestrator *appsession.Orchestrator
+
+	// Leases e' nil no modo `single`, e isso NAO e' omissao: com um processo
+	// so' nao ha posse a coordenar, e a trava de instancia do D1 ja' garante
+	// exclusividade. Ver buildLeaseManager.
+	Leases *leaseManager
 }
 
 const version = Version
@@ -403,7 +408,18 @@ func Main() {
 	initCustomHandlers(s)
 	s.routes()
 
+	// A posse tem de existir ANTES do connectOnStartup: e' ela que decide
+	// quais sessoes este processo pode assumir (ADR-0005 D2).
+	setupSessionOwnership(s)
+
 	s.connectOnStartup()
+
+	// O heartbeat so' comeca DEPOIS do connectOnStartup: antes disso nao ha
+	// posse registrada para renovar, e um tick vazio no meio da subida so'
+	// produziria consulta inutil.
+	leaseCtx, pararLeases := context.WithCancel(context.Background())
+	defer pararLeases()
+	startLeaseHeartbeat(leaseCtx, s.Leases)
 
 	if serverMode == Stdio {
 		startStdioMode(s)
@@ -442,6 +458,12 @@ func startHTTPMode(s *server) {
 					log.Error().Err(err).Msg("Failed to stop server")
 					os.Exit(1)
 				}
+
+				// AQUI, e nunca num `defer`: os.Exit abaixo nao executa
+				// funcoes adiadas. Um release adiado nunca rodaria, e o
+				// sintoma seria "as vezes a sessao demora 15s para voltar" —
+				// creditado a' rede, e nao a um defer que nao disparou.
+				releaseLeasesOnShutdown(s.Leases)
 
 				log.Info().Msg("Server Exited Properly")
 				os.Exit(0)

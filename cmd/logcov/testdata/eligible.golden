@@ -2036,7 +2036,7 @@ pkg/bootstrap.KillChannel.Delete	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Get	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Set	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
-pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:240);uncovered:L3(zerolog,main.go:268);uncovered:L3(zerolog,main.go:281);uncovered:L3(zerolog,main.go:317)
+pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:245);uncovered:L3(zerolog,main.go:273);uncovered:L3(zerolog,main.go:286);uncovered:L3(zerolog,main.go:322)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
 pkg/bootstrap.MetricasRetry	EXCLUDED	X1
@@ -2117,6 +2117,7 @@ pkg/bootstrap.atrasoDaTentativa	ELIGIBLE	uncovered:L1
 pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
 pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
+pkg/bootstrap.buildLeaseManager	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildRouter	ELIGIBLE	uncovered:L1
 pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:254)
@@ -2124,6 +2125,7 @@ pkg/bootstrap.buildRouter.func2	ELIGIBLE	uncovered:L1
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
 pkg/bootstrap.checkIfSubscribedToEvent	EXCLUDED	X1
+pkg/bootstrap.claimSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:102)
 pkg/bootstrap.clusterModeConfigurado	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:65)
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -2184,8 +2186,10 @@ pkg/bootstrap.registerCustomRoutes	ELIGIBLE	uncovered:L1
 pkg/bootstrap.registerCustomRoutes.func1	EXCLUDED	X1
 pkg/bootstrap.registerCustomRoutes.func2	EXCLUDED	X1
 pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
+pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
+pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:201)
-pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:72)
+pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:77)
 pkg/bootstrap.s3MediaUploader.ProcessMediaForS3	ELIGIBLE	uncovered:L1
 pkg/bootstrap.securityHeadersMiddleware	EXCLUDED	X1
 pkg/bootstrap.securityHeadersMiddleware.func1	ELIGIBLE	uncovered:L1
@@ -2207,13 +2211,16 @@ pkg/bootstrap.sessionAttachHookAdapter.Attach.func1	ELIGIBLE	covered
 pkg/bootstrap.sessionAttachHookAdapter.Detach	EXCLUDED	X1
 pkg/bootstrap.sessionEventDispatcherAdapter.Dispatch	ELIGIBLE	covered
 pkg/bootstrap.setKillChannel	EXCLUDED	X1
+pkg/bootstrap.setupSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:435);uncovered:L3(zerolog,main.go:446)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:451);uncovered:L3(zerolog,main.go:468)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:482)
+pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
+pkg/bootstrap.startLeaseHeartbeat.func1	EXCLUDED	X6
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:504)
 pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_delegates.go:132)
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6
