@@ -13,6 +13,60 @@ import (
 	"time"
 )
 
+// limitadorBloqueante é a PRIMEIRA tentativa da F86: um teto que, ao saturar,
+// SEGURA o chamador até vagar slot. Ele saiu de produção — o pool com fila
+// tomou o lugar — e sobrevive aqui porque os números dele são a evidência que
+// levou ao pool, e sem eles a decisão vira "confie em mim".
+//
+// Medido: handler 26× mais lento (3,165s contra 121ms), p95 de 51ms de atraso
+// por evento. E o dreno IDÊNTICO ao do pool de mesmo tamanho (3,232s contra
+// 3,234s), provando que o custo de entrega é o mesmo e a única diferença entre
+// as duas formas é quem espera.
+type limitadorBloqueante struct {
+	slots      chan struct{}
+	emVoo      atomic.Int64
+	pico       atomic.Int64
+	saturacoes atomic.Int64
+}
+
+func novoLimitadorBloqueante(capacidade int) *limitadorBloqueante {
+	if capacidade <= 0 {
+		return &limitadorBloqueante{}
+	}
+	return &limitadorBloqueante{slots: make(chan struct{}, capacidade)}
+}
+
+func (l *limitadorBloqueante) Go(nome string, fn func()) {
+	if l == nil || l.slots == nil {
+		safeGo(nome, fn)
+		return
+	}
+	select {
+	case l.slots <- struct{}{}:
+	default:
+		l.saturacoes.Add(1)
+		l.slots <- struct{}{} // bloqueia o CHAMADOR: e' o ponto todo
+	}
+	atual := l.emVoo.Add(1)
+	for {
+		pico := l.pico.Load()
+		if atual <= pico || l.pico.CompareAndSwap(pico, atual) {
+			break
+		}
+	}
+	safeGo(nome, func() {
+		defer func() { l.emVoo.Add(-1); <-l.slots }()
+		fn()
+	})
+}
+
+func (l *limitadorBloqueante) Metricas() (emVoo, pico, saturacoes int64) {
+	if l == nil {
+		return 0, 0, 0
+	}
+	return l.emVoo.Load(), l.pico.Load(), l.saturacoes.Load()
+}
+
 // Medição A/B do teto de despacho (F86).
 //
 // Este arquivo NÃO é asserção de comportamento — é instrumento de medida. Ele
@@ -54,7 +108,7 @@ type medida struct {
 func medirRajada(t *testing.T, teto int, c cenarioCarga) medida {
 	t.Helper()
 
-	l := newDispatchLimiter(teto)
+	l := novoLimitadorBloqueante(teto)
 
 	pararAmostra := make(chan struct{})
 	var picoGo atomic.Int64
@@ -184,7 +238,7 @@ func TestMedicaoCargaDespachoHTTPReal(t *testing.T) {
 	payload := make([]byte, 8*1024)
 
 	medir := func(teto, entregas int) medida {
-		l := newDispatchLimiter(teto)
+		l := novoLimitadorBloqueante(teto)
 		parar := make(chan struct{})
 		var picoGo atomic.Int64
 		var picoHeap atomic.Uint64

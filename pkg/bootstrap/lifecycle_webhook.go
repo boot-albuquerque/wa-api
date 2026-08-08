@@ -55,7 +55,7 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 		log.Info().Str("url", webhookurl).Msg("Calling user webhook")
 
 		if path == "" {
-			dispatchGo("callHookWithHmac", func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
+			dispatchGo("callHookWithHmac", len(jsonData), func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
 		} else {
 			if err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey); err != nil {
 				log.Error().Err(err).Msg("Error calling hook file")
@@ -136,6 +136,24 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 		return
 	}
 
+	// O Marshal acontece AQUI, antes do primeiro despacho, e não mais logo
+	// antes do webhook: a fila de despacho se limita por BYTES (ver F86), e
+	// `len(jsonData)` é a única medida honesta do payload que cada closure
+	// mantém vivo. Sem ele, o despacho do WS — que é justamente quem carrega
+	// os lotes de HistorySync, os maiores medidos — entraria na contabilidade
+	// como tamanho estimado, furando a proteção na rajada que ela existe para
+	// conter.
+	//
+	// O custo é um Marshal a mais no modo Stdio, que antes retornava sem
+	// serializar. É volume baixo nesse modo, e paga a contabilidade exata nos
+	// quatro despachos.
+	jsonData, err := json.Marshal(postmap)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
+		return
+	}
+	tamanhoPayload := len(jsonData)
+
 	// Real-time push to any live /session/ws connection — the same event,
 	// same subscription gate, as a fourth delivery channel alongside the
 	// per-user webhook, global webhook, and RabbitMQ below. Best-effort and
@@ -143,20 +161,13 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 	// delivery (BroadcastToUser is itself non-blocking per-connection, see
 	// wsBroadcastTimeout), and REST polling of /session/status and
 	// /session/qr is untouched either way.
-	dispatchGo("sendToWS", func() { clientManager.BroadcastToUser(evh.UserID, postmap) })
+	dispatchGo("sendToWS", tamanhoPayload, func() { clientManager.BroadcastToUser(evh.UserID, postmap) })
 
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if evh.mode == Stdio {
 		if evh.NotifyFn != nil {
 			evh.NotifyFn(eventType, postmap)
 		}
-		return
-	}
-
-	// Prepare webhook data
-	jsonData, err := json.Marshal(postmap)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
 		return
 	}
 
@@ -176,7 +187,7 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, evh.UserID, evh.Token, encryptedHmacKey)
 
 	// Get global webhook if configured
-	dispatchGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalWebHook", tamanhoPayload, func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
 
-	dispatchGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalRabbit", tamanhoPayload, func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
 }

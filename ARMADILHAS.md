@@ -277,3 +277,35 @@ esperando.
 **Fixe a propriedade num teste** que falhe se ela mudar, como
 `TestLimitador_AquisicaoBloqueiaOChamador`. Comentário não impede regressão;
 teste impede.
+
+---
+
+## 16. Espera sem prazo transforma defeito em silêncio
+
+`sync.WaitGroup` só oferece `Wait()` infinito. Num teste que persegue "o
+mecanismo travou", isso é o defeito silenciando o próprio teste.
+
+`TestPool_PanicoNaoMataOWorker` (F86) esperava com `panicos.Wait()` nu. Ao
+rodar o **controle negativo** — recover encerrando o worker, semântica de
+`SafeGo` —, os workers morreram, os pânicos restantes nunca rodaram, e o teste
+**pendurou por 300s** em vez de acusar. O controle só provou alguma coisa
+depois que a espera ganhou prazo:
+
+```
+--- FAIL: TestPool_PanicoNaoMataOWorker (10.00s)
+    so' 4 de 12 panicos rodaram: os workers morreram e o pool encolheu
+```
+
+`4 de 12` é exatamente o número de workers: cada pânico matou um. A mensagem
+com progresso é o que separa "falhou" de "falhou por este motivo".
+
+**Regra**: toda espera num teste de concorrência tem prazo e mensagem com
+PROGRESSO (`X de Y`), nunca só "timeout". Um `Wait()` nu parece mais simples e
+é pior: ele converte a falha que você quer detectar em travamento, que é o
+sintoma mais caro de diagnosticar.
+
+**Corolário — o controle negativo audita o teste, não só o código.** Este
+controle não achou defeito no `dispatch.go`; achou defeito no
+`dispatch_test.go`. Se o controle não produzir uma FALHA COM MENSAGEM em
+tempo hábil, o problema pode ser o teste (ver também a entrada 4, sobre
+controle que não compila).

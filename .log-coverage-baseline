@@ -258,7 +258,43 @@ rules_frozen=true
 # indisponibilidade antes de degradar, e o handler escolhe o nivel pela
 # categoria do apperr (warn para recusa de cliente, error para falha nossa),
 # como a rota irma passou a fazer na F83. errpath_coverage fica em 864.
-min_func_coverage=707
+# justificativa: F86 (2026-08-08), o teto bloqueante do despacho de eventos
+# foi SUBSTITUIDO por pool de workers com fila limitada por bytes, depois de
+# medicao A/B que mostrou o teto segurando o handler de eventos por 3,1s
+# contra 121ms sem ele. Ver F86 no HOUSEKEEP.md.
+#
+# min_eligible sobe 542->546 (+4, ratchet-UP honesto). Saem
+# dispatchLimiter.Go e dispatchConcurrencyConfigurada; entram
+# dispatchPool.Go, dispatchPool.executar, dispatchPool.Metricas,
+# newDispatchPool, dispatchGo, dispatchWorkersConfigurados,
+# dispatchQueueBytesConfigurado e lerInteiroDoAmbiente.
+#
+# func_coverage cai 707->705, por diluicao, e as TRES descobertas foram
+# conferidas nominalmente com `logcov -list-uncovered`, nao deduzidas:
+#
+#   newDispatchPool          construtor: aloca canal e sobe workers, sem
+#                            caminho de erro proprio.
+#   dispatchPool.Metricas    le contadores atomicos e devolve. Um log aqui
+#                            sairia a cada consulta de metrica.
+#   dispatchPool.executar    TEM log.Error (panico recuperado no worker), mas
+#                            ele esta' dentro do `defer`, que o analisador
+#                            conta como funcao propria. E' exatamente o caso
+#                            ja' justificado na F74 (o Warn de falha de
+#                            escrita migrou de Broadcast para dentro da
+#                            closure e Broadcast virou descoberta). O log
+#                            EXISTE e e' obrigatorio ficar no defer: fora
+#                            dele nao ha panico para recuperar.
+#
+# Nenhum site que logava deixou de logar. Ao contrario: o mecanismo novo
+# ADICIONOU um aviso que nao existia — dispatchPool.Go loga em Warn quando a
+# fila satura e o handler de eventos passa a ser segurado, uma unica vez por
+# processo (logar por ocorrencia transformaria a saturacao numa segunda
+# rajada, agora de log — ver F85). lerInteiroDoAmbiente preserva os dois
+# Warn de configuracao invalida/negativa que dispatchConcurrencyConfigurada
+# tinha, agora servindo as duas variaveis.
+#
+# errpath_coverage fica em 864.
+min_func_coverage=705
 min_errpath_coverage=864
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
@@ -266,7 +302,9 @@ min_errpath_coverage=864
 # de concorrencia da F86. dispatchConcurrencyConfigurada loga em Warn quando
 # a variavel do .env e' invalida ou negativa — um typo na configuracao nao
 # pode desligar a protecao em silencio.
-min_eligible=542
+# +4 (542->546): o teto virou pool com fila por bytes na segunda rodada da
+# F86 — ver a justificativa de min_func_coverage acima para a lista nominal.
+min_eligible=546
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -65,16 +65,17 @@ func (f *formaSemTeto) Despachar(_ int, fn func()) {
 func (f *formaSemTeto) Fechar()         { f.wg.Wait() }
 func (f *formaSemTeto) Perdidas() int64 { return 0 }
 
-// formaBloqueante é o limitador que está no código hoje (dispatchLimiter):
+// formaBloqueante é o limitador da primeira tentativa da F86
+// (limitadorBloqueante, em dispatch_carga_test.go):
 // quando satura, a aquisição segura o chamador até vagar slot. É a forma sob
 // suspeita — a medição existe para dizer quanto ela segura.
 type formaBloqueante struct {
-	l  *dispatchLimiter
+	l  *limitadorBloqueante
 	wg sync.WaitGroup
 }
 
 func novaFormaBloqueante(teto int) *formaBloqueante {
-	return &formaBloqueante{l: newDispatchLimiter(teto)}
+	return &formaBloqueante{l: novoLimitadorBloqueante(teto)}
 }
 func (f *formaBloqueante) Despachar(_ int, fn func()) {
 	f.wg.Add(1)
