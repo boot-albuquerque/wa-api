@@ -155,6 +155,36 @@ timer não custa goroutine, mas mantém o payload vivo — trocar "goroutine
 dormindo" por "timer pendente" só mudaria ONDE a memória cresce sem limite.
 Por isso o conjunto de pendentes nasceu com teto por BYTES, igual ao do pool.
 
+## Idioma do código: identificadores e comentários em inglês (EN-US)
+
+**Regra**, válida para todo código novo e para todo código tocado:
+
+| o quê | idioma |
+|---|---|
+| identificadores (variável, função, tipo, campo, constante) | **inglês** |
+| comentários de código | **inglês** |
+| nomes de arquivo e de diretório | **inglês** |
+| mensagens de log e de erro | **inglês** |
+| documentos do repositório (`HOUSEKEEP.md`, `ARMADILHAS.md`, ADRs) | português — são registro de decisão, não código |
+| mensagens de commit | português — idem |
+
+O motivo não é estética: identificador em português obriga quem lê a alternar
+de idioma no meio de uma expressão que já mistura palavras-chave em inglês
+(`for`, `range`, `err`), e nomes como `renovarUma` ao lado de `RowsAffected`
+tornam a leitura mais lenta para qualquer pessoa, inclusive quem fala
+português.
+
+**Zero string literal solta.** Toda string que carrega significado — nome de
+tabela, tipo de banco, chave de configuração, rótulo de goroutine — vira
+constante nomeada no pacote. Literal repetido em dois lugares é o mesmo bug
+esperando divergir. Isto já era pilar do projeto (ADR-0004) e passa a ser
+verificável: se você escreveu `"postgres"` duas vezes, extraia.
+
+**Ao TOCAR num arquivo antigo**: converta o que você mexeu, não o arquivo
+inteiro. Conversão em massa mistura renomeação com mudança de comportamento no
+mesmo diff, e aí a revisão não consegue separar as duas — é exatamente o tipo
+de mudança em que um defeito passa despercebido.
+
 ## Armadilhas conhecidas — leia `ARMADILHAS.md`
 
 `ARMADILHAS.md` (raiz) cataloga defeitos que **já passaram por revisão e por

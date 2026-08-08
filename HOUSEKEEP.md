@@ -2777,3 +2777,47 @@ em andamento.
 > campo, porque o monitor exibia `campos=JID,Timestamp,Action,FromFullSync`.
 > Aquilo era renderização do meu próprio watcher, não do wa-api — o log não
 > contém a string `campos` uma única vez. Ver ARMADILHAS.md 13.
+
+---
+
+## F92 — 71% dos arquivos Go têm comentário em português, contra a política de idioma
+
+**Data**: 2026-08-08
+**Contexto**: o usuário definiu o padrão de idioma do código (identificadores,
+comentários, nomes de arquivo e mensagens de log/erro em inglês) e pediu que
+ficasse documentado para qualquer AI ou sessão seguir. A política entrou em
+`CLAUDE.md` e `AGENTS.md`. Esta entrada registra o passivo.
+
+**Onde**: `pkg/` e `cmd/`.
+
+**Números**, medidos e não estimados:
+
+```
+arquivos .go com comentário em português : 329
+total de arquivos .go em pkg/ e cmd/     : 465
+                                           ~71%
+```
+
+Heurística usada: acentuação e palavras-função (`ção`, `não`, `porque`, `que a`)
+dentro de linha `//`. É limite superior aproximado — arquivo com uma única
+linha em português conta igual a um totalmente em português. Quem for atacar
+precisa levantar a lista real, não usar este número como plano de trabalho.
+
+**Problema**: não é defeito de funcionamento. É custo de leitura, e ele cresce
+com o tamanho do time e com a quantidade de agentes trabalhando no repositório.
+Identificador em português no meio de expressão com palavra-chave em inglês
+obriga alternância de idioma a cada linha.
+
+**Correção sugerida — e explicitamente NÃO uma conversão em massa.** A política
+já diz: ao TOCAR num arquivo, converta o que você mexeu, não o arquivo inteiro.
+Assim a dívida drena por contato, e nenhum diff mistura renomeação com mudança
+de comportamento — que é onde defeito passa despercebido em revisão.
+
+Se um dia se quiser um mutirão, ele tem de ser: commit separado, só renomeação,
+zero mudança de comportamento, e `make check` verde antes e depois com os
+mesmos números de gate.
+
+**Status**: **não corrigido, por decisão**. Os arquivos do trabalho corrente
+(`lease.go`, `session_lease.go` e testes) já nasceram em inglês; `cluster.go` e
+`dispatch*.go`, escritos nesta sessão antes da política, ficam para um commit
+de conversão pura. O restante aguarda decisão sobre mutirão.
