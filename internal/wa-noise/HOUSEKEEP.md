@@ -3917,6 +3917,21 @@ sustentam mutuamente:
 Controle negativo executado: com o `case` removido, os dois primeiros testes
 falham exibindo o código de pareamento no dump (`&{Codes:[...SEGREDO...]}`).
 
+**Verificado ao vivo em 2026-08-08**, com os dois binários no MESMO arquivo
+de log, e um pareamento real e bem-sucedido de cada lado:
+
+```
+binário ANTIGO (pareamento 23:52)  -> 1 linha contendo o código
+binário NOVO   (pareamento 07:55)  -> 0 linhas contendo o código
+                                      0 dumps `Codes:`
+                                      0 `Unhandled event`
+                                      1 `QR pairing ok!`
+```
+
+O `QR pairing ok!` importa: sem ele a contagem zero não provaria nada — um
+QR que nunca fosse emitido também não vazaria. A sessão pareou
+(`554192421234:18@s.whatsapp.net`), então o evento existiu e não vazou.
+
 Varredura dos demais tipos que ainda caem no `default`, feita na mesma
 sessão: `CATRefreshError` (só um `error`), `ManualLoginReconnect` e
 `QRScannedWithoutMultidevice` (ambos `struct{}`). Nenhum carrega credencial —
