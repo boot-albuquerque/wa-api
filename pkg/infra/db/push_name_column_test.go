@@ -127,3 +127,107 @@ func TestGetChatPushNames_SemNomeNenhumNaoEntra(t *testing.T) {
 		t.Errorf("chat sem pushName entrou no mapa: %+v", got)
 	}
 }
+
+// --- F84: o re-sync tem de CURAR as linhas gravadas sem nome -------------
+
+// TestSaveMessageToHistory_ResyncPreencheONomeQueFaltava é o teste que
+// impede o defeito de ser irrecuperável.
+//
+// A cláusula era ON CONFLICT DO NOTHING. Como um HistorySync novo traz as
+// MESMAS message_id, o insert inteiro era descartado e as linhas gravadas
+// sem nome (todas, até a F84) ficariam sem nome para sempre — nenhuma
+// instalação existente se curaria ao atualizar.
+func TestSaveMessageToHistory_ResyncPreencheONomeQueFaltava(t *testing.T) {
+	db := newHistoryDB(t)
+
+	// Primeira gravação: como o defeito da F84 deixou o banco.
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", ""); err != nil {
+		t.Fatalf("gravar sem nome: %v", err)
+	}
+	// Re-sync: mesma message_id, agora COM o nome do protobuf.
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", "Maria Recuperada"); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+
+	var got string
+	if err := db.Get(&got, `SELECT sender_push_name FROM message_history WHERE message_id='M1'`); err != nil {
+		t.Fatalf("ler: %v", err)
+	}
+	if got != "Maria Recuperada" {
+		t.Errorf("sender_push_name = %q; o re-sync nao curou a linha sem nome", got)
+	}
+}
+
+// TestSaveMessageToHistory_ResyncNaoApagaNomeComVazio é a guarda da Evolution
+// API (issue #2426): uma mensagem que volte SEM pushName não pode zerar o
+// nome que já está gravado.
+func TestSaveMessageToHistory_ResyncNaoApagaNomeComVazio(t *testing.T) {
+	db := newHistoryDB(t)
+
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", "Maria"); err != nil {
+		t.Fatalf("gravar com nome: %v", err)
+	}
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", ""); err != nil {
+		t.Fatalf("re-sync sem nome: %v", err)
+	}
+
+	var got string
+	if err := db.Get(&got, `SELECT sender_push_name FROM message_history WHERE message_id='M1'`); err != nil {
+		t.Fatalf("ler: %v", err)
+	}
+	if got != "Maria" {
+		t.Errorf("sender_push_name = %q; o vazio apagou um nome que existia", got)
+	}
+}
+
+// TestSaveMessageToHistory_ResyncNaoSobrescreveNomeExistente: só PREENCHER o
+// que falta. Sem esta metade da guarda, um re-sync de histórico ANTIGO
+// rebaixaria um nome mais recente.
+func TestSaveMessageToHistory_ResyncNaoSobrescreveNomeExistente(t *testing.T) {
+	db := newHistoryDB(t)
+
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", "Nome Atual"); err != nil {
+		t.Fatalf("gravar: %v", err)
+	}
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "oi", "", "", "{}", "Nome Antigo"); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+
+	var got string
+	if err := db.Get(&got, `SELECT sender_push_name FROM message_history WHERE message_id='M1'`); err != nil {
+		t.Fatalf("ler: %v", err)
+	}
+	if got != "Nome Atual" {
+		t.Errorf("sender_push_name = %q; o re-sync rebaixou um nome que ja existia", got)
+	}
+}
+
+// TestSaveMessageToHistory_ResyncNaoTocaOutrasColunas: a idempotência do
+// resto do insert é o motivo de #292 ter posto o ON CONFLICT aqui, e a F84
+// não pode tê-la desfeito.
+func TestSaveMessageToHistory_ResyncNaoTocaOutrasColunas(t *testing.T) {
+	db := newHistoryDB(t)
+
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "texto original", "", "", "{}", ""); err != nil {
+		t.Fatalf("gravar: %v", err)
+	}
+	if err := SaveMessageToHistory(db, "u1", "111@lid", "111@lid", "M1",
+		"text", "TEXTO ADULTERADO", "", "", "{}", "Maria"); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+
+	var texto string
+	if err := db.Get(&texto, `SELECT text_content FROM message_history WHERE message_id='M1'`); err != nil {
+		t.Fatalf("ler: %v", err)
+	}
+	if texto != "texto original" {
+		t.Errorf("text_content = %q; o re-sync passou a sobrescrever colunas alem do nome", texto)
+	}
+}
