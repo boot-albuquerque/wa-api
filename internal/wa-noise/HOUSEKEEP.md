@@ -3921,3 +3921,73 @@ Varredura dos demais tipos que ainda caem no `default`, feita na mesma
 sessão: `CATRefreshError` (só um `error`), `ManualLoginReconnect` e
 `QRScannedWithoutMultidevice` (ambos `struct{}`). Nenhum carrega credencial —
 `QR` era o único caso sensível.
+
+## F77 — o WebSocket só pode ser aberto disparando `/session/connect`
+
+**Data / contexto**: 2026-08-08, teste de desvinculação pelo app do celular,
+verificando se o painel consegue reagir por WS.
+
+**Onde**: `pkg/presentation/http/devui/assets/sessions.html:382-388`
+
+```js
+if (qual === "conectar") {
+  abrirWS(s);
+  ...
+  await chamar(s, "GET", "/session/connect", "connect");
+```
+
+**Problema**: abrir o socket e pedir conexão são a MESMA ação na página. Não
+há "só observar". Somado a `sessions.html:341`, que deliberadamente não
+reconecta (`"num painel de diagnóstico, um socket que reabre sozinho esconde
+o sintoma"` — decisão correta), o resultado é que **depois da primeira queda
+do socket o painel fica cego** até alguém clicar em Conectar.
+
+Medido: no início deste teste o painel exibia `0 conectados` com as cinco
+sessões pareadas e vivas. Todo o estado vinha do poll REST de 3s
+(`POLL_MS`, linha 158).
+
+**Correção sugerida**: separar as duas coisas — um botão "Observar" que só
+chama `abrirWS`, ou abrir o socket automaticamente ao renderizar o card de
+uma sessão já pareada. A ausência de reconexão continua valendo; o que falta
+é uma forma de abrir o socket **sem** efeito colateral de sessão.
+
+**Status**: **não corrigido** — descoberto durante o teste, e a decisão de
+UI é do dono do painel. Contornado no teste com um observador injetado pelo
+console, que abre `/session/ws` direto.
+
+## F78 — `/session/connect` não é idempotente numa sessão já conectada
+
+**Data / contexto**: 2026-08-08, mesma sessão de teste. Foi o motivo de eu
+**não** clicar em Conectar para abrir o WS das sessões vivas.
+
+**Onde**: `pkg/application/session/orchestrator.go:139-167`
+
+```go
+func (o *Orchestrator) Start(ctx context.Context, userID, token string) error {
+	sess, err := o.provider.NewSession(ctx, port.SessionSpec{...})
+	...
+	o.registry.Register(userID, sess)
+	...
+	if aerr := o.attach.Attach(ctx, userID, token); aerr != nil {
+```
+
+**Problema**: não há guarda de "já conectado". `Start` cria uma sessão nova
+incondicionalmente, `Register` substitui a anterior no registry e `Attach`
+registra um novo kill-channel. O `*wanoise.Client` antigo não é desconectado
+por esse caminho — fica órfão e, até onde a leitura alcança, ainda falando
+com o servidor do WhatsApp. Dois sockets para a mesma conta é a condição
+clássica de `StreamReplaced` / conflito 440.
+
+**Evidência**: leitura de código, **não** experimento — justamente porque o
+experimento consistiria em fazer isso com a sessão pareada de um usuário
+real. É o que falta para confirmar ou descartar.
+
+**Correção sugerida**: `Start` consultar `IsConnected()`/`IsLoggedIn()`
+(`contracts/session_provider.go:63,71`) e virar no-op — ou reconexão
+explícita — quando já houver sessão viva. Alternativa mais conservadora:
+`Register` devolver a sessão anterior para que `Start` a encerre antes de
+substituir.
+
+**Status**: **não corrigido, e não verificado experimentalmente.** Antes de
+mexer, vale um teste controlado numa sessão descartável: chamar
+`/session/connect` duas vezes e observar se aparece `StreamReplaced`.
