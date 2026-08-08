@@ -225,19 +225,19 @@ func dispatchGo(nome string, bytes int, fn func()) {
 // dispatchWorkersConfigurados lê o tamanho do pool do ambiente. Zero DESLIGA o
 // mecanismo — é o rollback, e é distinto de valor inválido.
 func dispatchWorkersConfigurados() int {
-	return lerInteiroDoAmbiente(envDispatchWorkers, dispatchDefaultWorkers)
+	return readIntFromEnv(envDispatchWorkers, dispatchDefaultWorkers)
 }
 
 // dispatchQueueBytesConfigurado lê o orçamento da fila do ambiente.
 func dispatchQueueBytesConfigurado() int64 {
-	return int64(lerInteiroDoAmbiente(envDispatchQueueBytes, dispatchDefaultQueueBytes))
+	return int64(readIntFromEnv(envDispatchQueueBytes, dispatchDefaultQueueBytes))
 }
 
-// lerInteiroDoAmbiente devolve o padrão para valor ausente, inválido ou
+// readIntFromEnv devolve o padrão para valor ausente, inválido ou
 // negativo, sempre com aviso em Warn nos dois últimos casos: um typo não pode
 // mudar a proteção em silêncio, e com padrões NÃO-ZERO esse caminho é a
 // diferença entre proteger e não proteger.
-func lerInteiroDoAmbiente(nome string, padrao int) int {
+func readIntFromEnv(nome string, padrao int) int {
 	bruto := os.Getenv(nome)
 	if bruto == "" {
 		return padrao

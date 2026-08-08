@@ -104,7 +104,55 @@ var migrations = []Migration{
 		UpSQL:   addSenderPushNameSQL,
 		DownSQL: addSenderPushNameDownSQL,
 	},
+	{
+		ID:      migrationIDSessionLeases,
+		Name:    "add_session_leases",
+		UpSQL:   addSessionLeasesSQL,
+		DownSQL: addSessionLeasesDownSQL,
+	},
 }
+
+// migrationIDSessionLeases identifica a migração da tabela de posse. Nomeada
+// porque três lugares a referenciam — a lista, o roteamento por dialeto e o
+// teste que cobre o ramo — e literal repetido é divergência esperando.
+const migrationIDSessionLeases = 14
+
+// addSessionLeasesSQL cria a tabela de posse de sessão (ADR-0005, D2).
+//
+// Uma sessão do WhatsApp é STATEFUL: o socket vive dentro de um processo. Duas
+// réplicas assumindo a mesma sessão não brigam em laço, como se supunha —
+// medido na F89, o WhatsApp manda UM `StreamReplaced` e o perdedor fica com a
+// sessão morta para sempre, sem nunca reconectar. Esta tabela é quem decide,
+// antes de conectar, qual processo tem o direito.
+//
+// A tabela é criada nos DOIS dialetos mesmo sendo inerte em `single`: migração
+// condicional por modo produziria esquemas divergentes, e uma instalação que
+// migrasse de `single` para `multi` precisaria de migração retroativa.
+//
+// `expires_at` com fuso no Postgres (TIMESTAMPTZ) porque é comparado com
+// `now()` para decidir posse — comparação de instante em fuso ambíguo aqui
+// significaria duas réplicas se achando donas.
+const addSessionLeasesSQL = `
+CREATE TABLE IF NOT EXISTS session_leases (
+    user_id    TEXT PRIMARY KEY,
+    owner_id   TEXT        NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_leases_expires_at ON session_leases (expires_at);
+`
+
+// addSessionLeasesSQLiteSQL é a mesma tabela sem TIMESTAMPTZ, que o SQLite não
+// conhece. Fica inerte: em `single` não há posse a coordenar.
+const addSessionLeasesSQLiteSQL = `
+CREATE TABLE IF NOT EXISTS session_leases (
+    user_id    TEXT PRIMARY KEY,
+    owner_id   TEXT      NOT NULL,
+    expires_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_leases_expires_at ON session_leases (expires_at);
+`
+
+const addSessionLeasesDownSQL = `DROP TABLE IF EXISTS session_leases;`
 
 // addSenderPushNameSQL acompanha a F84: o pushName que o WhatsApp manda em
 // cada mensagem passa a ter coluna própria.
@@ -615,6 +663,12 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 			// Sem DEFAULT: NULL distingue "linha antiga, nao sabemos o nome"
 			// de "sabemos que nao tem" (F84).
 			err = addColumnIfNotExistsSQLite(tx, "message_history", "sender_push_name", "TEXT")
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDSessionLeases {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(addSessionLeasesSQLiteSQL)
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}
