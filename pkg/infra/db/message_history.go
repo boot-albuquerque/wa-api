@@ -21,9 +21,30 @@ import (
 // `quotedMessageID` compila em silêncio. No fim, o único argumento que pode
 // estar errado é o novo.
 func SaveMessageToHistory(db *sqlx.DB, userID, chatJID, senderJID, messageID, messageType, textContent, mediaLink, quotedMessageID, dataJson, senderPushName string) error {
+	// ON CONFLICT preenche o nome que falta, e SÓ ele (F84).
+	//
+	// A cláusula era DO NOTHING, e isso tornava o defeito da F84
+	// irrecuperável: um HistorySync novo traz as MESMAS message_id, o insert
+	// inteiro era descartado, e as linhas gravadas sem nome ficavam sem nome
+	// para sempre. Nenhuma instalação existente se curaria ao atualizar.
+	//
+	// A guarda é dupla, e as duas metades importam:
+	//   - `EXCLUDED.sender_push_name <> ''` — nunca apagar um nome com vazio.
+	//     É a lição da Evolution API (issue #2426), onde a falta dessa guarda
+	//     zerava o pushName a cada mensagem enviada.
+	//   - `message_history.sender_push_name IS NULL OR = ''` — só PREENCHER o
+	//     que falta, nunca sobrescrever o que já existe. Sem ela, um
+	//     re-sync antigo poderia rebaixar um nome mais recente.
+	//
+	// Nenhuma outra coluna é tocada: a idempotência do resto do insert
+	// continua valendo, que é o motivo de #292 ter posto o ON CONFLICT aqui.
 	query := db.Rebind(`INSERT INTO message_history (user_id, chat_jid, sender_jid, message_id, timestamp, message_type, text_content, media_link, quoted_message_id, datajson, sender_push_name)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (user_id, message_id) DO NOTHING`)
+              ON CONFLICT (user_id, message_id) DO UPDATE
+                 SET sender_push_name = EXCLUDED.sender_push_name
+               WHERE EXCLUDED.sender_push_name <> ''
+                 AND (message_history.sender_push_name IS NULL
+                      OR message_history.sender_push_name = '')`)
 	_, err := db.Exec(query, userID, chatJID, senderJID, messageID, time.Now(), messageType, textContent, mediaLink, quotedMessageID, dataJson, senderPushName)
 	if err != nil {
 		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).

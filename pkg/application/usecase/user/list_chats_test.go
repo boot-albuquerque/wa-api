@@ -319,3 +319,106 @@ func TestLista_GrupoNaoUsaOHistorico(t *testing.T) {
 		}
 	}
 }
+
+// --- F84: os dois espaços de identidade têm de se encontrar --------------
+
+// TestLista_NomeGravadoComoPN_AlcancaChatNormalizadoParaLID reproduz a
+// condição REAL medida em produção, e que os testes acima não pegavam porque
+// seus dublês chaveavam tudo no mesmo espaço.
+//
+// O histórico grava o chat_jid como ele veio — e 120 dos 135 chats com
+// pushName vieram como `@s.whatsapp.net`. A lista, porém, normaliza as
+// chaves de atividade para `@lid` (normalizeToLID). Sem aliasar as tabelas
+// de consulta, os dois lados nunca se encontram: medido, 11 nomes
+// aproveitados de 480 chats enquanto 7.273 mensagens tinham nome gravado.
+func TestLista_NomeGravadoComoPN_AlcancaChatNormalizadoParaLID(t *testing.T) {
+	const pn = "5511999@s.whatsapp.net"
+	const lid = "90937@lid"
+
+	ar := &contractsfake.ChatActivityReader{
+		// A atividade chega como PN...
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			return map[string]time.Time{pn: t0(10)}, nil
+		},
+		// ...e o pushName também foi gravado sob o PN.
+		GetChatPushNamesFunc: func(context.Context, string) (map[string]string, error) {
+			return map[string]string{pn: "Maria do Historico"}, nil
+		},
+	}
+	// ...mas o store conhece o LID, então normalizeToLID reescreve a chave
+	// de atividade para @lid. É exatamente aqui que o encontro se perdia.
+	cd := &contractsfake.ContactDirectory{
+		GetManyLIDsForPNsFunc: func(context.Context, string, []domain.JID) (map[domain.JID]domain.JID, error) {
+			return map[domain.JID]domain.JID{pn: lid}, nil
+		},
+	}
+	gd := &contractsfake.GroupDirectory{}
+
+	page := listar(t, ar, cd, gd, 0, 0)
+
+	if len(page.Chats) != 1 {
+		t.Fatalf("esperava 1 conversa, veio %d", len(page.Chats))
+	}
+	c := page.Chats[0]
+	if c.JID != lid {
+		t.Fatalf("JID = %q, quero o normalizado %q", c.JID, lid)
+	}
+	if c.Name != "Maria do Historico" {
+		t.Fatalf("name = %q; o nome gravado como PN nao alcancou o chat normalizado para LID", c.Name)
+	}
+}
+
+// TestLista_RosterGravadoComoPN_AlcancaChatNormalizado: o mesmo vale para o
+// roster, que também mistura os dois espaços (886 chaves PN medidas).
+func TestLista_RosterGravadoComoPN_AlcancaChatNormalizado(t *testing.T) {
+	const pn = "5511999@s.whatsapp.net"
+	const lid = "90937@lid"
+
+	ar := &contractsfake.ChatActivityReader{
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			return map[string]time.Time{pn: t0(10)}, nil
+		},
+	}
+	cd := &contractsfake.ContactDirectory{
+		ContactNamesFunc: func(context.Context, string) (map[domain.JID]domain.ContactName, error) {
+			return map[domain.JID]domain.ContactName{pn: {FullName: "Maria da Agenda"}}, nil
+		},
+		GetManyLIDsForPNsFunc: func(context.Context, string, []domain.JID) (map[domain.JID]domain.JID, error) {
+			return map[domain.JID]domain.JID{pn: lid}, nil
+		},
+	}
+
+	page := listar(t, ar, cd, &contractsfake.GroupDirectory{}, 0, 0)
+
+	if len(page.Chats) != 1 || page.Chats[0].Name != "Maria da Agenda" {
+		t.Fatalf("o roster gravado como PN nao alcancou o chat normalizado: %+v", page.Chats)
+	}
+}
+
+// TestLista_AliasNaoSobrescreveEntradaDiretaPorLID: uma entrada que JÁ veio
+// chaveada por LID é mais direta que a derivada de um PN, e não pode ser
+// substituída por ela.
+func TestLista_AliasNaoSobrescreveEntradaDiretaPorLID(t *testing.T) {
+	const pn = "5511999@s.whatsapp.net"
+	const lid = "90937@lid"
+
+	ar := &contractsfake.ChatActivityReader{
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			return map[string]time.Time{lid: t0(10)}, nil
+		},
+		GetChatPushNamesFunc: func(context.Context, string) (map[string]string, error) {
+			return map[string]string{lid: "Nome Direto", pn: "Nome Derivado"}, nil
+		},
+	}
+	cd := &contractsfake.ContactDirectory{
+		GetManyLIDsForPNsFunc: func(context.Context, string, []domain.JID) (map[domain.JID]domain.JID, error) {
+			return map[domain.JID]domain.JID{pn: lid}, nil
+		},
+	}
+
+	page := listar(t, ar, cd, &contractsfake.GroupDirectory{}, 0, 0)
+
+	if len(page.Chats) != 1 || page.Chats[0].Name != "Nome Direto" {
+		t.Fatalf("o alias derivado do PN sobrescreveu a entrada direta por LID: %+v", page.Chats)
+	}
+}

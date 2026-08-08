@@ -1906,10 +1906,85 @@ CN-5 sem a migracao 13   -> coluna sender_push_name ausente apos as migracoes (0
 **Verificado ao vivo**: migração 13 aplicada (`coluna presente: 1`,
 `migracao 13 registrada: 1`), lista respondendo com as 728 conversas.
 
-**Limite honesto**: o histórico JÁ GRAVADO não se recupera — o nome foi
-perdido na escrita, e `datajson` guarda `''`. Só um novo HistorySync (ou
-mensagens novas) popula a coluna. A verificação de que os nomes de fato
-aparecem exige um pareamento novo, e está pendente.
+**Correção de registro (2026-08-08)**: a versão anterior desta entrada dizia
+que "um novo HistorySync repovoaria". Era **falso**, e teria custado um
+pareamento inteiro num falso negativo.
+
+`SaveMessageToHistory` usava `ON CONFLICT (user_id, message_id) DO NOTHING`,
+e o logout NÃO apaga `message_history`. Um HistorySync novo traz as MESMAS
+`message_id`, o insert inteiro era descartado, e as linhas gravadas sem nome
+ficariam sem nome para sempre — **nenhuma instalação existente se curaria ao
+atualizar**. Medido no `TesteQR` antes do fix: 23.836 mensagens, 0 com nome.
+
+A cláusula virou `DO UPDATE` com guarda dupla, e as duas metades importam:
+
+```sql
+ON CONFLICT (user_id, message_id) DO UPDATE
+   SET sender_push_name = EXCLUDED.sender_push_name
+ WHERE EXCLUDED.sender_push_name <> ''
+   AND (message_history.sender_push_name IS NULL
+        OR message_history.sender_push_name = '')
+```
+
+- `EXCLUDED.<> ''` — nunca apagar um nome com vazio (Evolution API #2426).
+- `IS NULL OR = ''` — só PREENCHER o que falta, nunca sobrescrever: um
+  re-sync de histórico ANTIGO não pode rebaixar um nome mais recente.
+
+Nenhuma outra coluna é tocada — a idempotência do resto do insert é o motivo
+de #292 ter posto o `ON CONFLICT` ali, e não podia ser desfeita.
+
+Quatro testes novos em `push_name_column_test.go` (`..._Resync*`), com
+controles negativos executados:
+
+```
+CN-1 volta a DO NOTHING       -> sender_push_name = ""; o re-sync nao curou a linha sem nome
+CN-2 sem a guarda de vazio    -> sender_push_name = ""; o vazio apagou um nome que existia
+CN-2 (mesma remocao)          -> sender_push_name = "Nome Antigo"; o re-sync rebaixou um nome que ja existia
+```
+
+**Segundo defeito, descoberto NA MEDIÇÃO ao vivo (2026-08-08)**: depois do
+pareamento o banco tinha 7.273 mensagens nomeadas e a lista mostrava **11**.
+
+A lista normaliza as chaves de atividade para `@lid` (`normalizeToLID`), mas
+120 dos 135 chats com pushName foram gravados como `@s.whatsapp.net` — o
+histórico preserva o JID original de cada conversa. Os dois lados nunca se
+encontravam.
+
+E o comentário de `nomesDoHistorico` afirmava que `montarResumo` "tenta as
+duas formas". **Não tentava** — comentário descrevendo comportamento que não
+existe.
+
+Corrigido com `aliasarParaLID`, que acrescenta às tabelas de consulta
+(roster E pushName) uma entrada sob o LID equivalente de cada chave PN.
+Aliasa em vez de reescrever, porque nem toda entrada de atividade é
+normalizada, e não sobrescreve entrada que já veio chaveada por LID — essa é
+mais direta que a derivada de um PN.
+
+**Por que os testes não pegaram**: os dublês chaveavam tudo no mesmo espaço
+de identidade. Três testes novos reproduzem a condição real (atividade
+normalizada para `@lid`, tabela de consulta em `@s.whatsapp.net`), com
+controle negativo:
+
+```
+CN remover o alias -> name = ""; o nome gravado como PN nao alcancou o chat normalizado para LID
+```
+
+**RESULTADO MEDIDO EM PRODUÇÃO** (pareamento de 2026-08-08):
+
+```
+                              antes      depois
+mensagens com nome          0/23.836   7.273/23.856
+conversas individuais         23/481       254/480   (5% -> 53%)
+grupos                         19/20         19/20
+```
+
+Só 20 mensagens NOVAS entraram — as outras 7.253 são linhas antigas curadas
+pelo `DO UPDATE`, o que prova que instalações existentes se recuperam ao
+atualizar.
+
+**Teto real**: 226 conversas (47%) seguem sem nome. Não é falha do
+mecanismo — são contatos que nunca mandaram mensagem com pushName no
+histórico sincronizado e não estão na agenda.
 
 **Não implementado do plano original**: o item 3 da correção sugerida
 (LID→PN antes da junção, +73 conversas medidas). Com o pushName do

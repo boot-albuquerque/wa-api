@@ -2020,6 +2020,7 @@ pkg/application/usecase/user.NewSetPrivacySettingUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewUnblockUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.SetPrivacySettingUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.UnblockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,unblock_user.go:46)
+pkg/application/usecase/user.aliasarParaLID	ELIGIBLE	covered
 pkg/application/usecase/user.encryptHMACKeyFunc	EXCLUDED	X1
 pkg/application/usecase/user.fatiar	ELIGIBLE	uncovered:L1
 pkg/application/usecase/user.isValidEvent	EXCLUDED	X1
@@ -2248,7 +2249,7 @@ pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
 pkg/infra/db.createMigrationsTable	ELIGIBLE	covered
 pkg/infra/db.createTableIfNotExistsSQLite	ELIGIBLE	covered
-pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:64)
+pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:85)
 pkg/infra/db.getAppliedMigrations	ELIGIBLE	covered
 pkg/infra/db.initializePostgres	ELIGIBLE	covered
 pkg/infra/db.initializeSQLite	ELIGIBLE	covered

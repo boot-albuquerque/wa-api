@@ -260,7 +260,9 @@ rules_frozen=true
 # como a rota irma passou a fazer na F83. errpath_coverage fica em 864.
 min_func_coverage=707
 min_errpath_coverage=864
-min_eligible=539
+# +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
+# Warn quando o mapa LID nao vem e degrada para a tabela original.
+min_eligible=540
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
