@@ -2505,8 +2505,19 @@ negativos com saída registrada acima.
 `TestRetry_JanelaTotalCabeNoOrcamentoDeRelevancia` trava a janela contra a
 decisão que a escolheu, no molde de `TestPool_PadroesCobremARajadaMedida`.
 
-**DECISÃO TOMADA (2026-08-08), não pendência**: o retry NÃO será durável por
-ora. O RabbitMQ **continua opcional** (`RabbitEnabled` pode ser `false`) e não
+> **AMENDADA pelo [ADR-0005](docs/adr/0005-obrigatoriedade-de-stack-e-posse-de-sessao.md)
+> (2026-08-08, algumas horas depois).** A decisão abaixo partia de que retry
+> durável exigiria RabbitMQ e um consumidor. **Está errado**: durabilidade
+> exige armazenamento TRANSACIONAL, e SQLite é um. Um outbox na base SQL que
+> existir dá sobrevivência a restart em qualquer configuração, inclusive na
+> catastrófica de um pod só — sem broker nenhum. Ver D3 e D4 do ADR.
+>
+> O que continua valendo do texto abaixo: o RabbitMQ segue **opcional** e não
+> vira dependência dura. O que muda: ele deixa de ser o caminho da
+> durabilidade e passa a ser distribuição.
+
+**DECISÃO ORIGINAL (2026-08-08), superada pelo ADR-0005**: o retry NÃO será
+durável por ora. O RabbitMQ **continua opcional** (`RabbitEnabled` pode ser `false`) e não
 vira dependência dura do caminho de entrega.
 
 Consequência aceita conscientemente: **o retry não sobrevive a restart**. Se o
@@ -2588,5 +2599,91 @@ posse, o problema do WebSocket entre réplicas fica quase de graça: basta rotea
    esta sessão inteira ensinou a não aceitar — ver "Medir antes de projetar"
    em CLAUDE.md.
 
-**Status**: **não corrigido** — registrado com a análise. Nenhuma linha de
-código de posse escrita ainda, por decisão: valida-se primeiro.
+### Validação executada (2026-08-08) — ambiente isolado, sessão descartável
+
+Postgres + RabbitMQ em `infra/compose.yaml`, instância de teste na 8081 contra
+Postgres (a produção roda em SQLite), usuário `descartavel-f89` pareado por QR.
+
+**Exp 3 — o store aguenta a troca de processo? SIM, 6/6.** Duas execuções
+independentes de 3 rodadas. Processo novo retoma a sessão SEM QR em todas:
+zero menções a QR nos logs, socket com o WhatsApp restabelecido, JID idêntico.
+`users.connected` permanece `1` após desligamento gracioso, que é o que faz o
+`connectOnStartup` seguinte pegar a sessão.
+
+**Exp 2 — tempo de retomada: 1,16s a 2,29s** (6 rodadas). O religamento da
+sessão NÃO é o gargalo. Um lease em Postgres, que resolve em dezenas de
+milissegundos, é folgado — não há necessidade de Redis nem de eleição rápida.
+Se a retomada custasse 30s a conversa seria outra.
+
+> Instrumento corrigido no caminho: a primeira medição deu "1,00s" nas três
+> rodadas, redondo demais. Era quantização — os timestamps do log têm resolução
+> de SEGUNDO. Os números acima vêm de cronômetro próprio.
+
+**Exp 1 — duas réplicas na mesma sessão. O resultado CORRIGE a análise acima.**
+
+Esta entrada dizia que as réplicas "se derrubam mutuamente em laço". **Está
+errado.** Medido com A na 8081 e B na 8082 contra o mesmo Postgres, observado
+por 90s:
+
+| | |
+|---|---|
+| `StreamReplaced` em A | **1** (não voltou a subir em 90s) |
+| `StreamReplaced` em B | 0 |
+| logout | **0** — credenciais preservadas |
+| A se recupera depois que B morre? | **não**, nem após 45s |
+| `users.connected` no banco | continua **1** |
+
+Não há laço. Há **um único chute, e o perdedor fica morto para sempre**: o
+processo A segue vivo e respondendo HTTP, mas sua sessão fica
+`loggedIn=false, connected=false` e nunca tenta reconectar — nenhuma tentativa
+no log depois do `StreamReplaced`.
+
+Isso é PIOR que o laço que eu supus, por um motivo: laço é barulhento e
+observável. Isto é **silencioso**. Em k8s, duas réplicas de vida longa
+disputando a mesma sessão deixam uma delas zumbi — processo saudável, HTTP
+respondendo, liveness verde, sessão morta — e o banco ainda afirma
+`connected=1`, então nada sinaliza o problema.
+
+**Consequência para o desenho**: além do lease, é preciso um sinal de saúde que
+distinga "processo de pé" de "sessão de pé". O `connected` da tabela `users` é
+intenção, não estado observado, e hoje qualquer readiness probe baseada nele
+mentiria.
+
+**Status**: **não corrigido** — validado, não implementado. Os três
+experimentos rodaram e os números estão acima. Nenhuma linha de código de posse
+escrita ainda.
+
+---
+
+## F90 — desconexão do cliente é logada como `error`, e parece falha de banco
+
+**Data**: 2026-08-08
+**Contexto**: apareceu no monitor durante a validação da F89, como uma rajada
+de 15 erros seguidos que aparentavam falha de banco em produção. Não era.
+
+**Onde**: caminho de leitura de sessão/usuários — as mensagens são
+`failed to list users`, `failed to read session record` e
+`session use case failed`, todas com `error=context canceled` e
+`error=database error: context canceled`.
+
+**Problema**: `context canceled` aqui significa que o CLIENTE desistiu da
+requisição — no caso observado, o navegador cancelando o polling do devui ao
+trocar de aba. Isso não é erro do servidor: nada falhou, ninguém precisa agir.
+
+Evidência de que é o cliente: todas as 15 ocorrências têm
+`user_agent: Mozilla/...` e `req_id` do polling do devui, e o processo seguiu
+saudável (HTTP 200) durante e depois.
+
+O dano é de sinal, não de função. Em nível `error`, com a mensagem
+`database error`, uma navegação rotineira de aba fica indistinguível de banco
+fora do ar — e num ambiente com alerta por nível de log isso acorda alguém de
+madrugada por causa de um F5.
+
+**Correção sugerida**: classificar `errors.Is(err, context.Canceled)` como
+`Info`/`Debug` no caminho HTTP, e não como `error`. O cancelamento pelo cliente
+é resultado esperado, não defeito. Atenção para NÃO confundir com
+`context.DeadlineExceeded`, que é timeout NOSSO e continua sendo erro de
+verdade.
+
+**Status**: **não corrigido** — fora do escopo da F89, que era o que estava em
+andamento. Registrado para decisão.
