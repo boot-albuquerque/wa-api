@@ -23,6 +23,39 @@ para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 > vieram integralmente; nenhuma foi perdida.
 
 
+
+## Convenção de status
+
+Toda entrada termina com um `**Status**:` cujo **veredito vem em negrito**,
+para que uma varredura mecânica o encontre. Ele pode estar no início da linha
+ou como item de lista (`- **Status**: ...`) — os dois layouts convivem no
+arquivo, e **uma varredura tem de aceitar os dois**:
+
+- `**Status**: **corrigido**` — com os testes que o travam e o controle
+  negativo executado (ver a política anti-regressão em `CLAUDE.md`).
+- `**Status**: **não corrigido**` — seguido do motivo.
+- `**Status**: **fechado — não corrigir**` — decisão registrada, não pendência.
+- `**Status**: **parcialmente corrigido**` — com o que ficou aberto e por quê.
+
+O formato importa, e a varredura também: em 2026-08-08 três varreduras
+seguidas minhas erraram — uma leu cinco entradas como "sem status" porque o
+veredito estava em texto simples, outra perdeu quatro porque o `**Status**`
+era item de lista. Em todos os casos **o documento estava certo e o método
+errado**, e eu quase "corrigi" entradas íntegras.
+
+Entradas com MAIS de um `**Status**` são legítimas: o achado tem sub-itens
+com desfechos diferentes (ver F29, F49, F69). O veredito que vale é o do
+sub-item; não existe um status único para elas.
+
+Seções que são **nota** e não achado — evidência nova para entradas
+existentes, observação de acompanhamento — não levam status. Dê a elas um
+título que diga isso ("Nota sobre…", "Evidências novas…"), para que a
+varredura as distinga de um achado que esqueceu o status.
+
+Referências entre entradas são por **título**, nunca por número de linha —
+ver a F61, cuja própria referência ficou obsoleta quando estes arquivos
+foram divididos.
+
 ## 2026-08-06 — bug de locale no `coverage-gate` do Makefile
 
 **Encontrado durante**: verificação final da feature de arquitetura
@@ -170,7 +203,7 @@ e reproduzível, confirmado 2x — antes e depois do vendoring), com nota
 explicando a investigação. Ver commit `d11979b` em
 `feature/vendor-wa-noise`.
 
-**Status**: corrigido (branch `feature/vendor-wa-noise`, ainda não
+**Status**: **corrigido** (branch `feature/vendor-wa-noise`, ainda não
 mergeada em `develop` no momento deste registro).
 
 ---
@@ -199,7 +232,7 @@ as duas ocorrências, concatenadas com newline, inválidas como inteiro
 (707/856, o valor efetivamente vigente pós-`ace7770`). Ver commit
 `d11979b` em `feature/vendor-wa-noise`.
 
-**Status**: corrigido nesta branch. **Atenção**: como `ace7770` é de outra
+**Status**: **corrigido** nesta branch. **Atenção**: como `ace7770` é de outra
 sessão/branch que pode não ter esse fix, vale confirmar que a duplicata
 não reaparece no merge — é um problema de "esqueceu de apagar a linha
 velha ao adicionar a nova", fácil de reintroduzir se outra sessão editar
@@ -265,7 +298,7 @@ reservando `--wadebug` só para baixar o nível a Debug. Para o achado
 secundário, envolver os retornos crus de `user_adapters.go` com
 `apperr.New(...)` conforme os pontos forem tocados.
 
-**Status**: não corrigido — decisão de quando implementar pendente com o
+**Status**: **não corrigido** — decisão de quando implementar pendente com o
 usuário; avaliação de arquitetura clean/DDD-lite + testes para essa área
 em andamento na mesma sessão.
 
@@ -307,7 +340,7 @@ literalmente para não divergir em silêncio de um plano revisado.
 alinhando com os demais erros de parse de JID da fronteira, e atualizar
 `TestUserAdapter_GetUserInfo_JIDInvalido`.
 
-**Status**: não corrigido — plano aprovado fixa código e categoria; mudar
+**Status**: **não corrigido** — plano aprovado fixa código e categoria; mudar
 aqui seria divergir do que foi revisado. Pendente de decisão do usuário.
 
 ---
@@ -334,7 +367,7 @@ trava que não trava.
 **Correção sugerida**: sincronizar por canal em vez de variável
 compartilhada, e remover a exclusão do `Makefile`.
 
-**Status**: corrigido nesta sessão (commits `c196a68` e `d005ab1`).
+**Status**: **corrigido** nesta sessão (commits `c196a68` e `d005ab1`).
 `go test -race` passa em toda a árvore de `pkg/`.
 
 ---
@@ -411,7 +444,13 @@ com a F59 numa passada só.
 
 **Onde**: ~15 ocorrências, sobretudo em `internal/wa-noise/PATCHES.md`
 (linhas 251, 483, 715, 1065, 1489, 2054, 2747, 3084, 3188, 3421, 3497) e
-`internal/wa-noise/HOUSEKEEP.md:874`.
+a entrada "2026-08-06 — data race real em `pkg/infra/wa-noise/safe_go_test.go`",
+que a divisão dos HOUSEKEEP (2026-08-08) moveu para a RAIZ.
+
+> A referência original era `internal/wa-noise/HOUSEKEEP.md:874` — ficou
+> errada no arquivo E na linha. É a própria F61 acontecendo de novo, agora
+> por causa da divisão: **referência por número de linha nasce obsoleta**.
+> Cite por título.
 
 **Problema**: as referências são a `pkg/infra/wa-noise/walog/`,
 `pkg/infra/wa-noise/group/`, `pkg/infra/wa-noise/user/` e
@@ -739,6 +778,12 @@ pendente no plano.
 **Status**: **não corrigido**. São 67 sítios mais a ligação do
 `HTTPStatus()`; é mudança de contrato de API (respostas que hoje são 500
 passam a ser 400) e merece commit próprio, fora do merge.
+
+> **Atualização (2026-08-08)**: a F83 corrigiu UMA instância desta família
+> — `/session/profile` passou a derivar o status da categoria do `apperr`
+> em vez de devolver 500 fixo. O padrão está demonstrado ali
+> (`GetProfileUseCase.Execute` devolve `apperr.New(..., CategoryValidation, ...)`
+> e `RespondJSON` faz o resto); as demais rotas seguem abertas.
 
 ## F67 — o `.env` que o `run.sh` gera tem chave AES de tamanho inválido
 
