@@ -2124,6 +2124,13 @@ pkg/bootstrap.deleteKillChannel	EXCLUDED	X1
 pkg/bootstrap.depsFromServer	ELIGIBLE	uncovered:L1
 pkg/bootstrap.deviceJIDLookup	ELIGIBLE	uncovered:L1
 pkg/bootstrap.deviceJIDLookup.func1	EXCLUDED	X6
+pkg/bootstrap.dispatchConcurrencyConfigurada	ELIGIBLE	covered
+pkg/bootstrap.dispatchGo	EXCLUDED	X1
+pkg/bootstrap.dispatchGo.func1	EXCLUDED	X6
+pkg/bootstrap.dispatchLimiter.Go	ELIGIBLE	uncovered:L1
+pkg/bootstrap.dispatchLimiter.Go.func1	EXCLUDED	X6
+pkg/bootstrap.dispatchLimiter.Go.func2	EXCLUDED	X1
+pkg/bootstrap.dispatchLimiter.Metricas	EXCLUDED	X1
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
@@ -2138,6 +2145,7 @@ pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
+pkg/bootstrap.newDispatchLimiter	EXCLUDED	X1
 pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6

@@ -138,3 +138,48 @@ As quatro que mais custaram, resumidas aqui porque valem para toda tarefa:
 
 Quando encontrar uma armadilha nova, acrescente ao catálogo com a evidência
 — é o que o torna útil em vez de genérico.
+
+## Medir antes de projetar — especulação não entra no plano
+
+Nenhum plano de correção sai de suposição sobre como o sistema se comporta.
+Sai de **teste prático que simula a vida real**, e os números dele é que
+viram o plano.
+
+O teste desta regra é simples: **se a medição só confirmou o que você já
+achava, provavelmente ela não mediu nada.** Uma medição útil produz pelo
+menos um "eu não teria adivinhado".
+
+Três exemplos reais de 2026-08-08, todos do mesmo dia e todos invisíveis a
+qualquer raciocínio de escrivaninha:
+
+1. **A amplificação era ~5×, não 1×.** 800 entregas viraram ~4.000
+   goroutines — o transporte HTTP cria goroutines internas por conexão. A
+   análise estática tinha contado "4 goroutines por evento".
+2. **O primeiro harness mediu a coisa errada e teria invertido a decisão.**
+   Com `time.Sleep` o heap era idêntico com e sem teto (4,7MB), o que
+   sugeria "não faça nada". `Sleep` não aloca; com HTTP real foram 32MB
+   contra 13MB. **O instrumento precisa alocar, bloquear e falhar como o
+   original.**
+3. **O limitador travou o próprio teste.** A aquisição bloqueia o chamador —
+   propriedade documentada por mim e não internalizada. Em produção o
+   chamador é o handler de eventos do SDK, então o "remédio" empurrava o
+   problema para um lugar pior. Só apareceu porque um teste deadlockou.
+
+**Como fazer:**
+
+- **Simule o caminho real, não uma caricatura dele.** E/S de rede se mede com
+  E/S de rede; alocação, com payload do tamanho verdadeiro. Se o dublê não
+  aloca nem bloqueia como o original, ele mede outra coisa.
+- **Compare no mesmo instante e na mesma máquina.** Alterne a variável dentro
+  de uma execução; comparar execuções separadas mede também o estado da
+  máquina.
+- **Repita.** Uma amostra não distingue efeito de ruído — três rodadas já
+  mostram se os números são estáveis.
+- **Meça o que você agiria a respeito**: pico (não média), memória, latência
+  induzida, e a saturação do próprio mecanismo.
+- **Registre o ANTES** antes de mexer. Sem linha de base, o depois não
+  significa nada.
+
+Quando a medição contrariar a hipótese, **a hipótese cai** — inclusive se
+ela já estiver escrita num HOUSEKEEP com número. Corrija a entrada; um
+achado com diagnóstico errado é pior que nenhum, porque parece resolvido.

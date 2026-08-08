@@ -2195,7 +2195,54 @@ concorrência observada não passa dele; e, para o breaker, que depois de N
 falhas o destino deixa de ser chamado. Teste de teto sem `-race` não vale:
 `make check` já roda `-race` nos pacotes de infra.
 
-**Status**: **não corrigido** — descoberto ao investigar a F85.
+**Medições de 2026-08-08** (harness em `pkg/bootstrap/dispatch_carga_test.go`,
+3 rodadas, 800 entregas, servidor a 100ms, payload de 8KB):
+
+| | goroutines | duração | heap pico |
+|---|---|---|---|
+| sem teto | ~4.000 | ~207ms | **~32MB** |
+| teto=16 | ~97 | 5,04s | ~24MB |
+| **teto=64** | ~350 | 1,31s | **~13MB** |
+| teto=256 | ~1.320 | 409ms | ~20MB |
+
+**Três coisas que a análise estática não mostrava:**
+
+1. **A amplificação é ~5×, não 1×**: 800 entregas viram ~4.000 goroutines. O
+   transporte HTTP cria goroutines internas por conexão. A contagem de "4
+   goroutines por evento" desta entrada subestimava o efeito.
+2. **O primeiro harness inverteria a decisão.** Com `time.Sleep` o heap era
+   4,7MB COM e SEM teto — o que diria "não faça nada". `Sleep` não aloca.
+3. **O teto custa latência proporcional**: teto=16 é 24× mais lento.
+
+**Tamanho real do payload** (20.000 eventos de `message_history`):
+
+```
+mediana 2.089 B | média 2.899 B | p90 3.998 B | p99 10.094 B | máx 120.302 B
+```
+
+Copiar 2.000 eventos custa **5,5MB** — ~6× menos que os 32MB das goroutines
+sem teto. Isso responde à pergunta de desenho: **a cópia não é o custo
+dominante**, e outbox/storage resolveriam DURABILIDADE, não memória. O
+RabbitMQ já está no projeto se durabilidade virar requisito.
+
+Mas o máximo é 120KB, **40× a mediana**: uma fila limitada por CONTAGEM
+estoura com outliers. O teto tem de ser por BYTES.
+
+**Problema de desenho encontrado ao implementar a camada 1**: a aquisição
+BLOQUEIA o chamador, e em produção o chamador é a goroutine do handler de
+eventos do SDK. Sob saturação, um webhook lento atrasaria o processamento de
+TODOS os eventos da sessão, inclusive os que nem vão para webhook — trocando
+"goroutines demais" por "handler parado". Descoberto porque um teste próprio
+deadlockou por 600s, não por revisão.
+
+Por isso o limitador entrou com **padrão 0 (desligado)**: o código é
+mensurável e não muda comportamento até a forma de aquisição ser decidida
+entre bloquear, descartar ou enfileirar.
+
+**Status**: **parcialmente corrigido** — o teto está implementado, testado
+sob `-race` e medido, porém DESLIGADO por padrão. Falta decidir a forma de
+aquisição (o dado que falta é o atraso induzido no handler), e as camadas 2
+(circuit breaker) e 3 (backpressure no broadcast) seguem abertas.
 
 > **Ponteiros e corrida**: `Broadcast` já documenta que `payload` é lido e
 > nunca escrito, e que o produtor não muta o mapa depois de despachar

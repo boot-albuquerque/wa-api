@@ -262,7 +262,11 @@ min_func_coverage=707
 min_errpath_coverage=864
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
-min_eligible=540
+# +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
+# de concorrencia da F86. dispatchConcurrencyConfigurada loga em Warn quando
+# a variavel do .env e' invalida ou negativa — um typo na configuracao nao
+# pode desligar a protecao em silencio.
+min_eligible=542
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

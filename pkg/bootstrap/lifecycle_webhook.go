@@ -55,7 +55,7 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 		log.Info().Str("url", webhookurl).Msg("Calling user webhook")
 
 		if path == "" {
-			safeGo("callHookWithHmac", func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
+			dispatchGo("callHookWithHmac", func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
 		} else {
 			if err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey); err != nil {
 				log.Error().Err(err).Msg("Error calling hook file")
@@ -143,7 +143,7 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 	// delivery (BroadcastToUser is itself non-blocking per-connection, see
 	// wsBroadcastTimeout), and REST polling of /session/status and
 	// /session/qr is untouched either way.
-	safeGo("sendToWS", func() { clientManager.BroadcastToUser(evh.UserID, postmap) })
+	dispatchGo("sendToWS", func() { clientManager.BroadcastToUser(evh.UserID, postmap) })
 
 	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if evh.mode == Stdio {
@@ -176,7 +176,7 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, evh.UserID, evh.Token, encryptedHmacKey)
 
 	// Get global webhook if configured
-	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
 
-	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
 }

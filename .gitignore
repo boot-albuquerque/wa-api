@@ -23,6 +23,9 @@ vendor/
 # --- Environment & Secrets ---
 .env
 .env.*
+# .env.example e' documentacao versionada: descreve as variaveis sem
+# carregar valor nenhum. Sem esta excecao, .env.* o esconderia do git.
+!.env.example
 !.env.sample
 *.key
 *.pem
