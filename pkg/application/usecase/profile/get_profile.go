@@ -6,6 +6,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // GetProfileUseCase implementa a lógica de obtenção de perfil WhatsApp.
@@ -44,7 +45,14 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 	da, err := uc.profiles.ProfileAccess(ctx, txtID)
 	if err != nil {
 		uc.logger.Warn(ctx, "no session for txtID", "txtID", txtID, "error", err)
-		return "", ErrNoSession
+		// Envelopado em apperr com CategoryValidation (F83): "não há sessão"
+		// é condição ESPERADA e causada pelo cliente, e saía como 500. O
+		// envelope da fronteira lê a categoria e devolve 400 sozinho, sem o
+		// handler precisar conhecer este pacote.
+		//
+		// ErrNoSession segue sendo a causa, então errors.Is continua valendo
+		// para quem já dependia dele.
+		return "", apperr.New("no_session", apperr.CategoryValidation, "no session", false, ErrNoSession)
 	}
 
 	result := buildProfile(ctx, da, uc.logger)
@@ -88,11 +96,21 @@ func buildProfile(ctx context.Context, da appport.ProfileDataAccess, logger appp
 		j, ok := da.OwnJID()
 		if ok {
 			result.JID = string(j)
-			if url, id, err := da.ProfilePictureURL(ctx, j); err == nil {
+			// Avatar e contato NÃO derrubam o perfil quando falham: os demais
+			// campos continuam valendo. Mas a falha passa a ser LOGADA — antes
+			// o erro era descartado, e um avatar_url vazio por falha de rede
+			// ficava indistinguível de um avatar_url vazio por não haver foto.
+			// São causas diferentes com a mesma aparência, e sem o log não há
+			// como separá-las depois do fato.
+			if url, id, err := da.ProfilePictureURL(ctx, j); err != nil {
+				logger.Warn(ctx, "avatar indisponivel; perfil segue sem ele", "jid", string(j), "error", err)
+			} else {
 				result.AvatarURL = url
 				result.AvatarID = id
 			}
-			if fullName, bizName, err := da.ContactInfo(ctx, j); err == nil {
+			if fullName, bizName, err := da.ContactInfo(ctx, j); err != nil {
+				logger.Warn(ctx, "dados de contato indisponiveis; perfil segue sem eles", "jid", string(j), "error", err)
+			} else {
 				result.FullName = fullName
 				result.BusinessName = bizName
 			}

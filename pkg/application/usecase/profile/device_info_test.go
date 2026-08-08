@@ -3,10 +3,13 @@ package profile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
+	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // O perfil da sessão devolvia só seis campos de identidade pública
@@ -95,5 +98,41 @@ func TestProfileResult_ContinuaObjetoPlano(t *testing.T) {
 	}
 	if _, aninhado := plano["SessionDeviceInfo"]; aninhado {
 		t.Error("os campos do aparelho vieram aninhados; o embedding perdeu o anonimato")
+	}
+}
+
+// TestExecute_SemSessao_ErroTipado fecha a corrente da F83.
+//
+// O teste de handler (profile_envelope_test.go) constrói o apperr ele mesmo,
+// então prova que o handler REAGE à taxonomia — não que este use case a
+// PRODUZ. Sem esta asserção, remover o apperr daqui deixaria o handler
+// correto e a rota errada, com os dois lados verdes.
+func TestExecute_SemSessao_ErroTipado(t *testing.T) {
+	uc := NewGetProfileUseCase(
+		&contractsfake.ProfileAccessProvider{
+			ProfileAccessFunc: func(context.Context, string) (port.ProfileDataAccess, error) {
+				return nil, errors.New("sem cliente")
+			},
+		},
+		&contractsfake.Logger{},
+	)
+
+	_, err := uc.Execute(context.Background(), "u-1")
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro nao carrega taxonomia: %T %v — a fronteira nao consegue derivar o status", err, err)
+	}
+	if appErr.Category != apperr.CategoryValidation {
+		t.Errorf("Category = %q, quero %q — sem sessao e' recusa de cliente, nao falha do servidor",
+			appErr.Category, apperr.CategoryValidation)
+	}
+	if appErr.Code != "no_session" {
+		t.Errorf("Code = %q, quero no_session", appErr.Code)
+	}
+	// A causa continua sendo ErrNoSession: quem já dependia de errors.Is não
+	// pode ter sido quebrado pela mudança.
+	if !errors.Is(err, ErrNoSession) {
+		t.Error("errors.Is(err, ErrNoSession) deixou de valer")
 	}
 }

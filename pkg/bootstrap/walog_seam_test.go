@@ -60,15 +60,23 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 
 	// UserInfoCache populado com Events vazio: sendEventWithWebHook resolve
 	// a assinatura pelo cache, conclui que o usuário não assina "Connected"
-	// e retorna antes de qualquer entrega — sem banco, sem HTTP.
+	// e retorna antes de qualquer entrega — sem HTTP.
+	//
+	// O banco, porém, é necessário desde a F82: handleConnected passou a
+	// gravar users.connected=1 ANTES da guarda de pushname, e este handler
+	// tem pushname vazio. Antes da F82 a guarda saía cedo e a escrita nunca
+	// acontecia — era só por isso que o teste rodava sem banco.
 	appCtx.UserInfoCache.Set(walogSeamToken, Values{M: map[string]string{
 		"Id": walogSeamUser, "Webhook": "", "Events": "", "Jid": "", "Name": "",
 	}}, 0)
 	t.Cleanup(func() { appCtx.UserInfoCache.Delete(walogSeamToken) })
 
+	sqlDB := schemaDB(t)
+	seedUser(t, sqlDB, walogSeamUser, walogSeamToken, "")
 	evh := &UserEventHandler{
 		UserID:   walogSeamUser,
 		Token:    walogSeamToken,
+		DB:       sqlDB,
 		WAClient: wanoise.NewClient(&store.Device{Log: bridge.Sub("Device")}, bridge),
 	}
 	evh.handleEvent(&events.Connected{})

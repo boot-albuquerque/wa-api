@@ -58,22 +58,35 @@ func (evh *UserEventHandler) handleAppStateSyncComplete(evt *events.AppStateSync
 func (evh *UserEventHandler) handleConnected(st *eventState) bool {
 	st.postmap["type"] = "Connected"
 	st.dowebhook = 1
+
+	// A persistência do estado de conexão vem PRIMEIRO, e fora da guarda de
+	// pushname (F82).
+	//
+	// Até a F82 este UPDATE ficava depois de um `return true` antecipado para
+	// pushname vazio. A guarda existe pelo motivo declarado abaixo — não
+	// anunciar presença sem pushname —, mas levava junto a escrita da coluna,
+	// que nada tem a ver com nome de contato.
+	//
+	// Num pareamento novo por QR o evento Connected chega ANTES de o pushname
+	// existir. A sessão ficava viva e autenticada com users.connected=0, e
+	// como connectOnStartup (lifecycle.go:54) itera WHERE connected=1, ela
+	// não era reconectada no start seguinte: todo pareamento por QR se perdia
+	// no primeiro restart.
+	sqlStmt := `UPDATE users SET connected=1 WHERE id=$1`
+	if _, err := evh.DB.Exec(sqlStmt, evh.UserID); err != nil {
+		log.Error().Err(err).Msg(sqlStmt)
+		return false
+	}
+
 	if len(evh.WAClient.Store.PushName) == 0 {
 		return true
 	}
 	// Send presence available when connecting and when the pushname is changed.
 	// This makes sure that outgoing messages always have the right pushname.
-	err := evh.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
-	if err != nil {
+	if err := evh.WAClient.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
 		log.Warn().Err(err).Msg("Failed to send available presence")
 	} else {
 		log.Info().Msg("Marked self as available")
-	}
-	sqlStmt := `UPDATE users SET connected=1 WHERE id=$1`
-	_, err = evh.DB.Exec(sqlStmt, evh.UserID)
-	if err != nil {
-		log.Error().Err(err).Msg(sqlStmt)
-		return false
 	}
 	return true
 }
