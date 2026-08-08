@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/domain/apperr"
 
 	"github.com/rs/zerolog/hlog"
@@ -27,6 +28,11 @@ var (
 	errUnauthorized     = apperr.New("unauthorized", apperr.CategoryUnauthorized, "unauthorized", false, nil)
 	errMissingSessionID = apperr.New("missing_session_id", apperr.CategoryValidation, "missing session id", false, nil)
 )
+
+// cacheControlPerfil desliga o cache nas duas rotas de perfil: o estado da
+// sessão muda sozinho (conectar, desconectar, deslogar), e uma resposta em
+// cache faria alguém depurar um estado que já não existe.
+const cacheControlPerfil = "no-store, no-cache, must-revalidate, max-age=0"
 
 // ProfileUseCase define o contrato de uso para obtenção de perfil.
 type ProfileUseCase interface {
@@ -91,6 +97,61 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ResponseWriter — o cliente wa-worker (que desembrulha body.data como
 	// todo o resto da API) sempre lia data=undefined e devolvia pushname/
 	// avatar vazios, mesmo com o wa-noise retornando os campos certos.
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Cache-Control", cacheControlPerfil)
 	RespondJSON(w, http.StatusOK, json.RawMessage(response), nil)
+}
+
+// ProfileFullUseCase é o contrato de `/session/profile/full`.
+type ProfileFullUseCase interface {
+	Execute(ctx context.Context, txtID string) (*profile.ProfileFullResult, error)
+}
+
+// ProfileFullHandler serve GET /session/profile/full.
+//
+// Rota separada de /session/profile de propósito: esta agrega chamadas de
+// REDE (recado, privacidade) e está sujeita a latência e rate limit, enquanto
+// a outra lê só o store local. Juntá-las tornaria a rota barata refém da cara.
+type ProfileFullHandler struct {
+	usecase ProfileFullUseCase
+}
+
+// NewProfileFullHandler cria o handler com o usecase injetado.
+func NewProfileFullHandler(uc ProfileFullUseCase) *ProfileFullHandler {
+	return &ProfileFullHandler{usecase: uc}
+}
+
+func (h *ProfileFullHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+	if !ok || info == nil {
+		hlog.FromRequest(r).Warn().
+			Str("path", r.URL.Path).
+			Msg("profile request without user info in context")
+		RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
+		return
+	}
+	txtID := info.Get("Id")
+	if txtID == "" {
+		hlog.FromRequest(r).Warn().
+			Str("path", r.URL.Path).
+			Msg("profile request with empty session id")
+		RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
+		return
+	}
+
+	result, err := h.usecase.Execute(r.Context(), txtID)
+	if err != nil {
+		// Mesmo critério de nível da rota irmã (F83): recusa de cliente em
+		// warn, falha nossa em error.
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) && appErr.Category == apperr.CategoryValidation {
+			hlog.FromRequest(r).Warn().Err(err).Str("user_id", txtID).Msg("get profile full use case failed")
+		} else {
+			hlog.FromRequest(r).Error().Err(err).Str("user_id", txtID).Msg("get profile full use case failed")
+		}
+		RespondJSON(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", cacheControlPerfil)
+	RespondJSON(w, http.StatusOK, result, nil)
 }
