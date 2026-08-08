@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"testing"
 
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
 	"wa-api/internal/wa-noise/protocol/proto/waWeb"
 	"wa-api/internal/wa-noise/protocol/types"
-	wanoise "wa-api/internal/wa-noise"
 )
 
 // F84: o WebMessageInfo do HistorySync JÁ CARREGA o pushName (campo 19 do
