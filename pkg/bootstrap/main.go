@@ -326,6 +326,20 @@ func Main() {
 	}
 	exPath := filepath.Dir(ex)
 
+	// Modo de cluster ANTES de abrir o banco (ADR-0005, D1): uma configuração
+	// impossível — `multi` sem Postgres, ou um segundo processo sobre o mesmo
+	// diretório de dados — tem de morrer sem ter tocado em estado nenhum.
+	dirDados := exPath
+	if *dataDir != "" {
+		dirDados = *dataDir
+	}
+	liberarCluster, err := prepararCluster(dirDados, getDatabaseConfig(exPath, *dataDir).Type)
+	if err != nil {
+		log.Fatal().Err(err).Msg("configuracao de cluster invalida")
+		os.Exit(1)
+	}
+	defer liberarCluster()
+
 	db, err := InitializeDatabase(exPath, *dataDir)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")

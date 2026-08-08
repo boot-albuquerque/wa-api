@@ -294,8 +294,36 @@ rules_frozen=true
 # tinha, agora servindo as duas variaveis.
 #
 # errpath_coverage fica em 864.
-min_func_coverage=705
-min_errpath_coverage=864
+# justificativa: ADR-0005 D1 (2026-08-08), modo de cluster explicito e trava de
+# instancia unica (pkg/bootstrap/cluster.go). Impede os DOIS modos de falha
+# silenciosos medidos na F89: degradar para SQLite sem pedir, e um segundo
+# processo virar zumbi.
+#
+# min_eligible 550->554 (+4, ratchet-UP): clusterModeConfigurado,
+# validarStackDoModo, travarInstanciaUnica e prepararCluster.
+#
+# `covered` sobe 388->390: DUAS das quatro ja' nascem cobertas
+# (travarInstanciaUnica loga falha ao registrar PID e ao liberar a trava;
+# prepararCluster loga o modo e o aviso de que o lease da D2 nao existe).
+#
+# func_coverage cai 705->704 e errpath 864->862 por causa das outras duas,
+# conferidas com `logcov -list-uncovered` e NAO deduzidas:
+#
+#   clusterModeConfigurado   cluster.go:57   uncovered:L1; S-ret em :65
+#   validarStackDoModo       cluster.go:74   uncovered:L1; S-ret em :76
+#
+# Sao validadores PUROS: nao tocam porta nenhuma, nao tem efeito colateral, e
+# devolvem erro com mensagem completa e acionavel ("use single ou multi";
+# "defina DB_USER, DB_PASSWORD, DB_NAME, DB_HOST e DB_PORT, todas, nao um
+# subconjunto"). Quem loga e' o main.go, em Fatal, matando o processo.
+#
+# Logar dentro DELAS seria duplicar um erro fatal de arranque: a mesma falha
+# sairia duas vezes, uma em Error e outra em Fatal, e a segunda e' a que
+# importa porque carrega a decisao de derrubar o processo. O padrao aqui e' o
+# mesmo ja' aceito neste repo para adapters — quem decide se e' erro e' que
+# loga.
+min_func_coverage=704
+min_errpath_coverage=862
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -305,6 +333,8 @@ min_errpath_coverage=864
 # +4 (542->546): o teto virou pool com fila por bytes na segunda rodada da
 # F86 — ver a justificativa de min_func_coverage acima para a lista nominal.
 #
+# +4 (550->554): ADR-0005 D1, modo de cluster e trava de instancia — ver a
+# justificativa de min_func_coverage acima para a lista nominal.
 # +4 (546->550): F88, a espera do backoff de webhook saiu de dentro do worker
 # do pool. Entram atrasoDaTentativa, tamanhoDoPayload, agendarProximaTentativa
 # e MetricasRetry (dispatch_retry.go), mais a quebra de callHookWithHmac em
@@ -321,7 +351,7 @@ min_errpath_coverage=864
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-min_eligible=550
+min_eligible=554
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
