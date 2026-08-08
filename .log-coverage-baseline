@@ -199,9 +199,24 @@ rules_frozen=true
 # denominador -1 e numerador -1 ao mesmo tempo. Nenhum site que logava deixou
 # de logar: o Warn "no session for txtID" continua exatamente onde estava,
 # uma linha acima do return.
-min_func_coverage=708
-min_errpath_coverage=862
-min_eligible=514
+# justificativa: GET /user/profile/{jid} (2026-08-08), perfil consolidado a
+# partir de qualquer identidade (telefone, JID de telefone ou LID).
+# min_eligible sobe 514->521 (+7, ratchet-UP honesto): UserAdapter.GetPNForLID,
+# GetUserProfileUseCase.Execute + os quatro helpers privados que ele
+# orquestra (resolverIdentidades, preencherPresencaNaRede, preencherInfo,
+# preencherAvatar) e o construtor.
+#
+# Os quatro helpers JA NASCEM cobertos: cada um loga em Warn a falha da porta
+# que consulta antes de registrar o motivo em Unavailable — o endpoint degrada
+# em vez de falhar, e degradar em silencio seria pior que falhar.
+#
+# Por isso as DUAS medidas SOBEM (ratchet-UP): func_coverage 708->710 e
+# errpath_coverage 862->863. Codigo novo que nasce instrumentado sobe a razao
+# em vez de dilui-la — o oposto do que costuma acontecer quando entram
+# metodos de adapter, que por padrao deste repo nao logam.
+min_func_coverage=710
+min_errpath_coverage=863
+min_eligible=521
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -27,6 +27,18 @@ type ContactDirectory interface {
 	// GetLIDForPN resolve o LID correspondente a um número de telefone.
 	GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
 
+	// GetPNForLID resolve o número de telefone correspondente a um LID — a
+	// direção INVERSA de GetLIDForPN.
+	//
+	// As duas existem porque a identidade é dupla e o chamador nem sempre sabe
+	// qual das duas recebeu: PN e LID são o mesmo tipo Go, distintos só pelo
+	// Server (`@s.whatsapp.net` vs `@lid`) em tempo de execução. Quem aceita
+	// "um identificador qualquer" precisa poder ir nos dois sentidos.
+	//
+	// LID sem mapeamento conhecido devolve JID vazia SEM erro, como
+	// GetLIDForPN: ausência de mapeamento é resposta, não falha.
+	GetPNForLID(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error)
+
 	// GetManyLIDsForPNs resolve em lote o LID correspondente a cada JID de
 	// telefone (`@s.whatsapp.net`) informado — usado pra normalizar
 	// last-activity (message_history, majoritariamente PN) pro mesmo espaço

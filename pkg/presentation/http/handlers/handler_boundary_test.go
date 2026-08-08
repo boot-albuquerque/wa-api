@@ -113,16 +113,32 @@ func (s *spyPort) GetLIDForPN(context.Context, string, domain.JID) (domain.JID, 
 	return "", s.err
 }
 
+func (s *spyPort) GetPNForLID(context.Context, string, domain.JID) (domain.JID, error) {
+	s.calls++
+	return "", s.err
+}
+
 func (s *spyPort) GetManyLIDsForPNs(context.Context, string, []domain.JID) (map[domain.JID]domain.JID, error) {
 	s.calls++
 	return nil, s.err
 }
 
+// ResolveJID espelha a regra de mapping/jid/parse.go: sem "@", aplica o
+// servidor padrao; COM "@", preserva o que veio. Concatenar cegamente — como
+// esta funcao fazia — produz "x@s.whatsapp.net@s.whatsapp.net" para qualquer
+// entrada ja qualificada, e um dublê mais permissivo que a producao esconde
+// bugs em vez de revela-los.
 func (s *spyPort) ResolveJID(_ context.Context, raw string) (domain.JID, error) {
+	if strings.Contains(raw, "@") {
+		return domain.JID(raw), nil
+	}
 	return domain.JID(raw + "@s.whatsapp.net"), nil
 }
 
 func (s *spyPort) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID, error) {
+	if strings.Contains(raw, "@") {
+		return domain.JID(raw), nil
+	}
 	return domain.JID(raw + "@s.whatsapp.net"), nil
 }
 

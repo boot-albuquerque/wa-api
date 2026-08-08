@@ -44,10 +44,14 @@ func (p *lidPorta) GetLIDForPN(_ context.Context, _ string, jid domain.JID) (dom
 	return p.lid, nil
 }
 
-// ResolveQualifiedJID devolve o valor cru: o spyPort acrescenta sufixo, e
-// aqui o JID do caminho já vem qualificado — o teste precisa comparar
-// exatamente o que entrou pela URL.
+// Os dois resolvedores devolvem o valor cru: o JID do caminho já vem
+// qualificado nestes testes, e o que se quer comparar é exatamente o que
+// entrou pela URL.
 func (p *lidPorta) ResolveQualifiedJID(_ context.Context, raw string) (domain.JID, error) {
+	return domain.JID(raw), nil
+}
+
+func (p *lidPorta) ResolveJID(_ context.Context, raw string) (domain.JID, error) {
 	return domain.JID(raw), nil
 }
 
@@ -55,7 +59,7 @@ func (p *lidPorta) ResolveQualifiedJID(_ context.Context, raw string) (domain.JI
 func rotaLID(t *testing.T, porta *lidPorta) http.Handler {
 	t.Helper()
 	uc := user.NewGetUserLIDUseCase(porta, porta, silentLogger{})
-	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, uc, nil, nil)
+	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, uc, nil, nil, nil)
 
 	r := mux.NewRouter()
 	r.Handle("/user/lid/{jid}", h.GetUserLID()).Methods(http.MethodGet)

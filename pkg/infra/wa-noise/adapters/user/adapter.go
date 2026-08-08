@@ -110,6 +110,31 @@ func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.
 	return domain.JID(lid.String()), nil
 }
 
+// GetPNForLID resolve o telefone correspondente a um LID.
+//
+// Espelha GetLIDForPN, inclusive no contrato de ausência: mapeamento
+// desconhecido devolve JID vazia e erro nil. O store recusa a chamada com um
+// JID que não seja @lid (sqlstore/lidmap.go:125), então passar um PN aqui é
+// erro, não silêncio — e é o use case que decide a direção.
+func (a *UserAdapter) GetPNForLID(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := wajid.ToJID(lid)
+	if err != nil {
+		return "", err
+	}
+	pn, err := client.Store().LIDs.GetPNForLID(ctx, parsed)
+	if err != nil {
+		return "", err
+	}
+	if pn.IsEmpty() {
+		return "", nil
+	}
+	return domain.JID(pn.String()), nil
+}
+
 // GetManyLIDsForPNs resolve em lote (1 chamada ao store local, não 1 por
 // JID) o LID de cada telefone informado.
 //

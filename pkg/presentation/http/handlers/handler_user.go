@@ -17,15 +17,16 @@ import (
 
 // UserHandlers agrupa todos os handlers de usuário.
 type UserHandlers struct {
-	listUsers   *user.ListUsersUseCase
-	addUser     *user.AddUserUseCase
-	editUser    *user.EditUserUseCase
-	deleteUser  *user.DeleteUserUseCase
-	checkUser   *user.CheckUserUseCase
-	getUser     *user.GetUserUseCase
-	getUserLID  *user.GetUserLIDUseCase
-	blockUser   *user.BlockUserUseCase
-	unblockUser *user.UnblockUserUseCase
+	listUsers      *user.ListUsersUseCase
+	addUser        *user.AddUserUseCase
+	editUser       *user.EditUserUseCase
+	deleteUser     *user.DeleteUserUseCase
+	checkUser      *user.CheckUserUseCase
+	getUser        *user.GetUserUseCase
+	getUserLID     *user.GetUserLIDUseCase
+	getUserProfile *user.GetUserProfileUseCase
+	blockUser      *user.BlockUserUseCase
+	unblockUser    *user.UnblockUserUseCase
 }
 
 // NewUserHandlers cria uma nova instância de UserHandlers.
@@ -37,19 +38,21 @@ func NewUserHandlers(
 	checkUser *user.CheckUserUseCase,
 	getUser *user.GetUserUseCase,
 	getUserLID *user.GetUserLIDUseCase,
+	getUserProfile *user.GetUserProfileUseCase,
 	blockUser *user.BlockUserUseCase,
 	unblockUser *user.UnblockUserUseCase,
 ) *UserHandlers {
 	return &UserHandlers{
-		listUsers:   listUsers,
-		addUser:     addUser,
-		editUser:    editUser,
-		deleteUser:  deleteUser,
-		checkUser:   checkUser,
-		getUser:     getUser,
-		getUserLID:  getUserLID,
-		blockUser:   blockUser,
-		unblockUser: unblockUser,
+		listUsers:      listUsers,
+		addUser:        addUser,
+		editUser:       editUser,
+		deleteUser:     deleteUser,
+		checkUser:      checkUser,
+		getUser:        getUser,
+		getUserLID:     getUserLID,
+		getUserProfile: getUserProfile,
+		blockUser:      blockUser,
+		unblockUser:    unblockUser,
 	}
 }
 
@@ -263,6 +266,50 @@ func (h *UserHandlers) GetUserLID() http.Handler {
 		result, err := h.getUserLID.Execute(r.Context(), txtID, req)
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
+			return
+		}
+		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	})
+}
+
+// GetUserProfile retorna o handler para GET /user/profile/{jid}.
+//
+// Aceita telefone, JID de telefone ou LID no caminho — o use case descobre
+// qual chegou e resolve a contraparte. mux.Vars, e nao r.PathValue: o router
+// e' gorilla/mux (ver F81, onde essa troca era o erro que quase entrou no
+// lugar do defeito).
+func (h *UserHandlers) GetUserProfile() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
+			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
+			return
+		}
+		txtID := info.Get("Id")
+		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
+			return
+		}
+		alvo := mux.Vars(r)["jid"]
+		if alvo == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingJID).
+				Str("path", r.URL.Path).
+				Msg("request without jid in path")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingJID)
+			return
+		}
+		result, err := h.getUserProfile.Execute(r.Context(), txtID, alvo)
+		if err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
