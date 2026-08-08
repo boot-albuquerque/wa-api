@@ -1926,7 +1926,51 @@ travamento raro que evitam. O caminho provável é iniciar o loop _antes_ do env
 e dar timeout ao download, mas isso é decisão de projeto sobre a política de
 history sync, não patch pontual.
 
-**Status**: **PARCIALMENTE corrigido; o resto ABERTO por decisão.**
+**Status**: **PARCIALMENTE corrigido; o resto ABERTO por decisao** — agora com medicao de carga real.
+
+### Medicao (2026-08-07, 4 sessoes pareadas por interface, 40.786 mensagens)
+
+| Fato | Valor |
+| --- | --- |
+| Lotes de history sync processados | 10 |
+| Falhas de download | **0** |
+| Sinais de fila cheia ou produtor bloqueado | **0** |
+| Loop religado apos parada | **0** |
+
+O ultimo e' o mais informativo. Existe um `Warnf("New history sync
+notifications appeared after loop stopped, restarting loop...")`
+(`history_sync.go:64`) exatamente para o caso em que a fila recebe algo
+enquanto o consumidor esta' parado. Ele **nao disparou nenhuma vez** no uso
+mais pesado que este projeto viu: o pareamento inicial de quatro contas.
+
+O cenario que esta entrada teme — buffer cheio com consumidor pendurado num
+Download — nao se materializou sob essa carga.
+
+### Um numero que NAO significa o que parece
+
+Os intervalos entre lotes chegaram a **127 segundos**. E' tentador ler isso
+como "o consumidor ficou dois minutos ocupado", e seria errado:
+`historySyncLoopIdleTimeout` e' 1 minuto, e o `case <-time.After(...)` faz o
+loop SAIR quando fica ocioso. Um intervalo de 127s e' igualmente compativel
+com "ocioso, saiu, foi religado pela notificacao seguinte" — o caminho
+saudavel.
+
+Os timestamps dos lotes nao separam "processando" de "ocioso". Quem for
+retomar esta entrada nao deve usar esse numero como evidencia de lentidao.
+
+### O que falta para decidir sobre o timeout
+
+A pergunta da entrada — vale dar timeout ao download? — depende de quanto
+tempo um download demora, e **nenhuma linha de log cronometra
+`DownloadHistorySync`**. Sem isso, qualquer valor de timeout seria escolhido
+no escuro.
+
+Duas linhas de instrumentacao (inicio e fim do download, com duracao)
+resolveriam, ao custo de mexer no caminho de recepcao do modulo de protocolo.
+
+A alternativa e' fechar esta entrada registrando que o risco nao se
+manifestou em carga real — que ja' e' insumo melhor do que ela tinha quando
+foi aberta, quando o risco era inteiramente teorico.
 
 **Feito** (2026-08-07): `EnqueueHistorySync` passou a ligar o consumidor
 **antes** de enfileirar. Era o contrário — enfileirava e só então ligava o loop,
