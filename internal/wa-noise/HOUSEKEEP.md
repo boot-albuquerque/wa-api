@@ -3492,3 +3492,101 @@ Vale checar de passagem se a migração de `migrations.go:236-254` roda em
 SQLite — ela usa `information_schema`, que é de Postgres.
 
 **Status**: **CORRIGIDO** (2026-08-07) — ver o commit da correcao.
+
+
+## Evidências novas (2026-08-07, ambiente pareado) para F42, F66 e F68
+
+Esta seção não é achado novo: são medições feitas com a sessão real de pé,
+que mudam o que se sabe sobre três achados que estavam parados por falta de
+insumo. Cada uma está anexada aqui em vez de reescrever as entradas, para que
+a data e o raciocínio original delas permaneçam legíveis.
+
+### F42 — o caminho de envio v3/FB é INALCANÇÁVEL a partir do wa-api
+
+A entrada dizia que decidir exigia captura de tráfego. Não exige: a pergunta
+anterior a essa é se o código chega a rodar, e ele não chega.
+
+```
+grep -rn 'SendFBMessage' --include='*.go' pkg/ cmd/   ->  0 ocorrências
+```
+
+`Client.SendFBMessage` (`core/sendfb.go:25`) é o único caminho até
+`EncryptForDevicesV3`, onde vive o `v` numérico. Ele tem **zero chamadores**
+em `pkg/` e `cmd/`, e a fachada `internal/wa-noise/main.go` **não o
+reexporta**. Nenhuma rota HTTP alcança o envio v3/FB.
+
+O que existe em `pkg/` é `handleFBMessage` (`eventhandler_message.go:400`),
+que trata FBMessage **recebida** — direção oposta, não usa `encAttrs`.
+
+**O que isso muda na decisão**: não é "qual forma o servidor espera", é "este
+ramo não é exercitado por este produto". As opções passam a ser:
+
+1. Uniformizar para string agora, já que nada em produção depende da forma
+   atual — risco praticamente nulo, e remove a única inconsistência do tipo no
+   caminho de envio.
+2. Deixar como está e anotar no código que o ramo é inalcançável, com o
+   critério de reavaliação: se algum dia uma rota expuser `SendFBMessage`, a
+   forma do `v` vira pergunta real e precisa de captura antes de ir a
+   produção.
+
+A (1) só é preferível se a uniformização for de fato inócua; como o ramo não
+roda, nenhum teste de integração pode confirmá-la — o que é argumento a favor
+da (2), que não toca em código morto.
+
+### F66 — 23 de 25 endpoints POST devolvem 500 para payload vazio
+
+A entrada contava 67 sítios de `fmt.Errorf` em use cases. Medido contra o
+servidor rodando, o alcance visível ao cliente é:
+
+```
+POST <endpoint>?token=… com body {}
+  4xx (correto): 2
+  5xx (F66):    23
+```
+
+Os 23: `/chat/send/{text,image,audio,document,video,sticker,location,contact,
+poll,edit,buttons,list,template}`, `/chat/{react,markread,archive,delete,
+delete/message,presence,request-unavailable-message}`, `/call/reject`,
+`/group/announce`, `/user/status`.
+
+Ou seja: **quase toda a superfície de escrita da API**. Um cliente que
+mande um payload malformado recebe 5xx, que tem semântica de retry, e
+retentará para sempre algo que nunca pode dar certo.
+
+**O que isso muda na decisão**: a entrada apresentava o custo (67 sítios) sem
+o benefício quantificado. Com 23 endpoints medidos, a proporção muda — e
+sugere um caminho intermediário que a entrada não considerava: ligar
+`Category.HTTPStatus()` no caminho de resposta **primeiro**, e converter os
+`fmt.Errorf` incrementalmente. Os endpoints já convertidos passam a responder
+400 sem esperar os 67.
+
+### F68 — os dois schemas convivem, mas com cardinalidades diferentes
+
+Observado no pareamento real: o `*events.QR` do SDK chega ao handler de
+domínio **uma vez**, com o array completo (`&{Codes:[…6 códigos…]}`), e cai no
+`default` como `"Unhandled event"`.
+
+Isso esclarece a diferença entre os dois caminhos, que a entrada tratava como
+simétricos:
+
+| Caminho | Dispara | Payload |
+| --- | --- | --- |
+| `Subscribe` → `qrPayload` | **1×** por sessão, só com `Codes[0]` | `{event:"qr", code}` |
+| `Pair()` → `onPairingQR` | **6×**, um por código | `{event:"code", qrCodeBase64, expiresAt}` |
+
+Um cliente WS recebe 7 eventos `type:"QR"` numa única sessão de pareamento,
+em dois formatos, e só 6 deles correspondem a códigos realmente exibíveis. O
+único do `Subscribe` traz um código que o de pareamento também traz — em
+formato pior (sem imagem, sem validade).
+
+**O que isso muda na decisão**: a opção (2) da entrada (separar em dois
+`type`) fica menos atraente, porque o evento do `Subscribe` não acrescenta
+informação — é subconjunto do outro. Surge uma terceira opção:
+
+3. Parar de despachar o QR pelo caminho do `Subscribe`, deixando apenas o de
+   pareamento. Remove a ambiguidade sem inventar um `type` novo, e nenhum
+   consumidor perde dado.
+
+Antes de fazê-la, é preciso confirmar que nada consome o formato do
+`Subscribe` hoje — o que é pergunta para quem opera os webhooks, não para o
+código.
