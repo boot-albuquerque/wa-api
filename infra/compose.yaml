@@ -1,0 +1,60 @@
+# Infraestrutura de apoio do wa-api.
+#
+# Existe por dois motivos, nesta ordem:
+#
+#  1. Validar o comportamento multi-réplica (F89). O alvo é k8s/k3s com N pods,
+#     e SQLite não sustenta isso — hoje a instância local roda em SQLite pelo
+#     fallback silencioso de `pkg/infra/db/connection.go:81`, que dispara
+#     quando as variáveis de Postgres estão PARCIALMENTE definidas. Medir posse
+#     de sessão em SQLite mediria outra coisa.
+#  2. Exercitar o RabbitMQ de verdade. Até aqui o broker é opcional e nenhum
+#     caminho que o usa foi testado contra um servidor real — a fila de erro do
+#     webhook publica às cegas.
+#
+# Portas do HOST deslocadas de propósito: 5432 já está ocupada nesta máquina, e
+# subir infraestrutura de teste em cima de um serviço existente seria a receita
+# para corromper o banco errado.
+#
+#   docker compose -f infra/compose.yaml up -d
+#   docker compose -f infra/compose.yaml down -v      # -v apaga os volumes
+
+name: wa-api-infra
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: waapi
+      POSTGRES_PASSWORD: waapi
+      POSTGRES_DB: waapi
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` sozinho responde antes de o banco aceitar conexão de
+      # verdade na primeira subida; o -d força a checagem contra o banco real.
+      test: ["CMD-SHELL", "pg_isready -U waapi -d waapi"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: waapi
+      RABBITMQ_DEFAULT_PASS: waapi
+    ports:
+      - "5672:5672"
+      - "15672:15672" # console de gerenciamento
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  pgdata:
+  rabbitdata:
