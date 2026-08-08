@@ -2687,3 +2687,58 @@ verdade.
 
 **Status**: **não corrigido** — fora do escopo da F89, que era o que estava em
 andamento. Registrado para decisão.
+
+---
+
+## F91 — o ramo `default` do handler despeja a struct inteira no log
+
+**Data**: 2026-08-08
+**Contexto**: apareceu ao investigar os avisos `Unhandled event` que o monitor
+mostrava durante a validação da F89.
+
+**Onde**: `pkg/bootstrap/eventhandler.go`, ramo `default` do type-switch de
+`handleEvent`.
+
+**Problema**: o `default` loga o evento com `%+v` da struct — VALORES, não
+forma. Exemplo real colhido do log de sessão:
+
+```
+{"level":"warn","event":"&{Codes:[https://wa.me/settings/linked_devices#2@B+o1E1qrt...
+ ...,3K5amX5Az3wjYJr4T/UuAf0CO+0eHW6p5mhXDdzN4ws=,...]}","message":"Unhandled event"}
+```
+
+São **códigos de pareamento** no log. Quem os lê vincula um aparelho à conta.
+
+A F76 já tinha registrado exatamente isso e foi corrigida — mas **só para
+`*events.QR`**, com um `case` dedicado. O ramo `default` continua despejando
+valores de qualquer OUTRO tipo que caia nele. A correção tratou a instância,
+não a classe.
+
+**Evidência de que a correção da F76 funciona e o resto não**: a linha acima é
+de `2026-08-07T23:52:32`, anterior ao `case *events.QR`. Depois dela não há
+mais vazamento de `Codes` — e há, no mesmo log, outros eventos caindo no
+`default` com dump completo, entre eles um de chamada com
+`BasicCallMeta:{From:...@lid CallCreator:...@lid CallID:...}`.
+
+**Números** (17,5h de log, uma instalação):
+- 11 eventos caíram no `default`;
+- 43 tipos `*events.*` têm `case` próprio;
+- 69 structs declaradas em `internal/wa-noise/protocol/types/events/` —
+  **limite superior**, não contagem de não-tratados: nem toda struct daquele
+  pacote é evento despachado. Quem for corrigir tem de levantar a lista real,
+  não subtrair 43 de 69.
+
+**Correção sugerida**: o `default` loga o NOME DO TIPO e os NOMES DOS CAMPOS,
+nunca os valores — foi o que o watcher desta sessão
+(`scratchpad/watch.py:88-99`) precisou fazer para ser seguro de ler. Isso
+preserva o valor do aviso (descobrir tipo não previsto) e elimina a classe
+inteira do vazamento, em vez de fechar um tipo por vez conforme cada um
+vaza algo.
+
+**Status**: **não corrigido** — registrado. Fora do escopo da F89, que estava
+em andamento.
+
+> Nota de método: eu quase registrei que a aplicação já logava só nomes de
+> campo, porque o monitor exibia `campos=JID,Timestamp,Action,FromFullSync`.
+> Aquilo era renderização do meu próprio watcher, não do wa-api — o log não
+> contém a string `campos` uma única vez. Ver ARMADILHAS.md 13.
