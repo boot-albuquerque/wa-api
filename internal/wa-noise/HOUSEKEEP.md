@@ -3602,3 +3602,125 @@ informação — é subconjunto do outro. Surge uma terceira opção:
 Antes de fazê-la, é preciso confirmar que nada consome o formato do
 `Subscribe` hoje — o que é pergunta para quem opera os webhooks, não para o
 código.
+
+## F72 — `no session` é logado em nível `error` para um estado esperado
+
+**Data**: 2026-08-07. **Contexto**: observação de log com o painel de sessões
+aberto, fazendo poll de status a cada 3s.
+
+**Onde**: pelo menos 12 use cases repetem o padrão, entre eles
+`chat/archive_chat.go:26`, `chat/request_unavailable_message.go:26`:
+
+```go
+if err := uc.chats.EnsureSession(ctx, userID); err != nil {
+    uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
+    return nil, err
+}
+```
+
+**Problema**: "a sessão não está conectada" é estado **esperado** — é o estado
+de toda sessão que ainda não pareou, ou que foi desconectada de propósito.
+Logar isso como `error` infla o nível: `error` deveria significar que algo
+está errado, e não estar conectado não está.
+
+O efeito prático apareceu sozinho: um painel que faça poll de `/session/status`
+a cada 3s gera **20 linhas de `error` por minuto e por sessão parada**. Medido
+nesta observação: 22 ocorrências, todas em `error`, todas de sessões que
+simplesmente não haviam conectado ainda.
+
+Quem monitora por nível — alerta em `error`, dashboard, ou o próprio filtro
+que montei para acompanhar esta sessão — precisa criar exceção para uma
+condição normal. É o mecanismo clássico pelo qual alertas param de ser lidos.
+
+**Correção sugerida**: rebaixar para `Debug` (ou `Info`) quando o erro for o
+sentinela de sessão ausente, mantendo `Error` para as demais falhas de
+`EnsureSession`. Distinguir pelo erro, não pela mensagem.
+
+Relacionado à **F66**: o mesmo `no_session` que é logado como `error` aqui é
+devolvido como HTTP 400 pelo handler — ou seja, a camada HTTP já o classifica
+corretamente como erro do cliente, e só o log discorda.
+
+**Status**: **não corrigido**.
+
+## F73 — `PushName` e `BusinessName` não geram webhook
+
+**Data**: 2026-08-07. **Contexto**: mesma observação, com quatro sessões reais
+recebendo eventos.
+
+**Onde**: `pkg/bootstrap/eventhandler.go:38` trata `*events.PushNameSetting`,
+que é a configuração do nome do PRÓPRIO usuário. Os eventos
+`*events.PushName` e `*events.BusinessName` — que anunciam que um CONTATO
+mudou de nome — caem no `default` e viram `"Unhandled event"`.
+
+Observado 2× cada em uma noite de uso normal.
+
+**Não é perda de dado**: o SDK persiste antes de emitir. `user/info.go:156`
+grava inclusive o JID alternativo (o par LID↔PN, o mesmo domínio da F65) e só
+depois despacha o evento. O contato fica com o nome novo no store.
+
+**O que falta é a notificação**: um integrador que queira reagir a "contato
+mudou de nome" não tem como — o evento não vira webhook. E `PushNameSetting`,
+que está em `SupportedEventTypes` e é assinável, cobre outro caso.
+
+**Correção sugerida**: decidir se esses dois eventos devem ser assináveis. Se
+sim, acrescentar a `SupportedEventTypes` e tratá-los no handler; se não,
+tratá-los explicitamente com um `case` que descarta em silêncio, para que o
+`"Unhandled event"` volte a significar "apareceu algo que não previmos".
+
+Hoje o warn não distingue "evento novo do protocolo" de "evento que decidimos
+ignorar", que é a informação que ele deveria carregar.
+
+**Status**: **não corrigido**. Depende de decisão sobre o contrato de webhook,
+como a F68.
+
+## F74 — o fan-out WebSocket é serial: N conexões obsoletas custam N × 5s
+
+**Data**: 2026-08-07. **Contexto**: observação de log; o painel de sessões
+abre um WebSocket por sessão, e recarregar a página deixa os anteriores
+mortos até a próxima escrita.
+
+**Onde**: `pkg/infra/wa-noise/registry/broadcast/broadcast.go`, `Broadcast`.
+
+```go
+for _, c := range conns {
+    ctx, cancel := context.WithTimeout(context.Background(), writeTimeout) // 5s
+    err := wsjson.Write(ctx, c, payload)
+    cancel()
+    ...
+}
+```
+
+**Observado**: uma rajada de 6 `websocket broadcast write failed` para o mesmo
+userID, cinco com `use of closed network connection` e uma com
+`context deadline exceeded`.
+
+**Problema**: o laço é **serial** e cada conexão tem seu próprio teto de 5s.
+Conexão morta que falha na hora custa quase nada, mas conexão *lenta* — a que
+produz `deadline exceeded` — custa os 5s inteiros, e elas somam. Com N
+conexões nesse estado, um único broadcast leva até N × 5s.
+
+Não bloqueia o event loop (roda sob `safego`), mas os broadcasts se
+enfileiram: o evento seguinte espera o anterior terminar de percorrer todas as
+conexões podres.
+
+A limpeza funciona — `Remove` tira a conexão na falha —, mas só na PRIMEIRA
+tentativa de escrita depois de ela morrer. Até lá ela conta no fan-out.
+
+**Correção sugerida**, em ordem de custo:
+
+1. Paralelizar o fan-out (um `go` por conexão, com `WaitGroup`). O teto passa
+   a ser 5s no total em vez de 5s por conexão. É a mudança que resolve.
+2. Reduzir `writeTimeout`. Trata o sintoma e piora a entrega para clientes
+   legitimamente lentos.
+
+A (1) muda concorrência e precisa de teste de corrida — o pacote já tem um,
+e o teste com conexão WebSocket real (`ws_conn_test.go`) exercita o caminho
+de descarte de conexão morta.
+
+**Ressalva sobre o texto do erro**: a mensagem chega como
+`failed to write JSON message: failed to marshal JSON: failed to write msg:
+use of closed network connection`. Ela diz "failed to marshal JSON" para uma
+falha de ESCRITA — o embrulho vem da biblioteca e induz a erro quem for
+investigar. Vale envolver com contexto próprio.
+
+**Status**: **não corrigido**.
