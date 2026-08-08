@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/hlog"
@@ -25,6 +26,7 @@ type UserHandlers struct {
 	getUser        *user.GetUserUseCase
 	getUserLID     *user.GetUserLIDUseCase
 	getUserProfile *user.GetUserProfileUseCase
+	listChats      *user.ListChatsUseCase
 	blockUser      *user.BlockUserUseCase
 	unblockUser    *user.UnblockUserUseCase
 }
@@ -39,6 +41,7 @@ func NewUserHandlers(
 	getUser *user.GetUserUseCase,
 	getUserLID *user.GetUserLIDUseCase,
 	getUserProfile *user.GetUserProfileUseCase,
+	listChats *user.ListChatsUseCase,
 	blockUser *user.BlockUserUseCase,
 	unblockUser *user.UnblockUserUseCase,
 ) *UserHandlers {
@@ -51,6 +54,7 @@ func NewUserHandlers(
 		getUser:        getUser,
 		getUserLID:     getUserLID,
 		getUserProfile: getUserProfile,
+		listChats:      listChats,
 		blockUser:      blockUser,
 		unblockUser:    unblockUser,
 	}
@@ -317,6 +321,59 @@ func (h *UserHandlers) GetUserProfile() http.Handler {
 		}
 		customhttp.RespondJSON(w, http.StatusOK, result, nil)
 	})
+}
+
+// ListChats retorna o handler para GET /chat/list.
+//
+// limit e offset vêm da query string. Valor não numérico é tratado como
+// AUSENTE, não como erro: `?limit=abc` recebe o padrão em vez de um 400 —
+// a rota é de leitura e recusar a chamada inteira por um parâmetro
+// decorativo seria desproporcional. O use case corrige faixa.
+func (h *UserHandlers) ListChats() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
+		if !ok || info == nil {
+			hlog.FromRequest(r).Warn().Err(errUnauthorized).
+				Str("path", r.URL.Path).
+				Msg("request without user info in context")
+			customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
+			return
+		}
+		txtID := info.Get("Id")
+		if txtID == "" {
+			hlog.FromRequest(r).Warn().Err(errMissingSessionID).
+				Str("path", r.URL.Path).
+				Msg("request with empty session id")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
+			return
+		}
+		limit := inteiroDaQuery(r, "limit")
+		offset := inteiroDaQuery(r, "offset")
+
+		result, err := h.listChats.Execute(r.Context(), txtID, limit, offset)
+		if err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("use case failed")
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
+			return
+		}
+		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	})
+}
+
+// inteiroDaQuery devolve 0 quando o parâmetro falta OU não é número — os
+// dois casos significam "não pedi", e o use case aplica o padrão.
+func inteiroDaQuery(r *http.Request, nome string) int {
+	bruto := r.URL.Query().Get(nome)
+	if bruto == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(bruto)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // BlockUser retorna o handler para POST /user/block.

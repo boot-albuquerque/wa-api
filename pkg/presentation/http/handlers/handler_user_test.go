@@ -36,6 +36,8 @@ type uhFakes struct {
 	block    *contractsfake.BlocklistManager
 	jids     *contractsfake.JIDResolver
 	sessions *contractsfake.SessionStatusReader
+	activity *contractsfake.ChatActivityReader
+	groups   *contractsfake.GroupDirectory
 	logger   *contractsfake.Logger
 }
 
@@ -46,6 +48,8 @@ func uhNewFakes() *uhFakes {
 		block:    &contractsfake.BlocklistManager{},
 		jids:     &contractsfake.JIDResolver{},
 		sessions: &contractsfake.SessionStatusReader{},
+		activity: &contractsfake.ChatActivityReader{},
+		groups:   &contractsfake.GroupDirectory{},
 		logger:   &contractsfake.Logger{},
 	}
 	// Sem LID o use case de /user/lid recusa com "LID not found for this
@@ -73,6 +77,7 @@ func (f *uhFakes) handlers() *UserHandlers {
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserLIDUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserProfileUseCase(f.contacts, f.jids, f.logger),
+		user.NewListChatsUseCase(f.activity, f.contacts, f.groups, f.logger),
 		user.NewBlockUserUseCase(f.block, f.jids, f.logger),
 		user.NewUnblockUserUseCase(f.block, f.jids, f.logger),
 	)

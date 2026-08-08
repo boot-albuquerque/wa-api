@@ -27,6 +27,14 @@ type ContactDirectory interface {
 	// GetLIDForPN resolve o LID correspondente a um número de telefone.
 	GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
 
+	// ContactNames devolve o roster TIPADO, por JID.
+	//
+	// Existe ao lado de GetAllContacts, que devolve `any`, porque quem
+	// precisa CASAR nomes por JID não pode receber o tipo do SDK: isso
+	// arrastaria o vendor para dentro da camada de aplicação. GetAllContacts
+	// segue servindo quem só repassa o bloco cru ao cliente.
+	ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error)
+
 	// GetPNForLID resolve o número de telefone correspondente a um LID — a
 	// direção INVERSA de GetLIDForPN.
 	//

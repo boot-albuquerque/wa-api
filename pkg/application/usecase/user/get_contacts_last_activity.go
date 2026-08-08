@@ -39,7 +39,7 @@ func (uc *GetContactsLastActivityUseCase) Execute(ctx context.Context, userID st
 		uc.logger.Error(ctx, "Failed to get contacts last activity", "error", err, "user_id", userID)
 		return nil, err
 	}
-	result := uc.normalizeToLID(ctx, userID, raw)
+	result := normalizeToLID(ctx, uc.contacts, uc.logger, userID, raw)
 	uc.logger.Info(ctx, "Retrieved contacts last activity", "user_id", userID, "count", len(result))
 	return result, nil
 }
@@ -60,8 +60,13 @@ func (uc *GetContactsLastActivityUseCase) Execute(ctx context.Context, userID st
 // PN sem LID conhecido mantém a chave original (`@s.whatsapp.net`) no
 // resultado — não é descartado, só não normalizado; o caller ainda pode
 // casar por telefone nesse caso residual.
-func (uc *GetContactsLastActivityUseCase) normalizeToLID(
+// Funcao de pacote, e nao metodo: ListChatsUseCase precisa da MESMA
+// normalizacao, e duplicar as duas passadas e o GREATEST abaixo seria
+// duplicar justamente a parte cuja sutileza custou a F65 a ser descoberta.
+func normalizeToLID(
 	ctx context.Context,
+	contacts appport.ContactDirectory,
+	logger appport.Logger,
 	userID string,
 	raw map[string]time.Time,
 ) map[string]time.Time {
@@ -75,12 +80,12 @@ func (uc *GetContactsLastActivityUseCase) normalizeToLID(
 		return raw
 	}
 
-	resolved, err := uc.contacts.GetManyLIDsForPNs(ctx, userID, pnJIDs)
+	resolved, err := contacts.GetManyLIDsForPNs(ctx, userID, pnJIDs)
 	if err != nil {
 		// Best-effort: sem sessão ativa (standby) ou erro do store, devolve
 		// o dado cru — degrada pro comportamento pré-normalização, não falha
 		// a chamada inteira por causa de um passo de enriquecimento.
-		uc.logger.Error(ctx, "Failed to resolve LID mapping for last activity, returning unnormalized", "error", err, "user_id", userID)
+		logger.Error(ctx, "Failed to resolve LID mapping for last activity, returning unnormalized", "error", err, "user_id", userID)
 		return raw
 	}
 

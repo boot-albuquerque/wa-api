@@ -59,7 +59,7 @@ func (p *lidPorta) ResolveJID(_ context.Context, raw string) (domain.JID, error)
 func rotaLID(t *testing.T, porta *lidPorta) http.Handler {
 	t.Helper()
 	uc := user.NewGetUserLIDUseCase(porta, porta, silentLogger{})
-	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, uc, nil, nil, nil)
+	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, uc, nil, nil, nil, nil)
 
 	r := mux.NewRouter()
 	r.Handle("/user/lid/{jid}", h.GetUserLID()).Methods(http.MethodGet)

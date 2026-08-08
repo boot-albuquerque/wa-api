@@ -70,6 +70,9 @@ type ContactDirectory struct {
 	GetLIDForPNFunc  func(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
 	GetLIDForPNCalls []ContactDirectoryGetLIDForPNCall
 
+	ContactNamesFunc  func(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error)
+	ContactNamesCalls int
+
 	GetPNForLIDFunc  func(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error)
 	GetPNForLIDCalls []ContactDirectoryGetPNForLIDCall
 
@@ -129,6 +132,16 @@ func (f *ContactDirectory) GetLIDForPN(ctx context.Context, txtID string, jid do
 		return f.GetLIDForPNFunc(ctx, txtID, jid)
 	}
 	return "", nil
+}
+
+// ContactNames implementa port.ContactDirectory. Zero-value devolve mapa
+// vazio, que e' o roster de uma sessao sem contatos.
+func (f *ContactDirectory) ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error) {
+	f.ContactNamesCalls++
+	if f.ContactNamesFunc != nil {
+		return f.ContactNamesFunc(ctx, txtID)
+	}
+	return map[domain.JID]domain.ContactName{}, nil
 }
 
 // GetPNForLID implementa port.ContactDirectory. Zero-value devolve JID vazia
