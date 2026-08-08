@@ -171,8 +171,15 @@ rules_frozen=true
 # Broadcast deixou de ter chamada direta e virou descoberta; a closure nasceu
 # coberta. Numerador igual, denominador +1. Nenhum site que logava deixou de
 # logar — o mesmo aviso sai, do mesmo ponto logico.
+# justificativa: F79 (2026-08-08), /session/disconnect e /session/logout
+# passaram a de fato encerrar a sessao. errpath_coverage SOBE 862->863
+# (ratchet-UP honesto): os dois use cases ganharam um caminho de erro novo
+# — a falha da porta SessionController — e os dois ja nascem logando em
+# Warn ("disconnect failed" / "logout failed") antes de propagar a causa.
+# min_eligible nao muda: nenhuma funcao nova, so' corpo dentro de Execute.
+# func_coverage nao muda: as duas funcoes ja estavam cobertas.
 min_func_coverage=708
-min_errpath_coverage=862
+min_errpath_coverage=863
 min_eligible=513
 max_exempt_annotations=0
 

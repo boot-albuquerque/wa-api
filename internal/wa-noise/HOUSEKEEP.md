@@ -3991,3 +3991,66 @@ substituir.
 **Status**: **não corrigido, e não verificado experimentalmente.** Antes de
 mexer, vale um teste controlado numa sessão descartável: chamar
 `/session/connect` duas vezes e observar se aparece `StreamReplaced`.
+
+## F79 — `/session/disconnect` e `/session/logout` devolviam 200 sem encerrar nada
+
+**Data / contexto**: 2026-08-08, teste manual de desconexão pela API para
+observar o comportamento no aparelho.
+
+**Onde**: `pkg/application/usecase/session/disconnect.go:25-33` e
+`pkg/application/usecase/session/logout.go:25-33`
+
+```go
+// Execute valida se o cliente está conectado.
+func (uc *DisconnectUseCase) Execute(...) (*domain.DisconnectResult, error) {
+	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil { ... }
+	uc.logger.Info(ctx, "disconnect validated", "txtID", txtID)
+	return &domain.DisconnectResult{}, nil
+}
+```
+
+**Problema**: os dois use cases consumiam `appport.SessionGuard` — porta que
+só responde "existe sessão?". Validavam, logavam `... validated` e
+retornavam. **Nunca chamavam `Disconnect()`/`Logout()`.** Os handlers
+(`handler_session.go:100-117` e o de logout) tampouco: respondiam 200 e
+acabava ali.
+
+Os métodos de verdade existem e funcionam em
+`pkg/infra/wa-noise/runtime/session/guard.go:88-104`, e eram alcançados de
+**um único lugar em todo o projeto**: `delete_user_complete.go:62,65`, na
+exclusão de usuário. Os dois endpoints HTTP nunca chegavam neles.
+
+**Evidência medida em produção**, duas sessões pareadas e vivas:
+
+- Duas chamadas a `/session/disconnect` → HTTP 200, `disconnect validated`
+  às 00:20:25 e 00:20:37.
+- `/session/status` 40s depois: `connected: true, loggedIn: true` nas duas.
+- Eventos continuaram chegando pelo WebSocket: `Message` e `ReadReceipt` às
+  04:20:49, :50, :53 e :54 — até **29 segundos após** a desconexão.
+- Nenhum evento `Disconnected` emitido em momento algum.
+
+**Por que a suíte não pegava**: `TestUseCases_SemSessao_PropagamACausa`
+exercita só a RECUSA da guarda. Um use case que valida e não age passa nela
+com folga — o caminho de sucesso não era testado por ninguém.
+
+**Correção aplicada**: os dois passaram a consumir
+`appport.SessionController` (a porta que a ADR-001 nomeia justamente para
+"as operações de ciclo de vida que sobravam em ClientProvider") e a chamar
+`Disconnect`/`Logout` depois da guarda, propagando a falha com log em Warn.
+O wiring não mudou: `SessionGuardAdapter` já satisfazia `SessionController`
+(`guard.go:107`).
+
+Coberto por `pkg/application/usecase/session/encerramento_test.go`: caminho
+feliz de cada um, propagação da falha da porta, e — o que nenhum dos outros
+pegaria — **a ordem**: sem sessão, não se age sobre ela. Inverter as duas
+chamadas deixa os demais testes passando.
+
+Controle negativo executado: revertendo os dois use cases a só validar, os
+quatro testes falham (`Disconnect chamado 0 vezes, quero 1`;
+`a causa da porta se perdeu: <nil>`).
+
+`min_errpath_coverage` subiu 862→863 no ratchet — os caminhos de erro novos
+já nascem logando.
+
+**Status**: **corrigido**, `make check` verde. Falta validar no aparelho:
+exige reiniciar o servidor, que ainda roda o binário antigo.

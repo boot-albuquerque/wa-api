@@ -97,6 +97,12 @@ func sessionCases() []sessionCase {
 		g := contractsfake.FailSession(err)
 		return &g
 	}
+	// Disconnect e Logout consomem SessionController desde a F79: precisam
+	// AGIR sobre a sessão, não só verificá-la. Aqui só importa a recusa da
+	// guarda propagar, então o controller nasce com a mesma FailSession.
+	ctl := func(err error) *contractsfake.SessionController {
+		return &contractsfake.SessionController{SessionGuard: contractsfake.FailSession(err)}
+	}
 	users := func() *contractsfake.UserRepository {
 		return &contractsfake.UserRepository{
 			ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
@@ -108,13 +114,13 @@ func sessionCases() []sessionCase {
 	return []sessionCase{
 		{
 			name:   "Disconnect",
-			build:  func(e error) http.Handler { return NewDisconnectHandler(session.NewDisconnectUseCase(guard(e), log)) },
+			build:  func(e error) http.Handler { return NewDisconnectHandler(session.NewDisconnectUseCase(ctl(e), log)) },
 			method: http.MethodPost,
 			path:   "/session/disconnect",
 		},
 		{
 			name:   "Logout",
-			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(guard(e), log)) },
+			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), log)) },
 			method: http.MethodPost,
 			path:   "/session/logout",
 		},
@@ -526,7 +532,7 @@ func TestGetQRAndStatus_RepositoryFailure_500_LogsError(t *testing.T) {
 // que nao satisfaz userInfo tem de virar 401 com causa — nao panico, e nao
 // seguir com ID vazio.
 func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
-	h := NewLogoutHandler(session.NewLogoutUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}))
+	h := NewLogoutHandler(session.NewLogoutUseCase(&contractsfake.SessionController{}, &contractsfake.Logger{}))
 	wrapped, capture := logassert.Wrap(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/session/logout", nil)

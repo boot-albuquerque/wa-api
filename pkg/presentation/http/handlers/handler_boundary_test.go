@@ -40,6 +40,19 @@ func (s *spyPort) EnsureSession(context.Context, string) error {
 	return s.err
 }
 
+// Disconnect e Logout entraram com a F79: os use cases correspondentes
+// passaram a consumir SessionController, porque antes só validavam a sessão
+// e devolviam 200 sem encerrar nada.
+func (s *spyPort) Disconnect(context.Context, string) error {
+	s.calls++
+	return s.err
+}
+
+func (s *spyPort) Logout(context.Context, string) error {
+	s.calls++
+	return s.err
+}
+
 func (s *spyPort) NewMessageID(context.Context, string) (string, error) {
 	s.calls++
 	return "generated-id", s.err

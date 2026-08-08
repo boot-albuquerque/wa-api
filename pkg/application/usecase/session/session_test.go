@@ -41,15 +41,29 @@ type guardCase struct {
 	run  func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error)
 }
 
+// ctlDe adapta um SessionGuard fake a port.SessionController — a porta que
+// Disconnect e Logout passaram a exigir na F79, por precisarem AGIR sobre a
+// sessão e não só verificá-la.
+//
+// EnsureSession delega ao ponteiro ORIGINAL de propósito: copiar o struct
+// para dentro do controller registraria as chamadas na cópia, e a asserção
+// sobre sg.EnsureSessionCalls passaria a medir nada — falha que o teste não
+// acusaria, porque continuaria compilando e passando.
+func ctlDe(sg *contractsfake.SessionGuard) *contractsfake.SessionController {
+	return &contractsfake.SessionController{
+		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
+	}
+}
+
 func guardCases() []guardCase {
 	users := &contractsfake.UserRepository{}
 	status := &contractsfake.SessionStatusReader{}
 	return []guardCase{
 		{"Disconnect", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewDisconnectUseCase(sg, log).Execute(context.Background(), txtID, domain.DisconnectRequest{})
+			return session.NewDisconnectUseCase(ctlDe(sg), log).Execute(context.Background(), txtID, domain.DisconnectRequest{})
 		}},
 		{"Logout", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewLogoutUseCase(sg, log).Execute(context.Background(), txtID, domain.LogoutRequest{})
+			return session.NewLogoutUseCase(ctlDe(sg), log).Execute(context.Background(), txtID, domain.LogoutRequest{})
 		}},
 		{"RequestHistorySync", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewRequestHistorySyncUseCase(sg, log).Execute(context.Background(), txtID, domain.RequestHistorySyncRequest{})
