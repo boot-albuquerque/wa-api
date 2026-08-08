@@ -178,9 +178,18 @@ rules_frozen=true
 # Warn ("disconnect failed" / "logout failed") antes de propagar a causa.
 # min_eligible nao muda: nenhuma funcao nova, so' corpo dentro de Execute.
 # func_coverage nao muda: as duas funcoes ja estavam cobertas.
-min_func_coverage=708
+# justificativa: perfil de sessao enriquecido (2026-08-08). min_eligible
+# sobe 513->514 (+1: ProfileDataAccess.DeviceInfo, ratchet-UP honesto).
+# func_coverage cai 708->706 pelo padrao ja aceito neste repo — adapter nao
+# loga, use case loga. E aqui e' mais forte que o de costume: DeviceInfo NAO
+# TEM caminho de erro. Le seis campos do store em memoria e devolve
+# zero-value quando o store esta' ausente, exatamente como as demais funcoes
+# deste adapter. Nao ha o que logar, e um log ali seria ruido por chamada.
+# errpath_coverage nao muda (863): nenhum caminho de saida novo — a funcao
+# tem um unico retorno por ramo e nenhum erro a propagar.
+min_func_coverage=706
 min_errpath_coverage=863
-min_eligible=513
+min_eligible=514
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

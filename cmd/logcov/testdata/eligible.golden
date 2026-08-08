@@ -1772,6 +1772,7 @@ pkg/application/contracts/contractsfake.PrivacyManager.GetPrivacySettings	EXCLUD
 pkg/application/contracts/contractsfake.PrivacyManager.SetPrivacySetting	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileAccessProvider.ProfileAccess	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.ContactInfo	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ProfileDataAccess.DeviceInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.OwnJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.ProfilePictureURL	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.PushName	EXCLUDED	X5
@@ -1925,7 +1926,7 @@ pkg/application/usecase/notification.NewGetHealthUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewListNewsletterUseCase	EXCLUDED	X1
 pkg/application/usecase/profile.GetProfileUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/profile.NewGetProfileUseCase	EXCLUDED	X1
-pkg/application/usecase/profile.NewProfileError	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,get_profile.go:107)
+pkg/application/usecase/profile.NewProfileError	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,get_profile.go:116)
 pkg/application/usecase/profile.ProfileError.Error	EXCLUDED	X4
 pkg/application/usecase/profile.buildProfile	ELIGIBLE	uncovered:L1
 pkg/application/usecase/profile.buildProfile.func1	EXCLUDED	X6
@@ -2373,6 +2374,7 @@ pkg/infra/wa-noise/adapters/presence.PresenceControllerAdapter.SubscribePresence
 pkg/infra/wa-noise/adapters/profile.NewProfileDataAccess	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/profile.NewProfileDataAccessFromInterface	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/profile.ProfileDataAccess.ContactInfo	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/profile.ProfileDataAccess.DeviceInfo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/profile.ProfileDataAccess.OwnJID	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/profile.ProfileDataAccess.ProfilePictureURL	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/profile.ProfileDataAccess.PushName	EXCLUDED	X1
