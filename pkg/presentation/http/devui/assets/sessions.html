@@ -162,6 +162,15 @@
   const admin = () => $("admin").value.trim();
   const enc = encodeURIComponent;
 
+  // O token das chamadas REST vai no HEADER, nao na query string: a query
+  // continua aceita nesta release mas emite WARN a cada request e sai na
+  // proxima (middleware/auth.go:72-90). Uma pagina de teste que exercita o
+  // caminho deprecado ensina o caminho errado a quem a ler.
+  //
+  // O WebSocket e a EXCECAO, e nao por descuido: a API WebSocket do navegador
+  // nao permite header customizado no handshake. Nao ha alternativa do lado
+  // do cliente — ver F75 em HOUSEKEEP.md.
+
   // ---- log ----------------------------------------------------------------
   function log(quem, tipo, carga, classe) {
     $("log-vazio")?.remove();
@@ -229,7 +238,7 @@
     const card = cardDe(s.token);
     if (!card) return;
     try {
-      const r = await fetch(`/session/status?token=${enc(s.token)}`, { cache: "no-store" });
+      const r = await fetch("/session/status", { cache: "no-store", headers: { token: s.token } });
       const b = await r.json();
       if (!b.success) {
         pintar(card, "off", b?.error?.code || `HTTP ${r.status}`, "");
@@ -399,7 +408,7 @@
 
   async function chamar(s, metodo, caminho, rotulo) {
     try {
-      const r = await fetch(`${caminho}?token=${enc(s.token)}`, { method: metodo, cache: "no-store" });
+      const r = await fetch(caminho, { method: metodo, cache: "no-store", headers: { token: s.token } });
       log(s.nome, rotulo, `HTTP ${r.status}`, r.ok ? "sys" : "err");
     } catch (e) {
       log(s.nome, rotulo, String(e), "err");

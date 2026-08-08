@@ -3768,3 +3768,58 @@ falha de ESCRITA — o embrulho vem da biblioteca e induz a erro quem for
 investigar. Vale envolver com contexto próprio.
 
 **Status**: **não corrigido**.
+
+## F75 — remover o token da query string vai quebrar todo cliente WebSocket de navegador
+
+**Data**: 2026-08-07.
+**Contexto**: migração do painel `devui` para autenticação por header, ao ver
+que ele sozinho respondia por ~1.000 dos 1.095 avisos de deprecação numa noite
+de uso.
+
+**Onde**: `pkg/presentation/http/middleware/auth.go:72-90`.
+
+```go
+// A query string continua aceita nesta release para não quebrar clientes que
+// dependem dela, mas cada uso emite WARN [...] A remoção é a release seguinte.
+func extractRequestToken(r *http.Request) string {
+	if token := r.Header.Get("token"); token != "" {
+		return token
+	}
+	...
+}
+```
+
+**Problema**: a API `WebSocket` do navegador **não permite header customizado
+no handshake**. Não há `headers` no construtor `new WebSocket(url, protocols)`
+— é limitação da especificação, não do nosso código. Um cliente web só
+consegue autenticar em `/session/ws` por query string (ou por cookie, ou pelo
+truque de subprotocolo).
+
+Portanto, quando a query string for removida na próxima release,
+`GET /session/ws` fica **inalcançável de qualquer navegador**. Clientes de
+servidor (Go, Node) não são afetados: eles montam o handshake e podem mandar
+o header.
+
+Isto não aparece nos testes: `TestRegistry_...` e o teste com WebSocket real
+usam bibliotecas Go, que mandam header sem dificuldade. Só se manifesta com
+um cliente de navegador de verdade — que passou a existir agora, com o
+`devui`.
+
+**Correção sugerida** — as três saídas conhecidas, e nenhuma é indolor:
+
+1. **Manter a query string apenas para `/session/ws`**, removendo do resto.
+   Simples e honesto; documenta a exceção em vez de fingir uniformidade. O
+   custo é o token continuar aparecendo em log de acesso e histórico de
+   navegador para essa rota.
+2. **Token no subprotocolo** (`new WebSocket(url, [token])` e o servidor lendo
+   `Sec-WebSocket-Protocol`). É o truque padrão da indústria para exatamente
+   este problema, e mantém o token fora da URL. Exige mudança no handshake
+   do servidor.
+3. **Cookie de sessão**, que o navegador manda sozinho no handshake. Muda o
+   modelo de autenticação da API inteira; desproporcional.
+
+A (2) é a resposta técnica correta; a (1) é a que cabe numa release.
+
+**Status**: **não corrigido — mas é bloqueador da remoção anunciada.** O
+`devui` já migrou os `fetch` para header e mantém a query só no WebSocket,
+com comentário apontando para esta entrada.
