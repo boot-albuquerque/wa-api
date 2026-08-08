@@ -25,7 +25,7 @@ func NewGetHistoryUseCase(sg appport.SessionGuard, l appport.Logger) *GetHistory
 func (uc *GetHistoryUseCase) Execute(ctx context.Context, txtID string) (*domain.WebhookHistoryResult, error) {
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

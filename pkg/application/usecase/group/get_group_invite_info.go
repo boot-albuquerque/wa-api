@@ -32,7 +32,7 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 
 	// Garantir que há sessão
 	if err := uc.groups.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

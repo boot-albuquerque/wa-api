@@ -23,7 +23,7 @@ func NewArchiveChatUseCase(co appport.ChatOperations, jr appport.JIDResolver, lo
 // Execute archives or unarchives a chat
 func (uc *ArchiveChatUseCase) Execute(ctx context.Context, userID string, req domain.ArchiveChatRequest) (*domain.ArchiveChatResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

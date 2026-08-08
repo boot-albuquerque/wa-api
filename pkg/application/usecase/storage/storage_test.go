@@ -113,9 +113,9 @@ func TestUseCases_SemSessao_PropagamACausaEnaoATraduzem(t *testing.T) {
 				t.Errorf("EnsureSession recebeu txtID %q, quero %q", sg.EnsureSessionCalls[0].TxtID, txtID)
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelError, "no wanoise session")
+			rec, found := log.FindLevel(contractsfake.LevelWarn, "no wanoise session")
 			if !found {
-				t.Fatalf("recusa de sessao nao foi logada em nivel error: %v", log.Records())
+				t.Fatalf("recusa de sessao nao foi logada em nivel warn (F72): %v", log.Records())
 			}
 			if !rec.IsStructured() {
 				t.Errorf("registro nao e' estruturado: %v", rec.Keyvals)

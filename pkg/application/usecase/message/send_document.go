@@ -40,7 +40,7 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 
 	// 2. Obter cliente wa-noise para verificar se existe sessão
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

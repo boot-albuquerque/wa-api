@@ -103,7 +103,7 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"txtID", "error"}},
+			wantLog:  wantLog{contractsfake.LevelWarn, "no wanoise session", []string{"txtID", "error"}},
 		},
 		{
 			name: "falha da porta vira erro logado",
@@ -198,7 +198,7 @@ func TestGetGroupInviteLinkUseCase_Execute(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"txtID", "error"}},
+			wantLog:  wantLog{contractsfake.LevelWarn, "no wanoise session", []string{"txtID", "error"}},
 		},
 		{
 			name: "porta falha",
@@ -282,7 +282,7 @@ func TestGetGroupInviteInfoUseCase_Execute(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"txtID", "error"}},
+			wantLog:  wantLog{contractsfake.LevelWarn, "no wanoise session", []string{"txtID", "error"}},
 		},
 		{
 			name: "porta falha",
@@ -355,7 +355,7 @@ func TestListGroupsUseCase_Execute(t *testing.T) {
 			},
 			wantErr:  true,
 			wantCode: "no_session",
-			wantLog:  wantLog{contractsfake.LevelError, "no wanoise session", []string{"txtID", "error"}},
+			wantLog:  wantLog{contractsfake.LevelWarn, "no wanoise session", []string{"txtID", "error"}},
 		},
 		{
 			name: "porta falha",

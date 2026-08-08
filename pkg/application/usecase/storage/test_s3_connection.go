@@ -26,7 +26,7 @@ func NewTestS3ConnectionUseCase(sg appport.SessionGuard, l appport.Logger) *Test
 func (uc *TestS3ConnectionUseCase) Execute(ctx context.Context, txtID string, req domain.S3TestRequest) (*domain.S3TestResult, error) {
 	// Validate client exists
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

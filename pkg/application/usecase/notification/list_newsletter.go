@@ -22,7 +22,7 @@ func NewListNewsletterUseCase(nr appport.NewsletterReader, logger appport.Logger
 // Execute lists subscribed newsletters
 func (uc *ListNewsletterUseCase) Execute(ctx context.Context, userID string) (*domain.NewsletterCollection, error) {
 	if err := uc.newsletters.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

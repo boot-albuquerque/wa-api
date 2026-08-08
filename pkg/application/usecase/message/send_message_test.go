@@ -500,7 +500,7 @@ func requireLog(t *testing.T, logger *contractsfake.Logger, level, msg string) c
 // mensagem canônica, a causa real e o identificador da sessão.
 func assertSessionLog(t *testing.T, logger *contractsfake.Logger, idKey, idValue string) {
 	t.Helper()
-	rec := requireLog(t, logger, contractsfake.LevelError, "no wanoise session")
+	rec := requireLog(t, logger, contractsfake.LevelWarn, "no wanoise session")
 	if got, ok := rec.Keyval("error"); !ok || got != error(errSession) {
 		t.Errorf("log de sessao nao carrega a causa real: %v", rec.Keyvals)
 	}

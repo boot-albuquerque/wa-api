@@ -64,9 +64,9 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 				t.Error("sessao recusada nao devia chegar ate' o resolver de JID")
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelError, "no wanoise session")
+			rec, found := log.FindLevel(contractsfake.LevelWarn, "no wanoise session")
 			if !found {
-				t.Fatalf("recusa de sessao nao foi logada em nivel error: %v", log.Messages())
+				t.Fatalf("recusa de sessao nao foi logada em nivel warn (F72): %v", log.Messages())
 			}
 			if !rec.IsStructured() {
 				t.Errorf("registro nao e' estruturado: %v", rec.Keyvals)

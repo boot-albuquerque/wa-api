@@ -3684,7 +3684,24 @@ Relacionado à **F66**: o mesmo `no_session` que é logado como `error` aqui é
 devolvido como HTTP 400 pelo handler — ou seja, a camada HTTP já o classifica
 corretamente como erro do cliente, e só o log discorda.
 
-**Status**: **não corrigido**.
+**Status**: **CORRIGIDO** (2026-08-07): 64 ocorrencias em 62 arquivos passaram de `Error` para `Warn`.
+
+O alcance era MUITO maior que esta entrada estimava — ela falava em ~12 use
+cases. E havia uma restricao que ela nao conhecia: a metrica de log-coverage
+so conta um caminho de saida como coberto com nivel **>= Warn**
+(`METRIC.md:136`). Rebaixar para `Info`/`Debug` tornaria os 64 caminhos
+descobertos de uma vez e obrigaria a afrouxar a catraca — trocaria um problema
+por outro. `Warn` e' o unico rebaixamento que cabe.
+
+Confirmado empiricamente: `errpath_coverage` ficou INALTERADO em 862 apos a
+mudanca.
+
+A porta `Logger` tambem nao tem `Debug` — so' `Info`, `Warn` e `Error` —,
+entao a alternativa nem estava disponivel sem mexer na interface.
+
+Cinco testes travavam o nivel (um helper compartilhado `assertNoSessionLog`,
+tabelas em group/chat, e um com string literal `"error"`). Todos ajustados,
+com o porque registrado no helper.
 
 ## F73 — `PushName` e `BusinessName` não geram webhook
 

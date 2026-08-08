@@ -27,7 +27,7 @@ func NewGroupManagementUseCase(gl appport.GroupLifecycle, gs appport.GroupSettin
 // recebiam.
 func (uc *GroupManagementUseCase) ensure(ctx context.Context, txtID string) error {
 	if err := uc.settings.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return err
 	}
 	return nil

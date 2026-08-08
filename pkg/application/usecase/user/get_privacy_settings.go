@@ -21,7 +21,7 @@ func NewGetPrivacySettingsUseCase(pm appport.PrivacyManager, logger appport.Logg
 // Execute retrieves privacy settings with timeout
 func (uc *GetPrivacySettingsUseCase) Execute(ctx context.Context, userID string) (interface{}, error) {
 	if err := uc.privacy.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

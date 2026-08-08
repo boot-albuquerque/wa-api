@@ -16,9 +16,20 @@ import (
 var errNoSession = errors.New("session not found")
 
 // assertNoSessionLog verifica a forma do log padronizado de sessão ausente.
+// assertNoSessionLog exige o log em WARN, nao em Error (F72).
+//
+// "sessao nao conectada" e' estado ESPERADO — de toda sessao que ainda nao
+// pareou ou que foi desconectada de proposito —, e logar como Error inutiliza
+// alerta por nivel: um painel fazendo poll de status a cada 3s gera 20 linhas
+// de error por minuto e por sessao parada.
+//
+// Warn, e nao Info/Debug, porque a metrica de log-coverage do projeto so
+// conta um caminho de saida como coberto com nivel >= Warn (METRIC.md:136).
+// Rebaixar mais tornaria 64 caminhos descobertos de uma vez e obrigaria a
+// afrouxar a catraca — trocar um problema por outro.
 func assertNoSessionLog(t *testing.T, logger *contractsfake.Logger, userID string) {
 	t.Helper()
-	rec, ok := logger.FindLevel(contractsfake.LevelError, "no wanoise session")
+	rec, ok := logger.FindLevel(contractsfake.LevelWarn, "no wanoise session")
 	if !ok {
 		t.Fatalf("log de sessão ausente não emitido; houve %v", logger.Messages())
 	}

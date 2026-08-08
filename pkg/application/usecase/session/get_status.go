@@ -35,7 +35,7 @@ func NewGetStatusUseCase(sg appport.SessionGuard, status appport.SessionStatusRe
 // endpoint para detectar a transição QR→autenticado nunca via a mudança.
 func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.GetStatusResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Error(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

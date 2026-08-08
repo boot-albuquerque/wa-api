@@ -35,6 +35,16 @@ func (evh *UserEventHandler) handleEvent(rawEvt interface{}) {
 	switch evt := rawEvt.(type) {
 	case *events.AppStateSyncComplete:
 		evh.handleAppStateSyncComplete(evt, st)
+	// PushName e BusinessName anunciam que um CONTATO mudou de nome — o SDK
+	// ja' persistiu o dado (inclusive o par LID<->PN) antes de emitir, entao
+	// nao ha o que fazer aqui hoje. O `case` existe para que "Unhandled
+	// event" volte a significar "apareceu algo que nao previmos", e nao
+	// "apareceu algo que decidimos ignorar": sem ele, os dois casos se
+	// misturam no mesmo warn e o aviso perde o valor que tinha.
+	//
+	// Se um dia esses eventos virarem webhook, e' aqui que entram. Ver F73.
+	case *events.PushName, *events.BusinessName:
+		return
 	case *events.Connected, *events.PushNameSetting:
 		if !evh.handleConnected(st) {
 			return

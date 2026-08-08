@@ -106,9 +106,15 @@ func TestListNewsletterExecute(t *testing.T) {
 				}
 				return
 			}
-			rec, ok := logger.FindLevel("error", tt.wantErrorLog)
+			// "no wanoise session" e' o unico caso que sai em warn: sessao
+			// nao conectada e' estado esperado, nao erro de servidor (F72).
+			nivel := "error"
+			if tt.wantErrorLog == "no wanoise session" {
+				nivel = "warn"
+			}
+			rec, ok := logger.FindLevel(nivel, tt.wantErrorLog)
 			if !ok {
-				t.Fatalf("faltou log de erro %q; registros: %v", tt.wantErrorLog, logger.Messages())
+				t.Fatalf("faltou log %s %q; registros: %v", nivel, tt.wantErrorLog, logger.Messages())
 			}
 			if !rec.HasKey("error") {
 				t.Errorf("log %q sem a keyval \"error\" — a causa se perde", tt.wantErrorLog)
