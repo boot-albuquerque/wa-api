@@ -102,13 +102,20 @@ func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *even
 		log.Info().Str("jid", jid.String()).Str("userid", st.txtid).Str("token", token).Msg("User information set")
 	}
 
-	// Check if automatic history sync is enabled and trigger it after QR code is scanned
+	// Check if automatic history sync is enabled and trigger it after QR code is scanned.
+	//
+	// A coluna e' `history` (migrations.go:254; o campo da API tambem, ver
+	// domain.AddUserRequest.History). Ate' a F71 esta query pedia
+	// `days_to_sync_history`, que nunca existiu: ela falhava em TODO banco e
+	// para TODO usuario, o `else if` abaixo jamais era alcancado, e o sync
+	// automatico apos pareamento era codigo morto. Como a falha era so' um
+	// Warn, passou despercebida — e quem configurasse history:30 via o valor
+	// persistido e devolvido por /session/status, concluindo que funcionava.
 	var daysToSyncHistory int
-	query := "SELECT COALESCE(days_to_sync_history, 0) FROM users WHERE id=$1"
-	query = evh.DB.Rebind(query)
+	query := evh.DB.Rebind(historyDaysQuery)
 	err = evh.DB.Get(&daysToSyncHistory, query, evh.UserID)
 	if err != nil {
-		log.Warn().Err(err).Str("userID", evh.UserID).Msg("Failed to get days_to_sync_history from database")
+		log.Warn().Err(err).Str("userID", evh.UserID).Msg("Failed to get history days from database")
 	} else if daysToSyncHistory > 0 {
 		// Trigger history sync in a goroutine to avoid blocking
 		// Wait a bit for the connection to be fully established

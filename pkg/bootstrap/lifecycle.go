@@ -48,7 +48,10 @@ func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userI
 
 // Connects to Whatsapp Websocket on server startup if last state was connected
 func (s *server) connectOnStartup() {
-	rows, err := s.DB.Queryx("SELECT id,name,token,jid,webhook,events,proxy_url,CASE WHEN s3_enabled THEN 'true' ELSE 'false' END AS s3_enabled,media_delivery,COALESCE(history, 0) as history,hmac_key FROM users WHERE connected=1")
+	// Mesma lista de colunas de ensureUserInfoCached: os dois preenchem a
+	// MESMA estrutura, e divergir faria a entrada nascer incompleta
+	// dependendo do caminho por onde o usuário passou (F70).
+	rows, err := s.DB.Queryx("SELECT " + userInfoColumns + " FROM users WHERE connected=1")
 	if err != nil {
 		log.Error().Err(err).Msg("DB Problem")
 		return

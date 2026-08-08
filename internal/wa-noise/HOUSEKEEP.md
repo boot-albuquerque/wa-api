@@ -3421,7 +3421,7 @@ descartar a pista certa.
 A (1) é mais barata e ataca a origem; a (2) torna o cache irrelevante para
 correção, o que é mais robusto.
 
-**Status**: **não corrigido**. É caminho de produção e merece commit próprio
+**Status**: **CORRIGIDO** (2026-08-07) — ver o commit da correcao.
 com teste de integração cobrindo "usuário criado após a subida recebe
 webhook".
 
@@ -3473,4 +3473,4 @@ parear, e afirmar que `syncHistoryAfterPair` rodou.
 Vale checar de passagem se a migração de `migrations.go:236-254` roda em
 SQLite — ela usa `information_schema`, que é de Postgres.
 
-**Status**: **não corrigido.**
+**Status**: **CORRIGIDO** (2026-08-07) — ver o commit da correcao.

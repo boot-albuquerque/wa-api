@@ -160,9 +160,13 @@ rules_frozen=true
 # devui NAO entrou em .logcov-exclude de proposito: e' codigo que vai no
 # binario, e exclui-lo seria encolher o denominador para embelezar o numero —
 # exatamente o que min_eligible existe para impedir.
-min_func_coverage=706
+# F70/F71 (2026-08-07): min_eligible 511->512 (+1: ensureUserInfoCached).
+# func_coverage SOBE 706->709 e errpath 862->862: a funcao nova loga tanto o
+# carregamento quanto a falha, e o Attach loga quando nao consegue popular o
+# cache. Ratchet-UP honesto — codigo novo que ja nasce instrumentado.
+min_func_coverage=709
 min_errpath_coverage=862
-min_eligible=511
+min_eligible=512
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

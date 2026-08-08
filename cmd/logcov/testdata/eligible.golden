@@ -2038,7 +2038,7 @@ pkg/bootstrap.UserEventHandler.handleCallOfferNotice	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallRelayLatency	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallTerminate	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleChatPresence	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:250)
+pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:257)
 pkg/bootstrap.UserEventHandler.handleConnectFailure	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleConnected	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:70)
 pkg/bootstrap.UserEventHandler.handleDisconnected	ELIGIBLE	covered
@@ -2049,8 +2049,8 @@ pkg/bootstrap.UserEventHandler.handleGroupInfo	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleHistorySync	ELIGIBLE	uncovered:L1
 pkg/bootstrap.UserEventHandler.handleIdentityChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleJoinedGroup	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:238)
-pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:244)
+pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:245)
+pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:251)
 pkg/bootstrap.UserEventHandler.handleLoggedOut	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleMediaRetry	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleMessage	ELIGIBLE	uncovered:L1
@@ -2060,7 +2060,7 @@ pkg/bootstrap.UserEventHandler.handleNewsletterLiveUpdate	ELIGIBLE	uncovered:L3(
 pkg/bootstrap.UserEventHandler.handleNewsletterMuteChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:318)
 pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:324)
-pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:268)
+pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:275)
 pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:96)
 pkg/bootstrap.UserEventHandler.handlePicture	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handlePresence	ELIGIBLE	covered
@@ -2068,7 +2068,7 @@ pkg/bootstrap.UserEventHandler.handlePrivacySettings	ELIGIBLE	uncovered:L3(zerol
 pkg/bootstrap.UserEventHandler.handleReceipt	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamError	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamReplaced	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:256)
+pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:263)
 pkg/bootstrap.UserEventHandler.handleUndecryptableMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleUserAbout	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.persistHistorySync	ELIGIBLE	covered
@@ -2099,6 +2099,7 @@ pkg/bootstrap.deviceJIDLookup.func1	EXCLUDED	X6
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
+pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
 pkg/bootstrap.generateHmacSignature	ELIGIBLE	uncovered:L1
 pkg/bootstrap.getKillChannel	EXCLUDED	X1
 pkg/bootstrap.getUserWebhookUrl	ELIGIBLE	covered
@@ -2143,7 +2144,7 @@ pkg/bootstrap.server.connectOnStartup	ELIGIBLE	covered
 pkg/bootstrap.server.connectOnStartup.func1	ELIGIBLE	covered
 pkg/bootstrap.server.routes	EXCLUDED	X1
 pkg/bootstrap.server.startSession	ELIGIBLE	covered
-pkg/bootstrap.sessionAttachHookAdapter.Attach	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,session_attach_hook_adapter.go:42)
+pkg/bootstrap.sessionAttachHookAdapter.Attach	ELIGIBLE	uncovered:L2(S-ret,session_attach_hook_adapter.go:42)
 pkg/bootstrap.sessionAttachHookAdapter.Attach.func1	ELIGIBLE	covered
 pkg/bootstrap.sessionAttachHookAdapter.Detach	EXCLUDED	X1
 pkg/bootstrap.sessionEventDispatcherAdapter.Dispatch	ELIGIBLE	covered

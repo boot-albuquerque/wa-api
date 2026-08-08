@@ -42,6 +42,20 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		return fmt.Errorf("sessionAttachHook: no wanoise client registered for userID %s", userID)
 	}
 
+	// Garante a entrada no UserInfoCache antes de qualquer evento poder
+	// chegar (F70). Attach é o ponto por onde TODA sessão passa — tanto o
+	// pareamento novo quanto a reconexão de quem já tinha credenciais — e é
+	// por isso que a correção mora aqui e não no handler de PairSuccess,
+	// que cobriria só metade dos casos.
+	//
+	// Falhar aqui NÃO aborta o Attach: sem cache a sessão ainda funciona
+	// para tudo que não depende dele, e derrubar o pareamento inteiro por
+	// causa de um enriquecimento seria pior que o defeito que se corrige.
+	if err := ensureUserInfoCached(h.s.DB, userID, token); err != nil {
+		log.Warn().Err(err).Str("userid", userID).
+			Msg("não foi possível carregar user info para o cache; webhook e history podem ficar inertes")
+	}
+
 	evh := &UserEventHandler{
 		WAClient:       client,
 		EventHandlerID: 1,
