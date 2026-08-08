@@ -245,15 +245,7 @@ func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accoun
 		}
 	}
 
-	// Try to get PushName from store if available
-	pushName := ""
-	if !isFromMe && senderJIDForInfo.User != "" {
-		if evh.WAClient != nil && evh.WAClient.Store != nil {
-			if contact, err := evh.WAClient.Store.Contacts.GetContact(context.Background(), senderJIDForInfo); err == nil {
-				pushName = contact.PushName
-			}
-		}
-	}
+	pushName := evh.resolverPushName(msg, isFromMe, senderJIDForInfo)
 
 	// Create MessageInfo structure matching events.Message format
 	messageInfo := types.MessageInfo{
@@ -310,6 +302,7 @@ func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accoun
 			mediaLink,
 			quotedMessageID,
 			string(evtJSON),
+			pushName,
 		)
 		if err != nil {
 			log.Error().Err(err).
@@ -334,4 +327,58 @@ func (evh *UserEventHandler) handleOfflineSyncPreview(evt *events.OfflineSyncPre
 	st.postmap["type"] = "OfflineSyncPreview"
 	st.dowebhook = 1
 	log.Info().Msg("Offline sync preview")
+}
+
+// resolverPushName decide o nome de exibição do remetente de uma mensagem do
+// HistorySync.
+//
+// A ORDEM é a correção da F84. Até ela, esta função consultava SÓ o roster
+// local — e para identidades `@lid` o roster está vazio na esmagadora maioria
+// dos casos, então gravávamos string vazia em toda conversa nova. Medido no
+// banco real: 261 de 1717 conversas individuais tinham nome.
+//
+// O `WebMessageInfo` que o HistorySync entrega JÁ CARREGA o pushName (campo
+// 19 do protobuf). O WhatsApp nos manda o nome em toda mensagem, e nós o
+// descartávamos em favor de uma consulta que falha.
+//
+// A guarda contra vazio vem da Evolution API (issue #2426), que teve o mesmo
+// sintoma por causa diferente: o upsert de contato sobrescrevia pushName com
+// string vazia a cada mensagem enviada, porque não tinha a guarda que o
+// caminho de Chat.name já tinha. A lição é a mesma aqui — nunca deixar o
+// vazio vencer um nome que existe.
+//
+// O roster continua servindo de segunda camada, como o guia de LID do
+// Baileys (issue #2414) recomenda: cache de contatos é fonte legítima, mas
+// não confiável SOZINHA, porque só eventos de upsert o alimentam.
+func (evh *UserEventHandler) resolverPushName(
+	msg *waHistorySync.HistorySyncMsg,
+	isFromMe bool,
+	sender types.JID,
+) string {
+	// Mensagem própria não tem pushName de remetente a resolver: quem a
+	// enviou é o dono da sessão.
+	if isFromMe || sender.User == "" {
+		return ""
+	}
+
+	// Camada 1 — o que veio no protobuf. É o dado mais fresco que existe:
+	// chega junto da mensagem, sem depender de sincronização de roster.
+	if msg != nil && msg.Message != nil {
+		if nome := msg.Message.GetPushName(); nome != "" {
+			return nome
+		}
+	}
+
+	// Camada 2 — o roster local. Só entra quando o protobuf não trouxe nada,
+	// e nunca sobrescreve o que veio dele.
+	if evh.WAClient == nil || evh.WAClient.Store == nil || evh.WAClient.Store.Contacts == nil {
+		return ""
+	}
+	contact, err := evh.WAClient.Store.Contacts.GetContact(context.Background(), sender)
+	if err != nil {
+		log.Warn().Err(err).Str("sender", sender.String()).
+			Msg("roster indisponivel ao resolver pushName; mensagem segue sem nome")
+		return ""
+	}
+	return contact.PushName
 }

@@ -321,6 +321,10 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 			mediaLink,
 			replyToMessageID,
 			string(evtJSON),
+			// Mensagem em tempo real ja' traz o pushName no proprio evento —
+			// nao ha store a consultar aqui, e por isso este caminho nunca
+			// sofreu da F84.
+			evt.Info.PushName,
 		)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to save message to history")

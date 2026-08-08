@@ -98,7 +98,40 @@ var migrations = []Migration{
 		UpSQL:   renameMessageSecretsIndexSQL,
 		DownSQL: renameMessageSecretsIndexDownSQL,
 	},
+	{
+		ID:      13,
+		Name:    "add_message_history_sender_push_name",
+		UpSQL:   addSenderPushNameSQL,
+		DownSQL: addSenderPushNameDownSQL,
+	},
 }
+
+// addSenderPushNameSQL acompanha a F84: o pushName que o WhatsApp manda em
+// cada mensagem passa a ter coluna própria.
+//
+// Antes ele só existia dentro de `datajson`, e a lista de conversas teria de
+// desserializar um JSON por linha para lê-lo — sobre 40 mil mensagens, num
+// caminho de leitura. A coluna é o que torna a junção barata.
+//
+// NULLABLE de propósito: as linhas já gravadas não têm o nome (ele foi
+// perdido na escrita, ver F84), e inventar string vazia para elas apagaria a
+// distinção entre "não sabemos" e "sabemos que não tem".
+const addSenderPushNameSQL = `
+-- PostgreSQL version
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'message_history' AND column_name = 'sender_push_name') THEN
+        ALTER TABLE message_history ADD COLUMN sender_push_name TEXT;
+    END IF;
+END $$;
+
+-- SQLite version (handled in code, via addColumnIfNotExists)
+`
+
+const addSenderPushNameDownSQL = `
+ALTER TABLE message_history DROP COLUMN sender_push_name;
+`
 
 // renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de
 // protocolo (ver renameLegacyTables em
@@ -574,6 +607,14 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 			// A migração 9 nunca criou o índice no SQLite, então não há o que
 			// renomear aqui.
 			err = nil
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == 13 {
+		if db.DriverName() == "sqlite" {
+			// Sem DEFAULT: NULL distingue "linha antiga, nao sabemos o nome"
+			// de "sabemos que nao tem" (F84).
+			err = addColumnIfNotExistsSQLite(tx, "message_history", "sender_push_name", "TEXT")
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}

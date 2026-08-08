@@ -70,10 +70,11 @@ func (uc *ListChatsUseCase) Execute(ctx context.Context, userID string, limit, o
 
 	nomesContato := uc.nomesDeContato(ctx, userID)
 	nomesGrupo := uc.nomesDeGrupo(ctx, userID)
+	nomesHistorico := uc.nomesDoHistorico(ctx, userID)
 
 	chats := make([]domain.ChatSummary, 0, len(atividade))
 	for jid, quando := range atividade {
-		chats = append(chats, montarResumo(jid, quando, nomesContato, nomesGrupo))
+		chats = append(chats, montarResumo(jid, quando, nomesContato, nomesGrupo, nomesHistorico))
 	}
 
 	ordenar(chats)
@@ -116,6 +117,23 @@ func (uc *ListChatsUseCase) nomesDeContato(ctx context.Context, userID string) m
 	return nomes
 }
 
+// nomesDoHistorico é a fonte que a F84 destravou: o pushName que o WhatsApp
+// manda junto de cada mensagem. Na prática é a mais completa das três — o
+// roster só conhece quem está na agenda, e para `@lid` está vazio na maioria
+// dos casos.
+//
+// A chave aqui é o chat_jid COMO ELE ESTÁ no histórico, sem normalização,
+// porque é assim que a consulta agrupa. A normalização acontece depois, em
+// montarResumo, que tenta as duas formas.
+func (uc *ListChatsUseCase) nomesDoHistorico(ctx context.Context, userID string) map[string]string {
+	nomes, err := uc.activity.GetChatPushNames(ctx, userID)
+	if err != nil {
+		uc.logger.Warn(ctx, "pushNames do historico indisponiveis; conversas caem para o roster", "error", err, "user_id", userID)
+		return nil
+	}
+	return nomes
+}
+
 func (uc *ListChatsUseCase) nomesDeGrupo(ctx context.Context, userID string) map[domain.JID]string {
 	nomes, err := uc.groups.GroupNames(ctx, userID)
 	if err != nil {
@@ -135,6 +153,7 @@ func montarResumo(
 	quando time.Time,
 	contatos map[domain.JID]domain.ContactName,
 	grupos map[domain.JID]string,
+	historico map[string]string,
 ) domain.ChatSummary {
 	resumo := domain.ChatSummary{
 		JID:          jid,
@@ -145,17 +164,26 @@ func montarResumo(
 		resumo.Name = grupos[domain.JID(jid)]
 		return resumo
 	}
-	c, ok := contatos[domain.JID(jid)]
-	if !ok {
-		// Conversa com quem não está no roster é comum (alguém que escreveu
-		// uma vez). Sai sem nome, e não fica de fora: omiti-la esconderia
-		// uma conversa que existe.
-		return resumo
+
+	// O roster vem primeiro por ser o nome que QUEM CONSULTA escolheu: se a
+	// pessoa está na agenda como "Maria Contadora", é isso que se espera ver,
+	// e não o pushName que ela escolheu para si.
+	if c, ok := contatos[domain.JID(jid)]; ok {
+		resumo.PushName = c.PushName
+		resumo.FullName = c.FullName
+		resumo.BusinessName = c.BusinessName
+		resumo.Name = c.Melhor()
 	}
-	resumo.Name = c.Melhor()
-	resumo.PushName = c.PushName
-	resumo.FullName = c.FullName
-	resumo.BusinessName = c.BusinessName
+
+	// O histórico entra quando o roster não soube — que é a maioria dos casos
+	// para `@lid` (F84). Nunca sobrescreve um nome que o roster deu: isso
+	// inverteria a preferência acima.
+	if resumo.Name == "" {
+		if nome := historico[jid]; nome != "" {
+			resumo.Name = nome
+			resumo.PushName = nome
+		}
+	}
 	return resumo
 }
 

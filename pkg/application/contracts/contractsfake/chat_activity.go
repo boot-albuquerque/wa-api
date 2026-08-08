@@ -18,8 +18,21 @@ type ChatActivityReaderGetLastActivityByUserCall struct {
 
 // ChatActivityReader é o fake de port.ChatActivityReader.
 type ChatActivityReader struct {
+	GetChatPushNamesFunc  func(ctx context.Context, userID string) (map[string]string, error)
+	GetChatPushNamesCalls int
+
 	GetLastActivityByUserFunc  func(ctx context.Context, userID string) (map[string]time.Time, error)
 	GetLastActivityByUserCalls []ChatActivityReaderGetLastActivityByUserCall
+}
+
+// GetChatPushNames implementa port.ChatActivityReader. Zero-value devolve
+// mapa vazio, que e' o historico de quem ainda nao recebeu mensagem nenhuma.
+func (f *ChatActivityReader) GetChatPushNames(ctx context.Context, userID string) (map[string]string, error) {
+	f.GetChatPushNamesCalls++
+	if f.GetChatPushNamesFunc != nil {
+		return f.GetChatPushNamesFunc(ctx, userID)
+	}
+	return map[string]string{}, nil
 }
 
 var _ port.ChatActivityReader = (*ChatActivityReader)(nil)

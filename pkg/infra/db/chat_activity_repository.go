@@ -25,3 +25,9 @@ func NewChatActivityRepository(db *sqlx.DB) *ChatActivityRepository {
 func (r *ChatActivityRepository) GetLastActivityByUser(_ context.Context, userID string) (map[string]time.Time, error) {
 	return GetLastActivityByUser(r.db, userID)
 }
+
+// GetChatPushNames devolve, por chat, o pushName mais recente que já chegou
+// naquela conversa. Ver GetChatPushNamesByUser.
+func (r *ChatActivityRepository) GetChatPushNames(_ context.Context, userID string) (map[string]string, error) {
+	return GetChatPushNamesByUser(r.db, userID)
+}
