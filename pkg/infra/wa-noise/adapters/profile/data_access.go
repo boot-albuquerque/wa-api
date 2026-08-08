@@ -10,7 +10,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
-// ProfileDataAccess adapta *wa-noise.Client para a interface
+// ProfileDataAccess adapta *wanoise.Client para a interface
 // usecase.ProfileDataAccess, permitindo mock em testes unitários.
 type ProfileDataAccess struct {
 	client *wanoise.Client
@@ -56,7 +56,7 @@ func toTypesJID(jid domain.JID) (types.JID, error) {
 
 // ProfilePictureURL retorna URL e ID da foto de perfil.
 //
-// O caminho real desta função exige um *wa-noise.Client inicializado
+// O caminho real desta função exige um *wanoise.Client inicializado
 // pelo SDK (que abre websocket). Esta refatoração fica limitada: o
 // adaptador continua a chamar o método concreto porque o SDK não
 // oferece uma interface alternativa. Testes diretos desta função

@@ -41,7 +41,7 @@ func TestClientManager_GetAllClients(t *testing.T) {
 	}
 }
 
-// TestClientManager_Iteratewa-noiseClients itera com callback.
+// TestClientManager_IterateWaNoiseClients itera com callback.
 func TestClientManager_IterateWaNoiseClients(t *testing.T) {
 	cm := NewClientManager()
 	cm.SetWaNoiseClient("u1", &wanoise.Client{})
@@ -56,7 +56,7 @@ func TestClientManager_IterateWaNoiseClients(t *testing.T) {
 	}
 }
 
-// TestClientManager_Iteratewa-noiseClients_BreakEarly callback false para.
+// TestClientManager_IterateWaNoiseClients_BreakEarly callback false para.
 func TestClientManager_IterateWaNoiseClients_BreakEarly(t *testing.T) {
 	cm := NewClientManager()
 	cm.SetWaNoiseClient("u1", &wanoise.Client{})
@@ -72,7 +72,7 @@ func TestClientManager_IterateWaNoiseClients_BreakEarly(t *testing.T) {
 	}
 }
 
-// TestClientManager_Iteratewa-noiseClients_Empty.
+// TestClientManager_IterateWaNoiseClients_Empty.
 func TestClientManager_IterateWaNoiseClients_Empty(t *testing.T) {
 	cm := NewClientManager()
 	count := 0

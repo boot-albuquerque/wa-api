@@ -30,7 +30,7 @@ type IQ struct {
 
 // Transport e' a fatia do cliente de que o pareamento precisa.
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {
@@ -72,7 +72,7 @@ type Transport interface {
 	// local, em nanossegundos.
 	SetServerTimeOffset(offset int64)
 
-	// ElementMissing devolve o *wa-noise.ElementMissingError historico. O
+	// ElementMissing devolve o *wanoise.ElementMissingError historico. O
 	// tipo e' erro generico de parsing de XML do fork inteiro (group, usync,
 	// newsletter, ...), nao deste dominio, entao continua na raiz; so' a
 	// construcao atravessa a interface. Mesmo racional dos lotes 1 a 3.

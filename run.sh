@@ -21,8 +21,12 @@ if [ ! -f .env ]; then
   echo "[3/6] Creating .env..."
   cat > .env << 'ENVEOF'
 WA_API_ADMIN_TOKEN=admin123
-WA_API_GLOBAL_ENCRYPTION_KEY=MinhaChaveDe32Caracteres1234567890
-WA_API_GLOBAL_HMAC_KEY=MinhaHMACKeyDe32Caracteres1234567
+# AES aceita chave de 16, 24 ou 32 BYTES. Estas tem 32 — conferidas, nao
+# apenas anunciadas: ate a F67 os valores aqui tinham 34 e 33 bytes apesar de
+# dizerem "De32Caracteres", o startup logava "invalid key size 34" e subia
+# assim mesmo, deixando a chave HMAC global sem ser gravada.
+WA_API_GLOBAL_ENCRYPTION_KEY=MinhaChaveDe32Caracteres12345678
+WA_API_GLOBAL_HMAC_KEY=MinhaHMACKeyDe32Caracteres123456
 DB_NAME=waapi
 ENVEOF
 else

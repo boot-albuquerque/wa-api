@@ -33,7 +33,7 @@ var testIQErrors = IQErrors{
 	NotFound:      errors.New("iq 404"),
 }
 
-// testElementMissing espelha *wa-noise.ElementMissingError.
+// testElementMissing espelha *wanoise.ElementMissingError.
 type testElementMissing struct {
 	Tag string
 	In  string

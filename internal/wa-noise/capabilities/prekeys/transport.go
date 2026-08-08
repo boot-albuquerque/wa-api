@@ -35,7 +35,7 @@ type IQ struct {
 
 // Transport e' a fatia do cliente de que o dominio de prekeys precisa.
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {

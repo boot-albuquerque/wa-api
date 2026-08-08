@@ -110,7 +110,7 @@ func depsWith(wa interface{}, mc UserClientGetter) SyncDeps {
 	}
 }
 
-// clientWithStore devolve um *wa-noise.Client cujo Store.ID esta' preenchido —
+// clientWithStore devolve um *wanoise.Client cujo Store.ID esta' preenchido —
 // o suficiente para passar da validacao e chegar no SendMessage.
 func clientWithStore(t *testing.T) *wanoise.Client {
 	t.Helper()

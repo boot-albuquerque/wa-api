@@ -8,15 +8,6 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// ClientLookup is the subset of ClientManager methods needed by adapters
-// that look up WhatsApp clients by user ID. Both the root-level (package
-// main) ClientManager and the internal/wa-noise ClientManager satisfy it
-// implicitly, which breaks the circular concrete-type dependency between
-// root main and internal/.
-type ClientLookup interface {
-	GetWaNoiseClient(id string) *wanoise.Client
-}
-
 // ClientHealthProvider is the interface the root-level ClientManager
 // satisfies for health-related queries. Extracted to break the concrete
 // type dependency between internal/ and package main.
@@ -27,7 +18,7 @@ type ClientHealthProvider interface {
 
 // SessionCounterAdapter adapta o ClientManager para appport.SessionCounter.
 //
-// A iteração sobre *wa-noise.Client — que antes vivia dentro do use case de
+// A iteração sobre *wanoise.Client — que antes vivia dentro do use case de
 // health — passou para cá: é aqui que conhecer o tipo do SDK é legítimo.
 type SessionCounterAdapter struct {
 	cm ClientHealthProvider

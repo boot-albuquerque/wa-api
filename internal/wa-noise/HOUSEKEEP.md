@@ -2777,7 +2777,7 @@ A interface irmã no mesmo arquivo, `ClientHealthProvider`, é usada de verdade
 a preservar — remover uma interface que ninguém referencia não pode quebrar
 consumidor nenhum, e o compilador prova isso.
 
-**Status**: **não corrigido**. Achado fora do escopo da reorganização, que era
+**Status**: **CORRIGIDO** (2026-08-07). A interface foi removida; o compilador prova que ninguem a referenciava.
 mover código, não apagá-lo. Registrado para decisão.
 
 ## F60 — comentário em `client/testkit/helpers.go` cita um método com nome corrompido
@@ -2806,7 +2806,7 @@ correção pontual.
 **Correção sugerida**: `grep -rn '[A-Za-z]wa-noise[A-Z]' --include='*.go' .` e
 corrigir os casos, todos em comentário.
 
-**Status**: **não corrigido**. É correção cosmética fora do escopo; agrupar
+**Status**: **CORRIGIDO** (2026-08-07), e o alcance era MAIOR que esta entrada estimava: 12 identificadores CamelCase corrompidos (`Getwa-noiseClient`, `Iteratewa-noiseClients`) mais 49 referencias `*wa-noise.X`, que deveriam ser `*wanoise.X` — 44 arquivos ao todo. Todas em comentario: o codigo compila, entao nenhuma era identificador real.
 com a F59 numa passada só.
 
 ## F61 — `PATCHES.md` e `HOUSEKEEP.md` citam caminhos de `pkg/infra/wa-noise/` que não existem mais
@@ -3271,7 +3271,9 @@ comportamento de engolir falha de cifra continua lá.
 **Correção sugerida**: cortar as duas chaves para 32 bytes E decidir
 explicitamente entre fail-fast e degradação anunciada.
 
-**Status**: **não corrigido**. O item 1 é uma linha; o item 2 é decisão de
+**Status**: **item 1 CORRIGIDO** (2026-08-07) — as duas chaves do `run.sh` passaram a ter 32 bytes de verdade, travadas por `TestRunSh_ChavesTemTamanhoValidoParaAES`, que valida com o proprio `aes.NewCipher` em vez de comparar com 32 (replicar a regra abriria espaco para as duas divergirem). Ha' tambem um teste que exige que uma chave contendo "32" no texto tenha mesmo 32 bytes — foi essa contradicao que fez ninguem desconfiar.
+
+**item 2 ABERTO**: engolir falha de inicializacao de material criptografico continua la'. Com a chave certa o sintoma some, mas o comportamento nao.
 política de inicialização.
 
 ## F68 — o mesmo evento `QR` é despachado com dois formatos de payload
@@ -3373,7 +3375,7 @@ vai errar a barra de progresso do primeiro QR por 40 segundos.
 **Correção sugerida**: corrigir o comentário (uma linha, sem risco) e decidir
 separadamente sobre os 60s do primeiro código.
 
-**Status**: **não corrigido.** O comentário invertido é trivial mas está em
+**Status**: **item 1 (comentario invertido) CORRIGIDO** (2026-08-07). **item 2 (a validade de 60s do primeiro codigo) ABERTO** — e' decisao de seguranca, nao de implementacao.
 arquivo fora do escopo desta tarefa; a validade de 60s é decisão de
 segurança, não de implementação.
 

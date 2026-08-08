@@ -23,8 +23,8 @@ type wanoiseSession struct {
 
 func (s *wanoiseSession) HasCredentials() bool { return s.device.ID != nil }
 
-// wa-noiseClient expõe o cliente do SDK por trás da sessão. É o que permite
-// ao ClientManager.Register manter wa-noiseClients em dia sem que o
+// wanoiseClient expõe o cliente do SDK por trás da sessão. É o que permite
+// ao ClientManager.Register manter wanoiseClients em dia sem que o
 // orchestrator (que só conhece port.Session) conheça o SDK. Devolve nil quando
 // a sessão foi criada com um cliente falso (testes).
 func (s *wanoiseSession) WaNoiseClient() *wanoise.Client {

@@ -33,7 +33,7 @@ type IQ struct {
 
 // Transport e' a fatia do cliente de que o dominio de newsletter precisa.
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real com socket e sessao Noise.
 type Transport interface {
@@ -59,7 +59,7 @@ type Transport interface {
 	// entre as query IDs web e desktop do MEX.
 	ClientPayload() *waWa6.ClientPayload
 	// ElementMissing monta o erro de elemento XML ausente. O tipo concreto
-	// (*wa-noise.ElementMissingError) e' generico do fork inteiro, nao do
+	// (*wanoise.ElementMissingError) e' generico do fork inteiro, nao do
 	// dominio de newsletter, entao continua definido na raiz; a construcao
 	// passa por aqui para preservar o tipo exato que os chamadores historicos
 	// recebem em um type assert.

@@ -23,7 +23,7 @@ type deviceContainer interface {
 	NewDevice() *store.Device
 }
 
-// sessionClient é a superfície de *wa-noise.Client que uma Session exercita.
+// sessionClient é a superfície de *wanoise.Client que uma Session exercita.
 // Store.ID não aparece aqui: o adapter guarda o *store.Device com que criou o
 // cliente (é o mesmo ponteiro de client.Store) e lê as credenciais de lá.
 type sessionClient interface {

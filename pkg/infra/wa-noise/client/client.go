@@ -12,12 +12,12 @@ import (
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
-// Client é a superfície mínima de *wa-noise.Client exercitada pelos
+// Client é a superfície mínima de *wanoise.Client exercitada pelos
 // adapters deste pacote. Existe para que os caminhos de erro dos adapters
 // (especialmente o ramo ErrNoSession) sejam testáveis sem inicializar um
 // cliente real do SDK — o que exigiria conexão com servidores do WhatsApp.
 //
-// *wa-noise.Client satisfaz esta interface por construção: cada método
+// *wanoise.Client satisfaz esta interface por construção: cada método
 // abaixo tem a assinatura exata de um método público do SDK. O custo de
 // manter a interface é trivial (o compilador acusa um método faltante na
 // primeira execução de teste); o benefício é cada adapter poder receber um
@@ -92,11 +92,11 @@ type Client interface {
 }
 
 // Getter é a função de lookup que os adapters recebem no construtor.
-// Em produção é clientManager.Getwa-noiseClient; nos testes é uma função
+// Em produção é clientManager.GetWaNoiseClient; nos testes é uma função
 // controlada pelo caso.
 type Getter func(txtID string) Client
 
-// RealClient adapta *wa-noise.Client para a interface Client. O método
+// RealClient adapta *wanoise.Client para a interface Client. O método
 // Store() existe para uniformizar o campo `Store *store.Device` com os
 // demais métodos virtuais (Go proíbe campos em interfaces).
 type RealClient struct {
@@ -105,7 +105,7 @@ type RealClient struct {
 
 func (r RealClient) Store() *store.Device { return r.Client.Store }
 
-// ClientForGetter converte o getter de produção (devolve *wa-noise.Client)
+// ClientForGetter converte o getter de produção (devolve *wanoise.Client)
 // para o getter da interface. Em produção é a única ponte entre o tipo
 // concreto e o seam. Exportado porque pkg/bootstrap é quem o chama.
 func ClientForGetter(getConcrete func(txtID string) *wanoise.Client) Getter {

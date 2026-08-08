@@ -15,7 +15,7 @@ import (
 // continuam na raiz — ver a secao "O que NAO foi extraido, e por que" do lote
 // 5 em PATCHES.md.
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso: e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso: e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente com socket e sessao Noise.
 type Transport interface {

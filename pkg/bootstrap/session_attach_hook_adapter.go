@@ -27,8 +27,8 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 }
 
 // Attach replica exatamente a construção de lifecycle.go:218-232: resolve o
-// *wa-noise.Client já registrado por SessionProvider/SessionRegistry via
-// clientManager.Getwa-noiseClient, monta o UserEventHandler, registra
+// *wanoise.Client já registrado por SessionProvider/SessionRegistry via
+// clientManager.GetWaNoiseClient, monta o UserEventHandler, registra
 // handleEvent e guarda o handle em clientManager.SetUserClient.
 //
 // Também é dona do kill-channel (lifecycle.go:459-472): a goroutine que

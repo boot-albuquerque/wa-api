@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
-// elementMissingError replica o *wa-noise.ElementMissingError da raiz (que
+// elementMissingError replica o *wanoise.ElementMissingError da raiz (que
 // este pacote nao pode importar) para que os testes possam afirmar que o erro
 // devolvido veio de Transport.ElementMissing, com tag e contexto corretos.
 type elementMissingError struct {

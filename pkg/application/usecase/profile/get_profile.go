@@ -55,7 +55,7 @@ func (uc *GetProfileUseCase) Execute(ctx context.Context, txtID string) (string,
 }
 
 // buildProfile constrói o perfil a partir do ProfileDataAccess.
-// Extraída para teste unitário sem depender de *wa-noise.Client.
+// Extraída para teste unitário sem depender de *wanoise.Client.
 // Chama OwnJID() uma única vez e cacheia o resultado para reuso.
 func buildProfile(ctx context.Context, da appport.ProfileDataAccess, logger appport.Logger) ProfileResult {
 	result := ProfileResult{

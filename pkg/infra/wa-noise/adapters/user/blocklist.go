@@ -92,7 +92,7 @@ func normalizeBlocklistJID(jid types.JID) types.JID {
 
 // resolveBlocklistPNJID traduz um LID para o número de telefone, que é a
 // forma que a lista de bloqueio aceita. Migrado literalmente de block_user.go,
-// menos a asserção de tipo `client.(*wa-noise.Client)`, que existia só
+// menos a asserção de tipo `client.(*wanoise.Client)`, que existia só
 // porque o helper recebia interface{} — aqui o tipo é a interface waclient.Client
 // e o Store é acessado pelo método Store().
 func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {

@@ -15,7 +15,7 @@ import (
 
 // GetterWith devolve uma waclient.Getter que mapeia txtID para o cliente
 // correspondente em clients. txtIDs ausentes devolvem nil (que é exatamente
-// o comportamento de registry.ClientManager.Getwa-noiseClient).
+// o comportamento de registry.ClientManager.GetWaNoiseClient).
 func GetterWith(clients map[string]waclient.Client) waclient.Getter {
 	return func(txtID string) waclient.Client {
 		return clients[txtID]

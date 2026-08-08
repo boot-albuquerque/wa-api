@@ -104,7 +104,7 @@ func (f *fakeTransport) ClearNCTSalt(context.Context) error {
 }
 
 // ElementMissing devolve um erro simples: o tipo concreto de verdade
-// (*wa-noise.ElementMissingError) vive na raiz, que este pacote nao importa.
+// (*wanoise.ElementMissingError) vive na raiz, que este pacote nao importa.
 func (f *fakeTransport) ElementMissing(tag, in string) error {
 	f.elementCalls = append(f.elementCalls, tag+"/"+in)
 	return fmt.Errorf("elemento <%s> ausente em %s", tag, in)

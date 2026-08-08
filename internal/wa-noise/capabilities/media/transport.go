@@ -12,7 +12,7 @@ import (
 // precisa: o http.Client dedicado, o logger e as duas decisoes que dependem da
 // configuracao do cliente (Messenger x WhatsApp, avisos de validacao).
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso — e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso — e' o que
 // permite que este pacote nao importe o pacote raiz e que os testes usem um
 // duble em vez de um cliente real.
 type HTTPTransport interface {

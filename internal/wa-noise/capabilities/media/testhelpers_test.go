@@ -37,7 +37,7 @@ func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error)
 }
 
 // fakeTransport e' o duble de media.Transport usado nos testes: implementa a
-// interface inteira sem precisar de um *wa-noise.Client (nem de socket, store
+// interface inteira sem precisar de um *wanoise.Client (nem de socket, store
 // ou sessao). E' exatamente o ganho de testabilidade que a extracao buscava.
 type fakeTransport struct {
 	httpClient *http.Client

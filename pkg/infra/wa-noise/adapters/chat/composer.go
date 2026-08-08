@@ -15,7 +15,7 @@ type MessageComposerAdapter struct {
 }
 
 // NewMessageComposerAdapter cria o adapter com a função de lookup.
-// O parâmetro getClient é tipicamente clientManager.Getwa-noiseClient
+// O parâmetro getClient é tipicamente clientManager.GetWaNoiseClient
 // (convertido via clientForGetter).
 func NewMessageComposerAdapter(getClient waclient.Getter) *MessageComposerAdapter {
 	return &MessageComposerAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}

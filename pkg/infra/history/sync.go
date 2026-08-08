@@ -14,9 +14,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// historySender e' o recorte de *wa-noise.Client que SyncHistoryForChat usa.
+// historySender e' o recorte de *wanoise.Client que SyncHistoryForChat usa.
 // A costura existe para que o envio do pedido de sync possa ser exercitado sem
-// socket; *wa-noise.Client a satisfaz e continua sendo o unico implementador
+// socket; *wanoise.Client a satisfaz e continua sendo o unico implementador
 // em producao. A assercao de tipo permanece de valor unico, entao o
 // comportamento para um valor de tipo inesperado e' o mesmo de antes.
 type historySender interface {
@@ -25,7 +25,7 @@ type historySender interface {
 }
 
 // UserClientGetter e' a interface minima que SyncDeps.GetMC precisa: acesso ao
-// *wa-noise.Client subjacente, sem exigir o tipo concreto de UserClient.
+// *wanoise.Client subjacente, sem exigir o tipo concreto de UserClient.
 type UserClientGetter interface {
 	GetWAClient() *wanoise.Client
 }

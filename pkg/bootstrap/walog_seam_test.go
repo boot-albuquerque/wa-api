@@ -23,7 +23,7 @@ import (
 //     que antes desta mudança era waLog.Noop e descartava o registro.
 //
 //  2. O caminho da aplicação: o handleEvent real, com um events.Connected
-//     real, sobre um *wa-noise.Client real construído com o bridge como
+//     real, sobre um *wanoise.Client real construído com o bridge como
 //     logger. É o handler de produção, não um stub.
 //
 // Ambos escrevem no mesmo buffer, que é o ponto: SDK e aplicação saem no

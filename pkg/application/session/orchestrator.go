@@ -259,9 +259,15 @@ func (o *Orchestrator) onPairingQR(ctx context.Context, userID string, evt port.
 	o.dispatch(ctx, userID, "QR", map[string]any{
 		"event":        "code",
 		"qrCodeBase64": base64qrcode,
-		// Validade real deste código específico (wa-noise emite 20s para os
-		// 5 primeiros e 60s para o último), em RFC3339 para o wa-worker
-		// repassar como está em vez de assumir uma janela fixa.
+		// Validade real deste código específico, em RFC3339, para o
+		// wa-worker repassar como está em vez de assumir uma janela fixa.
+		//
+		// São 60s para o PRIMEIRO código e 20s para os demais — não o
+		// contrário, como este comentário afirmava até a F69.
+		// qrchan.go:72 aplica qrCodeFirstTimeout quando ainda restam
+		// qrCodeFirstBatchSize códigos na fila, ou seja, no primeiro.
+		// Quem programasse um cliente a partir do texto anterior erraria a
+		// barra de progresso do primeiro QR por 40 segundos.
 		"expiresAt": time.Now().Add(evt.Timeout).Format(time.RFC3339),
 	})
 }

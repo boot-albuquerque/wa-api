@@ -14,7 +14,7 @@ import (
 	"wa-api/internal/wa-noise/security/keys"
 )
 
-// missingElementError e' o duble do *wa-noise.ElementMissingError da raiz. O
+// missingElementError e' o duble do *wanoise.ElementMissingError da raiz. O
 // tipo concreto continua la'; aqui so' interessa que a construcao atravessa a
 // interface e devolve um erro identificavel.
 type missingElementError struct {

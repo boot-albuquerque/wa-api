@@ -17,7 +17,7 @@ const (
 	// ModuleDatabase é o módulo do container sqlstore.
 	ModuleDatabase = "Database"
 
-	// ModuleClient é o módulo do *wa-noise.Client, do qual saem os
+	// ModuleClient é o módulo do *wanoise.Client, do qual saem os
 	// subloggers de Recv/Send/Pair.
 	ModuleClient = "Client"
 

@@ -31,7 +31,7 @@ type SessionGuardAdapter struct {
 }
 
 // NewSessionGuardAdapter cria o adapter com a função de lookup.
-// O parâmetro getClient é tipicamente clientManager.Getwa-noiseClient
+// O parâmetro getClient é tipicamente clientManager.GetWaNoiseClient
 // (convertido via clientForGetter).
 func NewSessionGuardAdapter(getClient waclient.Getter) *SessionGuardAdapter {
 	return &SessionGuardAdapter{getClient: getClient}
@@ -65,7 +65,7 @@ var _ appport.SessionGuard = (*SessionGuardAdapter)(nil)
 // SessionStatus devolve se a sessão de userID está conectada e autenticada.
 //
 // Substitui a interface ClientManagerAdapter que list_users.go declarava
-// localmente, cujo Getwa-noiseClient(id) devolvia interface{} — segundo o
+// localmente, cujo GetWaNoiseClient(id) devolvia interface{} — segundo o
 // comentário do próprio arquivo, "to avoid circular deps" — apenas para ser
 // comparado com nil antes das duas chamadas seguintes. Aqui o cliente não
 // atravessa a fronteira.

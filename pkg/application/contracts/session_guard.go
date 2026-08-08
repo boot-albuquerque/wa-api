@@ -5,8 +5,8 @@ import "context"
 // SessionGuard responde à única pergunta que a maioria esmagadora dos use
 // cases fazia ao ClientProvider: "existe sessão WhatsApp para este txtID?".
 //
-// Antes, perguntar isso custava um Getwa-noiseClient que devolvia
-// *wa-noise.Client — o use case recebia o cliente inteiro do SDK, com suas
+// Antes, perguntar isso custava um GetWaNoiseClient que devolvia
+// *wanoise.Client — o use case recebia o cliente inteiro do SDK, com suas
 // ~200 operações, para em seguida compará-lo com nil e descartá-lo. O tipo
 // concreto vazava para a camada de aplicação sem que nada além da existência
 // da sessão fosse de fato usado, e testar esses use cases exigia uma sessão

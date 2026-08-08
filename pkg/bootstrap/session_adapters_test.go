@@ -62,7 +62,7 @@ func TestSessionEventDispatcher_HandleDeOutroTipo(t *testing.T) {
 }
 
 // TestSessionAttachHook_AttachSemClienteRegistrado: Attach depende do
-// *wa-noise.Client que o SessionRegistry publica no clientManager. Sem ele,
+// *wanoise.Client que o SessionRegistry publica no clientManager. Sem ele,
 // falhar alto é obrigatório — montar um UserEventHandler com WAClient nil registraria
 // um handle que entra em pânico no primeiro evento recebido.
 func TestSessionAttachHook_AttachSemClienteRegistrado(t *testing.T) {

@@ -33,7 +33,7 @@ const boundaryTestToken = "boundary-test-token"
 // logs through the real ZerologAdapter during a router-driven request —
 // without needing a live wa-noise connection. Que ele seja trivial de
 // escrever é o ponto da ADR-001: com a porta antiga, a mesma fake tinha que
-// produzir um *wa-noise.Client.
+// produzir um *wanoise.Client.
 type noSessionGuard struct{}
 
 func (noSessionGuard) EnsureSession(context.Context, string) error {

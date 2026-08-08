@@ -33,7 +33,7 @@ var testIQErrors = IQErrors{
 	Gone:          errors.New("iq 410"),
 }
 
-// testElementMissing espelha *wa-noise.ElementMissingError.
+// testElementMissing espelha *wanoise.ElementMissingError.
 type testElementMissing struct {
 	Tag string
 	In  string

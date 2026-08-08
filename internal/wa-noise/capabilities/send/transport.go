@@ -84,7 +84,7 @@ type Errors struct {
 //     delegacao. Faze-las atravessar a interface seria transformar duas funcoes
 //     puras em dois metodos de duble.
 //
-// Deliberadamente nao expoe nada do *wa-noise.Client alem disso: e' o que
+// Deliberadamente nao expoe nada do *wanoise.Client alem disso: e' o que
 // permite que este pacote nao importe o pacote raiz (o que fecharia um ciclo) e
 // que os testes usem um duble em vez de um cliente com socket e sessao Noise.
 type Transport interface {

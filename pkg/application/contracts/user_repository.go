@@ -43,7 +43,7 @@ type UserRepository interface {
 // usuário.
 //
 // Substitui a interface ClientManagerAdapter que list_users.go declarava
-// localmente com Getwa-noiseClient(id) interface{} — um interface{} escolhido,
+// localmente com GetWaNoiseClient(id) interface{} — um interface{} escolhido,
 // segundo o próprio comentário do arquivo, "to avoid circular deps". O valor
 // devolvido nunca era usado para nada além de comparar com nil.
 type SessionStatusReader interface {
