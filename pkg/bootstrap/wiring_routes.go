@@ -91,6 +91,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/user/unblock", customChain.Then(ch.User.UnblockUser()), "POST")
 	registry.Register("/user/lid/{jid}", customChain.Then(ch.User.GetUserLID()), "GET")
 	registry.Register("/user/profile/{jid}", customChain.Then(ch.User.GetUserProfile()), "GET")
+	registry.Register("/chat/list", customChain.Then(ch.User.ListChats()), "GET")
 
 	// Group routes (migrated from internal/)
 	registry.Register("/group/requestparticipants", customChain.Then(ch.Group.GetGroupRequestParticipants), "GET")

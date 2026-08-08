@@ -113,6 +113,16 @@ func (s *spyPort) GetLIDForPN(context.Context, string, domain.JID) (domain.JID, 
 	return "", s.err
 }
 
+func (s *spyPort) ContactNames(context.Context, string) (map[domain.JID]domain.ContactName, error) {
+	s.calls++
+	return nil, s.err
+}
+
+func (s *spyPort) GroupNames(context.Context, string) (map[domain.JID]string, error) {
+	s.calls++
+	return nil, s.err
+}
+
 func (s *spyPort) GetPNForLID(context.Context, string, domain.JID) (domain.JID, error) {
 	s.calls++
 	return "", s.err

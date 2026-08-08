@@ -105,6 +105,9 @@ func initCustomHandlers(s *server) {
 	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
+	// Declarado aqui, e nao junto dos ContactHandlers: ListChats tambem o
+	// consome, e os dois tem de compartilhar a MESMA instancia.
+	chatActivityRepo := db.NewChatActivityRepository(s.DB)
 	miscAdapter := wamisc.NewMiscAdapter(waClientLookup)
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
@@ -199,6 +202,7 @@ func initCustomHandlers(s *server) {
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
 	getUserProfileUC := user.NewGetUserProfileUseCase(userAdapter, jidResolver, logger)
+	listChatsUC := user.NewListChatsUseCase(chatActivityRepo, userAdapter, groupAdapter, logger)
 	blockUserUC := user.NewBlockUserUseCase(userAdapter, jidResolver, logger)
 	unblockUserUC := user.NewUnblockUserUseCase(userAdapter, jidResolver, logger)
 	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)
@@ -213,6 +217,7 @@ func initCustomHandlers(s *server) {
 		getUserUC,
 		getUserLIDUC,
 		getUserProfileUC,
+		listChatsUC,
 		blockUserUC,
 		unblockUserUC,
 	)
@@ -316,7 +321,6 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Contact Handlers (/user/info, /user/avatar, /user/contacts)
-	chatActivityRepo := db.NewChatActivityRepository(s.DB)
 	contactHandlers := &handlers.ContactHandlers{
 		Avatar:       handlers.NewGetAvatarHandler(user.NewGetAvatarUseCase(userAdapter, jidResolver, logger)),
 		Contacts:     handlers.NewGetContactsHandler(user.NewGetContactsUseCase(userAdapter, logger)),

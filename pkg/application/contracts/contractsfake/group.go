@@ -40,6 +40,9 @@ type GroupDirectoryListJoinedGroupsCall struct {
 
 // GroupDirectory é o fake de port.GroupDirectory.
 type GroupDirectory struct {
+	GroupNamesFunc  func(ctx context.Context, txtID string) (map[domain.JID]string, error)
+	GroupNamesCalls int
+
 	SessionGuard
 
 	GetGroupInfoFunc  func(ctx context.Context, txtID string, group domain.JID) (any, error)
@@ -53,6 +56,16 @@ type GroupDirectory struct {
 
 	ListJoinedGroupsFunc  func(ctx context.Context, txtID string) (any, int, error)
 	ListJoinedGroupsCalls []GroupDirectoryListJoinedGroupsCall
+}
+
+// GroupNames implementa port.GroupDirectory. Zero-value devolve mapa vazio,
+// que e' a resposta de uma sessao sem grupos.
+func (f *GroupDirectory) GroupNames(ctx context.Context, txtID string) (map[domain.JID]string, error) {
+	f.GroupNamesCalls++
+	if f.GroupNamesFunc != nil {
+		return f.GroupNamesFunc(ctx, txtID)
+	}
+	return map[domain.JID]string{}, nil
 }
 
 var _ port.GroupDirectory = (*GroupDirectory)(nil)

@@ -1,6 +1,8 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
+import "time"
+
 // ListUsersRequest é o request para listar usuários
 type ListUsersRequest struct {
 	UserID string // Optional: if provided, lists a single user
@@ -127,4 +129,64 @@ type SessionDeviceInfo struct {
 	// nesse caso Connected=false com LoggedIn=true.
 	Connected bool `json:"connected"`
 	LoggedIn  bool `json:"logged_in"`
+}
+
+// ContactName são os nomes que o roster local conhece de um contato.
+//
+// Tipado, e não o `any` que GetAllContacts devolve: a lista de conversas
+// precisa CASAR nomes por JID, e fazer isso com o tipo do SDK arrastaria o
+// vendor para dentro da camada de aplicação.
+type ContactName struct {
+	FullName     string
+	FirstName    string
+	PushName     string
+	BusinessName string
+}
+
+// Melhor devolve o nome mais apresentável que se conhece do contato.
+//
+// A ordem não é arbitrária: FullName vem da agenda de quem consulta e é o
+// nome que a pessoa escolheu para aquele contato; PushName é o que o contato
+// escolheu para si; BusinessName é o registro comercial. FirstName fica por
+// último por ser o mais incompleto. Sem uma ordem declarada, cada chamador
+// inventaria a sua e a lista mudaria de nome conforme quem a monta.
+func (c ContactName) Melhor() string {
+	for _, n := range []string{c.FullName, c.PushName, c.BusinessName, c.FirstName} {
+		if n != "" {
+			return n
+		}
+	}
+	return ""
+}
+
+// ChatSummary é uma conversa na lista: com quem se fala e quando foi a
+// última interação. NÃO carrega mensagens — a lista existe para ordenar
+// conversas, e trazer conteúdo a tornaria cara sem tornar-se mais útil.
+type ChatSummary struct {
+	// JID é a identidade do chat como ela vive no histórico local. Para
+	// contatos pode ser `@lid` ou `@s.whatsapp.net` (ver a normalização em
+	// GetManyLIDsForPNs); para grupos é sempre `@g.us`.
+	JID string `json:"jid"`
+
+	Name    string `json:"name"`
+	IsGroup bool   `json:"is_group"`
+
+	// LastActivity é o timestamp da mensagem mais recente já persistida
+	// nesta conversa. É a chave de ordenação da lista.
+	LastActivity time.Time `json:"last_activity"`
+
+	// Os nomes crus ficam disponíveis para quem quiser aplicar outra regra
+	// de preferência que não a de ContactName.Melhor.
+	PushName     string `json:"push_name,omitempty"`
+	FullName     string `json:"full_name,omitempty"`
+	BusinessName string `json:"business_name,omitempty"`
+}
+
+// ChatListPage é uma fatia da lista de conversas, com o total para que o
+// cliente saiba quanto falta sem precisar paginar até o fim.
+type ChatListPage struct {
+	Chats  []ChatSummary `json:"chats"`
+	Total  int           `json:"total"`
+	Limit  int           `json:"limit"`
+	Offset int           `json:"offset"`
 }

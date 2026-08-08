@@ -214,9 +214,31 @@ rules_frozen=true
 # errpath_coverage 862->863. Codigo novo que nasce instrumentado sobe a razao
 # em vez de dilui-la — o oposto do que costuma acontecer quando entram
 # metodos de adapter, que por padrao deste repo nao logam.
-min_func_coverage=710
-min_errpath_coverage=863
-min_eligible=521
+# justificativa: GET /chat/list (2026-08-08), lista de conversas ordenada por
+# ultima interacao, com nome de contato e de grupo e paginacao.
+#
+# min_eligible sobe 521->531 (+10, ratchet-UP honesto): ListChatsUseCase.Execute
+# e seus dois helpers de porta (nomesDeContato, nomesDeGrupo), as quatro
+# funcoes PURAS de montagem (normalizarPaginacao, montarResumo, ordenar,
+# fatiar), os dois metodos de adapter tipados (UserAdapter.ContactNames,
+# GroupAdapter.GroupNames) e o construtor.
+#
+# errpath_coverage SOBE 863->864: os dois helpers de porta logam em Warn a
+# indisponibilidade antes de degradar, e Execute loga o erro do historico
+# antes de propaga-lo.
+#
+# func_coverage cai 710->704, e a queda e' inteiramente DILUICAO por codigo
+# que nao tem o que logar:
+#   - as quatro funcoes puras nao tocam porta nenhuma e nao tem caminho de
+#     erro (normalizarPaginacao corrige faixa, ordenar e fatiar sao
+#     manipulacao de slice, montarResumo le dois mapas);
+#   - ContactNames e GroupNames seguem o padrao ja aceito neste repo, adapter
+#     nao loga e o use case loga — o mesmo argumento das justificativas de
+#     2026-08-06 e 2026-08-07 acima.
+# Nenhum site que logava deixou de logar.
+min_func_coverage=704
+min_errpath_coverage=864
+min_eligible=531
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

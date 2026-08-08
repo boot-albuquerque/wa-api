@@ -27,6 +27,14 @@ type GroupDirectory interface {
 	// GetGroupInviteLink devolve o link de convite de um grupo.
 	GetGroupInviteLink(ctx context.Context, txtID string, group domain.JID) (string, error)
 
+	// GroupNames devolve o nome de cada grupo de que a sessão participa,
+	// por JID, numa ÚNICA chamada.
+	//
+	// A alternativa — GetGroupInfo por grupo — custa um round-trip por
+	// grupo, e a lista de conversas precisa de todos de uma vez. Tipado pelo
+	// mesmo motivo de ContactNames.
+	GroupNames(ctx context.Context, txtID string) (map[domain.JID]string, error)
+
 	// ListJoinedGroups devolve os grupos de que a sessão participa, e a
 	// contagem, que o use case usa para logar.
 	ListJoinedGroups(ctx context.Context, txtID string) (any, int, error)

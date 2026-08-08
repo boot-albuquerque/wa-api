@@ -4379,3 +4379,68 @@ HTTP/1.1 400 Bad Request
 Content-Type: application/json
 {"code":400,"error":{"code":"no_session","message":"no session"},"success":false}
 ```
+
+## F84 — a lista de conversas nomeia 3% dos contatos: roster e histórico vivem em espaços de identidade quase disjuntos
+
+**Data / contexto**: 2026-08-08, ao validar `GET /chat/list` contra dados
+reais.
+
+**Onde**: não é um defeito de um arquivo — é a junção entre
+`message_history` (via `ChatActivityReader`) e o roster
+(`ContactDirectory.ContactNames`), feita em
+`pkg/application/usecase/user/list_chats.go`.
+
+**Problema**: a lista funciona, ordena e pagina corretamente, mas quase
+nenhuma conversa individual sai com nome. Medido na sessão real:
+
+```
+roster:                 3362 entradas (2478 @lid, 883 @s.whatsapp.net)
+chats de contato:        481
+chats que casam:          17   (3,5%)
+chats com nome:           16
+```
+
+E o teto é baixo mesmo com junção perfeita:
+
+```
+entradas do roster COM algum nome:   1158 de 3362
+  destas, com chave @lid:             274 de 2478
+```
+
+Ou seja: **89% das entradas `@lid` do roster não têm nome nenhum**, e as
+chaves `@lid` do histórico praticamente não coincidem com as do roster,
+embora ambas usem o mesmo formato.
+
+Os GRUPOS não sofrem disso — saem todos nomeados, porque vêm de
+`GetJoinedGroups`, que traz o nome junto e não depende de junção.
+
+Isto é a mesma condição que a justificativa de `GET
+/user/contacts/last-activity` já registrava em `.log-coverage-baseline`
+("0/1141 contatos casaram por telefone, e só 5/284 por JID bruto"). A
+`normalizeToLID` melhorou o caso `@s.whatsapp.net` → `@lid`; o caso
+`@lid` do histórico ≠ `@lid` do roster continua aberto.
+
+**Correção sugerida**, em ordem de custo:
+
+1. **Fallback por PN**: para chat `@lid` sem acerto no roster, resolver
+   LID→PN (`GetPNForLID`, leitura de store LOCAL, sem rede) e tentar as 883
+   chaves `@s.whatsapp.net` do roster. Amostra de 6 LIDs resolveu 6 PNs, o
+   que mostra que o mapeamento existe — falta medir quantos desses PNs estão
+   no roster. Exige um método em LOTE: 481 chamadas individuais são baratas
+   por serem locais, mas continuam sendo 481.
+2. **Preencher o roster**: 89% das entradas `@lid` sem nome sugere que o
+   `PutPushName` do app-state não está populando esse espaço. Se for isso, é
+   a correção de maior alcance — e a de maior risco.
+3. **Nome pelo próprio histórico**: `message_history` guarda o pushname do
+   remetente por mensagem. Seria a fonte mais direta para "com quem eu
+   falei", e não depende do roster.
+
+**Status**: **não corrigido**. `GET /chat/list` foi entregue com este
+comportamento — ordena e pagina corretamente, e é honesto sobre não saber o
+nome (campo vazio, conversa presente). Fechar isto é trabalho próprio, com
+medição antes de escolher entre as três saídas.
+
+**Nota operacional**: ao medir isto, um laço de 6 chamadas a
+`/user/profile` disparou `429: rate-overlimit` do usync do WhatsApp. A rota
+de perfil faz chamadas de rede por consulta e NÃO deve ser usada em laço
+sobre uma lista.

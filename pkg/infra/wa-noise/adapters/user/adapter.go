@@ -179,3 +179,31 @@ var (
 	_ appport.BlocklistManager = (*UserAdapter)(nil)
 	_ appport.PrivacyManager   = (*UserAdapter)(nil)
 )
+
+// ContactNames devolve o roster tipado por JID.
+//
+// Mesma leitura de GetAllContacts, com a conversão do tipo do SDK feita AQUI,
+// que é onde ela pertence: o adapter existe para que o vendor pare nesta
+// fronteira. GetAllContacts continua devolvendo `any` para quem só repassa o
+// bloco cru ao cliente.
+func (a *UserAdapter) ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
+			"no active session for user", false, err)
+	}
+	contacts, err := client.Store().Contacts.GetAllContacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[domain.JID]domain.ContactName, len(contacts))
+	for jid, info := range contacts {
+		out[domain.JID(jid.String())] = domain.ContactName{
+			FullName:     info.FullName,
+			FirstName:    info.FirstName,
+			PushName:     info.PushName,
+			BusinessName: info.BusinessName,
+		}
+	}
+	return out, nil
+}

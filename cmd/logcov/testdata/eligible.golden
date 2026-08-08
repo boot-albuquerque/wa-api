@@ -1712,6 +1712,7 @@ pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.ArchiveChat	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RejectCall	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RequestUnavailableMessage	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ContactDirectory.ContactNames	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetAllContacts	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetLIDForPN	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetManyLIDsForPNs	EXCLUDED	X5
@@ -1729,6 +1730,7 @@ pkg/application/contracts/contractsfake.FailSession.func1	EXCLUDED	X6
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInfoFromLink	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInviteLink	EXCLUDED	X5
+pkg/application/contracts/contractsfake.GroupDirectory.GroupNames	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.ListJoinedGroups	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupLifecycle.CreateGroup	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupLifecycle.JoinGroup	EXCLUDED	X5
@@ -1979,7 +1981,6 @@ pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret
 pkg/application/usecase/user.GetAvatarUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_avatar.go:32);uncovered:L2(S-consume,get_avatar.go:36);uncovered:L2(S-ret,get_avatar.go:37)
 pkg/application/usecase/user.GetBlocklistUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsLastActivityUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/user.GetContactsLastActivityUseCase.normalizeToLID	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetPrivacySettingsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:51)
@@ -1989,6 +1990,9 @@ pkg/application/usecase/user.GetUserProfileUseCase.preencherInfo	ELIGIBLE	covere
 pkg/application/usecase/user.GetUserProfileUseCase.preencherPresencaNaRede	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserProfileUseCase.resolverIdentidades	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/user.ListChatsUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/user.ListChatsUseCase.nomesDeContato	ELIGIBLE	covered
+pkg/application/usecase/user.ListChatsUseCase.nomesDeGrupo	ELIGIBLE	covered
 pkg/application/usecase/user.ListUsersUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.NewAddUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewBlockUserUseCase	EXCLUDED	X1
@@ -2004,13 +2008,20 @@ pkg/application/usecase/user.NewGetPrivacySettingsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserLIDUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserProfileUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserUseCase	EXCLUDED	X1
+pkg/application/usecase/user.NewListChatsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewListUsersUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewSetPrivacySettingUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewUnblockUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.SetPrivacySettingUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.UnblockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,unblock_user.go:46)
 pkg/application/usecase/user.encryptHMACKeyFunc	EXCLUDED	X1
+pkg/application/usecase/user.fatiar	ELIGIBLE	uncovered:L1
 pkg/application/usecase/user.isValidEvent	EXCLUDED	X1
+pkg/application/usecase/user.montarResumo	ELIGIBLE	uncovered:L1
+pkg/application/usecase/user.normalizarPaginacao	ELIGIBLE	uncovered:L1
+pkg/application/usecase/user.normalizeToLID	ELIGIBLE	covered
+pkg/application/usecase/user.ordenar	EXCLUDED	X1
+pkg/application/usecase/user.ordenar.func1	EXCLUDED	X6
 pkg/bootstrap.InitPrivateIPBlocks	ELIGIBLE	covered
 pkg/bootstrap.InitRabbitMQ	EXCLUDED	X1
 pkg/bootstrap.IsPrivateOrLoopback	ELIGIBLE	uncovered:L1
@@ -2174,6 +2185,7 @@ pkg/bootstrap.userIDHolderHandler	EXCLUDED	X1
 pkg/bootstrap.userIDHolderHandler.func1	EXCLUDED	X1
 pkg/bootstrap.userInfoID	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
+pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
 pkg/domain.Secret.GoString	EXCLUDED	X1
@@ -2354,6 +2366,7 @@ pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfo	ELIGIBLE	uncovered:L
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfoFromLink	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInviteLink	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetRequestParticipants	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/group.GroupAdapter.GroupNames	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.JoinGroup	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.LeaveGroup	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,write.go:45)
 pkg/infra/wa-noise/adapters/group.GroupAdapter.ListJoinedGroups	ELIGIBLE	uncovered:L1
@@ -2390,6 +2403,7 @@ pkg/infra/wa-noise/adapters/sessioncount.NewSessionCounterAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/sessioncount.SessionCounterAdapter.CountSessions	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/sessioncount.SessionCounterAdapter.CountSessions.func1	EXCLUDED	X6
 pkg/infra/wa-noise/adapters/user.NewUserAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/user.UserAdapter.ContactNames	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetAllContacts	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetBlocklist	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetLIDForPN	ELIGIBLE	uncovered:L1
@@ -2729,6 +2743,8 @@ pkg/presentation/http/handlers.UserHandlers.GetUserLID	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.GetUserLID.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.GetUserProfile	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.GetUserProfile.func1	ELIGIBLE	covered
+pkg/presentation/http/handlers.UserHandlers.ListChats	EXCLUDED	X1
+pkg/presentation/http/handlers.UserHandlers.ListChats.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.ListUsers	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.ListUsers.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.UnblockUser	EXCLUDED	X1
@@ -2747,6 +2763,7 @@ pkg/presentation/http/handlers.handleSetGroupName	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupPhoto	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupTopic	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	covered
+pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:373)
 pkg/presentation/http/handlers.isClientCausedSessionError	EXCLUDED	X1
 pkg/presentation/http/handlers.newGroupHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered

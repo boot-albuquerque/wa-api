@@ -19,7 +19,7 @@ import (
 func rotaPerfil(t *testing.T, porta *lidPorta) http.Handler {
 	t.Helper()
 	uc := user.NewGetUserProfileUseCase(porta, porta, silentLogger{})
-	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, nil, uc, nil, nil)
+	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, nil, uc, nil, nil, nil)
 
 	r := mux.NewRouter()
 	r.Handle("/user/profile/{jid}", h.GetUserProfile()).Methods(http.MethodGet)
