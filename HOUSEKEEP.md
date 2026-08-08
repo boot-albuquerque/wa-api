@@ -2040,3 +2040,73 @@ quanto o pushName já resolve.
 **Nota operacional**: um laço de 6 chamadas a `/user/profile` disparou
 `429: rate-overlimit` do usync do WhatsApp. Aquela rota faz chamadas de rede
 por consulta e NÃO deve ser usada em laço sobre uma lista.
+
+## F85 — a rajada de HistorySync mata o WebSocket do painel, que fica cego no momento em que mais serve
+
+**Data / contexto**: 2026-08-08, restauração das quatro sessões desvinculadas
+nos testes do dia. O painel estava aberto acompanhando os pareamentos.
+
+**Onde**: dois lados, e a correção de cada um é independente.
+
+1. `pkg/presentation/http/devui/assets/sessions.html:183-196` (`log()`) e
+   `:346-353` (`ws.onmessage`)
+2. `pkg/infra/wa-noise/registry/broadcast/broadcast.go:27` (`writeTimeout`)
+
+**Problema**: logo depois de um pareamento o HistorySync despeja lotes de
+mensagens, e cada uma vira um broadcast para todas as conexões WS inscritas.
+O painel não consome nessa velocidade, a janela TCP enche, a escrita do
+servidor bloqueia, estoura `writeTimeout` e a conexão é **derrubada**.
+
+Resultado prático: **o painel fica cego exatamente quando o operador quer
+observar** — o pareamento e a sincronização que vêm logo em seguida. E como
+não há reconexão automática (decisão deliberada, `sessions.html:341` — "um
+socket que reabre sozinho esconde o sintoma"), ele só volta com um clique em
+Conectar, que dispara `/session/connect` (ver F77).
+
+**Medido na restauração** (log, janela de 32s):
+
+```
+13:27:47 -> 13:28:19   7 quedas de conexão durante 13 lotes de HistorySync
+  5x  use of closed network connection   (socket já morto)
+  2x  context deadline exceeded          (escrita estourou os 5s)
+```
+
+**As duas causas, em cadeia:**
+
+- **O painel guarda tudo.** `log()` faz `appendChild` por evento e **nunca
+  remove nada** — zero ocorrências de poda no arquivo inteiro. O DOM cresce
+  sem teto durante a rajada.
+- **E guarda o payload inteiro.** `onmessage` faz
+  `JSON.stringify(resto)` do evento completo; só `qrCodeBase64` é abreviado.
+  Um evento `Message` carrega `Info` + `RawMessage` inteiros, então cada
+  linha do log é um bloco de JSON de milhares de caracteres.
+- **O broadcast não tem estratégia para cliente lento.** `writeTimeout = 5s`
+  por conexão, e ao estourar a conexão é removida. Para um webhook isso é
+  correto — cliente morto não deve segurar o fan-out (foi o ponto da F74).
+  Para um painel de diagnóstico, derrubar é perder a observação inteira.
+
+**Correção sugerida**, na ordem em que resolve mais:
+
+1. **Podar e truncar no painel** (barato, resolve o caso medido): teto de
+   linhas no `#log` com remoção do mais antigo, e truncar `carga` a algumas
+   centenas de caracteres com o tamanho original indicado — como
+   `qrCodeBase64` já faz. Um painel de diagnóstico precisa do TIPO e do
+   contorno do evento, não do payload completo.
+2. **Coalescer no cliente**: durante rajada, agrupar eventos do mesmo tipo
+   numa linha com contador em vez de uma linha por evento.
+3. **Backpressure no servidor** (maior, decidir depois): fila limitada por
+   conexão com descarte do mais ANTIGO em vez de derrubar a conexão. Muda o
+   contrato do broadcast e afeta o webhook também — não fazer junto com (1).
+
+**Anti-regressão**: a correção (1) precisa de teste que prove o teto — gerar
+N+M eventos e verificar que o `#log` tem no máximo N linhas — e de um que
+prove a truncagem, com a saída original preservada no atributo. O teste do
+`devui` já trava marcadores da página (`devui_test.go`), e é onde isso entra.
+
+**Status**: **não corrigido** — descoberto durante a restauração das
+sessões, fora do escopo do que estava em andamento.
+
+> **Nota**: o comportamento do servidor aqui é a F74 funcionando como
+> projetada — o fan-out paralelo derrubou a conexão morta em vez de travar.
+> O defeito não é a queda; é o painel ter provocado a queda, e a
+> consequência dela ser perder a observação.
