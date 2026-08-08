@@ -14,9 +14,89 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// webhook for regular messages with HMAC
+// callHookWithHmac entrega um evento ao webhook do usuário.
+//
+// UMA tentativa por chamada. Quando falha, a próxima é AGENDADA (ver
+// dispatch_retry.go) em vez de esperada aqui dentro. A espera do backoff
+// ficava num time.Sleep DENTRO desta função, e desde a F86 esta função roda
+// num worker do pool de despacho — com os padrões antigos (5 tentativas, base
+// 30s) um evento para um destino morto segurava um worker por 7,5 minutos.
 func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte) {
-	log.Info().Str("url", myurl).Str("userID", userID).Msg("Sending POST to client with retry logic")
+	tentarWebhook(myurl, payload, userID, encryptedHmacKey, 0)
+}
+
+// montarRequisicaoWebhook monta corpo, assinatura e requisição de UMA
+// tentativa. Extraída do laço original sem alteração de comportamento: o
+// formato (json ou form) e a assinatura HMAC seguem exatamente como estavam.
+func montarRequisicaoWebhook(client *resty.Client, payload map[string]string, userID string, encryptedHmacKey []byte) (interface{}, *resty.Request) {
+	var body interface{} = payload
+	var req *resty.Request
+	var hmacSignature string
+	var marshalErr error
+
+	format := os.Getenv("WEBHOOK_FORMAT")
+
+	if format == "json" {
+		var jsonBody []byte
+
+		if jsonStr, ok := payload["jsonData"]; ok {
+			var postmap map[string]interface{}
+
+			if err := json.Unmarshal([]byte(jsonStr), &postmap); err == nil {
+				if instanceName, ok := payload["instanceName"]; ok {
+					postmap["instanceName"] = instanceName
+				}
+				postmap["userID"] = userID
+				body = postmap
+			}
+		}
+
+		// Marshal body to JSON for HMAC signature
+		jsonBody, marshalErr = json.Marshal(body)
+		if marshalErr != nil {
+			log.Error().Err(marshalErr).Msg("Failed to marshal body for HMAC")
+		}
+
+		// Generate HMAC signature if key exists
+		if len(encryptedHmacKey) > 0 && len(jsonBody) > 0 {
+			var err error
+			hmacSignature, err = generateHmacSignature(jsonBody, encryptedHmacKey)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to generate HMAC signature")
+			}
+		}
+
+		req = client.R().SetHeader("Content-Type", "application/json").SetBody(body)
+
+	} else {
+
+		if len(encryptedHmacKey) > 0 {
+			formData := url.Values{}
+			for k, v := range payload {
+				formData.Add(k, v)
+			}
+			formString := formData.Encode()
+			var err error
+			hmacSignature, err = generateHmacSignature([]byte(formString), encryptedHmacKey)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to generate HMAC signature")
+			}
+		}
+		req = client.R().SetFormData(payload)
+		body = payload
+	}
+
+	if hmacSignature != "" {
+		req.SetHeader("x-hmac-signature", hmacSignature)
+	}
+	return body, req
+}
+
+// tentarWebhook executa UMA tentativa e decide o que vem depois: sucesso,
+// reagendamento ou caminho terminal (fila de erro).
+func tentarWebhook(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte, tentativa int) {
+	log.Info().Str("url", myurl).Str("userID", userID).Int("attempt", tentativa+1).
+		Msg("Sending POST to client with retry logic")
 
 	client := clientManager.GetHTTPClient(userID)
 	if client == nil {
@@ -24,145 +104,62 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 		return
 	}
 
-	// Retry settings
-	maxRetries := 1
-	if appCtx.WebhookRetryEnabled {
-		maxRetries = appCtx.WebhookRetryCount
-	}
+	body, req := montarRequisicaoWebhook(client, payload, userID, encryptedHmacKey)
+	resp, postErr := req.Post(myurl)
 
 	var lastError error
-
-	var body interface{} = payload
-
-	// Starts the retry loop.
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			backoffFactor := 1 << uint(attempt-1)
-
-			// Calculate the final delay.
-			delayDuration := time.Duration(appCtx.WebhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
-
-			log.Warn().
-				Int("attempt", attempt+1).
-				Str("url", myurl).
-				Dur("delay", delayDuration).
-				Msg("Retrying webhook request with exponential backoff...")
-
-			time.Sleep(delayDuration)
-		}
-
-		var req *resty.Request
-		var hmacSignature string
-		var marshalErr error
-
-		format := os.Getenv("WEBHOOK_FORMAT")
-
-		if format == "json" {
-			var jsonBody []byte
-
-			if jsonStr, ok := payload["jsonData"]; ok {
-				var postmap map[string]interface{}
-
-				if err := json.Unmarshal([]byte(jsonStr), &postmap); err == nil {
-					if instanceName, ok := payload["instanceName"]; ok {
-						postmap["instanceName"] = instanceName
-					}
-					postmap["userID"] = userID
-					body = postmap
-				}
-			}
-
-			// Marshal body to JSON for HMAC signature
-			jsonBody, marshalErr = json.Marshal(body)
-			if marshalErr != nil {
-				log.Error().Err(marshalErr).Msg("Failed to marshal body for HMAC")
-			}
-
-			// Generate HMAC signature if key exists
-			if len(encryptedHmacKey) > 0 && len(jsonBody) > 0 {
-				var err error
-				hmacSignature, err = generateHmacSignature(jsonBody, encryptedHmacKey)
-				if err != nil {
-					log.Error().Err(err).Msg("Failed to generate HMAC signature")
-				}
-			}
-
-			req = client.R().SetHeader("Content-Type", "application/json").SetBody(body)
-
-		} else {
-
-			if len(encryptedHmacKey) > 0 {
-				formData := url.Values{}
-				for k, v := range payload {
-					formData.Add(k, v)
-				}
-				formString := formData.Encode()
-				var err error
-				hmacSignature, err = generateHmacSignature([]byte(formString), encryptedHmacKey)
-				if err != nil {
-					log.Error().Err(err).Msg("Failed to generate HMAC signature")
-				}
-			}
-			req = client.R().SetFormData(payload)
-			body = payload
-		}
-
-		if hmacSignature != "" {
-			req.SetHeader("x-hmac-signature", hmacSignature)
-		}
-
-		resp, postErr := req.Post(myurl)
-
+	switch {
+	case postErr != nil:
 		lastError = postErr
-
-		if postErr != nil {
-			log.Error().Err(postErr).Int("attempt", attempt+1).Str("url", myurl).Msg("Webhook failed due to network/IO error")
-			continue
-		}
-
-		if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
-			lastError = fmt.Errorf("unexpected status code: %d. Body: %s", resp.StatusCode(), string(resp.Body()))
-			log.Error().
-				Int("status", resp.StatusCode()).
-				Int("attempt", attempt+1).
-				Str("url", myurl).
-				Msg("Webhook failed due to non-2xx status code")
-
-			if !appCtx.WebhookRetryEnabled {
-				break
-			}
-			continue
-		}
-
+		log.Error().Err(postErr).Int("attempt", tentativa+1).Str("url", myurl).
+			Msg("Webhook failed due to network/IO error")
+	case resp.StatusCode() < 200 || resp.StatusCode() >= 300:
+		lastError = fmt.Errorf("unexpected status code: %d. Body: %s", resp.StatusCode(), string(resp.Body()))
+		log.Error().
+			Int("status", resp.StatusCode()).
+			Int("attempt", tentativa+1).
+			Str("url", myurl).
+			Msg("Webhook failed due to non-2xx status code")
+	default:
 		log.Info().Int("status", resp.StatusCode()).Str("url", myurl).Msg("Webhook call successful")
 		return
 	}
 
-	if lastError != nil {
-		log.Error().Str("url", myurl).Msg("Webhook permanently failed after all retries. Sending to error queue...")
-
-		errorPayloadMap := make(map[string]interface{})
-		if p, ok := body.(map[string]string); ok {
-
-			for k, v := range p {
-				errorPayloadMap[k] = v
-			}
-		} else if p, ok := body.(map[string]interface{}); ok {
-
-			errorPayloadMap = p
-		}
-
-		errorPayload := WebhookErrorPayload{
-			URL:              myurl,
-			Payload:          errorPayloadMap,
-			UserID:           userID,
-			EncryptedHmacKey: hex.EncodeToString(encryptedHmacKey),
-			AttemptTime:      time.Now(),
-			ErrorMessage:     lastError.Error(),
-		}
-
-		PublishDataErrorToQueue(errorPayload)
+	if agendarProximaTentativa(myurl, payload, userID, encryptedHmacKey, tentativa+1) {
+		return
 	}
+	entregarWebhookNaFilaDeErro(myurl, body, userID, encryptedHmacKey, lastError)
+}
+
+// entregarWebhookNaFilaDeErro é o caminho terminal, preservado como estava.
+//
+// ATENÇÃO ao contar com ele: dentro deste repositório NÃO existe consumidor
+// desta fila. Se algo a consome, é do lado do deployment.
+func entregarWebhookNaFilaDeErro(myurl string, body interface{}, userID string, encryptedHmacKey []byte, lastError error) {
+	if lastError == nil {
+		return
+	}
+	log.Error().Str("url", myurl).Msg("Webhook permanently failed after all retries. Sending to error queue...")
+
+	errorPayloadMap := make(map[string]interface{})
+	if p, ok := body.(map[string]string); ok {
+		for k, v := range p {
+			errorPayloadMap[k] = v
+		}
+	} else if p, ok := body.(map[string]interface{}); ok {
+		errorPayloadMap = p
+	}
+
+	errorPayload := WebhookErrorPayload{
+		URL:              myurl,
+		Payload:          errorPayloadMap,
+		UserID:           userID,
+		EncryptedHmacKey: hex.EncodeToString(encryptedHmacKey),
+		AttemptTime:      time.Now(),
+		ErrorMessage:     lastError.Error(),
+	}
+
+	PublishDataErrorToQueue(errorPayload)
 }
 
 // webhook for messages with file attachments and HMAC

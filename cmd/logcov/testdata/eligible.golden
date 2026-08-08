@@ -2039,6 +2039,7 @@ pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
 pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:240);uncovered:L3(zerolog,main.go:268);uncovered:L3(zerolog,main.go:281);uncovered:L3(zerolog,main.go:317)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
+pkg/bootstrap.MetricasRetry	EXCLUDED	X1
 pkg/bootstrap.NewAppContext	EXCLUDED	X1
 pkg/bootstrap.NewKillChannel	EXCLUDED	X1
 pkg/bootstrap.NewRouter	ELIGIBLE	uncovered:L1
@@ -2109,6 +2110,10 @@ pkg/bootstrap.UserEventHandler.saveMessageHistory	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.syncHistoryAfterPair	ELIGIBLE	covered
 pkg/bootstrap.accessLogRoute	EXCLUDED	X1
 pkg/bootstrap.accessLogUserID	EXCLUDED	X1
+pkg/bootstrap.agendarProximaTentativa	ELIGIBLE	covered
+pkg/bootstrap.agendarProximaTentativa.func1	EXCLUDED	X6
+pkg/bootstrap.agendarProximaTentativa.func2	EXCLUDED	X6
+pkg/bootstrap.atrasoDaTentativa	ELIGIBLE	uncovered:L1
 pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
 pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
@@ -2116,7 +2121,7 @@ pkg/bootstrap.buildRouter	ELIGIBLE	uncovered:L1
 pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:254)
 pkg/bootstrap.buildRouter.func2	ELIGIBLE	uncovered:L1
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
-pkg/bootstrap.callHookWithHmac	ELIGIBLE	covered
+pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
 pkg/bootstrap.checkIfSubscribedToEvent	EXCLUDED	X1
 pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:102)
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -2137,6 +2142,7 @@ pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
 pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
+pkg/bootstrap.entregarWebhookNaFilaDeErro	ELIGIBLE	covered
 pkg/bootstrap.generateHmacSignature	ELIGIBLE	uncovered:L1
 pkg/bootstrap.getKillChannel	EXCLUDED	X1
 pkg/bootstrap.getUserWebhookUrl	ELIGIBLE	covered
@@ -2148,6 +2154,7 @@ pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
 pkg/bootstrap.lerInteiroDoAmbiente	ELIGIBLE	covered
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
+pkg/bootstrap.montarRequisicaoWebhook	ELIGIBLE	covered
 pkg/bootstrap.newDispatchPool	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
@@ -2198,6 +2205,8 @@ pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:468)
 pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_delegates.go:132)
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6
+pkg/bootstrap.tamanhoDoPayload	EXCLUDED	X1
+pkg/bootstrap.tentarWebhook	ELIGIBLE	covered
 pkg/bootstrap.updateAndGetUserSubscriptions	ELIGIBLE	covered
 pkg/bootstrap.updateUserInfo	ELIGIBLE	covered
 pkg/bootstrap.userIDHolderHandler	EXCLUDED	X1

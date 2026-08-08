@@ -38,7 +38,19 @@ var (
 
 	webhookRetryEnabled      = flag.Bool("webhookretry", true, "Enable webhook retry mechanism")
 	webhookRetryCount        = flag.Int("retrycount", 5, "Number of times to retry failed webhooks")
-	webhookRetryDelaySeconds = flag.Int("retrydelay", 30, "Delay in seconds between webhook retries")
+	// A base do backoff exponencial: as esperas são base×1, ×2, ×4, ×8.
+	//
+	// O padrão era 30, o que com 5 tentativas dava 30+60+120+240 = 450s —
+	// SETE MINUTOS E MEIO de vida para um único evento. Com 8 a janela fica em
+	// 8+16+32+64 = 120s, cobrindo um deploy curto do lado do cliente sem
+	// manter evento velho em voo por tanto tempo. A fórmula não mudou, então
+	// quem já ajustou esta variável mantém o significado dela.
+	//
+	// A janela deixou de ser custo de recurso na F88 (a espera virou timer e
+	// não segura mais worker do pool), mas continua sendo custo de RELEVÂNCIA:
+	// entregar um evento de mensagem sete minutos atrasado já não serve para
+	// boa parte dos usos.
+	webhookRetryDelaySeconds = flag.Int("retrydelay", 8, "Base delay in seconds for webhook retry backoff (exponential: base x1, x2, x4, x8)")
 	webhookErrorQueueName    = flag.String("errorqueue", "webhook_errors", "RabbitMQ queue name for failed webhooks")
 	globalWebhookUseProxy    = flag.Bool("webhookuseproxy", true, "Route webhook deliveries through the per-user proxy when configured")
 

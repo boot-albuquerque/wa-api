@@ -2429,3 +2429,164 @@ nada para medir o efeito de ligar o teto.
 **Status**: **não corrigido** — registrado no momento em que apareceu.
 Diagnóstico dos 5,7s não iniciado; a parte estrutural está confirmada e já
 está em uso como premissa da F86.
+
+---
+
+## F88 — a espera do backoff de webhook dormia dentro de um worker do pool
+
+**Data**: 2026-08-08
+**Contexto**: regressão introduzida pela F86 nesta mesma sessão, encontrada ao
+preparar a medição com webhook ligado. Não é achado incidental — é dívida da
+mudança anterior.
+
+**Onde**: `pkg/bootstrap/dispatch_callhook.go` (laço de retry com
+`time.Sleep`), `pkg/bootstrap/config.go:41` (base do backoff).
+
+**Problema**, por aritmética dos padrões que já estavam no código
+(`webhookretry=true`, `retrycount=5`, `retrydelay=30`, backoff exponencial):
+
+```
+esperas: 30 + 60 + 120 + 240 = 450s = 7,5 min por evento
+```
+
+Desde a F86 essa espera acontece dentro de um worker do pool de 256. Logo:
+
+- 256 eventos para um destino morto saturam o pool inteiro por 7,5 min;
+- o pareamento medido são 129 eventos, então **2 pareamentos simultâneos
+  bastam**;
+- os quatro canais dividem o pool, então saturado ele para **também**
+  WebSocket, webhook global e RabbitMQ — que nada têm a ver com o destino
+  quebrado;
+- passado isso, o degrau 3 da escada entra e o handler da sessão trava.
+
+Antes do pool eram 258 goroutines dormindo: feio e inofensivo. **O mecanismo
+que existia para dar garantia de funcionamento tornou este cenário
+estritamente pior.**
+
+**Dois agravantes achados junto:**
+
+1. **Não havia jitter.** `backoffFactor := 1 << uint(attempt-1)` multiplica um
+   delay fixo. N sessões que falham juntas — a tempestade de QR — repetiam em
+   uníssono nos mesmos instantes, martelando um destino já com problema.
+2. **A fila de erro é terminal sem consumidor conhecido.** Esgotadas as
+   tentativas, o payload vai para `PublishDataErrorToQueue`. Dentro deste
+   repositório NÃO existe consumidor (verificado com controle positivo: a
+   mesma varredura acha o produtor). E o retry não sobrevive a restart — as
+   tentativas pendentes somem em silêncio, porque a fila de erro só recebe
+   DEPOIS de esgotadas.
+
+**Corrigido assim:**
+
+- Uma tentativa por chamada; a próxima é AGENDADA com `time.AfterFunc`. O
+  worker devolve o slot imediatamente e o trabalho volta ao pool no vencimento.
+  Timer pendente não custa goroutine.
+- O conjunto de pendentes tem teto **por BYTES** (`WA_API_WEBHOOK_RETRY_MAX_
+  PENDING_BYTES`, 32MB), pelo mesmo motivo do pool: trocar "goroutine dormindo"
+  por "timer pendente" sem teto só mudaria ONDE a memória cresce sem limite.
+- Jitter de ±25%.
+- Base do backoff 30s → 8s: janela 450s → 120s. A fórmula não mudou, então
+  quem já ajustou a variável mantém o significado. O custo de RECURSO da janela
+  sumiu, mas o de RELEVÂNCIA não — evento de mensagem entregue 7 min atrasado
+  já não serve para boa parte dos usos.
+
+**Controles negativos executados:**
+
+```
+--- FAIL: TestRetry_AgendarNaoBloqueiaOChamador (67.40s)
+    agendar segurou o chamador por 1m7.396923708s: a espera voltou para dentro do worker
+--- FAIL: TestRetry_OrcamentoDePendentesLimita
+    agendou todos os 20 com teto de 4KB: o orcamento nao esta' limitando
+--- FAIL: TestRetry_JitterEspalha
+    so' 1 valores distintos em 50 sorteios: o jitter nao esta' espalhando
+```
+
+**Status**: **corrigido** — 7 testes verdes sob `-race`, três controles
+negativos com saída registrada acima.
+`TestRetry_JanelaTotalCabeNoOrcamentoDeRelevancia` trava a janela contra a
+decisão que a escolheu, no molde de `TestPool_PadroesCobremARajadaMedida`.
+
+**DECISÃO TOMADA (2026-08-08), não pendência**: o retry NÃO será durável por
+ora. O RabbitMQ **continua opcional** (`RabbitEnabled` pode ser `false`) e não
+vira dependência dura do caminho de entrega.
+
+Consequência aceita conscientemente: **o retry não sobrevive a restart**. Se o
+processo cai dentro da janela de 120s, as tentativas pendentes somem em
+silêncio — não chegam nem à fila de erro, que só recebe depois de esgotadas.
+O que se perde é entrega de evento durante uma reinicialização que coincida
+com um destino fora do ar.
+
+Por que assim: retry durável exigiria fila com TTL + dead-letter E um
+consumidor, que não existe neste repositório; e tornaria o broker obrigatório
+para uma funcionalidade que hoje funciona sem ele. É troca de complexidade
+arquitetural por uma janela de perda de 120 segundos.
+
+Quem for reabrir isto: traga o dado que falta, que é a frequência real de
+restart coincidindo com destino fora do ar. Não reabra por intuição de que
+"durável é melhor" — ver a regra "Medir antes de projetar" em CLAUDE.md.
+
+---
+
+## F89 — não existe dono de sessão: o segundo processo derruba o primeiro
+
+**Data**: 2026-08-08
+**Contexto**: surgiu ao avaliar o requisito de rodar em N pods (k8s/k3s) com
+retry e WebSocket funcionando entre réplicas. É pré-requisito dos dois, e
+independente de ambos.
+
+**Onde**: `pkg/bootstrap/lifecycle.go:54`
+
+```go
+rows, err := s.DB.Queryx("SELECT " + userInfoColumns + " FROM users WHERE connected=1")
+```
+
+**Problema**: cada processo assume **todas** as sessões marcadas como
+conectadas. Não há lease, leader election, shard ou filtro por instância —
+procurado em `pkg/` por `lease|leader|shard|ownership|instance_id|pod_name|
+owner`, nenhuma ocorrência relacionada.
+
+Isso importa porque uma sessão é **stateful**: o cliente whatsmeow segura um
+socket vivo com o WhatsApp dentro de UM processo. Duas réplicas conectando as
+mesmas credenciais fazem o WhatsApp derrubar uma delas — e a prova de que o
+modo de falha é real está no próprio código, que já trata
+`events.StreamReplaced` (`pkg/bootstrap/eventhandler.go:73`).
+
+Com duas réplicas, ambas conectam tudo e se derrubam mutuamente em laço. Quebra
+no pod nº 2, antes de qualquer preocupação com entrega.
+
+**Dois bloqueadores multi-pod que apareceram junto:**
+
+1. **Fallback para SQLite** (`pkg/infra/db/connection.go:81`): quando as
+   variáveis de Postgres estão PARCIALMENTE definidas, o processo cai em SQLite
+   em vez de falhar. SQLite não sustenta N réplicas. Num perfil k8s isso tem de
+   falhar alto, não degradar em silêncio — uma variável esquecida no manifesto
+   viraria corrupção silenciosa de estado compartilhado.
+2. **Armadilha do retry durável sob N pods**: `tentarWebhook` pega o cliente
+   HTTP de `clientManager.GetHTTPClient(userID)`, que é estado EM MEMÓRIA do
+   processo. Num pod que não é dono daquela sessão isso devolve `nil` e o
+   código faz `log.Warn` e **retorna em silêncio**. Ou seja, fila de retry
+   compartilhada entre réplicas descartaria caladamente tudo que fosse
+   consumido pelo pod "errado". A entrega de webhook em si NÃO é presa à
+   sessão (é um POST HTTP; proxy e chave HMAC estão no banco), então o conserto
+   é montar o cliente a partir do banco — mas tem de ser feito JUNTO com a fila
+   durável, não depois.
+
+**Correção sugerida**: lease de posse por sessão. Cabe em Postgres
+(`FOR UPDATE SKIP LOCKED` ou advisory lock) sem exigir Redis. Resolvida a
+posse, o problema do WebSocket entre réplicas fica quase de graça: basta rotear
+`/session/ws` para o pod dono, em vez de precisar de barramento de fan-out.
+
+**A validar ANTES de codificar** (ordem acordada com o usuário: posse primeiro):
+
+1. **Conexão duplicada**: subir dois processos contra o mesmo banco e medir o
+   que o WhatsApp faz — quantos `StreamReplaced`, em que intervalo, se entra em
+   laço. Decide se posse é "importante" ou "inegociável".
+2. **Handoff**: matar o pod dono e medir QUANTO TEMPO até outro assumir e a
+   sessão voltar a receber evento. Esse número define se lease em Postgres
+   basta.
+3. **O store aguarda a troca?** O estado do dispositivo vive no banco
+   compartilhado, então em tese a segunda réplica retoma. "Em tese" é o que
+   esta sessão inteira ensinou a não aceitar — ver "Medir antes de projetar"
+   em CLAUDE.md.
+
+**Status**: **não corrigido** — registrado com a análise. Nenhuma linha de
+código de posse escrita ainda, por decisão: valida-se primeiro.

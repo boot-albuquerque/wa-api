@@ -108,6 +108,53 @@ A verificação em produção NÃO substitui o teste: ela prova que funciona
 hoje, o teste impede que pare de funcionar amanhã. Quando as duas existirem,
 registre as duas na entrada.
 
+### O caso especial: regressão introduzida pela PRÓPRIA correção
+
+A política acima protege o defeito que você foi consertar. Não protege o que o
+conserto quebra — e essa foi a falha real de 2026-08-08.
+
+O pool de despacho da F86 foi medido, testado sob `-race`, teve três controles
+negativos e passou no `make check`. Ainda assim tornou um cenário
+**estritamente pior**: com os padrões de retry que já existiam (5 tentativas,
+base 30s, exponencial), a espera do backoff dormia dentro de um worker e um
+único evento para um webhook morto segurava um slot por 7,5 minutos. Dois
+pareamentos simultâneos saturavam o pool inteiro e paravam também WebSocket,
+webhook global e RabbitMQ — canais que nada tinham a ver com o destino
+quebrado. Antes do pool, as mesmas esperas eram goroutines soltas dormindo:
+feio e inofensivo.
+
+Nada disso apareceu na análise nem na medição, porque **a medição comparou os
+cenários em que o mecanismo ajuda**.
+
+**Regra 1 — inventário de detentores.** Toda mudança que converte um recurso
+ilimitado em LIMITADO (pool, semáforo, fila, teto, rate limit, pool de
+conexões) tem de enumerar, na entrada do HOUSEKEEP, tudo que passa a disputar
+esse recurso e o PIOR CASO de ocupação de cada um. Detentor que possa segurar
+por tempo longo ou indeterminado é bloqueio, não observação.
+
+**Regra 2 — medir onde deveria PIORAR.** Para todo mecanismo, meça o cenário
+em que ele cobra o preço, não só aquele em que ele paga. Se a medição só tem
+pernas onde o mecanismo ganha, ela não mediu o mecanismo — mediu a hipótese.
+Pergunta que faz o cenário aparecer: *qual entrada faz esta proteção virar o
+problema?*
+
+**Regra 3 — a invariante, escrita e travada em teste.** Quando o recurso for
+limitado, enuncie a invariante em vez de redescobri-la a cada camada nova.
+A deste projeto é:
+
+> Nada que espere por relógio ou por par morto pode ocupar slot limitado.
+
+Com ela escrita, o próximo padrão de resiliência (circuit breaker, bulkhead,
+rate limiter) é **auditado contra uma regra**, em vez de ter as interações
+descobertas por acidente. Sem ela, cada camada nova custa uma sessão inteira
+de investigação.
+
+**Regra 4 — o conserto do conserto também é um mecanismo.** Aplique as três
+regras acima a ele. O conserto da F88 trocou `Sleep` por `time.AfterFunc`; um
+timer não custa goroutine, mas mantém o payload vivo — trocar "goroutine
+dormindo" por "timer pendente" só mudaria ONDE a memória cresce sem limite.
+Por isso o conjunto de pendentes nasceu com teto por BYTES, igual ao do pool.
+
 ## Armadilhas conhecidas — leia `ARMADILHAS.md`
 
 `ARMADILHAS.md` (raiz) cataloga defeitos que **já passaram por revisão e por
