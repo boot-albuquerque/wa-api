@@ -2009,7 +2009,7 @@ pkg/bootstrap.KillChannel.Delete	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Get	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Set	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
-pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:240);uncovered:L3(zerolog,main.go:268);uncovered:L3(zerolog,main.go:281);uncovered:L3(zerolog,main.go:299)
+pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:240);uncovered:L3(zerolog,main.go:268);uncovered:L3(zerolog,main.go:281);uncovered:L3(zerolog,main.go:317)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
 pkg/bootstrap.NewAppContext	EXCLUDED	X1
@@ -2152,10 +2152,10 @@ pkg/bootstrap.setKillChannel	EXCLUDED	X1
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:404);uncovered:L3(zerolog,main.go:415)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:421);uncovered:L3(zerolog,main.go:432)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:451)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:468)
 pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_delegates.go:132)
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6

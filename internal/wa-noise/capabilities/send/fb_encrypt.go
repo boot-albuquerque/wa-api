@@ -189,8 +189,24 @@ func EncryptForDeviceV3(
 		return nil, fmt.Errorf("cipher encryption failed: %w", err)
 	}
 
-	// NOTE: unlike the waE2E path, `v` here is the *numeric* FBMessageVersion,
-	// not a string. Kept verbatim: it is what goes on the wire.
+	// `v` aqui e' o FBMessageVersion NUMERICO, ao contrario do caminho waE2E,
+	// que escreve string ("2" / "3"). E' a unica inconsistencia de tipo nesse
+	// atributo em todo o caminho de envio (F42 em HOUSEKEEP.md).
+	//
+	// MANTIDO COMO ESTA', e a razao mudou depois da medicao de 2026-08-07:
+	// este ramo e' INALCANCAVEL a partir do wa-api. Client.SendFBMessage
+	// (core/sendfb.go:25) e' o unico caminho ate' aqui, tem ZERO chamadores em
+	// pkg/ e cmd/, e a fachada internal/wa-noise/main.go nao o reexporta.
+	// Nenhuma rota HTTP alcanca o envio v3/FB.
+	//
+	// Nao se uniformiza porque nao se pode verificar: sem o ramo rodar,
+	// nenhum teste de integracao confirmaria que trocar para string e'
+	// inocuo, e a forma correta so' sai de captura de trafego de um cliente
+	// oficial.
+	//
+	// CRITERIO DE REAVALIACAO: no dia em que alguma rota expuser
+	// SendFBMessage, a forma do `v` deixa de ser academica e precisa ser
+	// confirmada contra o fio ANTES de ir a producao.
 	encAttrs := waBinary.Attrs{
 		encAttrVersion: FBMessageVersion,
 		encAttrType:    encTypeMsg,

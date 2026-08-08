@@ -292,12 +292,29 @@ func Main() {
 	appCtx.WebhookRetryDelaySeconds = *webhookRetryDelaySeconds
 	appCtx.WebhookErrorQueueName = *webhookErrorQueueName
 
+	// Falha aqui é FATAL, e não um Error que se ignora (F67 item 2).
+	//
+	// Com a chave vazia, callHookWithHmac pula a assinatura em silêncio —
+	// `if len(encryptedHmacKey) > 0` (dispatch_callhook.go:80) — e todo
+	// webhook global sai SEM assinatura. O operador que configurou uma chave
+	// HMAC fez isso justamente para que fossem assinados; entregar sem
+	// assinatura acreditando que estão assinados é rebaixamento silencioso de
+	// segurança, e o receptor não tem como perceber a diferença.
+	//
+	// Não há caso legítimo de seguir adiante: *globalHMACKey nunca chega aqui
+	// vazio (linha 276 gera uma chave aleatória quando nenhuma é fornecida),
+	// então a assinatura é sempre pretendida. A única falha possível é
+	// WA_API_GLOBAL_ENCRYPTION_KEY inválida — configuração, corrigível, e que
+	// o operador precisa ver antes de o serviço atender requisição.
+	//
+	// Mesmo tratamento que os.Executable() logo abaixo já recebia.
 	globalHMACKeyEncrypted, err = encryptHMACKey(*globalHMACKey)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to encrypt global HMAC key")
-	} else {
-		log.Info().Msg("Global HMAC key encrypted successfully")
+		log.Fatal().Err(err).
+			Msg("não foi possível cifrar a chave HMAC global: webhooks sairiam SEM assinatura. " +
+				"Verifique WA_API_GLOBAL_ENCRYPTION_KEY — o AES aceita 16, 24 ou 32 bytes")
 	}
+	log.Info().Msg("Global HMAC key encrypted successfully")
 	appCtx.GlobalHMACKeyEncrypted = globalHMACKeyEncrypted
 
 	InitRabbitMQ()

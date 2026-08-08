@@ -1835,7 +1835,11 @@ das duas está errada e nunca foi notada porque o caminho v3/FB é pouco usado.
 **Correção sugerida**: confirmar contra captura de tráfego real qual forma o
 cliente oficial usa e uniformizar. Não dá para decidir por leitura de código.
 
-**Status**: **não corrigido, ABERTO por decisão** — mas com evidência nova
+**Status**: **RESOLVIDO por documentacao** (2026-08-07), depois de a medicao mostrar que a pergunta original era a errada.
+
+Nao se uniformizou o `v`, e a razao nao e' mais "falta captura de trafego": o ramo v3/FB de ENVIO e' **inalcancavel** a partir do wa-api (ver a secao de evidencias no fim deste arquivo). Sem o ramo rodar, nenhum teste de integracao poderia confirmar que trocar para string e' inocuo — mexer as cegas em codigo morto seria pior que anotar.
+
+`fb_encrypt.go` traz agora a constatacao completa e um **criterio de reavaliacao** explicito: no dia em que alguma rota expuser `SendFBMessage`, a forma do `v` deixa de ser academica e precisa ser confirmada contra o fio antes de ir a producao.
 levantada em 2026-08-07, para a decisão não recomeçar do zero.
 
 **O que o Baileys faz** (`src/Socket/messages-send.ts`): usa `v: '2'` como
@@ -3271,7 +3275,15 @@ comportamento de engolir falha de cifra continua lá.
 **Correção sugerida**: cortar as duas chaves para 32 bytes E decidir
 explicitamente entre fail-fast e degradação anunciada.
 
-**Status**: **item 1 CORRIGIDO** (2026-08-07) — as duas chaves do `run.sh` passaram a ter 32 bytes de verdade, travadas por `TestRunSh_ChavesTemTamanhoValidoParaAES`, que valida com o proprio `aes.NewCipher` em vez de comparar com 32 (replicar a regra abriria espaco para as duas divergirem). Ha' tambem um teste que exige que uma chave contendo "32" no texto tenha mesmo 32 bytes — foi essa contradicao que fez ninguem desconfiar.
+**Status**: **CORRIGIDO** (2026-08-07), os dois itens.
+
+**Item 1**: as duas chaves do `run.sh` passaram a ter 32 bytes de verdade, travadas por `TestRunSh_ChavesTemTamanhoValidoParaAES`, que valida com o proprio `aes.NewCipher` em vez de comparar com 32 — replicar a regra abriria espaco para as duas divergirem. Um segundo teste exige que uma chave contendo "32" no texto tenha mesmo 32 bytes, que foi a contradicao que fez ninguem desconfiar.
+
+**Item 2**: virou `log.Fatal`. A investigacao mostrou que nao era um erro cosmetico e sim **rebaixamento silencioso de seguranca**: com a chave vazia, `callHookWithHmac` pula a assinatura em silencio (`if len(encryptedHmacKey) > 0`, dispatch_callhook.go:80) e todo webhook global sai SEM assinatura, sem que o receptor tenha como perceber.
+
+Nao ha caso legitimo de seguir adiante: `*globalHMACKey` nunca chega vazio aquele ponto — `main.go:276` gera uma chave aleatoria quando nenhuma e' fornecida — entao a assinatura e' sempre pretendida, e a unica falha possivel e' `WA_API_GLOBAL_ENCRYPTION_KEY` invalida, que e' configuracao corrigivel. Mesmo tratamento que `os.Executable()` no mesmo arquivo ja' recebia.
+
+Verificado: com chave de 34 bytes o processo emite `"level":"fatal"` com mensagem acionavel e NAO sobe (`/livez` nao responde); com 32 bytes sobe normal e loga `"Global HMAC key encrypted successfully"`.
 
 **item 2 ABERTO**: engolir falha de inicializacao de material criptografico continua la'. Com a chave certa o sintoma some, mas o comportamento nao.
 política de inicialização.
