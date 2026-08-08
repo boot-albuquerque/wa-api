@@ -4116,10 +4116,27 @@ Coberto por `encerramento_test.go`, com três testes que se cercam:
 Controle negativo executado: sem a chamada a `Detach`, o primeiro falha com
 `Detach chamado 0 vezes, quero 1 — a sessao ficou registrada apos o logout`.
 
-Verificado ao vivo no caminho de FALHA: logout numa sessão já deslogada
-devolve 500 (`logout failed | the store doesn't contain a device JID`) e a
-sessão permanece registrada. O caminho de sucesso exige desvincular um
-aparelho pareado real — pendente de decisão.
+Verificado ao vivo nos DOIS caminhos.
+
+Falha — logout numa sessão já deslogada devolve 500
+(`logout failed | the store doesn't contain a device JID`) e a sessão
+permanece registrada, como tem de ser.
+
+Sucesso — logout do `iphone7`, pareado e conectado:
+
+```
+antes:  connected=True  loggedIn=True  jid=5511912345678:19@s.whatsapp.net
+POST /session/logout -> 200 {"details":""}
+07:53:31 info logged out
+07:53:31 info Received kill signal        <- o Detach disparou
+depois: /session/status -> no_session
+        /admin/users    -> connected=False loggedIn=None
+```
+
+O `Received kill signal` imediatamente após o `logged out` é a assinatura da
+correção: é o kill-channel sendo acionado pelo caminho da API, que antes só
+o telefone acionava. Com o defeito, esta mesma chamada deixava
+`loggedIn=true`.
 
 ## F81 — `GET /user/lid/{jid}` ignora o parâmetro da URL e exige corpo JSON
 
