@@ -1715,6 +1715,7 @@ pkg/application/contracts/contractsfake.ChatOperations.RequestUnavailableMessage
 pkg/application/contracts/contractsfake.ContactDirectory.GetAllContacts	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetLIDForPN	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetManyLIDsForPNs	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ContactDirectory.GetPNForLID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetProfilePicture	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetUserInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.IsOnWhatsApp	EXCLUDED	X5
@@ -1982,6 +1983,11 @@ pkg/application/usecase/user.GetContactsLastActivityUseCase.normalizeToLID	ELIGI
 pkg/application/usecase/user.GetContactsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetPrivacySettingsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:51)
+pkg/application/usecase/user.GetUserProfileUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/user.GetUserProfileUseCase.preencherAvatar	ELIGIBLE	covered
+pkg/application/usecase/user.GetUserProfileUseCase.preencherInfo	ELIGIBLE	covered
+pkg/application/usecase/user.GetUserProfileUseCase.preencherPresencaNaRede	ELIGIBLE	covered
+pkg/application/usecase/user.GetUserProfileUseCase.resolverIdentidades	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.ListUsersUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.NewAddUserUseCase	EXCLUDED	X1
@@ -1996,6 +2002,7 @@ pkg/application/usecase/user.NewGetContactsLastActivityUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetContactsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetPrivacySettingsUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserLIDUseCase	EXCLUDED	X1
+pkg/application/usecase/user.NewGetUserProfileUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewGetUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewListUsersUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewSetPrivacySettingUseCase	EXCLUDED	X1
@@ -2387,6 +2394,7 @@ pkg/infra/wa-noise/adapters/user.UserAdapter.GetAllContacts	ELIGIBLE	uncovered:L
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetBlocklist	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetLIDForPN	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetManyLIDsForPNs	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/user.UserAdapter.GetPNForLID	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetPrivacySettings	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetProfilePicture	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,avatar.go:43);uncovered:L2(S-ret,avatar.go:46);uncovered:L2(S-ret,avatar.go:52)
 pkg/infra/wa-noise/adapters/user.UserAdapter.GetUserInfo	ELIGIBLE	uncovered:L1
@@ -2719,6 +2727,8 @@ pkg/presentation/http/handlers.UserHandlers.GetUser	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.GetUser.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.GetUserLID	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.GetUserLID.func1	ELIGIBLE	covered
+pkg/presentation/http/handlers.UserHandlers.GetUserProfile	EXCLUDED	X1
+pkg/presentation/http/handlers.UserHandlers.GetUserProfile.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.ListUsers	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.ListUsers.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.UnblockUser	EXCLUDED	X1

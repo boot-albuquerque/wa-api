@@ -70,8 +70,18 @@ type ContactDirectory struct {
 	GetLIDForPNFunc  func(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
 	GetLIDForPNCalls []ContactDirectoryGetLIDForPNCall
 
+	GetPNForLIDFunc  func(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error)
+	GetPNForLIDCalls []ContactDirectoryGetPNForLIDCall
+
 	GetManyLIDsForPNsFunc  func(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error)
 	GetManyLIDsForPNsCalls []ContactDirectoryGetManyLIDsForPNsCall
+}
+
+// ContactDirectoryGetPNForLIDCall e' uma chamada a GetPNForLID.
+type ContactDirectoryGetPNForLIDCall struct {
+	Ctx   context.Context
+	TxtID string
+	LID   domain.JID
 }
 
 var _ port.ContactDirectory = (*ContactDirectory)(nil)
@@ -117,6 +127,16 @@ func (f *ContactDirectory) GetLIDForPN(ctx context.Context, txtID string, jid do
 	f.GetLIDForPNCalls = append(f.GetLIDForPNCalls, ContactDirectoryGetLIDForPNCall{Ctx: ctx, TxtID: txtID, JID: jid})
 	if f.GetLIDForPNFunc != nil {
 		return f.GetLIDForPNFunc(ctx, txtID, jid)
+	}
+	return "", nil
+}
+
+// GetPNForLID implementa port.ContactDirectory. Zero-value devolve JID vazia
+// sem erro, que e' o contrato de "mapeamento desconhecido".
+func (f *ContactDirectory) GetPNForLID(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error) {
+	f.GetPNForLIDCalls = append(f.GetPNForLIDCalls, ContactDirectoryGetPNForLIDCall{Ctx: ctx, TxtID: txtID, LID: lid})
+	if f.GetPNForLIDFunc != nil {
+		return f.GetPNForLIDFunc(ctx, txtID, lid)
 	}
 	return "", nil
 }

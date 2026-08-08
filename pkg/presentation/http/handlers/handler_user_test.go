@@ -72,6 +72,7 @@ func (f *uhFakes) handlers() *UserHandlers {
 		user.NewCheckUserUseCase(f.contacts, f.logger),
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserLIDUseCase(f.contacts, f.jids, f.logger),
+		user.NewGetUserProfileUseCase(f.contacts, f.jids, f.logger),
 		user.NewBlockUserUseCase(f.block, f.jids, f.logger),
 		user.NewUnblockUserUseCase(f.block, f.jids, f.logger),
 	)
