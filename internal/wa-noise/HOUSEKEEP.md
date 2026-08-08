@@ -4054,3 +4054,99 @@ já nascem logando.
 
 **Status**: **corrigido**, `make check` verde. Falta validar no aparelho:
 exige reiniciar o servidor, que ainda roda o binário antigo.
+
+## F80 — depois de um logout bem-sucedido, `/session/status` ainda diz `loggedIn=true`
+
+**Data / contexto**: 2026-08-08, validação da F79 com o binário novo.
+
+**Onde**: `pkg/infra/wa-noise/runtime/session/guard.go:72-78`
+
+```go
+func (a *SessionGuardAdapter) SessionStatus(_ context.Context, userID string) (bool, bool) {
+	client := a.getClient(userID)
+	if client == nil { return false, false }
+	return client.IsConnected(), client.IsLoggedIn()
+}
+```
+
+**Problema**: `POST /session/logout` respondeu 200 e logou `logged out` para
+as duas sessões (00:49:08 e 00:49:09). O `Logout` do SDK
+(`internal/wa-noise/core/client_session.go:25-56`) envia o IQ
+`remove-companion-device`, chama `Disconnect()` e **apaga o store**
+(`cli.Store.Delete(ctx)`) — e devolveu nil, então tudo isso aconteceu.
+
+Mesmo assim, `/session/status` e `/admin/users` seguem reportando
+`loggedIn=true` (com `connected=false`) para as duas.
+
+Diferente do logout iniciado pelo TELEFONE, que emite `*events.LoggedOut` →
+`handleLoggedOut` → sinal de kill → o cliente sai dos registries. No logout
+iniciado pela API esse evento não é emitido, o kill nunca dispara, e o
+cliente permanece registrado no `ClientManager` com estado em memória que já
+não corresponde ao store apagado.
+
+Consequência: a API afirma que a sessão está autenticada quando ela não
+está. Quem confia em `loggedIn` para decidir se precisa de QR novo decide
+errado.
+
+**Correção sugerida**: o caminho de logout da API sinalizar o kill como o
+caminho do telefone faz — provavelmente em `LogoutUseCase` ou num hook após
+`SessionController.Logout`, para que o cliente saia dos registries e o
+status volte a `no session`. Vale checar se `Disconnected`/`LoggedOut`
+deveriam ser emitidos sinteticamente, já que hoje **nenhum dos dois** sai
+quando a ação parte da API — ver também a observação da F79 sobre
+`Disconnected`.
+
+**Status**: **não corrigido** — descoberto ao validar a F79, e a correção
+mexe no ciclo de vida da sessão, que não era o alvo.
+
+## F81 — `GET /user/lid/{jid}` ignora o parâmetro da URL e exige corpo JSON
+
+**Data / contexto**: 2026-08-08, varredura dos endpoints com o binário novo.
+
+**Onde**: `pkg/presentation/http/handlers/handler_user.go:226-262`,
+`pkg/bootstrap/wiring_routes.go:92`, `pkg/domain/user.go:46-48`
+
+```go
+// GetUserLID retorna o handler para POST /user/lid.      <- diz POST
+...
+var req domain.GetUserLIDRequest
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {   <- lê o corpo
+```
+
+```go
+registry.Register("/user/lid/{jid}", customChain.Then(ch.User.GetUserLID()), "GET")
+```
+
+```go
+type GetUserLIDRequest struct {
+	JID string // from URL      <- o próprio struct diz "from URL"
+}
+```
+
+**Problema**: três fontes discordam. A rota é `GET` com `{jid}` no caminho, o
+struct documenta `from URL`, e o handler decodifica o CORPO e nunca lê
+`r.PathValue("jid")`. Um GET normal não tem corpo, então o decode falha com
+EOF e o endpoint devolve 400 **sempre**.
+
+**Evidência**:
+
+```
+GET /user/lid/5516981818244@s.whatsapp.net      -> 400
+GET /user/lid/5516981818244                     -> 400
+GET /user/lid/5516981818244%40s.whatsapp.net    -> 400
+log: could not decode payload | error=EOF
+
+GET /user/lid/ignorado  -d '{"JID":"5516981818244@s.whatsapp.net"}'  -> 200
+    {"jid":"5516981818244@s.whatsapp.net","lid":"29343770251463@lid"}
+```
+
+A última linha é a prova de que o parâmetro da URL é ignorado: o caminho
+dizia `ignorado` e a resposta veio do corpo.
+
+**Correção sugerida**: trocar o decode do corpo por
+`req.JID = r.PathValue("jid")`, validando vazio, e corrigir o comentário do
+handler que diz POST. É o que a rota e o struct já prometem. Um teste de
+handler que exercite a rota REGISTRADA (e não só o handler isolado) teria
+pego — os testes atuais montam o handler direto, sem o path param.
+
+**Status**: **não corrigido** — fora do escopo da rodada de testes.
