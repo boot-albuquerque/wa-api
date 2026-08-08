@@ -2250,3 +2250,71 @@ aquisição (o dado que falta é o atraso induzido no handler), e as camadas 2
 > despachos quando houver fila: enfileirar um `map` que o produtor ainda
 > pode tocar transforma backpressure em corrida. Qualquer fila aqui guarda
 > cópia ou valor imutável.
+
+---
+
+## F87 — o handler de nós já trava 5,7s em produção, e a fila de nós da sessão é SEQUENCIAL
+
+**Data**: 2026-08-08
+**Contexto**: surgiu enquanto eu media o atraso induzido no handler para
+decidir a forma de aquisição da F86. O Monitor do log de sessão disparou
+sozinho, com o teto de despacho **desligado** (`WA_API_DISPATCH_MAX_CONCURRENCY`
+não definida, padrão 0) — ou seja, isto **não** é efeito do limitador.
+
+**Onde**:
+- `internal/wa-noise/core/client_events.go:155-180` — `handlerQueueLoop`
+- `pkg/bootstrap/eventhandler.go:25` — `handleEvent`, registrado em
+  `pkg/bootstrap/session_attach_hook_adapter.go:68`
+
+**Problema**, em duas partes.
+
+A primeira é o dado observado. Duas ocorrências no log de sessão:
+
+```
+[warn] Node handling took 5.270184959s for <message from="status@broadcast"
+       id="ACCE95964615FA4DEBCA5B06749E8B7F" ... type="media">
+[warn] Node handling took 5.748452125s for <message from="status@broadcast"
+       id="ACCE95964615FA4DEBCA5B06749E8B7F" ... type="media">
+```
+
+Mesmo `id` nas duas: é o mesmo evento chegando em duas sessões, e as duas
+levaram >5s. A causa não está diagnosticada — é mídia de `status@broadcast`,
+então download ou decriptação são suspeitos, mas isso é hipótese, não achado.
+
+A segunda parte é estrutural, e é a que importa para a F86:
+
+```go
+case node := <-cli.handlerQueue:
+    doneChan := make(chan struct{}, 1)
+    go func() { cli.nodeHandlers[node.Tag](evtCtx, node); ...; doneChan <- struct{}{} }()
+    for i := 0; i < handlerQueueSlowNodeMaxWarnings; i++ {
+        select {
+        case <-doneChan:
+            ticker.Stop()
+            continue Loop        // <- só pega o PRÓXIMO nó quando este termina
+```
+
+O laço só volta a consumir a fila quando o nó corrente termina. **Um nó lento
+segura todos os nós seguintes daquela sessão** — inclusive recibo, presença e
+marcação de leitura, que nada têm a ver com o nó lento.
+
+Isso confirma com `file:line` a premissa em que a medição da F86 foi
+construída, e que até aqui era suposição minha: o chamador do despacho é
+sequencial, então segurá-lo não atrasa uma entrega — atrasa a sessão. O aviso
+do próprio SDK (`handlerQueueSlowNodeThreshold`) é a métrica de produção que
+valida qualquer mudança nessa área, e ela já existe: não é preciso instrumentar
+nada para medir o efeito de ligar o teto.
+
+**Correção sugerida**:
+1. Diagnosticar os 5,7s — instrumentar `handleEvent` por tipo de evento para
+   separar "nó de mídia é lento" de "nosso handler é lento". Sem isso não dá
+   para saber se o alvo é o SDK ou o nosso código.
+2. Usar `Node handling took` como linha de base ANTES de ligar o teto da F86.
+   Com o padrão em 0 hoje, a distribuição atual é a linha de base limpa.
+3. Não introduzir nada que segure `handleEvent` enquanto (1) não estiver
+   respondido: o orçamento de atraso do handler já está sendo consumido por
+   outra coisa.
+
+**Status**: **não corrigido** — registrado no momento em que apareceu.
+Diagnóstico dos 5,7s não iniciado; a parte estrutural está confirmada e já
+está em uso como premissa da F86.

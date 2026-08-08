@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -135,10 +136,14 @@ type formaFila struct {
 	cond     *sync.Cond
 	bytesAtu int64
 	bytesMax int64
-	espera   bool
-	perdidas atomic.Int64
-	workers  sync.WaitGroup
-	fechaUma sync.Once
+	// picoBytes é a marca d'água: quanto a fila REALMENTE precisou. Sem ela
+	// só dá para dizer "com 32MB não segurou", que não calibra nada — o que
+	// calibra é saber que a rajada pediu 17MB e não 31.
+	picoBytes int64
+	espera    bool
+	perdidas  atomic.Int64
+	workers   sync.WaitGroup
+	fechaUma  sync.Once
 }
 
 type trabalho struct {
@@ -191,6 +196,9 @@ func (f *formaFila) Despachar(tamanho int, fn func()) {
 		}
 	}
 	f.bytesAtu += int64(tamanho)
+	if f.bytesAtu > f.picoBytes {
+		f.picoBytes = f.bytesAtu
+	}
 	f.mu.Unlock()
 
 	if f.espera {
@@ -213,6 +221,14 @@ func (f *formaFila) Fechar() {
 	f.workers.Wait()
 }
 func (f *formaFila) Perdidas() int64 { return f.perdidas.Load() }
+
+// PicoBytes é a marca d'água de bytes em voo. Só a fila tem — as outras
+// formas não têm orçamento para calibrar.
+func (f *formaFila) PicoBytes() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.picoBytes
+}
 
 // --- distribuição de payload medida em produção ---------------------------
 
@@ -261,7 +277,7 @@ type medidaHandler struct {
 // O trabalho próprio (`custoProprio`) não é enfeite: sem ele o handler é só um
 // laço de despacho, e o atraso induzido pareceria dominar 100% do tempo. Em
 // produção o handler decodifica protobuf, grava no banco e só então despacha.
-func medirHandler(nome string, d despachante, eventos, porEvento int, tamanhos []int, custoProprio time.Duration, entregar func(tamanho int)) medidaHandler {
+func medirHandler(nome string, d despachante, eventos, porEvento int, tamanhos []int, custoProprio time.Duration, entregar func(payload []byte)) medidaHandler {
 	parar := make(chan struct{})
 	var picoGo atomic.Int64
 	var picoHeap atomic.Uint64
@@ -300,7 +316,17 @@ func medirHandler(nome string, d despachante, eventos, porEvento int, tamanhos [
 		antes := time.Now()
 		for j := 0; j < porEvento; j++ {
 			tam := tamanhos[(i*porEvento+j)%len(tamanhos)]
-			d.Despachar(tam, func() { entregar(tam) })
+			// O payload é alocado AQUI, pelo handler, e mantido vivo pela
+			// closure até a entrega — como em produção, onde o postmap é
+			// construído no handler e a closure de despacho o segura.
+			//
+			// A primeira versão fatiava um array compartilhado
+			// (`corpo[:tam]`). Com isso os itens na fila não seguravam
+			// memória própria, e o heap medido ficou CONSTANTE em ~25MB de
+			// 1MB a 32MB de orçamento — número que parecia dado e dizia
+			// apenas que o instrumento não alocava. Ver ARMADILHAS.md 14.
+			payload := make([]byte, tam)
+			d.Despachar(tam, func() { entregar(payload) })
 		}
 		atrasos = append(atrasos, time.Since(antes))
 	}
@@ -356,10 +382,8 @@ func TestMedicaoAtrasoNoHandler(t *testing.T) {
 	defer srv.Close()
 
 	tamanhos := tamanhosReais()
-	corpo := make([]byte, 128*1024) // fonte; cada entrega usa o prefixo do seu tamanho
-
-	entregar := func(tam int) {
-		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(corpo[:tam]))
+	entregar := func(payload []byte) {
+		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(payload))
 		if err != nil {
 			return
 		}
@@ -475,9 +499,8 @@ func TestMedicaoFilaNaSaturacao(t *testing.T) {
 	defer srv.Close()
 
 	tamanhos := tamanhosReais()
-	corpo := make([]byte, 128*1024)
-	entregar := func(tam int) {
-		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(corpo[:tam]))
+	entregar := func(payload []byte) {
+		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(payload))
 		if err != nil {
 			return
 		}
@@ -602,9 +625,8 @@ func TestMedicaoWorkersVsDreno(t *testing.T) {
 	defer srv.Close()
 
 	tamanhos := tamanhosReais()
-	corpo := make([]byte, 128*1024)
-	entregar := func(tam int) {
-		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(corpo[:tam]))
+	entregar := func(payload []byte) {
+		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(payload))
 		if err != nil {
 			return
 		}
@@ -688,5 +710,140 @@ func TestMedicaoWorkersVsDreno(t *testing.T) {
 	if dreno("fila-256w") >= dreno("fila-64w") {
 		t.Errorf("256 workers (%s) nao drenaram mais rapido que 64 (%s): o gargalo nao e' o pool, e esta tabela nao mede o que diz medir",
 			dreno("fila-256w"), dreno("fila-64w"))
+	}
+}
+
+// TestMedicaoCalibracaoOrcamento calibra o TAMANHO da fila.
+//
+// As medições anteriores usaram dois orçamentos extremos de propósito: 8MB
+// (apertado, handler segurado por 9,2s) e 32MB (folgado, handler intacto).
+// Isso prova que o orçamento importa, e não diz onde fica o joelho da curva —
+// que é a única coisa que permite escolher um número.
+//
+// Duas varreduras, com o pool FIXO em 256 workers para não misturar os botões:
+//
+//	A) orçamento variável, rajada fixa — onde o handler começa a ser segurado
+//	B) rajada variável, orçamento fixo — se um orçamento "suficiente" existe
+//
+// A varredura B é a que decide se dá para escolher um número e esquecer, ou se
+// o orçamento tem de acompanhar o tamanho da rajada. Se o handler produz muito
+// mais rápido do que o pool escoa, a fila tende a precisar da rajada INTEIRA,
+// e aí não existe número que sempre baste — só a escolha de quanto atraso se
+// aceita. A marca d'água (PicoBytes) responde isso com dado.
+//
+// Rode com:
+//
+//	go test ./pkg/bootstrap/ -run TestMedicaoCalibracaoOrcamento -v -timeout 25m
+func TestMedicaoCalibracaoOrcamento(t *testing.T) {
+	if testing.Short() {
+		t.Skip("medicao de carga: pulada em -short")
+	}
+
+	const latenciaServidor = 100 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		time.Sleep(latenciaServidor)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(make([]byte, 4096))
+	}))
+	defer srv.Close()
+
+	tamanhos := tamanhosReais()
+	entregar := func(payload []byte) {
+		resp, err := http.Post(srv.URL, "application/json", bytes.NewReader(payload))
+		if err != nil {
+			return
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}
+
+	const (
+		porEvento    = 4
+		workers      = 256 // fixo: o botao sob medida agora e' o orcamento
+		custoProprio = 200 * time.Microsecond
+		capItens     = 65536 // alto de proposito: quem limita tem de ser o BYTE
+		repeticoes   = 3
+	)
+
+	const mb = 1024 * 1024
+
+	// Uma perna: roda `repeticoes` vezes e devolve as medianas + marca d'água.
+	rodar := func(eventos int, orcamento int64) (medidaHandler, int64) {
+		var ms []medidaHandler
+		var picoBytes int64
+		for r := 0; r < repeticoes; r++ {
+			runtime.GC()
+			f := novaFormaFila(workers, capItens, orcamento, true)
+			m := medirHandler("", f, eventos, porEvento, tamanhos, custoProprio, entregar)
+			if p := f.PicoBytes(); p > picoBytes {
+				picoBytes = p
+			}
+			ms = append(ms, m)
+		}
+		med := func(sel func(medidaHandler) time.Duration) time.Duration {
+			v := make([]time.Duration, len(ms))
+			for i, m := range ms {
+				v[i] = sel(m)
+			}
+			sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
+			return v[len(v)/2]
+		}
+		var heap float64
+		var perdidas int64
+		for _, m := range ms {
+			heap += m.picoHeapMB
+			perdidas += m.perdidas
+		}
+		return medidaHandler{
+			handlerTotal: med(func(m medidaHandler) time.Duration { return m.handlerTotal }),
+			atrasoP95:    med(func(m medidaHandler) time.Duration { return m.atrasoP95 }),
+			atrasoMax:    med(func(m medidaHandler) time.Duration { return m.atrasoMax }),
+			drenoTotal:   med(func(m medidaHandler) time.Duration { return m.drenoTotal }),
+			picoHeapMB:   heap / float64(len(ms)),
+			perdidas:     perdidas,
+			entregas:     eventos * porEvento * repeticoes,
+		}, picoBytes
+	}
+
+	// --- A) orçamento variável, rajada fixa ---
+	const eventosFixos = 2000 // 8.000 entregas, ~19MB de payload
+	t.Logf("=== A) orcamento variavel | rajada fixa: %d entregas | pool %dw ===", eventosFixos*porEvento, workers)
+	t.Logf("%-10s %-10s %-10s %-10s %-10s %-10s %s", "orcamento", "handler", "atraso_p95", "atraso_max", "dreno", "heap", "pico_fila")
+	for _, orc := range []int64{1 * mb, 2 * mb, 4 * mb, 8 * mb, 16 * mb, 24 * mb, 32 * mb} {
+		m, pico := rodar(eventosFixos, orc)
+		t.Logf("%-10s %-10s %-10s %-10s %-10s %-10s %.1fMB",
+			fmt.Sprintf("%dMB", orc/mb),
+			m.handlerTotal.Round(time.Millisecond),
+			m.atrasoP95.Round(time.Microsecond),
+			m.atrasoMax.Round(time.Microsecond),
+			m.drenoTotal.Round(time.Millisecond),
+			fmt.Sprintf("%.1fMB", m.picoHeapMB),
+			float64(pico)/mb)
+	}
+
+	// --- B) rajada variável, orçamento fixo ---
+	const orcamentoFixo = int64(16 * mb)
+	t.Log("")
+	t.Logf("=== B) rajada variavel | orcamento fixo: %dMB | pool %dw ===", orcamentoFixo/mb, workers)
+	t.Logf("%-10s %-10s %-10s %-10s %-10s %s", "entregas", "handler", "atraso_p95", "dreno", "heap", "pico_fila")
+	for _, ev := range []int{500, 1000, 2000, 4000} {
+		m, pico := rodar(ev, orcamentoFixo)
+		t.Logf("%-10d %-10s %-10s %-10s %-10s %.1fMB",
+			ev*porEvento,
+			m.handlerTotal.Round(time.Millisecond),
+			m.atrasoP95.Round(time.Microsecond),
+			m.drenoTotal.Round(time.Millisecond),
+			fmt.Sprintf("%.1fMB", m.picoHeapMB),
+			float64(pico)/mb)
+	}
+
+	// Asserção do INSTRUMENTO: com 1MB o handler TEM de ser segurado, senão a
+	// varredura A nao exercitou a borda e a curva nao existe.
+	apertado, _ := rodar(eventosFixos, 1*mb)
+	folgado, _ := rodar(eventosFixos, 32*mb)
+	if apertado.handlerTotal <= folgado.handlerTotal {
+		t.Errorf("handler com 1MB (%s) nao ficou mais lento que com 32MB (%s): o orcamento nao esta limitando nada",
+			apertado.handlerTotal, folgado.handlerTotal)
 	}
 }
