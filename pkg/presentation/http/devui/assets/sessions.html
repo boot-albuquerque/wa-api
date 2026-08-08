@@ -62,6 +62,14 @@
   .qr.expirado img { filter:blur(4px) grayscale(1); opacity:.3; }
   .qr .over { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
   .qr .over button { background:#1d2530; color:#fff; border-color:#1d2530; font-weight:600; font-size:13px; }
+  /* O atributo `hidden` aplica display:none pela folha do navegador, mas
+     QUALQUER regra de autor com `display` vence — e .qr declara display:flex.
+     Sem estas duas linhas, a caixa branca do QR aparece em toda sessao,
+     inclusive nas que nunca conectaram. Foi o primeiro defeito que o teste
+     no navegador pegou, depois de a pagina passar em curl e em assercao de
+     marcadores: o contrato estava certo e a aparencia nao. */
+  .qr[hidden], .ttl[hidden] { display: none; }
+
   .ttl { height:3px; background:var(--raised); border-radius:2px; overflow:hidden; }
   .ttl > i { display:block; height:100%; width:0; background:var(--accent); transition:width .25s linear; }
   .ttl.low > i { background:var(--warn); }
