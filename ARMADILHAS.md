@@ -217,3 +217,63 @@ conclusão.
 **Corolário**: quando a varredura contradiz o que o documento aparenta,
 abra o documento antes de "corrigi-lo". Documento bem escrito perdendo para
 regex ingênua é o caso comum, não o raro.
+
+---
+
+## 14. O instrumento de medida precisa alocar, bloquear e falhar como o original
+
+A entrada 13 diz que a varredura é suspeita. Esta diz que o **harness**
+também é — e o modo de falha é pior, porque um harness ruim produz números
+que parecem dados.
+
+Medindo o teto de despacho da F86, o primeiro harness usava `time.Sleep` para
+simular a entrega. Resultado: heap **idêntico** com e sem teto (4,7MB), o que
+levaria à conclusão "goroutine sem teto não custa nada, não faça nada".
+
+`time.Sleep` não aloca. Uma entrega real segura `http.Request`, buffers de
+resposta e estado TLS. Refeito com HTTP de verdade contra um servidor lento e
+payload de 8KB:
+
+| | goroutines | heap pico |
+|---|---|---|
+| sem teto | ~4.000 | **~32MB** |
+| teto=64 | ~350 | **~13MB** |
+
+A conclusão inverteu. E apareceu de quebra que 800 entregas viram ~4.000
+goroutines — o transporte HTTP cria goroutines internas por conexão, coisa
+que a leitura do código não mostrava.
+
+**Regra**: antes de confiar num harness, pergunte o que ele NÃO faz que o
+original faz. Se o dublê não aloca, não bloqueia em rede e não falha como o
+real, ele mede outra coisa — e o número dele é pior que nenhum número,
+porque tem aparência de evidência.
+
+**Corolário**: rode a medição pelo menos três vezes. Uma amostra não separa
+efeito de ruído, e o heap em particular depende de quando o GC passou.
+
+---
+
+## 15. A propriedade que você documentou não é a que você internalizou
+
+O limitador da F86 tem aquisição **bloqueante**, e eu escrevi isso no
+comentário: *"aquisição bloqueante é deliberada — segurá-la por um instante é
+exatamente o backpressure que falta"*.
+
+Duas horas depois, meu próprio teste travou por 600s porque emitia despachos
+num laço com teto 1: o segundo bloqueou o laço, e o `close()` que liberaria
+o primeiro nunca chegou.
+
+E o deadlock revelou o que o comentário não dizia: em produção o chamador é a
+goroutine do handler de eventos do SDK. Segurá-la não é backpressure sobre
+uma fila — é **parar o processamento da sessão inteira**, inclusive dos
+eventos que nem vão para webhook. O "remédio" empurrava o problema para um
+lugar pior.
+
+**Regra**: ao introduzir bloqueio, semáforo ou fila, escreva explicitamente
+QUEM é o chamador em produção e o que acontece com ele quando o mecanismo
+satura. Se a resposta for "não sei", não é decisão de desenho — é acidente
+esperando.
+
+**Fixe a propriedade num teste** que falhe se ela mudar, como
+`TestLimitador_AquisicaoBloqueiaOChamador`. Comentário não impede regressão;
+teste impede.
