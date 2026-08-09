@@ -1,0 +1,90 @@
+{
+  "boot_1": {
+    "browser_floor_mb": 244.953125,
+    "fingerprint": {
+      "deviceMemory": null,
+      "hardwareConcurrency": 10,
+      "headlessHint": true,
+      "languages": [
+        "en-US",
+        "en"
+      ],
+      "platform": "Linux x86_64",
+      "plugins": 5,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+      "webdriver": false
+    },
+    "procs": {
+      "browser": 3,
+      "gpu": 1,
+      "renderer": 3,
+      "total": 11,
+      "utility": 2,
+      "zygote": 2
+    },
+    "profile_dir_exists": true,
+    "screenshot_bytes": 3880
+  },
+  "boot_2": {
+    "browser_floor_mb": 231.24609375,
+    "fingerprint": {
+      "deviceMemory": null,
+      "hardwareConcurrency": 10,
+      "headlessHint": true,
+      "languages": [
+        "en-US",
+        "en"
+      ],
+      "platform": "Linux x86_64",
+      "plugins": 5,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+      "webdriver": false
+    },
+    "procs": {
+      "browser": 3,
+      "gpu": 1,
+      "renderer": 3,
+      "total": 11,
+      "utility": 2,
+      "zygote": 2
+    },
+    "profile_dir_exists": true,
+    "screenshot_bytes": 3880
+  },
+  "canonical_flags": [
+    "--headless=new",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-breakpad",
+    "--disable-client-side-phishing-detection",
+    "--disable-default-apps",
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages",
+    "--disable-hang-monitor",
+    "--disable-ipc-flooding-protection",
+    "--disable-popup-blocking",
+    "--disable-prompt-on-repost",
+    "--disable-sync",
+    "--metrics-recording-only",
+    "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints",
+    "--disable-site-isolation-trials",
+    "--force-color-profile=srgb",
+    "--window-size=1280,800",
+    "--lang=en-US",
+    "--remote-debugging-address=0.0.0.0"
+  ],
+  "cpu_max": "300000 100000",
+  "goarch": "arm64",
+  "memory_max": "3221225472",
+  "num_cpu": 10,
+  "session_dir": "/session/profile",
+  "session_dir_writable": true,
+  "started_utc": "2026-08-09T06:48:01Z"
+}

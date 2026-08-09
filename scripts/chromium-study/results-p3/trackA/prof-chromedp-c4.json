@@ -1,0 +1,549 @@
+{
+  "meta": {
+    "browser": {
+      "Browser": "Chrome/151.0.7922.108",
+      "Protocol-Version": "1.3",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+      "V8-Version": "15.1.206.16",
+      "WebKit-Version": "537.36 (@4744b886309d987d292e43232776d2206cccb13d)",
+      "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/8a521f64-3b6c-4679-a7c7-4254d94ec523"
+    },
+    "concurrency": 4,
+    "controller": "chromedp",
+    "cpu_max": "600000 100000",
+    "goarch": "arm64",
+    "iters": 20,
+    "memory_max": "4294967296",
+    "num_cpu": 10,
+    "profiled": true,
+    "started_utc": "2026-08-09T04:47:49Z"
+  },
+  "samples": [
+    {
+      "t_ms": 278,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 2.7695541381835938,
+      "cgroup_mb": 308.453125,
+      "jobs_done": 0
+    },
+    {
+      "t_ms": 523,
+      "goroutines": 35,
+      "threads": 9,
+      "heap_mb": 2.8356475830078125,
+      "cgroup_mb": 289.52734375,
+      "jobs_done": 2
+    },
+    {
+      "t_ms": 795,
+      "goroutines": 39,
+      "threads": 9,
+      "heap_mb": 2.7554931640625,
+      "cgroup_mb": 306.15234375,
+      "jobs_done": 4
+    },
+    {
+      "t_ms": 1024,
+      "goroutines": 39,
+      "threads": 9,
+      "heap_mb": 2.6194610595703125,
+      "cgroup_mb": 310.9375,
+      "jobs_done": 4
+    },
+    {
+      "t_ms": 1257,
+      "goroutines": 33,
+      "threads": 9,
+      "heap_mb": 2.16357421875,
+      "cgroup_mb": 289.2578125,
+      "jobs_done": 6
+    },
+    {
+      "t_ms": 1514,
+      "goroutines": 39,
+      "threads": 9,
+      "heap_mb": 2.69793701171875,
+      "cgroup_mb": 308.83203125,
+      "jobs_done": 8
+    },
+    {
+      "t_ms": 1780,
+      "goroutines": 41,
+      "threads": 9,
+      "heap_mb": 3.3268661499023438,
+      "cgroup_mb": 312.98046875,
+      "jobs_done": 8
+    },
+    {
+      "t_ms": 2009,
+      "goroutines": 33,
+      "threads": 9,
+      "heap_mb": 3.8214340209960938,
+      "cgroup_mb": 290.75390625,
+      "jobs_done": 11
+    },
+    {
+      "t_ms": 2279,
+      "goroutines": 39,
+      "threads": 9,
+      "heap_mb": 2.7512283325195312,
+      "cgroup_mb": 309.53515625,
+      "jobs_done": 12
+    },
+    {
+      "t_ms": 2522,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 3.2404098510742188,
+      "cgroup_mb": 312.78125,
+      "jobs_done": 12
+    },
+    {
+      "t_ms": 2781,
+      "goroutines": 28,
+      "threads": 9,
+      "heap_mb": 2.19915771484375,
+      "cgroup_mb": 300.921875,
+      "jobs_done": 15
+    },
+    {
+      "t_ms": 3004,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 2.9268646240234375,
+      "cgroup_mb": 305.69921875,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 3267,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 2.7226638793945312,
+      "cgroup_mb": 311.203125,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 3930,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 3.0476760864257812,
+      "cgroup_mb": 312.74609375,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 3952,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 3.1028823852539062,
+      "cgroup_mb": 312.609375,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 4024,
+      "goroutines": 40,
+      "threads": 9,
+      "heap_mb": 3.1920928955078125,
+      "cgroup_mb": 312.82421875,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 4261,
+      "goroutines": 41,
+      "threads": 9,
+      "heap_mb": 3.5998992919921875,
+      "cgroup_mb": 314.671875,
+      "jobs_done": 16
+    }
+  ],
+  "jobs": 20,
+  "failures": 0,
+  "wall_ms": 4418,
+  "jobs_per_sec": 4.526905633984354,
+  "Total": {
+    "max_ms": 1622.708,
+    "mean_ms": 867.7674,
+    "n": 20,
+    "p50_ms": 768.109,
+    "p95_ms": 1549.978,
+    "p99_ms": 1622.708,
+    "stddev_ms": 364.65944616345814
+  },
+  "ops": {
+    "click": {
+      "max_ms": 111.051,
+      "mean_ms": 50.687200000000004,
+      "n": 20,
+      "p50_ms": 42.855,
+      "p95_ms": 101.281,
+      "p99_ms": 111.051,
+      "stddev_ms": 25.37098861219247
+    },
+    "dom_read": {
+      "max_ms": 541.813,
+      "mean_ms": 71.4284,
+      "n": 20,
+      "p50_ms": 48.595,
+      "p95_ms": 91.432,
+      "p99_ms": 541.813,
+      "stddev_ms": 109.78340973225417
+    },
+    "evaluate": {
+      "max_ms": 117.542,
+      "mean_ms": 15.324599999999998,
+      "n": 20,
+      "p50_ms": 2.688,
+      "p95_ms": 69.244,
+      "p99_ms": 117.542,
+      "stddev_ms": 30.153075392735648
+    },
+    "fill": {
+      "max_ms": 830.634,
+      "mean_ms": 224.88215,
+      "n": 20,
+      "p50_ms": 156.824,
+      "p95_ms": 765.149,
+      "p99_ms": 830.634,
+      "stddev_ms": 195.6563014314323
+    },
+    "navigate": {
+      "max_ms": 683.928,
+      "mean_ms": 139.36924999999997,
+      "n": 20,
+      "p50_ms": 115.254,
+      "p95_ms": 182.278,
+      "p99_ms": 683.928,
+      "stddev_ms": 130.9432189526724
+    },
+    "page_create": {
+      "max_ms": 328.038,
+      "mean_ms": 211.34055000000004,
+      "n": 20,
+      "p50_ms": 202.471,
+      "p95_ms": 305.367,
+      "p99_ms": 328.038,
+      "stddev_ms": 78.61725352139631
+    },
+    "wait_ready": {
+      "max_ms": 119.325,
+      "mean_ms": 53.6044,
+      "n": 20,
+      "p50_ms": 36.03,
+      "p95_ms": 118.511,
+      "p99_ms": 119.325,
+      "stddev_ms": 31.479909789260834
+    },
+    "wait_result": {
+      "max_ms": 141.144,
+      "mean_ms": 80.98864999999999,
+      "n": 20,
+      "p50_ms": 72.885,
+      "p95_ms": 135.909,
+      "p99_ms": 141.144,
+      "stddev_ms": 26.75022032297117
+    }
+  },
+  "block_top": [
+    {
+      "value": 18213851464,
+      "count": 25,
+      "stack": [
+        "0x25223",
+        "0x322217"
+      ]
+    },
+    {
+      "value": 18150618800,
+      "count": 25,
+      "stack": [
+        "0x25223",
+        "0x32462f"
+      ]
+    },
+    {
+      "value": 18146756427,
+      "count": 25,
+      "stack": [
+        "0x25223",
+        "0x32228b",
+        "0xa0e97"
+      ]
+    },
+    {
+      "value": 17953098996,
+      "count": 3834,
+      "stack": [
+        "0x70c07",
+        "0x3233df",
+        "0x322773"
+      ]
+    },
+    {
+      "value": 16339743958,
+      "count": 2091,
+      "stack": [
+        "0x70c07",
+        "0x32999b"
+      ]
+    },
+    {
+      "value": 14583519967,
+      "count": 333,
+      "stack": [
+        "0x70c07",
+        "0x3297d7",
+        "0x325b83"
+      ]
+    },
+    {
+      "value": 3869818836,
+      "count": 17,
+      "stack": [
+        "0x70c07",
+        "0x3f91a3"
+      ]
+    },
+    {
+      "value": 2896841921,
+      "count": 16,
+      "stack": [
+        "0x24347",
+        "0x3f872b",
+        "0x3f592b",
+        "0x5d3b3"
+      ]
+    },
+    {
+      "value": 2201063499,
+      "count": 20,
+      "stack": [
+        "0x70c07",
+        "0x3ee46b",
+        "0x325bd3",
+        "0x324eab",
+        "0x324e0c",
+        "0x3ee14b"
+      ]
+    },
+    {
+      "value": 2199604537,
+      "count": 300,
+      "stack": [
+        "0x70c07",
+        "0x32a223",
+        "0x12bfe7",
+        "0x1898eb",
+        "0x32766f",
+        "0x32752f"
+      ]
+    },
+    {
+      "value": 1856763168,
+      "count": 50,
+      "stack": [
+        "0x70c07",
+        "0x32a223",
+        "0x12bfe7",
+        "0x14c353",
+        "0x32a8ef",
+        "0x32b437"
+      ]
+    },
+    {
+      "value": 1520962459,
+      "count": 1,
+      "stack": [
+        "0xa0cf7",
+        "0x3f87ef",
+        "0x3f592b",
+        "0x5d3b3"
+      ]
+    }
+  ],
+  "mutex_top": [
+    {
+      "value": 299570379,
+      "count": 21,
+      "stack": [
+        "0xa0907",
+        "0x32ab1f",
+        "0x32aa6f",
+        "0x32b437",
+        "0x32984f",
+        "0x325b83"
+      ]
+    },
+    {
+      "value": 3370685,
+      "count": 9,
+      "stack": [
+        "0x68733"
+      ]
+    },
+    {
+      "value": 2412870,
+      "count": 24,
+      "stack": [
+        "0x8b7fc",
+        "0x8b7f8",
+        "0x6519f",
+        "0x63e3f",
+        "0x652ef",
+        "0x65773"
+      ]
+    },
+    {
+      "value": 2051580,
+      "count": 19,
+      "stack": [
+        "0x669ec",
+        "0x669e8",
+        "0x961f7",
+        "0x6677f",
+        "0x90fdf",
+        "0xaecff"
+      ]
+    },
+    {
+      "value": 1400708,
+      "count": 1,
+      "stack": [
+        "0x90f3c",
+        "0x90f38",
+        "0x65237",
+        "0x63e3f",
+        "0x652ef",
+        "0x65773"
+      ]
+    },
+    {
+      "value": 775708,
+      "count": 6,
+      "stack": [
+        "0x633c8",
+        "0x633c4",
+        "0x652ef",
+        "0x65773",
+        "0x96163"
+      ]
+    },
+    {
+      "value": 506667,
+      "count": 1,
+      "stack": [
+        "0x601ec",
+        "0x601e8",
+        "0x37b77",
+        "0x961f7",
+        "0x3775f",
+        "0x2d54f"
+      ]
+    },
+    {
+      "value": 378210,
+      "count": 6,
+      "stack": [
+        "0x60d98",
+        "0x60d94",
+        "0x394cf",
+        "0x961f7",
+        "0x38c63",
+        "0x38c34"
+      ]
+    },
+    {
+      "value": 359000,
+      "count": 1,
+      "stack": [
+        "0x8e0cc",
+        "0x8e0c8",
+        "0x2a503",
+        "0xf71bf",
+        "0xf6917",
+        "0xf095f"
+      ]
+    },
+    {
+      "value": 355709,
+      "count": 1,
+      "stack": [
+        "0x9f74c",
+        "0x9f6e7",
+        "0x9f5a3",
+        "0x19ae4b",
+        "0x1977a7",
+        "0x197043"
+      ]
+    },
+    {
+      "value": 272167,
+      "count": 1,
+      "stack": [
+        "0x637b0",
+        "0x637ac",
+        "0x652ef",
+        "0x659bb",
+        "0x778bf",
+        "0x778b8"
+      ]
+    },
+    {
+      "value": 257333,
+      "count": 1,
+      "stack": [
+        "0x601ec",
+        "0x601e8",
+        "0x38147",
+        "0x961f7",
+        "0x37e0b",
+        "0x39acb"
+      ]
+    }
+  ],
+  "goroutine_top": [
+    {
+      "value": 3,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3db993",
+        "0x3db7bf",
+        "0x3d8fc3",
+        "0x3f9a2f",
+        "0x3f8a0b",
+        "0x3f592b"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeb773",
+        "0xeb764",
+        "0x1e6417",
+        "0x1f4d53"
+      ]
+    }
+  ]
+}

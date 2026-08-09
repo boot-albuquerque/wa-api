@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "chat_query_used": false,
+    "cpu_max": "300000 100000",
+    "goarch": "arm64",
+    "memory_max": "3221225472",
+    "num_cpu": 10,
+    "started_utc": "2026-08-09T07:11:25Z",
+    "url": "https://web.whatsapp.com/"
+  },
+  "state": {
+    "state": ""
+  },
+  "automation_fingerprint": null,
+  "concurrency": 1,
+  "jobs": 0,
+  "correct_jobs": 0,
+  "false_successes": 0,
+  "failures": 3,
+  "timeouts": 3,
+  "correct_jobs_per_sec": 0,
+  "job_total": {
+    "n": 0
+  },
+  "ops": {
+    "navigate": {
+      "max_ms": 1169.884,
+      "mean_ms": 907.9466666666667,
+      "n": 3,
+      "p50_ms": 791.872,
+      "p95_ms": 1169.884,
+      "p99_ms": 1169.884,
+      "stddev_ms": 185.6164615209426
+    },
+    "restore_session": {
+      "max_ms": 179241.885,
+      "mean_ms": 121646.18466666667,
+      "n": 3,
+      "p50_ms": 178831.873,
+      "p95_ms": 179241.885,
+      "p99_ms": 179241.885,
+      "stddev_ms": 81162.87088583602
+    }
+  },
+  "cpu_core_seconds": 46.429174,
+  "nr_throttled": 22,
+  "nr_periods": 3676,
+  "throttled_seconds": 2.419329,
+  "browser_idle_floor_mb": 255.73046875,
+  "memory_over_floor_per_slot_mb": 321.46875,
+  "memory_current_mb": 584.48828125,
+  "memory_peak_mb": 862.45703125,
+  "memory_events": {
+    "high": 0,
+    "low": 0,
+    "max": 0,
+    "oom": 0,
+    "oom_group_kill": 0,
+    "oom_kill": 0
+  },
+  "memory_stat": {
+    "anon": 481886208,
+    "file": 106110976,
+    "kernel_stack": 2998272,
+    "shmem": 4096,
+    "slab": 8675712,
+    "sock": 8192
+  },
+  "chromium_procs": {
+    "browser": 3,
+    "gpu": 1,
+    "renderer": 6,
+    "total": 14,
+    "utility": 2,
+    "zygote": 2
+  },
+  "correct_jobs_per_core_hour": 0,
+  "correct_jobs_per_gib_hour": 0,
+  "avg_dom_nodes": 0,
+  "avg_js_heap_mb": 0,
+  "avg_resources": 0,
+  "distinct_origins": 0,
+  "session_age_seconds": 0
+}
