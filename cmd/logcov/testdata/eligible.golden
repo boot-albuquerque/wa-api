@@ -2618,9 +2618,9 @@ pkg/infra/wa-noise/runtime/session.NewSessionProviderAdapter.func1	EXCLUDED	X6
 pkg/infra/wa-noise/runtime/session.NewSessionProviderWithLogger	EXCLUDED	X1
 pkg/infra/wa-noise/runtime/session.NewSessionProviderWithLogger.func1	EXCLUDED	X6
 pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:49)
-pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Disconnect	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:100)
+pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Disconnect	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:124)
 pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.EnsureSession	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:57)
-pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Logout	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:91);uncovered:L2(S-ret,guard.go:93)
+pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Logout	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:91);uncovered:L2(S-ret,guard.go:108);uncovered:L2(S-ret,guard.go:117)
 pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.SessionStatus	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/runtime/session.SessionProviderAdapter.NewSession	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/runtime/session.SessionProviderAdapter.resolveDevice	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,provider.go:118)

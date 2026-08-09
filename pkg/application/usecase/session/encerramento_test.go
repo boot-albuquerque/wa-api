@@ -8,6 +8,8 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
+
+	"wa-api/pkg/domain/apperr"
 )
 
 // Testes da F79: /session/disconnect e /session/logout devolviam 200 sem
@@ -222,5 +224,74 @@ func TestDisconnectUseCase_NaoSoltaASessao(t *testing.T) {
 	}
 	if len(sc.DisconnectCalls) != 1 {
 		t.Fatalf("Disconnect chamado %d vezes, quero 1", len(sc.DisconnectCalls))
+	}
+}
+
+// F93: logout de sessão sem transporte vivo devolvia 500 e deixava
+// `users.connected=1` preso.
+//
+// O flag mentiroso não é cosmético: `connectOnStartup` decide o que religar com
+// `SELECT ... WHERE connected=1`, então uma sessão morta voltava a ser religada
+// a cada subida do processo.
+func TestLogoutUseCase_SemTransporteAlinhaOEstadoLocal(t *testing.T) {
+	semTransporte := apperr.New(
+		apperr.CodeSessionNotConnected, apperr.CategoryConflict,
+		"session has no live connection", false, nil,
+	)
+	sc := &contractsfake.SessionController{
+		LogoutFunc: func(context.Context, string) error { return semTransporte },
+	}
+	det := &contractsfake.SessionDetacher{}
+	log := &contractsfake.Logger{}
+
+	_, err := session.NewLogoutUseCase(sc, det, log).
+		Execute(context.Background(), txtID, domain.LogoutRequest{})
+
+	if err == nil {
+		t.Fatal("Execute devolveu sucesso para logout sem transporte")
+	}
+	if len(det.DetachCalls) != 1 {
+		t.Fatalf("Detach chamado %d vezes, quero 1: sem ele users.connected fica em 1 para uma sessão morta, e o connectOnStartup religa uma sessão fantasma", len(det.DetachCalls))
+	}
+}
+
+// TestLogoutUseCase_OutraFalhaNaoDerrubaOEstado é a outra metade, e é a que
+// impede a correção acima de virar um defeito pior.
+//
+// Falha por outro motivo pode ser transitória. Derrubar o estado local de uma
+// sessão possivelmente saudável seria pior que o problema original — o mesmo
+// raciocínio da regra de cerca do lease (D2).
+func TestLogoutUseCase_OutraFalhaNaoDerrubaOEstado(t *testing.T) {
+	sc := &contractsfake.SessionController{
+		LogoutFunc: func(context.Context, string) error { return errPorta },
+	}
+	det := &contractsfake.SessionDetacher{}
+	log := &contractsfake.Logger{}
+
+	_, _ = session.NewLogoutUseCase(sc, det, log).
+		Execute(context.Background(), txtID, domain.LogoutRequest{})
+
+	if len(det.DetachCalls) != 0 {
+		t.Errorf("Detach chamado %d vezes numa falha genérica: uma sessão possivelmente saudável seria derrubada", len(det.DetachCalls))
+	}
+}
+
+// TestLogoutUseCase_SucessoAindaDesanexa trava a F80, que é o risco desta
+// correção: acrescentei uma chamada no ramo de FALHA, e mover a do ramo de
+// sucesso reabriria aquele defeito — o logout pela API não emite evento, então
+// sem Detach o cliente ficava registrado com estado obsoleto e
+// /session/status seguia respondendo loggedIn=true.
+func TestLogoutUseCase_SucessoAindaDesanexa(t *testing.T) {
+	sc := &contractsfake.SessionController{}
+	det := &contractsfake.SessionDetacher{}
+	log := &contractsfake.Logger{}
+
+	if _, err := session.NewLogoutUseCase(sc, det, log).
+		Execute(context.Background(), txtID, domain.LogoutRequest{}); err != nil {
+		t.Fatalf("caminho feliz falhou: %v", err)
+	}
+
+	if len(det.DetachCalls) != 1 {
+		t.Fatalf("Detach chamado %d vezes no sucesso, quero 1 — a F80 voltou", len(det.DetachCalls))
 	}
 }

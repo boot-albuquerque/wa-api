@@ -427,7 +427,18 @@ min_func_coverage=695
 # e por que; o handler HTTP loga a resposta de erro. Um log no orquestrador
 # seria a terceira linha do MESMO evento, e o padrao deste repositorio e' que
 # loga quem decide, nao quem propaga.
-min_errpath_coverage=858
+# justificativa: F93 (2026-08-08), logout de sessao sem transporte vivo. errpath
+# cai 858->857: UM caminho de saida novo, a recusa em
+# SessionGuardAdapter.Logout, sem log proprio.
+#
+# Adapter nao loga — padrao ja' aceito neste repositorio e justificado varias
+# vezes acima. E aqui quem loga JA' loga: LogoutUseCase registra "logout failed"
+# em Warn com o txtID e a causa, e o handler HTTP registra a resposta. Um log no
+# guard seria a terceira linha do mesmo evento.
+#
+# min_eligible e func_coverage nao mudam: a guarda vive dentro de funcao ja'
+# elegivel e ja' coberta.
+min_errpath_coverage=857
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto

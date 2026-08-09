@@ -90,6 +90,30 @@ func (a *SessionGuardAdapter) Logout(_ context.Context, txtID string) error {
 	if client == nil {
 		return ErrNoSession(txtID, nil)
 	}
+
+	// Logout FALA com o WhatsApp: manda um IQ `remove-companion-device` antes
+	// de qualquer coisa. Sem transporte vivo não há o que enviar, e o SDK
+	// devolve "error sending logout request: websocket not connected" — erro
+	// CRU, que a fronteira HTTP transformava em 500 opaco (F93).
+	//
+	// A checagem é de ESTADO, não de texto de erro: casar a mensagem do SDK
+	// quebra silenciosamente quando ele muda a frase, e essa é a classe de
+	// acoplamento que só falha em produção.
+	//
+	// 409 e não 400: a requisição está correta, só não pode ser atendida NESTE
+	// estado. A mensagem diz o caminho de saída, porque a resposta anterior não
+	// dizia — o remédio é reconectar antes, e isso era conhecimento de
+	// implementação.
+	if !client.IsConnected() {
+		return apperr.New(
+			apperr.CodeSessionNotConnected,
+			apperr.CategoryConflict,
+			"session has no live connection; call /session/connect before logging out",
+			false,
+			nil,
+		)
+	}
+
 	return client.Logout(context.Background())
 }
 

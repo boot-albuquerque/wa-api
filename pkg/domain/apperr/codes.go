@@ -66,6 +66,15 @@ func (c Category) HTTPStatus() int {
 	}
 }
 
+// CodeSessionNotConnected marks a request that needs a live WhatsApp transport
+// on a session that has none — today, logout (F93).
+//
+// It lives here, and not in the infra package that raises it, because two
+// layers have to agree on it: infra RAISES it, and the use case READS it to
+// decide that the local state must be aligned. A code duplicated across layers
+// diverges the first time someone edits one of them.
+const CodeSessionNotConnected = "session_not_connected"
+
 // IsClientGaveUp reports whether err is the CLIENT abandoning the request —
 // a closed browser tab, a navigation, a cancelled fetch.
 //

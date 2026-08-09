@@ -2983,8 +2983,52 @@ duas vezes.
    `/session/connect` primeiro. A primeira opção é a que remove a pegadinha;
    a segunda é a barata. Qualquer uma é melhor que 500 opaco.
 
-**Status**: **não corrigido** — só diagnosticado, a pedido do dono do
-repositório. Nada foi alterado no código nem no banco.
+**Status**: **corrigido**.
+
+**Classificação** — `SessionGuardAdapter.Logout` checa `client.IsConnected()`
+ANTES de chamar o SDK e devolve `apperr` com `CategoryConflict` (409) e
+mensagem que diz a saída: *"call /session/connect before logging out"*. A
+resposta anterior era 500 com corpo genérico, e o remédio era conhecimento de
+implementação.
+
+A checagem é de **estado**, não de texto de erro. Casar a mensagem do SDK
+(`"websocket not connected"`) quebraria em silêncio no dia em que ele mudasse a
+frase — acoplamento que só falha em produção.
+
+**Estado local** — o use case chama `Detach` no ramo de falha quando o código é
+`CodeSessionNotConnected`, então `users.connected` para de mentir. Sem isso o
+`connectOnStartup` religava uma sessão fantasma a cada subida.
+
+Três decisões que o teste trava, e as duas últimas são o que impede a correção
+de virar defeito pior:
+
+1. **Só neste código.** Falha por outro motivo pode ser transitória, e derrubar
+   estado local de sessão possivelmente saudável seria pior que o problema
+   original — mesmo raciocínio da regra de cerca do lease (D2).
+2. **ACRESCENTA no ramo de falha, não MOVE o do sucesso.** A posição daquele é
+   deliberada e está justificada pela F80.
+3. O código de erro vive em `pkg/domain/apperr` porque duas camadas precisam
+   concordar sobre ele: a infra o LEVANTA, o use case o LÊ.
+
+Quatro controles negativos executados. Um deles NÃO COMPILOU na primeira
+tentativa (import órfão) — ARMADILHAS 4 — e foi refeito. Os demais:
+
+```
+--- FAIL: TestLogoutUseCase_SemTransporteAlinhaOEstadoLocal
+    Detach chamado 0 vezes ... o connectOnStartup religa uma sessão fantasma
+--- FAIL: TestLogoutUseCase_OutraFalhaNaoDerrubaOEstado
+    Detach chamado 1 vezes numa falha genérica
+--- FAIL: TestLogoutUseCase_SucessoAindaDesanexa
+    Detach chamado 0 vezes no sucesso — a F80 voltou
+```
+
+**Falta validar no fluxo real**: desconectar e deslogar pelo painel, conferindo
+409 em vez de 500 e `connected=0` no banco.
+
+> **Mudança de contrato observável**: o endpoint respondia 500 e passa a
+> responder 409. Cliente que trate 5xx como "tente de novo depois" e 4xx como
+> "não repita" vai agir diferente — e agir CERTO, porque repetir contra a mesma
+> sessão desconectada produz o mesmo erro. Decidido pelo dono do repositório.
 
 > **Verificação da F93 (2026-08-08)** — o diagnóstico acima foi produzido por
 > um agente delegado e as afirmações que o sustentam foram conferidas contra o
