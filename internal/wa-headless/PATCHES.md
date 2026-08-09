@@ -7,8 +7,15 @@ quê.
 `internal/wa-headless/` é a segunda pilha de transporte do projeto. Enquanto
 `internal/wa-noise/` fala o protocolo direto no WebSocket com o Noise
 framework, este módulo conduz o **SPA real** do `web.whatsapp.com` dentro de um
-browser, que é o que certos recursos e campanhas exigem e o que dá a camada
-adicional de mitigação de ban — mitigação, não garantia. As duas pilhas
+browser, que é o que certos recursos e campanhas exigem.
+
+A segunda motivação — a camada adicional de mitigação de ban — **não é
+propriedade automática desta pilha**. O spike do
+[ADR-0006](../../docs/adr/0006-wa-headless-engine-de-browser-e-custo-por-sessao.md)
+mediu `navigator.webdriver === true` nas duas engines avaliadas, e a D3 daquela
+ADR transforma a mitigação em frente de trabalho própria, com medição própria.
+Até que ela exista, esta pilha entrega o primeiro motivo e não o segundo. As duas
+pilhas
 convivem: a `wa-api` é a ponte, e o consumo desta biblioteca acontece em
 `pkg/infra/wa-headless/`, exatamente como `pkg/infra/wa-noise/` consome a
 outra.
@@ -136,24 +143,48 @@ esta pilha vier a reaproveitar algo da outra, o import é pela fachada
 
 ## Entradas
 
-**Nenhuma até 2026-08-08.**
+### P1 — A superfície de módulos é inventariada e verificada, não espalhada
 
-Não é omissão: `internal/wa-headless/main.go` contém uma linha
-(`package waheadless`) e `pkg/infra/wa-headless/doc.go` outra. Não existe
-comportamento implementado, logo não existe divergência a registrar. A
-primeira entrada nasce com o primeiro código que decida algo diferente do que
-o `wwebjs` decide.
+- **Nossos arquivos**: `internal/wa-headless/spa/` (o inventário e a
+  verificação de arranque). Ainda sem implementação — a divergência está
+  decidida e registrada antes do código, e a entrada passa a citar os arquivos
+  concretos quando eles existirem.
+- **Âncora da referência**: `wwebjs` em `main`, commit `942d236a11ad`
+  (2026-07-27), `src/Client.js` e `src/util/Injected/Utils.js`. WA Web
+  observado: Chrome 151 contra `web.whatsapp.com` em 2026-08-08, pré-login.
+- **O que a referência faz**: acessa os internos por
+  `window.require('<NomeDoModulo>')` com o nome **literal no ponto de uso** —
+  50 chamadas só no `Client.js`, com nomes como `WAWebChatGetters`,
+  `WAWebMsgKey`, `WAWebConnModel`, `WAWebCollections`. Não usa `moduleRaid` nem
+  `webpackChunkwhatsapp_web_client`; ambos estão ausentes do projeto nesse
+  commit.
+- **O que nós fazemos**: um inventário único de nomes como constantes nomeadas,
+  resolvido por inteiro no arranque da sessão, falhando alto com a lista do que
+  faltou. Zero literal no ponto de uso.
+- **Por quê**: os nomes são contrato não documentado da Meta e mudam sem aviso.
+  Espalhados, uma renomeação quebra no meio de uma operação com erro que não
+  denuncia a causa. Concentrados e verificados, ela quebra no arranque, num
+  lugar previsível, dizendo qual módulo sumiu.
+- **O comportamento mudou?** **Sim, deliberadamente** — é onde a falha acontece
+  e o que ela informa. A renomeação continua quebrando: isto não é resiliência
+  contra a mudança, é diagnóstico dela.
+- **Decidido em**: [ADR-0006](../../docs/adr/0006-wa-headless-engine-de-browser-e-custo-por-sessao.md) D4.
+
+> **Nota sobre a procedência desta entrada.** A primeira redação do ADR-0006
+> afirmava que o `wwebjs` fixava `webpackChunkwhatsapp_web_client` via
+> `moduleRaid`. Estava errada, e foi afirmação de memória sobre projeto de
+> terceiro dentro de um documento do repositório. A leitura da fonte no commit
+> acima desfez o engano — e revelou que o acoplamento real é **mais largo** do
+> que o suposto: dezenas de nomes, não um. É a razão de este arquivo exigir
+> âncora em vez de aceitar "o que a referência faz" de cabeça.
 
 ## Em aberto
 
-- **ADR do `wa-headless` não existe.** O `internal/wa-noise/` chegou à sua
-  forma atual por uma cadeia explícita (ADR-0002 → 0003 → 0004) que fixou o
-  que ele é, o que fica intocado e quais gates o travam. Esta biblioteca ainda
-  não tem esse documento, e sem ele "supere o `wwebjs` em escala e resiliência"
-  é objetivo, não critério. Precisa de ADR dizendo, no mínimo: o mecanismo de
-  automação de browser adotado em Go e por quê, o modelo de ciclo de vida e
-  teto de instâncias, e como a posse de sessão do ADR-0005 se aplica a uma
-  sessão que é um browser vivo.
+- **A ADR existe, mas está `proposed`.** O
+  [ADR-0006](../../docs/adr/0006-wa-headless-engine-de-browser-e-custo-por-sessao.md)
+  fixa a engine (`chromedp`), o orçamento de flags, o custo medido por sessão e
+  como a posse de sessão do ADR-0005 se aplica a um browser vivo. Enquanto não
+  for aceita, o esqueleto de pacotes deste diretório é forma, não compromisso.
 - **O teto de 300 linhas não é verificado aqui.** `waclient-filesize` casa com
   `internal/wa-noise/`; ou o script passa a aceitar os dois caminhos, ou o
   pilar vale só enquanto a revisão lembrar dele. Ver "Gates".
