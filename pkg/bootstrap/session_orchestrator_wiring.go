@@ -45,9 +45,10 @@ func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 		// posse, que e' exatamente o defeito que esta opcao existe para
 		// fechar (medido em 2026-08-08: sessao pareada pelo painel rodando
 		// SEM LEASE).
-		appsession.WithOwnershipCheck(func(userID string) bool {
-			return claimSessionOwnership(s.Leases, userID)
-		}),
+		appsession.WithOwnershipCheck(
+			func(userID string) bool { return claimSessionOwnership(s.Leases, userID) },
+			func(userID string) { releaseSessionOwnership(s.Leases, userID) },
+		),
 		appsession.WithS3Provisioner(func(userID string) {
 			storage.GetS3Manager().EnsureClientFromDB(userID)
 		}),

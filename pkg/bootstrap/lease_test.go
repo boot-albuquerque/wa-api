@@ -283,3 +283,46 @@ func TestBuildOwnerID_StableAndNonEmpty(t *testing.T) {
 		t.Error("owner id is not stable within the same process")
 	}
 }
+
+// TestLease_ReleaseHandsBackASingleLease covers the F96 fix at the manager
+// level: a session claimed but never started must give its lease back, or the
+// heartbeat renews ownership of something that does not exist and no other
+// replica can ever take that user.
+func TestLease_ReleaseHandsBackASingleLease(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+
+	for _, userID := range []string{"u1", "u2"} {
+		if ok, err := manager.Claim(context.Background(), userID); err != nil || !ok {
+			t.Fatalf("claim %s: ok=%v err=%v", userID, ok, err)
+		}
+	}
+
+	manager.Release(context.Background(), "u1")
+
+	if held := len(manager.ownedSessions()); held != 1 {
+		t.Errorf("still holds %d sessions, want 1: Release must drop exactly one", held)
+	}
+	if left := store.remaining(); left != 1 {
+		t.Errorf("%d leases left in the store, want 1", left)
+	}
+}
+
+// TestLease_ReleaseForgetsEvenWhenTheStoreFails: if the manager kept renewing a
+// lease it failed to delete, the session would stay unreachable to every
+// replica until the process died. Forgetting locally lets the TTL clear it.
+func TestLease_ReleaseForgetsEvenWhenTheStoreFails(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+	store.failWith(fmt.Errorf("%w: connection refused", db.ErrLeaseUnavailable))
+
+	manager.Release(context.Background(), "u1")
+
+	if held := len(manager.ownedSessions()); held != 0 {
+		t.Errorf("still holds %d sessions after a failed Release: the heartbeat would keep renewing a lease we tried to drop", held)
+	}
+}

@@ -381,7 +381,7 @@ func TestStopUnregistersAndDetaches(t *testing.T) {
 // one of them permanently.
 
 func TestStart_RefusesWhenOwnershipIsDenied(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }, nil))
 	// Paired on purpose, even though the guard should stop us first: if the
 	// guard is ever removed, Start would otherwise enter the BLOCKING
 	// pairing path and this test would hang instead of failing. A hanging
@@ -407,7 +407,7 @@ func TestStart_RefusesWhenOwnershipIsDenied(t *testing.T) {
 // reaches the HTTP layer as an opaque 500. The refusal is not a server fault —
 // the request simply reached the wrong replica — so it has to carry a category.
 func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }, nil))
 	// Paired on purpose, even though the guard should stop us first: if the
 	// guard is ever removed, Start would otherwise enter the BLOCKING
 	// pairing path and this test would hang instead of failing. A hanging
@@ -439,7 +439,7 @@ func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
 // path. A check that always refuses would pass the test above and break
 // everything.
 func TestStart_ProceedsWhenOwnershipIsGranted(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return true }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return true }, nil))
 	// Already paired: the unpaired path BLOCKS consuming the pairing channel,
 	// so without this the test hangs instead of failing — and a hanging test
 	// reports nothing (ARMADILHAS.md 16).
@@ -464,5 +464,83 @@ func TestStart_WithoutOwnershipCheckAllows(t *testing.T) {
 	}
 	if indexOf(h.recorder.Calls, "SessionProvider.NewSession") < 0 {
 		t.Errorf("session was not materialized in single mode: %v", h.recorder.Calls)
+	}
+}
+
+// TestStart_ReleasesOwnershipWhenSessionFailsToStart pins F96, a defect
+// INTRODUCED by the ownership guard itself.
+//
+// Ownership is claimed BEFORE the session is materialized, on purpose: a denial
+// must not leave client and registries dirty. The cost is that a failure
+// afterwards would keep the lease alive forever — the heartbeat renewing
+// ownership of a session that never came up, and no other replica ever able to
+// take that user.
+//
+// Measured before the fix, with a user connected via the API but never paired:
+//
+//	t=6s   connected=0  expires_in=12s
+//	t=12s  connected=0  expires_in=11s
+//	t=18s  connected=0  expires_in=15s   <- renewed
+func TestStart_ReleasesOwnershipWhenSessionFailsToStart(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.provider.NewSessionFunc = func(context.Context, port.SessionSpec) (port.Session, error) {
+		return nil, errors.New("provider refused")
+	}
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err == nil {
+		t.Fatal("Start succeeded even though the provider failed")
+	}
+
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Errorf("ownership released = %v, want [user-1]: the lease would be renewed forever for a session that never came up", released)
+	}
+}
+
+// TestStart_KeepsOwnershipOnSuccess is the other half, and the one that stops
+// the fix above from becoming a worse bug: releasing on the SUCCESS path would
+// hand the session away while it is being served.
+func TestStart_KeepsOwnershipOnSuccess(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 0 {
+		t.Errorf("ownership released on the SUCCESS path (%v): the session would be given away while running", released)
+	}
+}
+
+// TestStart_DoesNotReleaseWhenClaimWasDenied: we never held it, so releasing
+// would delete ANOTHER replica's lease — handing it a session it is serving.
+func TestStart_DoesNotReleaseWhenClaimWasDenied(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return false },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err == nil {
+		t.Fatal("Start succeeded despite the ownership refusal")
+	}
+
+	if len(released) != 0 {
+		t.Errorf("released ownership we never held (%v): this would delete the lease of the replica that owns the session", released)
 	}
 }

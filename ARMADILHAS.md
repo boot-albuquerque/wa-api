@@ -373,3 +373,100 @@ quando a API muda.
 em paralelo com ele. `go test ./...` paraleliza por pacote, então um teste
 faminto de CPU faz um pacote vizinho falhar por timeout — e o diagnóstico
 aponta para o lugar errado.
+
+---
+
+## 19. Você testa o caminho que escreveu, não o caminho que o usuário percorre
+
+O D2 (posse de sessão) foi instrumentado no `connectOnStartup`, e os testes
+seguiram o código: 9 unitários sob `-race`, 6 de integração contra Postgres
+real, 3 controles negativos, `make check` verde.
+
+O caminho que o usuário percorre é outro. `/session/connect` — que o painel e
+todo pareamento novo usam — iniciava sessão **sem reivindicar posse nenhuma**.
+Medido com duas sessões vivas:
+
+```
+teste-d2    connected=1  posse: MacBook-Pro-de-Lucas.local-93206
+teste-d2-b  connected=1  posse: SEM LEASE          <- pareada pelo painel
+```
+
+Sob N réplicas, isso é o desastre que o mecanismo existe para impedir: a
+réplica seguinte encontra o lease livre, toma, conecta a mesma sessão, e o
+WhatsApp mata uma das duas para sempre.
+
+**Regra**: depois de instrumentar um caminho, liste TODOS os pontos de entrada
+daquela operação e verifique cada um. Aqui eram dois — arranque e API — e o
+segundo é o que 100% dos usuários usam. "Passou nos testes" mede o código
+escrito; só o exercício do fluxo real mede o produto.
+
+**Como pegar barato**: exercite pela interface que o usuário usa, não pela
+função que você acabou de editar. Uma requisição pelo painel achou em segundos
+o que 18 testes verdes não acharam.
+
+---
+
+## 20. O conserto do conserto é um mecanismo novo — e a regra existir não basta
+
+A política anti-regressão deste repositório (`CLAUDE.md`) tem uma regra 4
+explícita: *o conserto do conserto também é um mecanismo; aplique as três
+regras anteriores a ele*.
+
+Escrevi essa regra pela manhã, ao corrigir a F88. Algumas horas depois,
+corrigindo a posse de sessão, criei a F96 — reivindicar a posse ANTES de
+materializar a sessão (decisão correta, evita registries sujos) sem liberar
+quando a sessão não sobe. Resultado medido:
+
+```
+t=6s   teste-runtime | connected=0 | expira_em=12s
+t=12s  teste-runtime | connected=0 | expira_em=11s
+t=18s  teste-runtime | connected=0 | expira_em=15s   <- renovou
+```
+
+Posse viva, renovada a cada 5s, para uma sessão que nunca existiu — e nenhuma
+outra réplica poderia assumir aquele usuário, jamais.
+
+**Regra**: a política não se aplica sozinha. Ao terminar QUALQUER correção,
+releia a lista de regras antes de considerar o trabalho pronto — não durante a
+revisão, que é tarde. A pergunta operacional é: *o que este conserto passou a
+segurar, e quem devolve?*
+
+**Corolário — correções de recurso vêm em pares.** Quem adquire precisa de quem
+libera, e os dois caminhos precisam de teste em direções OPOSTAS: não liberar
+reintroduz o vazamento; liberar demais entrega o recurso em uso. Os dois
+controles negativos desta correção falharam em mensagens distintas, e é isso
+que prova que o par está correto.
+
+---
+
+## 21. O shell também é um instrumento, e ele mente diferente em cada casca
+
+Três vezes numa sessão, uma peculiaridade de shell produziu resultado que
+parecia dado:
+
+| o que eu escrevi | o que aconteceu | o que quase concluí |
+|---|---|---|
+| `git grep -E '\bfoo\b'` | `\b` não é suportado ali | "não existe no repo" |
+| `timeout 120 go test ...` | `timeout` não existe no macOS | "o teste ainda pendura" |
+| `env $E cmd` com `E="A=1 B=2"` | **zsh não faz word-splitting**: virou UM argumento | "as réplicas se comportaram assim" |
+
+O terceiro é o pior: as duas réplicas subiram sem NENHUMA variável de banco,
+caíram em SQLite e uma rodou em modo `single` — e o experimento produziu uma
+tabela de resultados plausível sobre um cenário que não existiu.
+
+**Regra**: todo experimento precisa de um CONTROLE que prove que o cenário foi
+montado, antes de olhar qualquer resultado. No caso das réplicas, o controle é
+uma linha:
+
+```
+A: sqlite_fallback=0 | ownership=1
+B: sqlite_fallback=0 | ownership=1
+```
+
+Sem ele, não há como distinguir "o mecanismo se comportou assim" de "o
+mecanismo nem foi exercitado".
+
+**Corolário**: em zsh, use atribuições explícitas antes do comando
+(`A=1 B=2 cmd`) em vez de expandir uma variável com vários pares. E desconfie
+de saída vazia: pode ser `command not found` engolido por um `grep` na
+sequência.

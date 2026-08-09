@@ -125,6 +125,18 @@ func claimSessionOwnership(manager *leaseManager, userID string) bool {
 	return owned
 }
 
+// releaseSessionOwnership hands a lease back when a session failed to start.
+//
+// No-op with no manager: `single` mode never claimed anything.
+func releaseSessionOwnership(manager *leaseManager, userID string) {
+	if manager == nil {
+		return
+	}
+	log.Warn().Str("userid", userID).
+		Msg("session did not start; handing its ownership back so another replica can take it")
+	manager.Release(context.Background(), userID)
+}
+
 // startLeaseHeartbeat runs the renewal loop when there is a manager.
 func startLeaseHeartbeat(ctx context.Context, manager *leaseManager) {
 	if manager == nil {

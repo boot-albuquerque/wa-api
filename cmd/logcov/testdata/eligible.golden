@@ -1816,8 +1816,9 @@ pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:178);uncovered:L2(S-ret,orchestrator.go:212);uncovered:L2(S-ret,orchestrator.go:214)
-pkg/application/session.Orchestrator.Start.func1	EXCLUDED	X6
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:185);uncovered:L2(S-ret,orchestrator.go:233);uncovered:L2(S-ret,orchestrator.go:235)
+pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:202)
+pkg/application/session.Orchestrator.Start.func2	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
 pkg/application/session.Orchestrator.dispatch	ELIGIBLE	covered
@@ -1826,7 +1827,7 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:254)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:275)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithDefaultWebhookUseProxy	EXCLUDED	X1
 pkg/application/session.WithDefaultWebhookUseProxy.func1	EXCLUDED	X6
@@ -2159,12 +2160,13 @@ pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
 pkg/bootstrap.leaseManager.Claim	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.Release	ELIGIBLE	covered
 pkg/bootstrap.leaseManager.ReleaseAll	ELIGIBLE	covered
 pkg/bootstrap.leaseManager.RunHeartbeat	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
-pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:234);uncovered:L2(S-ret,lease.go:238)
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:251);uncovered:L2(S-ret,lease.go:255)
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
 pkg/bootstrap.montarRequisicaoWebhook	ELIGIBLE	covered
 pkg/bootstrap.newDispatchPool	ELIGIBLE	uncovered:L1
@@ -2173,6 +2175,7 @@ pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6
 pkg/bootstrap.newSessionOrchestrator.func2	EXCLUDED	X6
+pkg/bootstrap.newSessionOrchestrator.func3	EXCLUDED	X6
 pkg/bootstrap.outcomeFor	EXCLUDED	X1
 pkg/bootstrap.prepararCluster	ELIGIBLE	covered
 pkg/bootstrap.prepararCluster.func1	EXCLUDED	X6
@@ -2191,6 +2194,7 @@ pkg/bootstrap.registerCustomRoutes.func2	EXCLUDED	X1
 pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
+pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:201)
 pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:77)
 pkg/bootstrap.s3MediaUploader.ProcessMediaForS3	ELIGIBLE	uncovered:L1

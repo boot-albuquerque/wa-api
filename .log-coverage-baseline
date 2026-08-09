@@ -436,7 +436,18 @@ min_errpath_coverage=858
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-min_eligible=569
+# +3 (569->572): correcao da F96 — a posse reivindicada antes de materializar
+# a sessao agora e' DEVOLVIDA quando Start nao completa. Entram
+# leaseManager.Release, releaseSessionOwnership e a closure do defer em
+# Orchestrator.Start.
+#
+# As DUAS razoes ficam INALTERADAS (func 698, errpath 858) e `covered` sobe
+# 397->399: das tres, duas ja' nascem cobertas (Release loga a falha de
+# devolucao; releaseSessionOwnership loga qual sessao esta' sendo devolvida e
+# por que). A terceira e' a closure do defer, que nao loga de proposito — ela
+# so' chama releaseSessionOwnership, que JA' loga. Um log ali seria a segunda
+# linha do mesmo evento.
+min_eligible=572
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

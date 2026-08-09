@@ -3073,3 +3073,60 @@ sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
 **Status**: **não corrigido** — registrado com os dois sites que já sofrem.
+
+---
+
+## F96 — sessão que nunca subiu detém lease renovado para sempre
+
+**Data**: 2026-08-08
+**Contexto**: achado ao medir o cenário de duas réplicas do ADR-0005 D2, logo
+depois de corrigir a posse no caminho de execução. É defeito INTRODUZIDO por
+essa correção, não pré-existente.
+
+**Onde**: `pkg/application/session/orchestrator.go`, guarda de posse no início
+de `Start`; `pkg/bootstrap/lease.go`, mapa `lastRenewal` e `RunHeartbeat`.
+
+**Problema**: `Start` reivindica a posse ANTES de materializar a sessão — o que
+é deliberado e correto, para não deixar cliente e registries sujos se a posse
+for negada. Mas se a sessão não chega a subir (QR nunca lido, pareamento
+abandonado, `Start` falhando adiante), **nada libera o lease**. O gerenciador
+registrou a posse em `lastRenewal` e o heartbeat a renova indefinidamente.
+
+Evidência medida na instância de teste, com um usuário criado e conectado pela
+API mas nunca pareado:
+
+```
+  t=6s   teste-runtime | connected=0 | expira_em=12s
+  t=12s  teste-runtime | connected=0 | expira_em=11s
+  t=18s  teste-runtime | connected=0 | expira_em=15s     <- renovou
+```
+
+O salto de 11s para 15s é uma renovação: a posse está viva para uma sessão que
+não existe.
+
+Duas consequências:
+
+1. **Nenhuma outra réplica pode assumir aquele usuário**, jamais — o lease
+   nunca expira. Se a sessão for pareada depois, ela fica presa à réplica que
+   por acaso recebeu o `connect` original.
+2. **A tabela cresce** com cada tentativa abandonada, e cada linha custa
+   renovação a cada 5 segundos.
+
+**Correção sugerida**: liberar a posse quando `Start` não completar. O ponto
+natural é o próprio `Start`: reivindicou e vai retornar erro, então solta antes
+de sair. Para o caso do QR abandonado, é preciso decidir o que conta como "não
+completou" — provavelmente o retorno de `Start`, qualquer que seja o motivo,
+já que ele só retorna quando o fluxo de pareamento termina ou falha.
+
+**Atenção**: soltar no caminho de erro NÃO pode soltar no caminho de sucesso —
+a posse tem de sobreviver enquanto a sessão estiver rodando, que é o ponto do
+mecanismo.
+
+**Status**: **não corrigido** — registrado no momento em que a medição o
+expôs, para não interromper o experimento das duas réplicas em andamento.
+
+> Nota de método: este é o caso exato da regra "o conserto do conserto também é
+> um mecanismo novo" (`CLAUDE.md`, política anti-regressão). Eu escrevi essa
+> regra hoje, ao corrigir a F88, e não a apliquei à correção de posse algumas
+> horas depois. A regra existir não basta; ela precisa ser consultada no
+> momento de escrever, não só no momento de revisar.

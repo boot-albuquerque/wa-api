@@ -205,6 +205,23 @@ func (m *leaseManager) forget(userID string) {
 	m.mu.Unlock()
 }
 
+// Release hands back a single lease.
+//
+// Used when a session was claimed but never came up: the claim happens BEFORE
+// the session is materialized (so a denial leaves no dirty state), which means
+// a failure afterwards would otherwise keep the lease alive forever — the
+// heartbeat renewing ownership of a session that does not exist, and no other
+// replica ever able to take that user (F96, measured).
+func (m *leaseManager) Release(ctx context.Context, userID string) {
+	if err := m.store.Release(ctx, userID, m.ownerID); err != nil {
+		// Not fatal: the TTL expires this lease on its own. Worth a warning
+		// because until then the session is unreachable to every replica.
+		log.Warn().Err(err).Str("userid", userID).
+			Msg("failed to release lease for a session that did not start; the TTL will clear it")
+	}
+	m.forget(userID)
+}
+
 // ReleaseAll drops every lease on graceful shutdown so failover does not wait
 // out the TTL. A failure here is logged and does not stop the loop: the process
 // is exiting anyway, and the TTL covers whatever is left behind.

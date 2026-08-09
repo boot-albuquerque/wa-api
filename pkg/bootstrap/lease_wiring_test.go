@@ -133,3 +133,27 @@ func TestLeaseReleaseTimeout_IsSeparateFromShutdownBudget(t *testing.T) {
 			leaseReleaseTimeout, shutdownBudget)
 	}
 }
+
+// TestReleaseSessionOwnership_NilManagerIsSafe: `single` mode never claimed
+// anything, and the call site is unconditional. A panic here would turn a
+// failed session start into a crash.
+func TestReleaseSessionOwnership_NilManagerIsSafe(t *testing.T) {
+	releaseSessionOwnership(nil, "u1") // must not panic
+}
+
+// TestReleaseSessionOwnership_HandsTheLeaseBack is the F96 fix seen from the
+// wiring: this is the function the orchestrator calls when Start fails.
+func TestReleaseSessionOwnership_HandsTheLeaseBack(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	releaseSessionOwnership(manager, "u1")
+
+	if left := store.remaining(); left != 0 {
+		t.Errorf("%d leases left: another replica could never take this session", left)
+	}
+}

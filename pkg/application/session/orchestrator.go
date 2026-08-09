@@ -71,6 +71,12 @@ type Orchestrator struct {
 	// que é o modo `single`.
 	claimOwnership func(userID string) bool
 
+	// releaseOwnership devolve a posse quando Start NÃO completa. Sem ele, a
+	// posse reivindicada antes de materializar fica presa para sempre: o
+	// heartbeat renova indefinidamente uma sessão que nunca subiu, e nenhuma
+	// outra réplica consegue assumir aquele usuário (F96, medido).
+	releaseOwnership func(userID string)
+
 	// ensureS3 replica o storage.GetS3Manager().EnsureClientFromDB(userID)
 	// de startClient. Injetado como função para que pkg/application não
 	// importe pkg/infra/storage. Opcional: nil vira no-op.
@@ -105,9 +111,10 @@ type Option func(*Orchestrator)
 // enquanto a pareada no arranque tinha o seu. Sob N réplicas isso é o
 // desastre da F89: a réplica seguinte encontra o lease livre, toma, conecta a
 // mesma sessão, e o WhatsApp mata uma das duas para sempre.
-func WithOwnershipCheck(claim func(userID string) bool) Option {
+func WithOwnershipCheck(claim func(userID string) bool, release func(userID string)) Option {
 	return func(o *Orchestrator) {
 		o.claimOwnership = claim
+		o.releaseOwnership = release
 	}
 }
 
@@ -169,7 +176,7 @@ func NewOrchestrator(
 // Bloqueia enquanto o fluxo de pareamento estiver ativo (o canal de
 // PairingEvent é consumido aqui, como startClient consome o qrChan hoje);
 // no caminho já pareado retorna assim que a conexão sobe.
-func (o *Orchestrator) Start(ctx context.Context, userID, token string) error {
+func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err error) {
 	// Posse ANTES de materializar qualquer coisa: criar a sessão e só depois
 	// descobrir que ela é de outra réplica deixaria cliente e registries
 	// sujos, e o caminho de limpeza teria de desfazer o que nem devia ter
@@ -182,6 +189,20 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) error {
 			false,
 			nil,
 		)
+	}
+
+	// Reivindicou e vai falhar? Devolve. O `defer` fica AQUI, depois da
+	// reivindicação bem-sucedida, e não no topo: instalado antes, ele
+	// liberaria a posse de OUTRA réplica no caminho em que a nossa foi negada.
+	//
+	// E dispara SÓ com err != nil: no caminho de sucesso a posse tem de
+	// sobreviver enquanto a sessão roda, que é o ponto do mecanismo inteiro.
+	if o.claimOwnership != nil && o.releaseOwnership != nil {
+		defer func() {
+			if err != nil {
+				o.releaseOwnership(userID)
+			}
+		}()
 	}
 
 	sess, err := o.provider.NewSession(ctx, port.SessionSpec{UserID: userID, Token: token})
