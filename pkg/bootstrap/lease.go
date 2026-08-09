@@ -82,6 +82,12 @@ type leaseManager struct {
 	// lease of a session that is still coming up.
 	claimedAt map[string]time.Time
 
+	// lastTick records when the heartbeat loop last completed a pass. It is
+	// the ONLY way to tell a live renewal loop from a dead one: with no owned
+	// sessions the loop still ticks, so an empty lastRenewal map says nothing
+	// about whether the goroutine survived. Readiness (D6) reads it.
+	lastTick time.Time
+
 	now func() time.Time // injectable so tests do not depend on the wall clock
 }
 
@@ -221,6 +227,10 @@ func (m *leaseManager) RunHeartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			m.mu.Lock()
+			m.lastTick = m.now()
+			m.mu.Unlock()
+
 			for _, userID := range m.ownedSessions() {
 				// Checked BEFORE renewing: renewing first would hand this
 				// lease another full TTL of life before we drop it anyway.
@@ -315,4 +325,31 @@ func leaseSettings() (ttl, heartbeat time.Duration, err error) {
 			envLeaseHeartbeat, heartbeatSeconds, envLeaseTTL, ttlSeconds)
 	}
 	return time.Duration(ttlSeconds) * time.Second, time.Duration(heartbeatSeconds) * time.Second, nil
+}
+
+// HeartbeatStalled reports whether the renewal loop has stopped ticking.
+//
+// A dead heartbeat goroutine is the worst failure this mechanism has, and the
+// quietest: leases stop being renewed, every session this pod owns silently
+// expires from the other replicas' point of view, and they take over sessions
+// this pod is still serving — the two live owners of F89, which WhatsApp
+// settles by killing one for good.
+//
+// The tolerance is three heartbeats, not one: a single late tick under load is
+// normal, and the TTL already requires the interval to be at most half of it,
+// so three intervals still land inside a window where the fencing rule in
+// renewOne would act on its own.
+//
+// A manager that has never ticked (lastTick zero) is NOT stalled: RunHeartbeat
+// may simply not have had its first tick yet, and reporting a fresh process as
+// unhealthy would fail every deploy for one interval.
+func (m *leaseManager) HeartbeatStalled() bool {
+	m.mu.Lock()
+	last := m.lastTick
+	m.mu.Unlock()
+
+	if last.IsZero() {
+		return false
+	}
+	return m.now().Sub(last) > 3*m.heartbeat
 }

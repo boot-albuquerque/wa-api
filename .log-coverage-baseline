@@ -460,7 +460,43 @@ rules_frozen=true
 # já era coberta, então o numerador não muda e o ganho não aparece na razão.
 #
 # errpath fica em 857.
-min_func_coverage=693
+# ratchet-UP parcial: ADR-0005 D6 (2026-08-09), separacao de sondas.
+# min_eligible 577->579 (+2 liquido) e func_coverage 693->694 (SOBE).
+#
+# O ganho veio de um defeito que o proprio gate apontou: buildRouter estava em
+# `uncovered:L1` — funcao elegivel SEM log reconhecido — e o aviso novo que eu
+# escrevi ("nenhuma sonda de readiness ligada") nasceu em `uncovered:L3`, sem
+# campo estruturado. Acrescentar Str("endpoint", ...) levou a funcao a
+# `covered`. Consertado em vez de justificado: a metrica estava certa, e um
+# aviso sem estrutura nao diz ao operador QUAL sonda esta degradada.
+#
+# Contabilidade das funcoes novas, conferida com `logcov -list-uncovered`:
+#
+#   ELIGIBLE, cobertas:
+#     readinessHandler.func1        loga a falha de escrita do corpo
+#
+#   ELIGIBLE, descobertas (+2 no denominador):
+#     leaseManager.HeartbeatStalled predicado puro: responde "o heartbeat
+#                                   parou?". Quem age sobre a resposta e a
+#                                   sonda, que ja loga em Error. Mesmo
+#                                   argumento de isClientCausedSessionError
+#                                   (F90) e de leaseManager.abandoned (F98):
+#                                   log dentro de predicado sai a cada
+#                                   PERGUNTA, nao quando algo acontece.
+#     livenessHandler.func1         escreve {"status":"ok"} e retorna. E a
+#                                   sonda mais barata do processo, batida a
+#                                   cada tick de HEALTHCHECK; um log ali seria
+#                                   uma linha por segundo, para sempre.
+#
+#   EXCLUDED (nao entram no denominador): ReadinessReport.Ready,
+#     buildReadinessProbe, buildReadinessProbe.func1, livenessHandler,
+#     readinessHandler.
+#
+#   Saiu do denominador: buildRouter.func2, a closure inline do /livez que
+#     virou livenessHandler(). Deduplicacao, nao perda de instrumentacao.
+#
+# errpath fica em 857.
+min_func_coverage=694
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -533,7 +569,9 @@ min_errpath_coverage=857
 # min_func_coverage acima.
 # +2 (575->577): F99, bootstrap.registerAdminRoutes e stdio.StaticRouteTargets —
 # ver a justificativa de min_func_coverage acima.
-min_eligible=577
+# +2 (577->579): D6, leaseManager.HeartbeatStalled e livenessHandler.func1 —
+# ver a justificativa de min_func_coverage acima.
+min_eligible=579
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

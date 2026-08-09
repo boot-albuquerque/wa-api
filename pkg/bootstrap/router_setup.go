@@ -53,5 +53,8 @@ func depsFromServer(s *server) Deps {
 		Log:            routerLog,
 		StartSession:   s.startSession,
 		CustomHandlers: customHandlerSet,
+		// Getter, nao valor: s.Leases so' e' preenchido por
+		// setupSessionOwnership, que roda DEPOIS de s.routes(). Ver health.go.
+		Ready: buildReadinessProbe(s.DB, func() *leaseManager { return s.Leases }),
 	}
 }

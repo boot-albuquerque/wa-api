@@ -520,6 +520,18 @@ grep -c "releaseOwnership(userID)" pkg/application/session/orchestrator.go
 também, e o passo de restaurar precisa da mesma desconfiança que o passo de
 mutar.
 
+**Reincidência, no mesmo dia, duas horas depois de escrever isto acima.** Ao
+validar o D6 rodei `git checkout pkg/bootstrap/lease.go` para desfazer a
+segunda mutação, e apaguei o `HeartbeatStalled` que ainda não estava commitado.
+O que mudou foi só o desfecho: eu tinha posto o `grep` de verificação logo
+depois do restore, ele respondeu `0`, e o buraco se fechou em segundos em vez
+de virar um commit mentiroso.
+
+Vale registrar porque é a armadilha 20 acontecendo com a própria armadilha 22:
+**escrever a regra não impede o erro — o passo de verificação, sim.** Uma regra
+é uma intenção; um comando que roda é um mecanismo. Só o segundo funciona
+quando você está no meio de outra coisa.
+
 ---
 
 ## 23. Recomendação sobre risco também é afirmação — e ninguém a revisa
@@ -562,3 +574,56 @@ A F97 foi escrita horas antes e já estava errada sobre a própria consequência
 Quando ela vira plano, o texto precisa ser reconferido contra o código —
 exatamente como se veio de outra pessoa. É o mesmo princípio da armadilha 20 (o
 conserto do conserto é um mecanismo novo) aplicado a documento em vez de código.
+
+---
+
+## 24. Teste unitário recebe a dependência pronta; produção a monta depois
+
+Os dez testes do D6 passavam. A sonda estava certa, o relatório estava certo, os
+controles negativos falhavam nas duas direções. Subi na bancada em modo `multi`
+e o corpo veio assim:
+
+```json
+{"status":"ready","checks":{"database":"ok"}}
+```
+
+Sem `session_ownership`. A checagem não falhou — ela **não existia**. E o pior:
+o relatório ficou idêntico ao de um processo `single` saudável, que é
+exatamente o formato esperado quando não há posse a coordenar. Nada acusaria.
+
+A causa é ordem de montagem:
+
+```go
+s.routes()               // main.go:409 — monta o roteador, e com ele a sonda
+setupSessionOwnership(s) // main.go:413 — instala s.Leases QUATRO LINHAS DEPOIS
+```
+
+A sonda recebia `*leaseManager` por valor, então capturava `nil` para sempre.
+
+**Por que nenhum teste pegou**: todos entregam o manager já construído —
+`buildReadinessProbe(fakePinger{}, manager)`. Um teste que recebe a dependência
+pronta testa o COMPORTAMENTO da unidade e nunca a ORDEM em que ela é montada.
+São duas propriedades diferentes, e a segunda só aparece no processo inteiro.
+
+**Regra**: quando um componente lê uma dependência que é instalada em outro
+ponto do arranque, o teste tem de exercitar a JANELA — construir com a
+dependência ausente, instalá-la depois, e verificar que o componente passou a
+enxergá-la:
+
+```go
+var installed *leaseManager
+probe := buildReadinessProbe(fakePinger{}, func() *leaseManager { return installed })
+// ... afirma que a checagem NAO aparece ...
+installed = newLeaseManager(...)   // setupSessionOwnership roda aqui
+// ... afirma que a checagem PASSOU a aparecer ...
+```
+
+**Corolário de projeto**: prefira getter a valor sempre que a ordem de
+inicialização não for obviamente garantida. `func() *T` custa uma indireção e
+transfere a resolução para o instante em que a resposta é conhecível. Valor
+capturado cedo é uma decisão tomada antes de haver informação.
+
+**E o sinal de alerta**: desconfie de saída que parece SAUDÁVEL por acidente. Um
+relatório sem a checagem é indistinguível de um relatório onde a checagem não se
+aplica — a ausência não grita. Foi por isso que só a bancada pegou, e só porque
+eu conhecia o modo em que o processo estava rodando.

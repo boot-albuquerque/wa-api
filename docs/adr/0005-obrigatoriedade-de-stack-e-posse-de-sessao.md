@@ -158,6 +158,58 @@ O Exp 1 mostrou processo saudável com sessão morta e o banco dizendo
 Sem essa separação, qualquer readiness probe mente, e o k8s manda tráfego para
 um pod que não serve aquela sessão.
 
+**Implementado em 2026-08-09** (`pkg/bootstrap/health.go`), com uma divergência
+deliberada do parágrafo acima, registrada aqui porque quem ler o código depois
+vai notar a diferença:
+
+- `/health/live` responde pelo processo. `/livez` continua valendo como alias —
+  é para onde o `HEALTHCHECK` do Dockerfile aponta hoje, e renomear uma sonda
+  por baixo de um deployment em execução deixa todo contêiner insalubre no
+  mesmo instante.
+- `/health/ready` reprova quando o pod **não consegue servir nada**: banco sem
+  resposta, ou heartbeat de posse parado (este só existe em `multi`; em
+  `single` a checagem some do relatório em vez de aparecer como "ok", porque
+  checagem que sempre passa ensina a ser ignorada).
+
+O que **não** entrou: reprovar readiness porque UMA sessão morreu. Lido ao pé
+da letra, "servindo as sessões que ele diz possuir" derrubaria o pod inteiro
+por causa de uma sessão — cortando as outras noventa e nove que ele serve bem.
+A pergunta original é por SESSÃO e a sonda é por POD: ela não tem como dizer
+"mande o usuário A para outro lugar e continue me mandando o B". Isso é
+roteamento por dono (D5), não readiness.
+
+Enquanto o D5 não existe, a divisão honesta é: readiness reprova o que impede o
+pod de servir; divergência por sessão é **reportada**, não fatal. A F98 já
+removeu a fonte principal dessa divergência — lease de sessão que não existe
+mais volta a ser devolvido em vez de renovado para sempre.
+
+Validado em bancada, com o Postgres derrubado por `docker stop`:
+
+```
+live   {"status":"ok"}                                                    HTTP 200
+ready  {"status":"not_ready","checks":{"database":"unreachable",
+                                       "session_ownership":"ok"}}         HTTP 503
+```
+
+As duas sondas discordando ao mesmo tempo é a prova do D6 — uma sonda só, ou
+duas que sempre concordam, é o defeito que o Exp 1 mediu. Recuperou em ~3s
+depois de o banco voltar.
+
+A bancada também pegou o que os dez testes unitários não pegaram: `s.routes()`
+monta o roteador (e a sonda) QUATRO LINHAS antes de `setupSessionOwnership`
+instalar o `leaseManager`. Recebendo o manager por valor, a sonda capturava
+`nil` para sempre e a checagem de posse simplesmente não aparecia em `multi` —
+com um relatório idêntico ao de um `single` saudável, que é o pior formato
+possível para um defeito assumir. Corrigido lendo por getter, e travado por um
+teste que exercita a janela (ARMADILHAS 24).
+
+O corpo da sonda leva código de motivo, nunca o erro do driver: ela é
+não-autenticada (o kubelet não carrega token) e erro de conexão carrega host,
+porta e usuário. O detalhe vai para o log, que é autenticado. Resposta é **503**
+e não 500 — o pod está temporariamente incapaz de servir, e 5xx-como-bug seria
+lido como "reinicie este processo" quando a causa costuma ser dependência que
+volta.
+
 ### D7 — Degradação é sempre alta, nunca silenciosa
 
 No arranque, o processo registra um relatório de capacidades: o que está

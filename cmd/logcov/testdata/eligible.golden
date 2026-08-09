@@ -2052,7 +2052,8 @@ pkg/bootstrap.NewSessionAttachHook	EXCLUDED	X1
 pkg/bootstrap.NewSessionEventDispatcher	EXCLUDED	X1
 pkg/bootstrap.NewStdioServer	EXCLUDED	X1
 pkg/bootstrap.ProcessOutgoingMedia	ELIGIBLE	covered
-pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:102)
+pkg/bootstrap.ReadinessReport.Ready	EXCLUDED	X1
+pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:110)
 pkg/bootstrap.Routes.func1	EXCLUDED	X6
 pkg/bootstrap.Routes.func2	EXCLUDED	X6
 pkg/bootstrap.UserEventHandler.GetUserID	EXCLUDED	X1
@@ -2122,9 +2123,11 @@ pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-htt
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
 pkg/bootstrap.buildLeaseManager	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
-pkg/bootstrap.buildRouter	ELIGIBLE	uncovered:L1
-pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:254)
-pkg/bootstrap.buildRouter.func2	ELIGIBLE	uncovered:L1
+pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
+pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
+pkg/bootstrap.buildRouter	ELIGIBLE	covered
+pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:262)
+pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
 pkg/bootstrap.checkIfSubscribedToEvent	EXCLUDED	X1
@@ -2136,6 +2139,7 @@ pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
 pkg/bootstrap.deleteKillChannel	EXCLUDED	X1
 pkg/bootstrap.depsFromServer	ELIGIBLE	uncovered:L1
+pkg/bootstrap.depsFromServer.func1	EXCLUDED	X6
 pkg/bootstrap.deviceJIDLookup	ELIGIBLE	uncovered:L1
 pkg/bootstrap.deviceJIDLookup.func1	EXCLUDED	X6
 pkg/bootstrap.dispatchGo	EXCLUDED	X1
@@ -2161,6 +2165,7 @@ pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
 pkg/bootstrap.leaseManager.Claim	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.HeartbeatStalled	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.Release	ELIGIBLE	covered
 pkg/bootstrap.leaseManager.ReleaseAll	ELIGIBLE	covered
 pkg/bootstrap.leaseManager.RunHeartbeat	ELIGIBLE	covered
@@ -2168,7 +2173,9 @@ pkg/bootstrap.leaseManager.abandoned	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
-pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:309);uncovered:L2(S-ret,lease.go:313)
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:319);uncovered:L2(S-ret,lease.go:323)
+pkg/bootstrap.livenessHandler	EXCLUDED	X1
+pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)
 pkg/bootstrap.lockSingleInstance.func1	EXCLUDED	X6
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
@@ -2187,6 +2194,8 @@ pkg/bootstrap.rateLimitObserver.limiterFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.rateLimitObserver.middleware	EXCLUDED	X1
 pkg/bootstrap.rateLimitObserver.middleware.func1	ELIGIBLE	covered
 pkg/bootstrap.readIntFromEnv	ELIGIBLE	covered
+pkg/bootstrap.readinessHandler	EXCLUDED	X1
+pkg/bootstrap.readinessHandler.func1	ELIGIBLE	covered
 pkg/bootstrap.recordUserIDHandler	EXCLUDED	X1
 pkg/bootstrap.recordUserIDHandler.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware	EXCLUDED	X1
@@ -2200,7 +2209,7 @@ pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
-pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:201)
+pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:209)
 pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:77)
 pkg/bootstrap.s3MediaUploader.ProcessMediaForS3	ELIGIBLE	uncovered:L1
 pkg/bootstrap.securityHeadersMiddleware	EXCLUDED	X1

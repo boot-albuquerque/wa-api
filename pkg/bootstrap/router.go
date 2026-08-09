@@ -45,6 +45,14 @@ type Deps struct {
 	// route enumeration only walks the mux tree and never calls a
 	// handler's ServeHTTP.
 	CustomHandlers *customHandlers
+
+	// Ready backs /health/ready (ADR-0005 D6). Injected as a function so the
+	// router does not have to know about the database driver or the lease
+	// manager — and so the probe can be tested without either.
+	//
+	// Optional: nil answers ready with no checks, which is what a process
+	// with nothing to check should say.
+	Ready func(context.Context) ReadinessReport
 }
 
 // RouteInfo is one registered route, as returned by Routes.
@@ -292,17 +300,34 @@ func buildRouter(d Deps) *mux.Router {
 	c = c.Append(authAlice(d.DB.DB, d.UserCache))
 	c = c.Append(recordUserIDHandler)
 
-	// /livez is the container-level liveness probe: no auth, no DB query,
-	// no runtime.ReadMemStats — cheap enough to hit unauthenticated on
-	// every HEALTHCHECK tick without becoming a DoS amplifier. /health
-	// stays behind auth (registered below via registerCustomRoutes): it
-	// fans out to a DB COUNT(*) and ReadMemStats and returns sizing/version
-	// data that must not be public.
-	router.Handle("/livez", alice.New().Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	}))).Methods("GET")
+	// Probes (ADR-0005 D6 — see health.go for the split and for what readiness
+	// deliberately does not check). Both are unauthenticated because a kubelet
+	// cannot carry a token, and both are cheap: no ReadMemStats, no COUNT(*),
+	// and readiness never returns sizing or version data. /health stays behind
+	// auth (registered below via registerCustomRoutes) precisely because it
+	// does return those.
+	//
+	// /livez is kept as an alias of /health/live: it is what the Dockerfile
+	// HEALTHCHECK and any deployed manifest point at today, and renaming a
+	// probe out from under a running deployment turns every container
+	// unhealthy at the same moment.
+	live := alice.New().Then(livenessHandler())
+	router.Handle("/livez", live).Methods("GET")
+	router.Handle("/health/live", live).Methods("GET")
+
+	ready := d.Ready
+	if ready == nil {
+		// No probe wired: answer ready with no checks rather than crash. The
+		// alternative — nil-deref on the first kubelet poll — would take down
+		// a process that is, by every other measure, serving fine.
+		log.Warn().
+			Str("endpoint", "/health/ready").
+			Msg("no readiness probe wired; this endpoint will answer ready without checking anything")
+		ready = func(context.Context) ReadinessReport {
+			return ReadinessReport{Status: statusReady, Checks: map[string]string{}}
+		}
+	}
+	router.Handle("/health/ready", alice.New().Then(readinessHandler(ready))).Methods("GET")
 
 	registerCustomRoutes(router, c, d.CustomHandlers)
 
