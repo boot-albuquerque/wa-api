@@ -2489,6 +2489,11 @@ vídeo pode chegar ao webhook antes dele.
 tem, e o mecanismo de limite já está escrito. (B) é mais barato de implementar
 e mais caro de explicar a quem consome o webhook.
 
+> **DECIDIDO em 2026-08-09 pelo dono do repositório: opção (A)**, fila serial
+> por sessão. A implementação foi deliberadamente adiada para depois do D3
+> (outbox), que é o item seguinte da ordem aprovada — registrado aqui para que a
+> decisão não se perca entre uma coisa e outra.
+
 **Independente de A ou B**, duas coisas menores valem junto:
 - rever os timeouts de 10 min: mesmo fora do caminho do nó, um download de dez
   minutos segurando um worker é muito;
