@@ -2426,9 +2426,80 @@ nada para medir o efeito de ligar o teto.
    respondido: o orçamento de atraso do handler já está sendo consumido por
    outra coisa.
 
-**Status**: **não corrigido** — registrado no momento em que apareceu.
-Diagnóstico dos 5,7s não iniciado; a parte estrutural está confirmada e já
-está em uso como premissa da F86.
+**DIAGNOSTICADO em 2026-08-09.** A resposta é a menos confortável das duas
+hipóteses: o lento é o **nosso handler**, não o SDK. E não é soluço — é
+estrutural, em toda mídia recebida.
+
+A cadeia é síncrona de ponta a ponta:
+
+```
+handlerQueueLoop            (SDK, sequencial por sessão)
+ └─ handleEvent             pkg/bootstrap/eventhandler.go:26
+    └─ handleMessage        pkg/bootstrap/eventhandler_message.go:32
+       └─ processMessageMedia   :165
+          └─ processMedia       pkg/bootstrap/wiring_delegates.go:89
+             └─ media.ProcessMedia  pkg/infra/media/media.go:53
+                └─ Download(ctx, msg)  media.go:73   <- rede, aqui
+```
+
+E os prazos desse `ctx` estão em `wiring_delegates.go:49-53`:
+
+| tipo | timeout |
+|---|---|
+| sticker | 1 min |
+| imagem | 2 min |
+| áudio | 5 min |
+| documento | **10 min** |
+| vídeo | **10 min** |
+
+Como o `handlerQueueLoop` só consome o próximo nó quando o corrente termina,
+**uma única mensagem de mídia trava a fila de nós daquela sessão pelo tempo do
+download** — recibo, presença e marcação de leitura ficam atrás. Por
+configuração, até dez minutos.
+
+Os 5,7s medidos não são anomalia: são um download pequeno. O aviso do SDK só
+tornou visível o que acontece em TODA mídia recebida. E explica o mesmo `id` nas
+duas sessões: é o mesmo status sendo baixado duas vezes, uma por sessão.
+
+**Agravante achado junto**: não há filtro de `status@broadcast` em
+`eventhandler_message.go` nem em `media.go`. Status é alto volume por natureza —
+cada contato que publica um story enfileira um download na sessão. Um usuário
+com muitos contatos ativos tem a fila de nós permanentemente atrasada, e não por
+tráfego dele.
+
+Isto também **revalida a premissa da F86** por um caminho diferente do que usei
+lá: o orçamento de atraso do handler não estava livre; já estava sendo consumido
+por download de mídia.
+
+**Correção sugerida** — e aqui há uma DECISÃO do dono do repositório, porque as
+duas opções mudam coisas diferentes:
+
+**(A) Fila serial POR SESSÃO, do nosso lado.** O `handleEvent` enfileira e
+retorna; um worker por sessão faz download e webhook em ordem. O laço do SDK
+volta a andar imediatamente, então recibo e presença deixam de esperar mídia.
+A ordem dos webhooks por sessão é **preservada**. Custo: memória por fila, que
+é exatamente o problema que a F86 já resolveu com fila limitada por bytes —
+mesmo mecanismo, reaproveitável.
+
+**(B) Despachar no pool compartilhado da F86.** Mais simples, reusa o que
+existe. Custo: a ordem por sessão **se perde** — um texto enviado depois de um
+vídeo pode chegar ao webhook antes dele.
+
+**Recomendo (A)**: preserva a garantia que o cliente hoje tem sem saber que
+tem, e o mecanismo de limite já está escrito. (B) é mais barato de implementar
+e mais caro de explicar a quem consome o webhook.
+
+**Independente de A ou B**, duas coisas menores valem junto:
+- rever os timeouts de 10 min: mesmo fora do caminho do nó, um download de dez
+  minutos segurando um worker é muito;
+- avaliar um filtro de `status@broadcast` — baixar mídia de status de todos os
+  contatos pode ser trabalho que ninguém pediu, e hoje é obrigatório.
+
+**Status**: **diagnosticado, não corrigido**. A parte estrutural já era conhecida
+e está em uso como premissa da F86. O que faltava — separar "SDK lento" de
+"nosso handler lento" — está respondido, por leitura de código com `file:line`,
+não por hipótese. Falta a decisão entre (A) e (B) e a medição do efeito, que o
+próprio `Node handling took` do SDK dá de graça.
 
 ---
 
