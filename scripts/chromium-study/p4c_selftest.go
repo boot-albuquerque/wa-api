@@ -185,7 +185,14 @@ func RunDeadlineSelfTest(outPath string) error {
 			// Timeout de polling generoso de propósito: quem deve disparar aqui é
 			// o prazo da policy, não o do Poll. Se o Poll vencesse antes, o teste
 			// estaria medindo o chromedp e não a DeadlinePolicy.
-			chromedp.Poll(`false`, nil, chromedp.WithPollingTimeout(60*time.Second)))
+			//
+			// O intervalo explícito importa para o teste ser honesto: sem ele o
+			// Poll usa requestAnimationFrame, que não dispara em aba de fundo, e
+			// o caso passaria por "condição nunca avaliada" em vez de "condição
+			// nunca verdadeira" — passaria até com o Poll quebrado.
+			chromedp.Poll(`false`, nil,
+				chromedp.WithPollingInterval(100*time.Millisecond),
+				chromedp.WithPollingTimeout(60*time.Second)))
 	})
 
 	// §7-bis — sobrevivência da aba a operações sequenciais.

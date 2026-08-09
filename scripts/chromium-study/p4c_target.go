@@ -173,12 +173,26 @@ func primeTab(tab context.Context) error {
 // waitAppReady espera a aplicação ficar operacional, sob o prazo de Query.
 func waitAppReady(ctx context.Context, r *Runner, label string) error {
 	return r.Do(ctx, OpQuery, label, func(ctx context.Context) error {
-		// Timeout de polling generoso de propósito, pelo mesmo motivo do §7:
-		// quem deve vencer aqui é o prazo da policy, não o do Poll. O valor 0
-		// NÃO significa "sem limite" — faz o Poll errar de imediato, e foi
-		// exatamente o que invalidou a primeira corrida do Track B (Query
-		// falhando em 0 ms com deadline_exceeded=0).
+		// WithPollingInterval é obrigatório aqui, não uma afinação.
+		//
+		// A estratégia padrão do chromedp.Poll é requestAnimationFrame, e rAF
+		// não dispara em target headless fora de primeiro plano. O predicado
+		// então NUNCA é avaliado: o Poll queima o prazo inteiro sem testar a
+		// condição uma vez sequer. Foi o que ocorreu na primeira corrida válida
+		// do Track B — todo Query/ready estourou 15 s enquanto o StateProbe
+		// seguinte encontrava #pane-side em ~22 ms, uma contradição que só se
+		// resolve assim.
+		//
+		// É o mesmo mecanismo que a Fase 3 isolou como causa do teto de
+		// concorrência do go-rod (WaitStableRAF -> Page.WaitRepaint). Duas
+		// bibliotecas diferentes, o mesmo erro: presumir rAF em aba de fundo.
+		//
+		// O intervalo explícito troca rAF por setTimeout, que dispara mesmo
+		// throttled. O timeout do Poll fica generoso de propósito — quem deve
+		// vencer é o prazo da policy. E o valor 0 NÃO significa "sem limite":
+		// faz o Poll errar de imediato.
 		return chromedp.Run(ctx, chromedp.Poll(`!!document.querySelector('#pane-side')`, nil,
+			chromedp.WithPollingInterval(100*time.Millisecond),
 			chromedp.WithPollingTimeout(5*time.Minute)))
 	})
 }
