@@ -61,12 +61,21 @@ func launchBrowsers(n int, profile []string, basePort int) ([]*launched, error) 
 // inherits state from the previous run measures the state, not the run.
 var PersistentProfileDir string
 
+// ReclaimSingletons controla se o boot apaga SingletonLock/Cookie/Socket do
+// perfil persistente. É a variável independente do experimento §21: uma das
+// duas explicações vivas para a sessão do WhatsApp morrer após ~9-10 ciclos de
+// vida do browser é que este reclaim corrompe o perfil. A outra é invalidação
+// do lado do WhatsApp. Só um experimento que LIGUE E DESLIGUE isto separa as
+// duas — sem ele, a atribuição seria a mesma correlação que já falhou uma vez
+// nesta fase, quando a perda foi atribuída ao SIGKILL.
+var ReclaimSingletons = true
+
 func launchOne(idx int, profile []string, port int) (*launched, error) {
 	var dir string
 	var err error
 	if PersistentProfileDir != "" && idx == 0 {
 		dir = PersistentProfileDir
-		if err = os.MkdirAll(dir, 0o700); err == nil {
+		if err = os.MkdirAll(dir, 0o700); err == nil && ReclaimSingletons {
 			err = reclaimProfile(dir)
 		}
 	} else {

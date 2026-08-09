@@ -143,6 +143,7 @@ func main() {
 		waChat   = flag.String("wa-chat", "", "mode=wacap: search term for an AUTHORISED test conversation; empty means no interaction at all")
 		waWait   = flag.Duration("wa-wait", 5*time.Minute, "mode=waopen: how long to wait for QR pairing")
 		fault    = flag.String("fault", "sigkill", "mode=warecover: failure mode under ablation — sigkill | graceful")
+		reclaim  = flag.Bool("reclaim", true, "mode=walifecycle: delete Singleton files on each boot — the variable under ablation")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
 	)
 	flag.Parse()
@@ -184,6 +185,12 @@ func main() {
 	if *mode == "watabs" {
 		WAUserAgent = *waUA
 		must(RunTargetTabs(*reps, *out))
+		return
+	}
+	if *mode == "walifecycle" {
+		WAUserAgent = *waUA
+		ReclaimSingletons = *reclaim
+		must(RunSessionLifecycle(*reps, *out))
 		return
 	}
 	if *mode == "warecover" {
