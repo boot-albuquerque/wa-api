@@ -2983,7 +2983,25 @@ duas vezes.
    `/session/connect` primeiro. A primeira opção é a que remove a pegadinha;
    a segunda é a barata. Qualquer uma é melhor que 500 opaco.
 
-**Status**: **corrigido**.
+**Status**: **corrigido e VALIDADO EM BANCADA (2026-08-08)**, no fluxo real
+(Postgres 5433, sessão pareada `teste-d2-b`), medindo os dois efeitos:
+
+```
+inicio                  connected=1
+POST /session/disconnect connected=1
+POST /session/logout    -> HTTP 409 {"code":"session_not_connected", ...}
+                         connected=0
+```
+
+Os dois sintomas do defeito original caíram: o 500 virou 409 com remédio na
+mensagem, e o `connected=1` preso — que fazia o `connectOnStartup` ressuscitar
+sessão morta a cada subida — foi zerado pelo `Detach`.
+
+> Nota de método: na primeira passada eu li `connected` ANTES do logout, vi 1, e
+> quase registrei "o `Detach` não zera o estado". A medição estava no lugar
+> errado — o `UPDATE ... connected=0` roda na goroutine que consome o
+> kill-channel, ou seja, DEPOIS. Medir antes do efeito e concluir que o efeito
+> não existe é o mesmo erro da ARMADILHA 19, com outra fantasia.
 
 **Classificação** — `SessionGuardAdapter.Logout` checa `client.IsConnected()`
 ANTES de chamar o SDK e devolve `apperr` com `CategoryConflict` (409) e
@@ -3235,6 +3253,10 @@ nunca ler o QR. Se o lease sumir em vez de renovar a cada 5s, a correção vale
 em produção; se ficar, ela cobre só a falha do provider e não o pareamento
 abandonado — distinção que o teste unitário não revela.
 
+**VALIDADO EM BANCADA (2026-08-08)**: o lease **ficou**. Segunda hipótese
+confirmada — esta correção cobre só a falha síncrona do provider. O pareamento
+abandonado continua vazando posse, e virou a **F98**, com a medição completa.
+
 > Nota de método: este é o caso exato da regra "o conserto do conserto também é
 > um mecanismo novo" (`CLAUDE.md`, política anti-regressão). Eu escrevi essa
 > regra hoje, ao corrigir a F88, e não a apliquei à correção de posse algumas
@@ -3291,3 +3313,130 @@ autenticar.
 
 **Status**: **não corrigido** — registrado. É mudança de postura de segurança e
 tem etapa que quebra cliente; decisão do dono do repositório.
+
+---
+
+## F98 — a posse da sessão vaza quando o QR expira: renovada para sempre numa sessão que nunca subiu
+
+**Data**: 2026-08-08
+**Contexto**: validação de bancada da própria F96, exatamente pelo roteiro que
+a entrada da F96 deixou escrito ("criar um usuário, chamar `/session/connect` e
+nunca ler o QR"). A resposta é a segunda das duas hipóteses registradas lá: o
+lease **fica**. A F96 cobre só a falha síncrona do provider, não o pareamento
+abandonado.
+
+**Onde**:
+- `pkg/application/session/orchestrator.go` — o `defer` da F96 só devolve a
+  posse quando `Start` retorna `err != nil`.
+- O caminho do QR não retorna erro: `GET /session/connect` responde
+  `{"status":"connecting"}` com 200 e o pareamento segue **assíncrono**. Quando
+  o QR expira, quem morre é a goroutine do canal, não a chamada que já retornou.
+- `pkg/bootstrap/lease.go` — o renovador continua renovando enquanto a entrada
+  existir; ninguém a remove.
+
+**Problema**, medido nesta bancada (Postgres 5433, `WA_API_CLUSTER_MODE=multi`,
+processo `MacBook-Pro-de-Lucas.local-40848`):
+
+```
+23:11:26  GET /session/connect  -> 200 {"status":"connecting"}
+23:13:06  log: "QR timeout killing channel"   <- o pareamento morreu aqui
+23:16:41  select * from session_leases        <- posse VIVA, expires_at renovado
+```
+
+Estado final, na mesma linha do `join`:
+
+```
+teste-runtime | connected=0 | lease=MacBook-Pro-de-Lucas.local-40848
+```
+
+Ou seja: `connected=0`, `GET /session/status` devolve `no_session`, e mesmo
+assim a posse segue sendo renovada a cada ~10s, indefinidamente.
+
+Consequência em N pods — que é o cenário para o qual o lease existe: o usuário
+fica **preso permanentemente** à réplica onde tentou parear uma vez e desistiu.
+Nenhuma outra réplica consegue tomar a posse, porque `expires_at` nunca vence.
+Se ele tentar `/session/connect` contra outro pod, recebe 409 para sempre. Um
+QR abandonado — que é o evento mais banal do fluxo de pareamento — inutiliza o
+usuário até alguém reiniciar aquele pod específico.
+
+Vale dizer o que NÃO é defeito: reter a posse **durante** o pareamento está
+certo. Duas réplicas parear o mesmo usuário ao mesmo tempo seria pior. O defeito
+é não haver quem devolva a posse quando o pareamento termina em nada.
+
+**Correção sugerida**: a devolução precisa acompanhar o ciclo de vida real da
+sessão, não o retorno da chamada. Duas formas, em ordem de preferência:
+
+1. Devolver no mesmo ponto em que o "QR timeout killing channel" é emitido —
+   quem sabe que o pareamento morreu é aquela goroutine, e ela já roda no
+   processo dono da posse.
+2. Condicionar a renovação a haver sessão viva: o renovador consulta o registro
+   de sessões e, para um `userID` sem sessão, deixa o lease vencer em vez de
+   renovar. Mais robusto (cobre outras mortes assíncronas além do QR), porém
+   acopla o renovador ao registro.
+
+A (1) é cirúrgica e cobre o caso medido; a (2) cobre a classe. Fazer a (1) sem a
+(2) deixa em aberto qualquer outra morte assíncrona da sessão.
+
+**Status**: **não corrigido** — descoberto na validação, fora do escopo da F93
+que estava sendo validada. Decisão do dono do repositório se entra agora.
+
+> Nota de método: a F96 passou nos testes unitários e foi commitada. O defeito
+> que sobrou não é o que ela conserta — é o que ela **não alcança**, e isso só
+> apareceu porque a entrada da F96 registrou o teste de bancada que faltava, com
+> as duas hipóteses e o que cada resultado significaria. Escrever a hipótese
+> antes de medir foi o que tornou o resultado legível.
+
+---
+
+## F99 — o stdio chama `/session/connect` e `/session/disconnect` com POST; o HTTP as registra como GET
+
+**Data**: 2026-08-08
+**Contexto**: apareceu ao montar a bancada da F93 — mandei `POST
+/session/connect` seguindo a tabela do stdio e recebi `404 page not found`.
+
+**Onde**:
+
+`pkg/infra/stdio/stdio_routes_session.go:6,9`
+
+```go
+"session.connect":    {httpMethod: "POST", httpPath: "/session/connect"},
+"session.disconnect": {httpMethod: "POST", httpPath: "/session/disconnect"},
+```
+
+`pkg/bootstrap/wiring_routes.go:49,50`
+
+```go
+registry.Register("/session/connect",    customChain.Then(ch.Session.Connect),    "GET")
+registry.Register("/session/disconnect", customChain.Then(ch.Session.Disconnect), "GET")
+```
+
+**Problema**: `pkg/infra/stdio/stdio.go:206` monta a requisição com
+`httptest.NewRequest(httpMethod, httpPath, body)` e a executa contra o mesmo
+mux. O `HandlerRegistry` aplica `route.Methods(...)` (gorilla/mux), então o
+método divergente **não chega ao handler**. Reproduzido no HTTP real:
+
+```
+$ curl -X POST -H "token: ..." http://127.0.0.1:8081/session/connect
+404 page not found
+$ curl     -H "token: ..." http://127.0.0.1:8081/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+```
+
+Se o caminho stdio for exercitado, `session.connect` e `session.disconnect`
+falham — as duas operações mais básicas do ciclo de sessão. As demais rotas da
+tabela (`qr`, `status`, `logout`, `pairphone`) conferem.
+
+**Correção sugerida**: alinhar as duas tabelas. O alinhamento em si é de uma
+linha; a decisão é qual lado muda. `connect`/`disconnect` mudam estado do
+servidor, então POST é o verbo correto e GET é a divergência — mas trocar o
+lado HTTP quebra cliente existente, enquanto trocar o lado stdio não quebra
+ninguém. Sugestão: corrigir o stdio agora (POST → GET), e tratar a mudança de
+verbo do HTTP como item de API versionada, junto com a remoção do token por
+query string, que já está marcada para a release seguinte.
+
+O que impediria a reintrodução: um teste que percorra a tabela do stdio e
+verifique, para cada entrada, que `(httpMethod, httpPath)` casa com uma rota
+registrada. Hoje as duas listas são mantidas à mão, sem nada que as compare.
+
+**Status**: **não corrigido** — registrado. Achado incidental, fora do escopo
+da validação da F93.
