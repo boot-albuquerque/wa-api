@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// F88: a espera entre tentativas de webhook dormia DENTRO de um worker do pool
+// F88: a waitFull entre tentativas de webhook dormia DENTRO de um worker do pool
 // de despacho. Estes testes travam as propriedades que impedem isso de voltar.
 
 // prepararRetry ajusta a configuração de retry e restaura ao fim. `appCtx` é
@@ -54,9 +54,9 @@ func TestRetry_AgendarNaoBloqueiaOChamador(t *testing.T) {
 		t.Fatal("nao agendou a segunda tentativa com retry ligado e tentativas sobrando")
 	}
 	if decorrido > 100*time.Millisecond {
-		t.Errorf("agendar segurou o chamador por %s: a espera voltou para dentro do worker", decorrido)
+		t.Errorf("agendar segurou o chamador por %s: a waitFull voltou para dentro do worker", decorrido)
 	}
-	// E o payload tem de estar contabilizado enquanto espera.
+	// E o payload tem de estar contabilizado enquanto waitFull.
 	if pend, _ := MetricasRetry(); pend != 1024 {
 		t.Errorf("bytes pendentes = %d, quero 1024: o reagendamento nao esta' sendo contabilizado", pend)
 	}
@@ -180,7 +180,7 @@ func TestRetry_BackoffCresceExponencialmente(t *testing.T) {
 // decisão que o escolheu, no molde de TestPool_PadroesCobremARajadaMedida.
 //
 // A janela era de 450s (base 30). O custo de RECURSO dela sumiu com esta
-// correção — a espera não segura mais worker —, mas o custo de RELEVÂNCIA não:
+// correção — a waitFull não segura mais worker —, mas o custo de RELEVÂNCIA não:
 // entregar um evento de mensagem sete minutos atrasado já não serve para boa
 // parte dos usos. Se alguém subir a base, este teste obriga a decisão a ser
 // consciente.

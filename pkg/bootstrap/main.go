@@ -338,7 +338,7 @@ func Main() {
 	if *dataDir != "" {
 		dirDados = *dataDir
 	}
-	liberarCluster, err := prepararCluster(dirDados, getDatabaseConfig(exPath, *dataDir).Type)
+	liberarCluster, err := prepareCluster(dirDados, getDatabaseConfig(exPath, *dataDir).Type)
 	if err != nil {
 		log.Fatal().Err(err).Msg("configuracao de cluster invalida")
 		os.Exit(1)

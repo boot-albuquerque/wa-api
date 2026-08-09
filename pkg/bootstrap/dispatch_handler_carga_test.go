@@ -83,8 +83,8 @@ func (f *formaBloqueante) Despachar(_ int, fn func()) {
 }
 func (f *formaBloqueante) Fechar() { f.wg.Wait() }
 func (f *formaBloqueante) Perdidas() int64 {
-	_, _, sat := f.l.Metricas()
-	// Saturações NÃO são perdas nesta forma — ela não perde, ela espera. O
+	_, _, sat := f.l.Metrics()
+	// Saturações NÃO são perdas nesta forma — ela não perde, ela waitFull. O
 	// número é reportado à parte para não ser confundido com descarte.
 	_ = sat
 	return 0
@@ -126,22 +126,22 @@ func (f *formaDescarte) Perdidas() int64 { return f.perdidas.Load() }
 // O limite é em bytes porque item não é unidade de memória: ver o comentário
 // do contrato acima.
 // Na BORDA (fila cheia) há duas políticas possíveis, e a medição da rajada
-// pequena não distingue as duas porque a fila nunca encheu. `espera` escolhe:
+// pequena não distingue as duas porque a fila nunca encheu. `waitFull` escolhe:
 //
-//	espera=false — descarta o excedente. O handler nunca para; o usuário perde.
-//	espera=true  — segura o chamador SÓ quando cheia. Não perde; volta a ter
+//	waitFull=false — descarta o excedente. O handler nunca para; o usuário perde.
+//	waitFull=true  — segura o chamador SÓ quando cheia. Não perde; volta a ter
 //	               backpressure sobre o handler, mas apenas na borda.
 type formaFila struct {
-	jobs     chan trabalho
-	mu       sync.Mutex
-	cond     *sync.Cond
-	bytesAtu int64
-	bytesMax int64
-	// picoBytes é a marca d'água: quanto a fila REALMENTE precisou. Sem ela
+	jobs          chan trabalho
+	mu            sync.Mutex
+	cond          *sync.Cond
+	bytesInFlight int64
+	bytesBudget   int64
+	// peakBytes é a marca d'água: quanto a fila REALMENTE precisou. Sem ela
 	// só dá para dizer "com 32MB não segurou", que não calibra nada — o que
 	// calibra é saber que a rajada pediu 17MB e não 31.
-	picoBytes int64
-	espera    bool
+	peakBytes int64
+	waitFull  bool
 	perdidas  atomic.Int64
 	workers   sync.WaitGroup
 	fechaUma  sync.Once
@@ -152,11 +152,11 @@ type trabalho struct {
 	fn      func()
 }
 
-func novaFormaFila(workers, capItens int, bytesMax int64, espera bool) *formaFila {
+func novaFormaFila(workers, capItens int, bytesBudget int64, waitFull bool) *formaFila {
 	f := &formaFila{
-		jobs:     make(chan trabalho, capItens),
-		bytesMax: bytesMax,
-		espera:   espera,
+		jobs:        make(chan trabalho, capItens),
+		bytesBudget: bytesBudget,
+		waitFull:    waitFull,
 	}
 	f.cond = sync.NewCond(&f.mu)
 	for i := 0; i < workers; i++ {
@@ -166,7 +166,7 @@ func novaFormaFila(workers, capItens int, bytesMax int64, espera bool) *formaFil
 			for t := range f.jobs {
 				t.fn()
 				f.mu.Lock()
-				f.bytesAtu -= int64(t.tamanho)
+				f.bytesInFlight -= int64(t.tamanho)
 				f.mu.Unlock()
 				f.cond.Broadcast()
 			}
@@ -183,9 +183,9 @@ func (f *formaFila) Despachar(tamanho int, fn func()) {
 	// Um item maior que o orçamento inteiro passa mesmo assim: senão o
 	// evento de 120KB medido nesta instalação ficaria preso para sempre com
 	// orçamento pequeno, esperando por espaço que nunca chega.
-	if int64(tamanho) <= f.bytesMax {
-		for f.bytesAtu+int64(tamanho) > f.bytesMax {
-			if !f.espera {
+	if int64(tamanho) <= f.bytesBudget {
+		for f.bytesInFlight+int64(tamanho) > f.bytesBudget {
+			if !f.waitFull {
 				f.mu.Unlock()
 				f.perdidas.Add(1)
 				return
@@ -196,13 +196,13 @@ func (f *formaFila) Despachar(tamanho int, fn func()) {
 			f.cond.Wait()
 		}
 	}
-	f.bytesAtu += int64(tamanho)
-	if f.bytesAtu > f.picoBytes {
-		f.picoBytes = f.bytesAtu
+	f.bytesInFlight += int64(tamanho)
+	if f.bytesInFlight > f.peakBytes {
+		f.peakBytes = f.bytesInFlight
 	}
 	f.mu.Unlock()
 
-	if f.espera {
+	if f.waitFull {
 		f.jobs <- trabalho{tamanho: tamanho, fn: fn}
 		return
 	}
@@ -210,7 +210,7 @@ func (f *formaFila) Despachar(tamanho int, fn func()) {
 	case f.jobs <- trabalho{tamanho: tamanho, fn: fn}:
 	default:
 		f.mu.Lock()
-		f.bytesAtu -= int64(tamanho)
+		f.bytesInFlight -= int64(tamanho)
 		f.mu.Unlock()
 		f.cond.Broadcast()
 		f.perdidas.Add(1)
@@ -228,7 +228,7 @@ func (f *formaFila) Perdidas() int64 { return f.perdidas.Load() }
 func (f *formaFila) PicoBytes() int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.picoBytes
+	return f.peakBytes
 }
 
 // --- distribuição de payload medida em produção ---------------------------
@@ -519,8 +519,8 @@ func TestMedicaoFilaNaSaturacao(t *testing.T) {
 	}{
 		{"sem-teto", func() despachante { return &formaSemTeto{} }},
 		{"fila-8MB-descarta", func() despachante { return novaFormaFila(teto, 2048, 8*1024*1024, false) }},
-		{"fila-8MB-espera", func() despachante { return novaFormaFila(teto, 2048, 8*1024*1024, true) }},
-		{"fila-32MB-espera", func() despachante { return novaFormaFila(teto, 8192, 32*1024*1024, true) }},
+		{"fila-8MB-waitFull", func() despachante { return novaFormaFila(teto, 2048, 8*1024*1024, true) }},
+		{"fila-32MB-waitFull", func() despachante { return novaFormaFila(teto, 8192, 32*1024*1024, true) }},
 	}
 
 	const repeticoes = 3
@@ -581,11 +581,11 @@ func TestMedicaoFilaNaSaturacao(t *testing.T) {
 	if perdaDescarte == 0 {
 		t.Fatal("fila-8MB-descarta nao perdeu nada: a rajada nao saturou a fila, entao esta medicao nao mede a borda")
 	}
-	// A variante que espera não pode perder: se perdeu, a política de borda
+	// A variante que waitFull não pode perder: se perdeu, a política de borda
 	// não está implementada como descrita.
-	for _, m := range acumulado["fila-8MB-espera"] {
+	for _, m := range acumulado["fila-8MB-waitFull"] {
 		if m.perdidas != 0 {
-			t.Errorf("fila-8MB-espera perdeu %d entregas; a politica de espera nao pode descartar", m.perdidas)
+			t.Errorf("fila-8MB-waitFull perdeu %d entregas; a politica de waitFull nao pode descartar", m.perdidas)
 		}
 	}
 }
@@ -602,7 +602,7 @@ func TestMedicaoFilaNaSaturacao(t *testing.T) {
 //
 // bloqueia-N entra como referência direta: se o pool de N workers e o teto
 // bloqueante de N derem o mesmo dreno, fica provado que o custo de entrega é o
-// mesmo e a única diferença entre as duas formas é quem espera.
+// mesmo e a única diferença entre as duas formas é quem waitFull.
 //
 // Rode com:
 //
@@ -764,13 +764,13 @@ func TestMedicaoCalibracaoOrcamento(t *testing.T) {
 	// Uma perna: roda `repeticoes` vezes e devolve as medianas + marca d'água.
 	rodar := func(eventos int, orcamento int64) (medidaHandler, int64) {
 		var ms []medidaHandler
-		var picoBytes int64
+		var peakBytes int64
 		for r := 0; r < repeticoes; r++ {
 			runtime.GC()
 			f := novaFormaFila(workers, capItens, orcamento, true)
 			m := medirHandler("", f, eventos, porEvento, tamanhos, custoProprio, entregar)
-			if p := f.PicoBytes(); p > picoBytes {
-				picoBytes = p
+			if p := f.PicoBytes(); p > peakBytes {
+				peakBytes = p
 			}
 			ms = append(ms, m)
 		}
@@ -796,7 +796,7 @@ func TestMedicaoCalibracaoOrcamento(t *testing.T) {
 			picoHeapMB:   heap / float64(len(ms)),
 			perdidas:     perdidas,
 			entregas:     eventos * porEvento * repeticoes,
-		}, picoBytes
+		}, peakBytes
 	}
 
 	// --- A) orçamento variável, rajada fixa ---
@@ -804,7 +804,7 @@ func TestMedicaoCalibracaoOrcamento(t *testing.T) {
 	t.Logf("=== A) orcamento variavel | rajada fixa: %d entregas | pool %dw ===", eventosFixos*porEvento, workers)
 	t.Logf("%-10s %-10s %-10s %-10s %-10s %-10s %s", "orcamento", "handler", "atraso_p95", "atraso_max", "dreno", "heap", "pico_fila")
 	for _, orc := range []int64{1 * mb, 2 * mb, 4 * mb, 8 * mb, 16 * mb, 24 * mb, 32 * mb} {
-		m, pico := rodar(eventosFixos, orc)
+		m, peak := rodar(eventosFixos, orc)
 		t.Logf("%-10s %-10s %-10s %-10s %-10s %-10s %.1fMB",
 			fmt.Sprintf("%dMB", orc/mb),
 			m.handlerTotal.Round(time.Millisecond),
@@ -812,7 +812,7 @@ func TestMedicaoCalibracaoOrcamento(t *testing.T) {
 			m.atrasoMax.Round(time.Microsecond),
 			m.drenoTotal.Round(time.Millisecond),
 			fmt.Sprintf("%.1fMB", m.picoHeapMB),
-			float64(pico)/mb)
+			float64(peak)/mb)
 	}
 
 	// --- B) rajada variável, orçamento fixo ---
@@ -821,14 +821,14 @@ func TestMedicaoCalibracaoOrcamento(t *testing.T) {
 	t.Logf("=== B) rajada variavel | orcamento fixo: %dMB | pool %dw ===", orcamentoFixo/mb, workers)
 	t.Logf("%-10s %-10s %-10s %-10s %-10s %s", "entregas", "handler", "atraso_p95", "dreno", "heap", "pico_fila")
 	for _, ev := range []int{500, 1000, 2000, 4000} {
-		m, pico := rodar(ev, orcamentoFixo)
+		m, peak := rodar(ev, orcamentoFixo)
 		t.Logf("%-10d %-10s %-10s %-10s %-10s %.1fMB",
 			ev*porEvento,
 			m.handlerTotal.Round(time.Millisecond),
 			m.atrasoP95.Round(time.Microsecond),
 			m.drenoTotal.Round(time.Millisecond),
 			fmt.Sprintf("%.1fMB", m.picoHeapMB),
-			float64(pico)/mb)
+			float64(peak)/mb)
 	}
 
 	// Asserção do INSTRUMENTO: com 1MB o handler TEM de ser segurado, senão a

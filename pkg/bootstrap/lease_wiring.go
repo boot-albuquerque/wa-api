@@ -32,7 +32,7 @@ const leaseReleaseTimeout = 3 * time.Second
 // periodic writes to the database and buy nothing the flock does not already
 // provide.
 func buildLeaseManager(s *server) (*leaseManager, error) {
-	mode, err := clusterModeConfigurado()
+	mode, err := clusterModeFromEnv()
 	if err != nil {
 		return nil, err
 	}
