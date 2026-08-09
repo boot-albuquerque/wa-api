@@ -86,7 +86,25 @@ func Handler() http.Handler {
 	}
 	files := http.FileServer(http.FS(sub))
 
+	basePathNoSlash := strings.TrimSuffix(BasePath, "/")
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// `/devui` (sem barra) É uma rota registrada, mas o TrimPrefix abaixo
+		// não casa com ela — BasePath termina em "/", então `name` ficaria
+		// "/devui", o caminho viraria "//devui" e o FileServer devolveria 404.
+		//
+		// Redireciona em vez de servir o índice aqui: servido em `/devui`,
+		// qualquer URL relativa dentro do HTML resolveria contra a RAIZ
+		// (`/app.js`) em vez de `/devui/app.js`. É por isso que servidores
+		// redirecionam diretório em vez de servir os dois caminhos.
+		//
+		// F94: o 404 é indistinguível de "devui desligado" ou "instância
+		// caiu", e custou uma rodada de diagnóstico.
+		if r.URL.Path == basePathNoSlash {
+			http.Redirect(w, r, BasePath, http.StatusMovedPermanently)
+			return
+		}
+
 		name := strings.TrimPrefix(r.URL.Path, BasePath)
 		if name == "" {
 			name = indexFile

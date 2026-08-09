@@ -3001,9 +3001,17 @@ BasePath = "/devui/"                                   // devui.go:46
 registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")  // wiring_routes.go:42
 ```
 
-O padrão registrado é `/devui/{rest:.*}`, que casa com `/devui/` (rest vazio) e
-**não casa** com `/devui`. Não há rota nem redirecionamento para a forma sem
-barra.
+> **CORREÇÃO desta entrada (2026-08-08)**: o parágrafo abaixo, como escrito
+> originalmente, estava ERRADO. Eu afirmei que não havia rota para `/devui`.
+> **Há** — `wiring_routes.go:43` registra `strings.TrimSuffix(devui.BasePath,
+> "/")` desde `a203a6f` (2026-08-07), antes da minha medição. Escrevi a causa
+> por dedução a partir de uma única linha lida, sem conferir o resto do bloco.
+>
+> A causa real está no HANDLER, e é mais sutil: `devui.go:90` faz
+> `strings.TrimPrefix(r.URL.Path, BasePath)` com `BasePath = "/devui/"`. Para
+> `/devui` o prefixo NÃO casa, `name` continua `/devui`, o caminho reescrito
+> vira `//devui` e o `http.FileServer` devolve 404. A rota chega ao handler; é
+> o mapeamento de caminho que falha.
 
 **Problema**: medido na instância viva, com o devui habilitado e a mesma
 instância respondendo normalmente nas demais rotas:
@@ -3020,13 +3028,20 @@ desligado" ou "a instância caiu" — que foi exatamente a hipótese levantada
 quando aconteceu. Custa uma rodada de diagnóstico para descobrir que o único
 problema é uma barra.
 
-**Correção sugerida**: registrar `/devui` com um `http.RedirectHandler` para
-`/devui/` (301 ou 308), ao lado do registro atual. É o comportamento que a
-maioria dos servidores tem por padrão para diretório, e resolve a classe
-inteira em uma linha.
+**Status**: **corrigido**. O handler passa a redirecionar `/devui` para
+`/devui/` com 301.
 
-**Status**: **não corrigido** — fora do escopo do D2, que estava em andamento.
-Registrado assim que aconteceu.
+Redirecionar, e NÃO servir o índice ali, por um motivo que a correção óbvia
+erraria: servido em `/devui`, qualquer URL relativa dentro do HTML resolveria
+contra a raiz (`/app.js`) em vez de `/devui/app.js`. É exatamente por isso que
+servidores redirecionam diretório em vez de atender os dois caminhos.
+
+Dois testes: o redirecionamento, e que o DESTINO funciona — sem o segundo,
+apontar o `Location` para um caminho quebrado passaria no primeiro.
+
+Controle negativo executado: `status = 404, quero 301`. A primeira tentativa
+de controle NÃO COMPILOU (variável órfã), e controle que não compila não prova
+nada — ver ARMADILHAS.md 4.
 
 ---
 
@@ -3122,8 +3137,20 @@ já que ele só retorna quando o fluxo de pareamento termina ou falha.
 a posse tem de sobreviver enquanto a sessão estiver rodando, que é o ponto do
 mecanismo.
 
-**Status**: **não corrigido** — registrado no momento em que a medição o
-expôs, para não interromper o experimento das duas réplicas em andamento.
+**Status**: **corrigido** em `74c137e`. `Orchestrator.Start` devolve a posse
+por `defer` quando retorna erro — e o `defer` fica DEPOIS da reivindicação
+bem-sucedida, não no topo: instalado antes, liberaria a posse de OUTRA réplica
+no caminho em que a nossa foi negada.
+
+Três testes, cobrindo os três caminhos distintos (falhou depois de reivindicar
+/ teve sucesso / foi negado), e dois controles negativos que falham em direções
+OPOSTAS — não liberar reintroduz este defeito, liberar demais entrega sessão em
+uso. Um controle só provaria metade.
+
+**Falta validar no fluxo real**: criar usuário, chamar `/session/connect` e
+nunca ler o QR. Se o lease sumir em vez de renovar a cada 5s, a correção vale
+em produção; se ficar, ela cobre só a falha do provider e não o pareamento
+abandonado — distinção que o teste unitário não revela.
 
 > Nota de método: este é o caso exato da regra "o conserto do conserto também é
 > um mecanismo novo" (`CLAUDE.md`, política anti-regressão). Eu escrevi essa

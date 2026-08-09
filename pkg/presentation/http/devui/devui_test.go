@@ -149,3 +149,46 @@ func TestPaginaTrataOsDoisSchemasDeQR(t *testing.T) {
 		}
 	}
 }
+
+// TestHandler_RedirectsPathWithoutTrailingSlash cobre a F94.
+//
+// `/devui` JÁ ERA rota registrada (wiring_routes.go), mas o handler devolvia
+// 404: `strings.TrimPrefix(path, "/devui/")` não casa sem a barra, então o
+// caminho virava "//devui" e o FileServer não achava nada.
+//
+// O 404 era indistinguível de "devui desligado" ou "instância caiu" — foi
+// exatamente a hipótese levantada quando aconteceu, e custou uma rodada de
+// diagnóstico para descobrir que faltava uma barra.
+//
+// Redirecionar, e não servir o índice ali, porque URL relativa dentro do HTML
+// resolveria contra a raiz (`/app.js`) em vez de `/devui/app.js`.
+func TestHandler_RedirectsPathWithoutTrailingSlash(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, strings.TrimSuffix(BasePath, "/"), nil)
+
+	Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, quero %d (redirecionamento para a forma com barra)", rec.Code, http.StatusMovedPermanently)
+	}
+	if loc := rec.Header().Get("Location"); loc != BasePath {
+		t.Errorf("Location = %q, quero %q", loc, BasePath)
+	}
+}
+
+// TestHandler_ServesIndexOnBasePath: o redirecionamento acima só tem valor se o
+// destino funcionar. Sem esta asserção, apontar o Location para um caminho
+// quebrado passaria no teste anterior.
+func TestHandler_ServesIndexOnBasePath(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, BasePath, nil)
+
+	Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d para %s, quero 200", rec.Code, BasePath)
+	}
+	if rec.Body.Len() == 0 {
+		t.Error("corpo vazio: o redirecionamento levaria a uma pagina em branco")
+	}
+}
