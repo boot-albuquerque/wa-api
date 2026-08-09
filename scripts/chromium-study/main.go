@@ -175,14 +175,19 @@ func main() {
 		must(RunWAOpen(*waWait, *out))
 		return
 	}
+	// Fase 4C §7: o harness prova a si mesmo antes de tocar no alvo.
+	if *mode == "deadlinetest" {
+		must(RunDeadlineSelfTest(*out))
+		return
+	}
 	if *mode == "watabs" {
 		WAUserAgent = *waUA
-		must(RunWATabs(*out))
+		must(RunTargetTabs(*reps, *out))
 		return
 	}
 	if *mode == "warecover" {
 		WAUserAgent = *waUA
-		must(RunWARecover(*out))
+		must(RunTargetRecovery(*reps, *out))
 		return
 	}
 	if *mode == "wasession" {

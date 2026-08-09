@@ -1,0 +1,95 @@
+{
+  "experiment": "whatsapp-multi-tab",
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "rep1/A/navigate",
+      "start_ms": 2763,
+      "duration_ms": 2179,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep1/A/ready",
+      "start_ms": 4942,
+      "duration_ms": 0,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep1/A/state",
+      "start_ms": 4943,
+      "duration_ms": 0,
+      "deadline_ms": 5000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep2/A/navigate",
+      "start_ms": 7753,
+      "duration_ms": 1147,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep2/A/ready",
+      "start_ms": 8902,
+      "duration_ms": 0,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep2/A/state",
+      "start_ms": 8903,
+      "duration_ms": 0,
+      "deadline_ms": 5000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep3/A/navigate",
+      "start_ms": 11674,
+      "duration_ms": 1136,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep3/A/ready",
+      "start_ms": 12812,
+      "duration_ms": 0,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep3/A/state",
+      "start_ms": 12813,
+      "duration_ms": 0,
+      "deadline_ms": 5000,
+      "result": "error",
+      "error": "context canceled"
+    }
+  ],
+  "reps": 3,
+  "started_utc": "2026-08-09T12:54:43Z",
+  "trials": null,
+  "verdict": "INCONCLUSIVE",
+  "watchdog": {
+    "budget_sec": 420,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 12.957776715,
+    "experiment": "single-tab",
+    "operations": 9,
+    "status": "COMPLETED"
+  }
+}
