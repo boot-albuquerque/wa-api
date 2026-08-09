@@ -53,7 +53,27 @@ func buildLeaseManager(s *server) (*leaseManager, error) {
 		Dur("heartbeat", heartbeat).
 		Msg("session ownership enabled")
 
-	return newLeaseManager(store, ownerID, ttl, heartbeat, releaseSessionLocally), nil
+	manager := newLeaseManager(store, ownerID, ttl, heartbeat, releaseSessionLocally)
+	manager.hasLiveSession = hasLiveSessionLocally
+	return manager, nil
+}
+
+// hasLiveSessionLocally reports whether this process still has a session for a
+// user.
+//
+// The wa-noise client is the right thing to ask. It is registered while the
+// session is being created — so it is already there DURING a QR pairing, and
+// holding the lease through the pairing is correct, not a leak — and the
+// kill-channel path removes it when the session dies, from the QR timing out to
+// a logout.
+//
+// Assigned here, outside the constructor, so the thirteen existing call sites
+// of newLeaseManager keep compiling and keep testing what they were written to
+// test. A sixth positional parameter would have forced a mechanical edit on all
+// of them, and mechanical edits across tests are how a test quietly stops
+// asserting what its name claims.
+func hasLiveSessionLocally(userID string) bool {
+	return clientManager.GetWaNoiseClient(userID) != nil
 }
 
 // setupSessionOwnership builds the manager and installs it on the server, or

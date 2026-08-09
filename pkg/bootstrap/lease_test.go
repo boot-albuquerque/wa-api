@@ -326,3 +326,120 @@ func TestLease_ReleaseForgetsEvenWhenTheStoreFails(t *testing.T) {
 		t.Errorf("still holds %d sessions after a failed Release: the heartbeat would keep renewing a lease we tried to drop", held)
 	}
 }
+
+// --- F98: leases held for sessions that no longer exist ---------------------
+//
+// The safety net for the class the orchestrator fix covers one case of. Any
+// asynchronous death of a session — the QR expiring, the transport dropping,
+// anything a future path forgets to hand the lease back on — leaves the
+// heartbeat renewing ownership of nothing, and pins the user to this replica
+// for as long as the process lives.
+
+// TestLease_AbandonedSessionIsReleased: no live session and past the grace
+// period, the lease must go back. Measured before the fix, in `multi` mode with
+// a real Postgres: connected=0, GET /session/status answering "no session", and
+// expires_at still moving forward three minutes after the pairing died.
+func TestLease_AbandonedSessionIsReleased(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 30*time.Millisecond, 10*time.Millisecond, nil)
+	manager.hasLiveSession = func(string) bool { return false }
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.RunHeartbeat(ctx)
+
+	// Bounded wait, never WaitGroup.Wait(): a test that hangs reports nothing
+	// (ARMADILHAS.md 16).
+	deadline := time.After(3 * time.Second)
+	for {
+		if store.remaining() == 0 {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("the lease of a session that no longer exists was renewed instead of released; under N pods this user is pinned to this replica forever")
+		default:
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+}
+
+// TestLease_StartingSessionKeepsItsLease is the control that stops the fix from
+// becoming a worse defect than the leak.
+//
+// Ownership is claimed BEFORE the session is materialized — deliberately, so a
+// denial leaves nothing dirty behind. So "no session yet" is the NORMAL state
+// of a healthy startup for a moment. Releasing on first sight of it would drop
+// the lease of every session that is still coming up, which is precisely the
+// race the lease exists to prevent.
+func TestLease_StartingSessionKeepsItsLease(t *testing.T) {
+	store := newFakeLeaseStore()
+	// A TTL far longer than the test: the session is inside the grace period
+	// for the whole run.
+	manager := newLeaseManager(store, "pod-A", time.Hour, 5*time.Millisecond, nil)
+	manager.hasLiveSession = func(string) bool { return false }
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.RunHeartbeat(ctx)
+
+	time.Sleep(60 * time.Millisecond) // a dozen heartbeats
+
+	if store.remaining() != 1 {
+		t.Fatal("the lease of a session still coming up was released; every startup would lose ownership in its first milliseconds")
+	}
+}
+
+// TestLease_LiveSessionKeepsItsLease is the other control, in the opposite
+// direction: a session that EXISTS must never be touched by this check, no
+// matter how long it has been running.
+func TestLease_LiveSessionKeepsItsLease(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 10*time.Millisecond, 5*time.Millisecond, nil)
+	manager.hasLiveSession = func(string) bool { return true }
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.RunHeartbeat(ctx)
+
+	time.Sleep(80 * time.Millisecond) // many TTLs' worth of heartbeats
+
+	if store.remaining() != 1 {
+		t.Fatal("the lease of a LIVE session was released; the running session would be handed to another replica")
+	}
+}
+
+// TestLease_WithoutLiveSessionCheckKeepsRenewing pins the nil case: every
+// existing caller that does not wire the check must keep the old behaviour,
+// rather than silently start releasing leases.
+func TestLease_WithoutLiveSessionCheckKeepsRenewing(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", 10*time.Millisecond, 5*time.Millisecond, nil)
+	// hasLiveSession deliberately left nil.
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.RunHeartbeat(ctx)
+
+	time.Sleep(80 * time.Millisecond)
+
+	if store.remaining() != 1 {
+		t.Fatal("a manager with no live-session check released a lease; single mode and every existing test would change behaviour")
+	}
+}

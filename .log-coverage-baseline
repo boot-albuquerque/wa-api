@@ -410,7 +410,33 @@ rules_frozen=true
 # F91 e a F90 melhoraram o que JA' saia: o `default` parou de despejar valores
 # (codigos de pareamento, CallID) e o cancelamento do cliente parou de sair em
 # `error` como se fosse banco fora do ar.
-min_func_coverage=695
+# ratchet-UP: F98 (2026-08-08), a posse deixa de ser renovada para uma sessao
+# que nao existe mais. min_eligible 574->575 (+1) e func_coverage 695->696.
+#
+# As DUAS medidas SOBEM, e a razao e' o proprio conserto: leaseManager.
+# RunHeartbeat passou de `uncovered:L1` para `covered`. Ela era o caso
+# justificado acima como "e' o laco, todo log de decisao esta' em renewOne" —
+# e deixou de ser, porque agora ela TOMA uma decisao propria (largar o lease de
+# uma sessao inexistente) e a registra em Warn com userid e owner. Quem decide
+# loga, que e' a regra deste repositorio; ela virou decisora.
+#
+# As duas funcoes novas, conferidas com `logcov -list-uncovered` e nao
+# deduzidas:
+#
+#   leaseManager.abandoned    ELIGIBLE, uncovered:L1. Predicado puro: responde
+#                             "este lease e' de uma sessao que sumiu?". Quem
+#                             age sobre a resposta e' RunHeartbeat, que ja'
+#                             loga. Logar dentro de um predicado emitiria linha
+#                             a cada PERGUNTA — a cada heartbeat, por sessao —
+#                             e o mesmo argumento ja' foi aceito acima para
+#                             isClientCausedSessionError (F90).
+#
+#   hasLiveSessionLocally     EXCLUDED (X1). Uma linha: consulta o registro de
+#                             clientes e devolve bool.
+#
+# errpath fica em 857: nenhum caminho de saida novo — `abandoned` tem um
+# retorno por ramo e nenhum erro a propagar.
+min_func_coverage=696
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -479,7 +505,9 @@ min_errpath_coverage=857
 # por que). A terceira e' a closure do defer, que nao loga de proposito — ela
 # so' chama releaseSessionOwnership, que JA' loga. Um log ali seria a segunda
 # linha do mesmo evento.
-min_eligible=574
+# +1 (574->575): F98, leaseManager.abandoned — ver a justificativa de
+# min_func_coverage acima.
+min_eligible=575
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

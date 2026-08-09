@@ -2153,6 +2153,7 @@ pkg/bootstrap.entregarWebhookNaFilaDeErro	ELIGIBLE	covered
 pkg/bootstrap.generateHmacSignature	ELIGIBLE	uncovered:L1
 pkg/bootstrap.getKillChannel	EXCLUDED	X1
 pkg/bootstrap.getUserWebhookUrl	ELIGIBLE	covered
+pkg/bootstrap.hasLiveSessionLocally	EXCLUDED	X1
 pkg/bootstrap.init	EXCLUDED	X3
 pkg/bootstrap.initConnectHandler	EXCLUDED	X1
 pkg/bootstrap.initCustomHandlers	ELIGIBLE	uncovered:L1
@@ -2162,11 +2163,12 @@ pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
 pkg/bootstrap.leaseManager.Claim	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.Release	ELIGIBLE	covered
 pkg/bootstrap.leaseManager.ReleaseAll	ELIGIBLE	covered
-pkg/bootstrap.leaseManager.RunHeartbeat	ELIGIBLE	uncovered:L1
+pkg/bootstrap.leaseManager.RunHeartbeat	ELIGIBLE	covered
+pkg/bootstrap.leaseManager.abandoned	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
-pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:251);uncovered:L2(S-ret,lease.go:255)
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:309);uncovered:L2(S-ret,lease.go:313)
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)
 pkg/bootstrap.lockSingleInstance.func1	EXCLUDED	X6
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered

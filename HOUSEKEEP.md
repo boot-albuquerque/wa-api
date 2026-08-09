@@ -3377,8 +3377,45 @@ sessão, não o retorno da chamada. Duas formas, em ordem de preferência:
 A (1) é cirúrgica e cobre o caso medido; a (2) cobre a classe. Fazer a (1) sem a
 (2) deixa em aberto qualquer outra morte assíncrona da sessão.
 
-**Status**: **não corrigido** — descoberto na validação, fora do escopo da F93
-que estava sendo validada. Decisão do dono do repositório se entra agora.
+**Status**: **corrigido e VALIDADO EM BANCADA (2026-08-08)**, com as duas
+correções sugeridas — a cirúrgica E a da classe.
+
+**Camada 1**, `onPairingTimeout` (`orchestrator.go`): devolve a posse no mesmo
+ponto em que o QR expira, DEPOIS do teardown local. Liberar antes abriria uma
+janela em que outra réplica assume o usuário enquanto este processo ainda
+segura os handles do cliente.
+
+**Camada 2**, `leaseManager.abandoned` (`lease.go`): o heartbeat não renova
+lease de usuário sem sessão viva. Cobre qualquer morte assíncrona, inclusive
+caminhos futuros que esqueçam de devolver na camada 1 — que é exatamente o
+modo de falha que produziu esta entrada.
+
+O período de graça é o próprio TTL, e é a parte que não pode faltar: a posse é
+reivindicada ANTES de a sessão ser materializada, então "ainda não há sessão" é
+o estado NORMAL de um arranque saudável por um instante. Sem graça, toda sessão
+perderia a posse nos primeiros milissegundos de vida.
+
+Medição no mesmo cenário que gerou o defeito (Postgres, `multi`, QR nunca lido):
+
+```
+23:36:0x  GET /session/connect -> 200 {"status":"connecting"}
+23:38:56  "QR timeout killing channel"
+23:38:56  "session did not start; handing its ownership back so another
+           replica can take it"          <- MESMO SEGUNDO
+          lease: SEM-LEASE
+```
+
+Antes: posse renovada indefinidamente, ainda viva 3 minutos depois.
+
+Controle na direção oposta, no mesmo processo e na mesma janela: as duas
+sessões pareadas (`teste-d2`, `teste-d2-b`) mantiveram posse e conexão do
+começo ao fim, e a camada 2 não disparou nenhuma vez sobre elas
+(`grep -c "no longer exists in this process"` = 0). Uma correção que devolvesse
+posse demais seria pior que o vazamento.
+
+Seis testes novos. Controles negativos em direções opostas: sem a camada 2 o
+lease abandonado é renovado para sempre; sem o período de graça a sessão que
+está subindo perde a posse.
 
 > Nota de método: a F96 passou nos testes unitários e foi commitada. O defeito
 > que sobrou não é o que ela conserta — é o que ela **não alcança**, e isso só

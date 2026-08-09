@@ -59,11 +59,28 @@ type leaseManager struct {
 	// enough, the former owner must let go by itself.
 	onOwnershipLost func(userID string)
 
+	// hasLiveSession answers whether this process still holds a session for a
+	// user. It is the safety net F98 asked for: releasing at the exact point a
+	// pairing dies covers the case that was MEASURED, and this covers the
+	// class — any asynchronous death of a session, whether or not someone
+	// remembered to hand the lease back there.
+	//
+	// Nil means "assume there is one", which keeps every caller that does not
+	// wire it (including every existing test) on the old behaviour.
+	hasLiveSession func(userID string) bool
+
 	mu sync.Mutex
 	// lastRenewal records WHEN each session was last successfully renewed.
 	// This is not diagnostics: it is what lets the manager decide ownership
 	// without being able to reach the database — see renewOne.
 	lastRenewal map[string]time.Time
+
+	// claimedAt records when each lease was FIRST taken, and exists only to
+	// make the abandonment check safe. Ownership is claimed BEFORE the session
+	// is materialized, so for a brief window a perfectly healthy startup has a
+	// lease and no session yet. Without this the heartbeat would release the
+	// lease of a session that is still coming up.
+	claimedAt map[string]time.Time
 
 	now func() time.Time // injectable so tests do not depend on the wall clock
 }
@@ -76,6 +93,7 @@ func newLeaseManager(store leaseStore, ownerID string, ttl, heartbeat time.Durat
 		heartbeat:       heartbeat,
 		onOwnershipLost: onOwnershipLost,
 		lastRenewal:     map[string]time.Time{},
+		claimedAt:       map[string]time.Time{},
 		now:             time.Now,
 	}
 }
@@ -108,9 +126,36 @@ func (m *leaseManager) Claim(ctx context.Context, userID string) (bool, error) {
 	if owned {
 		m.mu.Lock()
 		m.lastRenewal[userID] = m.now()
+		// Only on the FIRST claim. Re-stamping here would keep pushing the
+		// abandonment grace period forward on every re-claim, and a lease that
+		// is never old enough to be checked is a check that never runs.
+		if _, seen := m.claimedAt[userID]; !seen {
+			m.claimedAt[userID] = m.now()
+		}
 		m.mu.Unlock()
 	}
 	return owned, nil
+}
+
+// abandoned reports whether this lease belongs to a session that no longer
+// exists in this process.
+//
+// The grace period is the whole difficulty. Ownership is claimed before the
+// session is materialized, so "no session yet" is the NORMAL state of a healthy
+// startup for a short while. Releasing on the first sight of it would break
+// exactly the case the lease exists to protect.
+//
+// The TTL is reused as that grace period on purpose: it is already this
+// mechanism's unit of "how long we tolerate not knowing", and a second knob
+// would be one more thing to get wrong in production.
+func (m *leaseManager) abandoned(userID string) bool {
+	if m.hasLiveSession == nil || m.hasLiveSession(userID) {
+		return false
+	}
+	m.mu.Lock()
+	claimed := m.claimedAt[userID]
+	m.mu.Unlock()
+	return m.now().Sub(claimed) >= m.ttl
 }
 
 // renewOne renews one session's lease and reports whether it is STILL ours.
@@ -177,6 +222,18 @@ func (m *leaseManager) RunHeartbeat(ctx context.Context) {
 			return
 		case <-ticker.C:
 			for _, userID := range m.ownedSessions() {
+				// Checked BEFORE renewing: renewing first would hand this
+				// lease another full TTL of life before we drop it anyway.
+				if m.abandoned(userID) {
+					log.Warn().Str("userid", userID).Str("owner", m.ownerID).
+						Msg("lease held for a session that no longer exists in this process; handing it back so another replica can take the user")
+					// onOwnershipLost is deliberately NOT called: there is
+					// nothing left to tear down, and its message ("the new
+					// owner takes it from here") would describe a handover
+					// that is not what happened.
+					m.Release(ctx, userID)
+					continue
+				}
 				if m.renewOne(ctx, userID) {
 					continue
 				}
@@ -202,6 +259,7 @@ func (m *leaseManager) ownedSessions() []string {
 func (m *leaseManager) forget(userID string) {
 	m.mu.Lock()
 	delete(m.lastRenewal, userID)
+	delete(m.claimedAt, userID)
 	m.mu.Unlock()
 }
 

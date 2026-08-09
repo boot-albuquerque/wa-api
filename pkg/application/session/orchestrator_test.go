@@ -549,3 +549,90 @@ func TestStart_DoesNotReleaseWhenClaimWasDenied(t *testing.T) {
 		t.Errorf("released ownership we never held (%v): this would delete the lease of the replica that owns the session", released)
 	}
 }
+
+// TestStart_ReleasesOwnershipWhenPairingTimesOut pins F98 — the half of F96
+// that the fix above does NOT reach.
+//
+// The distinction is the whole point. The F96 defer fires when Start RETURNS an
+// error. On the QR path Start already answered 200 {"status":"connecting"} and
+// the pairing dies later, asynchronously, inside the goroutine consuming the
+// events. runPairing then returns nil, so the defer never runs.
+//
+// Measured on the bench before the fix (Postgres, multi mode):
+//
+//	23:11:26  GET /session/connect -> 200 {"status":"connecting"}
+//	23:13:06  log: "QR timeout killing channel"   <- pairing died here
+//	23:16:41  lease still alive, expires_at renewed
+//
+// Under N pods that pins the user to the replica where they walked away from
+// the QR: no other replica can ever take them, and /session/connect elsewhere
+// answers 409 forever.
+func TestStart_ReleasesOwnershipWhenPairingTimesOut(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "abc", Timeout: 20 * time.Second}
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	// Start returns nil here, and that is exactly the trap: a test asserting on
+	// the returned error would pass both before and after the fix.
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Errorf("ownership released = %v, want [user-1]: the lease is renewed forever for a pairing that ended in nothing", released)
+	}
+}
+
+// TestStart_KeepsOwnershipWhenPairingSucceeds is the control in the opposite
+// direction: releasing on a pairing that WORKED would hand the session away the
+// moment the user finishes scanning — turning the fix into a worse defect than
+// the leak it repairs.
+func TestStart_KeepsOwnershipWhenPairingSucceeds(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "abc", Timeout: 20 * time.Second}
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 0 {
+		t.Errorf("ownership released after a SUCCESSFUL pairing (%v): the session would be given away right after the scan", released)
+	}
+}
+
+// TestStart_PairingTimeoutWithoutOwnershipCheck pins `single` mode on the same
+// path: with no release function installed, a QR timeout must not panic on a
+// nil call.
+func TestStart_PairingTimeoutWithoutOwnershipCheck(t *testing.T) {
+	h := newHarness(t) // no WithOwnershipCheck
+
+	events := make(chan port.PairingEvent, 1)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+}

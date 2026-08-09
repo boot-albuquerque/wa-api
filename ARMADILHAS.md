@@ -470,3 +470,52 @@ mecanismo nem foi exercitado".
 (`A=1 B=2 cmd`) em vez de expandir uma variável com vários pares. E desconfie
 de saída vazia: pode ser `command not found` engolido por um `grep` na
 sequência.
+
+---
+
+## 22. `git checkout <arquivo>` desfaz o controle negativo — e a correção junto
+
+O controle negativo tem uma forma fixa: quebre a correção de propósito,
+confirme que o teste falha, restaure. É o terceiro passo que morde.
+
+Hoje, ao validar a F98, mutei a correção com um script e restaurei com:
+
+```sh
+git checkout pkg/application/session/orchestrator.go
+```
+
+O teste falhou como esperado, o controle "passou", e eu segui adiante. Só que
+`git checkout` restaura o arquivo para o **HEAD**, não para o estado anterior à
+mutação — e a correção ainda não estava commitada. O comando apagou a mutação e
+a correção no mesmo gesto.
+
+O que torna isso perigoso não é o erro, é o **silêncio** dele. O build seguiu
+verde: a correção removida não quebra compilação, e os testes que a cobrem só
+seriam rodados de novo mais tarde. Se eu tivesse commitado logo em seguida, o
+commit teria a mensagem, os testes, o registro em `HOUSEKEEP.md` — e **não teria
+a correção**. Um commit que documenta em detalhe um conserto que não existe é
+pior que nenhum commit, porque ninguém volta a olhar.
+
+**Regra**: para restaurar depois de um controle negativo, use uma cópia feita
+ANTES da mutação, nunca o git:
+
+```sh
+cp arquivo.go /tmp/arquivo.go.bak     # antes
+...muta, roda o teste, confirma a falha...
+cp /tmp/arquivo.go.bak arquivo.go     # depois
+```
+
+`git checkout`, `git stash`, `git restore` — todos falam com o HEAD, e o HEAD
+não sabe nada de trabalho não commitado. Só sirvam para restaurar o que já está
+commitado.
+
+**Verificação barata que fecha o buraco**: depois de restaurar, confirme que a
+correção voltou, com um `grep` na linha que a implementa — não com o build.
+
+```sh
+grep -c "releaseOwnership(userID)" pkg/application/session/orchestrator.go
+```
+
+É a mesma lição da armadilha 4 por outro ângulo: o controle negativo é código
+também, e o passo de restaurar precisa da mesma desconfiança que o passo de
+mutar.

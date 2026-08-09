@@ -353,6 +353,26 @@ func (o *Orchestrator) onPairingTimeout(ctx context.Context, userID string) {
 	log.Warn().Str("userid", userID).Msg("QR timeout killing channel")
 	o.registry.Unregister(userID)
 	o.attach.Detach(userID)
+
+	// Devolve a posse: o pareamento acabou em nada e não há mais sessão.
+	//
+	// O `defer` de Start NÃO cobre este caminho, e é essa a lição da F98
+	// (medida em bancada). Start devolve a posse quando RETORNA erro; aqui o
+	// pareamento por QR já respondeu 200 {"status":"connecting"} e falha
+	// DEPOIS, de forma assíncrona, dentro da goroutine que consome os eventos.
+	// runPairing então retorna nil, e o defer nunca dispara.
+	//
+	// DEPOIS do teardown local, não antes: liberar primeiro abriria uma janela
+	// em que outra réplica assume o usuário enquanto este processo ainda
+	// segura os handles do cliente.
+	//
+	// Sem isto, o heartbeat renovava indefinidamente o lease de uma sessão com
+	// connected=0 e sem transporte, e sob N pods o usuário ficava preso para
+	// sempre à réplica onde desistiu de ler o QR — que é o evento mais banal
+	// do fluxo de pareamento.
+	if o.releaseOwnership != nil {
+		o.releaseOwnership(userID)
+	}
 }
 
 // onPairingSuccess limpa o QR. users.connected=1 é escrito pelo handler de
