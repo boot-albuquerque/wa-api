@@ -440,7 +440,7 @@ func TestSendToGlobalRabbit_DisabledButConfiguredLogsError(t *testing.T) {
 	t.Setenv("RABBITMQ_URL", "amqp://fake")
 	t.Setenv("RABBITMQ_QUEUE", "")
 
-	SendToGlobalRabbit([]byte(`{}`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`{}`), "user-1")
 
 	rec := logs.requireLog(t, "error", "RabbitMQ is configured but disabled",
 		"rabbitmq_url_set", "rabbitmq_queue_set")
@@ -455,7 +455,7 @@ func TestSendToGlobalRabbit_DisabledWithQueueOnly(t *testing.T) {
 	t.Setenv("RABBITMQ_URL", "")
 	t.Setenv("RABBITMQ_QUEUE", "q")
 
-	SendToGlobalRabbit([]byte(`{}`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`{}`), "user-1")
 
 	rec := logs.requireLog(t, "error", "RabbitMQ is configured but disabled",
 		"rabbitmq_url_set", "rabbitmq_queue_set")
@@ -470,7 +470,7 @@ func TestSendToGlobalRabbit_NotConfigured(t *testing.T) {
 	t.Setenv("RABBITMQ_URL", "")
 	t.Setenv("RABBITMQ_QUEUE", "")
 
-	SendToGlobalRabbit([]byte(`{}`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`{}`), "user-1")
 
 	logs.requireLog(t, "debug", "RabbitMQ not configured", "queue")
 }
@@ -480,7 +480,7 @@ func TestSendToGlobalRabbit_InvalidJSON(t *testing.T) {
 	logs := captureLogs(t)
 	setRabbitState(nil, &fakeChannel{}, true)
 
-	SendToGlobalRabbit([]byte(`nao e json`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`nao e json`), "user-1")
 
 	logs.requireLog(t, "error", "Failed to unmarshal original JSON data",
 		"error", "queue", "user_id", "payload_bytes")
@@ -496,10 +496,11 @@ func TestSendToGlobalRabbit_EnrichesPayload(t *testing.T) {
 	setRabbitState(nil, ch, true)
 
 	c := cache.New(time.Minute, time.Minute)
-	c.Set("tok", mwpkg.Values{M: map[string]string{"Name": "instancia-a"}}, cache.DefaultExpiration)
+	// Chave por userID (F100): o token nao serve mais de chave de cache.
+	c.Set("user-1", mwpkg.Values{M: map[string]string{"Name": "instancia-a"}}, cache.DefaultExpiration)
 	SetupDependencies(c, nil)
 
-	SendToGlobalRabbit([]byte(`{"event":"x"}`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`{"event":"x"}`), "user-1")
 
 	_, published := ch.snapshot()
 	if len(published) != 1 {
@@ -556,7 +557,7 @@ func TestSendToGlobalRabbit_NilCache(t *testing.T) {
 	setRabbitState(nil, ch, true)
 	userInfoCache = nil
 
-	SendToGlobalRabbit([]byte(`{"event":"x"}`), "tok", "user-1")
+	SendToGlobalRabbit([]byte(`{"event":"x"}`), "user-1")
 
 	_, published := ch.snapshot()
 	if len(published) != 1 {
@@ -571,7 +572,7 @@ func TestSendToGlobalRabbit_PublishError(t *testing.T) {
 	setRabbitState(nil, &fakeChannel{publishErr: errFake}, true)
 	userInfoCache = nil
 
-	SendToGlobalRabbit([]byte(`{"event":"x"}`), "tok", "user-1", "override")
+	SendToGlobalRabbit([]byte(`{"event":"x"}`), "user-1", "override")
 
 	logs.requireLog(t, "error", "Failed to publish to RabbitMQ", "error", "queue", "user_id")
 }

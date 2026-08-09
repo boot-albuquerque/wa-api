@@ -97,7 +97,7 @@ func (s *server) connectOnStartup() {
 				hmacKeyEncrypted = base64.StdEncoding.EncodeToString(hmac_key)
 			}
 
-			log.Info().Str("token", token).Msg("Connect to Whatsapp on startup")
+			log.Info().Str("userid", txtid).Msg("Connect to Whatsapp on startup")
 			v := Values{M: map[string]string{
 				"Id":               txtid,
 				"Name":             name,
@@ -111,7 +111,7 @@ func (s *server) connectOnStartup() {
 				"History":          fmt.Sprintf("%d", history),
 				"HmacKeyEncrypted": hmacKeyEncrypted,
 			}}
-			appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
+			appCtx.UserInfoCache.Set(txtid, v, cache.NoExpiration)
 			// Gets and set subscription to webhook events
 			eventarray := strings.Split(events, ",")
 

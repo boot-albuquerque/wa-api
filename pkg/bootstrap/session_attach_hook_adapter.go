@@ -51,7 +51,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 	// Falhar aqui NÃO aborta o Attach: sem cache a sessão ainda funciona
 	// para tudo que não depende dele, e derrubar o pareamento inteiro por
 	// causa de um enriquecimento seria pior que o defeito que se corrige.
-	if err := ensureUserInfoCached(h.s.DB, userID, token); err != nil {
+	if err := ensureUserInfoCached(h.s.DB, userID); err != nil {
 		log.Warn().Err(err).Str("userid", userID).
 			Msg("não foi possível carregar user info para o cache; webhook e history podem ficar inertes")
 	}

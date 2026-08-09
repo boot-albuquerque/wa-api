@@ -62,15 +62,18 @@ func TestEnsureUserInfoCached_CarregaDoBanco(t *testing.T) {
 	sqlDB := schemaDB(t)
 	seedUser(t, sqlDB, "u-1", "tok-1", "https://exemplo.test/hook")
 
-	if _, found := appCtx.UserInfoCache.Get("tok-1"); found {
+	// Chave por userID, nao por token (F100): o token e CREDENCIAL, e usar
+	// credencial como chave de cache foi o que amarrou o cache ao texto claro
+	// e bloqueou a F97.
+	if _, found := appCtx.UserInfoCache.Get("u-1"); found {
 		t.Fatal("o cache deveria começar vazio")
 	}
 
-	if err := ensureUserInfoCached(sqlDB, "u-1", "tok-1"); err != nil {
+	if err := ensureUserInfoCached(sqlDB, "u-1"); err != nil {
 		t.Fatalf("ensureUserInfoCached: %v", err)
 	}
 
-	v, found := appCtx.UserInfoCache.Get("tok-1")
+	v, found := appCtx.UserInfoCache.Get("u-1")
 	if !found {
 		t.Fatal("a entrada não foi criada")
 	}
@@ -103,7 +106,7 @@ func TestEnsureUserInfoCached_NaoSobrescreveEntradaExistente(t *testing.T) {
 		"Id": "u-2", "Token": "tok-2", "Webhook": "https://ja-no-cache.test",
 	}}, cache.NoExpiration)
 
-	if err := ensureUserInfoCached(sqlDB, "u-2", "tok-2"); err != nil {
+	if err := ensureUserInfoCached(sqlDB, "u-2"); err != nil {
 		t.Fatalf("ensureUserInfoCached: %v", err)
 	}
 
@@ -120,7 +123,7 @@ func TestEnsureUserInfoCached_UsuarioInexistenteNaoGravaNada(t *testing.T) {
 	withCache(t)
 	sqlDB := schemaDB(t)
 
-	err := ensureUserInfoCached(sqlDB, "nao-existe", "tok-x")
+	err := ensureUserInfoCached(sqlDB, "nao-existe")
 	if err == nil {
 		t.Fatal("queria erro para usuário inexistente")
 	}
@@ -170,5 +173,59 @@ func TestUserInfoColumns_ContemOsCamposDaEntrada(t *testing.T) {
 	seedUser(t, sqlDB, "u-4", "tok-4", "")
 	if _, err := sqlDB.Queryx("SELECT " + userInfoColumns + " FROM users WHERE connected=1"); err != nil {
 		t.Fatalf("userInfoColumns não casa com o schema: %v", err)
+	}
+}
+
+// TestEnsureUserInfoCached_ChaveNaoEhOToken fixa a mudança da F100 pela
+// consequência que ela existe para permitir, e não pelo detalhe da chave.
+//
+// Enquanto o cache era chaveado por token, ele dependia do texto claro estar
+// vivo. Isso é o que bloqueava a etapa 1 da F97: parar de gravar o token faria
+// toda entrada nascer sob a chave `""`, e `getUserWebhookUrl` — que lê SÓ do
+// cache — passaria a devolver vazio. O webhook configurado na tabela viraria
+// inerte, em silêncio. É a F70, reintroduzida pelo lado da segurança.
+//
+// O teste prova as duas metades: a entrada existe sob o userID, e NÃO existe
+// sob o token.
+func TestEnsureUserInfoCached_ChaveNaoEhOToken(t *testing.T) {
+	withCache(t)
+	sqlDB := schemaDB(t)
+	seedUser(t, sqlDB, "u-1", "tok-1", "https://exemplo.test/hook")
+
+	if err := ensureUserInfoCached(sqlDB, "u-1"); err != nil {
+		t.Fatalf("ensureUserInfoCached: %v", err)
+	}
+
+	if _, found := appCtx.UserInfoCache.Get("u-1"); !found {
+		t.Fatal("nao ha entrada sob o userID; o webhook do usuario ficaria inerte")
+	}
+	if _, found := appCtx.UserInfoCache.Get("tok-1"); found {
+		t.Error("ainda existe entrada sob o token; o cache continua amarrado ao texto claro e a F97 segue bloqueada")
+	}
+}
+
+// TestEnsureUserInfoCached_TokenVazioAindaCacheia é o cenário que a F97 etapa 1
+// vai produzir para TODO usuário novo: linha sem texto claro. A entrada tem de
+// nascer igual — se ela depender do token, o defeito só aparece depois do
+// deploy, num usuário criado depois dele.
+func TestEnsureUserInfoCached_TokenVazioAindaCacheia(t *testing.T) {
+	withCache(t)
+	sqlDB := schemaDB(t)
+	seedUser(t, sqlDB, "u-1", "tok-1", "https://exemplo.test/hook")
+
+	if _, err := sqlDB.Exec(`UPDATE users SET token = '' WHERE id = 'u-1'`); err != nil {
+		t.Fatalf("branquear token: %v", err)
+	}
+
+	if err := ensureUserInfoCached(sqlDB, "u-1"); err != nil {
+		t.Fatalf("ensureUserInfoCached: %v", err)
+	}
+
+	v, found := appCtx.UserInfoCache.Get("u-1")
+	if !found {
+		t.Fatal("usuario sem texto claro nao foi cacheado; o webhook dele nasceria inerte")
+	}
+	if got := v.(Values).Get("Webhook"); got != "https://exemplo.test/hook" {
+		t.Errorf("Webhook = %q, queria o valor do banco", got)
 	}
 }

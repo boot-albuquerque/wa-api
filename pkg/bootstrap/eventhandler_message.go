@@ -60,7 +60,7 @@ func (evh *UserEventHandler) handleMessage(evt *events.Message, st *eventState) 
 func (evh *UserEventHandler) resolveMessageS3Config(txtid string) messageS3Config {
 	var s3Config messageS3Config
 
-	myuserinfo, found := appCtx.UserInfoCache.Get(evh.Token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
 	if !found {
 		err := evh.DB.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
 		if err != nil {
@@ -216,7 +216,7 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventState) {
 	// Get user's history setting from cache
 	var historyLimit int
-	userinfo, found := appCtx.UserInfoCache.Get(evh.Token)
+	userinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
 	if found {
 		historyStr := userinfo.(Values).Get("History")
 		historyLimit, _ = strconv.Atoi(historyStr)

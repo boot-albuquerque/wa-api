@@ -53,8 +53,8 @@ const userInfoColumns = `id,name,token,jid,webhook,events,proxy_url,` +
 //
 // Idempotente: com a entrada presente, não toca no banco. É chamada no
 // caminho de Attach, que roda uma vez por sessão, não por evento.
-func ensureUserInfoCached(db *sqlx.DB, userID, token string) error {
-	if _, found := appCtx.UserInfoCache.Get(token); found {
+func ensureUserInfoCached(db *sqlx.DB, userID string) error {
+	if _, found := appCtx.UserInfoCache.Get(userID); found {
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func ensureUserInfoCached(db *sqlx.DB, userID, token string) error {
 	// A chave é o token vindo do BANCO, não o recebido por parâmetro: é o
 	// token que os leitores usam (evh.Token vem da mesma origem), e gravar
 	// sob outra chave criaria uma entrada que ninguém encontra.
-	appCtx.UserInfoCache.Set(dbToken, Values{M: map[string]string{
+	appCtx.UserInfoCache.Set(userID, Values{M: map[string]string{
 		"Id":               txtid,
 		"Name":             name,
 		"Jid":              jid,

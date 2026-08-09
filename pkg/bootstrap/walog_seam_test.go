@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -66,10 +67,11 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 	// gravar users.connected=1 ANTES da guarda de pushname, e este handler
 	// tem pushname vazio. Antes da F82 a guarda saía cedo e a escrita nunca
 	// acontecia — era só por isso que o teste rodava sem banco.
-	appCtx.UserInfoCache.Set(walogSeamToken, Values{M: map[string]string{
+	// Chave por userID (F100), nao por token.
+	appCtx.UserInfoCache.Set(walogSeamUser, Values{M: map[string]string{
 		"Id": walogSeamUser, "Webhook": "", "Events": "", "Jid": "", "Name": "",
 	}}, 0)
-	t.Cleanup(func() { appCtx.UserInfoCache.Delete(walogSeamToken) })
+	t.Cleanup(func() { appCtx.UserInfoCache.Delete(walogSeamUser) })
 
 	sqlDB := schemaDB(t)
 	seedUser(t, sqlDB, walogSeamUser, walogSeamToken, "")
@@ -80,6 +82,19 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 		WAClient: wanoise.NewClient(&store.Device{Log: bridge.Sub("Device")}, bridge),
 	}
 	evh.handleEvent(&events.Connected{})
+
+	// handleEvent despacha o webhook global e o RabbitMQ de forma ASSINCRONA,
+	// e essas goroutines escrevem no logger global — o mesmo que o Cleanup
+	// deste teste vai trocar de volta. Sem esperar, o `-race` acusa (medido):
+	// o worker do pool escrevendo no buffer enquanto o Cleanup restaura
+	// log.Logger.
+	//
+	// A corrida e do TESTE, nao do codigo de producao: la o logger global nao
+	// e trocado no meio da execucao. Mas ela so apareceu depois da F100 —
+	// antes, o teste semeava o cache sob o token e a busca por userID errava,
+	// entao o caminho assincrono nem era alcancado. Consertar a chave sem
+	// esperar o despacho trocaria um defeito silencioso por um teste instavel.
+	esperarDespachoDrenar(t)
 
 	recs = decodeRecords(t, &buf)
 	if len(recs) == 0 {
@@ -100,3 +115,33 @@ const (
 	walogSeamUser  = "walog-seam-user"
 	walogSeamToken = "walog-seam-token"
 )
+
+// esperarDespachoDrenar espera o pool de despacho ficar ocioso.
+//
+// Existe porque vários caminhos de evento despacham trabalho assíncrono que
+// sobrevive ao teste que o disparou. Um teste que troca estado global no
+// Cleanup — logger, cache, configuração — corre com esse trabalho, e o sintoma
+// é falha intermitente sob `-race`, longe da causa.
+//
+// Com PRAZO, nunca espera indefinida (ARMADILHAS 16).
+func esperarDespachoDrenar(t *testing.T) {
+	t.Helper()
+
+	if dispatch == nil {
+		return // o pool nem chegou a ser criado
+	}
+
+	prazo := time.After(5 * time.Second)
+	for {
+		if emVoo, _, _, _ := dispatch.Metrics(); emVoo == 0 {
+			return
+		}
+		select {
+		case <-prazo:
+			emVoo, _, _, _ := dispatch.Metrics()
+			t.Fatalf("o pool de despacho nao drenou: %d trabalhos ainda em voo", emVoo)
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+}

@@ -16,11 +16,11 @@ func ensureS3ClientForUser(userID string) {
 	storage.GetS3Manager().EnsureClientFromDB(userID)
 }
 
-func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
+func sendToGlobalWebHook(jsonData []byte, userID string) {
 	jsonDataStr := string(jsonData)
 
 	instance_name := ""
-	userinfo, found := appCtx.UserInfoCache.Get(token)
+	userinfo, found := appCtx.UserInfoCache.Get(userID)
 	if found {
 		instance_name = userinfo.(Values).Get("Name")
 	}
@@ -37,10 +37,10 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 	}
 }
 
-func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
+func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, encryptedHmacKey []byte) {
 
 	instance_name := ""
-	userinfo, found := appCtx.UserInfoCache.Get(token)
+	userinfo, found := appCtx.UserInfoCache.Get(userID)
 	if found {
 		instance_name = userinfo.(Values).Get("Name")
 	}
@@ -70,7 +70,7 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 func updateAndGetUserSubscriptions(evh *UserEventHandler) ([]string, error) {
 	// Get updated events from cache/database
 	currentEvents := ""
-	userinfo2, found2 := appCtx.UserInfoCache.Get(evh.Token)
+	userinfo2, found2 := appCtx.UserInfoCache.Get(evh.UserID)
 	if found2 {
 		currentEvents = userinfo2.(Values).Get("Events")
 	} else {
@@ -98,11 +98,11 @@ func updateAndGetUserSubscriptions(evh *UserEventHandler) ([]string, error) {
 	return subscribedEvents, nil
 }
 
-func getUserWebhookUrl(token string) string {
+func getUserWebhookUrl(userID string) string {
 	webhookurl := ""
-	myuserinfo, found := appCtx.UserInfoCache.Get(token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(userID)
 	if !found {
-		log.Warn().Str("token", token).Msg("Could not call webhook as there is no user for this token")
+		log.Warn().Str("userid", userID).Msg("Could not call webhook as there is no cached info for this user")
 	} else {
 		webhookurl = myuserinfo.(Values).Get("Webhook")
 	}
@@ -110,7 +110,7 @@ func getUserWebhookUrl(token string) string {
 }
 
 func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{}, path string) {
-	webhookurl := getUserWebhookUrl(evh.Token)
+	webhookurl := getUserWebhookUrl(evh.UserID)
 
 	// Get updated events from cache/database
 	subscribedEvents, err := updateAndGetUserSubscriptions(evh)
@@ -174,7 +174,7 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 
 	// Get HMAC key for this user
 	var encryptedHmacKey []byte
-	if userinfo, found := appCtx.UserInfoCache.Get(evh.Token); found {
+	if userinfo, found := appCtx.UserInfoCache.Get(evh.UserID); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
 		if encryptedB64 != "" {
 			var err error
@@ -185,10 +185,10 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 		}
 	}
 
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, evh.UserID, evh.Token, encryptedHmacKey)
+	sendToUserWebHookWithHmac(webhookurl, path, jsonData, evh.UserID, encryptedHmacKey)
 
 	// Get global webhook if configured
-	dispatchGo("sendToGlobalWebHook", tamanhoPayload, func() { sendToGlobalWebHook(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalWebHook", tamanhoPayload, func() { sendToGlobalWebHook(jsonData, evh.UserID) })
 
-	dispatchGo("sendToGlobalRabbit", tamanhoPayload, func() { sendToGlobalRabbit(jsonData, evh.Token, evh.UserID) })
+	dispatchGo("sendToGlobalRabbit", tamanhoPayload, func() { sendToGlobalRabbit(jsonData, evh.UserID) })
 }

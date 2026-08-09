@@ -298,7 +298,7 @@ func PublishToRabbit(data []byte, queueOverride ...string) error {
 	return err
 }
 
-func SendToGlobalRabbit(jsonData []byte, token string, userID string, queueName ...string) {
+func SendToGlobalRabbit(jsonData []byte, userID string, queueName ...string) {
 	if !getRabbitEnabled() {
 		// Check if RabbitMQ is configured but disabled due to connection issues
 		rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -326,7 +326,7 @@ func SendToGlobalRabbit(jsonData []byte, token string, userID string, queueName 
 	// Extract instance information
 	instance_name := ""
 	if userInfoCache != nil {
-		userinfo, found := userInfoCache.Get(token)
+		userinfo, found := userInfoCache.Get(userID)
 		if found {
 			if v, ok := userinfo.(Values); ok {
 				instance_name = v.Get("Name")

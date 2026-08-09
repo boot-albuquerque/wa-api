@@ -92,7 +92,11 @@ func (evh *UserEventHandler) handleConnected(st *eventState) bool {
 }
 
 func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *eventState) bool {
-	log.Info().Str("userid", evh.UserID).Str("token", evh.Token).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
+	// O token NAO sai daqui. Era logado em Info a cada pareamento — credencial
+	// de API em texto claro, no mesmo nivel de log que qualquer evento
+	// rotineiro. Mesma classe da F76, que tirou os codigos de QR do log: quem
+	// le o log passa a poder agir como o usuario.
+	log.Info().Str("userid", evh.UserID).Str("ID", evt.ID.String()).Str("BusinessName", evt.BusinessName).Str("Platform", evt.Platform).Msg("QR Pair Success")
 	jid := evt.ID
 	sqlStmt := `UPDATE users SET jid=$1 WHERE id=$2`
 	_, err := evh.DB.Exec(sqlStmt, jid, evh.UserID)
@@ -104,15 +108,14 @@ func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *even
 	st.postmap["type"] = "PairSuccess"
 	st.dowebhook = 1
 
-	myuserinfo, found := appCtx.UserInfoCache.Get(evh.Token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
 	if !found {
 		log.Warn().Msg("No user info cached on pairing?")
 	} else {
 		st.txtid = myuserinfo.(Values).Get("Id")
-		token := myuserinfo.(Values).Get("Token")
 		v := updateUserInfo(myuserinfo, "Jid", jid.String())
-		appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
-		log.Info().Str("jid", jid.String()).Str("userid", st.txtid).Str("token", token).Msg("User information set")
+		appCtx.UserInfoCache.Set(evh.UserID, v, cache.NoExpiration)
+		log.Info().Str("jid", jid.String()).Str("userid", st.txtid).Msg("User information set")
 	}
 
 	// Check if automatic history sync is enabled and trigger it after QR code is scanned.
