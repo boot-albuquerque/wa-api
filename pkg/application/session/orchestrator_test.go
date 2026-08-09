@@ -12,6 +12,8 @@ import (
 
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
+
+	"wa-api/pkg/domain/apperr"
 )
 
 // emptyDriver é um driver database/sql que aceita qualquer query e devolve
@@ -361,5 +363,106 @@ func TestStopUnregistersAndDetaches(t *testing.T) {
 
 	if len(h.registry.UnregisterCalls) != 1 || len(h.attach.DetachCalls) != 1 {
 		t.Fatalf("Stop deve chamar Unregister e Detach: %v", h.recorder.Calls)
+	}
+}
+
+// Session ownership (ADR-0005, D2).
+//
+// These tests exist because of a REAL gap found by measurement, not by review:
+// the ownership filter covered only connectOnStartup, so a session connected at
+// runtime (the /session/connect the dev panel and every new pairing use) ran
+// with NO lease at all. Measured on 2026-08-08 with two live sessions:
+//
+//	teste-d2    connected=1  owner: build-host.local-80338
+//	teste-d2-b  connected=1  owner: NO LEASE          <- paired via the panel
+//
+// Under N replicas that is the F89 disaster: the next replica sees connected=1,
+// finds the lease free, takes it, connects the same session, and WhatsApp kills
+// one of them permanently.
+
+func TestStart_RefusesWhenOwnershipIsDenied(t *testing.T) {
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	// Paired on purpose, even though the guard should stop us first: if the
+	// guard is ever removed, Start would otherwise enter the BLOCKING
+	// pairing path and this test would hang instead of failing. A hanging
+	// test reports nothing (ARMADILHAS.md 16) — the negative control for
+	// this guard timed out at 63s before this line existed.
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	err := h.orch.Start(context.Background(), "user-1", "token-1")
+	if err == nil {
+		t.Fatal("Start succeeded for a session owned by another replica")
+	}
+
+	// The guard must run BEFORE anything is materialized. Creating the session
+	// and only then discovering it belongs elsewhere would leave client and
+	// registries dirty, and the cleanup path would have to undo work that
+	// should never have started.
+	if indexOf(h.recorder.Calls, "SessionProvider.NewSession") >= 0 {
+		t.Errorf("session was materialized despite the ownership refusal: %v", h.recorder.Calls)
+	}
+}
+
+// TestStart_OwnershipRefusalIsClassified applies the F93 lesson: a raw error
+// reaches the HTTP layer as an opaque 500. The refusal is not a server fault —
+// the request simply reached the wrong replica — so it has to carry a category.
+func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	// Paired on purpose, even though the guard should stop us first: if the
+	// guard is ever removed, Start would otherwise enter the BLOCKING
+	// pairing path and this test would hang instead of failing. A hanging
+	// test reports nothing (ARMADILHAS.md 16) — the negative control for
+	// this guard timed out at 63s before this line existed.
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	err := h.orch.Start(context.Background(), "user-1", "token-1")
+	if err == nil {
+		t.Fatal("Start succeeded for a session owned by another replica")
+	}
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("error is not an *apperr.AppError, so the HTTP layer turns it into an opaque 500: %T", err)
+	}
+	if appErr.Code != codeSessionOwnedByAnotherReplica {
+		t.Errorf("code = %q, want %q", appErr.Code, codeSessionOwnedByAnotherReplica)
+	}
+	if status := appErr.Category.HTTPStatus(); status >= 500 {
+		t.Errorf("category maps to HTTP %d; refusing because another replica owns the session is not a server fault", status)
+	}
+	if appErr.Retryable {
+		t.Error("marked retryable: repeating the same request against the same replica yields the same refusal")
+	}
+}
+
+// TestStart_ProceedsWhenOwnershipIsGranted: the guard must not block the normal
+// path. A check that always refuses would pass the test above and break
+// everything.
+func TestStart_ProceedsWhenOwnershipIsGranted(t *testing.T) {
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return true }))
+	// Already paired: the unpaired path BLOCKS consuming the pairing channel,
+	// so without this the test hangs instead of failing — and a hanging test
+	// reports nothing (ARMADILHAS.md 16).
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start failed with ownership granted: %v", err)
+	}
+	if indexOf(h.recorder.Calls, "SessionProvider.NewSession") < 0 {
+		t.Errorf("session was not materialized despite ownership being granted: %v", h.recorder.Calls)
+	}
+}
+
+// TestStart_WithoutOwnershipCheckAllows pins `single` mode: with no check
+// installed there is nobody to compete with, and sessions must start normally.
+func TestStart_WithoutOwnershipCheckAllows(t *testing.T) {
+	h := newHarness(t) // no WithOwnershipCheck
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start failed with no ownership check installed: %v", err)
+	}
+	if indexOf(h.recorder.Calls, "SessionProvider.NewSession") < 0 {
+		t.Errorf("session was not materialized in single mode: %v", h.recorder.Calls)
 	}
 }

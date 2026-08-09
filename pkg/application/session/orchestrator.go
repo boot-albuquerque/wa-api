@@ -65,6 +65,12 @@ type Orchestrator struct {
 	// tem webhook_use_proxy definido (hoje appCtx.GlobalWebhookUseProxy).
 	defaultWebhookUseProxy bool
 
+	// claimOwnership reivindica a posse da sessão antes de iniciá-la
+	// (ADR-0005 D2). Injetado como função pelo mesmo motivo de ensureS3:
+	// pkg/application não importa a implementação. Nil vira "sempre pode",
+	// que é o modo `single`.
+	claimOwnership func(userID string) bool
+
 	// ensureS3 replica o storage.GetS3Manager().EnsureClientFromDB(userID)
 	// de startClient. Injetado como função para que pkg/application não
 	// importe pkg/infra/storage. Opcional: nil vira no-op.
@@ -76,7 +82,34 @@ type Orchestrator struct {
 }
 
 // Option ajusta parâmetros do Orchestrator.
+// codeSessionOwnedByAnotherReplica identifica a recusa por posse (ADR-0005 D2).
+//
+// Constante, e não literal inline como o resto deste pacote faz hoje, porque a
+// política de idioma/strings deste repositório pede isso — e porque código de
+// erro é contrato com quem consome a API: ele aparece no corpo da resposta e
+// clientes passam a depender dele.
+//
+// CategoryValidation (400) é o mais próximo disponível. O correto seria 409, e
+// a taxonomia de apperr só tem validation/unauthorized/internal — lacuna
+// registrada, não resolvida aqui para não expandir taxonomia no meio de outra
+// tarefa.
+const codeSessionOwnedByAnotherReplica = "session_owned_by_another_replica"
+
 type Option func(*Orchestrator)
+
+// WithOwnershipCheck instala a verificação de posse do ADR-0005 D2.
+//
+// Sem ela, o caminho de conexão em TEMPO DE EXECUÇÃO (o /session/connect que o
+// painel e todo pareamento novo usam) inicia sessão sem reivindicar posse —
+// medido em 2026-08-08, com uma sessão pareada pelo painel rodando SEM LEASE
+// enquanto a pareada no arranque tinha o seu. Sob N réplicas isso é o
+// desastre da F89: a réplica seguinte encontra o lease livre, toma, conecta a
+// mesma sessão, e o WhatsApp mata uma das duas para sempre.
+func WithOwnershipCheck(claim func(userID string) bool) Option {
+	return func(o *Orchestrator) {
+		o.claimOwnership = claim
+	}
+}
 
 // WithRetryPolicy sobrescreve o número de tentativas e a base do backoff
 // linear de conexão.
@@ -137,6 +170,20 @@ func NewOrchestrator(
 // PairingEvent é consumido aqui, como startClient consome o qrChan hoje);
 // no caminho já pareado retorna assim que a conexão sobe.
 func (o *Orchestrator) Start(ctx context.Context, userID, token string) error {
+	// Posse ANTES de materializar qualquer coisa: criar a sessão e só depois
+	// descobrir que ela é de outra réplica deixaria cliente e registries
+	// sujos, e o caminho de limpeza teria de desfazer o que nem devia ter
+	// começado.
+	if o.claimOwnership != nil && !o.claimOwnership(userID) {
+		return apperr.New(
+			codeSessionOwnedByAnotherReplica,
+			apperr.CategoryValidation,
+			"this session is owned by another replica; route the request to its owner",
+			false,
+			nil,
+		)
+	}
+
 	sess, err := o.provider.NewSession(ctx, port.SessionSpec{UserID: userID, Token: token})
 	if err != nil {
 		return err
