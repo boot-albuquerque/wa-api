@@ -2720,8 +2720,19 @@ madrugada por causa de um F5.
 `context.DeadlineExceeded`, que é timeout NOSSO e continua sendo erro de
 verdade.
 
-**Status**: **não corrigido** — fora do escopo da F89, que era o que estava em
-andamento. Registrado para decisão.
+**Status**: **corrigido**. `apperr.IsClientGaveUp` decide o nível nos três
+sites que produziram as quinze linhas: o repositório (`user_repository.go`), o
+use case (`get_status.go`) e o handler (`handler_session.go`, estendendo o
+`isClientCausedSessionError` que já existia em vez de duplicar o conceito).
+
+O predicado NÃO casa com `context.DeadlineExceeded`, e essa distinção é o
+ponto: aquele é timeout NOSSO — prometemos resposta num prazo e não entregamos
+— e continua saindo em `error`. Confundir os dois trocaria um alarme falso por
+um alarme perdido, que é pior.
+
+Teste com os cinco casos, incluindo erro embrulhado (`fmt.Errorf("database
+error: %w", context.Canceled)`), que é a forma como ele de fato aparecia no
+log. Registrado para decisão.
 
 ---
 
@@ -2770,8 +2781,23 @@ preserva o valor do aviso (descobrir tipo não previsto) e elimina a classe
 inteira do vazamento, em vez de fechar um tipo por vez conforme cada um
 vaza algo.
 
-**Status**: **não corrigido** — registrado. Fora do escopo da F89, que estava
-em andamento.
+**Status**: **corrigido**. O `default` passa a logar `%T` (nome do tipo) e a
+lista de NOMES dos campos, via `unhandledEventFields`. O aviso não perde valor:
+`%T` identifica o tipo com precisão maior que o dump, e os nomes de campo
+mostram a forma para quem for implementar o `case` que falta.
+
+Três testes — e o terceiro só existe porque o controle negativo denunciou os
+dois primeiros:
+
+Os dois iniciais cobriam `unhandledEventFields`, a FUNÇÃO. Mas o vazamento
+acontece no CALL SITE: mutando o `log` de volta para `%+v`, a função continuava
+correta e **os dois testes seguiam verdes**. Testei a peça, não o
+comportamento.
+
+`TestHandleEvent_DefaultNaoLogaValores` captura a saída do zerolog num buffer e
+afirma sobre o que SAI: sem o valor de `Codes`, sem o `CallID`, e ainda com o
+tipo e os nomes dos campos presentes. Controle negativo com esse teste: *"o log
+contem o VALOR do campo Codes — e' credencial de pareamento"*.
 
 > Nota de método: eu quase registrei que a aplicação já logava só nomes de
 > campo, porque o monitor exibia `campos=JID,Timestamp,Action,FromFullSync`.
@@ -3087,7 +3113,20 @@ que clientes já recebem. Para a posse de sessão isso é seguro (código novo,
 sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
-**Status**: **não corrigido** — registrado com os dois sites que já sofrem.
+**Status**: **parcialmente corrigido**. `CategoryConflict` existe e mapeia para
+409 (`codes.go`), e a recusa por posse de sessão migrou para ela.
+
+Dois testes travam o comportamento em níveis diferentes: o MAPEAMENTO
+(`TestCategory_HTTPStatus`, com o caso novo acrescentado à tabela — ela passava
+sem conhecer a categoria) e o USO (`TestStart_OwnershipRefusalIsClassified`,
+que agora exige 409 e não apenas "não-5xx"). Controle negativo executado nos
+dois: `HTTPStatus() = 400, want 409`.
+
+**Falta migrar a F93** (logout de sessão desconectada), que é o outro site
+listado acima. Não foi feito aqui porque, ao contrário da posse — código novo,
+sem cliente algum —, aquele endpoint já responde 500 em produção hoje: mudar
+para 409 é alteração de contrato OBSERVÁVEL e precisa ser decidida como tal,
+não aplicada de passagem.
 
 ---
 
@@ -3157,3 +3196,54 @@ abandonado — distinção que o teste unitário não revela.
 > regra hoje, ao corrigir a F88, e não a apliquei à correção de posse algumas
 > horas depois. A regra existir não basta; ela precisa ser consultada no
 > momento de escrever, não só no momento de revisar.
+
+---
+
+## F97 — o token de API é guardado em texto claro, e o caminho de autenticação ainda o aceita
+
+**Data**: 2026-08-08
+**Contexto**: surgiu ao investigar por que `GET /admin/users` devolve o token
+vazio. **A listagem está certa** — omitir credencial de uma listagem é boa
+prática, e não é achado. O achado é o que apareceu ao verificar o porquê.
+
+**Onde**:
+- `pkg/infra/db/user_repository.go:57` — o `INSERT` grava `token` E
+  `token_hash` na mesma linha.
+- `pkg/infra/auth/authenticators.go:78`:
+
+```sql
+FROM users WHERE token = $1 OR token_hash = $2 LIMIT 1
+```
+
+**Problema**: existe uma migração `add_token_hash` (migração 8) e a
+autenticação já sabe comparar por hash — `domain.HashToken(token)` é calculado
+na linha seguinte. Ainda assim:
+
+1. o token continua sendo **persistido em texto claro** na coluna `token`;
+2. o `OR token = $1` mantém esse valor como **caminho de autenticação ativo**,
+   não como resíduo inerte.
+
+Quem obtiver leitura do banco — backup, réplica, dump de suporte, SQL injection
+em qualquer outra rota — obtém credenciais utilizáveis diretamente, sem precisar
+quebrar hash nenhum. O hash existente não protege nada enquanto o original
+estiver ao lado dele.
+
+Vale notar o que isso NÃO é: não é vazamento por log nem por API. A listagem
+omite o token, e o `POST /admin/users` o devolve uma única vez, na criação —
+ambos corretos.
+
+**Correção sugerida**, em duas etapas separadas porque a segunda quebra
+clientes:
+
+1. Parar de GRAVAR o texto claro: o `INSERT` passa a preencher só
+   `token_hash`. Compatível com o que já existe, porque a autenticação
+   continua aceitando ambos.
+2. Depois de uma janela de migração, remover o `OR token = $1` e dropar a
+   coluna. Isso invalida qualquer linha antiga que só tenha texto claro — e é
+   por isso que precisa de janela, não de um PR.
+
+**A ordem importa**: inverter as duas deixa usuários antigos sem conseguir
+autenticar.
+
+**Status**: **não corrigido** — registrado. É mudança de postura de segurança e
+tem etapa que quebra cliente; decisão do dono do repositório.

@@ -11,6 +11,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
+
+	"wa-api/pkg/domain/apperr"
 )
 
 // UserRepository implementa appport.UserRepository sobre *sqlx.DB.
@@ -193,7 +195,14 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 
 	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {
-		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+		// Cliente desistiu da requisição não é falha nossa (F90): o polling do
+		// painel cancela ao trocar de aba, e quinze `error` seguidos dizendo
+		// "database error" já fizeram um F5 parecer banco fora do ar.
+		evento := log.Error()
+		if apperr.IsClientGaveUp(err) {
+			evento = log.Info()
+		}
+		evento.Err(err).Str("table", "users").Str("user_id", id).
 			Str("query", "list_users").Msg("failed to list users")
 		return nil, err
 	}

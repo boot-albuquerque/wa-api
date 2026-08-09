@@ -6,6 +6,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/types/events"
 
 	"github.com/rs/zerolog/log"
+	"reflect"
 )
 
 // eventState carrega o estado que os ramos do type-switch de handleEvent
@@ -160,10 +161,55 @@ func (evh *UserEventHandler) handleEvent(rawEvt interface{}) {
 	case *events.FBMessage:
 		evh.handleFBMessage(evt, st)
 	default:
-		log.Warn().Str("event", fmt.Sprintf("%+v", evt)).Msg("Unhandled event")
+		// Nome do TIPO e nomes dos CAMPOS, nunca os valores (F91).
+		//
+		// Este ramo logava `%+v` da struct inteira. A F76 pegou o caso mais
+		// grave — o evento QR carrega `Codes`, que são códigos de PAREAMENTO,
+		// e quem os lê vincula um aparelho à conta — e foi corrigida com um
+		// `case` dedicado para QR. Mas isso tratou a instância, não a classe:
+		// qualquer OUTRO tipo que caia aqui carregando dado sensível vaza
+		// igual, e já se viu no log evento de chamada com CallID e
+		// CallCreator completos.
+		//
+		// O aviso não perde valor: `%T` identifica o tipo com precisão maior
+		// que o dump, e os nomes de campo mostram a forma de quem for
+		// implementar o `case` que falta.
+		log.Warn().
+			Str("event_type", fmt.Sprintf("%T", evt)).
+			Strs("fields", unhandledEventFields(evt)).
+			Msg("Unhandled event")
 	}
 
 	if st.dowebhook == 1 {
 		sendEventWithWebHook(evh, st.postmap, path)
 	}
+}
+
+// unhandledEventFields returns an event's FIELD NAMES, never their values.
+//
+// This is what keeps the `default` branch above from leaking. Values are the
+// hazard: pairing codes, call identifiers, message contents. Field names carry
+// the shape a developer needs in order to write the missing `case`, and carry
+// no secret.
+//
+// Nil, non-struct or unnamed types return nil rather than guessing — an empty
+// field list is honest, a fabricated one is not.
+func unhandledEventFields(evt any) []string {
+	value := reflect.ValueOf(evt)
+	for value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return nil
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return nil
+	}
+
+	eventType := value.Type()
+	names := make([]string, 0, eventType.NumField())
+	for i := 0; i < eventType.NumField(); i++ {
+		names = append(names, eventType.Field(i).Name)
+	}
+	return names
 }

@@ -2235,6 +2235,7 @@ pkg/bootstrap.tamanhoDoPayload	EXCLUDED	X1
 pkg/bootstrap.tentarWebhook	ELIGIBLE	covered
 pkg/bootstrap.travarInstanciaUnica	ELIGIBLE	uncovered:L2(S-consume,cluster.go:106);uncovered:L2(S-ret,cluster.go:108)
 pkg/bootstrap.travarInstanciaUnica.func1	EXCLUDED	X6
+pkg/bootstrap.unhandledEventFields	ELIGIBLE	uncovered:L1
 pkg/bootstrap.updateAndGetUserSubscriptions	ELIGIBLE	covered
 pkg/bootstrap.updateUserInfo	ELIGIBLE	covered
 pkg/bootstrap.userIDHolderHandler	EXCLUDED	X1
@@ -2256,6 +2257,7 @@ pkg/domain/apperr.AppError.Error	EXCLUDED	X4
 pkg/domain/apperr.AppError.Is	ELIGIBLE	uncovered:L1
 pkg/domain/apperr.AppError.Unwrap	EXCLUDED	X2
 pkg/domain/apperr.Category.HTTPStatus	EXCLUDED	X1
+pkg/domain/apperr.IsClientGaveUp	EXCLUDED	X1
 pkg/domain/apperr.New	ELIGIBLE	uncovered:L2(S-ret,apperr.go:53)
 pkg/infra/auth.AdminValidator.Validate	EXCLUDED	X1
 pkg/infra/auth.DecryptHMACKey	ELIGIBLE	covered
@@ -2829,7 +2831,7 @@ pkg/presentation/http/handlers.handleSetGroupPhoto	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupTopic	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	covered
 pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:373)
-pkg/presentation/http/handlers.isClientCausedSessionError	EXCLUDED	X1
+pkg/presentation/http/handlers.isClientCausedSessionError	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.newGroupHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered

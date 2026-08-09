@@ -95,10 +95,10 @@ type Orchestrator struct {
 // erro é contrato com quem consome a API: ele aparece no corpo da resposta e
 // clientes passam a depender dele.
 //
-// CategoryValidation (400) é o mais próximo disponível. O correto seria 409, e
-// a taxonomia de apperr só tem validation/unauthorized/internal — lacuna
-// registrada, não resolvida aqui para não expandir taxonomia no meio de outra
-// tarefa.
+// CategoryConflict (409): a requisição está correta e autorizada, só chegou na
+// réplica errada. Era 400 até a F95 acrescentar a categoria — e 400 dizia ao
+// cliente "corrija o payload", que é ativamente enganoso quando não há nada a
+// corrigir no payload.
 const codeSessionOwnedByAnotherReplica = "session_owned_by_another_replica"
 
 type Option func(*Orchestrator)
@@ -184,7 +184,7 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err err
 	if o.claimOwnership != nil && !o.claimOwnership(userID) {
 		return apperr.New(
 			codeSessionOwnedByAnotherReplica,
-			apperr.CategoryValidation,
+			apperr.CategoryConflict,
 			"this session is owned by another replica; route the request to its owner",
 			false,
 			nil,

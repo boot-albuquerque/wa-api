@@ -389,7 +389,28 @@ rules_frozen=true
 # Main para baixar a complexidade maxima de 57 para 56 (o gate de lint trava o
 # TETO, nao a contagem — decompor sobe a contagem e melhora o repo). Ela nasce
 # coberta: loga o Fatal da configuracao invalida de posse.
-min_func_coverage=698
+# justificativa: F90, F91 e F95 (2026-08-08). min_eligible 572->574 (+2) e
+# func_coverage 698->695. As DUAS funcoes novas sao PREDICADOS/HELPERS PUROS, e
+# logar dentro delas seria pior que nao logar:
+#
+#   unhandledEventFields (eventhandler.go)
+#       Reflexao pura: recebe um evento e devolve os NOMES dos campos. Sem
+#       porta, sem caminho de erro, sem efeito. Quem loga e' o `default` do
+#       handleEvent, que a chama — e ele loga UMA linha com tipo e campos. Um
+#       log aqui dentro dispararia a cada evento nao tratado, duplicando
+#       exatamente a linha do chamador.
+#
+#   isClientCausedSessionError (handler_session.go)
+#       Predicado: responde "este erro e' culpa do cliente?". Quem age sobre a
+#       resposta e' o handler, que ja' loga em Warn ou Error conforme ela.
+#       Logar dentro de um predicado emitiria linha toda vez que alguem faz uma
+#       PERGUNTA, nao quando algo acontece.
+#
+# errpath fica em 858. Nenhum site que logava deixou de logar — ao contrario, a
+# F91 e a F90 melhoraram o que JA' saia: o `default` parou de despejar valores
+# (codigos de pareamento, CallID) e o cancelamento do cliente parou de sair em
+# `error` como se fosse banco fora do ar.
+min_func_coverage=695
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -447,7 +468,7 @@ min_errpath_coverage=858
 # por que). A terceira e' a closure do defer, que nao loga de proposito — ela
 # so' chama releaseSessionOwnership, que JA' loga. Um log ali seria a segunda
 # linha do mesmo evento.
-min_eligible=572
+min_eligible=574
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

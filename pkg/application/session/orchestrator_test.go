@@ -13,6 +13,7 @@ import (
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 
+	"net/http"
 	"wa-api/pkg/domain/apperr"
 )
 
@@ -427,8 +428,12 @@ func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
 	if appErr.Code != codeSessionOwnedByAnotherReplica {
 		t.Errorf("code = %q, want %q", appErr.Code, codeSessionOwnedByAnotherReplica)
 	}
-	if status := appErr.Category.HTTPStatus(); status >= 500 {
-		t.Errorf("category maps to HTTP %d; refusing because another replica owns the session is not a server fault", status)
+	// 409 specifically, not merely "not 5xx": the request is well formed and
+	// authorized, it just reached the wrong replica. 400 would tell the client
+	// to fix a payload that has nothing wrong with it (F95).
+	if status := appErr.Category.HTTPStatus(); status != http.StatusConflict {
+		t.Errorf("category maps to HTTP %d, want %d: the caller should route to the owner, not fix the request",
+			status, http.StatusConflict)
 	}
 	if appErr.Retryable {
 		t.Error("marked retryable: repeating the same request against the same replica yields the same refusal")

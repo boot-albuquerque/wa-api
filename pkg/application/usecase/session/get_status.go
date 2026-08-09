@@ -43,7 +43,12 @@ func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.
 
 	entries, err := uc.users.ListUsers(ctx, txtID)
 	if err != nil {
-		uc.logger.Error(ctx, "failed to read session record", "txtID", txtID, "error", err)
+		// Ver F90: cancelamento do cliente não é erro do servidor.
+		if apperr.IsClientGaveUp(err) {
+			uc.logger.Info(ctx, "session status read abandoned by the client", "txtID", txtID)
+		} else {
+			uc.logger.Error(ctx, "failed to read session record", "txtID", txtID, "error", err)
+		}
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 	if len(entries) == 0 {

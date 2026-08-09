@@ -24,6 +24,13 @@ import (
 // cada caminho de saida, porque cmd/logcov so' enxerga o log onde a cadeia
 // literalmente esta'.
 func isClientCausedSessionError(err error) bool {
+	// Cancelamento do cliente entra aqui (F90): o navegador desistiu da
+	// requisição — aba fechada, navegação, fetch abortado. Não é falha do
+	// servidor e não pode sair em `error`, senão uma troca de aba fica
+	// indistinguível de banco fora do ar.
+	if apperr.IsClientGaveUp(err) {
+		return true
+	}
 	var appErr *apperr.AppError
 	return errors.As(err, &appErr) && appErr.Category.HTTPStatus() < http.StatusInternalServerError
 }

@@ -47,11 +47,20 @@ func openTestPostgres(t *testing.T) *sqlx.DB {
 	if _, err := database.Exec(addSessionLeasesSQL); err != nil {
 		t.Fatalf("creating the lease table: %v", err)
 	}
-	// Every test starts clean: a leftover lease would make the outcome depend
-	// on execution order.
+	// Clean at the START so the outcome does not depend on execution order...
 	if _, err := database.Exec(truncateLeaseSQL); err != nil {
 		t.Fatalf("clearing leases: %v", err)
 	}
+	// ...and clean at the END so this suite does not leave rows behind in a
+	// SHARED database. Cleaning only on entry is enough for the tests and wrong
+	// for everyone else: leftover `pod-A`/`pod-B` rows once made a live
+	// measurement look like `single` mode was writing leases, when it was not.
+	// A test that pollutes shared state makes the next measurement lie.
+	t.Cleanup(func() {
+		if _, err := database.Exec(truncateLeaseSQL); err != nil {
+			t.Logf("could not clear leases on the way out: %v", err)
+		}
+	})
 	return database
 }
 
