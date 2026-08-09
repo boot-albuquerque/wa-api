@@ -1301,9 +1301,31 @@ um cliente de navegador de verdade — que passou a existir agora, com o
 
 A (2) é a resposta técnica correta; a (1) é a que cabe numa release.
 
-**Status**: **não corrigido — mas é bloqueador da remoção anunciada.** O
-`devui` já migrou os `fetch` para header e mantém a query só no WebSocket,
-com comentário apontando para esta entrada.
+**Status**: **CORRIGIDO (2026-08-09)** pela saída (1), a recomendada — e com a
+redação de log que a torna honesta.
+
+- A query string **deixa de autenticar** em toda rota que não seja
+  `/session/ws`. Nelas o header sempre foi possível; a query só sobrevivia por
+  compatibilidade.
+- Em `/session/ws` ela continua valendo, e o motivo é da especificação, não
+  nossa: `new WebSocket(url, protocols)` não aceita header. Recusar ali
+  quebraria todo painel de navegador sem oferecer saída.
+- O token que viaja na URL dessa exceção é **redigido** nos três sítios que
+  registram a URL — registro de fronteira, observador de limite de taxa e
+  relatório de pânico. Sem isso, a exceção justificada viraria credencial em
+  log, que é o defeito fechado horas antes em três outros lugares.
+
+O par de testes é o que segura o desenho: um exige a RECUSA fora do WebSocket,
+outro exige a ACEITAÇÃO nele. Uma regra por prefixo (`/session*`) passaria só no
+segundo — e o controle negativo confirma que ela é pega.
+
+**Destino declarado, fora desta janela**: o subprotocolo
+(`new WebSocket(url, [token])`), que tira o token da URL de vez. Exige mudança
+em todo cliente WebSocket, e por isso não cabe na mesma release (ADR-0006).
+
+> Nota de método: o `devui` já mantinha a query só no WebSocket, com comentário
+> apontando para esta entrada. O código do painel estava certo antes do
+> servidor — e foi ele que documentou o formato da saída.
 
 ## F76 — o log grava os códigos de pareamento em texto puro
 
