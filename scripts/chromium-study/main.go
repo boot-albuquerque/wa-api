@@ -188,6 +188,10 @@ func main() {
 		must(RunTargetTabs(*reps, *out))
 		return
 	}
+	if *mode == "closeprobe" {
+		must(RunCloseProbe(*out))
+		return
+	}
 	if *mode == "walifecycle" {
 		WAUserAgent = *waUA
 		ReclaimSingletons = *reclaim
