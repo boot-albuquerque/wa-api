@@ -60,10 +60,27 @@ var LifecycleStop = "sigterm"
 // contexto tem de ser o PRIMEIRO criado a partir do allocator (senão first é
 // false e o caminho vira cancelamento seco), e o browser já tem de estar
 // materializado por um Run anterior — que é o papel do primeTab.
-func closeBrowserViaCDP(tab context.Context, r *Runner, label string) error {
-	return r.Do(tab, OpShutdown, label, func(ctx context.Context) error {
-		return chromedp.Cancel(ctx)
-	})
+// A sonda §22 fechou a questão por medida direta, e contra a minha aposta:
+//
+//	CDP cru          Browser.close aceito em 2 ms, 10 -> 0 processos em <1 s
+//	chromedp.Cancel  sem erro em 19 ms, todos os processos vivos após 15 s
+//
+// Se o Cancel tivesse enviado o comando, os processos teriam morrido em menos
+// de um segundo. Não morreram: com RemoteAllocator o Cancel cai no ramo seco de
+// c.first == false e devolve nil sem nada ir ao fio. Os 19 ms eram teardown de
+// goroutines — ler latência como prova de envio foi erro meu.
+//
+// Por isso o desligamento passa pela conexão administrativa crua, que fala com
+// o BROWSER e não depende de nenhuma heurística de biblioteca.
+func closeBrowserViaCDP(wsURL string) error {
+	admin, err := dialAdmin(wsURL)
+	if err != nil {
+		return fmt.Errorf("conexao administrativa: %w", err)
+	}
+	if _, err := admin.c.call("", "Browser.close", nil); err != nil {
+		return fmt.Errorf("Browser.close recusado: %w", err)
+	}
+	return nil
 }
 
 type lifecycleIteration struct {
@@ -146,17 +163,6 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 
 			snap := snapshot(tab, r, fmt.Sprintf("life%d/state", i))
 
-			// O desligamento pelo protocolo tem de acontecer AQUI, com a
-			// conexão ainda viva — depois de cancelAlloc não há por onde
-			// enviar o comando.
-			if LifecycleStop == "browserclose" {
-				if err := closeBrowserViaCDP(tab, r, fmt.Sprintf("life%d/close", i)); err != nil {
-					it.Note = "Browser.close falhou: " + err.Error()
-				} else {
-					closedViaCDP = true
-				}
-			}
-
 			switch {
 			case readyErr == nil && snap.Class == classAppReady:
 				it.Class = string(classAppReady)
@@ -169,6 +175,18 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 				}
 			}
 		}()
+
+		// O desligamento pelo protocolo vai por conexão PRÓPRIA, depois que as
+		// sondas terminaram e o contexto da aba já foi desfeito. A conexão
+		// administrativa é independente da do chromedp, então não importa que
+		// aquela já tenha caído.
+		if LifecycleStop == "browserclose" {
+			if err := closeBrowserViaCDP(browsers[0].WSURL); err != nil {
+				it.Note = "Browser.close falhou: " + err.Error()
+			} else {
+				closedViaCDP = true
+			}
+		}
 
 		// Com Browser.close bem-sucedido, o processo deve sair sozinho. O
 		// gracefulStop só entra se ele NÃO sair — e nesse caso o registro diz
