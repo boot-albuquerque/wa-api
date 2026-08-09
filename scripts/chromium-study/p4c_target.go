@@ -340,6 +340,10 @@ type recoveryTrial struct {
 	Note           string  `json:"note,omitempty"`
 }
 
+// RecoveryFault seleciona a forma de parada do Track C: "sigkill" ou
+// "graceful". É a variável independente da ablação de §17.
+var RecoveryFault = "sigkill"
+
 // RunTargetRecovery executa §16–§20 com N repetições.
 func RunTargetRecovery(reps int, outPath string) error {
 	wd := StartWatchdog("browser-recovery", time.Duration(reps)*3*time.Minute+time.Minute)
@@ -363,31 +367,61 @@ func RunTargetRecovery(reps int, outPath string) error {
 			rep, t.DetectSec, t.LaunchSec, t.AppReadySec, t.TotalSec, t.QRRequired, t.Outcome)
 	}
 
-	var ok, authLoss int
+	// A contagem de perda de auth precisa incluir PRECONDITION_LOGIN_REQUIRED.
+	//
+	// Contar só RECOVERED_LOGIN_REQUIRED subnotifica o desfecho mais grave:
+	// quando a credencial já se perdeu, o baseline da repetição SEGUINTE
+	// também falha por falta de auth, e essas repetições sumiam da conta. Foi
+	// assim que a primeira corrida imprimiu "perda de auth: 0" com três
+	// repetições deslogadas.
+	//
+	// firstLossRep é o dado que interessa para produção: depois de QUANTOS
+	// ciclos de falha a sessão morre. Uma taxa média sobre repetições
+	// esconderia isso, porque as repetições não são independentes — uma vez
+	// perdida, a credencial não volta.
+	var ok, authLoss, firstLossRep int
 	var totals []float64
 	for _, t := range trials {
-		if t.Outcome == "RECOVERED_AUTHENTICATED" {
+		switch t.Outcome {
+		case "RECOVERED_AUTHENTICATED":
 			ok++
 			totals = append(totals, t.TotalSec)
-		}
-		if t.Outcome == "RECOVERED_LOGIN_REQUIRED" {
+		case "RECOVERED_LOGIN_REQUIRED", "PRECONDITION_LOGIN_REQUIRED":
 			authLoss++
+			if firstLossRep == 0 {
+				firstLossRep = t.Rep
+			}
 		}
 	}
 	summary := map[string]any{
-		"successes":              ok,
-		"attempts":               len(trials),
-		"authentication_loss":    authLoss,
-		"recovery_p50_sec":       median(totals),
-		"recovery_p95_sec":       pct95(totals),
+		"successes":                ok,
+		"attempts":                 len(trials),
+		"authentication_loss":      authLoss,
+		"recovery_p50_sec":         median(totals),
+		"recovery_p95_sec":         pct95(totals),
 		"authentication_loss_rate": rate(authLoss, len(trials)),
+		"first_loss_rep":           firstLossRep,
 	}
-	fmt.Fprintf(os.Stderr, "\nBROWSER RECOVERY: %d/%d autenticadas | perda de auth: %d | p50=%.1fs p95=%.1fs\n",
-		ok, len(trials), authLoss, median(totals), pct95(totals))
+	// survived_kill_cycles só existe quando houve perda E as repetições
+	// anteriores realmente exerceram a falha. Se o baseline já falhava, nenhum
+	// ciclo foi exercido e o número seria ficção — a primeira versão chegou a
+	// imprimir -1 e depois 4 para uma corrida em que nenhum SIGKILL ocorreu.
+	if firstLossRep > 0 {
+		exercised := 0
+		for _, t := range trials {
+			if t.Rep < firstLossRep && (t.Outcome == "RECOVERED_AUTHENTICATED" || t.Outcome == "RECOVERED_LOGIN_REQUIRED") {
+				exercised++
+			}
+		}
+		summary["fault_cycles_actually_exercised"] = exercised
+	}
+	fmt.Fprintf(os.Stderr,
+		"\nBROWSER RECOVERY: %d/%d autenticadas | perda de auth: %d (1a na rep %d) | p50=%.1fs p95=%.1fs\n",
+		ok, len(trials), authLoss, firstLossRep, median(totals), pct95(totals))
 
 	return writeJSON(outPath, map[string]any{
 		"experiment":  "browser-crash-recovery",
-		"fault":       "SIGKILL no processo principal do Chromium",
+		"fault":       RecoveryFault,
 		"reps":        reps,
 		"summary":     summary,
 		"trials":      trials,
@@ -424,16 +458,49 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 		return nil, err
 	}
 	if err := waitAppReady(tab, r, fmt.Sprintf("rec%d/baseline/ready", rep)); err != nil {
+		// O baseline falhar NÃO é falha de execução por padrão. A causa mais
+		// provável é a mais importante: a credencial já se perdeu numa
+		// repetição anterior, e a aplicação redireciona para o login —
+		// destruindo o target sob inspeção, o que o CDP reporta como
+		// "Inspected target navigated or closed (-32000)".
+		//
+		// Na primeira corrida do Track C isso foi devolvido como erro genérico
+		// e o laço o converteu em TIMEOUT, produzindo a linha "perda de auth: 0"
+		// enquanto três repetições tinham perdido exatamente a auth. Um
+		// classificador que engole o desfecho mais importante do experimento é
+		// pior do que não ter classificador.
+		//
+		// Por isso: classifica antes de desistir.
+		snap := snapshot(tab, r, fmt.Sprintf("rec%d/baseline/state", rep))
 		cancelTab()
 		cancelAlloc()
 		gracefulStop(browsers[0])
-		return nil, fmt.Errorf("sessao nao ficou pronta antes da falha: %w", err)
+		if snap.Class == classLoginRequired || snap.HasQR {
+			t.Outcome = "PRECONDITION_LOGIN_REQUIRED"
+			t.QRRequired = true
+			t.ProfileBytes = dirSize(dir)
+			t.Note = "credencial ja perdida antes desta repeticao"
+			return t, nil
+		}
+		t.Outcome = "PRECONDITION_UNRESPONSIVE"
+		t.Note = "baseline nao ficou pronto, classe=" + string(snap.Class) + ": " + err.Error()
+		return t, nil
 	}
 
-	// FALHA: SIGKILL só no processo principal. Filhos ficam órfãos — é o caso
-	// que um restart de pod precisa sobreviver.
+	// A FORMA da parada é a variável sob ablação.
+	//
+	// sigkill: só o processo principal morre, filhos ficam órfãos — é o caso
+	//          que um restart de pod precisa sobreviver, e o caso COMUM em
+	//          Kubernetes (OOM kill, evicção, grace period estourado).
+	// graceful: SIGTERM e espera, que é o que um preStop bem feito produz.
+	//
+	// Sem rodar as duas com o mesmo N, atribuir a perda de credencial ao
+	// SIGKILL é correlação: número de ciclos e tempo decorrido ficam
+	// confundidos com a forma de parada.
 	killAt := time.Now()
-	if err := browsers[0].SIGKILL(); err != nil {
+	if RecoveryFault == "graceful" {
+		gracefulStop(browsers[0])
+	} else if err := browsers[0].SIGKILL(); err != nil {
 		cancelTab()
 		cancelAlloc()
 		return nil, err

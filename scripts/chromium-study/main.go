@@ -142,6 +142,7 @@ func main() {
 		reps     = flag.Int("reps", 5, "independent repetitions per arm")
 		waChat   = flag.String("wa-chat", "", "mode=wacap: search term for an AUTHORISED test conversation; empty means no interaction at all")
 		waWait   = flag.Duration("wa-wait", 5*time.Minute, "mode=waopen: how long to wait for QR pairing")
+		fault    = flag.String("fault", "sigkill", "mode=warecover: failure mode under ablation — sigkill | graceful")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
 	)
 	flag.Parse()
@@ -187,6 +188,10 @@ func main() {
 	}
 	if *mode == "warecover" {
 		WAUserAgent = *waUA
+		if *fault != "sigkill" && *fault != "graceful" {
+			must(fmt.Errorf("-fault deve ser sigkill ou graceful, recebido %q", *fault))
+		}
+		RecoveryFault = *fault
 		must(RunTargetRecovery(*reps, *out))
 		return
 	}
