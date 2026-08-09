@@ -2984,3 +2984,92 @@ repositório. Nada foi alterado no código nem no banco.
 > Observação colhida na verificação: há **sete** sessões com `connected=1`, não
 > cinco — além das cinco de trabalho, `TesteQR` (presa pelo defeito acima) e
 > `instanciaA`, pareada por engano durante a validação da F89.
+
+---
+
+## F94 — `/devui` sem barra final devolve 404, sem redirecionar
+
+**Data**: 2026-08-08
+**Contexto**: o usuário tentou abrir o painel durante a validação do ADR-0005
+D2 e recebeu 404. Não era o servidor fora do ar nem o devui desligado.
+
+**Onde**: `pkg/bootstrap/wiring_routes.go:42` e
+`pkg/presentation/http/devui/devui.go:46`.
+
+```go
+BasePath = "/devui/"                                   // devui.go:46
+registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")  // wiring_routes.go:42
+```
+
+O padrão registrado é `/devui/{rest:.*}`, que casa com `/devui/` (rest vazio) e
+**não casa** com `/devui`. Não há rota nem redirecionamento para a forma sem
+barra.
+
+**Problema**: medido na instância viva, com o devui habilitado e a mesma
+instância respondendo normalmente nas demais rotas:
+
+```
+/devui/         -> 200
+/devui          -> 404
+/session/status -> 200
+```
+
+O dano é de usabilidade, e ele é desproporcional ao tamanho: `/devui` é a forma
+que se digita naturalmente, e o 404 é indistinguível de "o devui está
+desligado" ou "a instância caiu" — que foi exatamente a hipótese levantada
+quando aconteceu. Custa uma rodada de diagnóstico para descobrir que o único
+problema é uma barra.
+
+**Correção sugerida**: registrar `/devui` com um `http.RedirectHandler` para
+`/devui/` (301 ou 308), ao lado do registro atual. É o comportamento que a
+maioria dos servidores tem por padrão para diretório, e resolve a classe
+inteira em uma linha.
+
+**Status**: **não corrigido** — fora do escopo do D2, que estava em andamento.
+Registrado assim que aconteceu.
+
+---
+
+## F95 — a taxonomia de `apperr` não tem categoria para conflito (409)
+
+**Data**: 2026-08-08
+**Contexto**: apareceu ao classificar a recusa por posse de sessão (ADR-0005
+D2). Registrada, e não resolvida na hora, para não expandir taxonomia no meio
+de outra tarefa.
+
+**Onde**: `pkg/domain/apperr/codes.go:21-44`.
+
+```go
+CategoryValidation   Category = "validation"    -> 400
+CategoryUnauthorized Category = "unauthorized"  -> 401
+CategoryInternal     Category = "internal"      -> 500
+```
+
+**Problema**: são três categorias, e nenhuma descreve "a requisição está
+correta, mas não pode ser atendida NESTE estado ou NESTA réplica". Dois casos
+concretos já esbarram nisso:
+
+1. **Posse de sessão** (`pkg/application/session/orchestrator.go`, constante
+   `codeSessionOwnedByAnotherReplica`): a sessão pertence a outra réplica. O
+   cliente não errou nada — a requisição chegou no pod errado. Hoje sai **400**,
+   que diz ao cliente que ele mandou algo inválido. O correto é **409** (ou
+   **421 Misdirected Request**, que descreve exatamente isto).
+2. **Logout de sessão desconectada** (F93): mesma natureza — pré-condição
+   violada, não requisição malformada. A F93 sugere `CategoryValidation` pela
+   mesma falta de opção.
+
+O dano é de contrato: um cliente que trate 400 como "corrija o payload e não
+repita" vai fazer a coisa errada nos dois casos, porque em ambos a resposta
+certa é "repita contra o dono" ou "reconecte antes".
+
+**Correção sugerida**: acrescentar `CategoryConflict` mapeando para
+`http.StatusConflict`, e migrar os dois sites acima. É mudança pequena em
+`codes.go` mais o teste de mapeamento que já existe
+(`apperr_test.go:127 TestCategory_HTTPStatus`), que vai pedir a linha nova.
+
+**Atenção ao migrar**: mudar a categoria de um erro existente MUDA O STATUS HTTP
+que clientes já recebem. Para a posse de sessão isso é seguro (código novo,
+sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
+decidida como tal.
+
+**Status**: **não corrigido** — registrado com os dois sites que já sofrem.

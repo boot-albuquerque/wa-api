@@ -390,7 +390,23 @@ rules_frozen=true
 # TETO, nao a contagem — decompor sobe a contagem e melhora o repo). Ela nasce
 # coberta: loga o Fatal da configuracao invalida de posse.
 min_func_coverage=698
-min_errpath_coverage=859
+# justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
+# (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
+# cobria so' o connectOnStartup, entao sessao conectada pela API — o
+# /session/connect que o painel e todo pareamento novo usam — rodava SEM LEASE.
+# Medido com duas sessoes vivas, uma com posse e outra sem. Sob N replicas isso
+# e' o desastre da F89.
+#
+# errpath cai 859->858: UM caminho de saida novo, o `return` da recusa dentro
+# de Orchestrator.Start, sem log proprio. min_eligible e func_coverage NAO
+# mudam — a guarda vive dentro de funcao ja' elegivel e ja' coberta.
+#
+# Nao logo ali de proposito. Quem DECIDE a recusa e' claimSessionOwnership
+# (pkg/bootstrap/lease_wiring.go), que ja' loga em Info qual sessao foi negada
+# e por que; o handler HTTP loga a resposta de erro. Um log no orquestrador
+# seria a terceira linha do MESMO evento, e o padrao deste repositorio e' que
+# loga quem decide, nao quem propaga.
+min_errpath_coverage=858
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto

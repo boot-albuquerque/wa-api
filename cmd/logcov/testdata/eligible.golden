@@ -1816,7 +1816,7 @@ pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:165);uncovered:L2(S-ret,orchestrator.go:167)
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:178);uncovered:L2(S-ret,orchestrator.go:212);uncovered:L2(S-ret,orchestrator.go:214)
 pkg/application/session.Orchestrator.Start.func1	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
@@ -1826,10 +1826,12 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:207)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:254)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithDefaultWebhookUseProxy	EXCLUDED	X1
 pkg/application/session.WithDefaultWebhookUseProxy.func1	EXCLUDED	X6
+pkg/application/session.WithOwnershipCheck	EXCLUDED	X1
+pkg/application/session.WithOwnershipCheck.func1	EXCLUDED	X6
 pkg/application/session.WithRetryPolicy	EXCLUDED	X1
 pkg/application/session.WithRetryPolicy.func1	EXCLUDED	X6
 pkg/application/session.WithS3Provisioner	EXCLUDED	X1
@@ -2170,6 +2172,7 @@ pkg/bootstrap.newLeaseManager	EXCLUDED	X1
 pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6
+pkg/bootstrap.newSessionOrchestrator.func2	EXCLUDED	X6
 pkg/bootstrap.outcomeFor	EXCLUDED	X1
 pkg/bootstrap.prepararCluster	ELIGIBLE	covered
 pkg/bootstrap.prepararCluster.func1	EXCLUDED	X6
