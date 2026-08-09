@@ -119,7 +119,13 @@ func TestAuthAliceCachedEntryExpires(t *testing.T) {
 	}
 }
 
-func TestAuthAliceQueryStringTokenAcceptedWithWarning(t *testing.T) {
+// TestAuthAliceQueryStringTokenRecusadaForaDoWebSocket fixa a F75.
+//
+// A query string deixou de autenticar nas rotas comuns — nelas o header sempre
+// foi possível, e a query só sobrevivia por compatibilidade. O teste antes
+// AFIRMAVA o contrário (aceitar com aviso de depreciação); ele foi reescrito, e
+// não relaxado: agora exige a recusa.
+func TestAuthAliceQueryStringTokenRecusadaForaDoWebSocket(t *testing.T) {
 	db := newAuthTestDB(t)
 	insertAuthUser(t, db, "u1", "good-token", domain.HashToken("good-token"))
 
@@ -130,19 +136,35 @@ func TestAuthAliceQueryStringTokenAcceptedWithWarning(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodGet, "/chat/send/text?token=good-token", nil)
 
-	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
-		t.Errorf("status = %d, want %d", got, http.StatusOK)
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d: a query string continua autenticando fora do WebSocket", got, http.StatusUnauthorized)
 	}
 
 	out := logs.String()
-	if !strings.Contains(out, "token received via query string") {
-		t.Errorf("no deprecation WARN emitted for query-string token; logs: %s", out)
-	}
-	if !strings.Contains(out, `"level":"warn"`) {
-		t.Errorf("deprecation message was not logged at WARN; logs: %s", out)
+	if !strings.Contains(out, "recusado nesta rota") {
+		t.Errorf("a recusa nao foi registrada; quem operar nao vai saber por que o cliente parou: %s", out)
 	}
 	if strings.Contains(out, "good-token") {
-		t.Errorf("the token itself leaked into the log; logs: %s", out)
+		t.Errorf("o token vazou para o log: %s", out)
+	}
+}
+
+// TestAuthAliceQueryStringTokenAceitaNoWebSocket é a exceção, e o motivo dela
+// não é preferência nossa: a API `WebSocket` do navegador não permite header
+// customizado no handshake. Recusar aqui quebraria todo painel de navegador sem
+// oferecer saída.
+//
+// O par com o teste acima é o que importa: a exceção precisa ser EXATAMENTE uma
+// rota. Uma regra que aceitasse "rotas de sessão" ou qualquer prefixo mais largo
+// passaria nos dois e deixaria o buraco aberto.
+func TestAuthAliceQueryStringTokenAceitaNoWebSocket(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u1", "good-token", domain.HashToken("good-token"))
+
+	r := httptest.NewRequest(http.MethodGet, wsPath+"?token=good-token", nil)
+
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
+		t.Errorf("status = %d, want %d: o WebSocket de navegador ficou sem forma de autenticar", got, http.StatusOK)
 	}
 }
 

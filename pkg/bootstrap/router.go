@@ -204,7 +204,7 @@ func reportPanic(w http.ResponseWriter, r *http.Request, rec any, ev *zerolog.Ev
 	ev.
 		Interface("panic", rec).
 		Str("method", r.Method).
-		Stringer("url", r.URL).
+		Str("url", redactURL(r.URL)).
 		Msg("recovered from panic in HTTP handler")
 	customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("panic: %v", rec))
 }
@@ -230,7 +230,7 @@ func boundaryLogMiddlewares(l zerolog.Logger) []alice.Constructor {
 func writeBoundaryRecord(r *http.Request, status, size int, duration time.Duration) {
 	hlog.FromRequest(r).Info().
 		Str("method", r.Method).
-		Stringer("url", r.URL).
+		Str("url", redactURL(r.URL)).
 		Str("route", accessLogRoute(r)).
 		Int("status", status).
 		Int("size", size).

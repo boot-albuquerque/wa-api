@@ -79,15 +79,48 @@ func extractRequestToken(r *http.Request) string {
 	if token := r.Header.Get("token"); token != "" {
 		return token
 	}
+
 	token := strings.Join(r.URL.Query()["token"], "")
-	if token != "" {
+	if token == "" {
+		return ""
+	}
+
+	if !queryTokenAllowed(r.URL.Path) {
 		log.Warn().
 			Str("remote_addr", r.RemoteAddr).
 			Str("path", r.URL.Path).
 			Str("user_agent", r.UserAgent()).
-			Msg("token received via query string; deprecated, will be rejected in a future release")
+			Msg("token por query string recusado nesta rota; use o header `token`")
+		return ""
 	}
+
+	log.Debug().
+		Str("path", r.URL.Path).
+		Msg("token por query string aceito: a rota de WebSocket nao tem alternativa")
 	return token
+}
+
+// wsPath é a única rota onde o token pode vir por query string.
+const wsPath = "/session/ws"
+
+// queryTokenAllowed decide se aquela rota aceita token na URL.
+//
+// Só o WebSocket, e a razão é da especificação, não nossa: a API `WebSocket` do
+// navegador NÃO permite header customizado no handshake — não há `headers` em
+// `new WebSocket(url, protocols)`. Um painel web não tem outra forma de
+// autenticar ali, e recusar a query string nessa rota quebraria todo cliente de
+// navegador sem oferecer saída (F75).
+//
+// Nas demais rotas o header sempre foi possível, e a query só sobrevivia por
+// compatibilidade. Aqui ela deixa de ser aceita — e o token que viaja na URL da
+// exceção é redigido no log (ver url_redaction.go), senão a exceção
+// justificada viraria credencial registrada.
+//
+// O destino declarado é o subprotocolo (`new WebSocket(url, [token])`), que
+// tira o token da URL de vez. Ele exige mudança em TODO cliente WebSocket, e
+// por isso não cabe na mesma janela — ver ADR-0006.
+func queryTokenAllowed(path string) bool {
+	return path == wsPath
 }
 
 // AuthAlice returns middleware that looks up a user by token.

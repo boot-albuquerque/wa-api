@@ -2207,6 +2207,7 @@ pkg/bootstrap.recordUserIDHandler.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware.func2	EXCLUDED	X1
+pkg/bootstrap.redactURL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.reentregar	ELIGIBLE	covered
 pkg/bootstrap.reentregar.func1	EXCLUDED	X6
 pkg/bootstrap.registerAdminRoutes	ELIGIBLE	uncovered:L1
@@ -2894,3 +2895,4 @@ pkg/presentation/http/middleware.NewValues	EXCLUDED	X1
 pkg/presentation/http/middleware.ResolveConnectEvents	ELIGIBLE	covered
 pkg/presentation/http/middleware.Values.Get	EXCLUDED	X1
 pkg/presentation/http/middleware.extractRequestToken	ELIGIBLE	covered
+pkg/presentation/http/middleware.queryTokenAllowed	EXCLUDED	X1
