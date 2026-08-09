@@ -86,6 +86,37 @@ func tamanhoDoPayload(payload map[string]string) int {
 	return len(payload["jsonData"])
 }
 
+// reagendar escolhe QUEM vai executar a próxima tentativa, e é o ponto onde a
+// decisão do D3 fica visível: quando há linha no outbox, a retentativa é
+// DURÁVEL e quem a executa é a varredura; quando não há, cai no timer em
+// memória de sempre.
+//
+// Um ou outro, nunca os dois. Manter os dois para a mesma entrega faria os dois
+// dispararem perto de `due_at` e o cliente receberia em duplicata — e é
+// justamente por isso que a escolha mora numa função só, em vez de estar
+// espalhada em dois `if` no caminho de entrega.
+//
+// A verificação de orçamento vem ANTES de qualquer uma das duas: esgotou é
+// esgotado, e gravar prazo novo para uma entrega sem tentativas restantes só
+// criaria linha que a varredura pega para descobrir que não pode fazer nada.
+func reagendar(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte, proxima int, outboxID string) bool {
+	if !appCtx.WebhookRetryEnabled || proxima >= appCtx.WebhookRetryCount {
+		return false
+	}
+
+	if atraso := atrasoDaTentativa(proxima); outboxDefer(outboxID, proxima, atraso) {
+		log.Warn().
+			Int("attempt", proxima+1).
+			Str("url", myurl).
+			Dur("delay", atraso).
+			Str("outbox_id", outboxID).
+			Msg("Retrying webhook request with exponential backoff (durable)...")
+		return true
+	}
+
+	return agendarProximaTentativa(myurl, payload, userID, encryptedHmacKey, proxima)
+}
+
 // agendarProximaTentativa devolve true quando conseguiu agendar. False
 // significa "acabou" — por ter esgotado as tentativas, por retry desligado ou
 // por estouro do orçamento de pendentes —, e quem chama segue para o caminho
@@ -125,7 +156,9 @@ func agendarProximaTentativa(myurl string, payload map[string]string, userID str
 		// Volta pelo pool, e não direto: a tentativa reagendada é uma entrega
 		// como qualquer outra e tem de respeitar o mesmo teto.
 		dispatchGo("callHookWithHmac-retry", tamanho, func() {
-			tentarWebhook(myurl, payload, userID, encryptedHmacKey, proxima)
+			// outboxID vazio: este é o caminho SEM durabilidade, por definição.
+			// Se houvesse linha no outbox, a varredura é que retomaria.
+			tentarWebhook(myurl, payload, userID, encryptedHmacKey, proxima, "")
 		})
 	})
 	return true

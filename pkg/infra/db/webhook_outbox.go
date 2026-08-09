@@ -50,6 +50,21 @@ const (
 	claimBatch = 64
 )
 
+// HMACScope diz QUAL chave assina esta entrega.
+//
+// Não é o segredo — é o ponteiro para ele. O webhook do usuário assina com
+// `users.hmac_key`; o global, com a chave do processo. Sem isto, a retomada
+// teria de adivinhar comparando a URL com a configuração atual, e uma mudança
+// de configuração faria entregas antigas serem assinadas com a chave errada.
+type HMACScope string
+
+const (
+	// HMACScopeUser assina com users.hmac_key do dono da entrega.
+	HMACScopeUser HMACScope = "user"
+	// HMACScopeGlobal assina com a chave global do processo.
+	HMACScopeGlobal HMACScope = "global"
+)
+
 // OutboxEntry é uma entrega pendente.
 //
 // A chave HMAC NÃO está aqui, e a ausência é deliberada: ela vive em
@@ -63,6 +78,7 @@ type OutboxEntry struct {
 	Payload map[string]string
 	Attempt int
 	DueAt   time.Time
+	Scope   HMACScope
 }
 
 // WebhookOutboxRepository persiste entregas pendentes.
@@ -94,12 +110,17 @@ func (r *WebhookOutboxRepository) Enqueue(ctx context.Context, e OutboxEntry) er
 		dueAt = now
 	}
 
+	scope := e.Scope
+	if scope == "" {
+		scope = HMACScopeUser
+	}
+
 	query := r.db.Rebind(`INSERT INTO webhook_outbox
-		(id, user_id, url, payload, attempt, due_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		(id, user_id, url, payload, attempt, due_at, hmac_scope, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	if _, err := r.db.ExecContext(ctx, query,
-		e.ID, e.UserID, e.URL, string(payload), e.Attempt, dueAt.UTC(), now); err != nil {
+		e.ID, e.UserID, e.URL, string(payload), e.Attempt, dueAt.UTC(), string(scope), now); err != nil {
 		return fmt.Errorf("webhook outbox: enfileirar %s: %w", e.ID, err)
 	}
 	return nil
@@ -149,7 +170,7 @@ func (r *WebhookOutboxRepository) ClaimDue(ctx context.Context) ([]OutboxEntry, 
 
 	now := time.Now().UTC()
 
-	selectSQL := `SELECT id, user_id, url, payload, attempt
+	selectSQL := `SELECT id, user_id, url, payload, attempt, hmac_scope
 		FROM webhook_outbox WHERE due_at <= ? ORDER BY due_at LIMIT ?`
 	if r.db.DriverName() == driverPostgres {
 		selectSQL += " FOR UPDATE SKIP LOCKED"
@@ -192,7 +213,8 @@ func scanOutboxRows(rows *sqlx.Rows) ([]OutboxEntry, error) {
 			e   OutboxEntry
 			raw string
 		)
-		if err := rows.Scan(&e.ID, &e.UserID, &e.URL, &raw, &e.Attempt); err != nil {
+		var scope string
+		if err := rows.Scan(&e.ID, &e.UserID, &e.URL, &raw, &e.Attempt, &scope); err != nil {
 			return nil, fmt.Errorf("webhook outbox: ler linha: %w", err)
 		}
 		if err := json.Unmarshal([]byte(raw), &e.Payload); err != nil {
@@ -202,6 +224,7 @@ func scanOutboxRows(rows *sqlx.Rows) ([]OutboxEntry, error) {
 			// vai para quem chama, que decide se loga.
 			return nil, fmt.Errorf("webhook outbox: payload ilegivel em %s: %w", e.ID, err)
 		}
+		e.Scope = HMACScope(scope)
 		entries = append(entries, e)
 	}
 	if err := rows.Err(); err != nil {

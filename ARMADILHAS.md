@@ -627,3 +627,48 @@ capturado cedo é uma decisão tomada antes de haver informação.
 relatório sem a checagem é indistinguível de um relatório onde a checagem não se
 aplica — a ausência não grita. Foi por isso que só a bancada pegou, e só porque
 eu conhecia o modo em que o processo estava rodando.
+
+---
+
+## 25. Controle negativo que NÃO falha é defeito no teste, não prova do código
+
+O controle negativo tem uma leitura óbvia — "quebrei a correção e o teste
+acusou, logo o teste presta" — e uma leitura que quase ninguém faz: **e quando
+eu quebro a correção e o teste continua verde?**
+
+A tentação é anotar "esse caminho não estava coberto" e seguir. Está errado. O
+teste EXISTE e tem um nome que afirma cobrir aquilo. Verde com o mecanismo
+removido significa que ele passa por outro motivo — e a partir dali ele protege
+nada enquanto anuncia que protege.
+
+Aconteceu hoje, na fiação do outbox. `TestOutboxWiring_VarreduraReivindicaOVencido`
+dizia, em comentário meu: *"Sem cliente HTTP provisionado, tentarWebhook desiste
+e liquida a linha"*. Removi a liquidação daquele ramo e o teste passou. O log
+explicou:
+
+```
+[warn]  falha ao reler a chave HMAC do usuario para uma entrega pendente
+[error] nao foi possivel recuperar a chave HMAC; descartando
+```
+
+O usuário de teste nunca fora inserido em `users`. A entrada era descartada por
+falta de chave **antes de chegar ao caminho de entrega**. O teste percorria um
+caminho e o comentário descrevia outro — armadilha 19, com a diferença de que
+aqui ele passava *por acidente*, não por omissão.
+
+O conserto não foi ajustar a asserção: foi dividir em dois testes que percorrem
+cada um o seu caminho, e inserir o usuário no que precisa dele. Os dois
+comportamentos são reais e merecem cobertura; o que não podia continuar era um
+teste afirmando cobrir os dois.
+
+**Regra**: mutação aplicada + teste verde = investigar o TESTE, imediatamente.
+Não anotar como lacuna, não seguir em frente. E confirme sempre que a mutação
+foi de fato aplicada antes de interpretar o resultado — um `assert` que aborta o
+script deixa o teste rodar sem mutação nenhuma, e o verde parece um controle que
+passou. Foi o que aconteceu na primeira tentativa desta mesma verificação: a
+âncora ocorria três vezes, o script morreu, e o `ok` que sobrou não significava
+nada.
+
+**Corolário**: prefira controles que falhem por um MOTIVO específico e legível
+na mensagem. "quisera falhar" não distingue "o mecanismo sumiu" de "o teste
+nunca chegou lá".

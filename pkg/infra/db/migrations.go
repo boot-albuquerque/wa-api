@@ -140,6 +140,13 @@ const migrationIDWebhookOutbox = 15
 // user_id na retomada: duplicar segredo em outra tabela multiplica a
 // superfície de vazamento sem comprar nada.
 //
+// `hmac_scope` existe porque a chave tem DUAS origens: o webhook do usuário
+// assina com `users.hmac_key`, e o webhook global assina com a chave global do
+// processo. Sem o discriminador, a retomada teria de adivinhar comparando a URL
+// com a configuração ATUAL — e uma mudança de configuração faria entregas
+// antigas serem assinadas com a chave errada, silenciosamente. Não é segredo:
+// é qual segredo usar.
+//
 // A tabela é criada nos DOIS dialetos, como a de posse, para que uma
 // instalação que migre de `single` para `multi` não precise de migração
 // retroativa.
@@ -151,6 +158,7 @@ CREATE TABLE IF NOT EXISTS webhook_outbox (
     payload    TEXT        NOT NULL,
     attempt    INTEGER     NOT NULL DEFAULT 0,
     due_at     TIMESTAMPTZ NOT NULL,
+    hmac_scope TEXT        NOT NULL DEFAULT 'user',
     created_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);
@@ -168,6 +176,7 @@ CREATE TABLE IF NOT EXISTS webhook_outbox (
     payload    TEXT      NOT NULL,
     attempt    INTEGER   NOT NULL DEFAULT 0,
     due_at     TIMESTAMP NOT NULL,
+    hmac_scope TEXT      NOT NULL DEFAULT 'user',
     created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);

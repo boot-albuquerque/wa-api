@@ -421,6 +421,18 @@ func Main() {
 	defer pararLeases()
 	startLeaseHeartbeat(leaseCtx, s.Leases)
 
+	// Varredura do outbox (ADR-0005 D3). Depois do connectOnStartup pelo mesmo
+	// motivo do heartbeat: antes disso nao ha cliente HTTP provisionado para
+	// nenhuma sessao, e a retomada so encontraria entregas que nao tem como
+	// entregar — gastando tentativas do orcamento a toa.
+	//
+	// NAO existe caminho separado de "carregar pendentes na subida": uma linha
+	// deixada por um processo morto ja esta com o prazo vencido, entao a
+	// primeira varredura a pega. Dois mecanismos para o mesmo trabalho e o
+	// dobro das chances de divergir.
+	setupWebhookOutbox(s)
+	startOutboxSweeper(leaseCtx)
+
 	if serverMode == Stdio {
 		startStdioMode(s)
 	} else {

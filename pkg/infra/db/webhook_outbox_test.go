@@ -226,3 +226,64 @@ func TestOutbox_EmptyOutboxClaimsNothing(t *testing.T) {
 		t.Errorf("reivindicadas = %d, want 0", len(claimed))
 	}
 }
+
+// TestOutbox_ScopeSurvivesRoundTrip: sem isto, a retomada assinaria com a chave
+// errada. O webhook global e o do usuário usam chaves DIFERENTES, e o
+// discriminador é a única coisa que distingue os dois depois que o processo
+// morreu — a URL não serve, porque a configuração pode ter mudado.
+func TestOutbox_ScopeSurvivesRoundTrip(t *testing.T) {
+	db := newOutboxDB(t)
+	repo := NewWebhookOutboxRepository(db)
+	ctx := context.Background()
+
+	global := sampleEntry("e-global")
+	global.Scope = HMACScopeGlobal
+	if err := repo.Enqueue(ctx, global); err != nil {
+		t.Fatalf("Enqueue global: %v", err)
+	}
+
+	user := sampleEntry("e-user")
+	user.Scope = HMACScopeUser
+	if err := repo.Enqueue(ctx, user); err != nil {
+		t.Fatalf("Enqueue user: %v", err)
+	}
+
+	claimed, err := repo.ClaimDue(ctx)
+	if err != nil {
+		t.Fatalf("ClaimDue: %v", err)
+	}
+	if len(claimed) != 2 {
+		t.Fatalf("reivindicadas = %d, want 2", len(claimed))
+	}
+
+	got := map[string]HMACScope{}
+	for _, e := range claimed {
+		got[e.ID] = e.Scope
+	}
+	if got["e-global"] != HMACScopeGlobal {
+		t.Errorf("scope de e-global = %q, want %q: a entrega global seria assinada com a chave do usuário", got["e-global"], HMACScopeGlobal)
+	}
+	if got["e-user"] != HMACScopeUser {
+		t.Errorf("scope de e-user = %q, want %q", got["e-user"], HMACScopeUser)
+	}
+}
+
+// TestOutbox_EmptyScopeDefaultsToUser fixa o padrão. Quem enfileira sem
+// declarar o escopo tem a maioria dos casos — o webhook do usuário —, e o
+// silêncio não pode virar "assine com a chave global".
+func TestOutbox_EmptyScopeDefaultsToUser(t *testing.T) {
+	repo := NewWebhookOutboxRepository(newOutboxDB(t))
+	ctx := context.Background()
+
+	if err := repo.Enqueue(ctx, sampleEntry("e1")); err != nil { // Scope zero
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	claimed, err := repo.ClaimDue(ctx)
+	if err != nil {
+		t.Fatalf("ClaimDue: %v", err)
+	}
+	if len(claimed) != 1 || claimed[0].Scope != HMACScopeUser {
+		t.Fatalf("scope = %q, want %q", claimed[0].Scope, HMACScopeUser)
+	}
+}

@@ -520,7 +520,30 @@ rules_frozen=true
 # descartar — o analisador conta propagacao sem descarte como caminho coberto.
 #
 # NewWebhookOutboxRepository e as duas closures de defer ficam EXCLUDED (X1).
-min_func_coverage=686
+# ratchet-UP: ADR-0005 D3, fiacao (2026-08-09). As TRES medidas SOBEM:
+# min_eligible 586->595 (+9), func_coverage 686->689, errpath 859->860.
+#
+# A fiacao nasce instrumentada porque cada decisao dela e observavel, e sao
+# decisoes que um operador precisa distinguir: enfileirou ou nao, reagendou no
+# outbox ou caiu para a memoria, liquidou a linha ou nao conseguiu, descartou a
+# entrega por falta de chave. Sete das nove funcoes novas ja entram `covered`.
+#
+# Uma so ficou descoberta, conferida com `logcov -list-uncovered`:
+#
+#   runOutboxSweeper   E o laco. Todo log de decisao esta em sweepOutboxOnce,
+#                      que ele chama e que JA e coberta. Mesmo argumento aceito
+#                      para leaseManager.RunHeartbeat quando ela tambem so
+#                      tiquetaqueava — e, ao contrario dela, esta nao tomou
+#                      decisao propria depois.
+#
+# outboxDisponivel e a closure de reentregar ficam EXCLUDED (X1/X6).
+#
+# Um defeito proprio corrigido em vez de justificado: setupWebhookOutbox nasceu
+# em `uncovered:L3` — o aviso de "sem banco para o outbox" nao tinha campo
+# nenhum. Um aviso sem estrutura nao diz ao operador o que passou a valer;
+# agora carrega fallback e survives_restart, que e exatamente a pergunta que
+# alguem faz ao ler aquela linha.
+min_func_coverage=689
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -549,7 +572,8 @@ min_func_coverage=686
 # min_eligible e func_coverage nao mudam: a guarda vive dentro de funcao ja'
 # elegivel e ja' coberta.
 # ratchet-UP: 857->859, D3 — ver a justificativa de min_func_coverage acima.
-min_errpath_coverage=859
+# ratchet-UP: 859->860, D3 fiacao — idem.
+min_errpath_coverage=860
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -598,7 +622,10 @@ min_errpath_coverage=859
 # ver a justificativa de min_func_coverage acima.
 # +7 (579->586): D3, o repositorio do outbox — ver a justificativa de
 # min_func_coverage acima para a lista nominal.
-min_eligible=586
+# +9 (586->595): D3, a fiacao (outboxEnqueue/Settle/Defer, reagendar,
+# reentregar, resolverChaveHMAC, runOutboxSweeper, sweepOutboxOnce,
+# setupWebhookOutbox) — ver a justificativa de min_func_coverage acima.
+min_eligible=595
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

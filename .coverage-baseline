@@ -82,7 +82,15 @@
 # e os testes da guarda de token vazio cobrem os três caminhos de entrada
 # (header ausente, header vazio, query string vazia) mais o controle na direção
 # oposta. Nenhum código saiu do denominador.
-min_coverage=833
+# ADR-0005 D3, fiacao (2026-08-09): 833 -> 834.
+#
+# Vale registrar o caminho, porque o numero escondeu uma regressao no meio: a
+# fiacao entrou primeiro SEM teste para o laco da varredura, o arranque e os
+# ramos de banco indisponivel, e a cobertura CAIU para 831. O gate acusou, e a
+# resposta foi cobrir — nao baixar o piso. Os testes que faltavam sao
+# exatamente os que importam em producao: banco fora do ar degrada sem
+# derrubar, e a varredura para quando o processo desliga.
+min_coverage=834
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

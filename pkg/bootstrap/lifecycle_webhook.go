@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	dbpkg "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
 )
 
@@ -32,7 +33,7 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 			"userID":       userID,
 			"instanceName": instance_name,
 		}
-		callHookWithHmac(appCtx.GlobalWebhook, globalData, userID, appCtx.GlobalHMACKeyEncrypted)
+		callHookWithHmac(appCtx.GlobalWebhook, globalData, userID, appCtx.GlobalHMACKeyEncrypted, dbpkg.HMACScopeGlobal)
 	}
 }
 
@@ -55,7 +56,7 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 		log.Info().Str("url", webhookurl).Msg("Calling user webhook")
 
 		if path == "" {
-			dispatchGo("callHookWithHmac", len(jsonData), func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
+			dispatchGo("callHookWithHmac", len(jsonData), func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey, dbpkg.HMACScopeUser) })
 		} else {
 			if err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey); err != nil {
 				log.Error().Err(err).Msg("Error calling hook file")
