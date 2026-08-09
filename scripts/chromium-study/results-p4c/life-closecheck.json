@@ -1,0 +1,64 @@
+{
+  "experiment": "session-lifecycle-vs-reclaim",
+  "first_degradation": 1,
+  "healthy_iterations": 0,
+  "iterations": [
+    {
+      "iteration": 1,
+      "class": "LOGIN_REQUIRED",
+      "app_ready_sec": 15.973092715,
+      "profile_bytes": 125213440,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "browser.close+sigterm"
+    }
+  ],
+  "iterations_run": 1,
+  "logout_at_iteration": 1,
+  "max_iterations": 2,
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "life1/navigate",
+      "start_ms": 2388,
+      "duration_ms": 862,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life1/ready",
+      "start_ms": 3250,
+      "duration_ms": 15006,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life1/state",
+      "start_ms": 18256,
+      "duration_ms": 7,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life1/close",
+      "start_ms": 18264,
+      "duration_ms": 19,
+      "deadline_ms": 10000,
+      "result": "ok"
+    }
+  ],
+  "reclaim_singletons": true,
+  "started_utc": "2026-08-09T15:51:13Z",
+  "stop_mode": "graceful",
+  "watchdog": {
+    "budget_sec": 300,
+    "deadline_exceeded": 1,
+    "elapsed_sec": 33.546705599,
+    "experiment": "session-lifecycle",
+    "operations": 4,
+    "status": "COMPLETED"
+  }
+}

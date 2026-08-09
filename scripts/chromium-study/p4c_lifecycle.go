@@ -26,8 +26,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/chromedp/cdproto/browser"
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 )
 
@@ -43,20 +41,28 @@ import (
 // primeira degradação, e invalidação remota não reduz armazenamento local.
 var LifecycleStop = "sigterm"
 
-// closeBrowserViaCDP desliga o Chromium pelo protocolo.
+// closeBrowserViaCDP desliga o Chromium pelo protocolo, pela porta que o
+// chromedp abre para isso.
 //
-// Precisa do executor do BROWSER, não o da aba: Browser.close é um comando de
-// escopo global, e enviá-lo no alvo da aba devolve erro. Foi a mesma armadilha
-// do Target.createBrowserContext na Fase 4.
+// A primeira tentativa mandava browser.Close() direto no executor do browser e
+// foi recusada em 6/6 iterações — browser.go:185 devolve "to close the browser
+// gracefully, use chromedp.Cancel". A corrida inteira caiu no SIGTERM de
+// fallback e virou réplica do braço antigo em vez de comparação.
+//
+// Cancel é o caminho sancionado, e a leitura do código mostra por quê:
+//
+//	chromedp.go:134  c.first = c.Browser == nil   -> true no 1o ctx do allocator
+//	chromedp.go:252  graceful := c.first && c.Browser != nil
+//	chromedp.go:254  close(c.Browser.closingGracefully)  -> destrava a guarda
+//	chromedp.go:255  execute(browser.CommandClose)
+//
+// Duas pré-condições que o chamador precisa respeitar, e ambas valem aqui: o
+// contexto tem de ser o PRIMEIRO criado a partir do allocator (senão first é
+// false e o caminho vira cancelamento seco), e o browser já tem de estar
+// materializado por um Run anterior — que é o papel do primeTab.
 func closeBrowserViaCDP(tab context.Context, r *Runner, label string) error {
 	return r.Do(tab, OpShutdown, label, func(ctx context.Context) error {
-		return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			c := chromedp.FromContext(ctx)
-			if c == nil || c.Browser == nil {
-				return fmt.Errorf("sem browser no contexto")
-			}
-			return browser.Close().Do(cdp.WithExecutor(ctx, c.Browser))
-		}))
+		return chromedp.Cancel(ctx)
 	})
 }
 
