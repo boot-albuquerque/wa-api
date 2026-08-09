@@ -436,7 +436,31 @@ rules_frozen=true
 #
 # errpath fica em 857: nenhum caminho de saida novo — `abandoned` tem um
 # retorno por ramo e nenhum erro a propagar.
-min_func_coverage=696
+# justificativa: F99 + F100 (2026-08-09). min_eligible 575->577 (+2, ratchet-UP
+# honesto) e func_coverage CAI 696->693. A queda é diluição por duas funções
+# que não têm o que logar, conferidas com `logcov -list-uncovered` e não
+# deduzidas:
+#
+#   bootstrap.registerAdminRoutes    Tabela de rotas: seis chamadas a
+#                                    adminRoutes.Handle(...).Methods(...). Sem
+#                                    porta, sem erro, sem decisão. Estava
+#                                    inline em buildRouter (que é coberta) e
+#                                    virou função própria para que o teste de
+#                                    consistência com o stdio monte as MESMAS
+#                                    rotas sem banco nem token — replicá-las no
+#                                    teste criaria uma terceira tabela para
+#                                    divergir, que é o defeito da F99.
+#
+#   stdio.StaticRouteTargets         Copia um mapa para um tipo exportado. Um
+#                                    log aqui sairia a cada leitura da tabela.
+#
+# Nenhum sítio que logava deixou de logar. Ao contrário: a guarda de token
+# vazio da F100 ACRESCENTOU um Warn em AuthAlice ("request carries no token"),
+# que hoje distingue "token errado" de "token ausente" no log — mas AuthAlice
+# já era coberta, então o numerador não muda e o ganho não aparece na razão.
+#
+# errpath fica em 857.
+min_func_coverage=693
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -507,7 +531,9 @@ min_errpath_coverage=857
 # linha do mesmo evento.
 # +1 (574->575): F98, leaseManager.abandoned — ver a justificativa de
 # min_func_coverage acima.
-min_eligible=575
+# +2 (575->577): F99, bootstrap.registerAdminRoutes e stdio.StaticRouteTargets —
+# ver a justificativa de min_func_coverage acima.
+min_eligible=577
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -163,3 +163,57 @@ func TestAuthAliceHeaderTokenEmitsNoDeprecationWarning(t *testing.T) {
 		t.Error("header-supplied token wrongly flagged as query-string usage")
 	}
 }
+
+// TestAuthAliceEmptyTokenNeverMatchesBlankRow fixa a F100.
+//
+// A consulta casa por `token = $1`, e uma requisição sem token nenhum produz
+// $1 = "". Bastava UMA linha com token vazio para essa requisição anônima
+// autenticar como aquele usuário. Medido na bancada: a resposta caiu de 401
+// para 400 no instante em que a coluna foi branqueada.
+//
+// O usuário aqui é gravado JÁ com token vazio de propósito — é o estado que a
+// etapa 1 da F97 vai produzir para todo usuário novo. Um teste que só mandasse
+// requisição sem token contra uma tabela normal passaria antes e depois da
+// guarda, sem provar nada.
+func TestAuthAliceEmptyTokenNeverMatchesBlankRow(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u-blank", "", "")
+
+	t.Run("sem header algum", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d: requisição anônima autenticou como o usuário de token vazio", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("header presente e vazio", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+		r.Header.Set("token", "")
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("query string vazia", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text?token=", nil)
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", got, http.StatusUnauthorized)
+		}
+	})
+}
+
+// TestAuthAliceStillAcceptsRealTokenAlongsideBlankRow é o controle na direção
+// oposta: recusar token vazio não pode virar "recusar tudo". A tabela tem a
+// linha em branco E uma linha legítima; a legítima continua entrando.
+func TestAuthAliceStillAcceptsRealTokenAlongsideBlankRow(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u-blank", "", "")
+	insertAuthUser(t, db, "u-real", "real-token", domain.HashToken("real-token"))
+
+	r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+	r.Header.Set("token", "real-token")
+
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
+		t.Errorf("status = %d, want %d: a guarda de token vazio recusou um token legítimo", got, http.StatusOK)
+	}
+}

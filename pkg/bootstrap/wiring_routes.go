@@ -201,3 +201,23 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 
 	registry.Apply(router)
 }
+
+// registerAdminRoutes declara a tabela de rotas de /admin.
+//
+// Separada de buildRouter (router.go), onde vivia inline, por dois motivos. O
+// primeiro é que o teste de consistência com a tabela do stdio precisa montar
+// as MESMAS rotas sem precisar de banco, token ou middleware de auditoria —
+// e replicá-las no teste criaria uma terceira tabela para divergir (F99). O
+// segundo é o teto de complexidade do lint, que trava a PIOR função: tirar
+// um bloco de buildRouter melhora o teto.
+//
+// Recebe o subrouter já com PathPrefix("/admin") e os middlewares aplicados;
+// aqui só entram caminho, método e handler.
+func registerAdminRoutes(adminRoutes *mux.Router, ch *customHandlers) {
+	adminRoutes.Handle("/users", ch.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users/{id}", ch.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users", ch.User.AddUser()).Methods("POST")
+	adminRoutes.Handle("/users/{id}", ch.User.EditUser()).Methods("PUT")
+	adminRoutes.Handle("/users/{id}", ch.User.DeleteUser()).Methods("DELETE")
+	adminRoutes.Handle("/users/{id}/full", ch.Misc.DeleteUserComplete).Methods("DELETE")
+}

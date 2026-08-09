@@ -106,6 +106,24 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 
 			token := extractRequestToken(r)
 
+			// Sem token não se consulta o banco. A consulta casa por
+			// `token = $1`, e aqui $1 seria "" — bastaria UMA linha com token
+			// vazio para a requisição anônima autenticar como aquele usuário.
+			// Medido na F100: a resposta caiu de 401 para 400 no instante em
+			// que a coluna foi branqueada.
+			//
+			// Hoje nenhuma linha tem token vazio, então esta guarda não muda
+			// nada observável. Ela existe para que a etapa 1 da F97 — que vai
+			// branquear a coluna — não vire um acesso sem credencial.
+			if token == "" {
+				hlog.FromRequest(r).Warn().
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Msg("authentication rejected: request carries no token")
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
+				return
+			}
+
 			myuserinfo, found := userCache.Get(token)
 			if !found {
 				hlog.FromRequest(r).Debug().

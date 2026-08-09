@@ -111,7 +111,6 @@ func TestLookupUser_RejectsUnknownTokens(t *testing.T) {
 
 	rejected := map[string]string{
 		"token inexistente":       "nao-existe",
-		"token vazio":             "",
 		"prefixo do token valido": "alice",
 		"sufixo do token valido":  "token",
 		"wildcard SQL":            "%",
@@ -427,5 +426,35 @@ func TestWithUserInfo_UsesTypedKey(t *testing.T) {
 	//nolint:staticcheck // a string crua é exatamente o que NÃO pode funcionar
 	if got := ctx.Value("userinfo"); got != nil {
 		t.Fatalf("a string crua \"userinfo\" recuperou o valor (%v) — a chave voltou a ser untyped", got)
+	}
+}
+
+// TestLookupUser_EmptyTokenIsRefusedBeforeTheQuery separa o token vazio dos
+// demais candidatos de bypass porque ele agora é recusado de forma DIFERENTE, e
+// mais forte.
+//
+// Os outros candidatos são consultados e não casam com linha nenhuma —
+// (nil, nil), "não encontrado". O vazio nem chega ao banco: devolve
+// ErrEmptyToken.
+//
+// A distinção não é cosmética. A cláusula é `token = $1 OR token_hash = $2`, e
+// uma requisição sem token nenhum produz $1 = "". Enquanto TODA linha tiver
+// token preenchido, "não encontrado" basta; no instante em que a etapa 1 da
+// F97 branquear a coluna, "não encontrado" vira "autenticado" (F100, medido:
+// 401 virou 200 no controle negativo). A recusa antes da consulta é o que
+// mantém a garantia independente do conteúdo da tabela.
+func TestLookupUser_EmptyTokenIsRefusedBeforeTheQuery(t *testing.T) {
+	db := newAuthTestDB(t)
+	// A linha com token vazio é o cenário que a F97 vai criar. Sem ela o teste
+	// passaria mesmo sem a guarda, porque não haveria com o que casar.
+	insertUser(t, db, "u-blank", "blank", "", true)
+
+	rec, err := auth.LookupUser(db, "")
+
+	if !errors.Is(err, auth.ErrEmptyToken) {
+		t.Fatalf("err = %v, want ErrEmptyToken: a consulta foi feita com token vazio", err)
+	}
+	if rec != nil {
+		t.Fatalf("BYPASS: token vazio autenticou como usuario %q", rec.ID)
 	}
 }

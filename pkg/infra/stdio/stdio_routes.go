@@ -105,3 +105,28 @@ func (ss *Server) stringParam(req *JSONRpcRequest, name string) (string, bool) {
 	}
 	return value, true
 }
+
+// RouteTarget é o par (método, caminho) HTTP para onde um método JSON-RPC é
+// despachado.
+type RouteTarget struct {
+	Method string
+	Path   string
+}
+
+// StaticRouteTargets expõe a tabela estática de JSON-RPC → HTTP.
+//
+// Existe para o teste de consistência que vive em pkg/bootstrap (aqui não dá:
+// bootstrap importa stdio, e o inverso seria ciclo). Sem ele, as duas tabelas
+// são mantidas à mão sem nada que as compare — foi assim que `session.connect`
+// e `session.disconnect` passaram a ser despachados com POST contra rotas
+// registradas como GET, e o mux devolvia 404 (F99).
+//
+// Só as estáticas: as dinâmicas montam o caminho a partir dos params da
+// requisição, e sem uma requisição real não há caminho a conferir.
+func StaticRouteTargets() map[string]RouteTarget {
+	out := make(map[string]RouteTarget, len(staticRoutes))
+	for name, route := range staticRoutes {
+		out[name] = RouteTarget{Method: route.httpMethod, Path: route.httpPath}
+	}
+	return out
+}

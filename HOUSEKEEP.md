@@ -3475,5 +3475,139 @@ O que impediria a reintrodução: um teste que percorra a tabela do stdio e
 verifique, para cada entrada, que `(httpMethod, httpPath)` casa com uma rota
 registrada. Hoje as duas listas são mantidas à mão, sem nada que as compare.
 
-**Status**: **não corrigido** — registrado. Achado incidental, fora do escopo
-da validação da F93.
+**Status**: **corrigido (2026-08-09)** — e o conserto revelou que a entrada
+acima ERRAVA para menos. Eram **seis** métodos JSON-RPC quebrados, não dois.
+
+O teste de consistência, escrito antes de corrigir, acusou os outros quatro:
+
+| método | stdio | HTTP | efeito |
+|---|---|---|---|
+| `session.connect` | POST | GET | não chegava ao handler |
+| `session.disconnect` | POST | GET | não chegava ao handler |
+| `group.list` | GET | POST | não chegava ao handler |
+| `group.info` | GET | POST | não chegava ao handler |
+| `group.invitelink` | GET | POST | não chegava ao handler |
+| `session.history` | GET `/session/history` | só existe POST | rota inexistente |
+
+Os cinco primeiros: o lado stdio passou a declarar o método que o HTTP já
+registra — muda o despacho interno, não quebra cliente.
+
+O sexto é diferente: **não existe** `GET /session/history`. O getter mora em
+`/chat/history` e em `/webhook/history` (o mesmo `ch.Storage.GetHistory`), e o
+`session.history` apontava para um caminho que ninguém registrou. Apontei-o
+para `/chat/history`. A alternativa era registrar `GET /session/history` no
+HTTP, espelhando `/webhook/history`, que tem os dois verbos — preferi a opção
+que NÃO cria superfície pública nova para consertar um defeito interno.
+
+**O mecanismo**, que é o que importa aqui: `TestStdioRoutesMatchRegisteredHTTPRoutes`
+(`pkg/bootstrap/`) percorre a tabela do stdio e pergunta ao roteador REAL se
+cada par (método, caminho) casa, distinguindo "método divergente" de "rota
+inexistente" — as duas exigem consertos diferentes.
+
+Deliberadamente NÃO é uma lista de rotas esperadas: uma lista seria uma
+TERCEIRA tabela a manter, e a próxima rota nova entraria divergente nas três.
+
+Duas coisas que o teste precisou para não mentir:
+- `stdio.StaticRouteTargets()` expõe a tabela do stdio (o teste vive em
+  `bootstrap` porque `bootstrap` importa `stdio`; o inverso seria ciclo);
+- `registerAdminRoutes` foi extraída de `buildRouter`, porque `/admin/*` vive
+  num subrouter próprio. Sem ela o teste acusaria `admin.users.list` e
+  `admin.users.add` como rota inexistente — falso positivo que ensina a
+  ignorar o teste.
+
+Controle negativo: reintroduzir o POST em `session.connect` faz o teste apontar
+o método exato e a divergência.
+
+---
+
+## F100 — a etapa 1 da F97, feita como está escrita, abre acesso sem token
+
+**Data**: 2026-08-09
+**Contexto**: comecei a implementar a etapa 1 da F97 ("parar de GRAVAR o texto
+claro"), que a própria entrada da F97 — e eu, ao recomendar a ordem — descrevia
+como *"segura e compatível, porque a autenticação já aceita o hash"*. **Está
+errado.** Medido antes de escrever qualquer linha de correção.
+
+**Onde**:
+
+`pkg/presentation/http/middleware/auth.go:78-91` lê o token do header e, na
+ausência dele, devolve **string vazia**:
+
+```go
+func extractRequestToken(r *http.Request) string {
+	if token := r.Header.Get("token"); token != "" { return token }
+	token := strings.Join(r.URL.Query()["token"], "")
+	...
+	return token       // "" quando nao ha token nenhum
+}
+```
+
+`auth.go:119` usa esse valor cru na consulta:
+
+```sql
+FROM users WHERE token=$1 OR token_hash=$2 LIMIT 1
+```
+
+**Problema**: se alguma linha tiver `token = ''`, o `token=$1` casa com uma
+requisição que **não mandou token nenhum**. Não é hipótese — foi medido na
+bancada limpa (Postgres, instância 8081):
+
+```
+usuario f97probe, token='tok-probe'
+  com token   -> HTTP 400  {"code":"no_session"}     (autenticou; sem sessao)
+  SEM token   -> HTTP 401  {"error":"unauthorized"}  (correto)
+
+UPDATE users SET token='' WHERE name='f97probe'      <- o que a etapa 1 faria
+
+  SEM token   -> HTTP 400  {"code":"no_session"}     <- AUTENTICOU
+```
+
+A mudança de 401 para 400 é o sintoma: a requisição anônima passou a alcançar o
+caminho autenticado, como aquele usuário.
+
+**Hoje o buraco NÃO é alcançável**: `POST /admin/users` com `token: ""` é
+recusado (devolve 500, o que é um caso da F66 à parte). Ele nasce no instante em
+que a etapa 1 branquear a coluna — para TODO usuário criado depois.
+
+**E não é só autenticação.** O texto claro é carga viva em mais dois pontos:
+
+- `pkg/bootstrap/user_info_cache.go:29` — `userInfoColumns` inclui `token`, e o
+  `appCtx.UserInfoCache` é **chaveado por ele**. Com a coluna em branco, todo
+  usuário novo passa a ser cacheado sob a chave `""`, e `getUserWebhookUrl` (que
+  lê só do cache) devolve vazio — o webhook configurado na tabela vira inerte.
+  É a **F70 reintroduzida**, pelo mesmo mecanismo que ela documentou.
+- `pkg/bootstrap/lifecycle.go:54` — `connectOnStartup` lê o token do banco e o
+  repassa a `startSession(userID, token)` → `Attach`. Sem ele, a religação de
+  sessão na subida do processo passa a operar com token vazio.
+
+**Correção sugerida** — a etapa 1 da F97 deixa de ser "uma linha no INSERT" e
+passa a ter três pré-requisitos, nesta ordem:
+
+1. **Fechar o casamento com vazio**, independentemente de tudo o mais. É a
+   única parte que é de fato barata e sem risco:
+   `WHERE (token = $1 AND $1 <> '') OR token_hash = $2`, ou recusar
+   `token == ""` antes de consultar. Vale fazer **agora**, mesmo que o resto
+   fique para depois — hoje ela não conserta nada visível, e é exatamente o que
+   impede o próximo passo de virar incidente.
+2. **Rechavear o `UserInfoCache` por `userID`**, não por token. O token é
+   credencial; usar credencial como chave de cache é o que amarra os dois
+   problemas. `ensureUserInfoCached` já recebe o `userID`.
+3. **Tirar o token do caminho de religação** (`connectOnStartup` → `Attach`),
+   ou aceitar que ele passe a viajar vazio ali e verificar o que depende disso.
+
+Só depois disso o INSERT pode parar de gravar o texto claro. A etapa 2 original
+(remover o `OR token = $1` e dropar a coluna) continua sendo a última, e
+continua exigindo janela de migração.
+
+**Status**: **não corrigido, e a F97 está BLOQUEADA por esta entrada.** O item 1
+acima é pequeno e isolado — pode ser feito já. Os itens 2 e 3 são a parte que
+transforma "uma linha" em trabalho de verdade, e a decisão de encará-los é do
+dono do repositório.
+
+> Nota de método: eu recomendei ao usuário, poucas horas antes, fazer a etapa 1
+> "agora, porque é segura". A recomendação não veio de leitura do código de
+> autenticação — veio de repetir o que a entrada da F97 afirmava. O erro só
+> apareceu porque fui ler o caminho antes de escrever, e mediu-se em dois
+> comandos. **Conselho sobre risco precisa ser verificado com a mesma
+> desconfiança de uma correção**; uma recomendação errada custa mais que um
+> commit errado, porque ninguém a revisa.

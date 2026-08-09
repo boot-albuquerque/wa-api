@@ -2192,6 +2192,7 @@ pkg/bootstrap.recordUserIDHandler.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.recoverMiddleware.func2	EXCLUDED	X1
+pkg/bootstrap.registerAdminRoutes	ELIGIBLE	uncovered:L1
 pkg/bootstrap.registerCustomRoutes	ELIGIBLE	uncovered:L1
 pkg/bootstrap.registerCustomRoutes.func1	EXCLUDED	X1
 pkg/bootstrap.registerCustomRoutes.func2	EXCLUDED	X1
@@ -2401,6 +2402,7 @@ pkg/infra/stdio.Server.sendError	EXCLUDED	X1
 pkg/infra/stdio.Server.sendSuccess	EXCLUDED	X1
 pkg/infra/stdio.Server.stringParam	ELIGIBLE	covered
 pkg/infra/stdio.Server.writeResponse	ELIGIBLE	covered
+pkg/infra/stdio.StaticRouteTargets	ELIGIBLE	uncovered:L1
 pkg/infra/stdio.adminUserFullPath	ELIGIBLE	covered
 pkg/infra/stdio.adminUserPath	ELIGIBLE	covered
 pkg/infra/stdio.chatHistoryPath	ELIGIBLE	covered

@@ -156,6 +156,12 @@ cline/
 
 # --- Database & Data ---
 dbdata/
+# Backups do dbdata feitos por renomeacao antes de subir zerado. `dbdata/`
+# sozinho NAO os cobre, e cada um pesa centenas de MB — um `git add -A`
+# distraido os commitaria junto com dados reais de sessao.
+dbdata.bak-*/
+# Trava de instancia unica (ADR-0005 D1): arquivo de runtime, por processo.
+.wa-api-instance.lock
 files/
 *.db
 *.sqlite

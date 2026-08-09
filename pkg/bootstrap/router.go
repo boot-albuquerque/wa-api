@@ -270,12 +270,7 @@ func buildRouter(d Deps) *mux.Router {
 		adminRoutes.Use(mux.MiddlewareFunc(mw))
 	}
 	adminRoutes.Use(authAdmin(d.AdminToken))
-	adminRoutes.Handle("/users", d.CustomHandlers.User.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users", d.CustomHandlers.User.AddUser()).Methods("POST")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.EditUser()).Methods("PUT")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.DeleteUser()).Methods("DELETE")
-	adminRoutes.Handle("/users/{id}/full", d.CustomHandlers.Misc.DeleteUserComplete).Methods("DELETE")
+	registerAdminRoutes(adminRoutes, d.CustomHandlers)
 
 	// Chain order matters, and alice.Chain.Then applies constructors so the
 	// FIRST appended one is OUTERMOST (verified against alice/chain.go:45-55).

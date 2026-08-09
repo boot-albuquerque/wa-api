@@ -22,6 +22,12 @@ func TestRecoverIsOutermost(t *testing.T) {
 	router := NewRouter(d)
 
 	req := httptest.NewRequest(http.MethodGet, "/session/status", nil)
+	// O token precisa existir para o pânico ser ALCANÇÁVEL. Desde a F100,
+	// AuthAlice recusa token vazio com 401 ANTES de consultar o banco — e sem
+	// esta linha o teste passava a medir a guarda nova, não o recover. O valor
+	// é irrelevante: o que importa é chegar ao db.Query, que estoura no
+	// *sql.DB nil.
+	req.Header.Set("token", "qualquer-coisa")
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)

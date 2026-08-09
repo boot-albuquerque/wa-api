@@ -519,3 +519,46 @@ grep -c "releaseOwnership(userID)" pkg/application/session/orchestrator.go
 É a mesma lição da armadilha 4 por outro ângulo: o controle negativo é código
 também, e o passo de restaurar precisa da mesma desconfiança que o passo de
 mutar.
+
+---
+
+## 23. Recomendação sobre risco também é afirmação — e ninguém a revisa
+
+Ao listar os achados pendentes, recomendei ao usuário fazer a etapa 1 da F97
+("parar de gravar o token em texto claro") **primeiro, porque é segura e não
+quebra cliente**. Ele aprovou com base nisso.
+
+Era falso. A etapa 1 abre acesso sem credencial: a consulta de autenticação
+casa por `token = $1`, uma requisição sem token produz `$1 = ""`, e branquear a
+coluna faz qualquer requisição anônima autenticar como aquele usuário. Medido
+em dois comandos, e o controle negativo devolve **200 OK** para uma requisição
+sem token nenhum.
+
+De onde veio a recomendação errada: eu repeti o que a entrada da F97 afirmava.
+A entrada dizia "a autenticação já aceita o hash", o que é verdade e é
+irrelevante — o problema não é o hash não funcionar, é o texto claro continuar
+sendo um caminho de casamento. **Eu não abri `auth.go` antes de recomendar.**
+
+O que torna esse erro pior que um commit errado:
+
+| | commit errado | conselho errado |
+|---|---|---|
+| passa por revisão | sim (diff, testes, gate) | não |
+| deixa rastro | sim (histórico) | quase nenhum |
+| quem paga | quem revisa | quem decidiu confiando |
+
+Um plano aprovado vira escopo, e escopo vira trabalho executado sem
+reavaliação. A recomendação é o ponto de MAIOR alavancagem e o de MENOR
+escrutínio.
+
+**Regra**: antes de classificar uma mudança como "segura", "pequena" ou "não
+quebra cliente", leia o caminho que ela toca — não o que a documentação diz
+sobre ele. Se o custo de ler for alto, diga que não verificou, com essas
+palavras: *"a entrada afirma X; não confirmei no código"*. Incerteza declarada
+é utilizável; confiança emprestada de um documento antigo, não.
+
+**Corolário**: entrada de `HOUSEKEEP.md` é hipótese datada, não fato corrente.
+A F97 foi escrita horas antes e já estava errada sobre a própria consequência.
+Quando ela vira plano, o texto precisa ser reconferido contra o código —
+exatamente como se veio de outra pessoa. É o mesmo princípio da armadilha 20 (o
+conserto do conserto é um mecanismo novo) aplicado a documento em vez de código.

@@ -76,7 +76,13 @@
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 831 -> 832. Os testes portados de 3ac8073 (GetManyLIDsForPNs, no adapter e
 # no use case) somam cobertura sobre codigo que veio junto. Ratchet-UP.
-min_coverage=832
+# F99 + F100 (2026-08-09): 832 -> 833. Ratchet-UP honesto — é teste novo sobre
+# código que já existia ou que nasceu com ele: o teste de consistência das duas
+# tabelas de rotas exercita registerCustomRoutes e registerAdminRoutes inteiras,
+# e os testes da guarda de token vazio cobrem os três caminhos de entrada
+# (header ausente, header vazio, query string vazia) mais o controle na direção
+# oposta. Nenhum código saiu do denominador.
+min_coverage=833
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,
