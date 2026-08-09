@@ -79,9 +79,17 @@ func TestLookupUser_FindsUserByTokenHash(t *testing.T) {
 	}
 }
 
-func TestLookupUser_FindsUserByLegacyPlaintextToken(t *testing.T) {
-	// A coluna legada `token` continua aceita nesta release. Se o OR sumir da
-	// query, usuários não migrados perdem acesso — este teste é o que avisa.
+// TestLookupUser_RecusaTokenLegadoSoEmTextoClaro fecha a janela de transição.
+//
+// Este teste dizia o contrário — "a coluna legada continua aceita nesta
+// release; se o OR sumir, usuários não migrados perdem acesso" — e estava
+// certo NA ÉPOCA. A janela fechou na F97 etapa 2.
+//
+// Quem garante que ninguém perde acesso não é a cláusula `OR`, é a migração 16:
+// ela preenche o hash que faltar e ABORTA se sobrar linha sem ele. A cláusula
+// dava o mesmo resultado e, de quebra, casava `token = ”` com requisição SEM
+// token nenhum (F100).
+func TestLookupUser_RecusaTokenLegadoSoEmTextoClaro(t *testing.T) {
 	db := newAuthTestDB(t)
 	_, err := db.Exec(
 		`INSERT INTO users (id, name, token, webhook, jid, events, proxy_url, qrcode)
@@ -94,11 +102,8 @@ func TestLookupUser_FindsUserByLegacyPlaintextToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LookupUser: %v", err)
 	}
-	if rec == nil {
-		t.Fatal("token legado em claro deixou de autenticar")
-	}
-	if rec.ID != "u2" {
-		t.Fatalf("id: got %q, want %q", rec.ID, "u2")
+	if rec != nil {
+		t.Fatalf("o texto claro ainda autentica (usuario %q); a F97 etapa 2 nao valeu", rec.ID)
 	}
 }
 

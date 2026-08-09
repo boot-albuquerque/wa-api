@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
+	"wa-api/pkg/domain"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -285,5 +286,200 @@ func TestOutbox_EmptyScopeDefaultsToUser(t *testing.T) {
 	}
 	if len(claimed) != 1 || claimed[0].Scope != HMACScopeUser {
 		t.Fatalf("scope = %q, want %q", claimed[0].Scope, HMACScopeUser)
+	}
+}
+
+// --- F97 etapa 2: apagar o texto claro das linhas existentes ---------------
+
+func novoBancoMigrado(t *testing.T) *sqlx.DB {
+	t.Helper()
+	db := openTestDB(t)
+	if err := InitializeSchema(db); err != nil {
+		t.Fatalf("InitializeSchema: %v", err)
+	}
+	return db
+}
+
+// rodarMigracao16 executa a migração sobre um banco JÁ migrado.
+//
+// Chama a função direto, numa transação, em vez de applyMigration: o
+// InitializeSchema acima já aplicou a 16 e registrou o id, então reaplicá-la
+// falha na chave primária de `migrations` — o que, de quebra, é a evidência de
+// que ela está fiada na lista e roda de verdade na subida do processo.
+//
+// As linhas legadas precisam existir DEPOIS disso, porque o repositório não
+// grava mais texto claro: o estado que a migração conserta não é mais
+// produzível pelo caminho normal.
+func rodarMigracao16(t *testing.T, db *sqlx.DB) error {
+	t.Helper()
+
+	tx, err := db.Beginx()
+	if err != nil {
+		t.Fatalf("abrir transacao: %v", err)
+	}
+	if err := applyBlankPlaintextTokenMigration(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	return nil
+}
+
+// TestMigracao16_ApagaOTextoClaroPreservandoOAcesso é o teste da F97 etapa 2.
+//
+// As duas metades, e uma sem a outra é inútil ou destrutiva: o texto claro sai
+// do disco E o usuário continua conseguindo autenticar.
+func TestMigracao16_ApagaOTextoClaroPreservandoOAcesso(t *testing.T) {
+	db := novoBancoMigrado(t)
+
+	// Linha no estado ANTIGO: texto claro presente, gravada antes da etapa 1.
+	// Escrita direto, e não pelo repositório, porque o repositório já não grava
+	// texto claro — o cenário que a migração conserta não é mais produzível
+	// pelo caminho normal.
+	const token = "token-legado"
+	if _, err := db.Exec(
+		`INSERT INTO users (id,name,token,token_hash,webhook,jid,qrcode,events,proxy_url,history)
+		 VALUES ('u-legado','legado',?,?, '','','','All','',0)`,
+		token, domain.HashToken(token)); err != nil {
+		t.Fatalf("inserir linha legada: %v", err)
+	}
+
+	if err := rodarMigracao16(t, db); err != nil {
+		t.Fatalf("migracao 16: %v", err)
+	}
+
+	var linha struct {
+		Token     string `db:"token"`
+		TokenHash string `db:"token_hash"`
+	}
+	if err := db.Get(&linha, "SELECT token, token_hash FROM users WHERE id = 'u-legado'"); err != nil {
+		t.Fatalf("reler linha: %v", err)
+	}
+
+	if linha.Token != "" {
+		t.Errorf("token = %q, want vazio: a credencial continua legivel em disco", linha.Token)
+	}
+	if want := domain.HashToken(token); linha.TokenHash != want {
+		t.Fatalf("token_hash = %q, want %q: o usuario perdeu a forma de autenticar", linha.TokenHash, want)
+	}
+}
+
+// TestMigracao16_PreencheOHashQueFalta cobre a linha que tem texto claro e NÃO
+// tem hash — a que a migração precisa salvar antes de apagar.
+func TestMigracao16_PreencheOHashQueFalta(t *testing.T) {
+	db := novoBancoMigrado(t)
+
+	const token = "sem-hash"
+	if _, err := db.Exec(
+		`INSERT INTO users (id,name,token,token_hash,webhook,jid,qrcode,events,proxy_url,history)
+		 VALUES ('u-sem-hash','sem hash',?,NULL,'','','','All','',0)`, token); err != nil {
+		t.Fatalf("inserir linha sem hash: %v", err)
+	}
+
+	if err := rodarMigracao16(t, db); err != nil {
+		t.Fatalf("migracao 16: %v", err)
+	}
+
+	var linha struct {
+		Token     string `db:"token"`
+		TokenHash string `db:"token_hash"`
+	}
+	if err := db.Get(&linha, "SELECT token, token_hash FROM users WHERE id = 'u-sem-hash'"); err != nil {
+		t.Fatalf("reler linha: %v", err)
+	}
+	if want := domain.HashToken(token); linha.TokenHash != want {
+		t.Errorf("token_hash = %q, want %q: o hash nao foi preenchido antes de apagar", linha.TokenHash, want)
+	}
+	if linha.Token != "" {
+		t.Errorf("token = %q, want vazio", linha.Token)
+	}
+}
+
+// TestMigracao16_PassaComBancoEmOrdem é o controle na direção oposta dos dois
+// acima: uma migração que "protege" recusando sempre não protege nada.
+func TestMigracao16_PassaComBancoEmOrdem(t *testing.T) {
+	db := novoBancoMigrado(t)
+
+	if _, err := db.Exec(
+		`INSERT INTO users (id,name,token,token_hash,webhook,jid,qrcode,events,proxy_url,history)
+		 VALUES ('u-ok','ok','',?, '','','','All','',0)`, domain.HashToken("tok-ok")); err != nil {
+		t.Fatalf("inserir: %v", err)
+	}
+
+	if err := rodarMigracao16(t, db); err != nil {
+		t.Fatalf("migracao 16 recusou um banco em ordem: %v", err)
+	}
+}
+
+// TestMigracao16_FalhaEmVezDeDestruir prova que a migração NÃO apaga quando
+// não consegue garantir o acesso.
+//
+// O cenário é duas linhas com o MESMO token em claro e sem hash — estado
+// possível porque o índice único é sobre `token_hash`, e ele era NULL nas duas.
+// O preenchimento calcula o mesmo hash para ambas e a segunda viola o índice.
+//
+// O que importa é o DESFECHO: a transação inteira volta atrás, e o texto claro
+// continua lá. Uma migração que apagasse primeiro e falhasse depois deixaria
+// dois usuários sem acesso e sem como recuperar — o valor não existe em
+// nenhum outro lugar.
+//
+// O que este teste NÃO cobre, e vale dizer em vez de deixar implícito: a
+// verificação `semHash > 0` da migração. Aqui o UPDATE do preenchimento falha
+// ANTES dela, no índice único. Desligar a verificação não muda o resultado
+// deste teste — confirmado por controle negativo. Ela é defesa em profundidade
+// sobre uma operação irreversível, e está documentada como tal no código.
+func TestMigracao16_FalhaEmVezDeDestruir(t *testing.T) {
+	db := novoBancoMigrado(t)
+
+	for _, id := range []string{"u-a", "u-b"} {
+		if _, err := db.Exec(
+			`INSERT INTO users (id,name,token,token_hash,webhook,jid,qrcode,events,proxy_url,history)
+			 VALUES (?,?,'token-repetido',NULL,'','','','All','',0)`, id, id); err != nil {
+			t.Fatalf("inserir %s: %v", id, err)
+		}
+	}
+
+	if err := rodarMigracao16(t, db); err == nil {
+		t.Fatal("a migracao passou com duas linhas de token repetido; uma delas ficaria sem hash")
+	}
+
+	// E o texto claro continua lá: a transação voltou atrás por inteiro.
+	var restantes int
+	if err := db.Get(&restantes, `SELECT COUNT(*) FROM users WHERE token = 'token-repetido'`); err != nil {
+		t.Fatalf("contar: %v", err)
+	}
+	if restantes != 2 {
+		t.Errorf("linhas com texto claro = %d, want 2: a migracao apagou antes de garantir o acesso", restantes)
+	}
+}
+
+// TestMigracao16_ReportaFalhaDeLeitura cobre o caminho em que o banco não
+// responde: a migração precisa PROPAGAR o erro, e não seguir para o apagamento
+// como se não houvesse linha pendente nenhuma.
+//
+// Uma leitura que falha e é tratada como "nada a preencher" levaria direto ao
+// UPDATE que apaga — destruindo credencial com base numa consulta que nunca
+// respondeu.
+func TestMigracao16_ReportaFalhaDeLeitura(t *testing.T) {
+	db := novoBancoMigrado(t)
+
+	// Sem a tabela, toda consulta da migração falha.
+	if _, err := db.Exec(`DROP TABLE users`); err != nil {
+		t.Fatalf("dropar users: %v", err)
+	}
+
+	if err := rodarMigracao16(t, db); err == nil {
+		t.Fatal("a migracao seguiu com o banco sem a tabela users")
+	}
+}
+
+// TestMigracao16_BancoVazioNaoQuebra: instalação nova não tem linha legada
+// nenhuma, e a migração roda em toda subida. Um erro aqui apareceria como
+// falha de arranque num sistema que não tem o problema.
+func TestMigracao16_BancoVazioNaoQuebra(t *testing.T) {
+	if err := rodarMigracao16(t, novoBancoMigrado(t)); err != nil {
+		t.Fatalf("migracao 16 falhou num banco vazio: %v", err)
 	}
 }

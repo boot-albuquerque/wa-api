@@ -116,7 +116,21 @@ var migrations = []Migration{
 		UpSQL:   addWebhookOutboxSQL,
 		DownSQL: addWebhookOutboxDownSQL,
 	},
+	{
+		ID:   migrationIDBlankPlaintextToken,
+		Name: "blank_plaintext_token",
+		// UpSQL vazio: esta migração roda em Go (ver
+		// applyBlankPlaintextTokenMigration). O hash precisa bater byte a byte
+		// com domain.HashToken, e nem SQLite nem Postgres calculam SHA-256 sem
+		// extensão — mesmo motivo da migração 11.
+		UpSQL:   "",
+		DownSQL: "",
+	},
 }
+
+// migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
+// existentes (F97 etapa 2).
+const migrationIDBlankPlaintextToken = 16
 
 // migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
 // mesmo motivo da constante acima: três lugares a referenciam.
@@ -722,6 +736,8 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		}
 	} else if migration.ID == 11 {
 		err = applyTokenHashMigration(tx, db.DriverName())
+	} else if migration.ID == migrationIDBlankPlaintextToken {
+		err = applyBlankPlaintextTokenMigration(tx)
 	} else if migration.ID == 12 {
 		if db.DriverName() == "sqlite" {
 			// A migração 9 nunca criou o índice no SQLite, então não há o que
@@ -787,6 +803,17 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 var ErrDuplicateTokens = errors.New(
 	"migration 11 (add_token_hash) aborted: users.token contains duplicate values; " +
 		"resolve them before applying the UNIQUE constraint on token_hash")
+
+// ErrTokenHashBackfillIncomplete é devolvido pela migração 16 quando alguma
+// linha continuaria sem `token_hash` depois do preenchimento.
+//
+// Apagar o texto claro dessas linhas tiraria delas a ÚNICA forma de autenticar,
+// e o valor não existe em nenhum outro lugar — não há como desfazer. Abortar
+// deixa o processo sem subir, com esta mensagem; continuar deixaria um usuário
+// sem acesso e sem diagnóstico.
+var ErrTokenHashBackfillIncomplete = errors.New(
+	"migration 16 (blank_plaintext_token) aborted: some users would be left without token_hash; " +
+		"blanking the plaintext token would remove their only way to authenticate")
 
 func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
 	var duplicates int
@@ -980,3 +1007,86 @@ END $$;
 
 -- SQLite version (handled in code)
 `
+
+// applyBlankPlaintextTokenMigration apaga o token em texto claro das linhas
+// existentes (F97 etapa 2).
+//
+// A F97 etapa 1 fez o INSERT parar de gravar o texto claro, mas isso só vale
+// para linhas NOVAS. As antigas continuam com a credencial legível em disco —
+// e é ela que aparece num backup, numa réplica ou num dump de suporte.
+//
+// # A ordem, que é o que torna isto seguro
+//
+// Preenche o hash que faltar, VERIFICA que não sobrou ninguém sem hash, e só
+// então apaga. A verificação não é zelo: apagar o texto claro de uma linha sem
+// hash tira dela a única forma de autenticar, e não há como desfazer — o valor
+// não existe em nenhum outro lugar.
+//
+// Por isso a migração ABORTA em vez de continuar. Abortar deixa o processo sem
+// subir, com mensagem; continuar deixaria um usuário sem acesso e sem
+// diagnóstico.
+//
+// # O que NÃO é feito aqui
+//
+// A coluna não é dropada. Ela é NOT NULL, dropar exige reconstruir a tabela no
+// SQLite, e o ganho é cosmético: com todo valor vazio, o segredo já saiu do
+// disco. Fica como limpeza posterior, não como parte desta mudança.
+func applyBlankPlaintextTokenMigration(tx *sqlx.Tx) error {
+	var pendentes []struct {
+		ID    string `db:"id"`
+		Token string `db:"token"`
+	}
+	if err := tx.Select(&pendentes,
+		`SELECT id, token FROM users WHERE token <> '' AND (token_hash IS NULL OR token_hash = '')`); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "select_rows_without_hash").
+			Msg("failed to read rows missing token_hash")
+		return fmt.Errorf("failed to read rows missing token_hash: %w", err)
+	}
+
+	updateSQL := tx.Rebind("UPDATE users SET token_hash = ? WHERE id = ?")
+	for _, linha := range pendentes {
+		if _, err := tx.Exec(updateSQL, domain.HashToken(linha.Token), linha.ID); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("user_id", linha.ID).
+				Msg("failed to backfill token_hash")
+			return fmt.Errorf("failed to backfill token_hash for user %s: %w", linha.ID, err)
+		}
+	}
+
+	// Relê do BANCO em vez de confiar no laço acima: o que importa é o estado
+	// que vai ser destruído, não o que o código acha que fez.
+	//
+	// HOJE esta verificação é inalcançável, e isso foi MEDIDO, não suposto: o
+	// único jeito conhecido de uma linha sobreviver ao preenchimento é o UPDATE
+	// falhar, e aí a função já retornou erro acima. Desligar esta checagem não
+	// muda o resultado de nenhum teste — o controle negativo confirmou.
+	//
+	// Fica assim mesmo. É defesa em profundidade sobre uma operação
+	// IRREVERSÍVEL: o dia em que o preenchimento ganhar um caminho que engole
+	// falha por linha (um `continue` num laço, por exemplo), esta é a única
+	// coisa entre isso e um usuário sem acesso.
+	var semHash int
+	if err := tx.Get(&semHash,
+		`SELECT COUNT(*) FROM users WHERE token <> '' AND (token_hash IS NULL OR token_hash = '')`); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "verify_no_row_without_hash").
+			Msg("failed to verify token_hash backfill")
+		return fmt.Errorf("failed to verify token_hash backfill: %w", err)
+	}
+	if semHash > 0 {
+		log.Error().Str("table", "users").Int("rows", semHash).
+			Msg("migration 16 aborted: rows would lose their only way to authenticate")
+		return fmt.Errorf("%w (%d row(s) still without token_hash)", ErrTokenHashBackfillIncomplete, semHash)
+	}
+
+	res, err := tx.Exec(`UPDATE users SET token = '' WHERE token <> ''`)
+	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("column", "token").
+			Msg("failed to blank the plaintext token")
+		return fmt.Errorf("failed to blank the plaintext token: %w", err)
+	}
+	if apagadas, err := res.RowsAffected(); err == nil {
+		log.Info().Str("table", "users").Int64("rows", apagadas).
+			Msg("plaintext API tokens removed from storage")
+	}
+
+	return nil
+}

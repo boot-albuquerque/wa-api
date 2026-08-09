@@ -93,9 +93,9 @@ func LookupUser(db *sql.DB, token string) (*UserRecord, error) {
 		hmac_key IS NOT NULL AND length(hmac_key) > 0,
 		CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,
 		COALESCE(media_delivery, 'base64')
-		FROM users WHERE token = $1 OR token_hash = $2 LIMIT 1`
+		FROM users WHERE token_hash = $1 LIMIT 1`
 
-	rows, err := db.Query(query, token, domain.HashToken(token))
+	rows, err := db.Query(query, domain.HashToken(token))
 	if err != nil {
 		return nil, fmt.Errorf("db query: %w", err)
 	}

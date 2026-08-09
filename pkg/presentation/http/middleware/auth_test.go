@@ -71,18 +71,26 @@ func TestAuthAliceValidToken(t *testing.T) {
 	}
 }
 
-// TestAuthAliceAcceptsRowWithoutTokenHash cobre a janela de transição: linhas
-// gravadas antes da migração (token_hash NULL) continuam autenticando pelo
-// token cru. É a mitigação que impede a fase de invalidar sessões existentes.
-func TestAuthAliceAcceptsRowWithoutTokenHash(t *testing.T) {
+// TestAuthAliceRecusaLinhaSoComTextoClaro fecha a janela de transição que o
+// teste anterior mantinha aberta.
+//
+// Ele AFIRMAVA o contrário: linha com `token_hash` NULL autenticava pelo token
+// cru, e essa mitigação existia para a migração 11 não invalidar sessões. A
+// janela fechou na F97 etapa 2 — a consulta casa só por hash.
+//
+// O que torna isso seguro NÃO é este teste, é a migração 16: ela preenche o
+// hash que faltar e ABORTA se sobrar alguma linha sem ele, em vez de apagar o
+// texto claro e deixar alguém sem acesso. Aqui a linha é construída à mão,
+// justamente no estado que a migração se recusa a deixar existir.
+func TestAuthAliceRecusaLinhaSoComTextoClaro(t *testing.T) {
 	db := newAuthTestDB(t)
 	insertAuthUser(t, db, "u1", "legacy-token", "")
 
 	r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
 	r.Header.Set("token", "legacy-token")
 
-	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
-		t.Errorf("status = %d, want %d", got, http.StatusOK)
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d: o texto claro ainda autentica", got, http.StatusUnauthorized)
 	}
 }
 

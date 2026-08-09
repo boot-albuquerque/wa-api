@@ -167,8 +167,8 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"hmac_key IS NOT NULL AND length(hmac_key) > 0,"+
 						"CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,"+
 						"COALESCE(media_delivery, 'base64') "+
-						"FROM users WHERE token=$1 OR token_hash=$2 LIMIT 1",
-					token, domain.HashToken(token),
+						"FROM users WHERE token_hash=$1 LIMIT 1",
+					domain.HashToken(token),
 				)
 				if err != nil {
 					hlog.FromRequest(r).Error().Err(err).

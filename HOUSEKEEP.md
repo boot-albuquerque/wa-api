@@ -3465,6 +3465,42 @@ clientes:
 **A ordem importa**: inverter as duas deixa usuários antigos sem conseguir
 autenticar.
 
+---
+
+**CORRIGIDA POR INTEIRO (2026-08-09).** As duas etapas, na ordem.
+
+**Etapa 1** (`5af3a21`): o `INSERT` e o `UPDATE` param de gravar o texto claro.
+Só foi segura depois da F100 — antes, branquear a coluna abria acesso sem
+credencial.
+
+**Etapa 2** (migração 16 + consulta só por hash): o texto claro das linhas
+ANTIGAS é apagado, e o `OR token = $1` sai das duas consultas de autenticação.
+
+A migração preenche o hash que faltar, VERIFICA que não sobrou ninguém sem
+ele, e só então apaga. A verificação não é zelo: apagar o texto claro de uma
+linha sem hash tira dela a única forma de autenticar, e o valor não existe em
+nenhum outro lugar. Ela ABORTA em vez de continuar — abortar deixa o processo
+sem subir, com mensagem; continuar deixaria um usuário sem acesso e sem
+diagnóstico.
+
+Validado em bancada com uma linha legada real (texto claro + hash, como antes
+da etapa 1):
+
+```
+antes   legado | token='tok-legado'
+depois  legado | token='' | hash=6884b32e8e13
+        curl -H "token: tok-legado" -> HTTP 400  (autenticou; sem sessao)
+        log: "plaintext API tokens removed from storage" rows=1
+```
+
+**O que NÃO foi feito**: dropar a coluna. Ela é NOT NULL, dropar exige
+reconstruir a tabela no SQLite, e o ganho é cosmético — com todo valor vazio, o
+segredo já saiu do disco. Fica como limpeza posterior.
+
+**Janela de migração**: não é mais necessária. O desenho original supunha que
+remover o `OR` invalidaria linhas não migradas; a migração 16 garante que essa
+linha não existe, e se ela existisse a migração se recusaria a rodar.
+
 **Status**: **não corrigido** — registrado. É mudança de postura de segurança e
 tem etapa que quebra cliente; decisão do dono do repositório.
 

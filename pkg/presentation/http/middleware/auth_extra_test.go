@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"wa-api/pkg/domain"
 
 	appport "wa-api/pkg/application/contracts"
 	customhttp "wa-api/pkg/presentation/http"
@@ -297,9 +298,14 @@ func TestResolveConnectEventsWarnsOnDiscard(t *testing.T) {
 // diagnosticável.
 func TestAuthAliceScanErrorLogsAndReturns500(t *testing.T) {
 	db := newAuthTestDB(t)
+	// O `token_hash` precisa estar preenchido: desde a F97 etapa 2 a consulta
+	// de autenticacao casa SO por hash, e uma linha com token_hash NULL nao e
+	// encontrada — o teste mediria 401 em vez do erro de Scan que ele existe
+	// para exercitar.
 	if _, err := db.Exec(`INSERT INTO users
 		(id, name, token, token_hash, webhook, jid, qrcode, events, proxy_url, history, s3_enabled, media_delivery)
-		VALUES ('u1', 'user-u1', 'bad-history-token', NULL, '', '', '', '', '', 'not-a-number', 0, 'base64')`); err != nil {
+		VALUES ('u1', 'user-u1', '', ?, '', '', '', '', '', 'not-a-number', 0, 'base64')`,
+		domain.HashToken("bad-history-token")); err != nil {
 		t.Fatalf("insert row with non-integer history: %v", err)
 	}
 

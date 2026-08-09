@@ -2344,6 +2344,7 @@ pkg/infra/db.WebhookOutboxRepository.Enqueue	ELIGIBLE	uncovered:L1
 pkg/infra/db.WebhookOutboxRepository.PendingCount	ELIGIBLE	uncovered:L1
 pkg/infra/db.WebhookOutboxRepository.Reschedule	ELIGIBLE	uncovered:L1
 pkg/infra/db.addColumnIfNotExistsSQLite	ELIGIBLE	covered
+pkg/infra/db.applyBlankPlaintextTokenMigration	ELIGIBLE	covered
 pkg/infra/db.applyMigration	ELIGIBLE	covered
 pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
