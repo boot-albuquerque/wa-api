@@ -672,3 +672,22 @@ nada.
 **Corolário**: prefira controles que falhem por um MOTIVO específico e legível
 na mensagem. "quisera falhar" não distingue "o mecanismo sumiu" de "o teste
 nunca chegou lá".
+
+**Segunda ocorrência, na F87, com outra causa — e por isso vale registrar.** O
+teste media o tempo que o produtor gastava, mas o cronômetro começava DEPOIS de
+enfileirar o evento lento:
+
+```go
+enqueueSessionEvent(userID, func() { time.Sleep(lento) })  // custo acontece aqui
+inicio := time.Now()                                       // ...e o relogio comeca aqui
+```
+
+Com a fila, o enfileiramento é instantâneo. Sem a fila, ele bloqueia por dois
+segundos — mas ANTES do `time.Now()`. Os dois mundos produziam o mesmo número, e
+o controle negativo passava. Mover uma linha para cima fez o controle acusar
+`2.002241625s`.
+
+A forma geral: **um teste que mede DEPOIS do efeito não mede o efeito.** Vale
+para tempo, para contador e para estado — e é irmão do erro de ler
+`users.connected` antes do logout (F93), onde a medição estava certa e o
+INSTANTE estava errado.

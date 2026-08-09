@@ -2151,6 +2151,7 @@ pkg/bootstrap.dispatchPool.runJob.func1	ELIGIBLE	covered
 pkg/bootstrap.dispatchPool.worker	EXCLUDED	X1
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
+pkg/bootstrap.enqueueSessionEvent	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
 pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
 pkg/bootstrap.entregarWebhookNaFilaDeErro	ELIGIBLE	covered
@@ -2237,9 +2238,15 @@ pkg/bootstrap.server.connectOnStartup.func1	ELIGIBLE	covered
 pkg/bootstrap.server.routes	EXCLUDED	X1
 pkg/bootstrap.server.startSession	ELIGIBLE	covered
 pkg/bootstrap.sessionAttachHookAdapter.Attach	ELIGIBLE	uncovered:L2(S-ret,session_attach_hook_adapter.go:42)
-pkg/bootstrap.sessionAttachHookAdapter.Attach.func1	ELIGIBLE	covered
+pkg/bootstrap.sessionAttachHookAdapter.Attach.func1	EXCLUDED	X6
+pkg/bootstrap.sessionAttachHookAdapter.Attach.func2	EXCLUDED	X6
+pkg/bootstrap.sessionAttachHookAdapter.Attach.func3	ELIGIBLE	covered
 pkg/bootstrap.sessionAttachHookAdapter.Detach	EXCLUDED	X1
 pkg/bootstrap.sessionEventDispatcherAdapter.Dispatch	ELIGIBLE	covered
+pkg/bootstrap.sessionEventQueue.consumir	EXCLUDED	X1
+pkg/bootstrap.sessionEventQueue.executar	ELIGIBLE	covered
+pkg/bootstrap.sessionEventQueue.executar.func1	EXCLUDED	X1
+pkg/bootstrap.sessionQueueDepth	ELIGIBLE	uncovered:L1
 pkg/bootstrap.setKillChannel	EXCLUDED	X1
 pkg/bootstrap.setupSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
@@ -2253,7 +2260,11 @@ pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat.func1	EXCLUDED	X6
 pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
+pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
+pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:516)
+pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
+pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered
 pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_delegates.go:132)
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6

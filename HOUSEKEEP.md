@@ -2490,9 +2490,43 @@ tem, e o mecanismo de limite já está escrito. (B) é mais barato de implementa
 e mais caro de explicar a quem consome o webhook.
 
 > **DECIDIDO em 2026-08-09 pelo dono do repositório: opção (A)**, fila serial
-> por sessão. A implementação foi deliberadamente adiada para depois do D3
-> (outbox), que é o item seguinte da ordem aprovada — registrado aqui para que a
-> decisão não se perca entre uma coisa e outra.
+> por sessão.
+
+**CORRIGIDO (2026-08-09)** — `pkg/bootstrap/session_event_queue.go`.
+
+O `handleEvent` agora ENFILEIRA e devolve o laço de nós do SDK na hora; um
+worker por sessão faz o download e o webhook, em ordem. A fila nasce no Attach,
+ANTES de o handler ser registrado — registrar primeiro abriria uma janela em que
+um evento chega, não encontra fila e roda em linha, que é o defeito de volta.
+
+Três decisões que os testes travam:
+
+1. **Limite por ITENS, não por bytes** — o contrário do que a F86 fez, e por
+   motivo concreto: aqui a fila guarda o evento ANTES do download. A mídia não
+   está no item; o que está é a referência com as chaves para baixar depois.
+2. **Fila cheia BLOQUEIA** em vez de descartar. Bloquear devolve o sistema ao
+   comportamento de hoje (laço de nós parado); descartar perderia evento. Mesma
+   escada da F86 — mais lento, nunca com perda. E o envio observa a parada, senão
+   um produtor preso numa fila de sessão morta seguraria o laço para sempre.
+3. **A fila para ANTES de o cliente ser derrubado**, no caminho do kill-channel.
+   O worker pode estar no meio de um download e não pode seguir tocando handles
+   prestes a ser liberados.
+
+**O instrumento não podia sumir junto com o problema.** O aviso
+`Node handling took` do SDK era o que media o nosso handler DE GRAÇA — e tirar o
+trabalho do laço de nós cega exatamente a métrica que provaria a correção. Por
+isso a fila mede o que passou a fazer, com o mesmo limiar de 5s do SDK, e reporta
+também a profundidade da fila. As duas séries continuam comparáveis.
+
+**Falta validar em bancada**: precisa de dispositivo pareado recebendo mídia. O
+sinal a observar é `Node handling took` sumir para mensagens de mídia e, no
+lugar dele, aparecer (ou não) o aviso novo de evento lento. Se o novo aparecer
+com `queued` alto, a fila está absorvendo mas o download continua sendo o
+gargalo — que é informação diferente e útil.
+
+**Não entrou, e continua registrado**: rever os timeouts de 10 min e avaliar um
+filtro de `status@broadcast`. A fila resolve o BLOQUEIO; não resolve o trabalho
+desnecessário.
 
 **Independente de A ou B**, duas coisas menores valem junto:
 - rever os timeouts de 10 min: mesmo fora do caminho do nó, um download de dez

@@ -65,7 +65,17 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		NotifyFn:       h.s.SendNotification,
 		mode:           h.s.Mode,
 	}
-	evh.EventHandlerID = evh.WAClient.AddEventHandler(evh.handleEvent)
+	// A fila NASCE antes do handler ser registrado: registrar primeiro abriria
+	// uma janela em que um evento chega, não encontra fila e roda em linha —
+	// dentro do laço de nós, que é exatamente o que a F87 corrige.
+	startSessionEventQueue(userID)
+
+	// O handler agora ENFILEIRA e devolve o laço de nós do SDK na hora. O
+	// trabalho pesado (download de mídia, webhook) roda no worker da sessão, em
+	// ordem. Ver session_event_queue.go.
+	evh.EventHandlerID = evh.WAClient.AddEventHandler(func(rawEvt interface{}) {
+		enqueueSessionEvent(userID, func() { evh.handleEvent(rawEvt) })
+	})
 	clientManager.SetUserClient(userID, evh)
 
 	kill := make(chan bool, 1)
@@ -77,6 +87,10 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		// consome o sinal, de onde quer que ele venha (LoggedOut ou Detach).
 		<-kill
 		log.Info().Str("userid", userID).Msg("Received kill signal")
+		// Antes de derrubar o cliente: o worker da sessão pode estar no meio de
+		// um download e não pode continuar tocando em handles que estão prestes
+		// a ser liberados.
+		stopSessionEventQueue(userID)
 		client.Disconnect()
 		clientManager.DeleteWaNoiseClient(userID)
 		clientManager.DeleteUserClient(userID)
