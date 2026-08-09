@@ -363,9 +363,11 @@
 
   function tratar(s, tipo, d) {
     if (tipo === "qr") {
-      // Dois formatos chegam com o MESMO type "QR" (F68 em HOUSEKEEP.md):
-      // o fluxo de pareamento manda {qrCodeBase64, expiresAt}; o de Subscribe
-      // manda só {code}. Apenas o primeiro tem imagem.
+      // Um formato só desde a F68: os dois fluxos (pareamento e Subscribe)
+      // passaram a usar o mesmo construtor no servidor. O `if` continua
+      // porque `qrCodeBase64` é OPCIONAL por contrato — se a codificação da
+      // imagem falhar, o evento ainda chega com `code`, e é melhor não
+      // desenhar nada do que desenhar um <img> quebrado.
       if (d.qrCodeBase64) mostrarQR(s.token, d.qrCodeBase64, d.expiresAt);
       return;
     }

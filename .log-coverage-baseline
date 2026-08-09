@@ -579,7 +579,17 @@ rules_frozen=true
 # coberta e que agora distingue recusa (Warn) de excecao aceita (Debug).
 #
 # errpath fica em 860.
-min_func_coverage=686
+# ratchet-UP: F68 (2026-08-09), payload de QR unificado. 686->687.
+#
+# `buildQRPayload` nasce coberta: ela loga a falha de codificacao da imagem em
+# Error e SEGUE, despachando so o codigo. Antes esse caminho fazia
+# `onPairingQR` RETORNAR sem despachar nada — o cliente ficava sem o codigo
+# cru, que ele consegue renderizar sozinho. Um caminho de saida a menos e um
+# log a mais.
+#
+# min_eligible nao muda: `buildQRPayload` entra e o corpo inline de
+# `onPairingQR` sai, e `qrPayload` continua existindo como adaptador do port.
+min_func_coverage=687
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o

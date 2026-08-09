@@ -22,6 +22,16 @@ import (
 const (
 	defaultMaxConnectionRetries = 3
 	defaultConnectionRetryWait  = 5 * time.Second
+
+	// qrCodeImageSize é o lado, em pixels, do PNG do QR. Estava inline em
+	// onPairingQR; virou constante ao passar a ser usado por um construtor
+	// compartilhado, para que os dois fluxos não possam divergir no tamanho
+	// como divergiram no schema (F68).
+	qrCodeImageSize = 256
+
+	// qrCodeDataURIPrefix é o cabeçalho do data URI que o cliente coloca
+	// direto num <img src>.
+	qrCodeDataURIPrefix = "data:image/png;base64,"
 )
 
 // userStore é a superfície mínima de banco que o orchestrator usa.
@@ -313,31 +323,22 @@ func (o *Orchestrator) runPairing(ctx context.Context, sess port.Session, userID
 }
 
 func (o *Orchestrator) onPairingQR(ctx context.Context, userID string, evt port.PairingEvent) {
-	image, err := qrcode.Encode(evt.Code, qrcode.Medium, 256)
-	if err != nil {
-		log.Error().Err(err).Str("userid", userID).Msg("failed to encode QR code")
-		return
-	}
-	base64qrcode := "data:image/png;base64," + base64.StdEncoding.EncodeToString(image)
+	// MESMO construtor do fluxo de Subscribe (F68). Os dois payloads nasceram
+	// divergentes por serem montados em dois lugares, e nada comparava um com o
+	// outro; agora divergir exige mudar uma função só.
+	payload := buildQRPayload(evt.Code, evt.Timeout)
 
-	if _, err := o.db.Exec(`UPDATE users SET qrcode=$1 WHERE id=$2`, base64qrcode, userID); err != nil {
-		log.Error().Err(err).Str("userid", userID).Msg("failed to store qrcode")
+	// A coluna guarda a IMAGEM, que é o que `GET /session/qr` devolve. Só
+	// grava se a codificação deu certo — e a ausência não impede o despacho,
+	// ao contrário de antes: sem imagem o evento saía CANCELADO, e o cliente
+	// ficava sem o código cru, que ele consegue renderizar sozinho.
+	if imagem, ok := payload["qrCodeBase64"].(string); ok {
+		if _, err := o.db.Exec(`UPDATE users SET qrcode=$1 WHERE id=$2`, imagem, userID); err != nil {
+			log.Error().Err(err).Str("userid", userID).Msg("failed to store qrcode")
+		}
 	}
 
-	o.dispatch(ctx, userID, "QR", map[string]any{
-		"event":        "code",
-		"qrCodeBase64": base64qrcode,
-		// Validade real deste código específico, em RFC3339, para o
-		// wa-worker repassar como está em vez de assumir uma janela fixa.
-		//
-		// São 60s para o PRIMEIRO código e 20s para os demais — não o
-		// contrário, como este comentário afirmava até a F69.
-		// qrchan.go:72 aplica qrCodeFirstTimeout quando ainda restam
-		// qrCodeFirstBatchSize códigos na fila, ou seja, no primeiro.
-		// Quem programasse um cliente a partir do texto anterior erraria a
-		// barra de progresso do primeiro QR por 40 segundos.
-		"expiresAt": time.Now().Add(evt.Timeout).Format(time.RFC3339),
-	})
+	o.dispatch(ctx, userID, "QR", payload)
 }
 
 // onPairingTimeout limpa o QR e desmonta a sessão. A remoção dos handles de
@@ -507,12 +508,64 @@ func pairSuccessPayload(p *port.SessionPairSuccessEvent) map[string]any {
 	return payload
 }
 
-func qrPayload(q *port.SessionQREvent) map[string]any {
-	payload := map[string]any{"event": "qr"}
-	if q != nil {
-		payload["code"] = q.Code
+// qrEventName é o valor do campo `event` dentro do payload de QR.
+//
+// Havia DOIS — "code" no fluxo de pareamento e "qr" no de Subscribe —, os dois
+// despachados sob o mesmo `type: "QR"`. Um consumidor tinha de testar campos
+// para descobrir qual schema chegou (F68).
+//
+// Unificado em "code" porque era o valor que acompanhava o payload RENDERIZÁVEL
+// (com imagem e validade): é o que um cliente de interface provavelmente usa
+// para decidir desenhar o QR, e portanto o mais arriscado de mudar.
+//
+// O campo é redundante com o `type`, que já diz "QR". Removê-lo é candidato a
+// uma próxima versão de contrato, não a esta.
+const qrEventName = "code"
+
+// buildQRPayload monta o ÚNICO payload de QR do sistema.
+//
+// Sempre traz `code` — o texto cru que qualquer cliente consegue renderizar por
+// conta própria. `qrCodeBase64` e `expiresAt` entram quando dá: o primeiro
+// depende da codificação da imagem funcionar, o segundo de haver validade
+// conhecida.
+//
+// Um construtor só, e não dois que "combinam": dois nasceram divergentes
+// exatamente por serem dois, e nada comparava um com o outro.
+func buildQRPayload(code string, validade time.Duration) map[string]any {
+	payload := map[string]any{
+		"event": qrEventName,
+		"code":  code,
 	}
+
+	if imagem, err := qrcode.Encode(code, qrcode.Medium, qrCodeImageSize); err == nil {
+		payload["qrCodeBase64"] = qrCodeDataURIPrefix + base64.StdEncoding.EncodeToString(imagem)
+	} else {
+		// Degrada para só o `code` em vez de não despachar: o cliente ainda
+		// consegue renderizar o QR sozinho, e ficar sem evento nenhum
+		// impediria o pareamento.
+		log.Error().Err(err).Msg("falha ao codificar a imagem do QR; o evento sai apenas com o codigo")
+	}
+
+	// Validade real daquele código específico, em RFC3339, para o cliente
+	// repassar como está em vez de assumir uma janela fixa.
+	//
+	// São 60s para o PRIMEIRO código e 20s para os demais — não o contrário,
+	// como o comentário anterior afirmava até a F69. qrchan.go:72 aplica
+	// qrCodeFirstTimeout quando ainda restam qrCodeFirstBatchSize códigos na
+	// fila, ou seja, no primeiro. Quem programasse um cliente a partir do texto
+	// anterior erraria a barra de progresso do primeiro QR por 40 segundos.
+	if validade > 0 {
+		payload["expiresAt"] = time.Now().Add(validade).Format(time.RFC3339)
+	}
+
 	return payload
+}
+
+func qrPayload(q *port.SessionQREvent) map[string]any {
+	if q == nil {
+		return buildQRPayload("", 0)
+	}
+	return buildQRPayload(q.Code, q.Timeout)
 }
 
 func (o *Orchestrator) dispatch(ctx context.Context, userID, eventType string, payload map[string]any) {

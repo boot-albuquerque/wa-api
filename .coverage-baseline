@@ -90,7 +90,10 @@
 # resposta foi cobrir — nao baixar o piso. Os testes que faltavam sao
 # exatamente os que importam em producao: banco fora do ar degrada sem
 # derrubar, e a varredura para quando o processo desliga.
-min_coverage=834
+# F68 (2026-08-09): 834 -> 835. Os testes novos do payload unificado exercitam
+# o construtor pelos DOIS caminhos de entrada (pareamento e Subscribe), e o
+# caminho de falha de codificacao deixou de ser um `return` mudo.
+min_coverage=835
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

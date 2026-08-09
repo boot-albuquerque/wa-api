@@ -1,7 +1,10 @@
 package session
 
 import (
+	"slices"
+	"sort"
 	"testing"
+	"time"
 
 	port "wa-api/pkg/application/contracts"
 )
@@ -46,7 +49,7 @@ func TestTranslateStatusEvent_TodosOsKinds(t *testing.T) {
 			nome:      "qr",
 			evt:       port.SessionEvent{Kind: port.SessionEventKindQR},
 			wantType:  "QR",
-			wantEvent: "qr",
+			wantEvent: qrEventName,
 		},
 		{
 			nome:      "stream_replaced",
@@ -130,7 +133,10 @@ func TestPayloads_SemDetalhe(t *testing.T) {
 	if p := pairSuccessPayload(nil); p["event"] != "pair_success" || len(p) != 1 {
 		t.Fatalf("pair_success = %v", p)
 	}
-	if p := qrPayload(nil); p["event"] != "qr" || len(p) != 1 {
+	// O QR é a exceção desta lista: desde a F68 ele carrega SEMPRE `code`
+	// além do `event`, mesmo sem detalhe nenhum. Os outros continuam sendo só
+	// o `event` — e é isso que a lista prova.
+	if p := qrPayload(nil); p["event"] != qrEventName || p["code"] != "" {
 		t.Fatalf("qr = %v", p)
 	}
 }
@@ -182,5 +188,64 @@ func TestOptions_S3EWebhookProxy(t *testing.T) {
 	}
 	if !o.defaultWebhookUseProxy {
 		t.Fatal("WithDefaultWebhookUseProxy(true) não aplicou")
+	}
+}
+
+// TestQRPayload_OsDoisFluxosProduzemOMesmoSchema é o teste da F68.
+//
+// O mesmo `type: "QR"` era despachado com DOIS payloads incompatíveis: o fluxo
+// de pareamento mandava `{event:"code", qrCodeBase64, expiresAt}` e o de
+// Subscribe mandava `{event:"qr", code}`. Nada no tipo permitia distinguir — o
+// consumidor tinha de testar a presença dos campos, e quem tratasse só um
+// schema ignorava o outro em silêncio.
+//
+// O teste compara os CONJUNTOS DE CHAVES, não valores: valores diferem
+// legitimamente (códigos diferentes, validades diferentes), e é o schema que
+// precisa ser o mesmo.
+func TestQRPayload_OsDoisFluxosProduzemOMesmoSchema(t *testing.T) {
+	const code = "2@abc"
+	const validade = 20 * time.Second
+
+	// Fluxo de pareamento (onPairingQR) e fluxo de Subscribe (qrPayload)
+	// chamam o mesmo construtor; o teste passa pelos dois caminhos de entrada.
+	doPareamento := buildQRPayload(code, validade)
+	doSubscribe := qrPayload(&port.SessionQREvent{Code: code, Timeout: validade})
+
+	chaves := func(m map[string]any) []string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	if a, b := chaves(doPareamento), chaves(doSubscribe); !slices.Equal(a, b) {
+		t.Fatalf("schemas divergem: pareamento=%v subscribe=%v", a, b)
+	}
+
+	// E o schema precisa ter as três coisas que um cliente usa: o código cru
+	// (renderizável por conta própria), a imagem pronta e a validade.
+	for _, campo := range []string{"code", "qrCodeBase64", "expiresAt"} {
+		if _, ok := doPareamento[campo]; !ok {
+			t.Errorf("campo %q ausente do payload unificado", campo)
+		}
+	}
+	if doPareamento["code"] != code {
+		t.Errorf("code = %v, quero %q", doPareamento["code"], code)
+	}
+}
+
+// TestQRPayload_SemValidadeOmiteExpiresAt: um `expiresAt` inventado é pior que
+// ausente — o cliente desenharia uma barra de progresso que não corresponde a
+// nada.
+func TestQRPayload_SemValidadeOmiteExpiresAt(t *testing.T) {
+	p := buildQRPayload("2@abc", 0)
+
+	if _, presente := p["expiresAt"]; presente {
+		t.Errorf("expiresAt presente sem validade conhecida: %v", p["expiresAt"])
+	}
+	if p["code"] != "2@abc" {
+		t.Errorf("o code sumiu junto: %v", p["code"])
 	}
 }

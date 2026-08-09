@@ -875,8 +875,30 @@ A (1) é menos disruptiva para quem já consome; a (2) é mais honesta sobre
 serem eventos de origens diferentes. Ambas são mudança de contrato de webhook
 e precisam de decisão.
 
-**Status**: **não corrigido**. É contrato externo (webhook + WS), fora do
-escopo de criar a página.
+**Status**: **CORRIGIDO (2026-08-09)** pela saída (1), a recomendada.
+
+Um construtor só (`buildQRPayload`), usado pelos dois fluxos. O payload sempre
+traz `code` — o texto cru, que qualquer cliente renderiza sozinho — e traz
+`qrCodeBase64`/`expiresAt` quando dá.
+
+O campo `event` foi unificado em **`"code"`**, e não em `"qr"`: era o valor que
+acompanhava o payload RENDERIZÁVEL, então é o que um cliente de interface
+provavelmente usa para decidir desenhar o QR — e portanto o mais arriscado de
+mudar. O campo é redundante com o `type`, que já diz `QR`; removê-lo é
+candidato a uma próxima versão de contrato, não a esta.
+
+**Ganho que não estava no plano**: antes, falhar ao codificar a imagem fazia
+`onPairingQR` **retornar sem despachar nada**, e o cliente ficava sem o código
+cru — que ele consegue renderizar por conta própria. Agora degrada para só o
+`code`, com log. Um caminho de saída a menos e um log a mais.
+
+O teste compara os CONJUNTOS DE CHAVES dos dois fluxos, não valores: valores
+divergem legitimamente (códigos e validades diferentes), e é o schema que tem
+de ser o mesmo. O controle negativo devolve a divergência exata que existia:
+`pareamento=[code event expiresAt qrCodeBase64] subscribe=[code event]`.
+
+O contorno no `devui` foi simplificado — o `if` continua, mas agora porque
+`qrCodeBase64` é **opcional por contrato**, e não porque existem dois schemas.
 
 ## F70 — webhook nunca dispara para usuário integrado depois da subida do servidor
 

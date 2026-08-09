@@ -1816,8 +1816,8 @@ pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:185);uncovered:L2(S-ret,orchestrator.go:233);uncovered:L2(S-ret,orchestrator.go:235)
-pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:202)
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:195);uncovered:L2(S-ret,orchestrator.go:243);uncovered:L2(S-ret,orchestrator.go:245)
+pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:212)
 pkg/application/session.Orchestrator.Start.func2	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
@@ -1827,7 +1827,7 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:275)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:285)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithDefaultWebhookUseProxy	EXCLUDED	X1
 pkg/application/session.WithDefaultWebhookUseProxy.func1	EXCLUDED	X6
@@ -1839,11 +1839,12 @@ pkg/application/session.WithS3Provisioner	EXCLUDED	X1
 pkg/application/session.WithS3Provisioner.func1	EXCLUDED	X6
 pkg/application/session.WithSleep	EXCLUDED	X1
 pkg/application/session.WithSleep.func1	EXCLUDED	X6
+pkg/application/session.buildQRPayload	ELIGIBLE	covered
 pkg/application/session.disconnectedPayload	ELIGIBLE	uncovered:L1
 pkg/application/session.loggedOutPayload	ELIGIBLE	uncovered:L1
 pkg/application/session.pairSuccessPayload	ELIGIBLE	uncovered:L1
 pkg/application/session.proxyConfigFor	ELIGIBLE	uncovered:L1
-pkg/application/session.qrPayload	ELIGIBLE	uncovered:L1
+pkg/application/session.qrPayload	EXCLUDED	X1
 pkg/application/session.translateStatusEvent	EXCLUDED	X1
 pkg/application/usecase/chat.ArchiveChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,archive_chat.go:31);uncovered:L2(S-consume,archive_chat.go:35);uncovered:L2(S-ret,archive_chat.go:36)
 pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
