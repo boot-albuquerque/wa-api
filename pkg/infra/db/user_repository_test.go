@@ -153,12 +153,15 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 		t.Fatalf("edit error = %v, want user.ErrDuplicateToken", err)
 	}
 
+	// Confere pelo HASH, e nao pela coluna em texto claro: desde a F97 etapa 1
+	// ela e sempre vazia, entao compara-la nao distinguiria "a edicao foi
+	// recusada" de "a edicao passou e apagou o token" — os dois dariam "".
 	var stillBob string
-	if err := db.Get(&stillBob, "SELECT token FROM users WHERE id = ?", bob.ID); err != nil {
-		t.Fatalf("read bob token: %v", err)
+	if err := db.Get(&stillBob, "SELECT token_hash FROM users WHERE id = ?", bob.ID); err != nil {
+		t.Fatalf("read bob token_hash: %v", err)
 	}
-	if stillBob != "bob-token" {
-		t.Errorf("bob token = %q, want it unchanged", stillBob)
+	if want := domain.HashToken("bob-token"); stillBob != want {
+		t.Errorf("bob token_hash = %q, want %q (a edicao recusada nao pode ter mexido nele)", stillBob, want)
 	}
 }
 
@@ -213,3 +216,37 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 type stubSessionStatus struct{}
 
 func (stubSessionStatus) SessionStatus(context.Context, string) (bool, bool) { return false, false }
+
+// TestCreateUser_NaoGravaOTextoClaro fixa a F97 etapa 1 pelas DUAS metades,
+// porque uma sem a outra é inútil ou perigosa.
+//
+// Metade 1: o texto claro não é gravado. Quem obtiver leitura do banco —
+// backup, réplica, dump de suporte — não obtém credencial utilizável.
+//
+// Metade 2: o hash É gravado. Sem ele o usuário nasceria sem NENHUMA forma de
+// autenticar, e a "melhoria de segurança" seria uma conta inutilizável.
+func TestCreateUser_NaoGravaOTextoClaro(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := dbpkg.NewUserRepository(db)
+	const token = "tok-em-claro"
+	if _, err := repo.CreateUser(context.Background(), domain.UserRecord{
+		ID: "u1", Name: "alice", Token: token,
+	}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	var linha struct {
+		Token     string `db:"token"`
+		TokenHash string `db:"token_hash"`
+	}
+	if err := db.Get(&linha, "SELECT token, token_hash FROM users WHERE id = ?", "u1"); err != nil {
+		t.Fatalf("ler usuario: %v", err)
+	}
+
+	if linha.Token != "" {
+		t.Errorf("token = %q, want vazio: o texto claro continua no banco e a F97 nao valeu de nada", linha.Token)
+	}
+	if want := domain.HashToken(token); linha.TokenHash != want {
+		t.Fatalf("token_hash = %q, want %q: o usuario nasceu sem forma de autenticar", linha.TokenHash, want)
+	}
+}

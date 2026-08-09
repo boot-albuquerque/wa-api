@@ -3709,10 +3709,31 @@ Só depois disso o INSERT pode parar de gravar o texto claro. A etapa 2 original
 (remover o `OR token = $1` e dropar a coluna) continua sendo a última, e
 continua exigindo janela de migração.
 
-**Status**: **não corrigido, e a F97 está BLOQUEADA por esta entrada.** O item 1
-acima é pequeno e isolado — pode ser feito já. Os itens 2 e 3 são a parte que
-transforma "uma linha" em trabalho de verdade, e a decisão de encará-los é do
-dono do repositório.
+**Status**: **CORRIGIDO (2026-08-09)**, os três itens — e com eles a F97 etapa 1
+saiu junto, que era o ponto.
+
+1. Guarda de token vazio antes da consulta (`fef8316`).
+2. `UserInfoCache` rechaveado por `userID` (`122f172`). O teste prova a
+   CONSEQUÊNCIA, não a chave: usuário sem texto claro tem de ser cacheado igual.
+3. O token deixou de atravessar o caminho de sessão — virou parâmetro morto em
+   quatro funções depois de (2), e saiu delas.
+
+**Achado de brinde, no meio de (3)**: o token da API era **logado** em três
+sítios, todos em nível Info e todos em caminho rotineiro — `QR Pair Success`,
+`User information set` e `Connect to Whatsapp on startup`. Quem lesse o log
+podia agir como o usuário. Mesma classe da F76. `TestTokenNaoSaiEmLog` varre
+`pkg/` inteiro e falha se voltar, com controle de que a varredura varreu.
+
+**Validado em bancada**, no cenário exato que gerou esta entrada:
+
+```
+usuario novo -> token='' no banco, hash presente
+  com token certo  HTTP 400  (autenticou; sem sessao)
+  SEM token        HTTP 401  <- o buraco, fechado
+  token errado     HTTP 401
+```
+
+Antes da guarda, a linha do meio era 400 — requisição anônima autenticando.
 
 > Nota de método: eu recomendei ao usuário, poucas horas antes, fazer a etapa 1
 > "agora, porque é segura". A recomendação não veio de leitura do código de

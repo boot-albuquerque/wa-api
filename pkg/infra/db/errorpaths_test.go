@@ -1134,8 +1134,14 @@ func TestUserRepositoryUpdateUser_AppliesEveryField(t *testing.T) {
 		"SELECT name, token, token_hash, s3_bucket, history FROM users WHERE id = ?", "u1"); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
-	if got.Name != "renamed" || got.Token != "new-token" || got.Bucket != "b" || got.History != 25 {
+	if got.Name != "renamed" || got.Bucket != "b" || got.History != 25 {
 		t.Errorf("row = %+v, want every field applied", got)
+	}
+	// A coluna `token` fica VAZIA desde a F97 etapa 1: so o hash e persistido.
+	// Afirmar isto explicitamente e o que impede o texto claro de voltar por
+	// descuido num refactor do UPDATE.
+	if got.Token != "" {
+		t.Errorf("token = %q, want vazio: o texto claro voltou a ser gravado", got.Token)
 	}
 	if want := domain.HashToken("new-token"); got.TokenHash != want {
 		t.Errorf("token_hash = %q, want %q", got.TokenHash, want)
