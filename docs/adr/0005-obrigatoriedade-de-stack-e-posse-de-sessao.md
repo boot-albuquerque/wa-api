@@ -130,7 +130,30 @@ PRONTO e testado (`pkg/infra/db/webhook_outbox.go`, migração 15):
   `user_id`. Duplicar segredo em outra tabela multiplica a superfície de
   vazamento sem comprar nada.
 
-FALTA a fiação, e o desenho decidido é:
+**FIAÇÃO PRONTA e validada em bancada (2026-08-09)**, com `kill -9` — queda, não
+desligamento gracioso:
+
+```
+processo vivo, varredura de pe
+kill -9                                  <- queda abrupta
+insere 2 entregas pendentes (com o processo FORA)
+   pendentes com o processo morto: 2
+sobe de novo
+   t=+2s  pendentes=0
+   log: "retomando entregas pendentes do outbox" entregas=2
+```
+
+Antes desta mudança, as duas teriam sumido com o processo, sem log e sem
+contagem. Migração 15 aplicada e conferida nos DOIS dialetos (Postgres em 15 com
+`to_regclass` não-nulo; SQLite em 15 com a tabela presente).
+
+O que a bancada NÃO cobriu, e fica explícito: a entrega HTTP em si. O cliente
+HTTP é provisionado junto com a sessão, então uma entrega retomada para usuário
+sem sessão para em "HTTP client is nil" e a linha é liquidada — que é o
+comportamento correto, mas significa que o laço completo até um destino real
+exige um dispositivo pareado. Os testes unitários cobrem o resto.
+
+O desenho, para quem for ler o código:
 
 1. `callHookWithHmac` grava a intenção ANTES da primeira tentativa e tenta na
    hora — a primeira entrega não ganha latência de varredura.
