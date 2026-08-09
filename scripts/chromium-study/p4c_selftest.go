@@ -188,6 +188,59 @@ func RunDeadlineSelfTest(outPath string) error {
 			chromedp.Poll(`false`, nil, chromedp.WithPollingTimeout(60*time.Second)))
 	})
 
+	// §7-bis — sobrevivência da aba a operações sequenciais.
+	//
+	// Acrescentado depois que o Track B saiu INCONCLUSIVE três vezes por um
+	// defeito que os quatro casos acima NÃO podiam pegar: cada um usava aba
+	// nova e uma única operação. O chromedp cria o target preguiçosamente no
+	// primeiro Run e prende as goroutines que o gerenciam ao contexto DESSE
+	// Run; como Runner.Do cancela o filho ao retornar, a aba morria junto com
+	// a primeira operação e as seguintes falhavam em 0 ms com "context
+	// canceled" — nunca com deadline_exceeded, ou seja, sem parecer timeout.
+	//
+	// O caso abaixo é a regressão: três operações na MESMA aba, todas devendo
+	// ter sucesso. Se a aba não sobreviver, a auditoria falha e a fase para.
+	func() {
+		tab, cancelTab := chromedp.NewContext(alloc)
+		defer cancelTab()
+
+		if err := primeTab(tab); err != nil {
+			cases = append(cases, selfTestCase{
+				Name: "tab-survives-sequential-ops", Kind: "Sequence",
+				Verdict: "FAIL_TAB_DIED", TimedOut: true,
+			})
+			return
+		}
+
+		start := time.Now()
+		var errs []error
+		errs = append(errs, runner.Do(tab, OpNavigate, "seq/navigate", func(ctx context.Context) error {
+			return chromedp.Run(ctx, chromedp.Navigate(srv.URL()+"/noelement"))
+		}))
+		errs = append(errs, runner.Do(tab, OpQuery, "seq/query", func(ctx context.Context) error {
+			return chromedp.Run(ctx, chromedp.WaitReady("#other", chromedp.ByQuery))
+		}))
+		errs = append(errs, runner.Do(tab, OpStateProbe, "seq/probe", func(ctx context.Context) error {
+			var got string
+			return chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('#other').textContent`, &got))
+		}))
+
+		c := selfTestCase{
+			Name: "tab-survives-sequential-ops", Kind: "Sequence",
+			ObservedMS: time.Since(start).Milliseconds(),
+			Verdict:    "PASS", WithinBound: true,
+		}
+		for _, e := range errs {
+			if e != nil {
+				c.Verdict = "FAIL_TAB_DIED"
+				c.WithinBound = false
+			}
+		}
+		cases = append(cases, c)
+		fmt.Fprintf(os.Stderr, "%-26s %-10s %d ops sequenciais na mesma aba  %s\n",
+			c.Name, c.Kind, len(errs), c.Verdict)
+	}()
+
 	pass := true
 	for _, c := range cases {
 		if c.Verdict != "PASS" {

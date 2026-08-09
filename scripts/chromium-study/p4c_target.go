@@ -150,6 +150,26 @@ func snapshot(ctx context.Context, r *Runner, label string) pageSnapshot {
 	return s
 }
 
+// primeTab materializa o target ANTES de qualquer operação sob prazo.
+//
+// Necessário por uma interação entre chromedp e a DeadlinePolicy que custou uma
+// corrida inteira do Track B: no chromedp o target é criado preguiçosamente no
+// primeiro Run, e as goroutines que o gerenciam derivam do contexto passado
+// NESSE primeiro Run. Como Runner.Do sempre cancela o contexto filho ao
+// retornar, deixar a criação acontecer dentro de um Do mata o target assim que
+// a primeira operação termina — e toda operação seguinte na mesma aba falha
+// instantaneamente com "context canceled", nunca com deadline_exceeded.
+//
+// O self-test de §7 não expôs isso porque cada caso usava aba nova e uma única
+// operação; a interação só aparece a partir da segunda operação na mesma aba.
+//
+// Aqui o primeiro Run roda no contexto de vida da aba, sem prazo próprio — é
+// criação de target local, não espera por página remota. O watchdog do
+// experimento continua sendo o limite superior.
+func primeTab(tab context.Context) error {
+	return chromedp.Run(tab)
+}
+
 // waitAppReady espera a aplicação ficar operacional, sob o prazo de Query.
 func waitAppReady(ctx context.Context, r *Runner, label string) error {
 	return r.Do(ctx, OpQuery, label, func(ctx context.Context) error {
@@ -246,6 +266,9 @@ func oneTabTrial(parent context.Context, r *Runner, rep int) (*tabTrial, error) 
 
 	tabA, cancelA := chromedp.NewContext(alloc)
 	defer cancelA()
+	if err := primeTab(tabA); err != nil {
+		return nil, fmt.Errorf("aba A nao inicializou: %w", err)
+	}
 	if err := navigateTarget(tabA, r, fmt.Sprintf("rep%d/A/navigate", rep)); err != nil {
 		return nil, err
 	}
@@ -257,6 +280,9 @@ func oneTabTrial(parent context.Context, r *Runner, rep int) (*tabTrial, error) 
 
 	tabB, cancelB := chromedp.NewContext(alloc)
 	defer cancelB()
+	if err := primeTab(tabB); err != nil {
+		return nil, fmt.Errorf("aba B nao inicializou: %w", err)
+	}
 	if err := navigateTarget(tabB, r, fmt.Sprintf("rep%d/B/navigate", rep)); err != nil {
 		// Navegar falhar já é um resultado; a classificação vem do snapshot.
 		_ = err
@@ -297,6 +323,7 @@ type recoveryTrial struct {
 	MemPeakMB      float64 `json:"memory_peak_mb"`
 	OrphanProcs    int     `json:"orphan_procs_after_kill"`
 	ReclaimedLocks int     `json:"singleton_files_reclaimed"`
+	Note           string  `json:"note,omitempty"`
 }
 
 // RunTargetRecovery executa §16–§20 com N repetições.
@@ -370,6 +397,12 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 
 	alloc, cancelAlloc := chromedp.NewRemoteAllocator(parent, browsers[0].WSURL)
 	tab, cancelTab := chromedp.NewContext(alloc)
+	if err := primeTab(tab); err != nil {
+		cancelTab()
+		cancelAlloc()
+		gracefulStop(browsers[0])
+		return nil, fmt.Errorf("aba baseline nao inicializou: %w", err)
+	}
 	if err := navigateTarget(tab, r, fmt.Sprintf("rec%d/baseline/navigate", rep)); err != nil {
 		cancelTab()
 		cancelAlloc()
@@ -429,6 +462,11 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 	defer cancelAlloc2()
 	tab2, cancelTab2 := chromedp.NewContext(alloc2)
 	defer cancelTab2()
+	if err := primeTab(tab2); err != nil {
+		t.Outcome = "PROFILE_ERROR"
+		t.Note = "aba nao inicializou apos relaunch: " + err.Error()
+		return t, nil
+	}
 
 	if err := navigateTarget(tab2, r, fmt.Sprintf("rec%d/recover/navigate", rep)); err != nil {
 		t.Outcome = "TIMEOUT"

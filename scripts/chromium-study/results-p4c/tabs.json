@@ -4,15 +4,15 @@
     {
       "operation": "Navigate",
       "label": "rep1/A/navigate",
-      "start_ms": 2763,
-      "duration_ms": 2179,
+      "start_ms": 2254,
+      "duration_ms": 760,
       "deadline_ms": 30000,
       "result": "ok"
     },
     {
       "operation": "Query",
       "label": "rep1/A/ready",
-      "start_ms": 4942,
+      "start_ms": 3014,
       "duration_ms": 0,
       "deadline_ms": 15000,
       "result": "error",
@@ -21,7 +21,7 @@
     {
       "operation": "StateProbe",
       "label": "rep1/A/state",
-      "start_ms": 4943,
+      "start_ms": 3014,
       "duration_ms": 0,
       "deadline_ms": 5000,
       "result": "error",
@@ -30,15 +30,15 @@
     {
       "operation": "Navigate",
       "label": "rep2/A/navigate",
-      "start_ms": 7753,
-      "duration_ms": 1147,
+      "start_ms": 5312,
+      "duration_ms": 471,
       "deadline_ms": 30000,
       "result": "ok"
     },
     {
       "operation": "Query",
       "label": "rep2/A/ready",
-      "start_ms": 8902,
+      "start_ms": 5783,
       "duration_ms": 0,
       "deadline_ms": 15000,
       "result": "error",
@@ -47,7 +47,7 @@
     {
       "operation": "StateProbe",
       "label": "rep2/A/state",
-      "start_ms": 8903,
+      "start_ms": 5783,
       "duration_ms": 0,
       "deadline_ms": 5000,
       "result": "error",
@@ -56,15 +56,15 @@
     {
       "operation": "Navigate",
       "label": "rep3/A/navigate",
-      "start_ms": 11674,
-      "duration_ms": 1136,
+      "start_ms": 7988,
+      "duration_ms": 557,
       "deadline_ms": 30000,
       "result": "ok"
     },
     {
       "operation": "Query",
       "label": "rep3/A/ready",
-      "start_ms": 12812,
+      "start_ms": 8546,
       "duration_ms": 0,
       "deadline_ms": 15000,
       "result": "error",
@@ -73,7 +73,7 @@
     {
       "operation": "StateProbe",
       "label": "rep3/A/state",
-      "start_ms": 12813,
+      "start_ms": 8546,
       "duration_ms": 0,
       "deadline_ms": 5000,
       "result": "error",
@@ -81,13 +81,13 @@
     }
   ],
   "reps": 3,
-  "started_utc": "2026-08-09T12:54:43Z",
+  "started_utc": "2026-08-09T13:03:47Z",
   "trials": null,
   "verdict": "INCONCLUSIVE",
   "watchdog": {
     "budget_sec": 420,
     "deadline_exceeded": 0,
-    "elapsed_sec": 12.957776715,
+    "elapsed_sec": 8.572492463,
     "experiment": "single-tab",
     "operations": 9,
     "status": "COMPLETED"
