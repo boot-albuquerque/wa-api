@@ -2296,6 +2296,7 @@ pkg/infra/db.InitializeSchema	ELIGIBLE	covered
 pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
+pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
 pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:80);uncovered:L2(S-consume,session_lease.go:84)
 pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:109)
@@ -2310,6 +2311,12 @@ pkg/infra/db.UserRepository.UpdateUser	ELIGIBLE	covered
 pkg/infra/db.UserRepository.UpdateUser.func1	EXCLUDED	X6
 pkg/infra/db.UserRepository.UserExists	ELIGIBLE	covered
 pkg/infra/db.UserRepository.userS3Config	ELIGIBLE	covered
+pkg/infra/db.WebhookOutboxRepository.ClaimDue	ELIGIBLE	uncovered:L1
+pkg/infra/db.WebhookOutboxRepository.ClaimDue.func1	EXCLUDED	X1
+pkg/infra/db.WebhookOutboxRepository.Delete	ELIGIBLE	uncovered:L1
+pkg/infra/db.WebhookOutboxRepository.Enqueue	ELIGIBLE	uncovered:L1
+pkg/infra/db.WebhookOutboxRepository.PendingCount	ELIGIBLE	uncovered:L1
+pkg/infra/db.WebhookOutboxRepository.Reschedule	ELIGIBLE	uncovered:L1
 pkg/infra/db.addColumnIfNotExistsSQLite	ELIGIBLE	covered
 pkg/infra/db.applyMigration	ELIGIBLE	covered
 pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
@@ -2323,6 +2330,9 @@ pkg/infra/db.initializeSQLite	ELIGIBLE	covered
 pkg/infra/db.isUniqueViolation	ELIGIBLE	covered
 pkg/infra/db.migrateSQLiteIDToString	ELIGIBLE	covered
 pkg/infra/db.parseFlexTimestamp	ELIGIBLE	uncovered:L1
+pkg/infra/db.pushDueAt	ELIGIBLE	uncovered:L1
+pkg/infra/db.scanOutboxRows	ELIGIBLE	uncovered:L1
+pkg/infra/db.scanOutboxRows.func1	EXCLUDED	X1
 pkg/infra/egress.IsHTTPURL	ELIGIBLE	uncovered:L2(S-consume,egress.go:25)
 pkg/infra/egress.IsReservedOrLoopback	ELIGIBLE	covered
 pkg/infra/egress.ValidateOutboundURL	ELIGIBLE	covered

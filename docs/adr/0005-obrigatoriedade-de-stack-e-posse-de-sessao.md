@@ -113,6 +113,42 @@ memória. Vale para SQLite e para Postgres igualmente, e exige política de
 retenção — a linha some quando entrega ou quando esgota, e o esgotamento
 continua indo para o caminho terminal.
 
+**Estado em 2026-08-09: metade implementada, e a metade que falta está
+desenhada aqui para não se perder.**
+
+PRONTO e testado (`pkg/infra/db/webhook_outbox.go`, migração 15):
+
+- tabela nos dois dialetos — em SQLite ela NÃO é inerte, ao contrário da de
+  posse: o cenário catastrófico é justamente onde durabilidade de entrega
+  precisa funcionar;
+- `Enqueue` / `Reschedule` / `Delete` / `ClaimDue` / `PendingCount`;
+- reivindicação por EMPURRÃO de `due_at`, na mesma transação da leitura. Não há
+  estado "em processamento" separado, de propósito: um estado assim fica PRESO
+  quando o processo morre entre marcar e entregar, e exigiria um varredor para
+  destravá-lo. Empurrar o prazo faz ele vencer sozinho.
+- a chave HMAC **não** é persistida: já vive em `users.hmac_key` e é relida por
+  `user_id`. Duplicar segredo em outra tabela multiplica a superfície de
+  vazamento sem comprar nada.
+
+FALTA a fiação, e o desenho decidido é:
+
+1. `callHookWithHmac` grava a intenção ANTES da primeira tentativa e tenta na
+   hora — a primeira entrega não ganha latência de varredura.
+2. Sucesso e caminho terminal apagam a linha.
+3. Falha com orçamento restante faz `Reschedule`, e **quem executa a
+   retentativa passa a ser a varredura**, não o `time.AfterFunc` da F88.
+
+O item 3 é a decisão de projeto que importa: **o outbox vira o ÚNICO
+agendador.** Manter os dois (timer em memória + varredura) criaria corrida
+entre eles — os dois disparariam perto de `due_at` e o cliente receberia em
+duplicata. Uma fonte de verdade, e o custo é latência de até um intervalo de
+varredura numa retentativa que já espera 30s ou mais.
+
+Efeito colateral bem-vindo: o orçamento de bytes pendentes da F88
+(`retryBytesPendentes`) deixa de ser necessário para o retry. Ele existia porque
+os payloads pendentes viviam em MEMÓRIA; com o outbox eles vivem em disco, e o
+teto passa a ser o disco, que é observável e não derruba o processo.
+
 ### D4 — RabbitMQ é distribuição, não durabilidade
 
 Com o outbox, o broker deixa de ser necessário para não perder entrega. O que

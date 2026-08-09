@@ -528,7 +528,7 @@ func TestApplyMigration_PostgresBranchExecutesUpSQL(t *testing.T) {
 		// rejection this loop uses as evidence never happens. Skipping it here
 		// would silently drop coverage of its branch, so it gets its own
 		// assertion below: TestApplyMigration_PortableDDLBranchStillRuns.
-		if m.ID == migrationIDSessionLeases {
+		if m.ID == migrationIDSessionLeases || m.ID == migrationIDWebhookOutbox {
 			continue
 		}
 		err := applyMigration(pg, m)
@@ -1274,30 +1274,45 @@ func TestUserRepositoryDeleteUser_PropagatesQueryFailure(t *testing.T) {
 // "the branch never ran". This test uses the EFFECT as evidence instead: the
 // table has to exist afterwards.
 func TestApplyMigration_PortableDDLBranchStillRuns(t *testing.T) {
-	raw := openTestDB(t)
-	if err := createMigrationsTable(raw); err != nil {
-		t.Fatalf("create migrations table: %v", err)
-	}
-	pg := sqlx.NewDb(raw.DB, "postgres")
+	// Tabela, e não um caso por migração: toda migração de DDL portátil que
+	// entrar depois precisa ser pulada no laço acima E provada aqui, e uma
+	// tabela torna esse par visível num lugar só. Migration 15 (outbox) entrou
+	// exatamente por este caminho.
+	for _, tc := range []struct {
+		id    int
+		table string
+	}{
+		{migrationIDSessionLeases, "session_leases"},
+		{migrationIDWebhookOutbox, "webhook_outbox"},
+	} {
+		t.Run(tc.table, func(t *testing.T) {
+			raw := openTestDB(t)
+			if err := createMigrationsTable(raw); err != nil {
+				t.Fatalf("create migrations table: %v", err)
+			}
+			pg := sqlx.NewDb(raw.DB, "postgres")
 
-	var leaseMigration Migration
-	for _, m := range migrations {
-		if m.ID == migrationIDSessionLeases {
-			leaseMigration = m
-			break
-		}
-	}
-	if leaseMigration.ID == 0 {
-		t.Fatalf("migration %d not found in the list", migrationIDSessionLeases)
-	}
+			var found Migration
+			for _, m := range migrations {
+				if m.ID == tc.id {
+					found = m
+					break
+				}
+			}
+			if found.ID == 0 {
+				t.Fatalf("migration %d not found in the list", tc.id)
+			}
 
-	if err := applyMigration(pg, leaseMigration); err != nil {
-		t.Fatalf("applying migration %d on the postgres branch: %v", migrationIDSessionLeases, err)
-	}
+			if err := applyMigration(pg, found); err != nil {
+				t.Fatalf("applying migration %d on the postgres branch: %v", tc.id, err)
+			}
 
-	var name string
-	err := raw.Get(&name, "SELECT name FROM sqlite_master WHERE type='table' AND name='session_leases'")
-	if err != nil {
-		t.Fatalf("the postgres branch ran but session_leases does not exist: %v", err)
+			var name string
+			err := raw.Get(&name,
+				"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tc.table)
+			if err != nil {
+				t.Fatalf("the postgres branch ran but %s does not exist: %v", tc.table, err)
+			}
+		})
 	}
 }

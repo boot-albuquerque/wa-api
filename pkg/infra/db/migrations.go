@@ -110,7 +110,70 @@ var migrations = []Migration{
 		UpSQL:   addSessionLeasesSQL,
 		DownSQL: addSessionLeasesDownSQL,
 	},
+	{
+		ID:      migrationIDWebhookOutbox,
+		Name:    "add_webhook_outbox",
+		UpSQL:   addWebhookOutboxSQL,
+		DownSQL: addWebhookOutboxDownSQL,
+	},
 }
+
+// migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
+// mesmo motivo da constante acima: três lugares a referenciam.
+const migrationIDWebhookOutbox = 15
+
+// addWebhookOutboxSQL cria o outbox de entrega de webhook (ADR-0005, D3).
+//
+// Isto AMENDA a F88, que registrou que retry durável exigiria RabbitMQ e um
+// consumidor. Está errado: durabilidade exige armazenamento TRANSACIONAL, e
+// SQLite é um. Hoje o retry vive só em memória (`time.AfterFunc` em
+// dispatch_retry.go), então todo reinício do processo perde silenciosamente o
+// que estava pendente — e sob k8s reinício é rotina, não exceção.
+//
+// `due_at` é quando a linha volta a ser elegível, e é também o mecanismo de
+// posse: reivindicar empurra `due_at` para frente, de modo que outra réplica
+// não pegue a mesma linha enquanto esta trabalha. Um só campo faz as duas
+// coisas, e não há estado "em processamento" que possa ficar preso se o
+// processo morrer no meio — o prazo vence sozinho.
+//
+// NÃO guarda a chave HMAC. Ela já vive em `users.hmac_key` e é relida por
+// user_id na retomada: duplicar segredo em outra tabela multiplica a
+// superfície de vazamento sem comprar nada.
+//
+// A tabela é criada nos DOIS dialetos, como a de posse, para que uma
+// instalação que migre de `single` para `multi` não precise de migração
+// retroativa.
+const addWebhookOutboxSQL = `
+CREATE TABLE IF NOT EXISTS webhook_outbox (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT        NOT NULL,
+    url        TEXT        NOT NULL,
+    payload    TEXT        NOT NULL,
+    attempt    INTEGER     NOT NULL DEFAULT 0,
+    due_at     TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);
+`
+
+// addWebhookOutboxSQLiteSQL é a mesma tabela sem TIMESTAMPTZ, que o SQLite não
+// conhece. Aqui, ao contrário da tabela de posse, ela NÃO é inerte: o cenário
+// catastrófico do ADR — um pod com SQLite — é exatamente onde durabilidade de
+// entrega precisa funcionar.
+const addWebhookOutboxSQLiteSQL = `
+CREATE TABLE IF NOT EXISTS webhook_outbox (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT      NOT NULL,
+    url        TEXT      NOT NULL,
+    payload    TEXT      NOT NULL,
+    attempt    INTEGER   NOT NULL DEFAULT 0,
+    due_at     TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);
+`
+
+const addWebhookOutboxDownSQL = `DROP TABLE IF EXISTS webhook_outbox;`
 
 // migrationIDSessionLeases identifica a migração da tabela de posse. Nomeada
 // porque três lugares a referenciam — a lista, o roteamento por dialeto e o
@@ -669,6 +732,12 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	} else if migration.ID == migrationIDSessionLeases {
 		if db.DriverName() == "sqlite" {
 			_, err = tx.Exec(addSessionLeasesSQLiteSQL)
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDWebhookOutbox {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(addWebhookOutboxSQLiteSQL)
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}
