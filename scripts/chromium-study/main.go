@@ -143,6 +143,7 @@ func main() {
 		waChat   = flag.String("wa-chat", "", "mode=wacap: search term for an AUTHORISED test conversation; empty means no interaction at all")
 		waWait   = flag.Duration("wa-wait", 5*time.Minute, "mode=waopen: how long to wait for QR pairing")
 		fault    = flag.String("fault", "sigkill", "mode=warecover: failure mode under ablation — sigkill | graceful")
+		stopVia  = flag.String("stop", "sigterm", "mode=walifecycle: how to shut the browser down — sigterm | browserclose")
 		reclaim  = flag.Bool("reclaim", true, "mode=walifecycle: delete Singleton files on each boot — the variable under ablation")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
 	)
@@ -190,6 +191,10 @@ func main() {
 	if *mode == "walifecycle" {
 		WAUserAgent = *waUA
 		ReclaimSingletons = *reclaim
+		if *stopVia != "sigterm" && *stopVia != "browserclose" {
+			must(fmt.Errorf("-stop deve ser sigterm ou browserclose, recebido %q", *stopVia))
+		}
+		LifecycleStop = *stopVia
 		must(RunSessionLifecycle(*reps, *out))
 		return
 	}

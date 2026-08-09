@@ -1,0 +1,278 @@
+{
+  "experiment": "session-lifecycle-vs-reclaim",
+  "first_degradation": 4,
+  "healthy_iterations": 3,
+  "iterations": [
+    {
+      "iteration": 1,
+      "class": "APP_READY",
+      "app_ready_sec": 9.447419879,
+      "profile_bytes": 132305580,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Browser.close falhou: to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "iteration": 2,
+      "class": "APP_READY",
+      "app_ready_sec": 9.486335213,
+      "profile_bytes": 131311152,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Browser.close falhou: to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "iteration": 3,
+      "class": "APP_READY",
+      "app_ready_sec": 9.435119003,
+      "profile_bytes": 130805548,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Browser.close falhou: to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "iteration": 4,
+      "class": "OTHER",
+      "app_ready_sec": 7.424826128,
+      "profile_bytes": 124745445,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "iteration": 5,
+      "class": "OTHER",
+      "app_ready_sec": 1.032085375,
+      "profile_bytes": 124794151,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "iteration": 6,
+      "class": "LOGIN_REQUIRED",
+      "app_ready_sec": 16.132992841,
+      "profile_bytes": 124850861,
+      "singletons_present_before_boot": 3,
+      "stopped_via": "sigterm",
+      "note": "Browser.close falhou: to close the browser gracefully, use chromedp.Cancel"
+    }
+  ],
+  "iterations_run": 6,
+  "logout_at_iteration": 6,
+  "max_iterations": 20,
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "life1/navigate",
+      "start_ms": 2344,
+      "duration_ms": 951,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life1/ready",
+      "start_ms": 3296,
+      "duration_ms": 8419,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life1/state",
+      "start_ms": 11716,
+      "duration_ms": 8,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life1/close",
+      "start_ms": 11725,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life2/navigate",
+      "start_ms": 16336,
+      "duration_ms": 769,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life2/ready",
+      "start_ms": 17105,
+      "duration_ms": 8613,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life2/state",
+      "start_ms": 25718,
+      "duration_ms": 143,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life2/close",
+      "start_ms": 25862,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life3/navigate",
+      "start_ms": 30392,
+      "duration_ms": 691,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life3/ready",
+      "start_ms": 31083,
+      "duration_ms": 8660,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life3/state",
+      "start_ms": 39744,
+      "duration_ms": 28,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life3/close",
+      "start_ms": 39772,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life4/navigate",
+      "start_ms": 44368,
+      "duration_ms": 643,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life4/ready",
+      "start_ms": 45011,
+      "duration_ms": 6663,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life4/state",
+      "start_ms": 51675,
+      "duration_ms": 55,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life4/close",
+      "start_ms": 51731,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life5/navigate",
+      "start_ms": 56298,
+      "duration_ms": 708,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life5/ready",
+      "start_ms": 57006,
+      "duration_ms": 231,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life5/state",
+      "start_ms": 57238,
+      "duration_ms": 97,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life5/close",
+      "start_ms": 57336,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life6/navigate",
+      "start_ms": 61816,
+      "duration_ms": 1046,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life6/ready",
+      "start_ms": 62862,
+      "duration_ms": 15020,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life6/state",
+      "start_ms": 77886,
+      "duration_ms": 21,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Shutdown",
+      "label": "life6/close",
+      "start_ms": 77908,
+      "duration_ms": 0,
+      "deadline_ms": 10000,
+      "result": "error",
+      "error": "to close the browser gracefully, use chromedp.Cancel"
+    }
+  ],
+  "reclaim_singletons": true,
+  "started_utc": "2026-08-09T15:46:32Z",
+  "stop_mode": "graceful",
+  "watchdog": {
+    "budget_sec": 1920,
+    "deadline_exceeded": 1,
+    "elapsed_sec": 78.052010243,
+    "experiment": "session-lifecycle",
+    "operations": 24,
+    "status": "COMPLETED"
+  }
+}

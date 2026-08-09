@@ -26,8 +26,39 @@ import (
 	"os"
 	"time"
 
+	"github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 )
+
+// LifecycleStop escolhe COMO o browser é desligado a cada iteração.
+//
+//	sigterm:      SIGTERM no processo principal e espera (o gracefulStop atual)
+//	browserclose: Browser.close via CDP, que é o desligamento que o Chromium
+//	              entende como limpo e no qual ele descarrega o IndexedDB
+//
+// É a variável independente do experimento que separa "o WhatsApp invalida o
+// dispositivo" de "o desligamento do harness perde a escrita da sessão". A
+// pista que motivou isto: o perfil encolheu de 123 para 118 MB exatamente na
+// primeira degradação, e invalidação remota não reduz armazenamento local.
+var LifecycleStop = "sigterm"
+
+// closeBrowserViaCDP desliga o Chromium pelo protocolo.
+//
+// Precisa do executor do BROWSER, não o da aba: Browser.close é um comando de
+// escopo global, e enviá-lo no alvo da aba devolve erro. Foi a mesma armadilha
+// do Target.createBrowserContext na Fase 4.
+func closeBrowserViaCDP(tab context.Context, r *Runner, label string) error {
+	return r.Do(tab, OpShutdown, label, func(ctx context.Context) error {
+		return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			c := chromedp.FromContext(ctx)
+			if c == nil || c.Browser == nil {
+				return fmt.Errorf("sem browser no contexto")
+			}
+			return browser.Close().Do(cdp.WithExecutor(ctx, c.Browser))
+		}))
+	})
+}
 
 type lifecycleIteration struct {
 	Iter          int     `json:"iteration"`
@@ -35,7 +66,28 @@ type lifecycleIteration struct {
 	AppReadySec   float64 `json:"app_ready_sec"`
 	ProfileBytes  int64   `json:"profile_bytes"`
 	SingletonsPre int     `json:"singletons_present_before_boot"`
+	StopVia       string  `json:"stopped_via,omitempty"`
 	Note          string  `json:"note,omitempty"`
+}
+
+// waitExit espera o processo sair por conta própria após Browser.close.
+//
+// Sem isto o experimento não distingue nada: se o SIGTERM entrasse logo em
+// seguida, toda iteração teria o desligamento antigo por baixo e o resultado
+// seria o mesmo por construção.
+func waitExit(l *launched, d time.Duration) bool {
+	if l == nil || l.cmd == nil || l.cmd.Process == nil {
+		return true
+	}
+	done := make(chan struct{})
+	go func() { _, _ = l.cmd.Process.Wait(); close(done) }()
+	select {
+	case <-done:
+		l.killedByUs = true
+		return true
+	case <-time.After(d):
+		return false
+	}
 }
 
 // RunSessionLifecycle sobe e desce o browser até a sessão degradar ou até maxIter.
@@ -66,6 +118,7 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 		time.Sleep(2 * time.Second)
 
 		start := time.Now()
+		closedViaCDP := false
 		func() {
 			alloc, cancelAlloc := chromedp.NewRemoteAllocator(wd.Ctx(), browsers[0].WSURL)
 			defer cancelAlloc()
@@ -86,6 +139,18 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 			it.AppReadySec = time.Since(start).Seconds()
 
 			snap := snapshot(tab, r, fmt.Sprintf("life%d/state", i))
+
+			// O desligamento pelo protocolo tem de acontecer AQUI, com a
+			// conexão ainda viva — depois de cancelAlloc não há por onde
+			// enviar o comando.
+			if LifecycleStop == "browserclose" {
+				if err := closeBrowserViaCDP(tab, r, fmt.Sprintf("life%d/close", i)); err != nil {
+					it.Note = "Browser.close falhou: " + err.Error()
+				} else {
+					closedViaCDP = true
+				}
+			}
+
 			switch {
 			case readyErr == nil && snap.Class == classAppReady:
 				it.Class = string(classAppReady)
@@ -99,9 +164,19 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 			}
 		}()
 
-		// Sempre parada graciosa: a forma de parada NÃO é a variável aqui, e a
-		// ablação anterior já mostrou que ela não explica a perda.
-		gracefulStop(browsers[0])
+		// Com Browser.close bem-sucedido, o processo deve sair sozinho. O
+		// gracefulStop só entra se ele NÃO sair — e nesse caso o registro diz
+		// que o desligamento pelo protocolo não bastou, o que é resultado.
+		if closedViaCDP && waitExit(browsers[0], 15*time.Second) {
+			it.StopVia = "browser.close"
+		} else {
+			gracefulStop(browsers[0])
+			if closedViaCDP {
+				it.StopVia = "browser.close+sigterm"
+			} else {
+				it.StopVia = "sigterm"
+			}
+		}
 		it.ProfileBytes = dirSize(dir)
 		iters = append(iters, it)
 
