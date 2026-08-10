@@ -230,7 +230,8 @@ func TestMediaSendHandlers_MalformedPayload_400(t *testing.T) {
 
 // TestMediaSendHandlers_IncompletePayload_500: decodifica, mas o use case
 // recusa por campo obrigatorio ausente.
-func TestMediaSendHandlers_IncompletePayload_500(t *testing.T) {
+// O nome dizia 500 e o teste EXIGIA 500 — fixava o defeito da F66.
+func TestMediaSendHandlers_IncompletePayload_400(t *testing.T) {
 	for _, tc := range mediaCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := &contractsfake.MessageComposer{}
@@ -238,8 +239,8 @@ func TestMediaSendHandlers_IncompletePayload_500(t *testing.T) {
 
 			rec, capture := serveMedia(h, mediaRequest(tc.route, tc.incompleteBody, mediaUserInfo{id: "42"}))
 
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, esperado 500", rec.Code)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, esperado 400", rec.Code)
 			}
 			logassert.OutcomeLogged(t, capture.Records(t))
 		})

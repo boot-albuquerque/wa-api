@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,10 +25,10 @@ func NewDeleteMessageUseCase(sg appport.SessionGuard, l appport.Logger) *DeleteM
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *DeleteMessageUseCase) Execute(ctx context.Context, txtID string, req domain.DeleteMessageRequest) (*domain.DeleteMessageResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.ID == "" {
-		return nil, fmt.Errorf("missing Id in payload")
+		return nil, apperr.New("missing_id", apperr.CategoryValidation, "missing Id in payload", false, nil)
 	}
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {

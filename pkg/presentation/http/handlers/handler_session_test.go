@@ -119,8 +119,10 @@ func sessionCases() []sessionCase {
 			path:   "/session/disconnect",
 		},
 		{
-			name:   "Logout",
-			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), &contractsfake.SessionDetacher{}, log)) },
+			name: "Logout",
+			build: func(e error) http.Handler {
+				return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), &contractsfake.SessionDetacher{}, log))
+			},
 			method: http.MethodPost,
 			path:   "/session/logout",
 		},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -30,21 +31,21 @@ func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.R
 	}
 
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in Payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in Payload", false, nil)
 	}
 
 	if req.Body == "" {
-		return nil, fmt.Errorf("missing Body in Payload")
+		return nil, apperr.New("missing_body", apperr.CategoryValidation, "missing Body in Payload", false, nil)
 	}
 
 	recipient, err := uc.jids.ResolveJID(ctx, req.Phone)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse Phone")
+		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 	}
 
 	msgid := req.Id
 	if msgid == "" {
-		return nil, fmt.Errorf("missing Id in Payload")
+		return nil, apperr.New("missing_id", apperr.CategoryValidation, "missing Id in Payload", false, nil)
 	}
 
 	fromMe := false

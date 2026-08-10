@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,10 +25,10 @@ func NewSendVideoUseCase(mc appport.MessageComposer, l appport.Logger) *SendVide
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SendVideoUseCase) Execute(ctx context.Context, txtID string, req domain.SendVideoRequest) (*domain.SendVideoResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Video == "" {
-		return nil, fmt.Errorf("missing Video in payload")
+		return nil, apperr.New("missing_video", apperr.CategoryValidation, "missing Video in payload", false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {

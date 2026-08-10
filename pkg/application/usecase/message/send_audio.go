@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -26,10 +26,10 @@ func NewSendAudioUseCase(mc appport.MessageComposer, l appport.Logger) *SendAudi
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domain.SendAudioRequest) (*domain.SendAudioResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Audio == "" {
-		return nil, fmt.Errorf("missing Audio in payload")
+		return nil, apperr.New("missing_audio", apperr.CategoryValidation, "missing Audio in payload", false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {

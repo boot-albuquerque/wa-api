@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -29,10 +29,10 @@ func NewSendImageUseCase(mc appport.MessageComposer, l appport.Logger) *SendImag
 func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domain.SendImageRequest) (*domain.SendImageResult, error) {
 	// 1. Validar campos obrigatórios
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Image == "" {
-		return nil, fmt.Errorf("missing Image in payload")
+		return nil, apperr.New("missing_image", apperr.CategoryValidation, "missing Image in payload", false, nil)
 	}
 
 	// 2. Obter cliente wa-noise para verificar se existe sessão

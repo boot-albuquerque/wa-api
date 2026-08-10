@@ -183,9 +183,14 @@ func TestDownloadHandlers_SessionFailure_500(t *testing.T) {
 	}
 }
 
-// TestDownloadHandlers_MissingURL_500: o payload decodifica, mas o use case
+// TestDownloadHandlers_MissingURL_400: o payload decodifica, mas o use case
 // recusa por falta de Url. Ramo de erro distinto do de sessao.
-func TestDownloadHandlers_MissingURL_500(t *testing.T) {
+//
+// O nome dizia 500 e o teste EXIGIA 500 — fixava o defeito da F66: campo
+// obrigatorio ausente e erro do CLIENTE, e responder 500 dizia a ele "o
+// servidor quebrou" quando o remedio estava no payload dele. Invertido, nao
+// relaxado.
+func TestDownloadHandlers_MissingURL_400(t *testing.T) {
 	for _, tc := range downloadCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			sg := &contractsfake.SessionGuard{}
@@ -193,8 +198,8 @@ func TestDownloadHandlers_MissingURL_500(t *testing.T) {
 
 			rec, capture := serveDownload(h, downloadRequest(`{"Mimetype":"image/jpeg"}`, downloadUserInfo{id: "42"}))
 
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, esperado 500", rec.Code)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, esperado 400", rec.Code)
 			}
 			if len(sg.EnsureSessionCalls) != 0 {
 				t.Fatal("use case checou sessao antes de validar o payload")

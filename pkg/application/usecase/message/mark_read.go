@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -34,12 +35,12 @@ func (uc *MarkReadUseCase) Execute(ctx context.Context, userID string, req domai
 		var err error
 		jidChat, err = uc.jids.ResolveJID(ctx, req.ChatPhone)
 		if err != nil {
-			return fmt.Errorf("could not parse ChatPhone")
+			return apperr.New("invalid_chatphone", apperr.CategoryValidation, "could not parse ChatPhone", false, nil)
 		}
 	} else if req.Chat != "" {
 		jidChat = "" // legacy field parsing would go here
 	} else {
-		return fmt.Errorf("missing ChatPhone in Payload")
+		return apperr.New("missing_chatphone", apperr.CategoryValidation, "missing ChatPhone in Payload", false, nil)
 	}
 
 	var jidSender domain.JID
@@ -48,14 +49,14 @@ func (uc *MarkReadUseCase) Execute(ctx context.Context, userID string, req domai
 		var err error
 		jidSender, err = uc.jids.ResolveJID(ctx, req.SenderPhone)
 		if err != nil {
-			return fmt.Errorf("could not parse SenderPhone")
+			return apperr.New("invalid_senderphone", apperr.CategoryValidation, "could not parse SenderPhone", false, nil)
 		}
 	} else if req.Sender != "" {
 		jidSender = "" // legacy field parsing would go here
 	}
 
 	if len(req.Id) < 1 {
-		return fmt.Errorf("missing Id in Payload")
+		return apperr.New("missing_id", apperr.CategoryValidation, "missing Id in Payload", false, nil)
 	}
 
 	if err := uc.chats.MarkRead(ctx, userID, req.Id, time.Now(), jidChat, jidSender); err != nil {

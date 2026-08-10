@@ -500,7 +500,17 @@ func TestHandlers_ErrorEnvelopeCarriesOnlyGenericText(t *testing.T) {
 			spy := &spyPort{err: &leakyErr{segredo}}
 			rec := httptest.NewRecorder()
 
-			tc.build(spy).ServeHTTP(rec, withUser(httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}")), "user-1"))
+			// Corpo VÁLIDO, e não `{}`: desde a F66 as validações devolvem
+			// apperr com CategoryValidation, e um corpo vazio faz o handler
+			// responder 400 ANTES de chegar à porta — o teste passaria sem
+			// nunca exercitar o caminho do erro interno que ele existe para
+			// vigiar.
+			//
+			// Antes da F66 ele já não chegava lá: a validação crua produzia a
+			// MESMA string genérica que o erro vazador produziria, então o
+			// teste passava por coincidência. A conversão só tornou isso
+			// visível.
+			tc.build(spy).ServeHTTP(rec, withUser(httptest.NewRequest(tc.method, tc.path, strings.NewReader(corpoValidoParaFronteira)), "user-1"))
 
 			if rec.Code < 400 {
 				t.Fatalf("porta em erro produziu status de sucesso %d", rec.Code)
@@ -600,3 +610,36 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 		t.Errorf("error.code = %v, quero %q", got, "no_session")
 	}
 }
+
+// corpoValidoParaFronteira reúne todos os campos que as validações de use case
+// exigem, para que QUALQUER rota da tabela passe da validação e alcance a
+// porta.
+//
+// Campos a mais são ignorados na desserialização, então um corpo só serve as
+// dezessete rotas — e um corpo por rota seria uma segunda tabela para divergir
+// da primeira.
+const corpoValidoParaFronteira = `{
+  "Phone": "5511999999999",
+  "ChatPhone": "5511999999999",
+  "SenderPhone": "5511999999999",
+  "Id": "3EB0C767D26B8A3F1B0F",
+  "Url": "https://example.invalid/a.bin",
+  "Body": "texto",
+  "Content": "texto",
+  "Desc": "descricao",
+  "Name": "nome",
+  "State": "available",
+  "Latitude": -23.5,
+  "Longitude": -46.6,
+  "Image": "data:image/png;base64,AAAA",
+  "Video": "data:video/mp4;base64,AAAA",
+  "Audio": "data:audio/ogg;base64,AAAA",
+  "Document": "data:application/pdf;base64,AAAA",
+  "Sticker": "data:image/webp;base64,AAAA",
+  "Vcard": "BEGIN:VCARD\nEND:VCARD",
+  "Group": "120363000000000000",
+  "Header": "cabecalho",
+  "Footer": "rodape",
+  "FileName": "a.pdf",
+  "Options": ["um", "dois"]
+}`

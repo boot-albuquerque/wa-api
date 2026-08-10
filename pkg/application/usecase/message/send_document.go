@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -29,13 +29,13 @@ func NewSendDocumentUseCase(mc appport.MessageComposer, l appport.Logger) *SendD
 func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req domain.SendDocumentRequest) (*domain.SendDocumentResult, error) {
 	// 1. Validar campos obrigatórios
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Document == "" {
-		return nil, fmt.Errorf("missing Document in payload")
+		return nil, apperr.New("missing_document", apperr.CategoryValidation, "missing Document in payload", false, nil)
 	}
 	if req.FileName == "" {
-		return nil, fmt.Errorf("missing FileName in payload")
+		return nil, apperr.New("missing_filename", apperr.CategoryValidation, "missing FileName in payload", false, nil)
 	}
 
 	// 2. Obter cliente wa-noise para verificar se existe sessão

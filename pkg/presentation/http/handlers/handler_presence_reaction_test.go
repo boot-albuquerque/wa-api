@@ -221,6 +221,8 @@ func TestPresenceHandlers_MalformedBody(t *testing.T) {
 
 // TestPresenceHandlers_IncompletePayload: JSON valido, campo obrigatorio
 // ausente.
+// 400 desde a F66: campo ausente ou valor invalido no payload e erro do
+// CLIENTE. Este teste exigia 500, fixando o defeito.
 func TestPresenceHandlers_IncompletePayload(t *testing.T) {
 	for _, tc := range presenceCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -229,7 +231,7 @@ func TestPresenceHandlers_IncompletePayload(t *testing.T) {
 			rec, recs := ipmServe(t, tc.build(d), http.MethodPost, tc.path, `{}`,
 				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.emptyBodyErr)
 		})
 	}
@@ -252,6 +254,8 @@ func TestPresenceHandlers_SessionFailure(t *testing.T) {
 }
 
 // TestPresenceHandlers_JIDFailure: o telefone do payload nao vira JID.
+// 400 desde a F66: um telefone que nao faz parse foi ENVIADO pelo cliente, e
+// o remedio esta no payload dele. Este teste exigia 500.
 func TestPresenceHandlers_JIDFailure(t *testing.T) {
 	for _, tc := range presenceCases() {
 		if tc.jidErr == "" {
@@ -264,7 +268,7 @@ func TestPresenceHandlers_JIDFailure(t *testing.T) {
 			rec, recs := ipmServe(t, tc.build(d), http.MethodPost, tc.path, tc.validBody,
 				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.jidErr)
 		})
 	}

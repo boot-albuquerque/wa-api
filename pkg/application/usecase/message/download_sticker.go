@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,7 +25,7 @@ func NewDownloadStickerUseCase(sg appport.SessionGuard, l appport.Logger) *Downl
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *DownloadStickerUseCase) Execute(ctx context.Context, txtID string, req domain.DownloadRequest) (*domain.DownloadResult, error) {
 	if req.URL == "" {
-		return nil, fmt.Errorf("missing Url in payload")
+		return nil, apperr.New("missing_url", apperr.CategoryValidation, "missing Url in payload", false, nil)
 	}
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {

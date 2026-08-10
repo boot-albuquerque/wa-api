@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,13 +25,13 @@ func NewSendLocationUseCase(mc appport.MessageComposer, l appport.Logger) *SendL
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req domain.SendLocationRequest) (*domain.SendLocationResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Latitude == 0 {
-		return nil, fmt.Errorf("missing Latitude in payload")
+		return nil, apperr.New("missing_latitude", apperr.CategoryValidation, "missing Latitude in payload", false, nil)
 	}
 	if req.Longitude == 0 {
-		return nil, fmt.Errorf("missing Longitude in payload")
+		return nil, apperr.New("missing_longitude", apperr.CategoryValidation, "missing Longitude in payload", false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {

@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,13 +25,13 @@ func NewSendPollUseCase(mc appport.MessageComposer, l appport.Logger) *SendPollU
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain.SendPollRequest) (*domain.SendPollResult, error) {
 	if req.Group == "" {
-		return nil, fmt.Errorf("missing Group in payload")
+		return nil, apperr.New("missing_group", apperr.CategoryValidation, "missing Group in payload", false, nil)
 	}
 	if req.Header == "" {
-		return nil, fmt.Errorf("missing Header in payload")
+		return nil, apperr.New("missing_header", apperr.CategoryValidation, "missing Header in payload", false, nil)
 	}
 	if len(req.Options) < 2 {
-		return nil, fmt.Errorf("at least 2 options are required")
+		return nil, apperr.New("insufficient_options", apperr.CategoryValidation, "at least 2 options are required", false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {

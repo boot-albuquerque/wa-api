@@ -234,7 +234,10 @@ func TestInteractiveHandlers_RejectIncompletePayload(t *testing.T) {
 			rec, recs := ipmServe(t, tc.build(mc), http.MethodPost, tc.path, `{}`,
 				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			// 400 desde a F66: campo obrigatorio ausente e erro do CLIENTE.
+			// Este teste exigia 500, fixando o defeito — 500 dizia ao cliente
+			// "o servidor quebrou" quando o remedio estava no payload dele.
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.emptyBodyErr)
 			if len(mc.EnsureSessionCalls) != 0 {
 				t.Fatalf("payload incompleto alcancou a porta")

@@ -2,7 +2,7 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,10 +25,10 @@ func NewSendStickerUseCase(mc appport.MessageComposer, l appport.Logger) *SendSt
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req domain.SendStickerRequest) (*domain.SendStickerResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Sticker == "" {
-		return nil, fmt.Errorf("missing Sticker in payload")
+		return nil, apperr.New("missing_sticker", apperr.CategoryValidation, "missing Sticker in payload", false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {

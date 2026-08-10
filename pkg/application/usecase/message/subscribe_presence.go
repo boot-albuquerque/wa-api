@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -28,12 +29,12 @@ func (uc *SubscribePresenceUseCase) Execute(ctx context.Context, userID string, 
 	}
 
 	if len(req.Phone) < 1 {
-		return fmt.Errorf("missing Phone in Payload")
+		return apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in Payload", false, nil)
 	}
 
 	jid, err := uc.jids.ResolveJID(ctx, req.Phone)
 	if err != nil {
-		return fmt.Errorf("could not parse Phone")
+		return apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 	}
 
 	if err := uc.presence.SubscribePresence(ctx, userID, jid); err != nil {
