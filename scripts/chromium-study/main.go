@@ -192,6 +192,11 @@ func main() {
 		must(RunHostileSuite(*out))
 		return
 	}
+	if *mode == "cpubound" {
+		WAUserAgent = *waUA
+		must(RunCPUBoundary(*iters, *out))
+		return
+	}
 	if *mode == "closeprobe" {
 		must(RunCloseProbe(*out))
 		return
