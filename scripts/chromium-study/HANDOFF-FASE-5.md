@@ -11,7 +11,7 @@ Documento de retomada. A fonte de verdade das fases anteriores é
 Etapa 1-2  ler 4C, confirmar não repetir      FEITO
 Etapa 3    InteractionPolicy V1               REPROVADA (excesso de recusa)
 Etapa 4    Hostile suite                      EXECUTADA
-Etapa 5    InteractionPolicy V2               APROVADA, 3/3 PASS
+Etapa 5    InteractionPolicy V2 + V3          APROVADA, 3/3 PASS
 Etapa 6-14 CPU, RAM, Pod Recovery, capacity,
            recycling, timeouts, economia      NÃO INICIADAS
 ```
@@ -75,19 +75,64 @@ critério (`false_success=0`) já produziu um PASS falso nesta suite.
 
 ---
 
-## Dois resíduos honestos da V2 — entram na V3, não são bloqueadores
+## V3 — resíduo 1 fechado (identidade de nó)
+
+| caso | V2 | V3 |
+|---|---|---|
+| `node-replacement` | correct_failure, **wrong=1** | correct_failure, **wrong=0** |
+
+Cada elemento carrega `__p5id` (propriedade expando, não atributo — atributo
+entra no DOM serializado e pode casar com seletor de terceiro). A estabilidade
+exige **identidade além de geometria**, a troca vira `NODE_CHURN` separado de
+`UNSTABLE_GEOMETRY` (esperar não resolve re-render), e há reconferência colada
+no `Act`.
+
+A janela não fecha: entre a última sondagem e o `DispatchMouseEvent` a troca
+ainda é possível, e nenhum protocolo elimina isso. Caiu de ~1 amostra de
+estabilidade para uma ida ao browser, e virou detectável. Quem fecha o caso
+continua sendo o `Verify`.
+
+Veredito segue PASS. Commit `9eb1e6e`.
+
+---
+
+## Sessão do WhatsApp — VIVA, e o susto que veio junto
+
+`waopen` com o UA correto devolveu `state: app`, `matched_by: #pane-side`,
+perfil 154,5 MB, `sync_settle` 11 ms. **A credencial da 4C sobreviveu; nenhum QR
+foi gasto.**
+
+Dois aprendizados do caminho, os dois caros se repetidos:
+
+**1. Sem `-wa-ua` o alvo recusa.** Sai a tela "atualize o Google Chrome",
+`canvases: 0`, e o modo termina em `not logged in` — que parece sessão perdida e
+não é. O UA está na 4B §8:
+
+```
+UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+```
+
+**2. F94 — o harness desligava por sinal.** Ver `HOUSEKEEP.md`. Os dois `waopen`
+desta sessão saíram sujos (3 `Singleton` no perfil). A credencial aguentou, mas
+a 4C viu logout na 4ª iteração desse regime. **Corrigido e travado por teste
+antes de qualquer outra execução contra a conta** — commit `a66db7a`.
+
+Consequência para quem retomar: o perfil está em 148 MB, saudável, mas já gastou
+dois ciclos sujos. Rodar `waopen` de novo agora deve imprimir
+`stopped_via=browser.close` e deixar **zero** `Singleton`. Se imprimir algo
+começando com `DIRTY_`, pare e investigue antes de seguir.
+
+---
+
+## Dois resíduos honestos da V2 — resíduo 1 FECHADO na V3
 
 Nenhum dos dois afeta o veredito, e nenhum produz falso sucesso. Mas os dois
 importam para o alvo real e não devem ser redescobertos.
 
-**1. Em `node-replacement` a policy ainda emite o clique errado.**
-`ground_truth_wrong_clicks = 1` nas 3 réplicas. O nó substituído tem geometria
-idêntica, então `Validate` o considera estável e o hit-test passa; quem recusa é
-o `Verify`, depois do clique. Ou seja: **a proteção contra node replacement vem
-do Verify, não do Validate.** Isso basta para não MENTIR sobre o resultado, mas
-não impede o efeito colateral — e no WhatsApp um clique no nó errado pode
-significar abrir a conversa errada. Fix candidato: carregar identidade do nó
-(`DOM.getNodeId` / backendNodeId) entre `Validate` e `Act`, não só geometria.
+**1. ~~Em `node-replacement` a policy ainda emite o clique errado.~~ FECHADO
+na V3** — ver seção acima. Ficava `ground_truth_wrong_clicks = 1` porque o nó
+substituído tem geometria idêntica: `Validate` o considerava parado e quem
+recusava era o `Verify`, depois do clique. Resolvido com identidade de nó.
 
 **2. A policy não rola a página.** Em `fora-do-viewport` o chromedp direto
 acerta (ele faz scroll-into-view) e a policy recusa com `OUT_OF_VIEWPORT`. O
@@ -211,26 +256,33 @@ copia ambos).
 
 ## Sessão do WhatsApp
 
-Ao fim da Fase 4C a credencial estava saudável (40 ciclos limpos com
-`Browser.close`). Assuma que expirou e planeje pareamento apenas quando chegar
-nas etapas que tocam o alvo real (5 em diante). Protocolo: **avisar antes de
-exibir o QR e esperar confirmação explícita.**
+**Viva** — verificado nesta sessão, sem gastar QR. Ver a seção "Sessão do
+WhatsApp — VIVA" acima para o UA obrigatório e para a F94. Protocolo mantido:
+**avisar antes de exibir o QR e esperar confirmação explícita.**
 
 ---
 
 ## Próximos passos, em ordem
 
 1. ~~InteractionPolicy V2~~ — **FEITO**, PASS 3/3 com controle negativo.
-2. **CPU correctness boundary** contra o WhatsApp real — **exige pareamento**.
-   Antes de gastá-lo, provar que o braço executa: rodar o mesmo harness contra
-   a hostile suite sob os mesmos tetos de CPU e confirmar que a policy decide,
-   e não que o container simplesmente engasga.
-3. RAM/sessão + pico de recovery → Pod Recovery graceful e abrupto → blast
+2. ~~Resíduo 1, identidade de nó~~ — **FEITO** na V3.
+3. **Verificar a F94 contra a conta.** Um `waopen` deve imprimir
+   `stopped_via=browser.close` e deixar zero `Singleton` no perfil. É barato e
+   protege a credencial; deixar a correção não verificada é o risco maior.
+4. **CPU correctness boundary.** O `-wa-chat` provavelmente **não é
+   necessário**: o `wacap` já exercita a busca com eventos de teclado reais, e
+   um clique na caixa de busca com verificação de foco é um ciclo
+   Resolve→Validate→Act→Verify completo, read-only, sem abrir conversa nenhuma.
+   O critério tem de ser de dois lados como o da hostile suite — contra o alvo
+   real não existe `window.__truth`, então a póscondição observável do próprio
+   app é o ground truth, e "recusou tudo sob 0,5 CPU" NÃO pode contar como
+   ausência de falso sucesso.
+5. RAM/sessão + pico de recovery → Pod Recovery graceful e abrupto → blast
    radius → capacidade 1/2/3 → recycling → timeouts por p95/p99 → economia →
    decisão.
 
-Resíduos da V2 (§ acima) entram na V3: identidade de nó entre Validate e Act, e
-scroll-into-view.
+Resíduo 2 ainda aberto: **a policy não faz scroll-into-view**, e a lista de
+conversas exige rolagem.
 
 ### Como reproduzir a etapa 5
 
