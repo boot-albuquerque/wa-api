@@ -3980,3 +3980,70 @@ Ficou `failed to get LID: %w` — mensagem honesta, status inalterado.
 É o mesmo erro que a F66 corrige, na direção oposta, e cometido por mim no meio
 da correção dela. O que o pegou foi um teste de falha de porta que existia
 antes, não revisão.
+
+---
+
+## F102 — mensagem `type: media` que o handler não conhece é ignorada em silêncio, sem log
+
+**Data**: 2026-08-10
+**Contexto**: validação de bancada da F87 — mídia real chegando numa sessão
+recém-pareada.
+
+**Onde**: `pkg/bootstrap/eventhandler_message.go:165-214`
+(`processMessageMedia`).
+
+**Problema**: a função é uma sequência de `if` por tipo concreto — imagem,
+áudio, documento, vídeo, figurinha. Não há ramo `else`, e nenhuma linha de log
+no caminho em que **nenhum** dos cinco casa. Uma mensagem classificada como
+mídia pelo SDK que não seja um desses cinco simplesmente não produz nada: nem
+download, nem aviso, nem erro.
+
+**Evidência** (log da bancada, cinco mensagens de mídia do mesmo remetente):
+
+```
+00:22:08  Message Received  2A3BF272306F7466EA82  type: media     <- sem par
+00:22:09  Message Received  2A35D5F80159ED7EDAB4  type: media
+00:22:09  Media processed   2A35D5F80159ED7EDAB4.jpe
+00:22:09  Message Received  2AC75DDDF3AE23FD05AC  type: media
+00:22:10  Media processed   2AC75DDDF3AE23FD05AC.jpe
+00:22:10  Message Received  2A0B4735D74DBC97AF1E  type: media
+00:22:11  Media processed   2A0B4735D74DBC97AF1E.jpe
+00:22:11  Message Received  2A248CB70855A6DD2317  type: media
+00:22:11  Media processed   2A248CB70855A6DD2317.jpe
+```
+
+Cinco recebidas, quatro processadas. A primeira não tem `Media processed` e
+não tem erro. `grep` por `download|media` filtrado por `error|fail` no período
+não devolve nada relacionado a ela.
+
+**Causa provável**: `AlbumMessage`. Ele existe no proto vendorizado
+(`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go:11240`) e
+**não** tem ramo em `processMessageMedia`. Um álbum de 4 fotos chega como um
+cabeçalho de álbum mais 4 mensagens de imagem — que é exatamente 5 recebidas e
+4 baixadas. Falta confirmar com o remetente quantas fotos foram enviadas de uma
+vez; a confirmação muda a correção sugerida, não o defeito.
+
+**Por que importa, independentemente da causa**: o operador vê
+`Message Received ... type: media` e nada depois. Esse silêncio é
+indistinguível de um download que falhou sem registrar. Numa investigação de
+"o cliente diz que mandou foto e não chegou webhook", não há como separar
+"não havia mídia para baixar" de "a mídia sumiu no caminho" — e as duas exigem
+ações opostas.
+
+**Correção sugerida**, nesta ordem:
+
+1. **Um `else` que registra** o tipo não tratado, com o ID da mensagem e o nome
+   do campo presente em `evt.Message`. Barato, e resolve a cegueira mesmo sem
+   decidir nada sobre álbum. É o item que vale sozinho.
+2. **Decidir sobre `AlbumMessage`**: se o cabeçalho de álbum deve virar evento
+   próprio no webhook (com a contagem esperada, que ele carrega) ou ser
+   descartado explicitamente. Descartar em silêncio é o estado atual e é o
+   único que não deveria continuar.
+
+**Anti-regressão**: teste que monta um `events.Message` com um tipo de mídia
+não tratado e verifica que a linha de log sai — não que o download acontece.
+O defeito é de observabilidade, e o teste tem de fixar a observabilidade.
+
+**Status**: **não corrigido** — achado de lado durante a bancada da F87, fora
+do escopo dela. Não toquei porque a política do repositório é registrar e
+perguntar antes de corrigir defeito pré-existente fora do escopo.
