@@ -1,6 +1,11 @@
 # ADR-0006: `wa-headless` — engine de browser, custo por sessão e o que o spike mediu
 
-- **Status**: proposed
+- **Status**: superseded em parte pelo
+  [ADR-0007](0007-decisao-final-wa-headless-escopo-e-custo.md), que fecha a
+  decisão com a base empírica das Fases 1–5 e responde as perguntas em aberto
+  D6/D7 daqui. O que permanece válido: D1 (engine), D2 (flags), D3 (anti-ban
+  como frente própria), D4 (inventário de módulos), D5 (lease). O que mudou:
+  o custo por sessão pareada e o escopo da pilha.
 - **Data**: 2026-08-08
 - **Relacionado**: `internal/wa-headless/PATCHES.md` (divergência contra o
   `wwebjs`), `internal/wa-headless/HOUSEKEEP.md`. **Depende** do
