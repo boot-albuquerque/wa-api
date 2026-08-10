@@ -146,6 +146,7 @@ func main() {
 		stopVia  = flag.String("stop", "sigterm", "mode=walifecycle: how to shut the browser down — sigterm | browserclose")
 		reclaim  = flag.Bool("reclaim", true, "mode=walifecycle: delete Singleton files on each boot — the variable under ablation")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
+		waWin    = flag.String("wa-window", "", "override --window-size for WhatsApp modes, e.g. 1600x1200; empty keeps the canonical profile")
 	)
 	flag.Parse()
 	JobTimeout = *jobTO
@@ -194,6 +195,7 @@ func main() {
 	}
 	if *mode == "cpubound" {
 		WAUserAgent = *waUA
+		WAWindowSize = normalizeWindowSize(*waWin)
 		must(RunCPUBoundary(*iters, *out))
 		return
 	}
@@ -483,6 +485,22 @@ func browserWS(base string) (string, map[string]any, error) {
 		return "", nil, fmt.Errorf("no webSocketDebuggerUrl in %s", string(out))
 	}
 	return ws, v, nil
+}
+
+// normalizeWindowSize aceita 1600x1200 e 1600,1200 e devolve o formato do
+// Chromium. Erro de formato vira string vazia, que mantem o perfil canonico —
+// silenciosamente ignorar seria pior, entao o valor efetivo vai para o relatorio.
+func normalizeWindowSize(s string) string {
+	if s == "" {
+		return ""
+	}
+	out := []rune(s)
+	for i, c := range out {
+		if c == 'x' || c == 'X' {
+			out[i] = ','
+		}
+	}
+	return string(out)
 }
 
 func readFileTrim(p string) string {

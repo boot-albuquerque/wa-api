@@ -33,10 +33,32 @@ import (
 // versão instalada. Não há aqui nenhuma tentativa de tornar a automação
 // indetectável — o UA usado é registrado em todo relatório e o resto do
 // fingerprint fica como está.
+// WAWindowSize sobrepõe o --window-size para os modos que tocam o WhatsApp.
+//
+// Existe por medida, não por preferência. Com o canônico 1280x800 o viewport
+// efetivo é 1280x657 — a moldura come 143 px — e o WhatsApp renderiza `#side`
+// com 715x830 em (-165,-42): a barra lateral inteira fica RECORTADA, com todo
+// elemento clicável fora da área visível e hit-test falhando em todos.
+//
+// O efeito é grave e silencioso: o caminho ingênuo clica em coordenadas fora da
+// lateral e afirma sucesso (wrong_target 5/5 medido), enquanto a policy recusa
+// tudo. Ler isso como "a policy é conservadora demais" seria a conclusão errada
+// a partir de uma janela mal dimensionada.
+//
+// Não altera `CanonicalBrowserProfileV1`: aquele perfil é a linha de base de
+// todas as fases anteriores, e mudá-lo trocaria em silêncio o baseline delas.
+var WAWindowSize = ""
+
 func waProfile() []string {
-	p := CanonicalBrowserProfileV1
+	p := append([]string{}, CanonicalBrowserProfileV1...)
 	if WAUserAgent != "" {
-		p = append(append([]string{}, p...), "--user-agent="+WAUserAgent)
+		p = append(p, "--user-agent="+WAUserAgent)
+	}
+	if WAWindowSize != "" {
+		// Chromium usa a ÚLTIMA ocorrência da flag, então acrescentar sobrepõe
+		// a do perfil canônico sem precisar removê-la — e o relatório continua
+		// mostrando as duas, que é o que torna a sobreposição auditável.
+		p = append(p, "--window-size="+WAWindowSize)
 	}
 	return p
 }

@@ -165,9 +165,24 @@ const jsCandidates = `(() => {
                     parseFloat(cs.opacity || '1') > 0.01;
     const disabled = el.disabled === true ||
                      el.getAttribute('aria-disabled') === 'true';
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const inView = r.bottom > 0 && r.right > 0 &&
-                   r.top < innerHeight && r.left < innerWidth;
+    // Ponto de clique na INTERSEÇÃO do elemento com o viewport, não no centro
+    // geométrico.
+    //
+    // O centro geométrico foi medido errado contra o WhatsApp real: a caixa de
+    // busca aparecia com left=-70, top=-25, 592x28, ou seja 25 dos 28 px acima
+    // da dobra. O teste antigo — "o elemento intersecta o viewport" — dizia
+    // visível, e o centro caía em (226, -11), FORA da tela. elementFromPoint
+    // devolve null ali, então a policy recusava por OCCLUDED_OR_REPLACED,
+    // mandando o diagnóstico para overlay quando a causa era geometria.
+    //
+    // Pior no caminho ingênuo: o clique ia para uma coordenada fora da tela e
+    // acertava outra coisa. Foi wrong_target 5/5 no alvo real, sem starvation
+    // nenhuma.
+    const ix0 = Math.max(r.left, 0), iy0 = Math.max(r.top, 0);
+    const ix1 = Math.min(r.right, innerWidth), iy1 = Math.min(r.bottom, innerHeight);
+    const inView = ix1 > ix0 && iy1 > iy0;
+    const cx = inView ? (ix0 + ix1) / 2 : r.left + r.width / 2;
+    const cy = inView ? (iy0 + iy1) / 2 : r.top + r.height / 2;
     // hit-test no ponto REAL de interação: se o topo naquele ponto não for o
     // elemento nem descendente dele, algo está por cima.
     let hit = false;
@@ -271,6 +286,48 @@ func (p *InteractionPolicy) resolveOnce(ctx context.Context, sel, label string) 
 	}
 }
 
+// jsScrollIntoView rola o único candidato interagível para dentro da vista.
+//
+// Existe porque o alvo real exigiu: a caixa de busca do WhatsApp aparecia em
+// top=-25 com 28 px de altura, ou seja rolada para fora, e nenhum ponto de
+// clique honesto existia. Sem rolagem a policy não alcança nada abaixo (ou
+// acima) da dobra, e a lista de conversas é justamente uma lista rolável.
+//
+// Rolar é AÇÃO, não observação, então três cuidados:
+//
+//  1. só rola quando o alvo NÃO está utilmente visível — rolar sempre mexeria
+//     na página a cada sondagem e criaria o movimento que o Validate existe
+//     para detectar;
+//  2. rola no máximo uma vez por Validate, antes da janela de estabilidade, de
+//     modo que a estabilidade seja medida DEPOIS de a página assentar;
+//  3. não escolhe alvo: aplica o mesmo filtro de actionability do Resolve e só
+//     age se houver exatamente um, senão a rolagem decidiria por baixo dos
+//     panos qual é o alvo — que é o defeito que o AMBIGUOUS_TARGET impede.
+const jsScrollIntoView = `(() => {
+  const els = [...document.querySelectorAll(SELECTOR)].filter(el => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    const visible = cs.visibility !== 'hidden' && cs.display !== 'none' &&
+                    parseFloat(cs.opacity || '1') > 0.01;
+    const disabled = el.disabled === true ||
+                     el.getAttribute('aria-disabled') === 'true';
+    return el.isConnected && visible && !disabled && r.width > 0 && r.height > 0;
+  });
+  if (els.length !== 1) { return 'skip:' + els.length; }
+  els[0].scrollIntoView({block: 'center', inline: 'center'});
+  return 'scrolled';
+})()`
+
+// scrollTargetIntoView devolve true se chegou a rolar.
+func (p *InteractionPolicy) scrollTargetIntoView(ctx context.Context, sel, label string) bool {
+	var out string
+	err := p.R.Do(ctx, OpAction, label+"/scroll", func(ctx context.Context) error {
+		return chromedp.Run(ctx, chromedp.Evaluate(
+			jsSubstituteSelector(jsScrollIntoView, sel), &out))
+	})
+	return err == nil && out == "scrolled"
+}
+
 // Resolve reamostra até SettleBudget antes de recusar.
 //
 // Toda recusa de resolveOnce é retentada, inclusive AMBIGUOUS_TARGET: numa SPA
@@ -325,6 +382,17 @@ func (p *InteractionPolicy) Validate(ctx context.Context, sel, label string) (ra
 	first, err := p.resolveUntil(ctx, sel, label+"/settle", deadline)
 	if err != nil {
 		return rawCandidate{}, err
+	}
+
+	// Se o alvo existe mas não tem ponto de clique utilizável, rolar é a
+	// resposta certa — recusar seria over-refusal, a mesma família do FAIL da
+	// V1. Uma vez só, e antes da janela de estabilidade.
+	if !first.InView || !first.Hit {
+		if p.scrollTargetIntoView(ctx, sel, label) {
+			if c, err := p.resolveUntil(ctx, sel, label+"/postscroll", deadline); err == nil {
+				first = c
+			}
+		}
 	}
 
 	last := first

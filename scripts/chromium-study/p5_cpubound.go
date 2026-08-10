@@ -53,9 +53,41 @@ var waSearchSelectors = []string{
 	`#side div[contenteditable="true"][data-tab]`,
 	`#side div[contenteditable="true"]`,
 	`div[role="textbox"][contenteditable="true"]`,
+	`#side [role="textbox"]`,
+	`[data-icon="search"]`,
+	`[data-icon="search-alt"]`,
+	`#side button[aria-label*="Pesquis"]`,
 	`[aria-label*="Pesquis"]`,
 	`[aria-label*="Search"]`,
 }
+
+// jsTopAtCenter diz QUEM está no ponto de clique de cada candidato.
+//
+// Sem isto, "hit-test falhou" é um beco: não dá para saber se o alvo está
+// coberto por um overlay, se o clique cairia num filho (o que seria aceitável)
+// ou se a geometria está deslocada. Registra apenas NOME DE TAG e relação
+// estrutural — nunca texto, nunca conteúdo de conversa.
+const jsTopAtCenter = `(() => {
+  const out = [];
+  for (const el of document.querySelectorAll(SELECTOR)) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const top = document.elementFromPoint(cx, cy);
+    out.push({
+      tag: el.tagName,
+      w: Math.round(r.width), h: Math.round(r.height),
+      left: Math.round(r.left), top: Math.round(r.top),
+      cx: Math.round(cx), cy: Math.round(cy),
+      vw: innerWidth, vh: innerHeight,
+      center_in_viewport: cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight,
+      top_tag: top ? top.tagName : null,
+      top_is_self: top === el,
+      top_is_descendant: !!top && el.contains(top),
+      top_is_ancestor: !!top && top.contains(el)
+    });
+  }
+  return JSON.stringify(out);
+})()`
 
 // jsInstallWitness instala os ouvintes e zera o registro.
 //
@@ -163,19 +195,69 @@ func discoverSearchTarget(ctx context.Context, pol *InteractionPolicy) (string, 
 			report = append(report, entry)
 			continue
 		}
-		actionable := 0
-		for _, c := range cs {
-			if c.Attached && c.Visible && c.Enabled && c.W > 0 && c.H > 0 && c.InView {
-				actionable++
+		countable := func(cs []rawCandidate) (int, int) {
+			a, h := 0, 0
+			for _, c := range cs {
+				if c.Attached && c.Visible && c.Enabled && c.W > 0 && c.H > 0 && c.InView {
+					a++
+					if c.Hit {
+						h++
+					}
+				}
+			}
+			return a, h
+		}
+		actionable, hittable := countable(cs)
+
+		// Se há candidato único mas sem ponto de clique, ROLA e sonda de novo —
+		// porque é exatamente isso que o Validate da policy faz.
+		//
+		// A primeira versão exigia hittable ANTES de qualquer rolagem, e por
+		// isso rejeitava o alvo que a policy alcançaria: a caixa de busca do
+		// WhatsApp aparece em top=-25 e só fica clicável depois da rolagem. Um
+		// dublê mais ESTRITO que a produção derruba o experimento por um motivo
+		// que a produção não teria — a face oposta da armadilha nº 1 do
+		// ARMADILHAS.md, e igualmente enganosa.
+		if len(cs) > 0 && actionable == 1 && hittable == 0 {
+			if pol.scrollTargetIntoView(ctx, sel, "cpubound/discover") {
+				if cs2, e := pol.probe(ctx, sel, "cpubound/rediscover"); e == nil {
+					cs = cs2
+					actionable, hittable = countable(cs)
+					entry["scrolled_into_view"] = true
+				}
 			}
 		}
 		entry["matched"] = len(cs)
 		entry["actionable"] = actionable
+		entry["hittable"] = hittable
+		// Só vale diagnosticar quando há algo casado e o hit-test não fecha:
+		// é aí que "quem está por cima" decide se o alvo é recuperável.
+		if len(cs) > 0 && hittable == 0 {
+			var raw string
+			if e := pol.R.Do(ctx, OpStateProbe, "cpubound/topat", func(ctx context.Context) error {
+				return chromedp.Run(ctx, chromedp.Evaluate(
+					jsSubstituteSelector(jsTopAtCenter, sel), &raw))
+			}); e == nil {
+				var tops []map[string]any
+				if json.Unmarshal([]byte(raw), &tops) == nil {
+					entry["top_at_center"] = tops
+				}
+			}
+		}
 		report = append(report, entry)
-		// Exige EXATAMENTE um: dois candidatos interagíveis fariam a policy
-		// recusar por AMBIGUOUS_TARGET em toda iteração, e o experimento mediria
-		// a ambiguidade do seletor em vez do efeito da CPU.
-		if chosen == "" && actionable == 1 {
+		// Exige EXATAMENTE um interagível E que ele passe no HIT-TEST.
+		//
+		// A primeira versão exigia só `actionable == 1` e escolheu
+		// `[aria-label*="Pesquis"]`, um elemento com geometria real mas coberto
+		// no ponto central. Resultado: a policy recusou 5/5 por hit-test em
+		// ~190 ms, o chromedp direto clicou no que estava por cima e afirmou
+		// sucesso 5/5, e o experimento reprovou a policy por fazer exatamente a
+		// coisa certa.
+		//
+		// O dado do hit-test já vinha na sondagem e eu o descartava. Escolher um
+		// alvo que a própria policy recusaria por desenho não mede a policy —
+		// mede o meu seletor.
+		if chosen == "" && actionable == 1 && hittable == 1 {
 			chosen = sel
 		}
 	}
@@ -253,10 +335,104 @@ func RunCPUBoundary(iters int, outPath string) error {
 	})()`, nil, chromedp.WithPollingTimeout(180*time.Second),
 		chromedp.WithPollingInterval(500*time.Millisecond)))
 
+	// A geometria de `#side` assenta, ou já nasce errada?
+	//
+	// Distinguir isso decide o fix: se converge, a causa é espera insuficiente
+	// (requisito nº 5 da 4C — app-ready precisa de folga) e basta esperar; se
+	// não converge, é layout e nenhuma espera resolve. Medir é mais barato que
+	// discutir, e sem esta amostragem eu escolheria uma das duas por intuição.
+	for i := 0; i < 4; i++ {
+		var g string
+		_ = r.Do(tab, OpStateProbe, fmt.Sprintf("cpubound/settle%d", i), func(ctx context.Context) error {
+			return chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify((() => {
+				const s = document.querySelector('#side');
+				if (!s) return null;
+				const r = s.getBoundingClientRect();
+				let t = 'none', p = s;
+				while (p && p !== document.documentElement) {
+					const tr = getComputedStyle(p).transform;
+					if (tr && tr !== 'none') { t = p.tagName + ':' + tr; break; }
+					p = p.parentElement;
+				}
+				return {x: Math.round(r.left), y: Math.round(r.top),
+				        w: Math.round(r.width), h: Math.round(r.height),
+				        vw: innerWidth, vh: innerHeight, ancestor_transform: t};
+			})())`, &g))
+		})
+		fmt.Fprintf(os.Stderr, "side_settle[%d] %s\n", i, g)
+		time.Sleep(2 * time.Second)
+	}
+
 	sel, discovery := discoverSearchTarget(tab, pol)
 	discJSON, _ := json.Marshal(discovery)
 	fmt.Fprintf(os.Stderr, "discovery: %s\n", discJSON)
 	if sel == "" {
+		// Enumera o que É clicável na barra lateral, em vez de me fazer chutar
+		// mais um seletor. Reporta apenas ESTRUTURA — tag, role, data-icon,
+		// geometria, hit-test — e nunca texto: aria-label e conteúdo de nó
+		// podem carregar nome de contato.
+		var raw string
+		_ = r.Do(tab, OpStateProbe, "cpubound/enumerate", func(ctx context.Context) error {
+			return chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify((() => {
+				const side = document.querySelector('#side') || document.body;
+				const out = [];
+				for (const el of side.querySelectorAll('button,[role="button"],input,[role="textbox"],[data-icon]')) {
+					const r = el.getBoundingClientRect();
+					if (r.width <= 0 || r.height <= 0) continue;
+					const x = Math.max(r.left,0), y = Math.max(r.top,0);
+					const x1 = Math.min(r.right,innerWidth), y1 = Math.min(r.bottom,innerHeight);
+					if (!(x1 > x && y1 > y)) continue;
+					const top = document.elementFromPoint((x+x1)/2, (y+y1)/2);
+					out.push({
+						tag: el.tagName,
+						role: el.getAttribute('role') || null,
+						icon: el.getAttribute('data-icon') || null,
+						testid: el.getAttribute('data-testid') || null,
+						has_aria_label: !!el.getAttribute('aria-label'),
+						w: Math.round(r.width), h: Math.round(r.height),
+						x: Math.round(r.left), y: Math.round(r.top),
+						hit: !!top && (top === el || el.contains(top))
+					});
+				}
+				return out.slice(0, 40);
+			})())`, &raw))
+		})
+		fmt.Fprintf(os.Stderr, "clicaveis_no_side: %s\n", raw)
+
+		// Geometria de layout. Quando TODO elemento da barra lateral tem x
+		// negativo, a hipótese "o seletor está errado" já não explica nada — o
+		// que explica é o viewport. Só números; nenhuma captura de tela, porque
+		// a tela pós-login carrega nome de contato.
+		var geo string
+		_ = r.Do(tab, OpStateProbe, "cpubound/layout", func(ctx context.Context) error {
+			return chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify((() => {
+				const de = document.documentElement, side = document.querySelector('#side');
+				const sr = side ? side.getBoundingClientRect() : null;
+				const app = document.querySelector('#app') || document.body;
+				const ar = app.getBoundingClientRect();
+				return {
+					inner: [innerWidth, innerHeight],
+					outer: [outerWidth, outerHeight],
+					dpr: devicePixelRatio,
+					doc_scroll: [de.scrollLeft, de.scrollTop],
+					doc_size: [de.scrollWidth, de.scrollHeight],
+					body_scroll: [document.body.scrollLeft, document.body.scrollTop],
+					visual: (window.visualViewport ? {
+						w: visualViewport.width, h: visualViewport.height,
+						ox: visualViewport.offsetLeft, oy: visualViewport.offsetTop,
+						scale: visualViewport.scale
+					} : null),
+					side_rect: sr ? {x: Math.round(sr.left), y: Math.round(sr.top),
+					                 w: Math.round(sr.width), h: Math.round(sr.height)} : null,
+					app_rect: {x: Math.round(ar.left), y: Math.round(ar.top),
+					           w: Math.round(ar.width), h: Math.round(ar.height)},
+					html_zoom: getComputedStyle(de).zoom,
+					html_transform: getComputedStyle(de).transform,
+					app_transform: getComputedStyle(app).transform
+				};
+			})())`, &geo))
+		})
+		fmt.Fprintf(os.Stderr, "layout: %s\n", geo)
 		// Falhar alto. Um experimento que segue sem alvo produz uma tabela de
 		// recusas e a leitura errada de que a policy quebrou sob CPU.
 		return fmt.Errorf("nenhum seletor de busca interagivel: %s", discJSON)

@@ -50,8 +50,20 @@ var hostileCases = []hostileCase{
 		"dois nos interagiveis casam; escolher um e arbitrario"},
 	{"zero-size", "/zerosize", "#target", "window.__truth.clicked === true", false,
 		"caixa de dimensao zero nao e clicavel por um humano"},
-	{"fora-do-viewport", "/offscreen", "#target", "window.__truth.clicked === true", false,
-		"fora da area visivel sem rolagem"},
+	// ExpectAct virou TRUE quando a policy ganhou scroll-into-view, e a mudança
+	// é deliberada: o alvo está fora da dobra mas é ALCANÇÁVEL por rolagem, que
+	// é o que um humano faz. Manter a expectativa antiga transformaria o teste
+	// numa trava contra o comportamento correto — over-refusal, a mesma família
+	// do FAIL da V1.
+	//
+	// A cobertura que este caso dava antes ("recusar o que não dá para
+	// alcançar") NÃO foi perdida: migrou para `fora-da-tela-fixo`, abaixo, que
+	// é inalcançável de verdade. Trocar uma expectativa sem repor a cobertura
+	// seria enfraquecer a suite para caber no código.
+	{"fora-do-viewport", "/offscreen", "#target", "window.__truth.clicked === true", true,
+		"fora da dobra, porem alcancavel por rolagem"},
+	{"fora-da-tela-fixo", "/fixedoff", "#target", "window.__truth.clicked === true", false,
+		"position:fixed acima da tela: rolar nao traz, nao ha ponto de clique"},
 	{"modal-animando", "/modal", "#target", "window.__truth.clicked === true", true,
 		"o alvo se move; clicar antes de parar acerta a posicao errada"},
 }
@@ -109,6 +121,14 @@ func startHostileServer() (*hangServer, error) {
 
 	mux.HandleFunc("/offscreen", hostileHandler(`
 <button id=target style="position:absolute;top:5000px;left:50px;width:120px;height:40px"
+        onclick="window.__truth.clicked=true">ok</button>`))
+
+	// position:fixed é ancorado ao VIEWPORT, então scrollIntoView não o traz de
+	// volta — diferente de /offscreen, que só está longe no documento. É o
+	// controle que impede a rolagem de virar "clique em qualquer coisa".
+	mux.HandleFunc("/fixedoff", hostileHandler(`
+<div style="height:3000px"></div>
+<button id=target style="position:fixed;top:-400px;left:50px;width:120px;height:40px"
         onclick="window.__truth.clicked=true">ok</button>`))
 
 	mux.HandleFunc("/modal", hostileHandler(`
@@ -295,10 +315,10 @@ func RunHostileSuite(outPath string) error {
 		// Registrado no artefato porque é a variável que separa V1 de V2: um
 		// resultado sem ele não é reproduzível nem comparável.
 		"settle_budget": pol.SettleBudget.String(),
-		"cases":       len(hostileCases),
-		"summary":     summary,
-		"results":     results,
-		"watchdog":    wd.Verdict(r.Log),
-		"started_utc": time.Now().UTC().Format(time.RFC3339),
+		"cases":         len(hostileCases),
+		"summary":       summary,
+		"results":       results,
+		"watchdog":      wd.Verdict(r.Log),
+		"started_utc":   time.Now().UTC().Format(time.RFC3339),
 	})
 }
