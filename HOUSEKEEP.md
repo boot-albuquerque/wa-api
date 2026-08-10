@@ -2177,6 +2177,47 @@ sessões, fora do escopo do que estava em andamento.
 > O defeito não é a queda; é o painel ter provocado a queda, e a
 > consequência dela ser perder a observação.
 
+### Reprodução em bancada (2026-08-10), com o mecanismo exato
+
+Pareamento novo no pod limpo, HistorySync de ~15.700 mensagens em quatro
+lotes. A linha do tempo, do log do servidor:
+
+```
+00:09:53  websocket connected                   (painel abre /session/ws)
+00:12:12  QR Pair Success                       (rajada comeca)
+00:12:24  Saved HistorySync ... savedCount=922
+00:12:34  savedCount=4959
+00:12:42  savedCount=4949
+00:12:48  savedCount=4917
+00:13:01  websocket broadcast write failed; dropping connection
+          error="... failed to write frame: context deadline exceeded"
+00:13:01  websocket disconnected                (duration_ms=187106)
+```
+
+**O mecanismo que faltava na entrada original**: a conexão não cai por erro
+do cliente nem por fechamento do navegador — cai por **prazo de escrita
+estourado**. O `context deadline exceeded` na escrita do quadro é o painel
+não conseguindo drenar a rajada, e o servidor cumprindo a F74 ao derrubar
+quem não acompanha. As outras duas linhas do mesmo segundo já são
+`use of closed network connection`: consequência, não causa.
+
+**E o pior detalhe, que não estava registrado**: o painel **não reconecta**.
+Minutos depois da rajada o cabeçalho seguia em `0 conectados`, com a sessão
+pareada e viva. Não é uma cegueira momentânea durante a rajada — é
+permanente até alguém recarregar a página. Isso muda a prioridade das
+correções sugeridas acima: podar e truncar (1) reduz a chance de cair, mas
+**não** resolve o caso em que a queda acontece mesmo assim. Falta um item:
+
+4. **Reconexão automática no painel**, com recuo exponencial e um aviso
+   visível de "reconectando". Sem isso, qualquer queda — por rajada, por
+   suspensão do notebook, por rede — deixa o painel mentindo em silêncio: a
+   sessão aparece conectada (isso vem do REST) e o fluxo de eventos está
+   morto (isso vem do WebSocket).
+
+**Evidência incidental da F75 na mesma linha**: o registro de fronteira saiu
+como `"url":"/session/ws?token=REDACTED"`. A redação está funcionando no
+caminho real, e não só no teste.
+
 ## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
 
 **Data / contexto**: 2026-08-08, ao investigar as quedas de WebSocket da F85.
