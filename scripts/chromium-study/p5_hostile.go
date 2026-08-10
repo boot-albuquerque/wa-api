@@ -133,6 +133,13 @@ type hostileResult struct {
 	Wrong     int    `json:"ground_truth_wrong_clicks"`
 	Outcome   string `json:"outcome"`
 	Refusal   string `json:"refusal,omitempty"`
+
+	// DecisionMS é quanto tempo o agente levou entre "página carregada" e
+	// "decidiu". Existe para tornar um PASS ATRIBUÍVEL: a V2 só difere da V1 por
+	// reamostrar, então um correct_success em disabled-vira-enabled tem de
+	// aparecer com espera > 800 ms. Se aparecesse em ~0 ms, o sucesso viria de
+	// outra coisa e a explicação estaria errada.
+	DecisionMS int64 `json:"decision_ms"`
 }
 
 // classify compara o que o agente AFIRMOU com o que a página REGISTROU.
@@ -213,6 +220,7 @@ func RunHostileSuite(outPath string) error {
 
 		res := hostileResult{Case: hc.Name, Agent: agent, ExpectAct: hc.ExpectAct}
 		var actErr error
+		t0 := time.Now()
 		if agent == "chromedp-direto" {
 			// O caminho ingênuo: clica e considera o retorno sem erro como
 			// sucesso. É o comportamento que a policy existe para substituir.
@@ -222,6 +230,7 @@ func RunHostileSuite(outPath string) error {
 		} else {
 			actErr = pol.Click(tab, hc.Selector, hc.Post, label)
 		}
+		res.DecisionMS = time.Since(t0).Milliseconds()
 		res.Acted = actErr == nil
 		if actErr != nil {
 			res.Refusal = actErr.Error()
@@ -235,8 +244,8 @@ func RunHostileSuite(outPath string) error {
 		for _, agent := range []string{"chromedp-direto", "interaction-policy"} {
 			res := run(hc, agent)
 			results = append(results, res)
-			fmt.Fprintf(os.Stderr, "%-22s %-19s -> %-17s truth=%v wrong=%d\n",
-				hc.Name, agent, res.Outcome, res.Truth, res.Wrong)
+			fmt.Fprintf(os.Stderr, "%-22s %-19s -> %-17s truth=%v wrong=%d decision=%dms\n",
+				hc.Name, agent, res.Outcome, res.Truth, res.Wrong, res.DecisionMS)
 		}
 	}
 
@@ -272,11 +281,20 @@ func RunHostileSuite(outPath string) error {
 		fmt.Fprintf(os.Stderr, "\n%s: false_success=%d wrong_target=%d correct_success=%d correct_failure=%d\n",
 			agent, fs, wt, count(agent, OutcomeCorrectSuccess), count(agent, OutcomeCorrectFailure))
 	}
-	fmt.Fprintf(os.Stderr, "\nHOSTILE SUITE (criterio: false_success=0 na policy): %s\n", verdict)
+	// O critério é enunciado por inteiro porque a versão curta ("false_success=0")
+	// já produziu um PASS falso nesta suite: recusar tudo o satisfaz. Com ff=0
+	// junto, as DUAS soluções degeneradas ficam de fora — a que nunca age reprova
+	// por false_failure, a que sempre age reprova por false_success/wrong_target.
+	fmt.Fprintf(os.Stderr,
+		"\nHOSTILE SUITE (criterio na policy: false_success=0 E wrong_target=0 E false_failure=0): %s\n",
+		verdict)
 
 	return writeJSON(outPath, map[string]any{
-		"experiment":  "hostile-interaction-suite",
-		"verdict":     verdict,
+		"experiment": "hostile-interaction-suite",
+		"verdict":    verdict,
+		// Registrado no artefato porque é a variável que separa V1 de V2: um
+		// resultado sem ele não é reproduzível nem comparável.
+		"settle_budget": pol.SettleBudget.String(),
 		"cases":       len(hostileCases),
 		"summary":     summary,
 		"results":     results,
