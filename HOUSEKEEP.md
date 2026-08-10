@@ -4385,6 +4385,19 @@ usuário — que pode ser minutos, horas, ou nunca, se o tráfego for de entrada
 E o caso pior é o mais provável: uma sessão que só RECEBE mensagem não gera
 requisição HTTP nenhuma. Ela fica órfã até o próximo restart do pod.
 
+**LIMITE DESTA EVIDÊNCIA, e ele importa.** A medição usou um usuário de teste
+com `connected` NULL. O caminho `connectOnStartup` com `connected=1` — que é o
+que valeria num restart real de produção — **não foi exercitado**.
+
+A frase "fica órfã até o próximo restart", acima, portanto contém uma suposição
+minha, não uma medição: ela pressupõe que o restart recupera. É plausível, e é
+o que o código sugere, mas ninguém mediu. Se `connectOnStartup` também não
+recuperar, a sessão órfã fica órfã até intervenção humana — que é uma entrada
+bem pior que esta.
+
+Antes de a F107 virar decisão, é esse o experimento que falta: derrubar o dono
+com `connected=1` no banco, reiniciar o outro pod, e medir se ele assume.
+
 **Correção sugerida**: um laço que varre leases expirados e tenta reivindicar os
 que pertencem a usuários com `connected=1`. É o mesmo trabalho que
 `connectOnStartup` já faz, só que periódico em vez de uma vez.
