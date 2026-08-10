@@ -4284,3 +4284,65 @@ foi ensaiado. O que falta é **operacional**:
 
 **Status**: **não corrigido** — é decisão operacional, não mudança de código.
 O ensaio está feito e passou; o deploy em si é sua decisão.
+
+---
+
+## F106 — uma linha de payload ilegível trava o outbox de cabeça de fila, para sempre
+
+**Data**: 2026-08-10
+**Contexto**: cobertura do ramo `FOR UPDATE SKIP LOCKED` (Fase 1 do ADR-0007).
+Achado de lado, ao ler o caminho de reivindicação para escrever o teste.
+
+**Onde**: `pkg/infra/db/webhook_outbox.go:220-226`, em `scanOutboxRows`.
+
+**Problema**: o comentário e o código dizem coisas opostas, e o código está do
+lado errado.
+
+```go
+if err := json.Unmarshal([]byte(raw), &e.Payload); err != nil {
+    // Uma linha ilegível não pode derrubar o lote inteiro: ela ficaria
+    // para sempre bloqueando entregas saudáveis atrás dela. Sai do lote
+    // e continua vencida, para aparecer na varredura seguinte — e o erro
+    // vai para quem chama, que decide se loga.
+    return nil, fmt.Errorf("webhook outbox: payload ilegivel em %s: %w", e.ID, err)
+}
+```
+
+O comentário **nomeia exatamente o modo de falha** que afirma estar evitando, e
+a linha seguinte o implementa: `return nil, err` aborta o lote inteiro.
+`pushDueAt` não roda, nenhum `due_at` é empurrado, nada é commitado.
+
+É um comentário que documenta uma correção que nunca foi escrita — o que é pior
+que não ter comentário, porque quem revisar vai ler a intenção e conferir que
+ela está descrita.
+
+**Cenário concreto de falha**: uma linha com `payload` JSON inválido — restauração
+parcial, escrita truncada, ou um payload antigo com escape quebrado. Ela tem o
+`due_at` mais antigo, então `ORDER BY due_at LIMIT 64` a coloca no lote **toda
+vez**. A partir daí:
+
+- toda `ClaimDue` falha no scan;
+- nenhuma das outras 63 entregas saudáveis é reivindicada;
+- e isso não se resolve sozinho, porque o `due_at` da linha ruim nunca é
+  empurrado para frente.
+
+O outbox para de entregar **tudo**, permanentemente, por causa de uma linha.
+
+**Por que ninguém notou**: os 9 testes existentes montam payload válido. Não há
+teste com payload corrompido, e o caminho de erro nunca foi exercitado.
+
+**Correção sugerida**: fazer o que o comentário já promete — pular a linha,
+registrar em log com o `id`, e seguir com o resto do lote. E empurrar o `due_at`
+da linha ruim junto com as demais, senão ela volta no lote seguinte e o custo
+vira permanente de outra forma.
+
+Vale decidir também o que fazer com ela no fim: uma linha que nunca vai ser
+entregável precisa de uma saída (contador de tentativas, ou tabela de descarte),
+senão fica vencida para sempre gerando log.
+
+**Anti-regressão**: teste que insere uma linha com payload inválido junto com N
+válidas e verifica que as N válidas SÃO reivindicadas. Hoje esse teste falharia.
+
+**Status**: **não corrigido** — defeito pré-existente fora do escopo da tarefa
+(que era cobrir o `SKIP LOCKED`). A política do repositório é registrar e
+perguntar antes de corrigir.
