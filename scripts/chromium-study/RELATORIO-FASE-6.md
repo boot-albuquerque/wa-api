@@ -98,15 +98,81 @@ Corrigido: orçamento para 25 min e **tempo por estágio** registrado — sem el
 dá para saber onde o orçamento foi. Um número absurdo é sorte; o próximo pode ser
 plausível e errado.
 
-## 5. O que fica aberto
+## 5. O censo válido: são 3 renderers, não 4
 
-- **O que são os 2 renderers do boot.** Não sei. `browser_ui` e spare renderer
-  foram refutados. Não inventar.
-- **A composição com o app vivo.** A hipótese é `2 (boot) + 1 (página) +
-  1 (service worker) = 4`, casando com a Fase 5 — mas é `INFERRED` até o censo
-  completo válido, que estava em execução quando este relatório foi escrito.
+Terceira tentativa, 106 s, `stopped_via=browser.close`:
 
-## 6. Consequência para os documentos do `disparazaap`
+| estágio | renderers | targets |
+|---|--:|---|
+| `boot` | 2 | 2× `browser_ui`, 1 `page about:blank` |
+| `primed` | 3 | + a `page` anexada |
+| `appready` | **3** | + `page https://web.whatsapp.com/`, + `service_worker .../sw.js` |
+
+**A aplicação inteira soma +1 renderer sobre o boot.** A página reaproveitou o
+renderer da aba, e o service worker não ganhou processo próprio — coerente com
+site isolation desligada.
+
+A Fase 5 registrou 4 renderers, por um caminho diferente (`waopen`). A diferença
+fica aberta e **não deve ser resolvida por arredondamento**: são medições de
+fluxos distintos.
+
+O "PSS da aplicação" saiu **−51 MB**, negativo de novo — mas agora com a aba
+VIVA. Não é bug de medição: é a banda de ruído de ~50 MB do §3 engolindo o sinal.
+Custo de aplicação por PSS **não é medível neste harness**.
+
+## 6. O achado maior: a página para de responder
+
+```
+settle0..2   respondem
+settle3..14  StateProbe: deadline of 5s exceeded   (~90 s seguidos)
+sync settled=false
+```
+
+As três primeiras sondagens responderam. **A partir de ~6 s, todo `Evaluate` na
+página estoura 5 s.** `MEASURED`, HIGH.
+
+Isto explica o travamento de 24 minutos de forma mecanicista, e a explicação é
+uma armadilha que merece o catálogo:
+
+> **O `WithPollingTimeout` do `chromedp.Poll` é um timer DENTRO da página.**
+> Página que não executa JS nunca dispara o próprio timeout, e o `Poll` fica
+> preso indefinidamente — fora da `DeadlinePolicy` sem parecer que está. É primo
+> do achado de rAF da 4C: as duas presumem que a página coopera.
+
+Corrigido substituindo o `Poll` por laço do lado Go, com cada sondagem sob
+`Runner.Do`. O sintoma virou 12 erros registrados no `OpLog` em vez de silêncio.
+
+### 6.1 Duas leituras, e não sei qual é
+
+- **(a) renderer travado** — o alvo fica inoperável neste ambiente após ~6 s.
+  Seria bloqueador de produto.
+- **(b) renderer ocupado** — sync inicial bloqueia a main thread e os 5 s de
+  `OpStateProbe` são curtos demais para essa janela. Seria prazo mal calibrado
+  meu.
+
+`HYPOTHESIS`, sem preferência declarada. O teste que separa é barato: subir o
+prazo por sondagem e ver se volta a responder.
+
+### 6.2 O que isto reabre da Fase 5
+
+A anomalia de layout — `#side` em `(-165,-42)`, idêntica em 4 amostras ao longo
+de 8 s — foi medida **exatamente nesta janela**. Se a leitura (a) ou (b) valer,
+aquela geometria pode ter sido lida de um renderer que não estava executando, e
+a conclusão "layout estático sem causa conhecida" passa a ter uma causa
+candidata.
+
+O boundary de CPU, bloqueado pelo mesmo sintoma, entra na mesma revisão.
+
+**Nenhuma das duas conclusões da Fase 5 é retirada agora** — elas ficam
+marcadas como dependentes deste desfecho.
+
+## 7. O que fica aberto
+
+- **O que são os 2 renderers do boot.** `browser_ui` e spare renderer refutados.
+- **(a) ou (b)** do §6.1 — o próximo teste.
+- **3 vs 4 renderers** entre este censo e a Fase 5.
+
+## 8. Consequência para os documentos do `disparazaap`
 
 O doc `docs/architecture/wa-headless-chromium-cdp.md` §2.1.1 afirma:
 
@@ -119,7 +185,7 @@ Correção a propor pelo `HOUSEKEEP.md` do `disparazaap`, **não editada daqui**
 repo é da sessão C0/C1 e escrever nele desta sessão é o BLOCKER de trabalho
 paralelo. Esta é a primeira vez que o processo é seguido em vez de furado.
 
-## 7. Reprodução
+## 9. Reprodução
 
 ```bash
 S=scripts/chromium-study

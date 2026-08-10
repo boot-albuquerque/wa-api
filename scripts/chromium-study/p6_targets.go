@@ -332,13 +332,39 @@ func RunTargetCensus(outPath string) error {
 		return fmt.Errorf("PRECONDICAO classe=%s qr=%v: %w", snap.Class, snap.HasQR, err)
 	}
 	// Estado estacionário: contar durante o sync inicial mediria o transiente.
-	_ = chromedp.Run(tab, chromedp.Poll(`(() => {
-		const p = document.querySelector('#pane-side');
-		if (!p) return false;
-		return p.querySelectorAll('[role="listitem"], [role="row"]').length > 0 &&
-		       !document.querySelector('progress, [role="progressbar"]');
-	})()`, nil, chromedp.WithPollingTimeout(180*time.Second),
-		chromedp.WithPollingInterval(500*time.Millisecond)))
+	//
+	// NÃO usar chromedp.Poll aqui, e a razão custou 25 minutos de corrida cega:
+	// o WithPollingTimeout do Poll é implementado DENTRO DA PÁGINA, com um timer
+	// do próprio JS. Renderer travado derrota o próprio timeout, e aí nada do
+	// lado Go interrompe — a operação fica fora da DeadlinePolicy sem parecer
+	// que está.
+	//
+	// Aqui o laço é do lado Go e cada sondagem passa pelo Runner: prazo por
+	// operação, registro no OpLog, e um teto explícito de repetições. É o mesmo
+	// desenho da InteractionPolicy, que nunca travou.
+	settleDeadline := time.Now().Add(90 * time.Second)
+	settled := false
+	for i := 0; time.Now().Before(settleDeadline); i++ {
+		var ok bool
+		err := r.Do(tab, OpStateProbe, fmt.Sprintf("census/settle%d", i),
+			func(ctx context.Context) error {
+				return chromedp.Run(ctx, chromedp.Evaluate(`(() => {
+					const p = document.querySelector('#pane-side');
+					if (!p) return false;
+					return p.querySelectorAll('[role="listitem"], [role="row"]').length > 0 &&
+					       !document.querySelector('progress, [role="progressbar"]');
+				})()`, &ok))
+			})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "settle%d: %v\n", i, err)
+		}
+		if ok {
+			settled = true
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	fmt.Fprintf(os.Stderr, "sync settled=%v\n", settled)
 	time.Sleep(3 * time.Second)
 	appready := add("appready")
 
@@ -369,8 +395,12 @@ func RunTargetCensus(outPath string) error {
 		"renderers_at_boot": boot.ByType["renderer"],
 		"cpu_stat":          metrics.CPUStat(),
 		"memory_events":     metrics.CgroupEvents(),
-		"window_flag":       WAWindowSize,
-		"started_utc":       time.Now().UTC().Format(time.RFC3339),
+		// Sem isto a sonda nao responde "onde parou" — que e exatamente o que o
+		// OpLog da 4C existe para responder, e o que faltou na corrida cega.
+		"watchdog":     wd.Verdict(r.Log),
+		"sync_settled": settled,
+		"window_flag":  WAWindowSize,
+		"started_utc":  time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
