@@ -272,7 +272,7 @@ func oneTabTrial(parent context.Context, r *Runner, rep int) (*tabTrial, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer gracefulStop(browsers[0])
+	defer cleanStop(browsers[0])
 	time.Sleep(2 * time.Second)
 
 	alloc, cancelAlloc := chromedp.NewRemoteAllocator(parent, browsers[0].WSURL)
@@ -448,13 +448,13 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 	if err := primeTab(tab); err != nil {
 		cancelTab()
 		cancelAlloc()
-		gracefulStop(browsers[0])
+		cleanStop(browsers[0])
 		return nil, fmt.Errorf("aba baseline nao inicializou: %w", err)
 	}
 	if err := navigateTarget(tab, r, fmt.Sprintf("rec%d/baseline/navigate", rep)); err != nil {
 		cancelTab()
 		cancelAlloc()
-		gracefulStop(browsers[0])
+		cleanStop(browsers[0])
 		return nil, err
 	}
 	if err := waitAppReady(tab, r, fmt.Sprintf("rec%d/baseline/ready", rep)); err != nil {
@@ -474,7 +474,7 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 		snap := snapshot(tab, r, fmt.Sprintf("rec%d/baseline/state", rep))
 		cancelTab()
 		cancelAlloc()
-		gracefulStop(browsers[0])
+		cleanStop(browsers[0])
 		if snap.Class == classLoginRequired || snap.HasQR {
 			t.Outcome = "PRECONDITION_LOGIN_REQUIRED"
 			t.QRRequired = true
@@ -499,7 +499,7 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 	// confundidos com a forma de parada.
 	killAt := time.Now()
 	if RecoveryFault == "graceful" {
-		gracefulStop(browsers[0])
+		gracefulStop(browsers[0]) //ablation:stop-form
 	} else if err := browsers[0].SIGKILL(); err != nil {
 		cancelTab()
 		cancelAlloc()
@@ -536,7 +536,7 @@ func oneRecoveryTrial(parent context.Context, r *Runner, rep int) (*recoveryTria
 		t.Outcome = "PROFILE_ERROR"
 		return t, nil
 	}
-	defer gracefulStop(b2[0])
+	defer cleanStop(b2[0])
 	t.LaunchSec = time.Since(recStart).Seconds()
 
 	alloc2, cancelAlloc2 := chromedp.NewRemoteAllocator(parent, b2[0].WSURL)

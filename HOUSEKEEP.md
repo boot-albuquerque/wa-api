@@ -3073,3 +3073,79 @@ sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
 **Status**: **não corrigido** — registrado com os dois sites que já sofrem.
+
+---
+
+## F94 — o harness do estudo desligava o Chromium por sinal nos modos que carregam a credencial do WhatsApp
+
+**Data**: 2026-08-09.
+
+**Contexto**: apareceu na Fase 5 do estudo `scripts/chromium-study`, ao abrir o
+WhatsApp Web para medir o CPU correctness boundary. Não é escopo da Fase 5 — é
+dívida deixada pela Fase 4C.
+
+**Onde**: `scripts/chromium-study/p4_wa.go:187,236,442`,
+`p4b_wasession.go:65`, `p4c_target.go:275,451,457,477,539`.
+
+```go
+defer gracefulStop(browsers[0])   // = SIGTERM
+```
+
+**Problema**: a Fase 4C mediu que desligar por sinal corrompe o estado de sessão
+do WhatsApp (logout na 4ª e na 6ª iteração, contra 40 iterações limpas com
+`Browser.close`), e escreveu isso como requisito nº 1 de produção no
+`RELATORIO-FASE-4C.md` §7. **O requisito nunca saiu do experimento que o
+mediu.** Todos os modos que carregam a credencial — `waprep`, `waopen`,
+`wacap`, `wasession`, `watabs` — continuaram em `gracefulStop`.
+
+Evidência medida nesta sessão: após dois `waopen`, o perfil ficou com os **3
+arquivos `Singleton` presentes**, que é a assinatura de saída suja estabelecida
+pela 4C (o Chromium remove os próprios `Singleton` ao sair limpo; sob SIGTERM
+ficavam em 3 sempre). O perfil ainda estava em 148 MB, acima dos 118 MB que
+marcam degradação, então a credencial sobreviveu — mas por margem, e a 4C viu
+logout já na 4ª iteração desse regime.
+
+Três das nove chamadas eram piores que as demais: em `oneRecoveryTrial`
+(`p4c_target.go:451,457,477`) o desligamento sujo está em **caminho de erro**, e
+o da linha 477 roda justamente quando o baseline falha — ou seja, suja o perfil
+exatamente quando a credencial já está frágil.
+
+**Correção**: aplicada nesta sessão. Novo `cleanStop`
+(`p4c_lifecycle.go`) envia `Browser.close` via CDP, espera a saída, e imprime
+sempre o caminho usado (`stopped_via=`), porque os call sites usam `defer` e
+descartariam o retorno. Os nove call sites migraram, exceto os dois em que a
+forma de parada É a variável sob ablação (`p4c_target.go:502` sob
+`RecoveryFault`, `p4c_lifecycle.go:240` sob `LifecycleStop`), marcados
+`//ablation:stop-form`.
+
+**Testes que travam** (`scripts/chromium-study/shutdown_policy_test.go`):
+
+1. `TestCredentialModesNeverStopBySignal` — estático sobre a AST: qualquer
+   função que atribua `PersistentProfileDir` e chame `gracefulStop` sem o
+   marcador falha. É estático de propósito: o defeito não é "o desligamento não
+   funciona" (`closeBrowserViaCDP` sempre funcionou), é "o call site chama a
+   função errada", e um teste de comportamento sobre `cleanStop` passaria com
+   os cinco modos ainda quebrados.
+2. `TestCleanStopGoesThroughBrowserClose` — impede que esvaziar `cleanStopVia`
+   deixe a suíte verde com todos os modos desligando por sinal por dentro.
+
+**Controle negativo EXECUTADO**: reintroduzido `gracefulStop` em
+`p4_wa.go:236`:
+
+```
+--- FAIL: TestCredentialModesNeverStopBySignal (0.01s)
+    shutdown_policy_test.go:114: modo que carrega a credencial desliga por sinal
+    — SIGTERM corrompe o estado de sessao (Fase 4C §7 req. 1). Use cleanStop.
+      p4_wa.go:236:8 em RunWAOpen
+```
+
+Restaurado, volta a `ok`.
+
+**Nota de método**: a primeira versão do teste isentava funções inteiras por
+nome, e teria deixado passar as três chamadas de caminho de erro em
+`oneRecoveryTrial` — só uma das quatro ali era ablação legítima. A isenção
+passou a ser por linha (`//ablation:stop-form`). Isenção por nome de função
+cobre também o código que ainda vai ser escrito lá dentro.
+
+**Status**: **corrigido** nesta sessão, com os dois testes acima e controle
+negativo colado.

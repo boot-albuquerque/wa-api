@@ -62,7 +62,7 @@ func RunWASession(dur time.Duration, outPath string) error {
 	if err != nil {
 		return err
 	}
-	defer gracefulStop(browsers[0])
+	defer cleanStop(browsers[0])
 	time.Sleep(3 * time.Second)
 	memPreLogin := metrics.CgroupCurrent()
 

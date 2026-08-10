@@ -83,6 +83,49 @@ func closeBrowserViaCDP(wsURL string) error {
 	return nil
 }
 
+// cleanStop é o desligamento que TODO modo que toca o perfil pareado deve usar.
+//
+// Existe porque o requisito nº 1 da Fase 4C — desligar por `Browser.close` via
+// CDP, nunca por sinal — ficou só dentro do experimento que o mediu. Os modos
+// que carregam a credencial (`waprep`, `waopen`, `wacap`, `wasession`,
+// `watabs`) continuaram em `gracefulStop`, ou seja, SIGTERM, que é exatamente o
+// desligamento que produziu logout na 4ª e na 6ª iteração.
+//
+// Devolve o caminho efetivamente usado, e isso não é telemetria decorativa: a
+// 4C perdeu uma corrida inteira porque um braço caiu em fallback silencioso e
+// virou réplica do braço antigo. Um `stopped_via` que ninguém registra é a
+// mesma armadilha esperando de novo.
+//
+// NÃO usar nos experimentos em que a forma de parada É a variável sob ablação
+// (`RecoveryFault`, `LifecycleStop`) — ali trocar o desligamento destruiria o
+// desenho.
+// O caminho é impresso SEMPRE, e não apenas devolvido: os call sites usam
+// `defer cleanStop(b)`, que descarta o retorno. Um rótulo que ninguém lê não
+// teria evitado nada do que a 4C perdeu.
+func cleanStop(l *launched) string {
+	via := cleanStopVia(l)
+	fmt.Fprintf(os.Stderr, "stopped_via=%s\n", via)
+	return via
+}
+
+func cleanStopVia(l *launched) string {
+	if l == nil {
+		return "noop"
+	}
+	if err := closeBrowserViaCDP(l.WSURL); err != nil {
+		// Recusa do comando não autoriza deixar o processo vivo: um Chromium
+		// órfão segura o lock do perfil e impede o boot seguinte. O SIGTERM é o
+		// desligamento sujo conhecido, e o rótulo diz isso em voz alta.
+		gracefulStop(l)
+		return "DIRTY_sigterm_close_refused:" + err.Error()
+	}
+	if !waitExit(l, DefaultDeadlines.Shutdown) {
+		gracefulStop(l)
+		return "DIRTY_sigterm_after_close_timeout"
+	}
+	return "browser.close"
+}
+
 type lifecycleIteration struct {
 	Iter          int     `json:"iteration"`
 	Class         string  `json:"class"`
@@ -194,7 +237,7 @@ func RunSessionLifecycle(maxIter int, outPath string) error {
 		if closedViaCDP && waitExit(browsers[0], 15*time.Second) {
 			it.StopVia = "browser.close"
 		} else {
-			gracefulStop(browsers[0])
+			gracefulStop(browsers[0]) //ablation:stop-form
 			if closedViaCDP {
 				it.StopVia = "browser.close+sigterm"
 			} else {

@@ -184,7 +184,7 @@ func RunWAPrep(outPath string) error {
 		}
 		cancel()
 		cancelAlloc()
-		gracefulStop(browsers[0])
+		cleanStop(browsers[0])
 		time.Sleep(1500 * time.Millisecond)
 	}
 
@@ -233,7 +233,7 @@ func RunWAOpen(waitLogin time.Duration, outPath string) error {
 	if err != nil {
 		return err
 	}
-	defer gracefulStop(browsers[0])
+	defer cleanStop(browsers[0])
 	time.Sleep(2 * time.Second)
 
 	alloc, cancelAlloc := chromedp.NewRemoteAllocator(context.Background(), browsers[0].WSURL)
@@ -439,7 +439,7 @@ func RunWACapacity(conc, iters int, chatQuery string, outPath string) error {
 	if err != nil {
 		return err
 	}
-	defer gracefulStop(browsers[0])
+	defer cleanStop(browsers[0])
 	time.Sleep(3 * time.Second)
 	memFloor := metrics.CgroupCurrent()
 
