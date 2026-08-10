@@ -39,10 +39,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
 )
+
+// WAViewport sobrepoe o viewport de layout por CDP. Ver o comentario no ponto
+// de uso: e deliberadamente separado de WAWindowSize para que o resultado seja
+// atribuivel a uma das duas.
+var WAViewport = ""
+
+// parseWH aceita "1280x900" e "1280,900".
+func parseWH(s string) (int64, int64, bool) {
+	sep := -1
+	for i, c := range s {
+		if c == 'x' || c == 'X' || c == ',' {
+			sep = i
+			break
+		}
+	}
+	if sep <= 0 || sep >= len(s)-1 {
+		return 0, 0, false
+	}
+	w, err1 := strconv.ParseInt(s[:sep], 10, 64)
+	h, err2 := strconv.ParseInt(s[sep+1:], 10, 64)
+	if err1 != nil || err2 != nil || w <= 0 || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
+}
 
 // waSearchSelectors são os candidatos a caixa de busca, em ordem de
 // especificidade. O alvo é de terceiro e muda sem aviso, então a lista é
@@ -290,6 +317,33 @@ func RunCPUBoundary(iters int, outPath string) error {
 	if err := primeTab(tab); err != nil {
 		return fmt.Errorf("aba nao inicializou: %w", err)
 	}
+
+	// Viewport por CDP, deliberadamente SEPARADO de --window-size.
+	//
+	// A flag define a janela do sistema; este comando define o viewport de
+	// LAYOUT que o Blink usa. Medido que a flag não bastou: com 1280x800 e com
+	// 1600x1200 o `#side` saiu fora da área visível, e ampliar a janela piorou.
+	// `outerWidth/outerHeight` voltando [0,0] é o sintoma de que, em
+	// headless=new, não há janela no sentido que o app espera.
+	//
+	// Manter as duas flags distintas é o que permite ATRIBUIR o resultado. Se
+	// eu tivesse feito o -wa-window aplicar as duas coisas, um sucesso não
+	// diria qual delas resolveu.
+	//
+	// Aplicado ANTES do Navigate: o app decide layout no primeiro render, e
+	// sobrepor depois mediria um relayout, não o caminho de produção.
+	if WAViewport != "" {
+		w, h, ok := parseWH(WAViewport)
+		if !ok {
+			return fmt.Errorf("-wa-viewport invalido: %q", WAViewport)
+		}
+		if err := r.Do(tab, OpAction, "cpubound/viewport", func(ctx context.Context) error {
+			return chromedp.Run(ctx, emulation.SetDeviceMetricsOverride(w, h, 1, false))
+		}); err != nil {
+			return fmt.Errorf("setDeviceMetricsOverride: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "viewport override: %dx%d\n", w, h)
+	}
 	if err := navigateTarget(tab, r, "cpubound/navigate"); err != nil {
 		return err
 	}
@@ -524,17 +578,19 @@ func RunCPUBoundary(iters int, outPath string) error {
 		readFileTrim("/sys/fs/cgroup/cpu.max"), verdict)
 
 	return writeJSON(outPath, map[string]any{
-		"experiment":    "cpu-correctness-boundary",
-		"verdict":       verdict,
-		"cpu_max":       readFileTrim("/sys/fs/cgroup/cpu.max"),
-		"selector_used": sel,
-		"discovery":     discovery,
-		"settle_budget": pol.SettleBudget.String(),
-		"shape_initial": shape,
-		"summary":       summary,
-		"attempts":      attempts,
-		"watchdog":      wd.Verdict(r.Log),
-		"started_utc":   time.Now().UTC().Format(time.RFC3339),
+		"experiment":        "cpu-correctness-boundary",
+		"verdict":           verdict,
+		"cpu_max":           readFileTrim("/sys/fs/cgroup/cpu.max"),
+		"window_size_flag":  WAWindowSize,
+		"viewport_override": WAViewport,
+		"selector_used":     sel,
+		"discovery":         discovery,
+		"settle_budget":     pol.SettleBudget.String(),
+		"shape_initial":     shape,
+		"summary":           summary,
+		"attempts":          attempts,
+		"watchdog":          wd.Verdict(r.Log),
+		"started_utc":       time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

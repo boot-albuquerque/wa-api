@@ -147,6 +147,7 @@ func main() {
 		reclaim  = flag.Bool("reclaim", true, "mode=walifecycle: delete Singleton files on each boot — the variable under ablation")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
 		waWin    = flag.String("wa-window", "", "override --window-size for WhatsApp modes, e.g. 1600x1200; empty keeps the canonical profile")
+		waVP     = flag.String("wa-viewport", "", "mode=cpubound: set the LAYOUT viewport via CDP Emulation.setDeviceMetricsOverride, e.g. 1280x900; separate from -wa-window on purpose")
 	)
 	flag.Parse()
 	JobTimeout = *jobTO
@@ -196,6 +197,7 @@ func main() {
 	if *mode == "cpubound" {
 		WAUserAgent = *waUA
 		WAWindowSize = normalizeWindowSize(*waWin)
+		WAViewport = *waVP
 		must(RunCPUBoundary(*iters, *out))
 		return
 	}
