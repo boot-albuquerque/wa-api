@@ -24,6 +24,10 @@ Etapa 7-14 RAM, Pod Recovery, capacity,
 
 Branch: `feature/internal-wa-headless`.
 
+> **Fase 6 iniciada.** O nó H1 está fechado e o resultado é NEGATIVO: a premissa
+> de que reduzir renderers daria 100–200 MB por sessão foi **refutada**. Ver
+> [`RELATORIO-FASE-6.md`](RELATORIO-FASE-6.md).
+
 ---
 
 ## Resultado da etapa 5 — InteractionPolicy V2: PASS

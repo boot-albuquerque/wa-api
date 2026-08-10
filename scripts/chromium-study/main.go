@@ -147,6 +147,8 @@ func main() {
 		reclaim  = flag.Bool("reclaim", true, "mode=walifecycle: delete Singleton files on each boot — the variable under ablation")
 		waUA     = flag.String("wa-ua", "", "explicit --user-agent; CHANGES BROWSER IDENTITY, never defaulted")
 		waWin    = flag.String("wa-window", "", "override --window-size for WhatsApp modes, e.g. 1600x1200; empty keeps the canonical profile")
+		bootOnly = flag.Bool("boot-only", false, "mode=targets: para no estagio boot, sem navegar nem tocar o WhatsApp")
+		xFlags   = flag.String("extra-flags", "", "mode=targets: flags extras separadas por espaco, acrescentadas ao perfil canonico")
 		waVP     = flag.String("wa-viewport", "", "mode=cpubound: set the LAYOUT viewport via CDP Emulation.setDeviceMetricsOverride, e.g. 1280x900; separate from -wa-window on purpose")
 	)
 	flag.Parse()
@@ -192,6 +194,16 @@ func main() {
 	}
 	if *mode == "hostile" {
 		must(RunHostileSuite(*out))
+		return
+	}
+	if *mode == "targets" {
+		WAUserAgent = *waUA
+		WAWindowSize = normalizeWindowSize(*waWin)
+		CensusBootOnly = *bootOnly
+		if *xFlags != "" {
+			CensusExtraFlags = strings.Fields(*xFlags)
+		}
+		must(RunTargetCensus(*out))
 		return
 	}
 	if *mode == "cpubound" {

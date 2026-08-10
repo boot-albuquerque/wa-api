@@ -1,0 +1,348 @@
+{
+  "app_pss_mb": -31.8427734375,
+  "cpu_stat": {
+    "nr_periods": 1657,
+    "nr_throttled": 17,
+    "system_usec": 12074457,
+    "throttled_usec": 1261711,
+    "usage_usec": 30808700,
+    "user_usec": 18734243
+  },
+  "delta_by_type": {
+    "browser": 0,
+    "gpu-process": 0,
+    "renderer": 1,
+    "utility": 0,
+    "zygote": 0
+  },
+  "experiment": "h1-target-census",
+  "memory_events": {
+    "high": 0,
+    "low": 0,
+    "max": 0,
+    "oom": 0,
+    "oom_group_kill": 0,
+    "oom_kill": 1
+  },
+  "renderers_at_boot": 2,
+  "stages": [
+    {
+      "stage": "boot",
+      "targets": [
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 104,
+          "type": "utility",
+          "pss_kib": 10921,
+          "rss_kib": 43124
+        },
+        {
+          "pid": 132,
+          "type": "renderer",
+          "pss_kib": 164785,
+          "rss_kib": 232316
+        },
+        {
+          "pid": 139,
+          "type": "renderer",
+          "pss_kib": 37036,
+          "rss_kib": 99736
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 96611,
+          "rss_kib": 167980
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1287,
+          "rss_kib": 2656
+        },
+        {
+          "pid": 54,
+          "type": "browser",
+          "pss_kib": 1055,
+          "rss_kib": 2508
+        },
+        {
+          "pid": 56,
+          "type": "zygote",
+          "pss_kib": 16931,
+          "rss_kib": 56700
+        },
+        {
+          "pid": 57,
+          "type": "zygote",
+          "pss_kib": 13273,
+          "rss_kib": 57028
+        },
+        {
+          "pid": 77,
+          "type": "gpu-process",
+          "pss_kib": 43664,
+          "rss_kib": 80200
+        },
+        {
+          "pid": 81,
+          "type": "utility",
+          "pss_kib": 37240,
+          "rss_kib": 90832
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 2,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 98953,
+        "gpu-process": 43664,
+        "renderer": 201821,
+        "utility": 48161,
+        "zygote": 30204
+      },
+      "total_pss_kib": 422803,
+      "cgroup_current_mb": 436.63671875
+    },
+    {
+      "stage": "primed",
+      "targets": [
+        {
+          "type": "page",
+          "url": "about:blank",
+          "attached": true
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 104,
+          "type": "utility",
+          "pss_kib": 9694,
+          "rss_kib": 43124
+        },
+        {
+          "pid": 132,
+          "type": "renderer",
+          "pss_kib": 159743,
+          "rss_kib": 235388
+        },
+        {
+          "pid": 139,
+          "type": "renderer",
+          "pss_kib": 29583,
+          "rss_kib": 99736
+        },
+        {
+          "pid": 160,
+          "type": "renderer",
+          "pss_kib": 32780,
+          "rss_kib": 102636
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 100661,
+          "rss_kib": 175280
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1279,
+          "rss_kib": 2656
+        },
+        {
+          "pid": 54,
+          "type": "browser",
+          "pss_kib": 1047,
+          "rss_kib": 2508
+        },
+        {
+          "pid": 56,
+          "type": "zygote",
+          "pss_kib": 16739,
+          "rss_kib": 56700
+        },
+        {
+          "pid": 57,
+          "type": "zygote",
+          "pss_kib": 12363,
+          "rss_kib": 57028
+        },
+        {
+          "pid": 77,
+          "type": "gpu-process",
+          "pss_kib": 43227,
+          "rss_kib": 81060
+        },
+        {
+          "pid": 81,
+          "type": "utility",
+          "pss_kib": 36306,
+          "rss_kib": 91100
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 3,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 102987,
+        "gpu-process": 43227,
+        "renderer": 222106,
+        "utility": 46000,
+        "zygote": 29102
+      },
+      "total_pss_kib": 443422,
+      "cgroup_current_mb": 461.796875
+    },
+    {
+      "stage": "appready",
+      "targets": [
+        {
+          "type": "service_worker",
+          "url": "https://web.whatsapp.com/sw.js",
+          "attached": false
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 104,
+          "type": "utility",
+          "pss_kib": 7303,
+          "rss_kib": 26988
+        },
+        {
+          "pid": 132,
+          "type": "renderer",
+          "pss_kib": 105097,
+          "rss_kib": 134992
+        },
+        {
+          "pid": 139,
+          "type": "renderer",
+          "pss_kib": 14877,
+          "rss_kib": 38776
+        },
+        {
+          "pid": 169,
+          "type": "renderer",
+          "pss_kib": 44817,
+          "rss_kib": 73604
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 136311,
+          "rss_kib": 164112
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1758,
+          "rss_kib": 2844
+        },
+        {
+          "pid": 54,
+          "type": "browser",
+          "pss_kib": 316,
+          "rss_kib": 716
+        },
+        {
+          "pid": 56,
+          "type": "zygote",
+          "pss_kib": 7952,
+          "rss_kib": 15484
+        },
+        {
+          "pid": 57,
+          "type": "zygote",
+          "pss_kib": 4351,
+          "rss_kib": 18588
+        },
+        {
+          "pid": 77,
+          "type": "gpu-process",
+          "pss_kib": 32882,
+          "rss_kib": 54972
+        },
+        {
+          "pid": 81,
+          "type": "utility",
+          "pss_kib": 34532,
+          "rss_kib": 56228
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 3,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 138385,
+        "gpu-process": 32882,
+        "renderer": 164791,
+        "utility": 41835,
+        "zygote": 12303
+      },
+      "total_pss_kib": 390196,
+      "cgroup_current_mb": 501.109375
+    }
+  ],
+  "started_utc": "2026-08-10T16:58:55Z",
+  "window_flag": ""
+}
