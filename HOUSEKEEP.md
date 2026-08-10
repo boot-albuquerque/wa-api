@@ -768,16 +768,38 @@ tentativa.
 `apperr.New(<code>, apperr.CategoryValidation, <msg>, false, nil)` e ligar
 `Category.HTTPStatus()` no caminho de resposta.
 
-Vale notar: `Category.HTTPStatus()` **já existe e já tem teste**, mas nada o
-chama ainda — o mesmo achado que apareceu ao classificar
-`user_info_failed` (que foi corrigido para `CategoryValidation` nesta leva,
-mas cuja tradução para status HTTP depende desta mesma ligação). Esta entrada
-é a evidência de produção de que a ligação faz falta, e não só de que está
-pendente no plano.
+~~Vale notar: `Category.HTTPStatus()` **já existe e já tem teste**, mas nada o
+chama ainda.~~ **Isso estava errado quando foi escrito e ficou errado por dois
+dias.** `RespondJSON` (`pkg/presentation/http/response.go:52`) já ignora o
+status do sítio de chamada quando o erro é `*apperr.AppError` e usa
+`HTTPStatus()`. A ligação nunca faltou — faltava só classificar os erros.
 
-**Status**: **não corrigido**. São 67 sítios mais a ligação do
-`HTTPStatus()`; é mudança de contrato de API (respostas que hoje são 500
-passam a ser 400) e merece commit próprio, fora do merge.
+Essa frase custou uma estimativa: "67 sítios **mais** a ligação do
+`HTTPStatus()`" dobrava o trabalho real. Ela veio de um comentário
+desatualizado em `codes.go` que dizia *"nothing calls it yet"*; o comentário foi
+corrigido junto.
+
+**Status**: **CORRIGIDO (2026-08-09)**, em commits por grupo de use case
+(`user`, `message`, `group`, `storage`, `session`, `chat`) — 103 sítios, mais
+duas validações em `pkg/domain/privacy.go` que o levantamento por use case não
+via.
+
+**O que ficou de fora, de propósito**: 18 sítios com `failure sending to
+Whatsapp servers`, `failed to *` e `database error`. São falha nossa ou do
+upstream, e devolvê-los como 400 seria o defeito inverso — o cliente pararia de
+retentar uma falha que era mesmo transitória.
+
+**Dois erros meus no caminho**, ambos pegos por teste e não por revisão:
+- o levantamento usou `grep -rhn ... | grep -v _test`; com `-h` o nome do
+  arquivo não sai, então o filtro não filtrava nada e metade das strings eram
+  dublês de teste. Refeito por arquivo.
+- converti `LID not found: %w` para 404, e ele dispara quando o **store quebra**
+  — não quando o LID não existe. Um teste de falha de porta pegou. Revertido
+  para `failed to get LID: %w` (500).
+
+Os 9 testes que fixavam o defeito (4 com `_500` no nome) foram invertidos **caso
+a caso**: `TestUserHandlers_AdminRoutes` tem 9 casos esperando 500 e só 5
+mudaram — os outros 4 são erro de repositório e de escrita, e seguem 500.
 
 > **Atualização (2026-08-08)**: a F83 corrigiu UMA instância desta família
 > — `/session/profile` passou a derivar o status da categoria do `apperr`
@@ -2578,11 +2600,36 @@ desnecessário.
 - avaliar um filtro de `status@broadcast` — baixar mídia de status de todos os
   contatos pode ser trabalho que ninguém pediu, e hoje é obrigatório.
 
-**Status**: **diagnosticado, não corrigido**. A parte estrutural já era conhecida
-e está em uso como premissa da F86. O que faltava — separar "SDK lento" de
-"nosso handler lento" — está respondido, por leitura de código com `file:line`,
-não por hipótese. Falta a decisão entre (A) e (B) e a medição do efeito, que o
-próprio `Node handling took` do SDK dá de graça.
+**Status**: **CORRIGIDO (2026-08-09)** pela saída (A), a escolhida — fila serial
+por sessão, em `pkg/bootstrap/session_event_queue.go`. `handleEvent` enfileira e
+volta; um worker por sessão preserva a ordem que hoje vem de graça do laço
+sequencial do SDK, e que a saída (B) teria perdido.
+
+Três decisões que valem registro:
+- **teto por ITENS (1024), não por bytes**, ao contrário da F86: aqui a fila
+  guarda o evento **antes** do download, então a mídia não está no item.
+- **fila cheia BLOQUEIA**, não descarta: bloquear devolve o sistema ao
+  comportamento de hoje (laço de nós parado) em vez de perder evento.
+- **o envio observa o canal de parada**: sem isso, um produtor preso numa fila
+  cheia de sessão morta seguraria o laço de nós para sempre — o oposto do
+  objetivo.
+
+**Um controle negativo mentiu no caminho**: o teste de "não bloqueia o produtor"
+tinha `time.Now()` **depois** do enfileiramento do evento lento, então o custo
+dele caía fora da medição e o número saía idêntico nos dois mundos. Subir uma
+linha fez o controle acusar `2.002241625s`. Virou ARMADILHAS 25.
+
+**A correção cega o instrumento que a provaria.** O `Node handling took` do SDK
+media o nosso handler de graça, e ele para de medir justamente porque o trabalho
+saiu do laço de nós. Por isso entrou um aviso próprio com o mesmo limiar (5s) e
+mais o `queued` da fila — as duas séries continuam comparáveis.
+
+**Não corrigidos, e seguem abertos** (os dois itens menores acima): os timeouts
+de 1 a 10 minutos e o filtro de `status@broadcast`.
+
+**Falta a validação de bancada**: precisa de um aparelho pareado recebendo
+mídia. O sinal é o `Node handling took` sumir para mídia e o novo aviso de
+evento lento aparecer (ou não) com `queued`.
 
 ---
 
@@ -3501,8 +3548,12 @@ segredo já saiu do disco. Fica como limpeza posterior.
 remover o `OR` invalidaria linhas não migradas; a migração 16 garante que essa
 linha não existe, e se ela existisse a migração se recusaria a rodar.
 
-**Status**: **não corrigido** — registrado. É mudança de postura de segurança e
-tem etapa que quebra cliente; decisão do dono do repositório.
+**Status**: **CORRIGIDO (2026-08-09)**, as duas etapas — etapa 1 junto com a
+F100 (que era pré-requisito, não detalhe: fazê-la antes abria acesso sem
+credencial, e isso foi **medido**, não suposto), etapa 2 com a migração 16.
+
+**Só o drop da coluna fica pendente**, pelo motivo acima: é cosmético, e o
+segredo já saiu do disco.
 
 ---
 

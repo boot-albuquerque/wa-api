@@ -1,6 +1,8 @@
 # ADR-0006: release de contrato — uma janela, quatro mudanças
 
-- **Status**: proposed — duas decisões em aberto, marcadas abaixo
+- **Status**: **accepted e implementado (2026-08-09)** — as duas decisões em
+  aberto foram tomadas pelas opções recomendadas, e as quatro mudanças entraram.
+  Ver "Fechamento" no fim deste documento.
 - **Data**: 2026-08-09
 - **Relacionado**: F66, F68, F75, F97 e F100 em `HOUSEKEEP.md`
 
@@ -75,7 +77,8 @@ não por ser perigosa.
 
 #### F68 — unificar o payload do evento `QR`
 
-> **DECISÃO EM ABERTO (1 de 2).**
+> **DECIDIDO por (a) em 2026-08-09.** O texto abaixo fica como estava no
+> momento da decisão.
 > **(a)** um `type` só, sempre com `code`, e com `qrCodeBase64`/`expiresAt`
 > quando houver — menos disruptivo para quem já consome.
 > **(b)** dois `type` distintos (`QR` e `QRCode`) — mais honesto, e o roteamento
@@ -86,7 +89,8 @@ não por ser perigosa.
 
 #### F75 — token na query string
 
-> **DECISÃO EM ABERTO (2 de 2).** As três saídas, e nenhuma é indolor:
+> **DECIDIDO por (a) em 2026-08-09**, com a redação de log junto. As três
+> saídas, e nenhuma era indolor:
 >
 > **(a) Manter a query só em `/session/ws`, remover do resto.** Simples e
 > honesto. Custo: o token continua aparecendo em log de acesso e histórico de
@@ -124,7 +128,48 @@ então dropar — é o que substitui a possibilidade de voltar atrás.
 
 ## Follow-ups
 
-- Redação do token nos logs de fronteira, se a F75 for por (a).
-- Migração de preenchimento de `token_hash` para linhas antigas.
-- Consulta de verificação (`token_hash IS NULL` = 0) como critério de entrada da
-  Fase 1.
+- ~~Redação do token nos logs de fronteira, se a F75 for por (a).~~ Entrou junto
+  (`pkg/bootstrap/url_redaction.go`).
+- ~~Migração de preenchimento de `token_hash` para linhas antigas.~~ Migração 16.
+- ~~Consulta de verificação (`token_hash IS NULL` = 0) como critério de entrada
+  da Fase 1.~~ Virou parte da própria migração, que ABORTA em vez de continuar.
+
+## Fechamento (2026-08-09)
+
+**As duas decisões em aberto foram tomadas pelas opções recomendadas**: F68 por
+(a) — um `type` só — e F75 por (a) — query string apenas em `/session/ws`, com
+redação de log.
+
+**A Fase 0 e a Fase 1 acabaram no mesmo dia**, mas não no mesmo commit e não
+fora de ordem: a Fase 0 inteira (F100 nos três itens + F97 etapa 1) entrou
+antes, e a Fase 1 depois. A ordem era o que substituía a possibilidade de
+rollback, e foi respeitada.
+
+**O que este ADR errou, e vale mais que o que acertou:**
+
+**A separação em duas fases foi o acerto**, e por um motivo que só apareceu
+medindo: a F97 etapa 1, feita como estava escrita, **abre acesso sem
+credencial**. Com a coluna em branco e o `OR token = $1` ainda de pé,
+`token = ''` casa com uma requisição sem token nenhum. Isso não estava previsto
+aqui — virou a F100, e é a razão de a Fase 0 existir com essa ordem interna.
+
+**A coluna `token` não foi dropada**, e por isso o "irreversível" desta release é
+menor do que o texto acima prevê. A coluna é `NOT NULL`, dropar exige reconstruir
+a tabela no SQLite, e o ganho é cosmético: com todo valor em branco, o segredo já
+saiu do disco. Fica como limpeza posterior — e enquanto não for feita, nada aqui
+exige restaurar backup para voltar atrás.
+
+**A janela de migração anunciada não era necessária.** O desenho supunha que
+remover o `OR` invalidaria linhas antigas; a migração 16 preenche, verifica e só
+então apaga, então a linha inválida não chega a existir.
+
+**A estimativa da F66 estava dobrada**, porque este ADR repetiu um comentário
+desatualizado dizendo que `HTTPStatus()` "já existe mas falta ligá-lo". Ele já
+estava ligado em `response.go:52` desde antes. O trabalho era classificar erro,
+não ligar nada.
+
+**O que continua valendo do texto original**: o aviso de depreciação ainda
+precisa passar a dizer *exceto `/session/ws`* — a promessa publicada segue
+impossível de cumprir para aquela rota, e um cliente web que acredite nela
+quebra achando que estava em dia. Isso é comunicação, não código, e não entrou
+nesta release.
