@@ -3822,3 +3822,52 @@ Antes da guarda, a linha do meio era 400 — requisição anônima autenticando.
 > comandos. **Conselho sobre risco precisa ser verificado com a mesma
 > desconfiança de uma correção**; uma recomendação errada custa mais que um
 > commit errado, porque ninguém a revisa.
+
+---
+
+## F101 — `user not found` responde 500, e a taxonomia não tem categoria para 404
+
+**Data**: 2026-08-09
+**Contexto**: apareceu ao converter o grupo `user` da F66. É o mesmo defeito
+da F66 numa classe que ela não cobre, e por isso não foi convertido junto.
+
+**Onde**, em `pkg/application/usecase/user/`:
+
+| mensagem | ocorrências |
+|---|---|
+| `user not found` | 3 |
+| `LID not found for this number` | 1 |
+| `LID not found: %w` | 1 |
+
+Todas devolvem erro cru, e o `RespondJSON` cai no ramo não-tipado: **500 com
+corpo genérico**.
+
+**Problema**: pedir um usuário que não existe não é falha do servidor nem erro
+de payload — o payload está bem formado, o recurso é que não está lá. Hoje o
+cliente recebe `500 internal server error` e não tem como distinguir "o banco
+caiu" de "esse id não existe". Um retenta; o outro nunca vai funcionar.
+
+**Por que não entrou na F66**: `apperr` tem quatro categorias —
+`CategoryValidation` (400), `CategoryUnauthorized` (401), `CategoryConflict`
+(409) e `CategoryInternal` (500). **Não existe categoria para 404.** Converter
+essas cinco exigiria acrescentar uma, que é decisão de taxonomia com efeito de
+contrato — exatamente o que a F95 fez ao criar `CategoryConflict`, e que ela
+tratou como decisão própria e não como efeito colateral de outra tarefa.
+
+Marcar `user not found` como `CategoryValidation` seria pior que deixar 500:
+diria ao cliente "corrija o payload" quando não há nada a corrigir. É o mesmo
+raciocínio que fez a F95 escolher 409 em vez de 400.
+
+**Correção sugerida**:
+
+1. Acrescentar `CategoryNotFound` → `http.StatusNotFound` em
+   `pkg/domain/apperr/codes.go`, com o caso novo na tabela de
+   `TestCategory_HTTPStatus` (ela passa sem conhecer a categoria — foi assim
+   na F95).
+2. Converter os cinco sítios.
+3. Verificar se há mais fora de `user/`: `chat`, `group` e `storage` ainda não
+   foram varridos pela F66.
+
+**Status**: **não corrigido** — precisa da decisão sobre acrescentar a
+categoria. É mudança de contrato observável (500 vira 404) e merece entrar na
+mesma janela da release do ADR-0006, não depois dela.

@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -37,7 +38,8 @@ func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req dom
 	jid, err := uc.jids.ResolveQualifiedJID(ctx, req.JID)
 	if err != nil {
 		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "jid", req.JID)
-		return nil, fmt.Errorf("invalid jid format: %w", err)
+		return nil, apperr.New("invalid_jid", apperr.CategoryValidation,
+			"invalid jid format", false, err)
 	}
 
 	// Get LID from store

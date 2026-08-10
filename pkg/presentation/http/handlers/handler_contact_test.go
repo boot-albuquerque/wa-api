@@ -181,13 +181,15 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 			wantErrSubstring: sessionBoom.Error(),
 		},
 		{
-			name:   "GetAvatar sem Phone no payload",
-			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{}`,
+			name:       "GetAvatar sem Phone no payload",
+			wantStatus: http.StatusBadRequest,
+			build:      func(f *chFakes) http.Handler { return f.avatar() },
+			method:     http.MethodPost, path: "/user/avatar", body: `{}`,
 			wantErrSubstring: "missing Phone in Payload",
 		},
 		{
-			name: "GetAvatar JID nao parseia",
+			name:       "GetAvatar JID nao parseia",
+			wantStatus: http.StatusBadRequest,
 			arrange: func(f *chFakes) {
 				f.jids.ResolveJIDFunc = func(context.Context, string) (domain.JID, error) {
 					return "", errors.New("bad jid")

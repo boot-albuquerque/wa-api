@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -43,13 +44,14 @@ func (uc *UnblockUserUseCase) Execute(ctx context.Context, userID string, req do
 		target = strings.TrimSpace(req.Phone)
 	}
 	if target == "" {
-		return nil, fmt.Errorf("missing Phone or JID")
+		return nil, apperr.New("missing_phone_or_jid", apperr.CategoryValidation, "missing Phone or JID", false, nil)
 	}
 
 	jid, err := uc.jids.ResolveQualifiedJID(ctx, target)
 	if err != nil {
 		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "target", target)
-		return nil, fmt.Errorf("could not parse Phone or JID: %w", err)
+		return nil, apperr.New("invalid_phone_or_jid", apperr.CategoryValidation,
+			"could not parse Phone or JID", false, err)
 	}
 
 	update, err := uc.blocklist.UpdateBlocklist(ctx, userID, jid, false)

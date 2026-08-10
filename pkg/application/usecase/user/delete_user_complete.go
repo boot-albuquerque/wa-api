@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -32,7 +33,7 @@ func NewDeleteUserCompleteUseCase(db *sql.DB, sc appport.SessionController, logg
 // Execute completely deletes a user
 func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string) (*domain.DeleteUserCompleteResult, error) {
 	if userID == "" {
-		return nil, fmt.Errorf("missing ID")
+		return nil, apperr.New("missing_id", apperr.CategoryValidation, "missing ID", false, nil)
 	}
 
 	// Check if user exists

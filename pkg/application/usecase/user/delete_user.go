@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -22,7 +23,7 @@ func NewDeleteUserUseCase(users appport.UserRepository, logger appport.Logger) *
 // Execute deleta um usuário
 func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserRequest) error {
 	if req.UserID == "" {
-		return fmt.Errorf("user ID is required")
+		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}
 
 	deleted, err := uc.users.DeleteUser(ctx, req.UserID)

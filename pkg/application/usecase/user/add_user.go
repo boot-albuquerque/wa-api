@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -27,7 +28,7 @@ func NewAddUserUseCase(users appport.UserRepository, logger appport.Logger) *Add
 func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest) (*domain.UserResponse, error) {
 	// Validate required fields
 	if req.Name == "" || req.Token == "" {
-		return nil, fmt.Errorf("name and token are required")
+		return nil, apperr.New("missing_name_or_token", apperr.CategoryValidation, "name and token are required", false, nil)
 	}
 
 	// Set defaults
@@ -47,7 +48,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	var encryptedHmacKey []byte
 	if req.HmacKey != "" {
 		if len(req.HmacKey) < 32 {
-			return nil, fmt.Errorf("HMAC key must be at least 32 characters long")
+			return nil, apperr.New("hmac_key_too_short", apperr.CategoryValidation, "HMAC key must be at least 32 characters long", false, nil)
 		}
 		// Note: encryptHMACKey is defined in handlers.go - you'll need to refactor this
 		// For now, we'll create a simple approach
@@ -68,7 +69,8 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 				continue
 			}
 			if !isValidEvent(event) {
-				return nil, fmt.Errorf("invalid event type: %s", event)
+				return nil, apperr.New("invalid_event_type", apperr.CategoryValidation,
+					fmt.Sprintf("invalid event type: %s", event), false, nil)
 			}
 		}
 	}

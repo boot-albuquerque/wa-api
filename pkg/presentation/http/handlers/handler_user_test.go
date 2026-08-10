@@ -151,7 +151,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			name:   "AddUser sem name nem token",
 			build:  func(h *UserHandlers) http.Handler { return h.AddUser() },
 			method: http.MethodPost, path: "/admin/users",
-			body: `{}`, want: http.StatusInternalServerError,
+			body: `{}`, want: http.StatusBadRequest,
 			wantErrSubstring: "name and token are required",
 		},
 		{
@@ -221,7 +221,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 				return h.EditUser()
 			},
 			method: http.MethodPut, path: "/admin/users/",
-			body: `{"name":"bob"}`, want: http.StatusInternalServerError,
+			body: `{"name":"bob"}`, want: http.StatusBadRequest,
 			wantErrSubstring: "user ID is required",
 		},
 		{
@@ -253,7 +253,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 		{
 			name:   "DeleteUser sem id na URL",
 			build:  func(h *UserHandlers) http.Handler { return h.DeleteUser() },
-			method: http.MethodDelete, path: "/admin/users/", want: http.StatusInternalServerError,
+			method: http.MethodDelete, path: "/admin/users/", want: http.StatusBadRequest,
 			wantErrSubstring: "user ID is required",
 		},
 	}
@@ -481,6 +481,7 @@ func TestUserHandlers_SessionRoutes_PortaFalha(t *testing.T) {
 
 // TestUserHandlers_BlockSemAlvo: bloquear sem Phone nem JID e' recusa de
 // validacao do use case, e chega a' fronteira como 500 com causa logada.
+// 400 desde a F66: bloquear sem informar alvo e erro do CLIENTE.
 func TestUserHandlers_BlockSemAlvo(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -496,7 +497,7 @@ func TestUserHandlers_BlockSemAlvo(t *testing.T) {
 			rec, capture := uhServe(tc.build(f.handlers()),
 				withUser(uhRequest(http.MethodPost, tc.path, `{}`, nil), "u-1"))
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, capture.Records(t), "missing Phone or JID")
 		})
 	}

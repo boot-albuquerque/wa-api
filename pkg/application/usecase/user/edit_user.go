@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,7 +26,7 @@ func NewEditUserUseCase(users appport.UserRepository, logger appport.Logger) *Ed
 // Execute edita um usuário
 func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserRequest) error {
 	if req.UserID == "" {
-		return fmt.Errorf("user ID is required")
+		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}
 
 	// Check if user exists
@@ -46,7 +47,8 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 				continue
 			}
 			if !isValidEvent(event) {
-				return fmt.Errorf("invalid event type: %s", event)
+				return apperr.New("invalid_event_type", apperr.CategoryValidation,
+					fmt.Sprintf("invalid event type: %s", event), false, nil)
 			}
 		}
 	}
