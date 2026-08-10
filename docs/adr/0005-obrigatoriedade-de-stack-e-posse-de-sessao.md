@@ -416,7 +416,41 @@ existe. Reconexão automática é **pré-requisito** do D5, não consequência d
   **~119 segundos**, até chegar um `GET /session/connect`.
 
   **O TTL é o piso do downtime, não o downtime.** Ver F107 em `HOUSEKEEP.md`.
-- Sob que pausa acontece o despejo falso (`SIGSTOP` por mais que o TTL).
+- ~~Sob que pausa acontece o despejo falso (`SIGSTOP` por mais que o TTL).~~
+  **RESPONDIDA em 2026-08-10** (medição M2 da Fase 1 do ADR-0007), e aqui
+  também a resposta corrige a pergunta.
+
+  **O limiar NÃO é o TTL.** É a folga restante no instante da pausa, que vale
+  `expires_at − now() ∈ (TTL − heartbeat, TTL]` — com os padrões, **(10s,
+  15s]** — porque a renovação recarrega para 15s a cada 5s. Abaixo de 10s de
+  pausa nunca há despejo; acima de 15s sempre há; **entre 10s e 15s o resultado
+  depende da fase do ciclo de heartbeat**. Medido: duas pausas de 13s deram
+  resultados OPOSTOS, e foi preciso forçar a fase para reproduzir a segunda.
+
+  **A regra de cerca funciona.** Ao acordar, o pod despejado detecta e solta em
+  **0,032s / 0,076s / 0,103s** (do `CONT` até a primeira linha), com o par:
+  `session ownership taken by another replica; releasing` seguido de
+  `releasing session locally after losing ownership`. Acompanhado por 40s: o
+  pod acordado **não** retomou a posse.
+
+  **Janela de exposição: ~100–340ms**, não do tamanho do TTL. A cerca só
+  dispara no tick do heartbeat, então entre o `CONT` e o tick seguinte o pod
+  acordado ainda responde como dono.
+
+  **Controle negativo**: pausa de 8s (abaixo do limiar) com competidor tentando
+  ativamente — competidor recusado e o fato logado do lado dele; pausado com log
+  vazio, posse inalterada, e comprovadamente vivo (`/session/status` 200,
+  `ready=200`). As duas faixas produzem observações DISTINTAS, então o canal
+  discrimina.
+
+  **O QUE ESTA MEDIÇÃO NÃO COBRE, e é grande**: as sessões de teste nunca foram
+  pareadas (`jid` vazio nas duas). Mediu-se que o PROCESSO solta a sessão. **A
+  interação com o `StreamReplaced` do WhatsApp — o desastre da F89, que é a
+  razão de a cerca existir — não foi exercitada de forma alguma.** Fechar isso
+  exige aparelho pareado de verdade.
+
+  Ver também F109 em `HOUSEKEEP.md`: retomada de lease expirado não deixa
+  rastro.
 - A política de retenção do outbox.
 
 ### O que a bancada mudou no plano original

@@ -4447,3 +4447,61 @@ resolve junto com a decisão 2 do ADR-0007, não separado.
 
 **Status**: **não corrigido** — está no caminho da Fase 4 do ADR-0007, e
 corrigir antes seria decidir o roteamento por acidente.
+
+---
+
+## F109 — retomada de lease EXPIRADO é indistinguível de renovação normal, e não deixa rastro
+
+**Data**: 2026-08-10
+**Contexto**: medição M2 da Fase 1 do ADR-0007 (despejo falso sob `SIGSTOP`).
+
+**Onde**: `pkg/bootstrap/lease.go:231-235`, o ramo `err == nil && owned` de
+`renewOne`.
+
+```go
+case err == nil && owned:
+    m.mu.Lock()
+    m.lastRenewal[userID] = m.now()
+    m.mu.Unlock()
+    return true
+```
+
+**Problema**: esse ramo trata dois eventos muito diferentes como o mesmo:
+
+1. **renovei um lease que eu ainda tinha** — o caso normal, a cada 5s;
+2. **retomei um lease que já tinha EXPIRADO** — permitido por
+   `session_lease.go:68` (`WHERE session_leases.expires_at < now()`), e que só
+   acontece depois de uma janela em que qualquer réplica podia legitimamente
+   ter assumido a sessão.
+
+Os dois carimbam `lastRenewal` e devolvem `true`, em silêncio. Nada no log
+distingue um do outro.
+
+**Evidência** (bancada, TTL 15s, pausa de 20s sem competidor): o lease expirou —
+confirmado no banco com `valido=false` — e ao acordar o pod retomou a posse e
+seguiu servindo com **zero linhas de log**. `final dono=...-29215
+restante=10,47s`, `connected=true`.
+
+**Por que importa**: não é inseguro em si — naquele momento ninguém mais tinha a
+sessão. O problema é que o pod **serviu durante uma janela em que não era
+legitimamente dono**, e não há como saber disso depois. Numa investigação de
+mensagem duplicada ou de ordem trocada, essa janela é exatamente a hipótese que
+alguém precisaria considerar, e ela é invisível.
+
+**A máquina para consertar já existe no arquivo.** O ramo `default` logo abaixo
+(`lease.go:242-257`) já calcula `elapsed := m.now().Sub(last)` para decidir sem
+poder falar com o banco. Falta só usar o mesmo cálculo no caminho de sucesso:
+quando `elapsed > m.ttl`, emitir WARN — o lease foi retomado, não renovado.
+
+**Cenário observado que é a mesma raiz** (o agente reportou como defeito
+separado; não é): pod B tomou o lease expirado de A, o pareamento de B falhou 3s
+depois, B devolveu a posse — e isso **é** logado, em
+`lease_wiring.go:156` — e o A congelado retomou tudo ao acordar sem saber que
+tinha sido despejado. O resultado final é seguro; o que falta é o A registrar
+que perdeu e retomou. Mesmo `case`, mesma correção.
+
+**Anti-regressão**: teste que expira o lease no relógio injetado, deixa o mesmo
+dono reivindicar de novo, e verifica que sai WARN. Hoje não sai nada.
+
+**Status**: **não corrigido** — a correção é pequena e localizada, mas é código
+no caminho de posse e merece decisão explícita.
