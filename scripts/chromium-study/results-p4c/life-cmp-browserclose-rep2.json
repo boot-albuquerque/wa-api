@@ -1,0 +1,663 @@
+{
+  "experiment": "session-lifecycle-vs-reclaim",
+  "first_degradation": 0,
+  "healthy_iterations": 20,
+  "iterations": [
+    {
+      "iteration": 1,
+      "class": "APP_READY",
+      "app_ready_sec": 11.052744089,
+      "profile_bytes": 146256431,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 2,
+      "class": "APP_READY",
+      "app_ready_sec": 11.461463171,
+      "profile_bytes": 147609459,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 3,
+      "class": "APP_READY",
+      "app_ready_sec": 11.597194422,
+      "profile_bytes": 145241714,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 4,
+      "class": "APP_READY",
+      "app_ready_sec": 10.212578503,
+      "profile_bytes": 147581848,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 5,
+      "class": "APP_READY",
+      "app_ready_sec": 9.987585547,
+      "profile_bytes": 147287776,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 6,
+      "class": "APP_READY",
+      "app_ready_sec": 8.989581087,
+      "profile_bytes": 146070580,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 7,
+      "class": "APP_READY",
+      "app_ready_sec": 10.61502938,
+      "profile_bytes": 147037968,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 8,
+      "class": "APP_READY",
+      "app_ready_sec": 10.275497962,
+      "profile_bytes": 146210386,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 9,
+      "class": "APP_READY",
+      "app_ready_sec": 8.577024213,
+      "profile_bytes": 151652575,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 10,
+      "class": "APP_READY",
+      "app_ready_sec": 9.974294921,
+      "profile_bytes": 147016107,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 11,
+      "class": "APP_READY",
+      "app_ready_sec": 13.476972423,
+      "profile_bytes": 147657095,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 12,
+      "class": "APP_READY",
+      "app_ready_sec": 8.694234837,
+      "profile_bytes": 150717541,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 13,
+      "class": "APP_READY",
+      "app_ready_sec": 8.594094379,
+      "profile_bytes": 147636309,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 14,
+      "class": "APP_READY",
+      "app_ready_sec": 9.703322921,
+      "profile_bytes": 148005367,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 15,
+      "class": "APP_READY",
+      "app_ready_sec": 9.716278296,
+      "profile_bytes": 151149556,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 16,
+      "class": "APP_READY",
+      "app_ready_sec": 8.816778379,
+      "profile_bytes": 146615918,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 17,
+      "class": "APP_READY",
+      "app_ready_sec": 12.091077381,
+      "profile_bytes": 147287898,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 18,
+      "class": "APP_READY",
+      "app_ready_sec": 9.574770088,
+      "profile_bytes": 148035254,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 19,
+      "class": "APP_READY",
+      "app_ready_sec": 11.222853213,
+      "profile_bytes": 148880461,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    },
+    {
+      "iteration": 20,
+      "class": "APP_READY",
+      "app_ready_sec": 10.117469505,
+      "profile_bytes": 154012298,
+      "singletons_present_before_boot": 0,
+      "stopped_via": "browser.close"
+    }
+  ],
+  "iterations_run": 20,
+  "logout_at_iteration": 0,
+  "max_iterations": 20,
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "life1/navigate",
+      "start_ms": 2548,
+      "duration_ms": 1317,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life1/ready",
+      "start_ms": 3866,
+      "duration_ms": 9619,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life1/state",
+      "start_ms": 13488,
+      "duration_ms": 36,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life2/navigate",
+      "start_ms": 19004,
+      "duration_ms": 862,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life2/ready",
+      "start_ms": 19867,
+      "duration_ms": 10487,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life2/state",
+      "start_ms": 30357,
+      "duration_ms": 18,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life3/navigate",
+      "start_ms": 36288,
+      "duration_ms": 2190,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life3/ready",
+      "start_ms": 38478,
+      "duration_ms": 9059,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life3/state",
+      "start_ms": 47537,
+      "duration_ms": 51,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life4/navigate",
+      "start_ms": 52436,
+      "duration_ms": 925,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life4/ready",
+      "start_ms": 53361,
+      "duration_ms": 9199,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life4/state",
+      "start_ms": 62560,
+      "duration_ms": 71,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life5/navigate",
+      "start_ms": 67388,
+      "duration_ms": 677,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life5/ready",
+      "start_ms": 68066,
+      "duration_ms": 9193,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life5/state",
+      "start_ms": 77260,
+      "duration_ms": 6,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life6/navigate",
+      "start_ms": 82139,
+      "duration_ms": 666,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life6/ready",
+      "start_ms": 82805,
+      "duration_ms": 8206,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life6/state",
+      "start_ms": 91012,
+      "duration_ms": 50,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life7/navigate",
+      "start_ms": 95834,
+      "duration_ms": 813,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life7/ready",
+      "start_ms": 96647,
+      "duration_ms": 9646,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life7/state",
+      "start_ms": 106296,
+      "duration_ms": 20,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life8/navigate",
+      "start_ms": 111102,
+      "duration_ms": 770,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life8/ready",
+      "start_ms": 111873,
+      "duration_ms": 9392,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life8/state",
+      "start_ms": 121265,
+      "duration_ms": 27,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life9/navigate",
+      "start_ms": 126268,
+      "duration_ms": 847,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life9/ready",
+      "start_ms": 127115,
+      "duration_ms": 7599,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life9/state",
+      "start_ms": 134715,
+      "duration_ms": 27,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life10/navigate",
+      "start_ms": 139451,
+      "duration_ms": 935,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life10/ready",
+      "start_ms": 140387,
+      "duration_ms": 8937,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life10/state",
+      "start_ms": 149324,
+      "duration_ms": 16,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life11/navigate",
+      "start_ms": 154117,
+      "duration_ms": 978,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life11/ready",
+      "start_ms": 155095,
+      "duration_ms": 12292,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life11/state",
+      "start_ms": 167388,
+      "duration_ms": 15,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life12/navigate",
+      "start_ms": 172362,
+      "duration_ms": 943,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life12/ready",
+      "start_ms": 173306,
+      "duration_ms": 7646,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life12/state",
+      "start_ms": 180952,
+      "duration_ms": 12,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life13/navigate",
+      "start_ms": 185655,
+      "duration_ms": 784,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life13/ready",
+      "start_ms": 186439,
+      "duration_ms": 7721,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life13/state",
+      "start_ms": 194160,
+      "duration_ms": 328,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life14/navigate",
+      "start_ms": 199062,
+      "duration_ms": 758,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life14/ready",
+      "start_ms": 199821,
+      "duration_ms": 8880,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life14/state",
+      "start_ms": 208701,
+      "duration_ms": 27,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life15/navigate",
+      "start_ms": 213430,
+      "duration_ms": 603,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life15/ready",
+      "start_ms": 214033,
+      "duration_ms": 9036,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life15/state",
+      "start_ms": 223070,
+      "duration_ms": 36,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life16/navigate",
+      "start_ms": 227827,
+      "duration_ms": 764,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life16/ready",
+      "start_ms": 228591,
+      "duration_ms": 7932,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life16/state",
+      "start_ms": 236524,
+      "duration_ms": 24,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life17/navigate",
+      "start_ms": 241436,
+      "duration_ms": 2732,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life17/ready",
+      "start_ms": 244172,
+      "duration_ms": 9237,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life17/state",
+      "start_ms": 253410,
+      "duration_ms": 26,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life18/navigate",
+      "start_ms": 258192,
+      "duration_ms": 693,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life18/ready",
+      "start_ms": 258885,
+      "duration_ms": 8806,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life18/state",
+      "start_ms": 267692,
+      "duration_ms": 46,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life19/navigate",
+      "start_ms": 272506,
+      "duration_ms": 1036,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life19/ready",
+      "start_ms": 273543,
+      "duration_ms": 10072,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life19/state",
+      "start_ms": 283615,
+      "duration_ms": 5,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life20/navigate",
+      "start_ms": 289339,
+      "duration_ms": 1588,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life20/ready",
+      "start_ms": 290928,
+      "duration_ms": 8217,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life20/state",
+      "start_ms": 299146,
+      "duration_ms": 11,
+      "deadline_ms": 5000,
+      "result": "ok"
+    }
+  ],
+  "reclaim_singletons": true,
+  "started_utc": "2026-08-10T02:20:08Z",
+  "stop_mode": "graceful",
+  "watchdog": {
+    "budget_sec": 1920,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 301.408861763,
+    "experiment": "session-lifecycle",
+    "operations": 60,
+    "status": "COMPLETED"
+  }
+}

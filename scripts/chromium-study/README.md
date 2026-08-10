@@ -31,6 +31,7 @@ go build ./...
 | `RELATORIO-FASE-3.md` | profiling causal do rod, topologia, SPA real, soak de 60 min |
 | `RELATORIO-FASE-4.md` | ConnectionPolicy, custo real do BrowserContext |
 | `RELATORIO-FASE-4B.md` | WhatsApp Web: RAM por sessão, UA obrigatório, SingletonLock |
+| `RELATORIO-FASE-4C.md` | harness confiável, aba única, e a causa real da perda de sessão |
 | `METHODOLOGY.md` | regra epistemológica e separação de camadas |
 | `main.go`, `controllers.go`, `levels*.go` | harness das Fases 1–2 |
 | `p3_*.go` | Fase 3 — profiling, topologia, SPA real, soak |
@@ -42,11 +43,17 @@ go build ./...
 ## Estado das conclusões
 
 As decisões com confiança HIGH estão na ADR-0006. O que **não** foi estabelecido
-está listado explicitamente no fim de cada relatório — em particular, ao fim da
-Fase 4B seguem em aberto: restrição de aba única no WhatsApp Web, recovery/blast
-radius, InteractionPolicy, correctness boundary de CPU e soak de 24h.
+está listado explicitamente no fim de cada relatório.
 
-A decisão corrente é `GO WITH CONDITIONS`.
+A Fase 4C fechou a restrição de aba única (uma sessão ativa por perfil) e
+identificou a causa real da perda de credencial: o **desligamento** do Chromium,
+não invalidação pelo WhatsApp. SIGTERM corrompe o estado de sessão; o browser
+tem de ser encerrado por `Browser.close` via CDP. Seguem em aberto:
+InteractionPolicy, correctness boundary de CPU no alvo real, e o soak de 24h
+(NOT EXECUTED por restrição operacional).
+
+A decisão corrente é `GO` para a arquitetura e `GO WITH CONDITIONS` para
+produção, com as condições listadas em RELATORIO-FASE-4C.md §7.
 
 ## Cuidados ao executar
 
