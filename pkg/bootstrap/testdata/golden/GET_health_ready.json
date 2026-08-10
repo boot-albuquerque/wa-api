@@ -2,6 +2,13 @@
   "status": 200,
   "body": {
     "status": "ready",
-    "checks": {}
+    "checks": {},
+    "capabilities": {
+      "cluster_mode": "",
+      "database": "",
+      "multi_pod": "",
+      "session_ownership": "",
+      "durable_retry": ""
+    }
   }
 }

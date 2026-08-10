@@ -685,7 +685,7 @@ min_errpath_coverage=860
 # min_func_coverage acima.
 # +1 (601->602): F97 etapa 2, db.applyBlankPlaintextTokenMigration — ver a
 # justificativa de min_func_coverage acima.
-min_eligible=602
+min_eligible=603
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

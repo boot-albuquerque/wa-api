@@ -338,12 +338,20 @@ func Main() {
 	if *dataDir != "" {
 		dirDados = *dataDir
 	}
-	liberarCluster, err := prepareCluster(dirDados, getDatabaseConfig(exPath, *dataDir).Type)
+	tipoBanco := getDatabaseConfig(exPath, *dataDir).Type
+	modoCluster, liberarCluster, err := prepareCluster(dirDados, tipoBanco)
 	if err != nil {
 		log.Fatal().Err(err).Msg("configuracao de cluster invalida")
 		os.Exit(1)
 	}
 	defer liberarCluster()
+
+	// Relatório de capacidades (ADR-0005 D7, F104): declara o que este processo
+	// pode e não pode fazer, em UMA linha, antes de qualquer outra coisa
+	// acontecer. O que ele existe para evitar é o operador ter de DERIVAR
+	// "isto não aguenta dois pods" a partir de uma variável de ambiente
+	// ausente e de um tipo de banco que ninguém declarou.
+	publishCapabilities(modoCluster, tipoBanco)
 
 	db, err := InitializeDatabase(exPath, *dataDir)
 	if err != nil {

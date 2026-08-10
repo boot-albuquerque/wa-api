@@ -2137,6 +2137,7 @@ pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:10
 pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:72)
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
+pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
 pkg/bootstrap.deleteKillChannel	EXCLUDED	X1
 pkg/bootstrap.depsFromServer	ELIGIBLE	uncovered:L1
@@ -2196,6 +2197,7 @@ pkg/bootstrap.outboxSettle	ELIGIBLE	covered
 pkg/bootstrap.outcomeFor	EXCLUDED	X1
 pkg/bootstrap.prepareCluster	ELIGIBLE	covered
 pkg/bootstrap.prepareCluster.func1	EXCLUDED	X6
+pkg/bootstrap.publishCapabilities	ELIGIBLE	covered
 pkg/bootstrap.rateLimitObserver.limiterFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.rateLimitObserver.middleware	EXCLUDED	X1
 pkg/bootstrap.rateLimitObserver.middleware.func1	ELIGIBLE	covered
@@ -2255,7 +2257,7 @@ pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:463);uncovered:L3(zerolog,main.go:480)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:471);uncovered:L3(zerolog,main.go:488)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
@@ -2264,7 +2266,7 @@ pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
 pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
 pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:516)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:524)
 pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
 pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered

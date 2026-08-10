@@ -164,13 +164,13 @@ func TestPrepareCluster_MultiDoesNotLock(t *testing.T) {
 	t.Setenv(envClusterMode, clusterModeMulti)
 	dir := t.TempDir()
 
-	firstRelease, err := prepareCluster(dir, databaseTypePostgres)
+	_, firstRelease, err := prepareCluster(dir, databaseTypePostgres)
 	if err != nil {
 		t.Fatalf("multi+postgres rejected: %v", err)
 	}
 	defer firstRelease()
 
-	secondRelease, err := prepareCluster(dir, databaseTypePostgres)
+	_, secondRelease, err := prepareCluster(dir, databaseTypePostgres)
 	if err != nil {
 		t.Fatalf("a second replica in multi was blocked by the installation lock: %v", err)
 	}
@@ -181,13 +181,13 @@ func TestPrepareCluster_SingleLocks(t *testing.T) {
 	t.Setenv(envClusterMode, clusterModeSingle)
 	dir := t.TempDir()
 
-	release, err := prepareCluster(dir, databaseTypeSQLite)
+	_, release, err := prepareCluster(dir, databaseTypeSQLite)
 	if err != nil {
 		t.Fatalf("single+sqlite rejected; it is the supported catastrophic scenario: %v", err)
 	}
 	defer release()
 
-	if _, err := prepareCluster(dir, databaseTypeSQLite); err == nil {
+	if _, _, err := prepareCluster(dir, databaseTypeSQLite); err == nil {
 		t.Error("a second process in single mode was accepted")
 	}
 }

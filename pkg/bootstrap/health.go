@@ -56,9 +56,17 @@ const (
 // values are short reason codes, never error strings from the database: this
 // endpoint is unauthenticated (the kubelet cannot carry a token), and a driver
 // error can leak host, port and user.
+//
+// Capabilities carries what this pod IS (sqlite vs postgres, single vs multi),
+// which is a different question from whether it is healthy — a SQLite pod in
+// `single` is perfectly ready and still cannot serve as one of N replicas.
+// Keeping it out of Checks is deliberate: Checks holds verdicts that can fail
+// the probe, and none of these can. Mixing facts into verdicts is how a report
+// stops being read.
 type ReadinessReport struct {
-	Status string            `json:"status"`
-	Checks map[string]string `json:"checks"`
+	Status       string            `json:"status"`
+	Checks       map[string]string `json:"checks"`
+	Capabilities capabilityReport  `json:"capabilities"`
 }
 
 // Ready reports whether every check passed.
@@ -92,7 +100,17 @@ type pinger interface {
 // when the answer is knowable.
 func buildReadinessProbe(db pinger, leases func() *leaseManager) func(context.Context) ReadinessReport {
 	return func(ctx context.Context) ReadinessReport {
-		report := ReadinessReport{Status: statusReady, Checks: map[string]string{}}
+		// Lido AQUI, e não capturado no fio, pelo mesmo motivo que o lease
+		// acima: o relatório é publicado no arranque, e capturar o valor em
+		// tempo de montagem congelaria o que estivesse lá naquele instante.
+		// Com o lease isso já aconteceu de verdade — o campo simplesmente
+		// nunca aparecia. Ler em tempo de requisição é ler quando a resposta é
+		// conhecível.
+		report := ReadinessReport{
+			Status:       statusReady,
+			Checks:       map[string]string{},
+			Capabilities: currentCapabilityReport(),
+		}
 
 		dbCtx, cancel := context.WithTimeout(ctx, readinessDBTimeout)
 		defer cancel()

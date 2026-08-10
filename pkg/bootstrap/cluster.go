@@ -140,26 +140,31 @@ func lockSingleInstance(dataDir string) (func(), error) {
 //
 // Called BEFORE opening the database: an impossible configuration must die
 // without having touched any state.
-func prepareCluster(dataDir, databaseType string) (func(), error) {
+// It returns the RESOLVED mode, not just the release func: this is the only
+// place the mode is decided, and the capability report (D7) needs the same
+// value. Resolving it a second time in the caller would let the two drift —
+// and a report that disagrees with the running configuration is worse than no
+// report, because it is believed.
+func prepareCluster(dataDir, databaseType string) (string, func(), error) {
 	mode, err := clusterModeFromEnv()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if err := validateStackForMode(mode, databaseType); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	if mode == clusterModeMulti {
 		// In `multi`, exclusivity comes from the per-session lease (D2), not
 		// from an installation-wide lock — locking here would stop the second
 		// replica from starting, which is the whole point of the mode.
-		return func() {}, nil
+		return mode, func() {}, nil
 	}
 
 	release, err := lockSingleInstance(dataDir)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	log.Info().Str("mode", mode).Str("data_dir", dataDir).Msg("single instance locked")
-	return release, nil
+	return mode, release, nil
 }
