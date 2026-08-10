@@ -314,7 +314,10 @@ func TestSessionHandlers_MalformedBody_400_LogsCause(t *testing.T) {
 // ausente hoje vira fmt.Errorf sem taxonomia, e por isso sai 500. O teste
 // trava o comportamento OBSERVADO — se um dia esses sitios migrarem para
 // apperr de validacao, este teste e' o que avisa que o status mudou.
-func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
+func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 	tests := []struct {
 		name    string
 		handler http.Handler
@@ -339,8 +342,8 @@ func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec, recs := serveSession(t, tt.handler, http.MethodPost, tt.path, `{}`, "user-1", true)
 
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status %d, quero 500 (corpo %s)", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
 			}
 			logassert.OutcomeLogged(t, recs, tt.want)
 		})

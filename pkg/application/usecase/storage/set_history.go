@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -32,7 +32,7 @@ func (uc *SetHistoryUseCase) Execute(ctx context.Context, txtID string, req doma
 
 	// Validate history value
 	if req.History < 0 {
-		return nil, fmt.Errorf("history value cannot be negative")
+		return nil, apperr.New("invalid_history", apperr.CategoryValidation, "history value cannot be negative", false, nil)
 	}
 
 	result := &domain.WebhookHistoryResult{

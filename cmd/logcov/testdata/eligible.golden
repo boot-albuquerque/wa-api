@@ -1846,12 +1846,12 @@ pkg/application/session.pairSuccessPayload	ELIGIBLE	uncovered:L1
 pkg/application/session.proxyConfigFor	ELIGIBLE	uncovered:L1
 pkg/application/session.qrPayload	EXCLUDED	X1
 pkg/application/session.translateStatusEvent	EXCLUDED	X1
-pkg/application/usecase/chat.ArchiveChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,archive_chat.go:31);uncovered:L2(S-consume,archive_chat.go:35);uncovered:L2(S-ret,archive_chat.go:36)
+pkg/application/usecase/chat.ArchiveChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,archive_chat.go:32);uncovered:L2(S-consume,archive_chat.go:36);uncovered:L2(S-ret,archive_chat.go:37)
 pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRejectCallUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRequestUnavailableMessageUseCase	EXCLUDED	X1
-pkg/application/usecase/chat.RejectCallUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,reject_call.go:31);uncovered:L2(S-ret,reject_call.go:35);uncovered:L2(S-consume,reject_call.go:39);uncovered:L2(S-ret,reject_call.go:40)
-pkg/application/usecase/chat.RequestUnavailableMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,request_unavailable_message.go:31);uncovered:L2(S-ret,request_unavailable_message.go:35);uncovered:L2(S-ret,request_unavailable_message.go:39);uncovered:L2(S-consume,request_unavailable_message.go:43);uncovered:L2(S-ret,request_unavailable_message.go:44);uncovered:L2(S-consume,request_unavailable_message.go:48);uncovered:L2(S-ret,request_unavailable_message.go:49)
+pkg/application/usecase/chat.RejectCallUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,reject_call.go:32);uncovered:L2(S-ret,reject_call.go:36);uncovered:L2(S-consume,reject_call.go:40);uncovered:L2(S-ret,reject_call.go:41)
+pkg/application/usecase/chat.RequestUnavailableMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,request_unavailable_message.go:32);uncovered:L2(S-ret,request_unavailable_message.go:36);uncovered:L2(S-ret,request_unavailable_message.go:40);uncovered:L2(S-consume,request_unavailable_message.go:44);uncovered:L2(S-ret,request_unavailable_message.go:45);uncovered:L2(S-consume,request_unavailable_message.go:49);uncovered:L2(S-ret,request_unavailable_message.go:50)
 pkg/application/usecase/group.GetGroupInfoUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/group.GetGroupInviteInfoUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/group.GetGroupInviteLinkUseCase.Execute	ELIGIBLE	covered
@@ -1992,7 +1992,7 @@ pkg/application/usecase/user.GetBlocklistUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsLastActivityUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetPrivacySettingsUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:53)
+pkg/application/usecase/user.GetUserLIDUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_user_lid.go:58)
 pkg/application/usecase/user.GetUserProfileUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserProfileUseCase.preencherAvatar	ELIGIBLE	covered
 pkg/application/usecase/user.GetUserProfileUseCase.preencherInfo	ELIGIBLE	covered

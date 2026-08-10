@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -33,14 +33,15 @@ func (uc *ConfigureS3UseCase) Execute(ctx context.Context, txtID string, req dom
 
 	// Validate media_delivery
 	if req.MediaDelivery != "" && req.MediaDelivery != "base64" && req.MediaDelivery != "s3" && req.MediaDelivery != "both" {
-		return nil, fmt.Errorf("media_delivery must be 'base64', 's3', or 'both'")
+		return nil, apperr.New("invalid_media_delivery", apperr.CategoryValidation, "media_delivery must be 'base64', 's3', or 'both'", false, nil)
 	}
 
 	// Endpoint is optional (empty means the default AWS S3 endpoint); when
 	// set, it had no validation at all before this (sec/F24).
 	if req.Endpoint != "" {
 		if err := egress.ValidateOutboundURL(ctx, req.Endpoint); err != nil {
-			return nil, fmt.Errorf("invalid S3 endpoint: %w", err)
+			return nil, apperr.New("invalid_s3_endpoint", apperr.CategoryValidation,
+				"invalid S3 endpoint", false, err)
 		}
 	}
 

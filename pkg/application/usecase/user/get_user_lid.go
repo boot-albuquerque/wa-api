@@ -45,12 +45,18 @@ func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req dom
 	// Get LID from store
 	lid, err := uc.contacts.GetLIDForPN(ctx, userID, jid)
 	if err != nil {
+		// NAO e 404: aqui a PORTA falhou — o store quebrou, e o cliente nao
+		// tem como saber se aquele numero tem LID ou nao. Reportar "nao
+		// encontrado" faria ele PARAR de tentar diante de uma falha
+		// transitoria. A mensagem antiga ("LID not found: %w") ja era
+		// enganosa; o 500 e que estava acidentalmente certo.
 		uc.logger.Error(ctx, "Failed to get LID", "error", err, "jid", req.JID)
-		return nil, fmt.Errorf("LID not found: %w", err)
+		return nil, fmt.Errorf("failed to get LID: %w", err)
 	}
 
 	if lid == "" {
-		return nil, fmt.Errorf("LID not found for this number")
+		return nil, apperr.New("lid_not_found", apperr.CategoryNotFound,
+			"LID not found for this number", false, nil)
 	}
 
 	return &LIDResult{

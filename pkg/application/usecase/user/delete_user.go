@@ -32,7 +32,7 @@ func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserR
 		return fmt.Errorf("database error: %w", err)
 	}
 	if !deleted {
-		return fmt.Errorf("user not found")
+		return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
 
 	uc.logger.Info(ctx, "User deleted successfully", "user_id", req.UserID)

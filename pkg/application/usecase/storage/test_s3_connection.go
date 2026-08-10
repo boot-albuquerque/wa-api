@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -32,7 +32,7 @@ func (uc *TestS3ConnectionUseCase) Execute(ctx context.Context, txtID string, re
 
 	// Validate required fields
 	if req.Endpoint == "" || req.Region == "" || req.Bucket == "" || req.AccessKey == "" || req.SecretKey == "" {
-		return nil, fmt.Errorf("missing required S3 configuration fields")
+		return nil, apperr.New("missing_s3_config", apperr.CategoryValidation, "missing required S3 configuration fields", false, nil)
 	}
 
 	result := &domain.S3TestResult{

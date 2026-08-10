@@ -43,14 +43,35 @@ const (
 	// actively misleading here: there is nothing to fix in the payload.
 	CategoryConflict Category = "conflict"
 
+	// CategoryNotFound covers a well formed, authorized request for a resource
+	// that is not there.
+	//
+	// It exists for the same reason CategoryConflict does: the categories above
+	// forced a wrong answer. `user not found` was returning 500, and a caller
+	// could not tell "the database is down" from "that id does not exist" — one
+	// is worth retrying, the other never will be (F101).
+	//
+	// CategoryValidation (400) would be worse than the 500 it replaces: it says
+	// "fix your payload", and the payload is fine. CategoryInternal (500) says
+	// "we broke", and we did not.
+	CategoryNotFound Category = "not_found"
+
 	// CategoryInternal covers everything the caller cannot fix by changing
 	// their request: downstream failures, bugs, unexpected state.
 	CategoryInternal Category = "internal"
 )
 
 // HTTPStatus maps a Category to the HTTP status code it corresponds to.
-// The table exists and is tested here, but nothing calls it yet — Fase 4a
-// is the one that wires the HTTP boundary to it.
+//
+// É CHAMADO, em pkg/presentation/http/response.go:52 — `RespondJSON` IGNORA o
+// status que o call site passou quando o erro é um *apperr.AppError, e usa
+// este. O comentário anterior dizia "nothing calls it yet, Fase 4a is the one
+// that wires it", e ficou desatualizado quando a fiação aconteceu.
+//
+// Isso não é detalhe de comentário: a entrada da F66 em HOUSEKEEP.md repetiu a
+// afirmação daqui e concluiu que a correção exigiria "67 sítios MAIS a ligação
+// do HTTPStatus()". A ligação já existia, e o trabalho era metade do
+// estimado. Comentário desatualizado vira plano errado.
 func (c Category) HTTPStatus() int {
 	switch c {
 	case CategoryValidation:
@@ -59,6 +80,8 @@ func (c Category) HTTPStatus() int {
 		return http.StatusUnauthorized
 	case CategoryConflict:
 		return http.StatusConflict
+	case CategoryNotFound:
+		return http.StatusNotFound
 	case CategoryInternal:
 		return http.StatusInternalServerError
 	default:

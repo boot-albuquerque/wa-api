@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -29,7 +30,7 @@ func NewGroupRequestUseCase(gr appport.GroupRequests, jr appport.JIDResolver, l 
 func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (json.RawMessage, error) {
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
-		return nil, fmt.Errorf("missing groupJID parameter")
+		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
 	}
 
 	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
@@ -40,7 +41,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
 	if err != nil {
 		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("could not parse Group JID")
+		return nil, apperr.New("invalid_group_jid", apperr.CategoryValidation, "could not parse Group JID", false, nil)
 	}
 
 	resp, err := uc.requests.GetRequestParticipants(ctx, userID, group)
@@ -68,23 +69,23 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 	// Validate request
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
-		return nil, fmt.Errorf("missing groupJID parameter")
+		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
 	}
 
 	if len(req.Phone) < 1 {
 		uc.logger.Warn(ctx, "missing phone list in request", "user_id", userID, "group_jid", req.GroupJID)
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 
 	if req.Action == "" {
 		uc.logger.Warn(ctx, "missing action in request", "user_id", userID, "group_jid", req.GroupJID)
-		return nil, fmt.Errorf("missing Action in payload")
+		return nil, apperr.New("missing_action", apperr.CategoryValidation, "missing Action in payload", false, nil)
 	}
 
 	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
 	if err != nil {
 		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("could not parse Group JID")
+		return nil, apperr.New("invalid_group_jid", apperr.CategoryValidation, "could not parse Group JID", false, nil)
 	}
 
 	// Parse phone numbers
@@ -93,7 +94,7 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 		phoneParsed[i], err = uc.jids.ResolveQualifiedJID(ctx, phone)
 		if err != nil {
 			uc.logger.Warn(ctx, "could not parse phone", "user_id", userID, "index", i, "error", err)
-			return nil, fmt.Errorf("could not parse Phone")
+			return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 		}
 	}
 
@@ -106,7 +107,7 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 		action = domain.RequestReject
 	default:
 		uc.logger.Warn(ctx, "invalid action in request", "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
-		return nil, fmt.Errorf("invalid Action in payload (must be approve or reject)")
+		return nil, apperr.New("invalid_action", apperr.CategoryValidation, "invalid Action in payload (must be approve or reject)", false, nil)
 	}
 
 	if err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action); err != nil {
@@ -128,13 +129,13 @@ func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Conte
 
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
-		return nil, fmt.Errorf("missing groupJID parameter")
+		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
 	}
 
 	group, err := uc.jids.ResolveQualifiedJID(ctx, req.GroupJID)
 	if err != nil {
 		uc.logger.Warn(ctx, "could not parse group JID", "user_id", userID, "group_jid", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("could not parse Group JID")
+		return nil, apperr.New("invalid_group_jid", apperr.CategoryValidation, "could not parse Group JID", false, nil)
 	}
 
 	if err := uc.requests.SetJoinApprovalMode(ctx, userID, group, req.Mode); err != nil {

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -28,12 +29,12 @@ func (uc *ArchiveChatUseCase) Execute(ctx context.Context, userID string, req do
 	}
 
 	if req.Jid == "" {
-		return nil, fmt.Errorf("missing jid in Payload")
+		return nil, apperr.New("missing_jid", apperr.CategoryValidation, "missing jid in Payload", false, nil)
 	}
 
 	chatJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Jid)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Chat JID format")
+		return nil, apperr.New("invalid_chat_jid", apperr.CategoryValidation, "invalid Chat JID format", false, nil)
 	}
 
 	if err := uc.chats.ArchiveChat(ctx, userID, chatJID, req.Archive); err != nil {

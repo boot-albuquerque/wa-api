@@ -138,6 +138,12 @@ func TestCategory_HTTPStatus(t *testing.T) {
 		// atendida NESTE estado ou por ESTA instancia. Com 400 o cliente le
 		// "corrija o payload", que e' enganoso quando nao ha o que corrigir.
 		{"conflict", CategoryConflict, http.StatusConflict},
+		// F101: 404, e nao 500 nem 400. O recurso nao esta la — o payload
+		// esta' bem formado (400 diria "corrija o payload") e nada quebrou do
+		// nosso lado (500 diria "tente de novo"). Com 500 o cliente nao
+		// distinguia "o banco caiu" de "esse id nao existe": um retenta, o
+		// outro nunca vai funcionar.
+		{"not found", CategoryNotFound, http.StatusNotFound},
 		{"internal", CategoryInternal, http.StatusInternalServerError},
 		{"unknown category defaults to internal", Category("something_new"), http.StatusInternalServerError},
 	}

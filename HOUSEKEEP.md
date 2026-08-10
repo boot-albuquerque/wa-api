@@ -3868,6 +3868,23 @@ raciocínio que fez a F95 escolher 409 em vez de 400.
 3. Verificar se há mais fora de `user/`: `chat`, `group` e `storage` ainda não
    foram varridos pela F66.
 
-**Status**: **não corrigido** — precisa da decisão sobre acrescentar a
-categoria. É mudança de contrato observável (500 vira 404) e merece entrar na
-mesma janela da release do ADR-0006, não depois dela.
+**Status**: **CORRIGIDO (2026-08-09)**. `CategoryNotFound` → 404 entrou em
+`pkg/domain/apperr/codes.go`, com o caso na tabela de `TestCategory_HTTPStatus`
+— que passava sem conhecer a categoria, como na F95, e o controle negativo
+confirma que agora ela é exigida.
+
+Quatro sítios convertidos: os três `user not found` e o `LID not found for this
+number`.
+
+**O quinto NÃO foi convertido, e essa é a parte que importa.**
+`get_user_lid.go:46` dizia `LID not found: %w` quando a PORTA falhava — o store
+quebrou, e o cliente não tem como saber se aquele número tem LID. Eu o converti
+para 404 junto com os outros e o teste da porta acusou: reportar "não
+encontrado" faria o cliente PARAR de tentar diante de uma falha transitória.
+
+A mensagem antiga já era enganosa; o 500 é que estava acidentalmente certo.
+Ficou `failed to get LID: %w` — mensagem honesta, status inalterado.
+
+É o mesmo erro que a F66 corrige, na direção oposta, e cometido por mim no meio
+da correção dela. O que o pegou foi um teste de falha de porta que existia
+antes, não revisão.

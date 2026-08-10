@@ -2,7 +2,7 @@ package session
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,7 +25,7 @@ func NewSetStatusMessageUseCase(sg appport.SessionGuard, l appport.Logger) *SetS
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *SetStatusMessageUseCase) Execute(ctx context.Context, txtID string, req domain.SetStatusMessageRequest) (*domain.SetStatusMessageResult, error) {
 	if req.Body == "" {
-		return nil, fmt.Errorf("missing Body in payload")
+		return nil, apperr.New("missing_body", apperr.CategoryValidation, "missing Body in payload", false, nil)
 	}
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {

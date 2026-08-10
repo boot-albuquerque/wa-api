@@ -35,7 +35,7 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		return fmt.Errorf("database error: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("user not found")
+		return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
 
 	// Validate events if provided

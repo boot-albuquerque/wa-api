@@ -201,7 +201,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.EditUser() },
 			method: http.MethodPut, path: "/admin/users/u-1",
-			body: `{"name":"bob"}`, vars: map[string]string{"id": "u-1"}, want: http.StatusInternalServerError,
+			body: `{"name":"bob"}`, vars: map[string]string{"id": "u-1"}, want: http.StatusNotFound,
 			wantErrSubstring: "user not found",
 		},
 		{
@@ -237,7 +237,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.DeleteUser() },
 			method: http.MethodDelete, path: "/admin/users/u-1",
-			vars: map[string]string{"id": "u-1"}, want: http.StatusInternalServerError,
+			vars: map[string]string{"id": "u-1"}, want: http.StatusNotFound,
 			wantErrSubstring: "user not found",
 		},
 		{

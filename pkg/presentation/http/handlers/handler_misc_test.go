@@ -332,6 +332,9 @@ func TestMiscBodyHandlers_MalformedBody(t *testing.T) {
 	}
 }
 
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
 func TestMiscBodyHandlers_IncompletePayload(t *testing.T) {
 	for _, tc := range miscBodyCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -340,7 +343,7 @@ func TestMiscBodyHandlers_IncompletePayload(t *testing.T) {
 			rec, recs := ipmServe(t, tc.build(ops, pm, jids), http.MethodPost, tc.path, `{}`,
 				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.emptyBodyErr)
 		})
 	}

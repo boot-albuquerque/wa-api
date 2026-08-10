@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -36,10 +36,11 @@ func (uc *SetProxyUseCase) Execute(ctx context.Context, txtID string, req domain
 	// validation at all before this).
 	if req.Enabled {
 		if req.URL == "" {
-			return nil, fmt.Errorf("proxy URL is required when proxy is enabled")
+			return nil, apperr.New("missing_proxy_url", apperr.CategoryValidation, "proxy URL is required when proxy is enabled", false, nil)
 		}
 		if err := egress.ValidateOutboundURL(ctx, req.URL); err != nil {
-			return nil, fmt.Errorf("invalid proxy URL: %w", err)
+			return nil, apperr.New("invalid_proxy_url", apperr.CategoryValidation,
+				"invalid proxy URL", false, err)
 		}
 	}
 

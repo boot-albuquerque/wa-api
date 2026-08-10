@@ -297,7 +297,10 @@ func TestStorageHandlers_SessionFailure_500(t *testing.T) {
 // TestStorageHandlers_UseCaseRejection_500: a sessao existe, mas o use case
 // recusa o conteudo. E' o unico caminho em que a causa nasce no dominio, e
 // nao na fronteira — e o handler tem de leva-la ao log do mesmo jeito.
-func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
+func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 	log := silentLogger{}
 	cases := []struct {
 		name    string
@@ -355,7 +358,7 @@ func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
 
 			rec, recs := serveStorage(t, tc.build(storageSession(nil)), req)
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.wantErr)
 		})
 	}

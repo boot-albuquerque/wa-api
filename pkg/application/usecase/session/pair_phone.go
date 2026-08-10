@@ -2,7 +2,7 @@ package session
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -25,7 +25,7 @@ func NewPairPhoneUseCase(sg appport.SessionGuard, l appport.Logger) *PairPhoneUs
 // Execute valida os campos obrigatórios e verifica se o cliente está disponível.
 func (uc *PairPhoneUseCase) Execute(ctx context.Context, txtID string, req domain.PairPhoneRequest) (*domain.PairPhoneResult, error) {
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {

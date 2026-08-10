@@ -44,7 +44,7 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 		return nil, fmt.Errorf("database error")
 	}
 	if !exists {
-		return nil, fmt.Errorf("user not found")
+		return nil, apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
 
 	// Get user info before deletion
