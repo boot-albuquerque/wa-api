@@ -98,6 +98,46 @@ detalhe.
 
 ---
 
+## Etapa 6, parte QR-free — a policy sob starvation de CPU
+
+Feito antes de gastar pareamento, para provar que o braço executa sob pressão de
+CPU em vez de descobrir isso com a credencial na mesa. A hostile suite serve
+como carga controlada porque **carrega ground truth**; o sweep varia só
+`--cpus`.
+
+| cpus | policy | chromedp direto (fs / wt / cs) | parede |
+|---|---|---|---|
+| 3.0 | PASS | 2 / 2 / 4 | 28 s |
+| 2.0 | PASS | 2 / 2 / 4 | 29 s |
+| 1.0 | PASS | 2 / 2 / 4 | 34 s |
+| 0.5 | PASS | 2 / 2 / 3 | 72 s |
+| 0.35 | PASS | 2 / 2 / 4 | 60 s |
+| 0.25 | PASS | 1 / 2 / 3 | 91 s |
+
+**A garantia da policy (`fs=wt=ff=0`, `cs=2`) não se rompeu em nenhum teto,
+até 0,25 CPU** — MEASURED, confiança HIGH *para esta carga*. O caminho ingênuo,
+no mesmo intervalo, oscila: perde sucessos e troca falso sucesso por recusa
+conforme a lentidão desloca as janelas de corrida.
+
+Um "eu não teria adivinhado" do sweep, visível só por causa do `decision_ms`:
+**custo de sondagem e cronograma da página escalam de forma diferente.** De 3,0
+para 0,25 CPU, a decisão em `overlay` (limitada por sondagem) foi de 189 ms para
+703 ms, ~3,7×; já `disabled-vira-enabled` ficou em ~800–1040 ms nos dois
+extremos, porque quem manda ali é um `setTimeout` da página, que a starvation
+quase não afeta. Ou seja, sob CPU escassa o agente perde margem **contra
+relógios que não desaceleram junto com ele**. É esse descompasso que decide o
+budget, não a lentidão absoluta.
+
+**O que este sweep NÃO estabelece.** Ele mede a policy contra páginas estáticas
+de poucos nós. O WhatsApp Web é a carga pesada, e a Fase 3 já mostrou que a
+degradação sob starvation aparece na completude do DOM — 7 de 24 jobs
+"passaram" contra página incompleta. O boundary do alvo real continua **NÃO
+MEDIDO**, exatamente como o 4C §8 registrou. Não extrapolar esta tabela para ele.
+
+Artefatos: `results-p4c/hostile-cpu-{3.0,2.0,1.0,0.5,0.35,0.25}.json`.
+
+---
+
 ## Diagnóstico do FAIL da V1 — histórico, já resolvido
 
 Mantido só como registro: `Resolve` recusava com `NO_ACTIONABLE_CANDIDATE` na
