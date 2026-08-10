@@ -11,8 +11,9 @@ Documento de retomada. A fonte de verdade das fases anteriores é
 Etapa 1-2  ler 4C, confirmar não repetir      FEITO
 Etapa 3    InteractionPolicy V1               REPROVADA (excesso de recusa)
 Etapa 4    Hostile suite                      EXECUTADA
-Etapa 5    InteractionPolicy V2 + V3          APROVADA, 3/3 PASS
-Etapa 6-14 CPU, RAM, Pod Recovery, capacity,
+Etapa 5    InteractionPolicy V2..V5           APROVADA, suite de 9 casos PASS
+Etapa 6    CPU boundary (alvo real)           BLOQUEADO, causa desconhecida
+Etapa 7-14 RAM, Pod Recovery, capacity,
            recycling, timeouts, economia      NÃO INICIADAS
 ```
 
@@ -117,14 +118,98 @@ desta sessão saíram sujos (3 `Singleton` no perfil). A credencial aguentou, ma
 a 4C viu logout na 4ª iteração desse regime. **Corrigido e travado por teste
 antes de qualquer outra execução contra a conta** — commit `a66db7a`.
 
-Consequência para quem retomar: o perfil está em 148 MB, saudável, mas já gastou
-dois ciclos sujos. Rodar `waopen` de novo agora deve imprimir
+**3. A credencial da 4C acabou caindo mesmo assim**, e foi REPAREADA em
+2026-08-10. A queda veio depois de um `waopen` saudável, com o perfil encolhendo
+de 153 para 146 MB — o marcador da 4C. Melhor explicação: dano acumulado dos
+dois ciclos sujos acima (`INFERRED`, MEDIUM). A hipótese de que o `cpubound`
+derrubava a sessão foi **refutada** — ver a seção da sessão estável.
+
+Critério operacional para quem retomar: um `waopen` deve imprimir
 `stopped_via=browser.close` e deixar **zero** `Singleton`. Se imprimir algo
 começando com `DIRTY_`, pare e investigue antes de seguir.
 
 ---
 
-## Dois resíduos honestos da V2 — resíduo 1 FECHADO na V3
+## V4/V5 — o que só o alvo real revelou
+
+Dois defeitos da policy que **nenhuma versão da hostile suite pegava**, porque
+as páginas de teste sempre tinham o alvo confortavelmente dentro da tela.
+
+**1. Ponto de clique no centro geométrico.** O `inView` testava se o elemento
+*intersecta* o viewport, e o `Act` clicava no centro. Medido no WhatsApp: a
+caixa de busca em `left=-70, top=-25, 592×28` — 25 dos 28 px acima da dobra.
+O teste dizia visível, o centro caía em `(226,-11)`, fora da tela,
+`elementFromPoint` devolvia `null`, e a recusa saía como
+`OCCLUDED_OR_REPLACED` — mandando o diagnóstico para overlay quando a causa era
+geometria.
+
+No caminho ingênuo o efeito é pior: clique numa coordenada fora da tela,
+acertando outra coisa. **`wrong_target` 5/5 no alvo real, a 3 CPUs, sem
+starvation nenhuma.** MEASURED, HIGH.
+
+Corrigido: o ponto é o centro da **interseção** do elemento com o viewport.
+
+**2. Scroll-into-view.** Deixou de ser resíduo e virou requisito medido. Rola
+uma vez por `Validate`, antes da janela de estabilidade, só quando não há ponto
+de clique útil, e aplicando o mesmo filtro de actionability do `Resolve` — para
+a rolagem não escolher alvo por baixo dos panos.
+
+**Mudança de expectativa na suite, deliberada.** `fora-do-viewport` passou a
+`ExpectAct=true`: com rolagem, recusá-lo é over-refusal, a mesma família do FAIL
+da V1. A cobertura antiga **não foi perdida** — migrou para
+`fora-da-tela-fixo` (`position:fixed` acima da tela, que rolagem não alcança).
+Trocar expectativa sem repor cobertura seria enfraquecer a suite para caber no
+código.
+
+Suite: 9 casos, PASS, `cs=3 cf=6 fs=wt=ff=0`.
+
+---
+
+## O CPU boundary está BLOQUEADO — causa desconhecida
+
+**NÃO MEDIDO.** Não extrapolar, não inferir a partir do sweep da carga
+controlada.
+
+O `#side` do WhatsApp renderiza fora da área visível, e a coisa toda é estática:
+
+| janela | viewport | `#side` |
+|---|---|---|
+| 1280×800 (canônico) | 1280×657 | `(-165,-42)` 715×830 |
+| 1600×1200 | 1600×1057 | `(-229,-122)` 671×1390 |
+
+Os cinco elementos clicáveis da lateral têm `x` negativo e `hit=false` em todos.
+Ampliar a janela **piorou**. Quatro amostras ao longo de 8 s deram geometria
+idêntica ao pixel, então **não é assentamento** — o requisito nº 5 da 4C não
+explica isto. `doc_scroll=[0,0]`, `zoom=1`, transform de ancestral é identidade.
+
+Não é seletor errado nem defeito da policy. `OBSERVED`, HIGH quanto ao fato;
+**causa desconhecida**, e deliberadamente não inventada.
+
+**Próxima hipótese a testar** (não testada): `--window-size` pode não definir o
+viewport de layout que o app usa em `headless=new` — `outerWidth/outerHeight`
+voltam `[0,0]`. O caminho padrão é fixar o viewport por CDP com
+`Emulation.setDeviceMetricsOverride` em vez de depender da flag. Uma execução
+resolve a dúvida.
+
+Instrumentação já pronta para isso, em `p5_cpubound.go`: dump de `layout:`
+(viewport, scroll, zoom, transform, rects), `clicaveis_no_side:` (só estrutura —
+tag, role, data-icon, geometria, hit — nunca texto) e `side_settle[i]` para
+distinguir layout de animação.
+
+---
+
+## Sessão: estável sob o regime limpo
+
+Sobreviveu a ~8 execuções seguidas nesta sessão. Perfil **172 → 183 MB**, sempre
+crescendo, `stopped_via=browser.close` em todas, zero `Singleton`.
+
+Isso **refuta a hipótese B** (o `cpubound` derrubaria a sessão). Sobra a
+hipótese A — dano acumulado dos dois ciclos sujos pré-F94 — como a melhor
+explicação da queda anterior. `INFERRED`, MEDIUM.
+
+---
+
+## Dois resíduos honestos da V2 — AMBOS FECHADOS
 
 Nenhum dos dois afeta o veredito, e nenhum produz falso sucesso. Mas os dois
 importam para o alvo real e não devem ser redescobertos.
@@ -134,12 +219,10 @@ na V3** — ver seção acima. Ficava `ground_truth_wrong_clicks = 1` porque o n
 substituído tem geometria idêntica: `Validate` o considerava parado e quem
 recusava era o `Verify`, depois do clique. Resolvido com identidade de nó.
 
-**2. A policy não rola a página.** Em `fora-do-viewport` o chromedp direto
-acerta (ele faz scroll-into-view) e a policy recusa com `OUT_OF_VIEWPORT`. O
-ground truth da suite trata isso como recusa correta, então não conta contra o
-veredito — mas a lista de conversas do WhatsApp **exige rolagem**, e sem
-scroll-into-view a policy não alcança nada abaixo da dobra. É requisito, não
-detalhe.
+**2. ~~A policy não rola a página.~~ FECHADO na V5** — ver seção acima. Era
+`OUT_OF_VIEWPORT` em tudo abaixo da dobra, e a lista de conversas do WhatsApp
+exige rolagem. Resolvido com scroll-into-view no `Validate`, mais o caso novo
+`fora-da-tela-fixo` para preservar a cobertura de "recusar o inalcançável".
 
 ---
 
@@ -218,8 +301,10 @@ Corrigido em `p5_hostile.go`: esse caso vira `false_failure` e o veredito exige
 
 | arquivo | conteúdo |
 |---|---|
-| `p5_interaction.go` | InteractionPolicy V1 — Resolve/Validate/Act/Verify |
-| `p5_hostile.go` | suite dos 8 cenários, ground truth em `window.__truth` |
+| `p5_interaction.go` | InteractionPolicy — Resolve/Validate/Act/Verify, budget, identidade de nó, interseção com viewport, scroll |
+| `p5_hostile.go` | suite dos 9 cenários, ground truth em `window.__truth` |
+| `p5_cpubound.go` | boundary contra o alvo real + instrumentação de layout |
+| `shutdown_policy_test.go` | trava a F94: nenhum modo com credencial desliga por sinal |
 
 Modo: `-mode hostile`. Roda em ~40 s, **não toca no WhatsApp**, não exige
 pareamento. Dá para iterar na V2 sem gastar QR.
@@ -265,24 +350,28 @@ WhatsApp — VIVA" acima para o UA obrigatório e para a F94. Protocolo mantido:
 ## Próximos passos, em ordem
 
 1. ~~InteractionPolicy V2~~ — **FEITO**, PASS 3/3 com controle negativo.
-2. ~~Resíduo 1, identidade de nó~~ — **FEITO** na V3.
-3. **Verificar a F94 contra a conta.** Um `waopen` deve imprimir
-   `stopped_via=browser.close` e deixar zero `Singleton` no perfil. É barato e
-   protege a credencial; deixar a correção não verificada é o risco maior.
-4. **CPU correctness boundary.** O `-wa-chat` provavelmente **não é
-   necessário**: o `wacap` já exercita a busca com eventos de teclado reais, e
-   um clique na caixa de busca com verificação de foco é um ciclo
-   Resolve→Validate→Act→Verify completo, read-only, sem abrir conversa nenhuma.
-   O critério tem de ser de dois lados como o da hostile suite — contra o alvo
-   real não existe `window.__truth`, então a póscondição observável do próprio
-   app é o ground truth, e "recusou tudo sob 0,5 CPU" NÃO pode contar como
-   ausência de falso sucesso.
-5. RAM/sessão + pico de recovery → Pod Recovery graceful e abrupto → blast
+2. ~~Resíduo 1, identidade de nó~~ — **FEITO** (V3).
+3. ~~Verificar a F94 contra a conta~~ — **FEITO**: `stopped_via=browser.close`,
+   `Singleton` 3 → 0, perfil 148 → 153 MB.
+4. ~~Resíduo 2, scroll-into-view~~ — **FEITO** (V5).
+5. **DESTRAVAR o CPU boundary.** Único item que motivou o pareamento e não
+   fechou. Hipótese a testar: `Emulation.setDeviceMetricsOverride` em vez de
+   `--window-size`. Uma execução decide. Se destravar, medir 3,0 e 0,5
+   primeiro — são as duas pontas que mais informam, e colhê-las cedo protege o
+   resultado caso a credencial caia no meio.
+6. RAM/sessão + pico de recovery → Pod Recovery graceful e abrupto → blast
    radius → capacidade 1/2/3 → recycling → timeouts por p95/p99 → economia →
    decisão.
 
-Resíduo 2 ainda aberto: **a policy não faz scroll-into-view**, e a lista de
-conversas exige rolagem.
+O `-wa-chat` **não é necessário**: o job da busca é ciclo completo, read-only,
+sem abrir conversa.
+
+Critério do boundary, quando ele rodar: contra o alvo real não existe
+`window.__truth`, então a testemunha são ouvintes de `click` (fase de captura) e
+`focusin` instalados antes de agir. Todo caso é `ExpectAct=true`, logo recusa é
+sempre `false_failure` — sem isso, "recusou tudo sob 0,5 CPU" apareceria como
+ausência de falso sucesso e daria o resultado degenerado de que a policy é
+perfeita a 0,1 CPU porque nunca age.
 
 ### Como reproduzir a etapa 5
 
