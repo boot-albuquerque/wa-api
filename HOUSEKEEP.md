@@ -4143,3 +4143,83 @@ defeito da F86 voltando por outra porta.
 
 **Status**: **não corrigido** — achado fora do escopo da bancada, e a correção
 depende da pergunta em (2), que não tem resposta ainda.
+
+---
+
+## F104 — o D1 só protege quem declarou `multi`; escalar réplicas sem declarar nada não é detectado
+
+**Data**: 2026-08-10
+**Contexto**: recapitulação da branch e revisão do ADR-0005. Achado ao verificar
+uma afirmação minha sobre a configuração de produção — que estava errada, e o
+erro escondia um problema maior que o alegado.
+
+**Onde**:
+- `pkg/bootstrap/cluster.go:64-74` (`clusterModeFromEnv`) — ausência de
+  `WA_API_CLUSTER_MODE` resolve para `single`.
+- `pkg/bootstrap/cluster.go:82-89` (`validateStackForMode`) — só recusa a
+  combinação quando o modo é `multi`.
+- `pkg/bootstrap/cluster.go:101-115` (`lockSingleInstance`) — `flock`, que
+  protege contra segundo processo **na mesma máquina**.
+- `pkg/infra/db/connection.go:63-91` — sem nenhuma `DB_*`, resolve `sqlite`
+  sem qualquer aviso.
+
+**Problema**: o D1 do ADR-0005 recusa subir com `WA_API_CLUSTER_MODE=multi` e
+SQLite, e essa guarda funciona. Mas ela está condicionada a que o operador
+tenha declarado `multi` — que é justamente o que ele mais provavelmente
+esquece. O caminho não coberto:
+
+```
+WA_API_CLUSTER_MODE ausente  ->  single (padrao)
+DB_* ausentes                ->  sqlite (padrao, sem aviso)
+single + sqlite              ->  combinacao LEGAL, sobe normalmente
+replicas: 2 no orquestrador  ->  ninguem reclama
+```
+
+O `flock` não salva: réplicas em containers distintos não compartilham
+namespace de PID, e o lock é por processo na mesma máquina.
+
+**Pior no arranjo atual de produção do disparazaap**: o serviço monta um volume
+NOMEADO (`wa-api-data:/app/dbdata`). Duas réplicas no mesmo host Docker montam
+o **mesmo** volume — não é "cada réplica com um banco próprio", é dois
+processos escrevendo no mesmo arquivo SQLite. Corrupção, não divergência.
+
+**O que NÃO é o problema, e eu afirmei que era**: produção não roda em SQLite
+por fallback de configuração parcial. O `.env` e o `compose.yaml` não definem
+nenhuma `DB_*`, e o anchor `common-env` só carrega `TZ`. Roda SQLite por padrão
+declarado. O `warn` de `incomplete_postgres_env` que me levou ao erro veio de
+um pod de bancada, cuja máquina tem `DB_*` parciais no shell. Corrigido também
+no ADR-0005.
+
+Isso muda o tamanho do achado: **não há configuração errada em produção hoje**.
+Há um padrão que serve para 1 pod e uma armadilha para o dia em que virarem 2.
+
+**Correção sugerida**, da mais barata para a mais invasiva:
+
+1. **D7, o relatório de capacidades no arranque** — decisão do próprio ADR-0005
+   que não foi implementada. Um bloco único e legível
+   (`database=sqlite mode=single multi_pod=NOT_SUPPORTED`) transforma um estado
+   que hoje é inferido em algo declarado. Não impede nada; torna visível.
+2. **Expor `db_type` e `cluster_mode` no corpo do `/health/ready`** — barato, e
+   deixa o estado auditável de fora do processo, por quem for escalar.
+3. **Tornar `DB_*` parcial um erro fatal, em qualquer modo** — um subconjunto
+   nunca é intencional. Custo: uma instância com variável residual passa a
+   recusar subir no próximo deploy. Em produção o custo é zero (não há
+   nenhuma); em máquina de desenvolvimento com `DB_*` parciais no shell, quebra
+   na hora. **Precisa de decisão do dono do repositório.**
+
+Nenhuma delas detecta réplicas. Detectar de fora (contar pods, ler a API do
+orquestrador) é frágil e falha nos dois sentidos; a alternativa honesta é (1) +
+(2) e documentar que `multi` é declaração obrigatória, não inferência.
+
+**Anti-regressão**: teste que fixa a tabela de combinações — `single`+sqlite
+sobe, `multi`+sqlite recusa, e o relatório de capacidades sai com os campos
+esperados. Hoje só o segundo caso tem teste.
+
+**Pré-requisito que ninguém planejou**: migrar para Postgres não é mudança de
+configuração, é **migração de dados**. As sessões pareadas e o
+`message_history` de produção estão no SQLite daquele volume. Qualquer caminho
+para multi-pod passa por essa migração, e ela não existe.
+
+**Status**: **não corrigido** — registrado. As opções (1) e (2) são aditivas e
+podem entrar sem decisão; a (3) muda comportamento de arranque e é decisão do
+dono do repositório.

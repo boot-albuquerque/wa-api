@@ -38,11 +38,24 @@ Três consequências que o desenho tem de absorver:
    fica com o processo vivo, HTTP respondendo e liveness verde — e a sessão
    morta, sem nunca tentar reconectar. O banco continua afirmando
    `connected=1`.
-3. **Degradação silenciosa já mordeu.** A instância de produção roda em SQLite
-   por causa do fallback automático de `pkg/infra/db/connection.go:81`, que
-   dispara quando as variáveis de Postgres estão PARCIALMENTE definidas. Ela
-   registra um `warn` e segue. Em multi-pod isso seria cada réplica com um
-   banco próprio, todas se achando donas de tudo.
+3. ~~**Degradação silenciosa já mordeu.** A instância de produção roda em
+   SQLite por causa do fallback automático de `pkg/infra/db/connection.go:81`,
+   que dispara quando as variáveis de Postgres estão PARCIALMENTE definidas.~~
+
+   **CORRIGIDO em 2026-08-10, e o erro era meu.** O `.env` e o `compose.yaml`
+   de produção **não definem nenhuma variável `DB_*`** — o único anchor de
+   ambiente carrega apenas `TZ`. O fallback por configuração parcial **nunca
+   dispara lá**. Produção roda SQLite por PADRÃO declarado, não por degradação
+   silenciosa.
+
+   O `warn` de `incomplete_postgres_env` que originou esta afirmação veio de um
+   pod de bancada, cuja máquina tem variáveis de Postgres parcialmente
+   definidas no shell. Li o log da bancada e atribuí à produção.
+
+   **O que continua verdadeiro, e é o ponto**: em multi-pod isso seria cada
+   réplica com um banco próprio. Só que o gatilho não é configuração parcial —
+   é escalar réplicas sem declarar `WA_API_CLUSTER_MODE=multi`, que é o caminho
+   que o D1 NÃO cobre. Ver F104 em `HOUSEKEEP.md`.
 
 ## Decisão
 
