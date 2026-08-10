@@ -1,4 +1,9 @@
-# Handoff — Fase 5 em andamento
+# Handoff — Fase 5
+
+> **A fonte de verdade desta fase é `RELATORIO-FASE-5.md`.** Este handoff virou
+> o diário de bordo: guarda a cronologia, os becos e as hipóteses refutadas, que
+> o relatório resume. Para retomar o trabalho, leia o relatório primeiro e volte
+> aqui só para o detalhe operacional.
 
 Documento de retomada. A fonte de verdade das fases anteriores é
 `RELATORIO-FASE-4C.md`; este arquivo cobre apenas o que aconteceu **depois** dele.
