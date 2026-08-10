@@ -148,9 +148,17 @@ const envSettleBudget = "P5_SETTLE_BUDGET"
 // Uma avaliação só, de propósito: fazer várias idas ao browser abre janela para
 // o DOM mudar entre elas, que é exatamente o defeito (node replacement) que
 // esta camada precisa detectar em vez de sofrer.
+//
+// Cada elemento recebe uma IDENTIDADE (`__p5id`), gravada como propriedade
+// expando e não como atributo: atributo entra no DOM serializado e pode casar
+// com seletor de terceiro, propriedade não. Um nó substituído é outro objeto,
+// logo recebe id novo — e é assim que node replacement fica visível para o
+// Validate ANTES do clique, em vez de só para o Verify depois dele.
 const jsCandidates = `(() => {
+  const reg = (window.__p5 = window.__p5 || {n: 0});
   const out = [];
   for (const el of document.querySelectorAll(SELECTOR)) {
+    if (!el.__p5id) { el.__p5id = ++reg.n; }
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
     const visible = cs.visibility !== 'hidden' && cs.display !== 'none' &&
@@ -167,13 +175,14 @@ const jsCandidates = `(() => {
       const top = document.elementFromPoint(cx, cy);
       hit = !!top && (top === el || el.contains(top));
     }
-    out.push({attached: el.isConnected, visible, enabled: !disabled,
+    out.push({id: el.__p5id, attached: el.isConnected, visible, enabled: !disabled,
               w: r.width, h: r.height, cx, cy, inView, hit});
   }
   return JSON.stringify(out);
 })()`
 
 type rawCandidate struct {
+	ID       int64   `json:"id"`
 	Attached bool    `json:"attached"`
 	Visible  bool    `json:"visible"`
 	Enabled  bool    `json:"enabled"`
@@ -320,6 +329,7 @@ func (p *InteractionPolicy) Validate(ctx context.Context, sel, label string) (ra
 
 	last := first
 	stable := 0
+	idChanges := 0
 	var lastErr error
 	for i := 0; stable < p.StableFrames; i++ {
 		if !time.Now().Before(deadline) {
@@ -333,7 +343,15 @@ func (p *InteractionPolicy) Validate(ctx context.Context, sel, label string) (ra
 			continue
 		}
 		lastErr = nil
-		if c.CX == last.CX && c.CY == last.CY && c.W == last.W && c.H == last.H {
+		// Identidade JUNTO com geometria. Só geometria era insuficiente e isso
+		// foi medido: em node-replacement o nó novo nasce na mesma posição e com
+		// o mesmo tamanho, então a V2 o considerava parado, clicava, e quem
+		// recusava era o Verify — depois do clique já ter caído no nó errado.
+		if c.ID != last.ID {
+			idChanges++
+		}
+		if c.ID == last.ID &&
+			c.CX == last.CX && c.CY == last.CY && c.W == last.W && c.H == last.H {
 			stable++
 		} else {
 			stable = 0
@@ -346,6 +364,13 @@ func (p *InteractionPolicy) Validate(ctx context.Context, sel, label string) (ra
 		// mandaria a próxima investigação para o lugar errado.
 		if lastErr != nil {
 			return rawCandidate{}, lastErr
+		}
+		if idChanges > 0 {
+			// Distinto de UNSTABLE_GEOMETRY de propósito: o elemento não está se
+			// movendo, está sendo TROCADO. São causas diferentes e levam a fixes
+			// diferentes no alvo — esperar não resolve churn de re-render.
+			return rawCandidate{}, refuse("validate", "NODE_CHURN",
+				fmt.Sprintf("%d trocas de identidade em %s", idChanges, p.SettleBudget))
 		}
 		return rawCandidate{}, refuse("validate", "UNSTABLE_GEOMETRY",
 			fmt.Sprintf("nao parou em %s", p.SettleBudget))
@@ -408,6 +433,19 @@ func (p *InteractionPolicy) Click(ctx context.Context, sel, postcondition, label
 	c, err := p.Validate(ctx, sel, label)
 	if err != nil {
 		return err
+	}
+	// Reconferência de identidade colada no Act. Não fecha a janela — entre esta
+	// sondagem e o DispatchMouseEvent o nó ainda pode ser trocado, e nenhum
+	// protocolo elimina isso — mas reduz a janela de ~1 amostra de estabilidade
+	// para uma ida ao browser, e torna a troca DETECTÁVEL em vez de silenciosa.
+	// O que fecha o caso continua sendo o Verify.
+	if again, err := p.resolveOnce(ctx, sel, label+"/preact"); err != nil {
+		return refuse("validate", "TARGET_LOST_BEFORE_ACT", err.Error())
+	} else if again.ID != c.ID {
+		return refuse("validate", "REPLACED_BEFORE_ACT",
+			fmt.Sprintf("identidade %d -> %d entre validate e act", c.ID, again.ID))
+	} else {
+		c = again
 	}
 	if err := p.Act(ctx, c, label); err != nil {
 		return refuse("act", "INPUT_FALHOU", err.Error())
