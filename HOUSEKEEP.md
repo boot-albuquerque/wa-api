@@ -4223,3 +4223,64 @@ para multi-pod passa por essa migração, e ela não existe.
 **Status**: **não corrigido** — registrado. As opções (1) e (2) são aditivas e
 podem entrar sem decisão; a (3) muda comportamento de arranque e é decisão do
 dono do repositório.
+
+---
+
+## F105 — produção está 5 migrações atrás, e o próximo deploy roda a irreversível
+
+**Data**: 2026-08-10
+**Contexto**: backup de produção e ensaio de restauração, primeiro item do
+ADR-0007.
+
+**Onde**: volume `disparazaap-mvp_wa-api-data`, tabela `migrations`.
+
+**Problema**: produção está na migração **11**; a branch está na **16**. O
+próximo deploy aplica 12, 13, 14, 15 e 16 de uma vez, mais a renomeação
+`whatsmeow_*` → `wanoise_*` no store do protocolo.
+
+A migração 16 (`blank_plaintext_token`) é **irreversível**: apaga o token em
+texto claro depois de preencher e conferir o hash. Produção tem 7 usuários,
+todos com `token_hash` preenchido **e** todos ainda com texto claro. Ou seja:
+a 16 não aborta, e apaga os 7.
+
+**Duas consequências que ninguém tinha notado:**
+
+1. **O D3 (outbox) não existe em produção.** A migração 15 nunca foi aplicada
+   lá. A durabilidade de entrega que o ADR-0005 registra como PRONTA está na
+   branch, não no ar. Webhook pendente em produção ainda morre com o processo.
+
+2. **Depois do deploy, o backup vira o único lugar com os tokens em texto
+   claro.** Não é defeito — é o efeito pretendido da F97 —, mas muda o
+   procedimento: perder o backup passa a significar retokenizar os 7 clientes.
+
+**Evidência** — ensaio de restauração contra a cópia, com o binário da branch:
+
+```
+           antes    depois
+migração      11        16
+usuários       7         7
+texto claro    7         0     <- migração 16, irreversível
+token_hash     7         7
+histórico 167500    167500
+device         1         1     <- credencial do aparelho
+identity_keys  3         3
+sessions       3         3
+pre_keys     809       809
+```
+
+Autenticação sobreviveu: token real do backup devolveu **400** (autenticou, sem
+sessão), contra **401** para token inválido e **401** sem token.
+
+**Correção sugerida**: nenhuma no código — o caminho de migração está correto e
+foi ensaiado. O que falta é **operacional**:
+
+1. Fazer o deploy com o backup em mãos e o manifesto de restauração ao lado
+   (feito: `~/backups/wa-api/<timestamp>/MANIFESTO.md`).
+2. Guardar os 7 tokens em texto claro num cofre antes do deploy, ou aceitar
+   explicitamente que o backup é a única cópia.
+3. Não deixar a distância crescer de novo. Cinco migrações acumuladas
+   transformam um deploy de rotina num evento — e foi só por acaso que a
+   irreversível estava entre elas numa hora em que alguém olhava.
+
+**Status**: **não corrigido** — é decisão operacional, não mudança de código.
+O ensaio está feito e passou; o deploy em si é sua decisão.
