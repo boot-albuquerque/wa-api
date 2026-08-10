@@ -1,6 +1,8 @@
 # ADR-0005: obrigatoriedade de stack, posse de sessão e degradação por capacidade
 
-- **Status**: proposed
+- **Status**: **accepted, parcialmente implementado (2026-08-10)** — D1, D2, D3
+  e D6 entraram e estão em uso; D5 (roteamento por dono) e D7 (relatório de
+  capacidades) não. Ver "Fechamento" no fim deste documento.
 - **Data**: 2026-08-08
 - **Relacionado**: F86, F87, F88, F89 em `HOUSEKEEP.md`. **Amenda** a decisão
   registrada na F88 de que retry durável exigiria RabbitMQ — ver D3.
@@ -330,3 +332,75 @@ política de retenção do outbox.
   (`SIGSTOP`) por mais que o TTL.
 - Com dois pods e roteamento por dono, o WS reconecta sozinho quando a sessão
   troca de dono?
+
+## Fechamento (2026-08-10)
+
+### O que entrou
+
+| decisão | estado | commits |
+|---|---|---|
+| D1 — modo explícito, SQLite fatal em `multi`, trava local em `single` | **entrou** | `2cbd736` |
+| D2 — posse por lease com TTL e regra de cerca | **entrou** | `b780b12`, `05a08de`, `8f1ef68`, `74c137e`, `2e30467` |
+| D3 — outbox de webhook | **entrou** | `149a649`, `daa0c79` |
+| D4 — RabbitMQ é distribuição, não durabilidade | **decisão, sem código** | emenda à F88, absorvida pelo D3 |
+| D5 — Redis por padrão não; roteamento por dono | **NÃO entrou** | — |
+| D6 — `/health/live` separado de `/health/ready` | **entrou** | `3906ac3` |
+| D7 — relatório de capacidades no arranque | **NÃO entrou** | — |
+
+### A consequência de D5 não ter entrado
+
+**O modo `multi` não está operacional de ponta a ponta.** O lease (D2) impede
+duas réplicas de disputarem a mesma sessão, que era o modo de falha medido na
+F89. Mas sem roteamento por dono, um cliente que abra WebSocket no pod errado
+não alcança a sessão — e a tabela de obrigatoriedade acima promete
+"WS com cliente em pod diferente: **sim** (rota por dono)".
+
+Enquanto D5 não entrar, essa linha da tabela é uma promessa, não um fato.
+Subir em N pods hoje é seguro quanto à disputa e incompleto quanto à entrega.
+
+### A ordem executada não foi a sugerida
+
+A sequência proposta era D1 → D6 → D3 → D2. A executada foi D1 → D2 → D6 → D3.
+D2 subiu antes de D6, e o preço apareceu: a posse foi ligada sem a saúde
+separada para observá-la, e os dois defeitos que vieram depois (F96 e F98,
+lease renovado para sempre numa sessão que nunca subiu) foram encontrados **em
+bancada**, não por sinal de saúde. A sequência original estava certa; ignorá-la
+custou dois achados que a ordem correta teria exposto sozinha.
+
+### As perguntas em aberto, respondidas e não respondidas
+
+**Respondida, por acidente e negativamente:** *"Com dois pods e roteamento por
+dono, o WS reconecta sozinho quando a sessão troca de dono?"*
+
+A F85, reproduzida em bancada em 2026-08-10, mostrou que **o painel não
+reconecta de jeito nenhum** — nem por troca de dono, nem por rajada, nem por
+queda de rede. Depois que a conexão cai por prazo de escrita estourado, ele
+fica em `0 conectados` até alguém recarregar a página, exibindo a sessão como
+conectada (isso vem do REST) com o fluxo de eventos morto.
+
+Ou seja: a pergunta pressupunha um cliente que tenta reconectar. Ele não
+existe. Reconexão automática é **pré-requisito** do D5, não consequência dele.
+
+**Não respondidas, e continuam abertas:**
+
+- Quanto tempo o Postgres leva para liberar um lease de um pod morto por
+  `kill -9`, sob TTL de 15s. O `kill -9` que foi feito (`b7bf1b3`) validou o
+  **outbox**, não o lease — são coisas diferentes e a entrada anterior não
+  deixava isso claro.
+- Sob que pausa acontece o despejo falso (`SIGSTOP` por mais que o TTL).
+- A política de retenção do outbox.
+
+### O que a bancada mudou no plano original
+
+**A durabilidade do outbox foi validada com queda abrupta**: duas entregas
+pendentes sobreviveram e foram retomadas ~1s depois de o processo voltar. O que
+**não** foi validado é a entrega HTTP em si até um destino real — o usuário da
+bancada de 2026-08-10 tinha webhook vazio, e o log registrou `No webhook set
+for user` em vez de exercitar o laço completo.
+
+**O fallback silencioso de banco continua acontecendo em `single`**, por
+desenho: o log de 2026-08-10 traz
+`falling back to sqlite: DB_USER/DB_PASSWORD/DB_NAME/DB_HOST/DB_PORT partially
+set` em nível `warn`. Em `multi` isso é fatal (D1), que era o objetivo. Mas em
+`single` a degradação segue sendo um `warn` no meio de centenas — que é
+exatamente o que o D7 existiria para resolver, e o D7 não entrou.
