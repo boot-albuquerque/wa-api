@@ -4076,3 +4076,70 @@ O defeito é de observabilidade, e o teste tem de fixar a observabilidade.
 **Status**: **não corrigido** — achado de lado durante a bancada da F87, fora
 do escopo dela. Não toquei porque a política do repositório é registrar e
 perguntar antes de corrigir defeito pré-existente fora do escopo.
+
+---
+
+## F103 — mensagem reenviada pelo WhatsApp é processada duas vezes: dois downloads, dois webhooks
+
+**Data**: 2026-08-10
+**Contexto**: validação de bancada da F87, com vídeo real. Achado de lado —
+eu procurava aviso de lentidão e encontrei o mesmo `messageID` duas vezes.
+
+**Onde**: `pkg/bootstrap/eventhandler_message.go` (todo o caminho de
+`handleMessage`) — não há deduplicação por `messageID` em lugar nenhum.
+`grep` por `dedup|duplicate|alreadyProcessed|seenMessage` em `pkg/` só devolve
+código de migração, nada no caminho de mensagem.
+
+**Problema**: quando o WhatsApp reentrega uma mensagem — o que ele faz depois de
+uma falha de decriptação, e o SDK registra como `Unavailable message` seguido de
+pedido de reenvio — o nosso handler processa a segunda cópia como se fosse nova.
+Baixa a mídia de novo e despacha o webhook de novo.
+
+**Evidência** (log da bancada, mesmo `messageID`, 4 minutos de intervalo):
+
+```
+00:33:11  warn  Unavailable message 4ABAFB6B41B6E00C6835 from 150147912749158@lid
+00:33:12  info  Message Received      4ABAFB6B41B6E00C6835   (sem campo type:)
+00:33:15  info  Media processed       4ABAFB6B41B6E00C6835.m4v
+00:33:15  info  Temporary file deleted
+00:33:15  warn  No webhook set for user          <- ponto de despacho, 1a vez
+00:35:44  info  Message was read
+00:37:06  info  Message Received      4ABAFB6B41B6E00C6835   (type: media)
+00:37:08  info  Media processed       4ABAFB6B41B6E00C6835.m4v
+00:37:08  warn  No webhook set for user          <- ponto de despacho, 2a vez
+```
+
+Dois downloads completos do mesmo vídeo, dois arquivos temporários criados e
+removidos, e os dois ciclos alcançaram o despacho de webhook.
+
+**Limite desta evidência, declarado**: o usuário da bancada não tinha webhook
+configurado, então o que está provado é que **o caminho de despacho foi
+alcançado duas vezes** — não que dois POST saíram. A conclusão de entrega
+dupla é inferência do código, não observação direta. Confirmar com um sink
+local antes de tratar como certo.
+
+**Por que importa**: para o cliente, a mesma mensagem chega duas vezes com o
+mesmo `messageID`. Quem usa o webhook para criar registro (pedido, atendimento,
+cobrança) duplica, a menos que deduplique por conta própria — e nada na nossa
+documentação diz que ele precisa. O custo de banda também dobra, e num vídeo
+grande isso não é desprezível.
+
+**Correção sugerida**:
+
+1. **Deduplicar por `messageID`** antes de processar, com janela de tempo
+   limitada (um cache com expiração de minutos, não um registro perpétuo). O
+   `messageID` do WhatsApp é único por mensagem e estável entre reentregas —
+   foi exatamente por isso que este achado apareceu.
+2. **Decidir o que fazer com a primeira cópia**: no caso medido, a primeira
+   chegou sem `type:` preenchido e mesmo assim baixou mídia. Vale entender se
+   a primeira cópia é sempre completa ou se às vezes é um espectro — porque
+   deduplicar mantendo a PRIMEIRA seria errado se a primeira for a incompleta.
+   Esta pergunta precisa de resposta ANTES da correção (1).
+
+**Anti-regressão**: teste que entrega o mesmo `events.Message` duas vezes e
+verifica um único despacho de webhook e um único download. E um segundo teste
+que prove a expiração da janela — senão o cache cresce sem teto, que é o
+defeito da F86 voltando por outra porta.
+
+**Status**: **não corrigido** — achado fora do escopo da bancada, e a correção
+depende da pergunta em (2), que não tem resposta ainda.
