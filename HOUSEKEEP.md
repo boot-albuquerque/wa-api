@@ -4346,3 +4346,91 @@ válidas e verifica que as N válidas SÃO reivindicadas. Hoje esse teste falhar
 **Status**: **não corrigido** — defeito pré-existente fora do escopo da tarefa
 (que era cobrir o `SKIP LOCKED`). A política do repositório é registrar e
 perguntar antes de corrigir.
+
+---
+
+## F107 — a expiração do lease PERMITE o failover, mas nada o dispara: sessão órfã fica órfã
+
+**Data**: 2026-08-10
+**Contexto**: medição M1 da Fase 1 do ADR-0007 — quanto tempo o Postgres leva
+para liberar um lease de pod morto por `kill -9`. A resposta veio, e junto veio
+um achado maior que a pergunta.
+
+**Onde**: os **dois** — e só dois — sítios que reivindicam posse:
+- `pkg/bootstrap/lifecycle.go:91` (`connectOnStartup`), cuja consulta é
+  `SELECT ... FROM users WHERE connected=1` (`lifecycle.go:54`);
+- `pkg/bootstrap/session_orchestrator_wiring.go:49`, no caminho de requisição
+  HTTP.
+
+**Problema**: não existe varredura de leases expirados. Nenhum laço periódico,
+nenhum trabalho de fundo. A cláusula `WHERE session_leases.expires_at < now()`
+em `session_lease.go:68` deixa a linha DISPONÍVEL, mas alguém precisa tentar
+reivindicá-la — e as duas únicas coisas que tentam são o arranque do processo e
+uma requisição HTTP para aquele usuário.
+
+Consequência: **um pod já de pé, sem tráfego para aquele usuário, não recupera a
+sessão órfã.** O lease expira, a linha fica disponível, e ninguém a pega.
+
+**Evidência** (bancada, Postgres real, modo `multi`): numa rodada em que a
+sonda estava quebrada, o lease ficou expirado por **~119 segundos** com o pod B
+**rodando**, e o `owner_id` continuou sendo o do pod A morto. O pod B só assumiu
+quando chegou um `GET /session/connect`.
+
+**Por que isso muda a leitura do ADR-0005**: o documento trata o TTL como o
+custo do failover. Ele não é. **O TTL é o piso do downtime, não o downtime.** O
+tempo real até a sessão voltar é o TTL mais o intervalo até alguém bater naquele
+usuário — que pode ser minutos, horas, ou nunca, se o tráfego for de entrada
+(mensagem chegando do WhatsApp) em vez de saída.
+
+E o caso pior é o mais provável: uma sessão que só RECEBE mensagem não gera
+requisição HTTP nenhuma. Ela fica órfã até o próximo restart do pod.
+
+**Correção sugerida**: um laço que varre leases expirados e tenta reivindicar os
+que pertencem a usuários com `connected=1`. É o mesmo trabalho que
+`connectOnStartup` já faz, só que periódico em vez de uma vez.
+
+Decidir junto: com que intervalo, e se todo pod varre (mais rápido, mais
+disputa) ou só um (menos disputa, precisa de eleição — que é exatamente o que
+não temos).
+
+**Anti-regressão**: teste que expira um lease com o pod B de pé e SEM tráfego
+para o usuário, e verifica que o pod B assume dentro de um prazo. Hoje esse
+teste falharia, e é a prova de que o comportamento não existe.
+
+**Status**: **não corrigido** — é lacuna de desenho do D2/D5, não defeito de
+implementação. Precisa de decisão antes de código.
+
+---
+
+## F108 — `/session/connect` responde 200 "connecting" mesmo com a posse NEGADA
+
+**Data**: 2026-08-10
+**Contexto**: achado de lado na medição M1.
+
+**Onde**: `pkg/presentation/http/handlers/handler_session.go:90-91`.
+
+**Problema**: o handler dispara a conexão numa goroutine (fire-and-forget) e
+responde **antes** de o resultado ser conhecido. Quando a posse é negada porque
+outra réplica é dona, o cliente recebe:
+
+```
+HTTP 200 {"status":"connecting"}
+```
+
+O log do processo registra corretamente `session owned by another replica;
+skipping`. O cliente não fica sabendo de nada.
+
+**Por que importa**: o cliente não tem como distinguir "está conectando" de
+"este pod recusou e nunca vai conectar". Ele vai esperar por um estado que não
+vem, e a única saída é sondar `/session/status` até desistir por conta própria.
+
+Em `single` isso nunca aparece — não há com quem competir —, o que explica não
+ter sido notado. Em `multi` é o caminho comum enquanto não houver roteamento por
+dono (D5): a requisição cai em qualquer pod, e a maioria dos pods não é o dono.
+
+**Correção sugerida**: decidir a posse **antes** de responder, e devolver o que
+o D5 vai precisar de qualquer forma — 409 com o dono, ou encaminhar. Isso se
+resolve junto com a decisão 2 do ADR-0007, não separado.
+
+**Status**: **não corrigido** — está no caminho da Fase 4 do ADR-0007, e
+corrigir antes seria decidir o roteamento por acidente.

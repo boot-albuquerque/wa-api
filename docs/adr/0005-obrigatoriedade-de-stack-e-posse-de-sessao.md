@@ -396,10 +396,26 @@ existe. Reconexão automática é **pré-requisito** do D5, não consequência d
 
 **Não respondidas, e continuam abertas:**
 
-- Quanto tempo o Postgres leva para liberar um lease de um pod morto por
-  `kill -9`, sob TTL de 15s. O `kill -9` que foi feito (`b7bf1b3`) validou o
-  **outbox**, não o lease — são coisas diferentes e a entrada anterior não
-  deixava isso claro.
+- ~~Quanto tempo o Postgres leva para liberar um lease de um pod morto por
+  `kill -9`, sob TTL de 15s.~~ **RESPONDIDA em 2026-08-10** (medição M1 da Fase
+  1 do ADR-0007), e a resposta desmonta a pergunta.
+
+  **O número**: a posse fica retida por `TTL − tempo desde a última renovação
+  confirmada`, não pelo TTL cheio. Com TTL 15s e heartbeat 5s, a faixa é **10 a
+  15 segundos**; medido 12,53s / 12,54s / 12,57s em três repetições, e 10,59s
+  no piso (kill logo antes do próximo heartbeat). Controle negativo com TTL 5s
+  / hb 2s: 4,47s / 4,51s / 4,64s — o TTL manda no número, então o que foi
+  medido é expiração de lease e não outra coisa. A tomada em si é instantânea
+  (0,03–0,05s).
+
+  **Mas a pergunta estava mal formulada**, e é o achado que importa: a
+  expiração PERMITE o failover, ela não o dispara. Não há varredura de leases
+  expirados — as únicas duas coisas que reivindicam posse são o arranque do
+  processo e uma requisição HTTP para aquele usuário. Medido: com o lease
+  expirado e o pod B rodando, o `owner_id` continuou sendo o do pod A morto por
+  **~119 segundos**, até chegar um `GET /session/connect`.
+
+  **O TTL é o piso do downtime, não o downtime.** Ver F107 em `HOUSEKEEP.md`.
 - Sob que pausa acontece o despejo falso (`SIGSTOP` por mais que o TTL).
 - A política de retenção do outbox.
 
