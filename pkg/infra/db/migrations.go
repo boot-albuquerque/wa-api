@@ -126,11 +126,21 @@ var migrations = []Migration{
 		UpSQL:   "",
 		DownSQL: "",
 	},
+	{
+		ID:      migrationIDLeaseOwnerAddr,
+		Name:    "add_lease_owner_addr",
+		UpSQL:   addLeaseOwnerAddrSQL,
+		DownSQL: addLeaseOwnerAddrDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
 // existentes (F97 etapa 2).
 const migrationIDBlankPlaintextToken = 16
+
+// migrationIDLeaseOwnerAddr acrescenta o endereço do dono à tabela de posse
+// (ADR-0007, decisão 1).
+const migrationIDLeaseOwnerAddr = 17
 
 // migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
 // mesmo motivo da constante acima: três lugares a referenciam.
@@ -265,6 +275,39 @@ END $$;
 
 const addSenderPushNameDownSQL = `
 ALTER TABLE message_history DROP COLUMN sender_push_name;
+`
+
+// addLeaseOwnerAddrSQL guarda o ENDEREÇO do dono junto com a posse
+// (ADR-0007, decisão 1).
+//
+// # Por que na mesma linha, e não descoberto por fora
+//
+// Quem for rotear precisa de duas respostas: quem é o dono, e onde ele está.
+// Descobrir a segunda por DNS (StatefulSet) ou pela API do k8s são as duas
+// alternativas recusadas no ADR — a primeira amarra a arquitetura a uma
+// topologia, a segunda põe o plano de controle do cluster no caminho quente de
+// toda requisição.
+//
+// Guardando aqui, as duas respostas vêm da MESMA linha, na MESMA consulta,
+// escritas pela MESMA transação. Não existe caminho em que divirjam.
+//
+// # O endereço envelhece, e isso é tratado
+//
+// IP de pod é reciclado, então uma linha velha pode apontar para outro
+// processo. Quem receber confere se o `owner_id` é o seu e recusa se não for;
+// o chamador relê a linha. O erro é DETECTÁVEL e transitório — que é a
+// propriedade que faltava nas duas alternativas.
+//
+// `DEFAULT ''` porque a coluna é NOT NULL e a tabela pode já ter linhas: em
+// `single` ela é inerte (a posse nem é reivindicada), e vazio significa
+// "não roteável", que é a leitura correta para uma linha escrita antes desta
+// migração existir.
+const addLeaseOwnerAddrSQL = `
+ALTER TABLE session_leases ADD COLUMN owner_addr TEXT NOT NULL DEFAULT '';
+`
+
+const addLeaseOwnerAddrDownSQL = `
+ALTER TABLE session_leases DROP COLUMN owner_addr;
 `
 
 // renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de

@@ -47,13 +47,14 @@ func buildLeaseManager(s *server) (*leaseManager, error) {
 
 	store := db.NewSessionLeaseRepository(s.DB)
 	ownerID := buildOwnerID()
+	ownerAddr := buildOwnerAddr()
 	log.Info().
 		Str("owner_id", ownerID).
 		Dur("ttl", ttl).
 		Dur("heartbeat", heartbeat).
 		Msg("session ownership enabled")
 
-	manager := newLeaseManager(store, ownerID, ttl, heartbeat, releaseSessionLocally)
+	manager := newLeaseManager(store, ownerID, ownerAddr, ttl, heartbeat, releaseSessionLocally)
 	manager.hasLiveSession = hasLiveSessionLocally
 	return manager, nil
 }

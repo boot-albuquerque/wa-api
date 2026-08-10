@@ -2123,6 +2123,7 @@ pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
 pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
 pkg/bootstrap.buildLeaseManager	ELIGIBLE	covered
+pkg/bootstrap.buildOwnerAddr	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
@@ -2176,7 +2177,7 @@ pkg/bootstrap.leaseManager.abandoned	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
-pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:319);uncovered:L2(S-ret,lease.go:323)
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:363);uncovered:L2(S-ret,lease.go:367)
 pkg/bootstrap.livenessHandler	EXCLUDED	X1
 pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)
@@ -2326,9 +2327,9 @@ pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
-pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:80);uncovered:L2(S-consume,session_lease.go:84)
-pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:109)
-pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:96)
+pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:99);uncovered:L2(S-consume,session_lease.go:103)
+pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:131)
+pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:115)
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
 pkg/infra/db.TrimMessageHistory	ELIGIBLE	covered
 pkg/infra/db.UserRepository.CreateUser	ELIGIBLE	covered

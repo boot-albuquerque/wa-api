@@ -52,11 +52,18 @@ func NewSessionLeaseRepository(db *sqlx.DB) *SessionLeaseRepository {
 //
 // The `OR owner_id = EXCLUDED.owner_id` clause makes the operation idempotent
 // for the current owner, which is what lets Claim double as renewal.
+//
+// `owner_addr` viaja junto com a posse, e não numa escrita separada
+// (ADR-0007, decisão 1): quem for rotear lê as duas respostas — quem é o dono e
+// onde ele está — da mesma linha. Duas escritas abririam uma janela em que a
+// posse já mudou e o endereço ainda é o do dono anterior, que é exatamente o
+// tipo de divergência silenciosa que este desenho existe para não ter.
 const claimStatement = `
-	INSERT INTO session_leases (user_id, owner_id, expires_at)
-	VALUES ($1, $2, now() + make_interval(secs => $3))
+	INSERT INTO session_leases (user_id, owner_id, owner_addr, expires_at)
+	VALUES ($1, $2, $3, now() + make_interval(secs => $4))
 	ON CONFLICT (user_id) DO UPDATE
 	   SET owner_id = EXCLUDED.owner_id,
+	       owner_addr = EXCLUDED.owner_addr,
 	       expires_at = EXCLUDED.expires_at
 	 WHERE session_leases.expires_at < now()
 	    OR session_leases.owner_id = EXCLUDED.owner_id`
@@ -68,15 +75,27 @@ const claimStatement = `
 // had already taken, and both would believe they own the session.
 const releaseStatement = `DELETE FROM session_leases WHERE user_id = $1 AND owner_id = $2`
 
-const currentOwnerStatement = `SELECT owner_id, expires_at FROM session_leases WHERE user_id = $1`
+const currentOwnerStatement = `SELECT owner_id, owner_addr, expires_at FROM session_leases WHERE user_id = $1`
+
+// LeaseHolder is who holds a session and where to reach them.
+//
+// A struct rather than three return values because the three are only ever
+// meaningful together: an address without the owner it belongs to cannot be
+// verified, and verification is what makes a stale address safe (ADR-0007,
+// decisão 1).
+type LeaseHolder struct {
+	OwnerID   string
+	OwnerAddr string
+	ExpiresAt time.Time
+}
 
 // Claim attempts to take (or renew) ownership of a session.
 //
 // Returns true when this owner now holds the session. Returns false with no
 // error when ANOTHER owner holds a valid lease — that is not a failure, it is
 // the answer.
-func (r *SessionLeaseRepository) Claim(ctx context.Context, userID, ownerID string, ttl time.Duration) (bool, error) {
-	res, err := r.db.ExecContext(ctx, claimStatement, userID, ownerID, ttl.Seconds())
+func (r *SessionLeaseRepository) Claim(ctx context.Context, userID, ownerID, ownerAddr string, ttl time.Duration) (bool, error) {
+	res, err := r.db.ExecContext(ctx, claimStatement, userID, ownerID, ownerAddr, ttl.Seconds())
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", ErrLeaseUnavailable, err)
 	}
@@ -99,18 +118,21 @@ func (r *SessionLeaseRepository) Release(ctx context.Context, userID, ownerID st
 	return nil
 }
 
-// CurrentOwner reports who holds the lease and until when, for diagnostics.
+// CurrentOwner reports who holds the lease, where to reach them, and until when.
 //
-// Returns ("", zero, nil) when there is no lease — absence is not an error.
-func (r *SessionLeaseRepository) CurrentOwner(ctx context.Context, userID string) (string, time.Time, error) {
-	var owner string
-	var expiresAt time.Time
-	err := r.db.QueryRowxContext(ctx, currentOwnerStatement, userID).Scan(&owner, &expiresAt)
+// The bool separates "there is no lease" from "the lease is held by someone
+// with an empty address": both produce a zero-ish LeaseHolder, and they demand
+// opposite actions from a router — claim it, versus refuse to forward. Absence
+// is not an error, but it is not the same as presence either.
+func (r *SessionLeaseRepository) CurrentOwner(ctx context.Context, userID string) (LeaseHolder, bool, error) {
+	var holder LeaseHolder
+	err := r.db.QueryRowxContext(ctx, currentOwnerStatement, userID).
+		Scan(&holder.OwnerID, &holder.OwnerAddr, &holder.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", time.Time{}, nil
+			return LeaseHolder{}, false, nil
 		}
-		return "", time.Time{}, fmt.Errorf("%w: %v", ErrLeaseUnavailable, err)
+		return LeaseHolder{}, false, fmt.Errorf("%w: %v", ErrLeaseUnavailable, err)
 	}
-	return owner, expiresAt, nil
+	return holder, true, nil
 }

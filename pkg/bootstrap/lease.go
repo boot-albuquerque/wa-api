@@ -3,7 +3,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +38,10 @@ const (
 	// read. Losing the hostname must not stop the process from claiming
 	// ownership; it only makes the owner harder to trace.
 	ownerIDUnknownHost = "unknown-host"
+
+	// envAdvertiseAddr permite declarar explicitamente o endereco alcancavel
+	// deste processo (ADR-0007, decisao 1).
+	envAdvertiseAddr = "WA_API_ADVERTISE_ADDR"
 )
 
 // leaseStore is what the manager needs from the repository. It is an interface
@@ -43,14 +49,18 @@ const (
 // lives in pkg/infra/db/session_lease.go: Claim returns (false, nil) when
 // another owner holds a valid lease, and an error only when the DATABASE fails.
 type leaseStore interface {
-	Claim(ctx context.Context, userID, ownerID string, ttl time.Duration) (bool, error)
+	Claim(ctx context.Context, userID, ownerID, ownerAddr string, ttl time.Duration) (bool, error)
 	Release(ctx context.Context, userID, ownerID string) error
 }
 
 // leaseManager keeps ownership of this process's sessions alive.
 type leaseManager struct {
-	store     leaseStore
-	ownerID   string
+	store   leaseStore
+	ownerID string
+	// ownerAddr e' onde ESTE processo pode ser alcancado por outro pod
+	// (ADR-0007, decisao 1). Viaja gravado junto com a posse para que quem
+	// roteia leia dono e endereco da mesma linha.
+	ownerAddr string
 	ttl       time.Duration
 	heartbeat time.Duration
 
@@ -91,10 +101,15 @@ type leaseManager struct {
 	now func() time.Time // injectable so tests do not depend on the wall clock
 }
 
-func newLeaseManager(store leaseStore, ownerID string, ttl, heartbeat time.Duration, onOwnershipLost func(string)) *leaseManager {
+// ownerAddr entra pelo CONSTRUTOR, e não por atribuição posterior, porque é
+// identidade — não gancho opcional. Uma posse gravada com endereço vazio é
+// posse que ninguém consegue rotear, e o modo de falha seria alguém esquecer de
+// atribuir e só descobrir quando o roteamento não achasse o dono.
+func newLeaseManager(store leaseStore, ownerID, ownerAddr string, ttl, heartbeat time.Duration, onOwnershipLost func(string)) *leaseManager {
 	return &leaseManager{
 		store:           store,
 		ownerID:         ownerID,
+		ownerAddr:       ownerAddr,
 		ttl:             ttl,
 		heartbeat:       heartbeat,
 		onOwnershipLost: onOwnershipLost,
@@ -123,9 +138,38 @@ func buildOwnerID() string {
 	return fmt.Sprintf("%s-%d", host, os.Getpid())
 }
 
+// buildOwnerAddr resolve onde ESTE processo pode ser alcancado por outro pod.
+//
+// A variavel de ambiente vem primeiro porque so' o operador sabe o que e'
+// alcancavel do lado de fora: em k8s costuma ser o POD_IP pela downward API,
+// em compose o nome do servico. Adivinhar isso do lado de dentro do processo
+// e' o tipo de heuristica que funciona na maquina de quem escreveu.
+//
+// Sem a variavel, o hostname mais a porta e' o palpite honesto: em StatefulSet
+// o hostname e' o nome do pod e resolve por DNS; em compose e' o nome do
+// container. Nos dois casos e' o que o `owner_id` ja usa, entao dono e endereco
+// contam a mesma historia.
+//
+// Devolve vazio quando nem isso da' certo. Vazio significa NAO ROTEAVEL, que e'
+// leitura util para quem for encaminhar — melhor que um endereco inventado que
+// so' falha na hora de conectar.
+func buildOwnerAddr() string {
+	if addr := strings.TrimSpace(os.Getenv(envAdvertiseAddr)); addr != "" {
+		return addr
+	}
+
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		log.Warn().Err(err).Str("env", envAdvertiseAddr).
+			Msg("could not resolve an address to advertise for session ownership; this pod records itself as unroutable and no replica will be able to forward to it")
+		return ""
+	}
+	return net.JoinHostPort(host, *port)
+}
+
 // Claim attempts to take ownership of a session. Only the winner may connect.
 func (m *leaseManager) Claim(ctx context.Context, userID string) (bool, error) {
-	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ttl)
+	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ownerAddr, m.ttl)
 	if err != nil {
 		return false, err
 	}
@@ -181,7 +225,7 @@ func (m *leaseManager) abandoned(userID string) bool {
 // So the decision is not "did the database answer?" but "how long since the
 // last CONFIRMED renewal?".
 func (m *leaseManager) renewOne(ctx context.Context, userID string) bool {
-	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ttl)
+	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ownerAddr, m.ttl)
 
 	switch {
 	case err == nil && owned:

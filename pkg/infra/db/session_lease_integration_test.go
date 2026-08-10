@@ -73,7 +73,7 @@ func TestLease_SingleOwner(t *testing.T) {
 	repo := NewSessionLeaseRepository(openTestPostgres(t))
 	ctx := context.Background()
 
-	took, err := repo.Claim(ctx, "user-1", "pod-A", 30*time.Second)
+	took, err := repo.Claim(ctx, "user-1", "pod-A", "pod-A:8080", 30*time.Second)
 	if err != nil {
 		t.Fatalf("pod-A: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestLease_SingleOwner(t *testing.T) {
 		t.Fatal("pod-A failed to take a free lease")
 	}
 
-	took, err = repo.Claim(ctx, "user-1", "pod-B", 30*time.Second)
+	took, err = repo.Claim(ctx, "user-1", "pod-B", "pod-B:8080", 30*time.Second)
 	if err != nil {
 		t.Fatalf("pod-B: %v", err)
 	}
@@ -89,12 +89,20 @@ func TestLease_SingleOwner(t *testing.T) {
 		t.Fatal("pod-B took ownership while pod-A held a valid lease: both replicas would believe they own it")
 	}
 
-	owner, _, err := repo.CurrentOwner(ctx, "user-1")
+	dono, existe, err := repo.CurrentOwner(ctx, "user-1")
 	if err != nil {
 		t.Fatalf("CurrentOwner: %v", err)
 	}
-	if owner != "pod-A" {
-		t.Errorf("owner = %q, want pod-A", owner)
+	if !existe {
+		t.Fatal("a posse sumiu depois de ser tomada")
+	}
+	if dono.OwnerID != "pod-A" {
+		t.Errorf("owner = %q, want pod-A", dono.OwnerID)
+	}
+	// ADR-0007 decisao 1: o endereco viaja com a posse, na mesma linha. Sem
+	// isto, quem for rotear sabe QUEM e' o dono e nao sabe ONDE ele esta'.
+	if dono.OwnerAddr != "pod-A:8080" {
+		t.Errorf("owner_addr = %q, want pod-A:8080", dono.OwnerAddr)
 	}
 }
 
@@ -105,25 +113,25 @@ func TestLease_RenewalBySameOwner(t *testing.T) {
 	repo := NewSessionLeaseRepository(openTestPostgres(t))
 	ctx := context.Background()
 
-	if ok, err := repo.Claim(ctx, "user-2", "pod-A", 5*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-2", "pod-A", "pod-A:8080", 5*time.Second); err != nil || !ok {
 		t.Fatalf("initial claim: ok=%v err=%v", ok, err)
 	}
-	_, firstExpiry, err := repo.CurrentOwner(ctx, "user-2")
+	primeiro, _, err := repo.CurrentOwner(ctx, "user-2")
 	if err != nil {
 		t.Fatalf("CurrentOwner: %v", err)
 	}
 
 	time.Sleep(1100 * time.Millisecond)
 
-	if ok, err := repo.Claim(ctx, "user-2", "pod-A", 30*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-2", "pod-A", "pod-A:8080", 30*time.Second); err != nil || !ok {
 		t.Fatalf("renewal by the current owner was denied: ok=%v err=%v", ok, err)
 	}
-	_, secondExpiry, err := repo.CurrentOwner(ctx, "user-2")
+	segundo, _, err := repo.CurrentOwner(ctx, "user-2")
 	if err != nil {
 		t.Fatalf("CurrentOwner: %v", err)
 	}
-	if !secondExpiry.After(firstExpiry) {
-		t.Errorf("deadline was not extended: before=%s after=%s", firstExpiry, secondExpiry)
+	if !segundo.ExpiresAt.After(primeiro.ExpiresAt) {
+		t.Errorf("deadline was not extended: before=%s after=%s", primeiro.ExpiresAt, segundo.ExpiresAt)
 	}
 }
 
@@ -134,16 +142,16 @@ func TestLease_ExpiredCanBeTaken(t *testing.T) {
 	ctx := context.Background()
 
 	// A 1s TTL keeps the test from depending on a long sleep.
-	if ok, err := repo.Claim(ctx, "user-3", "pod-A", 1*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-3", "pod-A", "pod-A:8080", 1*time.Second); err != nil || !ok {
 		t.Fatalf("initial claim: ok=%v err=%v", ok, err)
 	}
-	if ok, _ := repo.Claim(ctx, "user-3", "pod-B", 30*time.Second); ok {
+	if ok, _ := repo.Claim(ctx, "user-3", "pod-B", "pod-B:8080", 30*time.Second); ok {
 		t.Fatal("pod-B took the lease before it expired")
 	}
 
 	time.Sleep(1300 * time.Millisecond)
 
-	ok, err := repo.Claim(ctx, "user-3", "pod-B", 30*time.Second)
+	ok, err := repo.Claim(ctx, "user-3", "pod-B", "pod-B:8080", 30*time.Second)
 	if err != nil {
 		t.Fatalf("pod-B after expiry: %v", err)
 	}
@@ -159,30 +167,33 @@ func TestLease_ReleaseOnlyByOwner(t *testing.T) {
 	repo := NewSessionLeaseRepository(openTestPostgres(t))
 	ctx := context.Background()
 
-	if ok, err := repo.Claim(ctx, "user-4", "pod-A", 30*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-4", "pod-A", "pod-A:8080", 30*time.Second); err != nil || !ok {
 		t.Fatalf("claim: ok=%v err=%v", ok, err)
 	}
 
 	if err := repo.Release(ctx, "user-4", "pod-B"); err != nil {
 		t.Fatalf("Release by a different owner returned an error (should be a no-op): %v", err)
 	}
-	owner, _, err := repo.CurrentOwner(ctx, "user-4")
+	dono, _, err := repo.CurrentOwner(ctx, "user-4")
 	if err != nil {
 		t.Fatalf("CurrentOwner: %v", err)
 	}
-	if owner != "pod-A" {
-		t.Fatalf("pod-B deleted pod-A's lease; owner = %q", owner)
+	if dono.OwnerID != "pod-A" {
+		t.Fatalf("pod-B deleted pod-A's lease; owner = %q", dono.OwnerID)
 	}
 
 	if err := repo.Release(ctx, "user-4", "pod-A"); err != nil {
 		t.Fatalf("Release by the actual owner: %v", err)
 	}
-	owner, _, err = repo.CurrentOwner(ctx, "user-4")
+	dono, existe, err := repo.CurrentOwner(ctx, "user-4")
 	if err != nil {
 		t.Fatalf("CurrentOwner after release: %v", err)
 	}
-	if owner != "" {
-		t.Errorf("lease survived a release by its owner: %q", owner)
+	// `existe` e nao o valor: uma linha ausente e uma linha com dono vazio
+	// pedem acoes opostas de quem roteia — reivindicar, contra recusar
+	// encaminhar. Conferir so' a string confundiria as duas.
+	if existe {
+		t.Errorf("lease survived a release by its owner: %+v", dono)
 	}
 }
 
@@ -194,7 +205,7 @@ func TestLease_ReleaseSpeedsUpFailover(t *testing.T) {
 	repo := NewSessionLeaseRepository(openTestPostgres(t))
 	ctx := context.Background()
 
-	if ok, err := repo.Claim(ctx, "user-5", "pod-A", 300*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-5", "pod-A", "pod-A:8080", 300*time.Second); err != nil || !ok {
 		t.Fatalf("claim: ok=%v err=%v", ok, err)
 	}
 	if err := repo.Release(ctx, "user-5", "pod-A"); err != nil {
@@ -202,7 +213,7 @@ func TestLease_ReleaseSpeedsUpFailover(t *testing.T) {
 	}
 
 	start := time.Now()
-	ok, err := repo.Claim(ctx, "user-5", "pod-B", 30*time.Second)
+	ok, err := repo.Claim(ctx, "user-5", "pod-B", "pod-B:8080", 30*time.Second)
 	if err != nil {
 		t.Fatalf("pod-B: %v", err)
 	}
@@ -220,10 +231,10 @@ func TestLease_SessionsAreIndependent(t *testing.T) {
 	repo := NewSessionLeaseRepository(openTestPostgres(t))
 	ctx := context.Background()
 
-	if ok, err := repo.Claim(ctx, "user-A", "pod-A", 30*time.Second); err != nil || !ok {
+	if ok, err := repo.Claim(ctx, "user-A", "pod-A", "pod-A:8080", 30*time.Second); err != nil || !ok {
 		t.Fatalf("pod-A/user-A: ok=%v err=%v", ok, err)
 	}
-	ok, err := repo.Claim(ctx, "user-B", "pod-B", 30*time.Second)
+	ok, err := repo.Claim(ctx, "user-B", "pod-B", "pod-B:8080", 30*time.Second)
 	if err != nil {
 		t.Fatalf("pod-B/user-B: %v", err)
 	}

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 	"fmt"
 	"sync"
 	"testing"
@@ -25,20 +26,25 @@ import (
 // A double that returned an error for "I lost ownership" would collapse the two
 // cases into one, and the test would agree with the defect — pitfall 1.
 type fakeLeaseStore struct {
-	mu     sync.Mutex
-	owners map[string]string
-	err    error
-	calls  int
+	mu             sync.Mutex
+	owners         map[string]string
+	err            error
+	calls          int
+	ultimoEndereco string
 }
 
 func newFakeLeaseStore() *fakeLeaseStore {
 	return &fakeLeaseStore{owners: map[string]string{}}
 }
 
-func (s *fakeLeaseStore) Claim(_ context.Context, userID, ownerID string, _ time.Duration) (bool, error) {
+func (s *fakeLeaseStore) Claim(_ context.Context, userID, ownerID, ownerAddr string, _ time.Duration) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
+	// Guardado para que um teste possa provar que o endereco CHEGA ao store.
+	// Sem isto, o campo poderia ser lido do gerenciador e nunca gravado, e
+	// nenhum teste notaria (ARMADILHAS 25).
+	s.ultimoEndereco = ownerAddr
 	if s.err != nil {
 		return false, s.err
 	}
@@ -85,7 +91,7 @@ func (s *fakeLeaseStore) remaining() int {
 // killing one of them for good.
 func TestLease_LostOwnershipReleasesImmediately(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
 		t.Fatalf("claim: ok=%v err=%v", ok, err)
@@ -104,7 +110,7 @@ func TestLease_LostOwnershipReleasesImmediately(t *testing.T) {
 func TestLease_DatabaseDownWithinTTLKeeps(t *testing.T) {
 	store := newFakeLeaseStore()
 	clock := time.Now()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	manager.now = func() time.Time { return clock }
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -130,7 +136,7 @@ func TestLease_DatabaseDownWithinTTLKeeps(t *testing.T) {
 func TestLease_DatabaseDownBeyondTTLReleases(t *testing.T) {
 	store := newFakeLeaseStore()
 	clock := time.Now()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	manager.now = func() time.Time { return clock }
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -152,7 +158,7 @@ func TestLease_LossTriggersDisconnect(t *testing.T) {
 	store := newFakeLeaseStore()
 	var dropped []string
 	var mu sync.Mutex
-	manager := newLeaseManager(store, "pod-A", 100*time.Millisecond, 10*time.Millisecond, func(userID string) {
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 100*time.Millisecond, 10*time.Millisecond, func(userID string) {
 		mu.Lock()
 		dropped = append(dropped, userID)
 		mu.Unlock()
@@ -190,7 +196,7 @@ func TestLease_LossTriggersDisconnect(t *testing.T) {
 // would dominate.
 func TestLease_ReleaseAllClears(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	for _, userID := range []string{"u1", "u2", "u3"} {
 		if ok, err := manager.Claim(context.Background(), userID); err != nil || !ok {
@@ -214,7 +220,7 @@ func TestLease_ReleaseAllClears(t *testing.T) {
 func TestLease_DeniedClaimIsNotRecorded(t *testing.T) {
 	store := newFakeLeaseStore()
 	store.giveTo("u1", "pod-B")
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	ok, err := manager.Claim(context.Background(), "u1")
 	if err != nil {
@@ -290,7 +296,7 @@ func TestBuildOwnerID_StableAndNonEmpty(t *testing.T) {
 // replica can ever take that user.
 func TestLease_ReleaseHandsBackASingleLease(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	for _, userID := range []string{"u1", "u2"} {
 		if ok, err := manager.Claim(context.Background(), userID); err != nil || !ok {
@@ -313,7 +319,7 @@ func TestLease_ReleaseHandsBackASingleLease(t *testing.T) {
 // replica until the process died. Forgetting locally lets the TTL clear it.
 func TestLease_ReleaseForgetsEvenWhenTheStoreFails(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
 		t.Fatalf("claim: ok=%v err=%v", ok, err)
@@ -341,7 +347,7 @@ func TestLease_ReleaseForgetsEvenWhenTheStoreFails(t *testing.T) {
 // expires_at still moving forward three minutes after the pairing died.
 func TestLease_AbandonedSessionIsReleased(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 30*time.Millisecond, 10*time.Millisecond, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 30*time.Millisecond, 10*time.Millisecond, nil)
 	manager.hasLiveSession = func(string) bool { return false }
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -380,7 +386,7 @@ func TestLease_StartingSessionKeepsItsLease(t *testing.T) {
 	store := newFakeLeaseStore()
 	// A TTL far longer than the test: the session is inside the grace period
 	// for the whole run.
-	manager := newLeaseManager(store, "pod-A", time.Hour, 5*time.Millisecond, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", time.Hour, 5*time.Millisecond, nil)
 	manager.hasLiveSession = func(string) bool { return false }
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -403,7 +409,7 @@ func TestLease_StartingSessionKeepsItsLease(t *testing.T) {
 // matter how long it has been running.
 func TestLease_LiveSessionKeepsItsLease(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 10*time.Millisecond, 5*time.Millisecond, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 10*time.Millisecond, 5*time.Millisecond, nil)
 	manager.hasLiveSession = func(string) bool { return true }
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -426,7 +432,7 @@ func TestLease_LiveSessionKeepsItsLease(t *testing.T) {
 // rather than silently start releasing leases.
 func TestLease_WithoutLiveSessionCheckKeepsRenewing(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 10*time.Millisecond, 5*time.Millisecond, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 10*time.Millisecond, 5*time.Millisecond, nil)
 	// hasLiveSession deliberately left nil.
 
 	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
@@ -441,5 +447,55 @@ func TestLease_WithoutLiveSessionCheckKeepsRenewing(t *testing.T) {
 
 	if store.remaining() != 1 {
 		t.Fatal("a manager with no live-session check released a lease; single mode and every existing test would change behaviour")
+	}
+}
+
+// TestLease_EnderecoChegaAoStore fecha o seam da decisão 1 do ADR-0007.
+//
+// O endereço podia perfeitamente existir como campo do gerenciador, aparecer no
+// construtor, e nunca ser gravado — nenhum outro teste notaria, porque nenhum
+// outro olha o que a chamada leva. Este olha.
+func TestLease_EnderecoChegaAoStore(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", "10.1.2.3:8080", 15*time.Second, 5*time.Second, nil)
+
+	if _, err := manager.Claim(context.Background(), "user-1"); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.ultimoEndereco != "10.1.2.3:8080" {
+		t.Errorf("endereco gravado = %q, want 10.1.2.3:8080 — quem for rotear leria a posse sem saber onde o dono esta'",
+			store.ultimoEndereco)
+	}
+}
+
+// TestEnderecoAnunciado_VariavelTemPrecedencia: só o operador sabe o que é
+// alcançável de fora. Adivinhar de dentro do processo é heurística que funciona
+// na máquina de quem escreveu.
+func TestEnderecoAnunciado_VariavelTemPrecedencia(t *testing.T) {
+	t.Setenv(envAdvertiseAddr, "wa-api-0.wa-api-hl:9000")
+
+	if addr := buildOwnerAddr(); addr != "wa-api-0.wa-api-hl:9000" {
+		t.Errorf("buildOwnerAddr() = %q, want o valor declarado na variavel", addr)
+	}
+}
+
+// TestEnderecoAnunciado_SemVariavelUsaHostnameEPorta fixa o palpite honesto: o
+// mesmo hostname que o `owner_id` já usa, para que dono e endereço contem a
+// mesma história.
+func TestEnderecoAnunciado_SemVariavelUsaHostnameEPorta(t *testing.T) {
+	t.Setenv(envAdvertiseAddr, "")
+
+	addr := buildOwnerAddr()
+	if addr == "" {
+		t.Skip("hostname indisponivel nesta maquina; o caminho de fallback nao e' exercitavel aqui")
+	}
+	if !strings.HasSuffix(addr, ":"+*port) {
+		t.Errorf("buildOwnerAddr() = %q; deveria terminar na porta em uso (%s)", addr, *port)
+	}
+	if strings.Contains(addr, ownerIDUnknownHost) {
+		t.Errorf("buildOwnerAddr() = %q; caiu no host desconhecido com hostname disponivel", addr)
 	}
 }

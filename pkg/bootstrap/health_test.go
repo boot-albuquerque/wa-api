@@ -79,7 +79,7 @@ func TestReadiness_SingleModeOmitsOwnershipCheck(t *testing.T) {
 // réplicas, e elas assumem sessões que ESTE pod ainda está servindo — os dois
 // donos vivos da F89, que o WhatsApp resolve matando um de vez.
 func TestReadiness_StalledHeartbeatIsNotReady(t *testing.T) {
-	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	// Último tique bem além da tolerância de três intervalos.
 	manager.lastTick = time.Now().Add(-time.Minute)
 
@@ -98,7 +98,7 @@ func TestReadiness_StalledHeartbeatIsNotReady(t *testing.T) {
 // acabou de subir ainda não teve o primeiro tique, e reportá-lo como doente
 // falharia a sonda por um intervalo inteiro em cada réplica nova.
 func TestReadiness_FreshProcessIsReadyBeforeTheFirstTick(t *testing.T) {
-	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	// lastTick no zero: RunHeartbeat ainda não tiquetaqueou.
 
 	report := buildReadinessProbe(fakePinger{}, func() *leaseManager { return manager })(context.Background())
@@ -114,7 +114,7 @@ func TestReadiness_FreshProcessIsReadyBeforeTheFirstTick(t *testing.T) {
 // TestReadiness_LiveHeartbeatIsReady fecha o terceiro estado: tiquetaqueando
 // dentro da tolerância.
 func TestReadiness_LiveHeartbeatIsReady(t *testing.T) {
-	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(newFakeLeaseStore(), "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	manager.lastTick = time.Now()
 
 	if !buildReadinessProbe(fakePinger{}, func() *leaseManager { return manager })(context.Background()).Ready() {
@@ -209,7 +209,7 @@ func TestReadiness_OwnershipCheckSurvivesWiringOrder(t *testing.T) {
 	}
 
 	// setupSessionOwnership roda, quatro linhas depois.
-	installed = newLeaseManager(newFakeLeaseStore(), "pod-A", 15*time.Second, 5*time.Second, nil)
+	installed = newLeaseManager(newFakeLeaseStore(), "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 	installed.lastTick = time.Now().Add(-time.Minute) // parado
 
 	report := probe(context.Background())
