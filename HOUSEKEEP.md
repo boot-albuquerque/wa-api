@@ -2668,9 +2668,34 @@ mais o `queued` da fila — as duas séries continuam comparáveis.
 **Não corrigidos, e seguem abertos** (os dois itens menores acima): os timeouts
 de 1 a 10 minutos e o filtro de `status@broadcast`.
 
-**Falta a validação de bancada**: precisa de um aparelho pareado recebendo
-mídia. O sinal é o `Node handling took` sumir para mídia e o novo aviso de
-evento lento aparecer (ou não) com `queued`.
+### Bancada (2026-08-10): o que ela estabeleceu, e o que NÃO
+
+Aparelho pareado, mídia real recebida — 4 fotos em álbum (~1s de download cada)
+e um vídeo (3s).
+
+**Estabelecido:**
+- a fila está no caminho de produção, e não só no teste: uma mensagem de texto
+  com carimbo `00:33:13` só foi registrada pelo nosso handler às `00:33:15`,
+  logo após o `Media processed` do vídeo. Ela esperou atrás do download.
+- a ordem é preservada com mídia real: as 4 fotos foram processadas exatamente
+  na ordem de chegada.
+- sem regressão: download, `Media processed` e remoção do arquivo temporário
+  seguem funcionando.
+
+**NÃO estabelecido — e é o ponto principal da F87:** que o laço de nós do SDK
+fica livre. O limiar de aviso é 5s dos dois lados, e o download mais lento da
+bancada levou 3s. Abaixo de 5s, **o código ANTIGO também não teria avisado
+nada** — então `Node handling took = 0` aqui é compatível com a correção, e não
+evidência dela. Um teste cujo controle negativo passaria igual não testou nada
+(ARMADILHAS 25).
+
+A propriedade de não bloquear está provada de forma determinística em
+`TestSessionQueue_NaoBloqueiaOProdutor`, com evento de 2s e cronômetro antes do
+enfileiramento. O que falta é só a confirmação em campo.
+
+**Para fechar**: um download que passe de 5s — vídeo grande ou link lento. Aí o
+sinal é binário: ou sai `evento de sessao demorou` com `queued` (fila no
+caminho, laço livre) ou sai `Node handling took` (fila fora do caminho).
 
 ---
 
@@ -4016,12 +4041,16 @@ Cinco recebidas, quatro processadas. A primeira não tem `Media processed` e
 não tem erro. `grep` por `download|media` filtrado por `error|fail` no período
 não devolve nada relacionado a ela.
 
-**Causa provável**: `AlbumMessage`. Ele existe no proto vendorizado
+**Causa CONFIRMADA pelo remetente (2026-08-10)**: eram 4 fotos enviadas como
+um álbum. O quinto evento é o cabeçalho do álbum. `AlbumMessage` Ele existe no proto vendorizado
 (`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go:11240`) e
 **não** tem ramo em `processMessageMedia`. Um álbum de 4 fotos chega como um
 cabeçalho de álbum mais 4 mensagens de imagem — que é exatamente 5 recebidas e
-4 baixadas. Falta confirmar com o remetente quantas fotos foram enviadas de uma
-vez; a confirmação muda a correção sugerida, não o defeito.
+4 baixadas — que foi exatamente o que aconteceu.
+
+**Nenhuma mídia foi perdida.** O defeito é de observabilidade, não de entrega:
+o comportamento (não baixar um cabeçalho de álbum, que não tem mídia) está
+certo; o silêncio é que não está.
 
 **Por que importa, independentemente da causa**: o operador vê
 `Message Received ... type: media` e nada depois. Esse silêncio é
