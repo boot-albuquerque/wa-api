@@ -4282,6 +4282,44 @@ foi ensaiado. O que falta é **operacional**:
    transformam um deploy de rotina num evento — e foi só por acaso que a
    irreversível estava entre elas numa hora em que alguém olhava.
 
+### Quando fazer o deploy, e por quê (2026-08-10, revisto)
+
+Eu havia recomendado "deploy logo, por causa do outbox". **Estava errado, e a
+suposição era minha.** Consultei o backup:
+
+```
+7 usuários, TODOS sem webhook configurado, TODOS com connected=0
+main.db: 1 device pareado, 3 sessions
+arquivos sem escrita desde 08/08
+```
+
+**O outbox não compra nada em produção hoje** — não há webhook para entregar.
+
+**O que o deploy realmente compra**: produção roda código de 06/08 ou antes —
+afirmável com precisão, porque o banco tem tabelas `whatsmeow_*` e a renomeação
+para `wanoise_*` é a migração 12, de 07/08. Logo, ela está **antes da
+vendorização inteira**, e não tem:
+
+- as ~25 correções de pânico alcançável por dado da rede feitas no fork (os 11
+  do `GetBotProfiles`, `handlePairSuccess`, `<failure reason=413>`, a guarda de
+  `MessageIDs[0]`) — eram bugs reais do upstream, e produção roda em cima do
+  upstream;
+- logout que de fato encerra a sessão (F79), status correto após logout (F80),
+  `/user/lid` utilizável (F81), sessão QR sobrevivendo a restart (F82);
+- token só em hash (F97).
+
+**Mas nada disso está em risco AGORA**: zero usuários conectados, nada sendo
+processado. Não há urgência.
+
+**O argumento honesto é o custo, não o risco.** Deployar agora custa menos que
+em qualquer outro momento: sem sessão ativa não há reconexão a perder, não há
+janela que incomode ninguém, e a migração irreversível roda com o backup fresco
+e o ensaio recente. Esperar até alguém parear e usar significa pagar o mesmo
+deploy com sessão viva em cima.
+
+**Classificação: oportunista, não prioritário.** Fazer quando for conveniente,
+aproveitando a ociosidade.
+
 **Status**: **não corrigido** — é decisão operacional, não mudança de código.
 O ensaio está feito e passou; o deploy em si é sua decisão.
 
