@@ -13,6 +13,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"wa-api/internal/wa-headless/observability"
 )
 
 // TimeoutError is "the target did not answer" — a claim that must never be
@@ -41,14 +43,21 @@ func (e *TimeoutError) Error() string {
 
 func (e *TimeoutError) Unwrap() error { return context.DeadlineExceeded }
 
-// Runner applies a DeadlinePolicy to every operation it executes.
+// Runner applies a DeadlinePolicy to every operation it executes, and records
+// each one.
+//
+// The recording is not optional tooling. A browser stack fails by stopping, and
+// a stop with no trace is indistinguishable from work still in progress — which
+// is how a 24-minute hang went unexplained until every operation carried its
+// budget beside its duration.
 type Runner struct {
 	Policy DeadlinePolicy
+	Log    *observability.OpLog
 }
 
-// NewRunner builds a Runner on the measured defaults.
+// NewRunner builds a Runner on the measured defaults, with tracing on.
 func NewRunner() *Runner {
-	return &Runner{Policy: DefaultDeadlines}
+	return &Runner{Policy: DefaultDeadlines, Log: observability.NewOpLog()}
 }
 
 // Do runs f under the deadline of class k.
@@ -67,12 +76,37 @@ func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(conte
 	ctx, cancel := context.WithTimeout(parent, deadline)
 	defer cancel()
 
+	start := time.Now()
 	err := f(ctx)
+	elapsed := time.Since(start)
 
 	// The context is consulted, not the error: a driver is free to report a
 	// blown deadline as any error it likes, or as none at all, and trusting its
 	// wording would put the classification in someone else's hands.
-	if ctx.Err() == context.DeadlineExceeded {
+	timedOut := ctx.Err() == context.DeadlineExceeded
+
+	rec := observability.OpRecord{
+		Op:         string(k),
+		Label:      label,
+		DurationMS: elapsed.Milliseconds(),
+		DeadlineMS: deadline.Milliseconds(),
+		Result:     observability.ResultOK,
+	}
+	switch {
+	case timedOut:
+		rec.Result = observability.ResultTimeout
+	case err != nil:
+		rec.Result = observability.ResultError
+	}
+	if err != nil {
+		rec.Err = err.Error()
+	}
+	if r.Log != nil {
+		rec.StartMS = r.Log.Since(start).Milliseconds()
+		r.Log.Add(rec)
+	}
+
+	if timedOut {
 		return &TimeoutError{Op: k, Label: label, Deadline: deadline}
 	}
 	return err
