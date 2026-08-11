@@ -113,17 +113,10 @@ func Classify(s PageSnapshot) PageClass {
 		return ClassLoginRequired
 	}
 
-	low := strings.ToLower(s.TextSample)
-	for _, marker := range conflictMarkers {
-		if strings.Contains(low, marker) {
-			return ClassSessionConflict
-		}
+	if cls, ok := classifyByText(s.TextSample); ok {
+		return cls
 	}
 	switch {
-	case strings.Contains(low, "update") && strings.Contains(low, "chrome"):
-		return ClassErrorPage
-	case strings.Contains(low, "atualize") && strings.Contains(low, "chrome"):
-		return ClassErrorPage
 	case s.URL != "" && !strings.Contains(strings.ToLower(s.URL), whatsappHost):
 		return ClassRedirect
 	case s.TextLength == 0:
@@ -152,4 +145,33 @@ func ClassifyProbe(s PageSnapshot, probeErr error) PageClass {
 		return ClassUnresponsive
 	}
 	return Classify(s)
+}
+
+// classifyByText matches the screens that carry no structural marker at all.
+//
+// Separated from Classify because it is the only part that touches page text,
+// and keeping it in one small function makes the PII surface one small function
+// — the guarantee is that Probe never gathers a sample from a healthy page, and
+// this is where the sample is finally read.
+//
+// Returns ok=false when nothing matched, so the caller can fall through to the
+// signals that do not need text at all.
+func classifyByText(sample string) (PageClass, bool) {
+	if sample == "" {
+		return ClassOther, false
+	}
+	low := strings.ToLower(sample)
+
+	for _, marker := range conflictMarkers {
+		if strings.Contains(low, marker) {
+			return ClassSessionConflict, true
+		}
+	}
+	// WhatsApp refusing the browser itself, in both languages the product
+	// serves. The study hit this by launching without a user agent.
+	if strings.Contains(low, "chrome") &&
+		(strings.Contains(low, "update") || strings.Contains(low, "atualize")) {
+		return ClassErrorPage, true
+	}
+	return ClassOther, false
 }

@@ -51,7 +51,7 @@ func startFakeBrowser(t *testing.T, reply replyFunc) *fakeBrowser {
 		if err != nil {
 			return
 		}
-		defer c.CloseNow()
+		defer func() { _ = c.CloseNow() }()
 		for {
 			_, data, err := c.Read(r.Context())
 			if err != nil {
@@ -70,7 +70,7 @@ func startFakeBrowser(t *testing.T, reply replyFunc) *fakeBrowser {
 			case actionSilent:
 				continue
 			case actionDrop:
-				c.CloseNow()
+				_ = c.CloseNow()
 				return
 			}
 			b, _ := json.Marshal(res)

@@ -130,18 +130,7 @@ func TestSignalStopKillsTheGroupWhenSigtermIsIgnored(t *testing.T) {
 	// child is the orphan-to-be.
 	b := startFake(t, "trap '' TERM; sleep 30 & echo $! > "+childFile+"; wait")
 
-	var childPID int
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		raw, err := os.ReadFile(childFile)
-		if err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw))); convErr == nil && pid > 0 {
-				childPID = pid
-				break
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	childPID := awaitChildPID(t, childFile)
 	if childPID == 0 {
 		t.Skip("the fake browser never reported a child pid; nothing to assert about the group")
 	}
@@ -161,16 +150,8 @@ func TestSignalStopKillsTheGroupWhenSigtermIsIgnored(t *testing.T) {
 		t.Fatalf("the parent survived the escalation: %v", err)
 	}
 
-	// The child must be gone too. Poll: reaping is not instantaneous.
-	gone := false
-	for until := time.Now().Add(5 * time.Second); time.Now().Before(until); {
-		if syscall.Kill(childPID, syscall.Signal(0)) != nil {
-			gone = true
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !gone {
+	// The child must be gone too. Polled: reaping is not instantaneous.
+	if !awaitProcessGone(childPID) {
 		t.Fatalf("child %d outlived the escalation — an orphaned Chromium holds the "+
 			"profile lock and blocks the next boot", childPID)
 	}
@@ -286,4 +267,32 @@ func TestProcessAliveTreatsEPERMAsAlive(t *testing.T) {
 			"to someone else; reading it as dead lets the reclaim delete a live " +
 			"browser's lock and put two browsers on one profile")
 	}
+}
+
+// awaitChildPID waits for the fake browser to report the pid of its child.
+// Returns 0 if it never does.
+func awaitChildPID(t *testing.T, path string) int {
+	t.Helper()
+	for until := time.Now().Add(5 * time.Second); time.Now().Before(until); {
+		raw, err := os.ReadFile(path)
+		if err == nil {
+			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw))); convErr == nil && pid > 0 {
+				return pid
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return 0
+}
+
+// awaitProcessGone polls until the pid stops existing. Signal 0 delivers
+// nothing; it asks the kernel whether the process is there.
+func awaitProcessGone(pid int) bool {
+	for until := time.Now().Add(5 * time.Second); time.Now().Before(until); {
+		if syscall.Kill(pid, syscall.Signal(0)) != nil {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
 }

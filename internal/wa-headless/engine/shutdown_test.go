@@ -103,19 +103,7 @@ func TestCleanStopWaitsBeforeItEverSignals(t *testing.T) {
 	}
 
 	seq := p.sequence()
-	waitAt, signalAt := -1, -1
-	for i, c := range seq {
-		switch c {
-		case "wait":
-			if waitAt < 0 {
-				waitAt = i
-			}
-		case "signal":
-			if signalAt < 0 {
-				signalAt = i
-			}
-		}
-	}
+	waitAt, signalAt := firstIndexOf(seq, "wait"), firstIndexOf(seq, "signal")
 	if waitAt < 0 || signalAt < 0 {
 		t.Fatalf("sequence %v: expected both a wait and a signal", seq)
 	}
@@ -216,4 +204,14 @@ func TestCleanStopIsBounded(t *testing.T) {
 	if max := 3 * r.Policy.Shutdown; elapsed > max {
 		t.Fatalf("CleanStop took %v with an uncooperative peer, over the %v bound", elapsed, max)
 	}
+}
+
+// firstIndexOf returns where name first appears, or -1.
+func firstIndexOf(seq []string, name string) int {
+	for i, c := range seq {
+		if c == name {
+			return i
+		}
+	}
+	return -1
 }

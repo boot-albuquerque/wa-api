@@ -169,16 +169,7 @@ func TestPrimingNeverHappensInsideABoundedOperation(t *testing.T) {
 				if !ok {
 					continue
 				}
-				ast.Inspect(lit, func(inner ast.Node) bool {
-					c, ok := inner.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
-					if name := calleeName(c.Fun); name == "PrimeTab" {
-						offenders = append(offenders, fset.Position(c.Pos()).String())
-					}
-					return true
-				})
+				offenders = append(offenders, callsTo(fset, lit, "PrimeTab")...)
 			}
 			return true
 		})
@@ -200,4 +191,20 @@ func calleeName(e ast.Expr) string {
 		return v.Sel.Name
 	}
 	return ""
+}
+
+// callsTo lists the positions where name is called anywhere inside n.
+func callsTo(fset *token.FileSet, n ast.Node, name string) []string {
+	var found []string
+	ast.Inspect(n, func(inner ast.Node) bool {
+		c, ok := inner.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if calleeName(c.Fun) == name {
+			found = append(found, fset.Position(c.Pos()).String())
+		}
+		return true
+	})
+	return found
 }

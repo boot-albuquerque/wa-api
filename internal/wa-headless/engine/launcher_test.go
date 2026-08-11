@@ -42,7 +42,7 @@ func devToolsServer(t *testing.T, wsURL func() string) (port int) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"Browser":"HeadlessChrome/151.0.0.0","webSocketDebuggerUrl":%q}`, wsURL())
+		_, _ = fmt.Fprintf(w, `{"Browser":"HeadlessChrome/151.0.0.0","webSocketDebuggerUrl":%q}`, wsURL())
 	}))
 	t.Cleanup(srv.Close)
 

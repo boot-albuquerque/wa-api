@@ -102,30 +102,11 @@ func ReclaimProfile(dir string, opts ReclaimOptions) (ReclaimResult, error) {
 	}
 	res.LockHolder = holder.raw
 
-	switch {
-	case !holder.present:
-		res.Reason = "no lock present"
-	case !holder.parsed:
-		// An unreadable lock cannot prove a live holder, and Chromium will
-		// refuse to boot while it exists. Removing it is the only way forward,
-		// and saying so is better than a silent delete.
-		res.Reason = "lock is unreadable; no live holder could be proven"
-	case holder.host != hostnameOf(opts):
-		if !opts.AllowForeignHost {
-			return res, fmt.Errorf("%w: lock names host %q, this is %q; reclaiming would risk "+
-				"two browsers on one profile. Prove single ownership and set AllowForeignHost",
-				ErrProfileHeldByAnotherHost, holder.host, hostnameOf(opts))
-		}
-		res.Reason = "foreign host, reclaim explicitly authorised by the caller"
-	case opts.ProcessAlive == nil:
-		return res, fmt.Errorf("%w: pid %d on this host, and no liveness probe was supplied "+
-			"to prove otherwise", ErrProfileHeldByLiveBrowser, holder.pid)
-	case opts.ProcessAlive(holder.pid):
-		return res, fmt.Errorf("%w: pid %d on %q is still running", ErrProfileHeldByLiveBrowser,
-			holder.pid, holder.host)
-	default:
-		res.Reason = fmt.Sprintf("holder pid %d on this host is gone", holder.pid)
+	reason, err := reclaimVerdict(holder, opts)
+	if err != nil {
+		return res, err
 	}
+	res.Reason = reason
 
 	for _, name := range singletonFiles {
 		p := filepath.Join(dir, name)
@@ -200,4 +181,41 @@ func hostnameOf(opts ReclaimOptions) string {
 		return ""
 	}
 	return name
+}
+
+// reclaimVerdict decides whether the Singleton files may go, and why.
+//
+// Separated from the deletion so that the DECISION can be read on its own: it
+// is the part that must never be permissive, and the part where a wrong answer
+// puts two browsers on one profile.
+func reclaimVerdict(holder lockHolder, opts ReclaimOptions) (string, error) {
+	switch {
+	case !holder.present:
+		return "no lock present", nil
+
+	case !holder.parsed:
+		// An unreadable lock cannot prove a live holder, and Chromium will
+		// refuse to boot while it exists. Removing it is the only way forward,
+		// and saying so is better than a silent delete.
+		return "lock is unreadable; no live holder could be proven", nil
+
+	case holder.host != hostnameOf(opts):
+		if !opts.AllowForeignHost {
+			return "", fmt.Errorf("%w: lock names host %q, this is %q; reclaiming would risk "+
+				"two browsers on one profile. Prove single ownership and set AllowForeignHost",
+				ErrProfileHeldByAnotherHost, holder.host, hostnameOf(opts))
+		}
+		return "foreign host, reclaim explicitly authorised by the caller", nil
+
+	case opts.ProcessAlive == nil:
+		return "", fmt.Errorf("%w: pid %d on this host, and no liveness probe was supplied "+
+			"to prove otherwise", ErrProfileHeldByLiveBrowser, holder.pid)
+
+	case opts.ProcessAlive(holder.pid):
+		return "", fmt.Errorf("%w: pid %d on %q is still running", ErrProfileHeldByLiveBrowser,
+			holder.pid, holder.host)
+
+	default:
+		return fmt.Sprintf("holder pid %d on this host is gone", holder.pid), nil
+	}
 }

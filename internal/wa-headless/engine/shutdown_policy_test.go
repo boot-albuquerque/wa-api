@@ -88,28 +88,8 @@ func isZeroLiteral(e ast.Expr) bool {
 func TestNothingStopsABrowserBySignal(t *testing.T) {
 	var offenders []string
 
-	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
-			return err
-		}
-
-		exemptLines := map[int]bool{}
-		for _, cg := range file.Comments {
-			for _, c := range cg.List {
-				if strings.Contains(c.Text, ablationMarker) {
-					exemptLines[fset.Position(c.Pos()).Line] = true
-				}
-			}
-		}
+	eachProductionFile(t, func(path string, fset *token.FileSet, file *ast.File) {
+		exempt := exemptedLines(fset, file)
 
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -117,24 +97,17 @@ func TestNothingStopsABrowserBySignal(t *testing.T) {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !signalSendingCalls[sel.Sel.Name] {
-				return true
-			}
-			if deliversNothing(call) {
+			if !ok || !signalSendingCalls[sel.Sel.Name] || deliversNothing(call) {
 				return true
 			}
 			pos := fset.Position(call.Pos())
-			if exemptLines[pos.Line] {
+			if exempt[pos.Line] {
 				return true
 			}
 			offenders = append(offenders, pos.String()+": "+sel.Sel.Name)
 			return true
 		})
-		return nil
 	})
-	if err != nil {
-		t.Fatalf("walking %s: %v", moduleRoot, err)
-	}
 
 	if len(offenders) > 0 {
 		t.Fatalf("a browser is stopped by signal, and SIGTERM corrupts session state "+
@@ -201,46 +174,22 @@ func TestSignalExemptionsLiveOnlyInShutdownFunctions(t *testing.T) {
 	type mark struct{ pos, fn string }
 	var marks []mark
 
-	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
-			return err
-		}
-
-		// Map each marker line to the function whose body contains it. A marker
-		// outside any function body reports an empty name and fails below —
-		// which is right: a package-level exemption exempts everything.
+	// Each marker is attributed to the function whose body contains it. A
+	// marker outside any function body reports an empty name and fails below —
+	// which is right: a package-level exemption exempts everything.
+	eachProductionFile(t, func(path string, fset *token.FileSet, file *ast.File) {
 		for _, cg := range file.Comments {
 			for _, c := range cg.List {
 				if !strings.Contains(c.Text, ablationMarker) {
 					continue
 				}
-				m := mark{pos: fset.Position(c.Pos()).String()}
-				for _, decl := range file.Decls {
-					fn, ok := decl.(*ast.FuncDecl)
-					if !ok || fn.Body == nil {
-						continue
-					}
-					if fn.Body.Pos() <= c.Pos() && c.Pos() <= fn.Body.End() {
-						m.fn = fn.Name.Name
-						break
-					}
-				}
-				marks = append(marks, m)
+				marks = append(marks, mark{
+					pos: fset.Position(c.Pos()).String(),
+					fn:  enclosingFunc(file, c.Pos()),
+				})
 			}
 		}
-		return nil
 	})
-	if err != nil {
-		t.Fatalf("walking %s: %v", moduleRoot, err)
-	}
 
 	if len(marks) == 0 {
 		t.Fatal("no ablation marker anywhere: the dirty fallback vanished, and with it " +
@@ -263,4 +212,63 @@ func TestSignalExemptionsLiveOnlyInShutdownFunctions(t *testing.T) {
 			"around:\n  %s", strings.Join(offenders, "\n  "))
 	}
 	t.Logf("%d signal exemption(s), all inside CleanStop/SignalStop", len(marks))
+}
+
+// eachProductionFile parses every non-test .go file under the module and hands
+// it to fn.
+//
+// Shared by both gates below because they ask different questions of the SAME
+// set of files: a walk written twice is a filter that can drift, and a gate
+// that silently stops covering a directory is a gate that passes for the wrong
+// reason.
+func eachProductionFile(t *testing.T, fn func(path string, fset *token.FileSet, file *ast.File)) {
+	t.Helper()
+
+	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		fset := token.NewFileSet()
+		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if parseErr != nil {
+			return parseErr
+		}
+		fn(path, fset, file)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", moduleRoot, err)
+	}
+}
+
+// exemptedLines maps the lines carrying the ablation marker in one file.
+func exemptedLines(fset *token.FileSet, file *ast.File) map[int]bool {
+	out := map[int]bool{}
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.Contains(c.Text, ablationMarker) {
+				out[fset.Position(c.Pos()).Line] = true
+			}
+		}
+	}
+	return out
+}
+
+// enclosingFunc names the function whose body contains pos, or "" when none
+// does. A marker outside any body exempts everything in the file, so "" is a
+// failure, not a detail.
+func enclosingFunc(file *ast.File, pos token.Pos) string {
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if fn.Body.Pos() <= pos && pos <= fn.Body.End() {
+			return fn.Name.Name
+		}
+	}
+	return ""
 }

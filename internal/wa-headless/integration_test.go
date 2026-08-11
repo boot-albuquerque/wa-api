@@ -95,7 +95,7 @@ func pageServer(t *testing.T) string {
 		html := body
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprint(w, html)
+			_, _ = fmt.Fprint(w, html)
 		})
 	}
 	srv := httptest.NewServer(mux)
@@ -178,7 +178,7 @@ func TestBrowserChainReportsAWedgedPageAsUnresponsive(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		// A synchronous spin with no exit: the main thread never returns to the
 		// event loop, so no evaluation can be scheduled.
-		fmt.Fprint(w, `<html><body><script>
+		_, _ = fmt.Fprint(w, `<html><body><script>
 			window.addEventListener('load', function () { for (;;) {} });
 		</script></body></html>`)
 	}))
@@ -239,7 +239,7 @@ func TestBrowserChainLivenessSeesAliveAndWedged(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		// The application mounts, THEN the main thread stops returning. This is
 		// the shape that fools a structural check: #pane-side is in the DOM.
-		fmt.Fprint(w, `<html><body><div id="pane-side"></div><script>
+		_, _ = fmt.Fprint(w, `<html><body><div id="pane-side"></div><script>
 			window.addEventListener('load', function () { for (;;) {} });
 		</script></body></html>`)
 	}))
@@ -322,7 +322,7 @@ func requirePage(t *testing.T, known []spa.Module) string {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL
