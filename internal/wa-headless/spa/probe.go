@@ -89,8 +89,13 @@ func Probe(ctx context.Context, r *engine.Runner, eval Evaluator, label string) 
 		// unresponsive, and saying so beats reporting the OTHER we had before.
 		return snap, ClassifyProbe(snap, err)
 	}
+	// The page script returns JSON.stringify(<string>), so what arrives here is
+	// a quoted, escaped JSON string — measured against a real browser, not
+	// assumed. A decode failure means the contract changed; swallowing it would
+	// leave an empty sample and a page classified by what it lacks.
 	if unquoteErr := json.Unmarshal([]byte(sample), &snap.TextSample); unquoteErr != nil {
 		snap.TextSample = ""
+		return snap, ClassOther
 	}
 	return snap, Classify(snap)
 }
