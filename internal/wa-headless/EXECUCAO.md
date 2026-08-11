@@ -185,6 +185,76 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
 ## Findings
 
+* **F-17 · o mesmo travamento acontece no ambiente Linux/Docker documentado
+  — o harness `-mode wasession` não é hoje um observador confiável, nem no
+  seu próprio ambiente de referência.** MINI-LOOP 02.3/B1.4-DOCKER-CONTROL,
+  investigativo, sem implementação. Complementa **F-15** e **F-16**.
+
+  ```
+  CONTROL PROFILE: internal/wa-headless/.lab/test-account-profile (mesmo da
+    F-16; UNPAIRED por EVIDENCIA-SPA.md M1/M2). O SOURCE nunca foi montado
+    diretamente: uma cópia descartável foi feita com `cp -R` para
+    /tmp/wa-control-profile-<timestamp> (fora do repositório, impossível de
+    ser rastreada pelo Git — confirmado com `git check-ignore` recusando o
+    path por estar fora da árvore). Fonte conferida intocada antes e depois
+    (118M nos dois momentos, sem SingletonLock, sem processo).
+  DISPOSABLE COPY: /tmp/wa-control-profile-<timestamp> — montada em
+    /session dentro do container; removida ao final do loop (rm -rf), nunca
+    entrou em Git.
+  ENVIRONMENT: Docker Desktop confirmado operacional (`docker info` →
+    linux/aarch64, casando com o host Apple Silicon). Nenhuma imagem
+    `chromium-study` existia antes deste loop (`docker image ls` vazio para
+    esse nome).
+  IMAGE: `chromium-study:p6` — mesma tag do último exemplo documentado
+    (RELATORIO-FASE-6.md §9), construída SEM alterar Dockerfile:
+      1. `GOOS=linux GOARCH=arm64 go -C scripts/chromium-study build -o
+         study-linux-arm64 .` — passo de reprodução documentado no mesmo
+         §9, arquitetura casando com o binário que o Dockerfile já copia
+         (`COPY study-linux-arm64 /study/study`).
+      2. `docker build -q -t chromium-study:p6 scripts/chromium-study` →
+         PASS, sha256:e7f027bd25a7bdf38b759a8bb1d8eecf76e0a9ae5ad46b5a690524725d39efbd.
+  METHOD: mesma composição de flags já documentada nos exemplos de
+    `docker run` do RELATORIO-FASE-6.md/4B.md (`--rm -e SKIP_BROWSER=1
+    --cpus --memory -v <profile>:/session -v <out>:/out chromium-study:<tag>
+    -mode <mode> ... -out /out/<arquivo>.json`), estendida ao `-mode
+    wasession` — NENHUM exemplo `docker run` para este modo específico está
+    documentado nos relatórios (só `waprep`/`waopen`/`targets` têm), mas o
+    padrão de flags é idêntico e uniforme em todas as invocações
+    documentadas de todos os modos, então compor para `wasession` não é
+    inventar comando novo, é aplicar o padrão já estabelecido. Registrado
+    como divergência de documentação, não como ambiguidade que bloqueasse o
+    loop.
+  RESULT: início 2026-08-11T16:16:45Z. `docker logs` confirmou o
+    entrypoint.sh reconhecendo `SKIP_BROWSER=1` e chamando `exec
+    /study/study -mode wasession ...` corretamente. `docker exec ... ps aux`
+    confirmou Chromium real rodando DENTRO do container contra o profile
+    montado (`--user-data-dir=/session`), consumindo CPU ativamente em
+    múltiplos renderers. Mesmo assim, nenhuma linha de classificação
+    ("session restored" ou "session not restored") foi produzida em mais de
+    3 minutos — muito além do prazo interno de 120s do Poll que decide
+    PAIRED/UNPAIRED. Container interrompido deliberadamente (processo da
+    própria investigação, container `--rm` removido automaticamente ao
+    parar).
+  ELAPSED: ~198s+ até a interrupção (16:16:45Z → confirmado ainda rodando
+    às 16:20:03Z), sem nenhum sinal.
+  SIGNAL: nenhum — idêntico em espécie ao F-15/F-16: o processo chega a
+    lançar o Chromium real contra o profile, mas nunca alcança o próprio
+    Poll de classificação dentro do prazo esperado.
+  CONCLUSION: DOCKER_CONTROL_UNSTABLE. O mesmo travamento acontece mesmo no
+    ambiente Linux/arm64/Docker para o qual o harness foi originalmente
+    escrito e medido — não é peculiaridade do macOS nativo (F-15/F-16), é o
+    mecanismo `-mode wasession` (RunWASession, p4b_wasession.go) que não é
+    hoje um observador confiável para este propósito, em nenhum dos dois
+    ambientes testados. Isso é evidência de tooling quebrado, não evidência
+    sobre o estado de nenhum profile.
+  IMPACT ON B-04: nenhum novo. B-04 continua **AUTH_INTERACTION_REQUIRED**;
+    `wa-session` continua UNKNOWN. O caminho "reproduzir no Docker/Linux
+    documentado" que os loops 02.1/02.2 apontavam como próximo passo foi
+    tentado e também não produziu observação — não há mais um caminho de
+    observação indireta conhecido e não tentado para decidir isso sem
+    interação humana.
+  ```
+
 * **F-16 · o controle negativo conhecido também trava no `-mode wasession`
   nativo — a instabilidade é do harness, não do `wa-session`.** MINI-LOOP
   02.2/B1.4-NATIVE-CONTROL, investigativo, sem implementação. Complementa a
@@ -381,6 +451,18 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
   `wa-session` segue **UNKNOWN**; o caminho que resolveria isso sem
   ambiguidade é o ambiente Linux/Docker documentado, não tentado nestes dois
   loops. B-04 continua **AUTH_INTERACTION_REQUIRED**.
+
+  **Nota de controle 2** (MINI-LOOP 02.3/B1.4-DOCKER-CONTROL, ver **F-17**):
+  o caminho apontado pela nota acima FOI tentado — imagem `chromium-study:p6`
+  construída sem alterar nenhum arquivo de build, rodada em container
+  Linux/arm64 real contra uma cópia descartável do mesmo profile controle —
+  e travou do mesmo jeito, sem produzir veredito, mesmo com Chromium real
+  visivelmente rodando dentro do container. Não é mais uma questão de
+  macOS-vs-Linux: `-mode wasession` não é hoje um observador confiável em
+  nenhum dos dois ambientes testados. Não existe mais um caminho de
+  observação indireta conhecido e não tentado. `wa-session` segue
+  **UNKNOWN**. B-04 continua **AUTH_INTERACTION_REQUIRED** — a única
+  pergunta em aberto é humana, não de tooling.
 
 * ~~**B-01**~~ · **RESOLVIDO** em `e5ee22e` + `2aa304d`. Detalhe na FASE B0.
   Texto original abaixo, mantido porque a H2 do `HOUSEKEEP.md` o referencia.
