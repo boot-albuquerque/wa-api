@@ -110,6 +110,18 @@ type LaunchConfig struct {
 	WindowSize string
 	// RemoteAddress overrides DefaultRemoteAddress. Empty keeps loopback.
 	RemoteAddress string
+	// Headful shows the browser window instead of running headless.
+	//
+	// It exists for ONE operation: pairing. A QR code is a credential that
+	// lives for seconds, and the safest way to get it in front of a person is
+	// to put it on their screen — never to screenshot it, which would write
+	// that credential to disk, and never to log it.
+	//
+	// Every measurement in the study was headless, so a headful run is NOT
+	// comparable to them: `--headless=new` is a different browser with
+	// different memory behaviour, not a display toggle. Nothing that produces
+	// a number should set this.
+	Headful bool
 }
 
 // BuildFlags renders the full argument list for one browser.
@@ -124,7 +136,15 @@ func BuildFlags(cfg LaunchConfig) ([]string, error) {
 	}
 
 	out := make([]string, 0, len(canonicalProfileV1)+6)
-	out = append(out, canonicalProfileV1...)
+	for _, f := range canonicalProfileV1 {
+		// The headless flag has no "off" switch: Chromium honours the last
+		// occurrence of most flags, but there is no --headless=false to append.
+		// It has to be left out.
+		if cfg.Headful && f == flagHeadless {
+			continue
+		}
+		out = append(out, f)
+	}
 
 	address := cfg.RemoteAddress
 	if address == "" {

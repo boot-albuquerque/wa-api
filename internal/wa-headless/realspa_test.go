@@ -234,3 +234,115 @@ func TestRealSPAUnpairedBootObservation(t *testing.T) {
 		t.Fatal("the page rendered nothing")
 	}
 }
+
+// pairToggle opts a run in to showing a window and waiting for a human.
+const pairToggle = "WA_HEADLESS_PAIR"
+
+// pairingBudget is how long the window stays up waiting for the scan. Generous
+// because the other end of this budget is a person finding their phone.
+const pairingBudget = 5 * time.Minute
+
+// LOOP B1.3 — pairing, which only a person can do.
+//
+// NOTHING about authentication is automated here. The QR is not captured, not
+// decoded, not screenshotted and not logged: it is a credential that lives for
+// seconds, and the only safe place for it is a screen a human is looking at.
+// That is why this launch is HEADFUL — the one operation in this module that is.
+//
+// What gets recorded is the three facts the phase asks for, and no more:
+//
+//	PAIRING_STARTED     the code is on screen
+//	PAIRING_COMPLETED   the account linked
+//	APP_READY_AT        how long the application took to become usable
+//
+// The browser stays up until the session is READY or the budget runs out, and
+// it always goes down through Browser.close, because from the moment the scan
+// lands this profile holds a credential.
+func TestRealSPAPairing(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv(pairToggle) == "" {
+		t.Skipf("set %s=1 to open a window and pair the TEST account by QR", pairToggle)
+	}
+	runner := engine.NewRunner()
+	tab := openLabProfileHeadful(t, runner)
+
+	qrShownAt, readyAt := awaitPairing(t, runner, tab)
+
+	if qrShownAt == 0 {
+		t.Fatal("the QR never appeared, so there was nothing to scan")
+	}
+	if readyAt == 0 {
+		t.Fatalf("PAIRING_NOT_COMPLETED within the budget (QR shown at t+%.1fs). "+
+			"The profile is left as it is; run again to retry.", qrShownAt.Seconds())
+	}
+}
+
+// openLabProfileHeadful launches the lab profile with a visible window and
+// navigates to the target. Headful is only ever for pairing.
+func openLabProfileHeadful(t *testing.T, runner *engine.Runner) *engine.Tab {
+	t.Helper()
+	binary := findChrome(t)
+
+	profile, err := filepath.Abs(labProfileDir)
+	if err != nil {
+		t.Fatalf("resolving the lab profile: %v", err)
+	}
+	if err := os.MkdirAll(profile, 0o700); err != nil {
+		t.Fatalf("creating the lab profile: %v", err)
+	}
+
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir:    profile,
+		DebuggingPort: freePort(t),
+		UserAgent:     realSPAUserAgent,
+		Headful:       true,
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	t.Cleanup(func() {
+		t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser))
+	})
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	t.Cleanup(tab.Close)
+
+	if err := tab.Navigate(runner, realSPAURL, "pair/navigate"); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+	return tab
+}
+
+// awaitPairing watches the classification until the account links or the budget
+// runs out. It reports WHEN, never WHAT: no QR, no identity, no page text.
+func awaitPairing(t *testing.T, runner *engine.Runner, tab *engine.Tab) (qrShownAt, readyAt time.Duration) {
+	t.Helper()
+	start := time.Now()
+
+	for deadline := start.Add(pairingBudget); time.Now().Before(deadline); {
+		_, class := spa.Probe(context.Background(), runner, tab.Evaluate, "pair/classify")
+
+		switch class {
+		case spa.ClassLoginRequired:
+			if qrShownAt == 0 {
+				qrShownAt = time.Since(start)
+				t.Logf("PAIRING_STARTED at t+%.1fs — the QR is on screen. "+
+					"Scan it with the TEST account. Nothing here reads it.", qrShownAt.Seconds())
+			}
+		case spa.ClassAppReady:
+			readyAt = time.Since(start)
+			t.Logf("PAIRING_COMPLETED — the account linked")
+			t.Logf("APP_READY_AT t+%.1fs", readyAt.Seconds())
+			return qrShownAt, readyAt
+		case spa.ClassUnresponsive:
+			t.Fatalf("the page stopped answering at t+%.1fs; pairing cannot be "+
+				"observed through a wedged renderer", time.Since(start).Seconds())
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return qrShownAt, readyAt
+}

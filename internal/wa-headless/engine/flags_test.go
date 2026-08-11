@@ -184,3 +184,41 @@ func TestDefaultsAreUsedWhenNothingIsOverridden(t *testing.T) {
 		t.Errorf("got %q (n=%d), want the measured default %q", entry, n, DefaultWindowSize)
 	}
 }
+
+// Pairing needs a window a person can look at, and the headless flag has no
+// "off" switch to append — it has to be absent.
+func TestHeadfulOmitsTheHeadlessFlag(t *testing.T) {
+	cfg := baseConfig
+	cfg.Headful = true
+
+	flags := mustBuild(t, cfg)
+	for _, f := range flags {
+		if f == flagHeadless {
+			t.Fatal("--headless=new survived a headful launch; the QR would render " +
+				"where nobody can scan it")
+		}
+	}
+	// Everything else must be untouched: headful is a display decision, not a
+	// licence to change the memory budget.
+	joined := strings.Join(flags, " ")
+	for _, required := range []string{"site-per-process", "--disable-site-isolation-trials"} {
+		if !strings.Contains(joined, required) {
+			t.Errorf("headful dropped %q, which is part of the measured flag set", required)
+		}
+	}
+}
+
+// The default stays headless. A run that shows a window by accident is a run
+// that cannot happen on a server.
+func TestHeadlessIsTheDefault(t *testing.T) {
+	flags := mustBuild(t, baseConfig)
+	found := false
+	for _, f := range flags {
+		if f == flagHeadless {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("--headless=new is missing by default")
+	}
+}
