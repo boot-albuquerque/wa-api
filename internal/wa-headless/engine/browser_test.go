@@ -223,3 +223,67 @@ func TestCleanStopEndsARealProcessThroughTheProtocol(t *testing.T) {
 		t.Error("a protocol stop of a real process must classify as clean")
 	}
 }
+
+func TestProcessAliveSeesARunningProcess(t *testing.T) {
+	b := startFake(t, "sleep 30")
+
+	if !ProcessAlive(b.PID()) {
+		t.Fatal("a running process was reported as gone; the reclaim would delete " +
+			"a live browser's lock and put two browsers on one profile")
+	}
+}
+
+func TestProcessAliveSeesAnExitedProcess(t *testing.T) {
+	b := startFake(t, "exit 0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := b.WaitExit(ctx); err != nil {
+		t.Fatalf("WaitExit: %v", err)
+	}
+	if ProcessAlive(b.PID()) {
+		t.Fatal("a reaped process was reported as alive; every reclaim after a crash " +
+			"would refuse and no profile would ever boot again")
+	}
+}
+
+// The probe must not be a stop. A pid it reports on has to survive being asked.
+func TestProcessAliveDoesNotDisturbTheProcess(t *testing.T) {
+	b := startFake(t, "sleep 30")
+
+	for i := 0; i < 5; i++ {
+		if !ProcessAlive(b.PID()) {
+			t.Fatalf("the process died after %d liveness probes — signal 0 must deliver nothing", i)
+		}
+	}
+}
+
+func TestProcessAliveRejectsNonsensePIDs(t *testing.T) {
+	for _, pid := range []int{0, -1, -12345} {
+		if ProcessAlive(pid) {
+			t.Errorf("pid %d reported as alive", pid)
+		}
+	}
+}
+
+// EPERM means "the process exists and is someone else's", and reading it as
+// "gone" would let the reclaim delete a live browser's lock.
+//
+// No process this test starts can produce EPERM — they all belong to it. pid 1
+// does: it is init/launchd, owned by root, and signal 0 to it from an
+// unprivileged process returns EPERM while the process is very much alive.
+func TestProcessAliveTreatsEPERMAsAlive(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: signal 0 to pid 1 succeeds outright, so this run " +
+			"cannot exercise the EPERM branch")
+	}
+	if err := syscall.Kill(1, syscall.Signal(0)); !errors.Is(err, syscall.EPERM) {
+		t.Skipf("signal 0 to pid 1 returned %v, not EPERM; this platform cannot "+
+			"exercise the branch here", err)
+	}
+	if !ProcessAlive(1) {
+		t.Fatal("pid 1 reported as gone. EPERM means the process exists and belongs " +
+			"to someone else; reading it as dead lets the reclaim delete a live " +
+			"browser's lock and put two browsers on one profile")
+	}
+}

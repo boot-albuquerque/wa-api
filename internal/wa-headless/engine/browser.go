@@ -144,3 +144,33 @@ func (b *Browser) SignalStop(ctx context.Context) error {
 	}
 	return nil
 }
+
+// ProcessAlive reports whether a pid is running on this host.
+//
+// It is the liveness probe ReclaimProfile requires and refuses to work without:
+// deleting a live browser's SingletonLock puts two browsers on one profile,
+// which is how a paired session is destroyed for real (study section 18).
+//
+// It lives here because this is the layer that knows about processes, and it is
+// a plain function so the reclaim never has to construct a Browser to ask a
+// question about a pid it read off a lock file.
+//
+// Signal 0 delivers NOTHING — it asks the kernel whether the pid exists. It is
+// not a shutdown path and carries no ablation marker, and the static gate knows
+// the difference: see deliversNothing in shutdown_policy_test.go.
+func ProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = proc.Signal(syscall.Signal(0))
+	if err == nil {
+		return true
+	}
+	// EPERM means the process exists and belongs to someone else. Reading that
+	// as "gone" would let the reclaim delete a live browser's lock.
+	return errors.Is(err, syscall.EPERM)
+}

@@ -52,6 +52,39 @@ var signalSendingCalls = map[string]bool{
 	"Kill":       true,
 }
 
+// deliversNothing reports whether a call sends signal 0.
+//
+// Signal 0 delivers no signal at all: it asks the kernel whether a pid exists.
+// It cannot stop anything, so flagging it would make the gate refuse a LIVENESS
+// PROBE, and the only ways out of that would be to exempt a function that is
+// not a shutdown (widening the exemption) or to write the probe some other way
+// to dodge the check (routing around it). Both are worse than naming the case.
+//
+// The match is deliberately syntactic and narrow: the literal 0, spelled out at
+// the call site. A variable holding a signal is NOT this — its value is not
+// visible here, and "probably zero" is not a thing a gate may assume.
+func deliversNothing(call *ast.CallExpr) bool {
+	if len(call.Args) == 0 {
+		return false
+	}
+	last := call.Args[len(call.Args)-1]
+
+	// syscall.Signal(0)
+	if conv, ok := last.(*ast.CallExpr); ok {
+		if sel, ok := conv.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Signal" &&
+			len(conv.Args) == 1 && isZeroLiteral(conv.Args[0]) {
+			return true
+		}
+	}
+	// Kill(pid, 0)
+	return isZeroLiteral(last)
+}
+
+func isZeroLiteral(e ast.Expr) bool {
+	lit, ok := e.(*ast.BasicLit)
+	return ok && lit.Kind == token.INT && lit.Value == "0"
+}
+
 func TestNothingStopsABrowserBySignal(t *testing.T) {
 	var offenders []string
 
@@ -85,6 +118,9 @@ func TestNothingStopsABrowserBySignal(t *testing.T) {
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
 			if !ok || !signalSendingCalls[sel.Sel.Name] {
+				return true
+			}
+			if deliversNothing(call) {
 				return true
 			}
 			pos := fset.Position(call.Pos())
