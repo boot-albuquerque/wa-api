@@ -298,7 +298,7 @@ ALTER TABLE message_history DROP COLUMN sender_push_name;
 // o chamador relê a linha. O erro é DETECTÁVEL e transitório — que é a
 // propriedade que faltava nas duas alternativas.
 //
-// `DEFAULT ''` porque a coluna é NOT NULL e a tabela pode já ter linhas: em
+// `DEFAULT ”` porque a coluna é NOT NULL e a tabela pode já ter linhas: em
 // `single` ela é inerte (a posse nem é reivindicada), e vazio significa
 // "não roteável", que é a leitura correta para uma linha escrita antes desta
 // migração existir.

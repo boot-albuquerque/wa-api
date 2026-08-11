@@ -175,16 +175,28 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 	// original.
 	s3cfg := mediaS3Config(s3Config)
 
+	// F102. Antes disto, uma mensagem classificada como mídia que não casasse
+	// com NENHUM dos tipos abaixo não produzia nada: nem download, nem aviso,
+	// nem erro. O operador via `Message Received ... type: media` e mais nada,
+	// e esse silêncio é indistinguível de um download que falhou calado.
+	//
+	// Numa investigação de "o cliente mandou foto e não chegou webhook", não
+	// havia como separar "não havia mídia para baixar" de "a mídia sumiu no
+	// caminho" — e as duas exigem ações opostas.
+	tratou := false
+
 	if img := evt.Message.GetImageMessage(); img != nil {
 		evh.processMedia(img, img.GetMimetype(), ".jpg",
 			downloadTimeoutImage, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if audio := evt.Message.GetAudioMessage(); audio != nil {
 		evh.processMedia(audio, audio.GetMimetype(), ".ogg",
 			downloadTimeoutAudio, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if doc := evt.Message.GetDocumentMessage(); doc != nil {
@@ -195,12 +207,14 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 		evh.processMedia(doc, doc.GetMimetype(), ext,
 			downloadTimeoutDocument, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if video := evt.Message.GetVideoMessage(); video != nil {
 		evh.processMedia(video, video.GetMimetype(), ".mp4",
 			downloadTimeoutVideo, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if sticker := evt.Message.GetStickerMessage(); sticker != nil {
@@ -210,6 +224,28 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 				"isSticker":       true,
 				"stickerAnimated": sticker.GetIsAnimated(),
 			})
+		tratou = true
+	}
+
+	// Cabeçalho de álbum: tipo CONHECIDO que legitimamente não tem o que
+	// baixar. Reconhecê-lo aqui não é tratá-lo — é impedir que o aviso abaixo
+	// dispare em todo álbum enviado, o que transformaria um diagnóstico útil em
+	// ruído de rotina. Foi o caso medido: 4 fotos em álbum chegam como
+	// cabeçalho + 4 imagens, e nenhuma mídia se perdeu.
+	//
+	// Se o cabeçalho deve virar evento próprio no webhook (ele carrega a
+	// contagem esperada) é decisão de contrato, ainda em aberto na F102.
+	if album := evt.Message.GetAlbumMessage(); album != nil {
+		tratou = true
+	}
+
+	if !tratou {
+		log.Warn().
+			Str("userid", evh.UserID).
+			Str("message_id", evt.Info.ID).
+			Str("type", evt.Info.Type).
+			Str("media_type", evt.Info.MediaType).
+			Msg("mensagem de midia de tipo nao tratado; nada foi baixado e nada sera' entregue para ela")
 	}
 }
 

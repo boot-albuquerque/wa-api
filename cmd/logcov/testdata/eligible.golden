@@ -2108,7 +2108,7 @@ pkg/bootstrap.UserEventHandler.persistHistorySync	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.persistHistorySyncConversation	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.persistHistorySyncMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.processMedia	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.processMessageMedia	ELIGIBLE	uncovered:L1
+pkg/bootstrap.UserEventHandler.processMessageMedia	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.resolveMessageS3Config	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.resolverPushName	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.saveMessageHistory	ELIGIBLE	covered

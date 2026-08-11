@@ -4073,9 +4073,33 @@ ações opostas.
 não tratado e verifica que a linha de log sai — não que o download acontece.
 O defeito é de observabilidade, e o teste tem de fixar a observabilidade.
 
-**Status**: **não corrigido** — achado de lado durante a bancada da F87, fora
-do escopo dela. Não toquei porque a política do repositório é registrar e
-perguntar antes de corrigir defeito pré-existente fora do escopo.
+**Status**: **CORRIGIDO (2026-08-10)**, com autorização explícita — a
+correção (1), o `else` com log.
+
+Sai `Warn` com `message_id`, `type` e `media_type`. O `message_id` é o que
+permite cruzar com a linha de `Message Received`; o `media_type` (que o SDK já
+derivava e ninguém usava) diz O QUE chegou que não tratamos.
+
+**O cabeçalho de álbum passou a ser reconhecido explicitamente**, e isso NÃO é
+a correção (2) disfarçada. É o que impede o aviso de disparar em todo álbum
+enviado — o caso medido, e frequente. Um diagnóstico que aparece no caminho
+normal deixa de ser lido, e eu teria trocado uma cegueira por um ruído.
+
+Se o cabeçalho deve virar evento próprio no webhook (ele carrega
+`ExpectedImageCount`) continua em aberto: é decisão de contrato.
+
+**Dois controles negativos**, e o primeiro precisou ser refeito:
+
+| mutação | resultado |
+|---|---|
+| aviso removido | `TipoNaoTratadoDeixaRastro` falha |
+| álbum deixa de ser reconhecido | `CabecalhoDeAlbumNaoViraRuido` falha, mostrando a linha que poluiria |
+
+A primeira tentativa do controle 1 trocou `if !tratou` por `if false` e
+**quebrou o build** — `tratou` ficou sem uso, o teste nem rodou, e o `FAIL` que
+apareceu era de compilação. Controle que não compila não é controle: ele não
+diz nada sobre o teste. Refeito com `tratou = true` antes da checagem, que
+compila e desliga o aviso de verdade.
 
 ---
 
@@ -4620,3 +4644,28 @@ esperar o tick. O padrão já existe no repositório.
 **Status**: **não corrigido** — achado de lado, e não é regressão: confirmei
 que a falha não vem da mudança da F109 rodando o pacote inteiro três vezes e o
 teste isolado cinco, todas verdes.
+
+### Segunda ocorrência (mesma data), e um achado maior junto
+
+Reapareceu no `make check` da F102 — **2 falhas em ~6 execuções**. Frequência
+alta o bastante para atrapalhar de verdade.
+
+**E o modo como ela apareceu é pior que ela.** O alvo `coverage-gate` do
+Makefile (linha 105) roda os testes com a saída para `/dev/null`:
+
+```make
+@$(GOTEST) -count=1 $(COVER_PKGS) ... -coverprofile=$(COVERAGE_OUT) > /dev/null
+```
+
+Quando um teste falha ali, o `make` para com `Error 1` e **nenhuma linha diz
+qual teste, nem por quê**. Foi exatamente o que aconteceu: `grep FAIL` no log
+devolveu zero, porque o `FAIL` foi para `/dev/null`, e o gate ficou parecendo
+quebrado sem motivo.
+
+**Correção sugerida** (segunda, e independente da primeira): não silenciar a
+saída dos testes no `coverage-gate`, ou capturá-la em arquivo e imprimir só em
+caso de falha. Um gate que falha sem dizer por quê ensina a rodar de novo — e é
+assim que a próxima falha REAL passa despercebida.
+
+Isso agrava o próprio motivo da entrada: teste instável mais gate mudo é a
+combinação que transforma "rodar de novo" em hábito.
