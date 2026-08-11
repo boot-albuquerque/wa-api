@@ -142,16 +142,60 @@ uma armadilha que merece o catálogo:
 Corrigido substituindo o `Poll` por laço do lado Go, com cada sondagem sob
 `Runner.Do`. O sintoma virou 12 erros registrados no `OpLog` em vez de silêncio.
 
-### 6.1 Duas leituras, e não sei qual é
+### 6.1 O teste que separou: é travamento, não ocupação
 
-- **(a) renderer travado** — o alvo fica inoperável neste ambiente após ~6 s.
-  Seria bloqueador de produto.
-- **(b) renderer ocupado** — sync inicial bloqueia a main thread e os 5 s de
-  `OpStateProbe` são curtos demais para essa janela. Seria prazo mal calibrado
-  meu.
+Duas leituras estavam em aberto — **(a)** renderer travado, **(b)** renderer
+ocupado com sync inicial e meu prazo de 5 s curto demais. O teste é subir só o
+prazo e manter o resto.
 
-`HYPOTHESIS`, sem preferência declarada. O teste que separa é barato: subir o
-prazo por sondagem e ver se volta a responder.
+Com **30 s por sondagem, ao longo de 240 s**:
+
+```
+settle0 t=1s     RESPONDEU ok=false
+settle1 t=33s    deadline of 30s exceeded
+settle2 t=65s    deadline of 30s exceeded
+…
+settle8 t=257s   deadline of 30s exceeded
+```
+
+**Uma resposta em t=1 s, depois nada por 4+ minutos.** Nove sondagens
+consecutivas, cada uma esperando 30 s cheios. `MEASURED`, HIGH.
+
+Quatro minutos de bloqueio ininterrupto da main thread não é sincronização — a
+leitura **(b) fica descartada na prática**. E para o produto a distinção
+colapsa de qualquer forma: uma sessão que não responde por 4 minutos é
+inutilizável, qualquer que seja a causa interna.
+
+### 6.1.1 O achado de produto: o alvo parece saudável por fora
+
+Durante a janela inteira de não-resposta:
+
+```
+target page            attached=true   https://web.whatsapp.com/
+target service_worker  attached=true   https://web.whatsapp.com/sw.js
+```
+
+O target existe, está anexado, o service worker está vivo, o processo está de pé.
+**Nada no nível de target ou processo denuncia o estado.**
+
+> **Consequência direta para o `wa-worker` e para o `wa-headless`: liveness de
+> sessão NÃO pode ser "o target existe" nem "o processo está vivo".** Tem de ser
+> um `Evaluate` com prazo do lado Go. Um health check estrutural reportaria
+> saudável durante os 4 minutos em que a sessão não faz nada.
+
+Isto é o mesmo princípio do `Verify` da InteractionPolicy, uma camada abaixo:
+"o alvo respondeu ao protocolo" e "a aplicação está executando" são afirmações
+diferentes, e só a segunda interessa.
+
+### 6.1.2 O estado é INTERMITENTE, e o gatilho é desconhecido
+
+Não afirmar que o alvo está sempre assim. Nas corridas de `cpubound` da Fase 5, o
+`Evaluate` **respondeu** — a descoberta de seletores e as sondas de layout
+devolveram dados. Naquelas execuções a página estava executando.
+
+Então: `MEASURED` que existe um estado de não-resposta por 4+ minutos;
+`OBSERVED` que outras execuções não o exibem. **O gatilho não é conhecido**, e
+não vou nomeá-lo sem medida.
 
 ### 6.2 O que isto reabre da Fase 5
 
@@ -169,7 +213,8 @@ marcadas como dependentes deste desfecho.
 ## 7. O que fica aberto
 
 - **O que são os 2 renderers do boot.** `browser_ui` e spare renderer refutados.
-- **(a) ou (b)** do §6.1 — o próximo teste.
+- **O gatilho do travamento** (§6.1.2). O estado é intermitente e nada no nível
+  de processo ou target o distingue.
 - **3 vs 4 renderers** entre este censo e a Fase 5.
 
 ## 8. Consequência para os documentos do `disparazaap`

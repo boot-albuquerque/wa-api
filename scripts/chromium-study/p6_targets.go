@@ -239,6 +239,17 @@ var CensusBootOnly = false
 // CensusExtraFlags são flags acrescentadas ao perfil canônico só nesta sonda.
 var CensusExtraFlags []string
 
+// CensusProbeTimeout e CensusSettleBudget existem para UM experimento: separar
+// "renderer travado" de "renderer ocupado".
+//
+// Com 5 s por sondagem, 12 tentativas seguidas estouraram. Isso é compatível com
+// as duas leituras — página parada e página ocupada respondem igual a um prazo
+// curto. Subir só o prazo, mantendo o resto, é o que as distingue: se a resposta
+// volta em 20 s, era ocupação; se não volta nem em 30 s por vários minutos, é
+// outra coisa.
+var CensusProbeTimeout time.Duration
+var CensusSettleBudget = 90 * time.Second
+
 // RunTargetCensus executa H1.
 func RunTargetCensus(outPath string) error {
 	wd := StartWatchdog("target-census", 25*time.Minute)
@@ -327,9 +338,20 @@ func RunTargetCensus(outPath string) error {
 	if err := navigateTarget(tab, r, "census/navigate"); err != nil {
 		return err
 	}
+	// waitAppReady FALHAR NÃO ABORTA esta sonda, e isso é o desenho, não
+	// tolerância a erro.
+	//
+	// A pergunta do experimento é "a página volta a responder, e quando?".
+	// Desistir aos 15 s responde antes de perguntar: um renderer ocupado e um
+	// renderer travado falham igual num prazo curto, e só o tempo até a resposta
+	// os separa. O laço de settle abaixo é a medida; o app-ready é contexto.
+	appReadyErr := ""
 	if err := waitAppReady(tab, r, "census/ready"); err != nil {
+		appReadyErr = err.Error()
 		snap := snapshot(tab, r, "census/precondition")
-		return fmt.Errorf("PRECONDICAO classe=%s qr=%v: %w", snap.Class, snap.HasQR, err)
+		fmt.Fprintf(os.Stderr, "app-ready NAO alcancado (classe=%s qr=%v): %v\n",
+			snap.Class, snap.HasQR, err)
+		fmt.Fprintf(os.Stderr, "seguindo mesmo assim — a resposta tardia E o dado\n")
 	}
 	// Estado estacionário: contar durante o sync inicial mediria o transiente.
 	//
@@ -342,8 +364,14 @@ func RunTargetCensus(outPath string) error {
 	// Aqui o laço é do lado Go e cada sondagem passa pelo Runner: prazo por
 	// operação, registro no OpLog, e um teto explícito de repetições. É o mesmo
 	// desenho da InteractionPolicy, que nunca travou.
-	settleDeadline := time.Now().Add(90 * time.Second)
+	if CensusProbeTimeout > 0 {
+		r.Policy.StateProbe = CensusProbeTimeout
+		fmt.Fprintf(os.Stderr, "probe timeout override: %s · budget %s\n",
+			CensusProbeTimeout, CensusSettleBudget)
+	}
+	settleDeadline := time.Now().Add(CensusSettleBudget)
 	settled := false
+	settleStart := time.Now()
 	for i := 0; time.Now().Before(settleDeadline); i++ {
 		var ok bool
 		err := r.Do(tab, OpStateProbe, fmt.Sprintf("census/settle%d", i),
@@ -355,8 +383,11 @@ func RunTargetCensus(outPath string) error {
 					       !document.querySelector('progress, [role="progressbar"]');
 				})()`, &ok))
 			})
+		el := time.Since(settleStart)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "settle%d: %v\n", i, err)
+			fmt.Fprintf(os.Stderr, "settle%d t=%.0fs: %v\n", i, el.Seconds(), err)
+		} else {
+			fmt.Fprintf(os.Stderr, "settle%d t=%.0fs: RESPONDEU ok=%v\n", i, el.Seconds(), ok)
 		}
 		if ok {
 			settled = true
@@ -397,10 +428,13 @@ func RunTargetCensus(outPath string) error {
 		"memory_events":     metrics.CgroupEvents(),
 		// Sem isto a sonda nao responde "onde parou" — que e exatamente o que o
 		// OpLog da 4C existe para responder, e o que faltou na corrida cega.
-		"watchdog":     wd.Verdict(r.Log),
-		"sync_settled": settled,
-		"window_flag":  WAWindowSize,
-		"started_utc":  time.Now().UTC().Format(time.RFC3339),
+		"watchdog":        wd.Verdict(r.Log),
+		"sync_settled":    settled,
+		"app_ready_error": appReadyErr,
+		"probe_timeout":   r.Policy.StateProbe.String(),
+		"settle_budget":   CensusSettleBudget.String(),
+		"window_flag":     WAWindowSize,
+		"started_utc":     time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
