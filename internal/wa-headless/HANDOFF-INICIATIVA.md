@@ -4,52 +4,64 @@
 **Escrito para:** o próximo engenheiro/agente, que continua daqui sem ter vivido
 a sessão.
 
-> **Leia primeiro §3.1.** Uma descoberta feita no fim da sessão muda a leitura da
-> iniciativa e coloca a ADR-0038 em revisão. Ignorá-la leva a reescrever 14 mil
-> linhas que talvez não precisem ser reescritas.
+> ## O objetivo, numa frase
+>
+> **O `wa-api` precisa ter, no `wa-headless`, um motor FUNCIONALMENTE
+> EQUIVALENTE ao `whatsapp-web.js`.**
+>
+> Tudo neste documento serve a isso. Equivalência de motor é o alvo — não
+> substituir o `wa-worker`, não consolidar serviços, não reescrever coordenação.
+> Ver §1 e, para o que isso descarta, §3.1.
 
 ---
 
 ## 1. Objetivo final
 
-### O que é
+### O objetivo
 
-`wa-headless` é a **segunda pilha de acesso ao WhatsApp**: conduzir o SPA real
-de `web.whatsapp.com` dentro de um Chromium headless, dirigido por CDP, em Go.
+> **Ter no `wa-api` um motor `wa-headless` funcionalmente equivalente ao
+> `whatsapp-web.js`.**
 
-A primeira pilha é `wa-noise` (`internal/wa-noise/`, 178 mil linhas), que fala o
-protocolo nativo por WebSocket/Noise e **já funciona**.
+Equivalência significa: tudo que o produto hoje obtém do `wwebjs`, ele passa a
+poder obter do `wa-headless`, pela mesma interface, com confiabilidade não pior.
+
+Isso e nada além disso. Explicitamente **fora** deste objetivo:
+
+- substituir o `wa-worker` ou reescrever sua coordenação;
+- consolidar serviços num único binário Go;
+- mitigação de detecção/anti-ban (frente própria — ADR-0006 D3);
+- superar o `wwebjs` em desempenho (o baseline dele nunca entrou no repo, então
+  "superar" é objetivo, não critério).
+
+### O que é o `wa-headless`
+
+O **segundo motor** do `wa-api`: conduz o SPA real de `web.whatsapp.com` num
+Chromium headless, dirigido por CDP, em Go.
+
+O primeiro motor é o `wa-noise` (`internal/wa-noise/`, 178 mil linhas), que fala
+o protocolo nativo e **já funciona**. Os dois convivem: protocolo é a pilha
+primária e barata; browser é o motor caro que alcança o que o protocolo não
+alcança.
 
 ### Que problema resolve
 
-Duas razões foram registradas no ADR-0006, e **só uma sobreviveu**:
+O `wwebjs` entrega hoje recursos que exigem o SPA real, e o produto depende
+deles. O problema que o `wa-headless` resolve é **ter esse acesso sob controle
+nosso**, em Go, dentro do `wa-api`, em vez de depender de uma biblioteca de
+terceiro acoplada a dezenas de nomes de módulo internos da Meta (ADR-0006 D4).
 
-1. **Recursos que exigem o SPA real**, não a reimplementação do protocolo.
-   `VÁLIDA` — mas a lista concreta desses recursos **nunca foi enumerada**
-   (ver §7).
-2. **Camada adicional de mitigação de ban.** `NÃO ENTREGUE` — o ADR-0006 D3 já
-   admitia, e o estudo confirmou: `navigator.webdriver === true` sem mitigação,
-   e stealth ficou explicitamente fora de escopo.
-
-### Por que substituir `wwebjs + wa-worker`
-
-Objetivo declarado pelo dono do projeto. Duas motivações registradas:
-controle sobre o motor (o `wwebjs` acopla a dezenas de nomes de módulo internos
-da Meta — ADR-0006 D4) e consolidação em Go.
-
-**Ressalva material, e é o ponto do §3.1:** a evidência encontrada no fim da
-sessão mostra que "substituir o motor" e "substituir o `wa-worker`" são
-decisões **separáveis**, e a segunda é ordens de grandeza maior.
+A segunda justificativa registrada no ADR-0006 — camada extra de mitigação de
+ban — **não é entregue** e não faz parte deste objetivo.
 
 ### Estado final
 
-`wa-headless` está concluído quando serve o contrato de provider do
-`wa-worker` com paridade funcional e de confiabilidade contra o `wwebjs`,
-medida lado a lado, e o `wwebjs` pode ser desligado sem perda observável.
+A iniciativa está concluída quando o `wa-headless` serve, pela interface que o
+`wa-worker` já consome, tudo que o `wwebjs` serve e que o produto usa — com
+paridade medida lado a lado — e o `wwebjs` pode ser desligado sem perda
+observável.
 
-**Não** inclui: mitigação de detecção, e superar o `wwebjs` em desempenho — o
-baseline dele nunca entrou no repositório, então "superar" é objetivo, não
-critério (ADR-0006).
+**A medida de "equivalente" é a lista do CAP-01**, não a superfície inteira do
+`wwebjs`: o alvo é o que o produto CHAMA, não o que a biblioteca OFERECE.
 
 ---
 
@@ -166,9 +178,17 @@ separáveis.**
 | **A — ADR-0038** | `wa-headless` absorve coordenação; serviço Go único | reescrever ~14 mil linhas de TS (fencing, shard-ring, quota, circuit-breaker, on-demand, spool, rebalancer) |
 | **B — pela costura** | `wa-api` ganha motor headless; `wa-worker` aponta `WA_ADAPTER` | implementar o motor; `wa-worker` intocado |
 
-**A ADR-0038 foi decidida sem esta evidência.** Ela não está errada como
-objetivo de longo prazo, mas **B é um caminho de risco muito menor para o mesmo
-resultado funcional**, e B não impede A depois. Ver §7.
+**Com o objetivo do §1, a escolha é B.** Equivalência de motor se alcança
+implementando o motor atrás da costura que já existe; absorver o `wa-worker` é
+outra iniciativa, com outro custo e outro risco.
+
+**A ADR-0038 (serviço Go único absorvendo o `wa-worker`) fica FORA do escopo
+desta iniciativa.** Ela foi decidida antes desta evidência e antes de o objetivo
+ser fixado como equivalência de motor. Não está revogada — está deslocada para
+depois, e precisa de revisão própria.
+
+Correção a propor pelo `HOUSEKEEP.md` do `disparazaap`, **não editada daqui**:
+aquele repo é da sessão C0/C1.
 
 ### 3.2 O que já existe
 
@@ -362,17 +382,16 @@ Serão critérios de validação. Cada um tem medição por trás.
 
 ## 7. Incertezas restantes
 
-**INCERTEZA:** A vs B (§3.1) — `wa-headless` absorve o `wa-worker`, ou entra
-como provider atrás da costura existente?
-**IMPACTO:** define se o trabalho é ~14 mil linhas de reescrita ou só o motor.
-**PRECISA SER RESOLVIDA ANTES DE CODIFICAR? SIM** — mas note que a primeira
-capacidade (§11) é idêntica nas duas leituras.
+**RESOLVIDA — A vs B (§3.1).** O objetivo é equivalência de motor, então o
+caminho é B: implementar atrás da costura existente. ADR-0038 sai do escopo
+desta iniciativa.
 
-**INCERTEZA:** qual a lista concreta de recursos que exigem o SPA real?
-**IMPACTO:** define o escopo de "paridade funcional". Sem ela, paridade é o
-conjunto inteiro do `wwebjs`.
+**INCERTEZA:** qual a lista concreta do que o produto usa do `wwebjs`?
+**IMPACTO:** é **a definição de "equivalente"**. Sem ela o objetivo não é
+verificável, e paridade vira a superfície inteira da biblioteca.
 **PRECISA SER RESOLVIDA ANTES DE CODIFICAR? NÃO** para a primeira capacidade;
-**SIM** antes de decidir quais capacidades implementar.
+**SIM** antes de qualquer capacidade de produto. É a incerteza mais importante
+que resta.
 
 **INCERTEZA:** o envio passa pelo contrato HTTP do `wa-api` ou por WS? O grep
 não achou endpoint de envio.
@@ -431,10 +450,11 @@ ambos observáveis a cada ciclo, sem esperar o logout.
 
 ## 9. Definition of Done
 
-`wa-headless` substituiu `wwebjs` quando **todas** forem verdadeiras:
+`wa-headless` é **equivalente ao `wwebjs`** quando **todas** forem verdadeiras:
 
-1. Implementa `WaClientAdapter` com **todos os obrigatórios** e os opcionais que
-   o inventário (CAP-01) marcar como usados em produção.
+1. Implementa **cada item da lista do CAP-01** — os obrigatórios de
+   `WaClientAdapter` e os opcionais que o produto realmente chama. Equivalência
+   se mede contra essa lista, não contra a superfície do `wwebjs`.
 2. `WA_ADAPTER` aponta para o motor novo em **100% das instâncias** por período
    definido, sem rollback.
 3. Paridade medida **lado a lado, mesma janela**: memória, tempo de restauração
@@ -453,10 +473,14 @@ ambos observáveis a cada ciclo, sem esperar o logout.
 
 Cadeia lógica, não microtarefas. Cada capacidade deixa o sistema coerente.
 
-**CAP-01 · Inventário do que o produto realmente usa**
+**CAP-01 · Inventário do que o produto realmente usa — A DEFINIÇÃO DE
+"EQUIVALENTE"**
 → lista concreta dos métodos de `WaClientAdapter` chamados em produção e dos
 recursos que exigem o SPA. *Observável:* documento com a lista, derivada de grep
 no `disparazaap`, não de opinião.
+**Sem esta lista o objetivo do §1 não é verificável**: "equivalente ao `wwebjs`"
+vira a superfície inteira da biblioteca, que é escopo infinito. Com ela,
+provavelmente é meia dúzia de operações.
 
 **CAP-02 · Fundação do motor dentro do módulo**
 → `DeadlinePolicy`, `Runner`, `OpLog`, `cleanStop`, `primeTab` portados do
