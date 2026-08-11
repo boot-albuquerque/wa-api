@@ -193,3 +193,34 @@ uma vez.
 
 **Status**: **não corrigido** — pendência de outra sessão, registrada aqui para
 não sumir. Referência cruzada: `scripts/chromium-study/RELATORIO-FASE-6.md` §8.
+
+## H4 — o formato do `SingletonLock` é premissa, não medida
+
+**Data**: 2026-08-11 · **Contexto**: CAP-03 LOOP 03.2, `ReclaimProfile`.
+
+**Onde**: `internal/wa-headless/engine/profile.go`, `readLockHolder`.
+
+**Problema**: a decisão de apagar ou recusar depende de ler o `SingletonLock`
+como **symlink cujo alvo é `<hostname>-<pid>`**. Isso vem da convenção do
+`chrome/browser/process_singleton_posix.cc`, e o dublê do teste imita essa
+regra — mas **nenhum perfil real foi inspecionado nesta sessão** para confirmar
+o formato na versão 151 que o projeto usa.
+
+Se o formato divergir, o `readLockHolder` cai no ramo "ilegível" e o reclaim
+apaga sem provar nada. Isso não é catastrófico — é exatamente o comportamento
+do estudo, que rodou assim por todas as fases — mas a guarda que a H4 protege
+deixa de guardar, e em silêncio.
+
+**Correção sugerida**: no primeiro boot contra alvo real (CAP-03 LOOP 03.4),
+matar o Chromium e inspecionar o perfil:
+
+```
+ls -la <perfil>/SingletonLock   # esperado: symlink -> <host>-<pid>
+```
+
+Colar a saída aqui e, se divergir, ajustar o parser E o dublê juntos — dublê
+mais permissivo que a produção esconde defeito (ARMADILHAS §1).
+
+**Status**: **não corrigido** — premissa documentada, verificação agendada
+para o LOOP 03.4. O comportamento sob divergência é degradação para o
+comportamento do estudo, não quebra.
