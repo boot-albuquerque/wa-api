@@ -8,10 +8,10 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 03 — sessão sobe e classifica · **código completo, verificação final BLOQUEADA**
-Loop: —
-Objective: a última asserção da CAP-03 ("contra conta real, o estado correto é
-reportado") exige parear/abrir uma sessão do WhatsApp. Ver **B-03**.
+CAP: 04 — liveness e causas · **em andamento**
+Loop: 04.3
+Objective: `refreshOwner` — primeira leitura do SPA, que exercita o inventário
+de módulos num caminho de baixo risco
 
 ## Completed
 
@@ -76,6 +76,24 @@ existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
 
 **Falta para fechar**: a asserção "contra conta real". Ver **B-03**.
 
+### CAP-04 — liveness e causas · **em andamento**
+
+| loop | objetivo | commit |
+|---|---|---|
+| 04.1 | `livenessCheck`: sonda por `Evaluate`, streak, latência | `e0ee05a` |
+| 04.2 | verificação contra renderer travado de verdade | `c0793ad` |
+
+**Verificado contra browser real**: página com `#pane-side` no DOM e
+`for(;;)` na thread principal classifica `UNRESPONSIVE` enquanto
+`ProcessAlive` confirma o processo vivo. O controle negativo (tirar o
+`for(;;)`) faz o teste reprovar com `probed as "APP_READY"` — prova que ele
+mede travamento, não presença de elemento.
+
+**Limite declarado**: a sonda ainda não é a viagem autenticada que o contrato
+descreve ("força I/O ao contexto autenticado"). Exige o inventário de módulos
+do CAP-06. Descarta o modo de falha medido; não descarta UI montada sobre
+socket morto.
+
 ### CAP-01 — inventário real de paridade · **DONE**
 
 | loop | objetivo | resultado |
@@ -95,10 +113,12 @@ apenas — aquele repo é da sessão C0/C1).
   seletor de QR ainda casam com a marcação real. *Done quando*: as classes
   saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
   (fecha **H4**).
-* **LOOP 04.1** — `livenessCheck`: sondagem periódica por `Evaluate` com
-  prazo, latência registrada (não só o booleano), e `UNRESPONSIVE` após N
-  estouros seguidos. É a primeira das seis capacidades da matriz de paridade e
-  não depende de conta real para ser escrita.
+* **LOOP 04.3** — `refreshOwner`: primeira leitura do SPA. Exercita o
+  inventário de módulos (CAP-06) num caminho de baixo risco, sem envio.
+  *Done quando*: os nomes de módulo estão num lugar só, resolvidos no arranque,
+  e renomear um de propósito derruba o boot com mensagem que nomeia a causa.
+* **LOOP 04.4** — `getBrowserPid` na fachada. O `engine.Browser.PID()` já
+  existe; falta expor pelo contrato, e isso é CAP-09.
 
 ## Findings
 
