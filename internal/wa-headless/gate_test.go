@@ -13,6 +13,7 @@ package waheadless
 // evidence named beside it.
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -206,5 +207,118 @@ func callsTo(fset *token.FileSet, n ast.Node, name string) []string {
 		}
 		return true
 	})
+	return found
+}
+
+// spaDir is the package that translates Meta's objects into ours.
+const spaDir = "spa"
+
+// untypedFieldTypes are the shapes an SPA object takes when it is passed
+// through instead of translated.
+var untypedFieldTypes = map[string]bool{
+	"any":                    true,
+	"interface{}":            true,
+	"json.RawMessage":        true,
+	"map[string]any":         true,
+	"map[string]interface{}": true,
+}
+
+// The data rule of this initiative, as a gate rather than as a paragraph.
+//
+// NEVER: `type Foo = <the object the SPA returned>`. The translation has to be
+//
+//	META INTERNAL OBJECT -> small internal DTO -> WA-HEADLESS DOMAIN
+//
+// so that a change on Meta's side is confined to one package. The failure mode
+// is not usually someone writing that alias on purpose — it is an untyped blob
+// escaping: a field typed `any`, `map[string]any` or `json.RawMessage` on an
+// EXPORTED type, which hands the caller Meta's shape with none of Meta's
+// guarantees and no place to notice when it changes.
+//
+// Unexported types are fine: they cannot cross the boundary. Errors and
+// functions are fine. The rule is about what spa/ PUBLISHES.
+//
+// Written now, while the boundary is still clean, for the same reason the other
+// gates were: a rule that arrives after the code it governs arrives too late.
+func TestTheSPABoundaryPublishesNoUntypedObjects(t *testing.T) {
+	var offenders []string
+
+	for _, path := range goFiles(t, false) {
+		if filepath.Base(filepath.Dir(path)) != spaDir {
+			continue
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+
+		ast.Inspect(file, func(n ast.Node) bool {
+			spec, ok := n.(*ast.TypeSpec)
+			if !ok || !spec.Name.IsExported() {
+				return true
+			}
+			offenders = append(offenders, untypedFieldsOf(fset, spec)...)
+			return true
+		})
+	}
+
+	if len(offenders) > 0 {
+		t.Fatalf("an exported type in %s/ publishes an untyped object. That hands the "+
+			"caller Meta's shape with none of Meta's guarantees, and there is then no "+
+			"single place that notices when Meta changes it. Translate into a named "+
+			"type instead:\n  %s", spaDir, strings.Join(offenders, "\n  "))
+	}
+}
+
+func fieldName(f *ast.Field) string {
+	if len(f.Names) == 0 {
+		return "<embedded>"
+	}
+	return f.Names[0].Name
+}
+
+// typeExprString renders the shapes this gate cares about. Anything it does not
+// recognise comes back as "" and is therefore not flagged — the gate is narrow
+// on purpose: a false positive here would push someone to route around it.
+func typeExprString(e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.Ident:
+		return v.Name
+	case *ast.InterfaceType:
+		if v.Methods == nil || len(v.Methods.List) == 0 {
+			return "interface{}"
+		}
+	case *ast.SelectorExpr:
+		if pkg, ok := v.X.(*ast.Ident); ok {
+			return pkg.Name + "." + v.Sel.Name
+		}
+	case *ast.MapType:
+		return "map[" + typeExprString(v.Key) + "]" + typeExprString(v.Value)
+	}
+	return ""
+}
+
+// untypedFieldsOf lists the exported fields of an exported struct whose type is
+// an untyped passthrough.
+func untypedFieldsOf(fset *token.FileSet, spec *ast.TypeSpec) []string {
+	st, ok := spec.Type.(*ast.StructType)
+	if !ok || st.Fields == nil {
+		return nil
+	}
+	var found []string
+	for _, field := range st.Fields.List {
+		// An unexported field cannot be read by a caller, so it cannot carry
+		// Meta's shape across the boundary.
+		if len(field.Names) > 0 && !field.Names[0].IsExported() {
+			continue
+		}
+		name := typeExprString(field.Type)
+		if !untypedFieldTypes[name] {
+			continue
+		}
+		found = append(found, fmt.Sprintf("%s: %s.%s is %s",
+			fset.Position(field.Pos()), spec.Name.Name, fieldName(field), name))
+	}
 	return found
 }
