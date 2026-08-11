@@ -1,12 +1,16 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
-	"strings"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"wa-api/pkg/infra/db"
 )
@@ -497,5 +501,80 @@ func TestEnderecoAnunciado_SemVariavelUsaHostnameEPorta(t *testing.T) {
 	}
 	if strings.Contains(addr, ownerIDUnknownHost) {
 		t.Errorf("buildOwnerAddr() = %q; caiu no host desconhecido com hostname disponivel", addr)
+	}
+}
+
+// F109. O par de testes abaixo trava a DISTINÇÃO, não a mensagem: renovar um
+// lease que ainda era meu e retomar um que já tinha expirado são eventos
+// diferentes, e antes disto os dois saíam idênticos — em silêncio.
+//
+// O que torna o par honesto é o segundo: sem ele, um aviso emitido em TODA
+// renovação passaria no primeiro e ninguém notaria.
+
+func TestLease_RetomadaAposExpirarDeixaRastro(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
+
+	relogio := time.Now()
+	manager.now = func() time.Time { return relogio }
+
+	if _, err := manager.Claim(context.Background(), "user-1"); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	var buf bytes.Buffer
+	orig := log.Logger
+	log.Logger = zerolog.New(&buf)
+	t.Cleanup(func() { log.Logger = orig })
+
+	// Congelamento além do TTL: o lease expirou e foi RETOMADO, não renovado.
+	relogio = relogio.Add(20 * time.Second)
+	if !manager.renewOne(context.Background(), "user-1") {
+		t.Fatal("renewOne devolveu false; o dublê concede a posse, entao o caminho medido nem foi alcancado")
+	}
+
+	saida := buf.String()
+	if saida == "" {
+		t.Fatal("nada registrado: o processo serviu numa janela em que nao era dono legitimo e nao ficou rastro (F109)")
+	}
+	if !strings.Contains(saida, "RETOMADO") {
+		t.Errorf("o aviso nao distingue retomada de renovacao: %s", saida)
+	}
+	// A lacuna precisa estar no registro: sem ela, quem investiga sabe QUE
+	// houve janela e nao sabe de quanto.
+	if !strings.Contains(saida, `"gap"`) {
+		t.Errorf("o aviso saiu sem a duracao da lacuna: %s", saida)
+	}
+}
+
+// TestLease_RenovacaoNormalNaoAvisa é o controle negativo do teste acima, e o
+// que impede a correção de virar ruído: com heartbeat de 5s, um aviso por
+// renovação seriam 12 linhas por minuto por sessão.
+func TestLease_RenovacaoNormalNaoAvisa(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
+
+	relogio := time.Now()
+	manager.now = func() time.Time { return relogio }
+
+	if _, err := manager.Claim(context.Background(), "user-1"); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	var buf bytes.Buffer
+	orig := log.Logger
+	log.Logger = zerolog.New(&buf)
+	t.Cleanup(func() { log.Logger = orig })
+
+	// Três renovações dentro do prazo, como na operação normal.
+	for i := 0; i < 3; i++ {
+		relogio = relogio.Add(5 * time.Second)
+		if !manager.renewOne(context.Background(), "user-1") {
+			t.Fatalf("renovacao %d devolveu false", i)
+		}
+	}
+
+	if saida := buf.String(); saida != "" {
+		t.Errorf("renovacao normal gerou aviso; com heartbeat de 5s isso seria ruido perpetuo: %s", saida)
 	}
 }

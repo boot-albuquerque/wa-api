@@ -2177,7 +2177,7 @@ pkg/bootstrap.leaseManager.abandoned	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
-pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:363);uncovered:L2(S-ret,lease.go:367)
+pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:393);uncovered:L2(S-ret,lease.go:397)
 pkg/bootstrap.livenessHandler	EXCLUDED	X1
 pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)

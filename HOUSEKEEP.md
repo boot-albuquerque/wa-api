@@ -4567,5 +4567,56 @@ que perdeu e retomou. Mesmo `case`, mesma correção.
 **Anti-regressão**: teste que expira o lease no relógio injetado, deixa o mesmo
 dono reivindicar de novo, e verifica que sai WARN. Hoje não sai nada.
 
-**Status**: **não corrigido** — a correção é pequena e localizada, mas é código
-no caminho de posse e merece decisão explícita.
+**Status**: **CORRIGIDO (2026-08-10)**, com autorização explícita.
+
+O ramo `owned` passou a comparar a lacuna desde a última renovação com o TTL, e
+emite WARN quando ela passou — com `gap` e `ttl` no registro, porque saber QUE
+houve janela sem saber de quanto não ajuda quem investiga.
+
+A máquina era mesmo a que já existia: o cálculo é o mesmo `agora.Sub(anterior)`
+que o ramo `default` usa para decidir sem poder falar com o banco.
+
+**`anterior` zerado não conta como lacuna**: é a primeira renovação depois do
+`Claim` inicial, e avisar ali seria falso positivo em todo arranque.
+
+**Dois controles negativos, em direções opostas** — e é o par que torna a
+correção honesta:
+
+| mutação | resultado |
+|---|---|
+| aviso removido | `TestLease_RetomadaAposExpirarDeixaRastro` falha |
+| aviso em TODA renovação (`lacuna >= 0`) | `TestLease_RenovacaoNormalNaoAvisa` falha, mostrando `gap=5000` |
+
+O segundo é o que impede a correção de virar ruído: com heartbeat de 5s, um
+aviso por renovação seriam 12 linhas por minuto **por sessão**. Sem esse teste,
+a mutação passaria despercebida e o registro viraria lixo — que é uma forma
+mais lenta de perder a mesma informação.
+
+---
+
+## F110 — `TestOutboxWiring_VarreduraRetomaOVencido` é instável sob carga
+
+**Data**: 2026-08-10
+**Contexto**: observado uma vez durante o `make check` da correção da F109 —
+que não toca em nada do outbox.
+
+**Onde**: `pkg/bootstrap/dispatch_outbox_test.go`, por volta da linha 285.
+
+**Problema**: o teste depende de relógio real (`DueAt: time.Now().UTC().Add(-time.Minute)`)
+e da varredura do sweeper, que roda a cada 1s. Sob a carga do `make check`
+completo — todos os pacotes compilando e rodando — a janela escapa.
+
+**Evidência**: 1 falha em 1 execução do `make check`; depois **8/8 verde** (5×
+isolado, 3× na suíte completa do pacote). Não reproduzível sob demanda.
+
+**Por que importa mais do que parece**: um gate que falha por acaso ensina a
+rodar de novo em vez de investigar. O custo não é o minuto perdido — é que a
+próxima falha REAL vai ser tratada como esta.
+
+**Correção sugerida**: injetar o relógio, como o `leaseManager` já faz
+(`m.now func() time.Time`), e disparar a varredura explicitamente em vez de
+esperar o tick. O padrão já existe no repositório.
+
+**Status**: **não corrigido** — achado de lado, e não é regressão: confirmei
+que a falha não vem da mudança da F109 rodando o pacote inteiro três vezes e o
+teste isolado cinco, todas verdes.

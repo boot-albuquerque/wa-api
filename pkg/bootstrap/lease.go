@@ -229,9 +229,39 @@ func (m *leaseManager) renewOne(ctx context.Context, userID string) bool {
 
 	switch {
 	case err == nil && owned:
+		agora := m.now()
+
 		m.mu.Lock()
-		m.lastRenewal[userID] = m.now()
+		anterior := m.lastRenewal[userID]
+		m.lastRenewal[userID] = agora
 		m.mu.Unlock()
+
+		// F109. Este ramo trata dois eventos MUITO diferentes como o mesmo:
+		// renovei um lease que eu ainda tinha, e retomei um lease que ja tinha
+		// EXPIRADO. O segundo e' permitido por session_lease.go:68
+		// (`WHERE session_leases.expires_at < now()`), e so' acontece depois de
+		// uma janela em que qualquer replica podia legitimamente ter assumido.
+		//
+		// Nao e' inseguro por si so' — se a reivindicacao venceu, ninguem mais
+		// tinha a sessao. O que era inaceitavel e' o SILENCIO: o pod serviu
+		// durante uma janela em que nao era dono legitimo, e nao ficava rastro
+		// nenhum disso. Numa investigacao de mensagem duplicada ou de ordem
+		// trocada, essa janela e' a primeira hipotese a considerar, e ela era
+		// invisivel.
+		//
+		// Medido em bancada: com o processo congelado por 20s (TTL 15s) e sem
+		// competidor, o lease expirou e o pod retomou servindo com ZERO linhas
+		// de log.
+		//
+		// `anterior` zerado nao e' lacuna: e' a primeira renovacao depois do
+		// Claim inicial, e avisar ali seria falso positivo em todo arranque.
+		if !anterior.IsZero() {
+			if lacuna := agora.Sub(anterior); lacuna > m.ttl {
+				log.Warn().Str("userid", userID).Str("owner", m.ownerID).
+					Dur("gap", lacuna).Dur("ttl", m.ttl).
+					Msg("lease RETOMADO apos expirar, nao renovado; este processo serviu esta sessao durante uma janela em que outra replica podia te-la assumido")
+			}
+		}
 		return true
 
 	case err == nil && !owned:
