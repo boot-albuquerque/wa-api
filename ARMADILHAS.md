@@ -373,3 +373,43 @@ quando a API muda.
 em paralelo com ele. `go test ./...` paraleliza por pacote, então um teste
 faminto de CPU faz um pacote vizinho falhar por timeout — e o diagnóstico
 aponta para o lugar errado.
+
+---
+
+## 19. Espera cujo relógio mora na página: uma página parada para o próprio timeout
+
+A armadilha nº 16 é sobre espera **sem** prazo. Esta é pior, porque a espera
+**tem** prazo — e ele não vale.
+
+O `chromedp.Poll` aceita `WithPollingTimeout`, e ele parece o prazo da operação.
+Não é: **o timer é injetado DENTRO da página**. Se o renderer não estiver
+executando JavaScript, o timeout nunca dispara, e a espera fica presa
+indefinidamente — **fora da `DeadlinePolicy` sem parecer que está**.
+
+**Evidência.** Uma sonda da Fase 6 travou **duas vezes**, 10 min e depois 25 min,
+sempre entre os mesmos dois estágios. Nada explicava: `navigateTarget` está sob
+prazo de 30 s, `waitAppReady` sob 15 s, e o `Poll` declarava teto de 180 s.
+Somando os piores casos dava 4 minutos. O estágio seguinte foi carimbado em
+**t=1501s**.
+
+A causa apareceu ao trocar o `Poll` por laço do lado Go com cada sondagem sob
+`Runner.Do`: o silêncio de 24 minutos virou **12 erros registrados no `OpLog`**,
+e ficou visível que a página havia parado de responder aos ~6 s.
+
+**É prima da nº 3 da Fase 4C** (`chromedp.Poll` que nunca avaliava a condição
+porque `requestAnimationFrame` não dispara em aba de fundo). As duas presumem
+que a página coopera — uma para agendar a avaliação, outra para agendar o
+próprio prazo. Duas bibliotecas independentes já erraram no primeiro; o segundo
+é o mesmo erro um nível acima.
+
+**Regra**: o relógio de qualquer espera remota mora **do lado do controlador**.
+Prazo implementado na página é dado, não garantia — vale como otimização, nunca
+como limite superior.
+
+**Guarda**: toda espera remota passa pelo `Runner.Do`, que aplica prazo por
+classe de operação e registra no `OpLog`. Espera que não passa por lá é espera
+que, quando travar, não deixa rastro de onde travou.
+
+**Como isto se detecta**: um estágio carimbado muito além da soma dos prazos
+declarados. Se o tempo observado não cabe na aritmética das políticas, existe
+uma espera fora delas — e o `OpLog` diz qual foi a última operação registrada.
