@@ -124,6 +124,7 @@ corrigidas, não escondidas: a contagem voltou a 267 exatos.
 | B1.1 | observar o SPA real com perfil vazio | `946dfcb` |
 | B1.2 | seletor de QR independente de idioma | `5158077` |
 | B1.3 | mecanismo de pareamento (headful) | `c8691dd` |
+| — | gate da REGRA DE DADOS na fronteira do SPA | `ea62bed` |
 
 Evidência congelada em `EVIDENCIA-SPA.md`.
 
@@ -161,6 +162,10 @@ apenas — aquele repo é da sessão C0/C1).
   seletor de QR ainda casam com a marcação real. *Done quando*: as classes
   saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
   (fecha **H4**).
+**Trabalho seguro esgotado.** Tudo que resta — B1.4, B1.5, 04.3A, CAP-05,
+CAP-06, CAP-07 — exige a sessão pareada. O último item independente foi o gate
+da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
+
 * **LOOP B1.4** (bloqueado por B-04) — validar `#pane-side` contra sessão
   pareada de verdade. *Done quando*: `READY` sai correto e o seletor deixa de
   ser hipótese.
