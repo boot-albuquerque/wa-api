@@ -8,10 +8,10 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 04 — liveness e causas · **em andamento**
-Loop: 04.3
-Objective: `refreshOwner` — primeira leitura do SPA, que exercita o inventário
-de módulos num caminho de baixo risco
+CAP: 06 — integração controlada com o SPA · **mecanismo pronto**
+Loop: —
+Objective: próximo é `refreshOwner` (CAP-04), que acrescenta ao inventário os
+módulos de identidade do dono e é a primeira leitura real do SPA
 
 ## Completed
 
@@ -94,6 +94,21 @@ descreve ("força I/O ao contexto autenticado"). Exige o inventário de módulos
 do CAP-06. Descarta o modo de falha medido; não descarta UI montada sobre
 socket morto.
 
+### CAP-06 — integração controlada com o SPA · **mecanismo pronto**
+
+| loop | objetivo | commit |
+|---|---|---|
+| 06.1 | inventário de módulos verificado no arranque | `3c24062` |
+
+Fonte: `whatsapp-web.js` **1.34.7**, lido de
+`services/wa-worker/node_modules/` no `disparazaap` — a versão que o produto
+roda. Ela usa **41 módulos distintos**; ficam os **8** que o próprio wwebjs
+resolve no `AuthStore` ao arrancar. Cada capacidade acrescenta os seus.
+
+**Verificado contra motor JS real**: página cujo `window.require` conhece os
+oito e LANÇA para qualquer outro. Renomear um módulo derruba o boot nomeando
+o que se moveu — o controle que a ADR-0006 D4 pede.
+
 ### CAP-01 — inventário real de paridade · **DONE**
 
 | loop | objetivo | resultado |
@@ -113,14 +128,19 @@ apenas — aquele repo é da sessão C0/C1).
   seletor de QR ainda casam com a marcação real. *Done quando*: as classes
   saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
   (fecha **H4**).
-* **LOOP 04.3** — `refreshOwner`: primeira leitura do SPA. Exercita o
-  inventário de módulos (CAP-06) num caminho de baixo risco, sem envio.
-  *Done quando*: os nomes de módulo estão num lugar só, resolvidos no arranque,
-  e renomear um de propósito derruba o boot com mensagem que nomeia a causa.
+* **LOOP 04.3** — `refreshOwner`: primeira leitura real do SPA (msisdn,
+  pushname, avatar do dono), acrescentando ao inventário os módulos que ela
+  exige. *Done quando*: os campos saem contra a página, e o inventário cresce
+  só com o que esta capacidade usa.
 * **LOOP 04.4** — `getBrowserPid` na fachada. O `engine.Browser.PID()` já
   existe; falta expor pelo contrato, e isso é CAP-09.
 
 ## Findings
+
+* **F-10 · o `spa/doc.go` cita um commit do wwebjs que não é o que roda.** Ele
+  aponta `main @ 942d236a11ad (2026-07-27)`; o produto tem `1.34.7` instalado.
+  O inventário segue a versão INSTALADA. O `doc.go` fica desatualizado de
+  propósito por ora — corrigi-lo é mexer em texto fora do escopo do loop.
 
 * **F-08 · guarda duplicada é camuflagem, não defesa — TRÊS vezes no mesmo
   dia.** No `Launcher` (recusa de URL vazia em `readEndpoint` e no laço), no
