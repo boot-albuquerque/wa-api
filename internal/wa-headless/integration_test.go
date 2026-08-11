@@ -14,12 +14,14 @@ package waheadless
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,5 +296,89 @@ func TestBrowserChainLivenessSeesAliveAndWedged(t *testing.T) {
 	if !engine.ProcessAlive(browser.PID()) {
 		t.Error("the browser process is gone, so UNRESPONSIVE could have come from " +
 			"the browser dying rather than from the page wedging")
+	}
+}
+
+// requirePage serves a page whose window.require knows exactly `known`.
+//
+// It throws for anything else, which is what the real one does — and that is
+// the behaviour the resolve script has to survive. A double that returned
+// undefined instead of throwing would let a script with no try/catch pass,
+// and against the real page the first missing module would abort the whole
+// check and report the rest as fine.
+func requirePage(t *testing.T, known []spa.Module) string {
+	t.Helper()
+	names := make([]string, len(known))
+	for i, m := range known {
+		names[i] = `"` + string(m) + `"`
+	}
+	body := `<html><body><div id="pane-side"></div><script>
+		const known = new Set([` + strings.Join(names, ",") + `]);
+		window.require = function (name) {
+			if (!known.has(name)) { throw new Error("Cannot find module '" + name + "'"); }
+			return { __module: name };
+		};
+	</script></body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// The requirement of ADR-0006 D4 against a real JavaScript engine: the
+// inventory passes when the page exposes what we need, and renaming ONE module
+// stops the boot with a message that names it.
+func TestBrowserChainVerifiesTheModuleInventory(t *testing.T) {
+	binary := findChrome(t)
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir:    t.TempDir(),
+		DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() { t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser)) }()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	// Every module present.
+	if err := tab.Navigate(runner, requirePage(t, spa.RequiredAtStartup), "nav/complete"); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+	if err := spa.VerifyInventory(context.Background(), runner, tab.Evaluate, spa.RequiredAtStartup); err != nil {
+		t.Fatalf("a page exposing every module failed the inventory: %v", err)
+	}
+
+	// Meta renames one. This is the negative control the ADR asks for, run
+	// against a real engine rather than a string.
+	renamed := make([]spa.Module, len(spa.RequiredAtStartup))
+	copy(renamed, spa.RequiredAtStartup)
+	renamed[2] = spa.Module(string(renamed[2]) + "V2")
+
+	if err := tab.Navigate(runner, requirePage(t, renamed), "nav/renamed"); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+	err = spa.VerifyInventory(context.Background(), runner, tab.Evaluate, spa.RequiredAtStartup)
+
+	var missing *spa.ErrModulesMissing
+	if !errors.As(err, &missing) {
+		t.Fatalf("a renamed module did not stop the boot: %v", err)
+	}
+	if len(missing.Missing) != 1 || missing.Missing[0] != spa.RequiredAtStartup[2] {
+		t.Fatalf("reported %v missing, want exactly %s — the check must name the "+
+			"module that moved, not the ones that did not", missing.Missing, spa.RequiredAtStartup[2])
+	}
+	if !strings.Contains(err.Error(), string(spa.RequiredAtStartup[2])) {
+		t.Errorf("the message does not name the missing module: %v", err)
 	}
 }
