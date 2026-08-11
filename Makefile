@@ -42,6 +42,34 @@ LINT          := golangci-lint
 LINT_TARGETS  := $(shell $(GOCMD) list ./... | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
 
+# O linter e' COMPILADO a partir da versao fixada, com o Go DESTE repositorio,
+# em vez de baixado como binario pronto.
+#
+# O motivo e' medido, nao preferencia. O golangci-lint carrega um go/types
+# proprio, o da versao de Go com que o BINARIO foi compilado, e ele recusa
+# qualquer pacote que declare um Go mais novo:
+#
+#   Error: can't load config: the Go language version (go1.25) used to build
+#   golangci-lint is lower than the targeted Go version (1.26)
+#
+# Nenhuma release resolve isso: ate a v2.12.2 (a mais nova em 2026-05) declara
+# `go 1.25.0` no proprio go.mod, e os binarios publicados sao compilados com
+# 1.25.x. Como este modulo esta em Go 1.26 (exigencia do chromedp v0.16.0, o
+# motor do internal/wa-headless/), o binario pronto nao consegue nem carregar
+# o pacote — o type checker panica dentro da dependencia.
+#
+# GOTOOLCHAIN e' obrigatorio aqui: o go.mod do golangci-lint traz um
+# `toolchain go1.25.12`, e sem sobrepo-lo o `go install` baixa 1.25.12 e
+# reproduz exatamente a incompatibilidade. `go env GOVERSION` devolve o Go que
+# ESTE repositorio ja' selecionou a partir do seu proprio go.mod, entao local e
+# CI compilam o mesmo linter com o mesmo Go, sem repetir o numero da versao.
+#
+# A VERSAO do linter continua fixada: .golangci-baseline e' uma contagem
+# absoluta de issues, atada a esta release. Subir GOLANGCI_VERSION e atualizar
+# o baseline sao a mesma mudanca, no mesmo PR.
+GOLANGCI_VERSION := v2.12.2
+GOLANGCI_PKG     := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
 # Coverage ratchet
 COVERAGE_BASELINE_FILE := .coverage-baseline
 
@@ -133,6 +161,10 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 	 fi
 
 ##@ Quality
+
+lint-tool: ## Compila o golangci-lint fixado com o Go deste repositorio
+	GOTOOLCHAIN=$(shell $(GOCMD) env GOVERSION) $(GOCMD) install $(GOLANGCI_PKG)@$(GOLANGCI_VERSION)
+	@$$($(GOCMD) env GOPATH)/bin/golangci-lint --version
 
 lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	@$(LINT) run --issues-exit-code 0 $(LINT_TARGETS) 2>&1 | tee .lint.out

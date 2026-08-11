@@ -23,7 +23,33 @@ max_complexity=56
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 261 -> 262. Uma issue nova, do metodo GetManyLIDsForPNs portado de
 # 3ac8073. max_complexity inalterado (56).
-count=263
+count=267
+
+# tooling: golangci-lint v2.5.0 -> v2.12.2 (2026-08-11): 263 -> 267.
+#
+# +4 e' EFEITO DA FERRAMENTA, nao de codigo. Medido, nao deduzido: a v2.12.2
+# foi rodada em 4d2532e — o HEAD anterior a branch do wa-headless, ainda em
+# Go 1.25 e sem nenhuma linha de internal/wa-headless/ — e reportou 267.
+#
+#   4d2532e + v2.5.0   263 issues   max_complexity 56
+#   4d2532e + v2.12.2  267 issues   max_complexity 56
+#
+# Os 4 novos sao de codigo PRE-EXISTENTE que a versao antiga nao reportava:
+# 2 de `gofmt` (pkg/bootstrap/config.go, pkg/presentation/http/handlers/
+# handler_session_test.go) — a v2.12 roda formatters que a v2.5 nao rodava —
+# e 2 de staticcheck. Ficam registrados aqui e nao foram corrigidos: sao
+# anteriores a esta branch, conforme a politica do repo.
+#
+# max_complexity INALTERADO (56) nas duas versoes. A trava real nao se moveu,
+# e e' por isso que a atualizacao nao afrouxa nada: a contagem e' informativa
+# por desenho (ver o cabecalho deste arquivo).
+#
+# Por que a v2.12.2: a v2.5.0 nao consegue mais carregar este modulo. Ela
+# embute o go/types do Go com que foi compilada (1.25.1) e recusa pacotes que
+# declarem um Go mais novo; o modulo esta em 1.26 desde o chromedp v0.16.0.
+# Nenhuma release publicada e' compilada com 1.26 — nem a v2.12.2 — entao o
+# Makefile passou a COMPILAR a versao fixada com o Go do repositorio
+# (`make lint-tool`). Ver o comentario de GOLANGCI_VERSION no Makefile.
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
