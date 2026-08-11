@@ -185,6 +185,51 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
 ## Findings
 
+* **F-16 · o controle negativo conhecido também trava no `-mode wasession`
+  nativo — a instabilidade é do harness, não do `wa-session`.** MINI-LOOP
+  02.2/B1.4-NATIVE-CONTROL, investigativo, sem implementação. Complementa a
+  **F-15**.
+
+  ```
+  CONTROL PROFILE: internal/wa-headless/.lab/test-account-profile — o path
+    exato que produziu a evidência limpa de UNPAIRED em EVIDENCIA-SPA.md
+    (M1: QR aos ~15s; M2.3: socket_state=UNPAIRED aos 6,08s) e é o
+    `labProfileDir` de internal/wa-headless/realspa_test.go:51. Confirmado
+    existente e não estava em uso (sem SingletonLock, sem processo Chrome
+    aberto) antes deste loop.
+  KNOWN STATE: UNPAIRED, medido por TestRealSPAUnpairedBootObservation /
+    TestRealSPADisqualifyReadinessSignalsOnLogin contra a SPA real
+    (EVIDENCIA-SPA.md M1/M2) — não por este harness.
+  METHOD: mesmo mecanismo do F-15 — scripts/chromium-study -mode wasession,
+    mesmo Chrome 151.0.7922.76 local, mesmo user-agent, WA_SESSION_DIR
+    apontado para o profile controle acima em vez do `wa-session`.
+  RESULT (RUN 1, única execução): início 2026-08-11T15:51:09Z. Processos
+    Chrome confirmados abertos contra o profile controle (`ps aux`). Nenhuma
+    linha de log/stderr produzida. Interrompido deliberadamente
+    (TaskStop, processo da própria investigação) em 2026-08-11T15:54:22Z —
+    ~193s decorridos, ~60% além do prazo interno de 120s do Poll de
+    classificação que a função usa para decidir PAIRED/UNPAIRED. Confirmado
+    limpo depois: nenhum processo Chrome remanescente, sem SingletonLock.
+    Segunda execução NÃO realizada: o padrão observado (travamento
+    sustentado, sem sinal) já é o padrão DOMINANTE do F-15 (2 das 3
+    execuções contra o `wa-session` travaram da mesma forma; só 1
+    apresentou erro CDP rápido e transitório) — repetir não responderia a
+    nenhuma pergunta nova.
+  COMPARISON WITH WA-SESSION: idêntico ao padrão majoritário observado no
+    F-15 contra o `wa-session` (travamento além do deadline interno, zero
+    sinal de classificação produzido). Nenhuma das duas execuções teve
+    resultado diferente entre os dois profiles.
+  CONCLUSION: CONTROL_HARNESS_UNSTABLE. O profile com estado UNPAIRED
+    conhecido e medido independentemente também não pôde ser classificado
+    por este mecanismo neste ambiente. Isso aponta a causa para o CAMINHO —
+    `scripts/chromium-study` nativo em macOS, fora do container Linux para
+    o qual foi escrito e medido — e não para o estado do `wa-session`
+    especificamente. `wa-session` permanece UNKNOWN (não vira PAIRED nem
+    UNPAIRED por esta comparação: a ausência de classificação do controle
+    apenas remove a hipótese de que a falha contra `wa-session` fosse
+    explicada por algo específico daquele profile).
+  ```
+
 * **F-15 · o candidato `scripts/chromium-study/wa-session` não pôde ser
   classificado — nem PAIRED nem UNPAIRED — pelo único mecanismo existente que
   não arrisca exibir/capturar QR.** MINI-LOOP 02.1/B1.4-PRECHECK, investigativo,
@@ -326,6 +371,16 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
   (`-mode wasession`) não produziu veredito neste ambiente (nativo em
   macOS, fora do container Linux para o qual foi escrito). B-04 continua
   **AUTH_INTERACTION_REQUIRED**.
+
+  **Nota de controle** (MINI-LOOP 02.2/B1.4-NATIVE-CONTROL, ver **F-16**): o
+  mesmo mecanismo, contra o profile com UNPAIRED já medido de forma
+  independente (`.lab/test-account-profile`), também travou sem produzir
+  veredito. Isso descarta a hipótese de que a falha do F-15 fosse algo
+  específico do `wa-session` — é o harness nativo em macOS que não é
+  confiável para esta observação, não uma pista sobre o estado do profile.
+  `wa-session` segue **UNKNOWN**; o caminho que resolveria isso sem
+  ambiguidade é o ambiente Linux/Docker documentado, não tentado nestes dois
+  loops. B-04 continua **AUTH_INTERACTION_REQUIRED**.
 
 * ~~**B-01**~~ · **RESOLVIDO** em `e5ee22e` + `2aa304d`. Detalhe na FASE B0.
   Texto original abaixo, mantido porque a H2 do `HOUSEKEEP.md` o referencia.
