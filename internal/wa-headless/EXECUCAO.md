@@ -8,10 +8,10 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 06 — integração controlada com o SPA · **mecanismo pronto**
-Loop: —
-Objective: próximo é `refreshOwner` (CAP-04), que acrescenta ao inventário os
-módulos de identidade do dono e é a primeira leitura real do SPA
+CAP: 03 — LOOP B1.3, pareamento · **AUTH_INTERACTION_REQUIRED**
+Loop: B1.3
+Objective: um humano precisa ler o QR com a conta de TESTE. Nada de
+autenticação é automatizado, por desenho. Ver **B-04**.
 
 ## Completed
 
@@ -94,6 +94,39 @@ descreve ("força I/O ao contexto autenticado"). Exige o inventário de módulos
 do CAP-06. Descarta o modo de falha medido; não descarta UI montada sobre
 socket morto.
 
+### FASE B0 — resolver o blocker do linter · **DONE**
+
+| loop | objetivo | commit |
+|---|---|---|
+| B0.1–B0.4 | compilar o linter fixado com o Go do repo | `e5ee22e` |
+| — | corrigir as 14 issues desta branch | `2aa304d` |
+
+```
+GO VERSION        1.26 (go.mod); go1.26.0 local; CI via go-version-file
+OLD LINTER        v2.5.0, compilada com go1.25.1  -> não carrega o módulo
+NEW LINTER        v2.12.2, COMPILADA com go1.26.0 por `make lint-tool`
+OLD BASELINE      count=263  max_complexity=56
+NEW BASELINE      count=267  max_complexity=56
+NEW FINDINGS      +4, todos de código PRÉ-EXISTENTE (2 gofmt, 2 staticcheck),
+                  medidos rodando a v2.12.2 em 4d2532e
+REMOVED FINDINGS  nenhum
+CONFIG CHANGES    nenhuma em .golangci.yml — nenhuma regra reduzida
+```
+
+**B-01 = CLOSED.** O mesmo gate roda local e no CI, com a versão nova, sem
+reduzir exigência. As 14 issues introduzidas por esta branch foram
+corrigidas, não escondidas: a contagem voltou a 267 exatos.
+
+### FASE B1 — conta de teste e SPA real · **parcial**
+
+| loop | objetivo | commit |
+|---|---|---|
+| B1.1 | observar o SPA real com perfil vazio | `946dfcb` |
+| B1.2 | seletor de QR independente de idioma | `5158077` |
+| B1.3 | mecanismo de pareamento (headful) | `c8691dd` |
+
+Evidência congelada em `EVIDENCIA-SPA.md`.
+
 ### CAP-06 — integração controlada com o SPA · **mecanismo pronto**
 
 | loop | objetivo | commit |
@@ -128,6 +161,11 @@ apenas — aquele repo é da sessão C0/C1).
   seletor de QR ainda casam com a marcação real. *Done quando*: as classes
   saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
   (fecha **H4**).
+* **LOOP B1.4** (bloqueado por B-04) — validar `#pane-side` contra sessão
+  pareada de verdade. *Done quando*: `READY` sai correto e o seletor deixa de
+  ser hipótese.
+* **LOOP B1.5** (bloqueado por B-04) — restart/restore sem QR, medindo parada,
+  saída do processo e tempo até `app-ready`.
 * **LOOP 04.3** — `refreshOwner`: primeira leitura real do SPA (msisdn,
   pushname, avatar do dono), acrescentando ao inventário os módulos que ela
   exige. *Done quando*: os campos saem contra a página, e o inventário cresce
@@ -192,6 +230,13 @@ apenas — aquele repo é da sessão C0/C1).
   `actionDrop`. ARMADILHAS §1.
 
 ## Blockers
+
+* **B-04 · AUTH_INTERACTION_REQUIRED — o QR precisa ser lido por um humano.**
+  O mecanismo está pronto e commitado; a leitura não é automatizável e não
+  deve ser. Comando e instruções no relatório desta parada.
+
+* ~~**B-01**~~ · **RESOLVIDO** em `e5ee22e` + `2aa304d`. Detalhe na FASE B0.
+  Texto original abaixo, mantido porque a H2 do `HOUSEKEEP.md` o referencia.
 
 * **B-01 · o gate de `make lint` está quebrado nesta branch.** O `chromedp
   v0.16.0` exige Go 1.26; o `golangci-lint v2.5.0` fixado no `ci.yml:37` foi
