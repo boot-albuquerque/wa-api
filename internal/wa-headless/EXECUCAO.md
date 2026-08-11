@@ -185,6 +185,62 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
 ## Findings
 
+* **F-15 · o candidato `scripts/chromium-study/wa-session` não pôde ser
+  classificado — nem PAIRED nem UNPAIRED — pelo único mecanismo existente que
+  não arrisca exibir/capturar QR.** MINI-LOOP 02.1/B1.4-PRECHECK, investigativo,
+  sem implementação.
+
+  ```
+  PROFILE: scripts/chromium-study/wa-session/profile
+  RESULT: UNKNOWN (harness indisponível de forma confiável neste ambiente)
+  METHOD: scripts/chromium-study -mode wasession (RunWASession, p4b_wasession.go),
+    o único dos três modos do Track J que NÃO pode exibir QR — comentário do
+    próprio código em main.go: "Track J. Three separate modes on purpose:
+    only `waopen` can display a QR." Invocado via os mecanismos JÁ existentes
+    no código, sem alteração: env var WA_SESSION_DIR (p4_wa.go:73, default
+    "/session/profile") apontado para o profile candidato, e CHROME_BIN
+    (p3_launcher.go:87, default "/usr/bin/chromium") apontado para o Chrome
+    151.0.7922.76 local. UA explícito reaproveitado de
+    internal/wa-headless/realspa_test.go's `realSPAUserAgent` (mesmo texto,
+    nenhuma variável nova). Três execuções, `-soak 3s` (mínimo):
+      1ª: falhou em segundos com erro CDP "Inspected target navigated or
+          closed (-32000)" — não é o "session not restored" limpo que a
+          função produz depois do Poll de 120s; é um erro de outra camada.
+      2ª: travou além do timeout de 200s da própria ferramenta de execução
+          (Bash), sem NENHUMA linha de log (nem stderr), e foi morta pelo
+          timeout — nenhum processo Chrome sobrou ligado a este profile
+          depois.
+      3ª: travou por mais de 4 minutos sem produzir nenhuma linha de log —
+          muito além do prazo de 120s do Poll interno que decidiria
+          PAIRED/UNPAIRED — e foi interrompida deliberadamente
+          (TaskStop) por ser o processo da própria investigação, não um
+          processo de terceiro. Confirmado limpo depois: nenhum processo
+          Chrome remanescente no profile, SingletonLock ausente.
+  SIGNALS: nenhum sinal de classificação chegou a ser produzido em nenhuma
+    das três tentativas — nem "session restored in Xs" (que exigiria
+    #pane-side), nem o erro limpo "session not restored: ... deadline
+    exceeded" que a função emite depois de 120s sem #pane-side (evidência de
+    QR/tela de login). O harness trava ou falha ANTES de alcançar o próprio
+    Poll de classificação.
+  CONCLUSION: este harness (scripts/chromium-study) foi escrito e só foi
+    medido dentro de container Linux com cgroup v2 e chamado via `docker run`
+    (README.md, RELATORIO-FASE-4B.md, RELATORIO-FASE-6.md) — nunca nativo em
+    macOS. Rodar nativo aqui expôs instabilidade real (uma falha rápida, dois
+    travamentos), não um veredito. Isso é limitação do AMBIENTE de execução
+    deste mecanismo específico, não uma medição do estado do profile.
+    Conforme a REGRA DE CLASSIFICAÇÃO deste loop, UNKNOWN não pode virar
+    PAIRED nem UNPAIRED — fica UNKNOWN.
+  IMPACT ON B-04: nenhum. B-04 continua **aberto e não resolvido**: não há
+    evidência comportamental, nem a favor nem contra, de que o profile
+    candidato está pareado. O caminho que RESOLVERIA isto sem ambiguidade —
+    rodar o mesmo `-mode wasession` (ou o modo Docker documentado, via
+    `docker run ... chromium-study:p6/p4`) dentro do container Linux para o
+    qual o harness foi escrito — está fora do escopo deste mini-loop
+    investigativo (envolveria compilar e rodar uma imagem Docker, uma ação
+    maior do que a checagem rápida que este loop pediu) e fica registrado
+    como o próximo passo, não executado aqui.
+  ```
+
 * **F-12 · o inventário de módulos NÃO é sinal de prontidão.** `window.require`
   e os 8 módulos do `RequiredAtStartup` resolvem em T+0,01s na tela de LOGIN.
   Eu ia usá-los como metade da condição de READY. `EVIDENCIA-SPA.md` M2.1.
@@ -262,6 +318,14 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
   Sem sessão, a pergunta do B1.4 não tem resposta e eu não vou inventá-la.
   Comando de pareamento no relatório desta parada.
+
+  **Nota sobre o candidato `scripts/chromium-study/wa-session`** (MINI-LOOP
+  02.1/B1.4-PRECHECK): investigado antes de pedir novo QR, para ver se esse
+  perfil dispensava a interação humana. Não dispensou — ver **F-15**. O único
+  mecanismo existente que observa sem risco de expor/capturar QR
+  (`-mode wasession`) não produziu veredito neste ambiente (nativo em
+  macOS, fora do container Linux para o qual foi escrito). B-04 continua
+  **AUTH_INTERACTION_REQUIRED**.
 
 * ~~**B-01**~~ · **RESOLVIDO** em `e5ee22e` + `2aa304d`. Detalhe na FASE B0.
   Texto original abaixo, mantido porque a H2 do `HOUSEKEEP.md` o referencia.
