@@ -19,7 +19,13 @@
 // Writing rule: this file holds aliases and delegation only. Anything that
 // needs a body lives in core/ or in capabilities/.
 //
-// The facade is empty today because the tree has no behavior yet: ADR-0006 is
-// still `proposed`, and the skeleton exists to fix the SHAPE before the code
-// arrives, not to pretend the code is there.
+// The facade is still empty, but the tree is no longer: CAP-02 landed the
+// foundation — deadline policy, runner, operation tracing, clean CDP shutdown
+// and target priming, in engine/ and observability/. Nothing outside this tree
+// consumes it yet, so there is nothing to re-export; the first alias belongs
+// with the first capability that has a consumer.
+//
+// gate_test.go holds the module-wide rules, and it is the enforcement this
+// comment used to only ask for: the driver stays inside engine/, no wait keeps
+// its clock in the page, and priming never happens inside a bounded operation.
 package waheadless
