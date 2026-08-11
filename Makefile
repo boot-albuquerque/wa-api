@@ -81,7 +81,11 @@ coverage-html: coverage ## Generate HTML coverage report
 	@echo "Coverage report: $(COVERAGE_HTML)"
 
 coverage-report: ## Cobertura por pacote com DEDUP DE BLOCOS + total que bate com go tool cover
-	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 || { \
+	   echo "FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):"; \
+	   grep -E '^(--- FAIL|FAIL|panic:)' $(COVERAGE_OUT).log || cat $(COVERAGE_OUT).log; \
+	   exit 1; \
+	 }
 	@$(GOCMD) run ./cmd/logcov -coverprofile=$(COVERAGE_OUT)
 	@echo ""
 	@echo "NOTA: o total acima usa deduplicacao de blocos por chave arquivo:range,"
@@ -102,7 +106,11 @@ coverage-domain: ## Show domain + application coverage
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
 
 coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
-	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 || { \
+	   echo "FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):"; \
+	   grep -E '^(--- FAIL|FAIL|panic:)' $(COVERAGE_OUT).log || cat $(COVERAGE_OUT).log; \
+	   exit 1; \
+	 }
 	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
 	 if [ -z "$$pct" ]; then \
 	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \

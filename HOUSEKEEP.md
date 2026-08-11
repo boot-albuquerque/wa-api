@@ -4626,9 +4626,21 @@ que não toca em nada do outbox.
 
 **Onde**: `pkg/bootstrap/dispatch_outbox_test.go`, por volta da linha 285.
 
-**Problema**: o teste depende de relógio real (`DueAt: time.Now().UTC().Add(-time.Minute)`)
-e da varredura do sweeper, que roda a cada 1s. Sob a carga do `make check`
-completo — todos os pacotes compilando e rodando — a janela escapa.
+~~**Problema**: o teste depende de relógio real
+(`DueAt: time.Now().UTC().Add(-time.Minute)`) e da varredura do sweeper, que
+roda a cada 1s.~~
+
+**ESSE DIAGNÓSTICO ESTAVA ERRADO, nos dois pontos**, e eu o escrevi a partir de
+um `grep` que mostrou `time.Now()` — sem ler o teste. O `DueAt` no passado é
+determinístico, e a varredura é chamada EXPLICITAMENTE (`sweepOutboxOnce`), não
+pelo tick de 1s.
+
+**A causa real**: `esperarOutboxVazio` (`dispatch_outbox_test.go:218`) tinha um
+prazo fixo de 3s contando `PendingCount`, mas `sweepOutboxOnce` apenas
+DESPACHA a entrega — `dispatchGo("outbox-retry", ...)` em
+`dispatch_outbox.go:235`. Quem liquida a linha é o worker do pool. Contar antes
+de o worker terminar mede um estado intermediário, e o prazo virava corrida
+contra a carga da máquina.
 
 **Evidência**: 1 falha em 1 execução do `make check`; depois **8/8 verde** (5×
 isolado, 3× na suíte completa do pacote). Não reproduzível sob demanda.
@@ -4641,9 +4653,27 @@ próxima falha REAL vai ser tratada como esta.
 (`m.now func() time.Time`), e disparar a varredura explicitamente em vez de
 esperar o tick. O padrão já existe no repositório.
 
-**Status**: **não corrigido** — achado de lado, e não é regressão: confirmei
-que a falha não vem da mudança da F109 rodando o pacote inteiro três vezes e o
-teste isolado cinco, todas verdes.
+**Status**: **CORRIGIDO (2026-08-10)**, as duas coisas.
+
+**1. A espera virou determinística.** `esperarOutboxVazio` passou a drenar o
+pool de despacho antes de contar, com o helper que já existia no repositório
+(`esperarDespachoDrenar`, que lê `dispatch.Metrics()`). O prazo de 3s continua,
+mas como rede de segurança e não como mecanismo: se a liquidação não acontecer
+nem depois de o pool drenar, é defeito de verdade e o teste deve falhar.
+
+**2. O gate deixou de ser mudo.** `coverage-gate` não manda mais a saída dos
+testes para `/dev/null`; captura em `coverage.out.log` (já coberto por `*.log`
+no `.gitignore`) e imprime as linhas de falha quando falha.
+
+**Controle executado**: acrescentei um teste que falha de propósito e rodei
+`make coverage-gate`. Antes sairia só `Error 1`. Agora sai:
+
+```
+FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):
+--- FAIL: TestControleTemporarioF110 (0.00s)
+```
+
+Teste temporário removido em seguida.
 
 ### Segunda ocorrência (mesma data), e um achado maior junto
 

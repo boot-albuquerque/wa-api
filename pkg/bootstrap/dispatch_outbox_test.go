@@ -217,6 +217,20 @@ func inserirUsuario(t *testing.T, db *sqlx.DB, id string, chave []byte) {
 // em vez de falhá-lo, e teste pendurado não reporta nada (ARMADILHAS 16).
 func esperarOutboxVazio(t *testing.T, repo *dbpkg.WebhookOutboxRepository, motivo string) {
 	t.Helper()
+
+	// F110. Drenar o pool ANTES de contar é o que torna esta espera
+	// determinística. `sweepOutboxOnce` apenas DESPACHA a entrega
+	// (`dispatchGo("outbox-retry", ...)`, dispatch_outbox.go:235); quem liquida
+	// a linha é o worker. Contar antes de o worker terminar mede um estado
+	// intermediário, e o prazo de 3s abaixo virava uma corrida contra a carga
+	// da máquina — 2 falhas em ~6 execuções do `make check`, nenhuma
+	// reproduzível isolada.
+	//
+	// O prazo continua como rede de segurança, não como mecanismo: se a
+	// liquidação não acontecer nem depois de o pool drenar, é defeito de
+	// verdade e o teste deve falhar.
+	esperarDespachoDrenar(t)
+
 	prazo := time.After(3 * time.Second)
 	for {
 		n, err := repo.PendingCount(context.Background())
