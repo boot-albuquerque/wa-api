@@ -28,8 +28,20 @@ type fakeBrowser struct {
 	received chan cdpMessage
 }
 
+// action is what the fake does with a command it receives. Three outcomes,
+// because the real browser has three: it answers, it stays silent, or — for
+// Browser.close specifically — it answers and then drops the socket, and a
+// dropped socket with no reply is the case a naive client hangs on forever.
+type action int
+
+const (
+	actionReply action = iota
+	actionSilent
+	actionDrop
+)
+
 // reply describes what the fake does with a command it receives.
-type replyFunc func(cmd cdpMessage) (cdpMessage, bool)
+type replyFunc func(cmd cdpMessage) (cdpMessage, action)
 
 func startFakeBrowser(t *testing.T, reply replyFunc) *fakeBrowser {
 	t.Helper()
@@ -53,9 +65,13 @@ func startFakeBrowser(t *testing.T, reply replyFunc) *fakeBrowser {
 				return // Chromium would reject; so does the double
 			}
 			f.received <- m
-			res, send := reply(m)
-			if !send {
+			res, act := reply(m)
+			switch act {
+			case actionSilent:
 				continue
+			case actionDrop:
+				c.CloseNow()
+				return
 			}
 			b, _ := json.Marshal(res)
 			if err := c.Write(r.Context(), websocket.MessageText, b); err != nil {
@@ -72,8 +88,8 @@ func (f *fakeBrowser) wsURL() string {
 }
 
 // echoOK is the well-behaved browser: it acknowledges the command it was sent.
-func echoOK(cmd cdpMessage) (cdpMessage, bool) {
-	return cdpMessage{ID: cmd.ID, Result: json.RawMessage(`{}`)}, true
+func echoOK(cmd cdpMessage) (cdpMessage, action) {
+	return cdpMessage{ID: cmd.ID, Result: json.RawMessage(`{}`)}, actionReply
 }
 
 func TestCloseBrowserSendsBrowserClose(t *testing.T) {
@@ -102,8 +118,8 @@ func TestCloseBrowserSendsBrowserClose(t *testing.T) {
 // sees would pass every other test here and would, against a live browser,
 // read an unrelated reply as confirmation of the shutdown.
 func TestCallIgnoresRepliesWithAnotherID(t *testing.T) {
-	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, bool) {
-		return cdpMessage{ID: cmd.ID + 1000, Result: json.RawMessage(`{}`)}, true
+	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, action) {
+		return cdpMessage{ID: cmd.ID + 1000, Result: json.RawMessage(`{}`)}, actionReply
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -116,8 +132,8 @@ func TestCallIgnoresRepliesWithAnotherID(t *testing.T) {
 }
 
 func TestCallSurfacesACDPRejection(t *testing.T) {
-	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, bool) {
-		return cdpMessage{ID: cmd.ID, Error: &cdpError{Code: -32000, Message: "not allowed"}}, true
+	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, action) {
+		return cdpMessage{ID: cmd.ID, Error: &cdpError{Code: -32000, Message: "not allowed"}}, actionReply
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -135,8 +151,8 @@ func TestCallSurfacesACDPRejection(t *testing.T) {
 // budget. A fixed internal timeout would be a deadline the call site cannot
 // see, which is the shape of defect the DeadlinePolicy exists to remove.
 func TestCallIsBoundedByTheCallersContext(t *testing.T) {
-	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, bool) {
-		return cdpMessage{}, false // accepted, never answered
+	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, action) {
+		return cdpMessage{}, actionSilent
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -158,8 +174,8 @@ func TestCallIsBoundedByTheCallersContext(t *testing.T) {
 // that will never come. This is the ordinary case for Browser.close, and it is
 // why the caller decides the outcome by watching the process, not this error.
 func TestCallFailsWhenTheConnectionDropsBeforeTheReply(t *testing.T) {
-	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, bool) {
-		return cdpMessage{}, false
+	f := startFakeBrowser(t, func(cmd cdpMessage) (cdpMessage, action) {
+		return cdpMessage{}, actionDrop // the browser is going down; no reply comes
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -167,9 +183,6 @@ func TestCallFailsWhenTheConnectionDropsBeforeTheReply(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- CloseBrowserViaCDP(ctx, f.wsURL()) }()
-
-	<-f.received
-	f.srv.CloseClientConnections()
 
 	select {
 	case err := <-done:
