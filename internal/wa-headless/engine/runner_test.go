@@ -17,6 +17,7 @@ var testPolicy = DeadlinePolicy{
 	StateProbe:    40 * time.Millisecond,
 	RecoveryProbe: 50 * time.Millisecond,
 	Shutdown:      340 * time.Millisecond,
+	Boot:          350 * time.Millisecond,
 }
 
 // The degenerate implementation of Do is `return f(parent)` — it passes any

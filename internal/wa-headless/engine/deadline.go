@@ -32,6 +32,15 @@ const (
 	OpStateProbe    OpKind = "StateProbe"
 	OpRecoveryProbe OpKind = "RecoveryProbe"
 	OpShutdown      OpKind = "Shutdown"
+	// OpBoot is the one class that is not a remote operation on a page: it is
+	// waiting for a process to answer on its DevTools endpoint.
+	//
+	// It lives here anyway, because the discipline is the same one and the
+	// point of the policy is that budgets have ONE home. A boot with no
+	// deadline hangs exactly like a CDP call with no deadline — the study lost
+	// runs to both — and a launcher carrying its own private timeout would be a
+	// budget nobody can see from here.
+	OpBoot OpKind = "Boot"
 )
 
 // DeadlinePolicy is the deadline of each class of remote operation.
@@ -51,6 +60,7 @@ type DeadlinePolicy struct {
 	StateProbe    time.Duration `json:"state_probe"`
 	RecoveryProbe time.Duration `json:"recovery_probe"`
 	Shutdown      time.Duration `json:"shutdown"`
+	Boot          time.Duration `json:"boot"`
 }
 
 // DefaultDeadlines carries the values validated across phases 4C, 5 and 6 of
@@ -64,6 +74,10 @@ var DefaultDeadlines = DeadlinePolicy{
 	StateProbe:    5 * time.Second,
 	RecoveryProbe: 2 * time.Second,
 	Shutdown:      10 * time.Second,
+	// The spike measured 6.1-8.5s to reach a usable SPA pre-login; answering on
+	// /json/version happens well before that. 30s is headroom for a cold page
+	// cache on a loaded host, not an expectation.
+	Boot: 30 * time.Second,
 }
 
 // For returns the deadline of a class.
@@ -88,6 +102,8 @@ func (p DeadlinePolicy) For(k OpKind) time.Duration {
 		return p.RecoveryProbe
 	case OpShutdown:
 		return p.Shutdown
+	case OpBoot:
+		return p.Boot
 	}
 	return p.Evaluate
 }

@@ -11,7 +11,7 @@ import (
 // no test knows about is an operation class whose deadline nobody checked.
 var allOpKinds = []OpKind{
 	OpNavigate, OpQuery, OpEvaluate, OpAction,
-	OpStateProbe, OpRecoveryProbe, OpShutdown,
+	OpStateProbe, OpRecoveryProbe, OpShutdown, OpBoot,
 }
 
 // The degenerate policy — every field zero — is what "the code does nothing"
@@ -41,6 +41,7 @@ func TestEveryOpKindReadsItsOwnField(t *testing.T) {
 		StateProbe:    5 * time.Second,
 		RecoveryProbe: 6 * time.Second,
 		Shutdown:      7 * time.Second,
+		Boot:          8 * time.Second,
 	}
 	want := map[OpKind]time.Duration{
 		OpNavigate:      1 * time.Second,
@@ -50,6 +51,7 @@ func TestEveryOpKindReadsItsOwnField(t *testing.T) {
 		OpStateProbe:    5 * time.Second,
 		OpRecoveryProbe: 6 * time.Second,
 		OpShutdown:      7 * time.Second,
+		OpBoot:          8 * time.Second,
 	}
 	for _, k := range allOpKinds {
 		if got := p.For(k); got != want[k] {
@@ -72,8 +74,8 @@ func TestEveryOpKindIsEnumerated(t *testing.T) {
 		}
 		seen[k] = true
 	}
-	if len(allOpKinds) != 7 {
-		t.Fatalf("allOpKinds has %d entries; deadline.go declares 7 classes — "+
+	if len(allOpKinds) != 8 {
+		t.Fatalf("allOpKinds has %d entries; deadline.go declares 8 classes — "+
 			"add the new class here and give it a deadline", len(allOpKinds))
 	}
 }
