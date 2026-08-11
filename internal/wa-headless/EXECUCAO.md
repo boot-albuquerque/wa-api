@@ -8,11 +8,10 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 03 — sessão sobe e classifica
-Loop: 03.1
-Objective: um `BrowserProcess` real (lançar Chromium com perfil persistente,
-`WebSocketURL`/`WaitExit`/`SignalStop`), fechando a interface que a CAP-02
-deixou sem implementação
+CAP: 03 — sessão sobe e classifica · **código completo, verificação final BLOQUEADA**
+Loop: —
+Objective: a última asserção da CAP-03 ("contra conta real, o estado correto é
+reportado") exige parear/abrir uma sessão do WhatsApp. Ver **B-03**.
 
 ## Completed
 
@@ -49,6 +48,34 @@ Invariantes do handoff cobertas por esta CAP: **2** (shutdown por
 sempre registrado), **5** e **6** (prazo do lado Go em todo caminho CDP),
 **7** (nenhuma espera com relógio na página).
 
+### CAP-03 — sessão sobe e classifica · **parcial**
+
+| loop | objetivo | commit |
+|---|---|---|
+| 03.1 | conjunto de flags de lançamento | `aaf6fe9` |
+| 03.2 | reclaim de `Singleton` só quando provadamente obsoleto | `726d465` |
+| 03.3 | isenção de sinal por FUNÇÃO, não por contagem | `093cf09` |
+| 03.4 | `Browser`: handle de processo (`WaitExit`/`SignalStop`/`PID`) | `4b9b14b` |
+| 03.5 | gate distingue sinal 0; `ProcessAlive` | `cdee0e1` |
+| 03.6 | `Launcher`: reclaim → exec → esperar endpoint | `1c02445` |
+| 03.7 | classificador de página sem ler mensagens | `dd65f24` |
+| 03.8 | `Tab` + cadeia ponta a ponta contra Chrome real | `fac7fa1` |
+
+**Verificado contra browser real** (Chrome local, páginas falsas em
+`httptest`, nunca `web.whatsapp.com`):
+
+```
+TestBrowserChainLaunchesNavigatesAndClassifies  PASS   stopped_via=browser.close
+TestBrowserChainReportsAWedgedPageAsUnresponsive PASS  (for(;;) na thread principal)
+```
+
+Invariantes cobertas por esta CAP: **11** (liveness por `Evaluate` com prazo),
+**14** (zero PII — página pronta nunca tem o texto lido), **15** (reclaim no
+boot). A **12** (toda morte com causa classificada) está parcial: as classes
+existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
+
+**Falta para fechar**: a asserção "contra conta real". Ver **B-03**.
+
 ### CAP-01 — inventário real de paridade · **DONE**
 
 | loop | objetivo | resultado |
@@ -63,18 +90,30 @@ apenas — aquele repo é da sessão C0/C1).
 
 ## Next
 
-* **LOOP 03.1** — `BrowserProcess` concreto: lançar Chromium com perfil
-  persistente e reclaim de `Singleton`, implementando a interface que a CAP-02
-  definiu. *Done quando*: sobe e desce um Chromium real com
-  `stopped_via=browser.close`, e a invariante 15 (reclaim no boot) está travada
-  em teste.
-* **LOOP 03.2** — navegar até o alvo e classificar a página
-  (`qr` / `ready` / `login_required` / `unresponsive`), tudo sob `Runner.Do`.
-  *Done quando*: a classificação é derivada de sinal estrutural + `Evaluate`
-  com prazo, e um alvo que não responde sai como `unresponsive`, nunca como
-  saudável.
+* **LOOP 03.9** (bloqueado por B-03) — subir a cadeia contra o perfil pareado
+  em `scripts/chromium-study/wa-session` e confirmar que `#pane-side` e o
+  seletor de QR ainda casam com a marcação real. *Done quando*: as classes
+  saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
+  (fecha **H4**).
+* **LOOP 04.1** — `livenessCheck`: sondagem periódica por `Evaluate` com
+  prazo, latência registrada (não só o booleano), e `UNRESPONSIVE` após N
+  estouros seguidos. É a primeira das seis capacidades da matriz de paridade e
+  não depende de conta real para ser escrita.
 
 ## Findings
+
+* **F-08 · guarda duplicada é camuflagem, não defesa — TRÊS vezes no mesmo
+  dia.** No `Launcher` (recusa de URL vazia em `readEndpoint` e no laço), no
+  `spa` (erro de sonda em `Classify` e em `ClassifyProbe`) e no gate de
+  shutdown (contagem de marcadores como proxy da regra real). Em todos, o
+  controle negativo passou verde porque apagar UMA das duas não mudava
+  comportamento. Padrão a procurar em toda revisão de diff: **se remover a
+  guarda não quebra nada, ela não está sendo testada — e provavelmente a outra
+  também não.**
+* **F-09 · o dublê tem de imitar o CONTRATO, não só a forma.** O falso
+  avaliador codificava em JSON duas vezes; o `chromedp.Evaluate` real também —
+  confirmado por medição contra Chrome, não por leitura. A convergência foi
+  sorte: o teste de integração é que provou o contrato.
 
 * **F-04 · a fenda não é o `wa-api-adapter.ts` — é a superfície HTTP do
   `wa-api`.** O `wa-api` já é `AdapterKind` de primeira classe
@@ -124,6 +163,20 @@ apenas — aquele repo é da sessão C0/C1).
   **Não bloqueia a CAP-01**, que é investigação. Bloqueia o merge.
   Decisão humana necessária: subir o linter junto do `.golangci-baseline` num
   PR próprio, ou voltar para `chromedp v0.14.2` + Go 1.25.
+
+* **B-03 · a verificação final da CAP-03 precisa de sessão real.** Toda a
+  cadeia está provada contra Chrome de verdade, mas contra páginas que EU
+  escrevi. O que falta é confirmar que a marcação real do WhatsApp ainda casa
+  com `#pane-side` e com `canvas[aria-label*="Scan"]` — e isso exige abrir o
+  perfil pareado, ou exibir um QR.
+
+  A restrição desta iniciativa é explícita: **avisar antes de precisar exibir o
+  QR e esperar confirmação**. Nada aqui foi executado contra conta real.
+
+  Decisão humana necessária: autorizar abrir o perfil pareado em
+  `scripts/chromium-study/wa-session` (somente leitura, sem envio), ou parear
+  um novo por QR. Enquanto isso não acontece, a CAP-03 fica **parcial** e o
+  trabalho segue pela CAP-04, que não depende disso para ser escrita.
 
 * **B-02 · `make coverage-gate` falha localmente** (`go: no such tool
   "covdata"`). **Pré-existente e não atribuível a este trabalho**: nem
