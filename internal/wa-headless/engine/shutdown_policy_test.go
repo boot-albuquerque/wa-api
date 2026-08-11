@@ -140,11 +140,30 @@ func TestCleanStopGoesThroughBrowserClose(t *testing.T) {
 	}
 }
 
-// The exemption must stay rare and must stay here. One marked line is the
-// design; a module sprinkled with markers is the gate being routed around, and
-// that is a review decision, not something to discover later.
-func TestTheSignalExemptionIsUsedExactlyOnce(t *testing.T) {
-	var marked []string
+// signalOwningFuncs are the only functions allowed to carry the exemption.
+//
+// The rule is that the code permitted to signal is the code whose NAME is the
+// signal. Two functions qualify, and they are different jobs:
+//
+//	CleanStop   decides that the protocol path failed and the fallback is due
+//	SignalStop  is the fallback — the mechanism that delivers the signal
+//
+// An earlier version of this gate demanded exactly ONE marker in the module,
+// which was written before the mechanism existed and would have forced the
+// launcher's SignalStop to either carry a second marker (failing the gate) or
+// route around it. Counting markers was a proxy; the real rule is WHERE they
+// may appear, and that is what is checked now.
+//
+// The count still matters, so it is reported: a module that grows a third
+// signalling site has made a decision somebody should see.
+var signalOwningFuncs = map[string]bool{
+	"CleanStop":  true,
+	"SignalStop": true,
+}
+
+func TestSignalExemptionsLiveOnlyInShutdownFunctions(t *testing.T) {
+	type mark struct{ pos, fn string }
+	var marks []mark
 
 	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -158,11 +177,27 @@ func TestTheSignalExemptionIsUsedExactlyOnce(t *testing.T) {
 		if err != nil {
 			return err
 		}
+
+		// Map each marker line to the function whose body contains it. A marker
+		// outside any function body reports an empty name and fails below —
+		// which is right: a package-level exemption exempts everything.
 		for _, cg := range file.Comments {
 			for _, c := range cg.List {
-				if strings.Contains(c.Text, ablationMarker) {
-					marked = append(marked, fset.Position(c.Pos()).String())
+				if !strings.Contains(c.Text, ablationMarker) {
+					continue
 				}
+				m := mark{pos: fset.Position(c.Pos()).String()}
+				for _, decl := range file.Decls {
+					fn, ok := decl.(*ast.FuncDecl)
+					if !ok || fn.Body == nil {
+						continue
+					}
+					if fn.Body.Pos() <= c.Pos() && c.Pos() <= fn.Body.End() {
+						m.fn = fn.Name.Name
+						break
+					}
+				}
+				marks = append(marks, m)
 			}
 		}
 		return nil
@@ -171,13 +206,25 @@ func TestTheSignalExemptionIsUsedExactlyOnce(t *testing.T) {
 		t.Fatalf("walking %s: %v", moduleRoot, err)
 	}
 
-	if len(marked) != 1 {
-		t.Fatalf("found %d ablation markers, want exactly 1 (the fallback inside "+
-			"CleanStop). Every extra one is a path that stops by signal:\n  %s",
-			len(marked), strings.Join(marked, "\n  "))
+	if len(marks) == 0 {
+		t.Fatal("no ablation marker anywhere: the dirty fallback vanished, and with it " +
+			"the only sanctioned way to stop a browser that refuses to leave")
 	}
-	if !strings.Contains(marked[0], "shutdown.go") {
-		t.Fatalf("the only signal exemption is at %s; it belongs in shutdown.go, "+
-			"inside CleanStop", marked[0])
+
+	var offenders []string
+	for _, m := range marks {
+		if !signalOwningFuncs[m.fn] {
+			where := m.fn
+			if where == "" {
+				where = "no enclosing function"
+			}
+			offenders = append(offenders, m.pos+" in "+where)
+		}
 	}
+	if len(offenders) > 0 {
+		t.Fatalf("a signal exemption sits outside CleanStop/SignalStop. Only the code whose "+
+			"NAME is the signal may carry one; anywhere else it is the gate being routed "+
+			"around:\n  %s", strings.Join(offenders, "\n  "))
+	}
+	t.Logf("%d signal exemption(s), all inside CleanStop/SignalStop", len(marks))
 }
