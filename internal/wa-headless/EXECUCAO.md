@@ -8,10 +8,11 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 03 — LOOP B1.3, pareamento · **AUTH_INTERACTION_REQUIRED**
-Loop: B1.3
-Objective: um humano precisa ler o QR com a conta de TESTE. Nada de
-autenticação é automatizado, por desenho. Ver **B-04**.
+CAP: 03 — LOOP B1.4, prontidão · **AUTH_INTERACTION_REQUIRED**
+Loop: B1.4
+Objective: `#pane-side` significa READY? O instrumento está pronto e os
+candidatos fáceis foram eliminados. Falta a sessão pareada — **B-04 continua
+aberto, agora MEDIDO**.
 
 ## Completed
 
@@ -124,6 +125,7 @@ corrigidas, não escondidas: a contagem voltou a 267 exatos.
 | B1.1 | observar o SPA real com perfil vazio | `946dfcb` |
 | B1.2 | seletor de QR independente de idioma | `5158077` |
 | B1.3 | mecanismo de pareamento (headful) | `c8691dd` |
+| B1.4/B1.4a | instrumento de prontidão + eliminação de candidatos | `ca61ebb` |
 | — | gate da REGRA DE DADOS na fronteira do SPA | `ea62bed` |
 
 Evidência congelada em `EVIDENCIA-SPA.md`.
@@ -162,6 +164,9 @@ apenas — aquele repo é da sessão C0/C1).
   seletor de QR ainda casam com a marcação real. *Done quando*: as classes
   saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
   (fecha **H4**).
+**O que foi possível sem sessão já foi feito** (instrumento + eliminação de
+candidatos, `ca61ebb`). Daqui em diante tudo exige o pareamento.
+
 **Trabalho seguro esgotado.** Tudo que resta — B1.4, B1.5, 04.3A, CAP-05,
 CAP-06, CAP-07 — exige a sessão pareada. O último item independente foi o gate
 da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
@@ -179,6 +184,18 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
   existe; falta expor pelo contrato, e isso é CAP-09.
 
 ## Findings
+
+* **F-12 · o inventário de módulos NÃO é sinal de prontidão.** `window.require`
+  e os 8 módulos do `RequiredAtStartup` resolvem em T+0,01s na tela de LOGIN.
+  Eu ia usá-los como metade da condição de READY. `EVIDENCIA-SPA.md` M2.1.
+* **F-13 · o socket se nomeia.** `WAWebSocketModel.__x_state` transiciona
+  `OPENING` → `PAIRING` → `UNPAIRED` sem sessão. É veredito da Meta, não
+  interpretação nossa, e é o melhor candidato a discriminador de READY junto
+  com a presença de `__x_wid`. M2.2 e M2.3.
+* **F-14 · instrumento também sofre da armadilha do dublê permissivo.** A
+  primeira sonda aceitava `ref` como prova de conexão viva — e `ref` é o campo
+  do próprio QR, então ela ficava verdadeira na tela que deveria excluir. Só
+  apareceu porque o controle negativo foi executado contra o alvo real.
 
 * **F-10 · o `spa/doc.go` cita um commit do wwebjs que não é o que roda.** Ele
   aponta `main @ 942d236a11ad (2026-07-27)`; o produto tem `1.34.7` instalado.
@@ -236,9 +253,15 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
 ## Blockers
 
-* **B-04 · AUTH_INTERACTION_REQUIRED — o QR precisa ser lido por um humano.**
-  O mecanismo está pronto e commitado; a leitura não é automatizável e não
-  deve ser. Comando e instruções no relatório desta parada.
+* **B-04 · AUTH_INTERACTION_REQUIRED — o perfil NÃO está pareado, e isso foi
+  medido.** Em 2026-08-11 recebi a informação de que o pareamento havia sido
+  concluído. Verifiquei antes de agir, e o perfil mostra QR aos ~6,1s com
+  `socket_state=UNPAIRED` — veredito da própria Meta. O que veio como
+  "evidência experimental" era saída de outro projeto (extensão Chrome,
+  service worker, `npm run test:longevity`), não de `TestRealSPAPairing`.
+
+  Sem sessão, a pergunta do B1.4 não tem resposta e eu não vou inventá-la.
+  Comando de pareamento no relatório desta parada.
 
 * ~~**B-01**~~ · **RESOLVIDO** em `e5ee22e` + `2aa304d`. Detalhe na FASE B0.
   Texto original abaixo, mantido porque a H2 do `HOUSEKEEP.md` o referencia.
