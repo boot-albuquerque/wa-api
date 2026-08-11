@@ -34,6 +34,16 @@ const (
 	ClassErrorPage PageClass = "ERROR_PAGE"
 	// ClassRedirect means the page is no longer on web.whatsapp.com.
 	ClassRedirect PageClass = "REDIRECT"
+	// ClassPairingLoading is the pairing screen with no code on it yet.
+	//
+	// Measured, not imagined: at t+9s the real SPA has the pairing screen
+	// mounted — 340 DOM nodes, its help/hint/terms markers present, a loading
+	// spinner — and no canvas at all. The QR arrives around t+15s.
+	//
+	// It is a class of its own because folding it into OTHER makes "wait, the
+	// code is coming" indistinguishable from "we do not recognise this page",
+	// and those ask opposite things of the caller.
+	ClassPairingLoading PageClass = "PAIRING_LOADING"
 	// ClassUnresponsive means the page did not answer within its budget.
 	//
 	// NEVER inferred from missing elements. A timeout is a class of its own,
@@ -60,8 +70,10 @@ type PageSnapshot struct {
 	ReadyState string `json:"ready_state"`
 	HasPane    bool   `json:"has_pane_side"`
 	HasQR      bool   `json:"has_qr"`
-	DOMNodes   int    `json:"dom_nodes"`
-	TextLength int    `json:"text_length"`
+	// HasQRLoading is the pairing screen without a code yet.
+	HasQRLoading bool `json:"has_qr_loading"`
+	DOMNodes     int  `json:"dom_nodes"`
+	TextLength   int  `json:"text_length"`
 	// TextSample exists ONLY to recognise WhatsApp's own error and conflict
 	// screens, which have no structural marker to match on.
 	//
@@ -111,6 +123,9 @@ func Classify(s PageSnapshot) PageClass {
 	}
 	if s.HasQR {
 		return ClassLoginRequired
+	}
+	if s.HasQRLoading {
+		return ClassPairingLoading
 	}
 
 	if cls, ok := classifyByText(s.TextSample); ok {

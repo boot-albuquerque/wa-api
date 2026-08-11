@@ -29,16 +29,48 @@ import (
 // result. It is the seam that keeps chromedp out of this package (ADR-0006 D1).
 type Evaluator func(ctx context.Context, expression string, out *string) error
 
+// Selectors, as constants: a literal at a call site is a contract nobody can
+// find when Meta changes it.
+//
+// The QR is matched TWO ways, and the order is the argument:
+//
+//	[data-testid="link-device-qr-code"]   Meta's own hook, locale-independent
+//	canvas[aria-label*="Scan"]            what wwebjs uses, English UI text
+//
+// Measured 2026-08-11 against the real SPA (EVIDENCIA-SPA.md M1): both are
+// present, and they appear at the same instant. The aria-label one WORKS — that
+// was checked, not assumed — but it is interface text in English, so the same
+// element on a Portuguese account reads "Ler o código QR" and the selector
+// stops matching. Keeping both means one of them changing is not an outage.
+//
+// The pairing-screen markers are separate from the QR itself. They appear about
+// six seconds EARLIER, while the code is still loading, and that gap is a state
+// of its own — see qrLoadingSelector.
+const (
+	paneSideSelector = "#pane-side"
+	qrTestIDSelector = `[data-testid="link-device-qr-code"]`
+	qrAriaSelector   = `canvas[aria-label*="Scan"]`
+	// qrLoadingSelector marks the pairing screen before the code arrives.
+	// Measured at t+9s with 340 DOM nodes and no canvas at all.
+	qrLoadingSelector = `[data-testid^="link-device-qrcode-alt-linking"]`
+)
+
 // structureScript reads only shape: no innerText, no attribute values, nothing
 // a person wrote. Every field is a boolean, a count, or a URL the caller
 // already knows.
+//
+// It never reads the QR payload. The [data-ref] attribute that carries it is a
+// credential for the seconds it lives, and this probe does not so much as look
+// at its value.
 const structureScript = `JSON.stringify((() => {
+	const q = (s) => !!document.querySelector(s);
 	return {
 		url: location.href,
 		title: document.title,
 		ready_state: document.readyState,
-		has_pane_side: !!document.querySelector('#pane-side'),
-		has_qr: !!document.querySelector('canvas[aria-label*="Scan"]'),
+		has_pane_side: q('` + paneSideSelector + `'),
+		has_qr: q('` + qrTestIDSelector + `') || q('` + qrAriaSelector + `'),
+		has_qr_loading: q('` + qrLoadingSelector + `'),
 		dom_nodes: document.getElementsByTagName('*').length,
 		text_length: document.body ? document.body.innerText.length : 0
 	};

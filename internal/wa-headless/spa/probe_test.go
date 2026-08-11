@@ -206,3 +206,66 @@ func TestProbeIsBoundedByTheStateProbeBudget(t *testing.T) {
 		t.Fatalf("Probe took %v on a 200ms StateProbe budget", elapsed)
 	}
 }
+
+// The measured intermediate state: pairing screen mounted, code not there yet.
+//
+// At t+9s against the real SPA there were 340 DOM nodes, the link-device
+// markers and a loading spinner, and no canvas at all. Folding that into OTHER
+// makes "wait, the code is coming" read the same as "we do not recognise this
+// page" — and those ask opposite things of the caller.
+func TestPairingScreenWithoutACodeIsItsOwnClass(t *testing.T) {
+	page := &fakePage{structure: PageSnapshot{
+		URL: "https://web.whatsapp.com/", HasQRLoading: true, TextLength: 900,
+	}}
+
+	snap, cls := Probe(context.Background(), testRunner(), page.eval, "boot")
+
+	if cls != ClassPairingLoading {
+		t.Fatalf("class = %q, want %q", cls, ClassPairingLoading)
+	}
+	if cls == ClassOther {
+		t.Error("the pairing screen was reported as an unrecognised page")
+	}
+	// It matched on structure, so no text may have been fetched.
+	if page.askedFor("text") || snap.TextSample != "" {
+		t.Error("text was read from a page that structure already classified")
+	}
+}
+
+// A code on screen outranks the loading markers: both are present at t+15s, and
+// reporting PAIRING_LOADING then would mean waiting for something already there.
+func TestACodeOnScreenOutranksTheLoadingMarkers(t *testing.T) {
+	page := &fakePage{structure: PageSnapshot{
+		URL: "https://web.whatsapp.com/", HasQR: true, HasQRLoading: true,
+	}}
+
+	if _, cls := Probe(context.Background(), testRunner(), page.eval, "boot"); cls != ClassLoginRequired {
+		t.Fatalf("class = %q, want %q", cls, ClassLoginRequired)
+	}
+}
+
+// Waiting helps here, so it must not read as terminal — unlike LOGIN_REQUIRED,
+// which needs a human with a phone.
+func TestPairingLoadingIsNotTerminal(t *testing.T) {
+	if ClassPairingLoading.Terminal() {
+		t.Fatal("PAIRING_LOADING reported as terminal; a caller would give up on a " +
+			"screen that resolves itself in about six seconds")
+	}
+	if !ClassLoginRequired.Terminal() {
+		t.Fatal("LOGIN_REQUIRED must stay terminal: only a human with a phone resolves it")
+	}
+}
+
+// The structure script must carry BOTH QR selectors. One of them changing is
+// then not an outage, which is the whole reason for keeping two.
+func TestStructureScriptCarriesBothQRSelectors(t *testing.T) {
+	for _, want := range []string{qrTestIDSelector, qrAriaSelector, qrLoadingSelector, paneSideSelector} {
+		if !strings.Contains(structureScript, want) {
+			t.Errorf("the structure probe does not ask for %s", want)
+		}
+	}
+	// The QR payload is a credential. The probe must not even look at it.
+	if strings.Contains(structureScript, "data-ref") {
+		t.Error("the structure probe reads [data-ref], which carries the QR payload")
+	}
+}

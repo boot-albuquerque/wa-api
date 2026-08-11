@@ -382,3 +382,97 @@ func TestBrowserChainVerifiesTheModuleInventory(t *testing.T) {
 		t.Errorf("the message does not name the missing module: %v", err)
 	}
 }
+
+// qrFixture builds the pairing screen as MEASURED on the real SPA
+// (EVIDENCIA-SPA.md M1), with each marker independently switchable.
+//
+// The markup is copied from what was observed, not from what wwebjs expects:
+// the canvas sits inside a DIV, the aria-label is the exact English string, and
+// the alt-linking markers are the ones that show up six seconds before the code
+// does. A fixture that only carried the selector we already match would prove
+// nothing about the selector we might need.
+func qrFixture(t *testing.T, withTestID, withAria, withLoading bool) string {
+	t.Helper()
+	body := `<html><body><div id="app">`
+	if withLoading {
+		body += `<div data-testid="link-device-qrcode-alt-linking-help"></div>
+			<div data-testid="link-device-qrcode-alt-linking-hint"></div>
+			<div data-testid="loading-spinner"></div>`
+	}
+	if withTestID || withAria {
+		attrs := ""
+		if withTestID {
+			attrs += ` data-testid="link-device-qr-code"`
+		}
+		aria := ""
+		if withAria {
+			aria = ` aria-label="Scan this QR code to link a device!"`
+		}
+		// [data-ref] carries the QR payload on the real page. The fixture keeps
+		// the ATTRIBUTE so the shape matches, with an obviously fake value.
+		body += `<div` + attrs + ` data-ref="FIXTURE-NOT-A-REAL-CODE"><canvas` + aria + `></canvas></div>`
+	}
+	body += `</div></body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// The selector work of LOOP B1.2, run in a real JavaScript engine.
+//
+// A unit test cannot make this claim: the double returns the snapshot fields
+// directly, so it never executes a selector. Only a browser can say whether
+// `[data-testid="link-device-qr-code"]` matches the markup we measured.
+func TestBrowserChainDetectsTheQRByEitherSelector(t *testing.T) {
+	binary := findChrome(t)
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() { t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser)) }()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	cases := []struct {
+		name                  string
+		testID, aria, loading bool
+		want                  spa.PageClass
+	}{
+		// Both, as the real page has them at t+15s.
+		{"as measured", true, true, true, spa.ClassLoginRequired},
+		// The locale case: an account in Portuguese keeps the hook and loses
+		// the English aria-label.
+		{"testid only (other locale)", true, false, true, spa.ClassLoginRequired},
+		// The wwebjs case: if Meta drops the testid, the aria still carries it.
+		{"aria only", false, true, true, spa.ClassLoginRequired},
+		// The measured gap at t+9s: pairing screen mounted, no code yet.
+		{"pairing screen, no code", false, false, true, spa.ClassPairingLoading},
+	}
+	for _, tc := range cases {
+		url := qrFixture(t, tc.testID, tc.aria, tc.loading)
+		if err := tab.Navigate(runner, url, "nav/"+tc.name); err != nil {
+			t.Fatalf("%s: Navigate: %v", tc.name, err)
+		}
+		snap, got := spa.Probe(context.Background(), runner, tab.Evaluate, "probe/"+tc.name)
+		if got != tc.want {
+			t.Errorf("%s: classified as %q, want %q (snapshot %+v)", tc.name, got, tc.want, snap)
+		}
+		// The QR payload is a credential. No case may capture page text.
+		if snap.TextSample != "" {
+			t.Errorf("%s: page text was captured: %q", tc.name, snap.TextSample)
+		}
+	}
+}
