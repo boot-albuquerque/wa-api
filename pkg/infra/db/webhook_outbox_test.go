@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 	"wa-api/pkg/domain"
@@ -481,5 +482,73 @@ func TestMigracao16_ReportaFalhaDeLeitura(t *testing.T) {
 func TestMigracao16_BancoVazioNaoQuebra(t *testing.T) {
 	if err := rodarMigracao16(t, novoBancoMigrado(t)); err != nil {
 		t.Fatalf("migracao 16 falhou num banco vazio: %v", err)
+	}
+}
+
+// F106. O defeito era de cabeça de fila: uma linha com payload ilegível tem o
+// `due_at` mais antigo, então `ORDER BY due_at LIMIT 64` a punha em TODO lote,
+// toda `ClaimDue` falhava no scan, e nenhuma entrega saudável atrás dela era
+// reivindicada — permanentemente.
+//
+// O teste fixa o que importa para o cliente: as entregas boas SAEM, apesar da
+// ruim. Não fixa a mensagem de log nem o formato do erro.
+func TestOutbox_PayloadIlegivelNaoDerrubaOLote(t *testing.T) {
+	db := newOutboxDB(t)
+	repo := NewWebhookOutboxRepository(db)
+	ctx := context.Background()
+
+	// A ruim entra PRIMEIRO e com `due_at` mais antigo — é a posição que
+	// causava o travamento. Inserida por SQL cru porque Enqueue serializa o
+	// payload corretamente e nunca produziria isto; o cenário real é corrupção
+	// no disco, restauração parcial ou escrita truncada.
+	antigo := time.Now().UTC().Add(-time.Hour)
+	if _, err := db.ExecContext(ctx, db.Rebind(
+		`INSERT INTO webhook_outbox (id, user_id, url, payload, attempt, due_at, hmac_scope, created_at)
+		 VALUES (?, ?, ?, ?, 0, ?, ?, ?)`),
+		"corrompida", "user-1", "https://example.invalid/hook",
+		`{"jsonData": NAO_E_JSON`, antigo, string(HMACScopeUser), antigo,
+	); err != nil {
+		t.Fatalf("inserir a linha corrompida: %v", err)
+	}
+
+	const boas = 3
+	for i := 0; i < boas; i++ {
+		if err := repo.Enqueue(ctx, sampleEntry(fmt.Sprintf("boa-%d", i))); err != nil {
+			t.Fatalf("Enqueue boa-%d: %v", i, err)
+		}
+	}
+
+	entries, err := repo.ClaimDue(ctx)
+	if err != nil {
+		t.Fatalf("ClaimDue devolveu erro por causa de UMA linha ilegivel; o lote inteiro morreu: %v", err)
+	}
+
+	if len(entries) != boas {
+		t.Fatalf("reivindicadas %d de %d entregas saudaveis; a linha corrompida levou as outras junto",
+			len(entries), boas)
+	}
+	for _, e := range entries {
+		if e.ID == "corrompida" {
+			t.Error("a linha ilegivel foi devolvida como entrega valida; ela iria para o webhook")
+		}
+	}
+
+	// A ilegível tem de ter o `due_at` EMPURRADO junto com as boas. Sem isso
+	// ela volta na cabeça de todo lote, para sempre — ocupando vaga e gerando
+	// uma linha de log por varredura.
+	segunda, err := repo.ClaimDue(ctx)
+	if err != nil {
+		t.Fatalf("segunda ClaimDue: %v", err)
+	}
+	if len(segunda) != 0 {
+		t.Errorf("segunda varredura devolveu %d entregas; nada deveria estar vencido ainda", len(segunda))
+	}
+
+	var due time.Time
+	if err := db.GetContext(ctx, &due, db.Rebind(`SELECT due_at FROM webhook_outbox WHERE id = ?`), "corrompida"); err != nil {
+		t.Fatalf("ler o due_at da corrompida: %v", err)
+	}
+	if !due.After(antigo) {
+		t.Errorf("o due_at da linha ilegivel nao foi empurrado (%s); ela volta na cabeca de todo lote", due)
 	}
 }

@@ -2361,7 +2361,7 @@ pkg/infra/db.isUniqueViolation	ELIGIBLE	covered
 pkg/infra/db.migrateSQLiteIDToString	ELIGIBLE	covered
 pkg/infra/db.parseFlexTimestamp	ELIGIBLE	uncovered:L1
 pkg/infra/db.pushDueAt	ELIGIBLE	uncovered:L1
-pkg/infra/db.scanOutboxRows	ELIGIBLE	uncovered:L1
+pkg/infra/db.scanOutboxRows	ELIGIBLE	covered
 pkg/infra/db.scanOutboxRows.func1	EXCLUDED	X1
 pkg/infra/egress.IsHTTPURL	ELIGIBLE	uncovered:L2(S-consume,egress.go:25)
 pkg/infra/egress.IsReservedOrLoopback	ELIGIBLE	covered

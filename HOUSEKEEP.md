@@ -4381,9 +4381,35 @@ senão fica vencida para sempre gerando log.
 **Anti-regressão**: teste que insere uma linha com payload inválido junto com N
 válidas e verifica que as N válidas SÃO reivindicadas. Hoje esse teste falharia.
 
-**Status**: **não corrigido** — defeito pré-existente fora do escopo da tarefa
-(que era cobrir o `SKIP LOCKED`). A política do repositório é registrar e
-perguntar antes de corrigir.
+**Status**: **CORRIGIDO (2026-08-10)**, com autorização explícita.
+
+A linha ilegível agora sai do lote de verdade: log em `Error` com o `outbox_id`
+e o `user_id`, e o lote segue com as demais.
+
+**A metade não-óbvia da correção** foi empurrar o `due_at` da linha ruim JUNTO
+com as reivindicadas. Pular sem empurrar a deixaria na cabeça do
+`ORDER BY due_at` para sempre — voltando em todo lote, ocupando uma vaga das 64
+e gerando uma linha de log por varredura, indefinidamente. Trocaria um
+travamento total por um vazamento permanente de vaga.
+
+Por isso `pushDueAt` passou a receber ids em vez de `[]OutboxEntry`, e o
+early-return de `ClaimDue` passou a considerar as duas listas: um lote em que
+TODAS as linhas são ilegíveis ainda precisa empurrar e commitar, senão trava do
+mesmo jeito.
+
+`Error` e não `Warn` de propósito: o payload foi escrito por nós, então
+ilegível aqui é corrupção de dado ou defeito de escrita — não é condição
+esperada de operação.
+
+**Controle negativo executado**: restaurando o `return nil, err`, o teste falha
+com *"ClaimDue devolveu erro por causa de UMA linha ilegivel; o lote inteiro
+morreu"*. Restaurado por `cp`, conferido por `grep` na linha que implementa.
+
+**O que ficou de fora, e continua em aberto**: o destino final da linha
+ilegível. Hoje ela é empurrada a cada varredura e logada a cada varredura —
+melhor que travar tudo, mas é ruído perpétuo. Falta decidir a saída: contador
+de tentativas com descarte, tabela de mortos, ou intervenção manual. Isso é
+decisão de contrato, não de implementação.
 
 ---
 

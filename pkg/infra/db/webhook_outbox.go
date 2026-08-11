@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 // Outbox de entrega de webhook (ADR-0005, D3).
@@ -181,15 +182,27 @@ func (r *WebhookOutboxRepository) ClaimDue(ctx context.Context) ([]OutboxEntry, 
 		return nil, fmt.Errorf("webhook outbox: selecionar vencidas: %w", err)
 	}
 
-	entries, err := scanOutboxRows(rows)
+	entries, ilegiveis, err := scanOutboxRows(rows)
 	if err != nil {
 		return nil, err
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && len(ilegiveis) == 0 {
 		return nil, nil
 	}
 
-	if err := pushDueAt(ctx, tx, entries, now.Add(claimLease)); err != nil {
+	// As ilegíveis entram no empurrão JUNTO com as boas, e essa é a metade
+	// não-óbvia da correção (F106). Pular a linha sem empurrar o `due_at` dela
+	// a deixaria na cabeça do `ORDER BY due_at` para sempre: ela voltaria em
+	// todo lote, ocupando uma vaga das 64 e gerando uma linha de log por
+	// varredura, indefinidamente. Empurrar tira a linha ruim do caminho pelo
+	// mesmo prazo que uma entrega reivindicada.
+	ids := make([]string, 0, len(entries)+len(ilegiveis))
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	ids = append(ids, ilegiveis...)
+
+	if err := pushDueAt(ctx, tx, ids, now.Add(claimLease)); err != nil {
 		return nil, err
 	}
 
@@ -204,10 +217,11 @@ func (r *WebhookOutboxRepository) ClaimDue(ctx context.Context) ([]OutboxEntry, 
 // aberto sobre ela na mesma conexão — deixar o Close para um defer no chamador
 // funcionaria no Postgres e travaria no SQLite, que é a configuração do cenário
 // catastrófico.
-func scanOutboxRows(rows *sqlx.Rows) ([]OutboxEntry, error) {
+func scanOutboxRows(rows *sqlx.Rows) ([]OutboxEntry, []string, error) {
 	defer func() { _ = rows.Close() }()
 
 	var entries []OutboxEntry
+	var ilegiveis []string
 	for rows.Next() {
 		var (
 			e   OutboxEntry
@@ -215,31 +229,39 @@ func scanOutboxRows(rows *sqlx.Rows) ([]OutboxEntry, error) {
 		)
 		var scope string
 		if err := rows.Scan(&e.ID, &e.UserID, &e.URL, &raw, &e.Attempt, &scope); err != nil {
-			return nil, fmt.Errorf("webhook outbox: ler linha: %w", err)
+			return nil, nil, fmt.Errorf("webhook outbox: ler linha: %w", err)
 		}
 		if err := json.Unmarshal([]byte(raw), &e.Payload); err != nil {
-			// Uma linha ilegível não pode derrubar o lote inteiro: ela ficaria
-			// para sempre bloqueando entregas saudáveis atrás dela. Sai do lote
-			// e continua vencida, para aparecer na varredura seguinte — e o erro
-			// vai para quem chama, que decide se loga.
-			return nil, fmt.Errorf("webhook outbox: payload ilegivel em %s: %w", e.ID, err)
+			// F106. Este comentário já dizia que a linha ilegível "sai do lote"
+			// para não ficar "para sempre bloqueando entregas saudáveis atrás
+			// dela" — e a linha abaixo fazia `return nil, err`, abortando o lote
+			// inteiro. O comentário nomeava exatamente o modo de falha que
+			// afirmava evitar, e o código o implementava.
+			//
+			// Medido: um payload JSON inválido com o `due_at` mais antigo entra
+			// em todo lote (`ORDER BY due_at`), toda `ClaimDue` falha no scan, e
+			// NENHUMA das outras 63 entregas saudáveis é reivindicada. O outbox
+			// para de entregar tudo, permanentemente, por causa de uma linha.
+			//
+			// Agora a linha sai do lote de verdade. O log é Error e não Warn: o
+			// payload foi escrito por nós, então ilegível aqui é corrupção de
+			// dado ou defeito de escrita — não é condição esperada.
+			log.Error().Err(err).Str("outbox_id", e.ID).Str("user_id", e.UserID).
+				Msg("webhook outbox: payload ilegivel; a entrega foi pulada e o lote segue")
+			ilegiveis = append(ilegiveis, e.ID)
+			continue
 		}
 		e.Scope = HMACScope(scope)
 		entries = append(entries, e)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("webhook outbox: iterar linhas: %w", err)
+		return nil, nil, fmt.Errorf("webhook outbox: iterar linhas: %w", err)
 	}
-	return entries, nil
+	return entries, ilegiveis, nil
 }
 
 // pushDueAt empurra o prazo das linhas reivindicadas.
-func pushDueAt(ctx context.Context, tx *sqlx.Tx, entries []OutboxEntry, until time.Time) error {
-	ids := make([]string, 0, len(entries))
-	for _, e := range entries {
-		ids = append(ids, e.ID)
-	}
-
+func pushDueAt(ctx context.Context, tx *sqlx.Tx, ids []string, until time.Time) error {
 	query, args, err := sqlx.In(`UPDATE webhook_outbox SET due_at = ? WHERE id IN (?)`, until, ids)
 	if err != nil {
 		return fmt.Errorf("webhook outbox: montar update de reivindicacao: %w", err)
