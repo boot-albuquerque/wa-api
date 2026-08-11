@@ -8,10 +8,11 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 01 — inventário real de paridade
-Loop: 01.1
-Objective: enumerar, por busca no código do `disparazaap`, o que o produto
-realmente chama do `WaClientAdapter`
+CAP: 03 — sessão sobe e classifica
+Loop: 03.1
+Objective: um `BrowserProcess` real (lançar Chromium com perfil persistente,
+`WebSocketURL`/`WaitExit`/`SignalStop`), fechando a interface que a CAP-02
+deixou sem implementação
 
 ## Completed
 
@@ -48,20 +49,54 @@ Invariantes do handoff cobertas por esta CAP: **2** (shutdown por
 sempre registrado), **5** e **6** (prazo do lado Go em todo caminho CDP),
 **7** (nenhuma espera com relógio na página).
 
+### CAP-01 — inventário real de paridade · **DONE**
+
+| loop | objetivo | resultado |
+|---|---|---|
+| 01.1 | ler a interface `WaClientAdapter` | 14 métodos: 6 obrigatórios, 8 opcionais |
+| 01.2 | achar os call sites reais no produto | todos os 14 têm call site no `runner.ts` — nenhum declarado e não usado |
+| 01.3 | consolidar a matriz | `PARIDADE-WWEBJS.md`, commit abaixo |
+
+Validação: cada número de linha da matriz foi conferido contra o arquivo
+citado; `disparazaap` permaneceu com `git status --porcelain` vazio (leitura
+apenas — aquele repo é da sessão C0/C1).
+
 ## Next
 
-* **LOOP 01.1** — localizar o `disparazaap` e a interface `WaClientAdapter`,
-  e listar os métodos obrigatórios e opcionais que ela declara.
-  *Done quando*: a lista existe, derivada de leitura do arquivo, não de memória.
-* **LOOP 01.2** — para cada método, achar os call sites reais no produto.
-  *Done quando*: cada linha da matriz tem caminho de arquivo, ou é marcada
-  explicitamente como "declarada e não chamada".
-* **LOOP 01.3** — consolidar a matriz de paridade em
-  `PARIDADE-WWEBJS.md` neste diretório.
-  *Done quando*: a matriz distingue "o produto usa" de "o `wwebjs` oferece", e
-  a Definition of Done passa a ser verificável contra ela.
+* **LOOP 03.1** — `BrowserProcess` concreto: lançar Chromium com perfil
+  persistente e reclaim de `Singleton`, implementando a interface que a CAP-02
+  definiu. *Done quando*: sobe e desce um Chromium real com
+  `stopped_via=browser.close`, e a invariante 15 (reclaim no boot) está travada
+  em teste.
+* **LOOP 03.2** — navegar até o alvo e classificar a página
+  (`qr` / `ready` / `login_required` / `unresponsive`), tudo sob `Runner.Do`.
+  *Done quando*: a classificação é derivada de sinal estrutural + `Evaluate`
+  com prazo, e um alvo que não responde sai como `unresponsive`, nunca como
+  saudável.
 
 ## Findings
+
+* **F-04 · a fenda não é o `wa-api-adapter.ts` — é a superfície HTTP do
+  `wa-api`.** O `wa-api` já é `AdapterKind` de primeira classe
+  (`disparazaap` `services/wa-worker/src/index.ts:279`, flag
+  `WA_WA_API_ENABLED`) e o adapter TS já fala HTTP/WS com este serviço, hoje
+  servido pelo `wa-noise`. O `wa-headless` vira um **segundo motor atrás de
+  rotas que já existem e já têm consumidor**. Fecha a incerteza nº 1 do handoff
+  §7 na **leitura B**, por evidência. Reorganiza a CAP-09: não é fachada nova,
+  é servir contrato existente.
+* **F-05 · o escopo real são SEIS capacidades, não catorze.** Oito das 14 já
+  são servidas pelo `wa-noise`. Só `fetchMessages`, `onMessageMeta`,
+  `livenessCheck`, `refreshOwner`, `getBrowserPid` e `backupNow` exigem o motor
+  de browser. Detalhe e ordem em `PARIDADE-WWEBJS.md` §3.
+* **F-06 · `sendText` deixa de ser a primeira capacidade de produto.** O
+  `wa-api` já envia pelo `wa-noise`; o envio pelo `wa-headless` só é necessário
+  quando uma conta rodar no motor de browser, ou seja, é consequência da
+  CAP-09. O fluxo Resolve → Validate → Act → Verify continua obrigatório quando
+  chegar.
+* **F-07 · o runner degrada em silêncio.** Cada opcional tem guarda
+  `if (!adapter.X) return` (`runner.ts:1230`, `:2129`, `:2680`, `:2791`,
+  `:717`). Capacidade faltando não vira erro — vira funcionalidade que sumiu
+  sem aviso. Vale para a CAP-10: paridade tem de ser medida, não observada.
 
 * **F-01 · o `OpLog` não tem política de redação de erro.** `OpRecord.Err` pode
   citar o que a página lançou. Truncado em 200 caracteres, o que limita o raio e
