@@ -222,3 +222,77 @@ func TestBrowserChainReportsAWedgedPageAsUnresponsive(t *testing.T) {
 		t.Fatalf("the probe took %v; the StateProbe budget is %v", elapsed, engine.DefaultDeadlines.StateProbe)
 	}
 }
+
+// Liveness against a REAL browser, in the two states that matter.
+//
+// The unit tests pin the streak arithmetic and the classification; what they
+// cannot show is that the probe survives a real renderer. This does — and the
+// wedged half reproduces the phase 6 state, where every structural signal says
+// healthy and only a deadlined evaluation disagrees.
+func TestBrowserChainLivenessSeesAliveAndWedged(t *testing.T) {
+	binary := findChrome(t)
+	base := pageServer(t)
+
+	wedged := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// The application mounts, THEN the main thread stops returning. This is
+		// the shape that fools a structural check: #pane-side is in the DOM.
+		fmt.Fprint(w, `<html><body><div id="pane-side"></div><script>
+			window.addEventListener('load', function () { for (;;) {} });
+		</script></body></html>`)
+	}))
+	defer wedged.Close()
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir:    t.TempDir(),
+		DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() { t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser)) }()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate, UnresponsiveAfter: 2}
+
+	if err := tab.Navigate(runner, base+"/ready", "nav/ready"); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+	live := monitor.Check(context.Background(), "live/ready")
+	if !live.Alive {
+		t.Fatalf("a mounted application probed as not alive: class=%q err=%v", live.Class, live.Err)
+	}
+	if live.Latency <= 0 {
+		t.Error("no latency recorded against a real browser")
+	}
+
+	// Same tab, same browser, same process — only the page changes.
+	_ = tab.Navigate(runner, wedged.URL, "nav/wedged")
+
+	var res spa.LivenessResult
+	for i := 0; i < monitor.UnresponsiveAfter; i++ {
+		res = monitor.Check(context.Background(), "live/wedged")
+	}
+	if !res.Unresponsive() {
+		t.Fatalf("a wedged page with #pane-side in the DOM probed as %q; a structural "+
+			"check would have called this session healthy", res.Class)
+	}
+
+	// The process is still up and the target still attached. That is the whole
+	// finding: nothing outside the evaluation knows anything is wrong.
+	if browser.PID() <= 0 {
+		t.Error("the browser process died; this test would then prove nothing")
+	}
+	if !engine.ProcessAlive(browser.PID()) {
+		t.Error("the browser process is gone, so UNRESPONSIVE could have come from " +
+			"the browser dying rather than from the page wedging")
+	}
+}
