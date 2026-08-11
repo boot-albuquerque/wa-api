@@ -4154,11 +4154,40 @@ grande isso não é desprezível.
    limitada (um cache com expiração de minutos, não um registro perpétuo). O
    `messageID` do WhatsApp é único por mensagem e estável entre reentregas —
    foi exatamente por isso que este achado apareceu.
-2. **Decidir o que fazer com a primeira cópia**: no caso medido, a primeira
-   chegou sem `type:` preenchido e mesmo assim baixou mídia. Vale entender se
-   a primeira cópia é sempre completa ou se às vezes é um espectro — porque
-   deduplicar mantendo a PRIMEIRA seria errado se a primeira for a incompleta.
-   Esta pergunta precisa de resposta ANTES da correção (1).
+2. ~~**Decidir o que fazer com a primeira cópia**~~ — **RESPONDIDO em
+   2026-08-10**, por leitura de código, e a resposta muda a correção (1).
+
+   **A primeira cópia É a incompleta, por construção.** A cadeia, verificada:
+
+   1. Chega um `<message>` com filho `<unavailable>` e nenhum `<enc>`. O SDK
+      registra `Unavailable message`, pede reenvio ao telefone
+      (`ImmediateRequestMessageFromPhone`), despacha `UndecryptableMessage` e
+      **retorna** — nenhum `events.Message` é produzido
+      (`capabilities/message/decrypt_loop.go:36-46`).
+   2. O telefone responde, e a resposta vira evento por
+      `HandlePlaceholderResendResponse` →
+      **`ParseWebMessage`** (`capabilities/message/history_sync.go:247`).
+   3. `ParseWebMessage` (`core/client_session.go:75-84`) monta o `MessageInfo`
+      **sem `Type` e sem `MediaType`**, e o `PushName` vem de
+      `webMsg.GetPushName()`, que pode vir vazio.
+
+   O caminho AO VIVO, em contraste, lê `info.Type = ag.OptionalString("type")`
+   do atributo do nó (`capabilities/message/parse.go:196`).
+
+   **Portanto: deduplicar mantendo a PRIMEIRA cópia entregaria webhook sem
+   `pushName` e sem informação de tipo** — e a F84 foi uma entrada inteira
+   sobre justamente não descartar o `pushName`. A política tem de ser manter a
+   ÚLTIMA, ou mesclar preferindo campo não-vazio.
+
+   **E a janela de dedup precisa ser larga.** No caso observado, as duas
+   cópias chegaram com **~4 minutos** de intervalo. Um cache de 30 segundos —
+   que é o que se escolhe por instinto — não teria pego este caso.
+
+   **Limite desta resposta**: o mecanismo está verificado no código; a linha do
+   tempo (00:33:12 incompleta, 00:37:06 completa) vem do registro desta sessão,
+   porque eu **destruí o log original** ao reiniciar o pod da bancada com `>` em
+   vez de `>>`. Reproduzir exige forçar uma falha de decifragem, que não é
+   trivial sob demanda.
 
 **Anti-regressão**: teste que entrega o mesmo `events.Message` duas vezes e
 verifica um único despacho de webhook e um único download. E um segundo teste
