@@ -30,6 +30,15 @@ type messageS3Config struct {
 }
 
 func (evh *UserEventHandler) handleMessage(evt *events.Message, st *eventState) {
+	// F103. A saída é AQUI, antes de qualquer outra coisa, e o lugar importa:
+	// `st.dowebhook` nasce 0 e é este método que o liga. Sair no topo já
+	// impede o despacho (`eventhandler.go:183`) sem que o chamador precise
+	// saber de nada — e impede também o download da mídia, que era o segundo
+	// custo da reentrega.
+	if mensagemJaProcessada(evh.UserID, evt) {
+		return
+	}
+
 	appCtx.LastMessageCache.Set(evh.UserID, &evt.Info, cache.DefaultExpiration)
 
 	s3Config := evh.resolveMessageS3Config(st.txtid)

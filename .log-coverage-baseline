@@ -597,7 +597,7 @@ rules_frozen=true
 # recusa por linha sem hash, a falha do apagamento, e o numero de linhas cujo
 # texto claro saiu do disco — que e o unico registro de que a operacao
 # aconteceu, porque depois dela nao ha como distinguir "apagou" de "nunca teve".
-min_func_coverage=692
+min_func_coverage=693
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -685,7 +685,7 @@ min_errpath_coverage=860
 # min_func_coverage acima.
 # +1 (601->602): F97 etapa 2, db.applyBlankPlaintextTokenMigration — ver a
 # justificativa de min_func_coverage acima.
-min_eligible=604
+min_eligible=605
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

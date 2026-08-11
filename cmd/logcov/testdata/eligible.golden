@@ -2132,6 +2132,7 @@ pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router
 pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
+pkg/bootstrap.chaveDedup	EXCLUDED	X1
 pkg/bootstrap.checkIfSubscribedToEvent	EXCLUDED	X1
 pkg/bootstrap.claimSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:102)
@@ -2183,6 +2184,7 @@ pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)
 pkg/bootstrap.lockSingleInstance.func1	EXCLUDED	X6
 pkg/bootstrap.logMessageReceived	ELIGIBLE	covered
+pkg/bootstrap.mensagemJaProcessada	ELIGIBLE	covered
 pkg/bootstrap.montarRequisicaoWebhook	ELIGIBLE	covered
 pkg/bootstrap.newDispatchPool	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newLeaseManager	EXCLUDED	X1

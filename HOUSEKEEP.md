@@ -4194,8 +4194,38 @@ verifica um único despacho de webhook e um único download. E um segundo teste
 que prove a expiração da janela — senão o cache cresce sem teto, que é o
 defeito da F86 voltando por outra porta.
 
-**Status**: **não corrigido** — achado fora do escopo da bancada, e a correção
-depende da pergunta em (2), que não tem resposta ainda.
+**Status**: **CORRIGIDO (2026-08-11)**, com autorização explícita — em
+`pkg/bootstrap/message_dedup.go`, com a saída no topo de `handleMessage`.
+
+**A política ficou sendo "guarda a PRIMEIRA", e isso INVERTE o que eu havia
+recomendado.** A resposta à pergunta (2) — a primeira cópia é a incompleta — me
+levou a dizer "manter a última". Essa recomendação não sobrevive à linha do
+tempo: quando a segunda cópia chega, ~4 minutos depois, a primeira já foi
+entregue. "Manter a última" exigiria DESENTREGAR, que não existe.
+
+A escolha real é entre dois danos: entregar duas vezes (cliente duplica pedido
+ou cobrança) ou entregar uma vez com metadado pobre (falta `pushName` e
+`type`). O primeiro é pior por uma margem grande — duplicar dinheiro é
+incidente, metadado ausente é degradação.
+
+**O custo ficou MEDIDO, não escondido**: ao suprimir, os campos que a cópia
+descartada trazia a mais vão para o log em `metadado_perdido`. Sem isso a
+decisão seria aposta permanente; com isso dá para revisar com dado.
+
+**TTL de 10 minutos**, e o número não é arbitrário: o intervalo medido entre as
+duas cópias foi de ~4 min. Trinta segundos — o valor que se escolhe por
+instinto — não teria pegado nada.
+
+**A chave inclui o `userID`.** O `messageID` do WhatsApp é único por remetente,
+não globalmente; chave só pelo id faria a mensagem de um usuário suprimir a de
+outro, que é perda silenciosa — muito pior que a duplicata sendo corrigida.
+
+**O controle negativo achou um buraco nos meus próprios testes.** Com a chamada
+REMOVIDA de `handleMessage`, **nenhum** dos seis testes falhava: eles cobriam a
+função, não o caminho. Uma dedup que existe e não está ligada não deduplica
+nada (ARMADILHAS 24). Escrevi `TestDedup_SeamDoHandleMessage`, que verifica o
+efeito observável — `st.dowebhook` continuar 0 na segunda cópia — e aí sim o
+controle acusou.
 
 ---
 
