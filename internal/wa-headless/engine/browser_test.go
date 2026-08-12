@@ -28,7 +28,7 @@ func startFake(t *testing.T, script string) *Browser {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start fake browser: %v", err)
 	}
-	b := newBrowser(cmd, "ws://127.0.0.1:0/devtools/browser/fake")
+	b := newBrowser(cmd, "ws://127.0.0.1:0/devtools/browser/fake", t.TempDir())
 	t.Cleanup(func() {
 		if b.PID() > 0 {
 			_ = syscall.Kill(-b.PID(), syscall.SIGKILL)

@@ -362,6 +362,22 @@ Serão critérios de validação. Cada um tem medição por trás.
 1. **Uma sessão ativa por perfil.** Nunca duas abas do WhatsApp no mesmo perfil.
 2. **Desligar é `Browser.close` via CDP, e termina na saída do processo** — nem
    sinal, nem helper de biblioteca.
+
+   **Precisão de 2026-08-12 (decisão A do usuário, H5.3).** O sinal **nunca é
+   caminho de rotina**; continua sendo recurso final, só depois de o `close` ter
+   sido enviado E a saída ter sido esperada. Quando ele acontece, três coisas
+   são obrigatórias: `stopped_via` sujo registrado, o perfil **marcado como
+   suspeito**, e a sessão **verificada** no boot seguinte em vez de presumida
+   boa.
+
+   O que essa precisão corrige: a fase 4C mediu logout na 4ª e na 6ª iteração
+   com `SIGTERM` como caminho NORMAL, tomado toda vez. O caso residual mede
+   outra coisa — sinal raro, depois de o caminho limpo falhar —, e transportar
+   o número de 4C para cá seria usar uma medição fora da condição que a
+   produziu. A alternativa ("nunca sinalizar") foi descartada com evidência: o
+   `reclaimVerdict` recusa enquanto o pid do detentor viver, então ela
+   protegeria a sessão de corrupção **tornando-a inalcançável**. Ver H5 no
+   `HOUSEKEEP.md` do módulo.
 3. **Nada externo mata o browser por sinal.** `terminationGracePeriodSeconds`
    cabe o pior caso do desligamento limpo.
 4. **Toda parada registra `stopped_via`** como métrica.

@@ -443,8 +443,10 @@ sinal, e escolher entre "arriscar a sessão para recuperar o perfil" e "preserva
 a sessão perdendo o perfil" é trade-off de produto. O que mudou é que agora
 existe número dos dois lados em vez de um lado imaginado.
 
-**Status do item 3**: **aberto — decisão do usuário**, com as três opções
-medidas e não mais especuladas. A opção C (escalar o `close` N vezes antes de
+**Status do item 3**: ~~**aberto — decisão do usuário**~~ · **DECIDIDO em
+2026-08-12: opção A, pelo usuário.** O sinal fica, e o preço de mantê-lo é pago
+por mecanismo — ver a seção de implementação no fim desta entrada. As três
+opções foram medidas e não mais especuladas. A opção C (escalar o `close` N vezes antes de
 qualquer sinal) ficou sem justificativa aparente para este modo de falha: contra
 um browser inalcançável, cada tentativa extra custa 10 s e não muda o desfecho.
 Ela só ganharia sentido se existir um travamento TRANSITÓRIO, que não foi
@@ -840,3 +842,69 @@ mesmo desfecho sujo.
 de shutdown desta sessão, e a correção depende de medição sob carga que não foi
 feita. Referência cruzada: a invariante 2 do `HANDOFF-INICIATIVA.md` §6 e o item
 6 da Definition of Done (`stopped_via` limpo em 100% das paradas).
+
+### Implementação da decisão A — LOOP H5.3 (2026-08-12)
+
+**A decisão, do usuário**: manter o sinal como recurso final. O argumento que a
+sustenta não é conforto — é que a medição de 4C (logout na 4ª e na 6ª iteração)
+foi feita com `SIGTERM` como caminho de ROTINA, tomado toda vez, e o caso
+residual é sinal RARO depois de o caminho limpo falhar. Transportar aquele
+número para cá seria usar uma medição fora da condição que a produziu, que é a
+armadilha que este repositório mais paga. Do outro lado, "nunca sinalizar" tem
+custo medido e certo: o `reclaimVerdict` recusa enquanto o pid viver.
+
+**O preço, pago por mecanismo e não por promessa** (`engine/suspect.go`):
+
+- toda parada suja escreve `.wa-headless-session-suspect` **dentro do perfil**,
+  com o `StopVia` que a causou;
+- a marca é escrita **pelo `CleanStop`**, não pelo chamador. `ProfileDir()`
+  entrou na interface `BrowserProcess` exatamente por isso: deixar a marcação a
+  cargo do call site faria ela depender de alguém lembrar, e o defeito que este
+  pacote existe para impedir é precisamente um call site que esqueceu;
+- a marca fica **dentro do perfil** de propósito: o perfil é o que viaja, e um
+  perfil restaurado noutro host ou num contêiner leva a própria dúvida junto;
+- ler **não** limpa. Só `ClearSessionSuspect` limpa, e ela só deve ser chamada
+  depois de a sessão ter sido verificada de verdade — se a leitura limpasse, um
+  boot que lesse o estado e caísse em seguida perderia a dúvida;
+- perfil ilegível devolve **erro**, nunca `false`. "Não consegui checar" virando
+  "está bom" é a forma fail-open que a invariante 12 proíbe.
+
+**Testes que travam a decisão**: `TestCleanStopMarksTheProfileWhenTheStopGoesDirty`,
+`TestCleanStopLeavesNoMarkWhenTheStopIsClean`,
+`TestSuspectMarkSurvivesReadingAndIsClearedOnlyExplicitly`,
+`TestSessionSuspectRefusesToGuessOnAnUnreadableMarker`,
+`TestMarkingIsANoopWithoutAProfile` (`engine/suspect_test.go`).
+
+**Controles negativos EXECUTADOS**, dois, ambos revertidos:
+
+**(NC-A1) a parada suja não é registrada** — a chamada de marcação removida do
+`CleanStop`:
+
+```
+--- FAIL: TestCleanStopMarksTheProfileWhenTheStopGoesDirty (0.15s)
+    the browser went down by signal and the profile was left unmarked; the next
+    boot would presume the session survived, which is exactly what decision A
+    buys with the signal it keeps
+```
+
+**(NC-A2) marca em TODA parada, inclusive limpa** — é o controle que decide se a
+marca SIGNIFICA alguma coisa. Um alarme permanente é um alarme ignorado, e
+tornaria o sinal indistinguível do caminho do protocolo — a mesma armadilha que
+fez o braço `browserclose` do estudo virar réplica do próprio controle:
+
+```
+--- FAIL: TestCleanStopLeavesNoMarkWhenTheStopIsClean (0.00s)
+    a clean stop marked the session suspect; the signal would then be
+    indistinguishable from the protocol path
+```
+
+**Fidelidade do dublê**: o `fakeProcess` devolve um diretório temporário REAL em
+`ProfileDir()`, não `""`. Com string vazia o `MarkSessionSuspect` retorna cedo e
+todos os testes do caminho sujo passariam sem a marcação jamais rodar — dublê
+mais permissivo que a produção escondendo o mecanismo inteiro (ARMADILHA 1).
+
+**O que fica aberto, e é consequência desta decisão, não pendência dela**: quem
+CONSOME a marca. O `SessionSuspect` existe e é lido por teste; nenhum caminho de
+boot ainda age sobre ele, porque o ciclo de vida que agiria é a CAP-05. A marca
+não é auto-executável — ela garante que a informação sobreviva até existir quem
+a use, que é o oposto de perdê-la em log.

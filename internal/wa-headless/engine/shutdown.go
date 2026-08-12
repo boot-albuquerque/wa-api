@@ -61,6 +61,14 @@ type BrowserProcess interface {
 	// SignalStop is the DIRTY fallback. It is on this interface because it must
 	// exist, and named so that no call site reaches for it by accident.
 	SignalStop(ctx context.Context) error
+	// ProfileDir is where this browser's session lives, or "" when it holds no
+	// profile.
+	//
+	// It is on this interface so that CleanStop can mark a dirty stop WITHOUT
+	// the caller's cooperation. Leaving it to call sites would make the mark
+	// depend on somebody remembering, and the defect this package exists to
+	// prevent is precisely a call site that forgot.
+	ProfileDir() string
 }
 
 // StopVia labels how a browser actually went down.
@@ -97,6 +105,8 @@ const (
 	opLabelClose    = "shutdown/browser.close"
 	opLabelWaitExit = "shutdown/wait-exit"
 	opLabelSignal   = "shutdown/signal"
+	// opLabelMarkSuspect records the profile being marked after a dirty stop.
+	opLabelMarkSuspect = "shutdown/mark-suspect"
 )
 
 // CleanStop is the shutdown every path that touches a paired profile must use.
@@ -147,8 +157,20 @@ func CleanStop(parent context.Context, r *Runner, p BrowserProcess) StopVia {
 	_ = r.Do(parent, OpShutdown, opLabelSignal, func(ctx context.Context) error {
 		return p.SignalStop(ctx) //ablation:stop-form
 	})
+
+	via := StopViaDirtySignalExitTimeout
 	if closeErr != nil {
-		return StopViaDirtySignalCloseRefused
+		via = StopViaDirtySignalCloseRefused
 	}
-	return StopViaDirtySignalExitTimeout
+	// Decision A: the signal stays, and this is what it costs. The profile
+	// carries the doubt forward so the next boot verifies the session instead of
+	// presuming it survived. See suspect.go.
+	//
+	// The error is deliberately not returned — CleanStop's contract is to report
+	// HOW the browser went down, and it did go down. It is recorded in the
+	// OpLog, where a shutdown-time failure belongs.
+	_ = r.Do(parent, OpShutdown, opLabelMarkSuspect, func(context.Context) error {
+		return MarkSessionSuspect(p.ProfileDir(), via)
+	})
+	return via
 }

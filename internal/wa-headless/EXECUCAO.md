@@ -8,7 +8,31 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 04 — LOOP 04.3D, quanto tempo em `OPENING` é saudável · **METADE**
+CAP: — · LOOP H5.3, a decisão A implementada · **DONE**
+
+**Decisão do usuário: A — o sinal fica.** Não por conforto: a fase 4C mediu o
+logout com `SIGTERM` como caminho de ROTINA, e o caso residual é sinal RARO
+depois de o caminho limpo falhar. Transportar aquele número seria usar medição
+fora da condição que a produziu. Do outro lado, "nunca sinalizar" tem custo
+medido e certo — o `reclaimVerdict` recusa enquanto o pid viver.
+
+**O preço é pago por mecanismo** (`engine/suspect.go`): toda parada suja escreve
+`.wa-headless-session-suspect` DENTRO do perfil, com o `StopVia` que a causou. A
+marca é escrita pelo `CleanStop`, não pelo chamador — `ProfileDir()` entrou na
+interface `BrowserProcess` exatamente para que nenhum call site possa esquecer.
+Ler não limpa; só `ClearSessionSuspect` limpa, depois de verificação real.
+Perfil ilegível devolve ERRO, nunca `false`.
+
+Cinco testes travam; dois controles negativos executados. O NC-A2 é o que
+importa — marcar em TODA parada faria a marca não significar nada, e é a mesma
+armadilha que fez o braço `browserclose` do estudo virar réplica do controle.
+
+A invariante 2 do `HANDOFF` §6 recebeu a precisão correspondente. Fica aberto
+quem CONSOME a marca: o ciclo que agiria sobre ela é a CAP-05.
+
+Loop anterior: **04.3D** (`bd254d6`), abaixo.
+
+### Loop anterior — LOOP 04.3D, quanto tempo em `OPENING` é saudável · **METADE**
 
 **Verificação de pareamento, pedida e MEDIDA** (2026-08-12): o perfil continua
 pareado e a sessão viva — `identity=true` em T+0,01s, socket **`CONNECTED`** em

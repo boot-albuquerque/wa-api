@@ -38,8 +38,9 @@ var ErrBrowserStillRunning = errors.New("browser did not exit within the budget"
 // called once. A single reaper goroutine calls it and everyone else watches the
 // channel it closes.
 type Browser struct {
-	cmd   *exec.Cmd
-	wsURL string
+	cmd        *exec.Cmd
+	wsURL      string
+	profileDir string
 
 	exited   chan struct{}
 	waitOnce sync.Once
@@ -53,8 +54,8 @@ type Browser struct {
 // to the process group; without it the escalation would signal this process's
 // own group. LaunchOptions.command sets it, and TestSignalStopKillsTheGroup
 // would fail loudly if it stopped doing so.
-func newBrowser(cmd *exec.Cmd, wsURL string) *Browser {
-	b := &Browser{cmd: cmd, wsURL: wsURL, exited: make(chan struct{})}
+func newBrowser(cmd *exec.Cmd, wsURL, profileDir string) *Browser {
+	b := &Browser{cmd: cmd, wsURL: wsURL, profileDir: profileDir, exited: make(chan struct{})}
 	go b.reap()
 	return b
 }
@@ -71,6 +72,12 @@ func (b *Browser) reap() {
 
 // WebSocketURL is the browser-level CDP endpoint.
 func (b *Browser) WebSocketURL() string { return b.wsURL }
+
+// ProfileDir is where this browser's session lives, or "" when it holds none.
+//
+// CleanStop uses it to mark a dirty stop, so a Browser built without it stops
+// silently losing that record — which is why the launcher always passes it.
+func (b *Browser) ProfileDir() string { return b.profileDir }
 
 // PID is the Chromium process id, or 0 once it is gone.
 //

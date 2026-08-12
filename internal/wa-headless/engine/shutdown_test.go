@@ -15,15 +15,24 @@ const deadEndpoint = "ws://127.0.0.1:1/devtools/browser/none"
 // a shutdown that signals before waiting gives every stop the dirty path
 // underneath while still reporting the clean label.
 type fakeProcess struct {
-	mu       sync.Mutex
-	calls    []string
-	url      string
-	exits    bool
-	signaled chan struct{}
+	profileDir string
+	mu         sync.Mutex
+	calls      []string
+	url        string
+	exits      bool
+	signaled   chan struct{}
 }
 
 func newFakeProcess(url string, exits bool) *fakeProcess {
 	return &fakeProcess{url: url, exits: exits, signaled: make(chan struct{}, 1)}
+}
+
+// newFakeProcessInProfile is for tests that read the suspect marker back, so
+// the directory comes from the caller rather than being invented here.
+func newFakeProcessInProfile(url string, exits bool, profileDir string) *fakeProcess {
+	p := newFakeProcess(url, exits)
+	p.profileDir = profileDir
+	return p
 }
 
 func (f *fakeProcess) record(name string) {
@@ -51,6 +60,14 @@ func (f *fakeProcess) WaitExit(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
+
+// ProfileDir is where CleanStop writes the suspect marker after a dirty stop.
+//
+// Tests that care about the marker pass a REAL temporary directory. An empty
+// one makes MarkSessionSuspect return early, so every dirty-path test would
+// pass without the marking ever running — the "double more permissive than
+// production" trap, hiding the whole mechanism.
+func (f *fakeProcess) ProfileDir() string { return f.profileDir }
 
 func (f *fakeProcess) SignalStop(ctx context.Context) error {
 	f.record("signal")

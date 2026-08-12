@@ -97,7 +97,7 @@ func (l *Launcher) Launch(ctx context.Context, cfg LaunchConfig) (*Browser, erro
 		return nil, fmt.Errorf("launch: start %s: %w", l.BinaryPath, err)
 	}
 
-	browser := newBrowser(cmd, "")
+	browser := newBrowser(cmd, "", cfg.ProfileDir)
 
 	wsURL, err := l.awaitEndpoint(ctx, runner, cfg.DebuggingPort)
 	if err != nil {
