@@ -86,6 +86,25 @@ const (
 	conflictPage = `<html><body>
 		<p>WhatsApp is open in another window. Click "Use Here" to use it here.</p>
 		</body></html>`
+	// H6: the application is loaded and our selector no longer matches it.
+	//
+	// This is not a hypothetical page. It is readyPage with the id changed, which
+	// is exactly what a rename by Meta looks like from in here: same chat list,
+	// same text, and a structural probe that now finds nothing.
+	renamedPanePage = `<html><body>
+		<div id="pane-side-v2">
+			<div>Mum &mdash; see you at 8</div>
+			<div>Work &mdash; the deploy is out</div>
+			<div>+55 11 99999-0000 &mdash; are we still on?</div>
+		</div></body></html>`
+	// The same rename, on a page that ALSO carries the conflict wording. It
+	// proves the guard did not buy privacy by giving up the class.
+	renamedPaneConflictPage = `<html><body>
+		<div id="pane-side-v2">
+			<div>Mum &mdash; see you at 8</div>
+		</div>
+		<p>WhatsApp is open in another window. Click "Use Here" to use it here.</p>
+		</body></html>`
 )
 
 func pageServer(t *testing.T) string {
@@ -163,10 +182,11 @@ func TestBrowserChainLaunchesNavigatesAndClassifies(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s classified as %q, want %q (snapshot %+v)", tc.path, got, tc.want, snap)
 		}
-		// No case here may capture text: ready and qr match on structure, and
+		// No case here may report markers: ready and qr match on structure, and
 		// the off-host page is decided by its URL.
-		if snap.TextSample != "" {
-			t.Errorf("%s: page text was captured into the snapshot: %q", tc.path, snap.TextSample)
+		if len(snap.Markers) != 0 {
+			t.Errorf("%s: markers were gathered from a page decided without text: %v",
+				tc.path, snap.Markers)
 		}
 	}
 }
@@ -899,9 +919,117 @@ func TestBrowserChainDetectsTheQRByEitherSelector(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: classified as %q, want %q (snapshot %+v)", tc.name, got, tc.want, snap)
 		}
-		// The QR payload is a credential. No case may capture page text.
-		if snap.TextSample != "" {
-			t.Errorf("%s: page text was captured: %q", tc.name, snap.TextSample)
+		// The QR payload is a credential. No case may scan page text.
+		if len(snap.Markers) != 0 {
+			t.Errorf("%s: markers were gathered from a page structure classified: %v",
+				tc.name, snap.Markers)
+		}
+	}
+}
+
+// h6Server serves the renamed-pane fixtures under a path that satisfies the
+// classifier's own host rule.
+//
+// The rule is `strings.Contains(lower(URL), "web.whatsapp.com")`, and it is
+// checked BEFORE the marker probe: on a plain 127.0.0.1 URL every fixture
+// classifies REDIRECT and the text path is never reached — which is why the
+// older browser test could only assert the conflict screen at unit level.
+//
+// Putting the host in the PATH is not a trick played on the classifier; it is
+// the classifier's rule, exercised exactly as written, without this test
+// resolving or contacting web.whatsapp.com. If somebody tightens that rule to
+// parse the host properly, this fixture stops matching and the test fails
+// loudly rather than silently skipping the path it exists to cover.
+func h6Server(t *testing.T) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	for path, body := range map[string]string{
+		"/web.whatsapp.com/renamed":          renamedPanePage,
+		"/web.whatsapp.com/renamed-conflict": renamedPaneConflictPage,
+	} {
+		html := body
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprint(w, html)
+		})
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// H6 against a real JavaScript engine: the marker script, executing.
+//
+// The unit tests hold the Go side, but the guard now LIVES in the page — the
+// body text is read, lowercased and discarded inside the browser — and a double
+// cannot make that claim. Only a browser can say whether what comes back over
+// CDP is a list of our own strings rather than somebody's conversation.
+//
+// Both fixtures have the application loaded with our selector renamed. That is
+// the H6 state: structure matches nothing, so the second probe runs against a
+// chat list.
+func TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed(t *testing.T) {
+	binary := findChrome(t)
+	base := h6Server(t)
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() {
+		via := engine.CleanStop(context.Background(), runner, browser)
+		t.Logf("stopped_via=%s", via)
+		if !via.Clean() {
+			t.Errorf("stopped_via=%s: a browser this test owns must go down through "+
+				"the protocol", via)
+		}
+	}()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	// The strings a leak would carry. They are in both fixtures' bodies.
+	private := []string{"Mum", "see you at 8", "the deploy is out", "99999-0000"}
+
+	cases := []struct {
+		name, path string
+		want       spa.PageClass
+	}{
+		// The chat list alone matches none of our vocabulary.
+		{"renamed selector, chat list", "/web.whatsapp.com/renamed", spa.ClassOther},
+		// And the class we would have lost by gating on identity instead: the
+		// conflict screen belongs to a PAIRED profile by definition, so a guard
+		// keyed on "no owner identity" would refuse to read exactly here.
+		{"renamed selector, conflict wording", "/web.whatsapp.com/renamed-conflict", spa.ClassSessionConflict},
+	}
+	for _, tc := range cases {
+		if err := tab.Navigate(runner, base+tc.path, "nav/"+tc.name); err != nil {
+			t.Fatalf("%s: Navigate: %v", tc.name, err)
+		}
+		snap, got := spa.Probe(context.Background(), runner, tab.Evaluate, "probe/"+tc.name)
+
+		if got != tc.want {
+			t.Errorf("%s: classified as %q, want %q (snapshot %+v)", tc.name, got, tc.want, snap)
+		}
+		// The page HAS text and the structural probe found nothing, so the
+		// marker path ran. If it had not, this assertion would be vacuous.
+		if snap.TextLength == 0 {
+			t.Errorf("%s: the fixture reported no text at all; the marker path was "+
+				"not exercised and this case proves nothing", tc.name)
+		}
+		rendered := fmt.Sprintf("%+v", snap)
+		for _, secret := range private {
+			if strings.Contains(rendered, secret) {
+				t.Errorf("%s: page text crossed the boundary: %q is in %s",
+					tc.name, secret, rendered)
+			}
 		}
 	}
 }

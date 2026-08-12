@@ -358,9 +358,14 @@ quebrar o seletor no navegador.
    corpo; asserção de que o snapshot volta com `TextSample` vazio. Com controle
    negativo: reintroduzir a leitura e ver o teste falhar.
 
-**Status**: **não corrigido** — fora do escopo do LOOP 04.3A, que é medição de
+**Status**: ~~**não corrigido** — fora do escopo do LOOP 04.3A, que é medição de
 liveness, e mexer na guarda de PII sem medir qual sinal a substitui trocaria
-uma dependência frágil por outra. Registrado para decisão do usuário.
+uma dependência frágil por outra. Registrado para decisão do usuário.~~
+**CORRIGIDO em 2026-08-12 (LOOP H6.1)** — ver a seção de resolução no fim desta
+entrada. Testes que o travam: `TestProbeCarriesNoPageTextWhenTheSelectorIsRenamed`,
+`TestProbeDiscardsMarkersItNeverAskedAbout`, `TestMarkerScriptNeverReturnsPageText`
+(`spa/probe_test.go`) e `TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed`
+(`integration_test.go`, contra Chrome real).
 
 ### Agravante removido em 2026-08-12 (LOOP 04.3B): o seletor estava escrito TRÊS vezes
 
@@ -380,3 +385,124 @@ dois lugares é o mesmo bug esperando divergir."*
 As duas cópias passaram a referenciar `paneSideSelector`. A superfície da H6
 continua a mesma — uma guarda só —, mas agora renomear o seletor é **uma**
 edição em vez de três lugares onde esquecer um.
+
+### Resolução — LOOP H6.1 (2026-08-12): a guarda deixou de ser guarda e virou mecanismo
+
+**O que foi adotado**: o texto da página **não atravessa mais a fronteira**. O
+segundo `Evaluate` deixou de devolver 200 caracteres de `innerText` e passou a
+receber um conjunto FECHADO das nossas próprias strings, perguntando quais delas
+a página viu. A busca de substring acontece dentro da página; o que volta é um
+subconjunto do que foi enviado, e `knownMarkers` descarta na chegada qualquer
+coisa fora do conjunto.
+
+`PageSnapshot.TextSample string` foi **removido** e substituído por
+`Markers []string`. Isso encerra também o agravante 2 desta entrada: não existe
+mais campo exportado de texto livre para um chamador futuro logar sem saber o
+que carrega.
+
+O significado ficou em Go. Qual combinação de marcadores é conflito e qual é
+"atualize o Chrome" continua em `classifyByMarkers`, testável por unidade — só a
+busca desceu para a página.
+
+**Por que NÃO foi a guarda por identidade** (correção 1 desta entrada, que era o
+caminho previsto). A tela de conflito só existe num perfil **pareado** — é isso
+que a torna conflito — e o M3.3 mediu que a identidade é PERSISTIDA e reaparece
+em T+0,01s, antes do socket abrir. Gatear a leitura de texto por "identidade
+ausente" fecharia a leitura exatamente na tela que a leitura existe para
+reconhecer, e a `ClassSessionConflict` é terminal: o chamador age sobre ela.
+Seria trocar uma dependência frágil por uma perda funcional.
+
+Isto é **inferência, não medição** — não produzi uma tela de conflito contra a
+conta real para ler a identidade nela, porque a correção adotada torna a
+pergunta irrelevante: sem texto cru atravessando, não há o que gatear. O
+falsificador fica registrado: se algum dia se medir identidade AUSENTE numa tela
+de conflito, esta justificativa cai (mas a correção adotada continua de pé, por
+outro motivo).
+
+**A ordem de preferência desta entrada estava, portanto, invertida.** A correção
+2 ("redigir na fronteira") não era mais cara que a 1 — é a mais barata das duas
+em consequência, porque não depende de medir sinal nenhum.
+
+**O que a correção NÃO cobre.** A guarda de `#pane-side` continua no script,
+rebaixada ao que de fato protege agora: CORREÇÃO, não privacidade. Uma lista de
+conversas varrida por estas frases pode acertar uma por coincidência — alguém
+escrevendo "outra aba" numa mensagem viraria `SESSION_CONFLICT` numa sessão
+saudável. Essa guarda é exercitada pelo dublê e por asserção estática sobre o
+script; a corrida real (painel aparecendo ENTRE as duas avaliações) não foi
+reproduzida contra navegador, e continua sendo o buraco de cobertura conhecido.
+
+**Controles negativos EXECUTADOS** (quatro mutações, todas revertidas):
+
+**(NC-1) o script volta a fatiar o texto** — `markerScript` devolve
+`[t.slice(0, 200)]`:
+
+```
+--- FAIL: TestProbeCarriesNoPageTextWhenTheSelectorIsRenamed
+    the marker probe never ran, so this test did not exercise H6
+--- FAIL: TestMarkerScriptNeverReturnsPageText
+    the marker script slices the body text; that is the H6 defect returning
+    the marker script does not filter the marker list; it is returning something else
+--- FAIL: TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed
+    renamed selector, conflict wording: classified as "OTHER", want "SESSION_CONFLICT"
+```
+
+Repare no que este controle revelou: a PII **não vazou**, porque `knownMarkers`
+a barrou sozinha. As duas camadas são independentes, e uma só já segura — que é
+o que se queria de defesa em profundidade, e não estava previsto no desenho.
+
+**(NC-2) a fronteira aceita o que a página inventar** — `knownMarkers` devolve
+`reported` sem filtrar:
+
+```
+--- FAIL: TestProbeDiscardsMarkersItNeverAskedAbout
+    the page smuggled strings we never sent: [Mum: see you at 8 outra aba but not really]
+```
+
+**(NC-3) as DUAS camadas removidas — o defeito H6 inteiro, contra Chrome real.**
+É o único controle que prova que a asserção de PII morde:
+
+```
+--- FAIL: TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed (1.65s)
+  renamed selector, chat list: page text crossed the boundary: "Mum" is in
+    {... Markers:[Mum — see you at 8
+                  Work — the deploy is out
+                  +55 11 99999-0000 — are we still on?]}
+  ... idem para "see you at 8", "the deploy is out", "99999-0000"
+  renamed selector, conflict wording: page text crossed the boundary: "Mum" is in {...}
+```
+
+**(NC-4) a guarda de correção removida do script** — a linha do `#pane-side`
+apagada de `markerScript`:
+
+```
+--- FAIL: TestMarkerScriptNeverReturnsPageText
+    the marker script no longer refuses a loaded application
+```
+
+> **Nota de método sobre o NC-4.** A primeira tentativa deste controle PASSOU, e
+> passou porque a mutação nunca aplicou: procurei o literal `'#pane-side'` no
+> fonte, que ali é a constante `paneSideSelector` concatenada. É a ARMADILHA 3
+> do repo em ação — controle negativo que não aplica não prova nada, e um que
+> "passa" é indistinguível de um teste que não morde. Refeito com `assert` na
+> substituição antes de escrever o arquivo.
+
+**Gate executado** (2026-08-12, árvore limpa antes e depois):
+
+```
+go build ./...                                   OK  (repo inteiro)
+go vet ./...                                     OK  (repo inteiro)
+scripts/chromium-study: build + vet              OK  (o laboratório não quebrou)
+gofmt -l internal/wa-headless/                   vazio
+go test -race -count=1 ./internal/wa-headless/...
+  wa-api/internal/wa-headless               ok  98.166s
+  wa-api/internal/wa-headless/engine        ok   5.015s
+  wa-api/internal/wa-headless/observability ok   1.189s
+  wa-api/internal/wa-headless/spa           ok   2.222s
+make lint   269 issues  ·  pai (stash, MESMA árvore) 269  ·  delta 0
+  internal/wa-headless: as MESMAS 2 gocyclo pré-existentes, nenhuma tocada
+```
+
+Nenhum browser desta correção saiu por sinal: `stopped_via=browser.close` nas
+duas corridas do teste novo. `web.whatsapp.com` não foi tocado — as fixtures são
+servidas por `httptest`, e o caminho de marcadores é alcançado servindo o host
+no PATH da URL, que é a regra do próprio classificador exercitada como escrita.

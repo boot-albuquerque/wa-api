@@ -74,19 +74,24 @@ type PageSnapshot struct {
 	HasQRLoading bool `json:"has_qr_loading"`
 	DOMNodes     int  `json:"dom_nodes"`
 	TextLength   int  `json:"text_length"`
-	// TextSample exists ONLY to recognise WhatsApp's own error and conflict
-	// screens, which have no structural marker to match on.
+	// Markers is the subset of OUR OWN marker strings that the page reported
+	// finding in its body text. It replaced a free-text sample in 2026-08-12
+	// (H6), and the difference is the whole PII argument.
 	//
-	// It is populated by the page script ONLY when #pane-side is absent, and
-	// that condition is the whole safety argument: on a loaded application the
-	// body text begins with the chat list — contact names and message previews,
-	// which is exactly the PII invariant 14 forbids in a log. A snapshot that
-	// captured text first and classified afterwards would put that in every
-	// record it wrote.
+	// The old field carried up to 200 characters of body.innerText, guarded by
+	// one selector: if #pane-side was absent, the text came back. On a loaded
+	// application that text begins with the chat list — contact names and
+	// message previews — so the day Meta renamed that selector, every snapshot
+	// would have started carrying exactly what invariant 14 forbids.
 	//
-	// It diverges from the study on purpose: p4c_target.go captured the sample
+	// Now the page is handed a closed set of strings and answers with which of
+	// them it saw. Anything not in the set we sent is dropped on arrival, so no
+	// sequence of bytes originating in the page's own text can traverse the
+	// boundary — regardless of which selector matched, or whether any did.
+	//
+	// It diverges from the study on purpose: p4c_target.go captured a sample
 	// unconditionally, which was safe there only because nothing persisted it.
-	TextSample string `json:"text_sample,omitempty"`
+	Markers []string `json:"-"`
 }
 
 // conflictMarkers are WhatsApp's own words for "this session moved".
@@ -95,6 +100,9 @@ type PageSnapshot struct {
 // conflict screen carries no id, class or data attribute to key on. Both
 // languages the product serves are listed, and a phrase that stops matching
 // degrades to ClassOther — visibly — rather than to a wrong class.
+//
+// They are lowercase because the comparison is done on lowercased text, in the
+// page. Adding a marker with an uppercase letter makes it unmatchable.
 var conflictMarkers = []string{
 	"open in another",
 	"another window",
@@ -102,6 +110,49 @@ var conflictMarkers = []string{
 	"outra janela",
 	"aberto em outro",
 	"outra aba",
+}
+
+// The "update Chrome" screen, which WhatsApp serves when it refuses the browser
+// itself. It is a CONJUNCTION — the browser name plus a verb — because "chrome"
+// alone appears on pages that are fine.
+//
+// The conjunction is evaluated here in Go, not in the page: the page is given
+// the terms and reports which it saw, and this file decides what a combination
+// means. Keeping the meaning on this side is what lets a unit test hold it.
+const browserNameMarker = "chrome"
+
+var browserUpdateMarkers = []string{"update", "atualize"}
+
+// textMarkers is the closed set the page is allowed to answer with.
+//
+// Order does not matter — the answer is compared by value, not by index — but
+// the contents do: this slice is simultaneously the question asked of the page
+// and the whitelist applied to its answer.
+func textMarkers() []string {
+	m := make([]string, 0, len(conflictMarkers)+1+len(browserUpdateMarkers))
+	m = append(m, conflictMarkers...)
+	m = append(m, browserNameMarker)
+	return append(m, browserUpdateMarkers...)
+}
+
+// knownMarkers drops anything the page reported that we did not ask about.
+//
+// This is the boundary that makes the PII claim structural rather than
+// conventional. Without it, a page could answer the marker probe with its own
+// text and the sample would be back — through a field whose name promises it
+// cannot happen.
+func knownMarkers(reported []string) []string {
+	allowed := textMarkers()
+	kept := make([]string, 0, len(reported))
+	for _, r := range reported {
+		for _, a := range allowed {
+			if r == a {
+				kept = append(kept, r)
+				break
+			}
+		}
+	}
+	return kept
 }
 
 const whatsappHost = "web.whatsapp.com"
@@ -128,7 +179,7 @@ func Classify(s PageSnapshot) PageClass {
 		return ClassPairingLoading
 	}
 
-	if cls, ok := classifyByText(s.TextSample); ok {
+	if cls, ok := classifyByMarkers(s.Markers); ok {
 		return cls
 	}
 	switch {
@@ -162,31 +213,41 @@ func ClassifyProbe(s PageSnapshot, probeErr error) PageClass {
 	return Classify(s)
 }
 
-// classifyByText matches the screens that carry no structural marker at all.
+// classifyByMarkers matches the screens that carry no structural marker at all.
 //
-// Separated from Classify because it is the only part that touches page text,
-// and keeping it in one small function makes the PII surface one small function
-// — the guarantee is that Probe never gathers a sample from a healthy page, and
-// this is where the sample is finally read.
+// It receives which of OUR strings the page reported seeing — never the text
+// itself. That is the H6 correction: the substring search moved into the page,
+// so what crosses the boundary is a verdict about our vocabulary instead of a
+// slice of somebody's conversation.
+//
+// What did NOT move is the meaning. Which combination of markers constitutes a
+// conflict screen or a refused browser is decided here, in Go, where a unit
+// test can hold it and where changing it is a reviewable diff.
 //
 // Returns ok=false when nothing matched, so the caller can fall through to the
 // signals that do not need text at all.
-func classifyByText(sample string) (PageClass, bool) {
-	if sample == "" {
+func classifyByMarkers(matched []string) (PageClass, bool) {
+	if len(matched) == 0 {
 		return ClassOther, false
 	}
-	low := strings.ToLower(sample)
+	seen := make(map[string]bool, len(matched))
+	for _, m := range matched {
+		seen[m] = true
+	}
 
 	for _, marker := range conflictMarkers {
-		if strings.Contains(low, marker) {
+		if seen[marker] {
 			return ClassSessionConflict, true
 		}
 	}
 	// WhatsApp refusing the browser itself, in both languages the product
 	// serves. The study hit this by launching without a user agent.
-	if strings.Contains(low, "chrome") &&
-		(strings.Contains(low, "update") || strings.Contains(low, "atualize")) {
-		return ClassErrorPage, true
+	if seen[browserNameMarker] {
+		for _, verb := range browserUpdateMarkers {
+			if seen[verb] {
+				return ClassErrorPage, true
+			}
+		}
 	}
 	return ClassOther, false
 }

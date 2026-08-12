@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +21,11 @@ type fakePage struct {
 	asked     []string
 	failOn    map[string]error
 	// paneAppearsLate simulates the application finishing its load between the
-	// two probes — the race the text script has to refuse.
+	// two probes — the race the marker script has to refuse.
 	paneAppearsLate bool
+	// reportExtra is what a page says that it was never asked about. Real pages
+	// do not do this; the boundary has to survive one that does.
+	reportExtra []string
 }
 
 func (f *fakePage) eval(ctx context.Context, expression string, out *string) error {
@@ -34,17 +38,27 @@ func (f *fakePage) eval(ctx context.Context, expression string, out *string) err
 		b, _ := json.Marshal(f.structure)
 		*out = string(b)
 		return nil
-	case strings.Contains(expression, "slice(0, 200)"):
-		f.asked = append(f.asked, "text")
-		if err := f.failOn["text"]; err != nil {
+	case strings.Contains(expression, "markers.filter"):
+		f.asked = append(f.asked, "markers")
+		if err := f.failOn["markers"]; err != nil {
 			return err
 		}
-		// The real script returns '' when #pane-side turned up after all.
-		sample := f.text
-		if f.paneAppearsLate {
-			sample = ""
+		// This mirrors markerScript in probe.go, and it mirrors it EXACTLY on
+		// purpose: lowercase the body once, keep the markers whose text occurs
+		// in it, answer with nothing else. A double that were more permissive
+		// than the page — returning the sample, say — would hide the very
+		// defect these tests exist to catch.
+		hits := []string{}
+		if !f.paneAppearsLate {
+			low := strings.ToLower(f.text)
+			for _, m := range textMarkers() {
+				if strings.Contains(low, m) {
+					hits = append(hits, m)
+				}
+			}
 		}
-		b, _ := json.Marshal(sample)
+		hits = append(hits, f.reportExtra...)
+		b, _ := json.Marshal(hits)
 		*out = string(b)
 		return nil
 	}
@@ -78,13 +92,13 @@ func TestProbeNeverReadsTextFromAReadyPage(t *testing.T) {
 	if cls != ClassAppReady {
 		t.Fatalf("class = %q, want %q", cls, ClassAppReady)
 	}
-	if page.askedFor("text") {
-		t.Fatal("the text of a READY page was fetched. On a loaded application the " +
+	if page.askedFor("markers") {
+		t.Fatal("a READY page had its text scanned. On a loaded application the " +
 			"body text begins with the chat list — contact names and message " +
 			"previews — which is the PII invariant 14 forbids")
 	}
-	if snap.TextSample != "" {
-		t.Fatalf("a text sample survived into the snapshot: %q", snap.TextSample)
+	if len(snap.Markers) != 0 {
+		t.Fatalf("markers survived into the snapshot of a structural match: %v", snap.Markers)
 	}
 }
 
@@ -98,8 +112,8 @@ func TestProbeNeverReadsTextFromAQRPage(t *testing.T) {
 	if cls != ClassLoginRequired {
 		t.Fatalf("class = %q, want %q", cls, ClassLoginRequired)
 	}
-	if page.askedFor("text") {
-		t.Error("text was fetched for a page that structure already classified")
+	if page.askedFor("markers") {
+		t.Error("text was scanned for a page that structure already classified")
 	}
 }
 
@@ -113,12 +127,12 @@ func TestProbeReadsTextOnlyWhenStructureMatchedNothing(t *testing.T) {
 
 	snap, cls := Probe(context.Background(), testRunner(), page.eval, "boot")
 
-	if !page.askedFor("text") {
-		t.Fatal("no text was fetched for a page with no structural marker; the " +
+	if !page.askedFor("markers") {
+		t.Fatal("no text was scanned for a page with no structural marker; the " +
 			"conflict screen would be unclassifiable")
 	}
 	if cls != ClassSessionConflict {
-		t.Fatalf("class = %q, want %q (sample %q)", cls, ClassSessionConflict, snap.TextSample)
+		t.Fatalf("class = %q, want %q (markers %v)", cls, ClassSessionConflict, snap.Markers)
 	}
 }
 
@@ -134,8 +148,8 @@ func TestProbeRefusesTextWhenThePaneAppearsBetweenProbes(t *testing.T) {
 
 	snap, _ := Probe(context.Background(), testRunner(), page.eval, "boot")
 
-	if snap.TextSample != "" {
-		t.Fatalf("text leaked through the race: %q", snap.TextSample)
+	if len(snap.Markers) != 0 {
+		t.Fatalf("the race produced markers from a loaded application: %v", snap.Markers)
 	}
 }
 
@@ -158,7 +172,7 @@ func TestProbeReportsUnresponsiveWhenTheStructureProbeTimesOut(t *testing.T) {
 func TestProbeReportsUnresponsiveWhenTheTextProbeTimesOut(t *testing.T) {
 	page := &fakePage{
 		structure: PageSnapshot{URL: "https://web.whatsapp.com/", TextLength: 10},
-		failOn:    map[string]error{"text": context.DeadlineExceeded},
+		failOn:    map[string]error{"markers": context.DeadlineExceeded},
 	}
 
 	_, cls := Probe(context.Background(), testRunner(), page.eval, "boot")
@@ -226,8 +240,8 @@ func TestPairingScreenWithoutACodeIsItsOwnClass(t *testing.T) {
 	if cls == ClassOther {
 		t.Error("the pairing screen was reported as an unrecognised page")
 	}
-	// It matched on structure, so no text may have been fetched.
-	if page.askedFor("text") || snap.TextSample != "" {
+	// It matched on structure, so no text may have been scanned.
+	if page.askedFor("markers") || len(snap.Markers) != 0 {
 		t.Error("text was read from a page that structure already classified")
 	}
 }
@@ -267,5 +281,89 @@ func TestStructureScriptCarriesBothQRSelectors(t *testing.T) {
 	// The QR payload is a credential. The probe must not even look at it.
 	if strings.Contains(structureScript, "data-ref") {
 		t.Error("the structure probe reads [data-ref], which carries the QR payload")
+	}
+}
+
+// H6, reproduced: Meta renames #pane-side and the chat list is on screen.
+//
+// This is the exact state the old guard could not survive. Structure reports no
+// pane — because the selector no longer matches anything — so the second probe
+// runs against a loaded application whose body text is the chat list. Under the
+// old script that returned 200 characters of innerText.
+//
+// The assertion is deliberately made against the WHOLE snapshot rather than
+// against one field: a test that checked a named field would keep passing if
+// somebody added a second one.
+func TestProbeCarriesNoPageTextWhenTheSelectorIsRenamed(t *testing.T) {
+	private := []string{"Mum", "see you at 8", "the deploy is out", "+55 11"}
+
+	page := &fakePage{
+		// HasPane false is the rename: the element is there, our selector is not.
+		structure: PageSnapshot{URL: "https://web.whatsapp.com/", TextLength: 48000},
+		text: "Mum: see you at 8\nWork: the deploy is out\n" +
+			"+55 11 99999-0000: are we still on?",
+	}
+
+	snap, cls := Probe(context.Background(), testRunner(), page.eval, "boot")
+
+	// It genuinely reached the text path — otherwise this test proves nothing.
+	if !page.askedFor("markers") {
+		t.Fatal("the marker probe never ran, so this test did not exercise H6")
+	}
+	rendered := fmt.Sprintf("%+v", snap)
+	for _, secret := range private {
+		if strings.Contains(rendered, secret) {
+			t.Errorf("page text reached the snapshot through a renamed selector: "+
+				"%q is in %s", secret, rendered)
+		}
+	}
+	// Nothing in a chat list matches our vocabulary, so it stays unrecognised.
+	if cls != ClassOther {
+		t.Errorf("class = %q, want %q", cls, ClassOther)
+	}
+}
+
+// The boundary, against a page that answers with something it was never given.
+//
+// knownMarkers is what makes the PII claim structural instead of conventional:
+// without it, the marker probe is just a differently-shaped way to return text.
+func TestProbeDiscardsMarkersItNeverAskedAbout(t *testing.T) {
+	page := &fakePage{
+		structure:   PageSnapshot{URL: "https://web.whatsapp.com/", TextLength: 900},
+		reportExtra: []string{"Mum: see you at 8", "outra aba but not really"},
+	}
+
+	snap, cls := Probe(context.Background(), testRunner(), page.eval, "boot")
+
+	if len(snap.Markers) != 0 {
+		t.Fatalf("the page smuggled strings we never sent: %v", snap.Markers)
+	}
+	// "outra aba but not really" CONTAINS a real marker. Dropping it whole,
+	// rather than matching on it, is the difference between a whitelist and a
+	// second substring search on the far side of the boundary.
+	if cls == ClassSessionConflict {
+		t.Fatal("a string the page invented was accepted as a conflict marker")
+	}
+}
+
+// The script itself must not be able to return text, whatever the Go side does.
+func TestMarkerScriptNeverReturnsPageText(t *testing.T) {
+	if strings.Contains(markerScript, "slice(") {
+		t.Error("the marker script slices the body text; that is the H6 defect returning")
+	}
+	if !strings.Contains(markerScript, "markers.filter") {
+		t.Error("the marker script does not filter the marker list; it is returning something else")
+	}
+	// Every marker Go knows about must actually be asked for, or a class dies
+	// silently the day somebody adds a phrase and forgets the wire.
+	for _, m := range textMarkers() {
+		if !strings.Contains(markerScript, m) {
+			t.Errorf("marker %q is never sent to the page", m)
+		}
+	}
+	// The pane check survives as a correctness guard: a chat list scanned for
+	// these phrases can hit one by coincidence.
+	if !strings.Contains(markerScript, paneSideSelector) {
+		t.Error("the marker script no longer refuses a loaded application")
 	}
 }

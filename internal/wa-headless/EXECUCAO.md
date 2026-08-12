@@ -8,7 +8,32 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 04 — LOOP 04.3B, o SPA percebe a queda SOZINHO? · **DONE**
+CAP: — · LOOP H6.1, a guarda de PII deixa de depender de seletor · **DONE**
+
+O `spa.Probe` não traz mais texto da página. O segundo `Evaluate` recebe um
+conjunto FECHADO das nossas strings e responde quais viu; `knownMarkers` descarta
+na chegada o que estiver fora do conjunto. `PageSnapshot.TextSample` foi
+**removido** — não existe mais campo exportado de texto livre.
+
+**A correção prevista pela entrada H6 não foi a adotada, e o motivo é uma
+descoberta deste loop.** Gatear a leitura pela AUSÊNCIA de identidade mataria a
+`ClassSessionConflict`: a tela de conflito só existe num perfil pareado — é isso
+que a torna conflito — e o M3.3 mediu identidade persistida presente em T+0,01s,
+antes do socket. A guarda fecharia a leitura exatamente na tela que a leitura
+existe para reconhecer, e essa classe é terminal. Detalhe, falsificador e os
+quatro controles negativos na resolução do **H6** em `HOUSEKEEP.md`.
+
+Quatro controles negativos executados; o NC-3 (as duas camadas removidas) é o
+único que prova que a asserção morde — contra Chrome real, o snapshot volta com
+`Mum — see you at 8` e `+55 11 99999-0000`. O NC-4 **passou na primeira
+tentativa por não ter aplicado**, e está registrado como nota de método.
+
+Gate: build+vet do repo e do estudo OK, `-race` verde nos 4 pacotes,
+`make lint` 269 contra 269 do pai medido com `stash` na MESMA árvore — delta 0.
+
+Loop anterior: **04.3B** (`ec8063e`), abaixo.
+
+### Loop anterior — CAP 04, LOOP 04.3B, o SPA percebe a queda SOZINHO? · **DONE**
 Objective: a saída do socket medida no 04.3A foi percepção do SPA, ou reação ao
 evento `offline` que a nossa emulação dispara? Medido cortando **só o
 transporte** (`emulateNetworkConditionsByRule` sozinho), com `navigator.onLine`
@@ -357,7 +382,13 @@ apenas — aquele repo é da sessão C0/C1).
 medido e a observação só-leitura está autorizada. O texto anterior desta seção
 dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**.
 
-* **LOOP 04.3B** (o próximo) — **quanto tempo em `OPENING` significa morto?**
+> **Correção de nomenclatura (2026-08-12, LOOP H6.1).** O primeiro item abaixo
+> estava rotulado `LOOP 04.3B`, mas esse número foi consumido pelo loop de
+> auto-detecção que já está em `ec8063e`. A PERGUNTA continua aberta e correta;
+> só o rótulo estava tomado, e quem lesse apenas esta seção concluiria que o
+> trabalho ainda não foi feito. Renumerado para **04.3D**.
+
+* **LOOP 04.3D** (o próximo) — **quanto tempo em `OPENING` significa morto?**
   O M4 mostrou que o socket reage em ~3 s mas cai para `OPENING`, que é o mesmo
   estado do boot: o valor instantâneo não separa "subindo" de "perdeu o
   servidor", só a DURAÇÃO separa. Sem esse número, um liveness que leia o socket

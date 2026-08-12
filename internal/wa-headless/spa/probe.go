@@ -12,11 +12,20 @@ package spa
 //
 //	1. structure only — enough to answer APP_READY and LOGIN_REQUIRED, the two
 //	   classes a working system spends all its time in;
-//	2. text, ONLY if structure matched nothing, because the screens that need
-//	   text (conflict, "update Chrome") carry no structural marker at all.
+//	2. marker matching, ONLY if structure matched nothing, because the screens
+//	   that need text (conflict, "update Chrome") carry no structural marker.
 //
-// The common path therefore never fetches text. The extra round trip is paid
-// only where the session is already broken.
+// The common path therefore never looks at text at all. The extra round trip is
+// paid only where the session is already broken.
+//
+// Step 2 does not return text (H6, 2026-08-12). It sends a closed set of our
+// own strings into the page and receives back which of them were present, and
+// the difference matters more than it looks: the previous version returned real
+// body text withheld only when #pane-side was found, so a rename of that one
+// selector by Meta would have converted every probe of a healthy session into a
+// capture of the chat list. The privacy of this package no longer rests on any
+// selector, on markup, or on an identity lookup — it rests on the fact that
+// there is no path by which page text reaches a Go string.
 
 import (
 	"context"
@@ -76,15 +85,46 @@ const structureScript = `JSON.stringify((() => {
 	};
 })())`
 
-// textScript is the second, guarded evaluation. It runs only on a page that
-// matched no structure, and it REFUSES to return anything if the application
-// turns out to be loaded after all — the page can finish loading between the
-// two probes, and a race must not be the way PII escapes.
-const textScript = `JSON.stringify((() => {
-	if (document.querySelector('` + paneSideSelector + `')) return '';
+// markerScript is the second, guarded evaluation. It runs only on a page that
+// matched no structure.
+//
+// It hands the page a closed list of OUR strings and asks which ones it saw.
+// The body text is read inside the page, compared inside the page, and thrown
+// away inside the page: what comes back is a subset of the list that went in.
+//
+// This replaced a script that returned 200 characters of body.innerText,
+// withheld only when #pane-side was present (H6). That guard was real but it
+// was ONE selector — the same selector this whole module treats as something
+// Meta may rename without warning — and its failure mode was not a
+// misclassification, it was contact names and message previews entering the
+// process. A guard whose failure costs a class is worth having; a guard whose
+// failure costs the PII invariant is worth replacing with a mechanism.
+//
+// The pane check survives, demoted to what it now actually protects:
+// CORRECTNESS. The application can finish loading between the two probes, and a
+// chat list scanned for these markers can hit one by coincidence — somebody
+// writing "outra aba" in a message would otherwise turn a healthy session into
+// SESSION_CONFLICT. It is no longer load-bearing for privacy.
+var markerScript = buildMarkerScript()
+
+func buildMarkerScript() string {
+	// json.Marshal of []string is a JavaScript array literal, and it escapes
+	// anything in a marker that would otherwise break out of the expression.
+	list, err := json.Marshal(textMarkers())
+	if err != nil {
+		// Unreachable for []string, and a panic here would be a boot-time
+		// failure in a package with no I/O. An empty list degrades to "no
+		// markers ever match", which shows up as OTHER rather than as silence.
+		list = []byte("[]")
+	}
+	return `JSON.stringify((() => {
+	if (document.querySelector('` + paneSideSelector + `')) return [];
+	const markers = ` + string(list) + `;
 	const t = document.body ? document.body.innerText : '';
-	return t.slice(0, 200);
+	const low = t.toLowerCase();
+	return markers.filter((m) => low.indexOf(m) !== -1);
 })())`
+}
 
 // Probe reads the page state and classifies it.
 //
@@ -113,21 +153,24 @@ func Probe(ctx context.Context, r *engine.Runner, eval Evaluator, label string) 
 		return snap, cls
 	}
 
-	var sample string
-	if err := r.Do(ctx, engine.OpStateProbe, label+"/text", func(ctx context.Context) error {
-		return eval(ctx, textScript, &sample)
+	var answer string
+	if err := r.Do(ctx, engine.OpStateProbe, label+"/markers", func(ctx context.Context) error {
+		return eval(ctx, markerScript, &answer)
 	}); err != nil {
 		// The page answered the first probe and not the second. It is going
 		// unresponsive, and saying so beats reporting the OTHER we had before.
 		return snap, ClassifyProbe(snap, err)
 	}
-	// The page script returns JSON.stringify(<string>), so what arrives here is
-	// a quoted, escaped JSON string — measured against a real browser, not
-	// assumed. A decode failure means the contract changed; swallowing it would
-	// leave an empty sample and a page classified by what it lacks.
-	if unquoteErr := json.Unmarshal([]byte(sample), &snap.TextSample); unquoteErr != nil {
-		snap.TextSample = ""
+	// The page script returns JSON.stringify(<string[]>), so what arrives here
+	// is a JSON array — measured against a real browser, not assumed. A decode
+	// failure means the contract changed; swallowing it would leave an empty
+	// result and a page classified by what it lacks.
+	var reported []string
+	if unmarshalErr := json.Unmarshal([]byte(answer), &reported); unmarshalErr != nil {
 		return snap, ClassOther
 	}
+	// Everything the page said that we did not ask about is discarded here, and
+	// this line is the reason PageSnapshot cannot carry page text at all.
+	snap.Markers = knownMarkers(reported)
 	return snap, Classify(snap)
 }
