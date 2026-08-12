@@ -21,6 +21,16 @@ package waheadless
 //
 //	WA_HEADLESS_REAL_SPA=1 go test -tags= -run TestRealSPA ./internal/wa-headless/ -v
 //
+// The observation probes default to the disposable lab profile and can be
+// pointed at another one with WA_HEADLESS_PROFILE_DIR, which is how a profile
+// of unknown paired state gets looked at by an instrument already proven to
+// work. That override reaches the READ-ONLY path only: pairing mutates the
+// profile it opens and stays bound to the lab one.
+//
+// The profile resolution itself is covered by ordinary unit tests at the bottom
+// of this file. They run in every `go test` — they open no browser and touch no
+// profile.
+//
 // NO PII, EVER. These probes report booleans, counts and tag names. They do not
 // read message text, contact names, phone numbers or the QR payload. The QR
 // image itself is a credential for the seconds it lives: it is never captured,
@@ -49,6 +59,16 @@ const (
 	// via internal/wa-headless/.gitignore. It is never the study's paired
 	// profile: that one belongs to another phase and is not disposable.
 	labProfileDir = ".lab/test-account-profile"
+	// profileDirOverride points the READ-ONLY observation probes at a profile
+	// other than the lab one, so a profile whose paired state is unknown can be
+	// looked at with the instrument that is already proven to work.
+	//
+	// It reaches the observation path ONLY. The pairing path refuses it — see
+	// pairingProfileDir.
+	profileDirOverride = "WA_HEADLESS_PROFILE_DIR"
+	// labProfilePerm keeps the profile readable by its owner alone: from the
+	// moment an account links, the directory holds a session credential.
+	labProfilePerm = 0o700
 	// realSPAUserAgent is required for compatibility, not for evasion.
 	//
 	// WhatsApp refuses the HeadlessChrome token outright and serves an "update
@@ -66,19 +86,93 @@ func requireRealSPA(t *testing.T) {
 	}
 }
 
-// openRealSPA launches the lab profile and navigates to the target.
+// observationProfileDir resolves, as an absolute path, the profile the
+// READ-ONLY probes open, and reports whether the caller overrode it.
+//
+// Resolution only: it touches no filesystem, so calling it is free of side
+// effects on either profile.
+func observationProfileDir() (dir string, overridden bool, err error) {
+	if override := os.Getenv(profileDirOverride); override != "" {
+		abs, err := filepath.Abs(override)
+		if err != nil {
+			return "", true, fmt.Errorf("resolving %s=%s: %w", profileDirOverride, override, err)
+		}
+		return abs, true, nil
+	}
+	abs, err := filepath.Abs(labProfileDir)
+	if err != nil {
+		return "", false, fmt.Errorf("resolving the lab profile: %w", err)
+	}
+	return abs, false, nil
+}
+
+// requireExistingProfile refuses an overridden profile that is not already
+// there.
+//
+// The lab profile is created on demand because it is disposable. An overridden
+// one must NOT be: creating it would answer the very question the observation
+// asks. An empty profile always shows a QR, so a typo in the path would be
+// recorded as evidence that the profile is unpaired — the instrument inventing
+// its own result.
+func requireExistingProfile(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("%s=%s: the profile must already exist, and an absent one is not "+
+			"created here (an empty profile looks unpaired, which is the answer this "+
+			"observation is supposed to measure): %w", profileDirOverride, dir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s=%s: not a directory", profileDirOverride, dir)
+	}
+	return nil
+}
+
+// pairingProfileDir resolves the profile the PAIRING path may open, and refuses
+// an overridden one.
+//
+// Pairing is the one operation in this file that MUTATES the profile: it links
+// an account into it. The observation probes only read, so they can be pointed
+// anywhere; pairing pointed at a real profile could re-pair or overwrite a
+// credential that is not disposable.
+//
+// The refusal is an ERROR rather than a skip on purpose. A skip says "this run
+// had nothing to do", and it would be silent about the fact that a human is
+// waiting at a window to scan a code that is never coming. The caller opted in
+// to pairing explicitly with two toggles; a request the instrument will not
+// honour has to be loud.
+func pairingProfileDir() (string, error) {
+	if override := os.Getenv(profileDirOverride); override != "" {
+		return "", fmt.Errorf("refusing to pair: %s=%s is set, and pairing MUTATES the "+
+			"profile it opens. Only %s is disposable. Unset %s to pair the lab profile",
+			profileDirOverride, override, labProfileDir, profileDirOverride)
+	}
+	abs, err := filepath.Abs(labProfileDir)
+	if err != nil {
+		return "", fmt.Errorf("resolving the lab profile: %w", err)
+	}
+	return abs, nil
+}
+
+// openRealSPA launches the observation profile and navigates to the target.
 func openRealSPA(t *testing.T, runner *engine.Runner) (*engine.Browser, *engine.Tab) {
 	t.Helper()
 	requireRealSPA(t)
 	binary := findChrome(t)
 
-	profile, err := filepath.Abs(labProfileDir)
+	profile, overridden, err := observationProfileDir()
 	if err != nil {
-		t.Fatalf("resolving the lab profile: %v", err)
+		t.Fatal(err)
 	}
-	if err := os.MkdirAll(profile, 0o700); err != nil {
+	if overridden {
+		if err := requireExistingProfile(profile); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := os.MkdirAll(profile, labProfilePerm); err != nil {
 		t.Fatalf("creating the lab profile: %v", err)
 	}
+	// The PATH, never the contents: any evidence this run produces has to say
+	// what was looked at, and a path carries no account data.
+	t.Logf("profile_dir=%s overridden=%v", profile, overridden)
 
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
@@ -288,17 +382,21 @@ func TestRealSPAPairing(t *testing.T) {
 
 // openLabProfileHeadful launches the lab profile with a visible window and
 // navigates to the target. Headful is only ever for pairing.
+//
+// The LAB profile, always: this is the mutating path, so pairingProfileDir
+// refuses the observation override instead of following it.
 func openLabProfileHeadful(t *testing.T, runner *engine.Runner) *engine.Tab {
 	t.Helper()
 	binary := findChrome(t)
 
-	profile, err := filepath.Abs(labProfileDir)
+	profile, err := pairingProfileDir()
 	if err != nil {
-		t.Fatalf("resolving the lab profile: %v", err)
+		t.Fatal(err)
 	}
-	if err := os.MkdirAll(profile, 0o700); err != nil {
+	if err := os.MkdirAll(profile, labProfilePerm); err != nil {
 		t.Fatalf("creating the lab profile: %v", err)
 	}
+	t.Logf("profile_dir=%s (pairing is bound to the lab profile)", profile)
 
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
@@ -632,6 +730,142 @@ func TestRealSPADisqualifyReadinessSignalsOnLogin(t *testing.T) {
 	}
 	if !out.Require {
 		t.Fatal("window.require absent; nothing to disqualify")
+	}
+}
+
+// --- Profile resolution: unit tests, no browser, no profile touched ---------
+//
+// These do not carry the TestRealSPA prefix and are not gated behind the
+// toggle, on purpose: they are the part of this file that can be locked without
+// going near web.whatsapp.com, and locking it is what makes the override safe
+// to ship.
+
+// wantLabProfileSuffix repeats labProfileDir's value on purpose, which is the
+// one place in this file where NOT extracting a shared constant is the right
+// call. An expectation computed from the value under test agrees with it by
+// construction and could never catch a change to it, and "the default is the
+// disposable lab profile" is precisely the property worth trapping. If this
+// ever diverges from labProfileDir, the failure is the point.
+const wantLabProfileSuffix = ".lab/test-account-profile"
+
+// clearProfileOverride expresses "no override" the way the code sees it: the
+// resolvers read os.Getenv, for which an empty value and an absent variable are
+// the same thing. Going through t.Setenv also restores whatever the developer's
+// shell had.
+func clearProfileOverride(t *testing.T) {
+	t.Helper()
+	t.Setenv(profileDirOverride, "")
+}
+
+func TestObservationProfileDirDefaultsToLabProfile(t *testing.T) {
+	clearProfileOverride(t)
+
+	dir, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatalf("observationProfileDir: %v", err)
+	}
+	if overridden {
+		t.Error("reported an override with the variable unset")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	want := filepath.Join(cwd, wantLabProfileSuffix)
+	if dir != want {
+		t.Errorf("default profile = %q, want the lab profile %q", dir, want)
+	}
+}
+
+func TestObservationProfileDirFollowsOverride(t *testing.T) {
+	// An absolute override comes back untouched; a relative one is resolved
+	// against the working directory, because Chrome is launched from wherever
+	// the test binary happens to run.
+	absolute := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	const relative = "some/candidate-profile"
+
+	cases := map[string]struct{ set, want string }{
+		"absolute": {set: absolute, want: absolute},
+		"relative": {set: relative, want: filepath.Join(cwd, relative)},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(profileDirOverride, tc.set)
+
+			dir, overridden, err := observationProfileDir()
+			if err != nil {
+				t.Fatalf("observationProfileDir: %v", err)
+			}
+			if !overridden {
+				t.Error("did not report an override with the variable set")
+			}
+			if !filepath.IsAbs(dir) {
+				t.Errorf("profile = %q, want an absolute path", dir)
+			}
+			if dir != tc.want {
+				t.Errorf("profile = %q, want %q", dir, tc.want)
+			}
+		})
+	}
+}
+
+// The guard. Pairing links an account INTO the profile it opens, so following
+// the override would let one run re-pair a profile the caller only meant to
+// look at.
+func TestPairingProfileDirRefusesOverride(t *testing.T) {
+	elsewhere := t.TempDir()
+	t.Setenv(profileDirOverride, elsewhere)
+
+	dir, err := pairingProfileDir()
+	if err == nil {
+		t.Fatalf("pairing accepted the overridden profile %q; it MUTATES what it opens", dir)
+	}
+	if dir != "" {
+		t.Errorf("refused but still returned a profile: %q", dir)
+	}
+	if !strings.Contains(err.Error(), profileDirOverride) {
+		t.Errorf("refusal %q does not name %s, so nobody can tell why it refused",
+			err, profileDirOverride)
+	}
+}
+
+func TestPairingProfileDirUsesLabProfileWithoutOverride(t *testing.T) {
+	clearProfileOverride(t)
+
+	dir, err := pairingProfileDir()
+	if err != nil {
+		t.Fatalf("pairingProfileDir: %v", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if want := filepath.Join(cwd, wantLabProfileSuffix); dir != want {
+		t.Errorf("pairing profile = %q, want the lab profile %q", dir, want)
+	}
+}
+
+func TestRequireExistingProfile(t *testing.T) {
+	existing := t.TempDir()
+	if err := requireExistingProfile(existing); err != nil {
+		t.Errorf("rejected an existing profile: %v", err)
+	}
+
+	absent := filepath.Join(existing, "never-created")
+	if err := requireExistingProfile(absent); err == nil {
+		t.Error("accepted an absent profile; it would boot empty and read as unpaired")
+	}
+
+	file := filepath.Join(existing, "not-a-directory")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := requireExistingProfile(file); err == nil {
+		t.Error("accepted a file as a profile directory")
 	}
 }
 
