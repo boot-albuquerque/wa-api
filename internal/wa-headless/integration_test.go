@@ -91,7 +91,7 @@ const (
 	// This is not a hypothetical page. It is readyPage with the id changed, which
 	// is exactly what a rename by Meta looks like from in here: same chat list,
 	// same text, and a structural probe that now finds nothing.
-	renamedPanePage = `<html><body>
+	renamedPanePage = `<html><head><title>Mum &mdash; WhatsApp</title></head><body>
 		<div id="pane-side-v2">
 			<div>Mum &mdash; see you at 8</div>
 			<div>Work &mdash; the deploy is out</div>
@@ -99,7 +99,7 @@ const (
 		</div></body></html>`
 	// The same rename, on a page that ALSO carries the conflict wording. It
 	// proves the guard did not buy privacy by giving up the class.
-	renamedPaneConflictPage = `<html><body>
+	renamedPaneConflictPage = `<html><head><title>Mum &mdash; WhatsApp</title></head><body>
 		<div id="pane-side-v2">
 			<div>Mum &mdash; see you at 8</div>
 		</div>

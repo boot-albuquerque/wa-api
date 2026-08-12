@@ -417,7 +417,11 @@ O desfecho ainda se anuncia honestamente: `Clean()` devolve **false**, então o
 chamador consegue agir sobre a diferença.
 
 Fidelidade do instrumento, dita antes que alguém a assuma: `SIGSTOP` modela com
-fidelidade **"CDP recusado / resposta impossível"**. Ele **não** modela um
+fidelidade **"CDP sem resposta possível"**. A palavra "recusado" estava errada e
+foi corrigida pela validação independente: um processo parado mantém o socket de
+escuta aberto, então a conexão **pendura** em vez de ser recusada — que é
+justamente por que as três corridas gastaram o orçamento inteiro de 10 s no
+`close`. Pior caso dos dois jeitos, então a conclusão não muda; a frase mudou. Ele **não** modela um
 browser em deadlock mas escalonável, que ainda serviria `SIGTERM` — nesse
 aspecto o `SIGSTOP` é MAIS severo que a realidade, o que torna a convergência
 medida um limite inferior, não otimismo.
@@ -653,3 +657,186 @@ Nenhum browser desta correção saiu por sinal: `stopped_via=browser.close` nas
 duas corridas do teste novo. `web.whatsapp.com` não foi tocado — as fixtures são
 servidas por `httptest`, e o caminho de marcadores é alcançado servindo o host
 no PATH da URL, que é a regra do próprio classificador exercitada como escrita.
+
+---
+
+## H7 — `PageSnapshot.Title` carrega conteúdo da página, ninguém o lê, e ele nunca foi medido
+
+**Data**: 2026-08-12 · **Contexto**: LOOP H6.1. Achado por ataque à própria
+alegação do commit, não por revisão de código — a frase "não existe caminho pelo
+qual texto da página chegue a uma string Go" foi posta à prova e não sobreviveu
+inteira.
+
+**Onde**: `internal/wa-headless/spa/probe.go`, `structureScript`
+(`title: document.title`) e `internal/wa-headless/spa/page.go`,
+`PageSnapshot.Title`.
+
+**Problema**: o H6 fechou o caminho do `body.innerText`, mas o `structureScript`
+continua trazendo `document.title`, que é **texto autorado pela página**, e o
+campo é **exportado**. É a mesma forma do agravante 2 do H6, em escala menor:
+qualquer chamador futuro pode logá-lo sem saber o que carrega.
+
+Duas coisas agravam, e uma atenua:
+
+1. **Ninguém lê o campo.** `grep -rn '\.Title\b' --include='*.go'
+   internal/wa-headless/` não devolve **nenhum** leitor. Ele é decodificado do
+   JSON e nunca consultado — nem pelo `Classify`, nem por teste. Um campo que
+   ninguém lê não paga o risco que carrega.
+2. **Nunca foi medido.** `EVIDENCIA-SPA.md` não tem uma única observação de
+   `document.title` contra o SPA real, nos dois perfis. Não sei se o título do
+   WhatsApp Web é `"WhatsApp"`, `"(3) WhatsApp"` ou algo que nomeie conversa ou
+   contato. **Afirmar que é inócuo seria repetir exatamente o erro que o H6
+   documenta**: tratar suposição sobre a página como propriedade dela.
+3. *(atenuante)* diferente do `TextSample`, o título é curto e não é a lista de
+   conversas. O risco é menor em magnitude, não em natureza.
+
+**Evidência**: leitura do caminho e o `grep` de leitores acima. **Não** é
+medição contra a conta real — e é essa ausência que constitui o achado.
+
+**Correção sugerida**, em ordem de custo:
+
+1. **Remover o campo e o `title:` do script.** É a correção mais barata e fecha
+   a classe: zero consumidores hoje, então o diff é de duas linhas e o risco de
+   remoção é nulo. Reintroduzir depois, se uma classificação precisar do título,
+   custa o mesmo e aí virá com medição junto.
+2. **Medir antes de decidir**, se houver intenção de usar o título para
+   classificar (telas de erro costumam ser identificáveis por título): uma
+   observação só-leitura do perfil pareado, registrando só a FORMA do título e
+   não o valor, resolve — e é a mesma sonda que o M1–M3 já usa.
+
+**Status**: **CORRIGIDO em 2026-08-12 (LOOP H7.1)**, e a correção 1 foi a
+escolhida — `title: document.title` saiu do `structureScript` e
+`PageSnapshot.Title` saiu da struct. Zero consumidores, diff de duas linhas.
+
+Registrei primeiro como "não corrigir sem perguntar", e mudei de posição por um
+motivo que é do próprio achado: isto **não é conserto de graça de bug alheio**,
+é a alegação do commit anterior sendo trazida de volta à verdade. O `997cebe`
+afirma que "não existe caminho pelo qual texto da página chegue a uma string
+Go", e enquanto o `Title` atravessasse a frase era falsa. Corrigir a alegação
+por comentário e deixar o campo seria escolher a documentação em vez do
+mecanismo — exatamente o que a `CLAUDE.md` proíbe.
+
+**O achado foi feito DUAS vezes, de forma independente e simultânea**: por
+ataque do Chief à própria frase do commit, e pela validação independente
+(evaluator em sessão separada), que chegou nele por outro caminho — notando que
+as duas fixtures do teste de navegador **não tinham `<title>`**, de modo que a
+asserção de PII passava de forma VAZIA justamente no único campo que ainda
+cruzava. Convergência de dois métodos diferentes no mesmo ponto cego.
+
+**Evidência BEFORE_FIX / AFTER_FIX.** A correção do teste veio ANTES da
+correção do código, de propósito — foi o evaluator quem apontou que sem título
+nas fixtures a asserção não morde. Com `<title>Mum — WhatsApp</title>` nas duas
+fixtures e o campo ainda no lugar:
+
+```
+--- FAIL: TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed (2.04s)
+  renamed selector, chat list: page text crossed the boundary: "Mum" is in
+    {URL:.../renamed Title:Mum — WhatsApp ... Markers:[]}
+  renamed selector, conflict wording: page text crossed the boundary: "Mum" is in
+    {URL:.../renamed-conflict Title:Mum — WhatsApp ... Markers:[open in another another window]}
+```
+
+Repare que os `Markers` da segunda perna continuam corretos: o conflito segue
+sendo detectado, então a falha é do `Title` e de mais nada. Depois de remover o
+campo e a linha do script, `PASS`, com as fixtures mantendo o título — a
+asserção agora cobre o caminho que estava escondido.
+
+**O que continua NÃO medido**, e por isso não vira alegação: se o
+`document.title` do WhatsApp Web carrega nome de contato com uma conversa
+aberta. A remoção tornou a pergunta desnecessária para a privacidade, mas ela
+volta a importar no dia em que alguém quiser usar o título para classificar tela
+de erro. Se esse dia chegar, a medição vem junto — e registre só a FORMA do
+título, nunca o valor.
+
+---
+
+## H8 — a checagem de host do classificador é `Contains`, e aceita domínio sósia
+
+**Data**: 2026-08-12 · **Contexto**: LOOP H6.1, achado pela **validação
+independente** ao auditar por que o teste de navegador consegue alcançar o
+caminho de marcadores. Não é regressão destes commits: a regra é anterior.
+
+**Onde**: `internal/wa-headless/spa/page.go`, no `Classify`:
+
+```go
+case s.URL != "" && !strings.Contains(strings.ToLower(s.URL), whatsappHost):
+    return ClassRedirect
+```
+
+**Problema**: `strings.Contains` sobre a URL INTEIRA não é uma checagem de host.
+Ela aceita como "no host certo":
+
+```
+https://web.whatsapp.com.attacker.example/     (sufixo de domínio)
+https://evil.example/web.whatsapp.com          (no caminho)
+```
+
+Uma página sósia deixa de ser `REDIRECT`, e como não casa estrutura nenhuma, ela
+**recebe a sonda de marcadores** — ou seja, o corpo dela é varrido e ela pode
+responder `SESSION_CONFLICT` ou `ERROR_PAGE` à vontade. Desde o LOOP H6.1 isso
+não vaza PII (o texto não atravessa mais), mas continua sendo classificação
+controlada por quem serve a página.
+
+**Severidade prática: BAIXA** — nós controlamos a navegação, e o motor só vai
+para `web.whatsapp.com`. Vira relevante se algum dia houver redirecionamento
+seguido sem validação, ou captive portal.
+
+**Evidência**: leitura da regra, mais o fato de o próprio teste
+`TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed` explorá-la de
+propósito — ele serve a fixture em `/web.whatsapp.com/renamed` para alcançar o
+caminho de marcadores sem tocar o host real.
+
+**Correção sugerida**: `url.Parse` e comparar `u.Hostname()` com igualdade (ou
+sufixo `.whatsapp.com` com ponto). **Quando isso for feito, o teste do H6 vai
+falhar alto** — e isso é característica, não defeito: o comentário dele promete
+exatamente essa falha. A fixture então passa o host pelo cabeçalho `Host` em vez
+do caminho.
+
+**Status**: **não corrigido** — apertar a regra muda comportamento de
+classificação e derruba um teste de propósito, o que merece loop próprio em vez
+de carona num loop de PII. Registrado com o caminho de correção pronto.
+
+---
+
+## H9 — `TestBrowserChainSeversTheWebSocketTransport` degrada para desligamento SUJO sob contenção
+
+**Data**: 2026-08-12 · **Contexto**: LOOP H6.1, observado pela **validação
+independente** — a primeira corrida de `-race` dela cruzou com testes de
+navegador de outra sessão na mesma máquina.
+
+**Onde**: `internal/wa-headless/realspa_test.go`,
+`TestBrowserChainSeversTheWebSocketTransport`.
+
+**Problema**: com a máquina disputada, os dois subtestes estouraram o prazo e a
+corrida terminou com:
+
+```
+stopped_via=DIRTY_signal_after_close_timeout
+```
+
+Sozinho, o teste passa — reproduzido depois pela mesma sessão. Então não é
+regressão dos commits do H6/H5, e é **pré-existente**.
+
+**Por que isto não é só flakiness de teste**: `DIRTY_signal_after_close_timeout`
+é o desligamento que a **invariante 2** proíbe em perfil com credencial, e a
+fase 4C mediu que ele dá logout (4ª e 6ª iteração). O gatilho aqui foi carga da
+máquina, não defeito do browser — e "só acontece sob carga" é precisamente como
+uma condição chega à produção, onde a densidade por nó é o objetivo declarado da
+iniciativa. Um nó com N sessões É a máquina disputada.
+
+A pergunta que fica: o orçamento de `Shutdown` (10 s) é suficiente sob a
+densidade que a CAP-10/CAP-11 pretendem, ou o caminho limpo passa a falhar em
+volume exatamente quando mais importa?
+
+**Evidência**: uma ocorrência, sob contenção conhecida, com a corrida isolada
+passando. Não é medição de distribuição — é achado.
+
+**Correção sugerida**: medir o tempo real de `Browser.close`→saída sob carga
+crescente antes de fixar o orçamento; e considerar distinguir "estourou o prazo
+porque a máquina está lenta" de "o browser não vai sair", que hoje colapsam no
+mesmo desfecho sujo.
+
+**Status**: **não corrigido** — pré-existente, fora do escopo dos loops de PII e
+de shutdown desta sessão, e a correção depende de medição sob carga que não foi
+feita. Referência cruzada: a invariante 2 do `HANDOFF-INICIATIVA.md` §6 e o item
+6 da Definition of Done (`stopped_via` limpo em 100% das paradas).

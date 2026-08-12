@@ -24,8 +24,15 @@ package spa
 // body text withheld only when #pane-side was found, so a rename of that one
 // selector by Meta would have converted every probe of a healthy session into a
 // capture of the chat list. The privacy of this package no longer rests on any
-// selector, on markup, or on an identity lookup — it rests on the fact that
-// there is no path by which page text reaches a Go string.
+// selector, on markup, or on an identity lookup — it rests on there being no
+// path by which page-authored text reaches a Go string.
+//
+// That sentence was FALSE when first written, and the gap is worth keeping in
+// view: structureScript also returned `document.title`, which the page authors,
+// into an exported field nobody read. Independent evaluation and a self-attack
+// found it at the same time, and the browser test was blind to it because no
+// fixture had a <title>. The field and the script line are gone (H7); the
+// fixtures now carry a title, so the assertion covers the path that hid.
 
 import (
 	"context"
@@ -75,7 +82,6 @@ const structureScript = `JSON.stringify((() => {
 	const q = (s) => !!document.querySelector(s);
 	return {
 		url: location.href,
-		title: document.title,
 		ready_state: document.readyState,
 		has_pane_side: q('` + paneSideSelector + `'),
 		has_qr: q('` + qrTestIDSelector + `') || q('` + qrAriaSelector + `'),

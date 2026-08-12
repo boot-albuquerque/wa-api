@@ -66,7 +66,6 @@ func (c PageClass) Terminal() bool {
 // with one bounded exception, guarded below.
 type PageSnapshot struct {
 	URL        string `json:"url"`
-	Title      string `json:"title"`
 	ReadyState string `json:"ready_state"`
 	HasPane    bool   `json:"has_pane_side"`
 	HasQR      bool   `json:"has_qr"`
@@ -91,6 +90,10 @@ type PageSnapshot struct {
 	//
 	// It diverges from the study on purpose: p4c_target.go captured a sample
 	// unconditionally, which was safe there only because nothing persisted it.
+	// The `json:"-"` is load-bearing, not cosmetic: it is what stops the
+	// STRUCTURE decode from populating this field straight off the page. Remove
+	// it and a page could answer the first probe with its own markers, skipping
+	// the closed set and knownMarkers entirely.
 	Markers []string `json:"-"`
 }
 

@@ -8,12 +8,47 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: — · LOOPS H5.1 e H2.1, o desligamento do travado e o build real · **DONE**
+CAP: — · LOOP H7.1, o campo que a validação independente achou · **DONE**
+
+**Validação independente EXECUTADA** (sessão Opus separada, adversarial):
+VERDICT **PASS** com um REQUIRED_FIX. Ela reproduziu por conta própria o gate
+com `-race`, o build da imagem, duas das mutações (NC-2 e NC-4, ambas
+confirmadas genuínas) e o teste do renderer travado 3×.
+
+O REQUIRED_FIX é real e está corrigido aqui: o `structureScript` ainda devolvia
+`title: document.title` para um `PageSnapshot.Title` que **ninguém lia**, então
+a frase do `997cebe` — "não existe caminho pelo qual texto da página chegue a
+uma string Go" — era falsa. Campo e linha do script removidos (**H7**).
+
+O achado saiu DUAS vezes ao mesmo tempo, por caminhos diferentes: o Chief
+atacando a própria frase do commit, e o evaluator notando que as fixtures do
+teste de navegador **não tinham `<title>`** — logo a asserção de PII passava
+VAZIA justamente no único campo que ainda cruzava. Corrigido na ordem certa:
+título com PII nas fixtures primeiro (teste FALHA, evidência colada no H7),
+remoção do campo depois (PASS).
+
+Três correções menores da mesma validação: o `json:"-"` do `Markers` é
+load-bearing e estava sem comentário; "CDP recusado" no H5.3 virou "CDP sem
+resposta possível" (processo parado pendura a conexão, não recusa — que é por
+que os 10 s do `close` foram gastos inteiros); e o desfecho do renderer travado
+passa a ser descrito como **caminho limpo 3/3**, não `browser.close` 3/3 — a
+corrida do evaluator deu `browser.close_unconfirmed` uma vez, que também é
+limpo. Substância intacta, precisão corrigida.
+
+Dois achados NOVOS dela, registrados e não corrigidos: **H8** (a checagem de
+host é `Contains` e aceita domínio sósia) e **H9** (o teste de severação degrada
+para desligamento SUJO sob contenção — pré-existente, e é o modo de falha da
+invariante 2 aparecendo exatamente sob a densidade que a iniciativa persegue).
+
+Loop anterior: **H5.1/H2.1** (`e211ab6`) e **H5.3** (`5ca80c9`), abaixo.
+
+### Loop anterior — LOOPS H5.1 e H2.1, o desligamento do travado e o build real · **DONE**
 
 **H5, itens 1 e 2 fechados; item 3 aberto com a pergunta estreitada.** O
 comentário do teste do renderer travado afirmava que um renderer travado não
-honra o `Browser.close`. É **falso**: 3/3 corridas saíram
-`stopped_via=browser.close`. O mecanismo é que o travamento é um `for(;;)` na
+honra o `Browser.close`. É **falso**: 3/3 corridas saíram pelo caminho limpo
+(`browser.close`; a validação independente colheu um
+`browser.close_unconfirmed`, que também é limpo). O mecanismo é que o travamento é um `for(;;)` na
 thread do RENDERER e o `close` é servido pelo processo BROWSER, que é outro
 processo. Consequência que importa para a CAP-04: **o módulo TEM caminho de
 desligamento provado para o estado UNRESPONSIVE.**
