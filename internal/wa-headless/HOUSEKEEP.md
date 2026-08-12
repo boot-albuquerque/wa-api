@@ -397,18 +397,54 @@ As três saídas, e por que nenhuma é escolha de mesa:
 - **C · escalada**: reabrir conexão e repetir o `close` N vezes antes de
   qualquer sinal, registrando cada tentativa.
 
-**Não projetei a política nesta sessão, e o motivo é o `CLAUDE.md`**: não existe
-reprodução do caso residual. Todo travamento que consegui produzir é de
-renderer, e esse sai pelo caminho limpo. Escolher entre A, B e C sem nunca ter
-observado um browser que recusa o `close` seria projetar sobre um modo de falha
-imaginado — exatamente o que a regra "medir antes de projetar" proíbe, e o
-tipo de decisão que a Regra 4 (o conserto também é mecanismo) mais castiga.
+### O caso residual, agora MEDIDO (2026-08-12)
 
-O que falta, em ordem: **(a)** produzir um browser que recuse o `close`
-— `SIGSTOP` no processo browser é o candidato barato e não escreve no perfil;
-**(b)** com esse estado na mão, medir se a escalada (C) converge; **(c)** só
-então decidir entre B e C, que é trade-off de produto — vazar recurso ou
-arriscar sessão — e portanto **decisão do usuário**.
+O passo (a) que esta entrada listava como pendente foi executado: `SIGSTOP` no
+processo browser produz exatamente um browser que não pode responder ao
+`Browser.close`, e não escreve nada no perfil. Perfil temporário, nunca o
+pareado. Três corridas:
+
+```
+stopped_via=DIRTY_signal_close_refused   30,006s   processo vivo depois: NÃO
+stopped_via=DIRTY_signal_close_refused   30,002s   processo vivo depois: NÃO
+stopped_via=DIRTY_signal_close_refused   30,003s   processo vivo depois: NÃO
+```
+
+**A escalada CONVERGE.** Os 30 s são os três orçamentos em sequência (close 10 s
++ wait-exit 10 s + `signalGrace` 10 s), e o `SIGKILL` no GRUPO derruba até um
+processo parado por `SIGSTOP` — sinal que não pode ser bloqueado nem ignorado.
+O desfecho ainda se anuncia honestamente: `Clean()` devolve **false**, então o
+chamador consegue agir sobre a diferença.
+
+Fidelidade do instrumento, dita antes que alguém a assuma: `SIGSTOP` modela com
+fidelidade **"CDP recusado / resposta impossível"**. Ele **não** modela um
+browser em deadlock mas escalonável, que ainda serviria `SIGTERM` — nesse
+aspecto o `SIGSTOP` é MAIS severo que a realidade, o que torna a convergência
+medida um limite inferior, não otimismo.
+
+### O que a medição faz com a decisão
+
+Ela desfaz a simetria que o trade-off aparentava ter. A opção **B** ("nunca
+sinalizar perfil com credencial") não custa apenas vazar um processo:
+`reclaimVerdict` recusa com `ErrProfileHeldByLiveBrowser` enquanto o pid do
+detentor estiver vivo (`engine/profile.go`), de propósito — apagar o
+`SingletonLock` de um browser vivo põe dois browsers num perfil, que é como uma
+sessão pareada morre de verdade. Então B deixa o perfil **irrecuperável naquele
+host** enquanto o processo travado existir: ela protegeria a sessão de
+corrupção bloqueando permanentemente a própria sessão.
+
+Isso NÃO decide a questão, e não a decidi. O custo de A continua real e medido
+(fase 4C: logout na 4ª e na 6ª iteração), a invariante 2 continua proibindo o
+sinal, e escolher entre "arriscar a sessão para recuperar o perfil" e "preservar
+a sessão perdendo o perfil" é trade-off de produto. O que mudou é que agora
+existe número dos dois lados em vez de um lado imaginado.
+
+**Status do item 3**: **aberto — decisão do usuário**, com as três opções
+medidas e não mais especuladas. A opção C (escalar o `close` N vezes antes de
+qualquer sinal) ficou sem justificativa aparente para este modo de falha: contra
+um browser inalcançável, cada tentativa extra custa 10 s e não muda o desfecho.
+Ela só ganharia sentido se existir um travamento TRANSITÓRIO, que não foi
+observado.
 
 ---
 

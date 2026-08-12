@@ -23,10 +23,13 @@ e `!ProcessAlive(pid)`. Controle negativo (`CleanStop` devolvendo `noop`) morde
 na segunda asserção — a primeira passa, porque `StopViaNoop.Clean()` é true — e
 deixou 7 órfãos, mesma ordem de grandeza dos 6 do achado original.
 
-Item 3 (política de escalada) segue **decisão do usuário**, e não a projetei:
-não existe reprodução do caso residual (o processo BROWSER recusando o `close`).
-Escolher entre "nunca sinalizar perfil com credencial" e "escalar N vezes" sem
-nunca ter observado esse estado seria projetar sobre modo de falha imaginado.
+**Item 3 continua decisão do usuário, mas deixou de ser especulação.** O caso
+residual foi PRODUZIDO com `SIGSTOP` no processo browser (perfil temporário,
+nunca o pareado) e medido 3/3: `DIRTY_signal_close_refused`, ~30,0s, **processo
+morto depois**. A escalada converge — o `SIGKILL` no grupo derruba até um
+processo parado. E a medição desfaz a simetria do trade-off: "nunca sinalizar"
+não custa só vazar processo, custa o perfil, porque o `reclaimVerdict` recusa
+com `ErrProfileHeldByLiveBrowser` enquanto o pid viver. Detalhe no **H5**.
 
 **H2 fechado.** `docker build` real, `EXIT=0`, imagem 911MB, binário
 `/app/wa-api` de 43MB; `golang:1.26-bookworm` resolve para `go1.26.5`, que
