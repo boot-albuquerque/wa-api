@@ -8,11 +8,49 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 03 — LOOP B1.4, prontidão · **AUTH_INTERACTION_REQUIRED**
-Loop: B1.4
-Objective: `#pane-side` significa READY? O instrumento está pronto e os
-candidatos fáceis foram eliminados. Falta a sessão pareada — **B-04 continua
-aberto, agora MEDIDO**.
+CAP: 04 — LOOP 04.3A, o corte do READY honesto · **PRONTO, não iniciado**
+Objective: quando a sessão passa a poder AGIR? A identidade não responde isso
+(é persistida — M3.3), então o corte está entre `meReadyTriggered` e o socket
+`CONNECTED`. **Antes de medir é preciso trocar o instrumento** — ver
+**F-20**: o tick de 250 ms não resolve uma janela de ~500 ms.
+
+Sem dependência humana. O perfil pareado está disponível e autorizado para
+observação só-leitura.
+
+### FASE B1 — encerrada em 2026-08-12
+
+| loop | objetivo | commit |
+|---|---|---|
+| B1.4-PARAM | sonda de SPA real deixa de ser presa ao perfil de laboratório | `2b776b1` |
+| B1.4-CLASSIFY | classificar o `wa-session` com o instrumento do módulo | *(medição do Chief, sem código)* |
+| B1.4-IDENTITY | achar onde a identidade do dono realmente mora | `17d951c` |
+| B1.4-CORRECTIONS | as cinco falhas achadas pela validação independente | `b34c5db` |
+| — | H5 (vazamento de browser) + método da H4 | `5b3c0af` |
+
+**Validação independente executada** (sessão Opus separada, só-leitura):
+VERDICT **PASS** com cinco correções, todas aplicadas em `b34c5db`. O validator
+reproduziu por conta própria os dois pontos frágeis — rodou o mesmo instrumento
+nos DOIS perfis (C-D) e tirou uma segunda amostra da linha do tempo (C-F), que
+bateu com a primeira em 60 ms no painel e 0 ms no socket. A variância de
+7,40s vs 15,61s que motivou a dúvida **não é ruído de execução**.
+
+**CAP GATE executado** (2026-08-12, HEAD `b34c5db`, árvore limpa):
+
+```
+go build ./...                                   OK
+go vet ./...                                     OK
+gofmt -l internal/wa-headless/                   vazio
+go test -race -count=1 ./internal/wa-headless/...
+  wa-api/internal/wa-headless              ok  83.108s
+  wa-api/internal/wa-headless/engine       ok   4.829s
+  wa-api/internal/wa-headless/observability ok  1.163s
+  wa-api/internal/wa-headless/spa          ok   2.026s
+as 5 sondas TestRealSPA* continuam puladas por padrão
+```
+
+Perfil pareado ao longo de toda a fase: **375M/2160 → 437M/2467 arquivos**.
+Cresceu em todas as corridas; `stopped_via=browser.close` em todas.
+`disparazaap` intocado (`features/macbook-lucas`, `ed9e651`, 0 linhas).
 
 ## Completed
 
@@ -159,31 +197,97 @@ apenas — aquele repo é da sessão C0/C1).
 
 ## Next
 
-* **LOOP 03.9** (bloqueado por B-03) — subir a cadeia contra o perfil pareado
-  em `scripts/chromium-study/wa-session` e confirmar que `#pane-side` e o
-  seletor de QR ainda casam com a marcação real. *Done quando*: as classes
-  saem corretas contra o alvo, e o formato do `SingletonLock` fica verificado
-  (fecha **H4**).
-**O que foi possível sem sessão já foi feito** (instrumento + eliminação de
-candidatos, `ca61ebb`). Daqui em diante tudo exige o pareamento.
+**Nenhum item abaixo depende de ação humana.** O perfil pareado existe, está
+medido e a observação só-leitura está autorizada. O texto anterior desta seção
+dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**.
 
-**Trabalho seguro esgotado.** Tudo que resta — B1.4, B1.5, 04.3A, CAP-05,
-CAP-06, CAP-07 — exige a sessão pareada. O último item independente foi o gate
-da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
-
-* **LOOP B1.4** (bloqueado por B-04) — validar `#pane-side` contra sessão
-  pareada de verdade. *Done quando*: `READY` sai correto e o seletor deixa de
-  ser hipótese.
-* **LOOP B1.5** (bloqueado por B-04) — restart/restore sem QR, medindo parada,
-  saída do processo e tempo até `app-ready`.
-* **LOOP 04.3** — `refreshOwner`: primeira leitura real do SPA (msisdn,
-  pushname, avatar do dono), acrescentando ao inventário os módulos que ela
-  exige. *Done quando*: os campos saem contra a página, e o inventário cresce
-  só com o que esta capacidade usa.
+* **LOOP 04.3A** (o próximo) — o corte do READY honesto: onde, entre
+  `meReadyTriggered` e o socket `CONNECTED`, a sessão passa a poder AGIR.
+  **Trocar o instrumento primeiro** (F-20): o tick de 250 ms não resolve uma
+  janela de ~500 ms, e a leitura atual pode ser quantização, não medida. O
+  desenho que escapa é carimbar a transição DENTRO da página e colher a linha
+  do tempo pronta numa avaliação só — o que não fere a invariante 6, porque
+  carimbar não é esperar e o prazo continua do lado Go. *Done quando*: a
+  largura do corte sai com resolução menor que ela mesma, e o instrumento
+  declara sua própria resolução.
+* **LOOP 03.9** — confirmar que a marcação real ainda casa com o classificador
+  e fechar a **H4** (formato do `SingletonLock`). *Método corrigido*: um perfil
+  parado de forma limpa NUNCA mostra o arquivo — exige inspeção com o Chromium
+  em execução, ou depois de parada suja. Ver a nota de 2026-08-12 na H4.
+* **LOOP B1.5** — restart/restore sem QR, medindo parada, saída do processo e
+  tempo até `app-ready`. Comparar com o `MEASURED` do handoff §F2 (p50 10,4s,
+  p95 13,8s, observado até 15,8s).
+* **LOOP 04.3** — `refreshOwner`: primeira capacidade de produto (nº 3 na ordem
+  do `PARIDADE-WWEBJS.md` §3). O módulo de identidade já é conhecido pela M3.
+  *Done quando*: os campos saem contra a página, e o inventário cresce só com o
+  que esta capacidade usa.
 * **LOOP 04.4** — `getBrowserPid` na fachada. O `engine.Browser.PID()` já
   existe; falta expor pelo contrato, e isso é CAP-09.
+* **H5, passos 1 e 2** — travar a terminação com `WaitExit`/`ProcessAlive` e
+  medir se o culpado é o `Browser.close` ou o `CleanStop` desistindo. O passo 3
+  (política de escalada) é decisão humana e continua pendente.
 
 ## Findings
+
+* **F-20 · o instrumento não resolve a janela que ele foi medir.** O
+  `readinessTick` é de **250 ms** e a janela entre `meReadyTriggered` (T+5,32s)
+  e o socket `CONNECTED` (T+5,82s) tem **500 ms — exatamente dois ticks**. A
+  corrida independente do validator deu 5,31s → 5,82s, mas isso **não confirma
+  nada**: as duas amostras caíram na mesma grade de 250 ms. O intervalo
+  verdadeiro está em algum ponto entre ~250 ms e ~750 ms, e o número "500 ms"
+  é provavelmente **quantização, não medida**.
+
+  Apertar o tick não resolve sozinho: cada amostra é um round-trip CDP, e num
+  tick pequeno o custo da amostra compete com o intervalo e borra a medida — o
+  próprio comentário do arquivo já alertava que "a coarse tick would smear the
+  very gap it exists to detect", e a recíproca também vale. O desenho que
+  escapa é carimbar a transição DENTRO da página e colher a linha do tempo
+  numa avaliação só.
+
+  Isso **não** fere a invariante 6 ("nenhuma espera com relógio na página"):
+  carimbar não é esperar, e o prazo continua do lado Go, que é o que a
+  invariante protege. A distinção precisa ficar escrita no loop, senão a
+  próxima revisão a lê como violação.
+
+  Mesma classe do erro da Fase 6, em que o primeiro harness mediu com
+  `time.Sleep` e teria invertido a decisão: **o instrumento precisa conseguir
+  resolver o que se pede a ele.**
+
+* **F-19 · "trabalho seguro esgotado" estava errado, e o modo de erro é
+  reutilizável.** Os loops 02.1/02.2/02.3 (F-15/F-16/F-17) concluíram que não
+  restava caminho de observação para decidir o B-04 sem interação humana. Os
+  três interrogaram o **harness do estudo** (`scripts/chromium-study -mode
+  wasession`), que trava no macOS e no Docker. Nenhum considerou o instrumento
+  **do próprio módulo** (`realspa_test.go`) — que já estava provado neste
+  ambiente, porque foi ele que produziu o M1 e o M2 do `EVIDENCIA-SPA.md`.
+
+  Apontá-lo para o perfil candidato exigia mudar **uma constante**. Feito isso,
+  o veredito saiu em 98 segundos e o B-04 caiu sem nenhum QR.
+
+  A lição não é sobre este harness: **quando uma ferramenta se recusa a
+  responder, verifique se você não construiu uma melhor desde então.** Três
+  loops investigativos foram gastos refinando a pergunta para o instrumento
+  errado.
+
+* **F-18 · a identidade do dono é PERSISTIDA, logo prova pareamento e não
+  sessão viva.** Volta em T+0,01s, antes de o socket abrir, porque sai de um
+  store de preferências e não da conexão. Uma máquina offline desde a semana
+  passada responderia igual de rápido. Mesma desqualificação que o inventário
+  de módulos sofreu no M2.1 — descoberta desta vez medindo, não apanhando.
+
+  **E o instrumento corrigido repetiu o defeito que consertou**: como
+  identidade e inventário já estão de pé em T+0,00s, o `record()` parava no
+  instante em que o painel renderizava (do cache), e um perfil **pareado porém
+  offline** passava verde com `socket CONNECTED at never`. Um veredito
+  alcançável por classe de perfil, igual à sonda `__x_wid` que ele substituiu.
+  Achado pela validação independente; corrigido em `b34c5db` com controle
+  negativo de duas pernas — a perna que roda a MESMA mutação contra o gate
+  ANTIGO e passa é o que torna aquilo prova, e não asserção sobre si mesmo.
+
+  Detalhe de método que vale além deste loop: **a contagem de ARQUIVOS é o
+  sinal estável do perfil, não os bytes.** O `du` arredonda e o LevelDB
+  compacta — os bytes caíram alguns KB duas vezes enquanto a contagem subia.
+  A heurística "perfil encolhendo = corrupção" precisa olhar arquivos.
 
 * **F-17 · o mesmo travamento acontece no ambiente Linux/Docker documentado
   — o harness `-mode wasession` não é hoje um observador confiável, nem no
@@ -449,6 +553,29 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
 
 ## Blockers
 
+* ~~**B-04**~~ · **RESOLVIDO** em 2026-08-12, sem QR. O perfil
+  `scripts/chromium-study/wa-session/profile` **ESTÁ pareado**, medido com o
+  instrumento do próprio módulo contra o SPA real:
+
+  ```
+  socket        OPENING -> CONNECTED         (controle não pareado: OPENING ->
+                                              PAIRING -> UNPAIRED aos 6,08s)
+  QR            nunca apareceu               (o teste teria abortado)
+  #pane-side    presente                     nós no DOM: 2691 (tela de QR: 347)
+  identidade    getMaybeMePnUser() PRESENT   (controle: EMPTY por 75s)
+  desligamento  stopped_via=browser.close    perfil cresceu, não encolheu
+  ```
+
+  Reproduzido de forma independente pelo validator, nos dois perfis, com o
+  mesmo binário. O que destravou não foi evidência nova sobre o perfil — foi
+  parar de perguntar ao instrumento errado (**F-19**).
+
+  Autorização do usuário registrada: abrir o `wa-session` direto, só leitura,
+  headless, sem envio. Vale para a observação continuada.
+
+  Texto original abaixo, mantido porque as notas de controle F-15/F-16/F-17 o
+  referenciam.
+
 * **B-04 · AUTH_INTERACTION_REQUIRED — o perfil NÃO está pareado, e isso foi
   medido.** Em 2026-08-11 recebi a informação de que o pareamento havia sido
   concluído. Verifiquei antes de agir, e o perfil mostra QR aos ~6,1s com
@@ -502,6 +629,20 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
   **Não bloqueia a CAP-01**, que é investigação. Bloqueia o merge.
   Decisão humana necessária: subir o linter junto do `.golangci-baseline` num
   PR próprio, ou voltar para `chromedp v0.14.2` + Go 1.25.
+
+* ~~**B-03**~~ · **RESOLVIDO** em 2026-08-12. A decisão humana que ele pedia —
+  autorizar abrir o perfil pareado só-leitura, ou parear um novo por QR — foi
+  tomada: **autorizado abrir o `wa-session` direto**, headless, sem envio. A
+  marcação real foi confirmada contra a conta: `#pane-side` casa, o seletor de
+  QR casa (M1.1), e o classificador sai correto nos dois estados.
+
+  Fica **parcialmente aberto** só o formato do `SingletonLock` (**H4**), e por
+  um motivo de método descoberto agora: o desligamento limpo remove o arquivo,
+  então um perfil parado de forma limpa nunca o mostra. Exige Chromium em
+  execução ou parada suja — o plano antigo ("matar e inspeccionar no 03.4")
+  não produziria nada.
+
+  Texto original abaixo.
 
 * **B-03 · a verificação final da CAP-03 precisa de sessão real.** Toda a
   cadeia está provada contra Chrome de verdade, mas contra páginas que EU
