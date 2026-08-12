@@ -224,3 +224,77 @@ mais permissivo que a produção esconde defeito (ARMADILHAS §1).
 **Status**: **não corrigido** — premissa documentada, verificação agendada
 para o LOOP 03.4. O comportamento sob divergência é degradação para o
 comportamento do estudo, não quebra.
+
+**Nota de 2026-08-12**: a verificação continua pendente e o LOOP 03.4 não a
+produz de graça. O perfil pareado foi aberto e fechado três vezes nesta data
+(M3 do `EVIDENCIA-SPA.md`) e **não havia `SingletonLock` nem antes nem depois**
+— o desligamento limpo o remove. Para medir o FORMATO é preciso inspecionar
+com o Chromium **em execução**, ou depois de uma parada suja; um perfil parado
+de forma limpa nunca vai mostrar o arquivo. A H4 segue aberta com o método
+corrigido.
+
+## H5 — o teste do renderer travado vaza o browser, e ninguém percebe
+
+**Data**: 2026-08-12 · **Contexto**: achado de lado durante o LOOP B1.4, ao
+inventariar processos antes de abrir o perfil pareado. Não faz parte daquele
+escopo.
+
+**Onde**: `internal/wa-headless/integration_test.go:197-202`, o `defer` de
+`TestBrowserChainReportsAWedgedPageAsUnresponsive`.
+
+```go
+defer func() {
+    // A wedged renderer will not honour Browser.close, so the dirty path is
+    // the expected outcome here. What matters is that it terminates.
+    via := engine.CleanStop(context.Background(), runner, browser)
+    t.Logf("stopped_via=%s", via)
+}()
+```
+
+**Problema**: o comentário ENUNCIA o requisito — *"what matters is that it
+terminates"* — e o código só **registra** o desfecho. Nada afirma que o
+processo morreu. Se o `CleanStop` voltar sem matar o browser, o teste passa
+verde e deixa o Chromium para trás.
+
+Foi o que aconteceu, e foi medido:
+
+```
+6 processos Chromium órfãos, --user-data-dir=/var/folders/.../
+  TestBrowserChainReportsAWedgedPageAsUnresponsive166315251/001
+idade: 1 dia 6h    CPU acumulada: 20min43s no processo principal
+diretório de perfil temporário sobrevivente: 81 MB
+```
+
+Honestidade sobre o alcance: **uma** ocorrência, de uma execução anterior a
+esta sessão. O `go test -race ./internal/wa-headless/...` rodado hoje **não**
+vazou. Então não é "todo run" — pode depender de a execução ser interrompida.
+A causa NÃO foi determinada; isto é achado, não diagnóstico.
+
+**Por que isto é mais que higiene de teste**: o comentário afirma, sem medida
+ao lado, que *um renderer travado não honra `Browser.close`*. Se isso for
+verdade — e o vazamento é compatível com isso —, então o módulo **não tem
+caminho de desligamento provado para o estado UNRESPONSIVE**, que é exatamente
+o estado que a CAP-04 existe para detectar. A invariante 2 proíbe sinal em
+perfil com credencial (o `SIGTERM` deu logout na 4ª e na 6ª iteração), e um
+browser travado segurando credencial é um dilema que a política ainda não
+resolveu. Atinge o item 11 da Definition of Done (nenhum vazamento conhecido
+de Chromium).
+
+**Correção sugerida**, em ordem:
+
+1. **Travar o requisito que o comentário já declara**: depois do `CleanStop`,
+   afirmar a morte do processo com `WaitExit`/`ProcessAlive` (existem desde os
+   loops 03.4/03.5 e não são usados aqui). Isto transforma o vazamento em
+   falha de teste — hoje ele é invisível.
+2. **Medir a afirmação**: `Browser.close` realmente não é honrado por um
+   renderer travado, ou o `CleanStop` desiste antes? São causas diferentes com
+   correções diferentes, e a distinção não foi medida.
+3. **Decidir a política de escalada** para UNRESPONSIVE com credencial, e
+   registrá-la — é decisão de arquitetura, não de teste. Aplicar a Regra 4 do
+   `CLAUDE.md`: o conserto também é um mecanismo, e matar por sinal é
+   exatamente o que a invariante 2 proíbe.
+
+**Status**: **não corrigido** — fora do escopo do LOOP B1.4, e o item 3 é
+decisão humana de arquitetura. Os processos órfãos e o diretório de 81 MB
+foram removidos em 2026-08-12 com autorização do usuário; o DEFEITO que os
+produziu continua no lugar.
