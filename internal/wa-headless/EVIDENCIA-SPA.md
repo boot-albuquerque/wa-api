@@ -499,3 +499,193 @@ linha 2) rodou sobre o código exatamente como ele vai ser commitado.
 **O que isto acrescenta ao M3.5.** Continua valendo que os instantes não são p50
 nem p95: o painel apareceu em T+7,40s, T+15,61s, T+8,35s e T+8,37s no MESMO
 perfil, em corridas diferentes. Quatro amostras não são uma distribuição.
+
+---
+
+## M4 — Sessão que PERDE O SERVIDOR: o que muda, e o que não muda
+
+**Data**: 2026-08-12 · **Loop**: 04.3A · **Ambiente**: Google Chrome
+151.0.7922.76, macOS arm64, `--headless=new`, perfil **pareado**
+(`scripts/chromium-study/wa-session/profile` via `WA_HEADLESS_PROFILE_DIR`),
+`stopped_via=browser.close` nas duas pernas.
+
+Tudo o que o M1–M3 mediu é **boot**. O próprio M3.5 diz: *"nada sobre
+reconexão, expiração de sessão ou sessão revogada no servidor: só o boot foi
+observado."* E o limite declarado da CAP-04 é que a sonda de liveness
+*"descarta o modo de falha medido; não descarta UI montada sobre socket
+morto"*.
+
+**UI montada sobre socket morto é exatamente o caso não testado.** A única
+forma honesta de olhar para ele é PRODUZI-LO.
+
+### M4.1 — O método: cortar a rede da página, não fingir que cortou
+
+A conexão foi severada pela emulação do próprio browser (`Network.enable` +
+`Network.emulateNetworkConditionsByRule` com condição global `offline` +
+`Network.overrideNetworkState`), encapsulada em
+`engine.Tab.SetNetworkOffline`. É o que acontece quando a tampa do notebook
+fecha.
+
+**Não é logout, não é sinal, não é revogação.** Nada aqui desvincula a conta,
+nada escreve no perfil, e a rede é restaurada antes de o browser descer — o
+perfil nunca fica meio-severado.
+
+Os **dois** comandos são necessários, e isto vale registrar porque a
+documentação do protocolo entrega metade da queda em cada um:
+
+| comando | o que faz | o que NÃO faz |
+|---|---|---|
+| `emulateNetworkConditionsByRule` | derruba as REQUISIÇÕES | não mexe em `navigator` — a aplicação continua se achando online |
+| `overrideNetworkState` | vira `navigator.onLine` e dispara o handler de offline | sozinho, as requisições continuam passando |
+
+Só um dos dois mediria a nossa emulação, não a sessão.
+
+O instrumento foi provado **antes** de ser apontado para a conta, contra
+Chrome real e um servidor local:
+`TestBrowserChainSeversAndRestoresThePageNetwork` verifica `navigator.onLine`,
+o veredito do `fetch` e — a asserção que importa — que **o servidor não recebeu
+a requisição** durante o corte.
+
+Amostragem a cada **1 s**. Isto é mais grosso que o tick de 250 ms do M3, e de
+propósito: o **F-20** trata de uma janela de ~500 ms que 250 ms não resolve, e
+aqui nada está nessa escala — transição de rede e socket desistindo são
+segundos a dezenas de segundos. Cada tick custa três round-trips.
+
+### M4.2 — O que o socket faz: sai de `CONNECTED` em ~3 s, para `OPENING`
+
+```
+  [baseline] T+  0.00s online=true  pane=true  identity=true  meReady=true  socket=CONNECTED  nodes=2742  probe=APP_READY  liveness=true /APP_READY
+NETWORK SEVERED at T+8.11s
+  [severed ] T+  8.11s online=false pane=true  identity=true  meReady=true  socket=CONNECTED  nodes=2911  probe=APP_READY  liveness=true /APP_READY
+  [severed ] T+ 10.19s online=false pane=true  identity=true  meReady=true  socket=OPENING    nodes=2925  probe=APP_READY  liveness=true /APP_READY
+SEVERED WINDOW — 90 samples over 91s (0 with the signals unread), from the steady state at T+7.10s
+```
+
+| sinal | quando mudou, a partir do estado estável |
+|---|---|
+| `navigator.onLine` → `false` | +1,0 s |
+| socket sai de `CONNECTED` → **`OPENING`** | **+3,1 s** |
+| `#pane-side` → false | **NUNCA** (90 s) |
+| identidade do dono → false | **NUNCA** (90 s) |
+| `meReadyTriggered` → false | **NUNCA** (90 s) |
+| `spa.Probe` sai de `APP_READY` | **NUNCA** (90 s) |
+| liveness reporta NÃO vivo | **NUNCA** (90 s) |
+
+O socket **é** um discriminador: reage em três segundos, sem depender de
+keepalive. Mas o valor para onde ele vai é `OPENING` — **o mesmo estado do boot
+normal** (M3.3: `OPENING` em T+5,32s, `CONNECTED` em T+5,82s). Ele ficou em
+`OPENING` pelos 90 s inteiros, tentando reconectar.
+
+Consequência que não se adivinharia: **"socket ≠ `CONNECTED`" não distingue
+"está subindo" de "perdeu o servidor".** As duas situações têm o mesmo valor de
+enum; o que as separa é **quanto tempo** o estado dura. Um liveness que leia só
+o valor instantâneo tem de escolher entre matar sessão que está subindo e
+manter sessão morta.
+
+### M4.3 — O achado: a sonda de liveness atual NÃO percebe
+
+`spa.Monitor.Check` respondeu **`Alive=true`, `Class=APP_READY`** em todas as
+90 amostras com a rede cortada. `spa.Probe` respondeu `APP_READY` nas 90.
+
+Isto **não** é defeito da implementação: ela faz exatamente o que o seu próprio
+comentário do `livenessScript` diz que faz — prova que o renderer executa
+e que a aplicação está montada. O comentário já declarava que "o que ela ainda
+não descarta é UI montada sobre socket morto".
+
+A diferença é que agora isso é **fato medido**, e não limite escrito por
+prudência. É o risco de fase 6 na sua forma nova: numa frota com standby e
+reciclagem, esta sessão seria contada como capacidade e receberia trabalho.
+
+### M4.4 — `#pane-side` e identidade: prova concreta, não mais raciocínio
+
+Os dois ficaram **verdadeiros pelos 90 s inteiros** com o servidor inalcançável.
+O painel está renderizado e nada o desmonta; a identidade sai de um store de
+preferências (M3.3) e a rede não a alcança.
+
+Isto **promove o F-18 de raciocínio de boot para fato medido**: nenhum dos dois
+pode ser sinal de liveness. Antes se sabia que eles chegam cedo demais; agora se
+sabe que eles **permanecem** depois que a sessão perde o servidor.
+
+### M4.5 — Recuperação: 2–3 s
+
+```
+NETWORK RESTORED at T+98.71s
+  [recovery] T+ 98.71s online=true  pane=true  identity=true  meReady=true  socket=OPENING    probe=APP_READY
+  [recovery] T+101.71s online=true  pane=true  identity=true  meReady=true  socket=CONNECTED  probe=APP_READY
+  socket back to CONNECTED        +3.0s after the reference (T+101.71s)
+  liveness alive again            n/a — it never stopped saying alive
+```
+
+A sessão voltou sozinha, sem QR, sem renavegação, sem reinício do browser. Duas
+corridas do mesmo perfil deram +2,0 s e +3,0 s — num corte de 90 s. **Não** diz
+nada sobre cortes longos nem sobre expiração.
+
+### M4.6 — Controle negativo EXECUTADO: a MESMA sonda, a MESMA janela, sem cortar
+
+Sem esta perna, "o sinal mudou" não é atribuível ao corte — poderia ser deriva
+do próprio sinal. É o mesmo instrumento, no mesmo perfil, no mesmo minuto:
+
+```
+=== RUN   TestRealSPALivenessUnderSeveredNetwork/control
+    READY: pane T+7.34s · identity T+0.00s · meReady T+5.30s · socket CONNECTED T+5.81s
+  [baseline] T+  0.00s online=true  pane=true  identity=true  meReady=true  socket=CONNECTED  nodes=2838  probe=APP_READY  liveness=true /APP_READY
+  [control ] T+  8.07s online=true  pane=true  identity=true  meReady=true  socket=CONNECTED  nodes=2917  probe=APP_READY  liveness=true /APP_READY
+    CONTROL WINDOW — 90 samples over 90s (0 with the signals unread), from the steady state at T+7.06s
+      navigator.onLine went false     NEVER
+      socket left CONNECTED           NEVER
+      #pane-side went false           NEVER
+      owner identity went false       NEVER
+      meReadyTriggered went false     NEVER
+      spa.Probe left APP_READY        NEVER
+      liveness reported NOT alive     NEVER
+      at the end of the window: socket="CONNECTED" pane=true identity=true probe=APP_READY liveness=true/APP_READY
+    CONTROL: every signal held still over the same window with the network untouched
+--- PASS: TestRealSPALivenessUnderSeveredNetwork (281.69s)
+    --- PASS: TestRealSPALivenessUnderSeveredNetwork/severed (173.49s)
+    --- PASS: TestRealSPALivenessUnderSeveredNetwork/control (108.20s)
+```
+
+O socket ficou em `CONNECTED` pelos 90 s. **A saída para `OPENING` na perna
+severada é atribuível ao corte**, e não a instabilidade da rede da máquina nem
+a comportamento espontâneo do SPA.
+
+A perna severada também tem a sua própria precondição travada em código: se
+`navigator.onLine` não ficasse falso, o teste **falha** dizendo que o corte
+nunca chegou à página — porque aí "nada mudou" seria afirmação sobre a nossa
+emulação, não sobre a sessão.
+
+Contagem de arquivos do perfil pareado, na corrida colada acima: **2527 antes →
+2557 depois**. Cresceu, como o F-18 prevê; não encolheu em momento nenhum
+(2467 → 2524 → 2527 → 2557 ao longo das corridas do dia).
+
+### M4.7 — O que M4 estabelece e o que NÃO estabelece
+
+**Estabelece:**
+
+- `WAWebSocketModel.Socket.__x_state` **reage** à perda do servidor, em ~3 s,
+  saindo de `CONNECTED`;
+- o valor para onde ele vai é `OPENING`, que é **indistinguível do boot** —
+  logo o estado instantâneo não basta, é preciso duração;
+- `#pane-side`, identidade do dono e `meReadyTriggered` permanecem
+  **verdadeiros** com o servidor inalcançável, por 90 s. Nenhum deles é sinal de
+  liveness (F-18, agora medido);
+- `spa.Monitor.Check` e `spa.Probe` reportam a sessão **saudável** durante todo
+  o corte. O limite declarado da CAP-04 está **confirmado em campo**;
+- restaurada a rede, a sessão volta a `CONNECTED` em 2–3 s sozinha.
+
+**Não estabelece:**
+
+- **nada sobre sessão revogada, deslogada ou expirada no servidor.** Um corte de
+  rede é o caso mais benigno da família: o servidor continua existindo e
+  aceitando o mesmo credential. Revogação é outra medição, e não foi feita —
+  fazê-la destruiria o ativo;
+- **nada sobre cortes longos.** A janela foi de 90 s. Não se sabe se, em 10
+  minutos, o SPA desiste, cai para outro estado, mostra QR ou fica em `OPENING`
+  para sempre;
+- **onde fica o corte de duração** que separa "subindo" de "morto". A medição
+  diz que o corte existe e que é necessário; não diz o número. Isso é medição
+  própria, com boots e severações repetidos;
+- que os instantes sejam representativos. A saída do `CONNECTED` deu **+3,1 s,
+  +3,0 s e +3,1 s** em três corridas do mesmo perfil, nesta máquina e nesta
+  rede — estável, mas três amostras não são distribuição, e a grade de
+  amostragem é de 1 s. A volta variou mais: +2,0 s e +3,0 s.

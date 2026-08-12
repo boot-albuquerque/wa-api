@@ -41,6 +41,20 @@ import (
 // the measured failure mode; what it does not yet rule out is a mounted UI over
 // a dead socket.
 //
+// That last sentence is no longer a caveat written out of prudence. LOOP 04.3A
+// produced the state against the real account — the page's network severed with
+// the browser's own emulation — and this probe answered Alive=true / APP_READY
+// for all 90 samples of the cut, while the SPA's socket had already left
+// CONNECTED three seconds in. #pane-side, the owner identity and
+// meReadyTriggered all stayed true throughout, so none of them can carry the
+// signal either. The measurement, with its negative control, is
+// EVIDENCIA-SPA.md M4; the finding is F-21.
+//
+// Nothing here was changed in response: measurement first, and the successor
+// signal needs a duration threshold that has not been measured yet, because the
+// socket falls back into OPENING — the same state a healthy boot passes
+// through.
+//
 // It never sends anything. The product contract rejects synthetic-send
 // explicitly, and so does this.
 const livenessScript = `JSON.stringify(!!document.querySelector('#pane-side'))`

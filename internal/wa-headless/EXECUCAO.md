@@ -8,11 +8,16 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 04 — LOOP 04.3A, o corte do READY honesto · **PRONTO, não iniciado**
-Objective: quando a sessão passa a poder AGIR? A identidade não responde isso
-(é persistida — M3.3), então o corte está entre `meReadyTriggered` e o socket
-`CONNECTED`. **Antes de medir é preciso trocar o instrumento** — ver
-**F-20**: o tick de 250 ms não resolve uma janela de ~500 ms.
+CAP: 04 — LOOP 04.3A, liveness contra sessão que perdeu o servidor · **DONE**
+Objective: a sonda de liveness percebe UI montada sobre socket morto? Medido
+cortando a rede da página com a emulação do browser, duas pernas (severada e
+controle). **Resposta: não percebe** — `EVIDENCIA-SPA.md` M4, finding **F-21**.
+
+O loop foi reapontado: a versão anterior desta linha era "o corte do READY
+honesto" (entre `meReadyTriggered` e o socket `CONNECTED`, bloqueada pelo
+**F-20**). Aquela pergunta **continua aberta** e voltou para o `Next` — o que
+mudou é a ordem, porque a sonda que já está no contrato de produto valia ser
+medida antes de refinar instantes de boot.
 
 Sem dependência humana. O perfil pareado está disponível e autorizado para
 observação só-leitura.
@@ -121,6 +126,7 @@ existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
 |---|---|---|
 | 04.1 | `livenessCheck`: sonda por `Evaluate`, streak, latência | `e0ee05a` |
 | 04.2 | verificação contra renderer travado de verdade | `c0793ad` |
+| 04.3A | a sonda percebe sessão que perdeu o servidor? | *(este commit)* |
 
 **Verificado contra browser real**: página com `#pane-side` no DOM e
 `for(;;)` na thread principal classifica `UNRESPONSIVE` enquanto
@@ -128,10 +134,17 @@ existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
 `for(;;)`) faz o teste reprovar com `probed as "APP_READY"` — prova que ele
 mede travamento, não presença de elemento.
 
-**Limite declarado**: a sonda ainda não é a viagem autenticada que o contrato
-descreve ("força I/O ao contexto autenticado"). Exige o inventário de módulos
-do CAP-06. Descarta o modo de falha medido; não descarta UI montada sobre
-socket morto.
+**Limite declarado, agora MEDIDO EM CAMPO**: a sonda ainda não é a viagem
+autenticada que o contrato descreve ("força I/O ao contexto autenticado").
+Exige o inventário de módulos do CAP-06. Descarta o modo de falha medido; **não
+descarta UI montada sobre socket morto** — e o 04.3A produziu esse estado contra
+a conta real e confirmou que a sonda reporta `Alive=true`/`APP_READY` nas 90
+amostras do corte. Deixou de ser limite escrito por prudência e passou a ser
+fato com evidência (`EVIDENCIA-SPA.md` M4.3).
+
+**Falta para fechar a CAP-04**: o socket é discriminador mas o seu valor de
+queda (`OPENING`) é igual ao do boot, então o veredito precisa de DURAÇÃO — e
+esse número não foi medido. Ver **F-21** e o `Next`.
 
 ### FASE B0 — resolver o blocker do linter · **DONE**
 
@@ -201,15 +214,29 @@ apenas — aquele repo é da sessão C0/C1).
 medido e a observação só-leitura está autorizada. O texto anterior desta seção
 dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**.
 
-* **LOOP 04.3A** (o próximo) — o corte do READY honesto: onde, entre
-  `meReadyTriggered` e o socket `CONNECTED`, a sessão passa a poder AGIR.
-  **Trocar o instrumento primeiro** (F-20): o tick de 250 ms não resolve uma
-  janela de ~500 ms, e a leitura atual pode ser quantização, não medida. O
-  desenho que escapa é carimbar a transição DENTRO da página e colher a linha
-  do tempo pronta numa avaliação só — o que não fere a invariante 6, porque
-  carimbar não é esperar e o prazo continua do lado Go. *Done quando*: a
-  largura do corte sai com resolução menor que ela mesma, e o instrumento
-  declara sua própria resolução.
+* **LOOP 04.3B** (o próximo) — **quanto tempo em `OPENING` significa morto?**
+  O M4 mostrou que o socket reage em ~3 s mas cai para `OPENING`, que é o mesmo
+  estado do boot: o valor instantâneo não separa "subindo" de "perdeu o
+  servidor", só a DURAÇÃO separa. Sem esse número, um liveness que leia o socket
+  escolhe entre matar sessão que está subindo e manter sessão morta.
+  *Done quando*: existe uma distribuição de "tempo em `OPENING` num boot
+  saudável" e outra de "tempo em `OPENING` sob corte", com mais de uma amostra
+  cada, e o corte proposto sai delas — não de escolha de mesa. Repare que isto
+  é medir onde o mecanismo PIORA (Regra 2): a pergunta é qual boot lento vira
+  falso positivo.
+* **LOOP 04.3C** — o corte do READY honesto: onde, entre `meReadyTriggered` e o
+  socket `CONNECTED`, a sessão passa a poder AGIR. Era o 04.3A original e
+  continua **bloqueado pelo F-20**: o tick de 250 ms não resolve uma janela de
+  ~500 ms, e a leitura atual pode ser quantização, não medida. O desenho que
+  escapa é carimbar a transição DENTRO da página e colher a linha do tempo
+  pronta numa avaliação só — o que não fere a invariante 6, porque carimbar não
+  é esperar e o prazo continua do lado Go. *Done quando*: a largura do corte sai
+  com resolução menor que ela mesma, e o instrumento declara sua própria
+  resolução.
+* **Corte longo** — a janela do M4 foi de 90 s. Não se sabe o que o SPA faz em
+  10 minutos sem servidor: desiste, muda de estado, mostra QR, ou fica em
+  `OPENING` para sempre. É a mesma sonda com outra janela, e o custo é tempo de
+  browser, não desenho novo.
 * **LOOP 03.9** — confirmar que a marcação real ainda casa com o classificador
   e fechar a **H4** (formato do `SingletonLock`). *Método corrigido*: um perfil
   parado de forma limpa NUNCA mostra o arquivo — exige inspeção com o Chromium
@@ -228,6 +255,55 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   (política de escalada) é decisão humana e continua pendente.
 
 ## Findings
+
+* **F-21 · a sonda de liveness reporta SAUDÁVEL uma sessão que perdeu o
+  servidor — e o socket que a perceberia cai num estado ambíguo.** LOOP 04.3A,
+  medido contra a conta real cortando a rede da página
+  (`EVIDENCIA-SPA.md` M4).
+
+  Com o servidor inalcançável por 90 s, `spa.Monitor.Check` respondeu
+  `Alive=true`/`APP_READY` nas **90** amostras, e `spa.Probe` respondeu
+  `APP_READY` nas 90. Numa frota com standby e reciclagem, essa sessão é contada
+  como capacidade e recebe trabalho. É o risco de fase 6 na forma nova: tudo por
+  fora diz saudável, e desta vez o renderer até responde.
+
+  Não é defeito de implementação — é exatamente o limite que `spa/liveness.go`
+  já declarava. **O que mudou é o estatuto**: era prudência escrita, virou fato
+  com evidência.
+
+  Três coisas que não se adivinhariam da mesa, e as duas primeiras contrariam o
+  que se esperaria:
+
+  1. **`#pane-side`, identidade e `meReadyTriggered` ficam VERDADEIROS os 90 s
+     inteiros.** O F-18 dizia que a identidade chega cedo demais para provar
+     sessão viva; agora se sabe que ela **permanece** depois que a sessão morre.
+     Raciocínio de boot virou fato medido.
+  2. **O socket reage rápido — 3 s — mas para `OPENING`, que é o estado do boot
+     normal** (M3.3). Logo `socket != CONNECTED` **não** distingue "está
+     subindo" de "perdeu o servidor". O discriminador existe, mas o valor
+     instantâneo não é ele: é o valor MAIS a duração. Um liveness escrito só
+     sobre o enum escolhe entre matar sessão que sobe e manter sessão morta.
+  3. **A volta é sozinha e em 2–3 s**, sem QR, sem renavegar, sem reiniciar o
+     browser. Qualquer política de reciclagem que agisse dentro do primeiro
+     minuto destruiria uma sessão que ia se recuperar.
+
+  **Escopo do que foi medido**: corte de REDE, que é o caso mais benigno da
+  família — o servidor continua existindo e aceitando o mesmo credential.
+  Revogação, deslogamento e expiração continuam sem medição, e medi-los
+  destruiria o ativo.
+
+  **Controle negativo EXECUTADO, duas pernas**: a mesma sonda, no mesmo perfil,
+  no mesmo minuto, sem cortar nada — todos os sinais imóveis por 90 s, socket em
+  `CONNECTED` o tempo todo. Sem essa perna, a saída para `OPENING` não seria
+  atribuível ao corte. A perna severada tem ainda a precondição travada em
+  código: se `navigator.onLine` não ficar falso, o teste FALHA dizendo que o
+  corte não chegou à página — senão "nada mudou" seria afirmação sobre a nossa
+  emulação, não sobre a sessão.
+
+  O instrumento de corte também foi provado **antes** de tocar na conta, contra
+  Chrome real e servidor local
+  (`TestBrowserChainSeversAndRestoresThePageNetwork`), incluindo a asserção de
+  que o servidor **não recebe** a requisição durante o corte.
 
 * **F-20 · o instrumento não resolve a janela que ele foi medir.** O
   `readinessTick` é de **250 ms** e a janela entre `meReadyTriggered` (T+5,32s)

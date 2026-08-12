@@ -14,6 +14,7 @@ package waheadless
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -381,6 +383,178 @@ func TestBrowserChainVerifiesTheModuleInventory(t *testing.T) {
 	if !strings.Contains(err.Error(), string(spa.RequiredAtStartup[2])) {
 		t.Errorf("the message does not name the missing module: %v", err)
 	}
+}
+
+// The severing instrument, proved against a real browser before it is pointed
+// at an account.
+//
+// LOOP 04.3A needs to produce a session whose UI is mounted and whose server is
+// gone. If the emulation did not actually sever, every signal would stay put and
+// the run would be reported as "nothing changed while offline" — the instrument
+// inventing its own finding, which is the failure this repository keeps paying
+// for. So the sever is measured HERE, where the other end of the connection is a
+// local server this test owns and can see.
+//
+// Both halves are asserted, and the online halves are the control: a "fetch
+// failed" that also fails while online would prove nothing about the sever.
+func TestBrowserChainSeversAndRestoresThePageNetwork(t *testing.T) {
+	binary := findChrome(t)
+
+	// Atomic because the counter is written by the server's goroutine and read
+	// by the test's: the requests are ordered in time, the memory accesses are
+	// not.
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// No-store, because a cached answer would come back with the network
+		// severed and read as "the sever did not work".
+		w.Header().Set("Cache-Control", "no-store")
+		if r.URL.Path == "/ping" {
+			hits.Add(1)
+			_, _ = fmt.Fprint(w, "pong")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, readyPage)
+	}))
+	defer srv.Close()
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() { t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser)) }()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	if err := tab.Navigate(runner, srv.URL+"/", "nav/sever"); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+
+	steps := []severStep{
+		// The first leg emulates nothing: it is the state the browser launched
+		// in, and it is what makes the severed leg's failure attributable.
+		{name: "before", emulate: false, wantOnline: true, wantFetch: fetchVerdictOK},
+		{name: "severed", emulate: true, offline: true, wantOnline: false, wantFetch: fetchVerdictFail},
+		{name: "restored", emulate: true, offline: false, wantOnline: true, wantFetch: fetchVerdictOK},
+	}
+	var hitsBeforeSever int64
+	for _, step := range steps {
+		if step.offline {
+			hitsBeforeSever = hits.Load()
+		}
+		checkSeverStep(t, runner, tab, srv.URL, step)
+	}
+
+	// The request must not have reached the server at all while severed. A fetch
+	// that failed AFTER being served would be a broken response, not a broken
+	// network, and the two are different measurements.
+	if served := hits.Load() - hitsBeforeSever; served != 1 {
+		t.Errorf("the server saw %d requests after the sever, want exactly 1 (the "+
+			"restored leg): a request arrived while the page was supposed to be "+
+			"severed", served)
+	}
+}
+
+// severStep is one leg of the sever test: what to emulate, and what the page
+// must then report.
+type severStep struct {
+	name string
+	// emulate distinguishes "leave the browser as it launched" from "ask for
+	// offline=false". Both look online; only the second exercises the restore.
+	emulate    bool
+	offline    bool
+	wantOnline bool
+	wantFetch  string
+}
+
+func checkSeverStep(t *testing.T, runner *engine.Runner, tab *engine.Tab, baseURL string, step severStep) {
+	t.Helper()
+	if step.emulate {
+		if err := tab.SetNetworkOffline(runner, step.offline, "sever/"+step.name); err != nil {
+			t.Fatalf("%s: SetNetworkOffline(%v): %v", step.name, step.offline, err)
+		}
+	}
+	if online := navigatorOnline(t, runner, tab, step.name); online != step.wantOnline {
+		t.Errorf("%s: navigator.onLine=%v, want %v — the emulation did not reach "+
+			"the application's view of the network", step.name, online, step.wantOnline)
+	}
+	if got := fetchVerdict(t, runner, tab, baseURL+"/ping?"+step.name); got != step.wantFetch {
+		t.Errorf("%s: fetch verdict %q, want %q", step.name, got, step.wantFetch)
+	}
+}
+
+// fetchVerdict values. The page reports a WORD, never a response body.
+const (
+	fetchVerdictPending = "PENDING"
+	fetchVerdictOK      = "OK"
+	fetchVerdictFail    = "FAIL"
+)
+
+// fetchProbeSlot is where the page parks its verdict between the two
+// evaluations. Named once, because a literal repeated across two scripts is the
+// same bug waiting to diverge.
+const fetchProbeSlot = "__waHeadlessFetchVerdict"
+
+// fetchVerdict starts a fetch in the page and waits, from the GO side, for it to
+// settle.
+//
+// The wait is a Go loop on purpose. A promise awaited inside the page would put
+// the clock where a stalled renderer can stop it, which is exactly what the
+// module's gate forbids.
+func fetchVerdict(t *testing.T, runner *engine.Runner, tab *engine.Tab, url string) string {
+	t.Helper()
+
+	start := `(() => { window.` + fetchProbeSlot + ` = '` + fetchVerdictPending + `';` +
+		`fetch(` + strconv.Quote(url) + `, {cache: 'no-store'})` +
+		`.then(() => { window.` + fetchProbeSlot + ` = '` + fetchVerdictOK + `'; })` +
+		`.catch(() => { window.` + fetchProbeSlot + ` = '` + fetchVerdictFail + `'; });` +
+		`return JSON.stringify('started'); })()`
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpEvaluate, "fetch/start",
+		func(ctx context.Context) error { return tab.Evaluate(ctx, start, &raw) }); err != nil {
+		t.Fatalf("starting the fetch probe: %v", err)
+	}
+
+	read := `JSON.stringify(window.` + fetchProbeSlot + ` || '` + fetchVerdictPending + `')`
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+		if err := runner.Do(context.Background(), engine.OpStateProbe, "fetch/read",
+			func(ctx context.Context) error { return tab.Evaluate(ctx, read, &raw) }); err != nil {
+			t.Fatalf("reading the fetch verdict: %v", err)
+		}
+		var verdict string
+		if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
+			t.Fatalf("unexpected fetch verdict shape %q: %v", raw, err)
+		}
+		if verdict != fetchVerdictPending {
+			return verdict
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fetchVerdictPending
+}
+
+func navigatorOnline(t *testing.T, runner *engine.Runner, tab *engine.Tab, label string) bool {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "online/"+label,
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, `JSON.stringify(navigator.onLine)`, &raw)
+		}); err != nil {
+		t.Fatalf("%s: reading navigator.onLine: %v", label, err)
+	}
+	var online bool
+	if err := json.Unmarshal([]byte(raw), &online); err != nil {
+		t.Fatalf("%s: unexpected navigator.onLine shape %q: %v", label, raw, err)
+	}
+	return online
 }
 
 // qrFixture builds the pairing screen as MEASURED on the real SPA

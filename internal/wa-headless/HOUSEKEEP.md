@@ -298,3 +298,66 @@ de Chromium).
 decisão humana de arquitetura. Os processos órfãos e o diretório de 81 MB
 foram removidos em 2026-08-12 com autorização do usuário; o DEFEITO que os
 produziu continua no lugar.
+
+---
+
+## H6 — `spa.Probe` pode capturar 200 caracteres de texto da página quando a estrutura não casa
+
+**Data / contexto**: 2026-08-12, LOOP 04.3A (liveness contra sessão que perdeu
+o servidor). Achado de lado: a sonda de corte de rede chama `spa.Probe` a cada
+tick contra a conta real, e ler o caminho para confirmar que isso é seguro
+mostrou que ele é seguro **por uma guarda só**.
+
+**Onde**: `internal/wa-headless/spa/probe.go:83-87` e `:116-123`.
+
+```go
+const textScript = `JSON.stringify((() => {
+	if (document.querySelector('#pane-side')) return '';
+	const t = document.body ? document.body.innerText : '';
+	return t.slice(0, 200);
+})())`
+```
+
+**Problema**: numa página classificada `OTHER` pela estrutura, o `Probe` faz a
+segunda avaliação e traz até 200 caracteres de `body.innerText`. Contra
+`web.whatsapp.com` com sessão pareada, esse texto é a lista de conversas —
+nomes de contato e prévias de mensagem. A única coisa que impede isso é
+`#pane-side` estar presente.
+
+Ou seja: **a proteção de PII depende do mesmo seletor cuja fragilidade este
+módulo inteiro assume**. No dia em que a Meta renomear `#pane-side`, o efeito
+não é só "classifica errado" — é que toda sonda passa a puxar texto de conversa
+para dentro do processo. O M4 mediu 180 amostras (90 severadas + 90 de
+controle) em que o painel se manteve, então nada foi capturado nesta corrida;
+o risco é o próximo build da Meta, não este.
+
+Duas condições agravantes, ambas já verdadeiras hoje:
+
+1. O caminho já é exercitado contra a conta real, não só contra dublês
+   (`realspa_test.go`, sondas de observação e agora a do 04.3A).
+2. O texto capturado vai para `PageSnapshot.TextSample`, que é campo
+   **exportado** — qualquer chamador futuro pode logá-lo sem saber o que ele
+   carrega. Nenhum loga hoje; a invariante 14 é mantida por convenção.
+
+**Evidência**: leitura do caminho, não medição — o estado que dispara a captura
+não foi produzido de propósito contra a conta real, e produzi-lo exigiria
+quebrar o seletor no navegador.
+
+**Correção sugerida**, em ordem de custo:
+
+1. **Não confiar num seletor só para decidir se pode ler texto.** A guarda pode
+   exigir a AUSÊNCIA de qualquer sinal de sessão pareada — hoje a identidade do
+   dono (`WAWebUserPrefsMeUser`, M3.2) é o candidato barato: se o perfil está
+   pareado, não leia texto. Nas telas que precisam de texto (conflito, "atualize
+   o Chrome") a identidade também é lida do store, então a regra precisa ser
+   medida antes de ser adotada — é achado, não diagnóstico.
+2. **Redigir na fronteira**: `TextSample` deixa de ser `string` livre e passa a
+   carregar só o que casou com um conjunto fechado de padrões conhecidos
+   (conflito, atualização de browser). Fecha a classe inteira em vez de um caso.
+3. **Teste que trave**: página com `#pane-side` renomeado E texto de conversa no
+   corpo; asserção de que o snapshot volta com `TextSample` vazio. Com controle
+   negativo: reintroduzir a leitura e ver o teste falhar.
+
+**Status**: **não corrigido** — fora do escopo do LOOP 04.3A, que é medição de
+liveness, e mexer na guarda de PII sem medir qual sinal a substitui trocaria
+uma dependência frágil por outra. Registrado para decisão do usuário.

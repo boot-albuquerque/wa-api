@@ -507,6 +507,16 @@ type readinessSample struct {
 	MeReadyTriggered bool `json:"me_ready_triggered"`
 	// SocketState is an enum of Meta's (CONNECTED, OPENING…), not user data.
 	SocketState string `json:"socket_state"`
+	// NavigatorOnline is the browser's own view of connectivity.
+	//
+	// It is here for LOOP 04.3A, which severs the page's network and must be
+	// able to say the sever LANDED. Without it, a run where nothing changed
+	// would be indistinguishable from a run where nothing was severed — the
+	// instrument reporting its own finding by construction.
+	//
+	// On a boot it is a constant true and says nothing about readiness, which is
+	// why it is recorded and never asserted on in the timeline.
+	NavigatorOnline bool `json:"navigator_online"`
 }
 
 // socketStateConnected is Meta's own name for a live socket, as observed in
@@ -571,7 +581,8 @@ func readinessScript(modules []spa.Module) string {
 			has_conn_wid: hasConnWid,
 			has_conn_wid_accessor: hasConnWidAccessor,
 			me_ready_triggered: meReady,
-			socket_state: socketState
+			socket_state: socketState,
+			navigator_online: navigator.onLine === true
 		};
 	})())`
 }
@@ -1030,6 +1041,498 @@ func TestRealSPAOwnerIdentityShape(t *testing.T) {
 
 	if !shape.Require {
 		t.Fatal("window.require absent; nothing could be enumerated")
+	}
+}
+
+// LOOP 04.3A — does anything notice a session that has LOST ITS SERVER?
+//
+// Everything measured up to here is BOOT. EVIDENCIA-SPA.md M3.5 says so in as
+// many words: "nada sobre reconexão, expiração de sessão ou sessão revogada no
+// servidor: só o boot foi observado." And CAP-04's declared limit is that the
+// current liveness probe "descarta o modo de falha medido; não descarta UI
+// montada sobre socket morto".
+//
+// A UI mounted over a dead socket is exactly the untested case, and the only
+// honest way to look at it is to PRODUCE it. So this severs the page's network
+// with the browser's own emulation — what happens when a laptop lid closes —
+// and watches every signal the module has.
+//
+// It is not a logout, not a signal and not a revocation. Nothing here unlinks
+// the account, nothing writes to the profile, and the network is restored before
+// the browser goes down so the profile is never left mid-sever.
+//
+// TWO LEGS, and the control is what makes the severed leg mean anything:
+//
+//	severed   the same probe over the same window, offline
+//	control   the same probe over the same window, untouched
+//
+// Without the control, "the signal changed" could be the signal drifting on its
+// own. The legs are subtests so each can be run alone — together they are about
+// four minutes of browser.
+func TestRealSPALivenessUnderSeveredNetwork(t *testing.T) {
+	requireRealSPA(t)
+
+	for _, leg := range []struct {
+		name  string
+		sever bool
+	}{
+		{severedLeg, true},
+		{controlLeg, false},
+	} {
+		t.Run(leg.name, func(t *testing.T) { observeSeveredSession(t, leg.sever) })
+	}
+}
+
+// The two legs, named once. A literal repeated between the table and the
+// reporting is the same bug waiting to diverge.
+const (
+	severedLeg = "severed"
+	controlLeg = "control"
+)
+
+const (
+	// severBaseline is how long the steady state is watched before anything is
+	// done to it. Short on purpose: it exists to show the signals are STILL, not
+	// to characterise them.
+	severBaseline = 8 * time.Second
+	// severWindow is the observation window — offline for the severed leg,
+	// untouched for the control. Long enough to outlast a keepalive: the
+	// question is whether the SPA ever notices, and a window shorter than its
+	// own heartbeat would answer "no" by construction.
+	severWindow = 90 * time.Second
+	// severRecovery bounds the wait for the session to come back.
+	severRecovery = 60 * time.Second
+	// severTick is the sampling interval.
+	//
+	// It is coarser than the readiness timeline's 250 ms, and deliberately so.
+	// F-20 is about a ~500 ms gap that a 250 ms tick cannot resolve; nothing
+	// here is at that scale — a network transition and a socket giving up are
+	// seconds to tens of seconds. Each tick costs three round trips, so a
+	// tighter one would buy resolution this question does not need and pay for
+	// it in probe traffic against the account.
+	severTick = 1 * time.Second
+)
+
+// severSample is one instant of the observation: the SPA's own signals plus
+// what each of the module's two verdicts said about them.
+type severSample struct {
+	at       time.Duration
+	signals  readinessSample
+	class    spa.PageClass
+	liveness spa.LivenessResult
+	// probeFailed marks a sample whose SIGNALS could not be read, and it exists
+	// because without it the instrument would fabricate findings.
+	//
+	// A blown StateProbe leaves the signals at their zero values — socket "",
+	// pane false, identity false. Scanned naively, that reads as "the socket
+	// left CONNECTED and the pane went away at T+n", which is a transition that
+	// never happened. The scans below skip these samples for the SPA's own
+	// signals; the liveness and page-class verdicts come from their own calls
+	// and stay valid, since "the page did not answer" is exactly what they are
+	// there to report.
+	probeFailed bool
+}
+
+// changedFrom reports whether anything worth printing moved.
+func (s severSample) changedFrom(prev severSample) bool {
+	return s.probeFailed != prev.probeFailed ||
+		s.signals.NavigatorOnline != prev.signals.NavigatorOnline ||
+		s.signals.HasPaneSide != prev.signals.HasPaneSide ||
+		s.signals.HasOwnerIdentity != prev.signals.HasOwnerIdentity ||
+		s.signals.MeReadyTriggered != prev.signals.MeReadyTriggered ||
+		s.signals.SocketState != prev.signals.SocketState ||
+		s.signals.HasQR != prev.signals.HasQR ||
+		s.class != prev.class ||
+		s.liveness.Alive != prev.liveness.Alive ||
+		s.liveness.Class != prev.liveness.Class
+}
+
+func (s severSample) log(t *testing.T, phase string) {
+	t.Helper()
+	if s.probeFailed {
+		// The signals are unread, not false. Printing them would be printing
+		// zero values as if they were measurements.
+		t.Logf("  [%-8s] T+%6.2fs SIGNALS UNREAD (the probe did not answer) "+
+			"probe=%-14s liveness=%-5v/%s", phase, s.at.Seconds(), s.class,
+			s.liveness.Alive, s.liveness.Class)
+		return
+	}
+	t.Logf("  [%-8s] T+%6.2fs online=%-5v pane=%-5v qr=%-5v identity=%-5v meReady=%-5v "+
+		"socket=%-10s nodes=%-5d probe=%-14s liveness=%-5v/%s",
+		phase, s.at.Seconds(), s.signals.NavigatorOnline, s.signals.HasPaneSide,
+		s.signals.HasQR, s.signals.HasOwnerIdentity, s.signals.MeReadyTriggered,
+		s.signals.SocketState, s.signals.DOMNodes, s.class,
+		s.liveness.Alive, s.liveness.Class)
+}
+
+// observeSeveredSession boots the paired profile, waits for a full ready state,
+// and then watches it — with the network cut, or without.
+func observeSeveredSession(t *testing.T, sever bool) {
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	script := readinessScript(spa.RequiredAtStartup)
+	want := len(spa.RequiredAtStartup)
+
+	// The precondition. Watching a session that never came up would measure the
+	// boot, not the sever, and the socket gate is what makes "ready" mean the
+	// session actually reached the server (M3.7).
+	_, marks := sampleReadiness(t, runner, tab, script, want)
+	if marks.pane == 0 || marks.connected == 0 {
+		t.Fatalf("the session never reached a ready state (pane %s, socket %s %s); "+
+			"there is no live session here to sever",
+			markString(marks.pane), socketStateConnected, markString(marks.connected))
+	}
+	t.Logf("READY: pane %s · identity %s · meReady %s · socket %s %s",
+		markString(marks.pane), markString(marks.identity), markString(marks.meReady),
+		socketStateConnected, markString(marks.connected))
+
+	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate}
+	start := time.Now()
+
+	baseline := watchSession(t, runner, tab, monitor, script, "baseline", start, severBaseline)
+	steady, haveSteady := lastReadSample(baseline)
+	if !haveSteady {
+		t.Fatal("no baseline sample with its signals read; the page stopped answering " +
+			"before the window opened, so there is no steady state to compare against")
+	}
+	if steady.signals.SocketState != socketStateConnected || !steady.signals.HasPaneSide {
+		t.Fatalf("the steady state is not what this loop needs to sever: socket=%q pane=%v",
+			steady.signals.SocketState, steady.signals.HasPaneSide)
+	}
+
+	phase := controlLeg
+	if sever {
+		severNetwork(t, runner, tab, start)
+		phase = severedLeg
+	}
+
+	window := watchSession(t, runner, tab, monitor, script, phase, start, severWindow)
+	outcome := reportSeverWindow(t, phase, steady, window)
+
+	if !sever {
+		return
+	}
+
+	if err := tab.SetNetworkOffline(runner, false, "sever/restore"); err != nil {
+		t.Fatalf("restoring the network: %v", err)
+	}
+	restoredAt := time.Since(start)
+	t.Logf("NETWORK RESTORED at T+%.2fs", restoredAt.Seconds())
+
+	recovery := watchSession(t, runner, tab, monitor, script, "recovery", start, severRecovery)
+	reportRecovery(t, restoredAt, recovery, outcome)
+}
+
+// severNetwork cuts the page off and guarantees it will be reconnected.
+//
+// The restore is a t.Cleanup registered IMMEDIATELY, and therefore runs BEFORE
+// the tab and browser cleanups openRealSPA registered earlier — cleanups are
+// LIFO. That is what keeps the profile from ever being left mid-sever, however
+// the rest of the test ends.
+func severNetwork(t *testing.T, runner *engine.Runner, tab *engine.Tab, start time.Time) {
+	t.Helper()
+	if err := tab.SetNetworkOffline(runner, true, "sever/offline"); err != nil {
+		t.Fatalf("severing the network: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := tab.SetNetworkOffline(runner, false, "sever/restore-cleanup"); err != nil {
+			t.Errorf("restoring the network: %v", err)
+		}
+	})
+	t.Logf("NETWORK SEVERED at T+%.2fs", time.Since(start).Seconds())
+}
+
+// watchSession samples the page for a window, printing only the instants where
+// something moved.
+//
+// The clock is on the Go side and every probe carries the Runner's budget, so a
+// page that stops answering produces samples that say UNRESPONSIVE rather than a
+// hang — which is the whole point of watching a severed session at all.
+func watchSession(t *testing.T, runner *engine.Runner, tab *engine.Tab, monitor *spa.Monitor,
+	script, phase string, start time.Time, window time.Duration) []severSample {
+	t.Helper()
+
+	var samples []severSample
+	prev := severSample{signals: readinessSample{DOMNodes: -1}}
+
+	for deadline := time.Now().Add(window); time.Now().Before(deadline); {
+		s := severSample{at: time.Since(start)}
+
+		signals, err := oneReadinessSample(runner, tab, script)
+		if err != nil {
+			// Recorded, not fatal: a probe that blows its budget IS an
+			// observation here, and it is the one this loop most wants to see.
+			t.Logf("  [%-8s] T+%6.2fs the page did not answer: %v", phase, s.at.Seconds(), err)
+			s.probeFailed = true
+		}
+		s.signals = signals
+		s.liveness = monitor.Check(context.Background(), "sever/liveness")
+		// Only the CLASS is kept. Probe reads up to 200 characters of body text
+		// when nothing structural matches, and on this target that text could be
+		// a chat list — so the snapshot is discarded here and never logged, the
+		// same discipline the other observation probes in this file follow.
+		_, s.class = spa.Probe(context.Background(), runner, tab.Evaluate, "sever/probe")
+
+		samples = append(samples, s)
+		if s.changedFrom(prev) {
+			s.log(t, phase)
+			prev = s
+		}
+		time.Sleep(severTick)
+	}
+	return samples
+}
+
+// firstSampleWhere returns the earliest sample satisfying pick.
+func firstSampleWhere(samples []severSample, pick func(severSample) bool) (severSample, bool) {
+	for _, s := range samples {
+		if pick(s) {
+			return s, true
+		}
+	}
+	return severSample{}, false
+}
+
+// firstSignalWhere is firstSampleWhere over the SPA's own signals, and it skips
+// samples whose signals were never read — see severSample.probeFailed. A zero
+// value is not a measurement, and treating it as one is how an instrument
+// reports a transition that did not happen.
+func firstSignalWhere(samples []severSample, pick func(readinessSample) bool) (severSample, bool) {
+	return firstSampleWhere(samples, func(s severSample) bool {
+		return !s.probeFailed && pick(s.signals)
+	})
+}
+
+// countFailedProbes is how many samples of a window had no signals at all. It is
+// reported rather than swallowed: a window that mostly failed is a window whose
+// "NEVER" lines mean far less than they look like.
+func countFailedProbes(samples []severSample) int {
+	n := 0
+	for _, s := range samples {
+		if s.probeFailed {
+			n++
+		}
+	}
+	return n
+}
+
+// lastReadSample is the most recent sample whose signals were actually read.
+func lastReadSample(samples []severSample) (severSample, bool) {
+	for i := len(samples) - 1; i >= 0; i-- {
+		if !samples[i].probeFailed {
+			return samples[i], true
+		}
+	}
+	return severSample{}, false
+}
+
+// sinceOrNever renders how long after a reference instant a sample landed, or
+// says it never did. "never" must not print as an instant — an instrument that
+// renders absence as T+0.00s lies in the direction of optimism.
+func sinceOrNever(s severSample, found bool, ref time.Duration) string {
+	if !found {
+		return "NEVER"
+	}
+	return fmt.Sprintf("+%.1fs after the reference (T+%.2fs)", (s.at - ref).Seconds(), s.at.Seconds())
+}
+
+// transitionTo names the value a signal moved TO, and says nothing at all when
+// it never moved. Printing `(to "")` for a signal that held would read like a
+// transition into an empty state, which is not what was measured.
+func transitionTo(value string, found bool) string {
+	if !found {
+		return ""
+	}
+	return fmt.Sprintf(" (to %q)", value)
+}
+
+// signalMark is the first sample at which one signal moved, plus whether it
+// moved at all. The boolean is not redundant with the sample: "never moved" and
+// "moved at T+0" are different statements, and collapsing them is how an
+// instrument reports absence as an instant.
+type signalMark struct {
+	sample severSample
+	seen   bool
+}
+
+func (m signalMark) since(ref time.Duration) string { return sinceOrNever(m.sample, m.seen, ref) }
+
+// windowMarks are the instants a window is summarised by.
+type windowMarks struct {
+	offline, socketLeft, paneGone, identityGone, meReadyGone signalMark
+	notAlive, notReady                                       signalMark
+}
+
+// collectWindowMarks finds the first movement of each signal.
+//
+// The SPA's own signals go through firstSignalWhere, which skips samples that
+// were never read; the two VERDICTS go through firstSampleWhere, because a
+// probe that did not answer is a legitimate input to them.
+func collectWindowMarks(samples []severSample) windowMarks {
+	signal := func(pick func(readinessSample) bool) signalMark {
+		s, ok := firstSignalWhere(samples, pick)
+		return signalMark{sample: s, seen: ok}
+	}
+	verdict := func(pick func(severSample) bool) signalMark {
+		s, ok := firstSampleWhere(samples, pick)
+		return signalMark{sample: s, seen: ok}
+	}
+	return windowMarks{
+		offline:      signal(func(s readinessSample) bool { return !s.NavigatorOnline }),
+		socketLeft:   signal(func(s readinessSample) bool { return s.SocketState != socketStateConnected }),
+		paneGone:     signal(func(s readinessSample) bool { return !s.HasPaneSide }),
+		identityGone: signal(func(s readinessSample) bool { return !s.HasOwnerIdentity }),
+		meReadyGone:  signal(func(s readinessSample) bool { return !s.MeReadyTriggered }),
+		notAlive:     verdict(func(s severSample) bool { return !s.liveness.Alive }),
+		notReady:     verdict(func(s severSample) bool { return s.class != spa.ClassAppReady }),
+	}
+}
+
+func (m windowMarks) log(t *testing.T, ref time.Duration) {
+	t.Helper()
+	t.Logf("  navigator.onLine went false     %s", m.offline.since(ref))
+	t.Logf("  socket left %-10s          %s%s", socketStateConnected, m.socketLeft.since(ref),
+		transitionTo(m.socketLeft.sample.signals.SocketState, m.socketLeft.seen))
+	t.Logf("  #pane-side went false           %s", m.paneGone.since(ref))
+	t.Logf("  owner identity went false       %s", m.identityGone.since(ref))
+	t.Logf("  meReadyTriggered went false     %s", m.meReadyGone.since(ref))
+	t.Logf("  spa.Probe left %-14s   %s%s", spa.ClassAppReady, m.notReady.since(ref),
+		transitionTo(string(m.notReady.sample.class), m.notReady.seen))
+	t.Logf("  liveness reported NOT alive     %s", m.notAlive.since(ref))
+}
+
+// reportSeverWindow is the answer this loop exists to produce.
+//
+// It ASSERTS nothing about what the SPA should do — the point is to find out.
+// The two things it refuses are a severed leg where the sever never landed,
+// because then there is no measurement, and a control leg that drifted, because
+// then the severed leg's changes are not attributable to the sever.
+//
+// It reports back what the window did to the liveness verdict, because the
+// recovery report has to know: "alive again" is only meaningful if it stopped.
+func reportSeverWindow(t *testing.T, phase string, steady severSample, samples []severSample) windowOutcome {
+	t.Helper()
+	if len(samples) == 0 {
+		t.Fatalf("%s: no samples in the window", phase)
+	}
+	// The closing state comes from the last sample whose signals were READ. The
+	// very last sample may be one that did not answer, and reporting its zero
+	// values as the end state would invent a collapse in the final second.
+	end, haveEnd := lastReadSample(samples)
+	if !haveEnd {
+		t.Fatalf("%s: not one sample in the window had its signals read", phase)
+	}
+
+	ref := steady.at
+	marks := collectWindowMarks(samples)
+	last := samples[len(samples)-1]
+
+	t.Logf("%s WINDOW — %d samples over %.0fs (%d with the signals unread), from the "+
+		"steady state at T+%.2fs", strings.ToUpper(phase), len(samples),
+		(last.at - ref).Seconds(), countFailedProbes(samples), ref.Seconds())
+	marks.log(t, ref)
+	t.Logf("  at the end of the window: socket=%q pane=%v identity=%v probe=%s liveness=%v/%s",
+		end.signals.SocketState, end.signals.HasPaneSide, end.signals.HasOwnerIdentity,
+		last.class, last.liveness.Alive, last.liveness.Class)
+
+	if phase == severedLeg {
+		reportSeveredVerdict(t, ref, marks)
+	} else {
+		assertControlHeldStill(t, end, marks)
+	}
+	return windowOutcome{livenessDropped: marks.notAlive.seen}
+}
+
+// reportSeveredVerdict states what the liveness check did while the server was
+// unreachable, and refuses a run where the sever never reached the page.
+func reportSeveredVerdict(t *testing.T, ref time.Duration, marks windowMarks) {
+	t.Helper()
+	// The instrument's own precondition. If the emulation did not reach the
+	// page, "nothing changed" is a statement about our emulation and not about
+	// the session.
+	if !marks.offline.seen {
+		t.Fatal("the sever never reached the page: navigator.onLine stayed true for " +
+			"the whole window, so nothing measured here is attributable to a lost server")
+	}
+	if marks.notAlive.seen {
+		t.Logf("VERDICT: the liveness check stopped reporting ALIVE %s", marks.notAlive.since(ref))
+		return
+	}
+	t.Log("VERDICT: the liveness check reported this session ALIVE for the whole " +
+		"window with its network cut. It is NOT sufficient on its own — the " +
+		"phase 6 hazard, measured rather than reasoned about.")
+}
+
+// assertControlHeldStill is the leg that makes the severed one mean something.
+// Any movement here and the severed timeline is not attributable to the sever,
+// so this is the one leg that asserts.
+func assertControlHeldStill(t *testing.T, end severSample, marks windowMarks) {
+	t.Helper()
+	if !end.signals.NavigatorOnline {
+		t.Error("the control leg went offline on its own; the two legs are then not comparable")
+	}
+	if marks.socketLeft.seen {
+		t.Errorf("the control leg's socket left %s at T+%.2fs with nothing done to it, so a "+
+			"socket change in the severed leg cannot be attributed to the sever",
+			socketStateConnected, marks.socketLeft.sample.at.Seconds())
+	}
+	if marks.notAlive.seen {
+		t.Errorf("the control leg reported NOT alive at T+%.2fs with nothing done to it",
+			marks.notAlive.sample.at.Seconds())
+	}
+	if marks.paneGone.seen || marks.identityGone.seen {
+		t.Errorf("the control leg lost pane (%v) or identity (%v) with nothing done to it",
+			marks.paneGone.seen, marks.identityGone.seen)
+	}
+	t.Log("CONTROL: every signal held still over the same window with the network untouched")
+}
+
+// windowOutcome is what a window did to the module's liveness verdict, which
+// the recovery report needs: "alive again" is only meaningful if it stopped.
+type windowOutcome struct {
+	livenessDropped bool
+}
+
+// reportRecovery says whether, and how fast, the session came back.
+func reportRecovery(t *testing.T, restoredAt time.Duration, samples []severSample, window windowOutcome) {
+	t.Helper()
+	if len(samples) == 0 {
+		t.Fatal("no samples after the network was restored")
+	}
+	back, recovered := firstSignalWhere(samples, func(s readinessSample) bool {
+		return s.SocketState == socketStateConnected
+	})
+	alive, aliveAgain := firstSampleWhere(samples, func(s severSample) bool {
+		return s.liveness.Alive
+	})
+	last := samples[len(samples)-1]
+	end, haveEnd := lastReadSample(samples)
+	if !haveEnd {
+		t.Fatal("not one sample after the restore had its signals read")
+	}
+
+	t.Logf("RECOVERY — %d samples over %.0fs (%d with the signals unread) after the "+
+		"restore at T+%.2fs", len(samples), (last.at - restoredAt).Seconds(),
+		countFailedProbes(samples), restoredAt.Seconds())
+	t.Logf("  socket back to %-10s       %s", socketStateConnected,
+		sinceOrNever(back, recovered, restoredAt))
+	// Only meaningful if it ever stopped. Printing "+0.0s" for a verdict that
+	// never dropped would read as a recovery that did not happen.
+	if window.livenessDropped {
+		t.Logf("  liveness alive again            %s", sinceOrNever(alive, aliveAgain, restoredAt))
+	} else {
+		t.Log("  liveness alive again            n/a — it never stopped saying alive")
+	}
+	t.Logf("  at the end: socket=%q pane=%v identity=%v probe=%s",
+		end.signals.SocketState, end.signals.HasPaneSide,
+		end.signals.HasOwnerIdentity, last.class)
+
+	// The session must be handed back healthy: this profile is not disposable,
+	// and leaving it disconnected would be a side effect of the measurement.
+	if !recovered {
+		t.Errorf("the socket never returned to %s within %s after the network came back",
+			socketStateConnected, severRecovery)
 	}
 }
 
