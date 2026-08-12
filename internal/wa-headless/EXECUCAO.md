@@ -361,12 +361,37 @@ da REGRA DE DADOS, escrito enquanto a fronteira ainda está limpa.
   Eu ia usá-los como metade da condição de READY. `EVIDENCIA-SPA.md` M2.1.
 * **F-13 · o socket se nomeia.** `WAWebSocketModel.__x_state` transiciona
   `OPENING` → `PAIRING` → `UNPAIRED` sem sessão. É veredito da Meta, não
-  interpretação nossa, e é o melhor candidato a discriminador de READY junto
-  com a presença de `__x_wid`. M2.2 e M2.3.
+  interpretação nossa, e é o melhor candidato a discriminador de READY ~~junto
+  com a presença de `__x_wid`~~. M2.2 e M2.3.
+  **CORRIGIDO em 2026-08-12 pelo F-18:** `__x_wid` sai — o campo não existe
+  nesta build. A parte do socket segue de pé e foi medida chegando a
+  `CONNECTED` em T+5,82s no perfil pareado (M3.3).
 * **F-14 · instrumento também sofre da armadilha do dublê permissivo.** A
   primeira sonda aceitava `ref` como prova de conexão viva — e `ref` é o campo
   do próprio QR, então ela ficava verdadeira na tela que deveria excluir. Só
   apareceu porque o controle negativo foi executado contra o alvo real.
+* **F-18 · o F-14 ao contrário: sonda que NUNCA fica verdadeira.** MINI-LOOP
+  B1.4b, investigativo. A sonda de prontidão comparava `#pane-side` contra
+  `WAWebConnModel.__x_wid` — campo que **não existe nesta build, nem no perfil
+  pareado**. Com um único veredito alcançável (`EARLY_MARKER`), ela não estava
+  medindo: falhava por construção em qualquer perfil. A identidade do dono mora
+  em `WAWebUserPrefsMeUser.getMaybeMePnUser()`/`getMaybeMeLidUser()`, onde o
+  `whatsapp-web.js` 1.34.7 a lê (`src/Client.js:351-364`), e ali ela
+  **discrimina**: `EMPTY` por 75 s no perfil não pareado, `PRESENT` em T+0,01s
+  no pareado. `EVIDENCIA-SPA.md` M3.
+
+  Duas lições que valem além deste caso:
+
+  1. **Ausência num só perfil não é diagnóstico.** O M2.2 concluiu que `__x_wid`
+     "só materializa com sessão" a partir de não vê-lo na tela de login. Sem o
+     caso positivo, "ainda não apareceu" e "não existe" são a mesma observação.
+  2. **Sonda com um único veredito alcançável não é instrumento.** Vale a
+     pergunta em toda revisão de sonda: *qual entrada faria isto responder o
+     contrário?* Se não houver, ela não mede — decide.
+
+  Efeito colateral medido: a identidade é **persistida** (T+0,01s, antes de o
+  socket abrir), logo prova PAREAMENTO, não sessão viva — mesma desqualificação
+  do F-12, e ainda não há corte medido para o READY honesto (M3.5).
 
 * **F-10 · o `spa/doc.go` cita um commit do wwebjs que não é o que roda.** Ele
   aponta `main @ 942d236a11ad (2026-07-27)`; o produto tem `1.34.7` instalado.

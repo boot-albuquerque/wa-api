@@ -470,27 +470,37 @@ type readinessSample struct {
 	HasRequire bool `json:"has_require"`
 	// ModulesResolved counts how many of the startup inventory answer.
 	ModulesResolved int `json:"modules_resolved"`
-	// The readiness candidates, chosen by MEASUREMENT rather than by guess.
+	// HasOwnerIdentity is the owner identity being materialised, read WHERE
+	// whatsapp-web.js reads it — see moduleUserPrefsMeUser.
 	//
-	// LOOP B1.4a read the key names of WAWebConnModel on an unpaired login
-	// screen. What was there: __x_ref, __x_refExpiry, __x_refTTL (the QR),
-	// __x_id, __x_stale, __x_meReadyTriggered. What was NOT there: __x_wid.
+	// Presence only. The value is the account's phone identity and is never
+	// read, logged or asserted on anywhere in this file.
 	//
-	// That disqualifies everything the first version of this probe used —
-	// window.require and all eight startup modules resolve at T+0.01s on the
-	// LOGIN screen, so an inventory cannot be evidence of readiness. It also
-	// explains the first instrument's mistake: it accepted `ref`, which is the
-	// QR's own field, and so went true with no session at all.
+	// LOOP B1.4b measured this getter on both profiles with one instrument:
+	// EMPTY for a full 75s on the unpaired lab profile, PRESENT at T+0.01s on
+	// the paired one. It discriminates, which is what makes it usable at all.
+	HasOwnerIdentity bool `json:"has_owner_identity"`
+	// HasConnWID is the field the FIRST version of this probe asserted on, kept
+	// as a RECORDED control rather than deleted.
 	//
-	// HasOwnerWID is presence only. The value is the account's JID and is never
-	// read here.
-	HasOwnerWID bool `json:"has_owner_wid"`
+	// It reported false for the whole 90s budget on a session that was
+	// demonstrably connected, and B1.4b found out why: WAWebConnModel has no
+	// wid key in this build, on EITHER profile. The field does not exist, so
+	// the probe was reading a place the identity never lived. Keeping it
+	// sampled means the day Meta adds it back, the evidence says so.
+	HasConnWID bool `json:"has_conn_wid"`
 	// MeReadyTriggered is the SPA's own flag for "the account finished
 	// loading". A boolean of Meta's, not an inference of ours.
 	MeReadyTriggered bool `json:"me_ready_triggered"`
 	// SocketState is an enum of Meta's (CONNECTED, OPENING…), not user data.
 	SocketState string `json:"socket_state"`
 }
+
+// socketStateConnected is Meta's own name for a live socket, as observed in
+// WAWebSocketModel.Socket.__x_state. whatsapp-web.js reads the same field to
+// decide whether a session needs authenticating (1.34.7, src/Client.js:146-179,
+// where UNPAIRED and UNPAIRED_IDLE are the negative verdicts).
+const socketStateConnected = "CONNECTED"
 
 // readinessScript samples every signal in ONE evaluation.
 //
@@ -505,20 +515,29 @@ func readinessScript(modules []spa.Module) string {
 		const q = (s) => !!document.querySelector(s);
 		const hasRequire = typeof window.require === 'function';
 		let resolved = 0;
-		let hasWid = false, meReady = false, socketState = '';
+		let hasIdentity = false, hasConnWid = false, meReady = false, socketState = '';
 		if (hasRequire) {
 			for (const name of [` + strings.Join(names, ",") + `]) {
 				try { if (window.require(name)) resolved++; } catch (e) {}
 			}
 			try {
-				const m = window.require('WAWebConnModel');
+				// Where whatsapp-web.js takes the owner identity from, and the
+				// only place this file looks for it. Presence only: the value
+				// is the account's phone identity.
+				const me = window.require('` + moduleUserPrefsMeUser + `');
+				const pn = (me && typeof me.getMaybeMePnUser === 'function') ? me.getMaybeMePnUser() : null;
+				const lid = (me && typeof me.getMaybeMeLidUser === 'function') ? me.getMaybeMeLidUser() : null;
+				hasIdentity = !!(pn || lid);
+			} catch (e) {}
+			try {
+				const m = window.require('` + string(spa.ModuleConnModel) + `');
 				const c = m && (m.Conn || m.default || m);
-				// Presence only. The value is the account's JID.
-				hasWid = !!(c && c.__x_wid);
+				// Recorded control: measured ABSENT on both profiles.
+				hasConnWid = !!(c && c.__x_wid);
 				meReady = !!(c && c.__x_meReadyTriggered === true);
 			} catch (e) {}
 			try {
-				const m = window.require('WAWebSocketModel');
+				const m = window.require('` + string(spa.ModuleSocketModel) + `');
 				const sk = m && (m.Socket || m.default || m);
 				socketState = (sk && typeof sk.__x_state === 'string') ? sk.__x_state : '';
 			} catch (e) {}
@@ -530,7 +549,8 @@ func readinessScript(modules []spa.Module) string {
 			has_qr_loading: q('[data-testid^="link-device-qrcode-alt-linking"]'),
 			has_require: hasRequire,
 			modules_resolved: resolved,
-			has_owner_wid: hasWid,
+			has_owner_identity: hasIdentity,
+			has_conn_wid: hasConnWid,
 			me_ready_triggered: meReady,
 			socket_state: socketState
 		};
@@ -544,6 +564,14 @@ func readinessScript(modules []spa.Module) string {
 // has already proved once, in this same SPA, not to mean "the thing is usable".
 // Treating presence as readiness is the exact mistake this loop exists to test
 // for, and the answer decides whether the classifier has a false positive.
+//
+// The first version of this test could never have answered it. It compared the
+// pane against WAWebConnModel's __x_wid, a field that does not exist in this
+// build, so it reported EARLY_MARKER for any profile whatsoever — including one
+// measured CONNECTED, unpaired-QR-free and 2691 DOM nodes deep. A probe with
+// only one reachable answer is not measuring anything. B1.4b found where the
+// identity really lives; this test now reads it there. EVIDENCIA-SPA.md M3
+// holds both measurements.
 func TestRealSPAReadinessTimeline(t *testing.T) {
 	runner := engine.NewRunner()
 	_, tab := openRealSPA(t, runner)
@@ -552,51 +580,76 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 	want := len(spa.RequiredAtStartup)
 
 	samples, marks := sampleReadiness(t, runner, tab, script, want)
-	paneAt, modulesAt, connAt := marks.pane, marks.modules, marks.conn
 
 	logTimeline(t, samples, want)
 	// "never" must not print as T+0.00s. A zero mark means the signal never
 	// turned on, and rendering that as an instant reads like "immediately" —
 	// an instrument that lies in the direction of optimism.
-	t.Logf("  #pane-side at        %s", markString(paneAt))
-	t.Logf("  module inventory at  %s", markString(modulesAt))
-	t.Logf("  owner wid present at %s", markString(connAt))
+	t.Logf("  #pane-side at             %s", markString(marks.pane))
+	t.Logf("  module inventory at       %s", markString(marks.modules))
+	t.Logf("  owner identity at         %s", markString(marks.identity))
+	t.Logf("  meReadyTriggered at       %s", markString(marks.meReady))
+	t.Logf("  socket %-10s at      %s", socketStateConnected, markString(marks.connected))
 
-	if paneAt == 0 {
+	if marks.pane == 0 {
 		t.Fatal("#pane-side never appeared on a paired profile")
 	}
-	if modulesAt == 0 {
+	if marks.modules == 0 {
 		t.Fatal("the module inventory never resolved; the SPA never finished booting")
 	}
 
 	// The verdict this loop exists to produce.
 	const tolerance = 250 * time.Millisecond
 	switch {
-	case connAt == 0:
+	case marks.identity == 0:
 		t.Error("EARLY_MARKER: #pane-side appeared but the owner identity never did — " +
 			"the classifier would report READY for a session that cannot act")
-	case connAt > paneAt+tolerance:
+	case marks.identity > marks.pane+tolerance:
 		t.Errorf("EARLY_MARKER: #pane-side at T+%.2fs but the owner identity only at "+
 			"T+%.2fs — a %.2fs window where the classifier says READY and the engine "+
-			"cannot act as anybody", paneAt.Seconds(), connAt.Seconds(),
-			(connAt - paneAt).Seconds())
+			"cannot act as anybody", marks.pane.Seconds(), marks.identity.Seconds(),
+			(marks.identity - marks.pane).Seconds())
 	default:
-		t.Logf("SAFE_READY_MARKER: the owner identity was already there when #pane-side "+
-			"appeared (wid T+%.2fs <= pane T+%.2fs + tolerance)",
-			connAt.Seconds(), paneAt.Seconds())
+		t.Logf("SAFE_READY_MARKER on the identity axis: the owner identity was already "+
+			"there when #pane-side appeared (identity T+%.2fs <= pane T+%.2fs + tolerance)",
+			marks.identity.Seconds(), marks.pane.Seconds())
 	}
-	// Recorded, not asserted: the inventory is known to be true on the login
-	// screen, so it can never be the discriminating signal.
-	t.Logf("  (module inventory at T+%.2fs — measured true on the LOGIN screen too, "+
-		"so it is not evidence of readiness)", modulesAt.Seconds())
+
+	// Recorded, NOT asserted — and the distinction is the finding.
+	//
+	// The identity comes out of a user-prefs store, so it is back at T+0.01s,
+	// before the socket has even opened. That makes it proof the profile is
+	// PAIRED, not proof the session is live: a machine offline since last week
+	// would answer it just as fast. The same disqualification as the module
+	// inventory in M2.1, arrived at by measuring instead of by assuming.
+	//
+	// What IS an event of this boot are the two below. Both are also earlier
+	// than the pane on the measured run, which is what makes the verdict above
+	// survive: the pane is the LAST of the five, not the first.
+	t.Logf("  (module inventory at %s — measured true on the LOGIN screen too, "+
+		"so it is not evidence of readiness)", markString(marks.modules))
+	t.Logf("  (the owner identity is PERSISTED, not connection-derived: it proves the "+
+		"profile is paired, not that the session is live. The live-session instants are "+
+		"meReadyTriggered %s and socket %s %s)",
+		markString(marks.meReady), socketStateConnected, markString(marks.connected))
 }
 
 // readinessMarks are the instants this loop compares.
-type readinessMarks struct{ pane, modules, conn time.Duration }
+//
+// identity, meReady and connected are the three things that could mean "this
+// session can act". They are all recorded because B1.4b measured that they
+// arrive at very different times and mean different things: identity is
+// PERSISTED and back before the socket opens, while the other two are events of
+// this boot.
+type readinessMarks struct{ pane, modules, identity, meReady, connected time.Duration }
 
-// record stamps the first time each signal turned on, and reports whether all
-// of them have. First-time-only: a signal that flickers must keep its earliest
-// instant, because the question is when readiness BECAME true.
+// record stamps the first time each signal turned on, and reports whether the
+// three the verdict needs have. First-time-only: a signal that flickers must
+// keep its earliest instant, because the question is when readiness BECAME
+// true.
+//
+// meReady and connected do not gate the stop: they are always earlier than the
+// pane on the measured boot, so waiting on them would only be able to hang.
 func (m *readinessMarks) record(s readinessSample, want int) bool {
 	if m.pane == 0 && s.HasPaneSide {
 		m.pane = s.At
@@ -604,10 +657,16 @@ func (m *readinessMarks) record(s readinessSample, want int) bool {
 	if m.modules == 0 && s.ModulesResolved == want {
 		m.modules = s.At
 	}
-	if m.conn == 0 && s.HasOwnerWID {
-		m.conn = s.At
+	if m.identity == 0 && s.HasOwnerIdentity {
+		m.identity = s.At
 	}
-	return m.pane > 0 && m.modules > 0 && m.conn > 0
+	if m.meReady == 0 && s.MeReadyTriggered {
+		m.meReady = s.At
+	}
+	if m.connected == 0 && s.SocketState == socketStateConnected {
+		m.connected = s.At
+	}
+	return m.pane > 0 && m.modules > 0 && m.identity > 0
 }
 
 // sampleReadiness polls the boot until every mark is in, or the budget ends.
@@ -666,13 +725,14 @@ func logTimeline(t *testing.T, samples []readinessSample, want int) {
 	for _, s := range samples {
 		if s.HasPaneSide == prev.HasPaneSide && s.HasQRLoad == prev.HasQRLoad &&
 			s.HasRequire == prev.HasRequire && s.ModulesResolved == prev.ModulesResolved &&
-			s.HasOwnerWID == prev.HasOwnerWID && s.MeReadyTriggered == prev.MeReadyTriggered &&
-			s.SocketState == prev.SocketState {
+			s.HasOwnerIdentity == prev.HasOwnerIdentity && s.HasConnWID == prev.HasConnWID &&
+			s.MeReadyTriggered == prev.MeReadyTriggered && s.SocketState == prev.SocketState {
 			continue
 		}
-		t.Logf("  T+%6.2fs nodes=%-6d pane=%-5v modules=%d/%d wid=%-5v meReady=%-5v socket=%s",
-			s.At.Seconds(), s.DOMNodes, s.HasPaneSide,
-			s.ModulesResolved, want, s.HasOwnerWID, s.MeReadyTriggered, s.SocketState)
+		t.Logf("  T+%6.2fs nodes=%-6d pane=%-5v modules=%d/%d identity=%-5v connWid=%-5v "+
+			"meReady=%-5v socket=%s",
+			s.At.Seconds(), s.DOMNodes, s.HasPaneSide, s.ModulesResolved, want,
+			s.HasOwnerIdentity, s.HasConnWID, s.MeReadyTriggered, s.SocketState)
 		prev = s
 	}
 }
@@ -730,6 +790,169 @@ func TestRealSPADisqualifyReadinessSignalsOnLogin(t *testing.T) {
 	}
 	if !out.Require {
 		t.Fatal("window.require absent; nothing to disqualify")
+	}
+}
+
+// moduleUserPrefsMeUser is the module whatsapp-web.js reads the owner identity
+// from. It is NOT part of spa.RequiredAtStartup, so it has no constant there
+// and gets one here, next to the only code that names it.
+//
+//	whatsapp-web.js 1.34.7 — src/Client.js:351-364
+//	  wid: window.require('WAWebUserPrefsMeUser').getMaybeMePnUser()
+//	    || window.require('WAWebUserPrefsMeUser').getMaybeMeLidUser()
+//
+// The same module is where the injected helpers take the sender identity from
+// (src/util/Injected/Utils.js:420-424 and :1267-1269). Nowhere in that release
+// does the client read the identity off WAWebConnModel.
+const moduleUserPrefsMeUser = "WAWebUserPrefsMeUser"
+
+// identityGetters are the accessor names to try on moduleUserPrefsMeUser.
+//
+// The two whatsapp-web.js actually calls come first; the rest are there so a
+// build that renamed them is DETECTED rather than silently read as "no
+// identity". The probe reports which ones exist, which is how a rename shows up
+// as evidence instead of as a false negative.
+var identityGetters = []string{
+	"getMaybeMePnUser",
+	"getMaybeMeLidUser",
+	"getMaybeMeUser",
+	"getMe",
+	"getMeUser",
+}
+
+// jsQuotedList renders names as a JavaScript array body: 'a','b','c'.
+func jsQuotedList(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = "'" + n + "'"
+	}
+	return strings.Join(quoted, ",")
+}
+
+// identityShapeScript enumerates WHERE an owner identity could live, in key
+// names and presence verdicts only.
+//
+// PII rule, and the reason every verdict is a word rather than a value: the
+// thing being looked for IS the account's phone identity. So the getters report
+// PRESENT / EMPTY / ABSENT / THREW, and objects report their KEY NAMES. A key
+// name is Meta's schema; a value would be the account.
+func identityShapeScript() string {
+	return `JSON.stringify((() => {
+		const out = {
+			require: typeof window.require === 'function',
+			pane: !!document.querySelector('#pane-side'),
+			modules: {},
+			getters: {},
+			identity_key_names: [],
+			has_identity: false
+		};
+		if (!out.require) return out;
+
+		const keysOf = (name, pick) => {
+			try {
+				const m = window.require(name);
+				if (!m) { out.modules[name] = 'UNRESOLVED'; return; }
+				const target = pick(m) || m;
+				out.modules[name] = Object.keys(target).sort().slice(0, 80).join(' ');
+			} catch (e) { out.modules[name] = 'THREW'; }
+		};
+		keysOf('` + string(spa.ModuleConnModel) + `', (m) => m.Conn);
+		keysOf('` + string(spa.ModuleSocketModel) + `', (m) => m.Socket);
+		keysOf('` + moduleUserPrefsMeUser + `', () => null);
+
+		try {
+			const me = window.require('` + moduleUserPrefsMeUser + `');
+			for (const name of [` + jsQuotedList(identityGetters) + `]) {
+				const fn = me && me[name];
+				if (typeof fn !== 'function') { out.getters[name] = 'ABSENT'; continue; }
+				try {
+					const v = fn();
+					out.getters[name] = v ? 'PRESENT' : 'EMPTY';
+					if (v) {
+						out.has_identity = true;
+						if (out.identity_key_names.length === 0 && typeof v === 'object') {
+							// Key names only. One of these values IS the account.
+							out.identity_key_names = Object.keys(v).sort();
+						}
+					}
+				} catch (e) { out.getters[name] = 'THREW'; }
+			}
+		} catch (e) { out.modules['` + moduleUserPrefsMeUser + `'] = 'THREW'; }
+		return out;
+	})())`
+}
+
+// identityShape is what identityShapeScript answers with.
+type identityShape struct {
+	Require          bool              `json:"require"`
+	Pane             bool              `json:"pane"`
+	Modules          map[string]string `json:"modules"`
+	Getters          map[string]string `json:"getters"`
+	IdentityKeyNames []string          `json:"identity_key_names"`
+	HasIdentity      bool              `json:"has_identity"`
+}
+
+// identityShapeBudget and identityShapeTick bound the settle wait. Coarse on
+// purpose: this probe answers WHERE the identity lives, not WHEN it arrives —
+// the instant is TestRealSPAReadinessTimeline's job, at a 250ms tick.
+const (
+	identityShapeBudget = 75 * time.Second
+	identityShapeTick   = 2 * time.Second
+)
+
+// LOOP B1.4b — where does the owner identity actually live in this build?
+//
+// It exists because the first readiness probe asserted on WAWebConnModel's
+// __x_wid and that field was FALSE for a full 90s budget on a session measured
+// as CONNECTED, with #pane-side up and 2691 DOM nodes. Two readings competed:
+// the session cannot identify its owner, or the probe reads the wrong place.
+//
+// It is ONE instrument meant to be run against BOTH profiles — the paired one
+// via WA_HEADLESS_PROFILE_DIR, the unpaired lab one by default. That is the
+// point, and it is what B1.4a could not do: a signal is only a
+// discriminator if it was measured false on one and true on the other, and one
+// instrument on two profiles is what makes that comparison mean something.
+func TestRealSPAOwnerIdentityShape(t *testing.T) {
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	script := identityShapeScript()
+	start := time.Now()
+
+	var shape identityShape
+	var identityAt time.Duration
+	for deadline := start.Add(identityShapeBudget); time.Now().Before(deadline); {
+		var raw string
+		err := runner.Do(context.Background(), engine.OpStateProbe, "identity/shape",
+			func(ctx context.Context) error { return tab.Evaluate(ctx, script, &raw) })
+		if err != nil {
+			t.Logf("t+%.1fs the page did not answer: %v", time.Since(start).Seconds(), err)
+			time.Sleep(identityShapeTick)
+			continue
+		}
+		if err := json.Unmarshal([]byte(raw), &shape); err != nil {
+			t.Fatalf("unexpected shape: %v", err)
+		}
+		if shape.HasIdentity {
+			identityAt = time.Since(start)
+			break
+		}
+		time.Sleep(identityShapeTick)
+	}
+
+	t.Logf("window.require present: %v · #pane-side: %v", shape.Require, shape.Pane)
+	for name, keys := range shape.Modules {
+		t.Logf("  %s keys: %s", name, keys)
+	}
+	for _, name := range identityGetters {
+		t.Logf("  %s.%s() -> %s", moduleUserPrefsMeUser, name, shape.Getters[name])
+	}
+	t.Logf("  identity object key names: %v", shape.IdentityKeyNames)
+	t.Logf("OWNER IDENTITY PRESENT: %v (first seen at %s, coarse %s tick)",
+		shape.HasIdentity, markString(identityAt), identityShapeTick)
+
+	if !shape.Require {
+		t.Fatal("window.require absent; nothing could be enumerated")
 	}
 }
 
