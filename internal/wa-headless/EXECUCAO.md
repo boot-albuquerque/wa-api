@@ -8,7 +8,34 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: — · LOOP H6.1, a guarda de PII deixa de depender de seletor · **DONE**
+CAP: — · LOOPS H5.1 e H2.1, o desligamento do travado e o build real · **DONE**
+
+**H5, itens 1 e 2 fechados; item 3 aberto com a pergunta estreitada.** O
+comentário do teste do renderer travado afirmava que um renderer travado não
+honra o `Browser.close`. É **falso**: 3/3 corridas saíram
+`stopped_via=browser.close`. O mecanismo é que o travamento é um `for(;;)` na
+thread do RENDERER e o `close` é servido pelo processo BROWSER, que é outro
+processo. Consequência que importa para a CAP-04: **o módulo TEM caminho de
+desligamento provado para o estado UNRESPONSIVE.**
+
+O defeito real era o `defer` só REGISTRAR o desfecho. Agora exige `via.Clean()`
+e `!ProcessAlive(pid)`. Controle negativo (`CleanStop` devolvendo `noop`) morde
+na segunda asserção — a primeira passa, porque `StopViaNoop.Clean()` é true — e
+deixou 7 órfãos, mesma ordem de grandeza dos 6 do achado original.
+
+Item 3 (política de escalada) segue **decisão do usuário**, e não a projetei:
+não existe reprodução do caso residual (o processo BROWSER recusando o `close`).
+Escolher entre "nunca sinalizar perfil com credencial" e "escalar N vezes" sem
+nunca ter observado esse estado seria projetar sobre modo de falha imaginado.
+
+**H2 fechado.** `docker build` real, `EXIT=0`, imagem 911MB, binário
+`/app/wa-api` de 43MB; `golang:1.26-bookworm` resolve para `go1.26.5`, que
+satisfaz a diretiva que o `chromedp v0.16.0` impôs. Não prova que o binário
+SIRVA — só foi inspecionado — e foi construído em arm64.
+
+Loop anterior: **H6.1** (`997cebe`), abaixo.
+
+### Loop anterior — LOOP H6.1, a guarda de PII deixa de depender de seletor · **DONE**
 
 O `spa.Probe` não traz mais texto da página. O segundo `Evaluate` recebe um
 conjunto FECHADO das nossas strings e responde quais viu; `knownMarkers` descarta

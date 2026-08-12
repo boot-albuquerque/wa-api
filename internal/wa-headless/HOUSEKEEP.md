@@ -164,9 +164,43 @@ falha de ambiente local, e já existia.
 build da imagem: `golang:1.26-bookworm` não foi construído nesta sessão, só
 declarado.
 
-**Status**: **não corrigido** — o gate de lint está quebrado nesta branch e o
+**Status**: ~~**não corrigido** — o gate de lint está quebrado nesta branch e o
 CI vai reprovar. `build`, `vet`, `test` (suíte inteira, com `-race`),
-`log-coverage-gate`, `waclient-facade` e `waclient-filesize` passam.
+`log-coverage-gate`, `waclient-facade` e `waclient-filesize` passam.~~
+**CORRIGIDO** — o lint em `e5ee22e` + `2aa304d` (FASE B0 no `EXECUCAO.md`), e a
+imagem em 2026-08-12 (LOOP H2.1), abaixo.
+
+### O build de produção, CONSTRUÍDO em vez de declarado — LOOP H2.1 (2026-08-12)
+
+A pendência que restava desta entrada era literal: *"`golang:1.26-bookworm` não
+foi construído nesta sessão, só declarado."* Construído agora, ponta a ponta,
+sem alterar nenhum arquivo de build:
+
+```
+docker build -t wa-api:h2-check .
+EXIT=0
+imagem   wa-api:h2-check   911MB
+binário  /app/wa-api       43.048.079 bytes, -rwxr-xr-x waapi:waapi
+```
+
+A tag resolve para uma toolchain que satisfaz a diretiva do `go.mod`, o que era
+a dúvida real — `1.26-bookworm` é uma tag móvel, e o módulo exige 1.26 por causa
+do `chromedp v0.16.0`:
+
+```
+docker run --rm golang:1.26-bookworm go version
+go version go1.26.5 linux/arm64
+```
+
+Então o `CGO_ENABLED=1 go build ./cmd/core` do estágio builder compila de fato
+com o Go que a branch passou a exigir, e o estágio final (`debian:bookworm-slim`)
+recebe um binário que existe e tem bit de execução.
+
+**O que isto NÃO prova**, e vale dizer porque o achado nasceu de uma declaração
+tomada por verificação: que o binário SIRVA — não foi executado contra
+dependências, só inspecionado na imagem. E a construção foi em **arm64**, que é
+a mesma limitação de arquitetura já registrada no `HANDOFF-INICIATIVA.md` §7.
+`amd64` continua não medido.
 
 ## H3 — dois documentos do `disparazaap` afirmam o que a Fase 6 refutou
 
@@ -294,10 +328,87 @@ de Chromium).
    `CLAUDE.md`: o conserto também é um mecanismo, e matar por sinal é
    exatamente o que a invariante 2 proíbe.
 
-**Status**: **não corrigido** — fora do escopo do LOOP B1.4, e o item 3 é
+**Status**: ~~**não corrigido** — fora do escopo do LOOP B1.4, e o item 3 é
 decisão humana de arquitetura. Os processos órfãos e o diretório de 81 MB
 foram removidos em 2026-08-12 com autorização do usuário; o DEFEITO que os
-produziu continua no lugar.
+produziu continua no lugar.~~
+**PARCIALMENTE CORRIGIDO em 2026-08-12 (LOOP H5.1)**: itens 1 e 2 fechados, item
+3 aberto e com a pergunta ESTREITADA pela medição. Ver abaixo.
+
+### Resolução dos itens 1 e 2 — LOOP H5.1 (2026-08-12)
+
+**Item 2 primeiro, porque ele desmonta a premissa do item 3.** A afirmação do
+comentário — *"a wedged renderer will not honour `Browser.close`"* — é **FALSA**,
+medida em três corridas consecutivas:
+
+```
+corrida 1   stopped_via=browser.close   (36,1s)
+corrida 2   stopped_via=browser.close   (36,1s)
+corrida 3   stopped_via=browser.close   (37,9s)
+```
+
+O mecanismo deixa de ser surpreendente assim que enunciado: o travamento é um
+`for(;;)` na thread principal do **RENDERER**, e o `Browser.close` é servido pelo
+processo **BROWSER**, que é outro processo e não está girando. Uma aba pendurada
+não deixa o browser surdo.
+
+Isso significa que **o módulo TEM caminho de desligamento provado para o estado
+UNRESPONSIVE** — que era exatamente a dúvida que esta entrada levantava sobre a
+CAP-04. A hipótese alternativa ("o `CleanStop` desiste antes do prazo") fica
+descartada pelo mesmo dado: ele não desiste, ele conclui pelo caminho limpo.
+
+**Item 1: o requisito que o comentário só declarava agora é asserção.** O
+`defer` captura o PID antes de parar e, depois do `CleanStop`, exige as duas
+coisas: `via.Clean()` e `!engine.ProcessAlive(pid)`.
+
+**Controle negativo EXECUTADO** — `CleanStop` devolve `StopViaNoop` sem parar
+nada:
+
+```
+--- FAIL: TestBrowserChainReportsAWedgedPageAsUnresponsive (36.01s)
+    stopped_via=noop pid=56700
+    pid 56700 is still alive after CleanStop returned noop: the test leaked the
+    browser it owns, which is the H5 defect
+```
+
+Repare em qual asserção mordeu: `StopViaNoop.Clean()` devolve **true**, então a
+guarda de `via.Clean()` passou e quem pegou foi o `ProcessAlive`. As duas não são
+redundantes — a que faltava era justamente a que o comentário prometia.
+
+A mutação deixou **7 processos órfãos**, removidos em seguida. A mesma ordem de
+grandeza dos 6 medidos no achado original, o que corrobora que o vazamento
+relatado é este caminho e não outro.
+
+### O que continua aberto — item 3, com a pergunta estreitada
+
+A medição **não** fecha o item 3; ela reduz o que ele abrange. O dilema já não é
+"como desligar um renderer travado" — isso sai limpo. É o caso RESIDUAL: quando
+o próprio processo browser não honra o `Browser.close`, o `CleanStop` cai no
+`SignalStop`, e um sinal contra perfil com credencial é o que a **invariante 2**
+proíbe e o que deu logout na 4ª e na 6ª iteração da fase 4C.
+
+As três saídas, e por que nenhuma é escolha de mesa:
+
+- **A · manter o sinal**: garante que nada vaza, ao custo de poder corromper a
+  sessão pareada. É o comportamento de hoje, e ele contradiz a invariante 2.
+- **B · nunca sinalizar perfil com credencial**: honra a invariante, e aceita
+  deixar processo e perfil para trás com causa classificada. Troca corrupção por
+  vazamento de recurso.
+- **C · escalada**: reabrir conexão e repetir o `close` N vezes antes de
+  qualquer sinal, registrando cada tentativa.
+
+**Não projetei a política nesta sessão, e o motivo é o `CLAUDE.md`**: não existe
+reprodução do caso residual. Todo travamento que consegui produzir é de
+renderer, e esse sai pelo caminho limpo. Escolher entre A, B e C sem nunca ter
+observado um browser que recusa o `close` seria projetar sobre um modo de falha
+imaginado — exatamente o que a regra "medir antes de projetar" proíbe, e o
+tipo de decisão que a Regra 4 (o conserto também é mecanismo) mais castiga.
+
+O que falta, em ordem: **(a)** produzir um browser que recuse o `close`
+— `SIGSTOP` no processo browser é o candidato barato e não escreve no perfil;
+**(b)** com esse estado na mão, medir se a escalada (C) converge; **(c)** só
+então decidir entre B e C, que é trade-off de produto — vazar recurso ou
+arriscar sessão — e portanto **decisão do usuário**.
 
 ---
 

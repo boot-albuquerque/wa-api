@@ -219,10 +219,36 @@ func TestBrowserChainReportsAWedgedPageAsUnresponsive(t *testing.T) {
 		t.Fatalf("Launch: %v", err)
 	}
 	defer func() {
-		// A wedged renderer will not honour Browser.close, so the dirty path is
-		// the expected outcome here. What matters is that it terminates.
+		// H5: this block used to say "a wedged renderer will not honour
+		// Browser.close, so the dirty path is the expected outcome here", and
+		// then only LOG the result. Both halves were wrong.
+		//
+		// The claim is false, measured 2026-08-12, three consecutive runs, all
+		// stopped_via=browser.close. The mechanism is not subtle once stated:
+		// the wedge is a `for(;;)` on the RENDERER's main thread, and
+		// Browser.close is served by the BROWSER process, which is a different
+		// process and is not spinning. A hung tab does not deafen the browser.
+		//
+		// Logging it was the real defect. The comment stated a requirement —
+		// "what matters is that it terminates" — that nothing asserted, so the
+		// run that left six orphaned Chromium processes and an 81 MB profile
+		// behind still passed green.
+		pid := browser.PID()
 		via := engine.CleanStop(context.Background(), runner, browser)
-		t.Logf("stopped_via=%s", via)
+		t.Logf("stopped_via=%s pid=%d", via, pid)
+
+		if !via.Clean() {
+			t.Errorf("stopped_via=%s: a wedged renderer was measured going down "+
+				"through the protocol 3/3. A dirty stop here is either a "+
+				"regression or new evidence — and by invariant 2 it is a signal "+
+				"sent to a profile that may hold a credential", via)
+		}
+		// The requirement the old comment only declared. Without this, a
+		// CleanStop that gives up leaves the browser running and the test green.
+		if engine.ProcessAlive(pid) {
+			t.Errorf("pid %d is still alive after CleanStop returned %s: the test "+
+				"leaked the browser it owns, which is the H5 defect", pid, via)
+		}
 	}()
 
 	tab, err := engine.OpenTab(context.Background(), browser)
