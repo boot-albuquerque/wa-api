@@ -489,6 +489,19 @@ type readinessSample struct {
 	// the probe was reading a place the identity never lived. Keeping it
 	// sampled means the day Meta adds it back, the evidence says so.
 	HasConnWID bool `json:"has_conn_wid"`
+	// HasConnWIDAccessor is the SAME question asked of the accessor rather than
+	// of the backing field, and it exists because the two are not the same
+	// question.
+	//
+	// __x_wid and Object.keys(Conn) both see only OWN ENUMERABLE properties. A
+	// prototype getter Conn.wid — one delegating to the user-prefs store, say —
+	// would be invisible to both while keeping whatsapp-web.js's one surviving
+	// read working. This file already depends on that duality in the other
+	// direction: it reads sk.__x_state where wwebjs reads Socket.state.
+	//
+	// Recorded, never asserted, exactly like HasConnWID: it is the falsifier of
+	// the claim that the field is gone from this build.
+	HasConnWIDAccessor bool `json:"has_conn_wid_accessor"`
 	// MeReadyTriggered is the SPA's own flag for "the account finished
 	// loading". A boolean of Meta's, not an inference of ours.
 	MeReadyTriggered bool `json:"me_ready_triggered"`
@@ -515,7 +528,8 @@ func readinessScript(modules []spa.Module) string {
 		const q = (s) => !!document.querySelector(s);
 		const hasRequire = typeof window.require === 'function';
 		let resolved = 0;
-		let hasIdentity = false, hasConnWid = false, meReady = false, socketState = '';
+		let hasIdentity = false, hasConnWid = false, hasConnWidAccessor = false;
+		let meReady = false, socketState = '';
 		if (hasRequire) {
 			for (const name of [` + strings.Join(names, ",") + `]) {
 				try { if (window.require(name)) resolved++; } catch (e) {}
@@ -532,8 +546,12 @@ func readinessScript(modules []spa.Module) string {
 			try {
 				const m = window.require('` + string(spa.ModuleConnModel) + `');
 				const c = m && (m.Conn || m.default || m);
-				// Recorded control: measured ABSENT on both profiles.
+				// Recorded controls, both coerced to booleans in the page: one
+				// of these values would BE the account. The own field and the
+				// accessor are asked separately because only the second would
+				// see a prototype getter — see HasConnWIDAccessor.
 				hasConnWid = !!(c && c.__x_wid);
+				hasConnWidAccessor = !!(c && c.wid);
 				meReady = !!(c && c.__x_meReadyTriggered === true);
 			} catch (e) {}
 			try {
@@ -551,6 +569,7 @@ func readinessScript(modules []spa.Module) string {
 			modules_resolved: resolved,
 			has_owner_identity: hasIdentity,
 			has_conn_wid: hasConnWid,
+			has_conn_wid_accessor: hasConnWidAccessor,
 			me_ready_triggered: meReady,
 			socket_state: socketState
 		};
@@ -597,18 +616,30 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 	if marks.modules == 0 {
 		t.Fatal("the module inventory never resolved; the SPA never finished booting")
 	}
+	// The precondition of the whole comparison, and the reason record() waits
+	// on the socket. Without it this test PASSES on a paired-but-offline
+	// profile: the pane comes back from cache, the identity comes back from
+	// prefs, and a timeline in which nothing ever reached the server gets
+	// printed as a healthy boot.
+	if marks.connected == 0 {
+		t.Fatalf("the socket never reported %s within %s. This profile is paired — the "+
+			"identity and the pane say so — but the session never reached the server, "+
+			"so there is no boot here to compare instants in. A pane rendered from "+
+			"cache is not readiness.", socketStateConnected, readinessBudget)
+	}
 
 	// The verdict this loop exists to produce.
 	const tolerance = 250 * time.Millisecond
 	switch {
 	case marks.identity == 0:
 		t.Error("EARLY_MARKER: #pane-side appeared but the owner identity never did — " +
-			"the classifier would report READY for a session that cannot act")
+			"the classifier would report READY without the one signal that shows the " +
+			"profile is even PAIRED")
 	case marks.identity > marks.pane+tolerance:
 		t.Errorf("EARLY_MARKER: #pane-side at T+%.2fs but the owner identity only at "+
-			"T+%.2fs — a %.2fs window where the classifier says READY and the engine "+
-			"cannot act as anybody", marks.pane.Seconds(), marks.identity.Seconds(),
-			(marks.identity - marks.pane).Seconds())
+			"T+%.2fs — a %.2fs window where the classifier says READY and the SPA "+
+			"cannot yet name the profile's owner", marks.pane.Seconds(),
+			marks.identity.Seconds(), (marks.identity - marks.pane).Seconds())
 	default:
 		t.Logf("SAFE_READY_MARKER on the identity axis: the owner identity was already "+
 			"there when #pane-side appeared (identity T+%.2fs <= pane T+%.2fs + tolerance)",
@@ -623,11 +654,19 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 	// would answer it just as fast. The same disqualification as the module
 	// inventory in M2.1, arrived at by measuring instead of by assuming.
 	//
-	// What IS an event of this boot are the two below. Both are also earlier
-	// than the pane on the measured run, which is what makes the verdict above
-	// survive: the pane is the LAST of the five, not the first.
+	// What IS an event of this boot are the two below. Both landed before the
+	// pane on the three boots measured so far — which is an observation about
+	// those boots, not a property of the SPA. The run above no longer depends
+	// on it either way: the socket gates the stop, so a boot where CONNECTED
+	// arrives AFTER the pane is waited for rather than missed.
 	t.Logf("  (module inventory at %s — measured true on the LOGIN screen too, "+
 		"so it is not evidence of readiness)", markString(marks.modules))
+	t.Logf("  (WAWebConnModel identity, recorded and never asserted: own field __x_wid "+
+		"seen=%v, accessor Conn.wid seen=%v, over %d samples. Both false is the measured "+
+		"state of this build; either turning true is what would falsify that.)",
+		anySample(samples, func(s readinessSample) bool { return s.HasConnWID }),
+		anySample(samples, func(s readinessSample) bool { return s.HasConnWIDAccessor }),
+		len(samples))
 	t.Logf("  (the owner identity is PERSISTED, not connection-derived: it proves the "+
 		"profile is paired, not that the session is live. The live-session instants are "+
 		"meReadyTriggered %s and socket %s %s)",
@@ -644,12 +683,27 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 type readinessMarks struct{ pane, modules, identity, meReady, connected time.Duration }
 
 // record stamps the first time each signal turned on, and reports whether the
-// three the verdict needs have. First-time-only: a signal that flickers must
-// keep its earliest instant, because the question is when readiness BECAME
+// run has everything the verdict needs. First-time-only: a signal that flickers
+// must keep its earliest instant, because the question is when readiness BECAME
 // true.
 //
-// meReady and connected do not gate the stop: they are always earlier than the
-// pane on the measured boot, so waiting on them would only be able to hang.
+// The socket gates the stop, and that is the correction of a real defect. An
+// earlier version stopped on pane+modules+identity, and every one of those
+// three is reachable WITHOUT the session ever meeting the server: the identity
+// is PERSISTED (M3.3), the module inventory resolves on the login screen (M2.1)
+// and the pane renders from cache. On a paired-but-OFFLINE profile the loop
+// therefore broke the instant the pane appeared and the run was called a
+// success with socket NEVER — one reachable verdict per profile class, which is
+// the same defect as the __x_wid probe this instrument replaced.
+//
+// It costs the healthy path nothing: across the three healthy boots measured so
+// far, CONNECTED landed at T+5.82s / T+6.86s / T+7.07s and the pane at T+7.40s
+// / T+8.35s / T+8.37s. The socket mark is already in when the pane arrives, so
+// the stop still trips on the pane and the run is no longer than before.
+//
+// meReady does NOT gate. It preceded CONNECTED on all three, which is three
+// samples and not a law; the socket state is Meta's own statement that the
+// session reached the server, so it is the one worth waiting on.
 func (m *readinessMarks) record(s readinessSample, want int) bool {
 	if m.pane == 0 && s.HasPaneSide {
 		m.pane = s.At
@@ -666,7 +720,7 @@ func (m *readinessMarks) record(s readinessSample, want int) bool {
 	if m.connected == 0 && s.SocketState == socketStateConnected {
 		m.connected = s.At
 	}
-	return m.pane > 0 && m.modules > 0 && m.identity > 0
+	return m.pane > 0 && m.modules > 0 && m.identity > 0 && m.connected > 0
 }
 
 // sampleReadiness polls the boot until every mark is in, or the budget ends.
@@ -726,13 +780,15 @@ func logTimeline(t *testing.T, samples []readinessSample, want int) {
 		if s.HasPaneSide == prev.HasPaneSide && s.HasQRLoad == prev.HasQRLoad &&
 			s.HasRequire == prev.HasRequire && s.ModulesResolved == prev.ModulesResolved &&
 			s.HasOwnerIdentity == prev.HasOwnerIdentity && s.HasConnWID == prev.HasConnWID &&
+			s.HasConnWIDAccessor == prev.HasConnWIDAccessor &&
 			s.MeReadyTriggered == prev.MeReadyTriggered && s.SocketState == prev.SocketState {
 			continue
 		}
 		t.Logf("  T+%6.2fs nodes=%-6d pane=%-5v modules=%d/%d identity=%-5v connWid=%-5v "+
-			"meReady=%-5v socket=%s",
+			"connWidGet=%-5v meReady=%-5v socket=%s",
 			s.At.Seconds(), s.DOMNodes, s.HasPaneSide, s.ModulesResolved, want,
-			s.HasOwnerIdentity, s.HasConnWID, s.MeReadyTriggered, s.SocketState)
+			s.HasOwnerIdentity, s.HasConnWID, s.HasConnWIDAccessor,
+			s.MeReadyTriggered, s.SocketState)
 		prev = s
 	}
 }
@@ -844,7 +900,9 @@ func identityShapeScript() string {
 			modules: {},
 			getters: {},
 			identity_key_names: [],
-			has_identity: false
+			has_identity: false,
+			conn_wid_own: false,
+			conn_wid_accessor: false
 		};
 		if (!out.require) return out;
 
@@ -859,6 +917,16 @@ func identityShapeScript() string {
 		keysOf('` + string(spa.ModuleConnModel) + `', (m) => m.Conn);
 		keysOf('` + string(spa.ModuleSocketModel) + `', (m) => m.Socket);
 		keysOf('` + moduleUserPrefsMeUser + `', () => null);
+
+		// The wid question asked BOTH ways, because keysOf above cannot answer
+		// it on its own: Object.keys sees only own enumerable properties, so a
+		// prototype getter Conn.wid would be missing from the key list and
+		// still work. Booleans only — the value would be the account.
+		try {
+			const c = window.require('` + string(spa.ModuleConnModel) + `').Conn;
+			out.conn_wid_own = !!(c && c.__x_wid);
+			out.conn_wid_accessor = !!(c && c.wid);
+		} catch (e) {}
 
 		try {
 			const me = window.require('` + moduleUserPrefsMeUser + `');
@@ -890,6 +958,13 @@ type identityShape struct {
 	Getters          map[string]string `json:"getters"`
 	IdentityKeyNames []string          `json:"identity_key_names"`
 	HasIdentity      bool              `json:"has_identity"`
+
+	// ConnWIDOwn and ConnWIDAccessor are the same question about
+	// WAWebConnModel.Conn asked of the own field and of the accessor. Only the
+	// second would see a prototype getter, and the key listing above sees
+	// neither — see readinessSample.HasConnWIDAccessor.
+	ConnWIDOwn      bool `json:"conn_wid_own"`
+	ConnWIDAccessor bool `json:"conn_wid_accessor"`
 }
 
 // identityShapeBudget and identityShapeTick bound the settle wait. Coarse on
@@ -948,6 +1023,8 @@ func TestRealSPAOwnerIdentityShape(t *testing.T) {
 		t.Logf("  %s.%s() -> %s", moduleUserPrefsMeUser, name, shape.Getters[name])
 	}
 	t.Logf("  identity object key names: %v", shape.IdentityKeyNames)
+	t.Logf("  %s.Conn wid — own field __x_wid: %v · accessor .wid: %v",
+		spa.ModuleConnModel, shape.ConnWIDOwn, shape.ConnWIDAccessor)
 	t.Logf("OWNER IDENTITY PRESENT: %v (first seen at %s, coarse %s tick)",
 		shape.HasIdentity, markString(identityAt), identityShapeTick)
 
@@ -1090,6 +1167,19 @@ func TestRequireExistingProfile(t *testing.T) {
 	if err := requireExistingProfile(file); err == nil {
 		t.Error("accepted a file as a profile directory")
 	}
+}
+
+// anySample reports whether any sample of the run satisfied pick.
+//
+// It exists for the RECORDED controls, whose question is "was this ever true
+// during the boot?" rather than readinessMarks' "when did it turn on?".
+func anySample(samples []readinessSample, pick func(readinessSample) bool) bool {
+	for _, s := range samples {
+		if pick(s) {
+			return true
+		}
+	}
+	return false
 }
 
 // markString renders an instant, or says the signal never arrived.

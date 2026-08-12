@@ -199,10 +199,24 @@ versão instalada. **Dois perfis, o MESMO instrumento**
 | **não pareado** (controle) | `.lab/test-account-profile` | sem sessão (M2.3) |
 | **pareado** | `scripts/chromium-study/wa-session/profile` | sessão viva, medida |
 
-Só leitura, sempre `headless`, encerramento por `stopped_via=browser.close` nas
-três execuções. Tamanho do perfil pareado antes/depois de cada corrida:
-396M/2271 → 405M/2287 → 417M/2332 arquivos. **Cresceu** — sincronização
-saudável; perfil que encolhe seria sinal de alarme.
+Só leitura, sempre `headless`, encerramento por `stopped_via=browser.close` em
+**todas** as execuções — as três originais e as cinco da rodada de correção.
+Tamanho e contagem de arquivos do perfil pareado, checkpoint por corrida:
+
+```
+396M/2271 → 405M/2287 → 417M/2332 → 424M/2353   (M3 original, 3 corridas)
+423M/2367 → 424M/2373 → 424M/2374               (correção: timeline, identity shape)
+436M/2459 → 437M/2463 → 437M/2467               (correção: 2 controles negativos + confirmação)
+```
+
+**Valor final: 437M / 2467 arquivos**, sobre 8 corridas no total. **Cresceu** —
+sincronização saudável; perfil que encolhe seria sinal de alarme.
+
+Uma ressalva sobre ler estes números: a contagem de ARQUIVOS é o sinal estável,
+o tamanho não. O `du -sh` arredonda e o LevelDB compacta, então bytes podem cair
+alguns KB enquanto a contagem sobe (aconteceu duas vezes aqui: 424M→423M com
++14 arquivos, e 447904K→447900K com +4). Isso é ruído de bloco, não o sinal de
+corrupção — a assinatura de corrupção é queda GRANDE com colapso da contagem.
 
 Este bloco existe porque a primeira sonda de prontidão media o lugar errado, e
 por isso **o M2.4 não podia ter sido respondido**: ela comparava `#pane-side`
@@ -220,9 +234,40 @@ wid: window.require('WAWebUserPrefsMeUser').getMaybeMePnUser()
 ```
 
 O mesmo módulo aparece em `src/util/Injected/Utils.js:420-424` (remetente da
-mensagem) e `:1267-1269` (rejeição de chamada). Em nenhum ponto da release a
-identidade sai do `WAWebConnModel` — o `Conn.serialize()` é espalhado no objeto
-e o `wid` é **sobrescrito** logo em seguida pela leitura do `UserPrefsMeUser`.
+mensagem) e `:1267-1269` (rejeição de chamada). No caminho do `ClientInfo` a
+identidade **não** sai do `WAWebConnModel` — o `Conn.serialize()` é espalhado no
+objeto e o `wid` é **sobrescrito** logo em seguida pela leitura do
+`UserPrefsMeUser`.
+
+**Correção de uma afirmação absoluta.** Uma revisão independente apontou que a
+versão anterior deste bloco dizia *"em nenhum ponto da release a identidade sai
+do `WAWebConnModel`"*, e isso é **falso**. Conferido na build instalada, existe
+exatamente **uma** leitura sobrevivente:
+
+```js
+// src/util/Injected/Utils.js:1254 — dentro de window.WWebJS.getProductMetadata
+let sellerId = window.require('WAWebConnModel').Conn.wid;
+```
+
+É a única ocorrência de `Conn.wid` na release inteira (`grep -rn "Conn\.wid" src/`),
+alcançada só por `src/structures/Product.js:56`, no catálogo de negócios. Todas
+as outras leituras do `WAWebConnModel` na release pedem **outra coisa**: bateria
+(`ClientInfo.js:65`, `Client.js:1068`), plataforma (`Client.js:2926`,
+`Utils.js:386-387`), `canSetMyPushname` (`Client.js:1960`) e o alias do
+`AuthStore`.
+
+O contraexemplo **reforça** o achado em vez de enfraquecê-lo. Como `Conn.wid`
+não existe nesta build — medido nos dois perfis, e agora também pelo acessador
+(M3.2) — esse `sellerId` sai `undefined` e o `queryProduct` recebe um vendedor
+vazio. É um caminho **quebrado nesta build**, não uma alternativa viável: se
+fosse exercitado com alguma frequência, teria virado issue. Ou seja, é
+corroboração independente de que a Meta removeu o campo — e é exatamente por
+isso que o `Client.js` **sobrescreve** o `wid` do `Conn.serialize()` logo depois
+de espalhá-lo.
+
+Vale como lição de método: uma afirmação universal ("em nenhum ponto") custa um
+`grep` para verificar e custa a credibilidade do documento inteiro quando não é
+verificada. O achado real nunca precisou dela.
 
 O mapa apontava para outro lugar o tempo todo. A página confirmou.
 
@@ -246,6 +291,27 @@ Duas leituras, ambas medidas:
    de "não existe"; só o perfil pareado separa os dois casos.
 2. `__x_ref`/`__x_refTTL` (os campos do QR) existem **apenas** no não pareado. É
    confirmação independente de que o perfil pareado não está na tela de login.
+
+**O acessador, medido separadamente — e o motivo de ter sido preciso medi-lo.**
+A listagem acima usa `Object.keys()` e a sonda de prontidão lia `c.__x_wid`.
+**Os dois enxergam só propriedades próprias e enumeráveis.** Um *getter* de
+protótipo `Conn.wid` — delegando ao `UserPrefsMeUser`, por exemplo — seria
+invisível para ambos e ainda assim manteria o `Utils.js:1254` funcionando. Este
+mesmo arquivo de teste já depende dessa dualidade na direção oposta: lê
+`sk.__x_state` onde o `wwebjs` lê `Socket.state`.
+
+Então a pergunta passou a ser feita **das duas formas**, em booleano coagido
+dentro da página:
+
+| perfil | `Conn.__x_wid` (campo próprio) | `Conn.wid` (acessador) |
+|---|---|---|
+| não pareado | `false` | `false` |
+| **pareado** | `false` | `false` |
+
+Ambas as formas negativas nos dois perfis. A afirmação "o campo não existe nesta
+build" passa a se apoiar no acessador também, e não só na ausência da chave.
+Continua **registrado e nunca asserido**: é o falsificador do achado no dia em
+que a Meta repuser o campo.
 
 Exports do `WAWebUserPrefsMeUser` — idênticos nos dois perfis:
 
@@ -349,3 +415,87 @@ classifier would report READY for a session that cannot act
 
 Falha com mensagem de asserção real, e gasta os 90 s inteiros de orçamento —
 exatamente o comportamento do instrumento quebrado. Revertido antes do commit.
+
+> **Nota (2026-08-12, rodada de correção).** O texto da asserção colado acima —
+> *"the classifier would report READY for a session that cannot act"* — foi
+> **reescrito** desde então, porque contradizia o próprio M3.3: a identidade é
+> persistida, logo prova PAREAMENTO, não capacidade de agir. A colagem fica como
+> registro fiel do que aquela corrida imprimiu; a mensagem atual fala em "sem o
+> único sinal que mostra que o perfil está PAREADO".
+
+### M3.7 — A correção da própria correção: a sonda repetia o defeito que consertou
+
+Uma validação independente dos commits `2b776b1` e `17d951c` voltou com PASS e
+cinco correções. A que importa está aqui, e ela é um caso-escola da **Regra 4**
+do `CLAUDE.md` (*"o conserto do conserto também é um mecanismo"*).
+
+**O defeito.** O `record()` parava a amostragem quando `pane && modules &&
+identity` estivessem de pé. Os três são alcançáveis **sem a sessão jamais falar
+com o servidor**: a identidade é persistida (M3.3), o inventário resolve na tela
+de login (M2.1) e o painel renderiza do cache. Num perfil **pareado mas
+offline**, portanto, o laço quebrava no instante em que o painel aparecia,
+`connected` só era observado por acaso antes disso, e o teste imprimia
+`SAFE_READY_MARKER` e **passava** com `socket CONNECTED at never`.
+
+Ou seja: **um veredito alcançável por classe de perfil** — estruturalmente o
+mesmo defeito da sonda `__x_wid` que este instrumento substituiu. O instrumento
+não tinha internalizado o próprio achado.
+
+**A correção, e por que gatear em vez de só asserir.** As duas opções eram
+asserir `marks.connected != 0` no fim, ou **gatear a parada** no sinal. Gatear é
+estritamente melhor: se apenas assertisse, um boot em que o painel chegasse
+antes do socket seria reprovado por um sinal que chegaria um segundo depois —
+falso negativo criado pela própria proteção. Gateando, o laço **espera** até o
+orçamento. Os dois juntos é o que foi feito: o gate torna a espera honesta, e o
+`t.Fatalf` transforma o estouro de orçamento em veredito.
+
+**Custo no caminho saudável: zero, medido.** `CONNECTED` chega antes do painel
+nas três corridas boas desta rodada, então a parada continua disparando no
+painel:
+
+| corrida | `CONNECTED` | `#pane-side` | duração |
+|---|---|---|---|
+| 1 | T+6,86s | T+8,35s | 11,36s |
+| 2 (confirmação pós-revert) | T+7,07s | T+8,37s | 11,67s |
+
+**Controle negativo EXECUTADO — duas pernas, porque uma não provaria o
+contraste.** O sinal de socket foi tornado inalcançável (leitura apontada para
+`sk.__x_stateNEGCONTROL`, campo inexistente), simulando o boot pareado-offline,
+e rodado contra o **perfil pareado**.
+
+*Perna A — com o gate novo: FALHA.*
+
+```
+  T+  0.05s nodes=195  pane=false modules=8/8 identity=true  connWid=false connWidGet=false meReady=false socket=
+  T+  6.34s nodes=302  pane=false modules=8/8 identity=true  connWid=false connWidGet=false meReady=true  socket=
+  T+  8.40s nodes=2593 pane=true  modules=8/8 identity=true  connWid=false connWidGet=false meReady=true  socket=
+  #pane-side at             T+8.40s
+  socket CONNECTED  at      NEVER
+the socket never reported CONNECTED within 1m30s. This profile is paired — the
+identity and the pane say so — but the session never reached the server, so
+there is no boot here to compare instants in. A pane rendered from cache is not
+readiness.
+--- FAIL: TestRealSPAReadinessTimeline (93.07s)
+```
+
+*Perna B — MESMA mutação, gate antigo (`pane && modules && identity`): PASSA.*
+
+```
+  T+  7.32s nodes=2740 pane=true  modules=8/8 identity=true  connWid=false connWidGet=false meReady=true  socket=
+  #pane-side at             T+7.32s
+  socket CONNECTED  at      NEVER
+SAFE_READY_MARKER on the identity axis: the owner identity was already there
+when #pane-side appeared (identity T+0.01s <= pane T+7.32s + tolerance)
+--- PASS: TestRealSPAReadinessTimeline (10.64s)
+```
+
+A perna B é o que torna o controle uma prova em vez de uma asserção sobre si
+mesmo: **o mesmo defeito, no mesmo perfil, no mesmo minuto**, passa com o gate
+antigo e falha com o novo. E a perna A gasta os 90 s inteiros do orçamento, que
+é o comportamento correto de um perfil que nunca conecta. Ambas as mutações
+foram revertidas antes do commit, e a corrida de confirmação (tabela acima,
+linha 2) rodou sobre o código exatamente como ele vai ser commitado.
+
+**O que isto acrescenta ao M3.5.** Continua valendo que os instantes não são p50
+nem p95: o painel apareceu em T+7,40s, T+15,61s, T+8,35s e T+8,37s no MESMO
+perfil, em corridas diferentes. Quatro amostras não são uma distribuição.
