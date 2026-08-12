@@ -959,3 +959,89 @@ página, e o tempo de reação muda de 3 s para 34 s.**
 **Contagem de arquivos do perfil pareado**: **2572 → 2686** ao longo das sete
 corridas do loop (2572 → 2635 → 2646 → 2656 → 2675 → 2680 → 2682 → 2686).
 Cresceu em todas; não encolheu em nenhuma. `stopped_via=browser.close` em todas.
+
+---
+
+## M6 — Quanto tempo o socket fica em `OPENING` num boot SAUDÁVEL (LOOP 04.3D, metade)
+
+**Data**: 2026-08-12 · Perfil pareado, só leitura, headless, sem envio.
+Instrumento: `TestRealSPAReadinessTimeline`, amostragem de 250 ms.
+
+### M6.1 — Por que esta medição
+
+O M5 fechou que o SPA percebe a queda sozinho, mas o valor de queda é `OPENING`
+— **o mesmo estado do boot**. O valor instantâneo não separa "subindo" de
+"perdeu o servidor"; só a DURAÇÃO separa. Sem ela, um liveness que leia o socket
+escolhe entre matar sessão que está subindo e manter sessão morta.
+
+### M6.2 — Os números
+
+Cinco boots consecutivos do perfil pareado, na mesma máquina, em ~10 minutos:
+
+| amostra | `meReadyTriggered` | socket `CONNECTED` | janela em `OPENING` | `#pane-side` |
+|---|---|---|---|---|
+| 1 | 5,04s | 5,54s | **0,50s** | 7,03s |
+| 2 | 6,29s | 6,79s | **0,50s** | 8,40s |
+| 3 | 6,30s | 6,57s | **0,27s** | 8,28s |
+| 4 | 6,31s | 6,81s | **0,50s** | 8,31s |
+| 5 | 6,30s | 6,80s | **0,50s** | 8,35s |
+
+Histórico, mesma medida no M3.3: 5,32s → 5,82s = **0,50s**. Seis amostras ao
+todo, todas **≤ 0,50s**.
+
+Higiene: `stopped_via=browser.close` em 5/5, perfil **2686 → 2781 arquivos**,
+cresceu em todas, encolheu em nenhuma.
+
+### M6.3 — A separação, e por que ela é grande
+
+```
+boot saudável, em OPENING       0,27 – 0,50 s
+sob corte, para SAIR de CONNECTED   33,2 – 34,2 s   (M5)
+```
+
+Cerca de **70×** entre os dois. Qualquer corte entre ~2 s e ~30 s separaria as
+duas populações medidas — o que é confortável demais para ser aceito sem a
+ressalva do M6.4.
+
+### M6.4 — O que esta medição NÃO estabelece, e é o essencial
+
+**Isto não é uma distribuição do fenômeno. São seis amostras de UM estado.**
+
+Os `meReadyTriggered` das amostras 2–5 caem em 6,29 / 6,30 / 6,31 / 6,30 s — um
+aperto de 20 ms. Um agrupamento assim, em corridas seguidas na mesma máquina e
+na mesma rede, não é evidência de estabilidade do fenômeno: é evidência de que
+**uma condição só foi amostrada cinco vezes**. Vale aqui a regra do projeto — se
+a medição só confirma o que já se achava e nenhum resultado possível a
+enfraqueceria, ela provavelmente não mediu o que interessa.
+
+E o que interessa para o corte é a **cauda superior**, não a mediana. A pergunta
+que decide é: *qual boot lento vira falso positivo?* Ela continua sem resposta.
+
+Há indício direto de que a cauda existe e é longa: o `#pane-side` apareceu em
+**7,40 s** numa corrida do M3.3 e em **15,61 s** noutra do MESMO perfil — mais
+que o dobro. Se a janela de `OPENING` escalar com a lentidão do boot como o
+painel escala, 0,5 s pode virar segundos sob CPU disputada ou rede ruim, e é aí
+que o corte é decidido.
+
+**Duas coisas faltam, e nenhuma é opinião:**
+
+1. **A perna que deveria PIORAR** — boot sob CPU disputada e sob rede
+   degradada, que é onde o mecanismo cobra o preço. Sem ela mediu-se a
+   hipótese, não o mecanismo.
+2. **A duração em `OPENING` SOB CORTE** — o M5 mediu o instante da SAÍDA de
+   `CONNECTED`, não por quanto tempo o socket permanece em `OPENING` depois
+   disso. A janela do M5 foi de 90 s e o comportamento além dela é o item
+   "corte longo" do `Next`.
+
+**Portanto o corte NÃO sai desta medição**, e propor um número agora seria
+escolha de mesa com aparência de dado. O que o M6 entrega é a metade saudável da
+distribuição, medida, e o piso de 34 s do M5 do outro lado.
+
+### M6.5 — Um limite do INSTRUMENTO, não do fenômeno
+
+Os valores caem em 0,27 s e 0,50 s porque a amostragem é de 250 ms: são **um ou
+dois ticks**. O valor verdadeiro está em algum ponto abaixo de 0,5 s e este
+instrumento não consegue dizer onde — é a **F-20** aparecendo nesta medida
+também. Para a decisão do corte isso não atrapalha (a separação é de 70×), mas
+qualquer afirmação mais fina que "menos de meio segundo" seria quantização
+apresentada como medida.

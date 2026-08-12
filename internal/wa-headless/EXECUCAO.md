@@ -8,7 +8,34 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: — · LOOP H7.1, o campo que a validação independente achou · **DONE**
+CAP: 04 — LOOP 04.3D, quanto tempo em `OPENING` é saudável · **METADE**
+
+**Verificação de pareamento, pedida e MEDIDA** (2026-08-12): o perfil continua
+pareado e a sessão viva — `identity=true` em T+0,01s, socket **`CONNECTED`** em
+T+5,54s, `#pane-side` com 2656 nós, QR nunca apareceu,
+`stopped_via=browser.close`. `CONNECTED` é mais forte que pareamento: o servidor
+aceitou a sessão. Um perfil revogado sairia `OPENING → PAIRING → UNPAIRED`, que
+é o controle medido aos 6,08s. **Nenhum QR é necessário e não há o que escanear.**
+
+**A metade saudável da distribuição está medida** (`EVIDENCIA-SPA.md` M6): seis
+amostras, janela em `OPENING` de **0,27–0,50 s**, contra os **33,2–34,2 s** que
+o M5 mediu para sair de `CONNECTED` sob corte. Separação de ~70×.
+`browser.close` em 5/5, perfil 2686 → 2781 arquivos, cresceu sempre.
+
+**E o corte NÃO sai daí**, que é o achado desagradável deste loop. Os
+`meReadyTriggered` das amostras 2–5 caem dentro de 20 ms um do outro: isso não é
+estabilidade do fenômeno, é **uma condição amostrada cinco vezes**. O que decide
+o corte é a CAUDA — qual boot lento vira falso positivo —, e há indício direto
+de que ela é longa: o painel apareceu em 7,40s numa corrida do M3.3 e em 15,61s
+noutra, do mesmo perfil.
+
+**Falta**, e nenhuma das duas é opinião: (a) a perna que deveria PIORAR — boot
+sob CPU disputada e rede degradada; (b) a duração em `OPENING` SOB CORTE, que o
+M5 não mediu (ele mediu o instante da saída de `CONNECTED`, não a permanência).
+
+Loop anterior: **H7.1** (`43fdcd6`), abaixo.
+
+### Loop anterior — LOOP H7.1, o campo que a validação independente achou · **DONE**
 
 **Validação independente EXECUTADA** (sessão Opus separada, adversarial):
 VERDICT **PASS** com um REQUIRED_FIX. Ela reproduziu por conta própria o gate
