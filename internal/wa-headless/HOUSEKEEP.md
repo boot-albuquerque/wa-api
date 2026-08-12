@@ -361,3 +361,22 @@ quebrar o seletor no navegador.
 **Status**: **não corrigido** — fora do escopo do LOOP 04.3A, que é medição de
 liveness, e mexer na guarda de PII sem medir qual sinal a substitui trocaria
 uma dependência frágil por outra. Registrado para decisão do usuário.
+
+### Agravante removido em 2026-08-12 (LOOP 04.3B): o seletor estava escrito TRÊS vezes
+
+O `#pane-side` aparecia como literal solto em `spa/probe.go:84` (o `textScript`
+citado acima) e em `spa/liveness.go:60` (o `livenessScript`), enquanto
+`spa/probe.go:50` já declarava `paneSideSelector` e o `structureScript` o usava.
+Três cópias, uma nomeada.
+
+Isso **não é cosmético para este achado**: a H6 é exatamente sobre a Meta
+renomear esse seletor, e uma renomeação que atualizasse a constante e passasse
+por cima das duas cópias produziria o cenário da H6 **por nossa própria mão** —
+o classificador perguntando pelo nome novo, a guarda de PII e a sonda de
+liveness pelo velho, e a captura de texto de conversa liberada sem que a Meta
+tivesse mudado nada. É também o que a `CLAUDE.md` proíbe: *"literal repetido em
+dois lugares é o mesmo bug esperando divergir."*
+
+As duas cópias passaram a referenciar `paneSideSelector`. A superfície da H6
+continua a mesma — uma guarda só —, mas agora renomear o seletor é **uma**
+edição em vez de três lugares onde esquecer um.

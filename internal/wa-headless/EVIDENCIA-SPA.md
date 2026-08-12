@@ -540,6 +540,14 @@ documentação do protocolo entrega metade da queda em cada um:
 
 Só um dos dois mediria a nossa emulação, não a sessão.
 
+> **RESSALVA (LOOP 04.3B).** A frase acima vale para "imitar uma queda de rede
+> completa", que era o objetivo desta perna. Ela **não** vale como regra geral, e
+> foi o que quase custou a CAP-04: usar `emulateNetworkConditionsByRule`
+> SOZINHO é a única forma de perguntar se a aplicação percebe **por conta
+> própria**, porque as falhas que a produção enfrenta — rota em buraco negro,
+> upstream morto, portal cativo, servidor pendurado — deixam `navigator.onLine`
+> **verdadeiro** e não disparam evento nenhum. Ver M5.
+
 O instrumento foi provado **antes** de ser apontado para a conta, contra
 Chrome real e um servidor local:
 `TestBrowserChainSeversAndRestoresThePageNetwork` verifica `navigator.onLine`,
@@ -571,10 +579,27 @@ SEVERED WINDOW — 90 samples over 91s (0 with the signals unread), from the ste
 | `spa.Probe` sai de `APP_READY` | **NUNCA** (90 s) |
 | liveness reporta NÃO vivo | **NUNCA** (90 s) |
 
-O socket **é** um discriminador: reage em três segundos, sem depender de
-keepalive. Mas o valor para onde ele vai é `OPENING` — **o mesmo estado do boot
-normal** (M3.3: `OPENING` em T+5,32s, `CONNECTED` em T+5,82s). Ele ficou em
+O socket **reage**. O valor para onde ele vai é `OPENING` — **o mesmo estado do
+boot normal** (M3.3: `OPENING` em T+5,32s, `CONNECTED` em T+5,82s). Ele ficou em
 `OPENING` pelos 90 s inteiros, tentando reconectar.
+
+> **CORREÇÃO (2026-08-12, LOOP 04.3B).** A versão anterior deste parágrafo dizia
+> que o socket "reage em três segundos, **sem depender de keepalive**". A parte
+> depois da vírgula **não estava medida** e está errada. Esta perna dispara os
+> DOIS comandos, e o `overrideNetworkState` faz o navegador emitir o evento
+> `offline` na página — então a saída rápida podia ser reação ao EVENTO, não
+> percepção da queda. A perna não consegue separar as duas coisas, porque
+> dispara as duas.
+>
+> Pior: o corte não fecha o socket. `TestBrowserChainSeversTheWebSocketTransport`
+> mede, contra servidor local que conta quadros nos dois sentidos, que a
+> emulação **engole os quadros em silêncio** — `readyState` fica `1` (OPEN),
+> `onclose` nunca dispara. Logo a saída do `CONNECTED` é decisão do próprio SPA,
+> e a pergunta "qual das duas?" era obrigatória.
+>
+> A M5 mediu. **São dois mecanismos, com tempos de ordem diferente:** o evento
+> compra ~1,4–3,1 s; a percepção própria leva ~34 s. O "três segundos" desta
+> perna é o EVENTO. Sem keepalive nenhum, é ~34 s.
 
 Consequência que não se adivinharia: **"socket ≠ `CONNECTED`" não distingue
 "está subindo" de "perdeu o servidor".** As duas situações têm o mesmo valor de
@@ -623,7 +648,13 @@ nada sobre cortes longos nem sobre expiração.
 ### M4.6 — Controle negativo EXECUTADO: a MESMA sonda, a MESMA janela, sem cortar
 
 Sem esta perna, "o sinal mudou" não é atribuível ao corte — poderia ser deriva
-do próprio sinal. É o mesmo instrumento, no mesmo perfil, no mesmo minuto:
+do próprio sinal. É o mesmo instrumento, no mesmo perfil, na mesma corrida do
+`go test`, com a mesma janela de 90 s — mas **sequencialmente, com ~3 min entre
+uma perna e outra** (severada 173,49s, controle 108,20s, na ordem em que
+aparecem abaixo), cada uma com o seu próprio boot. A versão anterior desta
+frase dizia "no mesmo minuto", o que é mais forte do que os tempos das pernas
+permitem afirmar; o que a comparação de fato controla é máquina, rede, perfil e
+instrumento, não simultaneidade.
 
 ```
 === RUN   TestRealSPALivenessUnderSeveredNetwork/control
@@ -685,7 +716,246 @@ Contagem de arquivos do perfil pareado, na corrida colada acima: **2527 antes �
 - **onde fica o corte de duração** que separa "subindo" de "morto". A medição
   diz que o corte existe e que é necessário; não diz o número. Isso é medição
   própria, com boots e severações repetidos;
-- que os instantes sejam representativos. A saída do `CONNECTED` deu **+3,1 s,
-  +3,0 s e +3,1 s** em três corridas do mesmo perfil, nesta máquina e nesta
-  rede — estável, mas três amostras não são distribuição, e a grade de
-  amostragem é de 1 s. A volta variou mais: +2,0 s e +3,0 s.
+- que os instantes sejam representativos. A saída do `CONNECTED` **com os dois
+  comandos** deu, contando todas as corridas conhecidas deste corte:
+
+  | corrida | saída do `CONNECTED` |
+  |---|---|
+  | 04.3A, três corridas | +3,1 s · +3,0 s · +3,1 s |
+  | validação independente | **+2,1 s** |
+  | 04.3B, controle negativo B (janela de 6 s) | **+1,4 s** |
+  | 04.3B, perna severada reexecutada | +3,0 s |
+
+  A faixa real é **+1,4 s a +3,1 s**, não "+3 s estável" como a versão anterior
+  desta linha dizia — ela só tinha as três primeiras. Sete amostras continuam
+  não sendo distribuição, e **a grade de amostragem é de 1 s**: nenhum destes
+  números tem resolução melhor que isso, e a diferença entre +1,4 s e +3,1 s é
+  de duas casas da grade. A volta variou mais: +2,0 s e +3,0 s no 04.3A, e
+  +4,1 s, +5,0 s e +6,0 s nas três corridas do 04.3B — mas essas voltam de um
+  socket que passou ~55 s em `OPENING`, não ~87 s, e o corte lá era só de
+  transporte.
+
+---
+
+## M5 — O SPA percebe a queda SOZINHO? (corte só de transporte)
+
+**Data**: 2026-08-12 · **Loop**: 04.3B · **Ambiente**: Google Chrome
+151.0.7922.76, macOS arm64, `--headless=new`, perfil **pareado**
+(`scripts/chromium-study/wa-session/profile` via `WA_HEADLESS_PROFILE_DIR`),
+`stopped_via=browser.close` em todas as corridas.
+
+### M5.1 — Por que esta medição era obrigatória
+
+A M4 mediu com os DOIS comandos. A validação independente do `437316e` provou,
+com instrumento próprio, que o corte chega mesmo ao transporte WebSocket — e
+achou, no mesmo experimento, que **o Chrome não fecha o socket**: os quadros são
+engolidos em silêncio, `readyState` fica `1` (OPEN) e `onclose` nunca dispara.
+
+Isso muda a leitura da M4 inteira. Se o socket não é derrubado pelo browser, a
+saída do `CONNECTED` em ~3 s foi **decisão do próprio SPA** — e havia duas
+causas possíveis que a perna severada não consegue separar, porque dispara as
+duas ao mesmo tempo:
+
+- **(a)** o evento `offline` do DOM, que o `overrideNetworkState` faz o
+  navegador emitir;
+- **(b)** o SPA notando, por conta própria, que o seu tráfego parou.
+
+A diferença decide a CAP-04 inteira. As falhas que a produção enfrenta —
+**rota em buraco negro, upstream morto, portal cativo, servidor pendurado** —
+deixam `navigator.onLine` **verdadeiro** e não disparam evento nenhum. Se o SPA
+só reagisse ao evento, o socket **não seria discriminador em produção**: a
+sessão ficaria em `CONNECTED` indefinidamente com o servidor morto, e a CAP-04
+ficaria sem sinal algum, já que os sinais de tela caíram no F-18.
+
+### M5.2 — O método: cortar os bytes sem avisar a página
+
+`engine.Tab.SetTransportOffline` manda **só** o
+`Network.emulateNetworkConditionsByRule`. Os bytes morrem;
+`navigator.onLine` fica `true`; nenhum evento é disparado. É o corte mais
+**estrito**, não o mais fraco: é a única forma em que "a aplicação percebeu"
+significa que ela percebeu **sozinha**.
+
+O corte é o mesmo objeto que a M4 usou pela metade — não é instrumento novo. E
+o que ele faz com o WebSocket está travado em teste próprio (M5.6).
+
+### M5.3 — A resposta
+
+**O SPA percebe a queda SOZINHO — e leva ~34 s, não ~3 s.**
+
+```
+  READY: pane T+7.50s · identity T+0.02s · meReady T+5.58s · socket CONNECTED T+6.08s
+  [baseline] T+  0.02s online=true  pane=true  qr=false identity=true  meReady=true  socket=CONNECTED  nodes=2707  probe=APP_READY  liveness=true /APP_READY
+NETWORK SEVERED (transport-only) at T+8.32s
+REACHABILITY — with the network untouched: OK · with the transport cut: FAIL
+  [transport-only] T+  8.43s online=true  pane=true  identity=true  meReady=true  socket=CONNECTED  nodes=2948  probe=APP_READY  liveness=true /APP_READY
+  [transport-only] T+ 42.54s online=true  pane=true  identity=true  meReady=true  socket=OPENING    nodes=2963  probe=APP_READY  liveness=true /APP_READY
+DOM NETWORK EVENTS over the window: offline=0 online=0
+TRANSPORT-ONLY WINDOW — 90 samples over 91s (0 with the signals unread), from the steady state at T+7.11s
+  navigator.onLine went false     NEVER
+  socket left CONNECTED           +35.4s after the reference (T+42.54s) (to "OPENING")
+  #pane-side went false           NEVER
+  owner identity went false       NEVER
+  meReadyTriggered went false     NEVER
+  spa.Probe left APP_READY        NEVER
+  liveness reported NOT alive     NEVER
+ANSWER: the SPA detects the stall ITSELF.
+```
+
+Três corridas, mesmo perfil, mesma máquina, mesma rede:
+
+| corrida | corte em | saída do `CONNECTED` | desde o estado estável | desde o CORTE | eventos `offline` | volta ao `CONNECTED` |
+|---|---|---|---|---|---|---|
+| 1 | T+8,32s | T+42,54s | +35,4 s | **+34,2 s** | 0 | +6,0 s |
+| 2 | T+8,50s | T+41,72s | +34,5 s | **+33,2 s** | 0 | +4,1 s |
+| 3 | T+8,36s | T+42,58s | +35,4 s | **+34,2 s** | 0 | +5,0 s |
+
+**Contado a partir do corte a estabilidade é de 1 s**, que é a própria grade de
+amostragem. Três amostras não são distribuição, mas a ordem de grandeza é
+inequívoca: **dezenas de segundos, não segundos.**
+
+### M5.4 — Os dois mecanismos, com os números lado a lado
+
+| o que o corte faz | evento `offline` | saída do `CONNECTED` |
+|---|---|---|
+| **os dois comandos** (M4) | dispara (medido: `offline=1`) | +1,4 s a +3,1 s |
+| **só transporte** (M5) | **não dispara** (medido: `offline=0`) | **+33,2 s a +34,2 s** |
+
+São **dois caminhos diferentes** no SPA, com uma ordem de grandeza entre eles. O
+número que a M4 publicou é o do atalho — o que só existe porque a nossa emulação
+se anunciou. O número que vale em produção é o outro.
+
+Isto **não se adivinharia**: a hipótese de escrivaninha era "ou o SPA percebe, e
+os 3 s valem, ou não percebe, e não há sinal". A resposta foi uma terceira,
+que é boa notícia com um preço: **o sinal existe e é honesto, mas custa ~34 s
+de latência de detecção.**
+
+Os ~34 s cheiram a temporizador — keepalive, timeout de ping, prazo de resposta.
+**Isso é leitura, não medição**: nada aqui olhou para o tráfego do SPA e nada
+identificou o mecanismo. O que está medido é o INTERVALO, e é dele que a CAP-04
+precisa.
+
+### M5.5 — A precondição desta perna, e por que ela é sólida
+
+A perna severada trava a sua precondição em `navigator.onLine` ficar falso —
+que é exatamente o que esta perna **não** faz. Precisava de outra, e uma perna
+sem precondição mede silenciosamente nada. São quatro checagens, em dois pares:
+
+**O CORTE CHEGOU** (checagem positiva, `reportTransportOnlyVerdict`):
+
+1. um `fetch` da própria página para um asset estático da origem do SPA
+   responde **`OK` antes** do corte — isto é o controle interno: sonda que não
+   consegue dizer `OK` jamais provaria nada dizendo `FAIL`;
+2. o mesmo `fetch` responde **`FAIL` com a emulação ativa**.
+
+O `fetch` mede HTTP, e o sinal em questão é WebSocket. A ponte **não é
+suposição**: `TestBrowserChainSeversTheWebSocketTransport` (M5.6) prova, contra
+servidor local, que este mesmo comando engole quadros de WebSocket nos dois
+sentidos. Detalhes que fazem a sonda funcionar: a URL leva *cache-buster*
+(acerto no cache HTTP ou no cache do service worker responderia `OK` com o
+transporte morto), e o veredito é sobre **alcançabilidade**, não sobre status —
+`fetch` resolve em 404 igual a 200 e só rejeita quando a requisição não pôde
+ser feita, que é exatamente a distinção necessária.
+
+**NADA ANUNCIOU O CORTE** (as duas que impedem a perna de virar a perna da M4):
+
+3. `navigator.onLine` ficou **verdadeiro** pela janela inteira;
+4. a página contou **zero** eventos `offline`, por listeners instalados antes do
+   corte. O contador é monotônico, então zero no fim é zero o tempo todo.
+
+A (4) é observação DIRETA do mecanismo; inferir "nenhum evento disparou" a
+partir do `navigator.onLine` seria inferência. E o contador não é decoração: o
+controle negativo B (M5.7) leu `offline=1`, provando que ele **conta** quando há
+o que contar.
+
+### M5.6 — O instrumento provado contra o transporte que importa
+
+A prova do corte que existia era contra `fetch` HTTP, nunca contra WebSocket —
+o transporte sobre o qual toda a M4 e toda a M5 se apoiam. Um Chrome que
+aplicasse a emulação a `fetch` e deixasse um WebSocket já aberto continuar
+entregando quadros transformaria tudo isto em achado sobre a nossa emulação, e
+nada notaria.
+
+`TestBrowserChainSeversTheWebSocketTransport` fecha o buraco: servidor WS local,
+quadros contados **nos dois sentidos**, para os **dois** formatos de corte.
+
+```
+--- PASS: TestBrowserChainSeversTheWebSocketTransport (13.92s)
+    --- PASS: .../full (6.20s)
+    --- PASS: .../transport-only (6.16s)
+    full: severed window — page sent 10, server received 0, page received 0, readyState=1 closed=false
+    transport-only: severed window — page sent 10, server received 0, page received 0, readyState=1 closed=false
+```
+
+Ele mede **ENTREGA**, nunca intenção: a página continua chamando `send()` a
+janela inteira (`page sent 10`), e é isso que torna o zero atribuível ao
+transporte e não a um produtor que parou.
+
+E confirma, dentro deste repositório, o que a validação independente achou:
+**`readyState=1`, `closed=false`** — o Chrome não fecha o socket, engole os
+quadros. É o fato que tornou a M5 obrigatória.
+
+### M5.7 — Controles negativos EXECUTADOS
+
+Colados em `EXECUCAO.md`, LOOP 04.3B. Em resumo: a mutação "o corte não
+acontece" faz a precondição (1)+(2) matar a corrida
+(`the transport cut never landed: the reachability probe still answered "OK"`),
+e a mutação "esta perna usa `SetNetworkOffline`" faz a precondição (3) matar a
+corrida (`navigator.onLine went false at T+8.56s; this leg exists to leave it
+alone`) — essa segunda lendo, de quebra, `offline=1`, que é o controle positivo
+do contador de eventos. No teste de WebSocket, não severar faz as duas
+asserções falharem (`server received 10 frames`, `page received 10 frames`).
+Todas as mutações foram revertidas antes do commit.
+
+### M5.8 — O que M5 estabelece e o que NÃO estabelece
+
+**Estabelece:**
+
+- o SPA **percebe sozinho** que o transporte morreu, sem `navigator.onLine` e
+  sem evento `offline`. **`WAWebSocketModel.Socket.__x_state` é discriminador
+  para as falhas que a produção enfrenta**, e não artefato da nossa emulação —
+  a CAP-04 tem fundação;
+- o **preço** dessa fundação: **~33–34 s** de latência de detecção, uma ordem de
+  grandeza acima dos ~3 s que a M4 publicou. Qualquer prazo de liveness ou de
+  reciclagem tem de caber acima disto;
+- a saída de ~1,4–3,1 s da M4 é reação ao **evento**, e não à queda. Corrigido
+  na M4.2;
+- a emulação **não fecha** o WebSocket em nenhum dos dois formatos de corte:
+  quadros engolidos, `readyState` OPEN, `onclose` nunca (M5.6);
+- o F-18 continua de pé, agora também sob corte silencioso: `#pane-side`,
+  identidade do dono e `meReadyTriggered` ficaram **verdadeiros** pelos 90 s;
+- o F-21 continua de pé: `spa.Monitor.Check` e `spa.Probe` responderam
+  **saudável** nas 90 amostras das três corridas.
+
+**Não estabelece:**
+
+- **qual** mecanismo dá os ~34 s. Ninguém olhou o tráfego; "keepalive" é leitura
+  plausível, não medição;
+- **onde fica o corte de duração** que separa "subindo" de "morto". Continua sem
+  número — e agora com uma restrição a mais, porque o limiar tem de ser maior
+  que os ~34 s de detecção mais o tempo de `OPENING` de um boot saudável;
+- **nada sobre cortes longos**: a janela foi de 90 s, dos quais ~55 s em
+  `OPENING`;
+- **nada sobre sessão revogada, deslogada ou expirada.** Continua sendo outra
+  medição, e continua sendo a que destruiria o ativo;
+- que os instantes sejam representativos: três corridas, uma máquina, uma rede,
+  grade de 1 s.
+
+### M5.9 — As outras duas pernas, reexecutadas com o instrumento novo
+
+O contador de eventos entrou nas TRÊS pernas, então as outras duas foram
+reexecutadas para que nenhuma asserção nova ficasse sem exercício:
+
+```
+severed   offline=1  socket left CONNECTED +3.0s   liveness ALIVE nas 90        PASS (171.03s)
+control   offline=0  socket left CONNECTED NEVER   todo sinal parado            PASS (110.12s)
+```
+
+A perna severada confirma pela sétima vez o F-21 (`Alive=true`/`APP_READY` a
+janela inteira) e dá a sétima amostra da saída rápida, +3,0 s. E o par
+`offline=1` / `offline=0` nas duas pernas é a demonstração mais curta da M5:
+**o mesmo instrumento, o mesmo perfil, a mesma janela — só muda quem avisa a
+página, e o tempo de reação muda de 3 s para 34 s.**
+
+**Contagem de arquivos do perfil pareado**: **2572 → 2686** ao longo das sete
+corridas do loop (2572 → 2635 → 2646 → 2656 → 2675 → 2680 → 2682 → 2686).
+Cresceu em todas; não encolheu em nenhuma. `stopped_via=browser.close` em todas.

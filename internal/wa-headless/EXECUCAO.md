@@ -8,19 +8,141 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: 04 — LOOP 04.3A, liveness contra sessão que perdeu o servidor · **DONE**
-Objective: a sonda de liveness percebe UI montada sobre socket morto? Medido
-cortando a rede da página com a emulação do browser, duas pernas (severada e
-controle). **Resposta: não percebe** — `EVIDENCIA-SPA.md` M4, finding **F-21**.
+CAP: 04 — LOOP 04.3B, o SPA percebe a queda SOZINHO? · **DONE**
+Objective: a saída do socket medida no 04.3A foi percepção do SPA, ou reação ao
+evento `offline` que a nossa emulação dispara? Medido cortando **só o
+transporte** (`emulateNetworkConditionsByRule` sozinho), com `navigator.onLine`
+intocado.
 
-O loop foi reapontado: a versão anterior desta linha era "o corte do READY
-honesto" (entre `meReadyTriggered` e o socket `CONNECTED`, bloqueada pelo
-**F-20**). Aquela pergunta **continua aberta** e voltou para o `Next` — o que
-mudou é a ordem, porque a sonda que já está no contrato de produto valia ser
-medida antes de refinar instantes de boot.
+**Resposta: percebe sozinho — e leva ~34 s, não ~3 s.** O socket é
+discriminador para as falhas que a produção enfrenta (rota em buraco negro,
+upstream morto, portal cativo, servidor pendurado), que não disparam evento
+nenhum. A CAP-04 tem fundação; o preço é uma ordem de grandeza de latência
+acima do que o 04.3A tinha publicado. `EVIDENCIA-SPA.md` M5, finding **F-22**.
+
+Loop anterior: **04.3A** (`437316e`), que mediu que a sonda de liveness reporta
+saudável uma sessão sem servidor — finding **F-21**, que continua inteiro.
+
+Ainda aberto e no `Next`: "o corte do READY honesto" (entre `meReadyTriggered`
+e o socket `CONNECTED`), que continua bloqueado pelo **F-20**.
 
 Sem dependência humana. O perfil pareado está disponível e autorizado para
 observação só-leitura.
+
+### LOOP 04.3B — controles negativos EXECUTADOS
+
+Três mutações, todas revertidas antes do commit. As duas primeiras provam que a
+precondição da perna nova morde; a terceira, que o teste de WebSocket morde.
+
+**(A) o corte não acontece** — `severNetwork` passa `offline=false`. A
+precondição positiva (o `fetch` da página tem de passar de `OK` para `FAIL`)
+mata a corrida. Janela encurtada para 6 s só para não gastar 90 s de perfil:
+
+```
+REACHABILITY — with the network untouched: OK · with the transport cut: OK
+DOM NETWORK EVENTS over the window: offline=0 online=0
+  navigator.onLine went false     NEVER
+  socket left CONNECTED           NEVER
+the transport cut never landed: the reachability probe still answered "OK" with
+the emulation active, so nothing measured here is attributable to a lost server
+--- FAIL: TestRealSPALivenessUnderSeveredNetwork/transport-only (25.25s)
+```
+
+**(B) a perna nova vira a perna do 04.3A** — a tabela aponta `transportLeg`
+para `SetNetworkOffline`. Aqui o corte CHEGA (`FAIL`), então a precondição
+positiva passa e quem mata é a guarda "nada anunciou o corte":
+
+```
+REACHABILITY — with the network untouched: OK · with the transport cut: FAIL
+DOM NETWORK EVENTS over the window: offline=1 online=0
+  navigator.onLine went false     +1.4s after the reference (T+8.56s)
+  socket left CONNECTED           +1.4s after the reference (T+8.56s) (to "OPENING")
+navigator.onLine went false at T+8.56s; this leg exists to leave it alone, so its
+whole premise is gone and the socket timeline cannot be read as self-detection
+--- FAIL: TestRealSPALivenessUnderSeveredNetwork/transport-only (25.08s)
+```
+
+O (B) faz **dois** serviços. Além de mostrar que a guarda morde, o
+`offline=1` é o **controle positivo do contador de eventos**: sem ele, o
+`offline=0` das três corridas de medição poderia ser um listener quebrado em
+vez de uma medição. E, de quebra, mostra o socket saindo do `CONNECTED` em
++1,4 s — no MESMO instante em que o `navigator.onLine` vira —, que é a
+corroboração mais direta de que a saída rápida é reação ao evento.
+
+**(C) o WebSocket não é severado** — `severWebSocketLeg` passa `offline=false`.
+As duas asserções de entrega falham, nos dois formatos de corte:
+
+```
+full: the server received 10 frames while the page was supposed to be severed;
+  the emulation does not reach an open WebSocket
+full: the page received 10 frames while severed; the emulation does not reach an
+  open WebSocket
+full: severed window — page sent 10, server received 10, page received 10,
+  readyState=1 closed=false
+transport-only: (as três linhas idênticas)
+--- FAIL: TestBrowserChainSeversTheWebSocketTransport (13.84s)
+```
+
+### Nota sobre a frase de lint do `437316e` — o número não é portátil
+
+A mensagem do `437316e` afirma: *"`make lint` em 269, exatamente o mesmo do HEAD
+sem estas mudanças (medido com stash)"*. **A validação independente não
+reproduziu esse número**: mediu **283** para o mesmo commit, por dois métodos.
+
+Reconferido nesta sessão, neste worktree, com `git stash`:
+
+```
+437316e (pai, árvore limpa)   269 issues   internal/wa-headless: 2 gocyclo
+HEAD + as mudanças deste loop 269 issues   internal/wa-headless: as MESMAS 2
+```
+
+As duas gocyclo são `(*readinessMarks).record` (14) e `logTimeline` (11), ambas
+pré-existentes e nenhuma tocada por este trabalho. O
+`TestBrowserChainSeversTheWebSocketTransport` (15) e o `observeSeveredSession`
+(11) que este loop introduziu **foram refatorados até sair da lista**, não
+absorvidos no baseline.
+
+**A lição, para comparações futuras:** o TOTAL do `golangci-lint` depende de
+onde ele é invocado — a resolução de módulo dele não se limita à árvore para a
+qual ele é apontado, então dois worktrees do mesmo commit dão totais diferentes
+(269 aqui, 283 lá). **Um total absoluto numa mensagem de commit não é
+verificável por quem não estiver na mesma árvore.** O que é verificável, e o que
+deve ser afirmado daqui em diante, são duas coisas:
+
+1. o **delta** medido com `stash` na mesma árvore, na mesma corrida;
+2. o **conjunto de issues restrito ao subdiretório sob trabalho**, listado por
+   arquivo e regra — que é invariante e é o que de fato responde "esta branch
+   piorou alguma coisa?".
+
+### CAP GATE do LOOP 04.3B (2026-08-12)
+
+```
+go build ./...                                   OK
+go vet ./...                                     OK
+gofmt -l internal/wa-headless/                   vazio
+go test -race -count=1 ./internal/wa-headless/...
+  wa-api/internal/wa-headless               ok  97.559s
+  wa-api/internal/wa-headless/engine        ok   5.263s
+  wa-api/internal/wa-headless/observability ok   1.603s
+  wa-api/internal/wa-headless/spa           ok   1.953s
+as 6 sondas TestRealSPA* continuam puladas por padrão
+make lint                                        269 (pai: 269, idêntico)
+```
+
+Contra a conta real, sete corridas, todas com `stopped_via=browser.close`:
+
+```
+transport-only   ×3   PASS   (medição: +34,2s · +33,2s · +34,2s desde o corte)
+transport-only   ×2   FAIL   (controles negativos A e B, mutações revertidas)
+severed          ×1   PASS   (+3,0s, offline=1)
+control          ×1   PASS   (nada se moveu, offline=0)
+```
+
+O contador de eventos entrou nas TRÊS pernas, então a severada e a de controle
+foram reexecutadas — nenhuma asserção nova ficou sem exercício contra a conta.
+
+**Perfil pareado: 2572 → 2686 arquivos.** Cresceu em todas as corridas, não
+encolheu em nenhuma. `disparazaap` intocado (`ed9e651`, 0 linhas).
 
 ### FASE B1 — encerrada em 2026-08-12
 
@@ -126,7 +248,8 @@ existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
 |---|---|---|
 | 04.1 | `livenessCheck`: sonda por `Evaluate`, streak, latência | `e0ee05a` |
 | 04.2 | verificação contra renderer travado de verdade | `c0793ad` |
-| 04.3A | a sonda percebe sessão que perdeu o servidor? | *(este commit)* |
+| 04.3A | a sonda percebe sessão que perdeu o servidor? | `437316e` |
+| 04.3B | o SPA percebe a queda SOZINHO, ou só reage ao evento? | *(este commit)* |
 
 **Verificado contra browser real**: página com `#pane-side` no DOM e
 `for(;;)` na thread principal classifica `UNRESPONSIVE` enquanto
@@ -142,9 +265,18 @@ a conta real e confirmou que a sonda reporta `Alive=true`/`APP_READY` nas 90
 amostras do corte. Deixou de ser limite escrito por prudência e passou a ser
 fato com evidência (`EVIDENCIA-SPA.md` M4.3).
 
-**Falta para fechar a CAP-04**: o socket é discriminador mas o seu valor de
-queda (`OPENING`) é igual ao do boot, então o veredito precisa de DURAÇÃO — e
-esse número não foi medido. Ver **F-21** e o `Next`.
+**A fundação da CAP-04 está provada** (04.3B, `EVIDENCIA-SPA.md` M5): o SPA
+percebe a queda do transporte **sozinho**, com `navigator.onLine` verdadeiro e
+zero eventos `offline`. Logo o socket discrimina as falhas que a produção
+enfrenta — rota em buraco negro, upstream morto, portal cativo, servidor
+pendurado — e não só a queda de rede que se anuncia. **O preço está medido:
+~33–34 s** de latência de detecção, e não os ~3 s que o 04.3A tinha publicado
+(aqueles eram reação ao evento `offline` da nossa própria emulação).
+
+**Falta para fechar a CAP-04**: o valor de queda (`OPENING`) é igual ao do boot,
+então o veredito precisa de DURAÇÃO — e esse número continua não medido, agora
+com um piso conhecido: tem de ser maior que os ~34 s de detecção somados ao
+tempo de `OPENING` de um boot saudável. Ver **F-21**, **F-22** e o `Next`.
 
 ### FASE B0 — resolver o blocker do linter · **DONE**
 
@@ -167,7 +299,18 @@ CONFIG CHANGES    nenhuma em .golangci.yml — nenhuma regra reduzida
 
 **B-01 = CLOSED.** O mesmo gate roda local e no CI, com a versão nova, sem
 reduzir exigência. As 14 issues introduzidas por esta branch foram
-corrigidas, não escondidas: a contagem voltou a 267 exatos.
+corrigidas, não escondidas: a contagem voltou ao baseline declarado.
+
+> **CORREÇÃO (2026-08-12, LOOP 04.3B).** A frase original era "a contagem voltou
+> a **267 exatos**". Ela **não se reproduz**: rodando `make lint` neste worktree
+> hoje, o `437316e` (pai deste commit, árvore limpa) mede **269**, e o gate
+> imprime `NOTA: a contagem de issues mudou (267 -> 269)` em toda corrida.
+>
+> **Isto é deriva PRÉ-EXISTENTE e não foi causada por este trabalho** — está
+> medida no pai, com a árvore limpa, antes de qualquer mudança desta sessão. As
+> duas issues a mais são de código pré-existente. A entrada fica corrigida aqui
+> em vez de no número do baseline porque mexer no `.golangci-baseline` é decisão
+> à parte, e ela não é desta sessão.
 
 ### FASE B1 — conta de teste e SPA real · **parcial**
 
@@ -256,6 +399,49 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 
 ## Findings
 
+* **F-22 · o socket percebe a queda SOZINHO, mas leva ~34 s — e os "3 s" do
+  F-21 eram reação à NOSSA emulação.** LOOP 04.3B, medido contra a conta real
+  cortando **só o transporte** (`EVIDENCIA-SPA.md` M5).
+
+  O 04.3A cortou com os dois comandos, e o `overrideNetworkState` faz o
+  navegador emitir o evento `offline` na página. Como a validação independente
+  provou que **o Chrome não fecha o socket** (quadros engolidos, `readyState`
+  OPEN, `onclose` nunca), a saída do `CONNECTED` era decisão do próprio SPA — e
+  havia duas causas possíveis que aquela perna não separa, porque dispara as
+  duas: o EVENTO, ou o SPA notando o próprio tráfego parar.
+
+  Cortando só os bytes, com `navigator.onLine` verdadeiro e **zero** eventos
+  `offline` contados por listeners da própria página:
+
+  | corte | evento `offline` | saída do `CONNECTED` |
+  |---|---|---|
+  | os dois comandos (04.3A) | dispara (`offline=1`) | +1,4 s a +3,1 s |
+  | só transporte (04.3B) | **não dispara** (`offline=0`) | **+33,2 a +34,2 s** |
+
+  Três corridas do mesmo perfil: +34,2 s, +33,2 s, +34,2 s contados do corte —
+  estáveis dentro da grade de amostragem de 1 s.
+
+  **Por que isto decidia a CAP-04 inteira.** Se o SPA só reagisse ao evento, o
+  socket não seria discriminador em produção: as falhas que uma frota enfrenta
+  — rota em buraco negro, upstream morto, portal cativo, servidor pendurado —
+  deixam `navigator.onLine` **verdadeiro** e não disparam evento nenhum. A
+  sessão ficaria em `CONNECTED` para sempre com o servidor morto, e a CAP-04
+  ficaria sem sinal algum, com os sinais de tela já eliminados pelo F-18.
+  **Percebe. A fundação existe** — com ~34 s de latência em vez de ~3 s, o que
+  é uma ordem de grandeza e muda qualquer prazo escrito em cima disso.
+
+  **O que NÃO foi medido**: qual mecanismo dá os ~34 s. Cheira a temporizador
+  (keepalive, timeout de ping), mas ninguém olhou o tráfego — é leitura, não
+  medição. E o F-21 continua inteiro: a sonda respondeu `Alive=true`/`APP_READY`
+  nas 90 amostras das três corridas, e `#pane-side`, identidade e
+  `meReadyTriggered` ficaram verdadeiros os 90 s também sob corte silencioso.
+
+  **Correções que este achado obrigou** (feitas, não anotadas para depois):
+  `EVIDENCIA-SPA.md` M4.2 dizia que o socket reage "sem depender de keepalive"
+  — afirmação não medida e errada; M4.7 dava a saída como "+3 s estável" com
+  três amostras, e a faixa real conhecida é +1,4 s a +3,1 s em seis;
+  `spa/liveness.go` repetia os "três segundos".
+
 * **F-21 · a sonda de liveness reporta SAUDÁVEL uma sessão que perdeu o
   servidor — e o socket que a perceberia cai num estado ambíguo.** LOOP 04.3A,
   medido contra a conta real cortando a rede da página
@@ -278,11 +464,14 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
      inteiros.** O F-18 dizia que a identidade chega cedo demais para provar
      sessão viva; agora se sabe que ela **permanece** depois que a sessão morre.
      Raciocínio de boot virou fato medido.
-  2. **O socket reage rápido — 3 s — mas para `OPENING`, que é o estado do boot
-     normal** (M3.3). Logo `socket != CONNECTED` **não** distingue "está
-     subindo" de "perdeu o servidor". O discriminador existe, mas o valor
-     instantâneo não é ele: é o valor MAIS a duração. Um liveness escrito só
-     sobre o enum escolhe entre matar sessão que sobe e manter sessão morta.
+  2. **O socket reage — mas para `OPENING`, que é o estado do boot normal**
+     (M3.3). Logo `socket != CONNECTED` **não** distingue "está subindo" de
+     "perdeu o servidor". O discriminador existe, mas o valor instantâneo não é
+     ele: é o valor MAIS a duração. Um liveness escrito só sobre o enum escolhe
+     entre matar sessão que sobe e manter sessão morta.
+     *(Esta linha dizia "reage rápido — 3 s". **Corrigido pelo F-22**: os 3 s
+     eram reação ao evento `offline` que a nossa própria emulação dispara. Sem
+     o anúncio, a percepção leva ~34 s.)*
   3. **A volta é sozinha e em 2–3 s**, sem QR, sem renavegar, sem reiniciar o
      browser. Qualquer política de reciclagem que agisse dentro do primeiro
      minuto destruiria uma sessão que ia se recuperar.

@@ -1061,33 +1061,55 @@ func TestRealSPAOwnerIdentityShape(t *testing.T) {
 // the account, nothing writes to the profile, and the network is restored before
 // the browser goes down so the profile is never left mid-sever.
 //
-// TWO LEGS, and the control is what makes the severed leg mean anything:
+// THREE LEGS, and neither of the other two means anything without the control:
 //
-//	severed   the same probe over the same window, offline
-//	control   the same probe over the same window, untouched
+//	severed         the same probe over the same window, offline
+//	transport-only  the bytes dead, navigator.onLine left TRUE
+//	control         the same probe over the same window, untouched
 //
 // Without the control, "the signal changed" could be the signal drifting on its
 // own. The legs are subtests so each can be run alone — together they are about
-// four minutes of browser.
+// six minutes of browser.
+//
+// The transport-only leg is LOOP 04.3B, and it exists because the severed leg
+// cannot answer the question that decides whether its own finding is usable.
+// Chrome does not close the socket under the emulation — the frames are silently
+// black-holed and readyState stays OPEN, proved in this repository by
+// TestBrowserChainSeversTheWebSocketTransport. So the SPA leaving CONNECTED is
+// the SPA's own decision, and there are two candidates for it: the `offline` DOM
+// event that overrideNetworkState fires, or the SPA noticing its own traffic has
+// stalled. The severed leg fires both, so it cannot separate them.
+//
+// The distinction is not academic. The failures a fleet actually meets — a
+// black-holed route, a dead upstream, a captive portal, a hung server — leave
+// navigator.onLine TRUE and fire no event at all. If the SPA only reacts to the
+// event, the socket is not a discriminator in production and CAP-04 has no
+// signal left, screen signals having already been disqualified by F-18. This leg
+// withholds the announcement and watches whether the SPA notices anyway.
 func TestRealSPALivenessUnderSeveredNetwork(t *testing.T) {
 	requireRealSPA(t)
 
+	// Method expressions, so the legs differ by exactly the command they send.
+	// A nil set is the control: no command is issued at all, which is what makes
+	// it a control rather than a leg that asks for offline=false.
 	for _, leg := range []struct {
-		name  string
-		sever bool
+		name string
+		set  func(*engine.Tab, *engine.Runner, bool, string) error
 	}{
-		{severedLeg, true},
-		{controlLeg, false},
+		{severedLeg, (*engine.Tab).SetNetworkOffline},
+		{transportLeg, (*engine.Tab).SetTransportOffline},
+		{controlLeg, nil},
 	} {
-		t.Run(leg.name, func(t *testing.T) { observeSeveredSession(t, leg.sever) })
+		t.Run(leg.name, func(t *testing.T) { observeSeveredSession(t, leg.name, leg.set) })
 	}
 }
 
-// The two legs, named once. A literal repeated between the table and the
+// The three legs, named once. A literal repeated between the table and the
 // reporting is the same bug waiting to diverge.
 const (
-	severedLeg = "severed"
-	controlLeg = "control"
+	severedLeg   = "severed"
+	transportLeg = "transport-only"
+	controlLeg   = "control"
 )
 
 const (
@@ -1167,7 +1189,10 @@ func (s severSample) log(t *testing.T, phase string) {
 
 // observeSeveredSession boots the paired profile, waits for a full ready state,
 // and then watches it — with the network cut, or without.
-func observeSeveredSession(t *testing.T, sever bool) {
+//
+// cut is the emulation this leg applies, and nil is the control.
+func observeSeveredSession(t *testing.T, leg string,
+	cut func(*engine.Tab, *engine.Runner, bool, string) error) {
 	runner := engine.NewRunner()
 	_, tab := openRealSPA(t, runner)
 
@@ -1190,6 +1215,13 @@ func observeSeveredSession(t *testing.T, sever bool) {
 	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate}
 	start := time.Now()
 
+	// The event sentinel goes in on EVERY leg, before anything is done to the
+	// network, because the comparison between the legs is half the answer: the
+	// severed leg is expected to fire an `offline` event, the other two are
+	// expected to fire none, and reading the counter in only one of them would
+	// leave that expectation untested.
+	installNetEventSentinel(t, runner, tab)
+
 	baseline := watchSession(t, runner, tab, monitor, script, "baseline", start, severBaseline)
 	steady, haveSteady := lastReadSample(baseline)
 	if !haveSteady {
@@ -1201,20 +1233,19 @@ func observeSeveredSession(t *testing.T, sever bool) {
 			steady.signals.SocketState, steady.signals.HasPaneSide)
 	}
 
-	phase := controlLeg
-	if sever {
-		severNetwork(t, runner, tab, start)
-		phase = severedLeg
-	}
+	evidence := applyLegCut(t, runner, tab, leg, cut, start)
 
-	window := watchSession(t, runner, tab, monitor, script, phase, start, severWindow)
-	outcome := reportSeverWindow(t, phase, steady, window)
+	window := watchSession(t, runner, tab, monitor, script, leg, start, severWindow)
+	evidence.events = readNetEvents(t, runner, tab)
+	t.Logf("DOM NETWORK EVENTS over the window: offline=%d online=%d",
+		evidence.events.Offline, evidence.events.Online)
+	outcome := reportSeverWindow(t, leg, steady, window, evidence)
 
-	if !sever {
+	if cut == nil {
 		return
 	}
 
-	if err := tab.SetNetworkOffline(runner, false, "sever/restore"); err != nil {
+	if err := cut(tab, runner, false, "sever/restore"); err != nil {
 		t.Fatalf("restoring the network: %v", err)
 	}
 	restoredAt := time.Since(start)
@@ -1230,17 +1261,149 @@ func observeSeveredSession(t *testing.T, sever bool) {
 // the tab and browser cleanups openRealSPA registered earlier — cleanups are
 // LIFO. That is what keeps the profile from ever being left mid-sever, however
 // the rest of the test ends.
-func severNetwork(t *testing.T, runner *engine.Runner, tab *engine.Tab, start time.Time) {
+func severNetwork(t *testing.T, runner *engine.Runner, tab *engine.Tab,
+	cut func(*engine.Tab, *engine.Runner, bool, string) error, leg string, start time.Time) {
 	t.Helper()
-	if err := tab.SetNetworkOffline(runner, true, "sever/offline"); err != nil {
+	if err := cut(tab, runner, true, "sever/offline"); err != nil {
 		t.Fatalf("severing the network: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := tab.SetNetworkOffline(runner, false, "sever/restore-cleanup"); err != nil {
+		if err := cut(tab, runner, false, "sever/restore-cleanup"); err != nil {
 			t.Errorf("restoring the network: %v", err)
 		}
 	})
-	t.Logf("NETWORK SEVERED at T+%.2fs", time.Since(start).Seconds())
+	t.Logf("NETWORK SEVERED (%s) at T+%.2fs", leg, time.Since(start).Seconds())
+}
+
+// applyLegCut applies this leg's cut, and takes the reachability readings that
+// only the transport-only leg needs.
+//
+// The two readings BRACKET the cut, and both halves are load-bearing: the one
+// before is the internal control — a probe that cannot say OK with the network
+// untouched could never prove anything by saying FAIL — and the one after is
+// the precondition proper. They are skipped on the other legs because each is a
+// real request to the SPA's origin, and the severed leg already has a
+// precondition that costs nothing.
+func applyLegCut(t *testing.T, runner *engine.Runner, tab *engine.Tab, leg string,
+	cut func(*engine.Tab, *engine.Runner, bool, string) error, start time.Time) legEvidence {
+	t.Helper()
+	var evidence legEvidence
+	needsReachability := leg == transportLeg
+
+	if needsReachability {
+		evidence.reachBefore = reachability(t, runner, tab, "before")
+	}
+	if cut != nil {
+		severNetwork(t, runner, tab, cut, leg, start)
+	}
+	if needsReachability {
+		evidence.reachDuring = reachability(t, runner, tab, "severed")
+		t.Logf("REACHABILITY — with the network untouched: %s · with the transport cut: %s",
+			evidence.reachBefore, evidence.reachDuring)
+	}
+	return evidence
+}
+
+// legEvidence is what a leg knows about its own cut that the sampled signals
+// cannot say: whether the transport really died, and whether anything told the
+// page about it.
+type legEvidence struct {
+	// reachBefore and reachDuring are the reachability probe's verdicts around
+	// the cut. Empty on the legs that do not run it.
+	reachBefore, reachDuring string
+	// events is what the page's own listeners counted over the window.
+	events netEventCounts
+}
+
+// netEventSlot is where the page parks its event counters. Named once, because
+// the installer and the reader are two scripts and a literal in both is the same
+// bug waiting to diverge.
+const netEventSlot = "__waHeadlessNetEvents"
+
+// installNetEventSentinelScript counts the DOM network events, and nothing else.
+//
+// It is the direct observation of the mechanism the transport-only leg is about.
+// Inferring "no offline event fired" from navigator.onLine staying true would be
+// inference; counting the events the page's own listeners receive is the
+// measurement. It is idempotent, so a leg that installed it twice would not
+// double-count.
+//
+// Counts only. It reads no event property, so there is nothing here that could
+// carry anything about the account.
+const installNetEventSentinelScript = `JSON.stringify((() => {
+	if (window.` + netEventSlot + `) return 'already';
+	const counts = {offline: 0, online: 0};
+	window.` + netEventSlot + ` = counts;
+	window.addEventListener('offline', () => { counts.offline++; });
+	window.addEventListener('online', () => { counts.online++; });
+	return 'installed';
+})())`
+
+// readNetEventSentinelScript answers -1 when the sentinel is GONE — a navigation
+// would take it with it — because zero would then read as "no event fired",
+// which is the optimistic lie an instrument must never tell.
+const readNetEventSentinelScript = `JSON.stringify(window.` + netEventSlot +
+	` || {offline: -1, online: -1})`
+
+// netEventCounts is how many `offline` and `online` events the page received.
+type netEventCounts struct {
+	Offline int `json:"offline"`
+	Online  int `json:"online"`
+}
+
+func installNetEventSentinel(t *testing.T, runner *engine.Runner, tab *engine.Tab) {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpEvaluate, "netevents/install",
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, installNetEventSentinelScript, &raw)
+		}); err != nil {
+		t.Fatalf("installing the network-event sentinel: %v", err)
+	}
+}
+
+func readNetEvents(t *testing.T, runner *engine.Runner, tab *engine.Tab) netEventCounts {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "netevents/read",
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, readNetEventSentinelScript, &raw)
+		}); err != nil {
+		t.Fatalf("reading the network-event sentinel: %v", err)
+	}
+	var counts netEventCounts
+	if err := json.Unmarshal([]byte(raw), &counts); err != nil {
+		t.Fatalf("unexpected network-event shape %q: %v", raw, err)
+	}
+	if counts.Offline < 0 || counts.Online < 0 {
+		t.Fatal("the network-event sentinel is gone from the page, so the counts are " +
+			"unknown rather than zero")
+	}
+	return counts
+}
+
+// reachabilityAsset is what the transport-only leg's precondition asks for: a
+// static icon on the SPA's own origin.
+//
+// Same-origin because a cross-origin request would report CORS failures and
+// network failures the same way. A static asset because the precondition must
+// not touch anything the account owns — this is one GET for an icon, and when
+// the cut has landed it never leaves the browser at all.
+//
+// The verdict is about REACHABILITY and not about status: fetch resolves on a
+// 404 just as it does on a 200, and rejects only when the request could not be
+// made. That is precisely the distinction the precondition needs.
+const reachabilityAsset = "favicon.ico"
+
+// reachability asks the page whether it can still reach its own origin.
+//
+// The cache-busting query is load-bearing twice over: an HTTP cache hit and a
+// service-worker cache hit would both answer OK with the transport dead, and the
+// precondition would then refuse a run whose cut had actually landed.
+func reachability(t *testing.T, runner *engine.Runner, tab *engine.Tab, tag string) string {
+	t.Helper()
+	url := fmt.Sprintf("%s%s?probe=%s-%d", realSPAURL, reachabilityAsset, tag, time.Now().UnixNano())
+	return fetchVerdict(t, runner, tab, url)
 }
 
 // watchSession samples the page for a window, printing only the instants where
@@ -1411,7 +1574,8 @@ func (m windowMarks) log(t *testing.T, ref time.Duration) {
 //
 // It reports back what the window did to the liveness verdict, because the
 // recovery report has to know: "alive again" is only meaningful if it stopped.
-func reportSeverWindow(t *testing.T, phase string, steady severSample, samples []severSample) windowOutcome {
+func reportSeverWindow(t *testing.T, phase string, steady severSample,
+	samples []severSample, evidence legEvidence) windowOutcome {
 	t.Helper()
 	if len(samples) == 0 {
 		t.Fatalf("%s: no samples in the window", phase)
@@ -1436,17 +1600,20 @@ func reportSeverWindow(t *testing.T, phase string, steady severSample, samples [
 		end.signals.SocketState, end.signals.HasPaneSide, end.signals.HasOwnerIdentity,
 		last.class, last.liveness.Alive, last.liveness.Class)
 
-	if phase == severedLeg {
-		reportSeveredVerdict(t, ref, marks)
-	} else {
-		assertControlHeldStill(t, end, marks)
+	switch phase {
+	case severedLeg:
+		reportSeveredVerdict(t, ref, marks, evidence)
+	case transportLeg:
+		reportTransportOnlyVerdict(t, ref, marks, evidence)
+	default:
+		assertControlHeldStill(t, end, marks, evidence)
 	}
 	return windowOutcome{livenessDropped: marks.notAlive.seen}
 }
 
 // reportSeveredVerdict states what the liveness check did while the server was
 // unreachable, and refuses a run where the sever never reached the page.
-func reportSeveredVerdict(t *testing.T, ref time.Duration, marks windowMarks) {
+func reportSeveredVerdict(t *testing.T, ref time.Duration, marks windowMarks, evidence legEvidence) {
 	t.Helper()
 	// The instrument's own precondition. If the emulation did not reach the
 	// page, "nothing changed" is a statement about our emulation and not about
@@ -1454,6 +1621,13 @@ func reportSeveredVerdict(t *testing.T, ref time.Duration, marks windowMarks) {
 	if !marks.offline.seen {
 		t.Fatal("the sever never reached the page: navigator.onLine stayed true for " +
 			"the whole window, so nothing measured here is attributable to a lost server")
+	}
+	// The counterpart of the transport-only leg's guard, and the reason the
+	// severed leg cannot answer LOOP 04.3B's question: here the page IS told.
+	if evidence.events.Offline < 1 {
+		t.Errorf("navigator.onLine went false but the page counted %d offline events; "+
+			"the two legs are then not the comparison they are documented to be",
+			evidence.events.Offline)
 	}
 	if marks.notAlive.seen {
 		t.Logf("VERDICT: the liveness check stopped reporting ALIVE %s", marks.notAlive.since(ref))
@@ -1464,13 +1638,79 @@ func reportSeveredVerdict(t *testing.T, ref time.Duration, marks windowMarks) {
 		"phase 6 hazard, measured rather than reasoned about.")
 }
 
+// reportTransportOnlyVerdict is LOOP 04.3B's answer, and its preconditions are
+// the whole reason the answer can be trusted.
+//
+// The severed leg's precondition — navigator.onLine went false — is exactly what
+// this leg must NOT do, so it needs a different one. It has four checks, in two
+// pairs, and both pairs are necessary:
+//
+// THE CUT LANDED. An in-page fetch to a static asset on the SPA's own origin
+// answers OK before the cut and FAIL after it. It is a positive check: it
+// exercises the real network stack from inside the page, and the before-leg
+// proves the probe is capable of saying OK, so the FAIL is a measurement rather
+// than a probe that cannot succeed. It measures HTTP, not the WebSocket, and the
+// bridge between the two is not an assumption: the same two emulation commands
+// are proved to black-hole WebSocket frames in both directions, against a server
+// this repository owns, by TestBrowserChainSeversTheWebSocketTransport.
+//
+// NOTHING ANNOUNCED IT. navigator.onLine must have stayed TRUE for the whole
+// window, and the page must have counted ZERO `offline` events. The counter is
+// monotonic, so zero at the end is zero throughout — which is what licenses
+// reading any socket departure inside the window as the SPA's own detection
+// rather than as an event handler firing. Without these two, this leg would just
+// be the severed leg with a slower guard.
+func reportTransportOnlyVerdict(t *testing.T, ref time.Duration, marks windowMarks, evidence legEvidence) {
+	t.Helper()
+	if evidence.reachBefore != fetchVerdictOK {
+		t.Fatalf("the reachability probe answered %q with the network untouched, want %q; "+
+			"a probe that cannot say OK could never prove a cut by saying FAIL",
+			evidence.reachBefore, fetchVerdictOK)
+	}
+	if evidence.reachDuring != fetchVerdictFail {
+		t.Fatalf("the transport cut never landed: the reachability probe still answered %q "+
+			"with the emulation active, so nothing measured here is attributable to a lost "+
+			"server", evidence.reachDuring)
+	}
+	if marks.offline.seen {
+		t.Fatalf("navigator.onLine went false at T+%.2fs; this leg exists to leave it alone, "+
+			"so its whole premise is gone and the socket timeline cannot be read as "+
+			"self-detection", marks.offline.sample.at.Seconds())
+	}
+	if evidence.events.Offline != 0 {
+		t.Fatalf("the page counted %d offline events with the navigator untouched; something "+
+			"announced the cut after all, so a socket departure cannot be attributed to the "+
+			"SPA noticing by itself", evidence.events.Offline)
+	}
+
+	if marks.socketLeft.seen {
+		t.Logf("ANSWER: the SPA detects the stall ITSELF. The socket left %s %s%s with "+
+			"navigator.onLine still true and zero offline events fired. The socket state is a "+
+			"discriminator for the failures production actually meets, not an artifact of the "+
+			"emulation announcing itself.", socketStateConnected, marks.socketLeft.since(ref),
+			transitionTo(marks.socketLeft.sample.signals.SocketState, marks.socketLeft.seen))
+		return
+	}
+	t.Logf("ANSWER: the SPA does NOT detect the stall. The socket stayed %s for the whole "+
+		"window with its transport dead and nothing announcing it. This CONTRADICTS F-22, "+
+		"which measured the departure at ~34s over three runs — either the window was too "+
+		"short for this build or the SPA changed. Either way the socket would not be a "+
+		"discriminator for a black-holed route, a dead upstream or a hung server, and CAP-04 "+
+		"would have no working liveness signal left: F-18 already disqualified the screen "+
+		"ones. Do not soften this; re-measure it.", socketStateConnected)
+}
+
 // assertControlHeldStill is the leg that makes the severed one mean something.
 // Any movement here and the severed timeline is not attributable to the sever,
 // so this is the one leg that asserts.
-func assertControlHeldStill(t *testing.T, end severSample, marks windowMarks) {
+func assertControlHeldStill(t *testing.T, end severSample, marks windowMarks, evidence legEvidence) {
 	t.Helper()
 	if !end.signals.NavigatorOnline {
-		t.Error("the control leg went offline on its own; the two legs are then not comparable")
+		t.Error("the control leg went offline on its own; the legs are then not comparable")
+	}
+	if evidence.events.Offline != 0 {
+		t.Errorf("the control leg counted %d offline events with nothing done to it",
+			evidence.events.Offline)
 	}
 	if marks.socketLeft.seen {
 		t.Errorf("the control leg's socket left %s at T+%.2fs with nothing done to it, so a "+

@@ -81,7 +81,7 @@ const structureScript = `JSON.stringify((() => {
 // turns out to be loaded after all — the page can finish loading between the
 // two probes, and a race must not be the way PII escapes.
 const textScript = `JSON.stringify((() => {
-	if (document.querySelector('#pane-side')) return '';
+	if (document.querySelector('` + paneSideSelector + `')) return '';
 	const t = document.body ? document.body.innerText : '';
 	return t.slice(0, 200);
 })())`

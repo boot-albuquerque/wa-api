@@ -49,13 +49,52 @@ const (
 //     application that reacts by reconnecting would reconnect successfully.
 //
 // A real drop is both, and measuring against half of one would produce a
-// finding about our emulation instead of about the session.
+// finding about our emulation instead of about the session — with one
+// exception, which is deliberate and lives in SetTransportOffline below: when
+// the question is whether the application notices BY ITSELF, the announcement
+// has to be withheld.
 //
 // Network.enable comes first because the emulation commands live in that domain
 // and are rejected without it. It also makes Chrome emit network events, which
 // carry URLs: this package registers no listener for them, so they are
 // discarded by the driver and never read, logged or persisted.
 func (t *Tab) SetNetworkOffline(r *Runner, offline bool, label string) error {
+	return t.emulateOffline(r, offline, true, label)
+}
+
+// SetTransportOffline kills the page's REQUESTS and leaves navigator.onLine
+// alone — the half of SetNetworkOffline that emulateNetworkConditionsByRule
+// provides, on its own and on purpose.
+//
+// It exists because the two halves answer different questions, and only this one
+// answers the question that decides whether a socket state is usable in
+// production.
+//
+// With both commands, an application that leaves CONNECTED could be reacting to
+// the `offline` DOM event that overrideNetworkState fires — a reaction that
+// exists only because the emulation announced itself. The failures a fleet
+// actually meets announce nothing: a black-holed route, a dead upstream, a
+// captive portal and a hung server all leave navigator.onLine TRUE and fire no
+// event. This function reproduces THAT: the bytes stop, and nothing tells the
+// page.
+//
+// So it is not a weaker sever. It is the stricter one — the only form in which
+// "the application noticed" means the application noticed by itself.
+//
+// Restoring goes through the same path with offline=false, which clears the rule
+// list; the navigator was never touched, so there is nothing there to restore.
+func (t *Tab) SetTransportOffline(r *Runner, offline bool, label string) error {
+	return t.emulateOffline(r, offline, false, label)
+}
+
+// emulateOffline is the one place the emulation commands are issued.
+//
+// withNavigatorState selects whether the page's own view of the network is
+// flipped along with the traffic. Both callers are above; the split is a
+// parameter rather than two bodies because the ordering, the Network.enable and
+// the empty-list restore are the same in both, and a second copy is the same bug
+// waiting to diverge.
+func (t *Tab) emulateOffline(r *Runner, offline, withNavigatorState bool, label string) error {
 	// Restoring is expressed as NO conditions rather than as a condition with
 	// offline=false: the rule list is replaced wholesale, so an empty list is
 	// the only form that leaves nothing behind.
@@ -76,7 +115,7 @@ func (t *Tab) SetNetworkOffline(r *Runner, offline bool, label string) error {
 	return r.Do(t.ctx, OpAction, label, func(ctx context.Context) error {
 		runCtx, cancel := t.derive(ctx)
 		defer cancel()
-		return chromedp.Run(runCtx,
+		actions := []chromedp.Action{
 			network.Enable(),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 				// Wrapped because this command answers with rule IDs, so its Do
@@ -87,8 +126,11 @@ func (t *Tab) SetNetworkOffline(r *Runner, offline bool, label string) error {
 					WithEmulateOfflineServiceWorker(offline).Do(ctx)
 				return err
 			}),
-			network.OverrideNetworkState(offline,
-				latencyUnthrottled, throughputUnthrottled, throughputUnthrottled),
-		)
+		}
+		if withNavigatorState {
+			actions = append(actions, network.OverrideNetworkState(offline,
+				latencyUnthrottled, throughputUnthrottled, throughputUnthrottled))
+		}
+		return chromedp.Run(runCtx, actions...)
 	})
 }

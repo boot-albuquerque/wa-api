@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/spa"
 )
@@ -555,6 +557,259 @@ func navigatorOnline(t *testing.T, runner *engine.Runner, tab *engine.Tab, label
 		t.Fatalf("%s: unexpected navigator.onLine shape %q: %v", label, raw, err)
 	}
 	return online
+}
+
+// The sever, proved against the transport the finding actually rests on.
+//
+// The test above proves the emulation against an HTTP fetch. The signal M4
+// measured is not a fetch: it is the SPA's WebSocket. A Chrome that applied the
+// emulation to fetch but let an already-open WebSocket keep carrying frames
+// would turn every conclusion of M4 into a statement about our instrument, and
+// nothing in the fetch test would notice. So the WebSocket is asserted here,
+// against a server this test owns and can count.
+//
+// It measures DELIVERY, in both directions, and never intent. The page keeps
+// calling send() throughout the cut — its readyState never leaves OPEN, which
+// is itself the measured behaviour — so "the page sent frames" proves nothing
+// at all. What proves the cut is that the SERVER stops receiving them and the
+// PAGE stops receiving the echoes, while the page is demonstrably still trying.
+//
+// Both cut shapes are covered, because both are load-bearing: the full sever is
+// what M4 used, and the transport-only one is what LOOP 04.3B's precondition
+// relies on when it infers a dead socket from a dead fetch.
+func TestBrowserChainSeversTheWebSocketTransport(t *testing.T) {
+	binary := findChrome(t)
+
+	pageURL, serverFrames := wsEchoServer(t)
+
+	runner := engine.NewRunner()
+	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
+	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer func() { t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser)) }()
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	defer tab.Close()
+
+	// Method expressions, so the two cut shapes differ by exactly the command
+	// they send and by nothing else in the leg around them.
+	for _, cut := range []struct {
+		name string
+		set  func(*engine.Tab, *engine.Runner, bool, string) error
+	}{
+		{"full", (*engine.Tab).SetNetworkOffline},
+		{"transport-only", (*engine.Tab).SetTransportOffline},
+	} {
+		t.Run(cut.name, func(t *testing.T) {
+			severWebSocketLeg(t, runner, tab, pageURL, serverFrames, cut.name, cut.set)
+		})
+	}
+}
+
+// severWebSocketLeg is one cut shape, watched online, severed and restored.
+func severWebSocketLeg(t *testing.T, runner *engine.Runner, tab *engine.Tab, pageURL string,
+	serverFrames *atomic.Int64, name string,
+	set func(*engine.Tab, *engine.Runner, bool, string) error) {
+	t.Helper()
+
+	// A fresh navigation per leg, so each leg opens its own socket and starts
+	// its counters from zero.
+	if err := tab.Navigate(runner, pageURL, "nav/ws/"+name); err != nil {
+		t.Fatalf("Navigate: %v", err)
+	}
+	awaitWSOpen(t, runner, tab, name)
+
+	// ONLINE: the control. Frames must flow, or a later "zero frames" would say
+	// nothing about the cut.
+	before := wsDelta(t, runner, tab, serverFrames, name+"/online", wsPhase)
+	if before.served == 0 || before.received == 0 {
+		t.Fatalf("%s: with the network untouched the server saw %d frames and the page "+
+			"received %d; the counters do not work, so nothing below could be attributed "+
+			"to a cut", name, before.served, before.received)
+	}
+
+	if err := set(tab, runner, true, "ws-sever/"+name); err != nil {
+		t.Fatalf("%s: severing: %v", name, err)
+	}
+	t.Cleanup(func() {
+		if err := set(tab, runner, false, "ws-restore/"+name); err != nil {
+			t.Errorf("%s: restoring the network: %v", name, err)
+		}
+	})
+
+	during := wsDelta(t, runner, tab, serverFrames, name+"/severed", wsPhase)
+	assertNothingDelivered(t, name, during)
+	t.Logf("%s: severed window — page sent %d, server received %d, page received %d, "+
+		"readyState=%d closed=%v", name, during.sent, during.served,
+		during.received, during.readyState, during.closed)
+
+	if err := set(tab, runner, false, "ws-restore/"+name); err != nil {
+		t.Fatalf("%s: restoring: %v", name, err)
+	}
+	after := wsDelta(t, runner, tab, serverFrames, name+"/restored", wsPhase)
+	if after.served == 0 || after.received == 0 {
+		t.Errorf("%s: after the restore the server saw %d frames and the page received "+
+			"%d; the emulation was not undone", name, after.served, after.received)
+	}
+}
+
+// assertNothingDelivered is the assertion the whole test exists for: with the
+// page still handing frames to an OPEN socket, neither end received any.
+func assertNothingDelivered(t *testing.T, name string, during wsWindow) {
+	t.Helper()
+	if during.sent == 0 {
+		t.Fatalf("%s: the page stopped calling send() during the cut, so zero deliveries "+
+			"would mean a stopped producer and not a severed transport", name)
+	}
+	if during.served != 0 {
+		t.Errorf("%s: the server received %d frames while the page was supposed to be "+
+			"severed; the emulation does not reach an open WebSocket", name, during.served)
+	}
+	if during.received != 0 {
+		t.Errorf("%s: the page received %d frames while severed; the emulation does not "+
+			"reach an open WebSocket", name, during.received)
+	}
+}
+
+// wsPhase is how long each leg of the WebSocket test is watched. At the page's
+// 200 ms send interval it is about ten frames, which is enough for "some" and
+// "none" to be different by a wide margin rather than by one tick.
+const wsPhase = 2 * time.Second
+
+// wsProbeSlot is where the page keeps its frame counters. Named once: a literal
+// repeated between the page script and the reader is the same bug waiting to
+// diverge.
+const wsProbeSlot = "__waHeadlessWS"
+
+// wsProbePage opens a WebSocket and reports COUNTS — never a frame's contents.
+// The payload it sends is a fixed character, so nothing about this page's
+// traffic depends on anything a person wrote.
+//
+// The send loop is unconditional on the emulation: it keeps calling send() for
+// as long as readyState says OPEN, which is what makes the severed window's
+// zero deliveries attributable to the transport rather than to a page that
+// gave up.
+const wsProbePage = `<html><body><script>
+window.` + wsProbeSlot + ` = {open: false, sent: 0, received: 0, closed: false, ready_state: -1};
+(function () {
+	var st = window.` + wsProbeSlot + `;
+	var s = new WebSocket(%s);
+	s.onopen = function () { st.open = true; };
+	s.onmessage = function () { st.received++; };
+	s.onclose = function () { st.closed = true; };
+	setInterval(function () {
+		st.ready_state = s.readyState;
+		if (s.readyState === 1) { s.send('x'); st.sent++; }
+	}, 200);
+})();
+</script></body></html>`
+
+// wsCounts is the page's side of the ledger.
+type wsCounts struct {
+	Open       bool `json:"open"`
+	Sent       int  `json:"sent"`
+	Received   int  `json:"received"`
+	Closed     bool `json:"closed"`
+	ReadyState int  `json:"ready_state"`
+}
+
+// wsWindow is what one watched phase delivered: the page's two counters and the
+// server's, all as DELTAS over the phase.
+type wsWindow struct {
+	sent, received, served int
+	readyState             int
+	closed                 bool
+}
+
+// wsEchoServer serves the probe page and echoes every frame back, counting what
+// arrives.
+func wsEchoServer(t *testing.T) (pageURL string, frames *atomic.Int64) {
+	t.Helper()
+	// Atomic because the counter is written by the server's goroutines and read
+	// by the test's.
+	var served atomic.Int64
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+		for {
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			served.Add(1)
+			if err := conn.Write(r.Context(), typ, data); err != nil {
+				return
+			}
+		}
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// The socket URL is built from the request's own Host, which is what
+		// keeps the page same-origin with the server that accepts it.
+		_, _ = fmt.Fprintf(w, wsProbePage, strconv.Quote("ws://"+r.Host+"/ws"))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL + "/", &served
+}
+
+// awaitWSOpen waits, from the GO side, for the page's socket to connect. The
+// clock stays out of the page for the same reason the fetch probe's does.
+func awaitWSOpen(t *testing.T, runner *engine.Runner, tab *engine.Tab, label string) {
+	t.Helper()
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+		if readWSCounts(t, runner, tab, label).Open {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("%s: the page's WebSocket never opened", label)
+}
+
+// wsDelta watches for one phase and returns what moved during it.
+func wsDelta(t *testing.T, runner *engine.Runner, tab *engine.Tab,
+	served *atomic.Int64, label string, phase time.Duration) wsWindow {
+	t.Helper()
+	start := readWSCounts(t, runner, tab, label+"/start")
+	servedStart := served.Load()
+	time.Sleep(phase)
+	end := readWSCounts(t, runner, tab, label+"/end")
+	return wsWindow{
+		sent:       end.Sent - start.Sent,
+		received:   end.Received - start.Received,
+		served:     int(served.Load() - servedStart),
+		readyState: end.ReadyState,
+		closed:     end.Closed,
+	}
+}
+
+func readWSCounts(t *testing.T, runner *engine.Runner, tab *engine.Tab, label string) wsCounts {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "ws/"+label,
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, `JSON.stringify(window.`+wsProbeSlot+`)`, &raw)
+		}); err != nil {
+		t.Fatalf("%s: reading the WebSocket counters: %v", label, err)
+	}
+	var counts wsCounts
+	if err := json.Unmarshal([]byte(raw), &counts); err != nil {
+		t.Fatalf("%s: unexpected WebSocket counter shape %q: %v", label, raw, err)
+	}
+	return counts
 }
 
 // qrFixture builds the pairing screen as MEASURED on the real SPA

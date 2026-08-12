@@ -45,10 +45,15 @@ import (
 // produced the state against the real account — the page's network severed with
 // the browser's own emulation — and this probe answered Alive=true / APP_READY
 // for all 90 samples of the cut, while the SPA's socket had already left
-// CONNECTED three seconds in. #pane-side, the owner identity and
-// meReadyTriggered all stayed true throughout, so none of them can carry the
-// signal either. The measurement, with its negative control, is
-// EVIDENCIA-SPA.md M4; the finding is F-21.
+// CONNECTED. #pane-side, the owner identity and meReadyTriggered all stayed true
+// throughout, so none of them can carry the signal either. The measurement, with
+// its negative control, is EVIDENCIA-SPA.md M4; the finding is F-21.
+//
+// LOOP 04.3B then cut the transport WITHOUT flipping navigator.onLine, so no
+// `offline` event reached the page, and the socket still left CONNECTED — at
+// ~34s rather than the ~1.4-3s the announced cut buys. So the socket reacts to
+// the SESSION and not to our emulation, which is what makes it usable at all
+// against the failures a fleet meets: EVIDENCIA-SPA.md M5.
 //
 // Nothing here was changed in response: measurement first, and the successor
 // signal needs a duration threshold that has not been measured yet, because the
@@ -57,7 +62,13 @@ import (
 //
 // It never sends anything. The product contract rejects synthetic-send
 // explicitly, and so does this.
-const livenessScript = `JSON.stringify(!!document.querySelector('#pane-side'))`
+//
+// The selector comes from probe.go's paneSideSelector rather than being spelled
+// again here. H6 is precisely the hazard of Meta renaming it, and a rename that
+// updated one copy and missed the other would leave the liveness probe asking
+// for an element that no longer exists while the classifier asked for the right
+// one — H6 arriving early, by our own hand.
+const livenessScript = `JSON.stringify(!!document.querySelector('` + paneSideSelector + `'))`
 
 // DefaultUnresponsiveAfter is how many consecutive failed probes make a session
 // UNRESPONSIVE.
