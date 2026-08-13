@@ -8,7 +8,169 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
-CAP: — · LOOP H5.3, a decisão A implementada · **DONE**
+CAP: 03 · LOOP 03.9, o formato do `SingletonLock` medido · **DONE**
+
+**A premissa era certa, e agora isso é um fato e não uma esperança.** A H4
+dizia que o `readLockHolder` decide entre APAGAR e RECUSAR lendo o
+`SingletonLock` como symlink de alvo `<hostname>-<pid>` — convenção tirada do
+`chrome/browser/process_singleton_posix.cc` — sem que nenhum perfil real
+tivesse sido inspecionado no Chromium 151 que o projeto usa. Medido:
+
+```
+MEASURED lstat: mode=Lrwxr-xr-x symlink=true
+MEASURED readlink target="<HOST>-63733"
+MEASURED os.Hostname()="<HOST>" launched_pid=63733
+```
+
+Hostname redigido para `<HOST>`: a máquina carrega o nome de uma pessoa, e PII
+é BLOCKER. **A redação agora é mecanismo, não aviso** — o `describeLockTarget` e
+o `hostRedactor` ficam entre todo valor medido e todo `Logf`/`Fatalf`, inclusive
+no caminho de FALHA, que é justamente quando a saída vira issue ou mensagem de
+commit. A forma que importa para o parser fica registrada — o `<HOST>` real
+contém **hífens** e um ponto, logo a regra "o pid vem depois do ÚLTIMO hífen"
+foi exercitada contra um hostname hifenizado de verdade **nesta corrida**. Essa
+é a palavra que faltava: o poder de discriminação era do HOST, não da sonda, e
+agora a sonda **afirma a precondição** em vez de depender dela em silêncio (ver
+"correções da avaliação adversarial", abaixo).
+
+**O que decide não é a inspeção crua — é o parser de produção comendo a string
+medida.** O `engine.ReclaimProfile` real, com a sonda de liveness real, devolve
+`ErrProfileHeldByLiveBrowser: pid 63733 on "<HOST>" is still running` e **não
+apaga nada**; esse erro tipado só é alcançável depois de o alvo virar host
+igual ao nosso mais pid vivo. Com o detentor declarado morto, apaga os três.
+Divergência teria devolvido erro nulo e apagado — o silêncio que a H4 existia
+para descartar. **Veredito: CONFIRMADO.**
+
+**Controle negativo para a MEDIÇÃO não se aplica, e isso é resposta, não
+omissão**: não houve divergência, logo não houve correção, logo não há defeito
+para reintroduzir. `profile.go` e `profile_test.go` não foram tocados. O que a
+medição acrescenta àquele arquivo é que o dublê dele **não é mais permissivo que
+a produção** — ARMADILHA 1 verificada em vez de presumida. E o argumento mais
+forte, que faltava: a regra do último hífen já está travada de forma **durável e
+não-gated** por `engine/profile_test.go:136-150`
+(`TestLockHolderSplitsOnTheLastHyphen`, dublê controlado `wa-headless-pod-7-8899`),
+que morde em qualquer host. A sonda é instrumento de medição; a trava é aquele
+teste. As GUARDAS acrescentadas depois, essas sim, têm controle executado —
+abaixo.
+
+**O método era o ponto**: perfil parado limpo NUNCA mostra o arquivo (M3, e
+reconfirmado no rabo deste teste). A observação boota com o `engine.Launcher`
+de **produção** — não um `exec` à mão, senão o formato observado poderia
+diferir do que o parser enfrenta — e inspeciona com o browser VIVO. A segunda
+metade, que é a que decide, entrega a string medida ao `ReclaimProfile` real
+contra uma **réplica** do lock num tempdir.
+
+> **CORREÇÃO do Chief (2026-08-12), antes do commit.** A frase original dizia
+> que a réplica era o que protegia o perfil vivo — *"nunca contra o perfil
+> vivo"*. **Isso está errado na ORDEM**, e a avaliação adversarial deste loop
+> pegou. O `Launcher.Launch` de produção já chama um `ReclaimProfile`
+> **deletante contra o diretório real** (`engine/launcher.go:73`) ANTES de o
+> browser subir, e a sonda passa por ele antes de ler o lock. Logo a réplica
+> nunca protegeu coisa alguma: quem protegeu foi o perfil estar parado limpo,
+> sem detentor vivo — `singleton_lock_present=false` no baseline — e a
+> invariante *"uma sessão ativa por perfil"* (`HANDOFF` §6, numerada **1**).
+>
+> A implicação é MAIOR que a sonda, e é o que valia registrar: se o formato
+> divergisse e houvesse um lock obsoleto, **quem apagaria em silêncio seria o
+> launcher de produção, em todo boot** — não um teste. O acidente que este
+> loop existe para descartar mora no caminho quente, e é por isso que medir o
+> formato importava.
+>
+> Registro que o erro sobreviveu a duas leituras antes desta: o avaliador o
+> classificou como restrito ao relatório de scratchpad, e eu repeti a
+> classificação sem abrir o arquivo. Estava no `EXECUCAO.md`, prestes a ser
+> commitado. Quem o achou no lugar certo foi o worker do loop de correção, ao
+> declarar o que tinha deixado por fazer.
+
+**Limite declarado**: medido em **macOS**. A invariante que a guarda protege é
+*"Reclaim de `Singleton` no boot é obrigatório em contêiner"* (`HANDOFF` §6,
+numerada **13**) — Linux. Os dois lados usam `gethostname(2)`, mas "deve valer"
+não é medida: **contêiner segue DESCONHECIDO**, e está nomeado.
+
+**Higiene**: perfil pareado 2781 → 2781 arquivos, `stopped_via=browser.close`
+em 3/3 corridas (uma no laboratório antes, duas na medição), `SingletonLock`
+ausente antes e depois. `disparazaap` intocado.
+
+**Achado de lado, registrado como H10**: "o perfil nunca encolhe" é **falso**
+num boot — **medido**, o laboratório foi 457 → 456 com parada limpa. Isso basta
+para invalidar o observável da CAP-05 ("perfil não-decrescente" por contagem de
+arquivos), que precisa ser enunciado sobre material de sessão e não sobre
+`find | wc -l`. Que a causa seja a rotação de `Default/Sessions/Session_*` e
+`Tabs_*` é **HIPÓTESE**: a rotação está provada, mas o `diff` que a mostra foi
+tirado em volta de uma corrida **posterior, de delta 0**; a corrida que encolheu
+nunca foi diffada. A H10 separa as duas metades e nomeia o que confirmaria o
+mecanismo. A asserção virou REGISTRO no teste — travar número nunca medido é
+especulação com cara de teste.
+
+**A auditoria da CAP-03, item por item, está na seção `Completed`** — e ela
+**não** declara a CAP fechada. Resumo: `boot`, `navegar` e `ready` provados
+contra a conta real; `login_required` não é item separado (é a mesma classe que
+`qr`); **`unresponsive` NÃO provado contra a conta real**, e com evidência
+contrária (90/90 amostras `APP_READY` no único modo de falha real medido).
+
+#### Correções da avaliação adversarial do 03.9
+
+A avaliação independente deu **PASS** — nada invalidou o fechamento da H4 — e
+deixou resíduo. O resíduo virou quatro correções, e a primeira é a que interessa:
+**a sonda afirmava mais do que tinha verificado.**
+
+**A — a mordida da sonda dependia do HOSTNAME, e nada dizia isso.** A asserção
+do formato só distingue `LastIndex` de `Index` se o nome da máquina tiver hífen.
+Nesta máquina tem — 3 hífens, ponto e sufixo `.local` —, então a regra foi de
+fato exercitada; mas isso era **sorte do host**, não propriedade do instrumento.
+Agora a precondição é **verificada contra o nome observado**: o subteste
+`last-hyphen rule` compara as duas leituras do alvo MEDIDO e, quando elas
+coincidem, **SKIPa nomeando o motivo** em vez de passar em silêncio. SKIP e não
+FAIL de propósito: host sem hífen é máquina legítima, não defeito, e falhar ali
+seria alarme falso — o mesmo custo que a H10 descreve, ensinar o leitor a apagar
+a checagem. Nada se perde no skip, porque a REGRA continua travada por
+`engine/profile_test.go:136-150`, que é não-gated e morde em qualquer host. O
+que o guarda protege é a **alegação da sonda** sobre o que aquela corrida
+verificou.
+
+**B — a redação de hostname era comentário; virou mecanismo.** A sonda imprimia
+o hostname cru no `Logf` e, pior, dentro das mensagens de `Fatalf` de
+DIVERGÊNCIA — o caminho que alguém copia para um issue. Agora todo valor sai por
+`describeLockTarget` (forma: separador, pid, contagem de hífens, ponto,
+`.local`) ou pelo `hostRedactor`, que raspa o host das strings que **não somos
+nós que compomos** — o `engine` escreve o host dentro do próprio erro
+(`profile.go:215`), e ele voltava no `err` e no `Reason`. Travado por
+`TestSingletonLockProbeOutputCannotCarryTheHost`, **não-gated** de propósito, que
+constrói as strings a partir do `ReclaimProfile` REAL e falha se o `engine`
+deixar de soletrar o host no erro — senão o guarda pararia de exercitar o
+vazamento que existe para pegar (ARMADILHA 1).
+
+**C — a H10 era inferência apresentada como medição.** Reescrita separando o que
+foi medido (o perfil ENCOLHE num boot limpo; o observável da CAP-05 é falso) do
+que é hipótese (a rotação como causa do −1), com o experimento que confirmaria
+nomeado. A metade medida **não** foi enfraquecida.
+
+**D — quarta ocorrência do deslocamento de numeração**, `engine/profile_test.go:48`
+("The happy path of **invariant 15**"), para a invariante que o `HANDOFF:394`
+numera **13**. **Sinalizada na H4, nada renumerado** — o deslocamento está em
+triagem humana.
+
+**Controle negativo EXECUTADO para o guarda A**, em cópia isolada em scratchpad
+(`mutlab-fixA`, cópia byte a byte de `engine/profile.go`), com o hostname como
+variável — o repositório não foi tocado em nenhum momento:
+
+```
+M1 = mutação strings.LastIndex -> strings.Index em engine/profile.go
+
+host=buildbox           M1: assertion PASS  (vácuo — reproduz o achado)  guarda: --- SKIP
+host=wa-headless-pod-7  M1: assertion FAIL  (DIVERGENCE, err=nil e 3 apagados)
+host=buildbox           M1 + guarda REMOVIDO (estado pré-correção): --- PASS, sem sinal
+                        e ainda imprimindo "DISCRIMINATING ... could not survive"
+```
+
+A terceira linha é o controle propriamente dito: com o guarda fora, a sonda
+passa **e afirma o que não verificou**. Com o guarda, ela recusa a alegação.
+Para o B, o mesmo laboratório rodou com um host-canário e a saída do caminho de
+FALHA foi varrida: `0` ocorrências do nome cru, `10` do `<HOST>`.
+
+Loop anterior: **H5.3** (`6c388b9`), abaixo.
+
+### Loop anterior — LOOP H5.3, a decisão A implementada · **DONE**
 
 **Decisão do usuário: A — o sinal fica.** Não por conforto: a fase 4C mediu o
 logout com `SIGTERM` como caminho de ROTINA, e o caso residual é sinal RARO
@@ -381,7 +543,56 @@ Invariantes cobertas por esta CAP: **11** (liveness por `Evaluate` com prazo),
 boot). A **12** (toda morte com causa classificada) está parcial: as classes
 existem, o ciclo de reciclagem que age sobre elas é CAP-04/05.
 
-**Falta para fechar**: a asserção "contra conta real". Ver **B-03**.
+### Auditoria da Definition of Done da CAP-03 (2026-08-12, LOOP 03.9)
+
+O observável do `HANDOFF-INICIATIVA.md` §10 é *"boot com perfil, navegar,
+classificar (`qr` / `ready` / `login_required` / `unresponsive`) — **contra
+conta real, o estado correto é reportado**"*. Item por item, **com o estado de
+cada um NOMEADO**. Item sem evidência sai como **DESCONHECIDO**, não como "ok".
+
+| item do DoD | estado | o que sustenta |
+|---|---|---|
+| boot com perfil | **PROVADO** contra a conta real | perfil pareado sobe pelo `engine.Launcher` de produção; hoje mais uma vez no 03.9 (`stopped_via=browser.close`), e antes nas seis amostras do M6 e nas pernas do M4/M5 |
+| navegar | **PROVADO** | `web.whatsapp.com` real, do M1 (perfil vazio) ao M6 (perfil pareado) |
+| classificar **`ready`** | **PROVADO** contra a conta real | `APP_READY` saiu do `spa.Probe` contra o perfil pareado em todas as pernas do M4/M5 e no 04.3D, com `#pane-side` de 2656–2963 nós e socket `CONNECTED`. É o estado real da conta, não página nossa |
+| classificar **`qr`** | **PROVADO** contra o SPA real, com ressalva de escopo | M1.1: o `aria-label` medido é literalmente `Scan this QR code to link a device!`, o `canvas[aria-label*="Scan"]` casa, e a corrida saiu `LOGIN_REQUIRED`. **Ressalva**: medido em perfil VAZIO — é a tela de QR real do WhatsApp, não uma página nossa, mas não é "a conta pareada perdeu a sessão". Fragilidade medida no M1.2: o seletor é texto de UI **em inglês** |
+| classificar **`login_required`** | **NÃO É ITEM SEPARADO** | `ClassLoginRequired` **é** "um QR está na tela" (`spa/page.go:25-27`). Os quatro nomes do §10 não mapeiam 1:1 na taxonomia implementada: `qr` e `login_required` são a MESMA classe. Coberto pelo item acima; como item independente, não existe |
+| classificar **`unresponsive`** | **NÃO PROVADO contra a conta real — e há evidência CONTRÁRIA** | `UNRESPONSIVE` só foi afirmado contra página que **NÓS** escrevemos (`for(;;)`, `integration_test.go:198`, LOOP 04.2, com controle negativo executado). No `realspa_test.go` a classe aparece só como GUARDA — o teste falha se ela sair —, nunca como resultado esperado. E contra a conta real o único modo de falha medido (sessão que perde o servidor, M4.3/M5) devolveu `Alive=true`/`APP_READY` em **90/90** amostras. Aqui o desconhecido é pior que desconhecido: é um **negativo conhecido** |
+
+Itens que o §10 não pede, nomeados para que "CAP-03 fechada" não seja lida como
+"o classificador inteiro está provado":
+
+* **`PAIRING_LOADING`** — **DESCONHECIDO**. A classe nasceu de medição (M1.3:
+  aos 9 s há 340 nós, os `link-device-*` e o `loading-spinner`, e nenhum
+  canvas), mas **não há corrida registrada em que o classificador tenha
+  EMITIDO essa classe** contra a página real. "O estado foi medido" e "o
+  classificador foi visto acertando-o" não são a mesma afirmação, e no M1.3 o
+  estado caía em `OTHER`.
+* **`SESSION_CONFLICT`, `ERROR_PAGE`, `REDIRECT`, `OTHER`** — **DESCONHECIDOS**
+  contra a conta real. Nenhuma corrida os produziu.
+* **`reclaim` de `Singleton` no boot** — invariante *"Reclaim de `Singleton` no
+  boot é obrigatório em contêiner"* (`HANDOFF` §6, numerada **13**).
+  **CONFIRMADO em macOS** hoje pela H4: o `SingletonLock` é symlink com alvo
+  `<hostname>-<pid>`, medido com o browser vivo, e o parser de produção o
+  resolve. **DESCONHECIDO em contêiner/Linux** — o ambiente que a invariante
+  nomeia é justamente o que não foi medido.
+* **H8** — a checagem de host do classificador é `Contains` e aceita domínio
+  sósia. Registrada, **fora de escopo neste ciclo**, e é defeito de corretude
+  do classificador que a CAP-03 usa.
+
+> **Divergência de numeração, SINALIZADA e não corrigida**: as seções acima
+> desta falam em "invariantes 11, 14 e 15"; o `HANDOFF` §6 — que é a fonte de
+> verdade — numera liveness por `Evaluate` como **10**, zero PII como **12** e
+> o reclaim como **13**. O deslocamento está em triagem humana e **não foi
+> renumerado aqui**. Cite pelo TEXTO.
+
+**Veredito desta auditoria**: a CAP-03 **não é declarada fechada por este
+loop** — a decisão é do Chief. O que este loop pode afirmar é o quadro acima:
+três dos quatro itens do DoD estão provados contra a conta real, o quarto
+(`login_required`) não é um item separado, e `unresponsive` **não está provado
+contra a conta real**, com evidência medida de que a classe não dispara no
+único modo de falha real já observado. O B-03 continua resolvido; o que o
+substitui como pendência é `unresponsive`, que é CAP-04.
 
 ### CAP-04 — liveness e causas · **em andamento**
 
@@ -504,16 +715,20 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 > só o rótulo estava tomado, e quem lesse apenas esta seção concluiria que o
 > trabalho ainda não foi feito. Renumerado para **04.3D**.
 
-* **LOOP 04.3D** (o próximo) — **quanto tempo em `OPENING` significa morto?**
-  O M4 mostrou que o socket reage em ~3 s mas cai para `OPENING`, que é o mesmo
-  estado do boot: o valor instantâneo não separa "subindo" de "perdeu o
-  servidor", só a DURAÇÃO separa. Sem esse número, um liveness que leia o socket
-  escolhe entre matar sessão que está subindo e manter sessão morta.
-  *Done quando*: existe uma distribuição de "tempo em `OPENING` num boot
-  saudável" e outra de "tempo em `OPENING` sob corte", com mais de uma amostra
-  cada, e o corte proposto sai delas — não de escolha de mesa. Repare que isto
-  é medir onde o mecanismo PIORA (Regra 2): a pergunta é qual boot lento vira
-  falso positivo.
+* **LOOP 04.3D — a METADE que falta.** *(Corrigido em 2026-08-12, LOOP 03.9:
+  este item dizia "o próximo" e descrevia trabalho que **já rodou**, em
+  `bd254d6`, como METADE. Quem lesse só esta seção concluiria que nada foi
+  medido. Bookkeeping; a numeração de invariantes NÃO foi tocada.)*
+  **Feito**: a distribuição do boot SAUDÁVEL — seis amostras, `OPENING` de
+  **0,27–0,50 s** (`EVIDENCIA-SPA.md` M6), contra os 33,2–34,2 s do M5 sob
+  corte. **Falta**, e o próprio 04.3D disse por quê: (a) a perna que deveria
+  PIORAR — boot sob CPU disputada e rede degradada, porque as amostras atuais
+  caem dentro de 20 ms umas das outras e isso é UMA condição amostrada seis
+  vezes, não a cauda; (b) a **permanência** em `OPENING` sob corte, que o M5
+  não mediu (ele mediu o instante da saída de `CONNECTED`).
+  *Done quando*: o corte sai das duas distribuições, com a cauda amostrada —
+  não de escolha de mesa. É medir onde o mecanismo PIORA (Regra 2): a pergunta
+  é qual boot lento vira falso positivo.
 * **LOOP 04.3C** — o corte do READY honesto: onde, entre `meReadyTriggered` e o
   socket `CONNECTED`, a sessão passa a poder AGIR. Era o 04.3A original e
   continua **bloqueado pelo F-20**: o tick de 250 ms não resolve uma janela de
@@ -527,10 +742,19 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   10 minutos sem servidor: desiste, muda de estado, mostra QR, ou fica em
   `OPENING` para sempre. É a mesma sonda com outra janela, e o custo é tempo de
   browser, não desenho novo.
-* **LOOP 03.9** — confirmar que a marcação real ainda casa com o classificador
-  e fechar a **H4** (formato do `SingletonLock`). *Método corrigido*: um perfil
-  parado de forma limpa NUNCA mostra o arquivo — exige inspeção com o Chromium
-  em execução, ou depois de parada suja. Ver a nota de 2026-08-12 na H4.
+* ~~**LOOP 03.9**~~ · **FEITO** (este commit). A **H4 está CONFIRMADA** em
+  macOS/Chrome 151 — `SingletonLock` é symlink de alvo `<hostname>-<pid>`,
+  medido com o browser vivo pelo `TestRealSPASingletonLockFormat`, e o parser
+  de produção o resolve. A marcação real já estava confirmada antes (M1.1,
+  M3.4). **Fica aberto**, nomeado e não presumido: o formato em
+  **contêiner/Linux**, que é o ambiente da invariante *"Reclaim de `Singleton`
+  no boot é obrigatório em contêiner"* (`HANDOFF` §6, numerada **13**).
+* **`unresponsive` contra a conta real** — é o que sobra da DoD da CAP-03
+  depois da auditoria do 03.9, e é CAP-04. Hoje a classe só foi afirmada contra
+  página que nós escrevemos, e contra a conta real o modo de falha medido sai
+  `APP_READY` em 90/90. *Done quando*: existe um estado da conta real que o
+  classificador reporta como `UNRESPONSIVE`, ou está escrito que não existe e
+  por quê.
 * **LOOP B1.5** — restart/restore sem QR, medindo parada, saída do processo e
   tempo até `app-ready`. Comparar com o `MEASURED` do handoff §F2 (p50 10,4s,
   p95 13,8s, observado até 15,8s).
@@ -540,9 +764,16 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   que esta capacidade usa.
 * **LOOP 04.4** — `getBrowserPid` na fachada. O `engine.Browser.PID()` já
   existe; falta expor pelo contrato, e isso é CAP-09.
-* **H5, passos 1 e 2** — travar a terminação com `WaitExit`/`ProcessAlive` e
-  medir se o culpado é o `Browser.close` ou o `CleanStop` desistindo. O passo 3
-  (política de escalada) é decisão humana e continua pendente.
+* ~~**H5, passos 1, 2 e 3**~~ · **FECHADO.** *(Corrigido em 2026-08-12, LOOP
+  03.9: este item ainda pedia os três passos como pendência. Os dois primeiros
+  fecharam em `e211ab6` — terminação travada por `WaitExit`/`ProcessAlive`, com
+  o culpado medido — e o passo 3 deixou de ser pendência quando a decisão
+  humana saiu: **decisão A, o sinal fica**, implementada em `6c388b9` com o
+  mecanismo `engine/suspect.go`. Bookkeeping; a numeração de invariantes NÃO
+  foi tocada.)*
+  O que segue aberto não é a H5: é **quem CONSOME** a marca
+  `.wa-headless-session-suspect`. Nenhum caminho de boot age sobre ela, e o
+  ciclo que agiria é a **CAP-05**.
 
 ## Findings
 

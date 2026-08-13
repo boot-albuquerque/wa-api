@@ -39,9 +39,13 @@ package waheadless
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -153,8 +157,16 @@ func pairingProfileDir() (string, error) {
 	return abs, nil
 }
 
-// openRealSPA launches the observation profile and navigates to the target.
-func openRealSPA(t *testing.T, runner *engine.Runner) (*engine.Browser, *engine.Tab) {
+// launchObservationProfile boots the observation profile with the PRODUCTION
+// launcher and returns the browser plus the resolved profile path.
+//
+// Split out of openRealSPA so that a probe which needs a LIVE browser but no
+// page — the SingletonLock observation of LOOP 03.9 — boots through the same
+// code path the production parser will face, instead of a hand-rolled exec that
+// could differ in exactly the way being measured.
+//
+// The clean stop is registered here, so no caller can boot without one.
+func launchObservationProfile(t *testing.T, runner *engine.Runner) (*engine.Browser, string) {
 	t.Helper()
 	requireRealSPA(t)
 	binary := findChrome(t)
@@ -189,6 +201,13 @@ func openRealSPA(t *testing.T, runner *engine.Runner) (*engine.Browser, *engine.
 		// loop depends on.
 		t.Logf("stopped_via=%s", engine.CleanStop(context.Background(), runner, browser))
 	})
+	return browser, profile
+}
+
+// openRealSPA launches the observation profile and navigates to the target.
+func openRealSPA(t *testing.T, runner *engine.Runner) (*engine.Browser, *engine.Tab) {
+	t.Helper()
+	browser, _ := launchObservationProfile(t, runner)
 
 	tab, err := engine.OpenTab(context.Background(), browser)
 	if err != nil {
@@ -1774,6 +1793,504 @@ func reportRecovery(t *testing.T, restoredAt time.Duration, samples []severSampl
 		t.Errorf("the socket never returned to %s within %s after the network came back",
 			socketStateConnected, severRecovery)
 	}
+}
+
+// --- LOOP 03.9: the on-disk FORM of SingletonLock, measured -----------------
+
+const (
+	// The three names Chromium leaves behind. engine spells them in its own
+	// unexported constants and this file spells them again ON PURPOSE: the
+	// probe exists to check the engine's assumption from OUTSIDE, and a name
+	// imported from the code under test would agree with it by construction.
+	singletonLockName   = "SingletonLock"
+	singletonCookieName = "SingletonCookie"
+	singletonSocketName = "SingletonSocket"
+)
+
+// countProfileFiles counts entries under dir, recursively.
+//
+// The COUNT, never the names: profile hygiene ("the profile did not shrink") is
+// answerable with a number, and a number cannot carry an account.
+func countProfileFiles(t *testing.T, dir string) int {
+	t.Helper()
+	n := 0
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			n++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("counting %s: %v", dir, err)
+	}
+	return n
+}
+
+// replicaOfLock rebuilds, in a temp directory, the profile shape Chromium left
+// behind — with the target string read from the REAL lock, byte for byte.
+//
+// The production parser is exercised against this replica and NEVER against the
+// live profile, and the reason is the defect being measured: if the format did
+// diverge, ReclaimProfile falls into its "unreadable" branch and DELETES. Doing
+// that to a live paired profile is precisely the accident this loop exists to
+// rule out. The replica loses nothing that the parser reads — readLockHolder
+// reads the symlink target, not the directory around it.
+func replicaOfLock(t *testing.T, target string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Symlink(target, filepath.Join(dir, singletonLockName)); err != nil {
+		t.Fatalf("replicating the measured lock: %v", err)
+	}
+	for _, name := range []string{singletonCookieName, singletonSocketName} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatalf("replicating %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// --- Zero PII in the probe's output: a MECHANISM, not a warning -------------
+//
+// The measured lock target embeds this machine's hostname, which can carry a
+// person's name, and zero PII is a BLOCKER here. A comment telling the reader
+// to redact before pasting is not a guard: the moment that matters is a
+// FAILURE, when someone copies the output into an issue, a CI log or a commit
+// message — and nobody re-reads a comment then. So the probe must not be able
+// to emit the raw value on any path, the failure path included.
+//
+// Two pieces, because the value reaches the output from two directions:
+//
+//   - describeLockTarget, for the string this file measured itself;
+//   - hostRedactor, for the strings this file does NOT compose. The engine
+//     writes the host INTO its own text — `pid %d on %q is still running`
+//     (engine/profile.go:215) — so it comes back inside the error and inside
+//     ReclaimResult.Reason, and every reason and every error printed by this
+//     probe goes through the redactor before it is formatted.
+//
+// Redaction must not cost the diagnosis: what survives is the shape (hyphen
+// count, dot, .local suffix), the separator and the pid, which is what a reader
+// needs to tell WHAT diverged.
+
+// redactedHost is the placeholder the documents already use, so a log line and
+// a HOUSEKEEP entry read the same.
+const redactedHost = "<HOST>"
+
+// hostRedactor rewrites every known spelling of this machine's name to
+// redactedHost.
+//
+// Built from values that were OBSERVED, never from a pattern: a pattern that
+// fails to match leaks silently, and an observed value cannot fail to match
+// itself. Over-redaction is the safe direction and is accepted.
+type hostRedactor struct{ replacer *strings.Replacer }
+
+func newHostRedactor(secrets ...string) hostRedactor {
+	// Longest first. strings.Replacer matches in argument order, so a bare
+	// hostname listed ahead of its ".local" spelling would replace the stem and
+	// leave the suffix dangling in the output.
+	sorted := append([]string(nil), secrets...)
+	sort.SliceStable(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
+	pairs := make([]string, 0, 2*len(sorted))
+	for _, s := range sorted {
+		if s == "" {
+			continue
+		}
+		pairs = append(pairs, s, redactedHost)
+	}
+	return hostRedactor{replacer: strings.NewReplacer(pairs...)}
+}
+
+// scrub renders v and takes the host out of the rendering. It accepts `any` so
+// that an error or a ReclaimResult field is formatted HERE, and no caller ever
+// holds the raw text long enough to pass it to a Logf by accident.
+func (h hostRedactor) scrub(v any) string {
+	return h.replacer.Replace(fmt.Sprint(v))
+}
+
+// hostSecretsOf lists every spelling of the machine name that could show up in
+// output: what os.Hostname() returns, the host half of the measured target
+// (they should be equal — proving that is the point of the probe — and the
+// redactor must not depend on it), and each of those without the ".local"
+// suffix macOS appends.
+func hostSecretsOf(target string) []string {
+	secrets := []string{hostnameOrEmpty(), hostHalfOf(target)}
+	for _, s := range append([]string(nil), secrets...) {
+		if trimmed := strings.TrimSuffix(s, ".local"); trimmed != s && trimmed != "" {
+			secrets = append(secrets, trimmed)
+		}
+	}
+	return secrets
+}
+
+// hostHalfOf returns what the production rule reads as the host: everything
+// before the LAST hyphen. With no hyphen it returns the whole string, which
+// over-redacts — the safe direction.
+func hostHalfOf(target string) string {
+	if i := strings.LastIndex(target, "-"); i > 0 {
+		return target[:i]
+	}
+	return target
+}
+
+// describeLockTarget renders the measured target with the host half replaced by
+// the placeholder, keeping the separator and the pid exactly as written plus
+// the SHAPE of the host: the hyphen count is the property the "pid after the
+// LAST hyphen" rule turns on, and the dot and the .local suffix are what tell a
+// macOS name apart from a container one.
+func describeLockTarget(target string) string {
+	// Named apart from the redacted case: "no holder was reported" and "a holder
+	// we are not printing" must not read the same on a failure line.
+	if target == "" {
+		return `"" (empty: nothing was reported as the holder)`
+	}
+	i := strings.LastIndex(target, "-")
+	if i <= 0 {
+		return fmt.Sprintf("%q (no usable hyphen: len=%d hyphens=%d dot=%v)",
+			redactedHost, len(target), strings.Count(target, "-"),
+			strings.Contains(target, "."))
+	}
+	host, pid := target[:i], target[i+1:]
+	return fmt.Sprintf("%q (host: len=%d hyphens=%d dot=%v endsLocal=%v)",
+		redactedHost+"-"+pid, len(host), strings.Count(host, "-"),
+		strings.Contains(host, "."), strings.HasSuffix(host, ".local"))
+}
+
+// TestSingletonLockProbeOutputCannotCarryTheHost is the guard for the mechanism
+// above, and it is NOT gated behind WA_HEADLESS_REAL_SPA on purpose: a
+// redaction that only runs when someone opts into a browser run is a redaction
+// nobody checks. It opens no browser and touches no profile.
+//
+// The strings it redacts are not written by hand. They come out of the REAL
+// ReclaimProfile against a synthetic lock, because the leak this guards is
+// precisely the one this file does not author: if engine ever changes how it
+// spells the host into its error, a hand-written sample would keep passing
+// while the probe started leaking (ARMADILHAS 1).
+func TestSingletonLockProbeOutputCannotCarryTheHost(t *testing.T) {
+	// A name of the shape that would be PII if it ever escaped.
+	const host = "alice-macbook.local"
+	const target = host + "-4242"
+
+	held, heldErr := engine.ReclaimProfile(replicaOfLock(t, target), engine.ReclaimOptions{
+		Hostname:     host,
+		ProcessAlive: func(int) bool { return true },
+	})
+	if !errors.Is(heldErr, engine.ErrProfileHeldByLiveBrowser) {
+		t.Fatalf("the sample did not reach the live-holder path: err=%v", heldErr)
+	}
+	// The premise of the guard: production really does put the host in its
+	// output. If this stops being true the redaction is still correct, but the
+	// guard would be testing nothing, so it must be re-read rather than trusted.
+	if !strings.Contains(heldErr.Error(), host) {
+		t.Fatalf("engine no longer spells the host into its error (%q): this guard "+
+			"has stopped exercising the leak it exists for", heldErr)
+	}
+
+	red := newHostRedactor(hostSecretsOf(target)...)
+	// hostSecretsOf reads os.Hostname() for the real run; here the synthetic
+	// name is what must disappear, and it is covered by the target's host half.
+	emitted := map[string]string{
+		"scrubbed error":       red.scrub(heldErr),
+		"scrubbed reason":      red.scrub(held.Reason),
+		"scrubbed lock holder": red.scrub(held.LockHolder),
+		"described target":     describeLockTarget(target),
+		"described split":      describeSplit(splitLockTargetAt(target, strings.LastIndex(target, "-"))),
+	}
+	for what, got := range emitted {
+		assertCarriesNoHost(t, what, got, host, "alice", "macbook")
+	}
+
+	// Redaction that eats the diagnosis is its own defect: a reader of a
+	// DIVERGENCE message still has to be able to tell what diverged.
+	assertKeepsAll(t, "the scrubbed error", red.scrub(heldErr), "4242", redactedHost)
+	assertKeepsAll(t, "the described target", describeLockTarget(target),
+		"4242", "hyphens=1", "endsLocal=true")
+}
+
+// assertCarriesNoHost fails if an emitted string contains any spelling of the
+// host, or any fragment of it that would identify a person.
+func assertCarriesNoHost(t *testing.T, what, got string, leaks ...string) {
+	t.Helper()
+	for _, leak := range leaks {
+		if strings.Contains(got, leak) {
+			t.Errorf("%s leaked %q: %s", what, leak, got)
+		}
+	}
+}
+
+// assertKeepsAll fails if redaction took the diagnosis with the host.
+func assertKeepsAll(t *testing.T, what, got string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s lost %q, which a reader needs to tell what diverged: %s",
+				what, want, got)
+		}
+	}
+}
+
+// --- Is the rule under test actually EXERCISED by this host's name? ---------
+//
+// The probe checks that production reads the measured target as "<host>-<pid>",
+// splitting on the LAST hyphen (engine/profile.go). Whether that assertion can
+// FAIL depends on the machine: with a hostname like "buildbox" the first hyphen
+// IS the last one, so a strings.LastIndex -> strings.Index mutation reads the
+// target identically and the probe passes while verifying nothing. On a host
+// like "wa-headless-pod-7" the same mutation makes the target unparseable and
+// the probe fails.
+//
+// That dependency used to be nowhere: not asserted, not even written down. It
+// is now checked against the hostname actually observed, and a host that cannot
+// discriminate produces a SKIP naming the reason instead of a silent pass —
+// which is the trap of ARMADILHAS 1 inverted, an instrument that reports more
+// than it measured.
+//
+// SKIP and not FAIL, deliberately: a hyphen-less hostname is a legitimate
+// machine, not a defect, and failing there would be a false alarm that teaches
+// the next reader to delete the check (the same cost H10 names). Nothing is
+// lost by skipping, because the RULE is locked elsewhere and ungated —
+// engine.TestLockHolderSplitsOnTheLastHyphen (engine/profile_test.go) proves it
+// with a controlled double on every `make check`, on any host. What the skip
+// protects is this probe's CLAIM about what a given run verified.
+
+// lockSplit is one reading of a lock target: host before a hyphen, pid after it.
+type lockSplit struct {
+	host string
+	pid  int
+	ok   bool
+}
+
+// splitLockTargetAt mirrors the parse in engine/profile.go (readLockHolder: pid
+// after the chosen hyphen, host before it, and the reading only counts if the
+// pid is a positive integer).
+//
+// It exists to compare the LAST-hyphen rule against its FIRST-hyphen mutation
+// on ONE measured value, and for nothing else. It never answers "is the format
+// right" — the authoritative reading of that value is the one the production
+// ReclaimProfile does a few lines up, through the typed error. A double that
+// stood in for the parser would be exactly the trap ARMADILHAS 1 describes.
+func splitLockTargetAt(target string, i int) lockSplit {
+	if i <= 0 {
+		return lockSplit{}
+	}
+	pid, err := strconv.Atoi(target[i+1:])
+	if err != nil || pid <= 0 {
+		return lockSplit{}
+	}
+	return lockSplit{host: target[:i], pid: pid, ok: true}
+}
+
+// lockTargetDiscriminatesLastHyphen answers the one question the probe cannot
+// answer by running production: on THIS measured string, would splitting on the
+// first hyphen instead of the last produce a different reading?
+func lockTargetDiscriminatesLastHyphen(target string) bool {
+	return splitLockTargetAt(target, strings.Index(target, "-")) !=
+		splitLockTargetAt(target, strings.LastIndex(target, "-"))
+}
+
+// describeSplit renders a reading without the host in it.
+func describeSplit(s lockSplit) string {
+	if !s.ok {
+		return "UNPARSEABLE (the reclaim would call the lock unreadable and DELETE)"
+	}
+	return fmt.Sprintf("host=%s(hyphens=%d) pid=%d", redactedHost,
+		strings.Count(s.host, "-"), s.pid)
+}
+
+// TestRealSPASingletonLockFormat measures what Chromium actually writes into
+// SingletonLock, and whether the production parser agrees with it.
+//
+// HOUSEKEEP H4. ReclaimProfile decides between DELETE and REFUSE by reading the
+// lock as a SYMLINK whose target is "<hostname>-<pid>", a convention taken from
+// chrome/browser/process_singleton_posix.cc. Until this probe, no real profile
+// had ever been inspected on the Chromium this project runs. A divergence is
+// SILENT: readLockHolder falls into its "unreadable" branch, the reclaim deletes
+// without proving a thing, and the guard of invariant "reclaim of Singleton at
+// boot is mandatory in a container" (HANDOFF §6, numbered 13) stops guarding.
+//
+// METHOD, and the obvious one does NOT work: a cleanly stopped profile never
+// shows the file — the clean shutdown removes it, measured as M3 in
+// EVIDENCIA-SPA.md and re-confirmed by the tail of this test. So the inspection
+// happens with the browser ALIVE, which is why this probe boots one.
+//
+// ZERO PII, BY MECHANISM: the measured target embeds this machine's hostname,
+// which can carry a person's name. Nothing here prints it — describeLockTarget
+// and hostRedactor above stand between every measured value and every Logf,
+// Errorf and Fatalf, so the failure path is covered too. That used to be a
+// comment asking the reader to redact by hand.
+//
+// WHAT THIS PROBE VERIFIES DEPENDS ON THE HOST, and it now says so: the
+// "pid after the LAST hyphen" rule is only exercised by a hostname that
+// contains a hyphen. The nested "last-hyphen rule" subtest checks that against
+// the name it actually observes and SKIPS with a reason when the name cannot
+// discriminate. See the section comment above lockSplit.
+func TestRealSPASingletonLockFormat(t *testing.T) {
+	requireRealSPA(t)
+
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overridden {
+		if err := requireExistingProfile(profile); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := 0
+	if _, err := os.Stat(profile); err == nil {
+		before = countProfileFiles(t, profile)
+	}
+	t.Logf("BASELINE profile_files=%d singleton_lock_present=%v",
+		before, lockPresent(t, profile))
+
+	// The subtest exists for its CLEANUP: the clean stop is registered inside
+	// launchObservationProfile, so the only way to observe the profile AFTER
+	// the browser is down is to let a nested test end first.
+	t.Run("live", func(t *testing.T) {
+		observeLiveSingletonLock(t, profile)
+	})
+
+	after := countProfileFiles(t, profile)
+	// REPORTED, not asserted, and the difference was measured rather than
+	// assumed. MEASURED: "the profile never shrinks" is the CAP-05 observable
+	// across sleep/wake cycles, and at the granularity of ONE boot it is false
+	// — a boot of the lab profile went 457 -> 456. HYPOTHESIS, not measured on
+	// that same boot: Chromium ROTATES Default/Sessions/Session_* and Tabs_*,
+	// dropping the previous pair and writing a new one, so the count moves by
+	// whatever the rotation happens not to balance. The rotation is real, but
+	// the listing diff that showed it was taken around a LATER boot whose delta
+	// was 0; the -1 boot was never diffed. See HOUSEKEEP H10. Either way, a run
+	// that asserted non-decrease here would fail on behaviour already observed
+	// to be healthy and teach the next reader to delete the check.
+	t.Logf("HYGIENE profile_files before=%d after=%d delta=%+d (Default/Sessions/* rotates; see HOUSEKEEP H10)",
+		before, after, after-before)
+	// Re-confirms M3, and it is the reason the naive method fails: after a
+	// clean stop the lock is not there to be looked at.
+	if lockPresent(t, profile) {
+		t.Errorf("%s survived the clean stop; the next boot would have to reclaim it", singletonLockName)
+	}
+	t.Logf("AFTER CLEAN STOP singleton_lock_present=%v", lockPresent(t, profile))
+}
+
+func lockPresent(t *testing.T, profile string) bool {
+	t.Helper()
+	_, err := os.Lstat(filepath.Join(profile, singletonLockName))
+	return err == nil
+}
+
+// observeLiveSingletonLock is the measurement proper: raw form first, then the
+// production parser's reading of that same raw form.
+func observeLiveSingletonLock(t *testing.T, profile string) {
+	t.Helper()
+	runner := engine.NewRunner()
+	browser, launched := launchObservationProfile(t, runner)
+	if launched != profile {
+		t.Fatalf("the probe measured %s but the launcher opened %s", profile, launched)
+	}
+
+	lock := filepath.Join(profile, singletonLockName)
+	info, err := os.Lstat(lock)
+	if err != nil {
+		t.Fatalf("%s while the browser is ALIVE: %v — either the browser is not "+
+			"holding the profile, or Chromium no longer writes this file at all, "+
+			"and the second case makes the whole reclaim guard dead code",
+			singletonLockName, err)
+	}
+	target, err := os.Readlink(lock)
+	if err != nil {
+		t.Fatalf("%s exists but is NOT a symlink (%v): mode=%v. readLockHolder "+
+			"reads it with Readlink and would report it unreadable — DIVERGENCE",
+			singletonLockName, err, info.Mode())
+	}
+
+	// Everything printed from here on passes through the redactor or through
+	// describeLockTarget. Nothing below may format `target`, os.Hostname(), a
+	// ReclaimResult field or an engine error directly.
+	red := newHostRedactor(hostSecretsOf(target)...)
+
+	t.Logf("MEASURED lstat: mode=%v symlink=%v", info.Mode(), info.Mode()&os.ModeSymlink != 0)
+	t.Logf("MEASURED readlink target=%s", describeLockTarget(target))
+	t.Logf("MEASURED os.Hostname() matches the lock's host half=%v launched_pid=%d",
+		hostnameOrEmpty() == hostHalfOf(target), browser.PID())
+
+	// What readLockHolder makes of that exact string, read through production.
+	//
+	// The typed error is the assertion, not a sentence: ErrProfileHeldByLiveBrowser
+	// is reachable ONLY after the target parsed into a host that equals this
+	// one AND a pid that is running. A format that did not parse would instead
+	// come back with a nil error and three deleted files.
+	live, liveErr := engine.ReclaimProfile(replicaOfLock(t, target), engine.ReclaimOptions{
+		ProcessAlive: engine.ProcessAlive,
+	})
+	t.Logf("PRODUCTION PARSER (real probe): lock_holder=%s reason=%s removed=%v err=%s",
+		describeLockTarget(live.LockHolder), red.scrub(live.Reason), live.Removed,
+		red.scrub(liveErr))
+
+	if !errors.Is(liveErr, engine.ErrProfileHeldByLiveBrowser) {
+		t.Fatalf("DIVERGENCE: readLockHolder did not resolve %s to a live holder on this "+
+			"host; got reason=%s removed=%v err=%s. The reclaim would delete without "+
+			"proof — HOUSEKEEP H4", describeLockTarget(target), red.scrub(live.Reason),
+			live.Removed, red.scrub(liveErr))
+	}
+	if len(live.Removed) != 0 {
+		t.Fatalf("the reclaim refused AND deleted %v; a refusal must touch nothing", live.Removed)
+	}
+	if live.LockHolder != target {
+		t.Errorf("the reclaim reported holder %s for a lock whose target is %s",
+			describeLockTarget(live.LockHolder), describeLockTarget(target))
+	}
+
+	// Does the name of THIS machine let the assertion above fail? Answered
+	// against the observed value, never assumed. The subtest carries the claim
+	// so that a host which cannot discriminate produces a named SKIP instead of
+	// a silent pass.
+	t.Logf("LAST-HYPHEN RULE exercised_by_this_target=%v",
+		lockTargetDiscriminatesLastHyphen(target))
+	t.Run("last-hyphen rule", func(t *testing.T) {
+		first := splitLockTargetAt(target, strings.Index(target, "-"))
+		last := splitLockTargetAt(target, strings.LastIndex(target, "-"))
+		if first == last {
+			t.Skipf("NOT VERIFIED ON THIS HOST, and saying so is the point. The measured "+
+				"target is %s: its first and last hyphen are the same hyphen (or it has "+
+				"none), so both rules read it identically — a strings.LastIndex -> "+
+				"strings.Index mutation in engine/profile.go would pass this probe "+
+				"unnoticed here, and a silent pass would overstate what this run "+
+				"verified. The RULE is not lost: engine.TestLockHolderSplitsOnTheLastHyphen "+
+				"(engine/profile_test.go) locks it with a controlled double, ungated, on "+
+				"every `make check` and on any host. To exercise it against a REAL "+
+				"target, run this probe on a machine whose hostname contains a hyphen.",
+				describeLockTarget(target))
+		}
+		t.Logf("DISCRIMINATING: first-hyphen split reads this target as %s, last-hyphen "+
+			"as %s — the LastIndex -> Index mutation could not survive the assertion above",
+			describeSplit(first), describeSplit(last))
+	})
+
+	// The second reading exists to print the parse in full: with a probe that
+	// says the holder is gone, the reason names the pid readLockHolder pulled
+	// out of the measured target, and the delete path is reached — which it can
+	// only be after the host matched.
+	gone, goneErr := engine.ReclaimProfile(replicaOfLock(t, target), engine.ReclaimOptions{
+		ProcessAlive: func(int) bool { return false },
+	})
+	t.Logf("PRODUCTION PARSER (holder declared dead): reason=%s removed=%v err=%s",
+		red.scrub(gone.Reason), gone.Removed, red.scrub(goneErr))
+	if goneErr != nil {
+		t.Fatalf("a lock whose holder is gone must be reclaimable: %v", goneErr)
+	}
+	if len(gone.Removed) != 3 {
+		t.Fatalf("removed %v, want all three; the reclaim did not reach the delete path",
+			gone.Removed)
+	}
+}
+
+func hostnameOrEmpty() string {
+	name, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 // --- Profile resolution: unit tests, no browser, no profile touched ---------

@@ -245,27 +245,114 @@ apaga sem provar nada. Isso não é catastrófico — é exatamente o comportame
 do estudo, que rodou assim por todas as fases — mas a guarda que a H4 protege
 deixa de guardar, e em silêncio.
 
-**Correção sugerida**: no primeiro boot contra alvo real (CAP-03 LOOP 03.4),
-matar o Chromium e inspecionar o perfil:
+**Nota de método (2026-08-12)**: o plano original — "matar o Chromium e olhar o
+perfil" — **não produz nada**. O perfil pareado foi aberto e fechado três vezes
+naquela data (M3 do `EVIDENCIA-SPA.md`) e não havia `SingletonLock` nem antes
+nem depois: o desligamento limpo o remove. Medir o FORMATO exige inspecionar
+com o Chromium **em execução**.
+
+---
+
+### MEDIDO em 2026-08-12 (LOOP 03.9) — a premissa está CORRETA
+
+**Instrumento**: `TestRealSPASingletonLockFormat`, em
+`internal/wa-headless/realspa_test.go`. Sobe o perfil com o **`engine.Launcher`
+de produção** (não um `exec` à mão: o formato observado tem de ser o formato que
+o parser de produção vai enfrentar), inspeciona com `os.Lstat` + `os.Readlink`
+com o browser **VIVO**, e depois entrega a string medida ao
+`engine.ReclaimProfile` — o parser de produção, não um dublê.
+
+**Ambiente**: Google Chrome **151.0.7922.109**, darwin/arm64, `--headless=new`.
+Perfil **pareado** (`scripts/chromium-study/wa-session/profile`), via
+`WA_HEADLESS_PROFILE_DIR`.
+
+Saída crua da corrida, **com o hostname redigido para `<HOST>`** (a máquina
+carrega o nome de uma pessoa, e PII é BLOCKER do repositório). Nada mais foi
+alterado:
 
 ```
-ls -la <perfil>/SingletonLock   # esperado: symlink -> <host>-<pid>
+BASELINE profile_files=2781 singleton_lock_present=false
+profile_dir=.../scripts/chromium-study/wa-session/profile overridden=true
+MEASURED lstat: mode=Lrwxr-xr-x symlink=true
+MEASURED readlink target="<HOST>-63733"
+MEASURED os.Hostname()="<HOST>" launched_pid=63733
+PRODUCTION PARSER (real probe): lock_holder="<HOST>-63733" reason="" removed=[] \
+  err=profile is held by a live browser: pid 63733 on "<HOST>" is still running
+PRODUCTION PARSER (holder declared dead): reason="holder pid 63733 on this host is gone" \
+  removed=[SingletonLock SingletonCookie SingletonSocket] err=<nil>
+stopped_via=browser.close
+HYGIENE profile_files before=2781 after=2781 delta=+0
+AFTER CLEAN STOP singleton_lock_present=false
 ```
 
-Colar a saída aqui e, se divergir, ajustar o parser E o dublê juntos — dublê
-mais permissivo que a produção esconde defeito (ARMADILHAS §1).
+O `<HOST>` redigido tem forma que importa para o parser e por isso fica
+registrada: contém **hífens** e um **ponto**, e termina em `.local`. Ou seja, a
+regra "o pid vem depois do ÚLTIMO hífen" foi exercitada contra um hostname
+hifenizado de verdade, não contra um nome simples.
 
-**Status**: **não corrigido** — premissa documentada, verificação agendada
-para o LOOP 03.4. O comportamento sob divergência é degradação para o
-comportamento do estudo, não quebra.
+**Veredito: a premissa está CONFIRMADA, ponto por ponto.**
 
-**Nota de 2026-08-12**: a verificação continua pendente e o LOOP 03.4 não a
-produz de graça. O perfil pareado foi aberto e fechado três vezes nesta data
-(M3 do `EVIDENCIA-SPA.md`) e **não havia `SingletonLock` nem antes nem depois**
-— o desligamento limpo o remove. Para medir o FORMATO é preciso inspecionar
-com o Chromium **em execução**, ou depois de uma parada suja; um perfil parado
-de forma limpa nunca vai mostrar o arquivo. A H4 segue aberta com o método
-corrigido.
+| o que `readLockHolder` assume | o que foi medido |
+|---|---|
+| o arquivo existe enquanto o browser vive | existe (`Lstat` OK com o browser vivo) |
+| é um **symlink** | `mode=Lrwxr-xr-x`, `symlink=true` |
+| o alvo é `<hostname>-<pid>` | `"<HOST>-63733"` |
+| `hostname` é o mesmo que `os.Hostname()` devolve | idêntico, inclusive o sufixo `.local` |
+| `pid` é o do processo browser | `63733` = `launched_pid` do `Launcher` |
+
+A verificação que decide não é a inspeção crua — é a **segunda metade**: a
+string medida entregue ao `ReclaimProfile` real. Com a sonda de liveness de
+produção ele devolve `ErrProfileHeldByLiveBrowser` e **não apaga nada**; esse
+erro tipado só é alcançável DEPOIS de o alvo ter sido decomposto em host igual
+ao nosso e pid vivo. Com o detentor declarado morto, ele apaga os três. Se o
+formato divergisse, o ramo "ilegível" devolveria erro nulo e apagaria — que é
+exatamente o silêncio que esta H4 existia para descartar.
+
+**Controle negativo: NÃO se aplica, e dizer isso é a resposta honesta.** Um
+controle negativo prova que um teste MORDE quando o defeito volta. Aqui não há
+defeito, não há correção e não há dublê novo: nada foi alterado em
+`profile.go` nem em `profile_test.go`. Inventar uma mutação cerimonial travaria
+uma regra que já está travada pelos testes do `profile_test.go` — o que a
+medição acrescenta é que o dublê daquele arquivo **não é mais permissivo que a
+produção**, porque a produção agora foi vista escrevendo exatamente o que o
+dublê escreve.
+
+**Limite declarado, e ele é real**: isto foi medido em **macOS**, e a invariante
+que a guarda protege é "**Reclaim de `Singleton` no boot é obrigatório em
+contêiner**" (`HANDOFF-INICIATIVA.md` §6, numerada **13**) — ou seja, Linux. Os
+dois lados usam `gethostname(2)` (`base::GetHostName` no Chromium,
+`os.Hostname` no Go), então a igualdade de host deve valer também lá, mas
+**deve** não é medido. Para o contêiner o formato continua **DESCONHECIDO**, e
+está nomeado como tal em vez de assumido.
+
+> **Divergência de numeração, sinalizada e NÃO corrigida**. A invariante é, pelo
+> TEXTO, *"Reclaim de `Singleton` no boot é obrigatório em contêiner"*, que o
+> `HANDOFF-INICIATIVA.md:394` — fonte de verdade — numera **13**. Chamam-na de
+> **15** dois pontos do código, e o segundo só apareceu na avaliação adversarial
+> do LOOP 03.9:
+>
+> | onde | texto literal |
+> |---|---|
+> | `engine/profile.go:8` | *"it is **invariant 15** of the initiative"* |
+> | `engine/profile_test.go:48` | *"The happy path of **invariant 15**"* ← quarta ocorrência do deslocamento, não sinalizada antes |
+>
+> O mesmo deslocamento atinge OUTRAS invariantes, e essas já estavam
+> sinalizadas: `PARIDADE-WWEBJS.md:88` chama `livenessCheck` de *"invariante
+> 11"* quando o `HANDOFF` a numera **10**, e `HOUSEKEEP.md:580` fala em
+> *"invariante 14"* para zero-PII, numerada **12**. A nota do
+> `EXECUCAO.md` (auditoria da CAP-03) sinaliza esse conjunto — "invariantes 11,
+> 14 e 15".
+>
+> **Nada foi renumerado**, aqui nem em lugar nenhum: o deslocamento está em
+> triagem HUMANA, e renumerar por conta própria trocaria uma divergência
+> conhecida por uma silenciosa. Cite pelo TEXTO, que não é ambíguo, e pelo
+> número **13** do `HANDOFF`.
+
+**Status**: **CONFIRMADO — H4 fechada** para Chrome 151 em macOS. Travada por
+`TestRealSPASingletonLockFormat` (gated por `WA_HEADLESS_REAL_SPA`) e pelos
+testes de `engine/profile_test.go`, que continuam verdes e cujo dublê a medição
+validou. Fica aberto apenas o caso **contêiner/Linux**, nomeado acima como
+desconhecido.
 
 ## H5 — o teste do renderer travado vaza o browser, e ninguém percebe
 
@@ -908,3 +995,99 @@ CONSOME a marca. O `SessionSuspect` existe e é lido por teste; nenhum caminho d
 boot ainda age sobre ele, porque o ciclo de vida que agiria é a CAP-05. A marca
 não é auto-executável — ela garante que a informação sobreviva até existir quem
 a use, que é o oposto de perdê-la em log.
+
+## H10 — "o perfil nunca encolhe" é falso no granulado de UM boot: o Chromium rotaciona `Default/Sessions/*`
+
+**Data**: 2026-08-12 · **Contexto**: achado **de lado** no LOOP 03.9, ao medir
+higiene de perfil em volta da observação do `SingletonLock`. Não faz parte
+daquele escopo, e não foi transformado em trabalho deste ciclo.
+
+**Onde**: comportamento do Chromium 151 sobre `<perfil>/Default/Sessions/`. Do
+nosso lado o que ele atinge é a expectativa escrita como observável da **CAP-05**
+no `HANDOFF-INICIATIVA.md` §10 — *"N ciclos dormir/acordar sem degradação,
+`Singleton` = 0, perfil **não-decrescente**"* — e o texto do LOOP 04.3D no
+`EXECUCAO.md` ("perfil 2686 → 2781 arquivos, **cresceu sempre**").
+
+**Problema, e ele tem duas metades de peso diferente** — a primeira é MEDIDA, a
+segunda é HIPÓTESE. Elas estavam escritas como se fossem a mesma coisa, e a
+avaliação adversarial do LOOP 03.9 mostrou que não são.
+
+### MEDIDO — a asserção "um boot nunca reduz a contagem" é FALSA
+
+Primeira corrida da observação, no perfil de laboratório:
+
+```
+BASELINE profile_files=457 singleton_lock_present=false
+...
+stopped_via=browser.close
+HYGIENE profile_files before=457 after=456 delta=-1
+the profile SHRANK (457 -> 456): a boot must never lose profile state
+```
+
+Isto é medição direta e não depende de explicação nenhuma: um boot **limpo**
+(`stopped_via=browser.close`, sem parada suja, sem crash) devolveu o perfil com
+**um arquivo a menos**. Portanto o observável "perfil **não-decrescente**" por
+contagem de arquivos **reprova em boot sadio**. Esta metade é firme, e é ela
+que invalida a checagem de higiene — o *porquê* do −1 não muda isso.
+
+### HIPÓTESE — que a rotação de `Session_*`/`Tabs_*` seja a causa DESSE −1
+
+Que o Chromium **rotacione** o par `Session_*`/`Tabs_*` está provado: o `diff`
+das duas listagens (só os nomes relativos ao perfil) mostra par descartado e par
+novo escrito, não deleção sem reposição.
+
+```
+350d349
+Default/Sessions/Session_13431009036226323
+352c351
+Default/Sessions/Tabs_13431009036997542
+---
+Default/Sessions/Session_13431037567163574
+353a353
+Default/Sessions/Tabs_13431037567202699
+```
+
+**O que NÃO está provado é que essa rotação explique o −1**, e a razão é de
+método: este `diff` foi tirado em volta de uma corrida **posterior**, cujo delta
+foi **0** — 2 removidos, 2 acrescentados, saldo zero, como as próprias linhas
+acima mostram. A corrida que de fato encolheu (457 → 456) **nunca foi diffada**.
+Dizer "a rotação causou o −1" é inferir de um mecanismo real para um evento que
+ele não foi visto causando. É exatamente o tipo de passagem que a regra "medir
+antes de projetar" existe para barrar, e ela passou despercebida aqui.
+
+**O que confirmaria o mecanismo** (barato, e ainda não feito): tirar a listagem
+completa ANTES e DEPOIS **da mesma corrida cujo delta seja negativo**, e diffar
+essa. Confirma se: o único nome que sumiu sem substituto estiver sob
+`Default/Sessions/`. **Refuta se**: o arquivo perdido estiver fora de
+`Default/Sessions/` — aí o −1 é perda de estado de verdade e esta entrada muda
+de "comportamento saudável" para defeito. Como o delta negativo não apareceu em
+todas as corridas (as seguintes deram `+0`), pode ser preciso repetir o boot até
+reproduzi-lo; registrar quantas corridas custou faz parte da medida.
+
+Enquanto isso não for feito, o que se pode afirmar é: `delta<0` num boot limpo
+**acontece**, e a rotação é a explicação **plausível e não confirmada**.
+
+**Por que isso importa — e repare que isto se apoia só na metade MEDIDA**: um
+gate que trave "perfil não-decrescente" por contagem de arquivos vai reprovar em
+boot sadio, e vai reprovar quer a causa seja a rotação, quer seja outra. O custo
+é pior que o falso positivo — ensina o próximo leitor a APAGAR a checagem em vez
+de lê-la, e aí o dia em que o perfil encolher de verdade não terá alarme nenhum.
+
+**Correção sugerida** (para quem fechar a CAP-05, não para agora): o observável
+"perfil não-decrescente" precisa ser enunciado sobre o que de fato não pode
+sumir — o material de sessão (`Default/Local Storage`, `Default/IndexedDB`, as
+chaves que a M3 mostrou carregarem a identidade) — e não sobre `find | wc -l`.
+Excluir `Default/Sessions/*` da conta é o passo natural, **mas ele depende da
+hipótese acima**: enquanto o diff da corrida negativa não for tirado, quem
+excluir aquele diretório está tirando da vigilância um lugar que ainda não foi
+visto sendo a causa. A ordem certa é medir primeiro, excluir depois.
+
+**Status**: **não corrigido, e de propósito**. No LOOP 03.9 a asserção foi
+trocada por REGISTRO no `TestRealSPASingletonLockFormat` — a contagem sai no
+log — porque travar um número que nunca foi medido é a mesma especulação de
+sempre, só que com cara de teste. O que o teste trava de verdade é o que foi
+medido: depois do `browser.close` não sobra `SingletonLock`. **Revisado em
+2026-08-12** pela avaliação adversarial do 03.9: a redação anterior apresentava
+a rotação como causa medida do −1, e o comentário do teste dizia o mesmo; os
+dois passaram a separar medição de hipótese. O achado **não** foi enfraquecido —
+a metade que invalida o observável da CAP-05 é a medida.
