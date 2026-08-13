@@ -1260,3 +1260,99 @@ menos — que o contrato da degradação.
 controle negativo 4A acima) e `TestDegradationIsASingleGlobalRule` (a
 propriedade que o teste antigo media). O desvio do ponto de construção
 (MUTANTE 4B) fica registrado acima como limite conhecido e **não** corrigido.
+
+---
+
+## H13 — o F-24 do `EXECUCAO.md` ainda afirma a unidirecionalidade que o M7.5 retirou
+
+**Data**: 2026-08-13 · **Contexto**: N2b (M8, a permanência em `OPENING` sob
+corte). Achado ao ler o M7 e o F-24 para saber o que já estava estabelecido
+sobre a janela de `OPENING` — **fora do escopo** desta tarefa, que é medição.
+
+**Onde**: `internal/wa-headless/EXECUCAO.md:904-910`, dentro do F-24:
+
+```
+**Ressalva de instrumento, e ela é grande.** Na perna `cpu-2x` o pior
+espaçamento entre amostras foi de **5,11 s** contra uma janela de 0,46 s — o
+tick pior é dez vezes a coisa medida. A falsificação do eixo CPU sobrevive
+porque um amostrador grosseiro reporta a transição TARDE e portanto **infla**
+a janela: o erro possível aponta ao contrário da conclusão. Não sobrevive por
+a resolução ter sido suficiente, e o M7.5 diz isso com as duas direções de
+erro.
+```
+
+**Problema**: o parágrafo afirma exatamente o que a avaliação adversarial do
+N2a derrubou, e depois cita como testemunha o texto que o derrubou. O
+`EVIDENCIA-SPA.md` M7.5 e o M7.8 item 4 dizem o oposto, com todas as letras:
+
+> **Não** sobrevive porque o erro apontasse para o outro lado — não aponta: um
+> buraco sobre a marca de INÍCIO encolhe a janela, e o texto anterior desta
+> linha afirmava uma unidirecionalidade que os dados não dão.
+
+O erro do amostrador **não é unidirecional**: a janela é a diferença de duas
+marcas, ambas enviesadas para tarde (`Ŵ = W + δc − δm`), então um buraco sobre o
+FIM infla e um buraco sobre o INÍCIO **encolhe**. O que sustenta a falsificação
+do eixo CPU é o delta de **80/60/70 ms** entre as duas âncoras nas três corridas
+de `cpu-2x`, que prova resolução de ~70 ms **na vizinhança das marcas** — e é
+esse número, não o sentido do enviesamento, que o M7.5 usa.
+
+A última frase do parágrafo (*"Não sobrevive por a resolução ter sido
+suficiente, e o M7.5 diz isso com as duas direções de erro"*) mostra que a
+correção do N2a chegou ao EVIDENCIA e **não** ao diário: o parágrafo tem a
+correção colada no fim de uma afirmação que ela contradiz, e as duas ficam de pé
+lado a lado. Quem ler só o `EXECUCAO.md` — que é onde se lê "o que já está
+estabelecido" — sai com o argumento retirado.
+
+**Gravidade**: documentação, não código. Nenhum número do M7 muda, nenhum teste
+depende disto. Mas é o mesmo tipo de defeito que o próprio N2a foi corrigir
+(o enquadramento dos 24,4× congelado num comentário onde a próxima pessoa o
+leria como assentado), e sobreviveu no arquivo vizinho.
+
+**Correção sugerida**: substituir as duas frases finais do parágrafo pelo
+argumento do M7.5 — as duas direções de erro, e o delta entre âncoras de
+80/60/70 ms como o que de fato sustenta a falsificação. Uma frase, sem tocar em
+número nenhum.
+
+**Status**: **corrigido** pelo Chief, no mesmo ciclo em que o defeito nasceu.
+
+O worker do N2b agiu certo ao registrar e não consertar: para ele o achado era
+externo ao escopo, e a política do projeto manda registrar e perguntar em vez de
+"consertar de graça". Quem tinha de decidir era o Chief, e a decisão foi
+consertar — porque `git log -S` põe o parágrafo no `77722e2`, que é **commit
+deste ciclo**. Não era dívida herdada: era defeito recém-introduzido, e terminar
+o próprio trabalho não é ampliar escopo.
+
+Não há teste a travar: é prosa de diário, e a política anti-regressão do
+`CLAUDE.md` se aplica a achado com defeito de comportamento.
+
+### O mecanismo do engano, que é a parte reutilizável
+
+O defeito não foi um erro de escrita. Foi uma **correção aplicada a um documento
+e não ao seu espelho**:
+
+```
+avaliação adversarial derruba o argumento da unidirecionalidade
+        ↓
+fix F3 nomeia o alvo: "EVIDENCIA-SPA.md M7.5 e M7.8 item 4"
+        ↓
+aplicado exatamente ali  ✓
+        ↓
+o espelho do MESMO argumento no EXECUCAO.md fica para trás  ✗
+```
+
+Três leituras não pegaram: o avaliador (o escopo dele era o M7, não o diário), o
+worker de correção (seguiu a lista fechada, corretamente), e o Chief, que
+conferiu os sete fixes **exatamente nos `file:line` que a lista nomeava**.
+Verificar contra a lista prova que a lista foi cumprida; **não prova que a lista
+estava completa**.
+
+Agravante que torna o caso pior que uma omissão: a frase corretiva foi parar no
+FIM do mesmo parágrafo, ao lado da afirmação que ela contradiz — e citando como
+testemunha (`"e o M7.5 diz isso"`) justamente o texto que a desmente. As duas
+ficaram de pé, e quem lesse só o diário — que é onde se lê "o que já está
+estabelecido" — sairia com o argumento retirado.
+
+**Regra que sai daqui**: quando uma avaliação derrubar um ARGUMENTO (e não um
+número), a correção MUST varrer os espelhos daquele argumento, não só o
+documento auditado. O comando é barato — procurar a frase derrubada em todos os
+`.md` do módulo — e a ausência dele custou este achado.

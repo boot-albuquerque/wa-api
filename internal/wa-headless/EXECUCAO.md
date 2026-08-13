@@ -1040,11 +1040,20 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 
   **Ressalva de instrumento, e ela é grande.** Na perna `cpu-2x` o pior
   espaçamento entre amostras foi de **5,11 s** contra uma janela de 0,46 s — o
-  tick pior é dez vezes a coisa medida. A falsificação do eixo CPU sobrevive
-  porque um amostrador grosseiro reporta a transição TARDE e portanto **infla**
-  a janela: o erro possível aponta ao contrário da conclusão. Não sobrevive por
-  a resolução ter sido suficiente, e o M7.5 diz isso com as duas direções de
-  erro.
+  tick pior é dez vezes a coisa medida. **O erro do amostrador NÃO é
+  unidirecional**, e a redação anterior desta linha dizia que era: a janela é a
+  diferença de duas marcas, ambas enviesadas para TARDE (`Ŵ = W + δc − δm`),
+  então um buraco sobre o FIM infla, mas um sobre o INÍCIO **encolhe** — para um
+  valor pequeno e **não nulo**, indistinguível de 0,46 s. O engolimento parcial é
+  justamente o que se disfarça de dado bom. O que descarta esse caso, e portanto
+  o que sustenta a falsificação do eixo CPU, é o delta entre as DUAS âncoras:
+  `openingFirst − meReady` deu **80 / 60 / 70 ms** nas três corridas de `cpu-2x`,
+  e um delta desse tamanho exige amostras separadas por ~70 ms na vizinhança das
+  marcas — logo os buracos de 2,71–5,11 s estavam em outro ponto da linha do
+  tempo. Se tivessem engolido as âncoras, o delta seria **zero**. A conclusão
+  sobrevive por esse número, **não** por a resolução ter sido suficiente nem por
+  o erro apontar para um lado só. Autoridade desta ressalva:
+  `EVIDENCIA-SPA.md` M7.5.
 
   **O que continua aberto:** a variância dentro de cada condição (as três
   amostras de `net-heavy` caem em 80 ms — é a armadilha do M6.4 de novo, um
