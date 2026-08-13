@@ -17,6 +17,7 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -132,5 +133,119 @@ func (t *Tab) emulateOffline(r *Runner, offline, withNavigatorState bool, label 
 				latencyUnthrottled, throughputUnthrottled, throughputUnthrottled))
 		}
 		return chromedp.Run(runCtx, actions...)
+	})
+}
+
+// --- DEGRADING the page's network, which is NOT severing it ----------------
+//
+// LOOP 04.3E needs the leg where the mechanism WORSENS: how long a HEALTHY boot
+// stays negotiating when the network is slow rather than gone. That is a
+// different phenomenon from everything above, and the difference is not a
+// nuance — it is the confound that LOOP 04.3A already paid for once.
+//
+// overrideNetworkState makes the browser fire an `offline` EVENT on the page,
+// and EVIDENCIA-SPA.md M5.4 measured what that costs: the SPA reacts to the
+// ANNOUNCEMENT in ~1.4-3.1s and to the actual stall in ~33-34s. A measurement
+// of a slow network that accidentally announced an outage would be measuring
+// the announcement.
+//
+// So the type below cannot express an outage. Offline is not a parameter of
+// NetworkDegradation and is written false at the single point of construction:
+// the two mechanisms stay distinct at the TYPE level, and a later edit cannot
+// quietly turn a degradation call into an outage call. Making it impossible is
+// worth more than documenting it, because this repository has already measured
+// the difference between a comment and a mechanism.
+//
+// The duplication with emulateOffline above is DELIBERATE for the same reason.
+// A shared body would be exactly the mutable path through which one call could
+// become the other, and eight lines are a cheap price for the two never being
+// able to meet.
+
+// NetworkDegradation is a slow network, never an absent one.
+//
+// Zero values mean UNTHROTTLED on each axis independently, so a partially
+// filled struct degrades only what it names rather than silently clamping the
+// rest to zero bytes — which is an outage wearing a throughput's costume.
+type NetworkDegradation struct {
+	// Latency is the delay added to every request, rounded to milliseconds,
+	// which is the protocol's own unit.
+	Latency time.Duration
+	// DownloadBytesPerSecond and UploadBytesPerSecond cap throughput.
+	DownloadBytesPerSecond float64
+	UploadBytesPerSecond   float64
+}
+
+// degradedConditions builds the rule list, and is separate from the method so
+// that the one property that matters about it can be asserted without a
+// browser. Its guard is TestDegradedConditionsCannotExpressAnOutage.
+func degradedConditions(d NetworkDegradation) []*network.Conditions {
+	throughput := func(bps float64) float64 {
+		if bps <= 0 {
+			return throughputUnthrottled
+		}
+		return bps
+	}
+	return []*network.Conditions{{
+		URLPattern: allRequests,
+		// The invariant of this whole file half. Not a parameter, not derived
+		// from the argument, not reachable from outside: a degraded network is
+		// a network that is THERE.
+		Offline:            false,
+		Latency:            float64(d.Latency.Milliseconds()),
+		DownloadThroughput: throughput(d.DownloadBytesPerSecond),
+		UploadThroughput:   throughput(d.UploadBytesPerSecond),
+	}}
+}
+
+// SetNetworkDegraded makes the page's network SLOW. It never makes it absent:
+// navigator.onLine stays true, no `offline` event is fired, and every request
+// still completes — late, and at a lower rate.
+//
+// WithEmulateOfflineServiceWorker is deliberately NOT sent: it is the outage
+// half of the protocol, and this call has no outage to express.
+//
+// Clearing goes through ClearNetworkConditions.
+func (t *Tab) SetNetworkDegraded(r *Runner, d NetworkDegradation, label string) error {
+	return t.applyConditions(r, degradedConditions(d), label)
+}
+
+// clearedConditions builds the rule list of the RESTORE path, and is separate
+// from the method for the same reason degradedConditions is: the one property
+// that matters about it — that it is EMPTY — can then be asserted without a
+// browser. Its guard is TestClearNetworkConditionsClearsWithAnEmptyRuleList.
+//
+// An EMPTY list rather than a rule saying "unthrottled": the rule list is
+// replaced wholesale, so an empty one is the only form that leaves nothing
+// behind. A rule that named every axis as unthrottled would still be a rule,
+// and the next edit to it would be an emulation nobody asked for.
+func clearedConditions() []*network.Conditions { return nil }
+
+// ClearNetworkConditions removes every emulation rule.
+//
+// The list it sends is clearedConditions() — empty, for the reason stated
+// there. The navigator was never touched by this half of the file, so there is
+// nothing there to restore either.
+func (t *Tab) ClearNetworkConditions(r *Runner, label string) error {
+	return t.applyConditions(r, clearedConditions(), label)
+}
+
+// applyConditions issues the rule list under the Action budget.
+//
+// OpAction for the same reason emulateOffline uses it: this is a command that
+// changes the target's state, not a probe whose answer is evidence. Going
+// through the Runner is what keeps invariant 5 — no CDP path blocks
+// indefinitely, deadline per operation class, on the Go side — true of the new
+// path as well as the old one.
+func (t *Tab) applyConditions(r *Runner, conditions []*network.Conditions, label string) error {
+	return r.Do(t.ctx, OpAction, label, func(ctx context.Context) error {
+		runCtx, cancel := t.derive(ctx)
+		defer cancel()
+		return chromedp.Run(runCtx,
+			network.Enable(),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				_, err := network.EmulateNetworkConditionsByRule(conditions).Do(ctx)
+				return err
+			}),
+		)
 	})
 }

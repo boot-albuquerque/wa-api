@@ -1091,3 +1091,110 @@ medido: depois do `browser.close` não sobra `SingletonLock`. **Revisado em
 a rotação como causa medida do −1, e o comentário do teste dizia o mesmo; os
 dois passaram a separar medição de hipótese. O achado **não** foi enfraquecido —
 a metade que invalida o observável da CAP-05 é a medida.
+## H12 — o guarda do restauro de rede não exercitava o restauro
+
+**Data**: 2026-08-13 · **Contexto**: N2a, aplicação dos fixes exigidos pela
+avaliação adversarial do LOOP 04.3E / M7. Achado **do avaliador**, não do
+implementador — encontrado por mutação, não por leitura.
+
+**Onde**: `internal/wa-headless/engine/network_test.go`, o antigo
+`TestClearNetworkConditionsSendsAnEmptyRuleList`:
+
+```go
+func TestClearNetworkConditionsSendsAnEmptyRuleList(t *testing.T) {
+	if got := degradedConditions(NetworkDegradation{}); len(got) != 1 {
+		t.Fatalf("a degradation is one global rule, got %d", len(got))
+	}
+}
+```
+
+**Problema**: o nome anuncia o contrato de **restauro**; o corpo chama
+`degradedConditions` e mede a cardinalidade do caminho de **degradação**.
+`ClearNetworkConditions` nunca era chamado, e o caminho de sucesso do restauro
+não era exercitado por teste nenhum. É a **ARMADILHA 2** deste repositório em
+forma pura — e por isso o achado é de mutação: a suíte estava verde.
+
+Evidência do avaliador (MUTANTE 4): trocar o corpo de `ClearNetworkConditions`
+por uma regra de **queda permanente** deixava a suíte **verde**.
+
+**Alcance na época**: contido, porque cada boot do M7 abre browser e aba novos,
+então uma limpeza quebrada não vazava para o boot seguinte. Mas o `t.Cleanup` do
+`applyDegradation` é o único usuário do contrato, e a próxima reutilização de
+aba pagaria a conta.
+
+**Correção aplicada**: extraído `clearedConditions()` em `engine/network.go` —
+o **único ponto de construção** da lista do caminho de limpeza, espelhando o que
+`degradedConditions` já é para o caminho de degradação — e
+`ClearNetworkConditions` passa a chamá-lo. **O comportamento CDP emitido não
+muda**: antes passava `nil` a `applyConditions`, agora passa
+`clearedConditions()`, que retorna `nil`. O teste passou a se chamar
+`TestClearNetworkConditionsClearsWithAnEmptyRuleList` e afirma sobre esse ponto
+de construção. A propriedade que o teste antigo de facto media foi preservada,
+com o nome certo, em `TestDegradationIsASingleGlobalRule` (que ganhou também a
+asserção de que o padrão de URL é o global).
+
+### Controle negativo EXECUTADO
+
+Laboratório isolado (`scratchpad/lab`: cópia de `engine/` + `observability/` com
+`go.mod`/`go.sum` do repo). **O repositório não foi mutado.** Linha de base da
+cópia: `ok wa-api/internal/wa-headless/engine 3.783s`.
+
+**MUTANTE 4A** — a queda permanente instalada no ponto de construção do caminho
+de limpeza, que é onde os MUTANTES 1–3 do avaliador também foram aplicados
+(`degradedConditions`, não `SetNetworkDegraded`):
+
+```go
+func clearedConditions() []*network.Conditions {
+	return []*network.Conditions{{
+		URLPattern: allRequests, Offline: true,
+		DownloadThroughput: 0, UploadThroughput: 0,
+	}}
+}
+```
+
+Antes da correção este mutante passava **VERDE**. Depois dela, **compila E
+falha com mensagem**:
+
+```
+--- FAIL: TestClearNetworkConditionsClearsWithAnEmptyRuleList (0.00s)
+    network_test.go:90: the restore path built rule 0 of 1: {URLPattern: Latency:0 DownloadThroughput:0 UploadThroughput:0 ConnectionType: PacketLoss:0 PacketQueueLength:0 PacketReordering:false Offline:true}
+    network_test.go:92: the restore path built 1 rule(s) and the contract is ZERO: the rule list is replaced wholesale, so an EMPTY list is the only form that leaves nothing behind — anything else is an emulation that outlives the boot that asked for it
+FAIL
+FAIL	wa-api/internal/wa-headless/engine	0.198s
+```
+
+(A mensagem desreferencia os ponteiros de propósito: a primeira versão imprimia
+`[0x5b15c256a050]`, que nomeia nada e por isso é meio guarda.)
+
+### O que este guarda NÃO pega, medido e não suposto
+
+**MUTANTE 4B** — a mesma queda permanente escrita **direto no corpo** de
+`ClearNetworkConditions`, sem passar por `clearedConditions()`. Continua
+**VERDE**:
+
+```
+--- PASS: TestClearNetworkConditionsClearsWithAnEmptyRuleList (0.00s)
+ok  	wa-api/internal/wa-headless/engine	0.191s
+```
+
+Isto **não é uma fraqueza deste guarda em particular**: é uma propriedade de
+pacote único em Go, e o guarda da degradação — que a avaliação aceitou — tem
+exatamente o mesmo limite. Medido, para não ficar em palavra: reescrever o corpo
+de `SetNetworkDegraded` para embutir uma regra com `Offline: true`, desviando de
+`degradedConditions`, também passa **verde** (`ok ... 0.193s`), embora o MUTANTE 1
+do avaliador — a mesma queda aplicada DENTRO de `degradedConditions` — mate o
+teste.
+
+Fechar o desvio exigiria uma costura de observação no código de produção (um
+campo em `Tab`, ou uma variável de pacote no lugar de `applyConditions`) para que
+o teste pudesse chamar o método real sem browser. Isso é mais largo que o
+"pequeno helper extraído" que o pacote do N2a autorizou, e troca uma estrutura de
+produção limpa por alcance de teste. **Não foi feito**, e fica aqui nomeado: o
+contrato está guardado no ponto de construção, com a mesma força — nem mais, nem
+menos — que o contrato da degradação.
+
+**Status**: **corrigido**. Coberto por
+`TestClearNetworkConditionsClearsWithAnEmptyRuleList` (contrato de restauro,
+controle negativo 4A acima) e `TestDegradationIsASingleGlobalRule` (a
+propriedade que o teste antigo media). O desvio do ponto de construção
+(MUTANTE 4B) fica registrado acima como limite conhecido e **não** corrigido.
