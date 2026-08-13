@@ -555,6 +555,26 @@ type readinessSample struct {
 // where UNPAIRED and UNPAIRED_IDLE are the negative verdicts).
 const socketStateConnected = "CONNECTED"
 
+// socketStateReadJS is the ONE place this file reads Meta's socket state enum.
+//
+// It is an expression, not a statement, so both readers can embed it: the
+// per-tick readiness probe below and the page-side transition recorder of the
+// long-cut probe (N2b). Two spellings of the same read is the same bug waiting
+// to diverge, and here the divergence would be invisible — the recorder would
+// quietly disagree with the sampler about what state the socket was in, and the
+// disagreement would read as a transition the sampler missed.
+//
+// It answers ” when the module is not reachable, which is the same "unknown"
+// the sampler already reports. It reads an enum of Meta's; nothing here can
+// carry anything about the account.
+const socketStateReadJS = `((() => {
+			try {
+				const m = window.require('` + string(spa.ModuleSocketModel) + `');
+				const sk = m && (m.Socket || m.default || m);
+				return (sk && typeof sk.__x_state === 'string') ? sk.__x_state : '';
+			} catch (e) { return ''; }
+		})())`
+
 // readinessScript samples every signal in ONE evaluation.
 //
 // One round trip per tick matters: two would smear the timeline by however long
@@ -594,11 +614,7 @@ func readinessScript(modules []spa.Module) string {
 				hasConnWidAccessor = !!(c && c.wid);
 				meReady = !!(c && c.__x_meReadyTriggered === true);
 			} catch (e) {}
-			try {
-				const m = window.require('` + string(spa.ModuleSocketModel) + `');
-				const sk = m && (m.Socket || m.default || m);
-				socketState = (sk && typeof sk.__x_state === 'string') ? sk.__x_state : '';
-			} catch (e) {}
+			socketState = ` + socketStateReadJS + `;
 		}
 		return {
 			dom_nodes: document.getElementsByTagName('*').length,
@@ -1833,6 +1849,724 @@ func reportRecovery(t *testing.T, restoredAt time.Duration, samples []severSampl
 		t.Errorf("the socket never returned to %s within %s after the network came back",
 			socketStateConnected, severRecovery)
 	}
+}
+
+// --- N2b: how long the socket STAYS in OPENING under a cut ------------------
+//
+// M5 measured DETECTION LATENCY — 33,2–34,2 s from a transport cut to the socket
+// LEAVING CONNECTED, inside a 90 s window. It never measured what the socket does
+// AFTERWARDS: ~55 s is all the OPENING that window ever saw, and M5.8 says so in
+// as many words ("nada sobre cortes longos").
+//
+// M7 delivered the LOWER bound of the cut: C > 1,36 s, the worst OPENING window
+// of a healthy boot under adversity. Nothing bounds C from ABOVE, and that is
+// what this probe is for. A cut C over time-in-OPENING only ever fires if the
+// socket is still IN OPENING when C elapses. If the SPA gives up, retries into
+// another state, shows a QR or returns to CONNECTED on its own, then C has a
+// CEILING — and worse, the observable a liveness cut watches can disappear
+// underneath it, so the cut would have to treat that transition as its own
+// signal.
+//
+// The three results, written BEFORE the run and repeated here so they cannot be
+// adjusted after it:
+//
+//   - CONFIRMS the primary hypothesis — a retry loop with no terminal state, so
+//     no practical upper bound inside the window: the socket enters OPENING
+//     after the cut and is STILL in OPENING when the window closes, in EVERY
+//     run, with no intervening state; and the page-side recorder, ten times
+//     finer than the Go sampler, shows no transition the sampler missed.
+//   - WEAKENS it: the socket leaves OPENING in some runs and not others, or
+//     oscillates between OPENING and something else without settling. The
+//     observable is then unstable, and a cut would have to treat the
+//     oscillation itself as its signal.
+//   - FALSIFIES it: the socket leaves OPENING at a reproducible instant in every
+//     run, for a state it does not come back from. That instant IS an upper
+//     bound on C, and it is the ALTERNATIVE hypothesis.
+//
+// The cut is the OUTAGE path, SetTransportOffline — the same M5 mechanism, not a
+// third harness. It is deliberately NOT M7's degradation path: NetworkDegradation
+// cannot express an outage by construction, which is the whole reason the two are
+// separate objects.
+//
+// This probe DOES NOT choose the cut and DOES NOT implement it.
+
+const (
+	// longCutWindow is how long the session is watched WITH the transport dead.
+	//
+	// Twelve minutes, and the number is chosen rather than inherited: M5's 90 s
+	// is exactly what left this question open, and EXECUCAO's `corte longo` names
+	// "what the SPA does after ten minutes without a server". Detection alone
+	// costs ~34 s of that window, so twelve minutes from the cut leaves ~11,4 min
+	// of OPENING to observe — past ten minutes with margin, and the margin is
+	// there because a window that ends at exactly the interesting instant cannot
+	// tell "it never left" from "it left just after we stopped looking".
+	longCutWindow = 12 * time.Minute
+	// longCutBaseline is the steady state watched before anything is done, same
+	// role and same length as M5's.
+	longCutBaseline = 8 * time.Second
+	// longCutRecovery bounds the wait for the session to come back AFTER a
+	// twelve-minute outage.
+	//
+	// Longer than M5's 60 s on purpose. M4.5 measured 2–3 s of recovery for a
+	// SHORT outage and M5 measured 4,1–6,0 s; whether that holds after twelve
+	// minutes is precisely what is unknown here, so the bound must not be the
+	// one calibrated on the short case — a budget that expires would report a
+	// session that never came back when what happened is that we stopped
+	// waiting.
+	longCutRecovery = 120 * time.Second
+	// longCutRuns is how many CUT runs happen. Three is the project minimum for
+	// "one run cannot distinguish a phenomenon from an accident", and each run
+	// costs a boot of the paired profile (phase 4C), so it is also the maximum
+	// this loop is willing to spend.
+	longCutRuns = 3
+)
+
+const (
+	longCutLeg     = "long-cut"
+	longControlLeg = "long-control"
+)
+
+// --- the page-side transition recorder --------------------------------------
+
+// socketTrailSlot is where the page parks its socket-state trail. Named once:
+// the installer and the reader are two scripts.
+const socketTrailSlot = "__waHeadlessSocketTrail"
+
+// socketTrailTimerSlot holds the interval handle, OUTSIDE the trail, so that
+// reading the trail never drags a timer id through JSON.
+const socketTrailTimerSlot = "__waHeadlessSocketTrailTimer"
+
+const (
+	// socketTrailTickMS is the page-side sampling interval, in milliseconds.
+	//
+	// It exists because of the trap this task is most exposed to: a transition
+	// missed between ticks is a WRONG answer, not a coarse one. The Go sampler
+	// runs at severTick — one second, three round trips per tick — and a state
+	// the socket passed through for 300 ms between two of its ticks would be
+	// invisible to it, and its absence would be reported as "no transition".
+	//
+	// The recorder is ten times finer and costs no round trip at all: it runs
+	// inside the page and is READ once per Go tick. It is not a replacement for
+	// the Go timeline — it is the witness that says whether the Go timeline
+	// missed anything.
+	//
+	// It is a STRING because it is interpolated into the installer script, which
+	// is a compile-time constant: strconv.Itoa is not.
+	socketTrailTickMS = "100"
+	// socketTrailCap bounds the recorded transitions.
+	//
+	// An oscillating socket at 100 ms over twelve minutes could record 7.200
+	// entries, and an unbounded array in a page we do not own is a leak we would
+	// be adding to the thing being measured. The cap is reported when it is hit:
+	// silent truncation would read as "it stopped oscillating", which is the
+	// optimistic lie an instrument must never tell.
+	//
+	// A string for the same reason as socketTrailTickMS.
+	socketTrailCap = "2000"
+)
+
+// installSocketTrailScript starts the page-side recorder.
+//
+// It records STATE STRINGS and millisecond offsets, and nothing else. The states
+// are an enum of Meta's; there is nothing here that could carry anything about
+// the account. It is idempotent, so a second install cannot restart the clock.
+//
+// The first reading is taken synchronously, before the interval is armed, so the
+// trail always opens with the state at install time rather than 100 ms later.
+const installSocketTrailScript = `JSON.stringify((() => {
+	if (window.` + socketTrailSlot + `) return 'already';
+	const trail = {missing: false, t0: Date.now(), ticks: 0, capped: false, entries: []};
+	window.` + socketTrailSlot + ` = trail;
+	let last = null;
+	const tick = () => {
+		trail.ticks++;
+		const s = ` + socketStateReadJS + `;
+		if (s === last) return;
+		last = s;
+		if (trail.entries.length >= ` + socketTrailCap + `) { trail.capped = true; return; }
+		trail.entries.push({at: Date.now() - trail.t0, state: s});
+	};
+	tick();
+	window.` + socketTrailTimerSlot + ` = setInterval(tick, ` + socketTrailTickMS + `);
+	return 'installed';
+})())`
+
+// readSocketTrailScript answers missing=true when the recorder is GONE — a
+// navigation would take it with it — because an empty trail would then read as
+// "no transition happened", which is the finding this probe is looking for and
+// therefore the last thing it may fabricate.
+const readSocketTrailScript = `JSON.stringify(window.` + socketTrailSlot +
+	` || {missing: true, t0: 0, ticks: 0, capped: false, entries: []})`
+
+// socketTrailEntry is one page-side transition: the state entered and how many
+// milliseconds after the recorder was installed.
+type socketTrailEntry struct {
+	At    int64  `json:"at"`
+	State string `json:"state"`
+}
+
+// socketTrail is the page's own view of the socket-state timeline.
+type socketTrail struct {
+	Missing bool               `json:"missing"`
+	Ticks   int                `json:"ticks"`
+	Capped  bool               `json:"capped"`
+	Entries []socketTrailEntry `json:"entries"`
+	// installedAt is the Go-side instant the recorder started, so its page-local
+	// offsets can be placed on the same T+ axis as everything else. The two
+	// clocks are both wall clocks on the same machine; the skew between them is
+	// not measured here and is assumed negligible at the scale of seconds.
+	installedAt time.Duration
+}
+
+func installSocketTrail(t *testing.T, runner *engine.Runner, tab *engine.Tab) {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpEvaluate, "sockettrail/install",
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, installSocketTrailScript, &raw)
+		}); err != nil {
+		t.Fatalf("installing the socket-state recorder: %v", err)
+	}
+}
+
+func readSocketTrail(t *testing.T, runner *engine.Runner, tab *engine.Tab,
+	installedAt time.Duration) socketTrail {
+	t.Helper()
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "sockettrail/read",
+		func(ctx context.Context) error {
+			return tab.Evaluate(ctx, readSocketTrailScript, &raw)
+		}); err != nil {
+		t.Fatalf("reading the socket-state recorder: %v", err)
+	}
+	var trail socketTrail
+	if err := json.Unmarshal([]byte(raw), &trail); err != nil {
+		t.Fatalf("unexpected socket-trail shape %q: %v", raw, err)
+	}
+	trail.installedAt = installedAt
+	return trail
+}
+
+func (tr socketTrail) log(t *testing.T) {
+	t.Helper()
+	if tr.Missing {
+		t.Error("the page-side socket recorder is GONE, so its silence is unknown rather " +
+			"than zero; a navigation took it with it and the fine-grained timeline for " +
+			"this run does not exist")
+		return
+	}
+	t.Logf("PAGE-SIDE TRAIL — %d transitions in %d ticks at %sms (capped=%v)",
+		len(tr.Entries), tr.Ticks, socketTrailTickMS, tr.Capped)
+	if tr.Capped {
+		t.Errorf("the page-side recorder hit its %s-entry cap, so the trail is TRUNCATED "+
+			"and the transitions after the cap are unknown rather than absent", socketTrailCap)
+	}
+	for _, e := range tr.Entries {
+		at := tr.installedAt + time.Duration(e.At)*time.Millisecond
+		t.Logf("    T+%8.2fs -> %q", at.Seconds(), e.State)
+	}
+}
+
+// --- the socket-state timeline, from the Go sampler -------------------------
+
+// socketRun is one contiguous stretch of a single socket state.
+//
+// The timeline is reported as runs rather than as marks because the question is
+// about a DURATION and about what came NEXT, and a mark can say neither. A run
+// that never ends is exactly the answer the primary hypothesis predicts, and it
+// is rendered as such rather than as an instant.
+type socketRun struct {
+	state       string
+	first, last time.Duration
+	samples     int
+}
+
+// socketRunsOf compresses the sampled socket states into runs.
+//
+// Samples whose signals were never READ are skipped, not treated as a state
+// change. A blown probe leaves SocketState at "", and scanning that naively
+// would invent a transition into an empty state — the same reason
+// firstSignalWhere exists.
+func socketRunsOf(samples []severSample) []socketRun {
+	var runs []socketRun
+	for _, s := range samples {
+		if s.probeFailed {
+			continue
+		}
+		if n := len(runs); n > 0 && runs[n-1].state == s.signals.SocketState {
+			runs[n-1].last = s.at
+			runs[n-1].samples++
+			continue
+		}
+		runs = append(runs, socketRun{state: s.signals.SocketState, first: s.at, last: s.at, samples: 1})
+	}
+	return runs
+}
+
+// openingStay is what this whole probe exists to produce for one run.
+type openingStay struct {
+	// entered and enteredAt: whether the socket ever reached OPENING, and when.
+	entered   bool
+	enteredAt time.Duration
+	// left, leftAt and nextState: whether it ever left, when, and for what.
+	left      bool
+	leftAt    time.Duration
+	nextState string
+	// held is the time spent in OPENING. When left is false it is a LOWER bound
+	// — the window is what was measured, not eternity — and every renderer of it
+	// has to say so.
+	held time.Duration
+	// endedAt is the last sample of the window whose signals were read, which is
+	// the T+ that "still in OPENING at T+X" refers to.
+	endedAt time.Duration
+}
+
+// openingStayOf reads the stay off the runs.
+//
+// It takes the FIRST arrival in OPENING and the first departure after it. A
+// socket that returned to OPENING later is not folded in: the oscillation is
+// reported by the run list, which is the honest place for it, rather than
+// summed into a single number that would hide it.
+func openingStayOf(runs []socketRun) openingStay {
+	var stay openingStay
+	for i, r := range runs {
+		if r.state != socketStateOpening {
+			continue
+		}
+		stay.entered, stay.enteredAt = true, r.first
+		if i+1 < len(runs) {
+			stay.left, stay.leftAt = true, runs[i+1].first
+			stay.nextState = runs[i+1].state
+			stay.held = stay.leftAt - stay.enteredAt
+		} else {
+			stay.held = r.last - r.first
+		}
+		stay.endedAt = runs[len(runs)-1].last
+		return stay
+	}
+	if len(runs) > 0 {
+		stay.endedAt = runs[len(runs)-1].last
+	}
+	return stay
+}
+
+// describe renders the stay for a human, and refuses to render absence as an
+// instant.
+func (s openingStay) describe(cutAt time.Duration) string {
+	switch {
+	case !s.entered:
+		return "the socket NEVER entered " + socketStateOpening
+	case s.left:
+		return fmt.Sprintf("%s from T+%.2fs to T+%.2fs — held %s, then went to %q "+
+			"(entered %.1fs after the cut)", socketStateOpening, s.enteredAt.Seconds(),
+			s.leftAt.Seconds(), fmtDur(s.held), s.nextState, (s.enteredAt - cutAt).Seconds())
+	default:
+		return fmt.Sprintf("STILL in %s at T+%.2fs — entered T+%.2fs (%.1fs after the cut), "+
+			"held AT LEAST %s. This is a statement about the window, not about eternity",
+			socketStateOpening, s.endedAt.Seconds(), s.enteredAt.Seconds(),
+			(s.enteredAt - cutAt).Seconds(), fmtDur(s.held))
+	}
+}
+
+// severSpacing is the OBSERVED interval between consecutive samples of a
+// severSample window: the resolution this instrument actually had (F-20).
+func severSpacing(samples []severSample) (max, median time.Duration) {
+	if len(samples) < 2 {
+		return 0, 0
+	}
+	gaps := make([]time.Duration, 0, len(samples)-1)
+	for i := 1; i < len(samples); i++ {
+		gaps = append(gaps, samples[i].at-samples[i-1].at)
+	}
+	return maxOf(gaps), medianOf(gaps)
+}
+
+// --- the run ----------------------------------------------------------------
+
+// longCutResult is one run reduced to what the cross-run report is made of.
+type longCutResult struct {
+	leg    string
+	cut    bool
+	cutAt  time.Duration
+	stay   openingStay
+	runs   []socketRun
+	events netEventCounts
+	// offlineMark is the first sample where navigator.onLine went false, and the
+	// boolean inside it is not redundant: "never" and "at T+0" are different
+	// statements. The blackhole cut requires it to have stayed true.
+	offlineMark signalMark
+	// recovered and recoveryIn: whether the socket came back after the cut was
+	// lifted, and how long it took. Only meaningful on a cut leg.
+	recovered  bool
+	recoveryIn time.Duration
+	spanMax    time.Duration
+	spanMedian time.Duration
+	samples    int
+	unread     int
+	trailFine  int
+	lockAfter  bool
+}
+
+func TestRealSPAOpeningPersistenceUnderLongCut(t *testing.T) {
+	requireRealSPA(t)
+
+	profile, _, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The order is INTERLEAVED, not sequential-then-control.
+	//
+	// The whole run takes about an hour, and a control taken before all the cuts
+	// or after all of them would sit at an extreme of whatever the machine and
+	// the network did over that hour. Putting it second gives the cut runs
+	// neighbours on both sides. The positive control of the event counter goes
+	// on the LAST leg, after its measurement is complete, so it cannot perturb
+	// anything this probe reports.
+	type leg struct {
+		name            string
+		cut             bool
+		positiveControl bool
+	}
+	legs := make([]leg, 0, longCutRuns+1)
+	for i := 1; i <= longCutRuns; i++ {
+		legs = append(legs, leg{
+			name:            fmt.Sprintf("%s-%d", longCutLeg, i),
+			cut:             true,
+			positiveControl: i == longCutRuns,
+		})
+		if i == 1 {
+			legs = append(legs, leg{name: longControlLeg})
+		}
+	}
+
+	var results []longCutResult
+	for _, leg := range legs {
+		var out longCutResult
+		// The subtest exists for its CLEANUP: the clean stop is registered inside
+		// launchObservationProfile, so the profile can only be looked at AFTER
+		// the browser is down by letting a nested test end first.
+		t.Run(leg.name, func(t *testing.T) {
+			out = observeLongCut(t, leg.name, leg.cut, leg.positiveControl)
+		})
+		out.lockAfter = lockPresent(t, profile)
+		if out.lockAfter {
+			t.Errorf("%s: %s survived the clean stop; the next boot would have to reclaim it",
+				leg.name, singletonLockName)
+		}
+		t.Logf("HYGIENE %s: singleton_lock_after_clean_stop=%v", leg.name, out.lockAfter)
+		results = append(results, out)
+	}
+	reportLongCut(t, results)
+}
+
+// observeLongCut is one run: boot, reach a ready state, cut (or not), watch for
+// twelve minutes, then lift the cut and watch it come back.
+func observeLongCut(t *testing.T, leg string, cut, positiveControl bool) longCutResult {
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	script := readinessScript(spa.RequiredAtStartup)
+	want := len(spa.RequiredAtStartup)
+
+	// The precondition. Watching a session that never came up would measure the
+	// boot rather than the cut.
+	_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
+	if marks.pane == 0 || marks.connected == 0 {
+		t.Fatalf("the session never reached a ready state (pane %s, socket %s %s); there is "+
+			"no live session here to cut", markString(marks.pane), socketStateConnected,
+			markString(marks.connected))
+	}
+	t.Logf("READY: pane %s · identity %s · meReady %s · socket %s %s",
+		markString(marks.pane), markString(marks.identity), markString(marks.meReady),
+		socketStateConnected, markString(marks.connected))
+
+	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate}
+	start := time.Now()
+	result := longCutResult{leg: leg, cut: cut}
+
+	// Both sentinels go in on EVERY leg, before anything is done to the network.
+	// The comparison between the legs is half the answer, and a counter read in
+	// only one of them would leave the other's expectation untested.
+	installNetEventSentinel(t, runner, tab)
+	trailInstalledAt := time.Since(start)
+	installSocketTrail(t, runner, tab)
+
+	baseline := watchSession(t, runner, tab, monitor, script, "baseline", start, longCutBaseline)
+	steady, haveSteady := lastReadSample(baseline)
+	if !haveSteady {
+		t.Fatal("no baseline sample with its signals read; the page stopped answering before " +
+			"the window opened, so there is no steady state to cut")
+	}
+	if steady.signals.SocketState != socketStateConnected || !steady.signals.HasPaneSide {
+		t.Fatalf("the steady state is not what this loop needs to cut: socket=%q pane=%v",
+			steady.signals.SocketState, steady.signals.HasPaneSide)
+	}
+
+	if cut {
+		result.cutAt = applyLongCut(t, runner, tab, leg, start)
+	}
+
+	window := watchSession(t, runner, tab, monitor, script, leg, start, longCutWindow)
+	result.events = readNetEvents(t, runner, tab)
+	trail := readSocketTrail(t, runner, tab, trailInstalledAt)
+
+	result.runs = socketRunsOf(window)
+	result.stay = openingStayOf(result.runs)
+	result.samples = len(window)
+	result.unread = countFailedProbes(window)
+	result.spanMax, result.spanMedian = severSpacing(window)
+	result.trailFine = len(trail.Entries)
+	result.offlineMark = collectWindowMarks(window).offline
+
+	reportLongCutWindow(t, leg, cut, result, trail, steady.at)
+
+	if cut {
+		result.recovered, result.recoveryIn = liftLongCut(t, runner, tab, monitor, script, start)
+	}
+	if positiveControl {
+		proveCounterCountsAfterLongCut(t, runner, tab, result.events)
+	}
+	return result
+}
+
+// applyLongCut blackholes the transport and proves the cut landed, returning the
+// instant of the cut.
+//
+// The two reachability readings BRACKET the cut and both halves are load-bearing:
+// the one before is the internal control — a probe that cannot say OK with the
+// network untouched could never prove anything by saying FAIL — and the one after
+// is the precondition proper. Both are one GET for a static icon on the SPA's own
+// origin, and neither touches anything the account owns.
+func applyLongCut(t *testing.T, runner *engine.Runner, tab *engine.Tab, leg string,
+	start time.Time) time.Duration {
+	t.Helper()
+	before := reachability(t, runner, tab, "before")
+	if before != fetchVerdictOK {
+		t.Fatalf("the reachability probe answered %q with the network untouched, want %q; "+
+			"a probe that cannot say OK could never prove a cut by saying FAIL",
+			before, fetchVerdictOK)
+	}
+	severNetwork(t, runner, tab, (*engine.Tab).SetTransportOffline, leg, start)
+	cutAt := time.Since(start)
+	during := reachability(t, runner, tab, "cut")
+	if during != fetchVerdictFail {
+		t.Fatalf("the transport cut never landed: the reachability probe still answered %q "+
+			"with the emulation active, so nothing measured here is attributable to a lost "+
+			"server", during)
+	}
+	t.Logf("REACHABILITY — untouched: %s · with the transport cut: %s", before, during)
+	return cutAt
+}
+
+// reportLongCutWindow prints the timeline and the stay, and refuses the two runs
+// that would be measurements of the instrument rather than of the session: a cut
+// leg where nothing announced the cut is the premise, and a control leg that
+// drifted makes the cut legs unattributable.
+func reportLongCutWindow(t *testing.T, leg string, cut bool, r longCutResult,
+	trail socketTrail, ref time.Duration) {
+	t.Helper()
+
+	t.Logf("%s WINDOW — %d samples over %.0fs (%d with the signals unread), cut at T+%.2fs",
+		strings.ToUpper(leg), r.samples, longCutWindow.Seconds(), r.unread, r.cutAt.Seconds())
+	t.Logf("  observed spacing: median %s, worst %s (requested tick %s) — this, not the "+
+		"constant, is the resolution of the timeline below",
+		fmtDur(r.spanMedian), fmtDur(r.spanMax), fmtDur(severTick))
+	t.Log("  SOCKET TIMELINE (Go sampler, one line per contiguous state)")
+	for _, run := range r.runs {
+		t.Logf("    T+%8.2fs .. T+%8.2fs  %-12s  %s over %d samples",
+			run.first.Seconds(), run.last.Seconds(), strconv.Quote(run.state),
+			fmtDur(run.last-run.first), run.samples)
+	}
+	trail.log(t)
+	t.Logf("  DOM NETWORK EVENTS over the window: offline=%d online=%d",
+		r.events.Offline, r.events.Online)
+	t.Logf("  STAY: %s", r.stay.describe(r.cutAt))
+
+	if !cut {
+		// The negative control, and the only leg that asserts. Without it,
+		// "stayed in OPENING" cannot be told apart from an instrument that
+		// reports OPENING regardless of what the socket is doing.
+		if len(r.runs) != 1 || r.runs[0].state != socketStateConnected {
+			t.Errorf("the control leg's socket did not hold %s for the whole window; the "+
+				"reader is then not shown to be capable of reporting anything but %s, and "+
+				"the cut legs' timelines are not attributable to the cut",
+				socketStateConnected, socketStateOpening)
+		}
+		if r.stay.entered {
+			t.Errorf("the control leg entered %s at T+%.2fs with nothing done to it",
+				socketStateOpening, r.stay.enteredAt.Seconds())
+		}
+		if r.events.Offline != 0 {
+			t.Errorf("the control leg counted %d offline events with nothing done to it",
+				r.events.Offline)
+		}
+		t.Logf("CONTROL: the socket held %s for the whole %s window with the network "+
+			"untouched, and the same reader reported %s on the cut legs. The reader "+
+			"discriminates.", socketStateConnected, fmtDur(longCutWindow), socketStateOpening)
+		return
+	}
+
+	// The premise of the outage path, exactly as M5 states it: navigator.onLine
+	// must have stayed TRUE and the page must have counted ZERO offline events.
+	// The counter is monotonic, so zero at the end is zero throughout. Without
+	// these two the blackhole leg would just be M4's announced cut with a slower
+	// guard, and the timeline could not be read as the SPA noticing by itself.
+	if r.offlineMark.seen {
+		t.Fatalf("navigator.onLine went false at T+%.2fs; the blackhole cut exists to leave "+
+			"it alone, so its whole premise is gone and this timeline cannot be read as "+
+			"self-detection", r.offlineMark.sample.at.Seconds())
+	}
+	if r.events.Offline != 0 {
+		t.Fatalf("the page counted %d offline events with the blackhole cut; something "+
+			"announced the outage after all, so nothing in this timeline can be attributed "+
+			"to the SPA noticing by itself", r.events.Offline)
+	}
+	if !r.stay.entered {
+		t.Errorf("the socket never entered %s over %s with its transport dead; M5 measured "+
+			"the departure from %s at 33,2–34,2s, so either the cut did not reach the "+
+			"socket or this build behaves differently. Do not soften this; re-measure it",
+			socketStateOpening, fmtDur(longCutWindow), socketStateConnected)
+	}
+}
+
+// liftLongCut restores the transport while the socket is still under the cut and
+// times the return to CONNECTED.
+//
+// This is the FALSE-POSITIVE side of the choice a later node has to make: a
+// session that WOULD have recovered is exactly what a badly chosen C kills. M4.5
+// measured 2–3 s for a short outage and M5 measured 4,1–6,0 s; whether that holds
+// after twelve minutes is the open half.
+func liftLongCut(t *testing.T, runner *engine.Runner, tab *engine.Tab, monitor *spa.Monitor,
+	script string, start time.Time) (bool, time.Duration) {
+	t.Helper()
+	if err := tab.SetTransportOffline(runner, false, "longcut/restore"); err != nil {
+		t.Fatalf("restoring the transport: %v", err)
+	}
+	restoredAt := time.Since(start)
+	t.Logf("TRANSPORT RESTORED at T+%.2fs, after %s of outage", restoredAt.Seconds(),
+		fmtDur(longCutWindow))
+
+	samples := watchSession(t, runner, tab, monitor, script, "recovery", start, longCutRecovery)
+	back, recovered := firstSignalWhere(samples, func(s readinessSample) bool {
+		return s.SocketState == socketStateConnected
+	})
+	t.Logf("RECOVERY — %d samples over %s (%d with the signals unread)", len(samples),
+		fmtDur(longCutRecovery), countFailedProbes(samples))
+	t.Logf("  socket back to %s  %s", socketStateConnected,
+		sinceOrNever(back, recovered, restoredAt))
+	for _, run := range socketRunsOf(samples) {
+		t.Logf("    T+%8.2fs .. T+%8.2fs  %-12s", run.first.Seconds(), run.last.Seconds(),
+			strconv.Quote(run.state))
+	}
+	// The session must be handed back healthy: this profile is not disposable,
+	// and leaving it disconnected would be a side effect of the measurement.
+	if !recovered {
+		t.Errorf("the socket never returned to %s within %s after a %s outage",
+			socketStateConnected, fmtDur(longCutRecovery), fmtDur(longCutWindow))
+		return false, 0
+	}
+	return true, back.at - restoredAt
+}
+
+// proveCounterCountsAfterLongCut is the POSITIVE control of the event counter,
+// in the M7.7 shape: the same listener that has just read zero is given a
+// genuine event, on the same page instance.
+//
+// A listener that never counted anything proves nothing by reading zero. It runs
+// AFTER everything this leg measures, so it cannot perturb any of it.
+func proveCounterCountsAfterLongCut(t *testing.T, runner *engine.Runner, tab *engine.Tab,
+	before netEventCounts) {
+	t.Helper()
+	t.Logf("POSITIVE CONTROL: the same listener that just read offline=%d is now given a "+
+		"genuine event", before.Offline)
+	if err := tab.SetNetworkOffline(runner, true, "longcut/positive-control"); err != nil {
+		t.Fatalf("firing the genuine offline event: %v", err)
+	}
+	defer func() {
+		if err := tab.SetNetworkOffline(runner, false, "longcut/positive-control-restore"); err != nil {
+			t.Errorf("restoring the network after the positive control: %v", err)
+		}
+	}()
+	// The event is dispatched by the browser, not by us, so it needs a moment to
+	// reach the listener. A read taken in the same instant would report zero and
+	// be indistinguishable from a counter that does not count.
+	time.Sleep(2 * time.Second)
+	after := readNetEvents(t, runner, tab)
+	if after.Offline <= before.Offline {
+		t.Errorf("POSITIVE CONTROL FAILED: offline %d -> %d after a genuine event. The zeros "+
+			"above are then silence rather than measurements", before.Offline, after.Offline)
+		return
+	}
+	t.Logf("POSITIVE CONTROL PASSED: offline %d -> %d, online %d -> %d. The counter counts, "+
+		"so the zeros above are measurements and not silence",
+		before.Offline, after.Offline, before.Online, after.Online)
+}
+
+// reportLongCut is the cross-run answer, and the one thing this node owes the
+// node that will choose the cut.
+func reportLongCut(t *testing.T, results []longCutResult) {
+	t.Helper()
+	t.Log("=== N2b — THE UPPER BOUND OF THE CUT ===")
+
+	var stays []time.Duration
+	allOpen, anyEntered := true, false
+	for _, r := range results {
+		if !r.cut {
+			continue
+		}
+		anyEntered = anyEntered || r.stay.entered
+		if r.stay.left {
+			allOpen = false
+		}
+		stays = append(stays, r.stay.held)
+		t.Logf("  %-12s cut T+%.2fs · %s · offline=%d · recovery %s · spacing med %s / worst %s",
+			r.leg, r.cutAt.Seconds(), r.stay.describe(r.cutAt), r.events.Offline,
+			recoveryString(r), fmtDur(r.spanMedian), fmtDur(r.spanMax))
+	}
+	if len(stays) == 0 {
+		t.Fatal("no cut runs, so there is no upper bound to answer about")
+	}
+
+	switch {
+	case allOpen && anyEntered:
+		t.Logf("ANSWER: NO upper bound on C WITHIN THE MEASURED WINDOW. In %d/%d cut runs "+
+			"the socket entered %s and was STILL in %s when the window closed at %s past "+
+			"the cut. The floor from M7 is C > 1,36s; this run puts no ceiling under %s, "+
+			"and it says NOTHING about what happens after it — the window is what was "+
+			"measured, not eternity.", len(stays), len(stays), socketStateOpening,
+			socketStateOpening, fmtDur(longCutWindow), fmtDur(minOf(stays)))
+	case !anyEntered:
+		t.Log("ANSWER: INCONCLUSIVE. The socket never reached " + socketStateOpening +
+			" under the cut, so the question this probe asks was never posed.")
+	default:
+		t.Log("ANSWER: an upper bound EXISTS inside the window — the socket left " +
+			socketStateOpening + " in at least one run. The per-run stays above are the " +
+			"ceiling, and the node that chooses C has to sit below the SMALLEST of them, " +
+			"or treat the departure itself as its signal.")
+	}
+	t.Log("This node does NOT choose the cut and does not implement it.")
+}
+
+// recoveryString renders a run's recovery, and says so when there was none.
+func recoveryString(r longCutResult) string {
+	if !r.cut {
+		return "n/a"
+	}
+	if !r.recovered {
+		return "NEVER"
+	}
+	return fmtDur(r.recoveryIn)
+}
+
+func minOf(ds []time.Duration) time.Duration {
+	out := ds[0]
+	for _, d := range ds[1:] {
+		if d < out {
+			out = d
+		}
+	}
+	return out
 }
 
 // --- LOOP 03.9: the on-disk FORM of SingletonLock, measured -----------------

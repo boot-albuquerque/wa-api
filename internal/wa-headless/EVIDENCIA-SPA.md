@@ -1458,3 +1458,339 @@ pareado**: sai da re-impressão dos logs da corrida, se estiverem guardados.
 entrega é a segunda perna: a metade saudável do M6, agora com a cauda amostrada
 sob adversidade, e a informação — que não estava em lugar nenhum — de que **o
 eixo que importa para essa cauda é a latência de rede, não a CPU**.
+
+---
+
+## M8 — A PERMANÊNCIA em `OPENING` sob corte: o limite SUPERIOR (N2b)
+
+**Data**: 2026-08-13 · **Ambiente**: Google Chrome 151.0.7922.109, macOS 15.6,
+**arm64**, 10 núcleos, Go 1.26.0, `--headless=new`, perfil **pareado**
+(`scripts/chromium-study/wa-session/profile` via `WA_HEADLESS_PROFILE_DIR`), só
+leitura, sem envio. Instrumento: `TestRealSPAOpeningPersistenceUnderLongCut`,
+**5 boots em duas execuções**, amostragem de **1 s** do lado Go e de **100 ms**
+dentro da página.
+
+Comandos, os dois:
+
+```
+# execução A — as quatro pernas
+WA_HEADLESS_REAL_SPA=1 \
+WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
+go test -run TestRealSPAOpeningPersistenceUnderLongCut ./internal/wa-headless/ -v -timeout 150m
+
+# execução B — a REPOSIÇÃO da perna que a rede da casa desqualificou (M8.6)
+WA_HEADLESS_REAL_SPA=1 \
+WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
+go test -run 'TestRealSPAOpeningPersistenceUnderLongCut/long-cut-2$' ./internal/wa-headless/ -v -timeout 60m
+```
+
+### M8.1 — Por que esta era a metade que faltava
+
+O M5 mediu **latência de DETECÇÃO**: 33,2–34,2 s do corte até o socket **SAIR**
+de `CONNECTED`, dentro de uma janela de 90 s. Ele nunca mediu o que o socket faz
+DEPOIS — o próprio M5.8 registra "nada sobre cortes longos", e os ~55 s de
+`OPENING` daquela janela são tudo que ela chegou a ver.
+
+O M7 entregou o limite **INFERIOR** do corte: `C > 1,36 s`, a pior janela de
+`OPENING` de um boot saudável sob adversidade. **Nada limitava `C` por cima.**
+
+E o limite superior não é detalhe de orçamento: um corte `C` sobre
+tempo-em-`OPENING` **só dispara se o socket ainda estiver em `OPENING`** quando
+`C` expira. Se o SPA desiste, tenta por outro estado, mostra QR ou volta sozinho
+para `CONNECTED`, então `C` tem **teto** — e pior: o observável que o corte vigia
+pode **sumir por baixo dele**, e o corte teria de tratar essa transição como
+sinal próprio.
+
+### M8.2 — Os três resultados, nomeados ANTES da corrida
+
+Escritos antes de qualquer boot e repetidos no comentário de cabeçalho do
+próprio teste, para que não pudessem ser ajustados depois:
+
+- **CONFIRMA** a hipótese primária (laço de retentativa sem estado terminal,
+  logo sem limite superior prático dentro da janela): o socket entra em
+  `OPENING` depois do corte e **ainda está em `OPENING`** quando a janela fecha,
+  em TODAS as corridas, sem estado intermediário — e o gravador da página, dez
+  vezes mais fino que o amostrador Go, não mostra transição que o amostrador
+  tenha perdido.
+- **ENFRAQUECE**: o socket sai de `OPENING` em algumas corridas e não em outras,
+  ou oscila entre `OPENING` e outra coisa sem assentar. O observável é então
+  instável, e um corte teria de tratar a própria oscilação como o seu sinal.
+- **FALSIFICA**: o socket sai de `OPENING` num instante reprodutível em todas as
+  corridas, para um estado do qual não volta. Esse instante **É** um limite
+  superior para `C`, e é a hipótese ALTERNATIVA.
+
+O resultado foi **CONFIRMA**, em 3 de 3 corridas válidas. Ver M8.4.
+
+### M8.3 — O método
+
+**O corte é o da M5, não um terceiro.** `engine.Tab.SetTransportOffline` — o
+caminho de **OUTAGE**. Os bytes morrem, `navigator.onLine` fica `true`, nenhum
+evento é disparado. Não é o caminho de **DEGRADAÇÃO** do M7:
+`engine.NetworkDegradation` não consegue expressar queda por construção, e as
+duas coisas são objetos separados exatamente por isso. O amostrador é o
+`watchSession` do M5 e a sonda de sinais é a do M6/M7 — nenhum harness novo.
+
+**A janela é de 12 minutos a partir do corte, e o número é escolhido, não
+herdado.** Os 90 s do M5 são o que deixou esta pergunta aberta, e o item
+`corte longo` do `EXECUCAO.md` nomeia "o que o SPA faz depois de dez minutos sem
+servidor". A detecção sozinha come ~31–42 s dessa janela, então 12 min a partir
+do corte deixam ~11,3 min de `OPENING` para observar — passa dos dez minutos com
+folga, e a folga existe porque **uma janela que termina exatamente no instante
+interessante não distingue "nunca saiu" de "saiu logo depois de a gente parar de
+olhar"**.
+
+**Duas resoluções, e as duas MEDIDAS em vez de declaradas (F-20).** O amostrador
+Go roda a 1 s, três idas e voltas por tique. A 1 s ele **não resolve** um estado
+pelo qual o socket passasse por 300 ms, e a ausência disso sairia como "nenhuma
+transição" — que é a resposta ERRADA, não a resposta grosseira. Por isso entrou
+um **gravador dentro da página**, a 100 ms, que não custa ida e volta nenhuma e é
+**lido** uma vez por tique do Go. Ele não substitui a linha do tempo do Go: é a
+testemunha que diz se ela perdeu alguma coisa. Os dois leem a MESMA expressão
+(`socketStateReadJS`), extraída para um único lugar — duas grafias da mesma
+leitura divergiriam de forma invisível, e a divergência apareceria justamente
+como "transição que o amostrador perdeu".
+
+**Ordem INTERCALADA na execução A.** A execução inteira leva ~53 min. Um controle
+tomado antes de todos os cortes ou depois de todos ficaria num extremo do que a
+máquina e a rede fizeram nesse tempo. Ele é o **segundo** dos quatro, e as
+corridas de corte têm vizinhos dos dois lados.
+
+**A recuperação é medida nas TRÊS corridas de corte**, não em uma. É o lado do
+FALSO POSITIVO da escolha: uma sessão que TERIA se recuperado é exatamente o que
+um `C` mal escolhido mata. O orçamento de espera é de 120 s e não os 60 s do M5,
+porque um orçamento calibrado no caso curto que expirasse reportaria "a sessão
+nunca voltou" quando o que houve foi "paramos de esperar".
+
+### M8.4 — Os números
+
+**Em 3 de 3 corridas válidas o socket entrou em `OPENING` e AINDA ESTAVA em
+`OPENING` quando a janela fechou, 12 minutos depois do corte.** Nenhum estado
+intermediário, nenhuma oscilação, nenhum QR, nenhum retorno espontâneo.
+
+| corrida | exec | corte em | saiu do `CONNECTED` | **detecção** | **tempo em `OPENING`** | estado seguinte | eventos `offline` | recuperação |
+|---|---|---|---|---|---|---|---|---|
+| `long-cut-1` | A | T+8,29s | T+42,51s | **+34,2 s** | **≥ 685,48 s** | **nenhum** | 0 | **+2,01 s** |
+| `long-cut-2` | B | T+8,43s | T+39,53s | **+31,1 s** | **≥ 688,38 s** | **nenhum** | 0 | **+3,02 s** |
+| `long-cut-3` | A | T+8,29s | T+50,55s | **+42,3 s** | **≥ 677,69 s** | **nenhum** | 0 | **+5,02 s** |
+
+O `≥` é literal e não é hedge: a corrida acabou com o socket ainda em `OPENING`,
+então o número é o que a JANELA viu, não a duração do estado. E o início real é
+ainda mais cedo que a coluna sugere — o gravador da página viu `OPENING` de 0,10
+a 0,57 s antes do amostrador Go (M8.5).
+
+Linha do tempo completa de uma corrida, colada, que é a forma de todas as três:
+
+```
+LONG-CUT-1 WINDOW — 719 samples over 720s (0 with the signals unread), cut at T+8.29s
+  observed spacing: median 1.00s, worst 1.07s (requested tick 1.00s)
+  SOCKET TIMELINE (Go sampler, one line per contiguous state)
+    T+    8.39s .. T+   41.51s  "CONNECTED"   33.11s over 34 samples
+    T+   42.51s .. T+  727.98s  "OPENING"     685.48s over 685 samples
+PAGE-SIDE TRAIL — 2 transitions in 7211 ticks at 100ms (capped=false)
+    T+    0.01s -> "CONNECTED"
+    T+   42.41s -> "OPENING"
+  DOM NETWORK EVENTS over the window: offline=0 online=0
+  STAY: STILL in OPENING at T+727.98s — entered T+42.51s (34.2s after the cut),
+        held AT LEAST 685.48s. This is a statement about the window, not about eternity
+TRANSPORT RESTORED at T+728.99s, after 720.00s of outage
+RECOVERY — 120 samples over 120.00s (0 with the signals unread)
+  socket back to CONNECTED  +2.0s after the reference (T+731.00s)
+    T+  728.99s .. T+  729.99s  "OPENING"
+    T+  731.00s .. T+  848.56s  "CONNECTED"
+```
+
+**A resposta, explícita: NÃO existe limite superior para `C` DENTRO DA JANELA
+MEDIDA.** O socket não tem estado terminal sob corte nos 12 minutos observados;
+não há teto abaixo de **677,69 s** (11,3 min). Combinado com o M7:
+
+| | |
+|---|---|
+| limite INFERIOR (M7, pior boot saudável sob adversidade) | **C > 1,36 s** |
+| limite SUPERIOR (M8, dentro da janela de 12 min) | **nenhum abaixo de 677,69 s** |
+| latência de DETECÇÃO que se SOMA (M5 + M8, ver M8.7) | **31,1–42,3 s** |
+
+O tempo total até declarar uma sessão morta continua sendo **`detecção + C`**,
+não `C`. **A faixa de escolha para `C` é larguíssima**, e o que a aperta não é o
+teto — é o custo de detecção que já se paga antes de `C` começar a contar, e o
+falso positivo do outro lado (M8.7).
+
+**Recuperação: doze minutos de queda NÃO degradam a volta.** +2,01 / +3,02 /
++5,02 s, dentro da faixa que o M4.5 mediu para corte curto (2–3 s) e o M5 para
+90 s (4,1–6,0 s). Isto é um "eu não teria adivinhado": a hipótese de escrivaninha
+razoável era que um socket doze minutos em retentativa voltasse com *backoff*
+longo, e ele volta como se nada tivesse acontecido. **É o lado do falso positivo,
+e ele é caro**: uma sessão cortada por 12 minutos ainda estava a ~3 s de voltar
+sozinha.
+
+### M8.5 — A resolução do instrumento, medida nos dois níveis
+
+O tique pedido do lado Go é 1 s. O espaçamento **observado** foi **mediano de
+1,00 s** nas cinco janelas, com pior caso de **1,01 a 1,13 s** — o tique segurou,
+e nenhuma amostra teve os sinais não lidos (`0 with the signals unread` em 5/5).
+
+O que o gravador da página acrescenta é a única coisa que o amostrador Go não
+podia dizer sobre si mesmo:
+
+| corrida | `OPENING` visto pelo gravador (100 ms) | pelo amostrador Go (1 s) | **atraso do amostrador** | transições vistas pelo gravador |
+|---|---|---|---|---|
+| `long-cut-1` | T+42,41s | T+42,51s | **0,10 s** | 2 em 7211 tiques |
+| `long-cut-2` (B) | T+38,96s | T+39,53s | **0,57 s** | 2 em 7169 tiques |
+| `long-cut-3` | T+50,02s | T+50,55s | **0,53 s** | 2 em 7172 tiques |
+| `long-control` | — (nunca saiu de `CONNECTED`) | — | — | 1 em 7180 tiques |
+
+Duas leituras, e as duas importam:
+
+1. **O amostrador Go atrasa de 0,10 a 0,57 s — sempre menos que um tique**, que é
+   exatamente o que se esperaria e agora está MEDIDO em vez de suposto;
+2. **o gravador não achou NENHUMA transição que o amostrador tenha perdido.** Duas
+   transições por janela de corte (`CONNECTED` no instante da instalação,
+   `OPENING` depois), contra os dois estados contíguos que o amostrador reportou.
+   Em ~7.180 tiques de 100 ms por janela, **o socket não passou por nenhum
+   estado intermediário**. É esta linha que fecha a armadilha do F-20 aqui: a
+   ausência de transição é medida com resolução de 100 ms, não inferida de uma
+   grade de 1 s.
+
+O cap de 2.000 entradas do gravador **não foi atingido em nenhuma janela**
+(`capped=false` em 5/5), então nenhuma trilha está truncada.
+
+### M8.6 — Os controles, todos EXECUTADOS
+
+**Controle NEGATIVO (o obrigatório): a perna sem corte.** Mesma janela, mesmo
+amostrador, mesma sonda, rede intocada:
+
+```
+LONG-CONTROL WINDOW — 717 samples over 720s (0 with the signals unread)
+  SOCKET TIMELINE (Go sampler, one line per contiguous state)
+    T+    8.10s .. T+  727.71s  "CONNECTED"   719.61s over 717 samples
+PAGE-SIDE TRAIL — 1 transitions in 7180 ticks at 100ms (capped=false)
+  DOM NETWORK EVENTS over the window: offline=0 online=0
+  STAY: the socket NEVER entered OPENING
+CONTROL: the socket held CONNECTED for the whole 720.00s window with the network
+untouched, and the same reader reported OPENING on the cut legs. The reader discriminates.
+```
+
+É ele que torna as três corridas de corte legíveis: **o mesmo leitor, na mesma
+execução, reportou `CONNECTED` por 719,61 s quando não havia corte e `OPENING`
+por ~680 s quando havia.** Sem isto, "ficou em `OPENING`" não se distinguiria de
+um instrumento que reporta `OPENING` sempre.
+
+**O CORTE CHEGOU**, nas três: `REACHABILITY — untouched: OK · with the transport
+cut: FAIL`, com o `OK` de antes servindo de controle interno — sonda que não
+consegue dizer `OK` jamais provaria nada dizendo `FAIL`.
+
+**NADA ANUNCIOU O CORTE**: `offline=0` e `online=0` nas três corridas válidas e
+no controle, e `navigator.onLine` **nunca** foi falso nelas.
+
+**Controle POSITIVO do contador, na forma do M7.7** — o mesmo listener que
+acabara de ler zero, na mesma instância de página, depois de a janela estar
+cronometrada:
+
+```
+POSITIVE CONTROL: the same listener that just read offline=0 is now given a genuine event
+POSITIVE CONTROL PASSED: offline 0 -> 1, online 0 -> 0. The counter counts, so the
+zeros above are measurements and not silence
+```
+
+**E um controle que o ambiente rodou sozinho, sem ser encomendado.** A `long-cut-2`
+da execução A foi **DESQUALIFICADA pelo próprio instrumento**: a rede da casa
+caiu de verdade no meio da janela, e a precondição matou a perna com o número na
+mão:
+
+```
+  [long-cut-2] T+267.14s online=false ... socket=OPENING
+  [long-cut-2] T+295.21s online=true  ... socket=OPENING
+  DOM NETWORK EVENTS over the window: offline=1 online=1
+navigator.onLine went false at T+267.14s; the blackhole cut exists to leave it alone,
+so its whole premise is gone and this timeline cannot be read as self-detection
+--- FAIL: TestRealSPAOpeningPersistenceUnderLongCut/long-cut-2 (739.49s)
+```
+
+Isso vale por três coisas. É a prova de que **a guarda MORDE contra um evento
+real que ninguém encenou** — controle negativo de campo, não de laboratório. É um
+**segundo controle positivo do contador**, independente do encomendado:
+`offline=1 online=1` num evento genuíno. E o dado da perna, embora inadmissível
+para a pergunta do M8, é ele próprio informativo: **mesmo com um `offline` de
+verdade no meio, o socket continuou em `OPENING`** e chegou a T+728,19s ainda
+nele. A perna foi **reposta** na execução B em vez de aproveitada — a
+desqualificação é da premissa, e premissa não se remenda.
+
+### M8.7 — O que o M8 entrega sobre o corte, e a correção que ele traz ao M5
+
+**Entrega o limite SUPERIOR, e ele é a ausência de um**: dentro de 12 minutos, o
+socket sob corte não tem estado terminal. `C` está livre para ficar em qualquer
+ponto acima do piso do M7 (`C > 1,36 s`) e abaixo dos ~11 min medidos, **sem que
+o observável desapareça por baixo dele**.
+
+**O que APERTA a escolha não é o teto — são as duas outras grandezas**, e as duas
+saem desta corrida:
+
+- **detecção**, que se SOMA: `detecção + C`. E o M8 **alarga a faixa que o M5
+  publicou**. O M5 mediu 33,2–34,2 s em três corridas e a estabilidade de 1 s
+  parecia ser a própria grade; o M8 mediu **31,1 / 34,2 / 42,3 s** em três
+  corridas válidas (mais 41,3 s na perna desqualificada), com o mesmo perfil, a
+  mesma máquina e a mesma grade de 1 s. **A faixa real é mais larga: 31,1–42,3 s,
+  e o máximo é 8,1 s acima do máximo do M5.** Não é contradição — são seis
+  amostras contra três, e a sexta caiu fora da faixa das três primeiras. O que
+  cai é a leitura de que os ~34 s eram um número apertado;
+- **falso positivo**, do outro lado: a recuperação depois de 12 minutos de queda
+  leva **2,01–5,02 s**. Um `C` escolhido perto do piso mata sessões que estavam a
+  três segundos de voltar.
+
+**A moldura dos 24,4× continua fora, e o M8 não a traz de volta.** 33,2 s é
+latência de detecção, soma-se; e o próprio número virou faixa.
+
+### M8.8 — O que o M8 NÃO estabelece
+
+**1. Não diz o que acontece depois de 12 minutos.** "Ainda em `OPENING` em
+T+727,98s" é uma afirmação sobre a JANELA. Se há um estado terminal em 20 min, em
+uma hora ou em um dia, o M8 não o viu e não o exclui. O texto do instrumento
+recusa, por construção, imprimir isto como "para sempre".
+
+**2. Três corridas em DUAS execuções, não uma.** A `long-cut-2` válida veio de
+uma execução separada, porque a rede da casa desqualificou a original. Comparar
+execuções separadas mede também o estado da máquina (a lição do M7.2), e a perna
+reposta não teve o controle ao lado no mesmo processo. O que a torna comparável
+mesmo assim: mesmo binário, mesmo perfil, mesma máquina, mesmo dia, e ela é a
+corrida com a **menor** detecção e a **maior** permanência das três — ou seja,
+não é ela que sustenta a conclusão.
+
+**3. Uma condição amostrada três vezes — a armadilha do M6.4/M7.8-1, pela
+terceira vez nesta capacidade.** As três corridas são o MESMO cenário: corte
+total, imediato, com a rede de casa saudável. Não foi amostrado corte
+intermitente, corte parcial, servidor que responde devagar, portal cativo, nem
+corte aplicado durante o boot em vez de sobre sessão estável. A permanência é
+"sem teto" **para este corte**, não para toda adversidade.
+
+**4. Não identificou o mecanismo.** "Laço de retentativa sem estado terminal" é
+LEITURA da linha do tempo, não medição. Ninguém olhou o tráfego, ninguém leu o
+código do SPA, e nenhum temporizador foi identificado — exatamente como
+"keepalive" era leitura no M5.4 e "handshake de k idas e voltas" no M7.4.
+
+**5. Não mediu sessão revogada, deslogada ou expirada.** Continua sendo outra
+medição, e continua sendo a que destruiria o ativo. Um socket em `OPENING` porque
+a REDE morreu e um socket em `OPENING` porque a SESSÃO morreu são
+indistinguíveis nesta evidência, e essa distinção é o que a CAP-04 vai precisar.
+
+**6. Não mediu a recuperação depois de mais de 12 minutos**, nem a partir de um
+estado que não fosse `OPENING`.
+
+**7. A resolução da AUSÊNCIA de transição é 100 ms, não zero.** Um estado pelo
+qual o socket passasse por menos de 100 ms escaparia às duas grades. O gravador
+reduz a janela cega em 10×; não a fecha.
+
+**8. Uma máquina, uma rede, um perfil, 5 boots.** E a rede de casa provou, nesta
+mesma corrida, que não é estável — o que reforça o item 2 em vez de o suavizar.
+
+**9. O corte NÃO sai daqui, e não era para sair.** Este nó é medição. Quando o
+corte for implementado, tempo, prazos e sequências têm de ser dependências
+injetáveis para que o teste seja determinístico, e o caminho de liveness não pode
+ganhar *fallback* silencioso: **toda morte de sessão sai com causa classificada,
+nunca erro genérico** (`HANDOFF-INICIATIVA.md` §6, numerada **11**).
+
+### M8.9 — Higiene
+
+`stopped_via=browser.close` em **5/5** boots e `SingletonLock` **ausente** depois
+da parada limpa em **5/5** (4 na execução A, 1 na B). A contagem de arquivos do
+perfil **não** é usada como sinal — a **H10** a mediu falsa para um boot só.
+Nenhum envio, nenhuma leitura de conteúdo de mensagem, nenhum dado da conta em
+log: a sonda reporta booleanos, contagens e o enum de estado do socket.
