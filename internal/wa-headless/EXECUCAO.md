@@ -8,6 +8,88 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
+CAP: 04 · LOOP 04.3E, a perna que deveria PIORAR · **DONE**
+
+**A cauda foi amostrada, e ela não estava onde o 04.3D apostou.** O M6 tinha
+medido a metade confortável (0,27–0,50 s em seis amostras) e o M6.4 disse por
+escrito o que faltava: a perna sob CPU disputada e rede degradada, porque
+amostras dentro de 20 ms umas das outras são UMA condição amostrada N vezes.
+Medido agora, em **21 boots numa única execução**, sete condições intercaladas
+por rotação, amostragem de 50 ms — quatro vezes mais fina que a do M6, e sem
+rebaselinar o M6, que continua sendo lido com o tick de 250 ms.
+
+**O máximo é 1,36 s**, e é isso que o nó entrega sobre um eventual corte `C`
+sobre tempo-em-`OPENING`: o **limite INFERIOR**, `C > 1,36 s`, na faixa medida —
+até 900 ms de latência adicionada. O limite SUPERIOR é a permanência em `OPENING`
+sob corte, que é o N2b e continua não medido. Os 33,2 s do M5 são latência de
+**DETECÇÃO** e **somam-se** ao corte (`33,2 s + C`) em vez de o limitarem — a
+razão de 24× entre os dois compara grandezas de eixos diferentes e é contexto
+orçamentário, não margem de segurança.
+
+**O achado é o eixo, não o número.** As duas hipóteses estavam metade certas
+cada uma, e nenhuma previa o resultado:
+
+- **CPU não move a janela.** Com **22,86×** de dilatação medida num boot, a
+  janela deu **0,46 s** — ABAIXO dos 0,73 s da perna sem carga. Tudo em volta
+  se mexeu (o `#pane-side` de T+7,3s para T+10,2s, o RTT da sonda de 1 ms para
+  2,66 s de pico); a janela, não. Pelo critério escrito ANTES da corrida, isso
+  **falsifica** a hipótese primária neste eixo.
+- **A rede move, e monotonicamente**: 0,70 → 0,76 → **1,36 s** para 150, 400 e
+  900 ms de latência adicionada.
+- **O que junta os dois** são as correlações sobre os 21 boots:
+  `r(latência, janela) = +0,95` contra `r(dilatação, janela) = −0,35` dentro das
+  pernas de CPU — sinal NEGATIVO, o oposto da hipótese primária. Um a um:
+  `cpu-2x` r3 bootou 2,2 s mais lento que os irmãos e deu a janela do MEIO;
+  `unstressed` r3 teve o `meReady` mais RÁPIDO da sua perna e deu a MAIOR janela
+  dela. **A janela não segue a lentidão do boot; segue a latência.** É o que se
+  esperaria de um handshake com número fixo de idas e voltas — leitura, não
+  medição, exatamente como "keepalive" era leitura no M5.4.
+
+O confundidor do 04.3A ficou fora nos dois sentidos, executados: `offline=0` nas
+21 corridas e `navigator.onLine` nunca falso em ~2.500 amostras; e o mesmo
+listener que leu zero contou `offline 0 -> 1` quando recebeu um evento de
+verdade. Antes de medido é ESTRUTURAL — `engine.NetworkDegradation` não tem como
+expressar queda, e o guarda que trava isso foi executado com a mutação e
+falhou como devia.
+
+Higiene: `stopped_via=browser.close` e `SingletonLock` ausente em **21/21**. A
+contagem de arquivos do perfil não foi usada como sinal — a **H10** a mediu
+falsa para um boot só.
+
+**A avaliação adversarial passou o M7 com fixes exigidos, e o que ela derrubou
+foram ARGUMENTOS, não números.** Nenhum dos 21 boots mudou de valor e nenhuma
+re-medição foi feita. O que caiu:
+
+- **o enquadramento dos 24,4×**, apresentado como se limitasse o corte quando é
+  latência de detecção que se SOMA a ele — e o erro estava congelado no
+  comentário de `detectionFloor`, onde a próxima pessoa o leria como assentado;
+- **o argumento de que o erro do amostrador é unidirecional** (M7.5). Não é: um
+  buraco sobre a marca de INÍCIO encolhe a janela para um valor pequeno mas não
+  nulo, indistinguível de 0,46 s. A falsificação da CPU sobrevive por outro
+  motivo, e melhor: o delta de 80/60/70 ms entre as DUAS âncoras prova resolução
+  de ~70 ms **na vizinhança das marcas**;
+- **a caracterização "40–70 ms"** da diferença entre âncoras: são 50–70 ms em 18
+  de 21, com 80/110/280 ms em três boots de CPU da rodada 1 — e a H11 contradizia
+  isso no seu próprio exemplo colado;
+- **o apoio escolhido para a Claim 4**: `net-heavy` r2 é ponto de alta
+  alavancagem (tirá-lo leva `r` de +0,45 a −0,01). A claim é melhor sustentada
+  pelas correlações e por outros dois boots;
+- **um guarda que não mordia**: `TestClearNetworkConditionsSendsAnEmptyRuleList`
+  nunca chamava `ClearNetworkConditions`. Um mutante que instalava queda
+  permanente no restauro passava VERDE. É o único defeito de código do lote, está
+  corrigido, e o mutante agora falha — ver **H12**.
+
+Duas limitações ficaram **registradas em vez de fechadas**, com o motivo: o
+controle positivo do confundidor rodou numa perna não degradada (fechá-la exigiria
+re-medir 21 boots do perfil pareado), e os brutos do espaçamento ao redor das
+marcas não foram publicados.
+
+Detalhe completo, com os 21 boots linha a linha, a ordem de intercalação, os
+controles colados e as dez coisas que a medição NÃO estabelece:
+`EVIDENCIA-SPA.md` **M7**.
+
+---
+
 CAP: 03 · LOOP 03.9, o formato do `SingletonLock` medido · **DONE**
 
 **A premissa era certa, e agora isso é um fato e não uma esperança.** A H4
@@ -715,17 +797,24 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 > só o rótulo estava tomado, e quem lesse apenas esta seção concluiria que o
 > trabalho ainda não foi feito. Renumerado para **04.3D**.
 
+* ~~**LOOP 04.3E — a perna que deveria PIORAR**~~ · **FEITO** (este commit).
+  A cauda está amostrada: **máximo de 1,36 s** em 21 boots, e a separação do
+  piso de 33,2 s do M5 é de **24×**. O item (a) do 04.3D abaixo está fechado; o
+  item (b), a **permanência** em `OPENING` sob corte, continua aberto e é o que
+  falta para o corte sair das DUAS distribuições. Ver `EVIDENCIA-SPA.md` M7 e o
+  **F-24**.
 * **LOOP 04.3D — a METADE que falta.** *(Corrigido em 2026-08-12, LOOP 03.9:
   este item dizia "o próximo" e descrevia trabalho que **já rodou**, em
   `bd254d6`, como METADE. Quem lesse só esta seção concluiria que nada foi
   medido. Bookkeeping; a numeração de invariantes NÃO foi tocada.)*
   **Feito**: a distribuição do boot SAUDÁVEL — seis amostras, `OPENING` de
   **0,27–0,50 s** (`EVIDENCIA-SPA.md` M6), contra os 33,2–34,2 s do M5 sob
-  corte. **Falta**, e o próprio 04.3D disse por quê: (a) a perna que deveria
-  PIORAR — boot sob CPU disputada e rede degradada, porque as amostras atuais
-  caem dentro de 20 ms umas das outras e isso é UMA condição amostrada seis
-  vezes, não a cauda; (b) a **permanência** em `OPENING` sob corte, que o M5
-  não mediu (ele mediu o instante da saída de `CONNECTED`).
+  corte. **Falta**, e o próprio 04.3D disse por quê: ~~(a) a perna que deveria
+  PIORAR~~ — **FEITA no 04.3E** (`EVIDENCIA-SPA.md` M7): 21 boots, sete
+  condições, máximo de 1,36 s, e o achado de que o eixo que move a janela é a
+  latência de rede e não a CPU; (b) a **permanência** em `OPENING` sob corte,
+  que o M5 não mediu (ele mediu o instante da saída de `CONNECTED`) — **segue
+  aberta**, e é o que resta para o corte sair das duas distribuições.
   *Done quando*: o corte sai das duas distribuições, com a cauda amostrada —
   não de escolha de mesa. É medir onde o mecanismo PIORA (Regra 2): a pergunta
   é qual boot lento vira falso positivo.
@@ -776,6 +865,55 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   ciclo que agiria é a **CAP-05**.
 
 ## Findings
+
+* **F-24 · a janela de `OPENING` de um boot saudável é limitada pela LATÊNCIA
+  de rede, não pela CPU nem pela lentidão do boot — e o máximo medido é
+  1,36 s.** LOOP 04.3E, 21 boots do perfil pareado numa única execução, sete
+  condições intercaladas por rotação, amostragem de 50 ms
+  (`EVIDENCIA-SPA.md` M7).
+
+  Os dois resultados que decidem, ambos com o critério escrito ANTES da
+  corrida:
+
+  - **CPU: falsificado.** 20 processos girando contra 10 núcleos, dilatação
+    medida de até **22,86×**, e a janela deu **0,46 s** — abaixo dos 0,73 s da
+    perna sem carga. O máximo de todas as pernas de CPU (0,66 s) fica abaixo do
+    máximo da não estressada. A contenção não é alegada: `#pane-side` foi de
+    T+7,3s para T+10,2s e o RTT da sonda de 1 ms mediano para 2,66 s de pico.
+  - **Rede: confirmado, e monotônico.** 0,70 → 0,76 → **1,36 s** para 150, 400
+    e 900 ms de latência adicionada.
+
+  **O que amarra os dois** é a corrida que nenhuma hipótese previa: o boot mais
+  lento das 21 (`net-heavy` r2, `meReady` em T+12,79s contra T+5–6s nos demais)
+  produziu **1,30 s**, praticamente igual aos outros dois `net-heavy`, que
+  bootaram na metade do tempo. A janela **não segue a lentidão do boot** — o
+  indício do M6.4, de que ela escalaria como o `#pane-side` escala, está
+  **medido e derrubado**. Ela segue a latência, que é o que se esperaria de um
+  handshake com número fixo de idas e voltas. *Leitura, não medição*: ninguém
+  olhou o tráfego, exatamente como "keepalive" era leitura para os ~34 s do
+  F-22.
+
+  **Consequência para o corte** (que este loop NÃO decide): a separação do piso
+  de detecção de 33,2 s caiu de ~70× para **24×** e continua ampla, mas o
+  parâmetro a vigiar num prazo de liveness deixa de ser "CPU do host" e passa a
+  ser **RTT até o servidor**. E o alcance da resposta é declarado: mediu-se até
+  900 ms de latência adicionada; enlaces de RTT plurissegundo não foram
+  medidos, e extrapolar a curva de três pontos até lá seria a escolha de mesa
+  que o M6.4 recusou.
+
+  **Ressalva de instrumento, e ela é grande.** Na perna `cpu-2x` o pior
+  espaçamento entre amostras foi de **5,11 s** contra uma janela de 0,46 s — o
+  tick pior é dez vezes a coisa medida. A falsificação do eixo CPU sobrevive
+  porque um amostrador grosseiro reporta a transição TARDE e portanto **infla**
+  a janela: o erro possível aponta ao contrário da conclusão. Não sobrevive por
+  a resolução ter sido suficiente, e o M7.5 diz isso com as duas direções de
+  erro.
+
+  **O que continua aberto:** a variância dentro de cada condição (as três
+  amostras de `net-heavy` caem em 80 ms — é a armadilha do M6.4 de novo, um
+  nível acima: o M7 produziu uma CURVA DE RESPOSTA entre condições, não a cauda
+  de uma distribuição dentro de uma), os eixos CRUZADOS, e a **permanência** em
+  `OPENING` sob corte, que continua sendo a outra metade que falta.
 
 * **F-23 · SIM, com escopo estreito e um teto de relógio. A ESCOLHA de motor
   por conta cabe inteira dentro do `wa-api`, e para ELA o write set do

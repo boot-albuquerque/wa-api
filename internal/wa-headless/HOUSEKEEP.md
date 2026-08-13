@@ -1091,6 +1091,68 @@ medido: depois do `browser.close` não sobra `SingletonLock`. **Revisado em
 a rotação como causa medida do −1, e o comentário do teste dizia o mesmo; os
 dois passaram a separar medição de hipótese. O achado **não** foi enfraquecido —
 a metade que invalida o observável da CAP-05 é a medida.
+
+---
+
+## H11 — a coluna "janela em `OPENING`" do M6 não é o tempo em `OPENING`
+
+**Data**: 2026-08-13 · **Contexto**: LOOP 04.3E (a perna que deveria PIORAR,
+`EVIDENCIA-SPA.md` M7). Achado de lado, ao construir a medição da cauda.
+
+**Onde**: `internal/wa-headless/EVIDENCIA-SPA.md`, seção **M6.2**, cabeçalho da
+tabela — a coluna rotulada `janela em OPENING`.
+
+**Problema**: os valores daquela coluna são `CONNECTED − meReadyTriggered`, e
+não o tempo que o socket passou no estado `OPENING`. Confere linha a linha na
+própria tabela do M6.2: 5,54−5,04 = 0,50; 6,79−6,29 = 0,50; 6,57−6,30 = 0,27.
+`meReadyTriggered` é uma **âncora escolhida**, não o estado medido, e o rótulo
+não diz que houve escolha.
+
+Medido no 04.3E, com as duas âncoras colhidas na mesma corrida e o mesmo
+instrumento (21 boots): a medida DIRETA — primeira amostra em `OPENING` até
+`CONNECTED` — é **50–70 ms menor em 18 dos 21 boots**; em três boots de CPU da
+rodada 1 a diferença chega a **80, 110 e 280 ms**, e os 280 ms de `cpu-1x` r1 são
+**42% da janela daquele boot** (0,66 s) — que é o máximo de todas as pernas de
+CPU, ou seja, o número mais carregado da falsificação do eixo CPU. Nenhum boot
+ficou em 40 ms: o mínimo observado é 50. Os três *outliers* estão todos onde o
+espaçamento observado foi pior, o que é o que se esperaria de um artefato de
+resolução e não de uma propriedade das âncoras. Exemplos da corrida, colados do
+M7.3 (note que o terceiro é um dos três *outliers*, com 80 ms):
+
+```
+unstressed r1   janela(M6) 0,49s   janela(direta) 0,44s
+net-heavy  r1   janela(M6) 1,36s   janela(direta) 1,31s
+cpu-2x     r1   janela(M6) 0,46s   janela(direta) 0,38s
+```
+
+**Nenhuma conclusão do M6 ou do M7 depende da escolha de âncora**, e isso deixou
+de ser impressão: o N2a-EVAL re-derivou as duas colunas nos 21 boots e verificou
+que **nada vira** sob a âncora direta — a monotonicidade da rede sobrevive
+(0,64 → 0,70 → 1,31), o máximo global vai de 1,36 para 1,31 s, e a falsificação
+do eixo CPU fica **mais forte**: a margem passa de 0,66/0,73 = 0,90 para
+0,49/0,68 = **0,72**. (A justificativa anterior desta linha era a razão de 24×
+contra o piso de detecção; ela foi **retirada** porque compara grandezas de eixos
+diferentes e não limita coisa nenhuma — ver H12 e `EVIDENCIA-SPA.md` M7.6.)
+
+O defeito é de ROTULAGEM,
+e o custo é o de sempre: quem ler só o M6 vai citar "0,27–0,50 s de tempo em
+`OPENING`" como se fosse o estado, e a próxima pessoa que medir o estado de
+verdade vai achar que encontrou uma divergência.
+
+**Correção sugerida**: renomear a coluna do M6.2 para `CONNECTED − meReady` e
+acrescentar uma linha dizendo que é uma âncora, com ponteiro para o M7.2, onde
+as duas medidas aparecem lado a lado. **Não** recalcular nem substituir os
+números do M6: eles são evidência congelada e continuam corretos para o que
+realmente mediram.
+
+**Status**: **não corrigido**. Fora do escopo do 04.3E, que é medição, e a
+política do repositório é não corrigir de graça achado fora de escopo sem
+perguntar. O M7.2 já registra a ambiguidade e reporta as DUAS âncoras em todas
+as 21 corridas, então nenhuma medição nova herda o problema; o que falta é
+consertar o rótulo na evidência antiga.
+
+---
+
 ## H12 — o guarda do restauro de rede não exercitava o restauro
 
 **Data**: 2026-08-13 · **Contexto**: N2a, aplicação dos fixes exigidos pela

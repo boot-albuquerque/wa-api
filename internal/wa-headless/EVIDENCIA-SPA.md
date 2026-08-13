@@ -1045,3 +1045,416 @@ instrumento não consegue dizer onde — é a **F-20** aparecendo nesta medida
 também. Para a decisão do corte isso não atrapalha (a separação é de 70×), mas
 qualquer afirmação mais fina que "menos de meio segundo" seria quantização
 apresentada como medida.
+
+---
+
+## M7 — A cauda: `OPENING` num boot saudável sob CPU disputada e rede degradada (LOOP 04.3E)
+
+**Data**: 2026-08-12/13 · **Ambiente**: Google Chrome 151.0.7922.109, macOS
+**arm64**, 10 núcleos, Go 1.26.0, `--headless=new`, perfil **pareado**
+(`scripts/chromium-study/wa-session/profile` via `WA_HEADLESS_PROFILE_DIR`),
+só leitura, sem envio. Instrumento: `TestRealSPABootUnderStress`, **21 boots
+numa única execução**, amostragem de **50 ms**.
+
+Comando:
+
+```
+WA_HEADLESS_REAL_SPA=1 \
+WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
+go test -run TestRealSPABootUnderStress ./internal/wa-headless/ -v -timeout 120m
+```
+
+### M7.1 — Os três resultados, nomeados ANTES da corrida
+
+Escritos antes de qualquer boot, e repetidos no comentário de cabeçalho do
+próprio teste para que não pudessem ser ajustados depois:
+
+- **CONFIRMA** "a janela escala com a lentidão do boot": o máximo das pernas
+  estressadas sobe materialmente acima do das não estressadas, **e sobe com o
+  nível** de degradação em vez de aleatoriamente.
+- **ENFRAQUECE**: o máximo estressado sobe só para a mesma ordem do não
+  estressado, ou sobe sem relação com o nível.
+- **FALSIFICA**: o máximo estressado fica **igual ou abaixo** do não estressado
+  **com a contenção comprovadamente aplicada** — isto é, com o boot em volta
+  medidamente mais lento e com dilatação e RTT mostrando fome real. Uma janela
+  que não se mexe enquanto tudo à volta se mexe é uma janela limitada por outra
+  coisa que não esta máquina, que é a **hipótese ALTERNATIVA**: um handshake do
+  lado do servidor.
+
+O resultado foi **os dois**, cada um num eixo — o que nenhuma das duas hipóteses
+previa sozinha. Ver M7.4.
+
+### M7.2 — O método
+
+**Um instrumento, não dois.** É o mesmo `sampleReadiness` que produziu o M6,
+com o tick virando parâmetro. `readinessTick` continua em 250 ms e o
+`TestRealSPAReadinessTimeline` continua chamando com ele: **os números do M6
+não foram rebaselinados**. A ponte entre as duas medições é a perna
+`unstressed` do M7, intercalada com as outras e amostrando o mesmo fenômeno.
+
+**Resolução, declarada (F-20).** O M7 amostra a 50 ms, **quatro vezes mais
+fino** que o M6, cujos 0,27/0,50 s eram um ou dois ticks (M6.5). Não é promessa:
+cada amostra custa uma ida e volta, então o espaçamento REAL é medido e
+reportado por perna, e é ele que vale como resolução — ver M7.5.
+
+**Duas âncoras, porque o M6 tinha uma só e não disse que era escolha.** O M6
+publicou "janela em `OPENING`" como `connected − meReady`. O M7 reporta essa —
+`openingM6`, para poder comparar — e também a direta, `primeira amostra em
+OPENING → CONNECTED`. As duas andam juntas, e a direta é **50–70 ms menor em 18
+dos 21 boots**; em três boots de CPU da rodada 1 a diferença chega a **80, 110 e
+280 ms**, e os 280 ms de `cpu-1x` r1 são **42% da janela daquele boot** (0,66 s)
+— que é justamente o máximo de todas as pernas de CPU, o número que a
+falsificação do eixo CPU usa. Os três *outliers* estão todos onde o espaçamento
+observado foi pior, o que é o que se esperaria de um artefato de resolução e não
+de uma propriedade das âncoras. Nenhuma conclusão do M7 vira sob a âncora direta
+— verificado linha a linha no N2a-EVAL, e sob ela a falsificação da CPU fica
+**mais forte** (0,49 s contra 0,68 s, em vez de 0,66 contra 0,73).
+
+**Intercalação dentro de UMA execução, na mesma máquina.** Comparar execuções
+separadas mediria também o estado da máquina. A perna não estressada abre cada
+rodada — é a ponte com o M6 e quer o mesmo lugar sempre — e as seis restantes
+**rodam por rotação**, para que uma máquina que aqueça ou derive ao longo da
+execução não some o mesmo deslocamento à mesma perna três vezes. A ordem
+executada, colada da corrida:
+
+```
+r1/unstressed -> r1/cpu-0.5x -> r1/cpu-1x -> r1/cpu-2x -> r1/net-mild ->
+r1/net-moderate -> r1/net-heavy -> r2/unstressed -> r2/cpu-1x -> r2/cpu-2x ->
+r2/net-mild -> r2/net-moderate -> r2/net-heavy -> r2/cpu-0.5x -> r3/unstressed ->
+r3/cpu-2x -> r3/net-mild -> r3/net-moderate -> r3/net-heavy -> r3/cpu-0.5x ->
+r3/cpu-1x
+```
+
+**Os eixos variam UM DE CADA VEZ**, não cruzados. Um cruzamento completo seriam
+9 condições e 27 boots do perfil pareado, e a fase 4C mediu que boots repetidos
+são como uma sessão pareada se degrada; um de cada vez também **atribui** o
+movimento ao eixo que se mexeu.
+
+**A CPU disputada é real, e quantificada em vez de afirmada.** São processos do
+sistema operacional girando (`/bin/sh -c 'while :; do :; done'`), não
+goroutines: goroutines disputariam primeiro o `GOMAXPROCS` deste processo e
+poderiam matar de fome o amostrador deixando o browser relativamente em paz —
+uma caricatura que não esfomeia o que está sendo medido não mede nada. Três
+níveis contra os 10 núcleos reais: **5, 10 e 20** processos. O quanto pegou sai
+em três números por boot: a **dilatação** de um laço de CPU fixo do processo de
+teste contra a mesma medida sem carga, o `vm.loadavg` do kernel e o **RTT da
+própria sonda**, que é a mesma pergunta feita ao renderizador enquanto o boot
+acontece.
+
+**A rede degradada NÃO desliga a página, e isso é estrutural antes de ser
+medido.** O 04.3A já pagou por isto: `overrideNetworkState` faz o navegador
+**disparar um evento `offline`**, e o M5.4 mediu o preço — o SPA reage ao
+ANÚNCIO em 1,4–3,1 s e ao travamento real em 33,2–34,2 s. Uma medição de rede
+lenta que anunciasse uma queda estaria medindo o anúncio.
+
+Por isso o método novo é um tipo que **não consegue expressar queda**:
+`engine.NetworkDegradation` não tem campo `Offline`, e `degradedConditions`
+escreve `false` no único ponto de construção. `overrideNetworkState` nunca é
+enviado neste caminho. Três níveis:
+
+| nível | latência adicionada | download | upload |
+|---|---|---|---|
+| `net-mild` | 150 ms | 1,5 MB/s | 512 KB/s |
+| `net-moderate` | 400 ms | 500 KB/s | 200 KB/s |
+| `net-heavy` | 900 ms | 200 KB/s | 100 KB/s |
+
+A degradação entra **ANTES da navegação**: a pergunta é sobre um boot LENTO, e
+uma degradação ligada depois de o bundle ter chegado seria degradação de nada.
+
+### M7.3 — Os números. O MÁXIMO primeiro, porque é ele que decide
+
+**O maior tempo em `OPENING` medido em 21 boots foi 1,36 s** — perna
+`net-heavy`, rodada 1. Contra os **33,2 s** que o M5 mediu para o socket SAIR
+de `CONNECTED` com o servidor perdido, a razão é **24,4×**.
+
+Por perna, `n=3` cada. `p95` é por **posto mais próximo**: com `n=3` o p95 **É o
+máximo**, e está escrito assim em vez de disfarçado com interpolação, que
+inventaria um valor nunca observado.
+
+| perna | n | **máx** (âncora M6) | p95 | mediana | máx (direta) | pior espaçamento | dilatação média |
+|---|---|---|---|---|---|---|---|
+| `unstressed` | 3 | **0,73 s** | 0,73 s | 0,49 s | 0,68 s | 0,49 s | 0,98× |
+| `cpu-0.5x` (5 proc) | 3 | **0,51 s** | 0,51 s | 0,51 s | 0,46 s | 0,32 s | 1,56× |
+| `cpu-1x` (10 proc) | 3 | **0,66 s** | 0,66 s | 0,55 s | 0,49 s | 1,41 s | 2,27× |
+| `cpu-2x` (20 proc) | 3 | **0,50 s** | 0,50 s | 0,49 s | 0,44 s | 5,11 s | 9,61× |
+| `net-mild` | 3 | **0,70 s** | 0,70 s | 0,53 s | 0,64 s | 0,31 s | 0,95× |
+| `net-moderate` | 3 | **0,76 s** | 0,76 s | 0,75 s | 0,70 s | 0,30 s | 0,95× |
+| `net-heavy` | 3 | **1,36 s** | 1,36 s | 1,30 s | 1,31 s | 0,30 s | 0,94× |
+
+Agrupado: **não estressado n=3, máx 0,73 s** · **estressado n=18, máx 1,36 s**.
+
+Os 21 boots, um por linha, com a dilatação que cada um realmente sofreu:
+
+```
+perna         rodada  proc  dilatação  meReady    CONNECTED  janela(M6)  janela(direta)
+unstressed    r1      0      1,01×     T+5,29s    T+5,78s    0,49s       0,44s
+cpu-0.5x      r1      5      1,32×     T+6,16s    T+6,67s    0,51s       0,40s
+cpu-1x        r1     10      2,36×     T+5,38s    T+6,05s    0,66s       0,38s
+cpu-2x        r1     20     22,86×     T+5,96s    T+6,41s    0,46s       0,38s
+net-mild      r1      0      0,97×     T+5,20s    T+5,90s    0,70s       0,64s
+net-moderate  r1      0      0,96×     T+6,16s    T+6,92s    0,76s       0,70s
+net-heavy     r1      0      0,94×     T+6,08s    T+7,44s    1,36s       1,31s
+unstressed    r2      0      0,95×     T+5,16s    T+5,62s    0,46s       0,40s
+cpu-1x        r2     10      2,12×     T+6,22s    T+6,68s    0,46s       0,41s
+cpu-2x        r2     20      2,82×     T+5,77s    T+6,27s    0,50s       0,44s
+net-mild      r2      0      0,93×     T+6,17s    T+6,66s    0,49s       0,44s
+net-moderate  r2      0      0,94×     T+6,15s    T+6,90s    0,75s       0,70s
+net-heavy     r2      0      0,94×     T+12,79s   T+14,08s   1,30s       1,24s
+cpu-0.5x      r2      5      1,13×     T+6,14s    T+6,65s    0,51s       0,46s
+unstressed    r3      0      0,97×     T+5,14s    T+5,86s    0,73s       0,68s
+cpu-2x        r3     20      3,13×     T+8,00s    T+8,49s    0,49s       0,42s
+net-mild      r3      0      0,95×     T+5,08s    T+5,61s    0,53s       0,48s
+net-moderate  r3      0      0,94×     T+5,17s    T+5,93s    0,75s       0,70s
+net-heavy     r3      0      0,94×     T+6,09s    T+7,38s    1,28s       1,23s
+cpu-0.5x      r3      5      2,23×     T+6,13s    T+6,64s    0,51s       0,44s
+cpu-1x        r3     10      2,32×     T+5,47s    T+6,02s    0,55s       0,49s
+```
+
+Higiene: `stopped_via=browser.close` em **21/21**, e `SingletonLock` **ausente**
+depois da parada limpa em **21/21**. A contagem de arquivos do perfil NÃO é
+usada como sinal de higiene aqui — a **H10** mediu "o perfil nunca encolhe"
+**FALSA** para um boot só (457 → 456 numa parada limpa), então seria observável
+falso.
+
+### M7.4 — A resposta, e ela é dividida por eixo
+
+**A CPU não move a janela. A rede move.** Nenhuma das duas hipóteses previa
+isso; cada uma acertou metade.
+
+**Eixo CPU — a hipótese primária está FALSIFICADA, pelo critério escrito antes
+da corrida.** A perna `cpu-2x` chegou a **22,86×** de dilatação num boot — o
+processo de teste levando 22 vezes mais para o mesmo laço — e produziu **0,46 s**
+de janela, **abaixo** dos 0,73 s da não estressada. O máximo de TODAS as pernas
+de CPU (0,66 s) fica abaixo do máximo da não estressada (0,73 s). A contenção
+não é alegada: ela **mexeu tudo em volta** — o `#pane-side` foi de T+7,3s para
+T+10,2s, o RTT da sonda de 1 ms mediano para 2,66 s de pico. Tudo se mexeu
+menos a janela.
+
+**Eixo rede — a hipótese primária está CONFIRMADA, e monotonicamente.**
+0,70 → 0,76 → **1,36 s** conforme a latência vai de 150 a 400 a 900 ms. Sobe
+**com o nível**, que era exatamente a condição escrita antes.
+
+**O que junta os dois é a evidência mais forte da corrida: a janela responde ao
+eixo LATÊNCIA e não responde à lentidão do boot.** E isso não repousa num boot
+só — repousa nas correlações sobre os 21 boots, calculadas no N2a-EVAL:
+
+```
+r(latência adicionada, janela), 21 boots        = +0,952   <- o eixo que move
+r(dilatação de CPU, janela), 21 boots           = −0,234
+r(dilatação de CPU, janela), só pernas CPU (n=9)= −0,347   <- sinal NEGATIVO
+r(nº de burners, janela), só pernas CPU (n=9)   = −0,282
+```
+
+O sinal **negativo** dentro das pernas de CPU é o ponto: quanto mais esfomeada a
+CPU, **menor** a janela, o oposto da hipótese primária. E dentro de cada perna,
+livre do confundimento entre pernas, `r(meReady, janela)` não tem sinal
+consistente em nenhuma delas.
+
+**Dois boots que mostram isso um a um, e são um "eu não teria adivinhado":**
+
+- **`cpu-2x` r3**: `meReady` em T+8,00 s, **2,2 s mais lento** que os irmãos da
+  mesma perna (T+5,96 e T+5,77) → janela de **0,49 s**, exatamente no meio dos
+  0,46 e 0,50 deles. Mesma demonstração, num eixo diferente.
+- **`unstressed` r3**: o `meReady` mais **RÁPIDO** da sua perna (T+5,14 s)
+  produziu a **MAIOR** janela não estressada (0,73 s), enquanto o `unstressed` r2,
+  no mesmo patamar de lentidão (T+5,16 s), produziu a **MENOR** (0,46 s). Direção
+  oposta à hipótese, com dois boots indistinguíveis em lentidão.
+
+O boot `net-heavy` da rodada 2 — o mais lento das 21 corridas, `meReady` em
+**T+12,79 s** contra T+5–6 s nos outros, e ainda assim janela de **1,30 s**,
+entre os 1,36 e 1,28 dos irmãos — é a mesma demonstração e continua verdadeiro.
+Mas ele **não** é o apoio da claim, e o N2a-EVAL mostrou por quê: é um ponto de
+alta alavancagem, e no sentido contrário ao que serviria. Retirá-lo leva
+`r(meReady, janela)` de **+0,454 para −0,009** — ou seja, o único ponto que
+produzia qualquer correlação positiva aparente era ele, por confundimento de
+perna e não por sinal. Além disso a lentidão dele é da fase **pré-`meReady`**,
+que sob 200 KB/s é limitada por **vazão**, enquanto a janela é pós-`meReady` e
+limitada por **latência**: são gargalos diferentes, então "boot lento, janela
+normal" é menos surpreendente nele do que nos dois boots acima.
+
+A janela não segue a lentidão do boot. Ela segue a **latência de rede**,
+especificamente. Isso é o que se esperaria de um **handshake com número fixo de
+idas e voltas**: o custo é `k × RTT` e não depende da CPU local nem de quanto o
+resto do boot demorou. É a hipótese ALTERNATIVA, mas com uma emenda que ela não
+tinha: o handshake é limitado pelo servidor **no número de trocas**, não no
+tempo — então RTT alto o infla, mesmo que a CPU não.
+
+**Isto é leitura, não medição.** Ninguém olhou o tráfego e nada aqui identificou
+o mecanismo, exatamente como no M5.4 com os ~34 s. O que está MEDIDO é que a
+janela responde à latência e não responde à CPU.
+
+### M7.5 — A resolução do instrumento, medida em vez de declarada
+
+O tick pedido é 50 ms. O espaçamento **observado** entre amostras foi mediano de
+**52 ms** em todas as 21 corridas — o tick segurou na mediana. O pior
+espaçamento de cada corrida é outra história, e é onde a honestidade custa:
+
+| perna | pior espaçamento | janela medida |
+|---|---|---|
+| `unstressed` | 0,30–0,49 s | 0,46–0,73 s |
+| `cpu-0.5x` | 0,30–0,32 s | 0,51 s |
+| `cpu-1x` | 0,59–1,41 s | 0,46–0,66 s |
+| `cpu-2x` | **2,71–5,11 s** | 0,46–0,50 s |
+| `net-*` | 0,30–0,31 s | 0,49–1,36 s |
+
+Na perna `cpu-2x` o **pior tick é dez vezes maior que a janela que ele mede**.
+Isso tem de ser dito, e tem de ser dito o que faz com a conclusão:
+
+- **o erro do amostrador não é unidirecional, e dizer que é seria a versão
+  confortável.** A janela é a diferença de duas marcas, ambas enviesadas para
+  TARDE: `Ŵ = W + δc − δm`. Se um buraco cobre o **FIM**, a janela infla; se
+  cobre o **INÍCIO**, ela **encolhe**, e encolhe para um valor pequeno mas **não
+  nulo** — exatamente indistinguível de 0,46 s. O engolimento TOTAL (`Ŵ ≈ 0`,
+  `meReady` e `CONNECTED` na mesma amostra) é o caso fácil; o **parcial** é o que
+  se disfarça de dado bom, e foi ele que o texto anterior desta seção não
+  descartou;
+- **o que descarta o engolimento do início é o delta entre as DUAS âncoras**, e
+  ele está na tabela do M7.3: `openingFirst − meReady` deu **80 / 60 / 70 ms**
+  nas três corridas de `cpu-2x`. Um delta desse tamanho **exige** amostras
+  separadas por ~70 ms ENTRE `meReady` e a primeira vista de `OPENING` — logo os
+  buracos de 2,71–5,11 s estavam em **outro ponto da linha do tempo** (o
+  candidato óbvio é a primeira sonda contra uma página fria com 20 burners), e
+  não na vizinhança das marcas. Se um buraco as tivesse engolido, as duas âncoras
+  teriam colapsado na **mesma** amostra e o delta seria **zero**. **É este
+  número, e não o sentido do enviesamento, que sustenta a falsificação.** Apoio
+  independente: `meReady` cai em T+5,08–6,22 s em 20 dos 21 boots, e um
+  deslocamento de segundos na marca de início exigiria um `meReady` verdadeiro em
+  ~T+1 s, incompatível com o bundle do SPA ter de carregar antes;
+- as pernas de rede, que são as que produziram o **máximo**, tiveram pior
+  espaçamento de **0,30 s** contra janela de **1,36 s**. O número que decide é o
+  medido com a melhor resolução da corrida.
+
+### M7.6 — O que o M7 entrega sobre o corte: o limite INFERIOR, e só ele
+
+| | |
+|---|---|
+| pior janela de boot saudável medida (21 boots, 7 condições) | **1,36 s** |
+| latência de DETECÇÃO do M5 (a mais RÁPIDA das três) | **33,2 s** |
+| razão entre as duas | 24,4× |
+
+**O que o M7 entrega sobre o corte é o limite INFERIOR e só ele**: `C > 1,36 s`
+na faixa medida (até 900 ms de latência adicionada). O limite **SUPERIOR** é a
+permanência em `OPENING` sob corte, que é o N2b e continua **não medido** (M7.8
+item 6).
+
+O tempo total até declarar uma sessão morta seria **`33,2 s + C`**: os 33,2 s do
+M5 são latência de **DETECÇÃO** — o instante de SAIR de `CONNECTED` — e
+**somam-se** ao corte em vez de o limitarem. Uma duração DENTRO de `OPENING` e
+uma latência que a PRECEDE são grandezas de eixos diferentes, e não competem.
+
+Por isso **a razão de 24,4× NÃO é um limite superior para o corte**. Ela é
+contexto orçamentário: diz que a folga para escolher `C` é pequena perto do
+custo de detecção que já se paga, e nada além disso. A formulação anterior desta
+seção — "a cauda invade o piso de detecção? não" — era **malformada**, e o mesmo
+erro estava congelado no comentário de `detectionFloor` em `realspa_test.go`;
+ambos corrigidos no N2a (ver `HOUSEKEEP.md` H12).
+
+**A resposta tem alcance, e o alcance é a faixa medida**: 900 ms de latência
+adicionada. A janela responde à latência de forma clara e o M7 não mediu enlaces
+de RTT plurissegundo — satélite, celular congestionado, portal cativo lento.
+Extrapolar a curva de três pontos até lá seria exatamente a escolha de mesa que
+o M6.4 recusou. O que está medido é: **até 900 ms de latência adicionada, o
+limite inferior do corte é 1,36 s.**
+
+### M7.7 — Os controles do confundidor, EXECUTADOS, nos dois sentidos
+
+**Lado negativo — zero em todas as corridas degradadas.** `offline=0` e
+`online=0` nas **21** corridas, e `navigator.onLine` **nunca** foi falso em
+nenhuma das ~2.500 amostras. Duas testemunhas independentes, porque inferir
+"nenhum evento disparou" a partir do `navigator.onLine` seria inferência.
+
+Antes de ser medido, é **estrutural**: `overrideNetworkState` não é enviado
+neste caminho, e `NetworkDegradation` não tem como expressar queda. O guarda
+disso é `TestDegradedConditionsCannotExpressAnOutage`, e ele **morde** —
+controle negativo executado, com `Offline` virado para `true`:
+
+```
+=== RUN   TestDegradedConditionsCannotExpressAnOutage
+    network_test.go:42: degradedConditions({Latency:0s DownloadBytesPerSecond:0
+    UploadBytesPerSecond:0}) built an OUTAGE: Offline=true. A degraded network is
+    a network that is THERE — with the outage announced the SPA reacts in ~3s and
+    without it in ~34s (EVIDENCIA-SPA.md M5.4), so this flag decides what the
+    measurement is about
+--- FAIL: TestDegradedConditionsCannotExpressAnOutage (0.00s)
+```
+
+A mutação foi revertida antes do commit.
+
+**Lado positivo — o contador CONTA.** Um listener que nunca contou nada não
+prova nada lendo zero. No último boot da execução, **depois** de a janela
+daquele boot ter sido cronometrada e o contador lido, o mesmo listener, na mesma
+instância de página, recebeu um evento de verdade via `SetNetworkOffline`:
+
+```
+POSITIVE CONTROL: the same listener that just read offline=0 is now given a genuine event
+POSITIVE CONTROL PASSED: offline 0 -> 1, online 0. The counter counts, so the
+zeros above are measurements and not silence.
+```
+
+É mais forte que o controle do M5.7, que era outra corrida: aqui é o **mesmo
+listener que acabara de ler zero**. E não custou boot nenhum ao perfil pareado.
+
+### M7.8 — O que esta medição NÃO estabelece
+
+**1. Não é uma distribuição, e cai na MESMA armadilha do M6.4 dentro de cada
+perna.** As três amostras de `net-heavy` deram 1,36/1,30/1,28 s — 80 ms de
+aperto. As de `cpu-0.5x` deram 0,51/0,51/0,51 s. Isso é, de novo, **uma condição
+amostrada três vezes**. O que o M7 produziu é uma **curva de resposta entre
+condições**, não a cauda de uma distribuição dentro de uma condição. A pergunta
+"qual boot lento vira falso positivo" está respondida **para as condições que eu
+impus**, e a variância natural do fenômeno numa condição fixa continua
+desconhecida.
+
+**2. Não mediu latência acima de 900 ms**, que é justamente onde o único eixo
+que move a janela continuaria movendo. É a limitação que dá alcance ao "não" do
+M7.6.
+
+**3. Não identificou o mecanismo.** "Handshake de k idas e voltas" é leitura
+plausível da resposta à latência, como "keepalive" era leitura plausível dos
+~34 s no M5.4. Ninguém olhou o tráfego.
+
+**4. Não mediu o eixo CPU com resolução à altura da janela.** Ver M7.5: em
+`cpu-2x` o **pior** espaçamento é 10× a janela. A conclusão sobrevive porque a
+resolução **na vizinhança das marcas** foi de ~70 ms, e isso está **medido**: é o
+delta `openingFirst − meReady` de 80/60/70 ms nas três corridas de `cpu-2x`, que
+só pode existir se houve amostras separadas por ~70 ms entre as duas âncoras.
+**Não** sobrevive porque o erro apontasse para o outro lado — não aponta: um
+buraco sobre a marca de INÍCIO encolhe a janela, e o texto anterior desta linha
+afirmava uma unidirecionalidade que os dados não dão.
+
+**5. Não mediu os eixos CRUZADOS.** CPU esfomeada *e* rede degradada ao mesmo
+tempo não foi amostrado — foi um de cada vez, por 21 boots contra 27. Se houver
+interação entre os dois, ela não está aqui.
+
+**6. Não mediu a PERMANÊNCIA em `OPENING` sob corte**, que é a outra metade que
+o M6.4 nomeou e continua aberta: o M5 mediu o instante da SAÍDA de `CONNECTED`,
+não por quanto tempo o socket fica em `OPENING` depois disso.
+
+**7. Uma máquina, uma rede, um perfil, 21 boots.** A rede base é a desta casa;
+a "latência adicionada" soma-se a um RTT de base que não foi caracterizado.
+
+**8. O controle positivo do confundidor rodou numa perna NÃO degradada.**
+`lastBoot` sai de `rotatedConditions(conditions, 3)`, e a rotação põe `r3/cpu-1x`
+no fim — uma perna sem degradação de rede. Então o que ficou provado é que **o
+código do sentinela conta**, na mesma instância de página que acabara de reportar
+zero; que ele contava nas 20 instâncias anteriores é generalização por código
+idêntico, não medição. Combinado com o apoio **estrutural** (`overrideNetworkState`
+nunca é enviado no caminho de degradação — `SetNetworkDegraded` → `applyConditions`,
+verificado no código) é suficiente, e por isso a limitação fica **registrada em vez
+de fechada**: fechá-la de vez custaria escolher `lastBoot` numa perna `net-*`, o
+que exige uma **re-medição completa de 21 boots** do perfil pareado por um ganho
+marginal — e o controle do confundidor já rodou nos dois sentidos (M7.7). Decisão
+do N2a: não re-executar o SPA.
+
+**9. Também sobre esta medição: o M7 não publicou os brutos.** As amostras
+individuais — em particular o **espaçamento observado imediatamente ao redor de
+`meReady` e de `CONNECTED` em cada boot** — não estão nesta evidência. O argumento
+do M7.5 sobre o engolimento parcial é uma **inferência a partir do delta entre
+âncoras**, não a leitura direta do espaçamento local. Publicar esse intervalo para
+os três boots de `cpu-2x` fecharia a questão diretamente, e **não exige o perfil
+pareado**: sai da re-impressão dos logs da corrida, se estiverem guardados.
+
+**10. O corte NÃO sai daqui, e não era para sair.** Este nó é medição. O que ele
+entrega é a segunda perna: a metade saudável do M6, agora com a cauda amostrada
+sob adversidade, e a informação — que não estava em lugar nenhum — de que **o
+eixo que importa para essa cauda é a latência de rede, não a CPU**.

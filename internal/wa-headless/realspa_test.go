@@ -42,8 +42,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -479,6 +482,14 @@ func awaitPairing(t *testing.T, runner *engine.Runner, tab *engine.Tab) (qrShown
 // name or a message — which is what makes it safe to print a whole timeline.
 type readinessSample struct {
 	At time.Duration `json:"-"`
+	// RTT is how long THIS sample's single round trip took.
+	//
+	// It is the instrument measuring ITSELF, and M7 is why it exists: under CPU
+	// contention the renderer answers more slowly, so the real spacing between
+	// samples stops being the sleep and becomes sleep+RTT. An arm that reported
+	// a 50 ms tick while its round trips cost 400 ms would be claiming a
+	// resolution it does not have — which is F-20 all over again, one layer up.
+	RTT time.Duration `json:"-"`
 
 	DOMNodes    int  `json:"dom_nodes"`
 	HasPaneSide bool `json:"has_pane_side"`
@@ -628,7 +639,7 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 	script := readinessScript(spa.RequiredAtStartup)
 	want := len(spa.RequiredAtStartup)
 
-	samples, marks := sampleReadiness(t, runner, tab, script, want)
+	samples, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
 
 	logTimeline(t, samples, want)
 	// "never" must not print as T+0.00s. A zero mark means the signal never
@@ -710,7 +721,25 @@ func TestRealSPAReadinessTimeline(t *testing.T) {
 // arrive at very different times and mean different things: identity is
 // PERSISTED and back before the socket opens, while the other two are events of
 // this boot.
-type readinessMarks struct{ pane, modules, identity, meReady, connected time.Duration }
+type readinessMarks struct {
+	pane, modules, identity, meReady, connected time.Duration
+	// openingFirst is the first instant the socket was seen reporting OPENING.
+	//
+	// RECORDED, never part of the stop condition, so adding it changed nothing
+	// about what M6 measured — the M6 numbers stay comparable.
+	//
+	// It exists because M6 published its "window in OPENING" as
+	// connected - meReady, which is an ANCHOR CHOICE and not the state itself.
+	// M7 needs both: the M6-comparable figure, and the direct one, which is
+	// this mark to connected. Where the two disagree, the disagreement is the
+	// finding rather than a detail — see EVIDENCIA-SPA.md M7.
+	openingFirst time.Duration
+}
+
+// socketStateOpening is Meta's own name for a socket that is negotiating. It is
+// both the boot state and the state M5 measured a lost server falling into,
+// which is the whole reason a DURATION is needed to tell them apart.
+const socketStateOpening = "OPENING"
 
 // record stamps the first time each signal turned on, and reports whether the
 // run has everything the verdict needs. First-time-only: a signal that flickers
@@ -747,6 +776,9 @@ func (m *readinessMarks) record(s readinessSample, want int) bool {
 	if m.meReady == 0 && s.MeReadyTriggered {
 		m.meReady = s.At
 	}
+	if m.openingFirst == 0 && s.SocketState == socketStateOpening {
+		m.openingFirst = s.At
+	}
 	if m.connected == 0 && s.SocketState == socketStateConnected {
 		m.connected = s.At
 	}
@@ -757,8 +789,14 @@ func (m *readinessMarks) record(s readinessSample, want int) bool {
 //
 // It FAILS the run on a QR: a login screen has no readiness to observe, and
 // producing a timeline from one would be inventing the result.
+// The tick is a PARAMETER rather than the package constant because M6 and M7
+// need different resolutions from the same instrument: M6's runs are frozen
+// evidence taken at 250 ms, and M7 has to resolve a window that 250 ms turns
+// into one or two ticks (F-20, EVIDENCIA-SPA.md M6.5). Passing it keeps one
+// sampler instead of two, which is what makes the two measurements comparable
+// at all.
 func sampleReadiness(t *testing.T, runner *engine.Runner, tab *engine.Tab,
-	script string, want int) ([]readinessSample, readinessMarks) {
+	script string, want int, tick time.Duration) ([]readinessSample, readinessMarks) {
 	t.Helper()
 
 	start := time.Now()
@@ -766,11 +804,13 @@ func sampleReadiness(t *testing.T, runner *engine.Runner, tab *engine.Tab,
 	var marks readinessMarks
 
 	for deadline := start.Add(readinessBudget); time.Now().Before(deadline); {
+		before := time.Now()
 		s, err := oneReadinessSample(runner, tab, script)
 		s.At = time.Since(start)
+		s.RTT = time.Since(before)
 		if err != nil {
 			t.Logf("t+%.2fs probe failed: %v", s.At.Seconds(), err)
-			time.Sleep(readinessTick)
+			time.Sleep(tick)
 			continue
 		}
 		samples = append(samples, s)
@@ -782,7 +822,7 @@ func sampleReadiness(t *testing.T, runner *engine.Runner, tab *engine.Tab,
 		if marks.record(s, want) {
 			break
 		}
-		time.Sleep(readinessTick)
+		time.Sleep(tick)
 	}
 	return samples, marks
 }
@@ -1221,7 +1261,7 @@ func observeSeveredSession(t *testing.T, leg string,
 	// The precondition. Watching a session that never came up would measure the
 	// boot, not the sever, and the socket gate is what makes "ready" mean the
 	// session actually reached the server (M3.7).
-	_, marks := sampleReadiness(t, runner, tab, script, want)
+	_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
 	if marks.pane == 0 || marks.connected == 0 {
 		t.Fatalf("the session never reached a ready state (pane %s, socket %s %s); "+
 			"there is no live session here to sever",
@@ -2448,4 +2488,722 @@ func markString(d time.Duration) string {
 		return "NEVER"
 	}
 	return fmt.Sprintf("T+%.2fs", d.Seconds())
+}
+
+// --- LOOP 04.3E · M7: the leg that should WORSEN ---------------------------
+//
+// M6 measured how long a HEALTHY boot keeps the socket negotiating, and got
+// 0.27-0.50s across six samples. M6.4 says in writing why that is not yet an
+// answer: samples 2-5 land within 20 ms of each other, which is ONE CONDITION
+// SAMPLED FIVE TIMES rather than the distribution of the phenomenon. What
+// decides a liveness cut is the UPPER TAIL — which slow boot becomes a false
+// positive — and a comfortable half of a distribution cannot produce it.
+//
+// The project rule this closes is the second of "medir antes de projetar":
+// measure the scenario where the mechanism COSTS, not only the one where it
+// pays. A distribution sampled only under favourable conditions measured the
+// hypothesis, not the mechanism.
+//
+// There is direct evidence the tail exists: #pane-side arrived at 7.40s in one
+// M3.3 run and at 15.61s in another, SAME profile. If the negotiating window
+// scales with boot slowness the way the panel does, half a second becomes
+// seconds under contention.
+//
+// The two hypotheses, and what would decide between them, WRITTEN BEFORE THE
+// RUN (EVIDENCIA-SPA.md M7.1 holds the same three lines):
+//
+//   - CONFIRMS "the window scales with boot slowness": the stressed arms'
+//     maximum rises materially above the unstressed arms' maximum, and rises
+//     WITH the level of degradation rather than at random.
+//   - WEAKENS it: the stressed maximum rises only to the same order as the
+//     unstressed one, or rises without any relation to the level.
+//   - FALSIFIES it: the stressed arms' maximum stays at or below the
+//     unstressed arms' maximum while the contention is demonstrably applied —
+//     that is, with the boot itself measurably slower (pane, meReady) and the
+//     dilation and RTT figures showing real starvation. A window that will not
+//     move while everything around it moves is a window bounded by something
+//     other than this machine, which is the ALTERNATIVE hypothesis: a
+//     server-side handshake.
+//
+// This probe DOES NOT choose the cut. It produces one of the two legs the
+// choice needs.
+
+const (
+	// stressTick is M7's sampling interval, and it is FOUR TIMES finer than
+	// M6's 250 ms on purpose: F-20 says the instrument does not resolve the
+	// window it was built to measure, and M6.5 says the 0.27/0.50s figures are
+	// one or two ticks of the coarse sampler.
+	//
+	// It does NOT re-baseline M6. readinessTick is untouched, so the M6 runs
+	// stay exactly what they were; the bridge between the two measurements is
+	// M7's own unstressed arm, which is interleaved with the stressed ones and
+	// samples the same phenomenon M6 sampled.
+	//
+	// The tick is a FLOOR on the spacing, never a promise about it: each sample
+	// costs a round trip, and under CPU contention the round trip is what sets
+	// the real spacing. That is why every sample carries its RTT and why the
+	// report prints the OBSERVED spacing per arm rather than this constant.
+	stressTick = 50 * time.Millisecond
+	// stressRounds is how many times the whole condition set is run. Three is
+	// the project minimum for "one sample cannot pass for a trend", and every
+	// boot of a paired profile costs something (phase 4C), so it is also the
+	// maximum this loop is willing to spend.
+	stressRounds = 3
+	// spinWork is the size of the calibration loop. Fixed, so that the only
+	// thing that can change its duration is how much CPU the process got.
+	spinWork = 40_000_000
+)
+
+// spinSink exists so the compiler cannot delete the calibration loop. A
+// benchmark that got optimised away would report a dilation of 1.00 under any
+// load whatsoever — the instrument answering by construction.
+var spinSink int
+
+// spinDuration times a fixed amount of pure CPU work.
+//
+// It measures the contention as THIS PROCESS feels it, which is a proxy for how
+// the browser feels it and not the same thing: they are different processes on
+// the same cores. The in-band figure is the probe RTT, and both are reported.
+func spinDuration() time.Duration {
+	start := time.Now()
+	x := 0
+	for i := 0; i < spinWork; i++ {
+		x += i % 7
+	}
+	spinSink = x
+	return time.Since(start)
+}
+
+// cpuLoad is REAL contention: separate OS processes spinning on the same cores
+// the browser runs on.
+//
+// Real processes rather than goroutines, because goroutines would compete for
+// this process's own GOMAXPROCS share first and could starve the sampler while
+// leaving the browser comparatively alone — a caricature that does not actually
+// starve the thing being measured measures nothing (packet DO#3).
+type cpuLoad struct{ procs []*exec.Cmd }
+
+// burnerCommand is a pure busy loop in the system shell. It takes no input of
+// any kind, so there is nothing here that could carry anything from the page.
+const burnerCommand = "while :; do :; done"
+
+func startCPULoad(t *testing.T, n int) *cpuLoad {
+	t.Helper()
+	load := &cpuLoad{}
+	for i := 0; i < n; i++ {
+		cmd := exec.Command("/bin/sh", "-c", burnerCommand)
+		if err := cmd.Start(); err != nil {
+			load.stop(t)
+			t.Fatalf("starting CPU burner %d/%d: %v", i+1, n, err)
+		}
+		load.procs = append(load.procs, cmd)
+	}
+	return load
+}
+
+// stop kills the burners and REAPS them. Without the wait they linger as
+// zombies and the next condition's load figure would include them.
+func (l *cpuLoad) stop(t *testing.T) {
+	t.Helper()
+	for _, cmd := range l.procs {
+		if cmd.Process == nil {
+			continue
+		}
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}
+	l.procs = nil
+}
+
+// loadAverage reads the kernel's own 1-minute figure.
+//
+// REPORTED, never asserted: it is a one-minute exponential average, so at the
+// scale of a boot it lags badly and would answer a question about the last
+// minute when asked about the last ten seconds. It is here because it is the
+// system's own number and costs nothing; the figures that actually quantify
+// the contention are the spin dilation and the probe RTT.
+func loadAverage() string {
+	out, err := exec.Command("sysctl", "-n", "vm.loadavg").Output()
+	if err != nil {
+		return "unavailable"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// stressCondition is one arm of the measurement: an amount of CPU contention
+// and an amount of network degradation.
+//
+// The two axes are varied ONE AT A TIME rather than crossed. A full cross would
+// be 9 conditions and 27 boots of a paired profile, and phase 4C measured that
+// repeated boots are how a paired session degrades; one-at-a-time also
+// attributes any movement to the axis that moved.
+type stressCondition struct {
+	name    string
+	burners int
+	net     engine.NetworkDegradation
+}
+
+func (c stressCondition) degraded() bool { return c.net != engine.NetworkDegradation{} }
+
+// stressConditions is the arm list, sized against the host's real core count.
+//
+// Three levels per axis (packet DO#5), because two runs of one condition is how
+// M6 ended up with five samples of a single state. The network levels are
+// chosen to DEGRADE rather than to break: the boot still has to complete for
+// there to be a negotiating window to time at all, and the Navigate budget is
+// 30s. A level that fails to boot is reported as such rather than dropped.
+func stressConditions(cores int) []stressCondition {
+	const (
+		kb = 1 << 10
+		mb = 1 << 20
+	)
+	return []stressCondition{
+		{name: "unstressed"},
+		{name: "cpu-0.5x", burners: cores / 2},
+		{name: "cpu-1x", burners: cores},
+		{name: "cpu-2x", burners: cores * 2},
+		{name: "net-mild", net: engine.NetworkDegradation{
+			Latency: 150 * time.Millisecond, DownloadBytesPerSecond: 1.5 * mb,
+			UploadBytesPerSecond: 512 * kb}},
+		{name: "net-moderate", net: engine.NetworkDegradation{
+			Latency: 400 * time.Millisecond, DownloadBytesPerSecond: 500 * kb,
+			UploadBytesPerSecond: 200 * kb}},
+		{name: "net-heavy", net: engine.NetworkDegradation{
+			Latency: 900 * time.Millisecond, DownloadBytesPerSecond: 200 * kb,
+			UploadBytesPerSecond: 100 * kb}},
+	}
+}
+
+// bootResult is one boot, reduced to the numbers the report is made of.
+type bootResult struct {
+	round     int
+	condition string
+	burners   int
+	// openingM6 is connected - meReady, which is EXACTLY what M6 published as
+	// its "window in OPENING". Kept because comparability with M6 is the point
+	// of reusing this instrument.
+	openingM6 time.Duration
+	// openingDirect is first-seen-OPENING to CONNECTED — the state itself
+	// rather than an anchor chosen around it. The two are reported side by side
+	// because M6 never distinguished them.
+	openingDirect            time.Duration
+	pane, meReady, connected time.Duration
+	// spanMax and spanMedian are the OBSERVED spacing between samples: the
+	// instrument's real resolution for THIS boot, which under contention is not
+	// stressTick.
+	spanMax, spanMedian  time.Duration
+	rttMax, rttMedian    time.Duration
+	spinDilation         float64
+	offlineEvents        int
+	onlineEvents         int
+	navigatorEverOffline bool
+	samples              int
+	loadAvg              string
+	failure              string
+	// lockAfterStop is the hygiene observable of invariant 2, read by the
+	// PARENT after the boot's subtest ended and the clean stop ran.
+	//
+	// The profile's FILE COUNT is deliberately not used for hygiene here: H10
+	// measured "the profile never shrinks" FALSE at the granularity of one boot
+	// (457 -> 456 on a clean stop), so a count would be a false observable.
+	lockAfterStop bool
+}
+
+// TestRealSPABootUnderStress is M7.
+//
+// It boots the paired profile repeatedly, INTERLEAVING stressed and unstressed
+// conditions inside ONE execution on ONE machine. Comparing separate executions
+// would also measure the state of the machine, which is the project rule and
+// not a preference.
+//
+// Read-only throughout: it opens the SPA, samples booleans and enum names, and
+// stops through the protocol. Nothing is sent and no message, name or number is
+// read.
+func TestRealSPABootUnderStress(t *testing.T) {
+	requireRealSPA(t)
+
+	cores := runtime.NumCPU()
+	conditions := stressConditions(cores)
+
+	// The unstressed reference for the dilation figure, taken before anything
+	// is loaded. Without it "the spin took 210 ms" is a number with no meaning.
+	reference := spinDuration()
+	t.Logf("HOST cores=%d arch=%s go=%s tick=%v rounds=%d reference_spin=%v load=%s",
+		cores, runtime.GOARCH, runtime.Version(), stressTick, stressRounds,
+		reference.Round(time.Millisecond), loadAverage())
+
+	profile, _, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Which boot carries the positive control, decided BEFORE the loop from the
+	// same rotation the loop uses, so the two cannot drift apart.
+	final := rotatedConditions(conditions, stressRounds)
+	lastBoot := fmt.Sprintf("r%d/%s", stressRounds, final[len(final)-1].name)
+
+	var results []bootResult
+	var order []string
+	for round := 1; round <= stressRounds; round++ {
+		for _, c := range rotatedConditions(conditions, round) {
+			label := fmt.Sprintf("r%d/%s", round, c.name)
+			order = append(order, label)
+			var got bootResult
+			// A subtest per boot, for its CLEANUP: the clean stop is registered
+			// inside launchObservationProfile, so the only way to observe the
+			// profile with the browser DOWN is to let a nested test end.
+			t.Run(label, func(t *testing.T) {
+				got = oneStressedBoot(t, c, round, reference, label == lastBoot)
+			})
+			got.lockAfterStop = lockPresent(t, profile)
+			results = append(results, got)
+		}
+	}
+
+	t.Logf("INTERLEAVING ORDER (%d boots, one execution, one machine): %s",
+		len(order), strings.Join(order, " -> "))
+	reportStressResults(t, results, conditions)
+}
+
+// rotatedConditions keeps the unstressed arm first — it is the bridge to M6 and
+// wants the same place in every round — and rotates the rest.
+//
+// The rotation is what makes the interleaving worth anything: if every round
+// ran the arms in the same order, a machine that warms up or drifts over the
+// execution would add the same offset to the same arm three times, and that
+// offset would be read as a property of the condition.
+func rotatedConditions(all []stressCondition, round int) []stressCondition {
+	if len(all) < 2 {
+		return all
+	}
+	head, tail := all[:1], all[1:]
+	shift := (round - 1) % len(tail)
+	out := append([]stressCondition{}, head...)
+	out = append(out, tail[shift:]...)
+	return append(out, tail[:shift]...)
+}
+
+// oneStressedBoot applies the condition, boots, and times the window.
+//
+// ORDER IS LOAD-BEARING. The contention and the degradation are applied BEFORE
+// the navigation, because the question is about a SLOW BOOT and a degradation
+// switched on after the bundle has landed would be a degradation of nothing.
+func oneStressedBoot(t *testing.T, c stressCondition, round int, reference time.Duration,
+	withPositiveControl bool) bootResult {
+	t.Helper()
+
+	out := bootResult{round: round, condition: c.name, burners: c.burners}
+
+	if c.burners > 0 {
+		load := startCPULoad(t, c.burners)
+		defer load.stop(t)
+	}
+	// Measured with the burners already spinning and the browser not yet up, so
+	// it reports the contention this arm ASKED for. The report also carries the
+	// probe RTT, which is the same question asked of the renderer while the
+	// boot is actually happening.
+	out.spinDilation = float64(spinDuration()) / float64(reference)
+	out.loadAvg = loadAverage()
+
+	runner := engine.NewRunner()
+	browser, _ := launchObservationProfile(t, runner)
+	_ = browser
+
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatalf("OpenTab: %v", err)
+	}
+	t.Cleanup(tab.Close)
+
+	applyDegradation(t, runner, tab, c)
+
+	if err := tab.Navigate(runner, realSPAURL, "stress/navigate"); err != nil {
+		// A degradation severe enough to blow the Navigate budget is a REPORTED
+		// outcome of that level, not a crash: the honest reading is "this level
+		// was not measured", and deleting the arm would quietly narrow the very
+		// tail this loop exists to sample.
+		out.failure = fmt.Sprintf("navigation did not complete: %v", err)
+		t.Logf("NOT MEASURED at this level: %s", out.failure)
+		return out
+	}
+
+	// As early as the page allows. It cannot cover the milliseconds between the
+	// document being created and this call, which is why the STRUCTURAL
+	// argument is reported beside the count: overrideNetworkState is never sent
+	// on this path, so there is no `offline` event for the browser to fire.
+	// navigator.onLine is sampled independently in every readiness sample and
+	// is the second, redundant witness.
+	installNetEventSentinel(t, runner, tab)
+
+	samples, marks := sampleReadiness(t, runner, tab, readinessScript(spa.RequiredAtStartup),
+		len(spa.RequiredAtStartup), stressTick)
+
+	events := readNetEvents(t, runner, tab)
+	out.absorb(samples, marks, events)
+
+	out.report(t)
+	out.assertConfoundAbsent(t)
+	if withPositiveControl {
+		provePageCountsOfflineEvents(t, runner, tab, out.offlineEvents)
+	}
+	return out
+}
+
+// provePageCountsOfflineEvents is the POSITIVE side of the confound control,
+// and without it every zero above proves nothing: a listener that can never
+// count anything reads zero under all conditions, including the conditions it
+// was installed to detect.
+//
+// It runs on the LAST boot only, and only AFTER that boot's window has been
+// timed and its counter read, so it cannot contaminate a measurement. Folding
+// it into an existing boot rather than giving it its own is deliberate: it
+// costs the paired profile nothing, and it is a STRONGER control than a
+// separate run because it exercises the same listener, in the same page
+// instance, that had just read zero.
+//
+// SetNetworkOffline is the announced cut — the one that fires the event. That
+// is the whole point here, and it is the reason this call must never appear on
+// a measuring path.
+func provePageCountsOfflineEvents(t *testing.T, runner *engine.Runner, tab *engine.Tab, before int) {
+	t.Helper()
+	t.Logf("POSITIVE CONTROL: the same listener that just read offline=%d is now "+
+		"given a genuine event", before)
+
+	if err := tab.SetNetworkOffline(runner, true, "control/announce"); err != nil {
+		t.Fatalf("the positive control could not fire the event: %v", err)
+	}
+	defer func() {
+		if err := tab.SetNetworkOffline(runner, false, "control/restore"); err != nil {
+			t.Logf("restoring after the positive control: %v", err)
+		}
+	}()
+	// The event is dispatched by the browser, not by us, so it needs a moment
+	// to reach the page's listener. The clock is on the GO side (invariant 6):
+	// no wait in this module keeps its clock in the page.
+	time.Sleep(2 * time.Second)
+
+	after := readNetEvents(t, runner, tab)
+	if after.Offline <= before {
+		t.Errorf("the `offline` listener did NOT count a genuine event (%d -> %d). "+
+			"Every zero this run reported is therefore unproven: a counter that "+
+			"cannot count is not evidence of absence",
+			before, after.Offline)
+		return
+	}
+	t.Logf("POSITIVE CONTROL PASSED: offline %d -> %d, online %d. The counter "+
+		"counts, so the zeros above are measurements and not silence.",
+		before, after.Offline, after.Online)
+}
+
+// applyDegradation switches the network condition on BEFORE the navigation,
+// and registers its own undo.
+//
+// Order is load-bearing: the question is how long a SLOW BOOT negotiates, and a
+// degradation switched on after the bundle has landed would be a degradation of
+// nothing.
+func applyDegradation(t *testing.T, runner *engine.Runner, tab *engine.Tab, c stressCondition) {
+	t.Helper()
+	if !c.degraded() {
+		return
+	}
+	if err := tab.SetNetworkDegraded(runner, c.net, "stress/degrade"); err != nil {
+		t.Fatalf("SetNetworkDegraded: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := tab.ClearNetworkConditions(runner, "stress/restore"); err != nil {
+			t.Logf("clearing the network conditions: %v", err)
+		}
+	})
+	t.Logf("DEGRADED latency=%v down=%.0fB/s up=%.0fB/s (offline=false, structurally: "+
+		"NetworkDegradation cannot express an outage — engine/network_test.go)",
+		c.net.Latency, c.net.DownloadBytesPerSecond, c.net.UploadBytesPerSecond)
+}
+
+// absorb turns one boot's samples and marks into the numbers the report is made
+// of.
+//
+// BOTH window anchors are computed. openingM6 is connected-meReady, which is
+// exactly what M6 published, and openingDirect is first-seen-OPENING to
+// connected, which is the state itself. M6 never distinguished the two, so
+// where they disagree the disagreement is a finding rather than a detail.
+func (r *bootResult) absorb(samples []readinessSample, marks readinessMarks, events netEventCounts) {
+	r.offlineEvents, r.onlineEvents = events.Offline, events.Online
+	r.navigatorEverOffline = anySample(samples, func(s readinessSample) bool {
+		return !s.NavigatorOnline
+	})
+	r.samples = len(samples)
+	r.pane, r.meReady, r.connected = marks.pane, marks.meReady, marks.connected
+	if marks.connected > 0 && marks.meReady > 0 {
+		r.openingM6 = marks.connected - marks.meReady
+	}
+	if marks.connected > 0 && marks.openingFirst > 0 {
+		r.openingDirect = marks.connected - marks.openingFirst
+	}
+	r.spanMax, r.spanMedian = spacing(samples)
+	r.rttMax, r.rttMedian = roundTrips(samples)
+	if marks.connected == 0 {
+		r.failure = "the socket never reported " + socketStateConnected +
+			" within the budget"
+	}
+}
+
+// report prints one boot. Split out of oneStressedBoot so the boot function
+// stays under the complexity gate; the lines it prints are unchanged.
+func (r bootResult) report(t *testing.T) {
+	t.Helper()
+	t.Logf("BOOT %s round=%d burners=%d dilation=%.2fx load=%q samples=%d",
+		r.condition, r.round, r.burners, r.spinDilation, r.loadAvg, r.samples)
+	t.Logf("  pane=%s meReady=%s connected=%s | openingM6=%s openingDirect=%s",
+		markString(r.pane), markString(r.meReady), markString(r.connected),
+		markString(r.openingM6), markString(r.openingDirect))
+	t.Logf("  observed spacing median=%v max=%v · probe RTT median=%v max=%v "+
+		"(the REAL resolution of this arm, not the %v tick)",
+		r.spanMedian.Round(time.Millisecond), r.spanMax.Round(time.Millisecond),
+		r.rttMedian.Round(time.Millisecond), r.rttMax.Round(time.Millisecond), stressTick)
+	t.Logf("  CONFOUND offline_events=%d online_events=%d navigator_ever_offline=%v",
+		r.offlineEvents, r.onlineEvents, r.navigatorEverOffline)
+}
+
+// assertConfoundAbsent is the ONLY assertion this probe makes, and it is about
+// the CONFOUND rather than about the phenomenon.
+//
+// A degraded run that fired an `offline` event would be measuring the SPA's
+// reaction to an ANNOUNCEMENT (M5.4: ~3s) instead of to a slow network, so its
+// number would belong to a different measurement. Nothing about the window
+// itself is asserted — locking a number this loop exists to DISCOVER would be
+// speculation wearing the costume of a test.
+func (r bootResult) assertConfoundAbsent(t *testing.T) {
+	t.Helper()
+	if r.offlineEvents != 0 {
+		t.Errorf("the page received %d `offline` event(s): this run measured the "+
+			"SPA reacting to an ANNOUNCEMENT, not to a slow network (M5.4), and its "+
+			"window is void", r.offlineEvents)
+	}
+	if r.navigatorEverOffline {
+		t.Error("navigator.onLine went false during the boot: the degradation " +
+			"announced itself, which is the 04.3A confound")
+	}
+}
+
+// spacing is the OBSERVED interval between consecutive samples: median and max.
+//
+// It is the number that says what this instrument actually resolved on this
+// boot. F-20 is the finding that a 250 ms tick cannot resolve a ~500 ms window;
+// printing a 50 ms constant while the round trips cost 400 ms would be the same
+// finding, one layer up and self-inflicted.
+func spacing(samples []readinessSample) (max, median time.Duration) {
+	if len(samples) < 2 {
+		return 0, 0
+	}
+	gaps := make([]time.Duration, 0, len(samples)-1)
+	for i := 1; i < len(samples); i++ {
+		gaps = append(gaps, samples[i].At-samples[i-1].At)
+	}
+	return maxOf(gaps), medianOf(gaps)
+}
+
+func roundTrips(samples []readinessSample) (max, median time.Duration) {
+	if len(samples) == 0 {
+		return 0, 0
+	}
+	rtts := make([]time.Duration, 0, len(samples))
+	for _, s := range samples {
+		rtts = append(rtts, s.RTT)
+	}
+	return maxOf(rtts), medianOf(rtts)
+}
+
+func maxOf(ds []time.Duration) time.Duration {
+	var out time.Duration
+	for _, d := range ds {
+		if d > out {
+			out = d
+		}
+	}
+	return out
+}
+
+// medianOf sorts a COPY: sorting the caller's slice would reorder a timeline
+// whose order is the measurement.
+func medianOf(ds []time.Duration) time.Duration {
+	if len(ds) == 0 {
+		return 0
+	}
+	cp := append([]time.Duration{}, ds...)
+	sort.Slice(cp, func(i, j int) bool { return cp[i] < cp[j] })
+	return cp[len(cp)/2]
+}
+
+// percentileOf is the NEAREST-RANK percentile, which is the only honest choice
+// for the sample sizes here: interpolating between three points invents a value
+// that was never observed. With n=3 the p95 IS the maximum, and the report says
+// so rather than dressing it up.
+func percentileOf(ds []time.Duration, p float64) time.Duration {
+	if len(ds) == 0 {
+		return 0
+	}
+	cp := append([]time.Duration{}, ds...)
+	sort.Slice(cp, func(i, j int) bool { return cp[i] < cp[j] })
+	rank := int(math.Ceil(p / 100 * float64(len(cp))))
+	if rank < 1 {
+		rank = 1
+	}
+	if rank > len(cp) {
+		rank = len(cp)
+	}
+	return cp[rank-1]
+}
+
+// reportStressResults prints the distribution, per arm and pooled.
+//
+// The MAXIMUM comes first, everywhere. The median of a boot-time distribution
+// is the number that makes a cut look easy; the tail is the number that decides
+// which slow boot becomes a false positive, and it is the only one this loop
+// was dispatched to produce.
+func reportStressResults(t *testing.T, results []bootResult, conditions []stressCondition) {
+	t.Helper()
+
+	t.Log("")
+	t.Log("=== M7 · time in OPENING, by arm. MAX first: it is the number that decides. ===")
+	t.Log("arm            n  max(M6-anchor)  p95     median  | max(direct)  worst spacing  dilation")
+
+	byArm := map[string][]bootResult{}
+	for _, r := range results {
+		byArm[r.condition] = append(byArm[r.condition], r)
+	}
+
+	var stressedAll, unstressedAll []time.Duration
+	for _, c := range conditions {
+		row, ok := summariseArm(byArm[c.name])
+		if !ok {
+			t.Logf("%-14s 0  NOT MEASURED — every boot of this arm failed to complete", c.name)
+			continue
+		}
+		if c.name == conditions[0].name {
+			unstressedAll = append(unstressedAll, row.m6...)
+		} else {
+			stressedAll = append(stressedAll, row.m6...)
+		}
+		t.Logf("%-14s %d  %-15s %-7s %-7s | %-12s %-14s %.2fx",
+			c.name, len(row.m6),
+			fmtDur(maxOf(row.m6)), fmtDur(percentileOf(row.m6, 95)), fmtDur(medianOf(row.m6)),
+			fmtDur(maxOf(row.direct)), fmtDur(maxOf(row.spans)), row.dilation)
+	}
+
+	t.Log("")
+	t.Logf("POOLED unstressed n=%d max=%s p95=%s", len(unstressedAll),
+		fmtDur(maxOf(unstressedAll)), fmtDur(percentileOf(unstressedAll, 95)))
+	t.Logf("POOLED stressed   n=%d max=%s p95=%s", len(stressedAll),
+		fmtDur(maxOf(stressedAll)), fmtDur(percentileOf(stressedAll, 95)))
+
+	// The question the packet asks, answered from the numbers rather than from
+	// the reader's impression of them. INCONCLUSIVE is an available verdict and
+	// is not a failure of the run.
+	worst := maxOf(append(append([]time.Duration{}, stressedAll...), unstressedAll...))
+	t.Logf("DETECTION FLOOR: the worst window measured here is %s against the %s "+
+		"M5 measured for a socket to LEAVE %s with the server lost. Ratio %.1fx "+
+		"— and the ratio is CONTEXT, not a bound: the detection latency ADDS to a "+
+		"cut C (total = detection + C) instead of capping it, so what this run "+
+		"gives about C is the lower bound alone.",
+		fmtDur(worst), fmtDur(detectionFloor), socketStateConnected,
+		float64(detectionFloor)/float64(worst))
+
+	reportHygieneAndConfound(t, results)
+}
+
+// reportHygieneAndConfound prints the two per-run observables that are not
+// about the window: whether every boot let go of the profile, and whether any
+// boot saw the confound.
+//
+// Split out of reportStressResults for the complexity gate; the lines are
+// unchanged.
+func reportHygieneAndConfound(t *testing.T, results []bootResult) {
+	t.Helper()
+
+	var dirty []string
+	attempted := 0
+	for _, r := range results {
+		if r.lockAfterStop {
+			dirty = append(dirty, fmt.Sprintf("r%d/%s", r.round, r.condition))
+		}
+		// A subtest the -run filter skipped leaves a zero entry. Counting those
+		// as boots would report hygiene for runs that never happened.
+		if r.samples > 0 || r.failure != "" {
+			attempted++
+		}
+	}
+	if len(dirty) > 0 {
+		t.Errorf("HYGIENE %s survived the clean stop on: %s", singletonLockName,
+			strings.Join(dirty, ", "))
+	} else {
+		t.Logf("HYGIENE %d/%d boots left no %s behind after the clean stop; "+
+			"stopped_via is logged per boot above",
+			attempted, attempted, singletonLockName)
+	}
+
+	totalOffline := 0
+	for _, r := range results {
+		totalOffline += r.offlineEvents
+	}
+	t.Logf("CONFOUND across every boot: offline events = %d (structurally "+
+		"impossible on this path — overrideNetworkState is never sent — AND "+
+		"counted zero; the counter's positive control ran in THIS run, on the "+
+		"last boot, against the same counter on the same page instance that had "+
+		"just reported zero, and asserts after > before — see provePageCounts"+
+		"OfflineEvents above and EVIDENCIA-SPA.md M7.7)", totalOffline)
+}
+
+// armSummary is one arm reduced to the vectors the report prints.
+type armSummary struct {
+	m6, direct, spans []time.Duration
+	dilation          float64
+}
+
+// summariseArm drops the boots that produced no window, and reports whether any
+// survived. A boot that failed to complete is NOT a zero-length window: folding
+// it in as one would pull every statistic of that arm downwards and make a
+// broken level look like a fast one.
+func summariseArm(runs []bootResult) (armSummary, bool) {
+	var out armSummary
+	var dilation float64
+	for _, r := range runs {
+		if r.failure != "" || r.openingM6 == 0 {
+			continue
+		}
+		out.m6 = append(out.m6, r.openingM6)
+		out.direct = append(out.direct, r.openingDirect)
+		out.spans = append(out.spans, r.spanMax)
+		dilation += r.spinDilation
+	}
+	if len(out.m6) == 0 {
+		return armSummary{}, false
+	}
+	out.dilation = dilation / float64(len(out.m6))
+	return out, true
+}
+
+// detectionFloor is what M5 measured for the socket to leave CONNECTED with the
+// server lost: 33.2-34.2s across three runs, of which the FASTEST is the one
+// quoted here.
+//
+// It is DETECTION LATENCY — the instant of LEAVING CONNECTED — and it therefore
+// ADDS to a cut instead of bounding it. For a cut C over time-in-OPENING the
+// total time to declare a session dead would be 33.2s + C. What this run
+// delivers about C is the LOWER bound and only it: C has to sit above the
+// slowest healthy boot. The UPPER bound is how long the socket STAYS in OPENING
+// under a cut, which is N2b and is not measured here.
+//
+// So the ratio printed against this constant is budgetary context — how much
+// room there is to choose C next to a detection cost that is already paid — and
+// is NOT an upper bound on the cut. The two quantities sit on different axes.
+const detectionFloor = 33200 * time.Millisecond
+
+// fmtDur prints a duration in seconds, or says the value is absent. Zero must
+// never print as "0.00s": a window that was never measured is not a window of
+// no length.
+func fmtDur(d time.Duration) string {
+	if d == 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.2fs", d.Seconds())
 }
