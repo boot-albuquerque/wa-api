@@ -777,6 +777,415 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 
 ## Findings
 
+* **F-23 · SIM, com escopo estreito e um teto de relógio. A ESCOLHA de motor
+  por conta cabe inteira dentro do `wa-api`, e para ELA o write set do
+  `wa-worker` é VAZIO — sob a condição de que toda rota C3 responda dentro do
+  orçamento de latência cravado como constante no consumidor TypeScript
+  (abaixo). E o SIM cobre a ESCOLHA de motor; ele NÃO licencia "adaptador TS
+  inalterado" para a iniciativa inteira: as seis capacidades que a
+  `PARIDADE-WWEBJS.md` §3 atribui ao `wa-headless` não são consumidas hoje pelo
+  `WaApiAdapter`, e no momento em que a iniciativa as ENTREGAR o worker terá de
+  consumi-las — aí o write set dele deixa de ser vazio.** Investigação da
+  CAP-09 em 2026-08-12, contra o código dos dois repositórios — `wa-api` em
+  `6c388b9` e `disparazaap` em `features/macbook-lucas` `ed9e651`, árvore limpa
+  (`git status --porcelain` vazio antes e depois; nada foi escrito lá).
+
+  **Este achado foi avaliado adversarialmente** (2026-08-12, avaliador
+  independente com write set vazio, seguido de re-verificação linha a linha por
+  um segundo executor — que é quem escreveu as correções abaixo e não copiou
+  nenhuma citação do avaliador sem abrir o arquivo). **Veredito:
+  PASS_WITH_REQUIRED_FIX.** O SIM sobreviveu a cinco vetores de refutação.
+  A redação original **não** sobreviveu inteira: tinha uma afirmação de
+  completude falsa, omitia o teto de latência, declarava escopo maior do que
+  provou, errava duas citações e apoiava o argumento certo numa perna
+  falsificável. O que quebrou está listado no fim, em *O que a avaliação
+  derrubou* — um achado atacado e sobrevivente vale mais que um nunca atacado,
+  desde que o que ele perdeu fique registrado em vez de apagado.
+
+  A pergunta era falsificável: *a escolha de motor por conta pode ser resolvida
+  inteiramente dentro do `wa-api`, sem mudar o `wa-worker`?* A resposta é **sim**,
+  e o que a sustenta é que **são dois eixos distintos, não um**:
+
+  | eixo | quem decide | onde vive o dado | o outro lado enxerga? |
+  |---|---|---|---|
+  | **serviço** — `wwebjs` \| `wa-api` | `wa-worker` | `whatsapp_accounts.provider` (app-core) | o `wa-api` não precisa saber |
+  | **motor** — `wa-noise` \| `wa-headless` | `wa-api` | `users.<coluna nova>` (banco do `wa-api`) | o `wa-worker` **não enxerga, e não precisa** |
+
+  **Lado `wa-worker` — o eixo que ele controla, e onde ele para.**
+  `AdapterKind` é `'wwebjs' | 'wa-api' | 'fake' | 'fake-single'`
+  (`adapter-selector.ts:31`). Não existe nele nenhum valor de motor, e nenhum
+  ponto onde um caberia sem mudar o tipo. A resolução por conta é
+  `resolveAdapterKind(provider)` em `index.ts:324-326`, aplicada uma vez na
+  criação do runner em `index.ts:401`; `provider` vem do envelope do comando
+  (`dispatch-command.ts:207`, `provider: s.provider`), que é a coluna
+  `whatsapp_accounts.provider` do app-core. **Depois de `provider === 'wa-api'`,
+  o `wa-worker` deixa de opinar**: ele constrói um `WaApiAdapter`
+  (`index.ts:281-290`) e a partir daí só fala HTTP/WS com o serviço.
+
+  **Lado `wa-api` — a identidade da conta chega em TODA requisição.** O adapter
+  provisiona um usuário por instância — `name: \`disparazaap:${instanceId}\``
+  (`wa-api-adapter.ts:103`) e `userToken: \`disparazaap-${instanceId}\``
+  (`index.ts:284`) — logo conta ↔ usuário do `wa-api` é 1:1 e derivável. Todo
+  endpoint de usuário manda o header `token` (`wa-api-http-client.ts:370-375`);
+  o `/session/ws` manda o mesmo token por query string
+  (`wa-api-adapter.ts:95`, aceito por `extractRequestToken`,
+  `middleware/auth.go:78-91`). Do nosso lado, `AuthAlice`
+  (`middleware/auth.go:94`) resolve `token` → linha de `users`
+  (`SELECT ... FROM users WHERE token=$1 OR token_hash=$2`,
+  `middleware/auth.go:114-121`) e publica os atributos daquele usuário no
+  contexto (`Values`, `middleware/auth.go:149-157`). Os handlers leem dali:
+  `sessionUser` (`handler_session.go:31-45`) serve connect/qr/status/logout/
+  sync, o WS usa o mesmo `sessionUser` (`handler_session_ws.go:41-44`), e o
+  perfil lê o mesmo contexto (`profile_handler.go:55-57`). **Dez** das 11 rotas
+  do contrato C3 estão atrás dessa mesma cadeia, todas via `customChain`:
+  `wiring_routes.go:47` (`/session/profile`), `:49` (`/session/connect`), `:51`
+  (`/session/qr`), `:52` (`/session/logout`), `:54` (`/session/status`), `:57`
+  (`/session/ws`), `:63` (`/user/contacts/sync`), `:152` (`/user/avatar`),
+  `:153` (`/user/contacts`) e `:154` (`/user/contacts/last-activity`).
+
+  **Correção — a 11ª NÃO está no `customChain`.** A redação original dizia "as
+  11 rotas estão todas atrás dessa mesma cadeia (`wiring_routes.go:47-63` e
+  `:152-154`)", e isso é falso para `/admin/users`. Ela é registrada no
+  subrouter `/admin` (`pkg/bootstrap/router.go:268`), sob
+  `adminRoutes.Use(authAdmin(d.AdminToken))` (`:272`), com os handlers em
+  `:273-278`. E `AuthAdmin` (`middleware/auth.go:44-63`) faz **só** um
+  `subtle.ConstantTimeCompare` do header `Authorization` contra o token de
+  admin e chama `next.ServeHTTP` (`:60`) — **não põe nada no contexto**, nenhum
+  usuário é resolvido. Isto **não** quebra a cadeia de identidade: `/admin/users`
+  é a rota de ESCRITA da coluna de motor, e identifica a conta pelo corpo do
+  POST (`router.go:275`) ou pelo `{id}` do path no PUT (`router.go:276`) — ainda
+  é por conta, só que por outra chave. O enunciado correto é: *10 das 11 rotas
+  do C3 resolvem a conta por `AuthAlice` atrás do `customChain`; `/admin/users`
+  fica sob `authAdmin`, que não resolve usuário nenhum.*
+
+  **E a costura de troca de motor já está declarada.** `port.SessionProvider`
+  é por usuário — `NewSession(ctx, SessionSpec{UserID, Token})`
+  (`contracts/session_provider.go:9-34`) — e o seu próprio comentário diz o que
+  esta CAP precisa: *"a implementação nativa futura substitui
+  SessionProvider/Session inteiros, sem tocar em SessionOrchestrator, use case
+  ou handler"*. O `Orchestrator.Start` chama `o.provider.NewSession` num único
+  ponto (`application/session/orchestrator.go:187`), e o provider concreto é
+  montado num único lugar (`session_orchestrator_wiring.go:32-34`). Os handles
+  vivos já são indexados por `userID` (`registry/manager.go:86-96`), e
+  `pkg/infra/wa-headless/registry/` e `pkg/infra/wa-headless/client/` já existem
+  como `doc.go` espelhando os do `wa-noise` — a intenção está registrada, a
+  implementação não.
+
+  **Write set, por lado — nomeado, inclusive quando vazio.**
+
+  *`wa-worker` (`disparazaap`): **VAZIO — para a ESCOLHA de motor, e só para
+  ela**.* Nenhum arquivo. `AdapterKind` não ganha valor, `resolveAdapterKind`
+  não muda, `wa-api-adapter.ts` e `wa-api-http-client.ts` não mudam. Duas
+  ressalvas que **não são código**: (i) para uma conta hoje em `wwebjs` passar a
+  rodar no motor headless, alguém tem de virar `whatsapp_accounts.provider` para
+  `'wa-api'` — é DADO no app-core, não código do worker; (ii)
+  `WA_WA_API_ENABLED` já é o portão existente (`index.ts:325`) e continua sendo
+  o mesmo.
+
+  **E uma terceira ressalva, que É código, e que a redação original não tinha.**
+  O vazio vale para a troca de motor. Ele **não** vale para a ENTREGA das seis
+  capacidades. Verificado no `disparazaap`: o `WaApiAdapter` tem exatamente oito
+  métodos públicos — `start` (`wa-api-adapter.ts:98`), `stop` (`:131`), `on`
+  (`:142`), `onContact` (`:146`), `listContacts` (`:150`), `primeContactRoster`
+  (`:188`), `sendText` (`:200`, que **lança** `'not implemented (out of scope
+  for ADR-0033)'`) e `fetchContactAvatar` (`:208`) — e **nenhuma** das seis
+  (`fetchMessages`, `onMessageMeta`, `livenessCheck`, `refreshOwner`,
+  `getBrowserPid`, `backupNow`). O runner degrada em silêncio quando falta:
+  `if (!adapter.getBrowserPid) return` (`runner.ts:1230`),
+  `if (!adapter.fetchMessages) return` (`:2791`),
+  `if (!adapter?.livenessCheck) return` (`:2129`),
+  `if (!adapter?.backupNow) { … return }` (`:717`); e `onMessageMeta` não é
+  guarda mas chamada opcional, `adapter.onMessageMeta?.(…)` (`:1199`) — mesmo
+  efeito, mecanismo diferente. Ou seja: **hoje o worker silenciosamente faz
+  MENOS para uma conta `wa-api`**. No dia em que a iniciativa entregar as seis e
+  quiser que uma conta headless as use, o worker terá de consumi-las, e aí o
+  write set dele **deixa de ser vazio**. O SIM da F-23 licencia a troca de
+  motor; não licencia "TypeScript inalterado" para a iniciativa inteira.
+
+  *`wa-api` (este repo): **não vazio**, onze pontos — e ainda assim PARCIAL, ver
+  a nota de cobertura no fim desta lista.*
+  1. `pkg/infra/db/migrations.go` — coluna nova em `users`, no mesmo padrão
+     `IF NOT EXISTS ... ALTER TABLE users ADD COLUMN` de `:272-310`, com default
+     que preserva o comportamento atual.
+  2. `pkg/presentation/http/middleware/auth.go:114-157` — a coluna entra no
+     `SELECT` e no mapa `Values`, e passa a chegar em toda requisição.
+  3. `pkg/bootstrap/user_info_cache.go:29` (`userInfoColumns`) e o `Scan`
+     correspondente em `pkg/bootstrap/lifecycle.go:53-76` — as duas listas têm
+     de andar juntas; divergir é literalmente a F70 de novo.
+  4. `pkg/domain/user.go:12` e `:25`, `pkg/domain/user_record.go:15` e `:32` —
+     campo opcional (`omitempty`) em `AddUserRequest`/`EditUserRequest`/
+     `UserRecord`/`UserUpdate`.
+  5. `pkg/bootstrap/session_orchestrator_wiring.go:32-34` — o provider passa a
+     ser um composto que escolhe por `userID`; alternativa equivalente é o
+     ponto único de `orchestrator.go:187`.
+  6. `pkg/infra/wa-headless/registry/` e `pkg/infra/wa-headless/client/` — hoje
+     só `doc.go`; é onde a `Session` headless nasce.
+  7. `pkg/bootstrap/wiring_handlers.go:103` —
+     `waclient.ClientForGetter(clientManager.GetWaNoiseClient)`, e o
+     `sessionGuard` construído a partir dele em `:115`
+     (`wasession.NewSessionGuardAdapter(waClientLookup)`), injetado nos use
+     cases em `:130`. **Este é o ponto caro, e não deve ser escondido**:
+     `waclient.Client` é uma interface LARGA e tipada em whatsmeow
+     (`types.JID`, `appstate.PatchInfo`, `Store() *store.Device`), e é por ela
+     que passam contatos, avatar, envio e status. Um motor de browser não a
+     satisfaz inteira. *(Correção da citação: a interface começa em
+     `pkg/infra/wa-noise/client/client.go:**28**` — `type Client interface {` —
+     e fecha em `:92`. A redação original citava `:60-92`, cortando 32 linhas do
+     MEIO da interface. O erro era **a favor** do próprio argumento dela — a
+     interface é ainda maior do que ela dizia —, e por isso mesmo foi
+     corrigido.)*
+  8. `pkg/bootstrap/session_attach_hook_adapter.go:40` — **o pior dos pontos
+     novos, e o único que não é custo difuso mas CAMINHO OBRIGATÓRIO QUE
+     QUEBRA.** `Attach` faz `client := clientManager.GetWaNoiseClient(userID)` e
+     retorna erro se `nil`
+     (`"sessionAttachHook: no wanoise client registered for userID %s"`,
+     `:41-43`). O comentário do próprio arquivo (`:46-47`) diz que *"Attach é o
+     ponto por onde TODA sessão passa — tanto o pareamento novo quanto a
+     reconexão de quem já tinha credenciais"*. Tracei o mecanismo até o fim, e
+     ele fecha: o registro só publica o cliente concreto quando a `port.Session`
+     satisfaz `interface{ WaNoiseClient() *wanoise.Client }`
+     (`pkg/infra/wa-noise/registry/clients/clients.go:38-47`) — uma `Session`
+     headless não satisfaz, logo `GetWaNoiseClient` devolve `nil`, logo `Attach`
+     erra; e o erro **aborta o start**:
+     `pkg/application/session/orchestrator.go:197-200` faz
+     `o.registry.Unregister(userID); return aerr` antes de qualquer
+     `Pair`/`Connect`. **Não há bypass.** Sem tratar este ponto, uma conta em
+     motor headless não inicia sessão nenhuma.
+  9. `pkg/bootstrap/wiring_delegates.go:133-134` —
+     `GetWA: func(uid string) interface{} { return clientManager.GetWaNoiseClient(uid) }`
+     e `GetMC: … clientManager.GetUserClient(uid)`, que injetam o cliente
+     concreto no `wahistory.SyncHistoryForChat`.
+  10. `pkg/bootstrap/lease_wiring.go:94-98` — `releaseSessionLocally` resolve o
+      cliente concreto para `Disconnect()` e depois limpa os três registros
+      (`DeleteWaNoiseClient`, `DeleteUserClient`, `DeleteHTTPClient`). É a
+      liberação de sessão ao perder o lease: para uma conta headless ela hoje
+      não desliga nada.
+  11. `pkg/bootstrap/session_event_dispatcher_adapter.go:32` —
+      `handle := clientManager.GetUserClient(userID)`, com type-assert para
+      `*bootstrap.UserEventHandler` (`:38`); sem handle, **descarta o evento** e
+      devolve `nil` (`:33-36`). Achado meu, não do avaliador: entra no mesmo
+      grep e tem o mesmo problema, só que degrada em silêncio em vez de falhar.
+
+  **Nota de cobertura — este write set é PARCIAL, e é por construção.** Re-rodei
+  `grep -rn "GetWaNoiseClient\|GetUserClient" pkg/`. Descontando testes,
+  comentários e as próprias definições em `pkg/infra/wa-noise/registry/manager.go`
+  (`:111`, `:126`, `:144`), sobram **sete linhas de produção**: as dos pontos 7
+  a 11 acima, mais `pkg/infra/wa-noise/adapters/sessioncount/adapter.go:34`
+  (`GetWaNoiseClientsCount`, casamento por substring) — que conta sessões vivas
+  para o `/health` iterando sobre `*wanoise.Client`
+  (`ClientHealthProvider`, `:15-17`; `IterateWaNoiseClients` em `:36`), e onde
+  uma conta headless simplesmente **não seria contada**. Mas o grep é mais
+  estreito que a pergunta: ele não pega `SetWaNoiseClient`, `GetAllClients`,
+  `IterateWaNoiseClients` nem `Snapshot`, e não pega os seis adapters de
+  capacidade que recebem o `waclient.Getter` já pronto do ponto 7
+  (`adapters/{misc,chat/messenger,chat/composer,group,presence,user}`). **Não
+  afirmo que a lista está completa** — a redação original afirmava, com um
+  ponto só, e era falsa. O que afirmo é o que o grep cobriu.
+
+  **Por que o ponto 7 não derruba o SIM — pela perna certa, não pela que a
+  redação original usou.** O argumento original era: *"as seis capacidades não
+  são servidas por rota alguma do `wa-api` hoje, logo não há contrato a
+  preservar"*. Isso é **enganoso, e falsificável**. `livenessCheck` é
+  precisamente o mecanismo que teria de SUSTENTAR `/session/status` para uma
+  conta headless, e `/session/status` é a rota mais quente que o worker chama —
+  a cada 2 s (`wa-api-adapter.ts:82`, `index.ts:287`). A capacidade não tem rota
+  própria; ela vira a **implementação de uma rota que já existe e já tem
+  consumidor vivo**. Apoiar o SIM nessa perna seria apoiá-lo em algo que o
+  primeiro leitor atento derruba.
+
+  A perna que sustenta é outra, e está verificada: **`/session/status` não passa
+  por `waclient.Client`.** `GetStatusUseCase.Execute`
+  (`pkg/application/usecase/session/get_status.go:36`) chama
+  `uc.sessions.EnsureSession(ctx, txtID)` (`:37`) e
+  `uc.status.SessionStatus(ctx, txtID)` (`:42`) — **portas**, não o cliente
+  concreto: `appport.SessionGuard` (uma função,
+  `contracts/session_guard.go:14-20`) e `appport.SessionStatusReader` (uma
+  função, `contracts/user_repository.go:49-52`). Um motor headless serve essa
+  rota implementando duas assinaturas, **não cobrindo a interface larga**. Que
+  hoje quem as implementa seja um adapter construído sobre o getter concreto
+  (`SessionGuardAdapter`, `pkg/infra/wa-noise/runtime/session/guard.go:28-36` e
+  `:72-78`, montado em `wiring_handlers.go:115`) é acidente da implementação
+  atual, não do contrato — e é exatamente por isso que o ponto 7 do write set
+  tem de citar `:115` junto com `:103`.
+
+  Portanto: o custo do ponto 7 é real, é INTERNO ao `wa-api`, aparece quando uma
+  conta headless tiver de responder às rotas C3, e **não atravessa para o
+  TypeScript** — porque o desenho é por portas, não porque faltem rotas.
+  **UNKNOWN nomeado**: quanto da interface `waclient.Client` o motor headless
+  precisa cobrir para servir as outras nove rotas C3 — não foi medido, e não é
+  mensurável sem as capacidades existirem. Confirmado apenas para
+  `/session/status`.
+
+  **Bloco de mudança de contrato** (as rotas têm consumidor vivo,
+  `wa-api-adapter.ts`):
+
+  - **OLD_CONTRACT** — `POST /admin/users` aceita `{name, token, webhook,
+    events}` (`wa-api-http-client.ts:138-154`); o motor não é conceito da API.
+    As 11 rotas C3 respondem sempre pelo `wa-noise`.
+  - **NEW_CONTRACT** — `AddUserRequest`/`EditUserRequest` ganham um campo
+    opcional de motor; ausente ⇒ `wa-noise`. As rotas C3 mantêm path, método,
+    auth e envelope; muda só quem está atrás.
+  - **COMPATIBILITY** — total **na FORMA**, nos dois sentidos; **condicional no
+    TEMPO** (ver o bloco de orçamento de latência logo abaixo). O `wa-worker` não manda o
+    campo (`provisionUser` monta o corpo com quatro chaves,
+    `wa-api-http-client.ts:139-144`) e cai no default; se a resposta ganhar o
+    campo, a tipagem TS o ignora (`WaApiSessionStatus`,
+    `wa-api-http-client.ts:62-73`, é estrutural e não rejeita campo extra).
+    O `wa-worker` **não chama** `PUT /admin/users/{id}` nem
+    `DELETE /admin/users/{id}` — o cliente só tem `provisionUser` e `listUsers`
+    (`wa-api-http-client.ts:138` e `:218`) —, então a rota de edição já
+    registrada (`router.go:276`) é caminho administrativo livre para virar o
+    motor de uma conta sem tocar em nada do TypeScript.
+  - **READ_PATH** — `AuthAlice` lê a coluna e a põe no contexto; o wiring do
+    orchestrator escolhe o provider por `userID`; os registries continuam
+    indexados por `userID` (`registry/manager.go:86-96`), inclusive o WS
+    (`AddWSConn`/`BroadcastToUser`, `manager.go:190-200`).
+  - **WRITE_PATH** — migração com default; `POST /admin/users` na criação e
+    `PUT /admin/users/{id}` na troca. Ambas já existem
+    (`router.go:275-276`).
+  - **ROLLBACK** — pôr a coluna de volta no default reverte conta a conta, sem
+    deploy: a linha volta a resolver `wa-noise` no `NewSession` seguinte. A
+    coluna pode ficar no banco sem efeito. Nenhum passo de rollback atravessa a
+    fronteira para o `disparazaap`.
+
+  **ORÇAMENTO DE LATÊNCIA — a condição do SIM que a redação original não
+  enunciava.** A compatibilidade declarada acima é de forma. O consumidor
+  TypeScript impõe também um teto de RELÓGIO, e ele é **constante hardcoded, não
+  configuração**. Verificado no `disparazaap`:
+
+  - `wa-api-adapter.ts:85-89` constrói o `WaApiHttpClient` **sem** passar
+    `timeoutMs` → cai no default `this.timeoutMs = options.timeoutMs ?? 15_000`
+    de `wa-api-http-client.ts:131`, aplicado em toda requisição
+    (`:388-390`, `AbortController` + `setTimeout`).
+  - **Não há env var.** `grep` por `timeoutMs|WA_API_TIMEOUT|pollIntervalMs` em
+    `index.ts`, `config.ts` e `wa-api-adapter.ts` devolve, além do default:
+    o override por chamada `{ timeoutMs: 50_000 }` de `primeContactRoster` →
+    `requestContactsSync` (`wa-api-adapter.ts:190`), também hardcoded, e
+    `pollIntervalMs: 2000` cravado no sítio de construção (`index.ts:287`)
+    além do default `?? 2000` (`wa-api-adapter.ts:82`). Nenhuma das três é
+    ajustável por ambiente.
+  - O `poll()` bate em `GET /session/status` a cada **2 s**
+    (`wa-api-adapter.ts:297`, `setInterval(…, this.pollIntervalMs)`).
+  - E o `catch` do `poll()` (`wa-api-adapter.ts:349-356`) emite
+    `{ status: 'disconnected', reason: 'wa-api poll error: …' }` para
+    **QUALQUER** exceção — inclusive um timeout de HTTP. Um `/session/status`
+    lento não degrada: ele é indistinguível de sessão caída.
+
+  Logo o SIM é **condicional a este orçamento**, que passa a ser requisito de
+  aceite da CAP-09:
+
+  | rota | teto | origem do teto |
+  |---|---|---|
+  | `POST /user/contacts/sync` | **< 50 s** | `wa-api-adapter.ts:190` |
+  | todas as demais rotas C3 | **< 15 s** | `wa-api-http-client.ts:131` |
+  | `GET /session/status` | **< 15 s, sob polling de 2 s** | idem + `index.ts:287` |
+
+  **UNKNOWN, medido-a-fazer**: a latência REAL das rotas C3 servidas por um
+  motor headless. Não foi medida — nem por quem escreveu o achado, nem pela
+  avaliação (uma sonda de SPA real exigiria o perfil pareado, e a invariante
+  *"uma sessão ativa por perfil"* — `HANDOFF-INICIATIVA.md` §6 — o reserva a um
+  worker por vez). O ponto não é que os tetos estourem; é que a F-23 declarava
+  COMPATIBILITY *"total, nos dois sentidos"* sem mencionar que existe um relógio
+  cravado no consumidor. Se estourar, o remédio é uma constante no TypeScript —
+  e aí o write set do `wa-worker` deixa de ser vazio por este motivo também.
+
+  **Isto NÃO é proposta de feature flag de rollout.** É uma coluna de
+  configuração por conta, no mesmo lugar e no mesmo formato que `proxy_url`,
+  `media_delivery` e `s3_enabled` já ocupam. O canário é CAP-11 e continua fora
+  deste ciclo.
+
+  **Linhas re-verificadas, porque a matriz avisa que envelhecem.**
+  `index.ts:265` **ainda existe** mas a `PARIDADE-WWEBJS.md` §5 o descreve com
+  imprecisão: 265-270 é o `defaultAdapterKind` (o padrão da FROTA, lido de
+  `WA_ADAPTER`); a resolução **por conta** é `resolveAdapterKind` em
+  **`index.ts:324-326`**, aplicada em **`index.ts:401`**. `index.ts:279`
+  **confere**: é `adapterFactoriesByKind`, com a fábrica `wa-api` em
+  `:281-290`; a flag `WA_WA_API_ENABLED` é documentada em `:271-278` e
+  **executada em `:325`**, não em `:279`. As quatro citações da §1 daquele
+  documento conferem no HEAD atual deste repo: `handler_session.go:47`
+  (`ConnectHandler`), `handler_session_ws.go:21` (`WSHandler`),
+  `handler_session.go:281` (`SyncContactRosterHandler`, `POST
+  /user/contacts/sync`) e `profile_handler.go:42` (`ProfileHandler`).
+  **Não corrigi a §5**: o write set desta investigação é só este arquivo.
+  A correção fica proposta, não aplicada.
+
+  **Divergência de numeração observada e NÃO corrigida**, como mandado:
+  `PARIDADE-WWEBJS.md` §3 chama `livenessCheck` de "invariante 11", mas o
+  invariante com esse texto — *"Liveness por `Evaluate` com prazo, nunca por
+  presença de processo/target"* — é o **10** de `HANDOFF-INICIATIVA.md` §6
+  (o 11 é *"Toda morte de sessão sai com causa classificada"*). A §4 chama
+  metadata-only de "invariante 13", e o texto *"`WaMessageMeta` é
+  metadata-only; zero PII em log"* é o **12**. Offset de +1, consistente com o
+  que o humano já pôs em TRIAGE.
+
+  **UNKNOWNs nomeados.** (a) o tamanho da cobertura de `waclient.Client`
+  exigida pelo motor headless para servir C3 — não medido; (b) se o
+  `ClientManager` global (`config.go:58`) precisa virar dois registries ou um
+  só com dois tipos de handle — é decisão de desenho da CAP-09, não foi
+  resolvida aqui; (c) quem, operacionalmente, escreve o motor de uma conta
+  (operador via `PUT /admin/users/{id}`, ou o app-core) — não há hoje nenhum
+  chamador daquela rota do lado do produto, e o eventual chamador seria mudança
+  no app-core, não no `wa-worker`; (d) a latência real das rotas C3 sob motor
+  headless, contra os tetos de 15 s / 50 s / polling de 2 s — não medida, e a
+  variável de que depende a condição do SIM. Buscas feitas: `grep` por `engine`
+  em `pkg/`, `cmd/` e `internal/wa-headless/` (só o pacote
+  `internal/wa-headless/engine`, sem relação), `grep` por
+  `GetWaNoiseClient|GetUserClient` em `pkg/` — **cujo alcance está enunciado na
+  nota de cobertura do write set, e que NÃO cobre todos os acoplamentos ao
+  cliente concreto** —, e enumeração das rotas C3 por `wiring_routes.go`.
+
+  **O que a avaliação derrubou.** Registro do que a redação original afirmava e
+  não sustentou, porque um achado corrigido em silêncio parece um achado que
+  nunca errou:
+
+  1. *"todos os pontos de acoplamento concreto listados acima"*, com **um** só
+     ponto (`wiring_handlers.go:103`). **FALSO.** O grep re-executado devolve
+     sete linhas de produção; o write set foi de sete para onze pontos e a frase
+     de completude virou uma nota de cobertura que diz o que o grep cobriu. O
+     mais grave dos novos é o `Attach`
+     (`session_attach_hook_adapter.go:40`): não é custo difuso, é caminho
+     obrigatório que ABORTA o start de sessão.
+  2. *COMPATIBILITY "total, nos dois sentidos"*. **INCOMPLETO.** Era verdade de
+     forma, não de tempo. O teto de relógio do consumidor virou bloco próprio e
+     condição explícita do SIM.
+  3. *Escopo.* O SIM provava a ESCOLHA de motor e vinha sendo lido como licença
+     para "adaptador TS inalterado" na iniciativa inteira. Estreitado na própria
+     frase do SIM e na ressalva do write set do worker.
+  4. *"as 11 rotas do C3 estão todas atrás do `customChain`"*. **ERRADO** para
+     `/admin/users` — corrigido acima; a cadeia de identidade não quebra.
+  5. *`waclient.Client` em `client.go:60-92`*. **ERRADO**: `:28-92`. O erro era a
+     favor do próprio argumento, e foi corrigido do mesmo jeito.
+  6. *A perna do argumento do ponto 7* (as seis capacidades "não têm rota").
+     **FRÁGIL** — `livenessCheck` sustentaria `/session/status`, que é a rota
+     mais quente que existe. Trocada pela perna verificada: `/session/status`
+     escapa por PORTAS (`get_status.go:36`, `:37`, `:42`).
+
+  O que **sobreviveu ao ataque sem emenda**: os dois eixos, a cadeia de
+  identidade das 10 rotas de sessão, o bloco de mudança de contrato, o write set
+  VAZIO do `wa-worker` para a escolha de motor, e as linhas re-verificadas de
+  `index.ts`. A avaliação procurou explicitamente e **não achou**: nenhum
+  `instanceof`, nenhuma negociação de capacidade, nenhum handshake de versão,
+  nenhuma env var pela qual o worker aprenda o motor, nenhum branch de runtime
+  condicionado a motor além dos seis que chaveiam no eixo SERVIÇO — e esses seis
+  têm, no comentário do próprio código, o mesmo racional (*"o processo/sessão
+  vive fora do worker"*), que é indiferente ao motor.
+
+  **Dois acoplamentos SEMÂNTICOS que a avaliação levantou e que ninguém tinha
+  anotado** (nenhum quebra; ambos degradam em silêncio, e por isso ficam
+  registrados): (a) o `expiresAt` do QR é calculado do
+  `QRChannelItem.Timeout` do whatsmeow — um motor de browser teria de
+  sintetizá-lo, e a ausência é tolerada porque o campo é anexado por spread
+  condicional; (b) o `emitReadyWithProfile` do adapter faz retry calibrado no
+  `Store.PushName` do whatsmeow (~3 tentativas × 3 s), orçamento sintonizado num
+  motor específico — um motor mais lento nisso faz o worker emitir `ready` sem
+  pushname.
+
+  **Achado incidental, NÃO corrigido** (write set desta correção é um arquivo
+  só): o comentário em `pkg/bootstrap/wiring_routes.go:88-89` manda ver
+  *"routes.go:51-58"*, e `pkg/bootstrap/routes.go` **não existe** — o arquivo é
+  `router.go` e as linhas são `273-278`. Verificado por mim. Candidato ao
+  `HOUSEKEEP.md` da raiz.
+
 * **F-22 · o socket percebe a queda SOZINHO, mas leva ~34 s — e os "3 s" do
   F-21 eram reação à NOSSA emulação.** LOOP 04.3B, medido contra a conta real
   cortando **só o transporte** (`EVIDENCIA-SPA.md` M5).
