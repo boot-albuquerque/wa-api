@@ -257,11 +257,16 @@ E, no mesmo commit, remover o `t.Skip` de `TestProcessDataSplitPayload`, que
 passa a ser a prova da correção. Vale também mandar o patch para o upstream
 (`wa-api/internal/wa-noise`), já que o bug não é nosso.
 
-**Status**: **não corrigido**. A Fase A do ADR-0004 é estrutural por contrato
-(`PATCHES.md` declara "comportamento não mudou" em todas as entradas) e este é
-justamente um caso em que o comportamento observável muda. Pendente de decisão
-do usuário: corrigir agora em commit próprio, ou tratar junto com F16 numa
-leva de correções de comportamento do fork.
+**Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" que existia
+aqui era texto obsoleto de uma versão anterior desta entrada, escrito antes de
+o lote C aplicar a correção acima — nunca removido quando o fix entrou. O
+arquivo também mudou de `internal/waclient/socket/framesocket.go` para
+`internal/wa-noise/protocol/socket/framesocket.go` na Fase H; as referências de
+caminho neste registro foram atualizadas. Evidência reverificada:
+`internal/wa-noise/protocol/socket/framesocket.go:180-193` mostra
+`receivedLength` contado após o descarte do cabeçalho; `go test -run
+'TestProcessDataSplitPayload|TestProcessDataSplitPayloadEmTodosOsPontosDeCorte|TestProcessDataPartialHeader'
+-v ./internal/wa-noise/protocol/socket/` — 3/3 PASS, nenhum skip.
 
 ---
 
@@ -451,10 +456,13 @@ responde `false`.
 _, err := s.db.Exec(ctx, deleteIdentityQuery, s.JID, address)
 ```
 
-**Status**: **não corrigido**. A Fase B é estrutural por contrato, e isto é
-mudança de comportamento em entrada patologica (ainda que a intenção do autor
-seja evidente pela existência da constante não usada). Pendente de decisão do
-usuário.
+**Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
+texto obsoleto — escrito antes de o próprio lote C (citado no `Status:
+CORRIGIDO` acima) aplicar a troca para `deleteIdentityQuery`. Evidência
+reverificada: `internal/wa-noise/store/sqlstore/store_identity.go:38-39` usa a
+query de igualdade; `go test ./internal/wa-noise/store/sqlstore/... -run
+'TestDeleteIdentityRemovesOnlyThatAddress|TestDeleteIdentityNaoTrataCuringaDeLike'
+-v` — 2/2 PASS.
 
 ---
 
@@ -901,9 +909,15 @@ delegar isso ao `goimports` que o `//go:generate` já roda logo depois —
 emitindo um bloco de import vazio e deixando o `goimports -local` resolver.
 A segunda opção é menor e usa maquinário que já está no lugar.
 
-**Status**: **não corrigido**. O `internals.go` commitado está correto e
-compila; o risco é exclusivamente para quem rodar `go generate`. Continua sem
-gate que detecte: `go generate` não roda em `make check`.
+**Nota de reconciliação (2026-08-12)**: **CORRIGIDO** (lote E, 2026-08-07,
+commit `aa6e4a3`). `core/internals_generate.go:172-192` agora tem
+`mergedImports()`, que junta os imports de **todos** os arquivos processados
+(não só `files[0]`), deduplicando por caminho — exatamente a correção revisada
+pedida acima. Evidência: `go generate ./...` reproduz `core/internals.go`
+byte-idêntico ao commitado (`diff -q` saída vazia); `go build ./...` limpo;
+`go test -run TestInternalsGerado -v ./...` PASS. O parágrafo "não corrigido"
+anterior descrevia o estado antes do lote E; nunca foi atualizado quando o fix
+chegou.
 
 ### Adendo ao F29 — a Fase H moveu o par para `core/` e **não** piorou o bug, 2026-08-07
 
@@ -930,11 +944,13 @@ bloco de import continua valendo.
 
 **Correção sugerida**: inalterada (ver "Correção sugerida (revisada)" acima).
 
-**Status**: **não corrigido**, por decisão explícita da Fase H. Corrigir o F29
-é escopo próprio: toca arquivo gerado, tem duas dependências acopladas, e a
-regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo da
-tarefa. Documentado para quem vier depois em
-`internal/wa-noise/docs/ARCHITECTURE.md` §6 e `docs/CONTRIBUTING.md` regra 9.
+**Nota de reconciliação (2026-08-12)**: **CORRIGIDO** (lote E, 2026-08-07,
+commit `aa6e4a3`, ver adendo anterior). A decisão da Fase H de não corrigir
+"de graça" continuou valendo até o lote E resolver o F29 como tarefa própria,
+como este próprio parágrafo previa. Evidência: `grep -c "^func (int
+\*DangerousInternalClient)" core/internals.go` = 206 wrappers (a lista
+hardcoded cobria só 178, dos quais 96 quebrariam); `go generate ./...` +
+`go build ./...` limpos.
 
 ## F30 — `downloadableMessageWithSizeBytes` não tem nenhum implementador: `getSize` cai no default para `StickerPackItem`
 
@@ -1158,6 +1174,42 @@ canal).
 única mudança de comportamento feita nele foi o panic de `handlePairSuccess`,
 que é fatal para o processo. Este é recuperável e a correção mexe em ordem de
 operações num caminho concorrente — precisa de decisão consciente.
+
+**Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
+texto obsoleto — o `close(qrc.stopQRs)` dentro do CAS já estava em produção
+(lote B, citado no `Status: CORRIGIDO` acima; código atual em
+`internal/wa-noise/core/qrchan.go:146-147`, com comentário inline citando esta
+entrada). O que faltava de fato era o **teste de regressão**: nenhum
+`qrchan_test.go` existia (`grep -rln "F33" --include="*_test.go"
+internal/wa-noise/` não devolvia nada). Isso foi corrigido agora, não apenas
+documentado:
+
+- Criado `internal/wa-noise/core/qrchan_test.go`, com
+  `TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes`:
+  50 goroutines concorrentes chamando `qrc.handleEvent` com eventos terminais
+  alternados (`*events.PairError` / `*events.Disconnected` — a sequência real
+  de uma falha de pareamento), cada uma com `recover()` próprio para
+  transformar panic em falha de asserção legível.
+- `go test -race -run
+  TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes -v
+  ./internal/wa-noise/core/` — PASS contra o código corrigido.
+- **Controle negativo executado**: reintroduzido temporariamente o
+  `close(qrc.stopQRs)` fora do CAS (a forma pré-fix, exata do trecho citado no
+  topo desta entrada). O mesmo teste falhou de verdade:
+
+  ```
+  qrchan_test.go:46: handleEvent entrou em panic (goroutine 49): close of closed channel
+  qrchan_test.go:46: handleEvent entrou em panic (goroutine 1): close of closed channel
+  qrchan_test.go:59: 2 de 50 goroutines entraram em panic ao fechar o canal concorrentemente
+  --- FAIL: TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes (0.00s)
+  ```
+
+  A mutação foi revertida em seguida; `git diff internal/wa-noise/core/qrchan.go`
+  ficou vazio (só o arquivo de teste é novo).
+- `go vet ./internal/wa-noise/core/...` e `go build ./...` limpos.
+
+**Status final: CORRIGIDO**, agora com teste que trava a causa (exclusão
+ausente entre `close` e o CAS), não só o sintoma.
 
 ## F34 — código morto em `decodeFBArmadillo`
 
@@ -1895,11 +1947,13 @@ sobre corrigir agora ou depois.
 - **Status**: **CORRIGIDO** (lote C, 2026-08-07) pela primeira opção.
   `EncodePatch` devolve `ErrNilMutationValue` nomeando qual mutação veio sem
   valor. Travado por `TestEncodePatchRejeitaMutacaoSemValor`.
-- **Status**: **não corrigido**. Está em `internal/wa-noise/appstate/`, que o
-  lote 3 explicitamente não toca (`git diff --stat internal/wa-noise/appstate/`
-  tem de continuar vazio). Registrado para decisão do usuário. O teste
-  `sendPatch()` em `appstatesync/send_test.go` documenta a pré-condição num
-  comentário citando `encode.go:50`.
+- **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
+  texto obsoleto — escrito para o escopo restrito do lote 3, superado pelo
+  próprio lote C (citado no `Status: CORRIGIDO` acima), que cobriu
+  `appstate/`. Evidência reverificada: `internal/wa-noise/appstate/encode.go:54-55`
+  tem o `nil` check retornando `ErrNilMutationValue`; `go test
+  ./internal/wa-noise/appstate/... -run TestEncodePatchRejeitaMutacaoSemValor
+  -v` — PASS.
 
 ## F50 — `phoneLinkingCache` é lido e escrito de goroutines diferentes sem sincronização
 
@@ -1937,11 +1991,15 @@ sobre corrigir agora ou depois.
   exatamente "último escritor ganha", sem seção crítica em volta. Travado por
   `TestStateLinkingSuportaLeituraEEscritaConcorrentes` (que falha sob `-race`
   na versão antiga) e `TestStateZeroValueTemLinkingNil`.
-- **Status**: **não corrigido**. É bug pré-existente fora do escopo do lote 4,
-  que era extração; alterar sincronização em código de criptografia de
-  pareamento sem pedir é exatamente o que o CLAUDE.md manda não fazer. O
-  comportamento foi preservado bit a bit e a decisão está documentada no doc de
-  `pairing.State` (`state.go`) e em `PATCHES.md`, seção do lote 4.
+- **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
+  texto obsoleto do racional do lote 4 (extração pura, sem tocar sincronização),
+  superado pelo próprio lote B (citado no `Status: CORRIGIDO` acima), que
+  trocou `State.linking` por `atomic.Pointer[LinkingCache]`. Evidência
+  reverificada: `internal/wa-noise/pairing/state.go:38,42,45` — `linking
+  atomic.Pointer[LinkingCache]`, `Linking()`/`SetLinking()` usam
+  `Load()`/`Store()`; `go test ./internal/wa-noise/pairing/... -run
+  'TestStateLinkingSuportaLeituraEEscritaConcorrentes|TestStateZeroValueTemLinkingNil'
+  -race -v` — 2/2 PASS sob `-race`.
 
 ## F51 — `prekeys.Upload` indexa `preKeys[len(preKeys)-1]` sem checar lista vazia
 
@@ -2328,9 +2386,19 @@ faltava. Os dois pontos de escrita (`newNoiseSocket` e `NoiseSocket.Stop`, este
 tome `fs.lock`), e fazer `Close` ler o campo ainda sob o lock que ele já segura.
 É correção local ao pacote `socket/`, sem efeito na API do fork.
 
-**Status**: **não corrigido**. Fora do escopo do lote 10 (que não tocou `socket/`), e
-a regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo.
-Registrado para decisão do usuário.
+**Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
+texto obsoleto de uma versão anterior desta entrada — escrito quando o achado
+ainda estava fora de escopo do lote 10, antes de o lote B efetivamente aplicar
+a correção descrita no `Status: CORRIGIDO` logo acima. Nunca removido quando o
+fix entrou. Caminhos também desatualizados: `socket/` virou
+`internal/wa-noise/protocol/socket/` na Fase H. Evidência reverificada:
+`internal/wa-noise/protocol/socket/framesocket.go:37` — campo privado
+`onDisconnect`, mutado só via `SetOnDisconnect` (linha 97), que toma `fs.lock`;
+`internal/wa-noise/protocol/socket/noisesocket.go:42,77` — os dois pontos de
+escrita usam o setter. `go test -run TestSetOnDisconnectEConcorrenteComClose
+-race -v ./internal/wa-noise/protocol/socket/` — PASS, 200 rounds concorrentes
+de `SetOnDisconnect`/`Close` sob `-race`, exercitando o mesmo `fs.lock` que
+`Close` usa — teste causal, não só de sintoma.
 
 ---
 
@@ -2645,7 +2713,307 @@ divergência existe **só na primeira exibição**. Do segundo código em diante
 somos idênticos ao oficial.
 
 **Status**: **item 1 (comentário invertido) corrigido** (2026-08-07).
-**item 2 (a validade de 60s do primeiro código) ABERTO** — é decisão de
-segurança, não de implementação, e a medição de 2026-08-08 mostra que o
-custo de decidir é menor do que parecia: afeta um código, não a janela toda.
+**item 2 corrigido** (2026-08-12), decisão do HUMAN via reconciliação
+HOUSEKEEP/PATCHES: reduzir para 20s, paridade com o oficial.
+
+**Decisão do item 2 (2026-08-12)**: consultado o upstream —
+`github.com/tulir/whatsmeow`, branch `main`, `qrchan.go` — antes de decidir,
+por regra deste projeto. O upstream tem o **mesmo** desenho (`timeout := 20 *
+time.Second; if len(codes) == 6 { timeout = 60 * time.Second }`), sem
+comentário explicando o motivo dos 60s. Ou seja: os 60s não são uma escolha
+consciente do wa-api nem do upstream documentada em algum lugar — são apenas
+o valor original nunca revisitado. Diante disso, e como QR de pareamento é
+credencial (quem vir a tela pode vincular um aparelho), a decisão foi
+**divergir do upstream conscientemente**: `qrCodeFirstTimeout` passou a valer
+`qrCodeTimeout` (20s) em `internal/wa-noise/core/pair_constants.go:23`, em
+vez de `60 * time.Second`. Não há custo funcional: o canal já rotaciona
+automaticamente para o próximo código, então o efeito é só o primeiro código
+trocar um pouco mais cedo — igual ao cliente oficial.
+
+**Teste de regressão**: `TestEmitQRsFirstCodeTimeoutMatchesOfficial`
+(`internal/wa-noise/core/qrchan_test.go`) chama `emitQRs` com um lote de
+`qrCodeFirstBatchSize` códigos e verifica que o primeiro item emitido tem
+`Timeout == qrCodeTimeout` (20s). Controle negativo executado: com
+`qrCodeFirstTimeout` revertido para `60 * time.Second`, o teste falha com
+`first QR code timeout = 1m0s, want 20s` — trava a causa (o valor da
+constante), não um sintoma indireto.
+
+---
+
+## Triagem dos TODO/FIXME herdados — `send/`, `appstatesync/`, `message/`, `media/` (2026-08-12)
+
+**Contexto**: reconciliação de HOUSEKEEP.md pós-extração (Fases A-H). Busca
+`grep -rn "TODO\|FIXME"` nos quatro pacotes encontrou **17 ocorrências reais**
+(o restante dos hits era a palavra portuguesa "TODOS" em comentários, falso
+positivo do grep) — abaixo da estimativa inicial de "~45", que era um resumo
+não verificado. Nenhuma delas esconde erro, retry ou fallback silenciados
+sob investigação direta do código ao redor — todas são gaps de funcionalidade
+ou anotações de incerteza do autor upstream, não bugs de correção. Nenhum novo
+endpoint de mensageria/mídia/perfil foi implementado (fora de escopo desta
+iniciativa); TODOs que apontam para isso viram débito rastreado apontando para
+a próxima iniciativa.
+
+### F70 — `send/ack.go`: invalidação de cache incompleta para grupo e broadcast
+
+**Onde**: `internal/wa-noise/capabilities/send/ack.go:84` (`TODO also
+invalidate device list caches`, ramo `types.GroupServer`) e `ack.go:87` (`TODO
+do something`, ramo `types.BroadcastServer`, corpo vazio).
+
+**Problema**: `InvalidateParticipantCache` invalida a lista de participantes
+do grupo, mas não a lista de dispositivos de cada participante — e para
+`BroadcastServer` não faz nada. Efeito: depois que o servidor sinaliza hash de
+lista de participantes divergente (`phash` — ver `ApplyAck` acima), o próximo
+envio pode continuar usando uma lista de dispositivos desatualizada para
+alguns participantes, e para broadcast a invalidação não acontece de jeito
+nenhum. Não é erro engolido — não há `err` disponível para engolir aqui, é
+lacuna de cache mesmo.
+
+**Dono**: quem tocar `send/ack.go` ou investigar falha de entrega em
+grupo/broadcast por device-list desatualizada.
+**Condição de remoção**: implementar a invalidação de device-list por
+participante do grupo, e decidir o que broadcast precisa (broadcast lists não
+têm o mesmo modelo de device-list de grupo — precisa de investigação própria
+contra Baileys/Evolution API antes de codar, por instrução do projeto).
+**Status**: **não corrigido** — débito registrado, correção requer decidir
+o comportamento correto de invalidação para broadcast primeiro.
+
+### F71 — `send/encrypt.go`: LID não resolvido para participantes sem entrada de sessão
+
+**Onde**: `internal/wa-noise/capabilities/send/encrypt.go:57` (`TODO query LID
+from server for missing entries`).
+
+**Problema**: ao cifrar para múltiplos dispositivos, participantes sem LID
+conhecido localmente não têm o LID buscado no servidor — o código segue sem
+essa informação. Efeito prático depende de como o restante do pipeline de
+envio trata LID ausente (não investigado a fundo aqui, fora do escopo desta
+triagem administrativa).
+**Dono**: capacidade `send`, próxima vez que LID ausente causar falha de envio
+observável.
+**Condição de remoção**: implementar a busca de LID via query ao servidor
+quando ausente, com teste que force o caminho de "LID desconhecido localmente".
+**Status**: **não corrigido** — débito registrado.
+
+### F72 — `send/message.go`: lógica duplicada com `sendNewsletter`
+
+**Onde**: `internal/wa-noise/capabilities/send/message.go:46` (`TODO somehow
+deduplicate this with the code in sendNewsletter?`).
+
+**Problema**: duplicação de código entre o caminho de envio normal e o de
+newsletter — dívida de manutenção (mudança num lugar sem espelhar no outro
+diverge o comportamento), não bug funcional atual.
+**Dono**: quem tocar qualquer um dos dois caminhos de envio.
+**Condição de remoção**: quando uma mudança precisar ser replicada nos dois
+lugares pela segunda vez, extrair a lógica comum nesse momento (regra do
+projeto: refatoração especulativa sem necessidade concreta não entra).
+**Status**: **não corrigido** — débito registrado, baixa prioridade (não é
+bug, é duplicação).
+
+### F73 — `send/node_build.go`: resolução de PN para grupos de anúncio é heurística não documentada
+
+**Onde**: `internal/wa-noise/capabilities/send/node_build.go:177` (`TODO this
+is a very hacky hack for announcement group messages, why is it pn anyway?`).
+
+**Problema**: o próprio autor upstream marca a lógica como incerta — usa PN
+(phone number JID) para mensagens de grupo de anúncio por motivo não
+documentado. Sem entender o motivo real (protocolo do WhatsApp para grupos de
+anúncio), mexer aqui é arriscado. Consultar Baileys antes de tocar, por
+instrução do CLAUDE.md deste projeto.
+**Dono**: quem investigar bug de entrega em grupo de anúncio (broadcast-only
+group).
+**Condição de remoção**: entendimento causal do motivo (via Baileys/Evolution
+API ou observação de campo) documentado em ADR antes de qualquer mudança de
+comportamento.
+**Status**: **não corrigido** — débito registrado, não mexido por incerteza
+de causa.
+
+### F74 — `send/prepare.go`: heurística para escolher identidade de envio sem critério documentado
+
+**Onde**: `internal/wa-noise/capabilities/send/prepare.go:162` (`TODO this is
+fairly hacky, is there a proper way to determine which identity the message is
+sent with?`).
+
+**Problema**: mesmo padrão do F73 — incerteza do próprio autor upstream sobre
+o critério correto para decidir com qual identidade (LID vs PN) uma mensagem é
+enviada. Área sensível (identidade LID/PN é justamente a área que o CLAUDE.md
+deste projeto pede para checar contra Baileys/Evolution API antes de projetar
+solução).
+**Dono**: quem investigar bug de identidade errada em mensagem enviada.
+**Condição de remoção**: mesma do F73 — entendimento causal documentado antes
+de mudar comportamento.
+**Status**: **não corrigido** — débito registrado.
+
+### F75 — `appstatesync/send.go`: não é possível criar nova chave de app state
+
+**Onde**: `internal/wa-noise/capabilities/appstatesync/send.go:33` (`TODO
+create new key instead of reusing the primary client's keys`).
+
+**Problema**: **não é falha silenciosa** — a linha seguinte já retorna erro
+explícito (`"no app state keys found, creating app state keys is not yet
+supported"`) quando não há chave. É limitação de funcionalidade documentada e
+com erro visível, herdada do upstream, não um caminho que engana o chamador.
+**Dono**: iniciativa futura de gestão de chaves de app state (fora do escopo
+de mensageria declarado para a próxima iniciativa, mas relacionado).
+**Condição de remoção**: quando o fork precisar operar sem as chaves do
+cliente primário (ex: multi-dispositivo com chaves próprias).
+**Status**: **não corrigido** — débito registrado, sem risco de correção
+silenciosa (erro já é explícito).
+
+### F76 — `appstatesync/mutation.go`: significado do índice 2 do mutation index não documentado
+
+**Onde**: `internal/wa-noise/capabilities/appstatesync/mutation.go:86` (`TODO
+what's index 2 here?`).
+
+**Problema**: comentário de incerteza sobre o protocolo binário do app state
+(`mutation.Index[2]`) — o código usa corretamente `mutation.Index[3]` para
+`deleteMedia` alguumas linhas abaixo, então não é bug, é lacuna de
+documentação sobre um campo que o código atual não precisa.
+**Dono**: quem for adicionar suporte a um `IndexClearChat` mais completo.
+**Condição de remoção**: quando o significado do índice 2 for necessário para
+alguma feature nova.
+**Status**: **não aplicável agora** — não bloqueia nada hoje, registrado só
+para não perder o contexto.
+
+### F77 — `message/decrypt_loop.go`: ACK enviado após falha de descriptografia pode confirmar recebimento indevidamente
+
+**Onde**: `internal/wa-noise/capabilities/message/decrypt_loop.go:139-141`:
+
+```go
+t.SendRetryReceipt(ctx, node, info, isUnavailable)
+// TODO this probably isn't supposed to ack
+t.SendAck(ctx, node, 0)
+```
+
+**Problema**: após falha de descriptografia, o código envia **os dois**:
+`SendRetryReceipt` (pede reenvio/renegociação de sessão) e `SendAck` (confirma
+recebimento do nó cifrado ao servidor). O TODO é do próprio autor upstream
+questionando se o segundo é correto. **Investigado nesta triagem**: não é
+supressão silenciosa de erro no sentido de "engolir e seguir como se nada
+tivesse acontecido" — o evento `UndecryptableMessage` é despachado
+(`decrypt_loop.go:146-150`) antes do `return`, então a aplicação é notificada
+da falha. O risco real, não confirmado, é protocolar: se `SendAck` sinaliza ao
+**servidor** (não ao remetente) que o nó não precisa ser reenviado, isso é
+correto (o nó chegou, só não foi decifrado); mas se o servidor ou o cliente
+remetente interpretam o ack como "mensagem entregue e legível", há divergência
+de estado. Não confirmei contra Baileys por restrição de tempo desta sessão de
+triagem — fica como próximo passo antes de decidir se é bug real.
+**Dono**: quem investigar mensagem perdida silenciosamente do lado do
+remetente após falha de decrypt do lado do destinatário.
+**Condição de remoção**: comparar com o tratamento equivalente em Baileys
+(`Baileys/src/Socket/messages-recv.ts`, caminho de `decryptMessageNode`) e
+decidir se `SendAck` deve ou não ser chamado neste ramo; se confirmado bug,
+volta como achado F## próprio com evidência causal antes de corrigir.
+**Status**: **não corrigido, sinalizado para investigação futura** — é a
+única das 17 ocorrências desta triagem com risco funcional plausível; as
+demais são lacunas de funcionalidade ou documentação sem indício de bug.
+
+### F78 — `message/decrypt.go`: nó `<meta msg_edit_t>` de edição de mensagem não tratado
+
+**Onde**: `internal/wa-noise/capabilities/message/decrypt.go:50` (`TODO edits
+have an additional <meta msg_edit_t="..." original_msg_t="..."/> node`).
+
+**Problema**: metadados de edição de mensagem (timestamp da edição e da
+mensagem original) não são extraídos. Gap de funcionalidade — mensagens
+editadas provavelmente ainda decodificam, só sem esses dois campos extras.
+**Dono**: iniciativa futura de suporte a edição de mensagem (endpoint de
+mensageria — fora do escopo desta reconciliação).
+**Condição de remoção**: quando a próxima iniciativa (endpoints de
+mensageria) precisar expor edição de mensagem na API.
+**Status**: **não corrigido** — débito registrado, apontando para iniciativa
+futura declarada.
+
+### F79 — `message/parse.go`: nós `franking`/`trace` ignorados e `IsFromMe` não setado para newsletter
+
+**Onde**: `internal/wa-noise/capabilities/message/parse.go:68` (`TODO
+IsFromMe?`, ramo `types.NewsletterServer`), `:222` e `:224` (`TODO` vazio,
+ramos `"franking"` e `"trace"` do switch de filhos do nó de mensagem).
+
+**Problema**: três lacunas de parsing sem tratamento de erro nenhum envolvido
+— os ramos simplesmente não extraem o dado (`franking`/`trace` são metadados
+de auditoria/rastreamento do WhatsApp, não usados hoje; `IsFromMe` não é
+setado para mensagens de canal/newsletter, então o campo fica no zero-value
+para esse tipo de origem).
+**Dono**: quem precisar desses campos (franking/trace: nenhum consumidor
+conhecido hoje; IsFromMe de newsletter: API de canais, se/quando exposta).
+**Condição de remoção**: quando algum consumidor precisar de
+franking/trace/IsFromMe para mensagens de newsletter.
+**Status**: **não aplicável agora** — nenhum caminho depende desses campos
+hoje; registrado para não perder o contexto.
+
+### F80 — `media/download_transport.go`: sem User-Agent nas requisições de download de mídia
+
+**Onde**: `internal/wa-noise/capabilities/media/download_transport.go:123`
+(`TODO user agent for whatsapp downloads?`).
+
+**Problema**: requisições HTTP de download de mídia não setam um `User-Agent`
+específico do WhatsApp. Risco: servidores de mídia do WhatsApp podem, no
+futuro, passar a exigir um `User-Agent` reconhecido (como fazem outros
+endpoints do protocolo) — hoje aparentemente não bloqueia, senão já teria
+aparecido como falha em produção.
+**Dono**: quem investigar falha de download de mídia com erro HTTP relacionado
+a header/user-agent.
+**Condição de remoção**: quando um download passar a falhar por causa disso
+(evidência de campo), ou quando Baileys/Evolution API confirmarem qual
+User-Agent o WhatsApp espera.
+**Status**: **não corrigido** — débito registrado, sem evidência de impacto
+atual.
+
+### F81 — `media/download.go` e `media/download_file.go`: critério para omitir hash de mídia não encriptada é incerto
+
+**Onde**: `internal/wa-noise/capabilities/media/download.go:143` e
+`internal/wa-noise/capabilities/media/download_file.go:89`, ambos `TODO omit
+hash for unencrypted media?` — mesma incerteza duplicada em dois pontos.
+
+**Problema**: incerteza do autor upstream sobre se a checagem de hash deveria
+ser pulada para mídia não encriptada. Não investigado a fundo aqui (envolve
+entender o modelo de integridade de mídia do protocolo — checar contra Baileys
+antes de decidir, por instrução do CLAUDE.md).
+**Dono**: quem investigar falha de validação de hash em download de mídia não
+encriptada.
+**Condição de remoção**: entendimento causal (via Baileys) documentado antes
+de mudar o comportamento; os dois pontos devem ser resolvidos juntos, já que é
+a mesma dúvida duplicada.
+**Status**: **não corrigido** — débito registrado.
+
+### F82 — `media/upload.go`: persistência de payload de backfill não-on-demand incerta
+
+**Onde**: `internal/wa-noise/capabilities/media/upload.go:224` (`TODO
+non-on-demand backfills may require this? it's in the initial bootstrap
+payload and may need to be persisted`).
+
+**Problema**: incerteza sobre se um payload precisa ser persistido para o
+caminho de backfill não-on-demand. Relacionado a histórico/sincronização
+inicial, fora do escopo de mensageria/mídia declarado para a próxima
+iniciativa, mas fica registrado porque toca o mesmo arquivo.
+**Dono**: iniciativa futura de histórico/backfill, se vier a existir.
+**Condição de remoção**: quando o caminho de backfill não-on-demand for
+exercitado com dado real e a ausência da persistência causar problema
+observável.
+**Status**: **não corrigido** — débito registrado.
+
+### Resumo da triagem
+
+| # | Local | Classificação |
+|---|---|---|
+| F70 | send/ack.go:84,87 | (b) débito |
+| F71 | send/encrypt.go:57 | (b) débito |
+| F72 | send/message.go:46 | (b) débito, baixa prioridade |
+| F73 | send/node_build.go:177 | (b) débito, precisa Baileys |
+| F74 | send/prepare.go:162 | (b) débito, precisa Baileys |
+| F75 | appstatesync/send.go:33 | (b) débito, erro já explícito |
+| F76 | appstatesync/mutation.go:86 | (c) não aplicável agora |
+| F77 | message/decrypt_loop.go:140 | (b) débito — único com risco funcional plausível |
+| F78 | message/decrypt.go:50 | (b) débito, aponta iniciativa futura |
+| F79 | message/parse.go:68,222,224 | (c) não aplicável agora |
+| F80 | media/download_transport.go:123 | (b) débito |
+| F81 | media/download.go:143, download_file.go:89 | (b) débito |
+| F82 | media/upload.go:224 | (b) débito |
+
+Nenhum item foi classificado "corrigir agora": todos que não são puramente
+administrativos (F73, F74, F77, F81) exigem consulta a Baileys/Evolution API
+antes de qualquer mudança de comportamento em área de identidade LID/PN ou
+protocolo de ack, por instrução do CLAUDE.md deste projeto — e essa consulta
+não coube no escopo desta sessão de triagem. Nenhum caminho de erro/retry/
+fallback engolido silenciosamente foi encontrado nos 17 pontos investigados;
+o achado mais próximo disso (F77) já dispara um evento para a aplicação antes
+de retornar, então não é engolido — é uma dúvida protocolar não confirmada.
 

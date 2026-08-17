@@ -2845,6 +2845,12 @@ do núcleo do `Client`, junto com `queryMediaConn`/`SendMediaRetryReceipt`
   protocolos distintos que podem divergir; ficam separadas, com o teste
   rodando a mesma tabela nas duas para que a divergência apareça.
 
+**Nota de reconciliação (2026-08-12)**: **F33 corrigido** — o `close` já
+estava dentro do `CompareAndSwap` desde o lote B (código atual em
+`core/qrchan.go:146-147`), e o que faltava (teste de regressão) foi escrito
+nesta sessão. Ver `HOUSEKEEP.md` F33 para a evidência completa. F34 e F35
+não fizeram parte do escopo desta reconciliação — status inalterado.
+
 ### Gates
 
 `WACLIENT_TEST_PKGS` já inclui `./internal/wa-noise/` desde o lote 1 — nada a
@@ -9389,15 +9395,22 @@ que a regra "sem interface gigante compartilhada" está sendo seguida.
 Ambas eram coisas que o inventário da etapa 1 pediu para registrar e que nunca
 tinham sido registradas:
 
-- **`HOUSEKEEP.md` F58** (novo): `messageSendLock` é declarado em
+- **`HOUSEKEEP.md` F58** (novo): `messageSendLock` era declarado em
   `core/client.go:117` e emprestado por ponteiro para `capabilities/send` via
   `SendLock() *sync.Mutex` (`core/send_adapter.go:68` ↔
-  `send/transport.go:141`). É a **única** violação real de "estado e lock viajam
-  juntos" no fork. Não cria ciclo e o ponteiro é estável; o risco é de
-  manutenção. Correção sugerida registrada (`send` passa a possuir um `State`
-  com o mutex privado, como `retry`/`prekeys`/`tctoken`), status não corrigido —
-  é mudança de API e de código de concorrência, fora do escopo de uma
-  reorganização de diretórios.
+  `send/transport.go:141`). Era a **única** violação real de "estado e lock
+  viajam juntos" no fork. **Nota de reconciliação (2026-08-12): CORRIGIDO**,
+  fora do escopo da Fase H, num commit posterior (`ef5c599`). `send.State`
+  passou a possuir o mutex privadamente (`capabilities/send/state.go:33-37`,
+  campo `sendLock`, exposto via `State.SendLock()`); `core/client.go` não tem
+  mais o campo `messageSendLock` (só sobrevive em comentário); os dois pontos
+  de chamada (`capabilities/send/message.go:74`, `fb_message.go:123`) usam
+  `t.State().SendLock()`. `grep -rn "messageSendLock"` na árvore não devolve
+  mais nenhum hit de código, só comentários e documentação. Este parágrafo
+  descrevia o estado no fechamento da Fase H e ficou sem atualização depois
+  que o fix chegou — `docs/LOCKS.md` e `docs/CONTRIBUTING.md` também ainda
+  descreviam o desenho antigo e foram corrigidos na mesma sessão de
+  reconciliação.
 - **Adendo ao F29**: replica no `HOUSEKEEP.md` o que a etapa 5 já tinha apurado
   — mover `internals.go`/`internals_generate.go` para `core/` **não piorou** o
   bug, porque os nomes da lista hardcoded resolvem relativo ao diretório do
@@ -9475,14 +9488,25 @@ não teria produzido arquitetura nenhuma, só pastas.
 
 ### O que fica em aberto
 
-Registrado, não corrigido, por decisão explícita:
+Registrado no fechamento da Fase H, não corrigido *naquele momento*, por decisão
+explícita. **Reconciliado em 2026-08-12** (ver `HOUSEKEEP.md` para o veredito e
+a evidência completos de cada item — este bloco só resume o estado atual):
 
-- **F29** — `internals_generate.go` com lista hardcoded; `go generate` derrubaria
-  96 dos 178 wrappers. A Fase H não piorou nem corrigiu.
-- **F58** — `messageSendLock` emprestado por ponteiro de `core` para `send`;
-  única violação de ownership estado/lock.
-- **Revisão de concorrência pendente** — `retry.State` (5 locks) e
-  `tctoken.State` (`TryStartDBPrune`) nunca tiveram revisão independente. É a
-  maior dívida de verificação do fork, e está no placar de `docs/LOCKS.md` §3.
-- **F53, F54, F55, F56, F57** e demais achados incidentais da Fase F/G, todos no
-  `HOUSEKEEP.md`.
+- **F29** — **CORRIGIDO** (lote E, commit `aa6e4a3`, posterior ao fechamento da
+  Fase H acima). `internals_generate.go` varre o diretório e junta os imports
+  de todos os arquivos; `go generate` reproduz `core/internals.go`
+  byte-idêntico ao commitado.
+- **F58** — **CORRIGIDO** (commit `ef5c599`, posterior). Ver nota acima.
+- **Revisão de concorrência independente** — feita em 2026-08-12: `retry.State`
+  (5 locks, todos com invariante declarado e verificado) veredito **seguro**;
+  `tctoken.State` revisado na mesma sessão (ver `HOUSEKEEP.md` para o veredito
+  individual dos locks). Isso fecha a dívida apontada em `docs/LOCKS.md` §3.
+- **F53, F54, F55, F56, F57** e demais achados incidentais da Fase F/G — status
+  individual em `HOUSEKEEP.md`; F56 já confirmado **CORRIGIDO** na reconciliação
+  de 2026-08-12. F53/F54/F55/F57 não fizeram parte do escopo dos 7 registros
+  reconciliados nesta sessão (F18, F21, F29, F33, F49, F50, F56) — permanecem
+  com o status que já tinham em `HOUSEKEEP.md`, não re-auditados aqui.
+- **F69 item 2** (TTL do primeiro QR de pareamento) — **decidido e corrigido**
+  em 2026-08-12: reduzido de 60s para 20s (paridade com o oficial), decisão do
+  HUMAN após consulta ao upstream (`whatsmeow`, mesmo valor não documentado).
+  Ver `HOUSEKEEP.md` F69 para a evidência e o teste de regressão.

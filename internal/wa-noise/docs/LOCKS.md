@@ -26,7 +26,7 @@ está marcada.
 | `socket` (`*socket.NoiseSocket`), `socketWait` | `core` | `socketLock sync.RWMutex` — `core/client.go:50` | `RLock` em `client_connection.go:25,43,54,226`, `connectionevents.go:58,126`, `client_events.go:202`, `request.go:218` | `Lock` em `client_connection.go:32,85,99,152,240,253` | O lock mais quente do fork. É a razão pela qual o núcleo é **um** pacote só: `core/`. Ver `CONTRIBUTING.md` regra 10. `core/handshake.go:27` documenta que `cli.socket = ns` roda sob o `Lock()` tomado por `client_connection.go`. |
 | `responseWaiters` (map de canais de resposta de IQ) | `core` | `responseWaitersLock sync.Mutex` — `core/client.go:102` | — (todo acesso é sob `Lock`) | `request.go:58,72,79,90` | Só `Mutex`: os quatro acessos escrevem no mapa. |
 | `eventHandlers` (slice de handlers registrados) | `core` | `eventHandlersLock sync.RWMutex` — `core/client.go:107` | `RLock` em `client_events.go:224` (despacho) | `Lock` em `client_events.go:77,96,117` (Add/Remove) | `RWMutex` porque o despacho é o caminho quente e é leitura. |
-| Ordenação de envio de mensagem | `core` (declara) / `capabilities/send` (usa) | `messageSendLock sync.Mutex` — `core/client.go:117` | — | `send/message.go:80`, `send/fb_message.go:129`, via `t.SendLock()` | **⚠ Única violação da regra 6 no fork.** O mutex é campo de `core.Client` e é **emprestado por ponteiro** para `capabilities/send` pela interface: `core/send_adapter.go:68` `func (t sendTransport) SendLock() *sync.Mutex { return &t.cli.messageSendLock }`, satisfazendo `send/transport.go:141 SendLock() *sync.Mutex`. `send/transport.go:135` documenta que o ponteiro **precisa ser estável** porque é campo de `*Client` e um `sync.Mutex` nunca pode ser copiado. Não corrigido na Fase H: é mudança de design, não de diretório. Registrado em `HOUSEKEEP.md` **F58** (com correção sugerida: `send` passa a possuir um `State` com o mutex privado, como `retry`/`prekeys`/`tctoken` já fazem). Ver também `FASE_H_INVENTORY.md` §4. |
+| Ordenação de envio de mensagem | `capabilities/send` (declara e usa) | `sendLock sync.Mutex` — `capabilities/send/state.go:30`, campo privado de `send.State` | — | `send/message.go:74`, `send/fb_message.go:123`, via `t.State().SendLock()` | **Corrigido (F58, commit `ef5c599`, posterior à Fase H).** Até então o mutex era campo de `core.Client` (`messageSendLock`) e emprestado por ponteiro para `capabilities/send` — a única violação real da regra 6 no fork. `send.State` passou a possuir o mutex privadamente, exposto por `func (s *State) SendLock() *sync.Mutex { return &s.sendLock }` (`state.go:37`), no mesmo desenho que `retry`/`prekeys`/`tctoken` já usavam. `core.Client` não tem mais o campo. Ver `HOUSEKEEP.md` **F58** para a evidência completa e `FASE_H_INVENTORY.md` §4 para o histórico. |
 | Canal de QR (`closed`) | `core` | `sync.Mutex` embutido — `core/qrchan.go:49`; mais `closed uint32` operado por `atomic.CompareAndSwapUint32` — `qrchan.go:63,87,101,142` e `atomic.LoadUint32` — `:73,111` | `atomic.Load` | `atomic.CAS` | O fechamento do canal é decidido por CAS, não pelo mutex; o mutex protege a emissão. |
 | Flags do `Client` (`isLoggedIn`, `forceAutoReconnect`, `sendActiveReceipts`, `privacySettingsCache`, `idCounter`, `serverTimeOffset`) | `core` | `atomic.*` — `core/client.go:53-170` | — | — | Campos atômicos da própria struct; não têm mutex e não precisam. |
 | `ConnCache` (conn de mídia cacheada) | `capabilities/media` | `lock sync.Mutex` — `media/conn.go:44` | — | `conn.go:58,67,80` | **Revisado independentemente** (F/G lote 1, `PATCHES.md:5168+`) — e só na segunda tentativa: o commit `160b386` alegou revisão que não aconteceu, foi retratado por `8d4ec40`, e a revisão real (`security-reviewer`, spawn limpo, focada em `ConnCache.Refresh` vs. `refreshMediaConn` original) fechou a pendência. |
@@ -73,13 +73,38 @@ nenhuma linha desta tabela — que é exatamente o motivo de ela ser segura.
 
 | Revisado de fato | Não revisado independentemente | Sem concorrência nova (revisão dispensada) |
 |---|---|---|
-| `media.ConnCache` (2ª tentativa) | `tctoken.State` (`TryStartDBPrune` pendente) | `newsletter` (F/G lote 2) |
-| `prekeys.State` | **`retry.State`** (5 locks — maior pendência) | `send` (F/G lote 8, `PATCHES.md:7951`) |
-| `appstatesync.State` (com ressalvas) | `sqlstore` e `store` (nunca tocados) | `message` (F/G lote 9, `PATCHES.md:8274`) |
+| `media.ConnCache` (2ª tentativa) | `sqlstore` e `store` (nunca tocados) | `newsletter` (F/G lote 2) |
+| `prekeys.State` | | `send` (F/G lote 8, `PATCHES.md:7951`) |
+| `appstatesync.State` (com ressalvas) | | `message` (F/G lote 9, `PATCHES.md:8274`) |
 | `group.Cache` (ressalva → `HOUSEKEEP.md` F53) | | |
 | `user.DeviceCache` (ressalva → `HOUSEKEEP.md` F54) | | |
 | `core.socketLock` + `keepalive` + `handshake` (F/G lote 10, SAFE TO COMMIT) | | |
+| **`retry.State`** (5 locks — `sessionRecreateLock`, `incomingCounterLock`, `messageRetriesLock`, `recentLock`, `pendingPhoneLock`) — revisado 2026-08-12 | | |
+| **`tctoken.State`** (2 locks — `senderTSLock`, `dbPruneLock`) — revisado 2026-08-12 | | |
+
+`retry.State` (revisão 2026-08-12): todos os 5 locks têm o invariante que
+protegem declarado e cada acesso ao campo protegido confirmado sob o lock
+correto (nenhum acesso fora de `state.go`). Um padrão de lock-segurado-durante-
+I/O existe (`sessionRecreateLock` durante `Store().ContainsSession()`), mas é
+**pré-existente à extração** (idêntico ao commit anterior `080b948^`), não uma
+regressão, e não viola o invariante do F86/F88 (não é pool de slot limitado
+disputado por múltiplos assinantes — é um mutex único por conexão). Veredito:
+**seguro**. `go test -race ./capabilities/retry/...` — PASS.
+
+`tctoken.State` (revisão 2026-08-12): **2 locks**, não 5 (a contagem de 5 é a
+de `retry.State`, PATCHES.md tinha o número certo mas atribuição ambígua).
+`senderTSLock` protege `senderTS`/`lastCleanup`, todo acesso sob lock, sem I/O
+segurado. `dbPruneLock` (via `TryStartDBPrune`/`FinishDBPrune`) serializa a
+poda no banco; o `DELETE` roda dentro do `defer FinishDBPrune()` de uma
+goroutine própria (`tctoken.go:104-117`) — o lock fica segurado durante I/O de
+banco, mas, como no caso de `retry.State`, é um mutex único que só a própria
+poda disputa, não um pool de slots compartilhado por outros assinantes; não
+viola o invariante do F86/F88. Veredito: **seguro**. `go test -race -count=1
+./capabilities/tctoken/...` — PASS.
 
 O critério de honestidade usado em todo o `PATCHES.md`, e repetido aqui:
 comparação manual feita **por quem escreveu o commit não é revisão
-independente**, e é registrada como tal.
+independente**, e é registrada como tal. As duas revisões acima foram feitas
+em 2026-08-12, na reconciliação HOUSEKEEP/PATCHES, por revisor sem envolvimento
+na extração original — fecha a maior dívida de verificação apontada neste
+placar.

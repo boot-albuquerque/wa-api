@@ -12,9 +12,15 @@ const (
 	qrChannelBuffer = 8
 	// qrCodeTimeout e a validade de cada QR code apos o primeiro.
 	qrCodeTimeout = 20 * time.Second
-	// qrCodeFirstTimeout e a validade do primeiro QR code, identificado por
-	// ainda haver qrCodeFirstBatchSize codigos na fila.
-	qrCodeFirstTimeout   = 60 * time.Second
+	// qrCodeFirstTimeout is the validity of the first QR code, identified by
+	// qrCodeFirstBatchSize codes still being queued. It intentionally equals
+	// qrCodeTimeout: security parity with the officially measured behavior
+	// (HOUSEKEEP.md F69 item 2). Upstream whatsmeow still uses 60s here,
+	// undocumented; we diverge on purpose because a pairing QR is a
+	// credential, and 3x the exposure window on the first code has no
+	// offsetting benefit — the channel just rotates to the next code sooner,
+	// same as the official client already does.
+	qrCodeFirstTimeout   = qrCodeTimeout
 	qrCodeFirstBatchSize = 6
 )
 
