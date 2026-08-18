@@ -1766,6 +1766,7 @@ pkg/application/contracts/contractsfake.Logger.Reset	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.Warn	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.record	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaFetcher.FetchBytes	EXCLUDED	X5
+pkg/application/contracts/contractsfake.MediaMessenger.SendDocument	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendImage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessageComposer.NewMessageID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishError	EXCLUDED	X5
@@ -1919,7 +1920,8 @@ pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret
 pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:29);uncovered:L2(S-ret,send_audio.go:32)
 pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:28);uncovered:L2(S-ret,send_buttons.go:31)
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:28);uncovered:L2(S-ret,send_contact.go:31);uncovered:L2(S-ret,send_contact.go:34)
-pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:32);uncovered:L2(S-ret,send_document.go:35);uncovered:L2(S-ret,send_document.go:38)
+pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
+pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:28);uncovered:L2(S-ret,send_edit_message.go:31);uncovered:L2(S-ret,send_edit_message.go:34)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
@@ -1932,8 +1934,11 @@ pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:28);uncovered:L2(S-ret,send_video.go:31)
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
+pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
 pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
+pkg/application/usecase/message.isDataURI	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIImage	EXCLUDED	X1
+pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_document.go:243)
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
 pkg/application/usecase/message.resolveMimeType	EXCLUDED	X1
 pkg/application/usecase/notification.GetHealthUseCase.Execute	ELIGIBLE	covered
@@ -2491,6 +2496,7 @@ pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:45)
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1

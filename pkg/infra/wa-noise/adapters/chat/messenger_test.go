@@ -473,3 +473,221 @@ func TestChatMessengerAdapter_SendImage_WithCallerID(t *testing.T) {
 		t.Errorf("SendImage ID = %q, want %q", res.ID, "caller-id")
 	}
 }
+
+// --- ChatMessengerAdapter.SendDocument (CAP-04) --------------------------
+
+// TestChatMessengerAdapter_SendDocument_NoSession.
+func TestChatMessengerAdapter_SendDocument_NoSession(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
+	_, err := a.SendDocument(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, FileName: "a.pdf"}, "")
+	if testkit.AppErrCode(err) != "no_session" {
+		t.Errorf("SendDocument code = %q", testkit.AppErrCode(err))
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_InvalidJID: JID inválido nunca pode
+// alcançar client.Upload nem client.SendMessage.
+func TestChatMessengerAdapter_SendDocument_InvalidJID(t *testing.T) {
+	uploadCalled := false
+	fake := &testkit.Fake{UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+		uploadCalled = true
+		return wanoise.UploadResponse{}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	_, err := a.SendDocument(context.Background(), "u1", domain.JID(string([]byte{0x00})), domain.MediaPayload{Bytes: []byte{1, 2, 3}, FileName: "a.pdf"}, "")
+	if err == nil {
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
+	}
+	if uploadCalled {
+		t.Fatal("SendDocument chamou client.Upload com JID inválido")
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_UploadFailurePropagates: falha de
+// upload nunca alcança client.SendMessage nem produz resultado.
+func TestChatMessengerAdapter_SendDocument_UploadFailurePropagates(t *testing.T) {
+	uploadErr := errors.New("upload: boom")
+	sendCalled := false
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, uploadErr
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			sendCalled = true
+			return wanoise.SendResponse{}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendDocument(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "application/pdf", FileName: "a.pdf"}, "")
+	if err == nil {
+		t.Fatal("SendDocument não propagou a falha de upload")
+	}
+	if sendCalled {
+		t.Fatal("upload falhou, mas client.SendMessage foi chamado mesmo assim")
+	}
+	if res != (domain.MessageSendResult{}) {
+		t.Errorf("SendDocument devolveu resultado nao-vazio com upload falho: %+v", res)
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_UploadOK_SendMessageFail_NeverSent é
+// o caso obrigatório do CAP-04: upload bem-sucedido seguido de SendMessage
+// falho NÃO produz sucesso algum. O protocolo não oferece desfazer o
+// upload, e este teste garante que o adapter não finge que oferece.
+func TestChatMessengerAdapter_SendDocument_UploadOK_SendMessageFail_NeverSent(t *testing.T) {
+	sendErr := errors.New("sendmessage: boom")
+	uploadCalled := false
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			uploadCalled = true
+			return wanoise.UploadResponse{URL: "https://mmg.whatsapp.net/x", DirectPath: "/x"}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			return wanoise.SendResponse{}, sendErr
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendDocument(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "application/pdf", FileName: "a.pdf"}, "")
+	if !uploadCalled {
+		t.Fatal("upload nunca foi chamado — teste nao exercita o caso upload-ok-send-fail")
+	}
+	if err == nil {
+		t.Fatal("SendDocument nao propagou a falha de SendMessage apos upload bem-sucedido")
+	}
+	if res != (domain.MessageSendResult{}) {
+		t.Errorf("upload OK + SendMessage falho produziu resultado nao-vazio: %+v", res)
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_OK confere a montagem da mensagem
+// (upload chamado com os bytes certos e wanoise.MediaDocument — não
+// MediaImage —, DocumentMessage montada a partir da resposta de upload e
+// de payload.FileName) e que o resultado vem de resp, não do id de entrada.
+func TestChatMessengerAdapter_SendDocument_OK(t *testing.T) {
+	now := time.Now()
+	var gotPlaintext []byte
+	var gotAppInfo wanoise.MediaType
+	var gotTo types.JID
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			gotPlaintext = plaintext
+			gotAppInfo = appInfo
+			return wanoise.UploadResponse{
+				URL:           "https://mmg.whatsapp.net/x",
+				DirectPath:    "/x",
+				MediaKey:      []byte{9, 9, 9},
+				FileEncSHA256: []byte{1, 1, 1},
+				FileSHA256:    []byte{2, 2, 2},
+			}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotTo = to
+			gotMsg = m
+			return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id-doc")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	payload := domain.MediaPayload{Bytes: []byte{0xDE, 0xAD, 0xBE, 0xEF}, MimeType: "application/pdf", Caption: "legenda", FileName: "relatorio.pdf"}
+	res, err := a.SendDocument(context.Background(), "u1", "x@y.com", payload, "")
+	if err != nil {
+		t.Fatalf("SendDocument = %v", err)
+	}
+	if string(gotPlaintext) != string(payload.Bytes) {
+		t.Errorf("bytes enviados ao Upload divergem do payload")
+	}
+	if gotAppInfo != wanoise.MediaDocument {
+		t.Errorf("appInfo do Upload = %v, want wanoise.MediaDocument", gotAppInfo)
+	}
+	if gotTo.String() != "x@y.com" {
+		t.Errorf("destinatario = %q, want %q", gotTo.String(), "x@y.com")
+	}
+	doc := gotMsg.GetDocumentMessage()
+	if doc == nil {
+		t.Fatal("DocumentMessage nao foi montada")
+	}
+	if doc.GetCaption() != "legenda" {
+		t.Errorf("Caption = %q, want %q", doc.GetCaption(), "legenda")
+	}
+	if doc.GetFileName() != "relatorio.pdf" {
+		t.Errorf("FileName = %q, want %q", doc.GetFileName(), "relatorio.pdf")
+	}
+	if doc.GetURL() != "https://mmg.whatsapp.net/x" || doc.GetDirectPath() != "/x" {
+		t.Errorf("URL/DirectPath nao vieram da resposta de upload: %+v", doc)
+	}
+	if string(doc.GetMediaKey()) != string([]byte{9, 9, 9}) {
+		t.Errorf("MediaKey nao veio da resposta de upload: %v", doc.GetMediaKey())
+	}
+	if string(doc.GetFileEncSHA256()) != string([]byte{1, 1, 1}) {
+		t.Errorf("FileEncSHA256 nao veio da resposta de upload: %v", doc.GetFileEncSHA256())
+	}
+	if string(doc.GetFileSHA256()) != string([]byte{2, 2, 2}) {
+		t.Errorf("FileSHA256 nao veio da resposta de upload: %v", doc.GetFileSHA256())
+	}
+	if doc.GetMimetype() != "application/pdf" {
+		t.Errorf("Mimetype = %q, want %q", doc.GetMimetype(), "application/pdf")
+	}
+	if doc.GetFileLength() != uint64(len(payload.Bytes)) {
+		t.Errorf("FileLength = %d, want %d", doc.GetFileLength(), len(payload.Bytes))
+	}
+	if res.Timestamp != now {
+		t.Errorf("SendDocument timestamp = %v, want %v", res.Timestamp, now)
+	}
+	if res.ID != "wire-id-doc" {
+		t.Errorf("SendDocument ID = %q, want %q (o que resp devolveu)", res.ID, "wire-id-doc")
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_FileName_NeverTouchesFilesystem
+// prova que um FileName hostil chega intacto ao protobuf, sem qualquer
+// tentativa de abrir/ler/escrever o caminho no filesystem local — é
+// metadata pura, mesmo quando hostil.
+func TestChatMessengerAdapter_SendDocument_FileName_NeverTouchesFilesystem(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotMsg = m
+			return wanoise.SendResponse{ID: types.MessageID("wire-id-hostile")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	hostileName := "../../etc/passwd"
+	payload := domain.MediaPayload{Bytes: []byte{1}, MimeType: "application/pdf", FileName: hostileName}
+	_, err := a.SendDocument(context.Background(), "u1", "x@y.com", payload, "")
+	if err != nil {
+		t.Fatalf("SendDocument = %v", err)
+	}
+	if got := gotMsg.GetDocumentMessage().GetFileName(); got != hostileName {
+		t.Errorf("FileName = %q, want %q (metadata pura, repassada intacta)", got, hostileName)
+	}
+}
+
+// TestChatMessengerAdapter_SendDocument_WithCallerID: quando id não é
+// vazio, vira RequestExtra.ID — o SDK que decide o ID final, devolvido em
+// resp.ID.
+func TestChatMessengerAdapter_SendDocument_WithCallerID(t *testing.T) {
+	var gotExtra []wanoise.SendRequestExtra
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotExtra = extra
+			return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendDocument(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1}, MimeType: "application/pdf", FileName: "a.pdf"}, "caller-id")
+	if err != nil {
+		t.Fatalf("SendDocument = %v", err)
+	}
+	if len(gotExtra) != 1 || string(gotExtra[0].ID) != "caller-id" {
+		t.Fatalf("RequestExtra.ID nao recebeu o id do chamador: %+v", gotExtra)
+	}
+	if res.ID != "caller-id" {
+		t.Errorf("SendDocument ID = %q, want %q", res.ID, "caller-id")
+	}
+}

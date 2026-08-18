@@ -50,32 +50,6 @@ type missingField struct {
 func composerUseCases() []composerUC {
 	return []composerUC{
 		{
-			name:    "SendDocument",
-			infoMsg: "document validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendDocumentUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendDocumentRequest{Phone: "5511987654321", Document: "data:...", FileName: "a.pdf", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendDocumentUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendDocumentRequest{Document: "data:...", FileName: "a.pdf"})
-					return err
-				}},
-				{"Document", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendDocumentUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendDocumentRequest{Phone: "5511987654321", FileName: "a.pdf"})
-					return err
-				}},
-				{"FileName", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendDocumentUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendDocumentRequest{Phone: "5511987654321", Document: "data:..."})
-					return err
-				}},
-			},
-		},
-		{
 			name:    "SendAudio",
 			infoMsg: "audio validated",
 			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {

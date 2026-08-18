@@ -11,8 +11,21 @@ import (
 // MessageSendResult.ID sem SendImageFunc configurada.
 const DefaultSentImageMessageID = "sent-image-message-id"
 
+// DefaultSentDocumentMessageID é o ID que MediaMessenger devolve em
+// MessageSendResult.ID sem SendDocumentFunc configurada.
+const DefaultSentDocumentMessageID = "sent-document-message-id"
+
 // MediaMessengerSendImageCall é uma chamada a SendImage.
 type MediaMessengerSendImageCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.MediaPayload
+	ID      string
+}
+
+// MediaMessengerSendDocumentCall é uma chamada a SendDocument.
+type MediaMessengerSendDocumentCall struct {
 	Ctx     context.Context
 	TxtID   string
 	Target  domain.JID
@@ -26,6 +39,9 @@ type MediaMessenger struct {
 
 	SendImageFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 	SendImageCalls []MediaMessengerSendImageCall
+
+	SendDocumentFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendDocumentCalls []MediaMessengerSendDocumentCall
 }
 
 var _ port.MediaMessenger = (*MediaMessenger)(nil)
@@ -37,4 +53,13 @@ func (f *MediaMessenger) SendImage(ctx context.Context, txtID string, target dom
 		return f.SendImageFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentImageMessageID}, nil
+}
+
+// SendDocument implementa port.MediaMessenger.
+func (f *MediaMessenger) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	f.SendDocumentCalls = append(f.SendDocumentCalls, MediaMessengerSendDocumentCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendDocumentFunc != nil {
+		return f.SendDocumentFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentDocumentMessageID}, nil
 }

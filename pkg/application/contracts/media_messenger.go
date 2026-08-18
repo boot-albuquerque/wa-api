@@ -28,4 +28,10 @@ type MediaMessenger interface {
 	// SendMessage é propagado, sem tentativa de desfazer o upload (o
 	// protocolo não oferece essa operação).
 	SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+
+	// SendDocument sobe payload.Bytes (com wanoise.MediaDocument, não
+	// MediaImage) e envia uma DocumentMessage para target, usando
+	// payload.FileName como metadata pura (CAP-04). Mesma disciplina de
+	// SendImage quanto a upload/envio e a ausência de rollback de upload.
+	SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 }

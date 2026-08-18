@@ -179,6 +179,53 @@ func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, targ
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendDocument sobe payload.Bytes (wanoise.MediaDocument) e envia uma
+// DocumentMessage para target (CAP-04). payload.FileName é metadata pura —
+// vai direto para DocumentMessage.FileName, sem sanitização e sem tocar o
+// sistema de arquivos (mesma disciplina de SendImage quanto a upload
+// órfão sem tentativa de desfazer).
+func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	uploaded, err := client.Upload(ctx, payload.Bytes, wanoise.MediaDocument)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		DocumentMessage: &waE2E.DocumentMessage{
+			URL:           proto.String(uploaded.URL),
+			FileName:      proto.String(payload.FileName),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String(payload.MimeType),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+			Caption:       proto.String(payload.Caption),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)

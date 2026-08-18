@@ -639,7 +639,37 @@ rules_frozen=true
 # nenhum ELIGIBLE virou EXCLUDED nem uma funcao coberta virou uncovered).
 # func_coverage cai 690->687 so' pela aritmetica do denominador
 # (419/610 = 68.69% vs 419/607 = 69.03%).
-min_func_coverage=687
+# justificativa: CAP-04 (2026-08-18), POST /chat/send/document passou a
+# buscar a URL ou decodificar a data URI, subir o anexo e enviar de verdade
+# pelo wa-noise (os dois transportes, no mesmo slice — data URI generica
+# "data:", nao so' "data:image" como em Image). min_eligible 611->615 (+4):
+#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument — o
+#     adapter que sobe o anexo (client.Upload, wanoise.MediaDocument) e envia
+#     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
+#     SendImage/SendText/SendReaction acima ("adapter nao loga, quem loga e'
+#     o usecase").
+#   - pkg/application/usecase/message.isHTTPDocumentURL — helper puro de
+#     validacao de scheme (http/https + host), simetrico a isHTTPImageURL;
+#     nasce DESCOBERTA pelo mesmo motivo.
+#   - pkg/application/usecase/message.decodeDataURIWithLimit — a logica de
+#     fronteira PURA (sem logger, sem *SendDocumentUseCase) extraida de
+#     decodeDataURIDocument especificamente para o teste de boundary poder
+#     injetar um limite sintetico pequeno em vez de alocar payloads de 100MB
+#     so' para uma comparacao (ver CLAUDE.md, "Teste de boundary sem
+#     desperdicar RAM"). Nasce DESCOBERTA: quem loga e' a funcao que a
+#     envolve (decodeDataURIDocument, abaixo), e logar dentro da funcao pura
+#     duplicaria a mesma linha de log no wrapper.
+#   - pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument
+#     — nova funcao elegivel, ja' nasce COBERTA (Warn tanto no caminho de
+#     tamanho excedido quanto no de base64 invalido, delegando a
+#     decodeDataURIWithLimit acima a decisao pura). E' o `covered` que sobe
+#     420->421, unico ganho liquido desta mudanca.
+# func_coverage cai 687->685 so' pela aritmetica do denominador
+# (421/615 = 68.46% vs 420/611 = 68.74%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` (as 3
+# funcoes novas descobertas sao exatamente as citadas acima, nenhuma outra
+# saiu da lista de cobertas).
+min_func_coverage=685
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -688,7 +718,18 @@ min_func_coverage=687
 # log (Client, ToJID, Upload, SendMessage) pelo padrao "adapter nao loga" já
 # aceito acima; URLFetcher.FetchBytes soma 1. Nenhum errpath JA' COBERTO
 # regrediu — confirmado pelo mesmo diff do golden citado em min_func_coverage.
-min_errpath_coverage=859
+# justificativa: CAP-04 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para a lista nominal. errpaths sobe 1258->1273
+# (+15) e errpaths_covered sobe 1081->1091 (+10): os pontos de retorno de
+# erro novos em SendDocumentUseCase.Execute e decodeDataURIDocument
+# (missing_filename, unsupported_document_source, document_fetch_failed,
+# empty_document_body, document_too_large, invalid_data_uri) SAO logados —
+# mesmo padrao de EnsureSession/ResolveJID/FetchBytes/SendDocument ja'
+# aceito para SendImage; os S-ret sem log de ChatMessengerAdapter.SendDocument
+# (Client, ToJID, Upload, SendMessage) e de isHTTPDocumentURL/
+# decodeDataURIWithLimit somam os 5 restantes, pelo padrao "adapter/funcao
+# pura nao loga" ja' aceito acima. Nenhum errpath JA' COBERTO regrediu.
+min_errpath_coverage=857
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -758,7 +799,13 @@ min_errpath_coverage=859
 # image_too_large e no de invalid_data_uri). message.isDataURIImage e
 # message.decodedBase64Len NAO entram no denominador (X1: corpo <=2
 # statements e nenhum caminho de saida de tipo error).
-min_eligible=611
+# +4 (611->615): CAP-04, ChatMessengerAdapter.SendDocument,
+# message.isHTTPDocumentURL, message.decodeDataURIWithLimit e
+# message.SendDocumentUseCase.decodeDataURIDocument — ver a justificativa de
+# min_func_coverage acima para o detalhe nominal de cada uma.
+# message.isDataURI NAO entra no denominador (X1, mesmo motivo de
+# isDataURIImage acima).
+min_eligible=615
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

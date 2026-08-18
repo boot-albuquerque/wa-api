@@ -66,13 +66,23 @@ type SendImageResult struct {
 // use case de envio de mídia passa a port.MediaMessenger. Fica em domain,
 // não em port, porque é dado — não comportamento — compartilhado entre a
 // camada de aplicação e o adapter (mesmo racional de LinkPreviewData).
+//
+// FileName só é usado por SendDocument (CAP-04); SendImage o deixa vazio.
+// É metadata pura — nunca vira operação de sistema de arquivos em nenhum
+// consumidor deste tipo.
 type MediaPayload struct {
 	Bytes    []byte
 	MimeType string
 	Caption  string
+	FileName string
 }
 
-// SendDocumentRequest representa o payload de envio de documento.
+// SendDocumentRequest representa o payload de envio de documento. Document é
+// uma união de dois transportes de OBTENÇÃO dos bytes — data URI (qualquer
+// MIME, não só "data:image" como em SendImageRequest.Image) e URL http(s)
+// externa — que convergem no mesmo protocolo de envio (appport.MediaMessenger),
+// mesmo racional de SendImageRequest (CAP-02/CAP-03) — ver
+// `git show 41bc8e2^:handlers.go`, em torno da linha 900.
 type SendDocumentRequest struct {
 	Phone    string `json:"Phone"`
 	Document string `json:"Document"`
@@ -85,6 +95,7 @@ type SendDocumentRequest struct {
 // SendDocumentResult representa o resultado do envio de documento.
 type SendDocumentResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 

@@ -48,16 +48,6 @@ type mediaCase struct {
 func mediaCases() []mediaCase {
 	return []mediaCase{
 		{
-			name:  "document",
-			route: "/chat/send/document",
-			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {
-				return NewSendDocumentHandler(message.NewSendDocumentUseCase(mc, l))
-			},
-			validBody:      `{"Phone":"5511999999999","Document":"data:application/pdf;base64,AAAA","FileName":"a.pdf"}`,
-			incompleteBody: `{"Phone":"5511999999999","Document":"data:application/pdf;base64,AAAA"}`,
-			secretBody:     `{"Phone":"` + logassertAdminToken + `","Document":"` + logassertGlobalEncryptionKey + `","FileName":"a.pdf"}`,
-		},
-		{
 			name:  "audio",
 			route: "/chat/send/audio",
 			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {

@@ -138,7 +138,7 @@ func initCustomHandlers(s *server) {
 	mediaFetcher := opengraph.NewURLFetcher(appCtx.GlobalHTTPClient)
 	sendMessageUC := message.NewSendMessageUseCase(chatMessenger, jidResolver, linkPreviewFetcher, logger)
 	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
-	sendDocumentUC := message.NewSendDocumentUseCase(messageComposer, logger)
+	sendDocumentUC := message.NewSendDocumentUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
 	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)
 	sendVideoUC := message.NewSendVideoUseCase(messageComposer, logger)
