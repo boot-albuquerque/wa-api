@@ -413,3 +413,64 @@ que, quando travar, não deixa rastro de onde travou.
 **Como isto se detecta**: um estágio carimbado muito além da soma dos prazos
 declarados. Se o tempo observado não cabe na aritmética das políticas, existe
 uma espera fora delas — e o `OpLog` diz qual foi a última operação registrada.
+
+## ARM — o boot de produção classifica UMA vez, e o dublê era rápido demais para revelar
+
+**Data**: 2026-08-18 · **Descoberta**: LOOP 05.1, primeira corrida de N ciclos
+contra o perfil pareado real.
+
+**O defeito**: `internal/wa-headless/core/session.go:303` chama `spa.Probe`
+**exatamente uma vez**, imediatamente depois de `tab.Navigate` retornar, e falha
+o boot se a classe não for `APP_READY`. Não há laço, espera de assentamento nem
+nova tentativa.
+
+```
+cycle 1/3: core.StartSession failed after 4.708414333s
+  core: boot failed at not_ready (stopped_via=browser.close):
+  core: page classified "OTHER", want "APP_READY"
+  (snapshot url="https://web.whatsapp.com/" dom_nodes=224)
+```
+
+Aos 4,7 s a página tinha **224 nós** — instantâneo tirado no meio da montagem.
+Não é QR, não é login-required: essas têm classe própria. É o SPA ainda subindo.
+
+**Por que atravessou todas as defesas.** O `core/session_test.go` tem quatro
+provas adversariais, todas contra páginas servidas por `httptest`. Um fixture
+local **monta instantaneamente**: quando `Navigate` retorna, `#pane-side` já
+está lá. O SPA real não — este mesmo repositório mediu que ele leva segundos
+além da navegação (`HANDOFF §F2`: recovery p50 **10,4 s**; `EVIDENCIA-SPA.md`
+M3/M6/M7). O dublê não reproduzia o **tempo** da produção, então o defeito ficou
+invisível.
+
+É a armadilha nº 1 deste catálogo noutra forma: não é que o dublê fosse mais
+permissivo na regra — é que ele era **mais rápido**. A dimensão em que ele
+diverge da produção foi a dimensão que escondeu o bug.
+
+**E o mais revelador**: `StartSession` é o **único** lugar do módulo que
+classifica uma vez e desiste. Todo o resto do `realspa_test.go` amostra em
+janela — 45 s no boot não pareado, `sampleReadiness` com orçamento, o laço de
+pareamento. O conhecimento existia no repositório e não atravessou para o
+código de produção quando ele foi escrito.
+
+**O que NÃO era**: prazo. O orçamento externo do ciclo era de 60 s. A única
+sonda disparou em T+4,7 s, dentro do orçamento, e nunca olhou de novo. Aumentar
+o timeout não conserta — falta o laço.
+
+**Quem passou por cima**: quatro provas adversariais, a verificação do Chief
+(que reproduziu a ablação de `VerifyInventory` com as próprias mãos) e o
+`CAP-05_RESTORATION: PASS` da orquestração. Nenhum deles podia pegar: nenhum
+exercitava o caminho de produção contra o SPA real.
+
+**A lição de processo, que é o que esta entrada existe para preservar**: um
+caminho de produção validado apenas contra dublê está validado contra as
+propriedades que o dublê tem. Quando a propriedade que importa é **temporal**,
+o dublê precisa ser lento como a produção — ou a validação precisa acontecer
+contra a produção. Aqui a evidência do timing já existia, medida, no mesmo
+repositório, e ainda assim não impediu o defeito.
+
+**Correção**: não aplicada nesta sessão — está fora do write set do LOOP 05.1 e
+mexer em `session.go` é mudança de mecanismo, não de teste. O caminho é dar ao
+`StartSession` um laço de assentamento com orçamento, na forma que o
+`sampleReadiness` já usa, e travá-lo com um dublê que **demore** para montar.
+
+**Status**: DESCOBERTA. Correção pendente de autorização de escopo.

@@ -600,6 +600,67 @@ estado de não-resposta do H1 é detectado como `UNRESPONSIVE`, não como saudá
 *Observável:* N ciclos dormir/acordar sem degradação, `Singleton` = 0, perfil
 não-decrescente.
 
+> **OBSERVÁVEL SUPERSEDED (2026-08-18, LOOP 05.1).** O texto acima fica
+> preservado como registro histórico e **deixa de incluir "perfil
+> não-decrescente" como critério de fechamento da CAP-05**. Não foi
+> esquecido nem afrouxado: foi substituído por evidência, e o que segue é o
+> porquê.
+>
+> **A hipótese que ele pressupunha.** O observável tratava o TAMANHO do
+> perfil (contagem de arquivos/bytes em disco) como sinal de integridade: se
+> o perfil encolhe, algo foi perdido. Essa hipótese nunca foi medida contra
+> um boot real antes de entrar no mapa — foi inferência apresentada como
+> critério.
+>
+> **A evidência contra a hipótese.** `H10` (`HOUSEKEEP.md`) mediu, contra o
+> perfil pareado real, um único ciclo de PARADA LIMPA: `profile_files
+> before=457 after=456 delta=-1`. O perfil ENCOLHEU numa parada que
+> `StopVia` classificou como limpa, `SingletonLock` zerado e nenhum processo
+> órfão. A causa é estrutural, não um defeito: o Chromium rotaciona
+> `Default/Sessions/*` (e artefatos irmãos do mesmo diretório) como parte
+> normal do seu próprio ciclo de vida, independentemente do que este módulo
+> faz. "Perfil não-decrescente" portanto não é uma invariante que uma parada
+> limpa possa garantir — é uma propriedade que o navegador subjacente já
+> viola por conta própria, medido 1/1 e nunca contestado.
+>
+> **Por que contagem de tamanho não é o sinal certo.** O que realmente
+> importa para o produto não é quantos arquivos o diretório do perfil
+> contém, é se a IDENTIDADE pareada sobrevive ao ciclo e continua utilizável
+> sem novo pareamento. Um perfil pode encolher (rotação de sessão) ou
+> crescer (cache, IndexedDB) sem que a identidade pareada seja afetada em
+> nenhuma direção — e um perfil poderia, em tese, manter o MESMO número de
+> arquivos e ainda assim ter perdido a credencial (ex.: um arquivo de
+> credencial sobrescrito por um arquivo de cache de mesmo tamanho). Tamanho
+> não discrimina a pergunta que importa.
+>
+> **Contrato substituto**, que é o que passa a valer:
+>
+> ```text
+> A CAP-05 não exige perfil não-decrescente. Exige que o ciclo de vida NÃO
+> DESTRUA A IDENTIDADE PERSISTIDA e que o MESMO perfil continue reutilizável
+> através de ciclos sucessivos, provado por sinais que o runtime pode
+> realmente atestar:
+>
+>   mesmo caminho de perfil sobrevive ao ciclo (nenhuma recriação/realocação)
+>   o próximo ciclo restaura SEM QR / sem re-pareamento
+>   estado autenticado / application-ready é recuperado (sinal POSITIVO de
+>     identidade, não ausência de QR)
+>   nenhum reset ou apagamento de perfil
+>   SingletonLock = 0 após Stop
+>   nenhum processo de browser órfão após Stop
+>
+> Tamanho do perfil PODE ser registrado como métrica observacional (H10 já
+> mostra que ele oscila por rotação interna do Chromium). NÃO é invariante
+> monotônica e NÃO decide sozinho se um ciclo passou ou falhou.
+> ```
+>
+> **Impacto sobre a CAP-05.** O fechamento da capacidade passa a depender do
+> contrato substituto acima — sobrevivência da identidade e reusabilidade do
+> perfil — em vez de tamanho não-decrescente. `H10` permanece a evidência de
+> por que o critério antigo era falsificável, e o LOOP 05.1 é quem executa a
+> substituição e a mede contra o perfil pareado real (ver `realspa_test.go`,
+> `TestRealSPANCycleLifecycle` ou equivalente, e o relatório do loop).
+
 **CAP-06 · Inventário de módulos do SPA**
 → nomes de `window.require` num lugar só, resolvidos no arranque, falha alta com
 a lista do que faltou. *Observável:* renomear um nome de propósito derruba o

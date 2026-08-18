@@ -50,9 +50,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/spa"
 )
@@ -4411,4 +4413,231 @@ func TestRealSPAModuleInventoryAgainstProduction(t *testing.T) {
 		t.Errorf("%s survived the clean stop; the next boot would have to reclaim it", singletonLockName)
 	}
 	t.Logf("HYGIENE: singleton_lock_after_clean_stop=%v", after)
+}
+
+// --- LOOP 05.1: the N-cycle lifecycle observable, against the PRODUCTION path ---
+//
+// This SUPERSEDES "perfil não-decrescente" as an acceptance criterion for
+// CAP-05 (HANDOFF-INICIATIVA.md §10, CAP-05 supersede block, 2026-08-18):
+// H10 already falsified profile size as a monotonic invariant — a single
+// clean stop measured 457 -> 456 files, because Chromium rotates
+// Default/Sessions/* on its own. What this test proves instead is the
+// contract that actually matters: the SAME already-paired profile survives
+// repeated cycles of core.StartSession -> READY -> Session.Stop without
+// losing the paired identity, restoring WITHOUT a QR every time, recovering
+// an authenticated/application-ready state (proved POSITIVELY, not by
+// absence of QR), leaving SingletonLock at 0, and leaving no orphan browser
+// process.
+//
+// PRODUCTION PATH ONLY: every cycle goes through core.StartSession and
+// Session.Stop exactly as a caller of this module would. The sequence is
+// NOT assembled by hand here — that was the mistake CAP-05A existed to stop
+// making (see core/session_test.go TestStartSession_CyclesTwice, which
+// proves the machinery cycles at all, against a disposable local fixture;
+// this test is the same shape against the real target and the real,
+// non-disposable paired profile).
+//
+// SAFETY: read-only. No message is ever sent from this test. No logout, no
+// revocation, no re-pair, no QR is triggered or waited on — a QR appearing
+// at all is treated as a hard failure of the run (see qrOrNotReady below),
+// because it would mean this profile is no longer paired, which is a fact
+// this test must report and stop on, never try to route around. No profile
+// deletion or credential mutation happens anywhere in this file. If a cycle
+// leaves the profile in a state this test does not understand — a dirty
+// stop, a failed identity read, a surviving lock — the run STOPS via
+// t.Fatalf instead of looping again, per the packet's explicit instruction
+// not to "try once more" against a profile whose state is no longer
+// understood.
+//
+// Requires BOTH toggles: WA_HEADLESS_REAL_SPA=1 (touches the real target at
+// all) and WA_HEADLESS_PROFILE_DIR=<the paired profile> (this test refuses
+// to run against the disposable lab profile, which is unpaired and would
+// show a QR on every cycle — see the skip below).
+const (
+	// nCycleReadyDeadline bounds each cycle's core.StartSession call.
+	//
+	// It deliberately does NOT reuse 15s: HANDOFF-INICIATIVA.md §F2 already
+	// measured recovery p50=10.4s, p95=13.8s, and app-ready observed as late
+	// as 15.8s on this exact restoration path — a 15s ceiling would be
+	// expected to clip the slow tail of the very thing being measured, not
+	// bound a genuine hang. 60s gives ~4x margin over the observed 15.8s
+	// max, comparable in order of magnitude to the other real-SPA budgets
+	// already used in this file (readinessBudget=90s, the unpaired-boot
+	// observation's 45s window) without being read as an SLA: it is a test
+	// budget chosen with margin over a measured tail, not a promise about
+	// production latency.
+	nCycleReadyDeadline = 60 * time.Second
+	// nCycleSampleCount is a SAMPLE COUNT, not a statistical bound. No
+	// canonical N was found anywhere in this repository (HANDOFF-INICIATIVA.md
+	// §10 names the observable as "N ciclos" without fixing N). The packet
+	// asks for N>=3 to falsify basic repeatability — one cycle proves the
+	// machinery can run once, two proves it can be reused, three is the
+	// first N that can show a trend instead of a single before/after pair.
+	// It does not establish a distribution and must not be read as one.
+	nCycleSampleCount = 3
+)
+
+// nCycleMetric is one cycle's measurement. Every field is a duration, a
+// count, a StopVia or a boolean — nothing here can carry the account's
+// identity, matching the zero-PII rule for this whole file.
+type nCycleMetric struct {
+	cycle           int
+	timeToReady     time.Duration
+	stopVia         engine.StopVia
+	singletonAfter  int
+	qrObserved      bool
+	identityPresent bool
+	profileFiles    int
+	orphanPID       int
+}
+
+// TestRealSPANCycleLifecycle is the N-cycle observable that supersedes
+// "perfil não-decrescente" for CAP-05. See the block comment above this
+// const group for the full contract and the safety rules.
+func TestRealSPANCycleLifecycle(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This test's whole point is "does an ALREADY-PAIRED profile survive N
+	// cycles". The disposable lab profile is unpaired by construction, so
+	// running against it would only prove QR appears N times, which is a
+	// different and already-covered observation
+	// (TestRealSPAUnpairedBootObservation). Refuse rather than silently
+	// measuring the wrong thing.
+	if !overridden {
+		t.Skip("this test only runs against an already-paired profile via " +
+			profileDirOverride + "; the disposable lab profile is unpaired, " +
+			"which would show a QR on every cycle and prove nothing about the " +
+			"observable this test exists to check")
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("profile_dir=%s sample_count=%d deadline_per_cycle=%s "+
+		"(production core.StartSession / Session.Stop; read-only; no send; no logout; no QR)",
+		profile, nCycleSampleCount, nCycleReadyDeadline)
+
+	var metrics []nCycleMetric
+	filesBeforeAny := countProfileFiles(t, profile)
+
+	for cycle := 1; cycle <= nCycleSampleCount; cycle++ {
+		runner := engine.NewRunner()
+		port := freePort(t)
+
+		ctx, cancel := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+		start := time.Now()
+		sess, startErr := core.StartSession(ctx, core.StartConfig{
+			BinaryPath:    binary,
+			ProfileDir:    profile,
+			DebuggingPort: port,
+			UserAgent:     realSPAUserAgent,
+			NavigateURL:   realSPAURL,
+			Runner:        runner,
+		})
+		elapsed := time.Since(start)
+		cancel()
+
+		if startErr != nil {
+			var boot *core.BootFailure
+			qrOrNotReady := errors.As(startErr, &boot) && boot.Stage == core.StageNotReady
+			// RESIDUAL-STATE CONTROL, negative leg: a failure here at
+			// StageOwnership on cycle > 1 would mean the previous cycle's
+			// Session.Stop did not release core's in-process ownership map
+			// (core/session.go acquireOwnership/release) — i.e. the run
+			// would be discriminating leaked in-process state rather than
+			// the real lifecycle. Name that explicitly instead of letting a
+			// generic Fatalf hide which failure mode this was.
+			ownershipLeak := errors.As(startErr, &boot) && boot.Stage == core.StageOwnership
+			t.Fatalf("cycle %d/%d: core.StartSession failed after %s "+
+				"(qr_or_not_ready=%v, in_process_ownership_leak=%v): %v — STOPPING the run "+
+				"rather than retrying against a profile whose state is no longer understood",
+				cycle, nCycleSampleCount, elapsed, qrOrNotReady, ownershipLeak, startErr)
+		}
+
+		// POSITIVE IDENTITY SIGNAL. Absence of a QR is not evidence of an
+		// authenticated session — StartSession reaching READY only proves
+		// the structural probe and the module inventory passed, neither of
+		// which names an account (TestRealSPADisqualifyReadinessSignalsOnLogin
+		// measured the module inventory true on the LOGIN screen too). The
+		// owner identity read below is the same call whatsapp-web.js itself
+		// makes (moduleUserPrefsMeUser doc comment): presence is asserted,
+		// the value is never read into this test.
+		var raw string
+		identityErr := runner.Do(context.Background(), engine.OpStateProbe, "cycle/identity",
+			func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, identityShapeScript(), &raw) })
+		var identityPresent bool
+		if identityErr == nil {
+			var shape identityShape
+			if json.Unmarshal([]byte(raw), &shape) == nil {
+				identityPresent = shape.HasIdentity
+			}
+		}
+
+		pid := sess.Browser().PID()
+		via := sess.Stop(context.Background())
+
+		// Orphan-process check: after a clean Stop, the PID this cycle's
+		// browser held must no longer answer signal 0. Matches the idiom
+		// engine's own tests use (engine/browser_test.go) rather than
+		// polling the DevTools port, which is unreliable under TIME_WAIT.
+		orphan := 0
+		if pid > 0 && syscall.Kill(pid, syscall.Signal(0)) == nil {
+			orphan = pid
+		}
+
+		lockCount := 0
+		if lockPresent(t, profile) {
+			lockCount = 1
+		}
+		files := countProfileFiles(t, profile)
+
+		m := nCycleMetric{
+			cycle: cycle, timeToReady: elapsed, stopVia: via,
+			singletonAfter: lockCount, qrObserved: false,
+			identityPresent: identityPresent, profileFiles: files, orphanPID: orphan,
+		}
+		metrics = append(metrics, m)
+		t.Logf("CYCLE %d/%d: time_to_ready=%s stop_via=%s singleton_lock_after=%d "+
+			"identity_present=%v profile_files=%d orphan_pid_nonzero=%v",
+			cycle, nCycleSampleCount, elapsed, via, lockCount, identityPresent, files, orphan != 0)
+
+		// STOP THE RUN, do not retry, on anything this test does not
+		// understand — exactly the safety rule the packet states.
+		if !via.Clean() {
+			t.Fatalf("cycle %d/%d: stopped_via=%s is not a clean stop; STOPPING rather than "+
+				"continuing against a profile whose state is no longer understood",
+				cycle, nCycleSampleCount, via)
+		}
+		if lockCount != 0 {
+			t.Fatalf("cycle %d/%d: SingletonLock survived a clean stop; STOPPING", cycle, nCycleSampleCount)
+		}
+		if orphan != 0 {
+			t.Fatalf("cycle %d/%d: pid %d still answers signal 0 after a clean stop "+
+				"(orphan browser process); STOPPING", cycle, nCycleSampleCount, orphan)
+		}
+		if !identityPresent {
+			t.Fatalf("cycle %d/%d: reached READY with no QR, but the POSITIVE identity signal "+
+				"(WAWebUserPrefsMeUser) was absent — absence of QR is not proof of identity, "+
+				"and this boot cannot claim the authenticated state was recovered; STOPPING",
+				cycle, nCycleSampleCount)
+		}
+	}
+
+	t.Logf("SUMMARY sample_count=%d profile_files_before_any_cycle=%d", nCycleSampleCount, filesBeforeAny)
+	for _, m := range metrics {
+		t.Logf("  cycle=%d time_to_ready=%s stop_via=%s singleton_after=%d identity=%v files=%d orphan=%v",
+			m.cycle, m.timeToReady, m.stopVia, m.singletonAfter, m.identityPresent,
+			m.profileFiles, m.orphanPID != 0)
+	}
+	// SIZE IS OBSERVATIONAL ONLY, per the supersede: no assertion on
+	// monotonic size anywhere in this test, on purpose. H10 measured a
+	// clean stop shrinking the profile by one file; asserting non-decrease
+	// here would fail on behaviour already known to be healthy.
+	t.Logf("SIZE (observational only, never asserted): %d -> %d across %d cycles "+
+		"(Default/Sessions/* rotates independently of this module — HOUSEKEEP.md H10)",
+		filesBeforeAny, metrics[len(metrics)-1].profileFiles, nCycleSampleCount)
 }
