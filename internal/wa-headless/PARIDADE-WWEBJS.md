@@ -101,21 +101,35 @@ continua obrigatório quando chegar, porque a alternativa é sucesso silencioso.
 
 ---
 
-## 4. O que NÃO implementar
+## 4. O que fica fora da fatia atual do `WaClientAdapter`
 
-Por evidência desta matriz:
+> **CORREÇÃO (2026-08-18, LOOP 04.4).** O título desta seção era "O que NÃO
+> implementar", redação que lê como exclusão GLOBAL de escopo do
+> `wa-headless`. Isso é falso: o que a matriz prova é **apenas** que estas
+> quatro coisas estão `OUT_OF_CURRENT_WA_WORKER_ADAPTER_SLICE` — fora do
+> contrato `WaClientAdapter` que o `wa-worker` consome HOJE
+> (`adapter.ts`, seção 2 acima). O `internal/wa-headless` é um SDK interno
+> com roadmap mais amplo do que essa fatia; paridade de integração ATUAL
+> **não é** o mesmo que escopo de capacidade GLOBAL do `wa-headless`. Nenhuma
+> destas quatro capacidades foi aberta para implementação por esta correção —
+> é mudança de redação e escopo, não de trabalho.
 
-- **nada de grupos, broadcast, status/stories**: a interface filtra os três em
-  todo método que os menciona (`adapter.ts:97`, `:117`, `:128`) — o produto é
-  1:1.
-- **nada de mídia no envio**: `sendText(waJid, body)` é a única superfície de
-  envio declarada. Não existe `sendMedia`, `sendImage`, `sendDocument`.
-- **nada de corpo de mensagem**: `WaMessageMeta` é **metadata-only por
-  invariante** (`adapter.ts:57`, `:116`, `:136`; invariante 13 do handoff). O texto live é
-  outra via (core-NATS `live.>`).
-- **nada de `primeContactRoster` no motor de browser**: o próprio
-  `adapter.ts:188` registra que o `wwebjs` não tem equivalente. Implementá-lo
-  seria superar o `wwebjs`, e o handoff §1 exclui isso do escopo.
+Por evidência desta matriz, contra o contrato atual:
+
+- **grupos, broadcast, status/stories — `NOT_REQUIRED_BY_CURRENT_PRODUCT_CONTRACT`**:
+  a interface filtra os três em todo método que os menciona (`adapter.ts:97`,
+  `:117`, `:128`) — o produto é 1:1 nesta fatia.
+- **mídia no envio — `OUT_OF_CURRENT_WA_WORKER_ADAPTER_SLICE`**:
+  `sendText(waJid, body)` é a única superfície de envio declarada no contrato
+  atual. Não existe `sendMedia`, `sendImage`, `sendDocument`.
+- **corpo de mensagem — `NOT_REQUIRED_BY_CURRENT_PRODUCT_CONTRACT`**:
+  `WaMessageMeta` é **metadata-only por invariante** (`adapter.ts:57`, `:116`,
+  `:136`; invariante 13 do handoff) nesta fatia. O texto live é outra via
+  (core-NATS `live.>`).
+- **`primeContactRoster` no motor de browser — `OUT_OF_CURRENT_WA_WORKER_ADAPTER_SLICE`**:
+  o próprio `adapter.ts:188` registra que o `wwebjs` não tem equivalente.
+  Implementá-lo superaria o `wwebjs`, e o handoff §1 exclui isso do escopo
+  ATUAL — não é exclusão permanente do `wa-headless` como SDK.
 
 ---
 

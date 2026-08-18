@@ -196,12 +196,25 @@ aquele repo é da sessão C0/C1.
 |---|---|--:|---|
 | `wa-noise` | `wa-api/internal/wa-noise` | 178.408 | funcionando |
 | `wa-worker` | `disparazaap/services/wa-worker/src` | 14.292 | em produção |
-| **`wa-headless`** | `wa-api/internal/wa-headless` | **132** | **só `doc.go` — esqueleto** |
+| **`wa-headless`** | `wa-api/internal/wa-headless` | **2.914 (+ 8.542 de teste)** | **7 pacotes implementados** |
 | harness do estudo | `wa-api/scripts/chromium-study` | 9.228 | **validado, fora do produto** |
 
-O módulo de produto tem **zero implementação**: `core/`, `engine/`, `runtime/`,
-`spa/`, `observability/`, `capabilities/send/` são todos um `doc.go` cada,
-declarando intenção.
+> **CORREÇÃO (2026-08-18, LOOP 04.4).** A linha dizia "**132**" / "**só
+> `doc.go` — esqueleto**". Isso era verdade em 2026-08-10 e deixou de ser
+> verdade desde então: medindo agora neste worktree —
+> `find internal/wa-headless -name '*.go' ! -name '*_test.go' | xargs wc -l`
+> dá **2.914** linhas de produção, `find internal/wa-headless -name
+> '*_test.go' | xargs wc -l` dá **8.542** linhas de teste, e `go list
+> ./internal/wa-headless/...` lista **7 pacotes** (`wa-headless`,
+> `capabilities/send`, `core`, `engine`, `observability`, `runtime`, `spa`).
+> O módulo de produto **não é mais** um `doc.go` por pacote declarando
+> intenção — o parágrafo abaixo, que fazia a mesma afirmação, está corrigido
+> pelo mesmo motivo.
+
+O módulo de produto **deixou de ter zero implementação** desde a correção
+acima: os pacotes `core/`, `engine/`, `runtime/`, `spa/`, `observability/`,
+`capabilities/send/` têm código de produção e de teste além do `doc.go` de
+cada um.
 
 ### 3.3 O que pode ser reutilizado — e é muito
 

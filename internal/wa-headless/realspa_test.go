@@ -2569,6 +2569,381 @@ func minOf(ds []time.Duration) time.Duration {
 	return out
 }
 
+// --- LOOP 04.4-T3: the C threshold, exercised against the real socket -------
+//
+// T1 introduced spa.OpeningWindowThreshold ("C") and spa.ClassifyOpeningDuration
+// as a pure function with unit tests. Nothing before this point has ever called
+// it against a socket that actually moved: without this, CAP-04 closes as a
+// contract nothing consumes. This runs it in two directed legs plus the
+// mandatory negative control:
+//
+//	A. healthy boot           -> time in OPENING < C -> ClassifyOpeningDuration
+//	                              == HEALTHY
+//	B. non-destructive cut    -> time in OPENING >= C -> ClassifyOpeningDuration
+//	                              == DEGRADED, with NOTHING torn down, and the
+//	                              socket returning to CONNECTED once restored
+//	B-control. leg B's window and sampler, WITHOUT the cut: the socket must
+//	                              stay CONNECTED and never classify as DEGRADED
+//
+// The cut is Tab.SetTransportOffline, never SetTransportOffline's sibling
+// SetNetworkOffline — see severNetwork's doc and applyLongCut, which this leg
+// reuses verbatim for exactly that reason: SetNetworkOffline flips
+// navigator.onLine and would measure this file's own emulation instead of the
+// session noticing on its own.
+//
+// The window is severWindow (90s), not longCutWindow (12min): M5/M8 measured
+// detection at 31.1-42.3s and C is 3.03s, so 90s leaves ample margin without
+// repeating M8's hour-long run to prove the same transition again.
+//
+// This does not introduce new E2E infrastructure. WA_HEADLESS_REAL_SPA gates
+// this exactly like the nine real-SPA tests already in this file, and every
+// sampler, cut mechanism and clean-stop registration below is reused, not
+// reinvented — parity with approved practice (packet §100.6), not a new
+// suite.
+
+// detectionKnownLow and detectionKnownHigh are the PREVIOUSLY REPORTED
+// detection-latency band (M5/M8), NOT a limit. F-25 already registered that
+// this band has never converged: M5's original three runs gave 33.2-34.2s,
+// and three more runs (M8) widened it to 31.1-42.3s. A run that lands
+// outside these two numbers is that same widening happening again, not a
+// contradiction to soften — see the DETECTION LATENCY log in
+// legBNondestructiveCut.
+const (
+	detectionKnownLow  = 31100 * time.Millisecond
+	detectionKnownHigh = 42300 * time.Millisecond
+)
+
+// recoveryKnownHigh is the highest recovery time M8.4 reported (2.01-5.02s,
+// three recoveries after a 12-minute cut). Same caveat as detectionKnownLow/
+// detectionKnownHigh: not a ceiling, just the most recent widened reading.
+const recoveryKnownHigh = 5020 * time.Millisecond
+
+func TestRealSPASocketClassificationAgainstThresholdC(t *testing.T) {
+	requireRealSPA(t)
+
+	profile, _, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, leg := range []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{"leg-a-healthy-boot", legAHealthyBoot},
+		{"leg-b-nondestructive-cut", func(t *testing.T) { legBNondestructiveCut(t, profile) }},
+		{"leg-b-negative-control", legBNegativeControl},
+	} {
+		// The subtest exists for its CLEANUP, same reason as
+		// TestRealSPAOpeningPersistenceUnderLongCut: the clean stop is
+		// registered inside launchObservationProfile, so the profile can only
+		// be looked at AFTER the browser is down, which nested-test teardown
+		// guarantees and a plain function call would not.
+		t.Run(leg.name, leg.run)
+		after := lockPresent(t, profile)
+		if after {
+			t.Errorf("%s: %s survived the clean stop; the next boot would have to reclaim it",
+				leg.name, singletonLockName)
+		}
+		t.Logf("HYGIENE %s: singleton_lock_after_clean_stop=%v", leg.name, after)
+	}
+}
+
+// legAHealthyBoot boots the paired profile, measures the time actually spent in
+// OPENING before the socket reached CONNECTED, and classifies it. Expected
+// HEALTHY: C is derived from the worst OPENING window M7 ever measured on a
+// healthy boot, plus margin, so a boot below that ceiling is exactly what C
+// exists to call healthy.
+func legAHealthyBoot(t *testing.T) {
+	t.Helper()
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	script := readinessScript(spa.RequiredAtStartup)
+	want := len(spa.RequiredAtStartup)
+
+	_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
+	if marks.connected == 0 {
+		t.Fatalf("the boot never reached socket %s; there is no healthy boot to classify",
+			socketStateConnected)
+	}
+
+	// A boot whose very first sample already read CONNECTED never had an
+	// observed OPENING mark (openingFirst stays zero); that is a genuine zero
+	// window, not a missing measurement, so it is classified as zero rather
+	// than skipped.
+	opening := time.Duration(0)
+	if marks.openingFirst > 0 {
+		opening = marks.connected - marks.openingFirst
+	}
+	got := spa.ClassifyOpeningDuration(opening)
+	t.Logf("LEG A — %s first seen at T+%.2fs, %s at T+%.2fs, time in %s = %s, "+
+		"spa.ClassifyOpeningDuration = %s (C = %s)",
+		socketStateOpening, marks.openingFirst.Seconds(), socketStateConnected,
+		marks.connected.Seconds(), socketStateOpening, fmtDur(opening), got,
+		fmtDur(spa.OpeningWindowThreshold))
+
+	if opening >= spa.OpeningWindowThreshold {
+		t.Errorf("LEG A CONTRADICTS C: this healthy boot's OPENING window was %s, at or above "+
+			"C=%s. This is a finding to report, not to soften.",
+			fmtDur(opening), fmtDur(spa.OpeningWindowThreshold))
+	}
+	if got != spa.SocketHealthy {
+		t.Errorf("leg A: spa.ClassifyOpeningDuration(%s) = %s, want %s (C=%s)",
+			fmtDur(opening), got, spa.SocketHealthy, fmtDur(spa.OpeningWindowThreshold))
+	}
+}
+
+// legBNondestructiveCut severs the transport under a stable, connected session,
+// samples past C, classifies the OPENING window it produces, proves nothing was
+// torn down while doing it, then restores the transport and measures the
+// recovery.
+func legBNondestructiveCut(t *testing.T, profile string) {
+	t.Helper()
+	runner := engine.NewRunner()
+	browser, tab := openRealSPA(t, runner)
+
+	script := readinessScript(spa.RequiredAtStartup)
+	want := len(spa.RequiredAtStartup)
+
+	_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
+	if marks.pane == 0 || marks.connected == 0 {
+		t.Fatalf("the session never reached a ready state (pane %s, socket %s %s); there is no "+
+			"live session here to cut", markString(marks.pane), socketStateConnected,
+			markString(marks.connected))
+	}
+	t.Logf("READY: pane %s · socket %s %s", markString(marks.pane), socketStateConnected,
+		markString(marks.connected))
+
+	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate}
+	start := time.Now()
+	installNetEventSentinel(t, runner, tab)
+
+	baseline := watchSession(t, runner, tab, monitor, script, "baseline", start, severBaseline)
+	steady, haveSteady := lastReadSample(baseline)
+	if !haveSteady || steady.signals.SocketState != socketStateConnected || !steady.signals.HasPaneSide {
+		t.Fatalf("the steady state is not what this leg needs to cut: read=%v socket=%q pane=%v",
+			haveSteady, steady.signals.SocketState, steady.signals.HasPaneSide)
+	}
+
+	// Reused verbatim from the N2b probe: same reachability bracket, same
+	// Tab.SetTransportOffline mechanism, same clean-restore registration. Only
+	// the WINDOW watched after it differs (severWindow, not longCutWindow).
+	cutAt := applyLongCut(t, runner, tab, transportLeg, start)
+
+	window := watchSession(t, runner, tab, monitor, script, transportLeg, start, severWindow)
+	events := readNetEvents(t, runner, tab)
+	t.Logf("DOM NETWORK EVENTS over the window: offline=%d online=%d", events.Offline, events.Online)
+
+	runs := socketRunsOf(window)
+	stay := openingStayOf(runs)
+	t.Log("LEG B SOCKET TIMELINE")
+	for _, run := range runs {
+		t.Logf("    T+%8.2fs .. T+%8.2fs  %-12s  %s over %d samples",
+			run.first.Seconds(), run.last.Seconds(), strconv.Quote(run.state),
+			fmtDur(run.last-run.first), run.samples)
+	}
+	t.Logf("STAY: %s", stay.describe(cutAt))
+	if stay.entered {
+		// The previously reported detection band is NOT a bound: M5's original
+		// three runs gave 33.2-34.2s, three more runs already widened that to
+		// 31.1-42.3s (M8), and F-25 registered this exact pattern — every new
+		// measurement stretches the band instead of converging on one. This
+		// run's number is logged explicitly against that band, flagged rather
+		// than folded in as "consistent", because that is the whole point: a
+		// reading outside the previously reported band is the widening
+		// happening again, not noise around a stable value.
+		detected := stay.enteredAt - cutAt
+		switch {
+		case detected < detectionKnownLow:
+			t.Logf("DETECTION LATENCY this run: %s after the cut (n=1) — BELOW the previously "+
+				"reported 31.1-42.3s band (M5/M8). Not consistent with it: the band has widened "+
+				"downward this time. See F-25.", fmtDur(detected))
+		case detected > detectionKnownHigh:
+			t.Logf("DETECTION LATENCY this run: %s after the cut (n=1) — ABOVE the previously "+
+				"reported 31.1-42.3s band (M5/M8). Not consistent with it: the band has widened "+
+				"upward this time. See F-25.", fmtDur(detected))
+		default:
+			t.Logf("DETECTION LATENCY this run: %s after the cut (n=1), inside the previously "+
+				"reported 31.1-42.3s band (M5/M8). One run inside the band does not shrink it — "+
+				"see F-25 on why this band should still not be read as a limit.", fmtDur(detected))
+		}
+	}
+
+	// --- no-teardown evidence, gathered BEFORE the classification verdict so
+	// a failed classification can never be blamed on cleanup already having
+	// run ---
+	if pid := browser.PID(); pid == 0 || !engine.ProcessAlive(pid) {
+		t.Errorf("NO-TEARDOWN CHECK FAILED: browser process (pid=%d) is not alive after the cut "+
+			"window; a non-destructive cut must never take the process down", pid)
+	} else {
+		t.Logf("NO-TEARDOWN: browser process pid=%d alive after the cut window", pid)
+	}
+	if _, err := oneReadinessSample(runner, tab, script); err != nil {
+		t.Errorf("NO-TEARDOWN CHECK FAILED: the CDP target no longer answers after the cut "+
+			"window: %v", err)
+	} else {
+		t.Log("NO-TEARDOWN: the CDP target still answers after the cut window")
+	}
+	if fi, err := os.Stat(profile); err != nil || !fi.IsDir() {
+		t.Errorf("NO-TEARDOWN CHECK FAILED: profile directory %s missing or not a directory: %v",
+			profile, err)
+	} else {
+		t.Logf("NO-TEARDOWN: profile directory %s still present", profile)
+	}
+	terminal := 0
+	for _, s := range window {
+		if !s.probeFailed && s.class.Terminal() {
+			terminal++
+		}
+	}
+	if terminal > 0 {
+		t.Errorf("NO-TEARDOWN CHECK FAILED: %d/%d samples classified as a terminal PageClass "+
+			"(LOGIN_REQUIRED/SESSION_CONFLICT) during a non-destructive cut; that would be "+
+			"independent evidence the session is gone, which the cut alone must never produce",
+			terminal, len(window))
+	} else {
+		t.Logf("NO-TEARDOWN: 0/%d samples classified as a terminal PageClass during the cut. "+
+			"No SESSION_LOST path exists to have fired anyway — spa.ClassifyOpeningDuration "+
+			"structurally cannot return spa.SocketSessionLost (socket.go, DEC-04.4-02)",
+			len(window))
+	}
+
+	if !stay.entered {
+		// The 31.1-42.3s figure is a PREVIOUSLY OBSERVED band, not a limit
+		// (F-25: it has widened on every remeasurement so far, this run's
+		// detection latency included — see detectionKnownLow/High and the
+		// DETECTION LATENCY log above). The assertion this test makes is
+		// therefore "entered OPENING somewhere inside the severWindow
+		// budget", not "entered inside that band" — a departure that lands
+		// outside the previously observed range is not itself a failure.
+		t.Fatalf("leg B: the socket never entered %s within the %s window of a non-destructive "+
+			"cut; departure from %s has been observed at ~23-42s across runs so far and that "+
+			"range has widened on every remeasurement (F-25), but this run saw NO departure at "+
+			"all within the budget. Either the cut did not land on this build or the timing has "+
+			"changed further. Re-measure this; do not soften the assertion",
+			socketStateOpening, fmtDur(severWindow), socketStateConnected)
+	}
+	got := spa.ClassifyOpeningDuration(stay.held)
+	t.Logf("LEG B CLASSIFICATION — spa.ClassifyOpeningDuration(%s) = %s (C = %s)",
+		fmtDur(stay.held), got, fmtDur(spa.OpeningWindowThreshold))
+	if stay.held < spa.OpeningWindowThreshold {
+		t.Errorf("LEG B CONTRADICTS C: OPENING held only %s within the %s window, below C=%s; "+
+			"the DEGRADED expectation below cannot be met without crossing the threshold. This "+
+			"is a finding to report, not a reason to adjust the test", fmtDur(stay.held),
+			fmtDur(severWindow), fmtDur(spa.OpeningWindowThreshold))
+	}
+	if got != spa.SocketDegraded {
+		t.Errorf("leg B: spa.ClassifyOpeningDuration(%s) = %s, want %s (C=%s)",
+			fmtDur(stay.held), got, spa.SocketDegraded, fmtDur(spa.OpeningWindowThreshold))
+	}
+
+	// Restore and measure the recovery. liftLongCut's exact pattern, called
+	// directly rather than through it because that helper's log lines are
+	// phrased for the 12-minute run.
+	if err := tab.SetTransportOffline(runner, false, "legb/restore"); err != nil {
+		t.Fatalf("restoring the transport: %v", err)
+	}
+	restoredAt := time.Since(start)
+	t.Logf("TRANSPORT RESTORED at T+%.2fs, after %s of cut", restoredAt.Seconds(), fmtDur(severWindow))
+
+	recovery := watchSession(t, runner, tab, monitor, script, "recovery", start, severRecovery)
+	back, recovered := firstSignalWhere(recovery, func(s readinessSample) bool {
+		return s.SocketState == socketStateConnected
+	})
+	if !recovered {
+		t.Errorf("leg B: the socket never returned to %s within %s of the transport being "+
+			"restored", socketStateConnected, fmtDur(severRecovery))
+		return
+	}
+	recoveryIn := back.at - restoredAt
+	t.Logf("LEG B RECOVERY — socket back to %s at T+%.2fs, %s after the restore",
+		socketStateConnected, back.at.Seconds(), fmtDur(recoveryIn))
+	if recoveryIn > recoveryKnownHigh {
+		// Flagged, not folded into "recovery worked": M8.4's 2.01-5.02s is the
+		// most recent widened reading, not a ceiling (same F-25 caveat as
+		// detectionKnownLow/High). This run's recovery landed ABOVE it, which
+		// is the range widening again on the other side, not confirmation of
+		// the previous number.
+		t.Logf("RECOVERY TIME this run: %s (n=1) — ABOVE the previously reported 2.01-5.02s "+
+			"band (M8.4). Not consistent with it: the band has widened upward this time. "+
+			"See F-25.", fmtDur(recoveryIn))
+	} else {
+		t.Logf("RECOVERY TIME this run: %s (n=1), inside the previously reported 2.01-5.02s "+
+			"band (M8.4). One run inside the band does not shrink it — see F-25.", fmtDur(recoveryIn))
+	}
+}
+
+// legBNegativeControl is leg B's mandatory negative control: the identical
+// sampler and window, with NOTHING done to the network. Without this, "went
+// DEGRADED after the cut" cannot be told apart from a detector that reports
+// DEGRADED regardless of what the socket is doing.
+func legBNegativeControl(t *testing.T) {
+	t.Helper()
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	script := readinessScript(spa.RequiredAtStartup)
+	want := len(spa.RequiredAtStartup)
+
+	_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
+	if marks.pane == 0 || marks.connected == 0 {
+		t.Fatalf("the session never reached a ready state (pane %s, socket %s %s); there is no "+
+			"live session here to watch", markString(marks.pane), socketStateConnected,
+			markString(marks.connected))
+	}
+
+	monitor := &spa.Monitor{Runner: runner, Eval: tab.Evaluate}
+	start := time.Now()
+	installNetEventSentinel(t, runner, tab)
+
+	baseline := watchSession(t, runner, tab, monitor, script, "baseline", start, severBaseline)
+	steady, haveSteady := lastReadSample(baseline)
+	if !haveSteady || steady.signals.SocketState != socketStateConnected {
+		t.Fatalf("the steady state is not what this control needs: read=%v socket=%q",
+			haveSteady, steady.signals.SocketState)
+	}
+
+	// NOTHING is done to the network here. This is the whole point.
+	window := watchSession(t, runner, tab, monitor, script, "control", start, severWindow)
+	events := readNetEvents(t, runner, tab)
+
+	runs := socketRunsOf(window)
+	stay := openingStayOf(runs)
+	t.Log("CONTROL SOCKET TIMELINE")
+	for _, run := range runs {
+		t.Logf("    T+%8.2fs .. T+%8.2fs  %-12s  %s over %d samples",
+			run.first.Seconds(), run.last.Seconds(), strconv.Quote(run.state),
+			fmtDur(run.last-run.first), run.samples)
+	}
+	t.Logf("CONTROL — offline events=%d online events=%d over %s with nothing done to the "+
+		"network", events.Offline, events.Online, fmtDur(severWindow))
+
+	if len(runs) != 1 || runs[0].state != socketStateConnected {
+		t.Errorf("NEGATIVE CONTROL FAILED: the socket did not hold %s for the whole %s window "+
+			"with nothing done to it; the reader is then not shown to discriminate a cut from "+
+			"no cut at all, and leg B's DEGRADED cannot be attributed to the cut",
+			socketStateConnected, fmtDur(severWindow))
+	}
+	if stay.entered {
+		got := spa.ClassifyOpeningDuration(stay.held)
+		t.Errorf("NEGATIVE CONTROL FAILED: the socket entered %s at T+%.2fs with nothing done "+
+			"to the network (spa.ClassifyOpeningDuration = %s); leg B's DEGRADED is not "+
+			"attributable to the cut if the control produces it too",
+			socketStateOpening, stay.enteredAt.Seconds(), got)
+	}
+	if events.Offline != 0 {
+		t.Errorf("NEGATIVE CONTROL FAILED: %d offline DOM events fired with nothing done to the "+
+			"network", events.Offline)
+	}
+	if !stay.entered && len(runs) == 1 && runs[0].state == socketStateConnected && events.Offline == 0 {
+		t.Logf("CONTROL PASSED: %s held for the whole %s window, the socket never entered %s, "+
+			"and spa.ClassifyOpeningDuration was never even applicable. leg B's DEGRADED is "+
+			"attributable to the cut, not to the detector.", socketStateConnected,
+			fmtDur(severWindow), socketStateOpening)
+	}
+}
+
 // --- LOOP 03.9: the on-disk FORM of SingletonLock, measured -----------------
 
 const (

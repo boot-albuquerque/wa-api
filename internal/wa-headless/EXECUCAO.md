@@ -8,6 +8,101 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
+CAP: 04 · LOOP 04.4, o corte sai da medida e vira mecanismo · **DONE**
+
+**O `C` não existia — e descobrir isso mudou o loop antes de ele começar.** A
+instrução desta rodada presumia um limiar já implementado, a ser auditado
+quanto a efeitos destrutivos. O trace mostrou outra coisa: não havia nenhuma
+leitura do enum de socket em código de produção, só em comentários e no
+instrumento de teste, e o único limiar existente era o
+`DefaultUnresponsiveAfter = 3` da `liveness.go`, que conta falhas consecutivas
+de sonda e é **outro eixo**. Além disso, `internal/wa-headless` não é importado
+por nada fora dele — `pkg/infra/wa-headless/{client,registry}` são só `doc.go`.
+Consequência dupla, e as duas foram registradas em vez de silenciadas: a prova
+de "o corte não derruba sessão" sai **por construção**, porque não existe
+caminho por onde derrubar; e a auditoria de downstream de `Alive` que a
+instrução pedia **não tem objeto** — é contrato a nascer, não código a auditar.
+
+**`C = 3,03 s`, derivado termo a termo, em `spa/socket.go`:**
+
+| termo | valor | origem |
+|---|---|---|
+| `healthy_upper_bound` | 1,36 s | M7.3 — pior janela em 21 boots / 7 condições, perna `net-heavy` r1 |
+| `measurement_uncertainty` | 0,31 s | M7.5 — pior espaçamento observado nas pernas `net-*`, as que produziram o termo 1 |
+| `explicit_guard_band` | 1,36 s | escolha de engenharia declarada: mais uma largura do sinal medido |
+
+A banda de guarda é arbitrária e está escrita como tal. O motivo de não ser
+melhor fundamentada é da EVIDÊNCIA, não do raciocínio: toda perna do M7 é
+`n=3` — "uma condição amostrada três vezes", nas palavras do próprio M7.8 —,
+não uma distribuição de onde se cite percentil. Dobrar o sinal medido é a
+forma menos arbitrária de comprar margem sem inventar um número solto.
+
+**Envelope de validade escrito ao lado da constante**: vale até 900 ms de
+latência adicionada, o teto da curva de três pontos do M7. Além disso a
+resposta é **`UNKNOWN`**, não "provavelmente ok" — esticar uma curva de três
+pontos é a escolha de mesa que o M6.4 e o M7.6 proíbem.
+
+**A proibição está travada por ESTRUTURA, não por convenção.**
+`ClassifyOpeningDuration` é mapeamento puro duração→veredito, sem efeito
+colateral, com exatamente dois `return` alcançáveis e nenhuma referência a
+`SocketSessionLost`. Não existe caminho por onde duração em `OPENING` sozinha
+chegue a perda de sessão ou a teardown.
+
+**Medido contra a conta real** (`TestRealSPASocketClassificationAgainstThresholdC`,
+perfil pareado, corte por `SetTransportOffline` com alcançabilidade provada
+OK→FAIL):
+
+| perna | medido | veredito |
+|---|---|---|
+| A — boot saudável | `OPENING` **0,25 s** | `HEALTHY` |
+| B — corte não destrutivo | detecção +23,1 s, `OPENING` ≥ **66,19 s** | `DEGRADED` |
+| B — recuperação | socket volta em **7,03 s** | `CONNECTED` |
+| controle negativo — sem corte | `CONNECTED` por **90,00 s**, `OPENING` nunca | não produziu `DEGRADED` |
+
+Não-teardown observado, não afirmado: processo vivo, target CDP respondendo
+depois da janela, diretório do perfil presente, **0/90** amostras em classe
+terminal, contadores de evento `offline`/`online` em **0/0** — o corte nunca se
+anunciou, então foi o SPA percebendo sozinho. Higiene `3/3`:
+`stopped_via=browser.close` e `SingletonLock` ausente nas três pernas.
+
+**Controle negativo do mecanismo, EXECUTADO duas vezes por pessoas
+diferentes.** Reintroduzido o defeito (`SESSION_LOST` para duração acima de
+600 s), o teste reprova:
+
+```
+=== RUN   TestClassifyOpeningDurationNeverReachesSessionLost
+    socket_test.go:81: ClassifyOpeningDuration(11m17.69s) = SESSION_LOST;
+    DEC-04.4-02 forbids duration in OPENING alone from ever producing this
+    value — M8 measured this exact duration with the socket still OPENING and
+    no independent evidence of session loss (EVIDENCIA-SPA.md M8.4)
+--- FAIL: TestClassifyOpeningDurationNeverReachesSessionLost (0.00s)
+```
+
+**Avaliação adversarial independente** (agente distinto de quem implementou):
+cinco mutações. Branch `SESSION_LOST`, fronteira exclusiva, constante alterada
+e drift do módulo na expressão — **todas** fizeram teste falhar. A quinta não:
+alterar **só o comentário** de derivação (termo 1 de `1.36s` para `9.99s`) faz a
+suíte inteira passar. Isso é a **H14**, e o teste foi renomeado para
+`TestOpeningWindowThresholdMatchesDocumentedTerms` para parar de prometer o que
+não entrega.
+
+**Risco que NÃO se materializou, e que era o pior possível aqui**: o
+`EVIDENCIA-SPA.md` está byte-idêntico ao commit (blob
+`8aa05dc1307f97bb14dc92189f0ac0af6cfdec35`), intocado por qualquer agente desta
+sessão, e os três números usados estão na versão commitada. O código foi
+derivado da evidência; ninguém ajustou a evidência ao código.
+
+**O que este loop NÃO fecha, declarado**: `C` não tem consumidor. As pernas A e
+B provam que o limiar separa o que deveria separar contra a conta real, mas
+nenhum caminho age sobre o veredito — a prova de não-teardown continua
+verdadeira e parcialmente vazia até a CAP-06 ligar isto a quem decide.
+`BOOTSTRAPPING` e `RECOVERING` não têm produtor porque exigem histórico de
+sessão que uma função sem estado não guarda. `UNRESPONSIVE` contra a conta real
+segue **não observado** — o único modo de falha real medido devolve
+`APP_READY`. Lacunas em **H14** e **H15**.
+
+---
+
 CAP: 04 · N2b, a PERMANÊNCIA em `OPENING` sob corte · **DONE**
 
 **O corte não tem teto, e a metade que faltava está medida.** O M7 tinha
@@ -953,6 +1048,42 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   ciclo que agiria é a **CAP-05**.
 
 ## Findings
+
+* **F-26 · a banda de DETECÇÃO nunca convergiu — ela alarga a cada medição, e
+  isso é defeito de método, não de número.** LOOP 04.4, perna B contra o perfil
+  pareado, `n=1`. O socket saiu de `CONNECTED` **23,1 s** depois do corte, e a
+  recuperação levou **7,03 s**. Os dois caem **FORA** das bandas publicadas: o
+  piso conhecido era 31,1 s (a detecção ficou abaixo) e o teto de recuperação
+  era 5,02 s (a recuperação ficou acima). Uma medição, duas violações, uma para
+  cada lado.
+
+  O que torna isto um achado e não uma correção de número é o histórico. O M5
+  publicou 33,2–34,2 s com três corridas; três corridas a mais alargaram para
+  31,1–42,3 s, e a **F-25** registrou esse alargamento. Agora alarga de novo,
+  para baixo. **Em nenhum momento a banda convergiu** — cada amostra nova a
+  estica. Isso não é ruído em torno de um valor verdadeiro: é o sintoma de que
+  aquilo nunca foi distribuição, foram poucas amostras tratadas como se fossem
+  limite. O M8.8-3 já tinha nomeado a armadilha ("a MESMA condição amostrada
+  três vezes") e ela reapareceu por outra porta — desta vez não na condição
+  amostrada, mas na leitura do resultado.
+
+  **Não afeta o `C`.** `C` é duração DENTRO de `OPENING`; detecção é a latência
+  que a PRECEDE, e as duas se somam em vez de competir (M7.6). O que muda é o
+  que se pode afirmar sobre o tempo TOTAL até um veredito: qualquer orçamento
+  que trate 31,1–42,3 s como cota está apoiado numa banda que não é limite.
+
+  **Correção aplicada**: o `realspa_test.go` deixou de citar a banda como
+  limite. Ela virou constantes nomeadas (`detectionKnownLow`,
+  `detectionKnownHigh`, `recoveryKnownHigh`) com comentário dizendo que são
+  banda previamente observada, e o log agora classifica cada corrida em
+  `BELOW` / `ABOVE` / `inside` em vez de dizer "consistente" — com a ressalva
+  explícita de que uma corrida dentro da banda **não a encolhe**. O juízo
+  passou de prosa para comparação executável.
+
+  **Status**: achado registrado, correção de leitura aplicada. O que segue
+  aberto é a banda em si: com `n` pequeno e alargando, ela não sustenta
+  orçamento. Fechar isso exige amostragem que ninguém fez, e o custo é tempo de
+  browser.
 
 * **F-25 · o socket sob corte NÃO tem estado terminal em 12 minutos: `C` não tem
   teto na janela medida — e a faixa de detecção do M5 era mais estreita que a

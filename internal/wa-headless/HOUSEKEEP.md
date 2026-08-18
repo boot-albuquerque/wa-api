@@ -1356,3 +1356,71 @@ estabelecido" — sairia com o argumento retirado.
 número), a correção MUST varrer os espelhos daquele argumento, não só o
 documento auditado. O comando é barato — procurar a frase derrubada em todos os
 `.md` do módulo — e a ausência dele custou este achado.
+
+## H14 — o elo entre `OpeningWindowThreshold` e a evidência medida existe só em prosa
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 04.4, avaliação adversarial
+independente de `internal/wa-headless/spa/socket.go`, arquivo novo que
+introduz o limiar `C = 3030ms`.
+
+**Onde**: `internal/wa-headless/spa/socket.go` (comentário de derivação de
+`OpeningWindowThreshold`) e `internal/wa-headless/spa/socket_test.go`
+(`TestOpeningWindowThresholdMatchesDocumentedTerms`).
+
+**Problema**: o teste que parece travar a derivação de `C` trava, na
+verdade, a CONSTANTE contra três literais hardcoded no próprio arquivo de
+teste (`healthyUpperBound`, `measurementUncertainty`, `explicitGuardBand`).
+Ele não amarra nada ao comentário de `socket.go` nem ao `EVIDENCIA-SPA.md`
+M7.3/M7.5.
+
+**Evidência (mutação executada pelo avaliador)**: alterar APENAS o
+comentário de derivação — termo 1 de "1.36s" para "9.99s", sem tocar na
+constante nem no teste — fez a suíte inteira PASSAR. Já a mutação que altera
+só a constante (3030ms → 3000ms) FALHA no teste, com a mensagem "the
+constant and its derivation comment have drifted apart".
+
+**Consequência**: alguém pode reescrever a seção M7.3 do `EVIDENCIA-SPA.md`
+com outros números, ou editar o comentário de `socket.go`, e nenhum teste
+morde. O que está protegido é o drift entre a constante e os literais do
+teste; o que não está é a narrativa de derivação em si, nem o vínculo com o
+`.md` de onde os números vêm.
+
+**Correção sugerida**: nenhuma automatizável de forma razoável — um teste Go
+não faz parsing daquele markdown. O caminho seria um gate fora do Go (script
+que extraia os números do `.md` e compare com os do `.go`), e isso é decisão
+à parte, não desta capacidade. Registrar a lacuna vale mais que escondê-la.
+
+**Status**: **não corrigido nesta sessão, por desenho**. O teste foi
+renomeado (`TestOpeningWindowThresholdMatchesDocumentedTerms`) e seu
+comentário passou a declarar explicitamente o que protege e o que não
+protege, para não prometer o que não entrega — mas a lacuna em si (nenhum
+elo executável com o `.md`) permanece, e é o achado.
+
+## H15 — o envelope de validade de `C` não tem expressão executável
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 04.4, avaliação adversarial
+independente de `internal/wa-headless/spa/socket.go`, mesma revisão da H14.
+
+**Onde**: `internal/wa-headless/spa/socket.go`, comentário de
+`OpeningWindowThreshold` (seção "VALIDITY ENVELOPE") e a função
+`ClassifyOpeningDuration`.
+
+**Problema**: o comentário declara que `C` só vale até 900ms de latência
+ADICIONADA — o teto da curva de três pontos do M7 — e que além disso a
+resposta é UNKNOWN. Mas `ClassifyOpeningDuration` recebe apenas uma
+`time.Duration` crua e não tem nenhuma noção de latência adicionada.
+Operacionalmente, um enlace real acima de 900ms de RTT adicionado produz
+exatamente o mesmo `SocketHealthy`/`SocketDegraded` de qualquer outro, sem
+nenhum sinal de que a garantia por trás de `C` deixou de valer ali.
+
+**Evidência**: verificado por leitura do código pelo avaliador —
+`ClassifyOpeningDuration` não recebe, não mede e não consulta latência em
+lugar nenhum; sua assinatura é `func ClassifyOpeningDuration(d
+time.Duration) SocketLiveness`. O envelope é 100% prosa.
+
+**Correção sugerida**: quando existir consumidor (CAP-06), o caminho de
+liveness precisaria conhecer a latência observada para saber que está fora
+do envelope, e reportar isso em vez de devolver um veredito com confiança
+que não tem. Enquanto não houver consumidor, não há o que corrigir.
+
+**Status**: **não corrigido nesta sessão**. Lacuna conhecida e declarada.
