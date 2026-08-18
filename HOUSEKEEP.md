@@ -5059,3 +5059,61 @@ CAP-05 é escopo, não dificuldade.
 
 **Status**: **NÃO CORRIGIDO** — CAP-05 tinha escopo fechado (ligar o envio real
 e recuperar PTT/MIME), e ampliar a superfície pública não era parte dele.
+
+## F118 — `SendVideoRequest` perdeu `MimeType` e `JPEGThumbnail` do contrato histórico
+
+**Data / contexto**: 2026-08-18, durante CAP-06 (ligar o envio real de vídeo).
+Registrado como follow-up documental, sem reabrir o slice.
+
+**Onde**: `pkg/domain/message.go` (`SendVideoRequest`, hoje
+`{Phone, Video, Caption, ID}`) contra o `imageStruct` que o handler de vídeo
+usava em `git show 41bc8e2^:handlers.go` (linha ~1585):
+
+```go
+type imageStruct struct {
+    Phone         string
+    Video         string
+    Caption       string
+    Id            string
+    JPEGThumbnail []byte   // <- perdido
+    MimeType      string   // <- perdido
+    ContextInfo   waE2E.ContextInfo
+    QuotedMessage *waE2E.Message
+}
+```
+
+**Problema**: são duas perdas com naturezas diferentes, e vale distingui-las.
+
+**`MimeType`** — o suporte existe em *toda* a pilha, menos na porta de entrada.
+A implementação de CAP-06 já traz a precedência histórica de dois níveis
+(`req.MimeType` → senão `http.DetectContentType`), e o nível 1 está escrito e
+testado. O que falta é o campo público: hoje nenhum cliente consegue
+selecioná-lo, então o mimetype de vídeo vem **sempre** do sniffing dos bytes.
+Ou seja:
+
+> protocolo e aplicação suportam; a superfície pública não consegue escolher.
+
+Reintroduzir o campo é acréscimo opcional, compatível para trás, e o nível 1
+passa a funcionar sem tocar em mais nada.
+
+**`JPEGThumbnail`** — o handler histórico aceitava a thumbnail **fornecida pelo
+request** e a colocava em `VideoMessage.JPEGThumbnail`. Hoje o vídeo é enviado
+sem preview. Repare no que isto **não** é: não é um pedido de gerar thumbnail.
+O histórico nunca gerou — ele apenas repassava o que o cliente mandava. Não há
+ffmpeg envolvido, não há probing de vídeo, e introduzir qualquer um dos dois
+seria inventar comportamento que nunca existiu.
+
+**Correção sugerida**: reintroduzir os dois campos em `SendVideoRequest` e
+repassá-los pela seam já existente até o adapter. Custo baixo; o motivo de não
+ter sido feito em CAP-06 é escopo — ampliar superfície pública não pertencia
+àquele slice.
+
+**Família**: esta é a quarta entrada da mesma causa. F114 (thumbnail HQ do link
+preview), F115 (`JPEGThumbnail` de imagem), F117 (`Waveform` de áudio) e agora
+F118 nasceram todas do mesmo evento: a deleção do `handlers.go` de 232KB em
+`41bc8e2`, em que os DTOs foram reconstruídos e as implementações não. Vale
+tratá-las num único pass de fidelidade, e não uma a uma — a decisão de adiar
+esse pass foi consciente, para ganhar largura de capabilities primeiro.
+
+**Status**: **NÃO CORRIGIDO** — dívida de contrato registrada, não trabalho
+pendente deste ciclo.
