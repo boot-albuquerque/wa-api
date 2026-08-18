@@ -548,13 +548,23 @@ conserto é o que o faz passar.
 **Regressões**: ablação do `VerifyInventory`, os dois testes da marca de
 suspeita e os de ownership continuam mordendo. Suíte inteira verde.
 
-**Status**: CORRIGIDA. O que segue aberto é a prova contra o SPA REAL — o
-conserto foi validado contra dublê temporal, e esta armadilha existe
-justamente porque dublê não é produção. A
-(laço de assentamento com orçamento, na forma do `sampleReadiness`) segue
-**pendente de autorização de escopo** — mexer em `session.go` é mudança de
-mecanismo. O teste está na árvore de trabalho, **não commitado**, para não
-deixar o branch vermelho antes de o conserto poder entrar junto.
+**Status**: CORRIGIDA e **provada contra o SPA REAL** (atualizado em 2026-08-18,
+LOOP 05.10 — as três ressalvas que este parágrafo carregava caducaram e estavam
+enganando quem lesse o status).
+
+O que ele dizia e por que já não vale:
+- *"o que segue aberto é a prova contra o SPA REAL"* — feita:
+  `TestRealSPANCycleLifecycle`, 3/3 ciclos contra o perfil pareado, READY em
+  16,5s / 11,9s / 9,9s, identidade `PRESENT` em todos, parada limpa, sem lock,
+  sem órfão.
+- *"pendente de autorização de escopo"* — concedida e executada; o laço de
+  assentamento vive em `spa.WaitForReady` e é chamado por `core.StartSession`.
+- *"o teste está na árvore de trabalho, não commitado"* — commitado desde o
+  `72512b1`, com a suíte verde.
+
+O parágrafo original ficou registrado acima em vez de apagado: uma armadilha
+cujo status envelheceu em silêncio é ela mesma um exemplo do que este catálogo
+existe para pegar.
 
 ## ARM — a sonda de identidade do teste de N ciclos funde três estados em `false`
 
@@ -611,8 +621,21 @@ ler uma vez. Não aplicada aqui: é mudança no instrumento logo depois de ele t
 produzido um resultado, e trocar instrumento e conclusão no mesmo passo é como
 se perde a rastreabilidade.
 
-**Status**: DESCOBERTA. O resultado "N ciclos falhou por identidade ausente" é
-**FALSO NEGATIVO** e não deve ser lido como evidência sobre a sessão.
+**Status**: **CORRIGIDA em 2026-08-18 (LOOP 05.3)** — esta entrada esteve como
+`DESCOBERTA` enquanto o conserto era feito num passo separado, de propósito,
+para não misturar o registro do achado com a troca do instrumento.
+
+O conserto: veredito de quatro estados
+(`PRESENT` / `ABSENT` / `PROBE_ERROR` / `PARSE_ERROR`), cada um com a sua
+mensagem, e amostragem em janela reutilizando
+`identityShapeBudget`/`identityShapeTick` em vez de número novo. Na primeira
+corrida sob o instrumento corrigido ele imediatamente pagou: devolveu
+`PROBE_ERROR: context canceled` por 76 s, revelando a armadilha seguinte deste
+catálogo — a sessão morria com o prazo do próprio boot.
+
+Continua verdadeiro, e é o motivo de a entrada existir: o resultado original
+*"N ciclos falhou por identidade ausente"* era **FALSO NEGATIVO** e não deve ser
+citado como evidência sobre a sessão.
 
 ## ARM — o dublê divergiu da produção no TEMPO DE VIDA DO CONTEXTO
 

@@ -1390,7 +1390,11 @@ não faz parsing daquele markdown. O caminho seria um gate fora do Go (script
 que extraia os números do `.md` e compare com os do `.go`), e isso é decisão
 à parte, não desta capacidade. Registrar a lacuna vale mais que escondê-la.
 
-**Status**: **PARCIALMENTE CORRIGIDO em 2026-08-18, LOOP 04.5.** O que mudou:
+**Status**: **FECHADO em 2026-08-18, LOOP 05.10** — ver o bloco de fechamento no
+fim desta entrada. O histórico abaixo fica porque a entrada foi resolvida em duas
+etapas e a segunda só faz sentido lendo a primeira.
+
+**Etapa 1 — PARCIALMENTE CORRIGIDO em 2026-08-18, LOOP 04.5.** O que mudou:
 os três termos deixaram de ser literais dentro do arquivo de teste e passaram a
 ser **dados nomeados em código de produção** (`healthyUpperBound`,
 `measurementUncertainty`, `explicitGuardBand` em `spa/socket.go`), com
