@@ -2451,3 +2451,40 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   "covdata"`). **Pré-existente e não atribuível a este trabalho**: nem
   `go1.25.12` nem `go1.26.0` trazem `covdata` em `pkg/tool` quando o toolchain
   vem do module cache. O CI instala distribuição completa e não vê isso.
+
+## LOOP 05.3 — a sonda mentia, e atrás dela a sessão morria com o boot
+
+**O que fechou**: o observável de N ciclos da **CAP-05**, contra o perfil
+pareado real. 3/3 ciclos: READY em 16,5s / 11,9s / 9,9s, identidade `PRESENT`
+em todos (esperas de 104ms, 99ms, 2,9ms), `stop_via=browser.close`,
+`SingletonLock=0`, nenhum órfão.
+
+**F-29 — a sonda de identidade fundia três estados em `false`.** O teste de N
+ciclos lia identidade UMA vez e escrevia `false` quando a sonda errava, quando o
+parse falhava ou quando a identidade estava mesmo ausente. Falhou contra um
+perfil cuja identidade a sonda irmã via `PRESENT` em T+0,02s. Eu havia
+**elogiado** esse controle no RELATÓRIO #6; parar diante de ambiguidade continua
+certo, o errado era o instrumento que a produzia. Corrigido: veredicto de quatro
+estados (`PRESENT`/`ABSENT`/`PROBE_ERROR`/`PARSE_ERROR`), cada um com sua
+mensagem, e amostragem em janela reutilizando `identityShapeBudget`/`Tick` em
+vez de número novo.
+
+**F-30 — a sessão morria com o prazo do próprio boot.** Revelado pela sonda
+corrigida: `PROBE_ERROR: context canceled` por 76s num boot que chegara a READY
+em 10,9s. `engine.OpenTab` deriva o alocador do contexto recebido, e
+`StartSession` passava o contexto do BOOT do chamador — logo `defer cancel()`,
+que todo código Go correto escreve, matava a sessão. Invisível à suíte inteira
+porque todos os testes usavam `context.Background()`, que nunca morre.
+
+**O eixo, terceira vez nesta sessão**: o dublê não é mais permissivo que a
+produção, ele é mais bem-comportado num eixo em que ninguém olha. Foi a
+velocidade (LOOP 05.2), agora o tempo de vida do contexto. A pergunta que faz a
+classe aparecer está no `ARMADILHAS.md`.
+
+**Controles negativos**: os dois primeiros NÃO morderam, e isso está registrado.
+Um não compilou; o outro passou com o mecanismo removido, porque a página de
+teste montava rápido demais para o `Navigate` importar. Refeitos até falharem
+com mensagem.
+
+**Aberto**: CAP-05_PAIRING (exige autorização HUMANA — irreversível), H14, H16,
+H17, H18, H20.
