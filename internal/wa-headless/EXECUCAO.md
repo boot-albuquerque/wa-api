@@ -46,6 +46,43 @@ Criar esse boot é a **CAP-05**, e criá-lo aqui seria fabricar mecanismo para t
 o que derrubar — a inversão que este repositório já catalogou. A decisão de
 escopo foi escalada à orquestração e **não é minha**.
 
+**Mutações adversariais exigidas pela orquestração, EXECUTADAS pelo Chief:**
+
+```
+mutação 1 — VerifyInventory aceita silenciosamente um ausente:
+  FAIL: TestVerifyInventoryFailsLoudlyAndNamesTheMissingModules
+        got <nil> (<nil>), want *ErrModulesMissing
+  FAIL: TestVerifyInventoryFailsWhenRequireItselfIsAbsent
+        got <nil>, want *ErrModulesMissing
+
+mutação 2 — ErrModulesMissing deixa de nomear os ausentes:
+  FAIL: TestVerifyInventoryFailsLoudlyAndNamesTheMissingModules
+        the message does not name WAWebCmd
+        the message does not name WAWebConnModel
+```
+
+As duas são pegas pelos testes **unitários** de `modules_test.go`, que rodam
+**sem** o gate de ambiente — a proteção vale no CI normal, não só na corrida
+gateada contra o SPA real. `modules.go` restaurado byte a byte depois de cada
+mutação.
+
+**Registro literal do que fica adiado, na forma que a orquestração pediu:**
+
+```text
+BOOT_ENFORCEMENT:
+DEFERRED_DEPENDENCY_ON_CAP-05
+
+REASON:
+no production composition/root lifecycle exists yet
+
+CAP-06 DOES NOT CREATE IT
+```
+
+Veredito da orquestração para esta forma: **`CAP-06: PASS`** com
+**`CAP-06_BOOT_INTEGRATION: DEFERRED_TO_CAP-05`** — e explicitamente **não**
+`PARTIAL`, porque obrigar uma capacidade a ficar aberta por uma dependência de
+roadmap que ela não deve criar inverteria a ordem do próprio roadmap.
+
 **Correção a mim mesmo**, apontada pelo validador: eu escrevi que "o caminho de
 produção nunca encontrou a realidade". Exagerado. Ele já rodava contra motor JS
 real; o que faltava era especificamente o `web.whatsapp.com` e o seu
