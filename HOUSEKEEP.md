@@ -4758,3 +4758,226 @@ assim que a próxima falha REAL passa despercebida.
 
 Isso agrava o próprio motivo da entrada: teste instável mais gate mudo é a
 combinação que transforma "rodar de novo" em hábito.
+
+---
+
+## F111 — `TestLease_RetomadaAposExpirarDeixaRastro` corre com a goroutine de outro teste sob `-race`
+
+**Data**: 2026-08-18
+**Contexto**: achado incidental durante o CAP-01 (POST /chat/send/text passa a
+enviar de verdade). Não é escopo da task — nenhum arquivo de
+`pkg/bootstrap/lease*.go` foi tocado nesta sessão.
+
+**Onde**: `pkg/bootstrap/lease_test.go:527` (write, dentro de
+`TestLease_RetomadaAposExpirarDeixaRastro`) vs `pkg/bootstrap/lease.go:260`
+(`log.Warn()` dentro de `leaseManager.renewOne`, chamado pelo `RunHeartbeat`
+que `TestLease_WithoutLiveSessionCheckKeepsRenewing` disparou numa goroutine
+própria em `lease_test.go:448`).
+
+**Problema**: `go test -race ./pkg/bootstrap/...` (dentro de `make check`)
+falhou com:
+
+```
+WARNING: DATA RACE
+Write at 0x0001021e5d60 by goroutine 2266:
+  wa-api/pkg/bootstrap.TestLease_RetomadaAposExpirarDeixaRastro()
+      lease_test.go:527
+Previous read at 0x0001021e5d60 by goroutine 2262:
+  github.com/rs/zerolog.(*Logger).disabled()
+  ...
+  wa-api/pkg/bootstrap.(*leaseManager).renewOne()
+      lease.go:260
+  wa-api/pkg/bootstrap.(*leaseManager).RunHeartbeat()
+      lease_test.go:448 (goroutine criada por TestLease_WithoutLiveSessionCheckKeepsRenewing)
+--- FAIL: TestLease_RetomadaAposExpirarDeixaRastro (0.00s)
+    testing.go:1617: race detected during execution of test
+```
+
+`TestLease_WithoutLiveSessionCheckKeepsRenewing` sobe uma goroutine de
+heartbeat e aparentemente não garante o encerramento dela (join/cancel) antes
+de retornar; quando `TestLease_RetomadaAposExpirarDeixaRastro` roda em
+seguida no mesmo processo, a goroutine ainda viva do teste anterior toca
+memória que o teste seguinte também toca — o detector de `-race` não
+distingue "teste terminou" de "goroutine que ele soltou terminou".
+
+**Reprodução**: intermitente sob a suíte completa do pacote — falhou 1 de 4
+execuções de `make check` nesta sessão. Isolado
+(`go test ./pkg/bootstrap/... -race -run TestLease_RetomadaAposExpirarDeixaRastro -count=5`)
+e a suíte inteira (`go test ./pkg/bootstrap/... -race -count=3`) passaram
+100% das vezes — a race só aparece quando os dois testes específicos correm
+próximos o bastante no mesmo binário de teste.
+
+**Correção sugerida**: `TestLease_WithoutLiveSessionCheckKeepsRenewing`
+precisa sincronizar o fim da goroutine de `RunHeartbeat` (contexto cancelado
++ `<-done` ou `sync.WaitGroup`) antes de retornar, em vez de deixá-la morrer
+por conta própria depois que o teste já saiu.
+
+**Status**: **NÃO CORRIGIDO** — fora do escopo do CAP-01, e a correção mexe
+em `pkg/bootstrap/lease_test.go`, arquivo que esta task não toca. Registrado
+para decisão do usuário sobre quando corrigir.
+
+---
+
+## F112 — `pkg/infra/media/media_utils.go` duplica a infra de Open Graph que CAP-01.1 conectou
+
+**Data**: 2026-08-18
+**Contexto**: CAP-01.1 (fechar `domain.SendMessageRequest.LinkPreview`, que
+a API aceitava e ignorava em silêncio desde a primeira versão do struct —
+ver `git log -S LinkPreview`, commit `542e707` do wuzapi original: "Add
+LinkPreview support to SendMessage and improve Open Graph data fetching").
+
+**Onde**: `pkg/infra/media/media_utils.go:1-306` (pacote `media`, funções
+`GetOpenGraphData`, `ExtractFirstURL`, `fetchOpenGraphDataInternal`,
+`UserSemaphoreManager`) vs `pkg/infra/media/opengraph/fetch.go:1-182`
+(pacote `opengraph`, mesma lógica, comentário próprio: "extracted from root
+wa-api/helpers.go (Phase 12b)").
+
+**Problema**: as duas implementações fazem a MESMA coisa — buscar HTML,
+parsear meta tags Open Graph, baixar e redimensionar a imagem — com a mesma
+origem (`helpers.go` do wuzapi). `media_utils.go` tem ZERO chamadores fora
+do próprio arquivo e de `media_utils_test.go` (confirmado por
+`grep -rn "GetOpenGraphData\|ExtractFirstURL" pkg/ cmd/` antes desta task).
+CAP-01.1 conectou `opengraph.Fetcher` (novo, em
+`pkg/infra/media/opengraph/adapter.go`) ao `SendMessageUseCase` via
+`appport.LinkPreviewFetcher` — `media_utils.go` continua morto, e agora
+tecnicamente enganoso: quem procurar "onde é a busca de Open Graph deste
+repo" pode achar o pacote errado primeiro.
+
+O comentário de topo de `pkg/infra/egress/egress.go` já registra que UMA
+função de `media_utils.go` (`IsHTTPURL`) foi removida na Fase 2 — o arquivo
+já vinha sendo esvaziado aos poucos, só não até o fim.
+
+**Correção sugerida**: deletar `pkg/infra/media/media_utils.go` e
+`pkg/infra/media/media_utils_test.go` inteiros, com todos os testes
+migrando (se ainda não cobertos) para `pkg/infra/media/opengraph`. Baixo
+risco — zero chamador de produção — mas fora do escopo fechado do
+CAP-01.1, que é aditivo (só ligou o fio até então solto), não uma faxina de
+dead code em arquivo que a task não tinha motivo para tocar.
+
+**Status**: **NÃO CORRIGIDO** — registrado para decisão do usuário.
+
+---
+
+## F113 — `opengraph.Fetcher` sem cache nem limite de concorrência por sessão
+
+**Data**: 2026-08-18
+**Contexto**: mesma task do F112 (CAP-01.1).
+
+**Onde**: `pkg/infra/media/opengraph/adapter.go` (`Fetcher.FetchLinkPreview`,
+usado por `SendMessageUseCase.Execute` quando `LinkPreview=true`).
+
+**Problema**: cada chamada com `LinkPreview=true` dispara uma busca de rede
+nova (fetch de página + fetch de imagem), mesmo que a mesma URL já tenha
+sido resolvida há 1 segundo, e sem limite de fetches concorrentes por sessão
+(`txtID`). O wuzapi original (commit `542e707`, e o que ficou em
+`media_utils.go`) tinha as duas proteções: `singleflight.Group` + cache TTL
+de 5 minutos (`openGraphCache`) e um semáforo de até 20 fetches concorrentes
+por usuário (`UserSemaphoreManager`). `opengraph.Fetcher` não tem nenhuma
+das duas — um cliente que manda várias mensagens com `LinkPreview=true`
+para a mesma URL, ou em rajada, gera uma busca de rede por chamada, sem
+teto de concorrência.
+
+O client injetado (`bootstrap.NewSafeHTTPClient()`) tem timeout de 60s por
+requisição mas nenhum limite de QUANTAS requisições simultâneas saem por
+sessão — o teto de recurso que a Regra 1 do HOUSEKEEP (seção "regressão
+introduzida pela própria correção") pede para todo mecanismo que possa
+segurar um slot: aqui não há slot nenhum, é fetch direto, então o risco não
+é "trava o pool" (não há pool), é amplificação de tráfego de saída sem teto
+por sessão.
+
+**Correção sugerida**: portar `singleflight.Group` + cache TTL +
+`UserSemaphoreManager` de `media_utils.go` (F112) para
+`opengraph.Fetcher`, parametrizado por `txtID` (o `userID` que
+`media_utils.go` já usava). Isso resolveria F112 e F113 juntas.
+
+**Status**: **NÃO CORRIGIDO** — CAP-01.1 é escopo fechado (fechar o campo
+ignorado, não construir rate limiting novo); registrado para decisão do
+usuário sobre quando endurecer.
+
+## F114 — o preview enviado é só a thumbnail inline; o card grande do WhatsApp não é montado
+
+**Data / contexto**: 2026-08-18, no gate adversarial (GATE 0) de CAP-01.1 —
+o bloco que religou o campo público `LinkPreview`, inerte desde a deleção do
+`handlers.go` em `41bc8e2`.
+
+**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger.go`
+(`ChatMessengerAdapter.SendText`, ramo `preview != nil`), que preenche
+`ExtendedTextMessage{Text, MatchedText, Title, Description, JPEGThumbnail}`.
+
+**Problema**: a implementação histórica recuperada de
+`git show 41bc8e2^:handlers.go` fazia mais do que isso. Depois de montar a
+mensagem, ela subia a imagem em alta resolução pelo protocolo:
+
+```go
+if len(og.HQImageData) > 0 {
+    uploaded, upErr := client.Upload(ctx, og.HQImageData, whatsmeow.MediaLinkThumbnail)
+    if upErr != nil {
+        log.Warn()... // "sending inline thumbnail only"
+    } else {
+        etm.ThumbnailDirectPath = ...; etm.ThumbnailSHA256 = ...
+        etm.ThumbnailEncSHA256 = ...; etm.MediaKey = ...
+        etm.MediaKeyTimestamp = ...; etm.ThumbnailWidth = ...
+        etm.ThumbnailHeight = ...
+    }
+}
+```
+
+O comentário do próprio código histórico diz o efeito da ausência desses
+campos, e é a evidência de que a diferença é visível para o usuário final:
+
+> "Upload the high-res thumbnail so clients render the large preview card;
+> without these fields only the small inline thumbnail shows."
+
+Ou seja: hoje o preview funciona, mas renderiza como thumbnail pequena
+inline, não como o card grande. Não é falso-sucesso — a mensagem é enviada e
+o preview aparece —, é uma capability entregue com fidelidade menor que a
+histórica, e isso não estava registrado em lugar nenhum.
+
+**Correção sugerida**: expor `Upload` na interface estreita
+`pkg/infra/wa-noise/client/client.go` (hoje ela não o expõe) e, no adapter,
+subir `HQImageData` como `MediaLinkThumbnail`, preenchendo os sete campos
+acima. Falha de upload MUST degradar para a thumbnail inline com log em
+`Warn`, exatamente como o original — nunca falhar o envio. Repare que
+`domain.LinkPreviewData` hoje só carrega `ThumbnailJPEG`; seria preciso
+carregar também a imagem HQ e suas dimensões.
+
+**Relação com CAP-02**: `Upload` na interface estreita é exatamente a
+primitiva que Send Media URL vai precisar. Se CAP-02 a expuser, esta entrada
+fica barata de fechar depois — vale reavaliar F114 logo após CAP-02.
+
+**Status**: **NÃO CORRIGIDO** — fora do escopo fechado de CAP-01.1
+(religar o campo ignorado, não reconstruir a fidelidade completa do card).
+Registrado como REQUIRED_FIX doc-only do GATE 0, que quanto ao resto deu
+PASS.
+
+## F115 — `SendImage` (CAP-02) envia sem `JPEGThumbnail`, divergindo do
+`handlers.go` histórico
+
+**Data/contexto**: 2026-08-18, CAP-02 (POST /chat/send/image, ramo URL).
+
+**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger.go`,
+`ChatMessengerAdapter.SendImage` — a `waE2E.ImageMessage` montada não
+preenche `JPEGThumbnail`. O `handlers.go` pré-refactor
+(`git show 41bc8e2^:handlers.go`, trecho do branch de imagem) decodificava
+`filedata` com `image.Decode`, gerava uma miniatura 72x72 com
+`jpegThumbnail(img, 72, 72)` e a atribuía a `ImageMessage.JPEGThumbnail`
+antes de enviar.
+
+**Problema**: sem `JPEGThumbnail`, o cliente WhatsApp perde o preview de
+baixa resolução que aparece na lista de conversas e na bolha da mensagem
+antes do download completo do anexo — mesma classe de perda de fidelidade
+que a F114 documentou para link preview (thumbnail pequena vs. nenhuma).
+Não é falso-sucesso: a imagem chega, só sem a miniatura instantânea.
+
+**Correção sugerida**: no adapter, decodificar `payload.Bytes` com
+`image/*` (mesmos pacotes que `opengraph.FetchOpenGraphImage` já importa:
+`image`, `image/jpeg`, `image/png`, `image/gif`), gerar uma miniatura
+72x72 e preencher `ImageMessage.JPEGThumbnail`. Falha de decode/thumbnail
+MUST degradar para envio sem miniatura com log em `Warn` — nunca falhar o
+envio por causa disso, mesmo princípio que a F114 já registrou para o
+upload da thumbnail HQ do link preview.
+
+**Status**: **NÃO CORRIGIDO** — fora do escopo fechado de CAP-02 (entregar o
+ramo URL ponta a ponta com upload+envio reais; ACCEPTANCE_CRITERIA da task
+não menciona thumbnail). Decisão consciente: registrada aqui em vez de
+implementada sem pedir, por ser scope creep sobre uma task já grande.

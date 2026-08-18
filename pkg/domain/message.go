@@ -17,7 +17,36 @@ type SendMessageResult struct {
 	Status    string `json:"status"`
 }
 
-// SendImageRequest representa o payload de envio de imagem.
+// LinkPreviewData é a metadata de Open Graph resolvida para a primeira URL
+// encontrada no corpo de uma mensagem de texto quando
+// SendMessageRequest.LinkPreview é true. Compõe o ExtendedTextMessage que
+// o wa-noise envia no lugar do Conversation simples — CAP-01.1 recuperou a
+// semântica original do campo LinkPreview no histórico do wuzapi (commit
+// 542e707: "Add LinkPreview support to SendMessage and improve Open Graph
+// data fetching").
+//
+// MatchedURL nunca fica vazio quando o ponteiro para este tipo não é nil —
+// é a condição usada para decidir que uma URL foi encontrada no corpo (ver
+// port.LinkPreviewFetcher). Title, Description e ThumbnailJPEG podem vir
+// vazios se a busca de Open Graph falhar ou a página não expuser essa
+// metadata; o preview ainda assim é enviado, só sem esses campos.
+type LinkPreviewData struct {
+	MatchedURL    string
+	Title         string
+	Description   string
+	ThumbnailJPEG []byte
+}
+
+// StatusSent é o valor de SendMessageResult.Status para uma mensagem de
+// texto que o wa-noise efetivamente entregou ao transporte — só aparece
+// DEPOIS que client.SendMessage retorna sucesso (CAP-01).
+const StatusSent = "sent"
+
+// SendImageRequest representa o payload de envio de imagem. Image é uma
+// união: aceita tanto data URI ("data:image/...;base64,...", CAP-03, fora
+// do escopo de CAP-02) quanto URL http(s) externa (CAP-02) — o mesmo campo
+// e a mesma rota servem os dois casos, herdado de handlers.go pré-refactor
+// (ver `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
 	Phone    string `json:"Phone"`
 	Image    string `json:"Image"`
@@ -29,7 +58,18 @@ type SendImageRequest struct {
 // SendImageResult representa o resultado do envio de imagem.
 type SendImageResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// MediaPayload é o anexo já resolvido (bytes em mãos, MIME decidido) que um
+// use case de envio de mídia passa a port.MediaMessenger. Fica em domain,
+// não em port, porque é dado — não comportamento — compartilhado entre a
+// camada de aplicação e o adapter (mesmo racional de LinkPreviewData).
+type MediaPayload struct {
+	Bytes    []byte
+	MimeType string
+	Caption  string
 }
 
 // SendDocumentRequest representa o payload de envio de documento.

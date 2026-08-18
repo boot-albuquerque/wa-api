@@ -1,0 +1,300 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gorilla/mux"
+
+	"wa-api/pkg/application/contracts/contractsfake"
+	"wa-api/pkg/application/usecase/message"
+	"wa-api/pkg/domain"
+)
+
+// Este arquivo cobre POST /chat/send/text (SendMessage) desde a migração do
+// CAP-01 para port.TextMessenger — o handler que efetivamente entrega texto
+// ao wa-noise, e não mais um "validated" sem envio.
+
+const sendTextSentinelToken = "send-text-sentinel-cause-9f8e7d"
+
+var errSendTextSentinel = errors.New(sendTextSentinelToken)
+
+// sendTextRouter registra o handler pela rota real (gorilla/mux), como
+// wiring_routes.go faz — não handler.ServeHTTP direto. ARMADILHA 2 deste
+// repo: defeito de rota só aparece testando pela rota registrada.
+func sendTextRouter(tm *contractsfake.TextMessenger, jr *contractsfake.JIDResolver) http.Handler {
+	return sendTextRouterWithPreview(tm, jr, &contractsfake.LinkPreviewFetcher{})
+}
+
+// sendTextRouterWithPreview é sendTextRouter com o fetcher de link preview
+// explícito — usado pelos testes de CAP-01.1 (LP-6) que precisam controlar
+// o que port.LinkPreviewFetcher devolve pela rota REGISTRADA.
+func sendTextRouterWithPreview(tm *contractsfake.TextMessenger, jr *contractsfake.JIDResolver, lpf *contractsfake.LinkPreviewFetcher) http.Handler {
+	uc := message.NewSendMessageUseCase(tm, jr, lpf, silentLogger{})
+	h := NewSendMessageHandler(uc)
+
+	r := mux.NewRouter()
+	r.Handle("/chat/send/text", h).Methods(http.MethodPost)
+	return r
+}
+
+func sendTextServe(t *testing.T, tm *contractsfake.TextMessenger, jr *contractsfake.JIDResolver, body string, mut func(*http.Request) *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader(body))
+	sendTextRouter(tm, jr).ServeHTTP(rec, mut(req))
+	return rec
+}
+
+// sendTextServeWithPreview é sendTextServe com o fetcher de link preview
+// explícito (LP-6).
+func sendTextServeWithPreview(t *testing.T, tm *contractsfake.TextMessenger, jr *contractsfake.JIDResolver, lpf *contractsfake.LinkPreviewFetcher, body string, mut func(*http.Request) *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader(body))
+	sendTextRouterWithPreview(tm, jr, lpf).ServeHTTP(rec, mut(req))
+	return rec
+}
+
+// TestSendText_Success_ViaRegisteredRoute prova o caminho HTTP -> handler ->
+// usecase -> TextMessenger.SendText pela rota gorilla/mux REGISTRADA, com
+// Status="sent", MessageID igual ao devolvido pela porta (não ao pedido) e
+// Timestamp vindo de MessageSendResult.Timestamp.
+func TestSendText_Success_ViaRegisteredRoute(t *testing.T) {
+	sentAt := int64(1755500000)
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
+			if target != domain.JID("5511999999999") {
+				t.Errorf("target: got %q", target)
+			}
+			if text != "ola" {
+				t.Errorf("text: got %q", text)
+			}
+			return domain.MessageSendResult{
+				ID:        "wire-id-999",
+				Timestamp: time.Unix(sentAt, 0),
+			}, nil
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
+	}
+	env := decodeEnvelope(t, rec)
+	if !env.Success {
+		t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
+	}
+
+	var data struct {
+		MessageID string `json:"message_id"`
+		Timestamp int64  `json:"timestamp"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		t.Fatalf("envelope.data invalido: %v", err)
+	}
+	if data.Status != domain.StatusSent {
+		t.Errorf("status: got %q, want %q", data.Status, domain.StatusSent)
+	}
+	if data.MessageID != "wire-id-999" {
+		t.Errorf("message_id: got %q, want %q (o que a porta devolveu)", data.MessageID, "wire-id-999")
+	}
+	if data.Timestamp != sentAt {
+		t.Errorf("timestamp: got %d, want %d", data.Timestamp, sentAt)
+	}
+	if n := len(tm.SendTextCalls); n != 1 {
+		t.Fatalf("SendText chamado %d vez(es) pela rota registrada, quero 1", n)
+	}
+}
+
+// TestSendText_RejectUnauthenticated: sem userInfo no contexto é 401 e a
+// porta não é tocada.
+func TestSendText_RejectUnauthenticated(t *testing.T) {
+	tm := &contractsfake.TextMessenger{}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, func(r *http.Request) *http.Request { return r })
+
+	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
+	if n := len(tm.SendTextCalls); n != 0 {
+		t.Fatalf("requisicao nao autenticada alcancou SendText %d vez(es)", n)
+	}
+}
+
+// TestSendText_RejectMissingRequiredField: Phone ou Body ausente é 400 e a
+// porta não é tocada.
+func TestSendText_RejectMissingRequiredField(t *testing.T) {
+	bodies := map[string]string{
+		"Phone": `{"Body":"ola"}`,
+		"Body":  `{"Phone":"5511999999999"}`,
+	}
+	for field, body := range bodies {
+		t.Run(field, func(t *testing.T) {
+			tm := &contractsfake.TextMessenger{}
+			jr := &contractsfake.JIDResolver{}
+
+			rec := sendTextServe(t, tm, jr, body, msgAuthed)
+
+			if rec.Code < 400 {
+				t.Fatalf("payload sem %s produziu status de sucesso %d", field, rec.Code)
+			}
+			if n := len(tm.SendTextCalls); n != 0 {
+				t.Fatalf("payload invalido, mas SendText foi chamado %d vez(es)", n)
+			}
+		})
+	}
+}
+
+// TestSendText_SessionFailure: sessão inexistente vira erro (não 200) e
+// SendText nunca é chamado.
+func TestSendText_SessionFailure(t *testing.T) {
+	tm := &contractsfake.TextMessenger{SessionGuard: contractsfake.FailSession(errSendTextSentinel)}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+
+	if rec.Code < 400 {
+		t.Fatalf("falha de sessao produziu status de sucesso %d", rec.Code)
+	}
+	if n := len(tm.SendTextCalls); n != 0 {
+		t.Fatalf("sessao invalida, mas SendText foi chamado %d vez(es)", n)
+	}
+}
+
+// TestSendText_InvalidPhoneNeverSends: JID que não resolve nunca vira 200
+// nem toca SendText — falso-sucesso de JID inválido é proibido pelo CAP-01.
+func TestSendText_InvalidPhoneNeverSends(t *testing.T) {
+	tm := &contractsfake.TextMessenger{}
+	jr := &contractsfake.JIDResolver{
+		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
+	}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"lixo","Body":"ola"}`, msgAuthed)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("JID invalido produziu 200: %s", rec.Body.String())
+	}
+	if n := len(tm.SendTextCalls); n != 0 {
+		t.Fatalf("JID invalido, mas SendText foi chamado %d vez(es)", n)
+	}
+}
+
+// TestSendText_DownstreamFailureNeverReturns200: SendText falhando NUNCA
+// produz 200 nem Status=sent — a garantia central do CAP-01 contra
+// falso-sucesso.
+func TestSendText_DownstreamFailureNeverReturns200(t *testing.T) {
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+			return domain.MessageSendResult{}, errSendTextSentinel
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("falha no envio produziu 200: %s", rec.Body.String())
+	}
+	env := decodeEnvelope(t, rec)
+	if env.Success {
+		t.Fatalf("envelope.success=true com envio falho: %s", rec.Body.String())
+	}
+}
+
+// TestSendText_ClientSuppliedIDIsForwardedButServerIDWins: o Id do cliente é
+// repassado a SendText, mas o message_id da resposta é o que a porta
+// devolveu de volta — nunca o do request usado às cegas.
+func TestSendText_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
+			if id != "id-do-cliente" {
+				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
+			}
+			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola","Id":"id-do-cliente"}`, msgAuthed)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
+	}
+	var data struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, rec).Data, &data); err != nil {
+		t.Fatalf("envelope.data invalido: %v", err)
+	}
+	if data.MessageID != "id-que-o-sdk-usou" {
+		t.Errorf("message_id: got %q, want %q", data.MessageID, "id-que-o-sdk-usou")
+	}
+}
+
+// TestSendText_LinkPreview_ViaRegisteredRoute (LP-6, CAP-01.1) prova o
+// caminho HTTP -> handler -> usecase -> LinkPreviewFetcher -> SendText pela
+// rota gorilla/mux REGISTRADA (não pelo handler cru — ARMADILHA 2): com
+// LinkPreview=true, o preview resolvido pelo fetcher chega inteiro a
+// SendText, e a resposta HTTP continua vindo do envio real (status="sent"),
+// não da resolução do preview.
+func TestSendText_LinkPreview_ViaRegisteredRoute(t *testing.T) {
+	sentAt := int64(1755500001)
+	wantPreview := domain.LinkPreviewData{
+		MatchedURL:    "https://exemplo.com/artigo",
+		Title:         "Um Artigo",
+		Description:   "Resumo do artigo",
+		ThumbnailJPEG: []byte{0xFF, 0xD8, 0xFF},
+	}
+	var gotPreview *domain.LinkPreviewData
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, preview *domain.LinkPreviewData, _ string) (domain.MessageSendResult, error) {
+			gotPreview = preview
+			return domain.MessageSendResult{ID: "wire-id-preview-route", Timestamp: time.Unix(sentAt, 0)}, nil
+		},
+	}
+	lpf := &contractsfake.LinkPreviewFetcher{
+		FetchLinkPreviewFunc: func(_ context.Context, text string) (domain.LinkPreviewData, bool) {
+			if text != "olha https://exemplo.com/artigo" {
+				t.Errorf("texto repassado ao fetcher: got %q", text)
+			}
+			return wantPreview, true
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	rec := sendTextServeWithPreview(t, tm, jr, lpf, `{"Phone":"5511999999999","Body":"olha https://exemplo.com/artigo","LinkPreview":true}`, msgAuthed)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
+	}
+	if gotPreview == nil {
+		t.Fatal("SendText nao recebeu preview algum")
+	}
+	if !reflect.DeepEqual(*gotPreview, wantPreview) {
+		t.Errorf("preview: got %+v, want %+v", *gotPreview, wantPreview)
+	}
+
+	var data struct {
+		MessageID string `json:"message_id"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, rec).Data, &data); err != nil {
+		t.Fatalf("envelope.data invalido: %v", err)
+	}
+	if data.Status != domain.StatusSent {
+		t.Errorf("status: got %q, want %q", data.Status, domain.StatusSent)
+	}
+	if data.MessageID != "wire-id-preview-route" {
+		t.Errorf("message_id: got %q, want %q", data.MessageID, "wire-id-preview-route")
+	}
+}

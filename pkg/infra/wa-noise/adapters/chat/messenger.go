@@ -10,8 +10,10 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/protocol/proto/waCommon"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/types"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -84,5 +86,102 @@ func (a *ChatMessengerAdapter) SendReaction(ctx context.Context, txtID string, t
 	return domain.MessageSendResult{Timestamp: resp.Timestamp}, nil
 }
 
-// Verificação em tempo de compilação de que o adapter implementa a porta.
-var _ appport.ChatMessenger = (*ChatMessengerAdapter)(nil)
+// SendText monta uma mensagem de texto e a envia. Sem preview (nil), monta
+// Conversation — a forma canônica do protocolo para texto sem link preview
+// nem contexto, ver ARMADILHAS.md sobre não introduzir ExtendedTextMessage
+// sem necessidade. Com preview (CAP-01.1), monta ExtendedTextMessage com a
+// metadata de Open Graph que o chamador resolveu. Quando id não é vazio, é
+// repassado como RequestExtra.ID para que o SDK use exatamente esse
+// identificador; o ID devolvido em domain.MessageSendResult.ID vem sempre
+// de resp.ID — o identificador que o SDK REALMENTE usou — nunca do id de
+// entrada por construção própria.
+func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		Conversation: proto.String(text),
+	}
+	if preview != nil {
+		msg = &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text:          proto.String(text),
+				MatchedText:   proto.String(preview.MatchedURL),
+				Title:         proto.String(preview.Title),
+				Description:   proto.String(preview.Description),
+				JPEGThumbnail: preview.ThumbnailJPEG,
+			},
+		}
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// SendImage sobe payload.Bytes para os servidores do WhatsApp e envia uma
+// ImageMessage para target (CAP-02). O upload acontece ANTES do envio; se
+// SendMessage falhar depois de um upload bem-sucedido, o erro é propagado
+// sem tentativa de desfazer o upload — o protocolo não oferece essa
+// operação, e um upload órfão não é uma mensagem entregue.
+func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	uploaded, err := client.Upload(ctx, payload.Bytes, wanoise.MediaImage)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		ImageMessage: &waE2E.ImageMessage{
+			Caption:       proto.String(payload.Caption),
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String(payload.MimeType),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// Verificação em tempo de compilação de que o adapter implementa as portas.
+var (
+	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)
+	_ appport.TextMessenger  = (*ChatMessengerAdapter)(nil)
+	_ appport.MediaMessenger = (*ChatMessengerAdapter)(nil)
+)

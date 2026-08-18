@@ -48,16 +48,6 @@ type mediaCase struct {
 func mediaCases() []mediaCase {
 	return []mediaCase{
 		{
-			name:  "image",
-			route: "/chat/send/image",
-			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {
-				return NewSendImageHandler(message.NewSendImageUseCase(mc, l))
-			},
-			validBody:      `{"Phone":"5511999999999","Image":"data:image/jpeg;base64,AAAA"}`,
-			incompleteBody: `{"Image":"data:image/jpeg;base64,AAAA"}`,
-			secretBody:     `{"Phone":"` + logassertAdminToken + `","Image":"` + logassertGlobalEncryptionKey + `"}`,
-		},
-		{
 			name:  "document",
 			route: "/chat/send/document",
 			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {

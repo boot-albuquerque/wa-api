@@ -10,6 +10,7 @@ import (
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/pkg/infra/db"
+	"wa-api/pkg/infra/media/opengraph"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -133,8 +134,10 @@ func initCustomHandlers(s *server) {
 	syncContactRosterUC := session.NewSyncContactRosterUseCase(miscAdapter, logger)
 
 	// Message UseCases
-	sendMessageUC := message.NewSendMessageUseCase(messageComposer, logger)
-	sendImageUC := message.NewSendImageUseCase(messageComposer, logger)
+	linkPreviewFetcher := opengraph.NewFetcher(appCtx.GlobalHTTPClient)
+	mediaFetcher := opengraph.NewURLFetcher(appCtx.GlobalHTTPClient)
+	sendMessageUC := message.NewSendMessageUseCase(chatMessenger, jidResolver, linkPreviewFetcher, logger)
+	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendDocumentUC := message.NewSendDocumentUseCase(messageComposer, logger)
 	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
 	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)

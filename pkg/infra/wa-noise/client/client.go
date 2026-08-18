@@ -37,6 +37,13 @@ type Client interface {
 	GenerateMessageID() types.MessageID
 	BuildUnavailableMessageRequest(chat, sender types.JID, id string) *waE2E.Message
 
+	// Upload sobe um anexo (imagem, video, audio, documento) aos
+	// servidores do WhatsApp. CAP-02 acrescenta este metodo a interface
+	// estreita (ADR-001) porque o envio de midia real, ao contrario do
+	// stub que so' validava, precisa da resposta de upload para montar o
+	// protobuf da mensagem.
+	Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
+
 	// Família de grupos
 	GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLink(ctx context.Context, code string) (*types.GroupInfo, error)

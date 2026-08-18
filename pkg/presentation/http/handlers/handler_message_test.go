@@ -14,13 +14,16 @@ import (
 	"wa-api/pkg/application/usecase/message"
 )
 
-// Este arquivo cobre os QUATRO handlers de mensagem de forma exaustiva:
-// send/text, send/edit, delete/message e send/template.
+// Este arquivo cobre TRÊS handlers de mensagem que ainda usam
+// port.MessageComposer de forma exaustiva: send/edit, delete/message e
+// send/template. send/text (SendMessage) migrou para port.TextMessenger no
+// CAP-01 e tem tabela própria em handler_message_send_test.go — sua forma
+// (JIDResolver + SendText) já não cabe nesta tabela.
 //
-// Os quatro tem a MESMA forma — mesma guarda de autenticacao, mesma guarda de
-// sessao, mesmo decode, mesma traducao de erro do use case — e e' por isso que
-// valem uma unica tabela: qualquer divergencia entre eles aparece como uma
-// linha vermelha, e nao como um teste que ninguem escreveu.
+// Os três restantes tem a MESMA forma — mesma guarda de autenticacao, mesma
+// guarda de sessao, mesmo decode, mesma traducao de erro do use case — e e'
+// por isso que valem uma unica tabela: qualquer divergencia entre eles
+// aparece como uma linha vermelha, e nao como um teste que ninguem escreveu.
 //
 // Cada caso de saida >=400 passa pelo co-gate D (logassert.OutcomeLogged):
 // o caminho tem de logar, com causa, com req_id, em warn ou error, e sem
@@ -47,8 +50,7 @@ type msgHandlerCase struct {
 	// wantMessageID e' o message_id do envelope de sucesso.
 	wantMessageID string
 	// generatesID indica se o use case chama NewMessageID quando Id vem vazio.
-	// So' send/text e send/template o fazem — e' o unico eixo em que os quatro
-	// handlers divergem.
+	// Só send/template o faz entre os três desta tabela.
 	generatesID bool
 	// missingField mapeia nome do campo obrigatorio ausente -> payload que o
 	// omite. E' a matriz de rejeicao do use case vista da fronteira HTTP.
@@ -58,20 +60,6 @@ type msgHandlerCase struct {
 func msgHandlerCases() []msgHandlerCase {
 	log := silentLogger{}
 	return []msgHandlerCase{
-		{
-			name: "SendMessage",
-			path: "/chat/send/text",
-			build: func(f *contractsfake.MessageComposer) http.Handler {
-				return NewSendMessageHandler(message.NewSendMessageUseCase(f, log))
-			},
-			validBody:     `{"Phone":"5511999999999","Body":"ola"}`,
-			wantMessageID: contractsfake.DefaultMessageID,
-			generatesID:   true,
-			missingField: map[string]string{
-				"Phone": `{"Body":"ola"}`,
-				"Body":  `{"Phone":"5511999999999"}`,
-			},
-		},
 		{
 			name: "SendEditMessage",
 			path: "/chat/send/edit",
@@ -351,13 +339,13 @@ func TestMessageHandlers_MessageIDFailure(t *testing.T) {
 	}
 }
 
-// TestMessageHandlers_ClientSuppliedIDSkipsGeneration: com Id no payload, nem
-// send/text nem send/template tocam NewMessageID, e o ID do cliente e' o que
-// volta. Sem este caso, o ramo `if msgID == ""` dos dois use cases so' seria
-// exercitado num sentido.
+// TestMessageHandlers_ClientSuppliedIDSkipsGeneration: com Id no payload,
+// send/template nao toca NewMessageID, e o ID do cliente e' o que volta.
+// Sem este caso, o ramo `if msgID == ""` do use case so' seria exercitado
+// num sentido. (send/text tem o caso equivalente em
+// handler_message_send_test.go, sobre port.TextMessenger.)
 func TestMessageHandlers_ClientSuppliedIDSkipsGeneration(t *testing.T) {
 	bodies := map[string]string{
-		"SendMessage":  `{"Phone":"5511999999999","Body":"ola","Id":"id-do-cliente"}`,
 		"SendTemplate": `{"Phone":"5511999999999","Content":"corpo","Footer":"rodape","Id":"id-do-cliente"}`,
 	}
 

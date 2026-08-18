@@ -50,48 +50,6 @@ type missingField struct {
 func composerUseCases() []composerUC {
 	return []composerUC{
 		{
-			name:    "SendMessage",
-			infoMsg: "message validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendMessageUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendMessageRequest{Phone: "5511987654321", Body: "Ola", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendMessageUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendMessageRequest{Body: "Ola"})
-					return err
-				}},
-				{"Body", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendMessageUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendMessageRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
-			name:    "SendImage",
-			infoMsg: "image validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendImageUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendImageRequest{Phone: "5511987654321", Image: "data:image/png;base64,abc", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendImageUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendImageRequest{Image: "data:image/png;base64,abc"})
-					return err
-				}},
-				{"Image", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendImageUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendImageRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
 			name:    "SendDocument",
 			infoMsg: "document validated",
 			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {

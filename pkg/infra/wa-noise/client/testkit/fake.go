@@ -27,6 +27,7 @@ type Fake struct {
 	SendMessageFn                    func(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 	GenerateMessageIDFn              func() types.MessageID
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
+	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLinkFn           func(ctx context.Context, code string) (*types.GroupInfo, error)
 	GetGroupInviteLinkFn             func(ctx context.Context, jid types.JID, reset bool) (string, error)
@@ -109,4 +110,11 @@ func (f *Fake) BuildUnavailableMessageRequest(chat, sender types.JID, id string)
 		return f.BuildUnavailableMessageFn(chat, sender, id)
 	}
 	return &waE2E.Message{}
+}
+
+func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+	if f.UploadFn != nil {
+		return f.UploadFn(ctx, plaintext, appInfo)
+	}
+	return wanoise.UploadResponse{}, nil
 }

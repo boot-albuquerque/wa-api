@@ -73,6 +73,19 @@ func (s *spyPort) SendReaction(context.Context, string, domain.JID, domain.React
 	return domain.MessageSendResult{}, s.err
 }
 
+func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+// FetchLinkPreview implementa port.LinkPreviewFetcher. Não conta como
+// "toque" em s.calls: é uma porta de resolução de metadata, não de ação
+// sobre a sessão — os testes de fronteira medem se o handler AGIU no
+// wa-noise, e uma consulta de preview isolada não é essa ação.
+func (s *spyPort) FetchLinkPreview(context.Context, string) (domain.LinkPreviewData, bool) {
+	return domain.LinkPreviewData{}, false
+}
+
 func (s *spyPort) SendPresence(context.Context, string, domain.PresenceType) error {
 	s.calls++
 	return s.err
@@ -266,7 +279,7 @@ func boundaryCases() []boundaryCase {
 	return []boundaryCase{
 		{
 			name:      "SendMessage",
-			build:     func(s *spyPort) http.Handler { return NewSendMessageHandler(message.NewSendMessageUseCase(s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewSendMessageHandler(message.NewSendMessageUseCase(s, s, s, log)) },
 			method:    http.MethodPost,
 			path:      "/chat/send/text",
 			readsBody: true,
@@ -567,7 +580,7 @@ func TestSessionUser_AndInlineGuard_AgreeOnEveryInput(t *testing.T) {
 
 			// Via bloco inline.
 			viaInline := httptest.NewRecorder()
-			NewSendMessageHandler(message.NewSendMessageUseCase(&spyPort{}, log)).
+			NewSendMessageHandler(message.NewSendMessageUseCase(&spyPort{}, &spyPort{}, &spyPort{}, log)).
 				ServeHTTP(viaInline, in.mut(httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader("{}"))))
 
 			if viaHelper.Code != viaInline.Code {

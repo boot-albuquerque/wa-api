@@ -9510,3 +9510,37 @@ a evidência completos de cada item — este bloco só resume o estado atual):
   em 2026-08-12: reduzido de 60s para 20s (paridade com o oficial), decisão do
   HUMAN após consulta ao upstream (`whatsmeow`, mesmo valor não documentado).
   Ver `HOUSEKEEP.md` F69 para a evidência e o teste de regressão.
+
+---
+
+## CAP-02 — fachada de `Upload`/`MediaType`, 2026-08-18
+
+### Contexto
+
+CAP-02 (POST /chat/send/image, ramo URL) precisa que `pkg/infra/wa-noise/
+client/client.go` (interface estreita, ADR-001) exponha `Client.Upload`.
+`*wanoise.Client` (o alias de tipo completo em `main.go`) já satisfaz esse
+método por promoção — mas o CHAMADOR precisa nomear `wanoise.MediaType` e
+`wanoise.MediaImage` para invocá-lo, e nenhum dos dois estava na fachada
+(`internal/wa-noise/main.go`), só em `core` (`internal/wa-noise/core/
+download_types.go`, que já define os aliases `MediaType = media.Type` e
+`MediaImage = media.TypeImage` etc.). `scripts/waclient-facade-check.sh`
+proíbe consumidores fora do fork de importar `core` direto.
+
+### O que mudou
+
+`internal/wa-noise/main.go`, seção "Perfil e midia": acrescentados os
+aliases `MediaType`, `UploadResponse` (tipos) e `MediaImage`, `MediaVideo`,
+`MediaAudio`, `MediaDocument` (constantes), todos apontando para os
+símbolos já existentes em `core`. Nenhuma lógica nova — só alias e
+delegação, a regra de escrita deste arquivo (comentário de topo de
+`main.go`). Comportamento não mudou: os símbolos já existiam em `core`,
+só não eram alcançáveis pela fachada.
+
+### Por que aqui, não em `pkg/`
+
+A tarefa (CAP-02) chama isto de "alargar a fachada do lado do wa-api", não
+de "alterar o wa-noise" — mas o arquivo tocado (`internal/wa-noise/
+main.go`) fica fisicamente dentro do fork, então a mudança é registrada
+aqui por completude, seguindo a mesma disciplina que qualquer outra
+divergência contra o upstream deste diretório.

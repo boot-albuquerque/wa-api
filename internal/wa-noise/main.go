@@ -83,6 +83,20 @@ const (
 type (
 	GetProfilePictureParams = core.GetProfilePictureParams
 	DownloadableMessage     = core.DownloadableMessage
+
+	// MediaType e UploadResponse expostos para CAP-02 (pkg/infra/wa-noise/
+	// adapters/chat): consumidor precisa nomear o tipo de midia ao chamar
+	// Client.Upload (alias de metodo, ja' presente via Client = core.Client)
+	// e ler os campos de UploadResponse para montar a mensagem protobuf.
+	MediaType      = core.MediaType
+	UploadResponse = core.UploadResponse
+)
+
+const (
+	MediaImage    = core.MediaImage
+	MediaVideo    = core.MediaVideo
+	MediaAudio    = core.MediaAudio
+	MediaDocument = core.MediaDocument
 )
 
 // Erros nomeados pelos consumidores. Sao as *mesmas* variaveis de core, entao
