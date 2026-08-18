@@ -2488,3 +2488,46 @@ com mensagem.
 
 **Aberto**: CAP-05_PAIRING (exige autorização HUMANA — irreversível), H14, H16,
 H17, H18, H20.
+
+## LOOP 05.5 / 05.6 — o primeiro chamador real, e o canal de orquestração degradado
+
+**H20 fechado.** `StartConfig` ganha `SettleBudget` (zero = default). Os dois
+testes de caminho negativo que pagavam o orçamento inteiro passam a receber 3s;
+pacote `core` de **201,2s para 98,4s** (−51%). O ganho que importa não é a
+velocidade: ficou travada a propriedade certa — *o boot desiste no orçamento que
+RECEBEU* —, com limite superior e inferior, porque uma regressão de tiro único
+também terminaria abaixo do default e passaria só com o superior.
+
+**H17 fechado**, por medição: `grep Socket|Liveness|ClassifyOpening` em `core/`
+retorna zero. A CAP-05 tem a pré-condição certa e **não é** a consumidora de
+`C`. Corrigido o ponteiro sem nomear destino novo. Achado incidental: o código
+ainda carregava o exagero da **F-28**, corrigido antes só nas minhas falas.
+
+**F-31 — o canal de orquestração truncou três vezes seguidas.** Respostas longas
+chegavam cortadas no meio da palavra (`'E autoriz'`, `'Autorização reen'`,
+`` '`internal/wa-headless_' ``). Recusei inferir o resto de uma frase de
+autorização cortada — metade de uma autorização não é autorização. A saída foi
+um **protocolo de token único**: perguntas de resposta fechada, um token cada.
+Funcionou de primeira (`SIM`, depois `UMA SIM SORUNTIME`). Enquanto o canal
+esteve mudo, segui pelos H já autorizados em vez de parar.
+
+**CAP-05 ganha o primeiro consumidor real: `runtime.Holder`.** Escopo fixado
+pela orquestração: UMA sessão entre comandos, **sem** teto e **sem** reciclagem;
+invariante 13 exercitada agora; WRITE_SET `runtime/` apenas.
+
+O `Holder` existe para fechar a lacuna que escondeu os defeitos deste ciclo
+inteiro: não havia chamador que SEGURASSE uma sessão. Ele exercita a invariante
+7 na forma que a produção tem de verdade — um comando chega com prazo próprio,
+faz o boot, retorna, seu contexto morre, e um comando POSTERIOR ainda encontra a
+sessão viva.
+
+**Honestidade sobre o que os testes provam**: os três controles negativos
+morderam, e nos três quem barra é `core.ErrProfileAlreadyOwned`. A invariante 13
+é imposta pelo `core`; o que os testes do `Holder` provam é que ele **não a
+contorna** e a converte no comportamento certo para o chamador — não que ele a
+imponha sozinho.
+
+**H21 aberto**: o detentor não tem como perguntar se a sessão ainda está viva.
+`core/` está fora do WRITE_SET, e sondar `Browser().PID()` por fora seria pôr
+política de liveness na camada errada.
+

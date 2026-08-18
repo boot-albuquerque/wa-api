@@ -1638,3 +1638,41 @@ também terminaria bem abaixo do default e passaria só com o limite superior:
   was given — the settle loop is not waiting out its budget"*.
 
 `session.go` restaurado byte-idêntico após cada mutação.
+
+## H21 — o detentor não tem como perguntar se a sessão ainda está viva
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 05.6, ao construir o `runtime.Holder`
+com WRITE_SET restrito a `runtime/` (`core/` fora de escopo por decisão da
+orquestração).
+
+**Onde**: API pública de `internal/wa-headless/core` — `Session` expõe
+`Browser()`, `Tab()`, `ProfileDir()` e `Stop()`, e nada mais.
+
+**Problema**: o `Holder` guarda uma sessão entre comandos e a devolve a quem
+pedir. Ele **não tem como saber se ela ainda está utilizável**. Se o browser
+morrer sozinho — crash, OOM, morte externa — o `Holder` continua entregando o
+mesmo ponteiro, e o comando seguinte descobre o problema como um erro de CDP no
+meio de uma operação de negócio, não como uma sessão inválida.
+
+Isto **não é hipotético para este módulo**: `engine.ProcessAlive` existe e o
+teste de N ciclos já o usa para caçar órfãos. O sinal existe; o que não existe
+é um caminho pela API do `core` para o detentor consultá-lo sem alcançar
+`Browser().PID()` e reimplementar a política por fora — que é exatamente o tipo
+de conhecimento vazado que o item 4 do briefing separa entre as camadas.
+
+**Por que não corrigi**: `core/` está fora do WRITE_SET deste ciclo (resposta
+`SORUNTIME` da orquestração). Fazer o `Holder` sondar `Browser().PID()` por
+conta própria seria contornar a restrição pela porta dos fundos e colocar
+política de liveness na camada errada — e a liveness deste módulo já tem uma
+lição cara sobre isso (item 12 do briefing: processo, alvo, service worker,
+socket, SPA, sessão e identidade são sinais DIFERENTES).
+
+**Correção sugerida**: `core.Session` ganhar uma consulta de liveness cuja
+semântica seja declarada — provavelmente sobre o PROCESSO, o sinal mais barato e
+menos ambíguo — com nome que não prometa mais do que mede (`ProcessAlive`, não
+`Healthy`). Um detentor então decide o que fazer; a política fica nele, o sinal
+fica no `core`.
+
+**Status**: não corrigido, fora do WRITE_SET. Registrado antes de virar
+descoberta de campo.
+
