@@ -56,6 +56,7 @@ import (
 
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
+	waruntime "wa-api/internal/wa-headless/runtime"
 	"wa-api/internal/wa-headless/spa"
 )
 
@@ -4709,4 +4710,146 @@ func TestRealSPANCycleLifecycle(t *testing.T) {
 	t.Logf("SIZE (observational only, never asserted): %d -> %d across %d cycles "+
 		"(Default/Sessions/* rotates independently of this module — HOUSEKEEP.md H10)",
 		filesBeforeAny, metrics[len(metrics)-1].profileFiles, nCycleSampleCount)
+}
+
+// holderIdleGap is how long the Holder sits on a live session between commands.
+//
+// It is not derived from any SLA and is not a claim about how long a session
+// SHOULD survive. It is long enough that the gap is not swallowed by scheduling
+// noise, and short enough to keep this gated test usable. What it measures is
+// the question the local fixtures cannot ask: a fixture page has no socket to
+// Meta's servers, so it cannot drop one while idle. The real SPA can.
+const holderIdleGap = 45 * time.Second
+
+// TestRealSPAHolderAcrossCommands runs runtime.Holder against the real paired
+// profile, which is the only place its central claim can actually fail.
+//
+// The Holder's local tests prove it against an httptest fixture, and this
+// module has learned three times in one day that a fixture is well-behaved in
+// an axis nobody is watching (ARMADILHAS.md: it mounted instantly, and its
+// context never died). Here is the axis a fixture cannot reproduce at all: a
+// held session owns a live WebSocket to Meta's servers, and holding it idle is
+// exactly the condition under which that socket can go away without anyone
+// calling Stop.
+//
+// Safety, same rules as every gated test in this file: read-only, no message
+// sent, no logout, no re-pair, no QR, and the session ends through the
+// production Holder.Stop.
+func TestRealSPAHolderAcrossCommands(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("this test only runs against an already-paired profile via " +
+			profileDirOverride + "; an unpaired profile would show a QR and prove " +
+			"nothing about holding an AUTHENTICATED session across commands")
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath:    binary,
+		ProfileDir:    profile,
+		DebuggingPort: freePort(t),
+		UserAgent:     realSPAUserAgent,
+		NavigateURL:   realSPAURL,
+		Runner:        runner,
+	})
+	stopped := false
+	defer func() {
+		if !stopped {
+			h.Stop(context.Background())
+		}
+	}()
+
+	t.Logf("profile_dir=%s idle_gap=%s (production runtime.Holder / core.StartSession; "+
+		"read-only; no send; no logout; no QR)", profile, holderIdleGap)
+
+	// COMMAND 1. Its context bounds the BOOT and is released immediately, the
+	// way a real command does. Everything after this point runs with that
+	// context already dead.
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	start := time.Now()
+	sess, err := h.Session(bootCtx)
+	bootTook := time.Since(start)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("command 1 could not get a session after %s: %v", bootTook, err)
+	}
+	pidAfterBoot := sess.Browser().PID()
+
+	verdict, waited, identityErr := sampleIdentityUntilPresent(
+		sess, runner, identityShapeBudget, identityShapeTick)
+	if verdict != verdictPresent {
+		t.Fatalf("command 1: identity=%s (waited %s, err=%v); the held session must start "+
+			"from a proven authenticated state or nothing measured afterwards means "+
+			"anything", verdict, waited, identityErr)
+	}
+	t.Logf("COMMAND 1: boot=%s identity=%s (waited %s) pid=%d",
+		bootTook, verdict, waited, pidAfterBoot)
+
+	// THE GAP. No command runs, nobody touches the session, and the context
+	// that created it is long gone.
+	time.Sleep(holderIdleGap)
+
+	// COMMAND 2, arriving later with a context of its own.
+	laterCtx, cancelLater := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	defer cancelLater()
+	again, err := h.Session(laterCtx)
+	if err != nil {
+		t.Fatalf("command 2 could not get the held session after a %s gap: %v",
+			holderIdleGap, err)
+	}
+	if again != sess {
+		t.Fatal("command 2 got a DIFFERENT session; the Holder re-booted instead of " +
+			"holding, which would mean two owners of one profile")
+	}
+	if pid := again.Browser().PID(); pid != pidAfterBoot {
+		t.Fatalf("command 2 sees browser pid %d, boot saw %d — a new browser was launched",
+			pid, pidAfterBoot)
+	}
+
+	// The claim under test: after the gap, with the boot context dead, the
+	// session is still authenticated. Identity is read the SAME way as before,
+	// through the four-state verdict, so an instrument failure here reports as
+	// an instrument failure and not as a lost session (ARMADILHAS.md).
+	verdict2, waited2, identityErr2 := sampleIdentityUntilPresent(
+		again, runner, identityShapeBudget, identityShapeTick)
+	t.Logf("COMMAND 2 (after %s idle): identity=%s (waited %s) pid=%d",
+		holderIdleGap, verdict2, waited2, again.Browser().PID())
+	switch verdict2 {
+	case verdictPresent:
+		// held, and still authenticated
+	case verdictAbsent:
+		t.Fatalf("after %s held idle the session no longer reports an owner identity. "+
+			"This is a REAL finding about holding sessions, not an instrument failure: "+
+			"identity was PRESENT at command 1 on this same session", holderIdleGap)
+	default:
+		t.Fatalf("the identity INSTRUMENT failed at command 2 (%s: %v); this says nothing "+
+			"about whether the held session survived and must not be read as if it did",
+			verdict2, identityErr2)
+	}
+
+	// Teardown through the production path, then the same hygiene the N-cycle
+	// test asserts: a clean stop, no lock, no orphan.
+	via := h.Stop(context.Background())
+	stopped = true
+	if !via.Clean() {
+		t.Fatalf("Holder.Stop returned %s; want a clean stop", via)
+	}
+	if lockPresent(t, profile) {
+		t.Fatal("SingletonLock survived a clean Holder.Stop")
+	}
+	if engine.ProcessAlive(pidAfterBoot) {
+		t.Fatalf("pid %d still answers signal 0 after a clean Holder.Stop (orphan browser)",
+			pidAfterBoot)
+	}
+	t.Logf("SUMMARY held one session across 2 commands with a %s idle gap; "+
+		"identity PRESENT at both; stop_via=%s; no lock; no orphan; profile_files=%d",
+		holderIdleGap, via, countProfileFiles(t, profile))
 }

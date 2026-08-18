@@ -2531,3 +2531,30 @@ imponha sozinho.
 `core/` está fora do WRITE_SET, e sondar `Browser().PID()` por fora seria pôr
 política de liveness na camada errada.
 
+## LOOP 05.7 — o detentor contra a SPA real
+
+`TestRealSPAHolderAcrossCommands`, com portão, contra o perfil pareado.
+Resultado: **PASS**.
+
+```
+COMMAND 1: boot=14.28s identity=PRESENT (waited 17.6ms) pid=62826
+COMMAND 2 (after 45s idle): identity=PRESENT (waited 8.3ms) pid=62826
+stop_via=browser.close; no lock; no orphan
+```
+
+O eixo que só a SPA real tem: uma página de fixture **não tem socket** para os
+servidores da Meta, então não pode largar um enquanto ociosa. A sessão real
+pode. Foi por isso que este teste existiu, e não para repetir o que o fixture já
+provava.
+
+**O QUE ISTO NÃO PROVA, e a distinção não é retórica**: 45 s de ociosidade
+falsifica *"a sessão morre ao ser segurada"*. Não estabelece **nenhuma** garantia
+de duração. Uma retenção de produção dura horas, e o comportamento do socket do
+WhatsApp nessa escala continua **UNKNOWN** — não medido, não inferido. Uma
+amostra, dois comandos, um intervalo.
+
+**Atrito de nome registrado**: o pacote se chama `runtime`, que o stdlib já
+possui, e o `realspa_test.go` já importava o `runtime` da linguagem. Resolvido
+com alias local (`waruntime`). Renomear o pacote é decisão do lado do `core` e
+está fora do WRITE_SET deste ciclo.
+
