@@ -5176,3 +5176,49 @@ implementações não. Somam **doze campos públicos** perdidos.
 **Status**: **NÃO CORRIGIDO** — dívida de contrato. O pass de fidelidade que
 trata a família inteira foi adiado conscientemente para ganhar largura de
 capabilities primeiro.
+
+## F120 — `SendMessageHandler` (texto) loga `user_id` (o Id de sessão) nos
+ramos de erro; os cinco handlers de mídia não logam nada equivalente
+
+**Data**: 2026-08-18. **Contexto**: FIX-07b, restaurando o eixo de
+no-secret-leak perdido pela deleção de `handler_media_test.go` (achado do
+Chief na revisão de stage do CAP-07).
+
+**Onde**: `pkg/presentation/http/handlers/handler_message_send.go:51,61` —
+```go
+hlog.FromRequest(r).Warn().Err(err).
+    Str("path", r.URL.Path).
+    Str("user_id", txtID).
+    Msg("...")
+```
+Comparar com os seis handlers de mídia (`handler_media.go`,
+`handler_media_ext.go`), que nos mesmos ramos de erro só logam `path`, nunca
+o Id de sessão.
+
+**Problema**: ao escrever `TestSendText_NoSecretLeak` reusando a técnica do
+teste deletado (plantar um dos três segredos da F9.4 como Id de sessão via
+`withUser`), o teste falhou de verdade — `user_id` carregava o valor
+plantado. Investigando: não é uma reincidência da F9.4 (o Id de sessão não é
+`admin_token`/`global_encryption_key`/`global_hmac_key`, e nenhum dos três
+pode legitimamente coincidir com um Id de sessão gerado pelo sistema), mas é
+uma inconsistência real entre os seis handlers de envio — um loga o
+identificador de sessão do chamador em toda falha, os outros cinco não. Um
+Id de sessão em log é uma superfície de correlação/hijacking mais branda que
+um segredo global, mas ainda assim uma escolha que os outros cinco handlers
+deliberadamente não fazem.
+
+Por isso o teste final (`TestSendText_NoSecretLeak` e as outras cinco
+variações, em `handler_*_send_test.go`) planta os três segredos em
+`Phone`/campo de mídia/header `Authorization`, e usa um Id de sessão NÃO
+secreto (`"no-secret-leak-session"`) — o que é fiel à produção, onde o Id de
+sessão nunca é um dos três segredos globais.
+
+**Correção sugerida**: decidir, conscientemente, se `user_id` deveria ou não
+aparecer no log de erro do handler de texto — e se sim, replicar a mesma
+decisão nos outros cinco (paridade), ou removê-la de texto para alinhar com
+o resto. Não é urgente (não é vazamento dos três segredos da F9.4), mas é
+divergência de comportamento entre handlers irmãos que deveria ser
+deliberada, não acidental.
+
+**Status**: **NÃO CORRIGIDO** — fora do escopo do FIX-07b (só teste). Fica
+pendente de decisão do usuário sobre se `user_id` deve ou não ser logado.
