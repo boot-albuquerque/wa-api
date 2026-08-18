@@ -8,6 +8,60 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
+CAP: 05 · o módulo ganha um caminho de boot de produção · **fatia de RESTAURAÇÃO feita**
+
+**Dois dos quatro mecanismos órfãos deixaram de ser órfãos.** O recálculo do
+frontier tinha achado o padrão: quatro mecanismos de produção, nenhum com
+consumidor, porque não havia composition root onde rodá-los. `core/session.go`
+é esse root, e ele é **composição**, não mecanismo novo.
+
+```
+StartSession
+  → acquireOwnership          (invariante 1: um perfil, um dono)
+  → engine.SessionSuspect     (invariante 2: parada suja ⇒ VERIFICAR, não presumir)
+  → engine.Launcher.Launch
+  → engine.OpenTab            (que já chama PrimeTab internamente)
+  → navegar
+  → spa.Probe / spa.Classify
+  → spa.VerifyInventory       (CAP-06 ganha o enforcement que estava DEFERRED)
+  → READY
+falha em QUALQUER estágio ⇒ engine.CleanStop, com StopVia registrado
+```
+
+`VerifyInventory` e `SessionSuspect`/`ClearSessionSuspect` passam a ter **o
+primeiro leitor de produção deste repositório**. O `BootFailure` carrega o
+`Stage`, então a falha diz **onde** parou, e `Unwrap()` preserva a causa — um
+módulo ausente continua chegando como `*spa.ErrModulesMissing`.
+
+**As quatro provas adversariais, todas executadas contra Chromium real e
+fixtures locais — nunca contra `web.whatsapp.com`:**
+
+| prova | resultado |
+|---|---|
+| AT-1 — remover `VerifyInventory` do boot | **ablação real** no arquivo de produção; teste falha: *"StartSession returned a live Session; want a `*BootFailure` at StageInventory"*. Reproduzida pelo Chief |
+| AT-2 — módulo obrigatório que não resolve | `StageInventory`, `*spa.ErrModulesMissing` com **exatamente** o módulo escondido, não os outros |
+| AT-3 — falha em estágio intermediário | `StageNotReady`, teardown limpo, `SingletonLock` 0/1, zero processo vazado |
+| AT-4 — `Start` concorrente no mesmo perfil | 3/3 em caixa branca **e** ponta a ponta com browsers reais: o segundo falha em `StageOwnership` **antes de `Launch`** — o segundo browser **nunca nasce**, por construção |
+
+A AT-4 é a mais forte do conjunto: não é "ganhamos a corrida e matamos o
+perdedor", é que a ordem do código torna o segundo browser inexistente.
+
+**`C` NÃO foi ligado**, e a razão é melhor do que a minha. Eu tinha só o
+argumento de ausência — o contrato não menciona. O executor achou um argumento
+**estrutural**: um boot de restauração classifica **uma vez**, via
+`spa.Probe`/`spa.Classify`, e nunca fica observando `OPENING`; ou alcança
+`APP_READY` dentro dos prazos, ou falha em `StageNotReady`. Não existe duração
+em `OPENING` para alimentar `C`. Ele precisa de um **observador**, e esta fatia
+não é um. A **H17** permanece: consumidor verdadeiro INDETERMINADO.
+
+**O que ficou de fora, deliberadamente**: pareamento por QR — a única parte
+irreversível, que exige telefone e pode custar o perfil pareado. Fatia separada,
+com autorização humana. O observável completo da CAP-05 (*"N ciclos
+dormir/acordar sem degradação"*) **não** está provado; esta fatia entrega o
+caminho de boot, não o ciclo N vezes.
+
+---
+
 CAP: 06 · o inventário de módulos encontra o SPA real · **metade PROVADA, metade sem alvo**
 
 **A função de produção conheceu a realidade.** Até aqui `spa.VerifyInventory`

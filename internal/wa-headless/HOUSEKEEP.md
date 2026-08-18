@@ -1511,3 +1511,46 @@ que esta entrada registra.
 
 **Status**: **não corrigido, deliberadamente**. Registrado para que o próximo
 agente não herde o ponteiro como se fosse decisão.
+
+## H18 — `BootFailure` não carrega o PID do browser que não conseguiu subir
+
+**Data**: 2026-08-18 · **Contexto**: CAP-05, levantado pelo próprio executor.
+
+**Onde**: `internal/wa-headless/core/session.go`, tipo `BootFailure`.
+
+**Problema**: em qualquer caminho de falha, `StartSession` não devolve `*Session`
+— por desenho, um boot que falhou não tem nada vivo para entregar. Logo não há
+PID. Os testes de teardown provam "sem processo órfão" pelo artefato
+`SingletonLock`, não por PID recuperado. Isso basta para o que a CAP-05 precisa,
+mas um consumidor futuro de métrica/alerta que queira identificar o processo que
+morreu não tem por onde.
+
+**Correção sugerida**: acrescentar `PID int` ao `BootFailure`. Mudança estreita e
+aditiva — não feita porque nada neste escopo precisou dela.
+
+**Status**: não corrigido, aguardando consumidor que justifique.
+
+## H19 — a sequência ler-e-limpar da marca de suspeita não tem teste próprio
+
+**Data**: 2026-08-18 · **Contexto**: CAP-05, levantado pelo próprio executor.
+
+**Onde**: `internal/wa-headless/core/session.go` — `engine.SessionSuspect` na
+entrada do boot e `engine.ClearSessionSuspect` depois do sucesso.
+
+**Problema**: `engine/suspect_test.go` cobre o mecanismo da marca **isolado**, e
+a CAP-05 agora o compõe no boot. Mas todos os testes desta fatia partem de perfis
+`t.TempDir()` recém-criados, que **nunca** foram marcados suspeitos — `wasSuspect`
+deu `false` em todos. Ou seja: o caminho composto ler→limpar nunca foi exercitado
+a partir de um perfil de fato suspeito.
+
+**Consequência**: se `ClearSessionSuspect` deixasse de rodar no sucesso, ou se a
+leitura passasse a devolver `false` por engano, nenhum teste desta fatia morde. A
+invariante 2 diz que a sessão deve ser **verificada** no boot seguinte a uma
+parada suja; a verificação existe, a prova de que ela roda no caminho composto,
+não.
+
+**Correção sugerida**: fixture que pré-grava `.wa-headless-session-suspect` e
+prova que o boot lê, e que um boot bem-sucedido limpa.
+
+**Status**: não corrigido. O executor sinalizou em vez de deixar coberto por
+implicação — teria sido uma quinta prova não pedida, fora do orçamento da tarefa.
