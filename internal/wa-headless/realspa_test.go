@@ -4522,21 +4522,34 @@ const (
 //
 // The returned verdict is the LAST one observed, so a window that only ever
 // saw probe errors reports PROBE_ERROR and not ABSENT.
+// shouldProbeAgain is the sampling loop's continue-decision, extracted so it can
+// be tested without a browser.
+//
+// It exists because of a defect recorded in the root ARMADILHAS.md, which was
+// mine and was introduced on the same day as the blind-probe fix it was part of.
+// The loop used to be a plain `now.Before(deadline)`, which can execute its body
+// ZERO times when the budget has already elapsed at the first check — trivially
+// possible with the 1ms budget the hold-retention test passes on purpose, and
+// possible under scheduler pressure with any budget. A zero-iteration sampling
+// loop returns the zero value of its verdict, and that zero value is ABSENT,
+// which callers read as a statement about the SESSION. The blind instrument,
+// rebuilt inside the fix for the blind instrument.
+//
+// The rule it encodes: at least one probe ALWAYS happens, and the budget bounds
+// the RETRIES rather than the first attempt — which is what "budget" meant all
+// along.
+func shouldProbeAgain(probed bool, now, deadline time.Time) bool {
+	return !probed || now.Before(deadline)
+}
+
 func sampleIdentityUntilPresent(sess *core.Session, runner *engine.Runner,
 	budget, tick time.Duration) (identityVerdict, time.Duration, error) {
 
 	start := time.Now()
-	// probed guards the one hole a plain deadline loop leaves: if the budget
-	// has already elapsed when the first check runs — trivially possible with a
-	// tiny budget, and possible under scheduler pressure with any budget — the
-	// body never executes and the function returns verdictAbsent WITHOUT HAVING
-	// PROBED. Callers read ABSENT as a statement about the session, so that
-	// would be the blind instrument of ARMADILHAS.md rebuilt in a new place.
-	// At least one probe always happens; the budget bounds the RETRIES.
 	probed := false
 	last := verdictAbsent
 	var lastErr error
-	for deadline := start.Add(budget); !probed || time.Now().Before(deadline); {
+	for deadline := start.Add(budget); shouldProbeAgain(probed, time.Now(), deadline); {
 		probed = true
 		var raw string
 		err := runner.Do(context.Background(), engine.OpStateProbe, "cycle/identity",
@@ -5030,4 +5043,34 @@ func TestRealSPAHoldRetention(t *testing.T) {
 	t.Logf("stop_via=%s; no lock; no orphan. NOTE: %s is a SAMPLE, not a bound — "+
 		"production holds sessions for far longer and that range stays UNKNOWN",
 		via, holdFor)
+}
+
+// TestSamplingLoopAlwaysProbesAtLeastOnce locks the rule shouldProbeAgain
+// encodes. It is NOT gated on the real SPA: the defect it guards has nothing to
+// do with WhatsApp, and gating it would mean the property is only checked on the
+// rare runs that have a paired profile — which is how it got in.
+func TestSamplingLoopAlwaysProbesAtLeastOnce(t *testing.T) {
+	now := time.Now()
+	alreadyExpired := now.Add(-time.Hour)
+	stillOpen := now.Add(time.Hour)
+
+	// The case that produced the defect: nothing probed yet, budget already
+	// gone. The loop MUST still run, or the caller gets ABSENT for a session
+	// nobody ever looked at.
+	if !shouldProbeAgain(false, now, alreadyExpired) {
+		t.Fatal("the sampling loop skips its first probe when the budget has already " +
+			"elapsed; it would return the zero-value verdict (ABSENT) without having " +
+			"probed, and callers read ABSENT as a statement about the session")
+	}
+	// And the budget must still stop the RETRIES, or "budget" means nothing.
+	if shouldProbeAgain(true, now, alreadyExpired) {
+		t.Fatal("the sampling loop keeps retrying past an expired budget")
+	}
+	// Ordinary case, both directions, so the test cannot pass on a constant.
+	if !shouldProbeAgain(true, now, stillOpen) {
+		t.Fatal("the sampling loop stops retrying while the budget is still open")
+	}
+	if !shouldProbeAgain(false, now, stillOpen) {
+		t.Fatal("the sampling loop skips its first probe with an open budget")
+	}
 }

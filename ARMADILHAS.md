@@ -721,6 +721,19 @@ antigo. Não foi descartada, e o critério é verificável — o defeito só pro
 `PRESENT` daquela corrida é válida. Um `ABSENT` ali seria **ambíguo** e não
 contaria como achado.
 
+**Travada em teste**: `TestSamplingLoopAlwaysProbesAtLeastOnce`. A decisão do
+laço foi extraída para `shouldProbeAgain(probed, now, deadline)` — pura, sem
+browser — porque `sampleIdentityUntilPresent` recebe `*core.Session` e não havia
+como exercitá-la sem Chrome. O teste **não tem portão**: o defeito não tem nada
+a ver com o WhatsApp, e pô-lo atrás do portão significaria verificar a
+propriedade só nas corridas raras que têm perfil pareado — que foi exatamente
+como ele entrou.
+
+**Controle negativo, executado**: voltar a `return now.Before(deadline)` faz
+falhar com *"the sampling loop skips its first probe when the budget has already
+elapsed; it would return the zero-value verdict (ABSENT) without having probed"*.
+Arquivo restaurado byte-idêntico.
+
 **Status**: CORRIGIDA. A lição que fica: um laço com prazo cujo corpo pode
 executar zero vezes precisa dizer, no tipo ou na estrutura, o que devolve
 quando não executou — senão devolve o zero-value, e zero-value de veredito é
