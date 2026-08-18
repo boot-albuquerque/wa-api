@@ -5117,3 +5117,62 @@ esse pass foi consciente, para ganhar largura de capabilities primeiro.
 
 **Status**: **NÃO CORRIGIDO** — dívida de contrato registrada, não trabalho
 pendente deste ciclo.
+
+## F119 — `SendStickerRequest` perdeu cinco campos, e a infra que os consome está inteira
+
+**Data / contexto**: 2026-08-18, durante CAP-07 (ligar o envio real de sticker).
+É a maior perda de superfície de um único contrato encontrada até aqui.
+
+**Onde**: `pkg/domain/message.go` (`SendStickerRequest`, hoje
+`{Phone, Sticker, ID, MimeType}`) contra o `stickerStruct` de
+`git show 41bc8e2^:handlers.go` (linha ~1417):
+
+```go
+type stickerStruct struct {
+    Phone         string
+    Sticker       string
+    Id            string
+    PngThumbnail  []byte   // <- perdido
+    MimeType      string
+    PackId        string   // <- perdido
+    PackName      string   // <- perdido
+    PackPublisher string   // <- perdido
+    Emojis        []string // <- perdido
+    ContextInfo   waE2E.ContextInfo
+    QuotedMessage *waE2E.Message
+}
+```
+
+**Problema**: os cinco campos não estão apenas ausentes — eles são
+**parâmetros de uma pipeline que continua existindo e funcionando** no
+repositório. `pkg/infra/media/sticker.ProcessStickerData` tem esta assinatura:
+
+```go
+func ProcessStickerData(stickerData, mimeOverride, packID, packName,
+    packPublisher string, emojis []string) ([]byte, string, error)
+```
+
+CAP-07 a religou passando `"", "", "", nil` nos quatro últimos. O sticker é
+enviado, é WebP válido, e `EmbedStickerEXIF` roda — só que grava metadata de
+pacote vazia. O resultado prático: o sticker chega, mas sem identidade de
+pacote (nome, autor, emojis associados), e sem `PngThumbnail`.
+
+O que torna esta entrada diferente de F117 e F118: ali faltava o campo E o
+consumo. Aqui o consumo está pronto, testado (`exif_test.go`, 23KB) e
+conectado — falta só a porta de entrada. É a dívida de menor custo de fechar
+das quatro.
+
+**Correção sugerida**: reintroduzir os cinco campos em `SendStickerRequest` e
+repassá-los pelo `StickerProcessor` até `ProcessStickerData`. São acréscimos
+opcionais, compatíveis para trás, e o pipeline não muda em nada — apenas para
+de receber string vazia.
+
+**Família**: quinta entrada da mesma causa, junto de F114 (thumbnail HQ do link
+preview), F115 (`JPEGThumbnail` de imagem), F117 (`Waveform` de áudio) e F118
+(`MimeType`/`JPEGThumbnail` de vídeo). Todas nasceram da deleção do
+`handlers.go` de 232KB em `41bc8e2`, quando os DTOs foram reconstruídos e as
+implementações não. Somam **doze campos públicos** perdidos.
+
+**Status**: **NÃO CORRIGIDO** — dívida de contrato. O pass de fidelidade que
+trata a família inteira foi adiado conscientemente para ganhar largura de
+capabilities primeiro.
