@@ -8,6 +8,52 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
+CAP: 06 · o inventário de módulos encontra o SPA real · **metade PROVADA, metade sem alvo**
+
+**A função de produção conheceu a realidade.** Até aqui `spa.VerifyInventory`
+tinha sido exercitada contra Chrome real (`integration_test.go:408,:421`) mas
+sobre uma página **nossa**, servida por `httptest`. O que nunca tinha acontecido
+era encontrá-la com o `window.require` de verdade do `web.whatsapp.com`. Agora
+aconteceu, e nos dois sentidos:
+
+| controle | resultado |
+|---|---|
+| positivo — os 8 obrigatórios | `VerifyInventory(RequiredAtStartup) = nil`, 8 requeridos / 8 resolvidos / 0 ausentes |
+| negativo — um nome impossível | falha, `*spa.ErrModulesMissing`, mensagem **nomeia** o ausente, e **nenhum dos 8 reais** é acusado |
+| lista completa — dois impossíveis | **os dois** vêm na lista, não só o primeiro |
+| higiene | `stopped_via=browser.close`, `SingletonLock` ausente, 1/1 |
+
+A corrida gateada levou 14,08 s. O teste chama `spa.VerifyInventory` **três
+vezes, diretamente** — não há cópia do `resolveScript` no teste, que era a
+armadilha nomeada: teste que carrega o algoritmo prova o teste, não o produto.
+
+**O controle negativo é honesto por construção.** `VerifyInventory` recebe a
+lista como parâmetro, então passar um nome impossível **muda a dependência de
+verdade** contra o `window.require` da Meta. Não é dublê, não é página nossa: é
+o SPA real recusando um nome que não existe. É o *"renomear um nome de
+propósito"* do observável canônico, feito sem encenação.
+
+**A metade que NÃO fecha, e por que não é teimosia.** O observável diz
+*"renomear um nome de propósito derruba **o boot** com mensagem que nomeia a
+causa"*. **Não existe boot de produção para derrubar.** O trace deste ciclo
+achou três evidências convergentes: o facade `main.go` diz por escrito *"The
+facade is still empty"*; `core/` — declarado no próprio `doc.go` como *"the
+composition root of this stack"* — tem só `doc.go`; e quem monta a sequência
+`launch → navigate → ready` são os **testes**, cada um a sua
+(`realspa_test.go:192,:423`, `integration_test.go:134`).
+
+Criar esse boot é a **CAP-05**, e criá-lo aqui seria fabricar mecanismo para ter
+o que derrubar — a inversão que este repositório já catalogou. A decisão de
+escopo foi escalada à orquestração e **não é minha**.
+
+**Correção a mim mesmo**, apontada pelo validador: eu escrevi que "o caminho de
+produção nunca encontrou a realidade". Exagerado. Ele já rodava contra motor JS
+real; o que faltava era especificamente o `web.whatsapp.com` e o seu
+`window.require`. Terceira vez neste ciclo em que um agente independente pega uma
+afirmação minha um grau acima da evidência — ver **F-28** e a errata dela.
+
+---
+
 CAP: 04 · LOOP 04.5, o tipo passa a dizer só o que a medida sustenta · **DONE**
 
 **O defeito não era o número, era o que o tipo afirmava.** O LOOP 04.4 entregou

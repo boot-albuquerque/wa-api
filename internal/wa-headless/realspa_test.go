@@ -4316,3 +4316,99 @@ func fmtDur(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.2fs", d.Seconds())
 }
+
+// TestRealSPAModuleInventoryAgainstProduction exercises spa.VerifyInventory —
+// the PRODUCTION function, not a copy of its algorithm — against the real,
+// paired SPA. It is CAP-06's contract (HANDOFF-INICIATIVA.md section 10): "the
+// boot stops in a predictable place and names the cause". Every other real-SPA
+// test in this file that touches RequiredAtStartup goes through
+// readinessScript, a test-local reimplementation used to build a timeline;
+// this one goes through spa.VerifyInventory itself, with the same
+// Runner/Evaluator plumbing openRealSPA already wires up, so a pass here says
+// something about the product and not about the test's own JavaScript.
+func TestRealSPAModuleInventoryAgainstProduction(t *testing.T) {
+	requireRealSPA(t)
+
+	profile, _, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("live", func(t *testing.T) {
+		runner := engine.NewRunner()
+		_, tab := openRealSPA(t, runner)
+
+		// Wait for a real boot, using the SAME readiness wait every other
+		// probe in this file uses — this is only to know the page is ready to
+		// be asked, not the thing under test.
+		script := readinessScript(spa.RequiredAtStartup)
+		want := len(spa.RequiredAtStartup)
+		_, marks := sampleReadiness(t, runner, tab, script, want, readinessTick)
+		if marks.connected == 0 {
+			t.Fatalf("the boot never reached socket %s within %s; there is no ready SPA to "+
+				"verify the inventory against", socketStateConnected, readinessBudget)
+		}
+
+		// POSITIVE CONTROL — the production function, the production list.
+		if err := spa.VerifyInventory(context.Background(), runner, tab.Evaluate, spa.RequiredAtStartup); err != nil {
+			t.Fatalf("spa.VerifyInventory failed against a ready, paired real SPA with the real "+
+				"%d required modules: %v", want, err)
+		}
+		t.Logf("POSITIVE CONTROL: spa.VerifyInventory(RequiredAtStartup) = nil "+
+			"(%d modules required, %d resolved, 0 missing)", want, want)
+
+		// NEGATIVE CONTROL — the real eight plus ONE impossible name. The
+		// dependency really changed: window.require on the real page cannot
+		// resolve a name Meta never shipped.
+		const impossibleOne = spa.Module("WANoSuchModuleCAP06Impossible1")
+		oneWrong := append(append([]spa.Module{}, spa.RequiredAtStartup...), impossibleOne)
+
+		err = spa.VerifyInventory(context.Background(), runner, tab.Evaluate, oneWrong)
+		var missing *spa.ErrModulesMissing
+		if !errors.As(err, &missing) {
+			t.Fatalf("an impossible module name did not fail VerifyInventory as "+
+				"*spa.ErrModulesMissing: %v", err)
+		}
+		if len(missing.Missing) != 1 || missing.Missing[0] != impossibleOne {
+			t.Fatalf("reported %v missing, want exactly [%s] — the failure must name the "+
+				"module that cannot resolve, and must NOT falsely accuse the %d real ones",
+				missing.Missing, impossibleOne, want)
+		}
+		if !strings.Contains(err.Error(), string(impossibleOne)) {
+			t.Errorf("the error message does not name the missing module: %v", err)
+		}
+		for _, real := range spa.RequiredAtStartup {
+			if strings.Contains(err.Error(), string(real)) {
+				t.Errorf("the error message mentions %s, one of the real modules that DID "+
+					"resolve — the failure must be specific, not blanket: %v", real, err)
+			}
+		}
+		t.Logf("NEGATIVE CONTROL (one impossible name): err=%q missing=%v", err.Error(), missing.Missing)
+
+		// COMPLETE-LIST PROPERTY — two impossible names, both reported. The
+		// contract says "a lista do que faltou", plural.
+		const impossibleTwo = spa.Module("WANoSuchModuleCAP06Impossible2")
+		twoWrong := append(append([]spa.Module{}, spa.RequiredAtStartup...), impossibleOne, impossibleTwo)
+
+		err = spa.VerifyInventory(context.Background(), runner, tab.Evaluate, twoWrong)
+		if !errors.As(err, &missing) {
+			t.Fatalf("two impossible module names did not fail VerifyInventory as "+
+				"*spa.ErrModulesMissing: %v", err)
+		}
+		gotMissing := append([]spa.Module{}, missing.Missing...)
+		sort.Slice(gotMissing, func(i, j int) bool { return gotMissing[i] < gotMissing[j] })
+		wantMissing := []spa.Module{impossibleOne, impossibleTwo}
+		sort.Slice(wantMissing, func(i, j int) bool { return wantMissing[i] < wantMissing[j] })
+		if len(gotMissing) != 2 || gotMissing[0] != wantMissing[0] || gotMissing[1] != wantMissing[1] {
+			t.Fatalf("reported %v missing, want exactly the two impossible names %v — the "+
+				"complete list, not just the first one found", missing.Missing, wantMissing)
+		}
+		t.Logf("COMPLETE-LIST CONTROL (two impossible names): err=%q missing=%v", err.Error(), missing.Missing)
+	})
+
+	after := lockPresent(t, profile)
+	if after {
+		t.Errorf("%s survived the clean stop; the next boot would have to reclaim it", singletonLockName)
+	}
+	t.Logf("HYGIENE: singleton_lock_after_clean_stop=%v", after)
+}
