@@ -4526,9 +4526,18 @@ func sampleIdentityUntilPresent(sess *core.Session, runner *engine.Runner,
 	budget, tick time.Duration) (identityVerdict, time.Duration, error) {
 
 	start := time.Now()
+	// probed guards the one hole a plain deadline loop leaves: if the budget
+	// has already elapsed when the first check runs — trivially possible with a
+	// tiny budget, and possible under scheduler pressure with any budget — the
+	// body never executes and the function returns verdictAbsent WITHOUT HAVING
+	// PROBED. Callers read ABSENT as a statement about the session, so that
+	// would be the blind instrument of ARMADILHAS.md rebuilt in a new place.
+	// At least one probe always happens; the budget bounds the RETRIES.
+	probed := false
 	last := verdictAbsent
 	var lastErr error
-	for deadline := start.Add(budget); time.Now().Before(deadline); {
+	for deadline := start.Add(budget); !probed || time.Now().Before(deadline); {
+		probed = true
 		var raw string
 		err := runner.Do(context.Background(), engine.OpStateProbe, "cycle/identity",
 			func(ctx context.Context) error {
@@ -4852,4 +4861,173 @@ func TestRealSPAHolderAcrossCommands(t *testing.T) {
 	t.Logf("SUMMARY held one session across 2 commands with a %s idle gap; "+
 		"identity PRESENT at both; stop_via=%s; no lock; no orphan; profile_files=%d",
 		holderIdleGap, via, countProfileFiles(t, profile))
+}
+
+// holdDurationEnv lets the operator lengthen the retention measurement without
+// editing code. The DEFAULT is deliberately modest: this test exists to produce
+// the first real timeline of a held session, and a first measurement that never
+// finishes produces nothing.
+const holdDurationEnv = "WA_HEADLESS_HOLD_MINUTES"
+
+const (
+	defaultHoldMinutes = 10
+	holdSampleInterval = 30 * time.Second
+)
+
+// holdSample is one observation of a held session, on the THREE axes item 12 of
+// the briefing insists are different signals.
+//
+// Recording them separately is the entire point. A held session could keep its
+// process and lose its socket, or keep both and lose its identity, and a single
+// boolean "still alive?" would report all three the same way — which is the
+// class of instrument that already cost this module a cycle (ARMADILHAS.md).
+type holdSample struct {
+	at           time.Duration
+	processAlive bool
+	socket       spa.SocketState
+	identity     identityVerdict
+}
+
+// TestRealSPAHoldRetention measures what actually happens to a session that is
+// HELD, against the real paired profile, over a long idle period.
+//
+// This became measurable only after H21: before it, the only way to find out
+// whether a held session had died was to try to USE it, which makes death
+// indistinguishable from a failing operation. Session.ProcessAlive gives a
+// signal that does not require touching the SPA.
+//
+// It asserts almost nothing on purpose. The repository has no measurement of
+// held-session behaviour at this timescale, so an assertion here would encode a
+// guess as a contract. What it DOES assert is the one thing that would be a
+// defect under any policy: the process must not die while nobody asked it to.
+// Everything else is recorded as a timeline for a later decision.
+//
+// Safety, unchanged: read-only, no send, no logout, no re-pair, no QR.
+func TestRealSPAHoldRetention(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("this test only runs against an already-paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	minutes := defaultHoldMinutes
+	if v := os.Getenv(holdDurationEnv); v != "" {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n <= 0 {
+			t.Fatalf("%s=%q is not a positive number of minutes", holdDurationEnv, v)
+		}
+		minutes = n
+	}
+	holdFor := time.Duration(minutes) * time.Minute
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath:    binary,
+		ProfileDir:    profile,
+		DebuggingPort: freePort(t),
+		UserAgent:     realSPAUserAgent,
+		NavigateURL:   realSPAURL,
+		Runner:        runner,
+	})
+	stopped := false
+	defer func() {
+		if !stopped {
+			h.Stop(context.Background())
+		}
+	}()
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	pid := sess.Browser().PID()
+	t.Logf("holding for %s, sampling every %s (pid=%d, profile=%s); read-only, no send",
+		holdFor, holdSampleInterval, pid, profile)
+
+	readSocket := func() spa.SocketState {
+		var raw string
+		if probeErr := runner.Do(context.Background(), engine.OpStateProbe, "hold/socket",
+			func(ctx context.Context) error {
+				return sess.Tab().Evaluate(ctx, spa.SocketStateReadExpr, &raw)
+			}); probeErr != nil {
+			// A failed READ is not a socket state. Returning Unread here would
+			// claim the page answered "" when it never answered at all.
+			return spa.SocketState("PROBE_ERROR")
+		}
+		return spa.SocketState(raw)
+	}
+
+	var samples []holdSample
+	start := time.Now()
+	for elapsed := time.Duration(0); elapsed <= holdFor; elapsed = time.Since(start) {
+		// The process question first, because it is the one that needs no
+		// cooperation from the page: if it is false, the two probes below
+		// would only report the consequences of it.
+		alive := sess.ProcessAlive()
+		s := holdSample{at: time.Since(start), processAlive: alive}
+		if alive {
+			s.socket = readSocket()
+			// A single read, not a settle window: here the question is "what is
+			// true NOW", and waiting would smear the sample across the very
+			// timeline being measured. The four-state verdict still keeps a
+			// probe failure distinguishable from a real absence.
+			verdict, _, _ := sampleIdentityUntilPresent(sess, runner, time.Millisecond, time.Millisecond)
+			s.identity = verdict
+		}
+		samples = append(samples, s)
+		t.Logf("t+%-8s process=%v socket=%-12s identity=%s",
+			s.at.Round(time.Second), s.processAlive, s.socket, s.identity)
+
+		if !alive {
+			t.Fatalf("the held session's browser process died at t+%s with nobody asking "+
+				"it to. Whatever the right policy for socket or identity loss turns out "+
+				"to be, a process disappearing on its own is a defect under all of them",
+				s.at.Round(time.Second))
+		}
+		time.Sleep(holdSampleInterval)
+	}
+
+	// The timeline is the deliverable. Summarise the transitions rather than
+	// asserting a shape nothing has measured yet.
+	firstSocket, firstIdentity := samples[0].socket, samples[0].identity
+	socketChanged, identityChanged := "", ""
+	for _, s := range samples {
+		if socketChanged == "" && s.socket != firstSocket {
+			socketChanged = fmt.Sprintf("socket %s -> %s at t+%s", firstSocket, s.socket, s.at.Round(time.Second))
+		}
+		if identityChanged == "" && s.identity != firstIdentity {
+			identityChanged = fmt.Sprintf("identity %s -> %s at t+%s", firstIdentity, s.identity, s.at.Round(time.Second))
+		}
+	}
+	if socketChanged == "" {
+		socketChanged = fmt.Sprintf("socket stayed %s for the whole %s", firstSocket, holdFor)
+	}
+	if identityChanged == "" {
+		identityChanged = fmt.Sprintf("identity stayed %s for the whole %s", firstIdentity, holdFor)
+	}
+	t.Logf("TIMELINE over %s, %d samples: %s; %s", holdFor, len(samples), socketChanged, identityChanged)
+
+	via := h.Stop(context.Background())
+	stopped = true
+	if !via.Clean() {
+		t.Fatalf("Stop returned %s after a long hold; want a clean stop", via)
+	}
+	if lockPresent(t, profile) {
+		t.Fatal("SingletonLock survived a clean Stop after a long hold")
+	}
+	if engine.ProcessAlive(pid) {
+		t.Fatalf("pid %d survived a clean Stop after a long hold (orphan)", pid)
+	}
+	t.Logf("stop_via=%s; no lock; no orphan. NOTE: %s is a SAMPLE, not a bound — "+
+		"production holds sessions for far longer and that range stays UNKNOWN",
+		via, holdFor)
 }

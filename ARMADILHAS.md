@@ -674,3 +674,55 @@ porque é a armadilha 3 deste catálogo acontecendo em tempo real:
 **Status**: CORRIGIDA. Verificada contra o perfil pareado real: 3/3 ciclos,
 identidade `PRESENT` em todos (esperas de 104ms, 99ms, 2,9ms), parada limpa,
 `SingletonLock=0`, nenhum órfão.
+
+## ARM — o laço com prazo que pode não rodar NENHUMA vez
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 05.9, enquanto a medição de retenção
+longa rodava. Defeito **meu**, introduzido hoje, na função que eu havia acabado
+de escrever para consertar um instrumento cego.
+
+**Onde**: `internal/wa-headless/realspa_test.go`,
+`sampleIdentityUntilPresent`.
+
+**O código**:
+
+```go
+start := time.Now()
+last := verdictAbsent
+for deadline := start.Add(budget); time.Now().Before(deadline); {
+    ...sonda...
+}
+return last, time.Since(start), lastErr
+```
+
+**O problema**: se o orçamento já tiver expirado quando a primeira verificação
+roda, o corpo **nunca executa** e a função devolve `verdictAbsent` **sem ter
+sondado nada**. Os chamadores leem `ABSENT` como afirmação sobre a SESSÃO. É a
+armadilha da sonda cega reconstruída num lugar novo — na função escrita para
+consertar a sonda cega.
+
+**Como apareceu**: o teste de retenção chama com `budget = 1ms` de propósito,
+porque ali a pergunta é "o que é verdade AGORA" e esperar borraria a linha do
+tempo que se está medindo. Com 1 ms, a janela entre `start` e a primeira
+verificação deixa de ser desprezível.
+
+**Por que quase passou**: com os orçamentos grandes (75 s do N ciclos) o corpo
+sempre roda, então nenhum teste existente morde. O defeito só é alcançável pelo
+chamador novo — o mesmo padrão de "só aparece quando um consumidor real
+aparece" que se repetiu o dia inteiro.
+
+**Correção**: `probed := false` e `!probed || time.Now().Before(deadline)`.
+**Pelo menos uma sonda sempre acontece; o orçamento passa a limitar as
+RETENTATIVAS**, que é o que ele sempre quis dizer.
+
+**Sobre a medição em curso quando o defeito foi achado**: ela rodava o binário
+antigo. Não foi descartada, e o critério é verificável — o defeito só produz
+`ABSENT`, e `PRESENT` **só pode vir de uma sonda que rodou**. Toda amostra
+`PRESENT` daquela corrida é válida. Um `ABSENT` ali seria **ambíguo** e não
+contaria como achado.
+
+**Status**: CORRIGIDA. A lição que fica: um laço com prazo cujo corpo pode
+executar zero vezes precisa dizer, no tipo ou na estrutura, o que devolve
+quando não executou — senão devolve o zero-value, e zero-value de veredito é
+sempre a resposta mais perigosa possível.
+
