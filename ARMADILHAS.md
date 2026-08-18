@@ -473,4 +473,49 @@ mexer em `session.go` é mudança de mecanismo, não de teste. O caminho é dar 
 `StartSession` um laço de assentamento com orçamento, na forma que o
 `sampleReadiness` já usa, e travá-lo com um dublê que **demore** para montar.
 
-**Status**: DESCOBERTA. Correção pendente de autorização de escopo.
+**BEFORE_FIX, evidência executada e preservada** (2026-08-18, antes de qualquer
+correção, conforme a política deste repositório):
+
+O defeito foi reproduzido num teste rápido contra fixture local. O fixture
+`lateMountingPage` serve uma página **sem** o marcador de prontidão no primeiro
+paint e injeta `#pane-side` no DOM só depois de `lateMountDelay = 6 s` — atraso
+escolhido a partir de número **medido**, não de intuição: a falha de campo
+disparou em T+4,708 s. O orçamento dado ao `StartSession` é de 20 s, dentro do
+teto do `F2` (app-ready observado até 15,8 s). Ou seja: **um boot que apenas
+esperasse teria folga de sobra para passar; só um boot que classifica uma vez
+falha.**
+
+```
+--- FAIL: TestStartSession_LateMountingSPA_SingleProbeFailsBeforePageFinishesMounting
+    StartSession gave up at StageNotReady after only 2.15s, before
+    lateMountDelay=6s had elapsed and #pane-side was ever mounted — this is the
+    defect under test: session.go:303 calls spa.Probe exactly once, right after
+    Navigate returns, and never looks again.
+```
+
+Reproduzido pelo Chief. Falha em **2,15 s**, muito abaixo do atraso e do
+orçamento: não é `context.DeadlineExceeded`. Todos os testes pré-existentes
+continuam verdes.
+
+**A armadilha DENTRO da armadilha, e ela é a parte mais instrutiva.** O primeiro
+rascunho do teste afirmava `BootFailure` em `StageNotReady` **como sucesso** — e
+**passou** contra o código defeituoso. Isso é o inverso do que um teste de
+defeito deve fazer: ele passaria hoje e **falharia depois do conserto**,
+travando o bug em vez do comportamento. O executor percebeu sozinho e reescreveu
+para afirmar `err == nil`.
+
+Vale como regra própria: **um teste de defeito que passa hoje não é teste de
+defeito — é a especificação do bug.** A pergunta que separa os dois é "este
+teste vira verde ou vermelho quando o conserto chegar?".
+
+**Nota de fidelidade do dublê**: o snapshot local classifica `REDIRECT` e não
+`OTHER` como no campo, porque `Classify` verifica `web.whatsapp.com` na URL e o
+`httptest` serve de `127.0.0.1`. As duas classes são `!= APP_READY` e entram no
+`StageNotReady` pelo mesmo ramo, então o estágio sob teste não muda — mas fica
+registrado que o dublê **não** reproduz a classe exata, só o caminho.
+
+**Status**: DESCOBERTA, com teste do defeito escrito e falhando. A correção
+(laço de assentamento com orçamento, na forma do `sampleReadiness`) segue
+**pendente de autorização de escopo** — mexer em `session.go` é mudança de
+mecanismo. O teste está na árvore de trabalho, **não commitado**, para não
+deixar o branch vermelho antes de o conserto poder entrar junto.
