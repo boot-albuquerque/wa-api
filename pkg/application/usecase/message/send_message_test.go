@@ -50,27 +50,6 @@ type missingField struct {
 func composerUseCases() []composerUC {
 	return []composerUC{
 		{
-			name:    "SendAudio",
-			infoMsg: "audio validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendAudioUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendAudioRequest{Phone: "5511987654321", Audio: "data:...", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendAudioUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendAudioRequest{Audio: "data:..."})
-					return err
-				}},
-				{"Audio", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendAudioUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendAudioRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
 			name:    "SendSticker",
 			infoMsg: "sticker validated",
 			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {

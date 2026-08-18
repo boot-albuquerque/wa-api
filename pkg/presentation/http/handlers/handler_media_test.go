@@ -13,9 +13,12 @@ import (
 	"wa-api/pkg/application/usecase/message"
 )
 
-// Os cinco handlers de /chat/send de midia (handler_media.go: image, document,
-// audio; handler_media_ext.go: sticker, video) repetem o mesmo corpo de
-// fronteira: le o userinfo TIPADO do contexto, exige Id, decodifica, executa.
+// Os handlers de /chat/send de midia ainda em cima de port.MessageComposer
+// (handler_media_ext.go: sticker, video) repetem o mesmo corpo de fronteira:
+// le o userinfo TIPADO do contexto, exige Id, decodifica, executa. Image,
+// Document e Audio (handler_media.go) migraram para port.MediaMessenger e
+// tem suites dedicadas (handler_media_send_test.go, handler_send_document_test.go,
+// handler_send_audio_test.go) — nao entram nesta tabela.
 // Sao quatro caminhos de saida >=400 por handler, e todos os quatro tem de
 // logar a causa — o log de fronteira do router sabe QUE a requisicao saiu 400,
 // nao POR QUE.
@@ -47,16 +50,6 @@ type mediaCase struct {
 
 func mediaCases() []mediaCase {
 	return []mediaCase{
-		{
-			name:  "audio",
-			route: "/chat/send/audio",
-			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {
-				return NewSendAudioHandler(message.NewSendAudioUseCase(mc, l))
-			},
-			validBody:      `{"Phone":"5511999999999","Audio":"data:audio/ogg;base64,AAAA"}`,
-			incompleteBody: `{"Phone":"5511999999999"}`,
-			secretBody:     `{"Phone":"` + logassertAdminToken + `","Audio":"` + logassertGlobalEncryptionKey + `"}`,
-		},
 		{
 			name:  "sticker",
 			route: "/chat/send/sticker",

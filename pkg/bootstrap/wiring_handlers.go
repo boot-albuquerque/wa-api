@@ -139,7 +139,7 @@ func initCustomHandlers(s *server) {
 	sendMessageUC := message.NewSendMessageUseCase(chatMessenger, jidResolver, linkPreviewFetcher, logger)
 	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendDocumentUC := message.NewSendDocumentUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
-	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
+	sendAudioUC := message.NewSendAudioUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)
 	sendVideoUC := message.NewSendVideoUseCase(messageComposer, logger)
 	sendContactUC := message.NewSendContactUseCase(messageComposer, logger)

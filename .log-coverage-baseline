@@ -669,7 +669,45 @@ rules_frozen=true
 # regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` (as 3
 # funcoes novas descobertas sao exatamente as citadas acima, nenhuma outra
 # saiu da lista de cobertas).
-min_func_coverage=685
+# justificativa: CAP-05 (2026-08-18), POST /chat/send/audio passou a
+# buscar a URL ou decodificar a data URI ("data:audio/", discriminacao
+# ESTREITA como Image — nao "data:" generico como Document), resolver PTT
+# (default TRUE quando ausente) e MIME (precedencia de 4 niveis, exclusiva
+# de Audio) e enviar de verdade pelo wa-noise. min_eligible 615->620 (+5):
+#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio — o
+#     adapter que sobe o anexo (client.Upload, wanoise.MediaAudio) e envia
+#     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
+#     SendDocument/SendImage acima ("adapter nao loga, quem loga e' o
+#     usecase").
+#   - pkg/application/usecase/message.isHTTPAudioURL — helper puro de
+#     validacao de scheme (http/https + host), simetrico a
+#     isHTTPDocumentURL/isHTTPImageURL; nasce DESCOBERTA pelo mesmo motivo.
+#   - pkg/application/usecase/message.decodeAudioDataURIWithLimit — a logica
+#     de fronteira PURA (sem logger) extraida de decodeDataURIAudio
+#     especificamente para o teste de boundary poder injetar um limite
+#     sintetico pequeno em vez de alocar payloads de 16MB (mesmo racional de
+#     decodeDataURIWithLimit em CAP-04). Nasce DESCOBERTA: quem loga e' a
+#     funcao que a envolve (decodeDataURIAudio, abaixo).
+#   - pkg/application/usecase/message.resolveAudioMimeType — DIFERENTE do
+#     precedente de CAP-04/CAP-03 (resolveMimeType, de Image/Document, e'
+#     isento por X1: <=2 statements). resolveAudioMimeType tem 4 niveis de
+#     precedencia (req.MimeType / detectedMime / sniffing / fallback por
+#     PTT) — nao cabe em <=2 statements sem distorcer a logica, entao NASCE
+#     ELEGIVEL de verdade (nao so' "descoberta pelo padrao"). E' funcao pura
+#     (sem logger, sem *SendAudioUseCase); a decisao de nao logar dentro
+#     dela segue o mesmo racional das outras funcoes puras desta lista: quem
+#     loga e' o Execute que a chama.
+#   - pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio —
+#     nova funcao elegivel, ja' nasce COBERTA (Warn tanto no caminho de
+#     tamanho excedido quanto no de base64 invalido, delegando a
+#     decodeAudioDataURIWithLimit acima a decisao pura). E' o `covered` que
+#     sobe 421->422, unico ganho liquido desta mudanca.
+# func_coverage cai 685->681 so' pela aritmetica do denominador
+# (422/620 = 68.06% vs 421/615 = 68.46%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado em
+# HEAD (bc7ba91, worktree limpo) vs no estado final: diff mostra APENAS as
+# 4 linhas novas citadas acima sendo ACRESCENTADAS, nenhuma linha removida.
+min_func_coverage=681
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -729,7 +767,20 @@ min_func_coverage=685
 # (Client, ToJID, Upload, SendMessage) e de isHTTPDocumentURL/
 # decodeDataURIWithLimit somam os 5 restantes, pelo padrao "adapter/funcao
 # pura nao loga" ja' aceito acima. Nenhum errpath JA' COBERTO regrediu.
-min_errpath_coverage=857
+# justificativa: CAP-05 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para a lista nominal. errpaths sobe 1273->1288
+# (+15) e errpaths_covered sobe 1091->1101 (+10): os pontos de retorno de
+# erro novos em SendAudioUseCase.Execute (missing_audio,
+# unsupported_audio_source, audio_fetch_failed, empty_audio_body) e
+# decodeDataURIAudio (audio_too_large, invalid_data_uri) SAO logados —
+# mesmo padrao ja' aceito para SendDocument/SendImage; os S-ret/S-consume
+# sem log de ChatMessengerAdapter.SendAudio (Client, ToJID, Upload,
+# SendMessage) e de isHTTPAudioURL/decodeAudioDataURIWithLimit somam os 5
+# restantes, pelo padrao "adapter/funcao pura nao loga" ja' aceito acima.
+# Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
+# `logcov -list-uncovered` (HEAD bc7ba91 vs estado final) citado em
+# min_func_coverage: so' ACRESCIMO, nenhuma remocao.
+min_errpath_coverage=855
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -805,7 +856,15 @@ min_errpath_coverage=857
 # min_func_coverage acima para o detalhe nominal de cada uma.
 # message.isDataURI NAO entra no denominador (X1, mesmo motivo de
 # isDataURIImage acima).
-min_eligible=615
+# +5 (615->620): CAP-05, ChatMessengerAdapter.SendAudio,
+# message.isHTTPAudioURL, message.decodeAudioDataURIWithLimit,
+# message.resolveAudioMimeType e message.SendAudioUseCase.decodeDataURIAudio
+# — ver a justificativa de min_func_coverage acima para o detalhe nominal de
+# cada uma, inclusive por que resolveAudioMimeType (diferente de
+# resolveMimeType em Image/Document) nasce elegivel de verdade e nao so'
+# "descoberta pelo padrao". message.isDataURIAudio NAO entra no denominador
+# (X1, mesmo motivo de isDataURI/isDataURIImage acima).
+min_eligible=620
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

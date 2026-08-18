@@ -1766,6 +1766,7 @@ pkg/application/contracts/contractsfake.Logger.Reset	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.Warn	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.record	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaFetcher.FetchBytes	EXCLUDED	X5
+pkg/application/contracts/contractsfake.MediaMessenger.SendAudio	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendDocument	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendImage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessageComposer.NewMessageID	EXCLUDED	X5
@@ -1917,7 +1918,8 @@ pkg/application/usecase/message.NewSendTemplateUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendVideoUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSubscribePresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,react.go:34);uncovered:L2(S-ret,react.go:38);uncovered:L2(S-consume,react.go:42);uncovered:L2(S-ret,react.go:43);uncovered:L2(S-ret,react.go:48)
-pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:29);uncovered:L2(S-ret,send_audio.go:32)
+pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:69);uncovered:L2(S-ret,send_audio.go:72);uncovered:L2(S-ret,send_audio.go:124);uncovered:L2(S-ret,send_audio.go:129)
+pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
 pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:28);uncovered:L2(S-ret,send_buttons.go:31)
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:28);uncovered:L2(S-ret,send_contact.go:31);uncovered:L2(S-ret,send_contact.go:34)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
@@ -1934,12 +1936,16 @@ pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:28);uncovered:L2(S-ret,send_video.go:31)
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
+pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
 pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
 pkg/application/usecase/message.isDataURI	EXCLUDED	X1
+pkg/application/usecase/message.isDataURIAudio	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIImage	EXCLUDED	X1
+pkg/application/usecase/message.isHTTPAudioURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_audio.go:258)
 pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_document.go:243)
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
+pkg/application/usecase/message.resolveAudioMimeType	ELIGIBLE	uncovered:L1
 pkg/application/usecase/message.resolveMimeType	EXCLUDED	X1
 pkg/application/usecase/notification.GetHealthUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/notification.GetHealthUseCase.Execute.func1	EXCLUDED	X1
@@ -2496,6 +2502,7 @@ pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:45)
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1

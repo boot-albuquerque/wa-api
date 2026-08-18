@@ -99,7 +99,25 @@ type SendDocumentResult struct {
 	Status    string `json:"status"`
 }
 
-// SendAudioRequest representa o payload de envio de áudio.
+// SendAudioRequest representa o payload de envio de áudio. Audio é uma
+// união de dois transportes de OBTENÇÃO dos bytes — data URI
+// ("data:audio/...;base64,...") e URL http(s) externa — mesmo racional de
+// SendImageRequest/SendDocumentRequest, mas com discriminação ESTREITA
+// como SendImageRequest.Image (só "data:audio/", não "data:" genérico como
+// SendDocumentRequest.Document) — ver `git show 41bc8e2^:handlers.go`, em
+// torno da linha 1088.
+//
+// PTT é ponteiro de propósito: nil significa "cliente não declarou",
+// TRUE por default (voice note) — não false. Ver resolveAudioPTT em
+// send_audio.go.
+//
+// Caption existe no contrato público mas é INERTE para áudio: o histórico
+// (`git show 41bc8e2^:handlers.go`, em torno da linha 1148) nunca monta um
+// campo Caption em AudioMessage, e o protobuf waE2E.AudioMessage não tem
+// esse campo (confirmado: nenhum campo Caption em
+// internal/wa-noise/protocol/proto/waE2E, struct AudioMessage). Achado do
+// CAP-05, reportado — não implementado por conta própria (decisão de
+// contrato não é do executor).
 type SendAudioRequest struct {
 	Phone    string `json:"Phone"`
 	Audio    string `json:"Audio"`
@@ -113,7 +131,19 @@ type SendAudioRequest struct {
 // SendAudioResult representa o resultado do envio de áudio.
 type SendAudioResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// AudioPayload é o anexo de áudio já resolvido (bytes em mãos, MIME
+// decidido, PTT e Seconds resolvidos) que SendAudioUseCase passa a
+// port.MediaMessenger.SendAudio. Tipo próprio, e não domain.MediaPayload —
+// ver o comentário de SendAudio em port.MediaMessenger para o porquê.
+type AudioPayload struct {
+	Bytes    []byte
+	MimeType string
+	PTT      bool
+	Seconds  uint32
 }
 
 // SendStickerRequest representa o payload de envio de sticker.

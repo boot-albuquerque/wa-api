@@ -117,7 +117,18 @@
 # Os quatro caminhos que IMPORTAM estao cobertos e com controle negativo:
 # apaga preservando o acesso, preenche o hash que falta, FALHA em vez de
 # destruir, e nao quebra em banco vazio.
-min_coverage=839
+# justificativa: CAP-05 (2026-08-18), POST /chat/send/audio passou a
+# buscar/decodificar, resolver PTT+MIME e enviar de verdade. Cobertura subiu
+# 83.9%->84.0% (839->840): send_audio.go nasce coberto pelo teste de causa,
+# pelos 4 niveis de precedencia de MIME e pela fronteira de 16MB; a adicao
+# que teria FICADO descoberta sem teste dedicado foi
+# ChatMessengerAdapter.SendAudio (0.0% no primeiro run desta sessao,
+# corrigido com messenger_test.go mirrando TestChatMessengerAdapter_
+# SendDocument_*: NoSession, InvalidJID, UploadFailurePropagates,
+# UploadOK_SendMessageFail_NeverSent, OK, PTTFalse_Preserved, WithCallerID).
+# min_coverage ajustado para refletir a medicao honesta (o alvo avisa quando
+# a cobertura sobe).
+min_coverage=840
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

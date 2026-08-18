@@ -34,4 +34,20 @@ type MediaMessenger interface {
 	// payload.FileName como metadata pura (CAP-04). Mesma disciplina de
 	// SendImage quanto a upload/envio e a ausência de rollback de upload.
 	SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+
+	// SendAudio sobe payload.Bytes (com wanoise.MediaAudio) e envia uma
+	// AudioMessage para target, usando payload.PTT e payload.Seconds como
+	// metadata de protocolo (CAP-05). Mesma disciplina de SendImage/
+	// SendDocument quanto a upload/envio e a ausência de rollback de
+	// upload.
+	//
+	// domain.AudioPayload — não domain.MediaPayload — de propósito:
+	// AudioMessage carrega PTT e Seconds, campos de protocolo que
+	// ImageMessage e DocumentMessage não têm. Acrescentar esses campos a
+	// MediaPayload obrigaria SendImage e SendDocument a ignorá-los
+	// silenciosamente, o que é exatamente a incoerência que motiva uma
+	// assinatura própria em vez de reaproveitar o tipo. A PORTA continua
+	// única (upload+envio de mídia é uma capacidade coerente) — só o
+	// payload de áudio é um tipo à parte.
+	SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error)
 }

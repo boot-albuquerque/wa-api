@@ -226,6 +226,54 @@ func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, t
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendAudio sobe payload.Bytes (wanoise.MediaAudio) e envia uma
+// AudioMessage para target (CAP-05). payload.PTT e payload.Seconds são
+// metadata de protocolo pura — vão direto para AudioMessage.PTT e
+// AudioMessage.Seconds, sem transcoding nem cálculo (mesma disciplina de
+// SendImage/SendDocument quanto a upload órfão sem tentativa de desfazer).
+func (a *ChatMessengerAdapter) SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	uploaded, err := client.Upload(ctx, payload.Bytes, wanoise.MediaAudio)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	ptt := payload.PTT
+	msg := &waE2E.Message{
+		AudioMessage: &waE2E.AudioMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String(payload.MimeType),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+			PTT:           proto.Bool(ptt),
+			Seconds:       proto.Uint32(payload.Seconds),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)

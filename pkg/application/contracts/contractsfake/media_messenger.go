@@ -15,6 +15,10 @@ const DefaultSentImageMessageID = "sent-image-message-id"
 // MessageSendResult.ID sem SendDocumentFunc configurada.
 const DefaultSentDocumentMessageID = "sent-document-message-id"
 
+// DefaultSentAudioMessageID é o ID que MediaMessenger devolve em
+// MessageSendResult.ID sem SendAudioFunc configurada.
+const DefaultSentAudioMessageID = "sent-audio-message-id"
+
 // MediaMessengerSendImageCall é uma chamada a SendImage.
 type MediaMessengerSendImageCall struct {
 	Ctx     context.Context
@@ -33,6 +37,15 @@ type MediaMessengerSendDocumentCall struct {
 	ID      string
 }
 
+// MediaMessengerSendAudioCall é uma chamada a SendAudio.
+type MediaMessengerSendAudioCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.AudioPayload
+	ID      string
+}
+
 // MediaMessenger é o fake de port.MediaMessenger.
 type MediaMessenger struct {
 	SessionGuard
@@ -42,6 +55,9 @@ type MediaMessenger struct {
 
 	SendDocumentFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 	SendDocumentCalls []MediaMessengerSendDocumentCall
+
+	SendAudioFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error)
+	SendAudioCalls []MediaMessengerSendAudioCall
 }
 
 var _ port.MediaMessenger = (*MediaMessenger)(nil)
@@ -62,4 +78,13 @@ func (f *MediaMessenger) SendDocument(ctx context.Context, txtID string, target 
 		return f.SendDocumentFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentDocumentMessageID}, nil
+}
+
+// SendAudio implementa port.MediaMessenger.
+func (f *MediaMessenger) SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+	f.SendAudioCalls = append(f.SendAudioCalls, MediaMessengerSendAudioCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendAudioFunc != nil {
+		return f.SendAudioFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentAudioMessageID}, nil
 }
