@@ -1470,3 +1470,44 @@ rodando. Isso está escrito no próprio arquivo de teste, sob o título
 teste deixou de prometer exaustão, e o comentário nomeia a fuga que permanece.
 É a lição da F-28 aplicada ao conserto da própria F-28: o nome não pode
 prometer o que o corpo não executa.
+
+## H17 — o ponteiro do futuro consumidor de `C` está obsoleto no próprio código
+
+**Data**: 2026-08-18 · **Contexto**: trace canônico da CAP-05, pedido pela
+orquestração antes de implementar.
+
+**Onde**: `internal/wa-headless/spa/socket.go:100`.
+
+**Problema**: o comentário do tipo `SocketLiveness` diz que a taxonomia completa
+"lives in EVIDENCIA-SPA.md and in **CAP-06's still-unopened scope** (the caller
+that tracks history and combines axes)". A CAP-06 fechou, e ela era outra coisa:
+**inventário de módulos do SPA**. Ela não tem — e não deveria ter — nada que
+combine eixos de liveness ou guarde histórico de sessão. O ponteiro aponta para
+um lugar que existe e não é aquele.
+
+**Como apareceu**: eu afirmei à orquestração que "o consumidor de `C`" era um
+dos adiamentos que apontavam para a CAP-05. Ela mandou não contar isso sem
+confirmar no contrato canônico. Ao conferir, descobri duas coisas: a minha
+afirmação era inferência, e a fonte escrita dizia **outra coisa ainda** — CAP-06.
+
+**O que o contrato canônico realmente diz**: a CAP-05 é *"pareamento por QR,
+restauração, desligamento limpo, reclaim de `Singleton`"* (`HANDOFF §10`). Ela
+**não menciona** consumir veredito de degradação. Por outro lado, `core/doc.go`
+— que é a casa da CAP-05 — declara que o pacote *"holds the state that outlives
+a single command"* e carrega *"heartbeat renews, TTL covers abrupt death"*.
+Estado que sobrevive a um comando é exatamente a pré-condição que o consumidor
+de `C` precisa (*"has this socket ever reached CONNECTED? was the previous
+classification DEGRADED?"*).
+
+**Conclusão honesta**: `core/` é o único lugar canônico que satisfaz a
+pré-condição, mas **nenhum contrato atribui a consumação de `C` a ele**. Isso é
+diferente de "é ali". O consumidor verdadeiro segue **INDETERMINADO**.
+
+**Correção sugerida**: quando a CAP-05 existir e o seu call graph estiver
+escrito, decidir por evidência onde `C` é consumido — e só então corrigir o
+ponteiro de `socket.go:100`. Não corrigi agora porque trocaria um palpite errado
+por outro palpite: apontar para a CAP-05 sem prova repetiria exatamente o erro
+que esta entrada registra.
+
+**Status**: **não corrigido, deliberadamente**. Registrado para que o próximo
+agente não herde o ponteiro como se fosse decisão.
