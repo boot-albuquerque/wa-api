@@ -907,3 +907,194 @@ func TestChatMessengerAdapter_SendAudio_WithCallerID(t *testing.T) {
 		t.Errorf("SendAudio ID = %q, want %q", res.ID, "caller-id")
 	}
 }
+
+// --- ChatMessengerAdapter.SendVideo (CAP-06) ------------------------------
+
+func TestChatMessengerAdapter_SendVideo_NoSession(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
+	_, err := a.SendVideo(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}}, "")
+	if testkit.AppErrCode(err) != "no_session" {
+		t.Errorf("SendVideo code = %q", testkit.AppErrCode(err))
+	}
+}
+
+// TestChatMessengerAdapter_SendVideo_InvalidJID: JID inválido nunca pode
+// alcançar client.Upload nem client.SendMessage.
+func TestChatMessengerAdapter_SendVideo_InvalidJID(t *testing.T) {
+	uploadCalled := false
+	fake := &testkit.Fake{UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+		uploadCalled = true
+		return wanoise.UploadResponse{}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	_, err := a.SendVideo(context.Background(), "u1", domain.JID(string([]byte{0x00})), domain.MediaPayload{Bytes: []byte{1, 2, 3}}, "")
+	if err == nil {
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
+	}
+	if uploadCalled {
+		t.Fatal("SendVideo chamou client.Upload com JID inválido")
+	}
+}
+
+// TestChatMessengerAdapter_SendVideo_UploadFailurePropagates: falha de
+// upload nunca alcança client.SendMessage nem produz resultado.
+func TestChatMessengerAdapter_SendVideo_UploadFailurePropagates(t *testing.T) {
+	uploadErr := errors.New("upload: boom")
+	sendCalled := false
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, uploadErr
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			sendCalled = true
+			return wanoise.SendResponse{}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendVideo(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "video/mp4"}, "")
+	if err == nil {
+		t.Fatal("SendVideo não propagou a falha de upload")
+	}
+	if sendCalled {
+		t.Fatal("upload falhou, mas client.SendMessage foi chamado mesmo assim")
+	}
+	if res != (domain.MessageSendResult{}) {
+		t.Errorf("SendVideo devolveu resultado nao-vazio com upload falho: %+v", res)
+	}
+}
+
+// TestChatMessengerAdapter_SendVideo_UploadOK_SendMessageFail_NeverSent é o
+// caso obrigatório do CAP-06: upload bem-sucedido seguido de SendMessage
+// falho NÃO produz sucesso algum.
+func TestChatMessengerAdapter_SendVideo_UploadOK_SendMessageFail_NeverSent(t *testing.T) {
+	sendErr := errors.New("sendmessage: boom")
+	uploadCalled := false
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			uploadCalled = true
+			return wanoise.UploadResponse{URL: "https://mmg.whatsapp.net/x", DirectPath: "/x"}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			return wanoise.SendResponse{}, sendErr
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendVideo(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "video/mp4"}, "")
+	if !uploadCalled {
+		t.Fatal("upload nunca foi chamado — teste nao exercita o caso upload-ok-send-fail")
+	}
+	if err == nil {
+		t.Fatal("SendVideo nao propagou a falha de SendMessage apos upload bem-sucedido")
+	}
+	if res != (domain.MessageSendResult{}) {
+		t.Errorf("upload OK + SendMessage falho produziu resultado nao-vazio: %+v", res)
+	}
+}
+
+// TestChatMessengerAdapter_SendVideo_OK confere a montagem da mensagem
+// (upload chamado com os bytes certos e wanoise.MediaVideo, VideoMessage
+// montada a partir da resposta de upload, não de valores inventados) e que
+// o resultado vem de resp, não do id de entrada.
+//
+// CONTROLE NEGATIVO (CAP-06): trocar wanoise.MediaVideo por
+// wanoise.MediaImage na chamada de client.Upload dentro de
+// ChatMessengerAdapter.SendVideo faz este teste morder na asserção
+// gotAppInfo != wanoise.MediaVideo — mutação executada e revertida
+// manualmente durante o desenvolvimento deste slice.
+func TestChatMessengerAdapter_SendVideo_OK(t *testing.T) {
+	now := time.Now()
+	var gotPlaintext []byte
+	var gotAppInfo wanoise.MediaType
+	var gotTo types.JID
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			gotPlaintext = plaintext
+			gotAppInfo = appInfo
+			return wanoise.UploadResponse{
+				URL:           "https://mmg.whatsapp.net/x",
+				DirectPath:    "/x",
+				MediaKey:      []byte{9, 9, 9},
+				FileEncSHA256: []byte{1, 1, 1},
+				FileSHA256:    []byte{2, 2, 2},
+			}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotTo = to
+			gotMsg = m
+			return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id-video")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	payload := domain.MediaPayload{Bytes: []byte{0xDE, 0xAD, 0xBE, 0xEF}, MimeType: "video/mp4", Caption: "legenda"}
+	res, err := a.SendVideo(context.Background(), "u1", "x@y.com", payload, "")
+	if err != nil {
+		t.Fatalf("SendVideo = %v", err)
+	}
+	if string(gotPlaintext) != string(payload.Bytes) {
+		t.Errorf("bytes enviados ao Upload divergem do payload")
+	}
+	if gotAppInfo != wanoise.MediaVideo {
+		t.Errorf("appInfo do Upload = %v, want wanoise.MediaVideo", gotAppInfo)
+	}
+	if gotTo.String() != "x@y.com" {
+		t.Errorf("destinatario = %q, want %q", gotTo.String(), "x@y.com")
+	}
+	video := gotMsg.GetVideoMessage()
+	if video == nil {
+		t.Fatal("VideoMessage nao foi montada")
+	}
+	if video.GetCaption() != "legenda" {
+		t.Errorf("Caption = %q, want %q", video.GetCaption(), "legenda")
+	}
+	if video.GetURL() != "https://mmg.whatsapp.net/x" || video.GetDirectPath() != "/x" {
+		t.Errorf("URL/DirectPath nao vieram da resposta de upload: %+v", video)
+	}
+	if string(video.GetMediaKey()) != string([]byte{9, 9, 9}) {
+		t.Errorf("MediaKey nao veio da resposta de upload: %v", video.GetMediaKey())
+	}
+	if string(video.GetFileEncSHA256()) != string([]byte{1, 1, 1}) {
+		t.Errorf("FileEncSHA256 nao veio da resposta de upload: %v", video.GetFileEncSHA256())
+	}
+	if string(video.GetFileSHA256()) != string([]byte{2, 2, 2}) {
+		t.Errorf("FileSHA256 nao veio da resposta de upload: %v", video.GetFileSHA256())
+	}
+	if video.GetMimetype() != "video/mp4" {
+		t.Errorf("Mimetype = %q, want %q", video.GetMimetype(), "video/mp4")
+	}
+	if video.GetFileLength() != uint64(len(payload.Bytes)) {
+		t.Errorf("FileLength = %d, want %d", video.GetFileLength(), len(payload.Bytes))
+	}
+	if res.Timestamp != now {
+		t.Errorf("SendVideo timestamp = %v, want %v", res.Timestamp, now)
+	}
+	if res.ID != "wire-id-video" {
+		t.Errorf("SendVideo ID = %q, want %q (o que resp devolveu)", res.ID, "wire-id-video")
+	}
+}
+
+// TestChatMessengerAdapter_SendVideo_WithCallerID: quando id não é vazio,
+// vira RequestExtra.ID — o SDK que decide o ID final, devolvido em resp.ID.
+func TestChatMessengerAdapter_SendVideo_WithCallerID(t *testing.T) {
+	var gotExtra []wanoise.SendRequestExtra
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotExtra = extra
+			return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendVideo(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1}, MimeType: "video/mp4"}, "caller-id")
+	if err != nil {
+		t.Fatalf("SendVideo = %v", err)
+	}
+	if len(gotExtra) != 1 || string(gotExtra[0].ID) != "caller-id" {
+		t.Fatalf("RequestExtra.ID nao recebeu o id do chamador: %+v", gotExtra)
+	}
+	if res.ID != "caller-id" {
+		t.Errorf("SendVideo ID = %q, want %q", res.ID, "caller-id")
+	}
+}

@@ -274,6 +274,54 @@ func (a *ChatMessengerAdapter) SendAudio(ctx context.Context, txtID string, targ
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendVideo sobe payload.Bytes (wanoise.MediaVideo) e envia uma
+// VideoMessage para target (CAP-06). payload.Caption é metadata pura — vai
+// direto para VideoMessage.Caption, sem transcoding e sem geração de
+// thumbnail (JPEGThumbnail vinha do request no histórico e não está no DTO
+// atual — achado reportado, não implementado). Mesma disciplina de
+// SendImage/SendDocument/SendAudio quanto a upload órfão sem tentativa de
+// desfazer.
+func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	uploaded, err := client.Upload(ctx, payload.Bytes, wanoise.MediaVideo)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		VideoMessage: &waE2E.VideoMessage{
+			Caption:       proto.String(payload.Caption),
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String(payload.MimeType),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)

@@ -71,27 +71,6 @@ func composerUseCases() []composerUC {
 			},
 		},
 		{
-			name:    "SendVideo",
-			infoMsg: "video validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendVideoUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendVideoRequest{Phone: "5511987654321", Video: "data:...", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendVideoUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendVideoRequest{Video: "data:..."})
-					return err
-				}},
-				{"Video", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendVideoUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendVideoRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
 			name:    "SendContact",
 			infoMsg: "contact validated",
 			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {

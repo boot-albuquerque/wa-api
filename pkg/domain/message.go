@@ -160,7 +160,17 @@ type SendStickerResult struct {
 	Status    string `json:"status"`
 }
 
-// SendVideoRequest representa o payload de envio de vídeo.
+// SendVideoRequest representa o payload de envio de vídeo. Video é uma
+// união de dois transportes de OBTENÇÃO dos bytes — data URI e URL http(s)
+// externa — mesmo racional de SendImageRequest/SendDocumentRequest, mas com
+// a discriminação MAIS FROUXA das quatro: os 4 primeiros caracteres têm de
+// ser "data" (sem os dois-pontos), não "data:video/" (estreito como Audio)
+// nem "data:" (como Document) — ver `git show 41bc8e2^:handlers.go`, em
+// torno da linha 1583, e isDataVideo em send_video.go.
+//
+// MimeType e JPEGThumbnail existiam no DTO histórico (imageStruct de
+// SendVideo) e NÃO estão aqui — achado do CAP-06, reportado, não
+// implementado por conta própria (decisão de contrato não é do executor).
 type SendVideoRequest struct {
 	Phone   string `json:"Phone"`
 	Video   string `json:"Video"`
@@ -171,6 +181,7 @@ type SendVideoRequest struct {
 // SendVideoResult representa o resultado do envio de vídeo.
 type SendVideoResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 

@@ -50,4 +50,17 @@ type MediaMessenger interface {
 	// única (upload+envio de mídia é uma capacidade coerente) — só o
 	// payload de áudio é um tipo à parte.
 	SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error)
+
+	// SendVideo sobe payload.Bytes (com wanoise.MediaVideo, não
+	// MediaImage/MediaDocument/MediaAudio) e envia uma VideoMessage para
+	// target, usando payload.Caption como metadata pura (CAP-06). Mesma
+	// disciplina de SendImage/SendDocument/SendAudio quanto a upload/envio
+	// e a ausência de rollback de upload.
+	//
+	// domain.MediaPayload — não um tipo próprio como AudioPayload — de
+	// propósito: VideoMessage não carrega nenhum campo de protocolo que
+	// MediaPayload não já tenha (sem PTT, sem Seconds; Seconds/Width/
+	// Height/GIF/playback nunca eram preenchidos historicamente e não são
+	// implementados aqui — sem probing).
+	SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 }

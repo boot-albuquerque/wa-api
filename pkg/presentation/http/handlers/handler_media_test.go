@@ -14,11 +14,12 @@ import (
 )
 
 // Os handlers de /chat/send de midia ainda em cima de port.MessageComposer
-// (handler_media_ext.go: sticker, video) repetem o mesmo corpo de fronteira:
-// le o userinfo TIPADO do contexto, exige Id, decodifica, executa. Image,
-// Document e Audio (handler_media.go) migraram para port.MediaMessenger e
-// tem suites dedicadas (handler_media_send_test.go, handler_send_document_test.go,
-// handler_send_audio_test.go) — nao entram nesta tabela.
+// (handler_media_ext.go: sticker) repetem o mesmo corpo de fronteira: le o
+// userinfo TIPADO do contexto, exige Id, decodifica, executa. Image,
+// Document, Audio e Video (handler_media.go) migraram para
+// port.MediaMessenger e tem suites dedicadas (handler_media_send_test.go,
+// handler_send_document_test.go, handler_send_audio_test.go,
+// handler_send_video_test.go) — nao entram nesta tabela.
 // Sao quatro caminhos de saida >=400 por handler, e todos os quatro tem de
 // logar a causa — o log de fronteira do router sabe QUE a requisicao saiu 400,
 // nao POR QUE.
@@ -59,16 +60,6 @@ func mediaCases() []mediaCase {
 			validBody:      `{"Phone":"5511999999999","Sticker":"data:image/webp;base64,AAAA"}`,
 			incompleteBody: `{"Phone":"5511999999999"}`,
 			secretBody:     `{"Phone":"` + logassertAdminToken + `","Sticker":"` + logassertGlobalEncryptionKey + `"}`,
-		},
-		{
-			name:  "video",
-			route: "/chat/send/video",
-			newHandler: func(mc appport.MessageComposer, l appport.Logger) http.Handler {
-				return NewSendVideoHandler(message.NewSendVideoUseCase(mc, l))
-			},
-			validBody:      `{"Phone":"5511999999999","Video":"data:video/mp4;base64,AAAA"}`,
-			incompleteBody: `{"Phone":"5511999999999"}`,
-			secretBody:     `{"Phone":"` + logassertAdminToken + `","Video":"` + logassertGlobalEncryptionKey + `"}`,
 		},
 	}
 }

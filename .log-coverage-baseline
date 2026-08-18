@@ -707,7 +707,24 @@ rules_frozen=true
 # regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado em
 # HEAD (bc7ba91, worktree limpo) vs no estado final: diff mostra APENAS as
 # 4 linhas novas citadas acima sendo ACRESCENTADAS, nenhuma linha removida.
-min_func_coverage=681
+# justificativa: CAP-06 (2026-08-18) — POST /chat/send/video passou a
+# buscar/decodificar, resolver MIME (2 niveis, reaproveitando resolveMimeType
+# de send_image.go) e enviar de verdade. Tres funcoes novas ELEGIVEIS, mesmo
+# padrao "adapter/funcao pura nao loga" ja' aceito para Image/Document/Audio:
+# ChatMessengerAdapter.SendVideo, message.isHTTPVideoURL e
+# message.decodeVideoDataURIWithLimit (todas uncovered, por design — quem
+# loga e' SendVideoUseCase.Execute/decodeDataVideo que as chamam). A quarta
+# funcao elegivel, SendVideoUseCase.decodeDataVideo, NASCE COBERTA (Warn nos
+# dois caminhos de erro — tamanho excedido e base64 invalido — delegando a
+# decodeVideoDataURIWithLimit a decisao pura, mesmo padrao de
+# decodeDataURIAudio). E' o `covered` que sobe 422->423, unico ganho liquido.
+# func_coverage cai 681->678 so' pela aritmetica do denominador
+# (423/624 = 67.79% vs 422/620 = 68.06%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado em
+# HEAD (643c65b, worktree temporario via `git worktree add`) vs no estado
+# final: diff mostra APENAS as 3 linhas novas (SendVideo, isHTTPVideoURL,
+# decodeVideoDataURIWithLimit) sendo ACRESCENTADAS, nenhuma linha removida.
+min_func_coverage=678
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -780,7 +797,20 @@ min_func_coverage=681
 # Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
 # `logcov -list-uncovered` (HEAD bc7ba91 vs estado final) citado em
 # min_func_coverage: so' ACRESCIMO, nenhuma remocao.
-min_errpath_coverage=855
+# justificativa: CAP-06 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para o detalhe nominal. errpaths sobe 1288->1303
+# (+15) e errpaths_covered sobe 1101->1111 (+10): os pontos de retorno de
+# erro novos em SendVideoUseCase.Execute (missing_video,
+# unsupported_video_source, video_fetch_failed, empty_video_body) e
+# decodeDataVideo (video_too_large, invalid_data_uri) SAO logados — mesmo
+# padrao ja' aceito para SendDocument/SendImage/SendAudio; os S-ret/S-consume
+# sem log de ChatMessengerAdapter.SendVideo (Client, ToJID, Upload,
+# SendMessage) e de isHTTPVideoURL/decodeVideoDataURIWithLimit somam os 5
+# restantes, pelo padrao "adapter/funcao pura nao loga" ja' aceito acima.
+# Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
+# `logcov -list-uncovered` (HEAD 643c65b vs estado final) citado em
+# min_func_coverage: so' ACRESCIMO, nenhuma remocao.
+min_errpath_coverage=853
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -864,7 +894,16 @@ min_errpath_coverage=855
 # resolveMimeType em Image/Document) nasce elegivel de verdade e nao so'
 # "descoberta pelo padrao". message.isDataURIAudio NAO entra no denominador
 # (X1, mesmo motivo de isDataURI/isDataURIImage acima).
-min_eligible=620
+# +4 (620->624): CAP-06, ChatMessengerAdapter.SendVideo, message.isHTTPVideoURL,
+# message.decodeVideoDataURIWithLimit e message.SendVideoUseCase.decodeDataVideo
+# — ver a justificativa de min_func_coverage acima para o detalhe nominal de
+# cada uma. Ao contrario de Audio, Video REAPROVEITA resolveMimeType
+# (send_image.go) em vez de ganhar uma funcao de precedencia propria — a
+# precedencia historica de Video e' identica a de Image (2 niveis, sem
+# Content-Type remoto), entao nao ha' funcao nova equivalente a
+# resolveAudioMimeType aqui. message.isDataVideo NAO entra no denominador
+# (X1, mesmo motivo de isDataURI/isDataURIImage/isDataURIAudio acima).
+min_eligible=624
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

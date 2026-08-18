@@ -19,6 +19,10 @@ const DefaultSentDocumentMessageID = "sent-document-message-id"
 // MessageSendResult.ID sem SendAudioFunc configurada.
 const DefaultSentAudioMessageID = "sent-audio-message-id"
 
+// DefaultSentVideoMessageID é o ID que MediaMessenger devolve em
+// MessageSendResult.ID sem SendVideoFunc configurada.
+const DefaultSentVideoMessageID = "sent-video-message-id"
+
 // MediaMessengerSendImageCall é uma chamada a SendImage.
 type MediaMessengerSendImageCall struct {
 	Ctx     context.Context
@@ -46,6 +50,15 @@ type MediaMessengerSendAudioCall struct {
 	ID      string
 }
 
+// MediaMessengerSendVideoCall é uma chamada a SendVideo.
+type MediaMessengerSendVideoCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.MediaPayload
+	ID      string
+}
+
 // MediaMessenger é o fake de port.MediaMessenger.
 type MediaMessenger struct {
 	SessionGuard
@@ -58,6 +71,9 @@ type MediaMessenger struct {
 
 	SendAudioFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error)
 	SendAudioCalls []MediaMessengerSendAudioCall
+
+	SendVideoFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendVideoCalls []MediaMessengerSendVideoCall
 }
 
 var _ port.MediaMessenger = (*MediaMessenger)(nil)
@@ -87,4 +103,13 @@ func (f *MediaMessenger) SendAudio(ctx context.Context, txtID string, target dom
 		return f.SendAudioFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentAudioMessageID}, nil
+}
+
+// SendVideo implementa port.MediaMessenger.
+func (f *MediaMessenger) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	f.SendVideoCalls = append(f.SendVideoCalls, MediaMessengerSendVideoCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendVideoFunc != nil {
+		return f.SendVideoFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentVideoMessageID}, nil
 }
