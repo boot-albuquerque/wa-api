@@ -4898,7 +4898,11 @@ type holdSample struct {
 	at           time.Duration
 	processAlive bool
 	socket       spa.SocketState
-	identity     identityVerdict
+	// socketErr is kept BESIDE socket rather than encoded into it: "the read
+	// failed" is not a socket state, and a type that can express both in one
+	// field is a type that lets a caller confuse them.
+	socketErr error
+	identity  identityVerdict
 }
 
 // TestRealSPAHoldRetention measures what actually happens to a session that is
@@ -4966,17 +4970,23 @@ func TestRealSPAHoldRetention(t *testing.T) {
 	t.Logf("holding for %s, sampling every %s (pid=%d, profile=%s); read-only, no send",
 		holdFor, holdSampleInterval, pid, profile)
 
-	readSocket := func() spa.SocketState {
+	// readSocket returns the state AND the read error separately, and the split
+	// is the point. An earlier draft folded a failed read into the return value
+	// as spa.SocketState("PROBE_ERROR") — a value outside the type's declared
+	// vocabulary (CONNECTED / OPENING / ""), which is the "fictional contract"
+	// the orchestration rejected in LOOP 04.4 and which reads, in a log line,
+	// exactly like something the page said. It did not say it. Returning Unread
+	// instead would be worse still: that claims the page answered "" when it
+	// never answered at all.
+	readSocket := func() (spa.SocketState, error) {
 		var raw string
 		if probeErr := runner.Do(context.Background(), engine.OpStateProbe, "hold/socket",
 			func(ctx context.Context) error {
 				return sess.Tab().Evaluate(ctx, spa.SocketStateReadExpr, &raw)
 			}); probeErr != nil {
-			// A failed READ is not a socket state. Returning Unread here would
-			// claim the page answered "" when it never answered at all.
-			return spa.SocketState("PROBE_ERROR")
+			return spa.SocketStateUnread, probeErr
 		}
-		return spa.SocketState(raw)
+		return spa.SocketState(raw), nil
 	}
 
 	var samples []holdSample
@@ -4988,7 +4998,7 @@ func TestRealSPAHoldRetention(t *testing.T) {
 		alive := sess.ProcessAlive()
 		s := holdSample{at: time.Since(start), processAlive: alive}
 		if alive {
-			s.socket = readSocket()
+			s.socket, s.socketErr = readSocket()
 			// A single read, not a settle window: here the question is "what is
 			// true NOW", and waiting would smear the sample across the very
 			// timeline being measured. The four-state verdict still keeps a
@@ -4997,8 +5007,15 @@ func TestRealSPAHoldRetention(t *testing.T) {
 			s.identity = verdict
 		}
 		samples = append(samples, s)
+		socketField := string(s.socket)
+		if s.socketErr != nil {
+			// Named so it can never be mistaken for something the page said.
+			socketField = "READ_FAILED"
+		} else if socketField == "" {
+			socketField = "UNREAD"
+		}
 		t.Logf("t+%-8s process=%v socket=%-12s identity=%s",
-			s.at.Round(time.Second), s.processAlive, s.socket, s.identity)
+			s.at.Round(time.Second), s.processAlive, socketField, s.identity)
 
 		if !alive {
 			t.Fatalf("the held session's browser process died at t+%s with nobody asking "+
@@ -5011,9 +5028,29 @@ func TestRealSPAHoldRetention(t *testing.T) {
 
 	// The timeline is the deliverable. Summarise the transitions rather than
 	// asserting a shape nothing has measured yet.
-	firstSocket, firstIdentity := samples[0].socket, samples[0].identity
+	// The BASELINE must come from a sample that was actually read. Taking
+	// samples[0] blindly would make a failed first read the reference point,
+	// and every later successful read would then look like a transition — a
+	// false finding manufactured by the summary itself, which is the class of
+	// error this whole file keeps paying for.
+	baseline, haveBaseline := holdSample{}, false
+	for _, s := range samples {
+		if s.socketErr == nil {
+			baseline, haveBaseline = s, true
+			break
+		}
+	}
+	if !haveBaseline {
+		t.Fatalf("not one of the %d samples produced a readable socket state; there is "+
+			"no baseline to compare against and no timeline to report", len(samples))
+	}
+	firstSocket, firstIdentity := baseline.socket, baseline.identity
 	socketChanged, identityChanged := "", ""
 	for _, s := range samples {
+		if s.socketErr != nil {
+			// A read we could not perform is not evidence of a transition.
+			continue
+		}
 		if socketChanged == "" && s.socket != firstSocket {
 			socketChanged = fmt.Sprintf("socket %s -> %s at t+%s", firstSocket, s.socket, s.at.Round(time.Second))
 		}
