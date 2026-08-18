@@ -863,3 +863,64 @@ func TestStartSession_CancelledBootStillAborts(t *testing.T) {
 	}
 	t.Logf("aborted %s into a %s navigation (err=%v)", elapsed, serverDelay, err)
 }
+
+// TestStartSession_SessionSurvivesBootDeadlineExpiry is the second shape of the
+// same invariant, and it is not the same test as
+// TestStartSession_SessionOutlivesItsBootContext.
+//
+// That one cancels EXPLICITLY, right after the boot returns. This one lets a
+// short boot DEADLINE expire on its own, later, while the session is being
+// used. The distinction matters because the two arrive by different routes: a
+// caller writes `defer cancel()` on purpose, but a deadline expiring under a
+// long-lived session is something a caller creates by accident — it is the
+// shape the real holder of these sessions will produce, and the module has no
+// such holder yet (runtime/ is doc-only, and nothing outside this module
+// imports it), so nothing else in the repository exercises it.
+//
+// The invariant, stated once so the next resilience layer is audited against a
+// rule instead of rediscovering it:
+//
+//	A session's lifetime is ended by Stop, and by nothing else.
+//	No boot deadline, no caller cancellation after the boot has returned,
+//	and no context the caller happened to pass in may end it.
+func TestStartSession_SessionSurvivesBootDeadlineExpiry(t *testing.T) {
+	const bootBudget = 25 * time.Second
+
+	runner := engine.NewRunner()
+	cfg := baseConfig(t, pageServer(t, "/ready", readyPage))
+	cfg.Runner = runner
+	cfg.RequiredModules = []spa.Module{}
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), bootBudget)
+	defer cancelBoot()
+
+	start := time.Now()
+	sess, err := StartSession(bootCtx, cfg)
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	defer sess.Stop(context.Background())
+	bootTook := time.Since(start)
+
+	// Hold the session past the boot deadline, the way a caller that keeps a
+	// session across commands does. Nothing here re-derives from bootCtx.
+	<-bootCtx.Done()
+	if bootCtx.Err() == nil {
+		t.Fatal("the boot context did not expire; this test proves nothing")
+	}
+
+	var got string
+	evalErr := runner.Do(context.Background(), engine.OpStateProbe, "post-deadline/probe",
+		func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, "String(6*7)", &got) })
+	if evalErr != nil {
+		t.Fatalf("the session died when its BOOT deadline expired (%v), %s after the boot "+
+			"itself had already returned successfully in %s. A caller granting a boot "+
+			"budget is not granting a session lifetime; only Stop may end a session",
+			evalErr, bootBudget-bootTook, bootTook)
+	}
+	if got != "42" {
+		t.Fatalf("probe returned %q, want \"42\"", got)
+	}
+	t.Logf("boot returned in %s; session still answering %s after its boot deadline expired",
+		bootTook, bootBudget-bootTook)
+}

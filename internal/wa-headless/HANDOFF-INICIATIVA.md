@@ -398,6 +398,38 @@ Serão critérios de validação. Cada um tem medição por trás.
    operação, do lado Go.
 6. **Nenhuma espera com relógio na página.** Sem `chromedp.Poll` para prazo, sem
    `requestAnimationFrame` em aba de fundo (ARMADILHAS 19 e 3).
+7. **O tempo de vida de uma sessão termina no `Stop`, e em mais nada.**
+
+   Nenhum prazo de boot, nenhum cancelamento do chamador depois de o boot ter
+   retornado, e nenhum contexto que o chamador por acaso tenha passado pode
+   encerrar uma sessão viva. Quem concede um orçamento a `StartSession` está
+   concedendo um **BOOT**, não uma **SESSÃO**.
+
+   **Medido, 2026-08-18 (LOOP 05.3).** `engine.OpenTab` deriva o alocador do
+   chromedp do contexto recebido, e `core.StartSession` passava o contexto do
+   boot do chamador. Contra o perfil pareado real, um boot que alcançou READY em
+   10,9 s devolveu uma sessão que respondia `context canceled` a todas as sondas
+   pela janela inteira de 76 s. A suíte era cega por construção: todo teste
+   chamava `StartSession(context.Background(), ...)`, o dublê imortal de um
+   contexto. Ver `ARMADILHAS.md`.
+
+   A invariante fica escrita aqui, e não só nos testes, pelo motivo da Regra 3
+   do `CLAUDE.md`: a próxima camada que segurar sessões — o pool do `runtime/`,
+   um reaproveitamento, um circuit breaker — precisa ser **auditada contra uma
+   regra**, em vez de ter esta interação redescoberta por acidente. Hoje não
+   existe detentor nenhum: `runtime/` é só `doc.go` e nada fora do módulo
+   importa `wa-headless`. Foi precisamente essa ausência de chamador real que
+   escondeu o defeito.
+
+   **Travada por dois testes, com rotas de falha diferentes** — cancelamento
+   explícito e expiração de prazo não são o mesmo caminho, e os controles
+   negativos produzem erros distintos (`context canceled` contra
+   `context deadline exceeded`):
+   `TestStartSession_SessionOutlivesItsBootContext` e
+   `TestStartSession_SessionSurvivesBootDeadlineExpiry`. O aborto do boot segue
+   preservado e travado por `TestStartSession_CancelledBootStillAborts`, cujo
+   controle negativo exigiu um servidor lento para morder — a versão rápida
+   passava com o mecanismo removido.
 7. **Interação crítica só com póscondição observável verificada.**
 8. **Ponto de clique na interseção com o viewport**, nunca no centro geométrico.
 9. **Identidade de nó, não só geometria**, entre validar e agir.
