@@ -322,6 +322,57 @@ func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, targ
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendSticker sobe payload.Bytes (wanoise.MediaImage — sticker não tem
+// MediaType próprio) e envia uma StickerMessage para target (CAP-07).
+// payload.Bytes/payload.MimeType já chegam aqui processados (WebP
+// convertido) pelo usecase, via appport.StickerProcessor — este adapter não
+// faz conversão nenhuma, só upload+envio, mesma disciplina de SendImage/
+// SendDocument/SendAudio/SendVideo. PngThumbnail e os quatro campos de
+// metadata de pacote (PackId/PackName/PackPublisher/Emojis) não são
+// preenchidos: PngThumbnail viria do request histórico e não existe em
+// domain.SendStickerRequest (achado CAP-07, reportado); os quatro de pacote
+// já foram consumidos como EXIF dentro da conversão, não são campos de
+// StickerMessage.
+func (a *ChatMessengerAdapter) SendSticker(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	uploaded, err := client.Upload(ctx, payload.Bytes, wanoise.MediaImage)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		StickerMessage: &waE2E.StickerMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String(payload.MimeType),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)

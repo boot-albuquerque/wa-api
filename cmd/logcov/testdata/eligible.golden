@@ -1769,6 +1769,7 @@ pkg/application/contracts/contractsfake.MediaFetcher.FetchBytes	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendAudio	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendDocument	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendImage	EXCLUDED	X5
+pkg/application/contracts/contractsfake.MediaMessenger.SendSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendVideo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessageComposer.NewMessageID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishError	EXCLUDED	X5
@@ -1813,6 +1814,7 @@ pkg/application/contracts/contractsfake.SessionRegistry.ProvisionWebhookClient	E
 pkg/application/contracts/contractsfake.SessionRegistry.Register	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionRegistry.Unregister	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionStatusReader.SessionStatus	EXCLUDED	X5
+pkg/application/contracts/contractsfake.StickerProcessor.ProcessSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.UploadFile	EXCLUDED	X5
@@ -1933,15 +1935,17 @@ pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:28);uncovered:L2(S-ret,send_poll.go:31);uncovered:L2(S-ret,send_poll.go:34)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
-pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:28);uncovered:L2(S-ret,send_sticker.go:31)
+pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:67);uncovered:L2(S-ret,send_sticker.go:70)
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:129);uncovered:L2(S-ret,send_video.go:134)
 pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covered
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
+pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:205)
 pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
 pkg/application/usecase/message.decodeVideoDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_video.go:214);uncovered:L2(S-ret,send_video.go:226)
 pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
+pkg/application/usecase/message.isDataSticker	EXCLUDED	X1
 pkg/application/usecase/message.isDataURI	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIAudio	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIImage	EXCLUDED	X1
@@ -2436,8 +2440,10 @@ pkg/infra/media/sticker.EncodeJPEGThumbnail	ELIGIBLE	covered
 pkg/infra/media/sticker.EnsureVP8XWithEXIF	EXCLUDED	X1
 pkg/infra/media/sticker.InjectWebPEXIF	ELIGIBLE	covered
 pkg/infra/media/sticker.IsValidWebP	EXCLUDED	X1
+pkg/infra/media/sticker.NewProcessor	EXCLUDED	X1
 pkg/infra/media/sticker.ParseWebPChunks	ELIGIBLE	covered
 pkg/infra/media/sticker.ProcessStickerData	ELIGIBLE	covered
+pkg/infra/media/sticker.Processor.ProcessSticker	ELIGIBLE	covered
 pkg/infra/media/sticker.PutUint24LE	ELIGIBLE	covered
 pkg/infra/media/sticker.RunFFmpegConversion	ELIGIBLE	covered
 pkg/infra/media/sticker.RunFFmpegConversion.func1	ELIGIBLE	covered
@@ -2511,6 +2517,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncover
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1

@@ -724,7 +724,28 @@ rules_frozen=true
 # HEAD (643c65b, worktree temporario via `git worktree add`) vs no estado
 # final: diff mostra APENAS as 3 linhas novas (SendVideo, isHTTPVideoURL,
 # decodeVideoDataURIWithLimit) sendo ACRESCENTADAS, nenhuma linha removida.
-min_func_coverage=678
+#
+# FIX-07 (2026-08-18): REQUIRED_FIX da avaliacao adversarial independente de
+# CAP-07. O `min_func_coverage=678` acima so' era alcancavel porque
+# ChatMessengerAdapter.SendSticker (pkg/infra/wa-noise/adapters/chat/
+# messenger.go) tinha um `log.Warn` plantado no ramo de upload-fail —
+# medido pelo avaliador como matematica e suficiente para o piso: remover
+# essa UNICA linha derruba func_coverage de 678 para 676, e reintroduzi-la
+# devolve 678 (controle negativo executado nesta sessao, os dois numeros
+# abaixo). O log era inconsistente com os cinco irmaos do mesmo arquivo —
+# SendText, SendImage, SendDocument, SendAudio, SendVideo — nenhum dos
+# quais loga: neste repo quem loga e' o USE CASE (SendStickerUseCase.
+# Execute via appport.Logger), o adapter delegador so' propaga o erro. O
+# log foi removido, tornando SendSticker consistente com os irmaos.
+# medicao ANTES da remocao: func_coverage = 67.8% (425/627).
+# medicao DEPOIS da remocao: func_coverage = 67.6% (424/627).
+# controle negativo (log reintroduzido temporariamente): func_coverage
+#   volta a 67.8% (425/627), confirmando que o log era o que sustentava o
+#   piso anterior; log removido de novo antes de fechar a sessao.
+# nenhuma funcao ja' coberta regrediu — a unica mudanca e' a perda desta
+# UNICA cobertura artificial; min_eligible NAO muda (627), so' `covered`
+# cai 425->424.
+min_func_coverage=676
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -903,7 +924,34 @@ min_errpath_coverage=853
 # Content-Type remoto), entao nao ha' funcao nova equivalente a
 # resolveAudioMimeType aqui. message.isDataVideo NAO entra no denominador
 # (X1, mesmo motivo de isDataURI/isDataURIImage/isDataURIAudio acima).
-min_eligible=624
+# (linha ativa min_eligible movida para baixo pelo CAP-07 — ver comentario)
+
+# CAP-07 (envio de sticker de verdade, 2026-08-18): min_eligible 624 -> 627.
+# +4 elegiveis novos: SendStickerUseCase.Execute, checkStickerDataURISize
+# (application/usecase/message), Processor.ProcessSticker
+# (infra/media/sticker), ChatMessengerAdapter.SendSticker
+# (infra/wa-noise/adapters/chat). classifyStickerProcessError e
+# isHTTPStickerURL foram cogitados como funcoes proprias e descartados
+# antes do commit: o mapeamento de erro foi embutido em Execute (nao havia
+# reuso a proteger) e a checagem de URL reaproveita isHTTPImageURL
+# (send_image.go) em vez de duplicar — a regra e' identica, sem nada
+# especifico de sticker, mesmo racional de resolveMimeType reaproveitada
+# por Video. func_coverage ficou EXATAMENTE no piso (678) na medicao
+# original: checkStickerDataURISize (funcao pura, sem logger, mesma
+# categoria de decodeVideoDataURIWithLimit/isHTTPVideoURL/
+# resolveAudioMimeType — layer restrita a L1-a, sem porta de logger
+# disponivel numa funcao livre) e ChatMessengerAdapter.SendSticker eram os
+# dois elegiveis novos SEM log, mas o segundo tinha um `log.Warn` plantado
+# so' para bater o piso — CORRIGIDO por FIX-07 (ver justificativa completa
+# e as duas medicoes do controle negativo na entrada de min_func_coverage
+# acima). Pos-fix: SendSticker segue SEM log, consistente com os cinco
+# irmaos delegadores do mesmo arquivo (SendText/Image/Document/Audio/
+# Video); Processor.ProcessSticker (infra/media/sticker) manteve o log
+# estruturado via zerolog — permitido fora da camada de aplicacao, mesmo
+# racional que libera zerolog em outros adapters de infra — e
+# SendStickerUseCase.Execute manteve o log via appport.Logger, como os
+# demais Execute de send_*.
+min_eligible=627
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

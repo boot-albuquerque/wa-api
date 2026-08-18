@@ -407,3 +407,31 @@ func TestSendAudio_MimeType_FallbackByPTT_ViaRegisteredRoute(t *testing.T) {
 		t.Fatalf("SendAudio chamado %d vez(es), quero 1", n)
 	}
 }
+
+// TestSendAudio_NoSecretLeak restaura o eixo perdido pela delecao de
+// handler_media_test.go (a tabela sobre port.MessageComposer ficou vazia
+// quando CAP-07 migrou o ultimo handler para longe dela — ver
+// HOUSEKEEP.md). Phone, o campo Audio e o header Authorization carregam os
+// tres segredos da F9.4 (a sessao usa um id NAO secreto, de proposito: em
+// producao ele nunca coincide com um dos tres); a sessao falha e o log de
+// saida da rota REGISTRADA nao pode carregar nenhum dos tres.
+func TestSendAudio_NoSecretLeak(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{SessionGuard: contractsfake.FailSession(errors.New("send-audio-secret-leak-cause"))}
+	jr := &contractsfake.JIDResolver{}
+	mf := defaultSendAudioFetcher()
+
+	wrapped, capture := logassert.Wrap(sendAudioRouter(mm, jr, mf))
+
+	body := `{"Phone":"` + logassertGlobalHMACKey + `","Audio":"` + logassertGlobalEncryptionKey + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/chat/send/audio", strings.NewReader(body))
+	req = withUser(req, "no-secret-leak-session")
+	req.Header.Set("Authorization", logassertAdminToken)
+
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Code < 400 {
+		t.Fatalf("falha de sessao produziu status de sucesso %d", rec.Code)
+	}
+	logassert.NoSecrets(t, capture.Records(t))
+}

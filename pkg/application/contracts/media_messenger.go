@@ -63,4 +63,22 @@ type MediaMessenger interface {
 	// Height/GIF/playback nunca eram preenchidos historicamente e não são
 	// implementados aqui — sem probing).
 	SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+
+	// SendSticker sobe payload.Bytes (com wanoise.MediaImage — sticker NÃO
+	// tem MediaType próprio no SDK) e envia uma StickerMessage para target
+	// (CAP-07). payload.Bytes/payload.MimeType TÊM de ser os bytes/MIME já
+	// processados pelo pipeline de sticker (appport.StickerProcessor) — o
+	// WebP convertido, nunca o input cru. Mesma disciplina de SendImage/
+	// SendDocument/SendAudio/SendVideo quanto a upload órfão sem tentativa
+	// de desfazer.
+	//
+	// domain.MediaPayload — não um tipo próprio — de propósito: o único
+	// campo de protocolo de StickerMessage além de URL/DirectPath/MediaKey/
+	// Mimetype/FileEncSHA256/FileSHA256/FileLength é PngThumbnail, que viria
+	// do REQUEST histórico e não existe em domain.SendStickerRequest (achado
+	// CAP-07, reportado — não implementado por conta própria). O mesmo vale
+	// para os quatro campos de metadata de pacote (PackId/PackName/
+	// PackPublisher/Emojis), que alimentam a EXIF dentro do pipeline de
+	// conversão, não StickerMessage diretamente.
+	SendSticker(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 }

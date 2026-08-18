@@ -11,6 +11,7 @@ import (
 
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/media/opengraph"
+	"wa-api/pkg/infra/media/sticker"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -140,7 +141,8 @@ func initCustomHandlers(s *server) {
 	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendDocumentUC := message.NewSendDocumentUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendAudioUC := message.NewSendAudioUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
-	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)
+	stickerProcessor := sticker.NewProcessor()
+	sendStickerUC := message.NewSendStickerUseCase(chatMessenger, jidResolver, mediaFetcher, stickerProcessor, logger)
 	sendVideoUC := message.NewSendVideoUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendContactUC := message.NewSendContactUseCase(messageComposer, logger)
 	sendLocationUC := message.NewSendLocationUseCase(messageComposer, logger)

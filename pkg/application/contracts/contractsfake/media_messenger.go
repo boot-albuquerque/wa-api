@@ -23,6 +23,10 @@ const DefaultSentAudioMessageID = "sent-audio-message-id"
 // MessageSendResult.ID sem SendVideoFunc configurada.
 const DefaultSentVideoMessageID = "sent-video-message-id"
 
+// DefaultSentStickerMessageID é o ID que MediaMessenger devolve em
+// MessageSendResult.ID sem SendStickerFunc configurada.
+const DefaultSentStickerMessageID = "sent-sticker-message-id"
+
 // MediaMessengerSendImageCall é uma chamada a SendImage.
 type MediaMessengerSendImageCall struct {
 	Ctx     context.Context
@@ -59,6 +63,15 @@ type MediaMessengerSendVideoCall struct {
 	ID      string
 }
 
+// MediaMessengerSendStickerCall é uma chamada a SendSticker.
+type MediaMessengerSendStickerCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.MediaPayload
+	ID      string
+}
+
 // MediaMessenger é o fake de port.MediaMessenger.
 type MediaMessenger struct {
 	SessionGuard
@@ -74,6 +87,9 @@ type MediaMessenger struct {
 
 	SendVideoFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
 	SendVideoCalls []MediaMessengerSendVideoCall
+
+	SendStickerFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendStickerCalls []MediaMessengerSendStickerCall
 }
 
 var _ port.MediaMessenger = (*MediaMessenger)(nil)
@@ -112,4 +128,13 @@ func (f *MediaMessenger) SendVideo(ctx context.Context, txtID string, target dom
 		return f.SendVideoFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentVideoMessageID}, nil
+}
+
+// SendSticker implementa port.MediaMessenger.
+func (f *MediaMessenger) SendSticker(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+	f.SendStickerCalls = append(f.SendStickerCalls, MediaMessengerSendStickerCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendStickerFunc != nil {
+		return f.SendStickerFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentStickerMessageID}, nil
 }
