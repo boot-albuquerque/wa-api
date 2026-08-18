@@ -4981,3 +4981,81 @@ upload da thumbnail HQ do link preview.
 ramo URL ponta a ponta com upload+envio reais; ACCEPTANCE_CRITERIA da task
 não menciona thumbnail). Decisão consciente: registrada aqui em vez de
 implementada sem pedir, por ser scope creep sobre uma task já grande.
+
+## F116 — `SendAudioRequest.Caption` é aceito pela API e não tem representação no protocolo
+
+**Data / contexto**: 2026-08-18, durante CAP-05 (ligar o envio real de áudio).
+Descoberto pelo executor e reconferido pelo avaliador independente no `.pb.go`
+gerado.
+
+**Onde**: `pkg/domain/message.go` (`SendAudioRequest.Caption`, tag JSON
+`Caption,omitempty`), consumido — ou melhor, **não** consumido — por
+`pkg/application/usecase/message/send_audio.go`.
+
+**Problema**: a rota `POST /chat/send/audio` aceita `Caption` no payload
+público, mas `waE2E.AudioMessage` **não possui campo Caption**. Não é um caso
+de "esquecemos de ligar": não existe onde ligar. O campo atravessa a fronteira
+HTTP, é decodificado, e morre ali. O handler histórico (`41bc8e2^:handlers.go`)
+também não o enviava — ele montava `AudioMessage` sem qualquer caption.
+
+Isto é a mesma **classe** dos achados de `LinkPreview` (F-anterior, corrigido em
+CAP-01.1) e do `MimeType` de imagem (corrigido em CAP-03), com uma diferença
+importante: aqueles dois tinham representação protocolar e só não estavam
+ligados. Este não tem. Por isso **não** foi corrigido em CAP-05 — não há
+correção possível sem inventar comportamento.
+
+**Correção sugerida**: é decisão de CONTRATO, não de implementação. Três
+caminhos, nenhum trivial:
+1. remover `Caption` do DTO de áudio — mudança de contrato público, quebra
+   clientes que hoje o enviam (mesmo sem efeito);
+2. documentar explicitamente como aceito-e-ignorado, o que ao menos torna a
+   mentira honesta;
+3. investigar se o WhatsApp representa legenda de áudio por outro mecanismo
+   (mensagem de texto associada, `ContextInfo`), e se isso é desejável.
+
+**PROIBIDO**: inventar uma forma de "enviar caption em áudio" empurrando o
+texto para outro campo. Seria fabricar semântica que o protocolo não tem.
+
+**Status**: **NÃO CORRIGIDO** — registrado como dívida de contrato por decisão
+do ciclo. Não bloqueia nenhuma capability.
+
+## F117 — `Waveform` sumiu da superfície pública de áudio, mas o histórico a enviava
+
+**Data / contexto**: 2026-08-18, durante CAP-05. É o inverso exato da F116.
+
+**Onde**: `pkg/domain/message.go` (`SendAudioRequest`, que **não** tem campo
+`Waveform`) contra `git show 41bc8e2^:handlers.go`, onde o `audioStruct` tinha
+o campo e ele era enviado:
+
+```go
+AudioMessage: &waE2E.AudioMessage{
+    ...
+    PTT:      &ptt,
+    Seconds:  proto.Uint32(t.Seconds),
+    Waveform: t.Waveform,
+}
+```
+
+**Problema**: `waE2E.AudioMessage.Waveform` existe no protocolo e era
+preenchido a partir do request. Quando o `handlers.go` de 232KB foi deletado
+(`41bc8e2`), o DTO reconstruído perdeu o campo. Ou seja: a superfície atual é
+**mais pobre** que a histórica, e nada registrava isso.
+
+O waveform é a barrinha de amplitude que o WhatsApp desenha num voice note.
+Sem ele, o cliente recebedor tende a exibir uma forma de onda genérica ou
+achatada — a mensagem funciona, mas a fidelidade visual do voice note é menor.
+Não medi esse efeito contra um aparelho real; a afirmação vem do protocolo e do
+comentário histórico, não de observação.
+
+**Relação com F115 e F114**: são a mesma família — metadata de fidelidade que a
+reconstrução perdeu (thumbnail HQ do link preview, `JPEGThumbnail` de imagem, e
+agora `Waveform` de áudio). Vale tratá-las num único pass de fidelidade em vez
+de uma a uma.
+
+**Correção sugerida**: reintroduzir `Waveform []byte` em `SendAudioRequest` e
+repassá-lo ao `AudioPayload` até o adapter. É acréscimo de campo opcional,
+portanto compatível para trás. Custo baixo; o motivo de não ter sido feito em
+CAP-05 é escopo, não dificuldade.
+
+**Status**: **NÃO CORRIGIDO** — CAP-05 tinha escopo fechado (ligar o envio real
+e recuperar PTT/MIME), e ampliar a superfície pública não era parte dele.
