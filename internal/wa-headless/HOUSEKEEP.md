@@ -1509,8 +1509,28 @@ ponteiro de `socket.go:100`. Não corrigi agora porque trocaria um palpite errad
 por outro palpite: apontar para a CAP-05 sem prova repetiria exatamente o erro
 que esta entrada registra.
 
-**Status**: **não corrigido, deliberadamente**. Registrado para que o próximo
-agente não herde o ponteiro como se fosse decisão.
+**Status**: **CORRIGIDO em 2026-08-18 (LOOP 05.4)**.
+
+A pré-condição desta entrada — *"quando a CAP-05 existir e o seu call graph
+estiver escrito"* — foi satisfeita. E a resposta veio por medição, não por
+palpite: `grep` por `Socket|Liveness|ClassifyOpening` em `internal/wa-headless/core/`
+retorna **zero ocorrências**. A CAP-05 que existe tem a pré-condição certa
+(`core/doc.go`: *"holds the state that outlives a single command"*) e **não é**
+a consumidora.
+
+O ponteiro foi corrigido para dizer o que se sabe e parar aí: a CAP-06 estava
+errada duas vezes (fechou, e era inventário de módulos), a CAP-05 não é, e o
+consumidor segue **INDETERMINADO**. Nenhum destino novo foi nomeado — nomear um
+sem call site repetiria exatamente o erro que esta entrada registra.
+
+**Achado incidental, corrigido no mesmo bloco**: o comentário ainda carregava a
+afirmação exagerada da **F-28** — *"makes that impossible to violate by
+construction, not just by policy"*. A orquestração já tinha julgado isso
+(*"NOT IN DECLARED VOCABULARY != UNREPRESENTABLE BY THE TYPE SYSTEM"*), mas a
+correção fora aplicada às minhas falas e **não ao código**. Agora o comentário
+diz "impossible to express in the DECLARED VOCABULARY", registra a distinção e
+nomeia quem de fato guarda a propriedade:
+`TestClassifyOpeningDurationExhaustsToTwoValues`.
 
 ## H18 — `BootFailure` não carrega o PID do browser que não conseguiu subir
 

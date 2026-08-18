@@ -97,13 +97,30 @@ const SocketStateReadExpr = socketStateReadExpr
 // previous classification DEGRADED?) or INDEPENDENT evidence this file does
 // not read (a page-level signal, a probe timeout). LOOP 04.5 removed them
 // from the executable type; the taxonomy itself is not lost, it lives in
-// EVIDENCIA-SPA.md and in CAP-06's still-unopened scope (the caller that
-// tracks history and combines axes). Until that caller exists:
+// EVIDENCIA-SPA.md, and belongs to whichever caller ends up tracking history
+// and combining axes.
+//
+// WHICH CALLER THAT IS remains UNDETERMINED, and this comment used to claim
+// otherwise: it named "CAP-06's still-unopened scope", which was wrong twice
+// over — CAP-06 has since closed, and it was the SPA module inventory, which
+// neither holds session history nor combines liveness axes (H17). CAP-05 has
+// since closed too, and it is not the consumer either: core/ holds state that
+// outlives a single command, which is the right PRECONDITION, but it contains
+// no reference to socket state or liveness at all. That is measured, not
+// assumed. Naming a new destination here without a call site would repeat the
+// exact mistake this paragraph exists to correct.
 //
 //	SESSION_LOST DETECTOR: NOT IMPLEMENTED. Explicit absence beats a false
 //	detector — DEC-04.4-02 forbids duration in OPENING alone from ever
 //	producing a session-lost verdict, and removing the placeholder value
-//	makes that impossible to violate by construction, not just by policy.
+//	makes that verdict impossible to express in the DECLARED VOCABULARY.
+//
+// That last sentence used to read "impossible to violate by construction, not
+// just by policy", which overstated it: Go's type system does not stop anyone
+// from declaring a new SocketLiveness constant, so this is a barrier of intent
+// and review, not an impossibility (F-28). The property is actually guarded by
+// TestClassifyOpeningDurationExhaustsToTwoValues, which is what caught the
+// expansion when it happened.
 type SocketLiveness string
 
 const (
