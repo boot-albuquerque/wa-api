@@ -514,7 +514,43 @@ teste vira verde ou vermelho quando o conserto chegar?".
 `StageNotReady` pelo mesmo ramo, então o estágio sob teste não muda — mas fica
 registrado que o dublê **não** reproduz a classe exata, só o caminho.
 
-**Status**: DESCOBERTA, com teste do defeito escrito e falhando. A correção
+**CORRIGIDA em 2026-08-18** (LOOP 05.2, escopo autorizado pela orquestração
+depois da reabertura `PASS → SUPERSEDED → FAIL_REAL_SPA`). A semântica temporal
+foi para a camada certa: `spa.WaitForReady` — o `core` passa a saber apenas
+*"espere a condição de prontidão, com orçamento"*, e não quantos polls, qual
+seletor transitório ou como `OTHER` evolui.
+
+**O orçamento foi verificado, não presumido.** O `OpRecoveryProbe` — aquele
+orçamento declarado sem call site que este ciclo já tinha encontrado — foi
+checado e **não serve**: vale 2 s, e limita UMA ida e volta, não a espera
+inteira; com 2 s o laço desistiria no primeiro poll e o defeito voltaria com
+outro nome. Entrou `spa.DefaultSettleBudget = 60 s`, documentado como
+**orçamento operacional de espera, nunca SLA**, e explicitamente **não**
+derivado das três amostras do F2.
+
+**O achado durante a correção, que é a parte que vale.** A primeira versão
+marcou `ClassRedirect` como terminal — decisão que parece óbvia: a página
+"saiu" do host esperado. O teste do defeito **quebrou na hora**, e a razão é
+que `Classify` devolve `REDIRECT` para qualquer página sem marcador cuja URL
+não contenha `web.whatsapp.com` — o que é verdade de **todo** fixture local
+deste módulo, porque `httptest` nunca serve daquele host. Marcar `REDIRECT`
+como terminal **recriaria o defeito original com outro nome**: falha na
+primeira sonda, antes de a página montar.
+
+Ou seja: o teste do defeito pegou a reintrodução do próprio defeito, durante o
+conserto dele. É a justificativa mais direta possível para a regra de escrever
+o teste ANTES.
+
+**Controle de mutação, executado e reproduzido pelo Chief**: voltando ao
+`spa.Probe` de tiro único, o teste do defeito falha de novo em ~1,4 s. O
+conserto é o que o faz passar.
+
+**Regressões**: ablação do `VerifyInventory`, os dois testes da marca de
+suspeita e os de ownership continuam mordendo. Suíte inteira verde.
+
+**Status**: CORRIGIDA. O que segue aberto é a prova contra o SPA REAL — o
+conserto foi validado contra dublê temporal, e esta armadilha existe
+justamente porque dublê não é produção. A
 (laço de assentamento com orçamento, na forma do `sampleReadiness`) segue
 **pendente de autorização de escopo** — mexer em `session.go` é mudança de
 mecanismo. O teste está na árvore de trabalho, **não commitado**, para não

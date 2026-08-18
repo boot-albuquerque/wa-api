@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/spa"
@@ -511,5 +512,219 @@ func TestStartSession_SuspectMarker_NotClearedOnFailedBoot(t *testing.T) {
 		t.Error("marker cleared after a boot that FAILED to verify; a profile that went down " +
 			"dirty and then failed to boot must still be suspect on the next attempt " +
 			"(HANDOFF-INICIATIVA.md section 6, invariant 2: verified, not presumed good)")
+	}
+}
+
+// lateMountDelay is how long the fixture below withholds #pane-side after the
+// page is first served. It is NOT a guess: the field failure this test
+// reproduces was measured against the real, paired SPA at T+4.708s
+// (core: boot failed at not_ready (stopped_via=browser.close): core: page
+// classified "OTHER", want "APP_READY" — snapshot dom_nodes=224), which is
+// when session.go's single, un-retried spa.Probe fired and gave up. 6s is
+// comfortably above that 4.708s firing time, and comfortably below both the
+// per-call context budget this test grants (20s) and HANDOFF F2's own
+// measured ceiling for a real SPA to finish mounting (recovery p50 10.4s,
+// app-ready observed out to 15.8s) — so a boot that actually WAITED for the
+// mount would have room to succeed inside the budget, and only a boot that
+// classifies once and gives up can fail here.
+const lateMountDelay = 6 * time.Second
+
+// lateMountingPage is a fixture that mounts LATE, the way the real SPA does,
+// instead of instantly like every other fixture in this file.
+//
+// ARMADILHA (ARMADILHAS.md, "dublê mais rápido que a produção esconde o
+// defeito"): readyPage and requirePage above serve #pane-side already present
+// in the initial HTML, so by the time tab.Navigate returns, the DOM already
+// satisfies Classify. Against such a fixture, session.go:303's single
+// post-navigate spa.Probe always sees APP_READY on the first and only look,
+// and a missing settle/retry loop can never be observed — the double was not
+// more permissive in ITS RULES, it was FASTER than the real target, and speed
+// was the dimension that hid the bug. This fixture serves a shell with NO
+// readiness marker at all, then injects #pane-side into a live DOM after
+// lateMountDelay via a page-authored script — exactly what session.go must
+// tolerate and currently does not.
+// lateMountingPageURL serves a page whose window.require answers exactly
+// `known` (the same double requirePage above uses, so the settle loop is
+// proven against a page that clears VerifyInventory too, not just Classify),
+// and that only mounts #pane-side lateMountDelay after it is first served.
+//
+// This was widened from a bare HTML const during this fix: the original
+// fixture had no window.require stub at all, which meant that once the
+// settle loop actually started waiting instead of giving up on the first
+// probe, StartSession reached APP_READY and then failed one stage later, at
+// StageInventory, on a gap in the fixture rather than in production code —
+// VerifyInventory correctly refused a page that never answers `require` at
+// all. That is not the defect under test, so the fixture now stubs the
+// required modules the same way requirePage does.
+func lateMountingPageURL(t *testing.T, known []spa.Module) string {
+	t.Helper()
+	names := make([]string, len(known))
+	for i, m := range known {
+		names[i] = `"` + string(m) + `"`
+	}
+	body := `<html><head><title>WhatsApp</title></head><body>
+	<div id="app-shell">loading…</div>
+	<script>
+		const known = new Set([` + strings.Join(names, ",") + `]);
+		window.require = function (name) {
+			if (!known.has(name)) { throw new Error("Cannot find module '" + name + "'"); }
+			return { __module: name };
+		};
+		setTimeout(function () {
+			var pane = document.createElement('div');
+			pane.id = 'pane-side';
+			document.body.appendChild(pane);
+		}, ` + "6000" + `);
+	</script>
+</body></html>`
+	return pageServer(t, "/late", body)
+}
+
+// This is the test of the DEFECT, not the fix. It asserts the outcome a
+// CORRECT boot path owes a page that is genuinely going to become ready —
+// StartSession reaches READY once the fixture's setTimeout mounts #pane-side,
+// inside the 20s budget that comfortably contains lateMountDelay.
+//
+// It MUST fail against the current, unmodified session.go, and it does: the
+// boot path (session.go:303) probes exactly once, immediately after Navigate
+// returns — far before lateMountDelay elapses — classifies the still-loading
+// shell as ClassOther ("OTHER", not "APP_READY"), and gives up with a
+// *BootFailure at StageNotReady. There is no settle loop to wait out the
+// remaining delay, so this assertion (err == nil, a live *Session) cannot be
+// met by the current code, only by a fix that looks more than once.
+func TestStartSession_LateMountingSPA_SingleProbeFailsBeforePageFinishesMounting(t *testing.T) {
+	profileDir := t.TempDir()
+	cfg := baseConfig(t, lateMountingPageURL(t, spa.RequiredAtStartup))
+	cfg.ProfileDir = profileDir
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	sess, err := StartSession(ctx, cfg)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		var boot *BootFailure
+		if errors.As(err, &boot) && boot.Stage == StageNotReady && elapsed < lateMountDelay {
+			t.Fatalf("StartSession gave up at StageNotReady after only %s, before "+
+				"lateMountDelay=%s had elapsed and #pane-side was ever mounted — this is the "+
+				"defect under test: session.go:303 calls spa.Probe exactly once, right after "+
+				"Navigate returns, and never looks again. A boot path that instead settled/"+
+				"retried until its context budget would have reached APP_READY once the "+
+				"fixture's setTimeout fired (cause=%v)", elapsed, lateMountDelay, boot.Cause)
+		}
+		t.Fatalf("StartSession failed (elapsed=%s): %v", elapsed, err)
+	}
+
+	via := sess.Stop(context.Background())
+	if !via.Clean() {
+		t.Errorf("stopped_via=%s: a browser this test owns must go down through the protocol", via)
+	}
+	if elapsed < lateMountDelay {
+		t.Errorf("StartSession reached READY after only %s, before lateMountDelay=%s — "+
+			"the fixture may be mounting too early to exercise the defect", elapsed, lateMountDelay)
+	}
+}
+
+// Required test, immediate-ready: a page that is already mounted by the time
+// Navigate returns must not pay any part of spa.DefaultSettleBudget —
+// StartSession must reach READY on the settle loop's first look, the same
+// way it always did against readyPage/requirePage before this fix.
+func TestStartSession_ImmediateReadyPage_DoesNotPayTheSettleBudget(t *testing.T) {
+	cfg := baseConfig(t, requirePage(t, spa.RequiredAtStartup))
+
+	start := time.Now()
+	sess, err := StartSession(context.Background(), cfg)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("StartSession on an already-mounted page: %v", err)
+	}
+	via := sess.Stop(context.Background())
+	if !via.Clean() {
+		t.Errorf("stopped_via=%s: a browser this test owns must go down through the protocol", via)
+	}
+	// Generous relative to spa.DefaultSettleBudget (60s): an already-ready
+	// page must settle on essentially the first probe, not after polling.
+	const wantUnder = 10 * time.Second
+	if elapsed >= wantUnder {
+		t.Errorf("elapsed=%s: an already-mounted page took long enough to suggest it "+
+			"polled instead of returning on its first look", elapsed)
+	}
+}
+
+// Required test, terminal class: a page already showing the QR must
+// terminate FAST with StageNotReady and the LOGIN_REQUIRED cause preserved —
+// not after waiting out any part of the settle budget, and this restoration-
+// only path never waits for a human to scan it.
+const qrPage = `<html><body>
+	<canvas aria-label="Scan me, mate, to log in"></canvas>
+</body></html>`
+
+func TestStartSession_QRPage_TerminatesFastWithSpecificCause(t *testing.T) {
+	cfg := baseConfig(t, pageServer(t, "/qr", qrPage))
+
+	start := time.Now()
+	sess, err := StartSession(context.Background(), cfg)
+	elapsed := time.Since(start)
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession reached READY on a QR page (stopped_via=%s); want StageNotReady", via)
+	}
+	var boot *BootFailure
+	if !errors.As(err, &boot) {
+		t.Fatalf("error is not *BootFailure: %v", err)
+	}
+	if boot.Stage != StageNotReady {
+		t.Fatalf("failed at stage %q, want %q", boot.Stage, StageNotReady)
+	}
+	if !strings.Contains(boot.Cause.Error(), string(spa.ClassLoginRequired)) {
+		t.Fatalf("cause = %q, want it to name %q — the specific class must survive, "+
+			"not collapse into a generic not-ready", boot.Cause.Error(), spa.ClassLoginRequired)
+	}
+	// Generous relative to spa.DefaultSettleBudget (60s): a terminal class
+	// must be reported fast, not after waiting out any meaningful fraction of
+	// the budget.
+	const wantUnder = 10 * time.Second
+	if elapsed >= wantUnder {
+		t.Errorf("elapsed=%s: a terminal LOGIN_REQUIRED page took long enough to "+
+			"suggest StartSession waited it out instead of failing fast", elapsed)
+	}
+}
+
+// Required test, final snapshot preserved: a boot that fails at StageNotReady
+// must still carry the LAST structural snapshot actually observed — the
+// BootFailure.Cause message that already names url and dom_nodes (see the
+// StageNotReady branch in session.go) must not go missing just because the
+// failure now comes from a settle loop instead of a single probe.
+func TestStartSession_NotReadyFailure_PreservesFinalSnapshot(t *testing.T) {
+	blankPage := `<html><body>nothing here, ever</body></html>`
+	cfg := baseConfig(t, pageServer(t, "/blank-snapshot", blankPage))
+
+	// A short external ctx keeps this test fast: it stays sovereign over
+	// spa.DefaultSettleBudget (60s), so the boot fails once THIS deadline
+	// runs out rather than the full internal budget.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	sess, err := StartSession(ctx, cfg)
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession reached READY on a page that never mounts (stopped_via=%s); "+
+			"want StageNotReady", via)
+	}
+	var boot *BootFailure
+	if !errors.As(err, &boot) {
+		t.Fatalf("error is not *BootFailure: %v", err)
+	}
+	if boot.Stage != StageNotReady {
+		t.Fatalf("failed at stage %q, want %q", boot.Stage, StageNotReady)
+	}
+	cause := boot.Cause.Error()
+	if !strings.Contains(cause, "dom_nodes=") {
+		t.Errorf("cause = %q, lost the final snapshot's dom_nodes", cause)
+	}
+	if !strings.Contains(cause, "url=") {
+		t.Errorf("cause = %q, lost the final snapshot's url", cause)
 	}
 }

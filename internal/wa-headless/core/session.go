@@ -300,7 +300,14 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		return fail(StageNavigate, fmt.Errorf("core: navigating to the SPA: %w", err))
 	}
 
-	snap, class := spa.Probe(ctx, runner, tab.Evaluate, "core/start/probe")
+	// A single post-navigate probe fires as early as T+4.7s against the real
+	// SPA, well before the page finishes mounting (ARMADILHAS.md, boot
+	// classifies once). spa.WaitForReady replaces that single shot with a
+	// Go-side settle loop, bounded by spa.DefaultSettleBudget and by ctx
+	// itself — whichever expires first — so a page that is still mounting is
+	// waited for instead of rejected, while a page that answers with a
+	// terminal class (QR, session conflict, ...) still fails fast.
+	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, spa.DefaultSettleBudget, "core/start/probe")
 	if class != spa.ClassAppReady {
 		tab.Close()
 		return fail(StageNotReady, fmt.Errorf(

@@ -1559,3 +1559,31 @@ sucesso limpa; o outro prova que um boot que FALHA **não** limpa. A mutação
 exigida — mover `ClearSessionSuspect` para antes do `Launch` — faz o segundo
 falhar, e foi reproduzida pelo Chief. Nada em produção mudou: a posição do clear
 já estava certa; faltava a prova.
+
+## H20 — a suíte do `core` ficou 5× mais lenta, e a causa é o conserto certo
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 05.2, medido depois da correção.
+
+**Onde**: `internal/wa-headless/core/` — em especial
+`TestStartSession_SuspectMarker_NotClearedOnFailedBoot` e os testes cuja página
+nunca monta.
+
+**Problema**: `go test -race -count=1 ./internal/wa-headless/core/...` foi de
+**28 s para 152 s**. A causa é correta e esperada: antes, uma página que não
+estava pronta falhava no primeiro probe; agora o laço de assentamento espera o
+`DefaultSettleBudget` inteiro (60 s) antes de desistir. Um teste que prova
+"nunca fica pronto" **precisa** pagar o orçamento para provar isso.
+
+**Por que registrar mesmo sendo correto**: suíte lenta é suíte que se pula.
+152 s no pacote mais central do módulo é o tipo de custo que, acumulado, faz
+alguém rodar `-run` seletivo e deixar de ver regressão.
+
+**Correção sugerida**: os testes de caminho negativo podem injetar um orçamento
+menor em vez de usar o default — `spa.WaitForReady` já recebe `budget` como
+parâmetro, então é questão de o teste passar um valor curto e afirmar que o
+laço respeita o orçamento **recebido**, o que aliás é uma propriedade melhor de
+travar do que "espera 60 s". Não aplicado nesta sessão: mexer nos testes de
+regressão logo depois de eles terem acabado de validar uma correção é
+exatamente quando se introduz um defeito sem perceber.
+
+**Status**: não corrigido, registrado com a correção desenhada.
