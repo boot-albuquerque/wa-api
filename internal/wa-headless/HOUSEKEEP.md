@@ -1424,10 +1424,26 @@ não promete nada sobre a prosa; promete exatamente uma coisa verdadeira e
 verificável — **que os dois lados não divergiram em silêncio**, que é o achado
 original desta entrada.
 
+**E o desenho, MEDIDO antes de ser prometido** — porque "os três números ligam
+ao `.md`" era a minha segunda afirmação apressada sobre esta entrada, e ela
+também não sobreviveu ao contato. São **dois links e uma igualdade**, coisas
+diferentes:
+
+| termo | valor | o que dá para travar | âncora |
+|---|---|---|---|
+| `healthyUpperBound` | 1,36 s | link com o `.md` | linha `pior janela de boot saudável medida`, **1 ocorrência** |
+| `measurementUncertainty` | 0,31 s | link com o `.md` | linha de tabela `` | `net-*` | `` do M7.5, **1 ocorrência**, tomando o TOPO da faixa `0,30–0,31` — que é o que o `socket.go` declara fazer ("the worse of the two") |
+| `explicitGuardBand` | 1,36 s | **nada no `.md`** | é *"an explicit engineering choice, not a further measurement"*, declarada ancorada ao termo 1. O travável é `explicitGuardBand == healthyUpperBound`, invariante de CÓDIGO |
+
+As duas âncoras foram verificadas por extração real (uma ocorrência cada, número
+extraído batendo com a constante). O termo 3 não tem o que ancorar por
+construção — e um teste que fingisse ancorá-lo seria exatamente o tipo de
+promessa vazia que a F-28 ensinou a não fazer.
+
 Não implementado neste ciclo: a tarefa autorizada no momento era a medição de
 retenção longa (token `HOLD`), e abrir uma segunda frente no meio de uma
-medição é como se perde a rastreabilidade. Registrado com o desenho pronto e o
-número de linha da âncora.
+medição é como se perde a rastreabilidade. Registrado com o desenho pronto,
+as âncoras verificadas e o limite dele declarado.
 
 **Status revisto**: parcialmente corrigido, com a lacuna restante agora sabida
 **fechável** — ao contrário do que esta entrada afirmava.
