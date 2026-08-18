@@ -555,3 +555,61 @@ justamente porque dublê não é produção. A
 **pendente de autorização de escopo** — mexer em `session.go` é mudança de
 mecanismo. O teste está na árvore de trabalho, **não commitado**, para não
 deixar o branch vermelho antes de o conserto poder entrar junto.
+
+## ARM — a sonda de identidade do teste de N ciclos funde três estados em `false`
+
+**Data**: 2026-08-18 · **Descoberta**: primeira corrida de N ciclos **depois** da
+correção do boot, LOOP 05.2.
+
+**O que aconteceu**: com o conserto no lugar, o ciclo 1 alcançou `READY` em
+**16,22 s** — o laço de assentamento funcionou, contra os 4,7 s em que o boot
+antigo desistia. Mas o teste parou com `identity_present=false` e a mensagem
+"absence of QR is not proof of identity".
+
+**E a identidade estava lá.** Rodei em seguida a sonda já existente
+(`TestRealSPAOwnerIdentityShape`, só leitura, mesmo perfil, minutos depois):
+`OWNER IDENTITY PRESENT: true`, primeira vista em **T+0,02 s**,
+`getMaybeMePnUser() -> PRESENT`, `getMaybeMeLidUser() -> PRESENT`. O perfil
+está pareado e íntegro.
+
+**O defeito, em `realspa_test.go`**:
+
+```go
+var identityPresent bool
+if identityErr == nil {
+    if json.Unmarshal([]byte(raw), &shape) == nil {
+        identityPresent = shape.HasIdentity
+    }
+}
+```
+
+Uma leitura ÚNICA, com `OpStateProbe` (5 s), e `identityPresent` fica `false`
+em **três** situações que nada distingue: a sonda **errou**, o parse **falhou**,
+ou a identidade está **de fato ausente**. Erro engolido em silêncio vira
+"negativo" — e foi lido como negativo.
+
+**É a mesma classe do defeito que este ciclo acabou de consertar.** O boot
+classificava uma vez e desistia; esta sonda lê uma vez e desiste. A vizinha
+`TestRealSPAOwnerIdentityShape` faz o certo: amostra por 75 s com tique de 2 s,
+e é por isso que ela vê o que a outra não viu. **O conhecimento estava no
+arquivo, na função ao lado.**
+
+**E é também a lição da F-27 noutra forma**: um instrumento que não distingue
+dois estados não pode ser usado para decidir entre eles.
+
+**Agravante de processo, meu**: eu **elogiei** esse controle no RELATÓRIO #6 —
+disse que o validador tinha feito certo ao parar. Ele parou, e a decisão de
+parar diante de ambiguidade continua certa; o que estava errado era o
+instrumento que produziu a ambiguidade. Um controle rigoroso alimentado por
+sonda cega para de rodar pelo motivo errado, e eu não olhei o suficiente para
+perceber.
+
+**Correção sugerida**: a leitura de identidade deve (a) distinguir erro de
+sonda, erro de parse e ausência real, cada um com sua mensagem; e (b) amostrar
+em janela como a `identityShapeBudget`/`identityShapeTick` já fazem, em vez de
+ler uma vez. Não aplicada aqui: é mudança no instrumento logo depois de ele ter
+produzido um resultado, e trocar instrumento e conclusão no mesmo passo é como
+se perde a rastreabilidade.
+
+**Status**: DESCOBERTA. O resultado "N ciclos falhou por identidade ausente" é
+**FALSO NEGATIVO** e não deve ser lido como evidência sobre a sessão.
