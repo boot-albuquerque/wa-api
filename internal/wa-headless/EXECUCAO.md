@@ -2614,3 +2614,48 @@ Todos a mesma falha: **fundir "não consegui perguntar" com "a resposta foi X"**
 - **H15**: continua legitimamente bloqueado — depende de um consumidor de `C`
   que o H17 mediu como inexistente.
 
+## LOOP 05.10 — PAUSA de consolidação
+
+Decidida pela orquestração (token `PAUSA`) a pedido meu: não restava item aberto
+fechável sem decisão dela ou humana, e continuar abrindo frente nova com
+dezenove commits não revisados é como se perde a rastreabilidade que este ciclo
+custou a construir.
+
+**H14 fechado.** Dois testes ligam os termos de `C` ao `EVIDENCIA-SPA.md`:
+`TestMeasuredTermsMatchTheEvidenceDocument` (duas âncoras, cada uma obrigada a
+casar **exatamente uma** linha) e `TestGuardBandIsAnchoredToTermOne` (o termo 3
+não tem fonte no documento; o travável é identidade de código). Quatro controles
+negativos, três dos quais falharam na primeira tentativa por mutarem a linha
+errada.
+
+**Confirmação da retenção**: segunda corrida de 10 min, sob o binário já com as
+correções de instrumento, **resultado idêntico** — 20 amostras, socket
+`CONNECTED` e identidade `PRESENT` o tempo inteiro, zero anomalias. O caveat de
+proveniência do LOOP 05.9 está fechado por duas corridas independentes.
+
+**Auditoria de status, e três estavam enganando quem lesse**:
+- a armadilha do boot de tiro único carregava três ressalvas caducas ("prova
+  contra o SPA real segue aberta", "pendente de autorização", "não commitado") —
+  todas falsas hoje. Uma armadilha cujo status envelheceu em silêncio é ela
+  mesma exemplo do que o catálogo existe para pegar, então o texto original ficou
+  registrado em vez de apagado.
+- a armadilha da sonda de identidade seguia como `DESCOBERTA` embora o conserto
+  tenha vindo no mesmo dia.
+- o H14 anunciava `PARCIALMENTE CORRIGIDO` no cabeçalho com o fechamento anexado
+  no fim.
+
+**Estado final da pausa**: `go build`, `go vet`, `gofmt` limpos; suíte completa
+verde sob `-race` em todos os seis pacotes. Dezenove commits em
+`feature/wa-headless-foundation`, árvore limpa, **nada empurrado**. Perfil
+pareado íntegro: nenhuma mensagem enviada, nenhum QR, nenhum logout, nenhum
+órfão, nenhum `SingletonLock` sobrevivente.
+
+**Aberto, e por quê**:
+
+| item | bloqueio |
+|---|---|
+| `CAP-05_PAIRING` | autorização **HUMANA** — irreversível, exige telefone, pode custar o perfil |
+| H15 | depende de um consumidor de `C` que o H17 mediu como inexistente |
+| H16 | aberto **de propósito** — não fechável por amostragem; fechamento falso seria pior que a lacuna declarada |
+| H2, H5, H6, H18 | pré-existentes, fora do escopo deste ciclo |
+
