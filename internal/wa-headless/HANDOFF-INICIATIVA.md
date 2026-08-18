@@ -524,6 +524,77 @@ verde, com o teste de política de shutdown e seu controle negativo.
 → probe por `Evaluate` com prazo; toda morte sai com causa. *Observável:* o
 estado de não-resposta do H1 é detectado como `UNRESPONSIVE`, não como saudável.
 
+> **OBSERVÁVEL SUPERSEDED (2026-08-18, LOOP 04.5).** O texto acima fica
+> preservado como registro histórico e **deixa de ser critério de fechamento
+> da CAP-04**. Não foi esquecido nem afrouxado: foi substituído por evidência,
+> e o que segue é o porquê.
+>
+> **A hipótese que ele pressupunha.** O observável trata "não-resposta" como
+> fenômeno da CAMADA DE SESSÃO, detectável pelo classificador como
+> `UNRESPONSIVE`. Ele nasceu do H1 da fase 6 — um renderer que parou de
+> responder com todos os sinais estruturais reportando saúde — e generalizou
+> daquele caso para a sessão.
+>
+> **A evidência sintética existe e é sólida.** `TestBrowserChainReportsAWedged
+> PageAsUnresponsive` (`integration_test.go:194-276`) trava um renderer com
+> `for(;;)` numa página que NÓS escrevemos, servida por `httptest`, contra um
+> Chrome com perfil descartável (`t.TempDir()`), e o classificador reporta
+> `UNRESPONSIVE` enquanto `ProcessAlive` confirma o processo vivo. O controle
+> negativo — tirar o `for(;;)` — faz o teste reprovar com `probed as
+> "APP_READY"`. Isso prova o MECANISMO.
+>
+> **A evidência contra a conta real contradiz a generalização.** No único modo
+> de falha real já medido — a sessão que perde o servidor (M4.3/M5, F-21) — a
+> sonda devolveu `Alive=true` / `APP_READY` em **90/90** amostras, com
+> `#pane-side` presente, identidade do dono presente e `meReadyTriggered`
+> verdadeiro o tempo todo. Não é desconhecido: é **negativo conhecido**.
+>
+> **Por que a perda de rede não produz `UNRESPONSIVE`.** A sonda de liveness é
+> uma consulta ao DOM avaliada com prazo do lado Go. Ela responde
+> `UNRESPONSIVE` quando o renderer **para de executar JavaScript** — e um
+> socket morto não impede o renderer de executar. São eixos diferentes:
+> `spa/liveness.go` e `spa/page.go` leem execução de JS e estrutura de página,
+> e não consultam estado de sessão nem de socket em ponto algum. `UNRESPONSIVE`
+> já É, no código como está escrito, um conceito de **saúde de renderer**, não
+> de sessão. O observável descreve algo que o código não mede.
+>
+> **Por que não é correto exigir a ocorrência natural.** Exigi-la seria pedir
+> prova de uma proposição que o código não afirma. Além disso, a única forma de
+> forçá-la contra o alvo real seria injeção de falha no renderer, e o LOOP 04.5
+> investigou isso e recusou por evidência: o **único** caminho de recuperação
+> jamais provado neste repositório para um renderer travado é `Browser.close`
+> (`engine/shutdown.go`, medido 3/3 limpo). Ele é seguro quanto a credencial —
+> não desloga, não apaga cookie, localStorage, IndexedDB nem perfil —, mas é o
+> desligamento do único browser que segura a sessão pareada, ou seja um
+> *browser kill*, que o portão de segurança exclui como recuperação normal.
+> Não existe recuperação por target: `grep` por `closeTarget`/`Page.crash` em
+> `engine/` não retorna nada, e `OpRecoveryProbe` (`deadline.go:33`) é orçamento
+> declarado **sem call site de produção**. Registrado como
+> `REAL_TARGET_UNRESPONSIVE_FAULT_INJECTION: DEFERRED_UNSAFE`.
+>
+> **Contrato substituto**, que é o que passa a valer:
+>
+> ```text
+> UNRESPONSIVE mede EXECUÇÃO DO RENDERER, não saúde de sessão.
+>   provado por fault injection sintética, com controle negativo executado
+>   NÃO dispara em perda de socket/sessão — medido, 90/90 APP_READY (F-21)
+>
+> REAL_ACCOUNT_NATURAL_UNRESPONSIVE: NOT OBSERVED
+> SYNTHETIC_RENDERER_FAULT:          PROVEN
+> REAL_TARGET_FAULT_INJECTION:       DEFERRED_UNSAFE
+> ```
+>
+> **Impacto sobre a CAP-04.** O fechamento da capacidade passa a depender do
+> contrato substituto acima, não da ocorrência natural. O que a CAP-04 entrega
+> é: prazo do lado Go em todo caminho CDP, causa classificada em vez de erro
+> genérico, e a separação — medida contra a conta real — entre `OPENING` dentro
+> do envelope saudável e `OPENING` degradado, com a proibição de que duração
+> sozinha implique perda de sessão. A detecção de sessão perdida continua
+> **sem detector**, declarada como ausente em vez de simulada.
+>
+> A investigação que sustenta esta decisão é do LOOP 04.5; as quatro afirmações
+> que a sustentam foram reverificadas pelo Chief contra o código.
+
 **CAP-05 · Ciclo de vida completo**
 → pareamento por QR, restauração, desligamento limpo, reclaim de `Singleton`.
 *Observável:* N ciclos dormir/acordar sem degradação, `Singleton` = 0, perfil

@@ -79,92 +79,56 @@ const socketStateReadExpr = `((() => {
 // call sites in realspa_test.go do.
 const SocketStateReadExpr = socketStateReadExpr
 
-// SocketLiveness is the taxonomy phase 6's rule widens into once duration is
-// a signal: not just "did the probe answer" (spa.PageClass /
-// spa.ClassifyProbe already own that), but "is this session's socket axis
-// worth watching, worth escalating on, or neither".
+// SocketLiveness is what a duration spent in SocketStateOpening supports
+// concluding, and NOTHING wider: "is this OPENING still inside the envelope
+// M7 measured healthy boots to sit in, or has it crossed the derived
+// threshold". It is NOT "is the session healthy" — CONNECTED is not a value
+// this type has an opinion about, and a session can be perfectly fine while
+// this type reads SocketOpeningDegraded (M8.4: three recoveries in
+// 2.01-5.02s after sitting DEGRADED for a 12-minute cut).
 //
-// It is a WIDER lens than PageClass on purpose, and the two are not meant to
-// collapse into each other: PageClass answers "what is this page right now"
-// from one snapshot; SocketLiveness answers "what does this axis mean over
-// time". CAP-06 is where a caller combines both with probe-failure evidence
-// (spa.Monitor's ConsecutiveFailures) into one verdict a recycler can act on
-// — that wiring is out of scope here (DO_NOT list, task packet LOOP-04.4-T1).
+// A WIDER taxonomy — BOOTSTRAPPING, RECOVERING, UNRESPONSIVE, SESSION_LOST —
+// was named here in LOOP 04.4 as a taxonomy this package could grow into.
+// The orchestration review of 276c131 rejected that: none of those four had
+// a producer, and an executable type with unreachable placeholder values is
+// a fictional contract — "preparing the future" is not something a pure
+// duration->verdict function can do, because those four states all need
+// either session HISTORY (has this socket ever reached CONNECTED? was the
+// previous classification DEGRADED?) or INDEPENDENT evidence this file does
+// not read (a page-level signal, a probe timeout). LOOP 04.5 removed them
+// from the executable type; the taxonomy itself is not lost, it lives in
+// EVIDENCIA-SPA.md and in CAP-06's still-unopened scope (the caller that
+// tracks history and combines axes). Until that caller exists:
 //
-// Not every member is reachable from the code this file ships. That is
-// documented per-constant below, and it is deliberate: the packet asks this
-// package to be ABLE TO REASON about the full taxonomy, not to have a
-// producer for every branch of it before the consumer exists.
+//	SESSION_LOST DETECTOR: NOT IMPLEMENTED. Explicit absence beats a false
+//	detector — DEC-04.4-02 forbids duration in OPENING alone from ever
+//	producing a session-lost verdict, and removing the placeholder value
+//	makes that impossible to violate by construction, not just by policy.
 type SocketLiveness string
 
 const (
-	// SocketHealthy is CONNECTED, or OPENING for a duration below C. Session
-	// signal-wise, "nothing to watch here yet".
-	SocketHealthy SocketLiveness = "HEALTHY"
+	// SocketOpeningWithinEnvelope means a duration spent in
+	// SocketStateOpening is still below C, the envelope M7 measured healthy
+	// boots to sit inside. It says nothing about CONNECTED, nothing about
+	// session history, and nothing about whether the session is "healthy"
+	// in any wider sense than this one axis.
+	SocketOpeningWithinEnvelope SocketLiveness = "OPENING_WITHIN_ENVELOPE"
 
-	// SocketBootstrapping is OPENING on a session that has never reached
-	// CONNECTED once. M6/M7 measured exactly this window — a healthy boot's
-	// OPENING — and its distribution IS the healthy_upper_bound term C is
-	// built from. This package does not yet track "has this session ever
-	// seen CONNECTED", so nothing here produces SocketBootstrapping today;
-	// it is named because a caller that DOES track that history (a future
-	// Monitor field) needs a state to report instead of overloading
-	// SocketHealthy for a session that is not yet proven healthy.
-	SocketBootstrapping SocketLiveness = "BOOTSTRAPPING"
-
-	// SocketDegraded is OPENING for a duration at or above C, on a socket
-	// that HAD reached CONNECTED before. This is the ONLY state
-	// ClassifyOpeningDuration can produce besides SocketHealthy — see its
-	// doc comment and DEC-04.4-02 below.
-	SocketDegraded SocketLiveness = "DEGRADED"
-
-	// SocketRecovering is a socket that just left OPENING back to
-	// CONNECTED after having been DEGRADED. M8.4 measured this transition
-	// taking 2.01-5.02s after a 12-minute cut (three recoveries, all valid
-	// runs) — fast, and the reason DEC-04.4-02 forbids any duration-only
-	// path to SESSION_LOST: a session a C-based watcher would have killed
-	// was, in all three measured cases, seconds from coming back on its
-	// own. Nothing in this file produces this state either: it needs the
-	// PREVIOUS classification, which is a caller's job (a stateful
-	// Monitor), not this stateless function's.
-	SocketRecovering SocketLiveness = "RECOVERING"
-
-	// SocketUnresponsive is spa.ClassUnresponsive's axis, restated in this
-	// vocabulary for a caller that reasons about both at once: the PROBE
-	// round trip did not come back within its budget (liveness.go,
-	// DefaultUnresponsiveAfter). It is a different measurement than
-	// anything in this file — it does not read the socket enum at all —
-	// and ClassifyOpeningDuration never produces it. Listed here so a
-	// consumer combining both axes has one vocabulary instead of two.
-	SocketUnresponsive SocketLiveness = "UNRESPONSIVE"
-
-	// SocketSessionLost means the session is gone and only re-pairing
-	// restores it. DEC-04.4-02, frozen by the initiative's technical
-	// direction: duration in OPENING can NEVER, by itself, produce this
-	// value. M8 measured the socket sitting in OPENING for at least
-	// 677.69s under a real cut with no ceiling inside the 12-minute
-	// measurement window (EVIDENCIA-SPA.md M8.4, M8.7) — there is no
-	// duration past which OPENING alone distinguishes "the session is
-	// gone" from "the network is still gone but the session would come
-	// right back", because the M8 control never saw the socket LEAVE
-	// OPENING for anything but CONNECTED. Reaching this value requires
-	// evidence this file does not have: a page-level signal (QR shown,
-	// "used in another window" — spa.ClassLoginRequired,
-	// spa.ClassSessionConflict) or an explicit revocation this package has
-	// never measured (EVIDENCIA-SPA.md M8.8 item 5). No function in this
-	// file has a branch that returns SocketSessionLost — see
-	// TestClassifyOpeningDurationNeverReachesSessionLost's negative
-	// control for the executed proof.
-	SocketSessionLost SocketLiveness = "SESSION_LOST"
+	// SocketOpeningDegraded means a duration spent in SocketStateOpening is
+	// at or above C. This is the ONLY other state ClassifyOpeningDuration
+	// can produce — see its doc comment and DEC-04.4-02 below. It does NOT
+	// mean the session is lost: M8.4 measured this exact axis sitting
+	// DEGRADED for at least 677.69s and then recovering in 2.01-5.02s with
+	// no independent evidence the session was ever gone.
+	SocketOpeningDegraded SocketLiveness = "OPENING_DEGRADED"
 )
 
-// OpeningWindowThreshold ("C" in EVIDENCIA-SPA.md M6/M7/M8 and the task
-// packet) is how long a socket may sit in OPENING before that duration alone
-// is worth flagging as SocketDegraded.
+// The three terms below are DERIVED, term by term, from EVIDENCIA-SPA.md —
+// not chosen — and are named data here (not just prose) so a change to one
+// without a matching change to the others, or to their composition, fails a
+// test instead of drifting silently (H14; see socket_test.go).
 //
-// It is DERIVED, term by term, from EVIDENCIA-SPA.md — not chosen:
-//
-//	term 1 — healthy_upper_bound = 1.36s
+//	term 1 — healthyUpperBound = 1.36s
 //	  The worst OPENING window measured across 21 boots over 7 conditions
 //	  (unstressed, 3 CPU-contention levels, 3 network-degradation levels),
 //	  all against the real, paired profile (M7.3). It is the `net-heavy`
@@ -211,7 +175,8 @@ const (
 //	  cost this threshold sits inside of is the 31.1-42.3s of DETECTION
 //	  latency it gets ADDED to, not multiplied by.
 //
-//	C = term1 + term2 + term3 = 1.36s + 0.31s + 1.36s = 3.03s
+//	C = healthyUpperBound + measurementUncertainty + explicitGuardBand
+//	  = 1.36s + 0.31s + 1.36s = 3.03s
 //
 // INSTRUMENT RESOLUTION, declared next to C as the acceptance criteria
 // require: the derivation above is built entirely from a 50ms-tick
@@ -231,25 +196,42 @@ const (
 // dead session is UNKNOWN, not "probably fine" — this file does not soften
 // that into a guess.
 //
-// BOUNDARY, at exactly C: inclusive. duration >= C is SocketDegraded,
-// duration < C is SocketHealthy. Declared, not accidental: DEGRADED never
-// tears anything down (DEC-04.4-02, enforced structurally below), so the
-// cost of counting the boundary sample as DEGRADED rather than HEALTHY is
-// nothing more than flagging one sample early — the asymmetric cost that
-// would justify the opposite choice (treating C as an exclusive floor, i.e.
-// waiting for one sample past it) does not exist here.
-const OpeningWindowThreshold = 3030 * time.Millisecond
+// BOUNDARY, at exactly C: inclusive. duration >= C is SocketOpeningDegraded,
+// duration < C is SocketOpeningWithinEnvelope. Declared, not accidental:
+// OPENING_DEGRADED never tears anything down (DEC-04.4-02, enforced
+// structurally below), so the cost of counting the boundary sample as
+// DEGRADED rather than WITHIN_ENVELOPE is nothing more than flagging one
+// sample early — the asymmetric cost that would justify the opposite choice
+// (treating C as an exclusive floor, i.e. waiting for one sample past it)
+// does not exist here.
+const (
+	// healthyUpperBound is term 1 of C, see the derivation comment above.
+	healthyUpperBound = 1360 * time.Millisecond
+	// measurementUncertainty is term 2 of C, see the derivation comment above.
+	measurementUncertainty = 310 * time.Millisecond
+	// explicitGuardBand is term 3 of C, see the derivation comment above.
+	explicitGuardBand = 1360 * time.Millisecond
+
+	// OpeningWindowThreshold ("C" in EVIDENCIA-SPA.md M6/M7/M8 and the task
+	// packet) is how long a socket may sit in OPENING before that duration
+	// alone is worth flagging as SocketOpeningDegraded. Composed from the
+	// three named terms above, not asserted equal to them — see
+	// socket_test.go for the test that locks the composition.
+	OpeningWindowThreshold = healthyUpperBound + measurementUncertainty + explicitGuardBand
+)
 
 // ClassifyOpeningDuration decides what a duration spent in SocketStateOpening
-// means, and ONLY that. It answers exactly one question — "has this
-// duration crossed the derived threshold" — and structurally cannot answer
-// any other: its return type has two reachable values, SocketHealthy and
-// SocketDegraded, and neither this function nor anything it calls holds a
-// reference to SocketSessionLost. DEC-04.4-02 is frozen precisely because
-// M8 measured a socket sitting in OPENING for at least 677.69s (M8.4) and
-// then recovering in 2.01-5.02s (M8.4) with no independent evidence the
-// session was ever lost — duration in OPENING alone cannot tell "still
-// retrying" from "gone", so this function does not pretend it can.
+// means relative to C, and ONLY that. It answers exactly one question — "has
+// this duration crossed the derived threshold" — and structurally cannot
+// answer any other: its return type has exactly two values, and neither this
+// function nor anything it calls holds a reference to a session-lost
+// concept. DEC-04.4-02 is frozen precisely because M8 measured a socket
+// sitting in OPENING for at least 677.69s (M8.4) and then recovering in
+// 2.01-5.02s (M8.4) with no independent evidence the session was ever lost —
+// duration in OPENING alone cannot tell "still retrying" from "gone", so
+// this function does not pretend it can, and it does not claim anything
+// about whether the SESSION is healthy — only about this one duration
+// relative to the envelope M7 measured.
 //
 // The caller is responsible for calling this ONLY when the socket is
 // currently read as SocketStateOpening; a duration spent CONNECTED is not
@@ -258,7 +240,7 @@ const OpeningWindowThreshold = 3030 * time.Millisecond
 // mapping.
 func ClassifyOpeningDuration(d time.Duration) SocketLiveness {
 	if d >= OpeningWindowThreshold {
-		return SocketDegraded
+		return SocketOpeningDegraded
 	}
-	return SocketHealthy
+	return SocketOpeningWithinEnvelope
 }

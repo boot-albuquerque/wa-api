@@ -1390,11 +1390,22 @@ não faz parsing daquele markdown. O caminho seria um gate fora do Go (script
 que extraia os números do `.md` e compare com os do `.go`), e isso é decisão
 à parte, não desta capacidade. Registrar a lacuna vale mais que escondê-la.
 
-**Status**: **não corrigido nesta sessão, por desenho**. O teste foi
-renomeado (`TestOpeningWindowThresholdMatchesDocumentedTerms`) e seu
-comentário passou a declarar explicitamente o que protege e o que não
-protege, para não prometer o que não entrega — mas a lacuna em si (nenhum
-elo executável com o `.md`) permanece, e é o achado.
+**Status**: **PARCIALMENTE CORRIGIDO em 2026-08-18, LOOP 04.5.** O que mudou:
+os três termos deixaram de ser literais dentro do arquivo de teste e passaram a
+ser **dados nomeados em código de produção** (`healthyUpperBound`,
+`measurementUncertainty`, `explicitGuardBand` em `spa/socket.go`), com
+`OpeningWindowThreshold` **composto** por eles em vez de comparado a eles. O
+teste — agora `TestOpeningWindowThresholdTermsAreLocked` — trava cada termo
+contra a sua fonte medida, e a mutação foi executada pelo Chief: alterar
+`healthyUpperBound` de 1360 para 1400 ms faz o teste reprovar com
+`healthyUpperBound = 1.4s, want 1.36s (M7.3)`.
+
+O que **permanece aberto**, e é o achado original: nenhum teste Go liga esses
+valores ao `EVIDENCIA-SPA.md`. Provar automaticamente que prosa humana está
+semanticamente correta é impossível, e a direção técnica confirmou que não se
+deve criar teste que prometa isso. A diferença é que os números agora vivem em
+código executável, não só em comentário — mutar o comentário continua passando,
+mas o comentário deixou de ser onde o valor mora.
 
 ## H15 — o envelope de validade de `C` não tem expressão executável
 

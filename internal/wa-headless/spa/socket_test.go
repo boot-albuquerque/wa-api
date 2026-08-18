@@ -6,36 +6,41 @@ import (
 	"time"
 )
 
-// TestOpeningWindowThresholdMatchesDocumentedTerms locks the three literal
-// terms below — copied from socket.go's derivation comment — to the
-// OpeningWindowThreshold constant, so a future edit to the constant without a
-// matching edit to the comment (or vice versa) fails here instead of
-// drifting silently.
-//
-// What this test PROTECTS: the constant against diverging from the three
-// numbers socket.go's comment claims it is built from.
+// TestOpeningWindowThresholdTermsAreLocked pins the three named terms in
+// socket.go's production code — healthyUpperBound, measurementUncertainty,
+// explicitGuardBand — to the values EVIDENCIA-SPA.md M7/M8 measured, and
+// separately checks that OpeningWindowThreshold is their SUM (composition),
+// not a literal asserted equal to them. Unlike the prior version of this
+// test, the terms below are read from production code, not copied as
+// literals into this file — a mutation to any one of the three consts in
+// socket.go, or to how they are composed, fails here.
 //
 // What this test does NOT protect: it does not verify that 1.36s, 0.31s, or
-// 677.69s are still what EVIDENCIA-SPA.md M7/M8 say. The three consts below
-// are hardcoded literals in THIS file, not a read of the markdown — no
-// reasonable Go test parses EVIDENCIA-SPA.md, so that link is prose, not
-// code, and stays a manual-review obligation. A mutation that changes only
-// socket.go's derivation NARRATIVE (e.g. the comment's stated value for
-// term 1) without touching the OpeningWindowThreshold constant or this
-// file's literals passes this test — confirmed by running exactly that
-// mutation. Don't read a green run here as "the derivation is correct
-// against the evidence"; read it as "the constant has not silently drifted
-// from what the comment claims."
-func TestOpeningWindowThresholdMatchesDocumentedTerms(t *testing.T) {
+// 677.69s are still what EVIDENCIA-SPA.md M7/M8 say. No reasonable Go test
+// parses EVIDENCIA-SPA.md, so that link is prose, not code, and stays a
+// manual-review obligation (H14). What changed in LOOP 04.5 is that the
+// terms themselves stopped living only in prose — they are named data in
+// socket.go now, and this test locks THAT, not just the sum.
+func TestOpeningWindowThresholdTermsAreLocked(t *testing.T) {
 	const (
-		healthyUpperBound      = 1360 * time.Millisecond // M7.3: max over 21 boots/7 conditions, net-heavy r1
-		measurementUncertainty = 310 * time.Millisecond  // M7.5: worst observed spacing on the net-* legs
-		explicitGuardBand      = 1360 * time.Millisecond // engineering choice: one more full healthyUpperBound width
+		wantHealthyUpperBound      = 1360 * time.Millisecond // M7.3: max over 21 boots/7 conditions, net-heavy r1
+		wantMeasurementUncertainty = 310 * time.Millisecond  // M7.5: worst observed spacing on the net-* legs
+		wantExplicitGuardBand      = 1360 * time.Millisecond // engineering choice: one more full healthyUpperBound width
 	)
+	if healthyUpperBound != wantHealthyUpperBound {
+		t.Errorf("healthyUpperBound = %v, want %v (M7.3)", healthyUpperBound, wantHealthyUpperBound)
+	}
+	if measurementUncertainty != wantMeasurementUncertainty {
+		t.Errorf("measurementUncertainty = %v, want %v (M7.5)", measurementUncertainty, wantMeasurementUncertainty)
+	}
+	if explicitGuardBand != wantExplicitGuardBand {
+		t.Errorf("explicitGuardBand = %v, want %v (engineering choice, == term 1)", explicitGuardBand, wantExplicitGuardBand)
+	}
+
 	got := healthyUpperBound + measurementUncertainty + explicitGuardBand
 	if got != OpeningWindowThreshold {
-		t.Fatalf("OpeningWindowThreshold = %v, but the sum of its documented terms is %v; "+
-			"the constant and its derivation comment have drifted apart", OpeningWindowThreshold, got)
+		t.Fatalf("OpeningWindowThreshold = %v, but healthyUpperBound+measurementUncertainty+explicitGuardBand = %v; "+
+			"the constant is no longer the SUM of its named terms", OpeningWindowThreshold, got)
 	}
 	// Sanity against the two envelope numbers the derivation cites: C must
 	// stay far below the "no ceiling below" floor M8 measured, and it must
@@ -60,12 +65,12 @@ func TestClassifyOpeningDurationBoundary(t *testing.T) {
 		d    time.Duration
 		want SocketLiveness
 	}{
-		{"zero", 0, SocketHealthy},
-		{"far below C", 1360 * time.Millisecond, SocketHealthy}, // the M7 lower bound itself
-		{"one tick below C", OpeningWindowThreshold - time.Millisecond, SocketHealthy},
-		{"exactly C", OpeningWindowThreshold, SocketDegraded}, // boundary is inclusive, see socket.go
-		{"one tick above C", OpeningWindowThreshold + time.Millisecond, SocketDegraded},
-		{"far above C, M6 boot-lag scale", 5 * time.Second, SocketDegraded},
+		{"zero", 0, SocketOpeningWithinEnvelope},
+		{"far below C", 1360 * time.Millisecond, SocketOpeningWithinEnvelope}, // the M7 lower bound itself
+		{"one tick below C", OpeningWindowThreshold - time.Millisecond, SocketOpeningWithinEnvelope},
+		{"exactly C", OpeningWindowThreshold, SocketOpeningDegraded}, // boundary is inclusive, see socket.go
+		{"one tick above C", OpeningWindowThreshold + time.Millisecond, SocketOpeningDegraded},
+		{"far above C, M6 boot-lag scale", 5 * time.Second, SocketOpeningDegraded},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,26 +85,32 @@ func TestClassifyOpeningDurationBoundary(t *testing.T) {
 // DEC-04.4-02 requires: a duration far above C — 677.69s, the exact figure
 // M8.4's long-cut-3 measured the socket still sitting in OPENING at, with no
 // ceiling found inside the 12-minute window and no independent evidence the
-// session was lost — must classify as SocketDegraded, never SocketSessionLost,
-// and this function must never be in a position to trigger a teardown call
-// (it has no side effects at all; it is a pure duration->verdict mapping).
+// session was lost — must classify as SocketOpeningDegraded, and this
+// function must never be in a position to trigger a teardown call (it has
+// no side effects at all; it is a pure duration->verdict mapping). LOOP 04.5
+// removed the SESSION_LOST value from SocketLiveness entirely (it had no
+// producer and was an unreachable placeholder), so the check below is
+// against the SocketLiveness string space, not a specific removed
+// identifier — the removal itself is the stronger control: the value this
+// test used to check against no longer exists for anything to return.
 //
-// This test was run against a deliberately reintroduced defect (making
-// ClassifyOpeningDuration return SocketSessionLost past a duration
-// threshold) and the mutation FAILED this test before being reverted. The
-// failure output is pasted in the LOOP-04.4-T1 worker report, not in this
-// file — the mutation is not committed.
+// This test was run, before the removal, against a deliberately
+// reintroduced defect (making ClassifyOpeningDuration return the old
+// SocketSessionLost value past a duration threshold) and the mutation
+// FAILED this test before being reverted. The failure output is pasted in
+// the LOOP-04.4-T1 worker report, not in this file — the mutation was never
+// committed.
 func TestClassifyOpeningDurationNeverReachesSessionLost(t *testing.T) {
 	const farAboveC = 677690 * time.Millisecond // 677.69s, EVIDENCIA-SPA.md M8.4 long-cut-3
 
 	got := ClassifyOpeningDuration(farAboveC)
-	if got == SocketSessionLost {
+	if got != SocketOpeningDegraded {
+		t.Fatalf("ClassifyOpeningDuration(%v) = %v, want SocketOpeningDegraded", farAboveC, got)
+	}
+	if string(got) == "SESSION_LOST" {
 		t.Fatalf("ClassifyOpeningDuration(%v) = SESSION_LOST; DEC-04.4-02 forbids duration in "+
 			"OPENING alone from ever producing this value — M8 measured this exact duration with "+
 			"the socket still OPENING and no independent evidence of session loss (EVIDENCIA-SPA.md M8.4)", farAboveC)
-	}
-	if got != SocketDegraded {
-		t.Fatalf("ClassifyOpeningDuration(%v) = %v, want SocketDegraded", farAboveC, got)
 	}
 }
 
@@ -117,11 +128,11 @@ func TestClassifyOpeningDurationExhaustsToTwoValues(t *testing.T) {
 	}
 	for _, d := range durations {
 		switch got := ClassifyOpeningDuration(d); got {
-		case SocketHealthy, SocketDegraded:
+		case SocketOpeningWithinEnvelope, SocketOpeningDegraded:
 			// expected
 		default:
-			t.Fatalf("ClassifyOpeningDuration(%v) = %v, which is neither SocketHealthy nor "+
-				"SocketDegraded — duration in OPENING must never reach a third state", d, got)
+			t.Fatalf("ClassifyOpeningDuration(%v) = %v, which is neither SocketOpeningWithinEnvelope nor "+
+				"SocketOpeningDegraded — duration in OPENING must never reach a third state", d, got)
 		}
 	}
 }

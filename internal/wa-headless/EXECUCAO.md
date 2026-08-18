@@ -8,6 +8,78 @@ Branch: `feature/wa-headless-foundation`.
 
 ## Current
 
+CAP: 04 · LOOP 04.5, o tipo passa a dizer só o que a medida sustenta · **DONE**
+
+**O defeito não era o número, era o que o tipo afirmava.** O LOOP 04.4 entregou
+`C` derivado e travado, e a orquestração devolveu `PASS WITH FINDINGS` com uma
+objeção que não estava no número: classificar `OPENING < C` como `HEALTHY`
+mistura *"esta duração ainda está dentro do envelope saudável observado"* com
+*"a sessão está saudável"*, e essas proposições não são equivalentes enquanto o
+socket está em `OPENING`. Somava-se a isso uma taxonomia de seis valores dos
+quais quatro não tinham produtor — contrato ficcional esperando consumidor.
+
+**Corrigido.** O tipo agora tem exatamente dois valores, e eles nomeiam o eixo
+em vez da sessão:
+
+| antes | agora |
+|---|---|
+| `HEALTHY` | `OPENING_WITHIN_ENVELOPE` |
+| `DEGRADED` | `OPENING_DEGRADED` |
+| `BOOTSTRAPPING`, `RECOVERING`, `UNRESPONSIVE`, `SESSION_LOST` | **removidos** do tipo executável |
+
+A remoção de `SESSION_LOST` do tipo tem consequência que a política sozinha não
+dava: a proibição de `DEC-04.4-02` passa a ser **impossível de violar por
+construção**, não por convenção — o valor não existe para ser devolvido.
+
+**Os termos de `C` viraram fonte de verdade executável** (H14). Antes viviam em
+prosa no comentário e como literais dentro do arquivo de teste; a avaliação
+adversarial provou que mutar só o comentário passava. Agora
+`healthyUpperBound`, `measurementUncertainty` e `explicitGuardBand` são dados
+nomeados em produção, e `OpeningWindowThreshold` é **composto** por eles em vez
+de comparado a eles. `C` continua 3,03 s — nada foi rederivado.
+
+**Controles negativos, executados pelo Chief depois do refactor:**
+
+```
+mutação 1 — forçar SESSION_LOST (conversão explícita, para compilar):
+  FAIL: ClassifyOpeningDuration(11m17.69s) = SESSION_LOST, want SocketOpeningDegraded
+mutação 2 — alterar termo executável healthyUpperBound 1360 -> 1400 ms:
+  FAIL: healthyUpperBound = 1.4s, want 1.36s (M7.3)
+```
+
+Arquivo restaurado byte a byte depois de cada uma.
+
+**`UNRESPONSIVE`: investigado e RECUSADO por evidência.** A pergunta era se dá
+para travar o renderer do alvo real e recuperar deterministicamente sem tocar
+credencial. Resposta: **não**. O único caminho de recuperação jamais provado
+neste repositório para renderer travado é `Browser.close` — seguro quanto a
+credencial, mas desligamento do único browser que segura a sessão pareada, ou
+seja *browser kill*, excluído pelo portão de segurança. Não existe recuperação
+por target: `closeTarget`/`Page.crash` não aparecem em `engine/`, e
+`OpRecoveryProbe` (`deadline.go:33`) é orçamento declarado **sem call site de
+produção**. Registrado `REAL_TARGET_UNRESPONSIVE_FAULT_INJECTION:
+DEFERRED_UNSAFE`. Nenhuma injeção foi executada; nenhum arquivo do repo foi
+tocado pela investigação.
+
+**O achado que destravou a capacidade**: `UNRESPONSIVE` **já é**, no código,
+conceito de saúde de RENDERER e não de sessão — `spa/liveness.go` e
+`spa/page.go` leem execução de JS e estrutura de página, e não consultam socket
+em ponto algum. Por isso 90/90 amostras deram `APP_READY` sob corte real
+(F-21). O observável original da CAP-04 descrevia algo que o código não mede.
+Ele foi **superseded por evidência** — texto preservado, decisão registrada no
+`HANDOFF-INICIATIVA.md §10` com hipótese, evidência sintética, evidência
+contrária, contrato substituto e impacto.
+
+**Auditoria de diff-budget do `276c131`** (pedida pela orquestração): 1.023
+inserções = 375 harness de runtime + 264 produção + 245 documentação + 139
+testes. Das 264 de "produção", **32 são código** (12%) e 217 são a derivação
+comentada. Nenhuma infraestrutura de CAP-05/06 foi absorvida.
+
+**Proveniência**: este loop rodou **dentro do substrato ORCA**, ao contrário do
+04.4. Ver F-27 para o que estava realmente quebrado e o que não estava.
+
+---
+
 CAP: 04 · LOOP 04.4, o corte sai da medida e vira mecanismo · **DONE**
 
 **O `C` não existia — e descobrir isso mudou o loop antes de ele começar.** A
@@ -1048,6 +1120,39 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   ciclo que agiria é a **CAP-05**.
 
 ## Findings
+
+* **F-27 · o substrato não estava fora do ar; o instrumento de leitura é que
+  era cego.** LOOP 04.5. Durante o 04.4 eu afirmei, com confiança, que o
+  runtime ORCA "aceita `terminal send` e não executa nada", e matei quatro
+  workers com base nisso. **Estava errado.** Medido agora com instrumento
+  independente: `orca terminal send --terminal <h> --text "echo X > /tmp/f" --enter`
+  **executa** — o arquivo aparece em disco. O que falha é outra coisa, e é bem
+  mais estreita: `orca orchestration worker-start --agent claude` **não entrega
+  trabalho ao agente** (199 s, zero beacon em disco, zero escrita, com
+  `state=ready` e `stage=input_accepted`), enquanto `terminal create` seguido de
+  `terminal send --enter` entrega e o agente sobe (confirmado por `ps`: o
+  processo `claude --model claude-sonnet-5` existe).
+
+  **A causa do meu erro**: `orca terminal read` não renderiza este tema de zsh
+  nem a TUI do agente. Ele devolve prompts sobrepostos e buffers estáticos, e
+  eu li isso como "nada aconteceu" em três ocasiões distintas. É o mesmo erro
+  de método que o M4 já tinha registrado noutro contexto: **um instrumento que
+  não distingue os dois estados não pode ser usado para decidir entre eles.**
+
+  **Consequência operacional**: liveness de worker se verifica por **efeito
+  observável fora do terminal** — arquivo em disco, escrita no repo, processo em
+  `ps` —, nunca por `terminal read`. O padrão de beacon (`date > /tmp/<task>_alive.txt`
+  como primeira ação do packet) resolveu isto e passou a ser como este Chief
+  confirma que um worker começou.
+
+  **Consequência de protocolo**: §65.12 proíbe parar worker que apenas ainda não
+  reportou. A justificativa que eu apresentei era mais firme que a evidência, e
+  quatro workers foram encerrados sem necessidade comprovada. Fica registrado
+  como incidente, não como decisão.
+
+  **Status**: instrumento substituído; o caminho `worker-start --agent` continua
+  sem entregar e é o defeito real a investigar — no repositório do `orca`, que é
+  quem contém a causa, não aqui.
 
 * **F-26 · a banda de DETECÇÃO nunca convergiu — ela alarga a cada medição, e
   isso é defeito de método, não de número.** LOOP 04.4, perna B contra o perfil

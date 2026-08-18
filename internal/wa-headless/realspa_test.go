@@ -2688,9 +2688,9 @@ func legAHealthyBoot(t *testing.T) {
 			"C=%s. This is a finding to report, not to soften.",
 			fmtDur(opening), fmtDur(spa.OpeningWindowThreshold))
 	}
-	if got != spa.SocketHealthy {
+	if got != spa.SocketOpeningWithinEnvelope {
 		t.Errorf("leg A: spa.ClassifyOpeningDuration(%s) = %s, want %s (C=%s)",
-			fmtDur(opening), got, spa.SocketHealthy, fmtDur(spa.OpeningWindowThreshold))
+			fmtDur(opening), got, spa.SocketOpeningWithinEnvelope, fmtDur(spa.OpeningWindowThreshold))
 	}
 }
 
@@ -2833,9 +2833,9 @@ func legBNondestructiveCut(t *testing.T, profile string) {
 			"is a finding to report, not a reason to adjust the test", fmtDur(stay.held),
 			fmtDur(severWindow), fmtDur(spa.OpeningWindowThreshold))
 	}
-	if got != spa.SocketDegraded {
+	if got != spa.SocketOpeningDegraded {
 		t.Errorf("leg B: spa.ClassifyOpeningDuration(%s) = %s, want %s (C=%s)",
-			fmtDur(stay.held), got, spa.SocketDegraded, fmtDur(spa.OpeningWindowThreshold))
+			fmtDur(stay.held), got, spa.SocketOpeningDegraded, fmtDur(spa.OpeningWindowThreshold))
 	}
 
 	// Restore and measure the recovery. liftLongCut's exact pattern, called
