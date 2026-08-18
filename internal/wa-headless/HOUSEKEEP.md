@@ -1407,6 +1407,31 @@ deve criar teste que prometa isso. A diferença é que os números agora vivem e
 código executável, não só em comentário — mutar o comentário continua passando,
 mas o comentário deixou de ser onde o valor mora.
 
+**CORREÇÃO DESTA PRÓPRIA ENTRADA, 2026-08-18 (LOOP 05.9).** A frase acima
+*"um teste Go não faz parsing daquele markdown"* — que eu escrevi — está
+**errada**, e a distinção que ela perde é justamente a que importa.
+
+Provar que a NARRATIVA está semanticamente correta é de fato impossível. Mas
+não é isso que faltava: faltava travar que o VALOR citado no `.md` e o valor
+da constante em `.go` continuam sendo o mesmo número. E isso um teste Go faz,
+porque o número tem âncora estável — `EVIDENCIA-SPA.md:1331` é uma linha de
+tabela:
+
+    | pior janela de boot saudável medida (21 boots, 7 condições) | **1,36 s** |
+
+Ler o arquivo e afirmar que `healthyUpperBound` bate com o número dessa linha
+não promete nada sobre a prosa; promete exatamente uma coisa verdadeira e
+verificável — **que os dois lados não divergiram em silêncio**, que é o achado
+original desta entrada.
+
+Não implementado neste ciclo: a tarefa autorizada no momento era a medição de
+retenção longa (token `HOLD`), e abrir uma segunda frente no meio de uma
+medição é como se perde a rastreabilidade. Registrado com o desenho pronto e o
+número de linha da âncora.
+
+**Status revisto**: parcialmente corrigido, com a lacuna restante agora sabida
+**fechável** — ao contrário do que esta entrada afirmava.
+
 ## H15 — o envelope de validade de `C` não tem expressão executável
 
 **Data**: 2026-08-18 · **Contexto**: LOOP 04.4, avaliação adversarial
