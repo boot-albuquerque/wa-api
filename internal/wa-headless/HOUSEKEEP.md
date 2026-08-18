@@ -1673,6 +1673,43 @@ menos ambíguo — com nome que não prometa mais do que mede (`ProcessAlive`, n
 `Healthy`). Um detentor então decide o que fazer; a política fica nele, o sinal
 fica no `core`.
 
-**Status**: não corrigido, fora do WRITE_SET. Registrado antes de virar
-descoberta de campo.
+**Status**: **CORRIGIDO em 2026-08-18 (LOOP 05.8)**, depois de a orquestração
+autorizar `core/` no WRITE_SET (token `H21`).
+
+**O sinal, no `core`**: `Session.ProcessAlive()`. O nome é a coisa verdadeira
+mais estreita que cabia, de propósito — não `Healthy`, não `Alive`. O item 12 do
+briefing é o motivo: processo, alvo, service worker, socket, SPA, sessão e
+identidade são sinais DIFERENTES, e este módulo já pagou caro por confundi-los.
+Um processo vivo ainda não diz nada sobre o socket, a SPA ou a identidade. O que
+ele dá é o negativo barato e sólido: **processo morto significa que tudo acima
+dele também morreu**.
+
+**A política, no detentor**: `Holder.Session` pergunta antes de entregar e
+**recusa** com `ErrSessionDied`. Recusar em vez de re-bootar é decisão, não
+omissão — re-bootar em silêncio esconderia um browser que morre sempre, virando
+vazamento lento em vez de falha alta (ADR-0005 D7), e "quantos browsers este
+perfil já teve" passaria a depender de sorte. Se uma sessão morta deve ser
+substituída automaticamente é decisão de PRODUTO, e este pacote não a toma
+sozinho.
+
+**O teste é construído para o detector poder FALHAR** (item 15 do briefing): o
+browser é morto **de fora** com `SIGKILL`, do jeito que um crash ou um OOM
+chegam, então toda a contabilidade em processo continua dizendo que a sessão
+está boa. Um detector que respondesse sempre "vivo" passaria em todos os outros
+testes do arquivo e falharia só neste.
+
+**Controles negativos, executados, ambos mordendo com a mesma mensagem**:
+- `ProcessAlive` mentindo (`return true`): *"the Holder handed out a session
+  whose process (pid 70487) is gone, with err=<nil>; want ErrSessionDied"*.
+- checagem removida do `Holder`: idem, pid 70609.
+
+**Precisão sobre o que a mutação D NÃO pegou**: ela não derrubou
+`TestHolder_ProcessAliveIsFalseAfterStop`, porque a guarda de `stopped` retorna
+antes de alcançar a linha mutada. São mecanismos distintos — o teste do `Stop`
+trava a guarda, não a sonda — e registro assim em vez de contar como cobertura
+que não é.
+
+**Testes**: `TestHolder_RefusesAHeldSessionWhoseProcessDied`,
+`TestHolder_ProcessAliveIsFalseAfterStop`. Ambos arquivos restaurados
+byte-idênticos após cada mutação.
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -270,5 +271,77 @@ func TestHolder_StoppedHolderRefusesToBootAgain(t *testing.T) {
 		}
 		t.Fatalf("a stopped Holder booted again (err=%v); it must refuse with "+
 			"ErrHolderStopped so ownership of the profile is a decision, not a race", err)
+	}
+}
+
+// TestHolder_RefusesAHeldSessionWhoseProcessDied is H21's reason to exist, and
+// it is built so the detector can actually FAIL (briefing item 15).
+//
+// The browser is killed from OUTSIDE, the way a crash or an OOM kill arrives:
+// nothing in this module calls Stop, so every piece of in-process bookkeeping
+// still says the session is fine. A Holder that trusts its own bookkeeping
+// hands out a dead handle and the caller finds out as a CDP error in the middle
+// of a business operation. A detector that always answered "alive" would pass
+// every other test in this file and fail only this one.
+func TestHolder_RefusesAHeldSessionWhoseProcessDied(t *testing.T) {
+	h := NewHolder(holderConfig(t, t.TempDir()))
+	defer h.Stop(context.Background())
+
+	sess, err := h.Session(context.Background())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	pid := sess.Browser().PID()
+	if !sess.ProcessAlive() {
+		t.Fatal("the session reports its process dead immediately after a successful " +
+			"boot; the detector is broken in the direction that makes this test vacuous")
+	}
+
+	// Kill from outside, then wait for the OS to actually reap it. Asserting
+	// straight after the signal would race the kernel and make the test flaky
+	// in the direction that hides a real defect.
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatalf("killing the browser from outside: %v", err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for engine.ProcessAlive(pid) && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if engine.ProcessAlive(pid) {
+		t.Fatalf("pid %d still alive 10s after SIGKILL; the fixture, not the code, "+
+			"is what failed here", pid)
+	}
+
+	got, err := h.Session(context.Background())
+	if !errors.Is(err, ErrSessionDied) {
+		if got != nil {
+			t.Fatalf("the Holder handed out a session whose process (pid %d) is gone, "+
+				"with err=%v; want ErrSessionDied. The caller would meet this as a CDP "+
+				"failure inside a business operation instead of an invalid session",
+				pid, err)
+		}
+		t.Fatalf("want ErrSessionDied, got %v", err)
+	}
+	if got != nil {
+		t.Fatalf("the Holder returned ErrSessionDied AND a non-nil session")
+	}
+}
+
+// TestHolder_ProcessAliveIsFalseAfterStop locks the other end of the same
+// signal. Without it, ProcessAlive could be a constant true for every state the
+// tests above reach, since they only ever ask about a running browser.
+func TestHolder_ProcessAliveIsFalseAfterStop(t *testing.T) {
+	h := NewHolder(holderConfig(t, t.TempDir()))
+	sess, err := h.Session(context.Background())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	if via := h.Stop(context.Background()); !via.Clean() {
+		t.Fatalf("stopped via %s, want clean", via)
+	}
+	if sess.ProcessAlive() {
+		t.Fatal("a stopped session still reports its process alive; a stopped session " +
+			"has no process by definition, and a caller holding an old handle would " +
+			"read this as permission to use it")
 	}
 }

@@ -19,6 +19,21 @@ import (
 // ownership check in core can see.
 var ErrHolderStopped = errors.New("runtime: holder already stopped")
 
+// ErrSessionDied is returned by Session when the held session's browser process
+// is gone — it crashed, was OOM-killed, or was killed from outside.
+//
+// The Holder refuses rather than re-booting, and that is a decision, not an
+// omission. Re-booting silently would (a) hide a browser that keeps dying,
+// turning a loud failure into a slow leak, which is the opposite of the rule
+// ADR-0005 D7 sets for this process, and (b) make "how many browsers has this
+// profile had" depend on luck. Whether a dead session should be replaced
+// automatically is a PRODUCT decision about degradation policy, and it is not
+// one this package gets to make on its own.
+//
+// A caller that wants a fresh session after this constructs a new Holder, which
+// is explicit and which core's ownership check can see.
+var ErrSessionDied = errors.New("runtime: the held session's browser process is gone")
+
 // Holder owns exactly one headless session and keeps it alive across commands.
 //
 // It is the module's first real consumer of core.StartSession, and that is the
@@ -72,6 +87,20 @@ func (h *Holder) Session(ctx context.Context) (*core.Session, error) {
 		return nil, ErrHolderStopped
 	}
 	if h.session != nil {
+		// Ask the cheapest, least ambiguous question before handing the
+		// session out: is the process still there? A holder that skips this
+		// returns a dead handle, and the caller discovers it as a CDP error in
+		// the middle of a business operation rather than as an invalid
+		// session (H21).
+		//
+		// This is NOT a health check, and must not grow into one here. Process
+		// liveness is one of the seven distinct signals item 12 of the briefing
+		// separates; a live process still says nothing about the socket, the
+		// SPA or the identity. What it gives is a sound negative: process gone
+		// means everything above it is gone too.
+		if !h.session.ProcessAlive() {
+			return nil, ErrSessionDied
+		}
 		return h.session, nil
 	}
 

@@ -210,6 +210,31 @@ func (s *Session) Browser() *engine.Browser { return s.browser }
 // caller's own Runner.Do budgets.
 func (s *Session) Tab() *engine.Tab { return s.tab }
 
+// ProcessAlive reports whether the browser PROCESS this session owns is still
+// running. It answers nothing else, and the name is deliberately the narrowest
+// true thing rather than Healthy or Alive.
+//
+// Item 12 of this initiative's briefing is the reason for that narrowness:
+// process, target, service worker, socket, SPA, session and identity are
+// DIFFERENT signals, and this module has already paid for conflating them. A
+// live process can host a hung renderer, a socket in OPENING, or a page that
+// logged itself out. A caller that needs one of those must ask for that one.
+//
+// What it IS good for is the cheapest, least ambiguous negative: if the process
+// is gone, nothing above it can be true, so a holder can refuse to hand out the
+// session without probing anything. That is the case it exists for (H21).
+//
+// A stopped session reports false: Stop clears the browser handle, and a
+// session that has been stopped has no process by definition.
+func (s *Session) ProcessAlive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped || s.browser == nil {
+		return false
+	}
+	return engine.ProcessAlive(s.browser.PID())
+}
+
 // ProfileDir is the absolute profile directory this session owns.
 func (s *Session) ProfileDir() string { return s.profileDir }
 
