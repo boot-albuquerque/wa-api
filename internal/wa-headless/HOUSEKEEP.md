@@ -1606,4 +1606,35 @@ travar do que "espera 60 s". Não aplicado nesta sessão: mexer nos testes de
 regressão logo depois de eles terem acabado de validar uma correção é
 exatamente quando se introduz um defeito sem perceber.
 
-**Status**: não corrigido, registrado com a correção desenhada.
+**Status**: **CORRIGIDO em 2026-08-18 (LOOP 05.5)**, pela correção desenhada
+acima. O motivo do adiamento — *"mexer nos testes de regressão logo depois de
+eles terem acabado de validar uma correção"* — expirou: os testes já validaram
+dois ciclos de correção desde então, e o custo tinha PIORADO (152 s na medição
+original, **201 s** medidos agora antes de mexer).
+
+**O que mudou**: `StartConfig` ganha `SettleBudget`, com zero significando
+`spa.DefaultSettleBudget`. Os dois testes de caminho negativo que pagavam o
+orçamento inteiro — `FailureTearsDownDeterministicallyWithNoOrphan` e
+`SuspectMarker_NotClearedOnFailedBoot`, 61 s cada, 122 s dos 201 s — passam a
+receber `negativePathSettleBudget = 3s`. A duração da espera era incidental a
+ambos: um prova desmontagem sem órfão, o outro prova que a marca sobrevive.
+
+**Medição**: pacote `core` de **201,2 s para 98,4 s** (−51%), mesma máquina,
+mesma sessão. Suíte completa verde sob `-race`.
+
+**A propriedade melhor, travada**:
+`TestStartSession_SettleLoopRespectsTheBudgetItWasGiven`. "O boot espera 60 s" é
+um fato sobre um DEFAULT; "o boot desiste no orçamento que recebeu" é um fato
+sobre o MECANISMO, e continua significando algo quando o default mudar. Sem ele,
+tornar o orçamento configurável seria só aceleração, com nada afirmando que o
+botão está ligado.
+
+**Controles negativos, executados, cada um mordendo a SUA asserção** — o teste
+tem limite superior e inferior de propósito, porque uma regressão de tiro único
+também terminaria bem abaixo do default e passaria só com o limite superior:
+- ignorar `cfg.SettleBudget`: *"boot took 1m1.72s, at or beyond the 1m0s DEFAULT
+  budget despite being given 4s — SettleBudget is not reaching the settle loop"*.
+- voltar ao tiro único: *"boot gave up after 1.67s, sooner than the 4s budget it
+  was given — the settle loop is not waiting out its budget"*.
+
+`session.go` restaurado byte-idêntico após cada mutação.

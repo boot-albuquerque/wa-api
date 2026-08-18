@@ -114,6 +114,17 @@ func pageServer(t *testing.T, path, body string) string {
 	return srv.URL + path
 }
 
+// negativePathSettleBudget is what the never-becomes-ready tests grant the
+// settle loop instead of spa.DefaultSettleBudget.
+//
+// Those tests prove teardown and marker behaviour on a failed boot; the LENGTH
+// of the wait is incidental to both, and at the 60s default the two of them
+// alone were 122s of the package's 201s (H20). Short enough to be cheap, long
+// enough that a boot which WOULD have settled still gets several poll ticks at
+// spa's 500ms interval — a budget below one tick would prove nothing about the
+// loop, only about arithmetic.
+const negativePathSettleBudget = 3 * time.Second
+
 func baseConfig(t *testing.T, navigateURL string) StartConfig {
 	t.Helper()
 	return StartConfig{
@@ -199,6 +210,7 @@ func TestStartSession_FailureTearsDownDeterministicallyWithNoOrphan(t *testing.T
 	profileDir := t.TempDir()
 	cfg := baseConfig(t, pageServer(t, "/blank", blankPage))
 	cfg.ProfileDir = profileDir
+	cfg.SettleBudget = negativePathSettleBudget
 
 	sess, err := StartSession(context.Background(), cfg)
 	if err == nil {
@@ -483,6 +495,7 @@ func TestStartSession_SuspectMarkerComposedPath_ClearedOnSuccess(t *testing.T) {
 func TestStartSession_SuspectMarker_NotClearedOnFailedBoot(t *testing.T) {
 	blankPage := `<html><body>nothing here</body></html>`
 	cfg := baseConfig(t, pageServer(t, "/blank", blankPage))
+	cfg.SettleBudget = negativePathSettleBudget
 	if err := engine.MarkSessionSuspect(cfg.ProfileDir, engine.StopViaDirtySignalCloseRefused); err != nil {
 		t.Fatalf("priming the fixture with the production marker: %v", err)
 	}
@@ -923,4 +936,49 @@ func TestStartSession_SessionSurvivesBootDeadlineExpiry(t *testing.T) {
 	}
 	t.Logf("boot returned in %s; session still answering %s after its boot deadline expired",
 		bootTook, bootBudget-bootTook)
+}
+
+// TestStartSession_SettleLoopRespectsTheBudgetItWasGiven is the property H20
+// argued was better than the one the slow tests were accidentally proving.
+//
+// "The boot waits 60s before giving up" is a fact about a default. "The boot
+// gives up at the budget it was handed" is a fact about the MECHANISM, and it
+// is the one that keeps meaning something when the default changes. Without
+// it, making SettleBudget configurable would be a pure speed-up with nothing
+// asserting the knob is connected to anything.
+func TestStartSession_SettleLoopRespectsTheBudgetItWasGiven(t *testing.T) {
+	const budget = 4 * time.Second
+
+	blankPage := `<html><body>nothing here</body></html>`
+	cfg := baseConfig(t, pageServer(t, "/blank", blankPage))
+	cfg.SettleBudget = budget
+
+	start := time.Now()
+	sess, err := StartSession(context.Background(), cfg)
+	elapsed := time.Since(start)
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession reached READY on a blank page (stopped_via=%s)", via)
+	}
+
+	var boot *BootFailure
+	if !errors.As(err, &boot) || boot.Stage != StageNotReady {
+		t.Fatalf("want *BootFailure at StageNotReady, got %v", err)
+	}
+	// Upper bound: the loop must not fall back to the 60s default. The margin
+	// covers launch and navigate, which happen before the settle loop starts.
+	if elapsed >= spa.DefaultSettleBudget {
+		t.Fatalf("boot took %s, at or beyond the %s DEFAULT budget despite being given "+
+			"%s — SettleBudget is not reaching the settle loop",
+			elapsed, spa.DefaultSettleBudget, budget)
+	}
+	// Lower bound: the loop must actually WAIT the budget, not give up early.
+	// This is what stops a single-shot regression from passing the test above
+	// — a boot that classifies once and quits would also finish well under the
+	// default, and would be indistinguishable without this assertion.
+	if elapsed < budget {
+		t.Fatalf("boot gave up after %s, sooner than the %s budget it was given — the "+
+			"settle loop is not waiting out its budget", elapsed, budget)
+	}
+	t.Logf("gave up after %s on a %s budget (default is %s)", elapsed, budget, spa.DefaultSettleBudget)
 }

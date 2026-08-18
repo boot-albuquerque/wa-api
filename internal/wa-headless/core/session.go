@@ -45,6 +45,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/spa"
@@ -157,6 +158,21 @@ type StartConfig struct {
 	// a local fixture in tests, per the module's own convention of never
 	// touching the real target from ordinary tests).
 	NavigateURL string
+	// SettleBudget overrides spa.DefaultSettleBudget: how long the boot waits
+	// for the SPA to finish mounting before giving up. Zero uses the default.
+	//
+	// It exists for the negative paths. A test that proves "this page never
+	// becomes ready" has to pay the whole budget to prove it, and at the
+	// 60s default that one property was most of the package's runtime (H20:
+	// the suite went from 28s to 201s after the settle loop landed). The
+	// budget being a PARAMETER also makes the better property testable —
+	// that the loop respects the budget it was GIVEN, rather than that it
+	// happens to wait 60s.
+	//
+	// Production callers should leave this zero. It is not an SLA, and a
+	// caller wanting a shorter boot should bound ctx instead, which the loop
+	// already honours and which does not hide a slow mount as "not ready".
+	SettleBudget time.Duration
 	// RequiredModules overrides spa.RequiredAtStartup. Nil uses the default.
 	RequiredModules []spa.Module
 	// Runner overrides the default engine.Runner (measured deadlines, tracing
@@ -356,7 +372,11 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	// itself — whichever expires first — so a page that is still mounting is
 	// waited for instead of rejected, while a page that answers with a
 	// terminal class (QR, session conflict, ...) still fails fast.
-	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, spa.DefaultSettleBudget, "core/start/probe")
+	settleBudget := cfg.SettleBudget
+	if settleBudget <= 0 {
+		settleBudget = spa.DefaultSettleBudget
+	}
+	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, settleBudget, "core/start/probe")
 	if class != spa.ClassAppReady {
 		tab.Close()
 		return failTab(StageNotReady, fmt.Errorf(
