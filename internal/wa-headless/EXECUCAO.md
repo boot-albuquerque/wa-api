@@ -2558,3 +2558,59 @@ possui, e o `realspa_test.go` já importava o `runtime` da linguagem. Resolvido
 com alias local (`waruntime`). Renomear o pacote é decisão do lado do `core` e
 está fora do WRITE_SET deste ciclo.
 
+## LOOP 05.9 — retenção longa medida, e quatro instrumentos consertados no caminho
+
+**O resultado**, `TestRealSPAHoldRetention` contra o perfil pareado:
+
+```
+20 amostras em 10m, tique de 30s
+socket ficou CONNECTED os 10m inteiros
+identity ficou PRESENT os 10m inteiros
+process=true em todas
+stop_via=browser.close; sem lock; sem órfão
+```
+
+Isto só se tornou mensurável **depois do H21**. Antes dele, o único jeito de
+saber se uma sessão segurada tinha morrido era **tentar usá-la** — o que torna
+morte indistinguível de operação falhando, que é o instrumento cego outra vez.
+
+**O teste afirma quase nada de propósito.** O repositório não tinha medição de
+sessão segurada nesta escala, e asserção aqui codificaria palpite como contrato.
+A única coisa afirmada é a que seria defeito sob QUALQUER política futura: o
+processo não pode morrer sem ninguém ter pedido. O resto é linha do tempo
+registrada para uma decisão posterior.
+
+**O que NÃO prova**: 10 minutos é uma AMOSTRA, não um limite. Produção segura
+sessões por horas, e essa faixa continua **UNKNOWN**.
+
+### Quatro instrumentos consertados, três deles quebrados por mim hoje
+
+Todos a mesma falha: **fundir "não consegui perguntar" com "a resposta foi X"**.
+
+1. **A sonda de identidade** fundia sonda-com-erro, parse-com-erro e
+   identidade-ausente num único `false` (F-29).
+2. **O laço de amostragem** podia executar **zero vezes** e devolver o
+   zero-value do veredito — `ABSENT` — sem ter sondado. Só alcançável pelo
+   chamador novo, com orçamento de 1 ms. Travado por
+   `TestSamplingLoopAlwaysProbesAtLeastOnce`, **sem portão**: pô-lo atrás do
+   perfil pareado seria repetir o caminho pelo qual ele entrou.
+3. **`readSocket`** devolvia `spa.SocketState("PROBE_ERROR")` — valor fora do
+   vocabulário declarado do tipo, o "contrato fictício" rejeitado na LOOP 04.4,
+   e que num log lê-se como fala da página. Estado e erro voltam separados.
+4. **A linha de base do resumo** vinha de `samples[0]` sem checar se aquela
+   leitura falhara — o que faria toda leitura boa posterior parecer transição.
+   Achado falso fabricado pelo próprio resumo.
+
+### Correções de afirmações minhas, no mesmo loop
+
+- **H14**: eu escrevera que *"um teste Go não faz parsing daquele markdown"*.
+  Errado. Depois afirmei que *"os três números ligam ao `.md`"*. Também errado —
+  **medi antes de prometer** e são **dois links e uma igualdade**: o termo 3 é
+  escolha de engenharia declarada e não tem fonte no documento.
+- **H16**: examinado e **deixado aberto de propósito**. Não dá para fechar por
+  amostragem — uma mutação numa janela de 24h escapa de qualquer varredura,
+  inclusive aleatória, sobre 1,8×10^19 ns. A garantia é estrutural e a entrada já
+  está declarada onde engana. Fechamento falso seria pior que a lacuna.
+- **H15**: continua legitimamente bloqueado — depende de um consumidor de `C`
+  que o H17 mediu como inexistente.
+
