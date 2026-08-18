@@ -4486,9 +4486,69 @@ type nCycleMetric struct {
 	stopVia         engine.StopVia
 	singletonAfter  int
 	qrObserved      bool
-	identityPresent bool
+	identityVerdict identityVerdict
+	identityWaited  time.Duration
 	profileFiles    int
 	orphanPID       int
+}
+
+// identityVerdict names WHY the owner-identity read produced what it did.
+//
+// It exists because of a measured defect, recorded in the root ARMADILHAS.md:
+// this test used to collapse THREE different outcomes into a bare `false` —
+// the probe erroring, the JSON failing to parse, and the identity genuinely
+// being absent — and then fataled with a message that named only the third.
+// It fired against a profile whose identity the sibling probe
+// (TestRealSPAOwnerIdentityShape) saw PRESENT at T+0.02s minutes later. An
+// instrument that cannot distinguish two states cannot be used to decide
+// between them (F-27).
+type identityVerdict string
+
+const (
+	verdictPresent    identityVerdict = "PRESENT"
+	verdictAbsent     identityVerdict = "ABSENT"
+	verdictProbeError identityVerdict = "PROBE_ERROR"
+	verdictParseError identityVerdict = "PARSE_ERROR"
+)
+
+// sampleIdentityUntilPresent is the second half of the same correction: the
+// old read looked ONCE, immediately after StartSession returned, which is the
+// very shape of defect this cycle just fixed in core.StartSession itself. It
+// samples instead, reusing identityShapeBudget/identityShapeTick rather than
+// inventing a new number — the sibling probe already established that budget
+// against this same profile, and on a healthy boot this returns on the first
+// tick, so reusing a generous outer bound costs nothing.
+//
+// The returned verdict is the LAST one observed, so a window that only ever
+// saw probe errors reports PROBE_ERROR and not ABSENT.
+func sampleIdentityUntilPresent(sess *core.Session, runner *engine.Runner,
+	budget, tick time.Duration) (identityVerdict, time.Duration, error) {
+
+	start := time.Now()
+	last := verdictAbsent
+	var lastErr error
+	for deadline := start.Add(budget); time.Now().Before(deadline); {
+		var raw string
+		err := runner.Do(context.Background(), engine.OpStateProbe, "cycle/identity",
+			func(ctx context.Context) error {
+				return sess.Tab().Evaluate(ctx, identityShapeScript(), &raw)
+			})
+		switch {
+		case err != nil:
+			last, lastErr = verdictProbeError, err
+		default:
+			var shape identityShape
+			if uerr := json.Unmarshal([]byte(raw), &shape); uerr != nil {
+				last, lastErr = verdictParseError, uerr
+			} else if shape.HasIdentity {
+				return verdictPresent, time.Since(start), nil
+			} else {
+				last, lastErr = verdictAbsent, nil
+			}
+		}
+		time.Sleep(tick)
+	}
+	return last, time.Since(start), lastErr
 }
 
 // TestRealSPANCycleLifecycle is the N-cycle observable that supersedes
@@ -4566,16 +4626,8 @@ func TestRealSPANCycleLifecycle(t *testing.T) {
 		// owner identity read below is the same call whatsapp-web.js itself
 		// makes (moduleUserPrefsMeUser doc comment): presence is asserted,
 		// the value is never read into this test.
-		var raw string
-		identityErr := runner.Do(context.Background(), engine.OpStateProbe, "cycle/identity",
-			func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, identityShapeScript(), &raw) })
-		var identityPresent bool
-		if identityErr == nil {
-			var shape identityShape
-			if json.Unmarshal([]byte(raw), &shape) == nil {
-				identityPresent = shape.HasIdentity
-			}
-		}
+		verdict, identityWaited, identityErr := sampleIdentityUntilPresent(
+			sess, runner, identityShapeBudget, identityShapeTick)
 
 		pid := sess.Browser().PID()
 		via := sess.Stop(context.Background())
@@ -4598,12 +4650,14 @@ func TestRealSPANCycleLifecycle(t *testing.T) {
 		m := nCycleMetric{
 			cycle: cycle, timeToReady: elapsed, stopVia: via,
 			singletonAfter: lockCount, qrObserved: false,
-			identityPresent: identityPresent, profileFiles: files, orphanPID: orphan,
+			identityVerdict: verdict, identityWaited: identityWaited,
+			profileFiles: files, orphanPID: orphan,
 		}
 		metrics = append(metrics, m)
 		t.Logf("CYCLE %d/%d: time_to_ready=%s stop_via=%s singleton_lock_after=%d "+
-			"identity_present=%v profile_files=%d orphan_pid_nonzero=%v",
-			cycle, nCycleSampleCount, elapsed, via, lockCount, identityPresent, files, orphan != 0)
+			"identity=%s (waited %s) profile_files=%d orphan_pid_nonzero=%v",
+			cycle, nCycleSampleCount, elapsed, via, lockCount, verdict, identityWaited,
+			files, orphan != 0)
 
 		// STOP THE RUN, do not retry, on anything this test does not
 		// understand — exactly the safety rule the packet states.
@@ -4619,19 +4673,34 @@ func TestRealSPANCycleLifecycle(t *testing.T) {
 			t.Fatalf("cycle %d/%d: pid %d still answers signal 0 after a clean stop "+
 				"(orphan browser process); STOPPING", cycle, nCycleSampleCount, orphan)
 		}
-		if !identityPresent {
+		// Each non-PRESENT verdict gets its OWN message, because they are not
+		// the same finding: ABSENT is a statement about the SESSION, while
+		// PROBE_ERROR and PARSE_ERROR are statements about this INSTRUMENT and
+		// say nothing about the session at all. Collapsing them is the defect
+		// recorded in ARMADILHAS.md.
+		switch verdict {
+		case verdictPresent:
+			// the observable held for this cycle
+		case verdictAbsent:
 			t.Fatalf("cycle %d/%d: reached READY with no QR, but the POSITIVE identity signal "+
-				"(WAWebUserPrefsMeUser) was absent — absence of QR is not proof of identity, "+
-				"and this boot cannot claim the authenticated state was recovered; STOPPING",
-				cycle, nCycleSampleCount)
+				"(WAWebUserPrefsMeUser) stayed absent for the whole %s window — absence of QR "+
+				"is not proof of identity, and this boot cannot claim the authenticated state "+
+				"was recovered; STOPPING",
+				cycle, nCycleSampleCount, identityShapeBudget)
+		default:
+			t.Fatalf("cycle %d/%d: the identity INSTRUMENT failed (%s: %v) — this says nothing "+
+				"about whether the session recovered, and must not be read as if it did; "+
+				"STOPPING so the instrument is fixed before any verdict is drawn",
+				cycle, nCycleSampleCount, verdict, identityErr)
 		}
 	}
 
 	t.Logf("SUMMARY sample_count=%d profile_files_before_any_cycle=%d", nCycleSampleCount, filesBeforeAny)
 	for _, m := range metrics {
-		t.Logf("  cycle=%d time_to_ready=%s stop_via=%s singleton_after=%d identity=%v files=%d orphan=%v",
-			m.cycle, m.timeToReady, m.stopVia, m.singletonAfter, m.identityPresent,
-			m.profileFiles, m.orphanPID != 0)
+		t.Logf("  cycle=%d time_to_ready=%s stop_via=%s singleton_after=%d identity=%s "+
+			"identity_waited=%s files=%d orphan=%v",
+			m.cycle, m.timeToReady, m.stopVia, m.singletonAfter, m.identityVerdict,
+			m.identityWaited, m.profileFiles, m.orphanPID != 0)
 	}
 	// SIZE IS OBSERVATIONAL ONLY, per the supersede: no assertion on
 	// monotonic size anywhere in this test, on purpose. H10 measured a

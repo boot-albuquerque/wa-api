@@ -178,6 +178,11 @@ type Session struct {
 	profileDir string
 	release    func()
 
+	// cancelSession ends the context the tab was opened under. It is NOT the
+	// caller's boot context — see the sessionCtx block in StartSession — so
+	// the only thing that ends a live session is Stop.
+	cancelSession context.CancelFunc
+
 	mu      sync.Mutex
 	stopped bool
 }
@@ -209,6 +214,9 @@ func (s *Session) Stop(ctx context.Context) engine.StopVia {
 		s.tab.Close()
 	}
 	via := engine.CleanStop(ctx, s.runner, s.browser)
+	if s.cancelSession != nil {
+		s.cancelSession()
+	}
 	if s.release != nil {
 		s.release()
 	}
@@ -290,14 +298,55 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		return nil, &BootFailure{Stage: stage, Cause: cause, StoppedVia: via, WasSuspect: wasSuspect}
 	}
 
-	tab, err := engine.OpenTab(ctx, browser)
+	// THE SESSION'S LIFETIME IS NOT THE BOOT'S LIFETIME.
+	//
+	// engine.OpenTab derives the chromedp allocator from the context it is
+	// given, so whatever context goes in here becomes the tab's — and
+	// therefore the session's — lifetime. Passing the caller's ctx made the
+	// returned *Session die the moment the caller released its BOOT deadline,
+	// which is what every correct Go caller does with `defer cancel()`. It was
+	// measured against the real paired profile: every probe on a successfully
+	// booted session answered "context canceled" for 76s straight
+	// (ARMADILHAS.md; TestStartSession_SessionOutlivesItsBootContext).
+	//
+	// A caller that grants a 60s budget is asking for a 60s BOOT, not a 60s
+	// SESSION. So the tab is opened under a context this package owns, and the
+	// only thing that ends it is Stop.
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+
+	// Boot-time cancellation is still honoured, and must be: until the boot
+	// returns, the caller's ctx is the abort signal for the whole attempt, and
+	// tab.Navigate below runs under the TAB's context rather than under ctx,
+	// so without this watcher a cancelled boot would keep navigating. The
+	// watcher is torn down by bootDone on every exit path, successful or not,
+	// which is what stops it from following ctx after the handover.
+	bootDone := make(chan struct{})
+	defer close(bootDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancelSession()
+		case <-bootDone:
+		}
+	}()
+
+	// fail() and the terminal tab.Close() paths below already tear the browser
+	// down; cancelSession here releases the allocator with them, so no failed
+	// boot leaks the context it opened.
+	failTab := func(stage BootStage, cause error) (*Session, error) {
+		cancelSession()
+		return fail(stage, cause)
+	}
+
+	tab, err := engine.OpenTab(sessionCtx, browser)
 	if err != nil {
+		cancelSession()
 		return fail(StageOpenTab, fmt.Errorf("core: opening tab: %w", err))
 	}
 
 	if err := tab.Navigate(runner, cfg.NavigateURL, "core/start/navigate"); err != nil {
 		tab.Close()
-		return fail(StageNavigate, fmt.Errorf("core: navigating to the SPA: %w", err))
+		return failTab(StageNavigate, fmt.Errorf("core: navigating to the SPA: %w", err))
 	}
 
 	// A single post-navigate probe fires as early as T+4.7s against the real
@@ -310,7 +359,7 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, spa.DefaultSettleBudget, "core/start/probe")
 	if class != spa.ClassAppReady {
 		tab.Close()
-		return fail(StageNotReady, fmt.Errorf(
+		return failTab(StageNotReady, fmt.Errorf(
 			"core: page classified %q, want %q; this boot path is restoration-only — "+
 				"pairing is a separate, human-authorised slice (snapshot url=%q dom_nodes=%d)",
 			class, spa.ClassAppReady, snap.URL, snap.DOMNodes))
@@ -322,7 +371,7 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	}
 	if err := spa.VerifyInventory(ctx, runner, tab.Evaluate, required); err != nil {
 		tab.Close()
-		return fail(StageInventory, err)
+		return failTab(StageInventory, err)
 	}
 
 	// READY, verified: structural probe AND module inventory both passed on
@@ -337,10 +386,11 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	}
 
 	return &Session{
-		browser:    browser,
-		tab:        tab,
-		runner:     runner,
-		profileDir: absProfile,
-		release:    release,
+		browser:       browser,
+		tab:           tab,
+		runner:        runner,
+		cancelSession: cancelSession,
+		profileDir:    absProfile,
+		release:       release,
 	}, nil
 }

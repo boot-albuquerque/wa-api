@@ -728,3 +728,138 @@ func TestStartSession_NotReadyFailure_PreservesFinalSnapshot(t *testing.T) {
 		t.Errorf("cause = %q, lost the final snapshot's url", cause)
 	}
 }
+
+// TestStartSession_SessionOutlivesItsBootContext is the BEFORE_FIX evidence for
+// the defect measured against the real paired profile on 2026-08-18.
+//
+// The measurement: the N-cycle test bounded StartSession with a 60s boot
+// deadline, called cancel() as any correct Go caller does, and then every
+// identity probe on the returned *Session came back "context canceled" for a
+// full 76s window. The session was dead the instant its BOOT deadline was
+// released.
+//
+// The cause, in engine/tab.go:35: OpenTab builds the chromedp allocator from
+// the PARENT context, and core.StartSession passes the caller's boot context as
+// that parent. So the session's lifetime IS the boot deadline's lifetime. A
+// caller that gives StartSession a 60s budget has not asked for a 60s session —
+// it has asked for a 60s BOOT — but that is what it gets.
+//
+// Why the whole suite was blind to it: every other test in this file calls
+// StartSession with context.Background(), which is never cancelled and never
+// expires, so the coupling can never bite. This is the same armadilha as the
+// late-mount one, in a new dimension — the double did not diverge from
+// production in its RULES, it diverged in its CONTEXT LIFETIME. See
+// ARMADILHAS.md.
+func TestStartSession_SessionOutlivesItsBootContext(t *testing.T) {
+	runner := engine.NewRunner()
+	cfg := baseConfig(t, pageServer(t, "/ready", readyPage))
+	cfg.Runner = runner
+	cfg.RequiredModules = []spa.Module{}
+
+	// A BOOT budget, released as soon as the boot returns. This is what a
+	// production caller does; it is not an unusual or hostile pattern.
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), 30*time.Second)
+	sess, err := StartSession(bootCtx, cfg)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	defer sess.Stop(context.Background())
+
+	// The session must still be usable. Anything else means StartSession
+	// returned a handle that was already dead.
+	var got string
+	evalErr := runner.Do(context.Background(), engine.OpStateProbe, "post-boot/probe",
+		func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, "String(1+1)", &got) })
+	if evalErr != nil {
+		t.Fatalf("the session did not outlive its boot context: probing the returned "+
+			"*Session after cancelling the BOOT context failed with %v. StartSession "+
+			"handed back a session whose lifetime is its boot deadline — this is the "+
+			"defect under test (engine/tab.go:35 derives the allocator from the parent "+
+			"context, and core/session.go passes the caller's boot ctx as that parent)",
+			evalErr)
+	}
+	if got != "2" {
+		t.Fatalf("probe returned %q, want \"2\"", got)
+	}
+}
+
+// slowPageServer serves body only after delay, so the boot spends that whole
+// delay inside tab.Navigate. That is the point: Navigate runs under the TAB's
+// context, never under ctx, so it is the ONLY window in which the watcher
+// goroutine is what carries the caller's cancellation. A fast fixture makes
+// this test pass with the watcher deleted — measured, see ARMADILHAS.md — and
+// a test that passes with the mechanism removed is not testing the mechanism.
+func slowPageServer(t *testing.T, delay time.Duration, body string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/slow"
+}
+
+// TestStartSession_CancelledBootStillAborts is the other half of the lifetime
+// fix, and the reason it is not simply "pass context.Background() to OpenTab".
+//
+// Decoupling the session from the boot context must not cost the caller its
+// ability to abort the boot. tab.Navigate runs under the TAB's context, not
+// under ctx, so once the tab stops being a child of ctx there is nothing left
+// tying navigation to the caller's cancellation except the watcher goroutine
+// StartSession installs. This test cancels WHILE Navigate is still waiting on
+// a deliberately slow server, and requires the attempt to end with a failure
+// and a clean teardown — never a live session, never a hang.
+func TestStartSession_CancelledBootStillAborts(t *testing.T) {
+	const serverDelay = 30 * time.Second
+
+	profile := t.TempDir()
+	cfg := baseConfig(t, slowPageServer(t, serverDelay, readyPage))
+	cfg.ProfileDir = profile
+
+	bootCtx, cancelBoot := context.WithCancel(context.Background())
+	defer cancelBoot()
+
+	done := make(chan struct{})
+	var sess *Session
+	var err error
+	start := time.Now()
+	go func() {
+		sess, err = StartSession(bootCtx, cfg)
+		close(done)
+	}()
+
+	// Cancel once the boot is certainly inside Navigate, waiting on the server.
+	time.Sleep(3 * time.Second)
+	cancelBoot()
+
+	select {
+	case <-done:
+	case <-time.After(serverDelay):
+		t.Fatal("StartSession did not return within the server delay after its boot " +
+			"context was cancelled — the caller lost the ability to abort a boot, " +
+			"which is the regression the session-lifetime fix must not introduce")
+	}
+	elapsed := time.Since(start)
+
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession returned a live Session (stopped_via=%s) despite its boot "+
+			"context being cancelled mid-navigate", via)
+	}
+	if sess != nil {
+		t.Fatalf("StartSession returned both an error (%v) and a non-nil Session", err)
+	}
+	// The abort must come from the cancellation, not from the server finally
+	// answering. Without this bound the test would pass on a boot that simply
+	// waited out the slow server and failed later for an unrelated reason.
+	if elapsed >= serverDelay {
+		t.Fatalf("StartSession took %s, at or beyond the %s server delay: it waited the "+
+			"navigation out instead of aborting on cancellation", elapsed, serverDelay)
+	}
+	if n := singletonLockCount(t, profile); n != 0 {
+		t.Fatalf("SingletonLock survived an aborted boot (count=%d); the teardown is not clean", n)
+	}
+	t.Logf("aborted %s into a %s navigation (err=%v)", elapsed, serverDelay, err)
+}

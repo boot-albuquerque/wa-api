@@ -613,3 +613,64 @@ se perde a rastreabilidade.
 
 **Status**: DESCOBERTA. O resultado "N ciclos falhou por identidade ausente" é
 **FALSO NEGATIVO** e não deve ser lido como evidência sobre a sessão.
+
+## ARM — o dublê divergiu da produção no TEMPO DE VIDA DO CONTEXTO
+
+**Data**: 2026-08-18 · **Contexto**: LOOP 05.3, depois que a sonda de identidade
+corrigida (armadilha anterior) parou de mentir.
+
+**O que a sonda corrigida revelou**: `PROBE_ERROR: context canceled`, pela
+janela inteira de 76 s, num boot que tinha alcançado READY em 10,9 s. Não era
+identidade ausente — era a sessão **já morta** quando a primeira sonda rodou. O
+`identity_present=false` original era isto, e não uma afirmação sobre a conta.
+
+**A causa, em produção**: `engine.OpenTab` (`engine/tab.go:35`) deriva o
+alocador do chromedp do contexto que recebe, e `core.StartSession` passava o
+contexto do **boot** do chamador. Logo o tempo de vida da sessão ERA o do prazo
+de boot. Um chamador que escreve `defer cancel()` — o que todo código Go correto
+escreve — matava a sessão no instante em que o boot retornava. E mesmo sem
+cancelar, ela se autodestruiria quando o prazo de boot expirasse.
+
+Um chamador que concede 60 s está pedindo um BOOT de 60 s, não uma SESSÃO de
+60 s. O wa-api vai segurar a sessão por horas.
+
+**Por que a suíte inteira era cega**: todos os testes de `core/session_test.go`
+chamavam `StartSession(context.Background(), ...)` — um contexto que nunca é
+cancelado e nunca expira. O acoplamento não tinha como morder.
+
+**A lição, e é a terceira vez nesta sessão**: o dublê não era mais PERMISSIVO
+que a produção. Ele divergia numa dimensão em que ninguém estava olhando.
+- Primeiro foi a **velocidade** (fixture `httptest` monta instantaneamente, a
+  SPA real leva segundos) — escondeu o boot de tiro único.
+- Agora é o **tempo de vida do contexto** (`Background()` nunca morre, o prazo
+  de boot de um chamador real morre) — escondeu o acoplamento da sessão.
+
+A pergunta que faz essa classe aparecer não é "meu dublê aceita o que a produção
+aceita?", é: **em que EIXO o meu dublê é mais bem-comportado que o mundo?**
+Tempo, cancelamento, ordem, concorrência, falha parcial. `context.Background()`
+num teste é um dublê de um contexto, e um dublê imortal.
+
+**Correção**: `core.StartSession` abre a aba sob um contexto que o pacote
+possui, encerrado só pelo `Stop`. O aborto do boot é preservado por uma goroutine
+vigia desmontada no retorno — necessária porque `tab.Navigate` roda sob o
+contexto da ABA, nunca sob o `ctx`.
+
+**Controles negativos, e os dois primeiros NÃO morderam** — vale registrar
+porque é a armadilha 3 deste catálogo acontecendo em tempo real:
+1. Reverter o `OpenTab` para o `ctx` **não compilou** (`sessionCtx` sem uso).
+   Não prova nada. Refeito com `_ = sessionCtx`: aí sim FALHOU, com a mensagem
+   do defeito.
+2. Remover o vigia deixou `TestStartSession_CancelledBootStillAborts` **passar**.
+   O teste era cerimônia: a página de teste montava rápido, o aborto vinha do
+   `WaitForReady` (que recebe `ctx`) e o `Navigate` nunca chegava a importar.
+   Reescrito contra um servidor que só responde depois de 30 s — o único ponto
+   em que o vigia é o que carrega o cancelamento. Aí o controle mordeu:
+   `StartSession took 31.95s, at or beyond the 30s server delay: it waited the
+   navigation out instead of aborting on cancellation`.
+
+**Testes que travam**: `TestStartSession_SessionOutlivesItsBootContext`,
+`TestStartSession_CancelledBootStillAborts`.
+
+**Status**: CORRIGIDA. Verificada contra o perfil pareado real: 3/3 ciclos,
+identidade `PRESENT` em todos (esperas de 104ms, 99ms, 2,9ms), parada limpa,
+`SingletonLock=0`, nenhum órfão.
