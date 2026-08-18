@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -180,26 +181,97 @@ func TestSendImage_RejectMissingRequiredField(t *testing.T) {
 	}
 }
 
-// TestSendImage_DataURISource_Rejected: o ramo data URI (CAP-03) é
-// explicitamente fora de escopo neste endpoint — precisa virar erro, nunca
-// o 200 "validated" falso que o stub anterior produzia.
-func TestSendImage_DataURISource_Rejected(t *testing.T) {
-	mm := &contractsfake.MediaMessenger{}
+// TestSendImage_DataURI_Success_ViaRegisteredRoute prova o SEGUNDO
+// transporte de POST /chat/send/image (CAP-03) pela mesma superfície de
+// rota do ramo URL: data URI chega decodificada localmente ao
+// MediaMessenger — MediaFetcher nunca é tocado — com Status="sent" e
+// MessageID vindo da porta de envio.
+func TestSendImage_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
+	sentAt := int64(1755500020)
+	mm := &contractsfake.MediaMessenger{
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+			if target != domain.JID("5511999999999") {
+				t.Errorf("target: got %q", target)
+			}
+			if payload.MimeType != "image/png" {
+				t.Errorf("mimetype: got %q, want image/png", payload.MimeType)
+			}
+			return domain.MessageSendResult{ID: "wire-id-datauri-999", Timestamp: time.Unix(sentAt, 0)}, nil
+		},
+	}
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"data:image/png;base64,aGVsbG8="}`
+	encoded := base64.StdEncoding.EncodeToString(sendImagePNGBytes)
+	body := `{"Phone":"5511999999999","Image":"data:image/png;base64,` + encoded + `","Caption":"legenda"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
-	if rec.Code == http.StatusOK {
-		t.Fatalf("data URI produziu 200 falso: %s", rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
 	env := decodeEnvelope(t, rec)
-	if env.Success {
-		t.Fatalf("envelope.success=true para data URI fora de escopo: %s", rec.Body.String())
+	if !env.Success {
+		t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
+	}
+
+	var data struct {
+		MessageID string `json:"message_id"`
+		Timestamp int64  `json:"timestamp"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		t.Fatalf("envelope.data invalido: %v", err)
+	}
+	if data.Status != domain.StatusSent {
+		t.Errorf("status: got %q, want %q", data.Status, domain.StatusSent)
+	}
+	if data.MessageID != "wire-id-datauri-999" {
+		t.Errorf("message_id: got %q, want %q", data.MessageID, "wire-id-datauri-999")
 	}
 	if n := len(mf.FetchBytesCalls); n != 0 {
-		t.Fatalf("data URI, mas o fetch foi chamado %d vez(es)", n)
+		t.Fatalf("data URI, mas MediaFetcher foi chamado %d vez(es) pela rota registrada", n)
+	}
+	if n := len(mm.SendImageCalls); n != 1 {
+		t.Fatalf("SendImage chamado %d vez(es) pela rota registrada, quero 1", n)
+	}
+	if string(mm.SendImageCalls[0].Payload.Bytes) != string(sendImagePNGBytes) {
+		t.Error("bytes decodificados divergem dos originais")
+	}
+}
+
+// TestSendImage_UnsupportedSource_Rejected: fontes que não são nem URL
+// http(s) nem data URI de imagem — incluindo base64 cru sem prefixo
+// "data:" e MIME não-imagem em data URI — viram erro pela rota registrada,
+// nunca o 200 "validated" falso que o stub anterior produzia.
+func TestSendImage_UnsupportedSource_Rejected(t *testing.T) {
+	cases := map[string]string{
+		"raw_base64_no_prefix": "/9j/4AAQSkZJRgABAQEASABIAAD=",
+		"non_image_mime":       "data:application/pdf;base64,aGVsbG8=",
+		"unsupported_scheme":   "ftp://exemplo.com/foto.png",
+	}
+	for name, img := range cases {
+		t.Run(name, func(t *testing.T) {
+			mm := &contractsfake.MediaMessenger{}
+			jr := &contractsfake.JIDResolver{}
+			mf := defaultSendImageFetcher()
+
+			body := `{"Phone":"5511999999999","Image":"` + img + `"}`
+			rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
+
+			if rec.Code == http.StatusOK {
+				t.Fatalf("fonte nao suportada %q produziu 200 falso: %s", img, rec.Body.String())
+			}
+			env := decodeEnvelope(t, rec)
+			if env.Success {
+				t.Fatalf("envelope.success=true para fonte nao suportada %q: %s", img, rec.Body.String())
+			}
+			if n := len(mf.FetchBytesCalls); n != 0 {
+				t.Fatalf("fonte nao suportada %q, mas o fetch foi chamado %d vez(es)", img, n)
+			}
+			if n := len(mm.SendImageCalls); n != 0 {
+				t.Fatalf("fonte nao suportada %q, mas SendImage foi chamado %d vez(es)", img, n)
+			}
+		})
 	}
 }
 

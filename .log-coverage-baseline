@@ -753,7 +753,12 @@ min_errpath_coverage=859
 # +3 (607->610): CAP-02, ChatMessengerAdapter.SendImage,
 # opengraph.URLFetcher.FetchBytes, message.isHTTPImageURL — ver a
 # justificativa de min_func_coverage acima.
-min_eligible=610
+# +1 (610->611): CAP-03, message.SendImageUseCase.decodeDataURIImage — nova
+# funcao elegivel, ja' nasce coberta (Warn nos dois caminhos S-ret de
+# image_too_large e no de invalid_data_uri). message.isDataURIImage e
+# message.decodedBase64Len NAO entram no denominador (X1: corpo <=2
+# statements e nenhum caminho de saida de tipo error).
+min_eligible=611
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

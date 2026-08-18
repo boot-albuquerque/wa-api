@@ -1921,7 +1921,8 @@ pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:28);uncovered:L2(S-ret,send_contact.go:31);uncovered:L2(S-ret,send_contact.go:34)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:32);uncovered:L2(S-ret,send_document.go:35);uncovered:L2(S-ret,send_document.go:38)
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:28);uncovered:L2(S-ret,send_edit_message.go:31);uncovered:L2(S-ret,send_edit_message.go:34)
-pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:53);uncovered:L2(S-ret,send_image.go:56);uncovered:L2(S-ret,send_image.go:71);uncovered:L2(S-ret,send_image.go:88);uncovered:L2(S-ret,send_image.go:96)
+pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
+pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:28);uncovered:L2(S-ret,send_list.go:31)
 pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:28);uncovered:L2(S-ret,send_location.go:31);uncovered:L2(S-ret,send_location.go:34)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
@@ -1931,7 +1932,10 @@ pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:28);uncovered:L2(S-ret,send_video.go:31)
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
-pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:124)
+pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
+pkg/application/usecase/message.isDataURIImage	EXCLUDED	X1
+pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
+pkg/application/usecase/message.resolveMimeType	EXCLUDED	X1
 pkg/application/usecase/notification.GetHealthUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/notification.GetHealthUseCase.Execute.func1	EXCLUDED	X1
 pkg/application/usecase/notification.ListNewsletterUseCase.Execute	ELIGIBLE	covered

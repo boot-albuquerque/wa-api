@@ -43,10 +43,10 @@ type LinkPreviewData struct {
 const StatusSent = "sent"
 
 // SendImageRequest representa o payload de envio de imagem. Image é uma
-// união: aceita tanto data URI ("data:image/...;base64,...", CAP-03, fora
-// do escopo de CAP-02) quanto URL http(s) externa (CAP-02) — o mesmo campo
-// e a mesma rota servem os dois casos, herdado de handlers.go pré-refactor
-// (ver `git show 41bc8e2^:handlers.go`).
+// união: aceita tanto data URI ("data:image/...;base64,...", CAP-03) quanto
+// URL http(s) externa (CAP-02) — o mesmo campo e a mesma rota servem os
+// dois casos, herdado de handlers.go pré-refactor (ver
+// `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
 	Phone    string `json:"Phone"`
 	Image    string `json:"Image"`
