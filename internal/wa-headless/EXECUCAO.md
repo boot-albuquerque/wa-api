@@ -1121,6 +1121,48 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 
 ## Findings
 
+* **F-28 · a remoção de um valor do enum NÃO torna o estado inexprimível — e eu
+  disse que tornava.** Revalidação ORCA independente dos commits `276c131` e
+  `bde5dc32`, 2026-08-18, veredito `REVALIDATED_WITH_FINDINGS`.
+
+  **O que eu afirmei**, no RELATÓRIO #3 à orquestração: que remover
+  `SocketSessionLost` do tipo transformava `DEC-04.4-02` de política em
+  construção, porque "violar a proibição exigiria inventar um valor novo, não
+  apenas esquecer uma regra". A orquestração amplificou isso para *"deixou de
+  ser expressável por esse classificador"* e congelou no contrato.
+
+  **O que a medição mostrou.** O avaliador tentou a mutação e ela **compilou
+  sem nenhuma conversão explícita**: `SocketLiveness` é `type SocketLiveness
+  string`, então declarar `const x SocketLiveness = "SESSION_LOST"` e devolvê-lo
+  é livre. A garantia real é mais fraca do que eu descrevi: o valor não é
+  *inexprimível*, ele saiu do **vocabulário** — expressá-lo exige uma declaração
+  nova e deliberada, e não um esquecimento. Isso ainda é melhor que antes, mas
+  não é o que eu disse.
+
+  **Segundo achado, sobre qual teste faz o trabalho.** A mutação foi pega por
+  `TestClassifyOpeningDurationExhaustsToTwoValues` — o sweep amplo — e **NÃO**
+  por `TestClassifyOpeningDurationNeverReachesSessionLost`, o teste que carrega
+  o nome de controle negativo. Motivo: o controle negativo nomeado testa **uma
+  duração fixa** (677,69 s, do M8.4), e o gatilho da mutação era 365 dias, acima
+  dela. Com gatilho entre os dois valores, o controle nomeado teria pego. A
+  invariante do pacote se sustenta porque a suíte inteira falha; o que não se
+  sustenta é a leitura de que o teste nomeado é quem a protege em toda a faixa.
+
+  **Correção sugerida** (não aplicada — a CAP-04 está congelada e reabrir é
+  decisão da orquestração): o controle negativo nomeado deveria varrer uma faixa
+  em vez de um ponto, ou o sweep deveria ser reconhecido no nome como a guarda
+  real. Hoje o nome promete mais cobertura do que o corpo entrega — a mesma
+  classe de defeito da **H14**, noutra forma.
+
+  **Status**: registrado, não corrigido. A afirmação exagerada foi corrigida
+  junto à orquestração no mesmo ciclo em que foi descoberta.
+
+  **Método que produziu o achado**: passagem independente, por agente que não
+  escreveu o código, com instrução explícita de dizer na cara se algum número do
+  Chief estivesse errado. Foi o que aconteceu. O valor da revalidação não estava
+  em reconfirmar os 1.023/375/264/245/139 — todos bateram — e sim em derrubar
+  uma afirmação de garantia que ninguém tinha testado.
+
 * **F-27 · o substrato não estava fora do ar; o instrumento de leitura é que
   era cego.** LOOP 04.5. Durante o 04.4 eu afirmei, com confiança, que o
   runtime ORCA "aceita `terminal send` e não executa nada", e matei quatro
