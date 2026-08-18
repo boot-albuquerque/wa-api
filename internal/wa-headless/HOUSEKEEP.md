@@ -1448,6 +1448,51 @@ as âncoras verificadas e o limite dele declarado.
 **Status revisto**: parcialmente corrigido, com a lacuna restante agora sabida
 **fechável** — ao contrário do que esta entrada afirmava.
 
+**FECHADO em 2026-08-18 (LOOP 05.10)**, com autorização da orquestração (token
+`H14`). Dois testes em `spa/socket_test.go`:
+
+- `TestMeasuredTermsMatchTheEvidenceDocument` — lê o `EVIDENCIA-SPA.md`, exige
+  que cada âncora case com **exatamente uma** linha, e compara o número contra a
+  constante de produção. A unicidade da âncora é parte do teste, não higiene:
+  âncora que passa a casar duas linhas parou de identificar uma medição.
+- `TestGuardBandIsAnchoredToTermOne` — o termo 3 não tem fonte no documento, e o
+  travável é a identidade de CÓDIGO `explicitGuardBand == healthyUpperBound`.
+
+**Um erro de desenho meu, pego pelo próprio teste na primeira execução.** A
+regra inicial era "a última duração da LINHA". Ela lê `1,36 s` de
+`` | `net-*` | 0,30–0,31 s | 0,49–1,36 s | `` — a coluna da JANELA MEDIDA, não a
+do espaçamento do instrumento, de onde o termo vem. Pior que não achar nada:
+pegaria um número real da medição errada. Corrigido com seleção de célula
+(`evidenceAnchor.cell`), e o porquê está escrito no campo.
+
+O protótipo que eu havia rodado antes de prometer devolvia `['0.31','1.36']` e eu
+li como confirmação **porque o 0,31 estava lá** — sem verificar qual dos dois a
+regra escolheria. Medir e depois ler a medição com a hipótese na cabeça é a
+mesma falha que o `CLAUDE.md` descreve: *se a medição só confirmou o que você já
+achava, provavelmente ela não mediu nada*.
+
+**Quatro controles negativos, executados, e os três primeiros FALHARAM na
+primeira tentativa** — pela armadilha 3, silêncio não é prova. O `replace` com
+`count=1` acertava a primeira ocorrência de `**1,36 s**` no documento, que é
+outra linha, então a mutação nem tocava a âncora. Refeitos por índice de linha:
+
+- reescrever o M7.3 (`1,36 → 9,99`): *"healthyUpperBound = 1.36s in code, but
+  M7.3 ... says 9.99s"* — **este é o achado ORIGINAL desta entrada**, e agora
+  morde.
+- reescrever a coluna do M7.5 (`0,31 → 0,99`): *"measurementUncertainty = 310ms
+  in code, but M7.5 ... says 990ms"*.
+- duplicar a linha-âncora: *"matched 2 lines ..., want exactly 1"*.
+- desancorar o termo 3 (`1360 → 1500 ms`): *"the band is a number with no stated
+  derivation behind it"*.
+
+Documento e `socket.go` restaurados byte-idênticos após cada mutação.
+
+**O que estes testes NÃO provam**, dito aqui para não virar citação errada: que
+a PROSA está correta. Isso não é mecanicamente verificável e a direção técnica
+está certa em recusar teste que prometa isso. O que eles provam é a coisa
+estreita e verdadeira: **o valor citado no documento e o valor na constante não
+divergiram em silêncio**.
+
 ## H15 — o envelope de validade de `C` não tem expressão executável
 
 **Data**: 2026-08-18 · **Contexto**: LOOP 04.4, avaliação adversarial

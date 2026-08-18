@@ -2,6 +2,9 @@ package spa
 
 import (
 	"math"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -213,3 +216,165 @@ func TestSocketStateReadExprMatchesModuleSocketModel(t *testing.T) {
 		t.Fatalf("SocketStateReadExpr does not embed window.require(%q); got:\n%s", string(ModuleSocketModel), SocketStateReadExpr)
 	}
 }
+
+// evidenceDocPath is EVIDENCIA-SPA.md, relative to this package's directory.
+const evidenceDocPath = "../EVIDENCIA-SPA.md"
+
+// evidenceAnchor names one measured term's home in EVIDENCIA-SPA.md.
+//
+// substr must match EXACTLY ONE line of the document. That requirement is the
+// test, as much as the number is: an anchor that starts matching two lines has
+// stopped identifying a specific measurement, and silently comparing against
+// whichever line came first is how a link like this rots into decoration.
+type evidenceAnchor struct {
+	term   string
+	substr string
+	// cell selects which column of a markdown table row carries the figure,
+	// 1-based, counting cells between the pipes. Zero means "search the whole
+	// line", which is right for prose and for single-figure rows.
+	//
+	// It exists because the first draft of this test searched the whole line
+	// and read 1.36s out of `| net-* | 0,30–0,31 s | 0,49–1,36 s |` — the
+	// MEASURED WINDOW column, not the instrument-spacing column the term comes
+	// from. Both cells hold a plausible duration, so "last figure on the line"
+	// picked a real number from the wrong measurement, which is worse than
+	// finding nothing: it would have reported drift where there is none, or
+	// hidden drift where there is.
+	cell    int
+	want    time.Duration
+	section string
+}
+
+// TestMeasuredTermsMatchTheEvidenceDocument closes the half of H14 that stayed
+// open after LOOP 04.5: the three terms live in executable code now, but until
+// this test nothing tied them to the document the numbers CAME from. Someone
+// could rewrite M7.3 with different figures and no test would notice.
+//
+// WHAT THIS PROVES, AND WHAT IT DOES NOT. It proves the VALUE cited in the
+// document and the VALUE in the constant have not drifted apart. It proves
+// nothing about whether the surrounding prose is correct — that is not
+// mechanically checkable, and the orchestration was right to refuse a test that
+// would claim it. The narrow true thing is worth having; the broad false claim
+// is not (F-28).
+//
+// Only TWO of C's three terms are anchorable, and that asymmetry is the point
+// rather than an oversight — see TestGuardBandIsAnchoredToTermOne for the third.
+func TestMeasuredTermsMatchTheEvidenceDocument(t *testing.T) {
+	raw, err := os.ReadFile(evidenceDocPath)
+	if err != nil {
+		t.Fatalf("reading %s: %v. The evidence document is not optional: these constants "+
+			"are only defensible while the measurement they came from is readable",
+			evidenceDocPath, err)
+	}
+	lines := strings.Split(string(raw), "\n")
+
+	anchors := []evidenceAnchor{
+		{
+			term:    "healthyUpperBound",
+			substr:  "pior janela de boot saudável medida",
+			want:    healthyUpperBound,
+			section: "M7.3",
+		},
+		{
+			// The M7.5 table row for the net-* legs — the legs that produced
+			// term 1. Its cell is a RANGE, "0,30–0,31 s", and socket.go's
+			// derivation says it takes "the worse of the two". So the value
+			// compared here is the LAST duration on the row, matching that
+			// stated rule rather than a convenient reading of it.
+			term:    "measurementUncertainty",
+			substr:  "| `net-*` |",
+			cell:    2, // "pior espaçamento", NOT "janela medida" in cell 3
+			want:    measurementUncertainty,
+			section: "M7.5",
+		},
+	}
+
+	for _, a := range anchors {
+		var matches []string
+		for _, line := range lines {
+			if strings.Contains(line, a.substr) {
+				matches = append(matches, line)
+			}
+		}
+		if len(matches) != 1 {
+			t.Errorf("anchor %q for %s matched %d lines of %s, want exactly 1. The anchor "+
+				"no longer identifies one measurement, so comparing against it would be "+
+				"comparing against whichever line happened to come first",
+				a.substr, a.term, len(matches), evidenceDocPath)
+			continue
+		}
+		field := matches[0]
+		if a.cell > 0 {
+			cells := strings.Split(field, "|")
+			if a.cell >= len(cells) {
+				t.Errorf("anchor line for %s has %d cells, cannot read cell %d: %q",
+					a.term, len(cells), a.cell, matches[0])
+				continue
+			}
+			field = cells[a.cell]
+		}
+		got, ok := lastDocDuration(field)
+		if !ok {
+			t.Errorf("anchor line for %s carries no readable duration in the selected "+
+				"field: %q (from line %q)", a.term, field, matches[0])
+			continue
+		}
+		if got != a.want {
+			t.Errorf("%s = %v in code, but %s of %s says %v (line: %q). The constant and "+
+				"the measurement it claims to come from have drifted apart",
+				a.term, a.want, a.section, evidenceDocPath, got, matches[0])
+		}
+	}
+}
+
+// TestGuardBandIsAnchoredToTermOne covers C's third term, which has NO source in
+// the evidence document and must not pretend to.
+//
+// socket.go states it outright: the guard band is "an explicit engineering
+// choice, not a further measurement", deliberately set to one more full width of
+// term 1 rather than to an independent guess. So the checkable property is not a
+// document link but a CODE identity, and writing it as a document link would be
+// exactly the empty promise F-28 was about.
+func TestGuardBandIsAnchoredToTermOne(t *testing.T) {
+	if explicitGuardBand != healthyUpperBound {
+		t.Fatalf("explicitGuardBand = %v, healthyUpperBound = %v. The guard band's whole "+
+			"rationale is that it is ONE MORE full width of the worst measured window, "+
+			"anchored to the same measured number rather than to a guess; once they "+
+			"differ, the band is a number with no stated derivation behind it",
+			explicitGuardBand, healthyUpperBound)
+	}
+}
+
+// lastDocDuration reads the LAST "N,NN s" figure in the given field.
+//
+// Last, not first, because the anchored cells carry ranges ("0,30–0,31 s") and
+// socket.go's derivation takes the worse end. Reading the first would silently
+// compare against the optimistic end of every range this ever anchors.
+//
+// The FIELD, not the line: see evidenceAnchor.cell for why that distinction is
+// load-bearing rather than tidiness.
+func lastDocDuration(line string) (time.Duration, bool) {
+	m := docDurationRe.FindAllStringSubmatch(line, -1)
+	if len(m) == 0 {
+		return 0, false
+	}
+	last := m[len(m)-1]
+	whole, err := strconv.Atoi(last[1])
+	if err != nil {
+		return 0, false
+	}
+	frac, err := strconv.Atoi(last[2])
+	if err != nil {
+		return 0, false
+	}
+	// Two decimal places, as every figure in the document is written.
+	if len(last[2]) != 2 {
+		return 0, false
+	}
+	return time.Duration(whole)*time.Second + time.Duration(frac)*10*time.Millisecond, true
+}
+
+// docDurationRe matches the document's own number format: "1,36 s", optionally
+// bolded. Comma as decimal separator, because the document is written in
+// Portuguese and its tables are the source of truth here.
+var docDurationRe = regexp.MustCompile(`(\d+),(\d{2})\s*s`)
