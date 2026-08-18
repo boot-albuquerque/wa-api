@@ -238,6 +238,14 @@ const (
 // this function's concern, and asking it about one is a caller error this
 // package does not try to detect from inside a pure duration->verdict
 // mapping.
+//
+// "Exactly two values, forever" is a STRUCTURAL guarantee (this function has
+// exactly two return statements, both returning one of the two SocketLiveness
+// constants above — read the body, that is the whole proof), not a tested
+// one: socket_test.go's tests cover a finite list of sampled points and
+// cannot, by construction, prove a property over the full time.Duration
+// domain. See the "WHAT IS GUARANTEED BY TESTS VS BY STRUCTURE" comment in
+// socket_test.go for the F-28 errata that makes this distinction explicit.
 func ClassifyOpeningDuration(d time.Duration) SocketLiveness {
 	if d >= OpeningWindowThreshold {
 		return SocketOpeningDegraded

@@ -1435,3 +1435,38 @@ do envelope, e reportar isso em vez de devolver um veredito com confiança
 que não tem. Enquanto não houver consumidor, não há o que corrigir.
 
 **Status**: **não corrigido nesta sessão**. Lacuna conhecida e declarada.
+
+## H16 — a lista de pontos não fecha o meio do domínio, e isso está escrito no teste
+
+**Data**: 2026-08-18 · **Contexto**: errata da F-28, depois da CAP-04 fechada.
+
+**Onde**: `internal/wa-headless/spa/socket_test.go`,
+`TestClassifyOpeningDurationSampledPointsMapToTwoValues`.
+
+**Problema**: o teste percorre uma **lista finita de 11 pontos**, não o domínio.
+`time.Duration` é `int64` de nanossegundos — ~1,8 × 10^19 valores representáveis.
+Fechar as pontas (0, `C±1ns`, `math.MaxInt64`) não fecha o **meio**: uma mutação
+que dispare estritamente entre dois pontos amostrados escapa.
+
+**Evidência (mutação executada, e reproduzida pelo Chief)**: com
+`if d > 48h && d < 72h { return SocketLiveness("MUT_ENTRE") }` no classificador,
+a suíte inteira **PASSA**. Já a mutação acima do antigo máximo
+(`d > 400*24h`) agora **FALHA**, pega pelo ponto `math.MaxInt64` — essa metade
+foi fechada por esta errata.
+
+**Por que não foi corrigido**: fechar a propriedade exigiria varredura real ou
+teste de propriedade, e a instrução da orquestração vetou introduzir framework
+de property testing nesta errata. Listar cada fronteira de intervalo à mão não
+escala.
+
+**O que MITIGA**: a garantia central não é do teste, é **estrutural** —
+`ClassifyOpeningDuration` tem exatamente dois `return`, ambos devolvendo uma das
+duas constantes declaradas, e não existe terceira constante para devolver. Um
+terceiro ramo é diff visível em `socket.go`, não algo que o teste prove ausente
+rodando. Isso está escrito no próprio arquivo de teste, sob o título
+"WHAT IS GUARANTEED BY TESTS VS BY STRUCTURE".
+
+**Status**: **não corrigido, e declarado no lugar onde engana** — o nome do
+teste deixou de prometer exaustão, e o comentário nomeia a fuga que permanece.
+É a lição da F-28 aplicada ao conserto da própria F-28: o nome não pode
+prometer o que o corpo não executa.

@@ -1,6 +1,7 @@
 package spa
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -81,18 +82,43 @@ func TestClassifyOpeningDurationBoundary(t *testing.T) {
 	}
 }
 
-// TestClassifyOpeningDurationNeverReachesSessionLost is the NEGATIVE CONTROL
-// DEC-04.4-02 requires: a duration far above C — 677.69s, the exact figure
-// M8.4's long-cut-3 measured the socket still sitting in OPENING at, with no
-// ceiling found inside the 12-minute window and no independent evidence the
-// session was lost — must classify as SocketOpeningDegraded, and this
-// function must never be in a position to trigger a teardown call (it has
-// no side effects at all; it is a pure duration->verdict mapping). LOOP 04.5
-// removed the SESSION_LOST value from SocketLiveness entirely (it had no
-// producer and was an unreachable placeholder), so the check below is
-// against the SocketLiveness string space, not a specific removed
-// identifier — the removal itself is the stronger control: the value this
-// test used to check against no longer exists for anything to return.
+// WHAT IS GUARANTEED BY TESTS VS BY STRUCTURE (F-28 errata).
+//
+// The tests in this file cover a FINITE list of sampled points — see each
+// test's own doc comment for what its list contains. No finite test proves
+// "ClassifyOpeningDuration returns only these two values for every possible
+// time.Duration" or "no future edit adds a third branch" — that would take
+// an infeasible sweep over the full int64 domain.
+//
+// What DOES guarantee "exactly two outcomes, forever" is STRUCTURAL, not
+// tested: ClassifyOpeningDuration (socket.go) has exactly two return
+// statements in its body, both returning one of the two SocketLiveness
+// constants declared in this package, and SocketLiveness has no third
+// constant for a third statement to return. A change that adds a third
+// return statement is a diff any reviewer sees directly in socket.go; the
+// tests below narrow where a THIRD VALUE could sneak in via a value already
+// computed from d (e.g. a threshold-gated branch), not whether one exists in
+// the abstract — that question is answered by reading the function, not by
+// running it.
+
+// TestClassifyOpeningDurationM8SampleNeverReachesSessionLost is the NEGATIVE
+// CONTROL DEC-04.4-02 requires, for exactly ONE historically important
+// sample: 677.69s, the exact figure M8.4's long-cut-3 measured the socket
+// still sitting in OPENING at, with no ceiling found inside the 12-minute
+// window and no independent evidence the session was lost. This test proves
+// that THIS SAMPLE classifies as SocketOpeningDegraded and never as a
+// session-lost value — it does not, and was never meant to, prove that NO
+// duration anywhere produces a session-lost value; that broader claim is
+// covered by TestClassifyOpeningDurationSampledPointsMapToTwoValues plus the
+// structural argument above (SocketLiveness has no session-lost value to
+// return at all). This function must never be in a position to trigger a
+// teardown call (it has no side effects at all; it is a pure
+// duration->verdict mapping). LOOP 04.5 removed the SESSION_LOST value from
+// SocketLiveness entirely (it had no producer and was an unreachable
+// placeholder), so the check below is against the SocketLiveness string
+// space, not a specific removed identifier — the removal itself is the
+// stronger control: the value this test used to check against no longer
+// exists for anything to return.
 //
 // This test was run, before the removal, against a deliberately
 // reintroduced defect (making ClassifyOpeningDuration return the old
@@ -100,7 +126,7 @@ func TestClassifyOpeningDurationBoundary(t *testing.T) {
 // FAILED this test before being reverted. The failure output is pasted in
 // the LOOP-04.4-T1 worker report, not in this file — the mutation was never
 // committed.
-func TestClassifyOpeningDurationNeverReachesSessionLost(t *testing.T) {
+func TestClassifyOpeningDurationM8SampleNeverReachesSessionLost(t *testing.T) {
 	const farAboveC = 677690 * time.Millisecond // 677.69s, EVIDENCIA-SPA.md M8.4 long-cut-3
 
 	got := ClassifyOpeningDuration(farAboveC)
@@ -114,17 +140,34 @@ func TestClassifyOpeningDurationNeverReachesSessionLost(t *testing.T) {
 	}
 }
 
-// TestClassifyOpeningDurationExhaustsToTwoValues is a second, structural
-// guard on the same invariant: it enumerates every value ClassifyOpeningDuration
-// is documented to return and fails if a third value ever appears, across a
-// wide sweep of durations including ones far past anything EVIDENCIA-SPA.md
-// measured. A change that adds a third branch — reachable only past some
-// very large duration a narrower sweep would miss — still gets caught here.
-func TestClassifyOpeningDurationExhaustsToTwoValues(t *testing.T) {
+// TestClassifyOpeningDurationSampledPointsMapToTwoValues checks a FIXED LIST
+// of representative and extreme points, not a sweep (there is no step
+// between them) and not an exhaustion of the domain (time.Duration has
+// ~1.8*10^19 representable values; this list has 11). A mutation whose
+// trigger falls strictly between two of these points, or is more extreme
+// than the most extreme point tested, can still escape this test — see
+// F-28's executed negative controls in the LOOP-04.5-F28 worker report for a
+// concrete example of exactly that gap (a fake third branch above 365 days
+// and below the practical maximum escaped the pre-F28 version of this test
+// entirely). The list below closes the two gaps that report found (the
+// unbounded region above the old top sample, and the region between 24h and
+// 365 days) by adding the true practical extreme (time.Duration's own
+// maximum, ~292 years) and points that bracket the boundary at C by exactly
+// one nanosecond on each side; it does not, and cannot, close every possible
+// gap in an unbounded int64 domain.
+func TestClassifyOpeningDurationSampledPointsMapToTwoValues(t *testing.T) {
 	durations := []time.Duration{
-		0, time.Millisecond, time.Second, OpeningWindowThreshold,
-		time.Minute, time.Hour, 24 * time.Hour, 677690 * time.Millisecond,
-		365 * 24 * time.Hour,
+		0,
+		OpeningWindowThreshold - 1, // one ns below C
+		OpeningWindowThreshold,     // exactly C
+		OpeningWindowThreshold + 1, // one ns above C
+		time.Millisecond,
+		time.Second,
+		time.Minute,
+		time.Hour,
+		24 * time.Hour,
+		677690 * time.Millisecond,    // 677.69s, EVIDENCIA-SPA.md M8.4 long-cut-3
+		time.Duration(math.MaxInt64), // ~292 years, the practical extreme: time.Duration cannot represent a longer positive duration
 	}
 	for _, d := range durations {
 		switch got := ClassifyOpeningDuration(d); got {
@@ -134,6 +177,28 @@ func TestClassifyOpeningDurationExhaustsToTwoValues(t *testing.T) {
 			t.Fatalf("ClassifyOpeningDuration(%v) = %v, which is neither SocketOpeningWithinEnvelope nor "+
 				"SocketOpeningDegraded — duration in OPENING must never reach a third state", d, got)
 		}
+	}
+}
+
+// TestClassifyOpeningDurationNegativeIsWithinEnvelope decides, deliberately,
+// what a negative duration means: the caller computes d as time elapsed
+// since the socket entered SocketStateOpening (time.Since-shaped), so a
+// negative value is nonsense as real input — no real caller can produce one
+// — and is therefore OUT OF CONTRACT, not a case this function is asked to
+// handle meaningfully. It is not left undecided by accident, though:
+// time.Duration is a totally ordered int64, so "<" against C is still
+// well-defined for a negative value, and ClassifyOpeningDuration has no
+// input validation (see its doc comment: it trusts the caller). This test
+// locks the CURRENT, well-defined behavior — negative compares less than
+// C's positive value, so it reads WithinEnvelope — so a future change to
+// that behavior is a deliberate, reviewed diff instead of a silent drift.
+func TestClassifyOpeningDurationNegativeIsWithinEnvelope(t *testing.T) {
+	const negative = -1 * time.Hour // out-of-contract input; see doc comment above
+
+	got := ClassifyOpeningDuration(negative)
+	if got != SocketOpeningWithinEnvelope {
+		t.Fatalf("ClassifyOpeningDuration(%v) = %v, want SocketOpeningWithinEnvelope (current, deliberately "+
+			"locked behavior for out-of-contract negative input)", negative, got)
 	}
 }
 
