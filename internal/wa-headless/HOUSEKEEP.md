@@ -1552,5 +1552,10 @@ não.
 **Correção sugerida**: fixture que pré-grava `.wa-headless-session-suspect` e
 prova que o boot lê, e que um boot bem-sucedido limpa.
 
-**Status**: não corrigido. O executor sinalizou em vez de deixar coberto por
-implicação — teria sido uma quinta prova não pedida, fora do orçamento da tarefa.
+**Status**: **CORRIGIDA em 2026-08-18**, na fatia de fechamento da CAP-05A.
+Dois testes novos partem de um perfil primado com a marca de produção
+(`engine.MarkSessionSuspect`, não escrita à mão): um prova que o boot lê e que o
+sucesso limpa; o outro prova que um boot que FALHA **não** limpa. A mutação
+exigida — mover `ClearSessionSuspect` para antes do `Launch` — faz o segundo
+falhar, e foi reproduzida pelo Chief. Nada em produção mudou: a posição do clear
+já estava certa; faltava a prova.

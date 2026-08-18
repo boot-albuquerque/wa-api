@@ -54,6 +54,44 @@ argumento de ausência — o contrato não menciona. O executor achou um argumen
 em `OPENING` para alimentar `C`. Ele precisa de um **observador**, e esta fatia
 não é um. A **H17** permanece: consumidor verdadeiro INDETERMINADO.
 
+**Fechamento da fatia (T2): as duas lacunas que ela mesma tinha.**
+
+A orquestração formalizou a divisão — **CAP-05A** (restauração, sem QR, sem
+interação humana) e **CAP-05B** (pareamento, só com autorização explícita) — e a
+lista de escopo dela trazia `repeatable lifecycle`, que a primeira fatia não
+provava: o teste mostrava que o *ownership era liberado* (reacquire), não que o
+ciclo ciclava.
+
+`TestStartSession_CyclesTwice`: Start → READY → Stop limpo → Start **de novo no
+mesmo perfil** → READY → Stop limpo, com `SingletonLock` 0 após cada parada.
+
+E o que ele **não** prova, escrito para que verde não seja lido como observável
+cumprido: são **dois** ciclos, não N; contra fixture local, não conta real —
+sem service worker, sem IndexedDB, sem nada que possa de fato degradar; e
+**nada ali mede degradação**. Um sistema que não degrada e um que degrada
+devagar passariam idênticos. Leia como *"o lifecycle consegue ciclar"*, que é
+pré-condição para um dia medir o observável.
+
+**A H19 fechada, e a mutação que a orquestração exigiu:**
+
+```
+mutação — mover ClearSessionSuspect para ANTES do Launch, logo após a leitura:
+  FAIL: TestStartSession_SuspectMarker_NotClearedOnFailedBoot
+        marker cleared after a boot that FAILED to verify; a profile that went
+        down dirty and then failed to boot must still be suspect on the next
+        attempt (HANDOFF §6, invariante 2: verified, not presumed good)
+```
+
+Reproduzida pelo Chief, `session.go` restaurado byte a byte. **Nada em produção
+precisou mudar**: a posição atual do `ClearSessionSuspect` — depois de
+`VerifyInventory` passar, no retorno READY — já era a que satisfaz a invariante.
+A lacuna era puramente de cobertura, e agora as duas direções estão travadas:
+boot bem-sucedido **limpa** a marca, boot que falha **não limpa**.
+
+Essa segunda direção é o que torna *"verificada em vez de presumida boa"* real.
+Sem ela, uma regressão que limpasse a marca cedo demais passaria despercebida —
+e a mutação provou isso fazendo o teste falhar sob comando.
+
 **O que ficou de fora, deliberadamente**: pareamento por QR — a única parte
 irreversível, que exige telefone e pode custar o perfil pareado. Fatia separada,
 com autorização humana. O observável completo da CAP-05 (*"N ciclos

@@ -342,6 +342,58 @@ func TestStartSession_ConcurrentStartOnSameProfileEndToEnd(t *testing.T) {
 	}
 }
 
+// GAP 1 (CAP-05A-T2 packet): the existing "reaches ready and stops clean"
+// test proves ownership is RELEASED after Stop by re-acquiring the lock — it
+// never performs a second full StartSession. This test performs the actual
+// cycle: Start -> READY -> Stop (clean) -> Start AGAIN on the SAME ProfileDir
+// -> READY -> Stop (clean), asserting READY, StopVia.Clean(), and zero
+// SingletonLock after each of the two cycles.
+//
+// A fresh DebuggingPort is used for the second cycle: nothing in this
+// package requires that (the browser process from cycle 1 is fully gone
+// before cycle 2 starts, so the same port is free again), but reusing the
+// same port would leave a TIME_WAIT-vs-reuse question on the table for no
+// reason — freePortT is cheap and this removes the ambiguity outright.
+//
+// WHAT THIS DOES NOT PROVE (state this plainly, per the packet): this is two
+// cycles against a local fixture serving a static page, run back-to-back in
+// one test process. It is not the canonical observable named in the
+// orchestration ("N ciclos dormir/acordar sem degradação"): it does not run
+// N cycles, it does not run against a real WhatsApp account, and it measures
+// no degradation signal (memory, timing drift, DOM state decay) between
+// cycles — it only checks that the boot/stop machinery itself is reusable.
+// A passing result here must not be read as the degradation observable
+// being met; it closes a narrower gap ("does the lifecycle cycle at all")
+// that is a precondition for ever measuring the real one.
+func TestStartSession_CyclesTwice(t *testing.T) {
+	binary := findChrome(t)
+	profileDir := t.TempDir()
+	url := requirePage(t, spa.RequiredAtStartup)
+
+	for cycle := 1; cycle <= 2; cycle++ {
+		cfg := StartConfig{
+			BinaryPath:    binary,
+			ProfileDir:    profileDir,
+			DebuggingPort: freePortT(t),
+			NavigateURL:   url,
+		}
+		sess, err := StartSession(context.Background(), cfg)
+		if err != nil {
+			t.Fatalf("cycle %d: StartSession: %v", cycle, err)
+		}
+		if sess.Browser().PID() <= 0 {
+			t.Errorf("cycle %d: no PID recorded for the started browser", cycle)
+		}
+		via := sess.Stop(context.Background())
+		if !via.Clean() {
+			t.Errorf("cycle %d: stopped_via=%s, want a clean stop", cycle, via)
+		}
+		if n := singletonLockCount(t, profileDir); n != 0 {
+			t.Errorf("cycle %d: SingletonLock count = %d/1, want 0/1", cycle, n)
+		}
+	}
+}
+
 // A control on the whole chain: a page that fully satisfies both the probe
 // AND the inventory reaches a live, verified Session, and Stop tears it down
 // cleanly. Not one of the four adversarial tests, but without this passing
@@ -373,4 +425,91 @@ func TestStartSession_ReachesReadyAndStopsClean(t *testing.T) {
 		t.Fatalf("ownership was not released after Stop: %v", err)
 	}
 	release()
+}
+
+// GAP 2 (CAP-05A-T2 packet, H19): every existing core test starts from a
+// fresh, never-marked-suspect profile, so the composed read-then-clear
+// sequence in StartSession — engine.SessionSuspect on entry,
+// engine.ClearSessionSuspect after a verified READY — has no test of its
+// own. The fixture below pre-writes the marker with the production
+// engine.MarkSessionSuspect, not a hand-rolled file write: the marker's
+// format is the production code's business, not the test's.
+//
+// (b) proves the boot READS it: WasSuspect is surfaced on failure paths, and
+// a successful boot's own precondition is that reading it did not error.
+// (c) proves a SUCCESSFUL boot CLEARS it.
+func TestStartSession_SuspectMarkerComposedPath_ClearedOnSuccess(t *testing.T) {
+	cfg := baseConfig(t, requirePage(t, spa.RequiredAtStartup))
+	if err := engine.MarkSessionSuspect(cfg.ProfileDir, engine.StopViaDirtySignalExitTimeout); err != nil {
+		t.Fatalf("priming the fixture with the production marker: %v", err)
+	}
+	suspectBefore, via, err := engine.SessionSuspect(cfg.ProfileDir)
+	if err != nil || !suspectBefore {
+		t.Fatalf("fixture setup: SessionSuspect = (%v, %v, %v), want (true, %s, nil)",
+			suspectBefore, via, err, engine.StopViaDirtySignalExitTimeout)
+	}
+
+	sess, err := StartSession(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("StartSession on a suspect-but-otherwise-healthy profile: %v", err)
+	}
+	via = sess.Stop(context.Background())
+	if !via.Clean() {
+		t.Errorf("stopped_via=%s: a browser this test owns must go down through the protocol", via)
+	}
+
+	suspectAfter, _, err := engine.SessionSuspect(cfg.ProfileDir)
+	if err != nil {
+		t.Fatalf("SessionSuspect after a verified boot: %v", err)
+	}
+	if suspectAfter {
+		t.Error("marker still present after a boot that reached verified READY; " +
+			"ClearSessionSuspect did not run, or did not run on the profile the boot actually used")
+	}
+}
+
+// GAP 2, item (d), MANDATORY MUTATION: move the clear to run BEFORE the boot
+// has actually succeeded — here, immediately after the suspect read, before
+// Launch. If VerifyInventory (or Probe) then fails, a policy-honoring boot
+// path must NOT have cleared the marker, because nothing was ever verified.
+// This test asserts exactly that on the real, unmutated session.go — proving
+// the current placement (clear only after VerifyInventory succeeds, per
+// session.go's own comment at the READY return) already satisfies the
+// invariant. The mutation itself, executed against a temporary copy of the
+// clear call moved earlier, is reported below in the prose report with its
+// failing output pasted, per the packet's instruction not to leave the
+// production file mutated.
+func TestStartSession_SuspectMarker_NotClearedOnFailedBoot(t *testing.T) {
+	blankPage := `<html><body>nothing here</body></html>`
+	cfg := baseConfig(t, pageServer(t, "/blank", blankPage))
+	if err := engine.MarkSessionSuspect(cfg.ProfileDir, engine.StopViaDirtySignalCloseRefused); err != nil {
+		t.Fatalf("priming the fixture with the production marker: %v", err)
+	}
+
+	sess, err := StartSession(context.Background(), cfg)
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession reached READY on a blank page (stopped_via=%s); "+
+			"want StageNotReady", via)
+	}
+	var boot *BootFailure
+	if !errors.As(err, &boot) {
+		t.Fatalf("error is not *BootFailure: %v", err)
+	}
+	if boot.Stage != StageNotReady {
+		t.Fatalf("failed at stage %q, want %q", boot.Stage, StageNotReady)
+	}
+	if !boot.WasSuspect {
+		t.Error("BootFailure.WasSuspect = false, want true — the marker was primed before this boot")
+	}
+
+	suspectAfter, _, err := engine.SessionSuspect(cfg.ProfileDir)
+	if err != nil {
+		t.Fatalf("SessionSuspect after a failed boot: %v", err)
+	}
+	if !suspectAfter {
+		t.Error("marker cleared after a boot that FAILED to verify; a profile that went down " +
+			"dirty and then failed to boot must still be suspect on the next attempt " +
+			"(HANDOFF-INICIATIVA.md section 6, invariant 2: verified, not presumed good)")
+	}
 }
