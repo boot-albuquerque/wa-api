@@ -9139,3 +9139,85 @@ bloqueou este achado, que segue como apêndice puro ao final do arquivo.
 
 **Status**: **corrigido nesta sessão**, guardado pelos quatro testes acima e
 pelos dois controles negativos executados e colados.
+
+## F154
+
+**Data**: 2026-08-19. **Contexto**: CAP-25. O gate `TestGoldenBate` falhou
+DUAS vezes na mesma tarefa, as duas por motivo que não era regressão, e as
+duas custaram investigação.
+
+**Onde**: `cmd/logcov/testdata/eligible.golden` — o golden grava NÚMERO DE
+LINHA no terceiro campo:
+
+```
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:196);...
+```
+
+**Problema**: qualquer edição acima de uma linha rastreada — inclusive
+acrescentar um COMENTÁRIO — muda o golden sem que o conjunto elegível mude.
+Nesta sessão isso produziu dois falsos alarmes:
+
+1. o executor editou `orchestrator.go` enquanto o próprio `make check` rodava;
+   o gate mediu uma árvore intermediária e a mensagem foi
+   `golden divergiu: 2991 linhas geradas, 2991 versionadas` — contagem
+   IGUAL, o que faz o leitor procurar mudança de conjunto que não existe;
+2. converter comentários para EN-US (regra do CLAUDE.md) deslocou as linhas
+   em 2 e reprovou o gate de novo.
+
+A mensagem de falha é o que torna caro: ela diz que "divergiu" e manda
+regenerar, sem dizer se divergiu o CONJUNTO (que importa, e é o que o COV-4
+protege) ou só a POSIÇÃO (que não importa). Regenerar às cegas é o caminho
+que a mensagem sugere — e é exatamente o que mascararia uma mudança real.
+
+**O diagnóstico correto, que a mensagem deveria dar de graça**:
+
+```bash
+diff <(cut -f1,2 cmd/logcov/testdata/eligible.golden | sort) \
+     <(go run ./cmd/logcov -golden | cut -f1,2 | sort)
+```
+
+Vazio ⇒ mesmo conjunto e mesmos status ⇒ deslocamento de linha, regenerar é
+seguro. Não vazio ⇒ o conjunto elegível mudou de verdade ⇒ investigar.
+
+**Correção sugerida**: fazer o próprio `TestGoldenBate` separar os dois casos
+e dizer qual ocorreu — "conjunto inalterado, apenas posições" versus
+"ENTRARAM: x, y / SAÍRAM: z". Alternativa mais forte: tirar o número de linha
+do golden e mantê-lo só na saída de diagnóstico, já que o gate existe para
+travar o CONJUNTO, não a posição.
+
+**Status**: não corrigido — é gate, fora do escopo do CAP-25, e mexer em gate
+no mesmo commit da correção que ele julga é má ideia. Registrado para decisão.
+
+## F155
+
+**Data**: 2026-08-19. **Contexto**: CAP-25, ao verificar se o salto de lint
+era regressão da própria tarefa. Não era.
+
+**Onde**: `.golangci-baseline`, chave `count=263`.
+
+**Problema**: o `make check` imprime, em TODA execução:
+
+```
+lint: complexidade maxima 56 (baseline 56) | 322 issue(s) (informativo, baseline 263)
+NOTA: a contagem de issues mudou (263 -> 322). Informativo, nao trava. Atualize count no PR.
+```
+
+O `count=263` foi fixado em `a203a6f`, antes desta sessão inteira; a deriva
+até 322 acumulou ao longo dos 30 checkpoints e ninguém atualizou. O aviso
+pede uma ação que nunca é feita, então ele deixou de ser sinal e virou ruído
+de fundo — e um gate que avisa sempre é um gate que ninguém lê.
+
+**Nota importante para quem for corrigir**: o próprio arquivo documenta que
+`count` é INFORMATIVO de propósito, porque contagem de issues pune
+decomposição (quebrar um monolito de complexidade 202 em cinco funções de 40
+aumenta a contagem de 1 para 5). A trava real é `max_complexity`, que segue
+em 56 e não se moveu. Portanto **não** transforme `count` em trava.
+
+**Correção sugerida**: atualizar `count` para o valor medido com um
+comentário dizendo de onde veio a deriva — como as entradas anteriores do
+arquivo já fazem, nominalmente — ou remover o aviso quando a diferença for só
+crescimento sem mudança de `max_complexity`.
+
+**Status**: não corrigido de propósito. Mexer em baseline fora do escopo da
+tarefa é exatamente o movimento que mascara regressão; e a política do
+projeto proíbe "corrigir de graça" achado pré-existente sem perguntar.
