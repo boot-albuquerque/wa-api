@@ -88,7 +88,7 @@ dirigindo o SPA.
 | 1 | `livenessCheck` | é a invariante 11 do handoff, e o achado do H1 da fase 6 (renderer que não responde com tudo saudável por fora) é literalmente esta capacidade. Nada acima dela é confiável sem ela. |
 | 2 | `getBrowserPid` | trivial dado o CAP-02, e o `ChromiumSupervisor` do produto depende dele para registrar o processo |
 | 3 | `refreshOwner` | primeira leitura do SPA; exercita o inventário de módulos (CAP-06) num caminho de baixo risco |
-| 4 | `onMessageMeta` | metadata-only, invariante 13; realtime, sem envio |
+| 4 | `onMessageMeta` | metadata-only, invariante **12**; realtime, sem envio |
 | 5 | `fetchMessages` | metadata-only; mesma superfície de leitura da anterior |
 | 6 | `backupNow` | durabilidade do perfil; depende do lifecycle da CAP-05 estar fechado |
 
@@ -124,7 +124,7 @@ Por evidência desta matriz, contra o contrato atual:
   atual. Não existe `sendMedia`, `sendImage`, `sendDocument`.
 - **corpo de mensagem — `NOT_REQUIRED_BY_CURRENT_PRODUCT_CONTRACT`**:
   `WaMessageMeta` é **metadata-only por invariante** (`adapter.ts:57`, `:116`,
-  `:136`; invariante 13 do handoff) nesta fatia. O texto live é outra via
+  `:136`; invariante **12** do handoff) nesta fatia. O texto live é outra via
   (core-NATS `live.>`).
 - **`primeContactRoster` no motor de browser — `OUT_OF_CURRENT_WA_WORKER_ADAPTER_SLICE`**:
   o próprio `adapter.ts:188` registra que o `wwebjs` não tem equivalente.
@@ -203,4 +203,17 @@ e um vazio não é evidência de nada sobre a sessão. Se é nulo porque a conta
 tem pushname ou porque este build o guarda noutro lugar continua **UNKNOWN** —
 e `TestRealSPADisplayNameShape` é o instrumento que distingue os casos no dia
 em que mudar.
+
+### 6.3 — Correção de referência (2026-08-19)
+
+As duas citações de *"invariante 13"* neste documento apontavam para a
+invariante errada. No `HANDOFF-INICIATIVA.md` §6 a lista diz:
+
+- **12** — `WaMessageMeta` é metadata-only; zero PII em log
+- **13** — reclaim de `Singleton` no boot é obrigatório em contêiner
+
+Metadata-only é a **12**. Corrigido nos dois lugares. Achado ao ir implementar
+`onMessageMeta` e conferir contra qual invariante ela seria validada — conferir
+é o que fez a discrepância aparecer, e ela estava no documento desde antes
+desta sessão.
 

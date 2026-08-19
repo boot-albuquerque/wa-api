@@ -76,7 +76,7 @@ func NewHolder(cfg core.StartConfig) *Holder { return &Holder{cfg: cfg} }
 // Session returns the held session, booting it on first use.
 //
 // ctx bounds the BOOT ONLY. The returned session outlives it, and outlives the
-// call: that is invariant 7 (HANDOFF §6), and a Holder is the first thing in
+// call: that is invariant 15 (HANDOFF §6), and a Holder is the first thing in
 // this module able to exercise it, because it is the first thing that keeps a
 // session past the call that created it.
 //

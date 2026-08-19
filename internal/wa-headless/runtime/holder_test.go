@@ -111,7 +111,7 @@ func TestHolder_BootsOnceAndIsReusedAcrossCommands(t *testing.T) {
 	}
 }
 
-// TestHolder_SessionSurvivesTheBootContextOfTheCallThatCreatedIt is invariant 7
+// TestHolder_SessionSurvivesTheBootContextOfTheCallThatCreatedIt is invariant 15
 // (HANDOFF §6) exercised by a REAL holder for the first time.
 //
 // core's own tests prove the invariant against a caller they construct inside
@@ -145,7 +145,7 @@ func TestHolder_SessionSurvivesTheBootContextOfTheCallThatCreatedIt(t *testing.T
 		func(ctx context.Context) error { return again.Tab().Evaluate(ctx, "String(6*7)", &got) })
 	if evalErr != nil {
 		t.Fatalf("the held session was dead when a later command used it (%v). The first "+
-			"command's boot deadline ended the session — invariant 7 says only Stop may "+
+			"command's boot deadline ended the session — invariant 15 says only Stop may "+
 			"do that, and a Holder is exactly the caller that makes this visible", evalErr)
 	}
 	if got != "42" {

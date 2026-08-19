@@ -398,7 +398,16 @@ Serão critérios de validação. Cada um tem medição por trás.
    operação, do lado Go.
 6. **Nenhuma espera com relógio na página.** Sem `chromedp.Poll` para prazo, sem
    `requestAnimationFrame` em aba de fundo (ARMADILHAS 19 e 3).
-7. **O tempo de vida de uma sessão termina no `Stop`, e em mais nada.**
+7. **Interação crítica só com póscondição observável verificada.**
+8. **Ponto de clique na interseção com o viewport**, nunca no centro geométrico.
+9. **Identidade de nó, não só geometria**, entre validar e agir.
+10. **Liveness por `Evaluate` com prazo**, nunca por presença de processo/target.
+11. **Toda morte de sessão sai com causa classificada**, nunca erro genérico.
+12. **`WaMessageMeta` é metadata-only**; zero PII em log.
+13. **Reclaim de `Singleton` no boot** é obrigatório em contêiner.
+14. **`sendText` lança em falha**, não devolve sucesso silencioso.
+
+15. **O tempo de vida de uma sessão termina no `Stop`, e em mais nada.**
 
    Nenhum prazo de boot, nenhum cancelamento do chamador depois de o boot ter
    retornado, e nenhum contexto que o chamador por acaso tenha passado pode
@@ -430,14 +439,13 @@ Serão critérios de validação. Cada um tem medição por trás.
    preservado e travado por `TestStartSession_CancelledBootStillAborts`, cujo
    controle negativo exigiu um servidor lento para morder — a versão rápida
    passava com o mecanismo removido.
-7. **Interação crítica só com póscondição observável verificada.**
-8. **Ponto de clique na interseção com o viewport**, nunca no centro geométrico.
-9. **Identidade de nó, não só geometria**, entre validar e agir.
-10. **Liveness por `Evaluate` com prazo**, nunca por presença de processo/target.
-11. **Toda morte de sessão sai com causa classificada**, nunca erro genérico.
-12. **`WaMessageMeta` é metadata-only**; zero PII em log.
-13. **Reclaim de `Singleton` no boot** é obrigatório em contêiner.
-14. **`sendText` lança em falha**, não devolve sucesso silencioso.
+
+> **Nota de numeração (2026-08-19).** Este item nasceu como "7" em 2026-08-18 e
+> COLIDIA com o item 7 original ("Interação crítica só com póscondição observável
+> verificada") — erro meu, na sessão que o escreveu. Foi movido para o fim em vez
+> de renumerar 7–14, porque renumerar invalidaria em silêncio toda referência
+> cruzada já escrita no repositório, em código e em commits. As citações a
+> "invariante 7" que se referiam a ESTE item foram corrigidas para 15.
 
 ---
 
