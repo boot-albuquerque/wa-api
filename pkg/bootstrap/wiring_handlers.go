@@ -11,6 +11,7 @@ import (
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/pkg/infra/db"
+	"wa-api/pkg/infra/egress"
 	"wa-api/pkg/infra/media/opengraph"
 	"wa-api/pkg/infra/media/sticker"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
@@ -308,7 +309,7 @@ func initCustomHandlers(s *server) {
 	sessionConfigStore := db.NewSessionConfigRepository(s.DB)
 	sessionConfigCache := userInfoSessionCache{}
 	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, sessionConfigStore, sessionConfigCache,
-		appCtx.GlobalWebhookUseProxy, logger)
+		appCtx.GlobalWebhookUseProxy, egress.SystemResolver(), logger)
 	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, sessionConfigStore, sessionConfigCache, logger)
 	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
 

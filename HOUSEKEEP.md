@@ -10123,13 +10123,23 @@ teste assere os dois.
    que o histórico recusa. Com ele no lugar, a metade socks5 da funcionalidade
    era impossível. A validação passou a ser a histórica: `url.Parse` mais
    `domain.IsSupportedProxyScheme`.
-   **A parte de segurança, dita sem maquiagem**: com isso a rota deixa de
-   bloquear proxy em endereço reservado/loopback. É deliberado — um proxy na
-   rede interna é o caso NORMAL de uso, ao contrário de um webhook —, mas é uma
-   trava a menos, e ela protegia zero hoje porque estava num caminho que não
-   gravava nada. Está travado em teste
-   (`TestSetProxy_Esquemas/http_em_loopback_passa`) para que a próxima pessoa
-   veja que é decisão e não descuido.
+   **A parte de segurança** — *este parágrafo foi REESCRITO pela [[F167]];
+   o texto abaixo é o que vale, e o que ele substituiu está registrado lá*:
+   tirar o validador errado deixou a rota sem NENHUMA recusa de endereço
+   reservado/loopback, e o CAP-30 registrou isso como aceitável porque um proxy
+   na rede interna é o caso NORMAL de uso. A avaliação estava certa pela metade:
+   ela vale quando o proxy carrega só o tráfego deste servidor para o WhatsApp,
+   e **não** vale quando `webhook_use_proxy` está ligado — aí a ENTREGA DE
+   WEBHOOK sai por esse proxy, e um proxy em loopback escolhido pelo tenant vira
+   rota para contornar o validador de saída da fase sec/F24. O CAP-31 pôs uma
+   guarda PRÓPRIA de proxy (ciente do esquema, portanto compatível com
+   `socks5://`), condicionada ao modo. Detalhes, decisão e testes na [[F167]].
+   O subteste `TestSetProxy_Esquemas/http_em_loopback_passa`, que travava a
+   ausência da guarda, saiu: o eixo daquele teste é o ESQUEMA e ele não
+   escolhia o modo, o que tornava a afirmação forte demais depois de a rota
+   ficar viva. O que ele afirmava continua verdadeiro no modo desligado, e agora
+   está travado com o modo EXPLÍCITO em
+   `TestSetProxy_ReservadoDependeDoModo/desligado_+_http_em_loopback_GRAVA`.
 2. **Campos do request.** `ProxyConfigRequest` passou a ter
    `proxy_url`/`enable`/`webhook_use_proxy`, os três do struct histórico
    (`41bc8e2^:handlers.go:6086`). Os campos `enabled`/`url`/`auth` nasceram com
@@ -10888,3 +10898,215 @@ está dito na mensagem que mandei ao canal.
 
 **Status**: não corrigido. Depende da decisão pendente sobre o contrato da
 rota.
+
+## F167 — a rota de proxy passou a existir, e por isso a recusa de endereço reservado voltou (só quando o WEBHOOK sai pelo proxy)
+
+**Data**: 2026-08-19.
+**Contexto**: CAP-31, endurecimento de `POST /session/proxy` · `/proxy/set`
+depois de o CAP-30 ligar a rota de verdade. Reescreve o parágrafo de segurança
+da divergência 1 do CAP-30 (`egress.ValidateOutboundURL` saiu do `SetProxy`).
+
+### Onde
+
+- `pkg/application/usecase/storage/set_proxy.go:174` — a guarda nova, dentro de
+  `enable()`, depois do esquema e ANTES de `SaveProxyConfig`.
+- `pkg/application/usecase/storage/set_proxy.go:207` — `resolveWebhookUseProxy`
+  passou a devolver `(mode, determined bool)`.
+- `pkg/infra/egress/egress.go:178` — `ValidateNonReservedHost`, a metade de
+  endereço de `ValidateOutboundURL`, sem a checagem de esquema `http(s)`.
+- `pkg/bootstrap/wiring_handlers.go:311` — produção injeta
+  `egress.SystemResolver()`.
+
+### Problema
+
+O CAP-30 tirou `egress.ValidateOutboundURL` do caminho, e a remoção estava
+CERTA: `IsHTTPURL` (`egress.go:32`) recusaria `socks5://`, um dos dois esquemas
+que a rota existe para aceitar, e aceitaria `https://`, que o histórico recusa.
+Com ele no lugar, metade da funcionalidade era impossível.
+
+Junto com o validador errado, porém, foi embora a recusa de endereço
+reservado/loopback (origem: sec/F24, commit `8d9c040`). Enquanto a rota era um
+stub que não gravava nada, essa trava protegia zero. **A postura muda porque a
+rota passou a existir** — classe da Regra 1/2 do `CLAUDE.md`.
+
+O que a análise do CAP-30 não separou: o proxy tem DOIS papéis, e só um deles é
+inofensivo.
+
+- `webhook_use_proxy` DESLIGADO: o proxy carrega só o tráfego deste servidor
+  para o WhatsApp. Quem o configura é o dono da instalação, e proxy interno é o
+  jeito normal de rodar isso.
+- `webhook_use_proxy` LIGADO: a **entrega de webhook** sai por esse proxy. O
+  tenant escolhe um endereço que o processo passa a discar por ele, e um proxy
+  em loopback vira rota para contornar o validador de saída da sec/F24.
+  Confirmado que essa entrega **não** passa pelo `NewSafeHTTPClient` (o cliente
+  SSRF-safe só é usado por `pkg/infra/media/opengraph`), então a validação de
+  configuração é a fronteira que existe.
+
+### Correção aplicada
+
+Validador PRÓPRIO de proxy, ciente do esquema, e **condicionado ao modo**:
+
+- esquema: `http` e `socks5` e nenhum outro — `https` continua recusado, pelo
+  código `unsupported_proxy_scheme`, como no histórico. Inalterado pelo CAP-31.
+- endereço: recusado quando reservado/loopback **e** o modo estiver ligado.
+  Código novo `reserved_proxy_address`, categoria `validation` → 400.
+- desabilitar (`enable:false`) não passa pela guarda: a URL é jogada fora, e
+  recusar uma remoção por causa dela tornaria uma configuração ruim impossível
+  de tirar.
+
+#### Fail-closed no modo indeterminado (emenda da coordenação)
+
+`resolveWebhookUseProxy` tem três passos, e o terceiro é um chute: se a leitura
+do banco FALHA, ele cai em `uc.defaultWebhookUseProxy`, que vem de
+`appCtx.GlobalWebhookUseProxy` (`wiring_handlers.go:311`) — configuração de
+instalação, que **pode ser false**. Uma guarda de segurança lendo esse valor
+falharia ABERTA: numa instalação com o default em false, um hiccup de banco
+abriria o caminho de loopback.
+
+Por isso `resolveWebhookUseProxy` passou a devolver também se o modo foi
+DETERMINADO (veio do pedido ou de uma leitura bem-sucedida), e a guarda recusa
+quando `webhookUseProxy || !determined`. **O valor PERSISTIDO continua sendo o
+de `resolveWebhookUseProxy`** — comportamento histórico, e não uma decisão de
+segurança. Os dois divergem só neste caminho de erro, e divergem de propósito:
+persiste-se o default e recusa-se por precaução.
+
+#### DNS: opção (a), com seam, e por que não há E/S de rede nos testes
+
+`ValidateOutboundURL` resolve DNS (`egress.go:142`), o que tornaria os testes
+dependentes de rede. A escolha foi a opção **(a)**: IP literal é classificado
+direto (`egress.go:197`, sem lookup) e NOME é resolvido por um
+`egress.HostResolver` INJETADO. Falha de lookup é RECUSA, não passe — é o que
+`ValidateOutboundURL` já faz (`egress.go:143-147`), e uma guarda que abre
+quando não consegue classificar a entrada não é guarda.
+
+A (b) foi descartada porque deixaria `http://localhost:3128` passar por ser
+nome, e `localhost` é o contorno de uma linha para uma guarda que só olhasse
+literais.
+
+Os testes não tocam a rede por dois caminhos distintos, e é deliberado:
+
+- **teste de rota** (`pkg/bootstrap`): usa o resolvedor de PRODUÇÃO
+  (`egress.SystemResolver()`), sem dublê nenhum, e só endereços IP LITERAL —
+  que curto-circuitam a resolução. É a fronteira medida contra a produção.
+- **teste de use case**: dublê `rfc6761Resolver`, que responde APENAS nomes cuja
+  resposta é fixada por norma — `localhost` → 127.0.0.1 (RFC 6761 §6.3, que
+  obriga todo resolvedor a isso) e `*.invalid` → NXDOMAIN (RFC 6761 §6.4).
+  Qualquer outro nome faz o dublê ERRAR com a mensagem dizendo por quê, para que
+  ele não possa ficar mais permissivo que a produção (ARMADILHA 1).
+
+Efeito colateral registrado: os testes que usavam o host `proxy.invalid` foram
+convertidos para `203.0.113.10` (TEST-NET-3, RFC 5737 — fora de `reservedCIDRs`,
+mesmo motivo de `s3TestEndpoint`, `pkg/bootstrap/s3_config_route_test.go:66`).
+Com a guarda no lugar, um nome `.invalid` é NXDOMAIN por norma e viraria recusa
+em todo caminho de sucesso.
+
+### Testes que travam o achado
+
+Use case (`pkg/application/usecase/storage/session_config_test.go`):
+
+- `TestSetProxy_ReservadoDependeDoModo` — a tabela da decisão, seis casos: 
+  ligado+loopback e ligado+`10.0.0.0/8` RECUSADOS; ligado+IP público, 
+  desligado+loopback, desligado+reservado e desligado+público GRAVAM. Cada
+  recusa assere também que NADA foi gravado e NADA publicado no cache (ORDEM).
+- `TestSetProxy_Socks5_ContinuaAceitoNosDoisModos` — regressão do CAP-30.
+- `TestSetProxy_HTTPS_ContinuaRecusadoNosDoisModos` — fidelidade histórica, e
+  assere que a recusa vem do código de ESQUEMA, não do de endereço.
+- `TestSetProxy_ModoDaGuarda_VemDoPedidoOuDoBanco` — o modo que arma a guarda
+  segue a MESMA regra de `resolveWebhookUseProxy`: pedido quando vier, banco
+  quando o campo for omitido.
+- `TestSetProxy_ModoIndeterminado_RecusaReservadoPorPrecaucao` — o fail-closed,
+  com o default do processo em FALSE de propósito (com `true` a recusa
+  aconteceria de qualquer jeito e o teste passaria com o defeito no lugar). Traz
+  o par de contraste: leitura OK devolvendo o mesmo `false` ACEITA.
+- `TestSetProxy_NomeQueResolveParaLoopback_E_Recusado` — o ramo de NOME, nos
+  dois modos.
+- `TestSetProxy_Desabilitar_NaoAplicaAGuardaDeEndereco`.
+
+Rota (`pkg/bootstrap/session_config_route_test.go`):
+
+- `TestSessionConfigRoute_SetProxyEnderecoReservado` — pela ROTA REGISTRADA, nas
+  DUAS famílias de caminho (`/proxy/set` e `/session/proxy`), com banco e caches
+  reais: recusa é 400 sem gravar e sem publicar em nenhum dos dois caches;
+  desligado+loopback e ligado+público gravam.
+
+### Controles negativos EXECUTADOS
+
+**(a) guarda de reservado REMOVIDA do `enable()`** (bloco trocado por
+`_ = determined`):
+
+```
+--- FAIL: TestSetProxy_ReservadoDependeDoModo/ligado_+_http_em_loopback_e'_RECUSADO
+    session_config_test.go:607: proxy "http://127.0.0.1:3128" com webhook_use_proxy=true devia ser recusado: a entrega de webhook sairia por um endereco reservado escolhido pelo tenant
+--- FAIL: TestSetProxy_ReservadoDependeDoModo/ligado_+_socks5_em_10.0.0.0/8_e'_RECUSADO
+    session_config_test.go:607: proxy "socks5://10.0.0.1:1080" com webhook_use_proxy=true devia ser recusado: ...
+--- FAIL: TestSessionConfigRoute_SetProxyEnderecoReservado/caminho_/proxy/webhook_pelo_proxy_+_loopback_e'_400
+    session_config_route_test.go:596: status = 200, quero 400 (corpo: {"code":200,...,"ProxyURL":"http://127.0.0.1:3128","webhook_use_proxy":true},"success":true})
+```
+
+**(b) guarda aplicada SEMPRE, ignorando `webhook_use_proxy`** (`if true`) — o
+que prova que o gatilho é o MODO, e não o endereço:
+
+```
+--- FAIL: TestSetProxy_ReservadoDependeDoModo/desligado_+_http_em_loopback_GRAVA
+    session_config_test.go:624: proxy "http://127.0.0.1:3128" com webhook_use_proxy=false devia ser aceito: proxy address is reserved or loopback and webhook delivery would go through it
+--- FAIL: TestSetProxy_ModoDaGuarda_VemDoPedidoOuDoBanco/o_pedido_manda_false_e_o_banco_diz_true:_a_guarda_usa_o_PEDIDO_e_aceita
+--- FAIL: TestSetProxy_NomeQueResolveParaLoopback_E_Recusado
+--- FAIL: TestSessionConfigRoute_SetProxyEnderecoReservado/caminho_/session/webhook_fora_do_proxy_+_loopback_GRAVA
+    session_config_route_test.go:611: status = 400, quero 200 (corpo: {"code":400,"error":{"code":"reserved_proxy_address",...}})
+```
+
+**(c) `https` ACEITO** (`IsSupportedProxyScheme` mutado em
+`pkg/domain/storage.go:132`):
+
+```
+--- FAIL: TestSetProxy_Esquemas/https_e'_recusado
+    session_config_test.go:341: URL "https://203.0.113.10:3128" devia ser recusada
+--- FAIL: TestSetProxy_HTTPS_ContinuaRecusadoNosDoisModos/webhook_use_proxy=true
+--- FAIL: TestSetProxy_HTTPS_ContinuaRecusadoNosDoisModos/webhook_use_proxy=false
+--- FAIL: TestSessionConfigRoute_SetProxyEsquemas/caminho_/proxy/https_e'_recusado
+    session_config_route_test.go:414: status = 200, quero 400
+```
+
+**(d) no caminho de erro de leitura, usar o DEFAULT em vez do modo estrito**
+(`if _ = determined; webhookUseProxy {`) — o controle da emenda:
+
+```
+--- FAIL: TestSetProxy_ModoIndeterminado_RecusaReservadoPorPrecaucao
+    session_config_test.go:803: loopback foi ACEITO com o modo indeterminado: a guarda leu o default do processo (false) em vez de assumir o modo estrito, e uma falha de leitura do banco abre o caminho de loopback
+```
+
+As quatro mutações COMPILARAM e falharam com mensagem (ARMADILHA 3), e as
+quatro foram revertidas por edição localizada.
+
+### O que este achado NÃO cobre
+
+Validação em tempo de configuração não é guarda de discagem: um nome que
+resolve para IP público agora e para loopback no momento da conexão (DNS
+rebinding) passa. É a mesma limitação que `ValidateOutboundURL` já documenta
+(`egress.go:110-113`), e fechá-la exige guarda no `DialContext` do transporte
+que usa o proxy — fora do escopo do CAP-31.
+
+### Efeito nos gates de cobertura de log
+
+A função nova que LOGA fez os dois números de `.log-coverage-baseline`
+subirem em uma unidade cada, e os dois foram atualizados junto com o golden:
+
+- `min_eligible` 671 → 672 e `min_errpath_coverage` 866 → 867 — a nova
+  `egress.ValidateNonReservedHost` é elegível E tem log de nível >= Warn em
+  todo caminho de recusa, então entra no numerador e no denominador.
+- `min_func_coverage` NÃO mudou (665), que é o esperado de uma função elegível
+  que já nasce coberta.
+
+O `diff` prescrito contra o golden antes de regenerar deu exatamente duas
+entradas, ambas do CAP-31 e nenhuma delas deslocamento de outra função:
+
+```
+> pkg/infra/egress.SystemResolver	EXCLUDED
+> pkg/infra/egress.ValidateNonReservedHost	ELIGIBLE
+```
+
+`SystemResolver` é EXCLUDED porque é um construtor de uma linha sem caminho de
+saída a registrar.
+
+**Status**: corrigido nesta sessão, travado pelos testes listados acima e pelos
+quatro controles negativos executados.

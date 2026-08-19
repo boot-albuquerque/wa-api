@@ -8,6 +8,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/infra/egress"
 )
 
 // Result and error messages of this use case, as constants (ADR-0004). Every
@@ -21,6 +22,7 @@ const (
 	proxyMissingURLMsg     = "missing proxy_url in payload"
 	proxyInvalidURLMsg     = "invalid proxy URL format"
 	proxyUnsupportedMsg    = "only HTTP and SOCKS5 proxies are supported"
+	proxyReservedAddrMsg   = "proxy address is reserved or loopback and webhook delivery would go through it"
 	proxySaveFailedMsg     = "failed to save proxy configuration"
 	proxyRemoveFailedMsg   = "failed to remove proxy configuration"
 
@@ -28,6 +30,7 @@ const (
 	proxyMissingURLCode     = "missing_proxy_url"
 	proxyInvalidURLCode     = "invalid_proxy_url"
 	proxyUnsupportedCode    = "unsupported_proxy_scheme"
+	proxyReservedAddrCode   = "reserved_proxy_address"
 )
 
 // SetProxyUseCase writes the per-user proxy configuration.
@@ -36,6 +39,11 @@ type SetProxyUseCase struct {
 	store  appport.ProxyConfigStore
 	cache  appport.UserInfoProxyCache
 	logger appport.Logger
+
+	// resolver is the DNS seam of the reserved-address guard. Injected so the
+	// tests exercise the NAME branch without real DNS; production passes
+	// egress.SystemResolver() (wiring_handlers.go).
+	resolver egress.HostResolver
 
 	// defaultWebhookUseProxy is the process-wide value applied when the
 	// request omits `webhook_use_proxy` AND the stored one cannot be read.
@@ -50,6 +58,7 @@ func NewSetProxyUseCase(
 	store appport.ProxyConfigStore,
 	cache appport.UserInfoProxyCache,
 	defaultWebhookUseProxy bool,
+	resolver egress.HostResolver,
 	l appport.Logger,
 ) *SetProxyUseCase {
 	return &SetProxyUseCase{
@@ -57,6 +66,7 @@ func NewSetProxyUseCase(
 		store:                  store,
 		cache:                  cache,
 		logger:                 l,
+		resolver:               resolver,
 		defaultWebhookUseProxy: defaultWebhookUseProxy,
 	}
 }
@@ -107,7 +117,7 @@ func (uc *SetProxyUseCase) Execute(ctx context.Context, txtID string, req domain
 // that is about to be thrown away is malformed would make a broken
 // configuration impossible to remove.
 func (uc *SetProxyUseCase) disable(ctx context.Context, txtID string, req domain.ProxyConfigRequest) (*domain.ProxyConfigResult, error) {
-	webhookUseProxy := uc.resolveWebhookUseProxy(ctx, txtID, req.WebhookUseProxy)
+	webhookUseProxy, _ := uc.resolveWebhookUseProxy(ctx, txtID, req.WebhookUseProxy)
 
 	if err := uc.store.SaveProxyConfig(ctx, txtID, "", webhookUseProxy); err != nil {
 		uc.logger.Error(ctx, proxyRemoveFailedMsg, "txtID", txtID, "error", err)
@@ -142,7 +152,33 @@ func (uc *SetProxyUseCase) enable(ctx context.Context, txtID string, req domain.
 		return nil, apperr.New(proxyUnsupportedCode, apperr.CategoryValidation, proxyUnsupportedMsg, false, nil)
 	}
 
-	webhookUseProxy := uc.resolveWebhookUseProxy(ctx, txtID, req.WebhookUseProxy)
+	webhookUseProxy, determined := uc.resolveWebhookUseProxy(ctx, txtID, req.WebhookUseProxy)
+
+	// The reserved-address guard, and WHY it is conditional on the mode.
+	//
+	// With webhook_use_proxy on, WEBHOOK DELIVERY leaves through this proxy,
+	// so a tenant-controlled proxy on loopback becomes a route around the
+	// outbound validator the sec/F24 hardening installed (commit 8d9c040) —
+	// the tenant names the address the process then dials on its behalf. With
+	// it off the proxy only carries this server's own WhatsApp traffic, and an
+	// internal proxy is the normal way to run that, so a reserved address is
+	// allowed there on purpose.
+	//
+	// `determined` is false only when the stored flag could NOT be read. There
+	// the SECURITY decision assumes the strictest mode and refuses, while the
+	// value PERSISTED stays the one resolveWebhookUseProxy produced. The two
+	// diverging on that path is deliberate: the process default comes from
+	// installation config (appCtx.GlobalWebhookUseProxy, wiring_handlers.go)
+	// and can be false, and letting an unreadable row decide a security guard
+	// would make a database hiccup open the loopback path.
+	if webhookUseProxy || !determined {
+		if err := egress.ValidateNonReservedHost(ctx, uc.resolver, parsed.Hostname()); err != nil {
+			uc.logger.Warn(ctx, proxyReservedAddrMsg, "txtID", txtID,
+				"scheme", parsed.Scheme, "webhook_use_proxy", webhookUseProxy,
+				"mode_determined", determined, "error", err)
+			return nil, apperr.New(proxyReservedAddrCode, apperr.CategoryValidation, proxyReservedAddrMsg, false, nil)
+		}
+	}
 
 	if err := uc.store.SaveProxyConfig(ctx, txtID, req.ProxyURL, webhookUseProxy); err != nil {
 		uc.logger.Error(ctx, proxySaveFailedMsg, "txtID", txtID, "error", err)
@@ -173,15 +209,20 @@ func (uc *SetProxyUseCase) enable(ctx context.Context, txtID string, req domain.
 // A read failure is logged and swallowed for that last reason: it is the
 // historical behaviour, and failing the whole proxy write because an auxiliary
 // preference could not be read would be a worse outcome than defaulting it.
-func (uc *SetProxyUseCase) resolveWebhookUseProxy(ctx context.Context, txtID string, requested *bool) bool {
+//
+// The second return value says whether the mode was DETERMINED — true when it
+// came from the request or from a successful read, false when step 3 had to
+// guess. Only the security guard in enable() consults it; the value written to
+// the column is the first return in every case.
+func (uc *SetProxyUseCase) resolveWebhookUseProxy(ctx context.Context, txtID string, requested *bool) (mode, determined bool) {
 	if requested != nil {
-		return *requested
+		return *requested, true
 	}
 	stored, err := uc.store.LoadWebhookUseProxy(ctx, txtID)
 	if err != nil {
 		uc.logger.Warn(ctx, "could not read the stored webhook_use_proxy; falling back to the process default",
 			"txtID", txtID, "error", err, "default", uc.defaultWebhookUseProxy)
-		return uc.defaultWebhookUseProxy
+		return uc.defaultWebhookUseProxy, false
 	}
-	return stored
+	return stored, true
 }

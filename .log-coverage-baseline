@@ -1224,7 +1224,7 @@ min_func_coverage=665
 # medicao do ANTES (662/438, 1411/1219) foi feita em HEAD f3cf5c6 com
 # `git archive HEAD | tar -x` em diretorio temporario, no mesmo instante e na
 # mesma maquina que a do DEPOIS.
-min_errpath_coverage=866
+min_errpath_coverage=867
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1426,7 +1426,7 @@ min_errpath_coverage=866
 # junto de min_func_coverage: as tres de db.SessionConfigRepository, as duas de
 # bootstrap.userInfoSessionCache, bootstrap.withField e as tres de
 # storage.SetProxyUseCase. Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=671
+min_eligible=672
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

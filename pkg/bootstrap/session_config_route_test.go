@@ -20,6 +20,7 @@ import (
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/db"
+	"wa-api/pkg/infra/egress"
 	"wa-api/pkg/infra/wa-noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
@@ -132,7 +133,8 @@ func newSessionCfgFixture(t *testing.T) *sessionCfgFixture {
 			SetHistory: handlers.NewSetHistoryHandler(
 				storage.NewSetHistoryUseCase(alwaysSessionGuard{}, store, userInfoSessionCache{}, logger)),
 			SetProxy: handlers.NewSetProxyHandler(
-				storage.NewSetProxyUseCase(statusDeSessao{&conectado}, store, userInfoSessionCache{}, true, logger)),
+				storage.NewSetProxyUseCase(statusDeSessao{&conectado}, store, userInfoSessionCache{}, true,
+					egress.SystemResolver(), logger)),
 		},
 		// O consumidor do que a escrita publica: o gate da F128.
 		ChatHistory: &handlers.ChatHistoryHandlers{
@@ -371,7 +373,7 @@ func TestSessionConfigRoute_SetProxyConectado_400SemGravar(t *testing.T) {
 			f.seedCacheEntry()
 			*f.conectado = true
 
-			rec := f.do(t, http.MethodPost, rp.path, `{"enable":true,"proxy_url":"http://proxy.invalid:3128"}`)
+			rec := f.do(t, http.MethodPost, rp.path, `{"enable":true,"proxy_url":"http://203.0.113.10:3128"}`)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
 			}
@@ -393,10 +395,10 @@ func TestSessionConfigRoute_SetProxyEsquemas(t *testing.T) {
 		url     string
 		wantErr bool
 	}{
-		{name: "http grava", url: "http://proxy.invalid:3128"},
-		{name: "socks5 grava", url: "socks5://user:pass@proxy.invalid:1080"},
-		{name: "https e' recusado", url: "https://proxy.invalid:3128", wantErr: true},
-		{name: "ftp e' recusado", url: "ftp://proxy.invalid:21", wantErr: true},
+		{name: "http grava", url: "http://203.0.113.10:3128"},
+		{name: "socks5 grava", url: "socks5://user:pass@203.0.113.10:1080"},
+		{name: "https e' recusado", url: "https://203.0.113.10:3128", wantErr: true},
+		{name: "ftp e' recusado", url: "ftp://203.0.113.10:21", wantErr: true},
 	}
 	for _, rp := range proxyRoutePaths {
 		for _, tc := range cases {
@@ -494,7 +496,7 @@ func TestSessionConfigRoute_SetProxyDesabilita_ZeraBancoECaches(t *testing.T) {
 			f.seedCacheEntry()
 			f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
 
-			const url = "socks5://proxy.invalid:1080"
+			const url = "socks5://203.0.113.10:1080"
 			if rec := f.do(t, http.MethodPost, rp.path, `{"enable":true,"proxy_url":"`+url+`"}`); rec.Code != http.StatusOK {
 				t.Fatalf("preparo: POST devolveu %d (%s)", rec.Code, rec.Body.String())
 			}
@@ -529,7 +531,7 @@ func TestSessionConfigRoute_SetProxyFalhaDeBanco_500SemTocarOCache(t *testing.T)
 		t.Fatalf("fechar o banco: %v", err)
 	}
 
-	rec := f.do(t, http.MethodPost, "/session/proxy", `{"enable":true,"proxy_url":"http://proxy.invalid:3128"}`)
+	rec := f.do(t, http.MethodPost, "/session/proxy", `{"enable":true,"proxy_url":"http://203.0.113.10:3128"}`)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, quero 500 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -538,5 +540,83 @@ func TestSessionConfigRoute_SetProxyFalhaDeBanco_500SemTocarOCache(t *testing.T)
 	}
 	if valor, _ := f.cachedByToken(t, userInfoProxyField); valor != "" {
 		t.Errorf("publicou %q no cache de autenticacao depois de o banco falhar", valor)
+	}
+}
+
+// CAP-31 (rota) — a guarda de endereco reservado pela ROTA REGISTRADA, nas
+// DUAS familias de caminho, e com o resolvedor de PRODUCAO
+// (egress.SystemResolver(), montado no fixture): nao ha' duble de DNS aqui, e
+// nao ha' E/S de rede porque os hosts sao IP LITERAL, que curto-circuitam a
+// resolucao em egress.go:197.
+//
+// O modo vem do proprio corpo, e os dois valores sao obrigatorios: so' as
+// recusas provariam que a guarda existe, nao que o gatilho dela e' o modo.
+func TestSessionConfigRoute_SetProxyEnderecoReservado(t *testing.T) {
+	const loopback = "http://127.0.0.1:3128"
+	const reservado = "socks5://10.0.0.1:1080"
+
+	cases := []struct {
+		name    string
+		corpo   string
+		url     string
+		wantErr bool
+	}{
+		{
+			name:    "webhook pelo proxy + loopback e' 400",
+			corpo:   `{"enable":true,"webhook_use_proxy":true,"proxy_url":"` + loopback + `"}`,
+			wantErr: true,
+		},
+		{
+			name:    "webhook pelo proxy + faixa reservada e' 400",
+			corpo:   `{"enable":true,"webhook_use_proxy":true,"proxy_url":"` + reservado + `"}`,
+			wantErr: true,
+		},
+		{
+			name:  "webhook fora do proxy + loopback GRAVA",
+			corpo: `{"enable":true,"webhook_use_proxy":false,"proxy_url":"` + loopback + `"}`,
+			url:   loopback,
+		},
+		{
+			name:  "webhook pelo proxy + IP publico GRAVA",
+			corpo: `{"enable":true,"webhook_use_proxy":true,"proxy_url":"http://203.0.113.10:3128"}`,
+			url:   "http://203.0.113.10:3128",
+		},
+	}
+	for _, rp := range proxyRoutePaths {
+		for _, tc := range cases {
+			t.Run(rp.name+"/"+tc.name, func(t *testing.T) {
+				f := newSessionCfgFixture(t)
+				f.seedCacheEntry()
+				f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+
+				rec := f.do(t, http.MethodPost, rp.path, tc.corpo)
+
+				if tc.wantErr {
+					if rec.Code != http.StatusBadRequest {
+						t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
+					}
+					if url, _ := f.storedProxy(t); url != "" {
+						t.Fatalf("a recusa gravou users.proxy_url = %q", url)
+					}
+					if got := f.cachedByUserID(t, userInfoProxyField); got != "" {
+						t.Errorf("a recusa publicou %q no cache por usuario", got)
+					}
+					if valor, _ := f.cachedByToken(t, userInfoProxyField); valor != "" {
+						t.Errorf("a recusa publicou %q no cache de autenticacao", valor)
+					}
+					return
+				}
+
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
+				}
+				if url, _ := f.storedProxy(t); url != tc.url {
+					t.Fatalf("users.proxy_url = %q, quero %q", url, tc.url)
+				}
+				if got := f.cachedByUserID(t, userInfoProxyField); got != tc.url {
+					t.Errorf("appCtx.UserInfoCache[Proxy] = %q, quero %q", got, tc.url)
+				}
+			})
+		}
 	}
 }

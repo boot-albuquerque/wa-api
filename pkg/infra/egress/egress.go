@@ -160,3 +160,70 @@ func ValidateOutboundURL(ctx context.Context, rawURL string) error {
 	}
 	return nil
 }
+
+// HostResolver is the DNS seam of ValidateNonReservedHost. It exists so a
+// test can exercise the NAME branch without touching the network: real DNS in
+// a unit test is slow, flaky, and answers differently on every machine.
+//
+// The one method is the subset of *net.Resolver that this package uses, so
+// *net.Resolver satisfies it without an adapter.
+type HostResolver interface {
+	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
+}
+
+// SystemResolver returns the resolver production uses: the process default,
+// which is what ValidateOutboundURL builds inline at egress.go:141.
+func SystemResolver() HostResolver { return &net.Resolver{} }
+
+// ValidateNonReservedHost reports whether host — a URL hostname, already
+// stripped of its port — is allowed to be dialled outbound.
+//
+// It is the reserved-address half of ValidateOutboundURL, split out because
+// the proxy route needs THAT check without the http/https scheme check
+// IsHTTPURL imposes: POST /session/proxy accepts socks5, which IsHTTPURL
+// rejects, and rejects https, which IsHTTPURL accepts. Callers that own a
+// scheme rule apply it themselves and call this for the address.
+//
+// An IP literal is classified directly, with no lookup. A name is resolved
+// through resolver, and a lookup failure is a REFUSAL, not a pass: that is
+// what ValidateOutboundURL does (egress.go:143-147), and a guard that opens
+// when its input cannot be classified is not a guard.
+func ValidateNonReservedHost(ctx context.Context, resolver HostResolver, host string) error {
+	if host == "" {
+		log.Warn().Str("reason", "empty_host").Msg("outbound host rejected")
+		return fmt.Errorf("URL has no host")
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if IsReservedOrLoopback(ip) {
+			log.Warn().Str("reason", "reserved_address").Str("host", host).
+				Msg("outbound host rejected")
+			return fmt.Errorf("host is a reserved or loopback address")
+		}
+		return nil
+	}
+
+	if resolver == nil {
+		resolver = SystemResolver()
+	}
+	ips, err := resolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		log.Warn().Err(err).Str("reason", "unresolvable").Str("host", host).
+			Msg("outbound host rejected")
+		return fmt.Errorf("could not resolve host %q: %w", host, err)
+	}
+	if len(ips) == 0 {
+		log.Warn().Str("reason", "no_addresses").Str("host", host).
+			Msg("outbound host rejected")
+		return fmt.Errorf("no IP addresses found for host %q", host)
+	}
+	for _, ip := range ips {
+		if IsReservedOrLoopback(ip) {
+			log.Warn().Str("reason", "reserved_address").Str("host", host).
+				Stringer("resolved_ip", ip).
+				Msg("outbound host rejected")
+			return fmt.Errorf("host resolves to a reserved or loopback address")
+		}
+	}
+	return nil
+}

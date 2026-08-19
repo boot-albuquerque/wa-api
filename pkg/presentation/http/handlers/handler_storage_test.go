@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -482,7 +483,18 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 // pode ser configurado.
 func newTestSetProxyHandler(status appport.SessionStatusReader) http.Handler {
 	return NewSetProxyHandler(storage.NewSetProxyUseCase(
-		status, &contractsfake.ProxyConfigStore{}, &contractsfake.UserInfoSessionCache{}, true, silentLogger{}))
+		status, &contractsfake.ProxyConfigStore{}, &contractsfake.UserInfoSessionCache{}, true,
+		naoResolveNada{}, silentLogger{}))
+}
+
+// naoResolveNada e' o resolvedor DNS injetado nestes testes de eixo. Todos eles
+// usam `{"enable":false}`, o ramo que nunca olha o endereco, entao uma chamada
+// aqui significa que a guarda do CAP-31 vazou para a desabilitacao — e o erro
+// vira recusa visivel em vez de uma consulta de DNS silenciosa no teste.
+type naoResolveNada struct{}
+
+func (naoResolveNada) LookupIP(context.Context, string, string) ([]net.IP, error) {
+	return nil, errors.New("o ramo de desabilitacao nao pode resolver nome nenhum")
 }
 
 // TestSetProxyHandler_Eixos cobre, para SetProxy, os quatro eixos que a tabela

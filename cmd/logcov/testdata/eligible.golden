@@ -2476,6 +2476,8 @@ pkg/infra/db.scanOutboxRows	ELIGIBLE	covered
 pkg/infra/db.scanOutboxRows.func1	EXCLUDED	X1
 pkg/infra/egress.IsHTTPURL	ELIGIBLE	uncovered:L2(S-consume,egress.go:25)
 pkg/infra/egress.IsReservedOrLoopback	ELIGIBLE	covered
+pkg/infra/egress.SystemResolver	EXCLUDED	X1
+pkg/infra/egress.ValidateNonReservedHost	ELIGIBLE	covered
 pkg/infra/egress.ValidateOutboundURL	ELIGIBLE	covered
 pkg/infra/egress.mustParseCIDRs	ELIGIBLE	covered
 pkg/infra/history.SaveOutgoingMessageToHistory	ELIGIBLE	covered
