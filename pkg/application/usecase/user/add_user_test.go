@@ -39,7 +39,7 @@ func TestAddUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -80,7 +80,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
 
 			_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
@@ -98,7 +98,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 		CreateUserFunc: func(context.Context, domain.UserRecord) (bool, error) { return false, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, logger)
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, logger)
 
 	_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 	if !errors.Is(err, boom) {
@@ -171,7 +171,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err != nil {
@@ -206,9 +206,76 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			if got := resp.ProxyConfig["webhookUseProxy"]; got != tt.wantProxy {
 				t.Errorf("proxy webhookUseProxy = %v, queria %v", got, tt.wantProxy)
 			}
-			if tt.wantHmacConfig && len(rec.HmacKey) == 0 {
-				t.Error("HmacKey gravada vazia")
+			// A asserção é da PROPRIEDADE, não de "gravou algo": a versão
+			// anterior só exigia len != 0, e por isso não viu a chave sendo
+			// gravada em CLARO (F158). A prova de ida e volta contra o
+			// AES-GCM real está em pkg/bootstrap/add_user_hmac_route_test.go.
+			if tt.wantHmacConfig {
+				if len(rec.HmacKey) == 0 {
+					t.Error("HmacKey gravada vazia")
+				}
+				if string(rec.HmacKey) == tt.req.HmacKey {
+					t.Errorf("HmacKey gravada = texto plano do request, queria cifrada")
+				}
+				if want := contractsfake.FakeCipherPrefix + tt.req.HmacKey; string(rec.HmacKey) != want {
+					t.Errorf("HmacKey gravada = %q, queria %q (a saída do cifrador)", rec.HmacKey, want)
+				}
 			}
 		})
+	}
+}
+
+func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("encryption key not configured")
+	repo := &contractsfake.UserRepository{}
+	encryptor := &contractsfake.HmacKeyEncryptor{
+		EncryptHmacKeyFunc: func(string) ([]byte, error) { return nil, boom },
+	}
+	logger := &contractsfake.Logger{}
+	uc := user.NewAddUserUseCase(repo, encryptor, logger)
+
+	resp, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, queria embrulhar boom", err)
+	}
+	if resp != nil {
+		t.Errorf("resposta = %+v, queria nil", resp)
+	}
+	// Falha FECHADA: a ORDEM é o contrato. Se CreateUser fosse chamado, o
+	// usuário nasceria sem chave nenhuma e com 200 no lugar do erro.
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
+	}
+	// A chave em claro não entra no log do erro: só o tamanho.
+	for _, rec := range logger.Records() {
+		for _, kv := range rec.Keyvals {
+			if v, ok := kv.(string); ok && v == hmacKey32 {
+				t.Errorf("a chave em claro apareceu no log: %v", rec.Keyvals)
+			}
+		}
+	}
+}
+
+func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{}
+	encryptor := &contractsfake.HmacKeyEncryptor{}
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1]})
+	if err == nil {
+		t.Fatal("esperava recusa por chave curta")
+	}
+	// Validar ANTES de cifrar: uma chave curta nunca chega ao cifrador.
+	if len(encryptor.EncryptHmacKeyCalls) != 0 {
+		t.Errorf("EncryptHmacKey chamado %d vezes, queria 0", len(encryptor.EncryptHmacKeyCalls))
+	}
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
 	}
 }

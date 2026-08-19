@@ -214,7 +214,7 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
-	addUserUC := user.NewAddUserUseCase(userRepo, logger)
+	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, logger)
 	editUserUC := user.NewEditUserUseCase(userRepo, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)

@@ -9808,9 +9808,108 @@ gravar por `POST /admin/users` e provar que o valor na coluna **não** é o
 texto plano e decifra de volta para ele — o mesmo formato de
 `TestHmacRoute_PostGravaCifradoEPublicaNoCache`.
 
-**Status**: não corrigido. Fora do escopo do CAP-27, que é das três rotas de
-`/hmac`. Registrado e levado ao canal de decisão. Ver [[F157]] para o bloco
-que foi corrigido, e [[F156]] para a chave HMAC GLOBAL, que é outro bloco.
+**Status**: **corrigido no CAP-28** (2026-08-19). `AddUserUseCase` recebe
+`appport.HmacKeyEncryptor` no construtor e `encryptHMACKeyFunc` foi APAGADA —
+`grep -rn "encryptHMACKeyFunc" pkg/ --include='*.go'` não devolve mais nada.
+A ordem é validar (`domain.MinHmacKeyLength`, no lugar do literal `32`) →
+cifrar → gravar, e a falha da cifra retorna ANTES de `CreateUser`: falha
+FECHADA, sem usuário criado com chave vazia nem em claro.
+
+Chamadores do construtor ajustados (5 arquivos): `wiring_handlers.go:217`
+(produção, com `hmacKeyEncryptor{}`), `user_repository_test.go` (6 chamadas),
+`add_user_test.go` (4), `handler_user_test.go` (1).
+
+**Decisão de código de erro**: a falha da cifra devolve erro embrulhado
+comum (`fmt.Errorf("%s: %w", ...)`), não `apperr`, e portanto **500** — igual
+ao que `ConfigureHmacUseCase` faz. O motivo é que a única causa possível é
+configuração do processo (chave global ausente ou inválida para AES), não
+entrada do cliente: um 4xx diria ao operador que o corpo dele está errado
+quando o problema é do servidor. A chave curta continua `apperr` de validação
+(**400**), como antes.
+
+**Testes que travam** (todos executados verdes):
+
+- `pkg/bootstrap/add_user_hmac_route_test.go` — pela ROTA REGISTRADA
+  (`registerAdminRoutes` + gorilla/mux), SQLite real com o schema de produção
+  e o AES-GCM real de `pkg/infra/auth`:
+  - `TestAdminAddUser_ChaveHmacGravadaCifradaEDecifraDeVolta` — ida E volta:
+    o valor da coluna não é o texto plano **e** `auth.DecryptHMACKey` sobre
+    ele devolve exatamente o texto plano. Assere também que o segredo não
+    aparece na resposta nem no log.
+  - `TestAdminAddUser_CifraFalhaNaoCriaUsuario` — com
+    `appCtx.GlobalEncryptionKey = ""` (a falha REAL de
+    `auth.EncryptHMACKey`, hmac.go:39): 500 e NENHUMA linha em `users`.
+  - `TestAdminAddUser_ChaveHmacCurtaERecusada` — 400 e nada gravado.
+  - `TestAdminAddUser_SemChaveHmacCriaUsuario` — cria com `hmac_key` vazia.
+- `pkg/application/usecase/user/add_user_test.go`:
+  - `TestAddUserUseCase_Execute_Success/hmac_no_comprimento_mínimo` — a
+    asserção antiga (`len != 0`) foi trocada pela PROPRIEDADE: o gravado não
+    é o texto plano e é exatamente a saída do cifrador
+    (`contractsfake.FakeCipherPrefix + chave`).
+  - `TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario` — erro embrulhado,
+    resposta nil, `CreateUser` chamado 0 vezes e chave ausente do log.
+  - `TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador` — trava a
+    ORDEM: `EncryptHmacKey` chamado 0 vezes quando a chave é curta.
+
+Detalhe de dublê que quase escondeu o defeito: a busca do teste de rota é por
+`token_hash`, não por `token`, porque a coluna `token` recebe VAZIO desde a
+F97 (`user_repository.go:73`). Na primeira versão, procurar por `token`
+fazia os testes de "nada foi gravado" passarem mesmo com o usuário criado.
+
+**Controles negativos EXECUTADOS** (compilaram E falharam):
+
+(a) voltar a gravar texto plano —
+`encrypted, err := []byte(req.HmacKey), error(nil)`:
+
+```
+--- FAIL: TestAdminAddUser_ChaveHmacGravadaCifradaEDecifraDeVolta (0.01s)
+    add_user_hmac_route_test.go:133: hmac_key gravada em CLARO — é o texto plano do corpo
+    add_user_hmac_route_test.go:140: DecryptHMACKey sobre o valor gravado: failed to decrypt: cipher: message authentication failed
+--- FAIL: TestAddUserUseCase_Execute_Success/hmac_no_comprimento_mínimo (0.00s)
+    add_user_test.go:218: HmacKey gravada = texto plano do request, queria cifrada
+    add_user_test.go:221: HmacKey gravada = "0123456789abcdef0123456789abcdef", queria "enc:0123456789abcdef0123456789abcdef" (a saída do cifrador)
+```
+
+(b) criar o usuário mesmo com a cifra falhando — trocar o `return` por
+`encrypted = nil`:
+
+```
+--- FAIL: TestAdminAddUser_CifraFalhaNaoCriaUsuario (0.01s)
+    add_user_hmac_route_test.go:175: status = 200, queria 500 (corpo: {"code":200,...,"hmac_configured":true},"success":true})
+    add_user_hmac_route_test.go:180: usuário criado mesmo com a cifra falhando
+--- FAIL: TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario (0.00s)
+    add_user_test.go:242: err = <nil>, queria embrulhar boom
+```
+
+Os dois foram revertidos por edição localizada, e a árvore final volta a
+passar.
+
+**Dado pré-existente — NÃO migrado neste bloco, registrado aqui**: linhas de
+`users` criadas por `POST /admin/users` antes desta correção têm `hmac_key`
+em texto claro. O que acontece com elas HOJE, com o código corrigido: nada
+muda para melhor — `auth.DecryptHMACKey` continua falhando com
+`cipher: message authentication failed` (a mesma saída colada no controle
+(a)), e o webhook desses usuários segue sem `x-hmac-signature`, silenciosamente.
+A correção impede novas linhas ruins; não conserta as existentes.
+
+O caminho proposto segue o mesmo raciocínio que me foi citado como **ADR-0008**
+(envelope versionado para o S3, legado INVÁLIDO e **sem fallback para
+plaintext**). Registro a checagem em vez de a herdar: `docs/adr/` neste
+worktree vai de 0001 a 0007, e não há arquivo 0008 — a referência não pôde ser
+verificada aqui, e o que segue vale pelos próprios méritos.
+
+Prefixar o ciphertext com uma versão de envelope, tratar valor sem envelope
+como inválido — e **não** tentar usá-lo como chave em claro. Um fallback
+"se não decifra, use como está" transformaria o defeito em comportamento
+permanente e assinaria com um segredo que o banco entrega em claro. Para as
+linhas legadas, o correto é **revogar** (zerar `hmac_key`) e exigir
+reconfiguração por `POST /hmac/configure`, que já grava cifrado: revogar é
+honesto — o operador vê que não tem HMAC — enquanto hoje ele vê
+`hmac_configured: true` e nada é assinado. Falta decidir se a revogação é
+migração automática ou script de operação; não implementado aqui.
+
+Ver [[F157]] para o bloco corrigido no CAP-27, e [[F156]] para a chave HMAC
+GLOBAL, que é outro bloco.
 
 ## F159
 
@@ -9892,3 +9991,52 @@ escolha.
 
 **Status**: não corrigido. É decisão do humano sobre a própria regra dele;
 não altero `CLAUDE.md` por conta própria.
+
+## F161
+
+**Data**: 2026-08-19. **Contexto**: CAP-28 (correção da [[F158]]). Apareceu no
+`make check` da árvore final — não no escopo da tarefa.
+
+**Onde**: `pkg/bootstrap/dispatch_outbox_test.go:25`
+
+```go
+db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "outbox.db"))
+```
+
+**Problema**: o fixture do outbox abre o SQLite **sem** `busy_timeout`. Como
+`sqlx.Open` devolve um pool de conexões e o SQLite serializa escritores, duas
+conexões do mesmo pool disputando o arquivo falham NA HORA com `SQLITE_BUSY`
+em vez de esperar. Sob a carga do `make check` completo (`-race`, todos os
+pacotes), isso reprovou:
+
+```
+--- FAIL: TestOutboxWiring_VarreduraRetomaOVencido (0.38s)
+    dispatch_outbox_test.go:322: PendingCount: webhook outbox: contar pendentes: database is locked (5) (SQLITE_BUSY)
+```
+
+Evidência de que é intermitente e não regressão do CAP-28: o mesmo pacote
+passou 3/3 rodadas isoladas com `go test -race -count=1 ./pkg/bootstrap/`
+(9,9s / 12,7s / 10,1s) na MESMA árvore, e o CAP-28 não toca o outbox. O que a
+tarefa fez foi acrescentar carga ao pacote (quatro testes novos de rota), o
+que torna a corrida mais provável — não a criou.
+
+O outro fixture SQLite do mesmo pacote **já** faz o certo
+(`chat_history_route_test.go:126`):
+
+```go
+sqlx.Open("sqlite", t.TempDir()+"/chat_history.db?_pragma=busy_timeout(5000)")
+```
+
+**Correção sugerida**: usar a mesma string de conexão em
+`instalarOutboxDeTeste` (`?_pragma=busy_timeout(5000)`), e melhor ainda
+extrair a abertura para um helper único do pacote de teste — dois fixtures
+com regras de conexão divergentes é literal repetido esperando para divergir
+(ADR-0004). O SQLite de PRODUÇÃO **já** abre com
+`busy_timeout(10000)` e WAL (`pkg/infra/db/connection.go:128` e
+`pkg/bootstrap/main.go:385`) — conferido, não suposto. Ou seja: o achado é só
+do dublê, e o dublê está sendo MAIS restritivo que a produção, o que produz
+falha que produção não teria (o espelho da ARMADILHA 1).
+
+**Status**: não corrigido — fora do escopo do CAP-28, e o CLAUDE.md proíbe
+corrigir de graça defeito pré-existente sem perguntar. Registrado para
+decisão.

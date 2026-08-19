@@ -13,15 +13,31 @@ import (
 	"wa-api/pkg/infra/storage"
 )
 
+// Error codes and messages of this use case, as named constants: the tests
+// that lock the contract assert the SAME strings production returns
+// (ADR-0004).
+const (
+	hmacKeyTooShortCode  = "hmac_key_too_short"
+	hmacKeyTooShortMsg   = "HMAC key must be at least 32 characters long"
+	hmacEncryptFailedMsg = "failed to encrypt HMAC key"
+)
+
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
-	users  appport.UserRepository
-	logger appport.Logger
+	users     appport.UserRepository
+	encryptor appport.HmacKeyEncryptor
+	logger    appport.Logger
 }
 
-// NewAddUserUseCase cria uma nova instância
-func NewAddUserUseCase(users appport.UserRepository, logger appport.Logger) *AddUserUseCase {
-	return &AddUserUseCase{users: users, logger: logger}
+// NewAddUserUseCase cria uma nova instância.
+//
+// The encryptor is a dependency and not a package-level helper because the
+// AES key lives in the process configuration (appCtx.GlobalEncryptionKey),
+// which the application layer must not reach for. It is the same port
+// ConfigureHmacUseCase uses, so both writers of users.hmac_key produce the
+// same ciphertext format (HOUSEKEEP F158).
+func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, logger appport.Logger) *AddUserUseCase {
+	return &AddUserUseCase{users: users, encryptor: encryptor, logger: logger}
 }
 
 // Execute adiciona um novo usuário
@@ -44,18 +60,23 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		webhookUseProxy = *req.ProxyConfig.WebhookUseProxy
 	}
 
-	// Encrypt HMAC key if provided
+	// Encrypt the HMAC key if provided.
+	//
+	// The ORDER is the contract: validate, then encrypt, then write. A failure
+	// to encrypt returns BEFORE CreateUser, so the user is not created with an
+	// empty key nor with the key in plaintext — the column is read back
+	// through auth.DecryptHMACKey to sign every per-user webhook, and
+	// plaintext there is not valid AES-GCM.
 	var encryptedHmacKey []byte
 	if req.HmacKey != "" {
-		if len(req.HmacKey) < 32 {
-			return nil, apperr.New("hmac_key_too_short", apperr.CategoryValidation, "HMAC key must be at least 32 characters long", false, nil)
+		if len(req.HmacKey) < domain.MinHmacKeyLength {
+			return nil, apperr.New(hmacKeyTooShortCode, apperr.CategoryValidation, hmacKeyTooShortMsg, false, nil)
 		}
-		// Note: encryptHMACKey is defined in handlers.go - you'll need to refactor this
-		// For now, we'll create a simple approach
-		encrypted, err := encryptHMACKeyFunc(req.HmacKey)
+		// The plaintext key never reaches a log or an error: only its length does.
+		encrypted, err := uc.encryptor.EncryptHmacKey(req.HmacKey)
 		if err != nil {
-			uc.logger.Error(ctx, "Failed to encrypt HMAC key", "error", err)
-			return nil, fmt.Errorf("failed to encrypt HMAC key: %w", err)
+			uc.logger.Error(ctx, hmacEncryptFailedMsg, "keyLength", len(req.HmacKey), "error", err)
+			return nil, fmt.Errorf("%s: %w", hmacEncryptFailedMsg, err)
 		}
 		encryptedHmacKey = encrypted
 	}
@@ -153,12 +174,6 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		Events:         req.Events,
 		HmacConfigured: req.HmacKey != "",
 	}, nil
-}
-
-// Placeholder functions - these will be injected or refactored
-func encryptHMACKeyFunc(key string) ([]byte, error) {
-	// This will be replaced with the actual encryption from handlers.go
-	return []byte(key), nil
 }
 
 func isValidEvent(event string) bool {
