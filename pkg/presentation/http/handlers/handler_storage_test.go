@@ -46,6 +46,18 @@ type storageCase struct {
 	readsBody bool
 }
 
+// testHmacKey tem os 32 caracteres que domain.MinHmacKeyLength exige — abaixo
+// disso o use case recusa com 400, e o caso de sucesso da tabela viraria uma
+// recusa sem que ninguem percebesse.
+const testHmacKey = "0123456789abcdef0123456789abcdef"
+
+// newTestConfigureHmacUC monta o use case de escrita com os dubles das tres
+// portas novas. O store e' o de contractsfake, que imita a regra REAL do
+// adapter de producao (pkg/infra/db/hmac_config_repository.go).
+func newTestConfigureHmacUC(sg appport.SessionGuard, log appport.Logger) *storage.ConfigureHmacUseCase {
+	return storage.NewConfigureHmacUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.HmacKeyEncryptor{}, &contractsfake.UserInfoHmacCache{}, log)
+}
+
 func storageCases() []storageCase {
 	log := silentLogger{}
 	return []storageCase{
@@ -88,17 +100,17 @@ func storageCases() []storageCase {
 		{
 			name: "ConfigureHmac",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureHmacHandler(storage.NewConfigureHmacUseCase(sg, log))
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/hmac/configure",
-			body:      `{"enabled":true,"key":"k","secret":"s"}`,
+			body:      `{"hmac_key":"` + testHmacKey + `"}`,
 			readsBody: true,
 		},
 		{
 			name: "GetHmacConfig",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetHmacConfigHandler(storage.NewGetHmacConfigUseCase(sg, log))
+				return NewGetHmacConfigHandler(storage.NewGetHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/hmac/config",
@@ -106,7 +118,7 @@ func storageCases() []storageCase {
 		{
 			name: "DeleteHmacConfig",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewDeleteHmacConfigHandler(storage.NewDeleteHmacConfigUseCase(sg, log))
+				return NewDeleteHmacConfigHandler(storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log))
 			},
 			method: http.MethodDelete,
 			path:   "/storage/hmac/config",
@@ -341,6 +353,16 @@ func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 			wantErr: "proxy URL is required",
 		},
 		{
+			name: "ConfigureHmac/chave curta",
+			build: func(sg appport.SessionGuard) http.Handler {
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
+			},
+			method:  http.MethodPost,
+			path:    "/storage/hmac/configure",
+			body:    `{"hmac_key":"curta"}`,
+			wantErr: "HMAC key must be at least 32 characters long",
+		},
+		{
 			name: "SetHistory/valor negativo",
 			build: func(sg appport.SessionGuard) http.Handler {
 				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(sg, log))
@@ -388,10 +410,10 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		{
 			name: "ConfigureHmac",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureHmacHandler(storage.NewConfigureHmacUseCase(sg, log))
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
 			},
 			path: "/storage/hmac/configure",
-			body: `{"enabled":true,"key":"k","secret":"` + logassertGlobalHMACKey + `"}`,
+			body: `{"hmac_key":"` + logassertGlobalHMACKey + `"}`,
 		},
 		{
 			name: "TestS3Connection",

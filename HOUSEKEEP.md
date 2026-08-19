@@ -8884,6 +8884,15 @@ REVOGAÇÃO que não aparece acima e é mais grave que as cinco. A F157 também
 corrige uma afirmação desta entrada: o stub NÃO faz "todo webhook" sair sem
 assinatura — o webhook global é assinado, só o por-usuário não é.
 
+**ADENDO 2026-08-19 (CAP-27) — as TRÊS rotas de HMAC por usuário saíram do
+conjunto.** `configure_hmac.go`, `get_hmac_config.go` e `delete_hmac_config.go`
+gravam, leem e revogam de verdade. As outras sete continuam stub — a tabela
+acima segue válida para `set_history`, `set_proxy`, `test_s3_connection`,
+`configure_s3`, `get_s3_config`, `get_history` e `delete_s3_config`. Os testes
+que travam a correção estão na [[F157]], que é onde o bloco de HMAC foi
+descrito por inteiro.
+
+
 ## F152
 
 **Data**: 2026-08-19. **Contexto**: auditoria por LEITURA de
@@ -9411,6 +9420,11 @@ crescimento sem mudança de `max_complexity`.
 tarefa é exatamente o movimento que mascara regressão; e a política do
 projeto proíbe "corrigir de graça" achado pré-existente sem perguntar.
 
+**ADENDO 2026-08-19 (CAP-27)**: a deriva foi de 322 para **325**. Os três
+vêm dos arquivos novos do bloco de HMAC (porta, adapter de banco, adapters de
+bootstrap); `max_complexity` continua em **56**, sem se mover — a trava real
+não foi tocada. `count` segue como está, pelo motivo do Status acima.
+
 ## F156
 
 **Data**: 2026-08-19. **Contexto**: verificação do contrato para o bloco de
@@ -9555,3 +9569,326 @@ MENSAGENS está entregue; o stub aqui é o de leitura de CONFIGURAÇÃO.
 
 **Status**: nada corrigido. A F151 continua válida no que afirma; este adendo
 corrige o TAMANHO do conjunto e acrescenta a classe de revogação.
+
+### CORREÇÃO — 2026-08-19, CAP-27: as três rotas de HMAC por usuário
+
+**Status**: **corrigido** o bloco de HMAC (`POST`, `GET`, `DELETE`). As sete
+rotas restantes desta entrada e da [[F151]] continuam stub, sem alteração.
+
+Os três foram juntos exatamente pelo motivo escrito acima: entregar só o
+`POST` criaria uma chave que dá para pôr e não dá para tirar.
+
+#### O que passou a acontecer
+
+| rota | efeito real |
+|---|---|
+| `POST /hmac/configure` · `POST /session/hmac/config` | grava `users.hmac_key` **cifrada** (AES-GCM, `pkg/infra/auth.EncryptHMACKey`) e publica no `appCtx.UserInfoCache` |
+| `GET /hmac/config` · `GET /session/hmac/config` | `{"hmac_key": ""}` ou `{"hmac_key": "***"}` — o valor nunca sai |
+| `DELETE /hmac/config` · `DELETE /session/hmac/config` | `users.hmac_key = NULL` **e** cache com `HmacKeyEncrypted=""`, `HasHmac="false"` |
+
+A infra já estava viva e não foi reescrita: `pkg/infra/auth/hmac.go`,
+`dispatch_callhook.go:70-100`, `resolverChaveHMAC`
+(`dispatch_outbox.go:249`), `authenticators.go:93` e a coluna
+`users.hmac_key` (migração `add_hmac_key`, `migrations.go:68`). Faltava só a ESCRITA — nenhuma
+migração foi necessária.
+
+**O que foi acrescentado** (portas novas, adapters e fiação):
+
+- `pkg/application/contracts/hmac_config_port.go` — `HmacKeyStore`,
+  `HmacKeyEncryptor`, `UserInfoHmacCache`.
+- `pkg/infra/db/hmac_config_repository.go` — as três instruções SQL, como
+  constantes nomeadas.
+- `pkg/bootstrap/hmac_config_adapters.go` — cifrador sobre
+  `appCtx.GlobalEncryptionKey` e escritor do `UserInfoCache`.
+- `pkg/bootstrap/wiring_handlers.go:292-298` — as três dependências reais.
+
+**Divergências conscientes do contrato histórico**, ambas de forma e não de
+efeito:
+
+1. **Envelope.** O histórico devolvia `{"hmac_key":"***"}` cru; hoje sai
+   `{"code":200,"data":{"hmac_key":"***"},"success":true}`. É o envelope do
+   ADR-002, que vale para o repositório inteiro desde a migração — não uma
+   escolha desta rota.
+2. **Campos do request.** `HmacConfigRequest` passou a ter só `hmac_key`, que
+   é o campo histórico (`41bc8e2^:handlers.go:6767`). Os campos
+   `enabled`/`key`/`secret` que estavam lá nasceram com o stub, nunca
+   existiram no fio e nada em produção os lia. `HmacConfigResult.Enabled`
+   deixou de espelhar o pedido e passou a reportar o ESTADO depois da
+   operação.
+
+#### Os testes que travam a correção, por NOME
+
+`pkg/bootstrap/hmac_config_route_test.go` — pela **ROTA REGISTRADA**
+(`registerCustomRoutes` + `gorilla/mux`), SQLite real com o schema de
+produção, AES-GCM real e o `appCtx.UserInfoCache` real. As DUAS famílias de
+caminho são exercitadas em subteste, porque `/session/hmac/config` passa pelo
+wrapper que despacha por método (`wiring_routes.go:187`) e um `switch` errado
+ali não apareceria em teste de handler:
+
+- `TestHmacRoute_PostGravaCifradoEPublicaNoCache` — a chave gravada **não** é
+  o texto plano, decifra de volta para ele, e o cache recebe o base64 do
+  mesmo valor.
+- `TestHmacRoute_PostChaveCurta_400SemGravar`
+- `TestHmacRoute_PostSemChaveDeEncriptacao_500SemGravar` — cifra falha, nada
+  gravado.
+- `TestHmacRoute_GetMascaraEnaoVaza` — busca as três formas do segredo (texto
+  plano, cifrado cru, cifrado em base64) no corpo INTEIRO da resposta.
+- `TestHmacRoute_DeleteRevogaBancoECache` — banco NULL **e** cache limpo.
+- `TestHmacRoute_DeleteComBancoQuebrado_500SemLimparOCache` — o erro vem do
+  driver real (banco fechado), não de um erro fabricado.
+
+`pkg/application/usecase/storage/hmac_config_test.go` — a ORDEM e os efeitos
+colaterais, com dublês que registram cada fronteira:
+
+- `TestConfigureHmac_GravaCifradoEPublicaNoCache`
+- `TestConfigureHmac_ChaveCurta_RecusaSemGravar`
+- `TestConfigureHmac_FalhaDeCifra_NaoGrava`
+- `TestConfigureHmac_FalhaDeGravacao_NaoTocaOCache` — **teste de ORDEM**:
+  inverter as duas últimas chamadas passa em todos os outros.
+- `TestGetHmacConfig_MascaraEnaoVazaOSegredo`
+- `TestDeleteHmacConfig_RevogaBancoECache`
+- `TestDeleteHmacConfig_FalhaDeBanco_NaoLimpaOCache`
+- `TestHmacUseCases_SegredoNuncaVaiParaOLog` — oito caminhos, incluindo os
+  quatro de erro, que são os que mais logam.
+
+`pkg/infra/db/hmac_config_repository_test.go` — o adapter contra o schema
+real (a armadilha da F71): `TestHmacConfigRepository_LoadSemLinha_NaoEhErro`,
+`TestHmacConfigRepository_LoadColunaNula`,
+`TestHmacConfigRepository_SaveLoadDelete` (com bytes não-textuais, porque a
+coluna guarda ciphertext),
+`TestHmacConfigRepository_EscopoPorUsuario`.
+
+E `pkg/presentation/http/handlers/handler_storage_test.go` ganhou o caso
+`ConfigureHmac/chave curta` na tabela de 400.
+
+#### Controles negativos EXECUTADOS
+
+**(a) gravar a chave em CLARO em vez de cifrada** — trocado
+`SaveHmacKey(ctx, txtID, encrypted)` por `[]byte(req.HmacKey)`:
+
+```
+--- FAIL: TestConfigureHmac_GravaCifradoEPublicaNoCache (0.00s)
+    hmac_config_test.go:129: a chave foi gravada EM CLARO: o que chegou ao store e' o texto plano do request
+--- FAIL: TestHmacRoute_PostGravaCifradoEPublicaNoCache (0.02s)
+    --- FAIL: TestHmacRoute_PostGravaCifradoEPublicaNoCache/caminho_direto (0.01s)
+        hmac_config_route_test.go:201: users.hmac_key guarda a chave EM CLARO
+    --- FAIL: TestHmacRoute_PostGravaCifradoEPublicaNoCache/caminho_/session (0.01s)
+        hmac_config_route_test.go:201: users.hmac_key guarda a chave EM CLARO
+```
+
+**(b) o DELETE limpar só o banco e não o cache** — removida a linha
+`uc.cache.SetHmacKey(txtID, nil)`. É o controle que importa: é o defeito que
+o sintoma (200 idêntico) esconde.
+
+```
+--- FAIL: TestDeleteHmacConfig_RevogaBancoECache (0.00s)
+    hmac_config_test.go:309: o CACHE nao foi limpo (0 chamadas): a chave revogada continua assinando os webhooks do usuario ate' o processo reiniciar
+--- FAIL: TestHmacRoute_DeleteRevogaBancoECache (0.02s)
+    --- FAIL: TestHmacRoute_DeleteRevogaBancoECache/caminho_direto (0.01s)
+        hmac_config_route_test.go:332: HmacKeyEncrypted = "hhu6ATApbE5D8rdqSoXocP1P1h2dYWBwJrodVNY8rZMMEw16Cx53h7j2tW1N8BH0HF7cK4uhRuadTj0E" no cache apos a revogacao: a chave revogada continua assinando os webhooks do usuario
+    --- FAIL: TestHmacRoute_DeleteRevogaBancoECache/caminho_/session (0.01s)
+        hmac_config_route_test.go:332: HmacKeyEncrypted = "Jv+wGKfUQDvmAHbz0wCHefLdJfJWFNPHx7f/iXkbJnWPwbACPeBErwFwNqNfm3dsUFlEupl5Yik/meFB" no cache apos a revogacao: a chave revogada continua assinando os webhooks do usuario
+```
+
+**(c) o GET devolver a chave em vez de `"***"`** — trocado
+`view.HmacKey = domain.MaskedHmacKey` por `string(encrypted)`:
+
+```
+--- FAIL: TestGetHmacConfig_MascaraEnaoVazaOSegredo (0.00s)
+    --- FAIL: .../com_chave_devolve_mascara_e_nao_o_valor (0.00s)
+        hmac_config_test.go:255: hmac_key = "enc:0123456789abcdef0123456789abcdef", quero "***"
+--- FAIL: TestHmacRoute_GetMascaraEnaoVaza (0.02s)
+    --- FAIL: TestHmacRoute_GetMascaraEnaoVaza/caminho_direto (0.01s)
+        hmac_config_route_test.go:284: hmac_key = "�7���$.N�o\rF\x01st�^0��� Df��\x19�e3\x0e...", quero "***"
+```
+
+**(d) EXTRA — inverter a ORDEM: publicar no cache ANTES de gravar** —
+com essa inversão a falha de gravação deixa o cache assinando com uma chave
+que não existe no banco:
+
+```
+--- FAIL: TestConfigureHmac_FalhaDeGravacao_NaoTocaOCache (0.00s)
+    hmac_config_test.go:227: o cache foi publicado com a gravacao FALHADA: [{UserID:user-1 EncryptedKey:[101 110 99 58 ...]}] — a chave assinaria sem existir no banco
+```
+
+Os quatro foram revertidos por edição localizada, e a árvore voltou à forma
+final antes do `make check`.
+
+#### Cobertura de log: as três travas SOBEM
+
+| medida | antes | depois | baseline |
+|---|---|---|---|
+| `func_coverage` | 65.8% (426/647) | 66.1% (430/651) | `min_func_coverage` 658 → 661 |
+| `errpath_coverage` | 86.0% (1188/1381) | 86.1% (1196/1389) | `min_errpath_coverage` 860 → 861 |
+| `eligible` | 647 | 651 | `min_eligible` 647 → 651 |
+
+`.log-coverage-baseline` foi atualizado **para cima** nas três, que é o
+sentido do ratchet — não há afrouxamento aqui. O NUMERADOR não regrediu em
+nenhuma: `covered` sobe de 426 para 430, e as quatro funções elegíveis novas
+nascem TODAS cobertas, ao contrário dos adapters delegantes dos CAP-21/22/26
+que baixavam a razão. As quatro são
+`db.HmacConfigRepository.{Save,Load,Delete}HmacKey` e
+`bootstrap.userInfoHmacCache.SetHmacKey`, e as quatro logam.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado (2997 → 3008 linhas). O
+diff mandatório **não** veio vazio, e a explicação é que o conjunto elegível
+de fato mudou:
+
+```
+diff <(cut -f1,2 cmd/logcov/testdata/eligible.golden | sort)      <(go run ./cmd/logcov -golden | cut -f1,2 | sort)
+> pkg/application/contracts/contractsfake.HmacKeyEncryptor.EncryptHmacKey  EXCLUDED
+> pkg/application/contracts/contractsfake.HmacKeyStore.DeleteHmacKey       EXCLUDED
+> pkg/application/contracts/contractsfake.HmacKeyStore.LoadHmacKey         EXCLUDED
+> pkg/application/contracts/contractsfake.HmacKeyStore.SaveHmacKey         EXCLUDED
+> pkg/application/contracts/contractsfake.UserInfoHmacCache.SetHmacKey     EXCLUDED
+> pkg/bootstrap.hmacKeyEncryptor.EncryptHmacKey                            EXCLUDED
+> pkg/bootstrap.userInfoHmacCache.SetHmacKey                               ELIGIBLE
+> pkg/infra/db.HmacConfigRepository.DeleteHmacKey                          ELIGIBLE
+> pkg/infra/db.HmacConfigRepository.LoadHmacKey                            ELIGIBLE
+> pkg/infra/db.HmacConfigRepository.SaveHmacKey                            ELIGIBLE
+> pkg/infra/db.NewHmacConfigRepository                                     EXCLUDED
+```
+
+São ONZE linhas, todas `>` — só ACRÉSCIMO, e as onze são funções que este
+bloco criou. Nenhuma linha existente saiu, e nenhuma mudou de estado.
+
+**`.coverage-baseline` — NÃO alterado**, pelo mesmo motivo registrado na
+[[F148]]: o gate PASSA (`coverage: 857 decimos de % (piso declarado 840)`) e
+imprime o aviso "suba min_coverage para 857 neste mesmo PR", mas a deriva de
+1,7 ponto é anterior a esta tarefa (a F148 já a media em 855) e eu não medi
+quanto dela é do CAP-27. Escrever 857 sem ter isolado o ANTES seria número
+sem lastro. Valor medido fica registrado aqui, como dívida explícita.
+
+O `count` de `.golangci-baseline` também não foi alterado — ver o adendo na
+[[F155]]: 322 → 325, com `max_complexity` parado em 56.
+
+## F158
+
+**Data**: 2026-08-19. **Contexto**: CAP-27, ligando a escrita da chave HMAC
+por usuário. Achado ao procurar quem mais escreve em `users.hmac_key`.
+
+**Onde**: `pkg/application/usecase/user/add_user.go:157-162`
+
+```go
+// Placeholder functions - these will be injected or refactored
+func encryptHMACKeyFunc(key string) ([]byte, error) {
+	// This will be replaced with the actual encryption from handlers.go
+	return []byte(key), nil
+}
+```
+
+Chamada em `add_user.go:55`, no caminho de `POST /admin/users`
+(`wiring_routes.go:225`) quando o corpo traz `hmacKey`.
+
+**Problema**: a criação de usuário por admin grava a chave HMAC **em texto
+claro** na coluna `users.hmac_key`. São dois efeitos, e o segundo é silencioso:
+
+1. **Segredo em claro no banco.** A coluna existe justamente para guardar
+   ciphertext AES-GCM; um dump ou um backup entrega a chave de assinatura de
+   todos os usuários criados por esse caminho.
+2. **Webhook do usuário sai SEM assinatura.** `GenerateHmacSignature`
+   (`pkg/infra/auth/hmac.go:20`) chama `DecryptHMACKey` sobre o valor
+   armazenado. Texto claro não é AES-GCM válido: a decifra falha, a função
+   devolve erro e a entrega segue sem `x-hmac-signature`. O usuário configurou
+   HMAC, o `GET /session/status` dirá que tem HMAC, e nada é assinado.
+
+A rota corrigida no CAP-27 (`POST /hmac/configure`) usa o cifrador real, então
+os dois caminhos de escrita da MESMA coluna divergem: um grava cifrado, o
+outro grava em claro.
+
+**Evidência**: leitura. Não medido contra banco real — o achado é do corpo da
+função, que devolve o argumento sem tocar nele. `add_user_test.go:209` só
+assere `len(rec.HmacKey) != 0`, então a suíte passa com o defeito no lugar.
+
+**Correção sugerida**: injetar `appport.HmacKeyEncryptor` — a porta já existe
+desde o CAP-27 (`pkg/application/contracts/hmac_config_port.go`) e o adapter
+de produção é `bootstrap.hmacKeyEncryptor{}`. `AddUserUseCase` passa a
+recebê-la no construtor, e `encryptHMACKeyFunc` some. O teste que trava:
+gravar por `POST /admin/users` e provar que o valor na coluna **não** é o
+texto plano e decifra de volta para ele — o mesmo formato de
+`TestHmacRoute_PostGravaCifradoEPublicaNoCache`.
+
+**Status**: não corrigido. Fora do escopo do CAP-27, que é das três rotas de
+`/hmac`. Registrado e levado ao canal de decisão. Ver [[F157]] para o bloco
+que foi corrigido, e [[F156]] para a chave HMAC GLOBAL, que é outro bloco.
+
+## F159
+
+**Data**: 2026-08-19. **Contexto**: o mesmo arquivo da [[F158]].
+
+**Onde**: `pkg/application/usecase/user/add_user.go:164-167`, chamada em
+`add_user.go:71` e em `edit_user.go:49`.
+
+```go
+func isValidEvent(event string) bool {
+	// This will check against domain.SupportedEventTypes
+	return true
+}
+```
+
+**Problema**: a validação de tipos de evento na criação e na edição de usuário
+aceita **qualquer** string. Um `events: "mensagemm,Mesage,qualquer-coisa"`
+passa, é gravado, e o usuário fica inscrito em nada — sem erro nenhum na
+resposta. O comentário diz o que a função DEVERIA fazer
+(`domain.SupportedEventTypes`), e a lista existe.
+
+Gravidade menor que a da [[F158]]: produz ausência de função, com sintoma
+observável (o usuário não recebe eventos), e não vazamento de segredo.
+
+**Correção sugerida**: casar contra `domain.SupportedEventTypes`, com o mesmo
+tratamento de caixa que o resto do repositório usa para eventos, e um teste
+que rejeite um evento inexistente pelas DUAS rotas (`POST /admin/users` e a de
+edição) — o defeito vive nos dois chamadores.
+
+**Status**: não corrigido, fora do escopo do CAP-27.
+
+## F160
+
+**Data**: 2026-08-19. **Contexto**: revisão do CAP-27. Não é defeito de código
+— é divergência entre uma regra do `CLAUDE.md` e a prática densa do
+repositório, e por isso precisa de decisão humana em vez de correção.
+
+**A regra**, congelada no `CLAUDE.md`: identificadores (variável, função,
+tipo, campo, constante) em **inglês**, para todo código novo e todo código
+tocado.
+
+**A prática**, medida: nomes de teste são em **português**, de forma
+consistente, nos dois pacotes onde o CAP-27 escreveu e em muitos outros:
+
+```
+pkg/application/usecase/storage/  TestUseCases_SemSessao_PropagamACausaEnaoATraduzem
+                                  TestResultadosDoCaminhoFeliz
+pkg/bootstrap/                    TestRetry_AgendarNaoBloqueiaOChamador
+                                  TestRetry_GuardaDeTimerEmVooNaoEVacua
+cmd/logcov/                       TestGoldenBate
+                                  TestBaselineBateComAMedicao
+```
+
+Nome de função de teste **é identificador**, então a leitura literal da regra
+os proíbe. Mas a convenção contrária é anterior a esta sessão e foi seguida
+inclusive em commits meus dela (`dispatch_retry_test.go`, F110/F136).
+
+**Por que não "corrigi"**: renomear os 14 testes do CAP-27 para inglês os
+deixaria inconsistentes com **todos** os vizinhos, e aplicaria a um bloco uma
+régua que não apliquei aos anteriores. Churn de renomeação também mistura
+renomeação com mudança de comportamento no mesmo diff, que é justamente o que
+o `CLAUDE.md` manda evitar.
+
+**Por que não ignorei**: a regra é explícita e eu a apliquei ao CAP-25,
+convertendo comentários para EN-US. Aplicar a comentários e não a nomes de
+teste, sem dizer por quê, é a incoerência silenciosa que o próximo executor
+herda sem saber de que lado ficar.
+
+**A distinção que proponho**, se o humano concordar: comentários e mensagens
+de log/erro em EN-US, sem exceção, porque são lidos por quem não conhece o
+projeto e às vezes por quem não fala português. **Nome de teste é frase
+descritiva de comportamento, mais próxima de documentação de decisão** — e o
+`CLAUDE.md` já coloca documento de decisão em português. Se a decisão for
+essa, a regra deveria dizê-lo, para parar de gerar esta dúvida.
+
+**Correção sugerida**: editar o `CLAUDE.md` para explicitar de que lado ficam
+os nomes de teste — qualquer que seja o lado. A ambiguidade custa mais que a
+escolha.
+
+**Status**: não corrigido. É decisão do humano sobre a própria regra dele;
+não altero `CLAUDE.md` por conta própria.

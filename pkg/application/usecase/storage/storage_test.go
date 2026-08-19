@@ -45,7 +45,7 @@ func guardCases() []struct {
 		run  execFn
 	}{
 		{"ConfigureHmac", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewConfigureHmacUseCase(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{Enabled: true})
+			r, err := newConfigureHmac(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{HmacKey: validHmacKey})
 			return r != nil, err
 		}},
 		{"ConfigureS3", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -53,7 +53,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"DeleteHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewDeleteHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"DeleteS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -65,7 +65,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"GetHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -161,23 +161,24 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	sg := &contractsfake.SessionGuard{}
 	log := &contractsfake.Logger{}
 
-	t.Run("ConfigureHmac espelha Enabled", func(t *testing.T) {
-		for _, enabled := range []bool{true, false} {
-			r, err := storage.NewConfigureHmacUseCase(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{Enabled: enabled})
-			if err != nil {
-				t.Fatalf("erro inesperado: %v", err)
-			}
-			if r.Enabled != enabled {
-				t.Errorf("Enabled = %v, quero %v", r.Enabled, enabled)
-			}
-			if r.Details == "" {
-				t.Error("Details vazio")
-			}
+	// Enabled deixou de espelhar o pedido: ele reporta o ESTADO depois da
+	// operacao. Gravar uma chave habilita; revogar desabilita. O request nao
+	// tem mais campo `enabled` — nunca existiu no fio (41bc8e2^:handlers.go:6767).
+	t.Run("ConfigureHmac habilita apos gravar", func(t *testing.T) {
+		r, err := newConfigureHmac(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{HmacKey: validHmacKey})
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Enabled {
+			t.Error("Enabled = false apos gravar a chave, quero true")
+		}
+		if r.Details == "" {
+			t.Error("Details vazio")
 		}
 	})
 
 	t.Run("DeleteHmacConfig zera Enabled", func(t *testing.T) {
-		r, err := storage.NewDeleteHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+		r, err := storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -228,10 +229,10 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 		}
 	})
 
+	// GetHmacConfig ficou de fora: ele devolve HmacConfigView (`hmac_key`
+	// mascarado), nao HmacConfigResult. O contrato dele esta' em
+	// hmac_config_test.go.
 	t.Run("leituras devolvem Details", func(t *testing.T) {
-		if r, err := storage.NewGetHmacConfigUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetHmacConfig = %+v, %v", r, err)
-		}
 		if r, err := storage.NewGetS3ConfigUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
 			t.Errorf("GetS3Config = %+v, %v", r, err)
 		}

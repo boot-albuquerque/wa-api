@@ -1748,6 +1748,10 @@ pkg/application/contracts/contractsfake.GroupSettings.SetGroupName	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupPhoto	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupTopic	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.UpdateGroupParticipants	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HmacKeyStore.DeleteHmacKey	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HmacKeyStore.LoadHmacKey	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HmacKeyStore.SaveHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.InteractiveMessenger.SendButtons	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveQualifiedJID	EXCLUDED	X5
@@ -1829,6 +1833,7 @@ pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.UploadFile	EXCLUDED	X5
 pkg/application/contracts/contractsfake.TextMessenger.SendText	EXCLUDED	X5
+pkg/application/contracts/contractsfake.UserInfoHmacCache.SetHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.CreateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.DeleteUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
@@ -2210,6 +2215,7 @@ pkg/bootstrap.generateHmacSignature	ELIGIBLE	uncovered:L1
 pkg/bootstrap.getKillChannel	EXCLUDED	X1
 pkg/bootstrap.getUserWebhookUrl	ELIGIBLE	covered
 pkg/bootstrap.hasLiveSessionLocally	EXCLUDED	X1
+pkg/bootstrap.hmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X7
 pkg/bootstrap.init	EXCLUDED	X3
 pkg/bootstrap.initConnectHandler	EXCLUDED	X1
 pkg/bootstrap.initCustomHandlers	ELIGIBLE	uncovered:L1
@@ -2330,6 +2336,7 @@ pkg/bootstrap.updateAndGetUserSubscriptions	ELIGIBLE	covered
 pkg/bootstrap.updateUserInfo	ELIGIBLE	covered
 pkg/bootstrap.userIDHolderHandler	EXCLUDED	X1
 pkg/bootstrap.userIDHolderHandler.func1	EXCLUDED	X1
+pkg/bootstrap.userInfoHmacCache.SetHmacKey	ELIGIBLE	covered
 pkg/bootstrap.userInfoID	ELIGIBLE	uncovered:L1
 pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:84)
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
@@ -2373,10 +2380,14 @@ pkg/infra/db.GenerateRandomID	ELIGIBLE	covered
 pkg/infra/db.GetChatPushNamesByUser	ELIGIBLE	covered
 pkg/infra/db.GetDatabaseConfig	ELIGIBLE	covered
 pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
+pkg/infra/db.HmacConfigRepository.DeleteHmacKey	ELIGIBLE	covered
+pkg/infra/db.HmacConfigRepository.LoadHmacKey	ELIGIBLE	covered
+pkg/infra/db.HmacConfigRepository.SaveHmacKey	ELIGIBLE	covered
 pkg/infra/db.InitializeDatabase	ELIGIBLE	covered
 pkg/infra/db.InitializeSchema	ELIGIBLE	covered
 pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
 pkg/infra/db.NewChatHistoryRepository	EXCLUDED	X1
+pkg/infra/db.NewHmacConfigRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1

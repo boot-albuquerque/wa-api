@@ -994,7 +994,19 @@ rules_frozen=true
 # a razao por construcao; foi o que o CAP-21 (667->665) e o CAP-22 (665->659)
 # ja' fizeram. covered fica em 426: nenhuma funcao coberta regrediu, e o diff
 # do golden so' ACRESCENTA linhas.
-min_func_coverage=658
+# CAP-27 (2026-08-19): 658->661 (426/647=65.8% -> 430/651=66.1%). SOBE porque
+# as QUATRO funcoes ELIGIBLE novas nascem TODAS cobertas — ao contrario dos
+# adapters delegantes dos CAP-21/22/26, estas logam:
+#   - db.HmacConfigRepository.SaveHmacKey / LoadHmacKey / DeleteHmacKey
+#     (Error estruturado com table/user_id/query na falha; Load ainda tem um
+#     Debug no ramo "linha ausente", que e' resultado valido e nao erro).
+#   - bootstrap.userInfoHmacCache.SetHmacKey (Debug no no-op de cache miss,
+#     Error no tipo inesperado, Info na publicacao).
+# Nenhuma funcao ja' coberta regrediu: o diff do golden so' ACRESCENTA linhas
+# (11: as 4 ELIGIBLE acima e 7 EXCLUDED — NewHmacConfigRepository,
+# bootstrap.hmacKeyEncryptor.EncryptHmacKey e os 5 metodos dos dubles de
+# contractsfake). Nenhuma linha existente muda de estado.
+min_func_coverage=661
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1185,7 +1197,11 @@ min_func_coverage=658
 # caminho de saida COBERTO (propagacao de causa sem descarte, nao por log) —
 # removido junto com a funcao: -1 no denominador E -1 no numerador de
 # errpath_coverage, cancelando no arredondamento de uma casa decimal.
-min_errpath_coverage=860
+# CAP-27 (2026-08-19): errpath SOBE 860->861 (1188/1381=86.0% ->
+# 1196/1389=86.1%). +8 caminhos de saida no denominador e +8 cobertos: os tres
+# metodos do HmacConfigRepository e o SetHmacKey do cache, todos com Error ou
+# Debug no menor bloco que contem a saida.
+min_errpath_coverage=861
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1379,7 +1395,11 @@ min_errpath_coverage=860
 # (IsPaired, RequestPairingCode) entram como ELIGIBLE; NewPhonePairerAdapter,
 # testkit.Fake.PairPhone e as duas de contractsfake.PhonePairer entram como
 # EXCLUDED. Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=647
+# CAP-27 (2026-08-19): 647 -> 651. As QUATRO entradas estao enumeradas acima,
+# junto de min_func_coverage: os tres metodos de db.HmacConfigRepository e
+# bootstrap.userInfoHmacCache.SetHmacKey. Denominador CRESCE — nao ha'
+# remocao neste PR.
+min_eligible=651
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

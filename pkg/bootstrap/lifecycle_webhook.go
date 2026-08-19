@@ -175,7 +175,7 @@ func sendEventWithWebHook(evh *UserEventHandler, postmap map[string]interface{},
 	// Get HMAC key for this user
 	var encryptedHmacKey []byte
 	if userinfo, found := appCtx.UserInfoCache.Get(evh.UserID); found {
-		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
+		encryptedB64 := userinfo.(Values).Get(userInfoHmacKeyField)
 		if encryptedB64 != "" {
 			var err error
 			encryptedHmacKey, err = base64.StdEncoding.DecodeString(encryptedB64)

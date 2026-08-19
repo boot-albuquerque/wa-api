@@ -287,9 +287,14 @@ func initCustomHandlers(s *server) {
 	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, logger)
 	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, logger)
 	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
-	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, logger)
-	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, logger)
-	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, logger)
+	// HMAC por usuário: banco + cifra + cache, os três REAIS. O stub que
+	// respondia 200 sem gravar nada é a F151/F157 do HOUSEKEEP.
+	hmacKeyStore := db.NewHmacConfigRepository(s.DB)
+	hmacEncryptor := hmacKeyEncryptor{}
+	hmacCache := userInfoHmacCache{}
+	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, hmacKeyStore, hmacEncryptor, hmacCache, logger)
+	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, hmacKeyStore, logger)
+	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, hmacKeyStore, hmacCache, logger)
 	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, logger)
 	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, logger)
 	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)

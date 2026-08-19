@@ -83,17 +83,17 @@ func ensureUserInfoCached(db *sqlx.DB, userID string) error {
 	// token que os leitores usam (evh.Token vem da mesma origem), e gravar
 	// sob outra chave criaria uma entrada que ninguém encontra.
 	appCtx.UserInfoCache.Set(userID, Values{M: map[string]string{
-		"Id":               txtid,
-		"Name":             name,
-		"Jid":              jid,
-		"Webhook":          webhook,
-		"Token":            dbToken,
-		"Proxy":            proxyURL,
-		"Events":           events,
-		"S3Enabled":        s3Enabled,
-		"MediaDelivery":    mediaDelivery,
-		"History":          fmt.Sprintf("%d", history),
-		"HmacKeyEncrypted": hmacKeyEncrypted,
+		"Id":                 txtid,
+		"Name":               name,
+		"Jid":                jid,
+		"Webhook":            webhook,
+		"Token":              dbToken,
+		"Proxy":              proxyURL,
+		"Events":             events,
+		"S3Enabled":          s3Enabled,
+		"MediaDelivery":      mediaDelivery,
+		"History":            fmt.Sprintf("%d", history),
+		userInfoHmacKeyField: hmacKeyEncrypted,
 	}}, cache.NoExpiration)
 
 	log.Info().Str("userid", txtid).Msg("User info carregado do banco para o cache")

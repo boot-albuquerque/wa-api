@@ -191,6 +191,10 @@ func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 // GetHmacConfigHandler handles GET /storage/hmac/config
+//
+// O use case devolve domain.HmacConfigView — `{"hmac_key": ""}` ou
+// `{"hmac_key": "***"}` —, e não o HmacConfigResult dos outros dois: a
+// leitura reporta PRESENÇA de chave, e o valor nunca sai daqui.
 type GetHmacConfigHandler struct{ usecase *storage.GetHmacConfigUseCase }
 
 func NewGetHmacConfigHandler(uc *storage.GetHmacConfigUseCase) *GetHmacConfigHandler {

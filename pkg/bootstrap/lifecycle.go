@@ -99,17 +99,17 @@ func (s *server) connectOnStartup() {
 
 			log.Info().Str("userid", txtid).Msg("Connect to Whatsapp on startup")
 			v := Values{M: map[string]string{
-				"Id":               txtid,
-				"Name":             name,
-				"Jid":              jid,
-				"Webhook":          webhook,
-				"Token":            token,
-				"Proxy":            proxy_url,
-				"Events":           events,
-				"S3Enabled":        s3_enabled,
-				"MediaDelivery":    media_delivery,
-				"History":          fmt.Sprintf("%d", history),
-				"HmacKeyEncrypted": hmacKeyEncrypted,
+				"Id":                 txtid,
+				"Name":               name,
+				"Jid":                jid,
+				"Webhook":            webhook,
+				"Token":              token,
+				"Proxy":              proxy_url,
+				"Events":             events,
+				"S3Enabled":          s3_enabled,
+				"MediaDelivery":      media_delivery,
+				"History":            fmt.Sprintf("%d", history),
+				userInfoHmacKeyField: hmacKeyEncrypted,
 			}}
 			appCtx.UserInfoCache.Set(txtid, v, cache.NoExpiration)
 			// Gets and set subscription to webhook events
