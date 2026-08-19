@@ -8,21 +8,35 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// SendLocationUseCase encapsula a validação de envio de localização.
+// SendLocationUseCase envia uma localização de verdade: monta o
+// LocationMessage a partir dos campos escalares do request (sem upload, sem
+// fetch, sem conversão) e o envia pelo wa-noise. Só devolve
+// domain.StatusSent depois que o envio retorna sucesso — nunca antes (mesma
+// disciplina de SendMessageUseCase, CAP-01).
 type SendLocationUseCase struct {
-	messages appport.MessageComposer
+	messages appport.SimpleMessenger
+	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewSendLocationUseCase cria uma nova instância do usecase.
-func NewSendLocationUseCase(mc appport.MessageComposer, l appport.Logger) *SendLocationUseCase {
+func NewSendLocationUseCase(sm appport.SimpleMessenger, jr appport.JIDResolver, l appport.Logger) *SendLocationUseCase {
 	return &SendLocationUseCase{
-		messages: mc,
+		messages: sm,
+		jids:     jr,
 		logger:   l,
 	}
 }
 
-// Execute valida os campos obrigatórios e verifica se o cliente está disponível.
+// Execute valida os campos obrigatórios, resolve o destinatário e envia a
+// localização pela porta de verdade.
+//
+// A validação Latitude == 0 / Longitude == 0 confunde "campo ausente" com
+// "valor zero" — um ponto exatamente sobre o equador ou o meridiano de
+// Greenwich é rejeitado como se estivesse faltando. Este é o comportamento
+// HISTÓRICO (`git show 41bc8e2^:handlers.go`, em torno da linha 1913) e é
+// preservado aqui de propósito: corrigi-lo é mudança de contrato público,
+// não decisão desta capability — ver HOUSEKEEP.md.
 func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req domain.SendLocationRequest) (*domain.SendLocationResult, error) {
 	if req.Phone == "" {
 		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
@@ -39,21 +53,26 @@ func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req do
 		return nil, err
 	}
 
-	msgID := req.ID
-	if msgID == "" {
-		generated, err := uc.messages.NewMessageID(ctx, txtID)
-		if err != nil {
-			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
-			return nil, err
-		}
-		msgID = generated
+	recipient, err := uc.jids.ResolveJID(ctx, req.Phone)
+	if err != nil {
+		uc.logger.Warn(ctx, "invalid phone in send location payload", "txtID", txtID, "error", err)
+		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
+	}
+
+	payload := domain.LocationPayload{Latitude: req.Latitude, Longitude: req.Longitude, Name: req.Name}
+
+	sent, err := uc.messages.SendLocation(ctx, txtID, recipient, payload, req.ID)
+	if err != nil {
+		uc.logger.Error(ctx, "failed to send location message", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	result := &domain.SendLocationResult{
-		MessageID: msgID,
-		Status:    "validated",
+		MessageID: sent.ID,
+		Timestamp: sent.Timestamp.Unix(),
+		Status:    domain.StatusSent,
 	}
 
-	uc.logger.Info(ctx, "location validated", "msgID", msgID)
+	uc.logger.Info(ctx, "location sent", "msgID", result.MessageID)
 	return result, nil
 }

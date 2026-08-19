@@ -196,6 +196,7 @@ type SendContactRequest struct {
 // SendContactResult representa o resultado do envio de contato.
 type SendContactResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 
@@ -211,7 +212,31 @@ type SendLocationRequest struct {
 // SendLocationResult representa o resultado do envio de localização.
 type SendLocationResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// LocationPayload é a metadata de protocolo pura que
+// port.SimpleMessenger.SendLocation repassa para LocationMessage — sem
+// upload, sem fetch, sem conversão (CAP-08A). Latitude/Longitude/Name são
+// os únicos três campos que o histórico preenchia em LocationMessage (ver
+// `git show 41bc8e2^:handlers.go`, em torno da linha 1935).
+type LocationPayload struct {
+	Latitude  float64
+	Longitude float64
+	Name      string
+}
+
+// ContactPayload é a metadata de protocolo pura que
+// port.SimpleMessenger.SendContact repassa para ContactMessage — sem
+// upload, sem fetch, sem conversão (CAP-08B). Name/Vcard são os únicos dois
+// campos que o histórico preenchia em ContactMessage (ver
+// `git show 41bc8e2^:handlers.go`, em torno da linha 1810). Vcard é
+// repassado como STRING crua, sem parse nem validação de formato — mesma
+// disciplina do histórico.
+type ContactPayload struct {
+	Name  string
+	Vcard string
 }
 
 // SendButtonsRequest representa o payload de envio de botões.

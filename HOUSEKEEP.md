@@ -5222,3 +5222,251 @@ deliberada, não acidental.
 
 **Status**: **NÃO CORRIGIDO** — fora do escopo do FIX-07b (só teste). Fica
 pendente de decisão do usuário sobre se `user_id` deve ou não ser logado.
+
+## F121 — `SendLocationRequest.Latitude`/`Longitude` == 0 é indistinguível de
+"campo ausente"; um ponto sobre o equador ou o meridiano de Greenwich é
+inendereçável pela API
+
+**Data**: 2026-08-18. **Contexto**: CAP-08A, POST /chat/send/location
+passou a montar o LocationMessage e enviar de verdade.
+
+**Onde**: `pkg/application/usecase/message/send_location.go`, validação de
+`SendLocationUseCase.Execute`:
+```go
+if req.Latitude == 0 {
+    return nil, apperr.New("missing_latitude", apperr.CategoryValidation, "missing Latitude in payload", false, nil)
+}
+if req.Longitude == 0 {
+    return nil, apperr.New("missing_longitude", apperr.CategoryValidation, "missing Longitude in payload", false, nil)
+}
+```
+Comportamento HISTÓRICO idêntico — `git show 41bc8e2^:handlers.go`, em
+torno da linha 1913 (`if t.Latitude == 0 { ... "missing Latitude in
+Payload" }`).
+
+**Problema**: `domain.SendLocationRequest.Latitude`/`Longitude` são
+`float64` sem ponteiro. Na desserialização JSON, um campo ausente e um
+campo explicitamente enviado como `0` produzem o MESMO valor Go (`0.0`),
+então a validação `== 0` não consegue diferenciar "o cliente esqueceu de
+mandar Latitude" de "o cliente mandou Latitude=0 de propósito". Consequência
+concreta, não hipotética: qualquer ponto EXATAMENTE sobre o equador
+(latitude 0) ou sobre o meridiano de Greenwich (longitude 0) é rejeitado com
+400 `missing_latitude`/`missing_longitude`, mesmo sendo coordenadas
+geograficamente válidas. Não é um caso de borda raro tipo "Null Island"
+(0,0) — são duas linhas INTEIRAS do globo (todo o equador, todo o
+meridiano), qualquer ponto sobre qualquer uma delas.
+
+Reproduzido e travado em teste (`TestSendLocation_ZeroLatitudeRejected` e
+`TestSendLocation_ZeroLongitudeRejected`,
+`pkg/application/usecase/message/send_location_test.go`), e pela rota
+registrada (`TestSendLocation_ZeroLatitudeOrLongitude_Rejected_
+ViaRegisteredRoute`, `pkg/presentation/http/handlers/
+handler_send_location_test.go`) — os dois DOCUMENTAM o comportamento atual
+(400 para lat/lon zero), não o comportamento desejado.
+
+**Correção sugerida**: trocar `Latitude`/`Longitude` de `float64` para
+`*float64` em `domain.SendLocationRequest`, validando `== nil` em vez de
+`== 0`. Isto é MUDANÇA DE CONTRATO PÚBLICO (o corpo JSON aceito não muda,
+mas o comportamento de validação muda — um payload com `Latitude: 0` que
+hoje é 400 passaria a ser aceito), por isso não foi decidida nem aplicada
+nesta sessão — fica para decisão consciente do usuário, com o trade-off
+registrado aqui.
+
+**Status**: **NÃO CORRIGIDO** — comportamento histórico preservado de
+propósito (fora do escopo autorizado do CAP-08A: corrigir contrato público
+não é decisão do executor). Pendente de decisão do usuário.
+
+---
+
+## F122 — a guarda `missing session id` de `SendContactHandler`/
+`SendLocationHandler` ficou sem NENHUM teste depois da migração CAP-08A/08B;
+o comentário de `handler_interactive_test.go` afirma o contrário
+
+**Data**: 2026-08-18. **Contexto**: FIX-08, restaurando o eixo CORPO
+MALFORMADO que a avaliação EVAL-08 apontou como perdido nas duas ServeHTTP.
+Ao recontar a cobertura depois do conserto, o eixo restaurado explicou
+apenas PARTE da queda — sobrou um segundo bloco descoberto, que o packet
+do FIX-08 não tinha diagnosticado.
+
+**Onde**: `pkg/presentation/http/handlers/handler_interactive.go:38-43`
+(SendContact) e `:83-88` (SendLocation) — o mesmo bloco nos dois:
+```go
+txtID := info.Get("Id")
+if txtID == "" {
+    hlog.FromRequest(r).Warn().Err(errMissingSessionID).Str("route", route).Msg("request rejected")
+    customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
+    return
+}
+```
+A afirmação falsa está em `handler_interactive_test.go:96-103`: o comentário
+diz que os eixos "unauthorized, missing session id, malformed body, ..."
+foram *realocados* para `handler_send_location_test.go` e
+`handler_send_contact_test.go`, e que "Nenhum eixo foi removido, só
+realocado". `missing session id` NÃO foi realocado — não existe nenhum
+teste dele nos dois arquivos novos.
+
+**Problema**: o bloco não é exercitado por nenhum teste. Evidência medida
+nesta sessão, com os dois testes do FIX-08 já no lugar:
+```
+$ go tool cover -func=/tmp/fix08.cov | grep -E 'handler_interactive.go:(28|73)'
+handler_interactive.go:28:  ServeHTTP    86.4%
+handler_interactive.go:73:  ServeHTTP    86.4%
+$ grep handler_interactive.go /tmp/fix08.cov | grep ' 0$'
+handler_interactive.go:39.17,43.3 3 0
+handler_interactive.go:84.17,88.3 3 0
+```
+Ou seja: 22 statements por função, 16 cobertos antes do FIX-08 (72,7%), 19
+depois (86,4%), e os 3 que faltam em cada uma são exatamente esse bloco. É
+por isso que a cobertura NÃO volta aos 100,0% que o EVAL-08 mediu antes da
+migração — o eixo `missing session id` é a outra metade da queda.
+
+Consequência prática: uma sessão autenticada mas sem `Id` (o caso que o
+bloco existe para tratar) devolveria hoje 400 por acidente do use case
+(`missing_phone` etc.) ou 500, e nenhum teste notaria — é o mesmo padrão da
+ARMADILHA 2 deste repo, guarda sem cobertura pela rota registrada.
+
+**Correção sugerida**: acrescentar
+`TestSendLocation_MissingSessionID_ViaRegisteredRoute` e
+`TestSendContact_MissingSessionID_ViaRegisteredRoute` nos dois arquivos, no
+mesmo padrão do teste de corpo malformado desta sessão: rota gorilla/mux
+REGISTRADA (helpers `sendLocationServe`/`sendContactServe`), requisição
+autenticada com `Id` VAZIO (`withUser(r, "")`), `assertErrorEnvelope(...,
+http.StatusBadRequest)`, causa travada no log via `logassert.OutcomeLogged
+(t, recs, "missing session id")` — sem a asserção da CAUSA o teste não morde,
+porque o use case também produz 400 (foi o que o controle negativo do
+FIX-08 mostrou) — e `len(sm.SendXxxCalls) == 0`. Isso leva as duas ServeHTTP
+de volta a 100,0%. Corrigir junto o comentário de
+`handler_interactive_test.go:96-103`, que hoje é falso.
+
+**Status**: **CORRIGIDO** nesta mesma sessão (FIX-08, segundo dispatch, depois
+da autorização explícita do coordenador — o primeiro `ask`, thread
+`msg_aadf364a3add`, tinha expirado em 900s sem resposta, e por isso nada
+havia sido corrigido de graça).
+
+Travado por `TestSendLocation_MissingSessionID_ViaRegisteredRoute`
+(`pkg/presentation/http/handlers/handler_send_location_test.go`) e
+`TestSendContact_MissingSessionID_ViaRegisteredRoute`
+(`pkg/presentation/http/handlers/handler_send_contact_test.go`): rota
+gorilla/mux REGISTRADA, requisição AUTENTICADA com `Id` vazio, corpo VÁLIDO
+de propósito (se a guarda não disparar, nada mais impede o envio),
+`assertErrorEnvelope(..., 400)`, `len(sm.SendXxxCalls) == 0` e a CAUSA
+travada por `logassert.OutcomeLogged(t, recs, "missing session id")`.
+
+Controle negativo EXECUTADO nos dois (`if txtID == "" && false {`, edição de
+uma linha, revertida por edição localizada):
+```
+--- FAIL: TestSendLocation_MissingSessionID_ViaRegisteredRoute (0.00s)
+    handler_send_location_test.go:330: status: got 200, want 400 (corpo: {"code":200,"data":{"message_id":"sent-location-message-id","timestamp":-62135596800,"status":"sent"},"success":true})
+--- FAIL: TestSendContact_MissingSessionID_ViaRegisteredRoute (0.00s)
+    handler_send_contact_test.go:301: status: got 200, want 400 (corpo: {"code":200,"data":{"message_id":"sent-contact-message-id","timestamp":-62135596800,"status":"sent"},"success":true})
+```
+A mutação não produz um 400 por outra causa: ela deixa a requisição SEM
+session id chegar até a porta e devolver 200 com mensagem enviada — que é
+exatamente o defeito que a guarda existe para impedir.
+
+Cobertura das duas `ServeHTTP` de volta a **100,0%** (de 72,7% antes do
+FIX-08 e 86,4% depois de restaurado só o eixo de corpo malformado), sem
+nenhum bloco descoberto restante em `handler_interactive.go` nas duas
+funções.
+
+**Auditoria do comentário inteiro** (terceiro dispatch do FIX-08): o
+comentário de `handler_interactive_test.go:96-103` afirmava OITO eixos
+realocados. Auditados um a um, **três** não tinham vindo junto — os dois
+acima mais `wrong type in context` (contexto com valor que não satisfaz
+`userInfo` tem de virar 401, não pânico) — e um quarto, `ausência de log no
+caminho feliz`, também não existia nos arquivos novos. Os quatro passaram a
+existir:
+
+- `TestSendXxx_WrongTypeInContext_ViaRegisteredRoute`. Controle negativo
+  EXECUTADO (asserção de duas variáveis trocada pela de uma, `info :=
+  ...(userInfo)`, que COMPILA — `go build` OK — e falha):
+  `panic: interface conversion: int is not handlers.userInfo: missing method
+  Get`, em `handler_interactive.go:76` (Location) e `:31` (Contact). É o
+  pânico exato que o eixo existe para impedir.
+- `TestSendXxx_SuccessEmitsNoOutcomeLog`. Controle negativo EXECUTADO (o
+  handler passa a logar todo request servido em warn com campo `error`):
+  `caminho de sucesso emitiu registro de erro: {"level":"warn",...,"error":
+  "unauthorized","route":"/chat/send/contact","message":"request served"}` e
+  o equivalente para `/chat/send/location`. É o Cenário 2 da Fase 12 — um
+  handler que loga tudo passa em TODA asserção de caminho de erro e ainda
+  assim é ruído.
+
+Uma premissa do diagnóstico inicial estava errada e fica corrigida aqui:
+supôs-se que os eixos de log não pudessem ser exercitados nos arquivos novos
+porque os helpers usam `silentLogger{}`. `silentLogger` é o logger do USE
+CASE; o registro do handler sai por `hlog.FromRequest`, que
+`logassert.Wrap` captura. Por isso `no-secret-leak` já estava de fato
+realocado (`TestSendXxx_NoSecretLeak`) e `ausência de log no caminho feliz`
+pôde ser realocado de verdade, sem trocar o dublê.
+
+O comentário foi reescrito para listar os oito eixos **nome por nome**, com
+o teste de destino de cada um — verificável por `grep`, em vez de uma
+afirmação em bloco.
+
+**Diferença residual fechada** (quarto dispatch do FIX-08): os destinos de
+`session failure` e `campo obrigatório ausente` asseveravam status e porta
+intocada, mas não a CAUSA no log (co-gate D), que a tabela original exigia
+nos dois. Os quatro testes (`TestSendXxx_SessionFailure` e
+`TestSendXxx_RejectMissingRequiredField`) passaram a usar o helper novo
+`sendXxxServeCapturingLog` — o `sendXxxServe` acrescido da saída de log — e
+a asseverar `logassert.OutcomeLogged` com a causa: o token sentinela do
+arquivo para a falha de sessão, e a causa por campo (`missing Phone/
+Latitude/Longitude in payload`, `missing Phone/Name/Vcard in payload`) na
+tabela de campo obrigatório, que virou `map[string]struct{ body, cause }`.
+
+Controle negativo EXECUTADO, desenhado para ISOLAR a asserção nova — a
+mutação preserva o status e troca só a causa registrada
+(`Error().Err(err)` -> `Err(errUnauthorized)` em `handler_interactive.go:54`
+e `:99`), de modo que a checagem de status antiga continua passando e só o
+co-gate D morde. Compila (`go build` OK) e falha nas oito sub-asserções:
+```
+--- FAIL: TestSendContact_RejectMissingRequiredField/Phone
+    co-gate D: campo `error` ("unauthorized") nao contem "missing Phone in payload"
+--- FAIL: TestSendContact_RejectMissingRequiredField/Name
+    co-gate D: campo `error` ("unauthorized") nao contem "missing Name in payload"
+--- FAIL: TestSendContact_RejectMissingRequiredField/Vcard
+    co-gate D: campo `error` ("unauthorized") nao contem "missing Vcard in payload"
+--- FAIL: TestSendContact_SessionFailure
+    co-gate D: campo `error` ("unauthorized") nao contem "send-contact-sentinel-cause-4e8a2b"
+--- FAIL: TestSendLocation_RejectMissingRequiredField/{Phone,Latitude,Longitude}
+    co-gate D: campo `error` ("unauthorized") nao contem "missing {Phone,Latitude,Longitude} in payload"
+--- FAIL: TestSendLocation_SessionFailure
+    co-gate D: campo `error` ("unauthorized") nao contem "send-location-sentinel-cause-7f3c1d"
+```
+Os oito eixos ficam preservados — mas **não** "sem ressalva", que foi como
+esta entrada e o comentário afirmaram por um tempo. A medição: **cinco** dos
+oito destinos asseveram também a CAUSA no log (`missing session id`,
+`malformed body`, `campo obrigatório ausente`, `session failure`, `wrong type
+in context`). Os outros três não asseveram, e por motivos diferentes:
+
+- `no-secret-leak` e `ausência de log no caminho feliz` asseveram AUSÊNCIA
+  (nenhum segredo em nenhum registro; nenhum registro de erro num 200), e por
+  isso não comportam `logassert.OutcomeLogged`, que exige a PRESENÇA de um
+  registro de saída. Não é lacuna: é o eixo oposto.
+- `unauthorized` (`TestSendXxx_RejectUnauthenticated`) assevera só status e
+  porta intocada. A causa desse ramo fica travada por
+  `TestSendXxx_WrongTypeInContext_ViaRegisteredRoute`, porque a guarda é UMA
+  só (`if !ok || info == nil`, `handler_interactive.go:32` e `:77`) e emite
+  UMA linha de log — os dois casos caem no mesmo ramo.
+
+**Como o erro apareceu**: pela RE-EVAL-08, que reprovou as duas capabilities
+por este único ponto — o comentário afirmava "os oito destinos asseveram
+também a CAUSA no log ... não há diferença residual", e são cinco. A prova
+não é leitura, é o controle negativo NC-2 do avaliador: corrompida a causa do
+ramo `unauthorized`, `TestSendXxx_RejectUnauthenticated` **PASSOU** e só
+`WrongTypeInContext_ViaRegisteredRoute` mordeu. Evidência medida, não
+opinião — e exatamente o padrão que o teste do co-gate D existe para expor.
+
+O comentário de `handler_interactive_test.go` (hoje 96-140) foi corrigido
+para dizer isto, incluindo que só DOIS destinos usam o helper
+`sendXxxServeCapturingLog` (`campo obrigatório ausente` e `session failure`)
+enquanto os demais montam `logassert.Wrap` inline — outra imprecisão da mesma
+rodada. Esta entrada e aquele comentário estão alinhados: nenhum dos dois
+afirma mais equivalência total entre os oito destinos e a tabela original.
+
+A lição, que é o motivo de estar registrada aqui e não só no comentário: as
+duas afirmações falsas desta sessão ("nenhum eixo foi removido, só realocado"
+e "os oito destinos asseveram a causa") eram do MESMO tipo — resumo em bloco
+de um conjunto, escrito sem enumerar o conjunto. As duas passaram por testes
+verdes e por `make check`. O que as pegou foi contar item a item; o que as
+produziu foi descrever em vez de contar.

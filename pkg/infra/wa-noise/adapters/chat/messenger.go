@@ -373,9 +373,83 @@ func (a *ChatMessengerAdapter) SendSticker(ctx context.Context, txtID string, ta
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendLocation monta um LocationMessage a partir de payload e o envia para
+// target (CAP-08A). Só DegreesLatitude/DegreesLongitude/Name são
+// preenchidos — nenhum outro campo do protobuf (Address/URL/IsLive/
+// AccuracyInMeters/SpeedInMps/DegreesClockwiseFromMagneticNorth/Comment/
+// JPEGThumbnail), mesma disciplina do histórico
+// (`git show 41bc8e2^:handlers.go`). Sem upload, sem fetch: os três campos
+// já chegam prontos no payload.
+func (a *ChatMessengerAdapter) SendLocation(ctx context.Context, txtID string, target domain.JID, payload domain.LocationPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		LocationMessage: &waE2E.LocationMessage{
+			DegreesLatitude:  proto.Float64(payload.Latitude),
+			DegreesLongitude: proto.Float64(payload.Longitude),
+			Name:             proto.String(payload.Name),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// SendContact monta um ContactMessage a partir de payload e o envia para
+// target (CAP-08B). Só DisplayName/Vcard são preenchidos — nenhum outro
+// campo do protobuf (IsSelfContact), mesma disciplina do histórico
+// (`git show 41bc8e2^:handlers.go`). payload.Vcard é repassado como STRING
+// crua, sem parse nem validação de formato.
+func (a *ChatMessengerAdapter) SendContact(ctx context.Context, txtID string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		ContactMessage: &waE2E.ContactMessage{
+			DisplayName: proto.String(payload.Name),
+			Vcard:       proto.String(payload.Vcard),
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
-	_ appport.ChatMessenger  = (*ChatMessengerAdapter)(nil)
-	_ appport.TextMessenger  = (*ChatMessengerAdapter)(nil)
-	_ appport.MediaMessenger = (*ChatMessengerAdapter)(nil)
+	_ appport.ChatMessenger   = (*ChatMessengerAdapter)(nil)
+	_ appport.TextMessenger   = (*ChatMessengerAdapter)(nil)
+	_ appport.MediaMessenger  = (*ChatMessengerAdapter)(nil)
+	_ appport.SimpleMessenger = (*ChatMessengerAdapter)(nil)
 )

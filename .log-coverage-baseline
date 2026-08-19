@@ -746,6 +746,26 @@ rules_frozen=true
 # UNICA cobertura artificial; min_eligible NAO muda (627), so' `covered`
 # cai 425->424.
 min_func_coverage=676
+# CAP-08A/CAP-08B (2026-08-18): POST /chat/send/location e
+# POST /chat/send/contact passaram a montar o protobuf e enviar de verdade,
+# via nova porta port.SimpleMessenger implementada em ChatMessengerAdapter.
+# Duas funcoes novas ELEGIVEIS, mesmo padrao "adapter nao loga" ja' aceito
+# para Image/Document/Audio/Video/Sticker (ver FIX-07 acima — quem loga e' o
+# USE CASE via appport.Logger, o adapter so' monta e propaga):
+# ChatMessengerAdapter.SendLocation e ChatMessengerAdapter.SendContact
+# (pkg/infra/wa-noise/adapters/chat/messenger.go), ambas uncovered por
+# design. `covered` NAO muda (424->424); so' o denominador cresce
+# (627->629). func_coverage cai 676->674 so' pela aritmetica
+# (424/629 = 67.41% vs 424/627 = 67.62%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado no
+# worktree de baseline (HEAD 67fe1c6, `git worktree add /tmp/cap08-baseline
+# 67fe1c6`) vs no estado final: diff mostra APENAS as duas linhas novas
+# (SendLocation, SendContact) sendo ACRESCENTADAS, nenhuma linha removida.
+# errpath sobe 853->854 (1122/1315=85.32% -> 1132/1325=85.43%): os dois use
+# cases (SendLocationUseCase.Execute/SendContactUseCase.Execute) migraram de
+# stub "validated" para envio real, e os caminhos de saida novos (invalid
+# JID, downstream failure) nascem cobertos por Warn/Error existentes.
+min_func_coverage=674
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -831,7 +851,17 @@ min_func_coverage=676
 # Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
 # `logcov -list-uncovered` (HEAD 643c65b vs estado final) citado em
 # min_func_coverage: so' ACRESCIMO, nenhuma remocao.
-min_errpath_coverage=853
+# CAP-08A/CAP-08B (2026-08-18): errpaths sobe 1315->1325 (+10) e
+# errpaths_covered sobe 1122->1132 (+10) — ganho liquido igual ao
+# acrescimo, entao a razao SOBE (853->854). Os caminhos de saida novos vem
+# de SendLocationUseCase.Execute/SendContactUseCase.Execute migrando de
+# stub "validated" para envio real: missing_phone/missing_latitude/
+# missing_longitude/missing_name/missing_vcard (ja existiam, preservados),
+# mais invalid_phone e a propagacao de erro de SendLocation/SendContact —
+# todos cobertos por Warn/Error existentes no use case, mesmo padrao ja'
+# aceito para os demais send_*. Nenhum errpath ja' coberto regrediu —
+# mesmo diff de `logcov -list-uncovered` citado em min_func_coverage.
+min_errpath_coverage=854
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -951,7 +981,10 @@ min_errpath_coverage=853
 # racional que libera zerolog em outros adapters de infra — e
 # SendStickerUseCase.Execute manteve o log via appport.Logger, como os
 # demais Execute de send_*.
-min_eligible=627
+# CAP-08A/CAP-08B (2026-08-18): +2 elegiveis novos — ChatMessengerAdapter.
+# SendLocation e ChatMessengerAdapter.SendContact (627->629). Ver
+# justificativa completa em min_func_coverage acima.
+min_eligible=629
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

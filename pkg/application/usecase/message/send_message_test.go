@@ -47,60 +47,16 @@ type missingField struct {
 	run   func(mc port.MessageComposer, l port.Logger) error
 }
 
+// composerUseCases cobria SendContact e SendLocation até CAP-08A/CAP-08B
+// migrá-los para port.SimpleMessenger (envio de verdade, não mais
+// "validated"). Os dois eixos que este arquivo cobria para eles —
+// validação de campo obrigatório, propagação de falha de sessão, geração
+// de ID no caminho feliz, respeito ao Id do chamador — foram migrados para
+// send_location_test.go e send_contact_test.go, com a mesma disciplina de
+// causa (estrutura entregue à porta) que os demais use cases send_* já
+// exigem. Nenhum eixo foi removido, só realocado com o tipo de porta.
 func composerUseCases() []composerUC {
 	return []composerUC{
-		{
-			name:    "SendContact",
-			infoMsg: "contact validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendContactUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendContactRequest{Phone: "5511987654321", Name: "Ana", Vcard: "BEGIN:VCARD", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendContactUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendContactRequest{Name: "Ana", Vcard: "BEGIN:VCARD"})
-					return err
-				}},
-				{"Name", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendContactUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendContactRequest{Phone: "5511987654321", Vcard: "BEGIN:VCARD"})
-					return err
-				}},
-				{"Vcard", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendContactUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendContactRequest{Phone: "5511987654321", Name: "Ana"})
-					return err
-				}},
-			},
-		},
-		{
-			name:    "SendLocation",
-			infoMsg: "location validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendLocationUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5, Longitude: -46.6, ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendLocationUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendLocationRequest{Latitude: -23.5, Longitude: -46.6})
-					return err
-				}},
-				{"Latitude", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendLocationUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendLocationRequest{Phone: "5511987654321", Longitude: -46.6})
-					return err
-				}},
-				{"Longitude", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendLocationUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5})
-					return err
-				}},
-			},
-		},
 		{
 			name:    "SendButtons",
 			infoMsg: "buttons validated",

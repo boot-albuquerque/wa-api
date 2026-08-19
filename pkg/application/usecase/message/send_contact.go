@@ -8,21 +8,29 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// SendContactUseCase encapsula a validação de envio de contato.
+// SendContactUseCase envia um contato de verdade: monta o ContactMessage a
+// partir dos campos escalares do request (sem upload, sem fetch, sem
+// conversão) e o envia pelo wa-noise. Só devolve domain.StatusSent depois
+// que o envio retorna sucesso — nunca antes (mesma disciplina de
+// SendMessageUseCase, CAP-01).
 type SendContactUseCase struct {
-	messages appport.MessageComposer
+	messages appport.SimpleMessenger
+	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewSendContactUseCase cria uma nova instância do usecase.
-func NewSendContactUseCase(mc appport.MessageComposer, l appport.Logger) *SendContactUseCase {
+func NewSendContactUseCase(sm appport.SimpleMessenger, jr appport.JIDResolver, l appport.Logger) *SendContactUseCase {
 	return &SendContactUseCase{
-		messages: mc,
+		messages: sm,
+		jids:     jr,
 		logger:   l,
 	}
 }
 
-// Execute valida os campos obrigatórios e verifica se o cliente está disponível.
+// Execute valida os campos obrigatórios, resolve o destinatário e envia o
+// contato pela porta de verdade. req.Vcard é repassado como STRING crua,
+// sem parse nem validação de formato — mesma disciplina do histórico.
 func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req domain.SendContactRequest) (*domain.SendContactResult, error) {
 	if req.Phone == "" {
 		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
@@ -39,21 +47,26 @@ func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req dom
 		return nil, err
 	}
 
-	msgID := req.ID
-	if msgID == "" {
-		generated, err := uc.messages.NewMessageID(ctx, txtID)
-		if err != nil {
-			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
-			return nil, err
-		}
-		msgID = generated
+	recipient, err := uc.jids.ResolveJID(ctx, req.Phone)
+	if err != nil {
+		uc.logger.Warn(ctx, "invalid phone in send contact payload", "txtID", txtID, "error", err)
+		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
+	}
+
+	payload := domain.ContactPayload{Name: req.Name, Vcard: req.Vcard}
+
+	sent, err := uc.messages.SendContact(ctx, txtID, recipient, payload, req.ID)
+	if err != nil {
+		uc.logger.Error(ctx, "failed to send contact message", "txtID", txtID, "error", err)
+		return nil, err
 	}
 
 	result := &domain.SendContactResult{
-		MessageID: msgID,
-		Status:    "validated",
+		MessageID: sent.ID,
+		Timestamp: sent.Timestamp.Unix(),
+		Status:    domain.StatusSent,
 	}
 
-	uc.logger.Info(ctx, "contact validated", "msgID", msgID)
+	uc.logger.Info(ctx, "contact sent", "msgID", result.MessageID)
 	return result, nil
 }

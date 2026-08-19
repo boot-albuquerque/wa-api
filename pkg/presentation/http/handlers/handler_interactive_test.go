@@ -93,27 +93,54 @@ type interactiveCase struct {
 	emptyBodyErr string
 }
 
+// interactiveCases cobria SendContact e SendLocation até CAP-08A/CAP-08B
+// migrá-los para port.SimpleMessenger (envio de verdade). Os oito eixos que
+// esta tabela cobria para os dois foram realocados para
+// handler_send_location_test.go e handler_send_contact_test.go, no mesmo
+// padrão de handler_send_video_test.go (rota gorilla/mux registrada). O
+// destino de cada um, por nome — `Xxx` é `Location` ou `Contact`:
+//
+//	unauthorized                     TestSendXxx_RejectUnauthenticated
+//	missing session id               TestSendXxx_MissingSessionID_ViaRegisteredRoute
+//	malformed body                   TestSendXxx_MalformedBody_ViaRegisteredRoute
+//	campo obrigatório ausente        TestSendXxx_RejectMissingRequiredField
+//	session failure                  TestSendXxx_SessionFailure
+//	wrong type in context            TestSendXxx_WrongTypeInContext_ViaRegisteredRoute
+//	no-secret-leak                   TestSendXxx_NoSecretLeak
+//	ausência de log no caminho feliz TestSendXxx_SuccessEmitsNoOutcomeLog
+//
+// Esta lista é verificável nome por nome, de propósito: a versão anterior
+// deste comentário afirmava a realocação em bloco, e três dos oito eixos
+// (malformed body, missing session id, wrong type in context) não tinham
+// vindo junto — foi o que reprovou a EVAL-08, com as duas ServeHTTP caindo
+// de 100,0% para 72,7% de cobertura. Ver HOUSEKEEP.md F122.
+//
+// CINCO dos oito destinos asseveram também a CAUSA no log (co-gate D,
+// `logassert.OutcomeLogged`): `missing session id`, `malformed body`, `campo
+// obrigatório ausente`, `session failure` e `wrong type in context`. Isso
+// importa porque o envelope de erro deste repo é o genérico "bad request" —
+// sem a causa, duas rejeições diferentes com o mesmo status são
+// indistinguíveis, e o teste passa com o defeito no lugar. Os outros três,
+// e por quê:
+//
+//   - `no-secret-leak` e `ausência de log no caminho feliz` asseveram
+//     AUSÊNCIA (nenhum segredo em nenhum registro; nenhum registro de erro
+//     num 200), e por isso não comportam `OutcomeLogged`, que exige a
+//     PRESENÇA de um registro de saída.
+//   - `unauthorized` (TestSendXxx_RejectUnauthenticated) assevera só status e
+//     porta intocada. A causa desse ramo é travada por
+//     `TestSendXxx_WrongTypeInContext_ViaRegisteredRoute`, porque a guarda é
+//     UMA só (`if !ok || info == nil`, handler_interactive.go:32 e :77) e
+//     emite UMA linha de log — os dois casos caem no mesmo ramo.
+//
+// Só DOIS destinos usam o helper
+// `sendLocationServeCapturingLog`/`sendContactServeCapturingLog`, que é o
+// `sendXxxServe` acrescido da saída de log da requisição: `campo obrigatório
+// ausente` e `session failure`. Os que precisam do log e não usam o helper
+// montam `logassert.Wrap` inline, no padrão de `handler_send_video_test.go`.
 func interactiveCases() []interactiveCase {
 	log := &contractsfake.Logger{}
 	return []interactiveCase{
-		{
-			name: "SendContact",
-			path: "/chat/send/contact",
-			build: func(mc *contractsfake.MessageComposer) http.Handler {
-				return NewSendContactHandler(message.NewSendContactUseCase(mc, log))
-			},
-			validBody:    `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`,
-			emptyBodyErr: "missing Phone in payload",
-		},
-		{
-			name: "SendLocation",
-			path: "/chat/send/location",
-			build: func(mc *contractsfake.MessageComposer) http.Handler {
-				return NewSendLocationHandler(message.NewSendLocationUseCase(mc, log))
-			},
-			validBody:    `{"Phone":"5511999999999","Latitude":-23.5,"Longitude":-46.6}`,
-			emptyBodyErr: "missing Phone in payload",
-		},
 		{
 			name: "SendButtons",
 			path: "/chat/send/buttons",

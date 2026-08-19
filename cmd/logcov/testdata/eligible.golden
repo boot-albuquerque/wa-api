@@ -1814,6 +1814,8 @@ pkg/application/contracts/contractsfake.SessionRegistry.ProvisionWebhookClient	E
 pkg/application/contracts/contractsfake.SessionRegistry.Register	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionRegistry.Unregister	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionStatusReader.SessionStatus	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SimpleMessenger.SendContact	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SimpleMessenger.SendLocation	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StickerProcessor.ProcessSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
@@ -1924,14 +1926,14 @@ pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret
 pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:69);uncovered:L2(S-ret,send_audio.go:72);uncovered:L2(S-ret,send_audio.go:124);uncovered:L2(S-ret,send_audio.go:129)
 pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
 pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:28);uncovered:L2(S-ret,send_buttons.go:31)
-pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:28);uncovered:L2(S-ret,send_contact.go:31);uncovered:L2(S-ret,send_contact.go:34)
+pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:28);uncovered:L2(S-ret,send_edit_message.go:31);uncovered:L2(S-ret,send_edit_message.go:34)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:28);uncovered:L2(S-ret,send_list.go:31)
-pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:28);uncovered:L2(S-ret,send_location.go:31);uncovered:L2(S-ret,send_location.go:34)
+pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:42);uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:28);uncovered:L2(S-ret,send_poll.go:31);uncovered:L2(S-ret,send_poll.go:34)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
@@ -2514,8 +2516,10 @@ pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:45)
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendLocation	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1

@@ -1098,3 +1098,193 @@ func TestChatMessengerAdapter_SendVideo_WithCallerID(t *testing.T) {
 		t.Errorf("SendVideo ID = %q, want %q", res.ID, "caller-id")
 	}
 }
+
+// --- ChatMessengerAdapter.SendLocation (CAP-08A) ------------------------
+
+func TestChatMessengerAdapter_SendLocation_NoSession(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
+	_, err := a.SendLocation(context.Background(), "u1", "x@y.com", domain.LocationPayload{Latitude: -23.5505, Longitude: -46.6333}, "")
+	if err == nil {
+		t.Fatal("SendLocation sem sessao nao devolveu erro")
+	}
+}
+
+func TestChatMessengerAdapter_SendLocation_InvalidJID(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": &testkit.Fake{}}))
+	badJID := domain.JID(string([]byte{0x00}))
+	if _, err := a.SendLocation(context.Background(), "u1", badJID, domain.LocationPayload{}, ""); err == nil {
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
+	}
+}
+
+func TestChatMessengerAdapter_SendLocation_PropagatesError(t *testing.T) {
+	sdkErr := errors.New("sdk boom location")
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		return wanoise.SendResponse{}, sdkErr
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	if _, err := a.SendLocation(context.Background(), "u1", "x@y.com", domain.LocationPayload{Latitude: -23.5505, Longitude: -46.6333}, ""); err == nil {
+		t.Fatal("SendLocation não propagou erro")
+	}
+}
+
+// TestChatMessengerAdapter_SendLocation_OK prova a ESTRUTURA montada:
+// LocationMessage recebe EXATAMENTE DegreesLatitude/DegreesLongitude/Name
+// — nenhum outro campo do protobuf (Address/URL/IsLive/AccuracyInMeters/
+// SpeedInMps/DegreesClockwiseFromMagneticNorth/Comment/JPEGThumbnail).
+func TestChatMessengerAdapter_SendLocation_OK(t *testing.T) {
+	now := time.Now()
+	var gotTo types.JID
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotTo = to
+		gotMsg = m
+		return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id-location")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	payload := domain.LocationPayload{Latitude: -23.5505, Longitude: -46.6333, Name: "Praça da Sé"}
+	res, err := a.SendLocation(context.Background(), "u1", "x@y.com", payload, "")
+	if err != nil {
+		t.Fatalf("SendLocation = %v", err)
+	}
+	if gotTo.String() != "x@y.com" {
+		t.Errorf("destinatario = %q, want %q", gotTo.String(), "x@y.com")
+	}
+	loc := gotMsg.GetLocationMessage()
+	if loc == nil {
+		t.Fatal("LocationMessage nao foi montado")
+	}
+	if loc.GetDegreesLatitude() != -23.5505 {
+		t.Errorf("DegreesLatitude = %v, want %v", loc.GetDegreesLatitude(), -23.5505)
+	}
+	if loc.GetDegreesLongitude() != -46.6333 {
+		t.Errorf("DegreesLongitude = %v, want %v", loc.GetDegreesLongitude(), -46.6333)
+	}
+	if loc.GetName() != "Praça da Sé" {
+		t.Errorf("Name = %q, want %q", loc.GetName(), "Praça da Sé")
+	}
+	if loc.Address != nil || loc.URL != nil || loc.IsLive != nil || loc.AccuracyInMeters != nil ||
+		loc.SpeedInMps != nil || loc.DegreesClockwiseFromMagneticNorth != nil || loc.Comment != nil || loc.JPEGThumbnail != nil {
+		t.Errorf("LocationMessage preencheu campo alem dos tres historicos: %+v", loc)
+	}
+	if res.Timestamp != now {
+		t.Errorf("SendLocation timestamp = %v, want %v", res.Timestamp, now)
+	}
+	if res.ID != "wire-id-location" {
+		t.Errorf("SendLocation ID = %q, want %q (o que resp devolveu)", res.ID, "wire-id-location")
+	}
+}
+
+// TestChatMessengerAdapter_SendLocation_WithCallerID: quando id não é
+// vazio, vira RequestExtra.ID — o SDK que decide o ID final.
+func TestChatMessengerAdapter_SendLocation_WithCallerID(t *testing.T) {
+	var gotExtra []wanoise.SendRequestExtra
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotExtra = extra
+		return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendLocation(context.Background(), "u1", "x@y.com", domain.LocationPayload{Latitude: -23.5505, Longitude: -46.6333}, "caller-id")
+	if err != nil {
+		t.Fatalf("SendLocation = %v", err)
+	}
+	if len(gotExtra) != 1 || string(gotExtra[0].ID) != "caller-id" {
+		t.Fatalf("RequestExtra.ID nao recebeu o id do chamador: %+v", gotExtra)
+	}
+	if res.ID != "caller-id" {
+		t.Errorf("SendLocation ID = %q, want %q", res.ID, "caller-id")
+	}
+}
+
+// --- ChatMessengerAdapter.SendContact (CAP-08B) --------------------------
+
+func TestChatMessengerAdapter_SendContact_NoSession(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
+	_, err := a.SendContact(context.Background(), "u1", "x@y.com", domain.ContactPayload{Name: "Alice", Vcard: "BEGIN:VCARD"}, "")
+	if err == nil {
+		t.Fatal("SendContact sem sessao nao devolveu erro")
+	}
+}
+
+func TestChatMessengerAdapter_SendContact_InvalidJID(t *testing.T) {
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": &testkit.Fake{}}))
+	badJID := domain.JID(string([]byte{0x00}))
+	if _, err := a.SendContact(context.Background(), "u1", badJID, domain.ContactPayload{}, ""); err == nil {
+		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
+	}
+}
+
+func TestChatMessengerAdapter_SendContact_PropagatesError(t *testing.T) {
+	sdkErr := errors.New("sdk boom contact")
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		return wanoise.SendResponse{}, sdkErr
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	if _, err := a.SendContact(context.Background(), "u1", "x@y.com", domain.ContactPayload{Name: "Alice", Vcard: "BEGIN:VCARD"}, ""); err == nil {
+		t.Fatal("SendContact não propagou erro")
+	}
+}
+
+// TestChatMessengerAdapter_SendContact_OK prova a ESTRUTURA montada:
+// ContactMessage recebe EXATAMENTE DisplayName/Vcard — nenhum outro campo
+// do protobuf (IsSelfContact), e Vcard chega como string crua.
+func TestChatMessengerAdapter_SendContact_OK(t *testing.T) {
+	now := time.Now()
+	var gotTo types.JID
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotTo = to
+		gotMsg = m
+		return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id-contact")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	vcard := "BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"
+	payload := domain.ContactPayload{Name: "Alice", Vcard: vcard}
+	res, err := a.SendContact(context.Background(), "u1", "x@y.com", payload, "")
+	if err != nil {
+		t.Fatalf("SendContact = %v", err)
+	}
+	if gotTo.String() != "x@y.com" {
+		t.Errorf("destinatario = %q, want %q", gotTo.String(), "x@y.com")
+	}
+	contact := gotMsg.GetContactMessage()
+	if contact == nil {
+		t.Fatal("ContactMessage nao foi montado")
+	}
+	if contact.GetDisplayName() != "Alice" {
+		t.Errorf("DisplayName = %q, want %q", contact.GetDisplayName(), "Alice")
+	}
+	if contact.GetVcard() != vcard {
+		t.Errorf("Vcard = %q, want %q (string crua, sem parse)", contact.GetVcard(), vcard)
+	}
+	if contact.IsSelfContact != nil {
+		t.Errorf("ContactMessage preencheu IsSelfContact, campo alem dos dois historicos: %+v", contact)
+	}
+	if res.Timestamp != now {
+		t.Errorf("SendContact timestamp = %v, want %v", res.Timestamp, now)
+	}
+	if res.ID != "wire-id-contact" {
+		t.Errorf("SendContact ID = %q, want %q (o que resp devolveu)", res.ID, "wire-id-contact")
+	}
+}
+
+// TestChatMessengerAdapter_SendContact_WithCallerID: quando id não é
+// vazio, vira RequestExtra.ID — o SDK que decide o ID final.
+func TestChatMessengerAdapter_SendContact_WithCallerID(t *testing.T) {
+	var gotExtra []wanoise.SendRequestExtra
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotExtra = extra
+		return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	res, err := a.SendContact(context.Background(), "u1", "x@y.com", domain.ContactPayload{Name: "Alice", Vcard: "BEGIN:VCARD"}, "caller-id")
+	if err != nil {
+		t.Fatalf("SendContact = %v", err)
+	}
+	if len(gotExtra) != 1 || string(gotExtra[0].ID) != "caller-id" {
+		t.Fatalf("RequestExtra.ID nao recebeu o id do chamador: %+v", gotExtra)
+	}
+	if res.ID != "caller-id" {
+		t.Errorf("SendContact ID = %q, want %q", res.ID, "caller-id")
+	}
+}
