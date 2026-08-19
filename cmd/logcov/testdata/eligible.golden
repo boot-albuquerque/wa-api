@@ -1775,7 +1775,6 @@ pkg/application/contracts/contractsfake.MediaMessenger.SendDocument	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendImage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendVideo	EXCLUDED	X5
-pkg/application/contracts/contractsfake.MessageComposer.NewMessageID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishError	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishEvent	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishMessage	EXCLUDED	X5
@@ -2552,10 +2551,8 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovere
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	ELIGIBLE	uncovered:L1
-pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X1
-pkg/infra/wa-noise/adapters/chat.NewMessageComposerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.bizNativeFlowNodes	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.downloadableFor	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,downloader.go:123)
 pkg/infra/wa-noise/adapters/chat.listBizNodes	EXCLUDED	X1

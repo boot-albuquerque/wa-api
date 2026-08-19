@@ -979,7 +979,14 @@ rules_frozen=true
 #     normalizeInteractiveButtons (F148) acima.
 # nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
 # nenhuma linha, coberta ou nao.
-min_func_coverage=659
+# CAP-23 (2026-08-19): 659->660 (426/646=65.9% -> 426/645=66.0%). Andaime
+# orfao removido apos o CAP-22 migrar o ultimo consumidor de
+# port.MessageComposer: a interface, o MessageComposerAdapter.NewMessageID
+# (infra/wa-noise/adapters/chat) e o dublê contractsfake.MessageComposer.
+# covered fica em 426 — a unica funcao elegivel removida
+# (MessageComposerAdapter.NewMessageID) ja' estava descoberta
+# (golden: "uncovered:L1"), entao numerador nao muda, so' o denominador cai.
+min_func_coverage=660
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1164,6 +1171,12 @@ min_func_coverage=659
 # saidas novas dele (invalid phone, falha do envio) nascem cobertas pelos
 # Warn/Error que o proprio use case emite; as do adapter nao, pelo mesmo
 # padrao "adapter delegante nao loga" registrado em min_func_coverage acima.
+# CAP-23 (2026-08-19): 860 (tenths inalterado; 1183/1376=85.97% ->
+# 1182/1375=85.96%, ambos arredondam para 86.0%). MessageComposerAdapter.
+# NewMessageID tinha um `if err != nil { return "", err }` que CONTAVA como
+# caminho de saida COBERTO (propagacao de causa sem descarte, nao por log) —
+# removido junto com a funcao: -1 no denominador E -1 no numerador de
+# errpath_coverage, cancelando no arredondamento de uma casa decimal.
 min_errpath_coverage=860
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
@@ -1348,7 +1361,13 @@ min_errpath_coverage=860
 # acima, junto de min_func_coverage: normalizeListSections, normalizeRows,
 # ChatMessengerAdapter.SendList, listRows e listSections. Nenhuma coberta,
 # nenhuma saida.
-min_eligible=646
+# CAP-23 (2026-08-19): 646->645. UMA saida — nao entrada: com send/list
+# migrado no CAP-22, port.MessageComposer perdeu o ultimo consumidor.
+# MessageComposerAdapter.NewMessageID (a unica ELIGIBLE das tres funcoes
+# removidas; NewMessageComposerAdapter e contractsfake.MessageComposer.
+# NewMessageID ja' eram EXCLUDED) sai do golden. Ver min_func_coverage e
+# min_errpath_coverage acima para o efeito nas outras duas travas.
+min_eligible=645
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

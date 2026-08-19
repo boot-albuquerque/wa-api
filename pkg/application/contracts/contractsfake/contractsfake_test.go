@@ -273,7 +273,7 @@ func TestSessionGuardEmbutidoEPromovido(t *testing.T) {
 		t.Errorf("literal aninhado nao propagou: %v", err)
 	}
 
-	g := &contractsfake.MessageComposer{}
+	g := &contractsfake.TextMessenger{}
 	g.EnsureSessionFunc = func(context.Context, string) error { return errBoom }
 	if err := g.EnsureSession(context.Background(), "u1"); !errors.Is(err, errBoom) {
 		t.Errorf("campo promovido nao propagou: %v", err)
@@ -983,25 +983,6 @@ func TestDeleteUserProvider(t *testing.T) {
 }
 
 // --- Misc --------------------------------------------------------------
-
-func TestMessageComposerDevolveIDNaoVazio(t *testing.T) {
-	f := &contractsfake.MessageComposer{}
-	id, err := f.NewMessageID(context.Background(), "u1")
-	if err != nil {
-		t.Fatalf("NewMessageID = %v", err)
-	}
-	if id != contractsfake.DefaultMessageID || id == "" {
-		t.Errorf("NewMessageID zero-value = %q, quero %q", id, contractsfake.DefaultMessageID)
-	}
-
-	f.NewMessageIDFunc = func(context.Context, string) (string, error) { return "", errBoom }
-	if _, err := f.NewMessageID(context.Background(), "u2"); !errors.Is(err, errBoom) {
-		t.Errorf("NewMessageIDFunc = %v", err)
-	}
-	if len(f.NewMessageIDCalls) != 2 || f.NewMessageIDCalls[1].TxtID != "u2" {
-		t.Errorf("calls = %+v", f.NewMessageIDCalls)
-	}
-}
 
 func TestMessagingPort(t *testing.T) {
 	f := &contractsfake.MessagingPort{}
