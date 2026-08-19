@@ -54,7 +54,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 
@@ -5198,15 +5197,9 @@ func TestRealSPACaptureQRCode(t *testing.T) {
 			shot.HasQRScan, shot.CanvasCount, shot.DOMNodes)
 	}
 
-	var png []byte
-	if err := runner.Do(context.Background(), engine.OpStateProbe, "qr/screenshot",
-		func(ctx context.Context) error {
-			return chromedp.Run(tab.Context(), chromedp.CaptureScreenshot(&png))
-		}); err != nil {
+	png, err := tab.Screenshot(runner, "qr/screenshot")
+	if err != nil {
 		t.Fatalf("capturing the screenshot: %v", err)
-	}
-	if len(png) == 0 {
-		t.Fatal("the screenshot came back empty")
 	}
 
 	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
@@ -5272,15 +5265,9 @@ func TestRealSPALiveQR(t *testing.T) {
 
 	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
 	capture := func(label string) error {
-		var png []byte
-		if err := runner.Do(context.Background(), engine.OpStateProbe, label,
-			func(ctx context.Context) error {
-				return chromedp.Run(tab.Context(), chromedp.CaptureScreenshot(&png))
-			}); err != nil {
+		png, err := tab.Screenshot(runner, label)
+		if err != nil {
 			return err
-		}
-		if len(png) == 0 {
-			return errors.New("empty screenshot")
 		}
 		return os.WriteFile(out, png, 0o600)
 	}

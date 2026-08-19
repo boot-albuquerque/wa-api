@@ -9,6 +9,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 
 	"github.com/chromedp/chromedp"
 )
@@ -54,6 +55,38 @@ func (t *Tab) Close() {
 	if t.cancelAlloc != nil {
 		t.cancelAlloc()
 	}
+}
+
+// Screenshot captures the tab's viewport as PNG bytes.
+//
+// It lives here, and not in the caller that wanted it, because ADR-0006 D1 puts
+// the driver behind this package: engine/ is the only directory allowed to
+// import chromedp, and the module's gate test enforces it. A screenshot helper
+// written next to its user would have spread the dependency across the tree —
+// which is exactly what the gate caught when the QR capture tools were first
+// written in realspa_test.go.
+//
+// THE IMAGE IS PAGE CONTENT. Unlike everything else this package returns —
+// classes, states, durations, pids — a screenshot carries whatever the page was
+// showing: messages, names, and on a pairing screen the QR itself, which is a
+// credential. Callers own where it goes; nothing in this module writes it to a
+// log or to the repository.
+func (t *Tab) Screenshot(r *Runner, label string) ([]byte, error) {
+	var png []byte
+	err := r.Do(t.ctx, OpStateProbe, label, func(ctx context.Context) error {
+		runCtx, cancel := t.derive(ctx)
+		defer cancel()
+		return chromedp.Run(runCtx, chromedp.CaptureScreenshot(&png))
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(png) == 0 {
+		// An empty capture is not a blank page: chromedp returns no error when
+		// the target is gone mid-capture, so the emptiness IS the signal.
+		return nil, errors.New("engine: screenshot came back empty")
+	}
+	return png, nil
 }
 
 // Navigate points the tab at a URL under the Navigate budget.

@@ -1803,3 +1803,38 @@ que não é.
 `TestHolder_ProcessAliveIsFalseAfterStop`. Ambos arquivos restaurados
 byte-idênticos após cada mutação.
 
+## H22 — commitei com o portão de módulo vermelho, por ter rodado só testes seletivos
+
+**Data**: 2026-08-19 · **Contexto**: ferramentas de QR (LOOP 06.0), descoberto
+ao rodar a suíte inteira antes do commit da `capabilities/liveness`.
+
+**Onde**: `internal/wa-headless/realspa_test.go`, commit `4969834`.
+
+**Problema**: as duas ferramentas de QR importavam `github.com/chromedp/chromedp`
+para capturar a tela. A ADR-0006 D1 reserva o driver ao `engine/`, e o
+`TestOnlyTheEngineImportsTheDriver` verifica isso — **inclusive nos arquivos de
+teste**. O commit `4969834` foi feito com esse portão VERMELHO.
+
+**Como passou**: rodei só `-run TestRealSPACaptureQRCode` e
+`-run TestRealSPALiveQR` para validar as ferramentas, e não rodei a suíte. É
+literalmente o risco que o **H20** descreve — *"suíte lenta é suíte que se
+pula"* — mordendo em quem o escreveu, no dia seguinte a tê-lo fechado.
+
+**Correção**: `Tab.Screenshot(runner, label) ([]byte, error)` passa a existir no
+`engine/`, que é onde o `chromedp` mora. As ferramentas de QR chamam a
+primitiva. Não abri exceção no portão: o portão estava certo, o código é que
+estava no lugar errado.
+
+A primitiva ganhou duas coisas que o código embutido não tinha: captura vazia
+vira ERRO explícito (o `chromedp` não reporta erro quando o alvo some no meio da
+captura, então o vazio É o sinal), e um comentário dizendo que a imagem é
+**conteúdo de página** — diferente de tudo o mais que o `engine/` devolve, que é
+classe, estado, duração ou pid. Numa tela de pareamento ela é credencial.
+
+**Verificado**: portão verde, suíte completa verde sob `-race`, e a ferramenta
+de captura segue funcionando (falha nomeando o perfil pareado, que é o
+comportamento correto hoje).
+
+**Regra que fica**: `-run` seletivo valida a mudança, **não autoriza o commit**.
+O que autoriza é a suíte.
+
