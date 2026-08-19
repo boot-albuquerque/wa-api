@@ -8878,6 +8878,12 @@ S3 real toca credencial e rede.
 **Status**: não corrigido, nada implementado. Achado em campo e levado ao
 canal de decisão.
 
+**ADENDO 2026-08-19 — leia a [[F157]] antes de agir nesta entrada.** O
+conjunto aqui é INCOMPLETO: são DEZ rotas, não cinco, e há uma classe de
+REVOGAÇÃO que não aparece acima e é mais grave que as cinco. A F157 também
+corrige uma afirmação desta entrada: o stub NÃO faz "todo webhook" sair sem
+assinatura — o webhook global é assinado, só o por-usuário não é.
+
 ## F152
 
 **Data**: 2026-08-19. **Contexto**: auditoria por LEITURA de
@@ -9404,3 +9410,148 @@ crescimento sem mudança de `max_complexity`.
 **Status**: não corrigido de propósito. Mexer em baseline fora do escopo da
 tarefa é exatamente o movimento que mascara regressão; e a política do
 projeto proíbe "corrigir de graça" achado pré-existente sem perguntar.
+
+## F156
+
+**Data**: 2026-08-19. **Contexto**: verificação do contrato para o bloco de
+HMAC, enquanto o CAP-26 rodava. Achado de lado, não é regressão de nenhum
+bloco desta sessão.
+
+**Onde**: `pkg/bootstrap/main.go:274-283`, com `"math/rand"` importado na
+linha 8.
+
+```go
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+b := make([]byte, 32)
+for i := range b {
+    b[i] = charset[rand.Intn(len(charset))]   // math/rand, NAO crypto/rand
+}
+*globalHMACKey = string(b)
+log.Warn().Str("global_hmac_key", *globalHMACKey).Msg("No WA_API_GLOBAL_HMAC_KEY provided, generated a random one")
+```
+
+**Problema 1 — o segredo vai para o log, em claro.** Esta é a parte
+indiscutível, e é a que importa. A chave que ASSINA os webhooks globais é
+impressa na saída de log da aplicação, onde costuma ser coletada, encaminhada
+a agregador e retida por muito tempo. Quem lê o log forja webhook global
+assinado.
+
+**Problema 2 — o gerador não é criptográfico.** `math/rand` não é CSPRNG.
+Sendo justo com a gravidade, e para que ninguém escreva bobagem na correção:
+no Go 1.20+ as funções globais de `math/rand` são auto-semeadas com valor
+aleatório, então **não** é o caso clássico de semente fixa e reprodutível —
+não afirme isso sem medir. O defeito é que o fluxo é previsível a partir de
+saídas observadas, propriedade errada para chave de assinatura. `crypto/rand`
+custa a mesma linha.
+
+**Correção sugerida**: `crypto/rand` na geração, e o log dizendo apenas que
+uma chave foi gerada — nunca o valor. Se a operação precisa conhecer a chave,
+ela sai por canal deliberado (arquivo com permissão restrita, ou exigir a
+variável de ambiente), não por log.
+
+**Cuidado ao consertar** (Regra 4 do CLAUDE.md — o conserto também é
+mecanismo): exigir a variável e FALHAR FECHADO muda o comportamento de
+inicialização de quem hoje sobe sem configurar nada. Isso é decisão de
+contrato operacional, não limpeza.
+
+**Status**: não corrigido. Fora do escopo do bloco em andamento, e a política
+do projeto proíbe corrigir de graça achado pré-existente sem perguntar.
+
+## F157
+
+**Data**: 2026-08-19. **Contexto**: leitura, por fim completa, de
+`pkg/application/usecase/storage/`. Este é o ADENDO que corrige a F151 — que
+estava **certa no que afirmava e errada no tamanho do conjunto**.
+
+### O conjunto é de DEZ rotas, não de cinco
+
+Todos verificados por LEITURA, com a rota conferida em `wiring_routes.go`.
+As duas famílias de caminho (`/s3/configure` e `/session/s3/config`, etc.)
+chegam ao MESMO handler — as linhas 176 e 187 são wrappers que despacham por
+método.
+
+**ESCRITA de configuração** (os cinco da F151 original)
+
+| rota | use case |
+|---|---|
+| `POST /session/history` | `set_history.go` |
+| `POST /session/proxy` | `set_proxy.go` |
+| `POST /s3/configure` · `POST /session/s3/config` | `configure_s3.go` |
+| `POST /session/s3/test` | `test_s3_connection.go` |
+| `POST /hmac/configure` · `POST /session/hmac/config` | `configure_hmac.go` |
+
+**LEITURA de configuração** (novos)
+
+| rota | use case | devolve |
+|---|---|---|
+| `GET /s3/config` · `GET /session/s3/config` | `get_s3_config.go` | `"S3 configuration retrieved"` |
+| `GET /hmac/config` · `GET /session/hmac/config` | `get_hmac_config.go` | `"HMAC configuration retrieved"` |
+| `GET /webhook/history` | `get_history.go` | `"History configuration retrieved"` |
+
+**REVOGAÇÃO** (novos — e são os piores)
+
+| rota | use case | devolve |
+|---|---|---|
+| `DELETE /s3/config` · `DELETE /session/s3/config` | `delete_s3_config.go` | `"S3 configuration deleted"`, `Enabled:false` |
+| `DELETE /hmac/config` · `DELETE /session/hmac/config` | `delete_hmac_config.go` | `"HMAC configuration deleted"`, `Enabled:false` |
+
+### Por que a revogação é a pior das três classes
+
+Escrita que não grava produz **ausência** de função. Leitura que não lê produz
+resposta **inútil**. Revogação que não revoga produz **o oposto do que foi
+pedido**: quem descobre uma chave HMAC comprometida chama
+`DELETE /hmac/config`, recebe `200 "HMAC configuration deleted"` com
+`Enabled:false`, e a chave continua no banco, ativa, assinando. O operador sai
+da chamada acreditando que revogou. O mesmo com credencial de S3 de terceiro.
+
+Isto muda a composição do bloco de HMAC que o canal autorizou: o `DELETE` tem
+de entrar junto com o `POST`. Entregar só a escrita cria uma chave que dá para
+pôr e não dá para tirar — estritamente pior que hoje, onde ninguém consegue
+pôr nenhuma.
+
+### O detalhe que um conserto ingênuo da revogação erra
+
+`DeleteHmacConfig` histórico (`41bc8e2^:handlers.go:6862`) faz DOIS passos:
+`UPDATE users SET hmac_key = NULL` **e** limpar o `UserInfoCache`
+(`HasHmac="false"`, `HmacKeyEncrypted=""`).
+
+O cache é `cache.NoExpiration`. Limpar só o banco deixaria a chave **viva no
+cache para sempre** naquele token: a revogação pareceria funcionar, o sintoma
+(`200`) seria idêntico, e só a causa difere. O teste tem de asseverar o estado
+do CACHE, não só o do banco — mesmo raciocínio da F128 no History.
+
+E `GetHmacConfig` histórico devolve a chave **mascarada** (`"***"` ou `""`),
+nunca o valor: vira teste negativo obrigatório de que o segredo não vaza na
+resposta.
+
+### CORREÇÃO DE UMA AFIRMAÇÃO MINHA
+
+Escrevi, na F151 e no canal, que o stub de HMAC faz "todo webhook sair SEM
+ASSINATURA". **Forte demais, e errado.** Medido em
+`pkg/bootstrap/dispatch_outbox.go:249`, `resolverChaveHMAC` tem dois escopos:
+
+- **webhook GLOBAL**: assinado. A chave global sempre existe — se não vier por
+  flag nem por `WA_API_GLOBAL_HMAC_KEY`, o `main.go` GERA uma (ver [[F156]]).
+- **webhook POR USUÁRIO**: não assinado, porque `hmac_key` do usuário nunca é
+  gravada, e `resolverChaveHMAC` **não** cai para a global nesse caminho.
+
+O enunciado correto é: *o webhook por usuário sai sem assinatura*. Quem só usa
+o webhook global está assinado hoje.
+
+### Nota de método — a quarta vez nesta sessão
+
+Eu **tinha** a lista destes cinco arquivos desde a varredura e escrevi a F151
+sobre um subconjunto dela. O erro não foi a ferramenta: foi parar de ler
+quando a hipótese já estava confirmada. Varredura confirma o que procura; só a
+leitura fecha o conjunto. Junto com a F139 e a F151, são três formas do mesmo
+defeito — e esta é a mais insidiosa, porque a evidência completa estava na
+minha mão.
+
+`get_history.go` merece nota, para não gerar alarme falso: ele serve
+`/webhook/history`, **não** `/chat/history`. O CAP-09A rewireou o
+`/chat/history` para `ch.ChatHistory.GetChatHistory` e deixou comentário
+explicando a separação (`wiring_routes.go:197-203`). A leitura de histórico de
+MENSAGENS está entregue; o stub aqui é o de leitura de CONFIGURAÇÃO.
+
+**Status**: nada corrigido. A F151 continua válida no que afirma; este adendo
+corrige o TAMANHO do conjunto e acrescenta a classe de revogação.
