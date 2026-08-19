@@ -345,3 +345,84 @@ func TestHolder_ProcessAliveIsFalseAfterStop(t *testing.T) {
 			"read this as permission to use it")
 	}
 }
+
+// TestBrowserPIDIsRefusedOnceItIsMeaningless is the capability, not a
+// formality: getBrowserPid exists so a supervisor can watch a process, and a
+// pid handed out after the process died is a number the OS may have given to
+// something else.
+//
+// It asserts the three refusals separately, because a caller told only "no pid"
+// cannot tell "nothing started" from "what started is gone" — and those call
+// for different reactions.
+func TestBrowserPIDIsRefusedOnceItIsMeaningless(t *testing.T) {
+	h := NewHolder(holderConfig(t, t.TempDir()))
+
+	// 1. Never started.
+	if _, err := h.BrowserPID(); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("before boot: err = %v, want ErrNoSession", err)
+	}
+
+	sess, err := h.Session(context.Background())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	pid, err := h.BrowserPID()
+	if err != nil {
+		t.Fatalf("with a live session: %v", err)
+	}
+	if pid <= 0 || pid != sess.Browser().PID() {
+		t.Fatalf("BrowserPID=%d, browser pid=%d", pid, sess.Browser().PID())
+	}
+	if !engine.ProcessAlive(pid) {
+		t.Fatalf("pid %d is not alive on a freshly booted session", pid)
+	}
+
+	// 2. Process killed from outside — the supervisor's own failure case.
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatalf("killing the browser: %v", err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for engine.ProcessAlive(pid) && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	got, err := h.BrowserPID()
+	if !errors.Is(err, ErrSessionDied) {
+		t.Fatalf("after the process died: pid=%d err=%v, want ErrSessionDied. "+
+			"engine.Browser.PID() still returns %d, and a supervisor storing that "+
+			"number would later signal whatever inherited it", got, err, pid)
+	}
+	if got != 0 {
+		t.Fatalf("a stale pid (%d) was returned alongside the error; a caller logging "+
+			"\"pid=%%d err=%%v\" would put a reusable number into the record", got)
+	}
+
+	// 3. Stopped.
+	h.Stop(context.Background())
+	if _, err := h.BrowserPID(); !errors.Is(err, ErrHolderStopped) {
+		t.Fatalf("after Stop: err = %v, want ErrHolderStopped", err)
+	}
+}
+
+// TestBrowserPIDAfterCleanStopIsRefusedToo covers the ordinary path, which the
+// kill test above does not: a session stopped normally leaves engine.Browser
+// holding the same pid it always had. Measured — that is what made this
+// capability more than a getter.
+func TestBrowserPIDAfterCleanStopIsRefusedToo(t *testing.T) {
+	h := NewHolder(holderConfig(t, t.TempDir()))
+	sess, err := h.Session(context.Background())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	pid := sess.Browser().PID()
+	if via := h.Stop(context.Background()); !via.Clean() {
+		t.Fatalf("stopped via %s, want clean", via)
+	}
+
+	if sess.Browser().PID() != pid {
+		t.Fatal("engine.Browser.PID() changed after Stop; this test's premise no longer holds")
+	}
+	if _, err := h.BrowserPID(); err == nil {
+		t.Fatalf("BrowserPID answered after a clean stop; engine still holds pid %d and "+
+			"the OS may have reassigned it", pid)
+	}
+}

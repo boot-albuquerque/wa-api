@@ -34,6 +34,12 @@ var ErrHolderStopped = errors.New("runtime: holder already stopped")
 // is explicit and which core's ownership check can see.
 var ErrSessionDied = errors.New("runtime: the held session's browser process is gone")
 
+// ErrNoSession is returned when the Holder has not booted yet. It is separate
+// from ErrSessionDied because "nothing has started" and "what started is gone"
+// call for different reactions, and a caller told only "no pid" cannot tell
+// which it is looking at.
+var ErrNoSession = errors.New("runtime: no session has been started yet")
+
 // Holder owns exactly one headless session and keeps it alive across commands.
 //
 // It is the module's first real consumer of core.StartSession, and that is the
@@ -117,6 +123,39 @@ func (h *Holder) Session(ctx context.Context) (*core.Session, error) {
 	}
 	h.session = sess
 	return sess, nil
+}
+
+// BrowserPID answers the product's getBrowserPid: the process id a supervisor
+// should register and watch.
+//
+// IT REFUSES TO ANSWER WHEN THE NUMBER IS NO LONGER MEANINGFUL, and that
+// refusal is the whole capability rather than an extra. Measured on 2026-08-19:
+// engine.Browser.PID() keeps returning the SAME number after a clean stop, with
+// the process already dead. The number is not wrong — it is what the browser
+// used to be — but handing it to a supervisor is: operating systems reuse pids,
+// so a stored pid signalled later can reach whatever process inherited the
+// number. That is the same failure this module keeps meeting in other clothes —
+// a value that cannot be told apart from a valid one.
+//
+// So the pid comes with the liveness check attached, and the three refusals are
+// distinct: never started, already stopped, process gone.
+func (h *Holder) BrowserPID() (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.stopped {
+		return 0, ErrHolderStopped
+	}
+	if h.session == nil {
+		return 0, ErrNoSession
+	}
+	if !h.session.ProcessAlive() {
+		// Deliberately NOT returning the stale pid alongside the error. A
+		// caller that logs "pid=%d, err=%v" would put a reusable number into
+		// the record next to a message nobody reads twice.
+		return 0, ErrSessionDied
+	}
+	return h.session.Browser().PID(), nil
 }
 
 // Stop tears the held session down and releases the profile. It is safe to

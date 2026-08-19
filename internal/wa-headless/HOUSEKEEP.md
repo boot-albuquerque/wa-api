@@ -1838,3 +1838,51 @@ comportamento correto hoje).
 **Regra que fica**: `-run` seletivo valida a mudança, **não autoriza o commit**.
 O que autoriza é a suíte.
 
+## H23 — `engine.Browser.PID()` devolve o mesmo número depois da parada, e o SO reusa PIDs
+
+**Data**: 2026-08-19 · **Contexto**: `getBrowserPid`, quarta capacidade de
+paridade — que a matriz descreve como *"trivial dado o CAP-02"*.
+
+**Onde**: `internal/wa-headless/engine/browser.go`, `Browser.PID()`.
+
+**Medido antes de projetar** (a capacidade parecia um getter, e a medição é o
+que mostrou que não era):
+
+```
+ANTES do Stop:  pid=10819 alive=true
+DEPOIS do Stop: pid=10819 alive=false   (via=browser.close)
+o PID mudou? false
+```
+
+**Problema**: o número sobrevive à sessão. Ele não está *errado* — é o que o
+browser foi — mas entregá-lo a um supervisor é: sistemas operacionais **reusam
+PIDs**, então um pid guardado e sinalizado depois pode alcançar qualquer
+processo que tenha herdado o número. E o consumidor previsto desta capacidade é
+exatamente um supervisor que registra o processo (`PARIDADE-WWEBJS.md` §3).
+
+É a mesma falha que este módulo vem encontrando com outras roupas: **um valor
+que não se distingue de um válido**.
+
+**Correção**: `runtime.Holder.BrowserPID()` só responde enquanto o número
+significa algo, e as três recusas são distintas — `ErrNoSession` (nunca subiu),
+`ErrHolderStopped` (parado), `ErrSessionDied` (processo morto). Não devolve o
+pid obsoleto ao lado do erro: um chamador que escreve `"pid=%d err=%v"` poria um
+número reusável no registro ao lado de uma mensagem que ninguém relê.
+
+**Não corrigido no `engine/`**, e isso é deliberado: `Browser.PID()` está certo
+no que faz — reportar o pid do processo que ele lançou. Quem tem contexto para
+saber se o número ainda vale é quem SEGURA a sessão. Pôr a política no `engine/`
+seria a camada errada, pelo mesmo argumento do H21.
+
+**Testes**: `TestBrowserPIDIsRefusedOnceItIsMeaningless` (nunca iniciado, morto
+por `SIGKILL` de fora, parado) e `TestBrowserPIDAfterCleanStopIsRefusedToo`, que
+cobre o caminho ORDINÁRIO — o teste do `SIGKILL` sozinho não cobriria a parada
+limpa, que é o caso comum.
+
+**Controle negativo executado**: a versão "trivial" — `return
+h.session.Browser().PID(), nil` — falha com *"after the process died: pid=14835
+err=<nil>, want ErrSessionDied ... a supervisor storing that number would later
+signal whatever inherited it"*. Restaurado byte-idêntico.
+
+**Status**: CORRIGIDO.
+
