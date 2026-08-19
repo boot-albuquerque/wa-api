@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -173,8 +174,16 @@ func TestLease_LossTriggersDisconnect(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+	// F130: cancelling is not enough — nobody waited for the goroutine, so it
+	// outlived the test and kept reading the global log.Logger that the NEXT
+	// test writes. Defers run LIFO, so the order below is load-bearing:
+	// cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+	// lines waits for a heartbeat nobody told to stop, and the test hangs.
+	defer wg.Wait()
 	defer cancel()
-	go manager.RunHeartbeat(ctx)
 
 	store.giveTo("u1", "pod-B")
 
@@ -359,8 +368,16 @@ func TestLease_AbandonedSessionIsReleased(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+	// F130: cancelling is not enough — nobody waited for the goroutine, so it
+	// outlived the test and kept reading the global log.Logger that the NEXT
+	// test writes. Defers run LIFO, so the order below is load-bearing:
+	// cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+	// lines waits for a heartbeat nobody told to stop, and the test hangs.
+	defer wg.Wait()
 	defer cancel()
-	go manager.RunHeartbeat(ctx)
 
 	// Bounded wait, never WaitGroup.Wait(): a test that hangs reports nothing
 	// (ARMADILHAS.md 16).
@@ -398,8 +415,16 @@ func TestLease_StartingSessionKeepsItsLease(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+	// F130: cancelling is not enough — nobody waited for the goroutine, so it
+	// outlived the test and kept reading the global log.Logger that the NEXT
+	// test writes. Defers run LIFO, so the order below is load-bearing:
+	// cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+	// lines waits for a heartbeat nobody told to stop, and the test hangs.
+	defer wg.Wait()
 	defer cancel()
-	go manager.RunHeartbeat(ctx)
 
 	time.Sleep(60 * time.Millisecond) // a dozen heartbeats
 
@@ -421,8 +446,16 @@ func TestLease_LiveSessionKeepsItsLease(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+	// F130: cancelling is not enough — nobody waited for the goroutine, so it
+	// outlived the test and kept reading the global log.Logger that the NEXT
+	// test writes. Defers run LIFO, so the order below is load-bearing:
+	// cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+	// lines waits for a heartbeat nobody told to stop, and the test hangs.
+	defer wg.Wait()
 	defer cancel()
-	go manager.RunHeartbeat(ctx)
 
 	time.Sleep(80 * time.Millisecond) // many TTLs' worth of heartbeats
 
@@ -444,8 +477,16 @@ func TestLease_WithoutLiveSessionCheckKeepsRenewing(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+	// F130: cancelling is not enough — nobody waited for the goroutine, so it
+	// outlived the test and kept reading the global log.Logger that the NEXT
+	// test writes. Defers run LIFO, so the order below is load-bearing:
+	// cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+	// lines waits for a heartbeat nobody told to stop, and the test hangs.
+	defer wg.Wait()
 	defer cancel()
-	go manager.RunHeartbeat(ctx)
 
 	time.Sleep(80 * time.Millisecond)
 
@@ -576,5 +617,87 @@ func TestLease_RenovacaoNormalNaoAvisa(t *testing.T) {
 
 	if saida := buf.String(); saida != "" {
 		t.Errorf("renovacao normal gerou aviso; com heartbeat de 5s isso seria ruido perpetuo: %s", saida)
+	}
+}
+
+// countHeartbeatGoroutines reports how many live goroutines are inside
+// RunHeartbeat right now, by name in the runtime's own stack dump.
+//
+// The dump is the only honest instrument here: the defect of F130 is a
+// goroutine that OUTLIVES its test, and no assertion on the manager's own
+// state can see one, precisely because the manager is done with it.
+func countHeartbeatGoroutines() int {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return strings.Count(string(buf[:n]), "leaseManager).RunHeartbeat")
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
+// TestLease_HeartbeatNaoSobreviveAoTeste is the F130 guard.
+//
+// The measured defect was not "the heartbeat logs the wrong thing": it was
+// that `go manager.RunHeartbeat(ctx)` with only `defer cancel()` leaves a
+// goroutine running AFTER the test returns, still reading the global
+// log.Logger that the next test overwrites. The race detector caught it once
+// in a full `make check` and refused to reproduce in 570 targeted runs — so
+// the guard cannot be "run -race and hope". It has to observe the leak
+// DIRECTLY, which is what this test does.
+//
+// Two assertions, and the second is the one that would have caught F130:
+//
+//  1. while the heartbeat is running, the stack dump sees it — otherwise the
+//     instrument is blind and assertion 2 would pass for the wrong reason;
+//  2. once the launcher block has returned, ZERO heartbeats remain.
+func TestLease_HeartbeatNaoSobreviveAoTeste(t *testing.T) {
+	if leftover := countHeartbeatGoroutines(); leftover != 0 {
+		t.Fatalf("a heartbeat from an EARLIER test is still running (%d): the leak this test guards against already happened upstream", leftover)
+	}
+
+	observedWhileRunning := 0
+
+	// The launcher block reproduces, verbatim, the corrected pattern used by
+	// the five launch sites in this file. If someone reverts one of them to
+	// `defer cancel(); go manager.RunHeartbeat(ctx)`, the same revert here
+	// makes this test fail instead of making the suite intermittently red.
+	func() {
+		store := newFakeLeaseStore()
+		manager := newLeaseManager(store, "pod-A", "pod-A:8080", time.Hour, time.Millisecond, nil)
+
+		if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+			t.Fatalf("claim: ok=%v err=%v", ok, err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+		// Same LIFO order as the five launch sites: cancel() runs FIRST,
+		// wg.Wait() second. Inverted, this blocks forever.
+		defer wg.Wait()
+		defer cancel()
+
+		// Wait until the instrument actually sees the goroutine, so a zero at
+		// the end means "it exited", not "it never started".
+		deadline := time.After(3 * time.Second)
+		for observedWhileRunning == 0 {
+			observedWhileRunning = countHeartbeatGoroutines()
+			select {
+			case <-deadline:
+				t.Fatal("the heartbeat never appeared in the stack dump; the leak detector below would pass vacuously")
+			default:
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	if observedWhileRunning == 0 {
+		t.Fatal("instrument blind: never observed a running heartbeat")
+	}
+	if leftover := countHeartbeatGoroutines(); leftover != 0 {
+		t.Fatalf("%d heartbeat goroutine(s) survived the launcher: this is F130 exactly — the survivor keeps reading the global log.Logger that the next test writes", leftover)
 	}
 }

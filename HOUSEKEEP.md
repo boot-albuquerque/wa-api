@@ -6061,62 +6061,281 @@ total, porque 10 caminhos (5 cobertos, 5 descobertos) **saíram** junto.
 
 ## F130
 
-**Data**: 2026-08-18. **Contexto**: `make check` do Chief antes de commitar
-CAP-09A/CAP-09B. Falha INTERMITENTE, não reproduzida na execução seguinte.
+**Data**: 2026-08-18, **diagnostico REESCRITO em 2026-08-19** depois de medir.
+**Contexto**: `make check` do Chief antes de commitar CAP-09A/CAP-09B, falha
+intermitente sob `-race`.
 
-**Onde**: `pkg/bootstrap/lease_test.go:448` e `pkg/bootstrap/lease_test.go:527`.
-Nenhum dos dois está no diff do CAP-09 — é defeito PRÉ-EXISTENTE.
+**Onde**: cinco lancamentos de `RunHeartbeat` em `pkg/bootstrap/lease_test.go`
+(linhas originais 177, 363, 402, 425, 448) — todos PRE-EXISTENTES, nenhum no
+diff do CAP-09.
 
-**Problema**: corrida de dados entre DOIS testes, detectada sob `-race`:
+### O que esta entrada AFIRMAVA, e por que parecia certo
+
+A versao original desta entrada dizia que a causa do `make check` vermelho era
+a goroutine vazada do heartbeat: `go manager.RunHeartbeat(ctx)` com apenas
+`defer cancel()`, sobrevivendo ao teste e lendo o `log.Logger` global que o
+teste seguinte escreve. Parecia certo porque o stack colado no `make check`
+REALMENTE mostrava isso:
 
 ```
-WARNING: DATA RACE
 Write at 0x000106b1e140 by goroutine 3019:
   TestLease_RetomadaAposExpirarDeixaRastro()  lease_test.go:527
 Previous read at 0x000106b1e140 by goroutine 3015:
   zerolog.(*Logger).disabled()
   bootstrap.(*leaseManager).renewOne()        lease.go:260
   bootstrap.(*leaseManager).RunHeartbeat()    lease.go:321
-  TestLease_WithoutLiveSessionCheckKeepsRenewing.gowrap1()  lease_test.go:448
-Goroutine 3015 (finished) created at:
-  TestLease_WithoutLiveSessionCheckKeepsRenewing()  lease_test.go:448
 ```
 
-A causa é uma goroutine VAZADA. `TestLease_WithoutLiveSessionCheckKeepsRenewing`
-faz:
+O erro nao foi ler o stack errado. Foi generalizar UMA ocorrencia para a causa
+do gate vermelho, sem medir a distribuicao.
+
+### O que a medicao mostrou
+
+`go test ./pkg/bootstrap/ -race -count=20`, atribuindo cada bloco de corrida
+pelos dois lados do stack:
+
+| | corridas em 20 execucoes | blocos citando `renewOne`/`RunHeartbeat` |
+|---|---|---|
+| ANTES da correcao | 19 | **0** |
+| DEPOIS da correcao | 20 | **0** |
+
+Os **39 blocos** das duas execucoes tem o MESMO lado sobrevivente:
+`tentarWebhook` (`pkg/bootstrap/dispatch_callhook.go:107`, `:108` e `:112`),
+rodando dentro do pool global de despacho e dos timers de retry. Pares
+observados:
+
+```
+ 7  TestHandleEvent_DefaultNaoLogaValores.func1@eventhandler_test.go:91   x tentarWebhook@dispatch_callhook.go:107
+ 6  TestSessionEventDispatcher_HandleDeOutroTipo.func1@session_adapters_test.go:53 x tentarWebhook@dispatch_callhook.go:107
+ 5  TestWalogSeam_ErroDoSDKSaiSemWadebug.func1@walog_seam_test.go:36      x tentarWebhook@dispatch_callhook.go:107
+ 1  TestLease_RetomadaAposExpirarDeixaRastro@lease_test.go:567            x tentarWebhook@dispatch_callhook.go:112
+ 1  capturarLog@eventhandler_media_test.go:29                             x tentarWebhook@dispatch_callhook.go:112
+```
+
+E o heartbeat vazado nao reproduz nem sob MUTACAO. Reintroduzido o padrao
+vazado em `TestLease_WithoutLiveSessionCheckKeepsRenewing`:
+
+- `-run TestLease -race -count=50` → 0 corridas
+- `-run TestLease -race -count=500 -cpu 1` → 0 corridas
+- pacote inteiro `-race -count=20` → 26 corridas, **0** citando `renewOne`
+
+**Conclusao honesta**: a goroutine vazada do heartbeat e um defeito REAL e foi
+corrigida, mas e minoritaria a ponto de nao ser reproduzivel sob mutacao em 570
+execucoes dirigidas. Ela **NAO** e a causa do `make check` vermelho. A causa
+real esta na **F132**.
+
+### A correcao aplicada
+
+Os cinco lancamentos passaram a ESPERAR a goroutine, nao so cancela-la:
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
+var wg sync.WaitGroup
+wg.Add(1)
+go func() { defer wg.Done(); manager.RunHeartbeat(ctx) }()
+defer wg.Wait()
 defer cancel()
-go manager.RunHeartbeat(ctx)
-time.Sleep(80 * time.Millisecond)
 ```
 
-Ninguém ESPERA a goroutine terminar. Quando o teste retorna, `cancel()` pede
-para ela parar, mas ela pode estar no meio de `log.Warn()` — e sobrevive ao
-teste. Depois, `TestLease_RetomadaAposExpirarDeixaRastro` faz
-`log.Logger = zerolog.New(&buf)` na linha 527, escrevendo a MESMA variável
-global que a goroutine sobrevivente está lendo.
+A ordem dos `defer` e portadora de carga: LIFO faz `cancel()` rodar ANTES de
+`wg.Wait()`. Invertida, o teste espera por uma goroutine que ninguem mandou
+parar. Producao (`pkg/bootstrap/lease.go`) NAO foi tocada.
 
-É intermitente porque depende do instante em que a goroutine sai comparado ao
-instante em que o teste seguinte troca o logger. Rodei o pacote isolado duas
-vezes depois (`-count=5` no teste e o pacote inteiro) e passou nas duas — o
-que NÃO significa que não exista: detector de corrida acusando prova que a
-corrida existe; não acusar não prova nada.
+Linhas corrigidas (numeracao apos a edicao): 178, 372, 419, 450, 481.
 
-**Por que importa mais do que um teste chato**: enquanto ela existir,
-`make check` é intermitentemente vermelho, e todo checkpoint que afirma
-"make check EXIT:0" depende de sorte de escalonamento. Um gate que às vezes
-falha por motivo alheio treina quem lê a rodar de novo até passar — que é
-exatamente como um defeito real passa despercebido.
+### Os testes que travam o defeito
 
-**Correção sugerida**: fazer o teste ESPERAR a goroutine, em vez de só
-cancelar. `RunHeartbeat` recebendo um `chan struct{}` fechado na saída, ou um
-`sync.WaitGroup` com `defer wg.Wait()` depois do `cancel()`, resolve a raiz.
-Trocar o logger global por um logger injetado no `leaseManager` resolveria a
-outra ponta, e é o caminho mais alinhado ao resto do repo — mas é mudança
-maior e fora do escopo de CAP-09.
+`TestLease_HeartbeatNaoSobreviveAoTeste` (`pkg/bootstrap/lease_test.go`), com o
+auxiliar `countHeartbeatGoroutines`, que conta goroutines vivas dentro de
+`RunHeartbeat` lendo o dump do proprio runtime (`runtime.Stack(buf, true)`).
 
-**Status**: NÃO corrigido. É pré-existente e fora do escopo da tarefa atual;
-pela política do CLAUDE.md, não corrijo de graça sem perguntar. Levado ao
-canal de decisão junto com o fecho do CAP-09.
+O dump e o instrumento certo justamente porque o defeito e "a goroutine
+sobrevive ao teste": nenhuma assercao sobre o estado do gerenciador consegue
+ver uma goroutine da qual o gerenciador ja se desinteressou. E o `-race` nao
+serve de guarda aqui — foi medido acima que ele nao morde este produtor.
+
+O teste tem DUAS assercoes, e a primeira existe para que a segunda nao passe
+por vacuidade: (1) enquanto o heartbeat roda, o dump o enxerga; (2) depois que
+o bloco lancador retorna, restam ZERO.
+
+### Controles negativos, EXECUTADOS
+
+**Controle A — padrao vazado dentro da guarda.** Trocado o bloco lancador de
+volta para `defer cancel(); go manager.RunHeartbeat(ctx)`:
+
+```
+$ go test ./pkg/bootstrap/ -run TestLease_HeartbeatNaoSobreviveAoTeste -race -count=20
+--- FAIL: TestLease_HeartbeatNaoSobreviveAoTeste (0.00s)
+    lease_test.go:696: 1 heartbeat goroutine(s) survived the launcher: this is
+    F130 exactly — the survivor keeps reading the global log.Logger that the
+    next test writes
+FAIL    wa-api/pkg/bootstrap    0.385s
+```
+
+Falhou nas 20 execucoes. Revertido; 20/20 PASS depois.
+
+**Controle B — ordem dos `defer` invertida** em
+`TestLease_WithoutLiveSessionCheckKeepsRenewing` (`wg.Wait()` antes de
+`cancel()`):
+
+```
+$ go test ./pkg/bootstrap/ -run TestLease_WithoutLiveSessionCheckKeepsRenewing -race -timeout 30s
+panic: test timed out after 30s
+goroutine 12 [sync.WaitGroup.Wait]:
+    .../pkg/bootstrap/lease_test.go:496 +0x558
+goroutine 13 [select]:
+wa-api/pkg/bootstrap.(*leaseManager).RunHeartbeat(...)
+    .../pkg/bootstrap/lease_test.go:482 +0x84
+FAIL    wa-api/pkg/bootstrap    30.341s
+```
+
+Travou, como o comentario diz que travaria. Revertido.
+
+**Status**: CORRIGIDO no que esta entrada cobre — os cinco lancamentos vazados
+—, travado por `TestLease_HeartbeatNaoSobreviveAoTeste` com os dois controles
+acima. O `make check` vermelho NAO era isto: ver **F132**.
+
+## F131
+
+**Data**: 2026-08-19. **Contexto**: CURRENT_STATE do CAP-10 (Delete/Update
+Message), antes de implementar.
+
+**Onde**: `pkg/domain/message.go` — todos os `*Result` da superfície de envio.
+
+**Problema**: a forma da resposta de TODA a superfície de envio diverge do
+contrato histórico, e a divergência nunca foi registrada como decisão.
+
+- **Histórico** (`git show 41bc8e2^:handlers.go`, SendMessage linha ~132,
+  DeleteMessage linha 2825, SendEditMessage): a resposta era
+  `{"Details": "Sent"|"Deleted", "Timestamp": <unix>, "Id": <msgid>}`.
+- **Atual**: `{"message_id": ..., "timestamp": ..., "status": "sent"}`.
+
+Três nomes de campo diferentes e um campo a menos: `Details` sumiu, `Id`
+virou `message_id`, e apareceu `status`.
+
+A divergência é **anterior** às capabilities recuperadas nesta sessão: os
+DTOs já tinham essa forma quando eram stubs `"validated"`. As oito
+capabilities entregues (CAP-01 a CAP-08) preencheram esses DTOs, então a
+forma nova já está em produção em text, image, audio, video, document,
+sticker, location e contact.
+
+**Por que registro agora**: o CAP-10 vai recuperar Delete e Edit, cujos DTOs
+atuais (`DeleteMessageResult`, `SendEditMessageResult`) também têm a forma
+nova. Implementar sem decidir significaria escolher por omissão — e é
+exatamente o modo de falha da F123, em que o tipo "que parece certo" muda o
+contrato em silêncio.
+
+**As duas saídas, e o custo de cada uma**:
+
+1. **Manter a forma atual** (`message_id`/`timestamp`/`status`): consistente
+   com as oito capabilities já entregues; um cliente do wuzapi original
+   continua quebrado, mas já estava — a rota devolvia `"validated"` sem
+   enviar.
+2. **Voltar à forma histórica** (`Details`/`Timestamp`/`Id`): fidelidade ao
+   contrato original, mas exigiria mudar as oito capabilities já commitadas,
+   o que é mudança de contrato público em massa.
+
+**Correção sugerida**: manter a forma atual e PARAR de tratá-la como
+acidente — documentá-la como o contrato do wa-api, com um teste de forma de
+wire por capability, no padrão do
+`chat_history_wire_contract_test.go` criado no CAP-09A. Hoje nenhuma das oito
+tem trava de nome de campo: renomear `message_id` para qualquer coisa passa
+com a suíte verde, que foi exatamente o REQUIRED_FIX da EVAL-09.
+
+**Status**: não corrigido. Levado ao canal de decisão junto com o
+CURRENT_STATE do CAP-10.
+
+## F132
+
+**Data**: 2026-08-19. **Contexto**: descoberto ao medir a F130 — e a causa REAL
+do `make check` intermitentemente vermelho que a F130 atribuia ao heartbeat.
+
+**Onde**:
+- `pkg/bootstrap/dispatch.go:112` — `newDispatchPool` lanca N workers
+  (`dispatchDefaultWorkers = 256`) que so morrem quando o canal `jobs` fecha.
+- `pkg/bootstrap/dispatch.go:221` — `dispatchGo` cria esse pool por
+  `sync.Once` num par de globais (`dispatchOnce`, `dispatch`). **Nao existe
+  shutdown**: nada fecha `jobs`, nada espera os workers.
+- `pkg/bootstrap/dispatch_retry.go:161` — `time.AfterFunc(atraso, ...)`
+  reagenda a entrega pelo pool. Com o backoff exponencial de base 30s, ha
+  trabalho pendente por MINUTOS.
+- `pkg/bootstrap/dispatch_callhook.go:107`, `:108`, `:112` — `tentarWebhook`
+  chama `log.Warn()` nesse periodo.
+
+**Problema**: o pool e um recurso de PROCESSO, criado pelo primeiro teste que
+despacha um webhook e vivo ate o binario de teste morrer. Enquanto isso, dez
+pontos de teste em oito arquivos trocam o `log.Logger` global. Toda troca e uma
+corrida contra qualquer worker que esteja dentro de `log.Warn()`.
+
+Os dez escritores do `log.Logger` global em `pkg/bootstrap` (confirmados por
+`grep -rn "log\.Logger *=" --include="*.go" .`, alem dos dois de producao em
+`main.go:170` e `main.go:201`):
+
+1. `capabilities_test.go:88`
+2. `eventhandler_session_test.go:72`
+3. `eventhandler_media_test.go:29`
+4. `lease_test.go:527` (hoje `:567` apos a correcao da F130)
+5. `lease_test.go:566` (hoje `:606`)
+6. `eventhandler_test.go:90`
+7. `session_adapters_test.go:24`
+8. `session_adapters_test.go:52`
+9. `walog_seam_test.go:35`
+10. `wiring_delegates_test.go:27`
+
+(Existem outros escritores em `pkg/infra/messaging` e `pkg/presentation/http`,
+mas sao binarios de teste distintos e nao disputam com este pool.)
+
+**Evidencia medida** (`go test ./pkg/bootstrap/ -race -count=20`):
+
+- 19 corridas em 20 execucoes antes da correcao da F130, 20 depois.
+- **39 de 39** blocos tem `tentarWebhook` como lado sobrevivente.
+- **0 de 39** citam `renewOne` ou `RunHeartbeat`.
+- Numa passada UNICA de `make check` a corrida as vezes nao aparece: o Chief
+  observou EXIT:2 numa execucao e EXIT:0 na seguinte. Sob `-count=20` ela
+  reproduz quase sempre. Detector acusando prova que a corrida existe; nao
+  acusar nao prova nada.
+
+**Correcao sugerida** — duas saidas, ambas mudanca de PRODUCAO:
+
+1. Dar shutdown ao pool: fechar `jobs` e esperar os workers, com um seam que
+   o `TestMain` do pacote possa chamar. Precisa tambem cancelar os
+   `time.AfterFunc` pendentes, senao o retry ressuscita o pool depois do
+   shutdown.
+2. Injetar o logger no caminho de despacho, eliminando a leitura da global.
+   Mais alinhado ao resto do repo, mas superficie maior.
+
+**Status**: NAO corrigido, e deliberadamente fora deste bloco. Nao e escopo do
+FIX-F130 e nao foi autorizado. Alem disso, a linhagem deste pool ja custou caro
+(F86, F88): converter recurso ilimitado em limitado exige inventario de
+detentores e medicao do cenario que PIORA, pelas quatro regras do `CLAUDE.md`.
+Merece packet proprio. Referencia cruzada: **F130**.
+
+## F133
+
+**Data**: 2026-08-19. **Contexto**: verificacao final do FIX-F130 (`gofmt -l`
+sobre `pkg/bootstrap/`).
+
+**Onde**: `pkg/bootstrap/config.go`.
+
+**Problema**: o arquivo nao esta formatado por `gofmt`. Pre-existente em HEAD
+(e5b2528) e nao tocado por este bloco:
+
+```
+$ gofmt -l pkg/bootstrap/
+pkg/bootstrap/config.go
+$ git show HEAD:pkg/bootstrap/config.go | gofmt -l /dev/stdin
+/dev/stdin
+$ git diff --stat HEAD -- pkg/bootstrap/config.go   # vazio
+```
+
+O `make check` passou com EXIT:0 mesmo assim, o que significa que o gate atual
+**nao verifica formatacao** — entao qualquer arquivo pode divergir sem que nada
+avise, e o proximo diff que tocar `config.go` vai misturar reformatacao com
+mudanca de comportamento.
+
+**Correcao sugerida**: `gofmt -w pkg/bootstrap/config.go` num commit isolado, e
+acrescentar `gofmt -l` (falhando se a saida for nao-vazia) ao alvo `check` do
+Makefile, para que isto nao volte em silencio.
+
+**Status**: nao corrigido. E pre-existente e fora do escopo do FIX-F130; pela
+politica do `CLAUDE.md`, nao corrijo de graca sem perguntar.
