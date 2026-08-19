@@ -159,7 +159,7 @@ func TestPresenceHandlers_Success(t *testing.T) {
 			if env := decodeEnvelope(t, rec); !env.Success {
 				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
-			ipmAssertNoOutcomeLog(t, recs)
+			assertNoOutcomeLog(t, recs)
 		})
 	}
 }

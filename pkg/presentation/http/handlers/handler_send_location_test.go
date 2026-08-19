@@ -410,7 +410,7 @@ func TestSendLocation_WrongTypeInContext_ViaRegisteredRoute(t *testing.T) {
 }
 
 // TestSendLocation_SuccessEmitsNoOutcomeLog recupera o eixo AUSÊNCIA DE LOG
-// NO CAMINHO FELIZ (ipmAssertNoOutcomeLog na tabela original). É o eixo que
+// NO CAMINHO FELIZ (assertNoOutcomeLog na tabela original). É o eixo que
 // os outros não pegam: um handler que logasse TODO request em warn passaria
 // em cada asserção de caminho de erro deste arquivo e ainda assim seria o
 // ruído que a Fase 12 existe para evitar. O logger do use case é
@@ -431,9 +431,5 @@ func TestSendLocation_SuccessEmitsNoOutcomeLog(t *testing.T) {
 	if n := len(sm.SendLocationCalls); n != 1 {
 		t.Fatalf("SendLocation chamado %d vez(es), quero 1", n)
 	}
-	for _, r := range capture.Records(t) {
-		if r.has("error") {
-			t.Fatalf("caminho de sucesso emitiu registro de erro: %s", r.Raw)
-		}
-	}
+	assertNoOutcomeLog(t, capture.Records(t))
 }

@@ -390,9 +390,5 @@ func TestSendPoll_SuccessEmitsNoOutcomeLog(t *testing.T) {
 	if n := len(sm.SendPollCalls); n != 1 {
 		t.Fatalf("SendPoll chamado %d vez(es), quero 1", n)
 	}
-	for _, r := range capture.Records(t) {
-		if r.has("error") {
-			t.Fatalf("caminho de sucesso emitiu registro de erro: %s", r.Raw)
-		}
-	}
+	assertNoOutcomeLog(t, capture.Records(t))
 }

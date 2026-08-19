@@ -7646,3 +7646,118 @@ capability, cada uma nos dois pontos. Verificação: `go test ./pkg/... -race
 -count=1` EXIT:0; `make check` EXIT:0; `go run ./cmd/listroutes | sort | wc -l`
 = 107. Produção NÃO foi tocada — as nove mutações foram revertidas por cópia
 do arquivo original, e `git status --short` só mostra o arquivo de teste novo.
+
+## F143 — a asserção "caminho feliz não loga saída" existia em duas formas, e a mais usada não mordia
+
+**Data**: 2026-08-19. **Contexto**: CAP-17, varredura do eixo "o caminho de
+sucesso não emite registro de caminho de saída" nas capabilities de envio.
+
+**Onde**: `pkg/presentation/http/handlers/`, quatro pontos.
+
+**Problema**: o eixo estava escrito de duas maneiras, e só uma mede o que diz.
+
+| forma | código | mede |
+|---|---|---|
+| FORTE, por NÍVEL | `if lvl := r.str("level"); lvl == "warn" \|\| lvl == "error"` | qualquer registro de saída |
+| FRACA, por CAMPO | `if r.has("error")` | só registro que traz campo `error` |
+
+Um `Warn` de ruído no caminho feliz não carrega campo `error` nenhum, então a
+forma fraca o deixa passar em silêncio. A forma fraca era a MAIORIA: três
+testes próprios mais o helper compartilhado `ipmAssertNoOutcomeLog`, este
+último chamado de sete lugares — dez pontos ao todo contra um único ponto na
+forma forte (`TestSendTemplate_SuccessEmitsNoOutcomeLog`).
+
+**Evidência de que NÃO mordia** (controle negativo executado). Plantado
+`hlog.FromRequest(r).Warn().Msg("ruido")` no caminho de SUCESSO de quatro
+handlers — `handler_interactive.go:59` (SendContact), `:104` (SendLocation),
+`:239` (SendPoll) e `handler_misc.go:45` (GetHealth, um dos sete chamadores do
+helper) — imediatamente antes do `RespondJSON` de 200. ANTES da correção:
+
+```
+--- PASS: TestGetHealthHandler_Success (0.00s)
+--- PASS: TestSendContact_SuccessEmitsNoOutcomeLog (0.00s)
+--- PASS: TestSendLocation_SuccessEmitsNoOutcomeLog (0.00s)
+--- PASS: TestSendPoll_SuccessEmitsNoOutcomeLog (0.00s)
+ok  	wa-api/pkg/presentation/http/handlers	0.336s
+```
+
+Quatro testes verdes com ruído de `warn` no caminho feliz. DEPOIS da correção,
+com a MESMA mutação no lugar, os quatro mordem:
+
+```
+    handler_misc_test.go:51: caminho de sucesso emitiu registro warn: {"level":"warn","req_id":"da2phfmhokiniic7j650",...,"message":"ruido"}
+--- FAIL: TestGetHealthHandler_Success (0.00s)
+    handler_send_contact_test.go:405: caminho de sucesso emitiu registro warn: {"level":"warn",...,"message":"ruido"}
+--- FAIL: TestSendContact_SuccessEmitsNoOutcomeLog (0.00s)
+    handler_send_location_test.go:434: caminho de sucesso emitiu registro warn: {"level":"warn",...,"message":"ruido"}
+--- FAIL: TestSendLocation_SuccessEmitsNoOutcomeLog (0.00s)
+    handler_send_poll_test.go:393: caminho de sucesso emitiu registro warn: {"level":"warn",...,"message":"ruido"}
+--- FAIL: TestSendPoll_SuccessEmitsNoOutcomeLog (0.00s)
+```
+
+**Prova de que a forma nova não é GROSSEIRA**: trocando `Warn()` por `Info()`
+nas mesmas quatro linhas plantadas, os quatro voltam a passar —
+`info`/`debug` no caminho feliz continua permitido, só `warn` e `error`
+derrubam:
+
+```
+--- PASS: TestGetHealthHandler_Success (0.00s)
+--- PASS: TestSendContact_SuccessEmitsNoOutcomeLog (0.00s)
+--- PASS: TestSendLocation_SuccessEmitsNoOutcomeLog (0.00s)
+--- PASS: TestSendPoll_SuccessEmitsNoOutcomeLog (0.00s)
+ok  	wa-api/pkg/presentation/http/handlers	0.239s
+```
+
+**Correção aplicada**: um único helper FORTE em vez de N cópias. O
+`ipmAssertNoOutcomeLog` foi movido de `handler_interactive_test.go:74` para
+`logassert_test.go` — junto das outras asserções de log, e não enterrado no
+arquivo de uma capability — renomeado para `assertNoOutcomeLog` e convertido
+para a forma por nível. Os três testes próprios passaram a CHAMAR o helper em
+vez de manter laço local: era a duplicação que permitiu a divergência, e
+mantê-la só reabriria a porta.
+
+Lugares convertidos, nome por nome:
+
+| arquivo | função / ponto | o que mudou |
+|---|---|---|
+| `logassert_test.go` | `assertNoOutcomeLog` (novo, ex-`ipmAssertNoOutcomeLog`) | campo → NÍVEL |
+| `handler_send_location_test.go` | `TestSendLocation_SuccessEmitsNoOutcomeLog` | laço local `has("error")` → chama o helper |
+| `handler_send_contact_test.go` | `TestSendContact_SuccessEmitsNoOutcomeLog` | idem |
+| `handler_send_poll_test.go` | `TestSendPoll_SuccessEmitsNoOutcomeLog` | idem |
+
+Os SETE chamadores do helper, que herdaram a forma forte sem mudança própria
+além do nome: `handler_misc_test.go:51` (`TestGetHealthHandler_Success`),
+`:89`, `:171`, `:280`, `:401`; `handler_interactive_test.go:175`;
+`handler_presence_reaction_test.go:162`. NENHUM deles passou a falhar: `go
+test ./pkg/... -race -count=1` fecha EXIT:0 com 48 pacotes `ok`. Isso é achado
+por si — significa que nenhum desses caminhos felizes emite `warn` legítimo,
+ou seja, não há ruído de log em produção nesses sete pontos.
+
+**NÃO mexido, e por quê**: `handler_send_template_test.go`,
+`TestSendTemplate_SuccessEmitsNoOutcomeLog` já usava a forma por nível e traz
+o comentário que explica a escolha. Atenção para quem varrer depois: esse
+arquivo MENCIONA `has("error")` dentro do comentário explicativo, então grep
+ingênuo por `has("error")` o classifica como fraco — ele não é.
+
+**Outras ocorrências de `has("error")` no repo, todas verificadas e todas
+legítimas** (nenhuma é asserção de caminho feliz):
+
+- `logassert_test.go:156`, dentro de `checkOutcome` — é o co-gate D, que
+  EXIGE a existência de um registro com campo `error` no caminho de ERRO. Uso
+  correto e oposto ao daqui.
+- `handler_send_template_test.go:457` — texto de comentário, não código.
+
+**Esta é a SEGUNDA vez que a lição aparece.** O FIX-10 já havia movido esta
+asserção DELIBERADAMENTE de `has("error")` para nível, e mesmo assim código
+novo (CAP-08A, CAP-08B, CAP-14) regrediu para a forma fraca. A causa é
+estrutural: a lição estava registrada num comentário de UM teste, então cada
+capability nova a reescrevia do zero e reescrevia errado. Por isso a correção
+desta vez não foi corrigir os três pontos e sim ELIMINAR a possibilidade de
+divergência — existe agora um helper só, com o porquê escrito nele. Uma lição
+que não está travada em código compartilhado volta.
+
+**Status**: CORRIGIDO nesta sessão. Testes que o travam:
+`assertNoOutcomeLog` em `pkg/presentation/http/handlers/logassert_test.go`, e
+por meio dele os dez pontos de chamada listados acima. Produção NÃO foi
+tocada: as quatro mutações foram revertidas por edição localizada e `git diff
+--name-only` de `handler_interactive.go` e `handler_misc.go` sai vazio.

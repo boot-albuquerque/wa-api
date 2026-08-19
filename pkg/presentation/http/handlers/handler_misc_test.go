@@ -48,7 +48,7 @@ func TestGetHealthHandler_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 // TestGetHealthHandler_CounterFailure: /health e' a rota que o operador usa
@@ -86,7 +86,7 @@ func TestListNewsletterHandler_Success(t *testing.T) {
 	if len(nr.ListSubscribedCalls) != 1 {
 		t.Fatalf("ListSubscribed chamado %d vez(es), quero 1", len(nr.ListSubscribedCalls))
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestListNewsletterHandler_Unauthorized(t *testing.T) {
@@ -168,7 +168,7 @@ func TestDeleteUserCompleteHandler_Success(t *testing.T) {
 	if remaining != 0 {
 		t.Fatalf("usuario sobreviveu a exclusao completa (%d linhas)", remaining)
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestDeleteUserCompleteHandler_DatabaseFailure(t *testing.T) {
@@ -277,7 +277,7 @@ func TestMiscBodyHandlers_Success(t *testing.T) {
 			if env := decodeEnvelope(t, rec); !env.Success {
 				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
-			ipmAssertNoOutcomeLog(t, recs)
+			assertNoOutcomeLog(t, recs)
 		})
 	}
 }
@@ -398,7 +398,7 @@ func TestGetPrivacySettingsHandler_Success(t *testing.T) {
 	if len(pm.GetPrivacySettingsCalls) != 1 {
 		t.Fatalf("GetPrivacySettings chamado %d vez(es), quero 1", len(pm.GetPrivacySettingsCalls))
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestGetPrivacySettingsHandler_Unauthorized(t *testing.T) {

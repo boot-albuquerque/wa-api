@@ -207,3 +207,28 @@ func (logAssertions) checkNoSecrets(recs []logLine, extra []string) error {
 	}
 	return nil
 }
+
+// assertNoOutcomeLog locks the happy path: a successful request must not emit
+// any warn/error record.
+//
+// The assertion is by record LEVEL, not by presence of the "error" field. A
+// noise Warn on the happy path carries no "error" field at all, so the
+// has("error") form lets it through silently — measured: with
+// `hlog.FromRequest(r).Warn().Msg("ruido")` planted in the success path of
+// SendContact, SendLocation, SendPoll and GetHealth, the field form passed on
+// all four. FIX-10 already moved one assertion from field to level for this
+// exact reason and new code regressed to the weak form anyway; this shared
+// helper exists so the lesson is stated in ONE place instead of being
+// re-derived per capability.
+//
+// info/debug records are deliberately allowed: the happy path may narrate
+// itself, it just must not report an outcome.
+func assertNoOutcomeLog(t *testing.T, recs []logLine) {
+	t.Helper()
+	for _, r := range recs {
+		if lvl := r.str("level"); lvl == "warn" || lvl == "error" {
+			t.Fatalf("caminho de sucesso emitiu registro %s: %s", lvl, r.Raw)
+		}
+	}
+	logassert.NoSecrets(t, recs)
+}

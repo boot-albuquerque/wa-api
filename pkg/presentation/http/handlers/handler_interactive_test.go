@@ -69,18 +69,6 @@ func ipmServe(t *testing.T, h http.Handler, method, path, body string, mut func(
 	return rec, capture.Records(t)
 }
 
-// ipmAssertNoOutcomeLog trava o caminho feliz: sucesso nao emite registro de
-// caminho de saida.
-func ipmAssertNoOutcomeLog(t *testing.T, recs []logLine) {
-	t.Helper()
-	for _, r := range recs {
-		if r.has("error") {
-			t.Fatalf("caminho de sucesso emitiu registro de erro: %s", r.Raw)
-		}
-	}
-	logassert.NoSecrets(t, recs)
-}
-
 // interactiveCase descreve um dos handlers de envio interativo que ainda
 // dependem de port.MessageComposer.
 type interactiveCase struct {
@@ -184,7 +172,7 @@ func TestInteractiveHandlers_Success(t *testing.T) {
 			if len(mc.NewMessageIDCalls) != 1 {
 				t.Fatalf("NewMessageID chamado %d vez(es), quero 1", len(mc.NewMessageIDCalls))
 			}
-			ipmAssertNoOutcomeLog(t, recs)
+			assertNoOutcomeLog(t, recs)
 		})
 	}
 }
