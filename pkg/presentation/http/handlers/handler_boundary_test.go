@@ -88,11 +88,11 @@ func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.
 	return domain.MessageSendResult{}, s.err
 }
 
-// Os quatro métodos de port.SimpleMessenger entraram com o CAP-15, quando
-// SendTemplate migrou de port.MessageComposer (que só validava) para a porta
-// que ENVIA. A tabela só exercita SendTemplate; os outros três existem porque
-// a interface é uma só e o use case a exige inteira — e ficam prontos para
-// quando /chat/send/location, /contact e /poll entrarem nesta tabela.
+// Os CINCO métodos de port.SimpleMessenger entraram com o CAP-15
+// (Location/Contact/Poll/Template) e o CAP-22 (List). A tabela só exercita
+// SendTemplate; os outros quatro existem porque a interface é uma só e o
+// use case a exige inteira — e ficam prontos para quando
+// /chat/send/location, /contact, /poll e /list entrarem nesta tabela.
 //
 // Todos contam em s.calls: o boundary test mede se o handler chegou a AGIR
 // sobre o WhatsApp, e enviar é o ato máximo.
@@ -112,6 +112,11 @@ func (s *spyPort) SendPoll(context.Context, string, domain.JID, domain.PollPaylo
 }
 
 func (s *spyPort) SendTemplate(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendList(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }
@@ -316,8 +321,10 @@ func boundaryCases() []boundaryCase {
 	log := silentLogger{}
 	return []boundaryCase{
 		{
-			name:      "SendMessage",
-			build:     func(s *spyPort) http.Handler { return NewSendMessageHandler(message.NewSendMessageUseCase(s, s, s, log)) },
+			name: "SendMessage",
+			build: func(s *spyPort) http.Handler {
+				return NewSendMessageHandler(message.NewSendMessageUseCase(s, s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/send/text",
 			readsBody: true,

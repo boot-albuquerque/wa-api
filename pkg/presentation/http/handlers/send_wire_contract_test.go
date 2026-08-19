@@ -16,10 +16,11 @@ import (
 
 // CAP-13 — TRAVA DOS NOMES DO WIRE das capabilities de envio. Nasceu com
 // OITO; o CAP-14 acrescentou a nona (/chat/send/poll), o CAP-15 a decima
-// (/chat/send/template) e o CAP-21 a DECIMA PRIMEIRA
-// (/chat/send/buttons), cada uma no mesmo movimento em que passou a enviar
-// de verdade. Capability nova que fica de fora desta trava e' a proxima
-// F137.
+// (/chat/send/template), o CAP-21 a decima primeira (/chat/send/buttons) e
+// o CAP-22 a DÉCIMA SEGUNDA (/chat/send/list) — a última da superfície de
+// envio (HOUSEKEEP F149) —, cada uma no mesmo movimento em que passou a
+// enviar de verdade. Capability nova que fica de fora desta trava e' a
+// proxima F137.
 //
 // Por que este arquivo existe, separado dos testes de cada rota: todo o resto
 // da suite de envio decodifica `envelope.data` numa struct anonima com as
@@ -38,14 +39,14 @@ import (
 //
 // A forma travada e' a ATUAL — {message_id, timestamp, status} —, que diverge
 // do historico ({Details, Timestamp, Id}). Manter a forma atual foi decisao
-// registrada (HOUSEKEEP F131), por consistencia entre as oito. Este arquivo
+// registrada (HOUSEKEEP F131), por consistencia entre as doze. Este arquivo
 // trava a decisao; nao a reabre.
 
 // sendResultWireKeys sao os nomes das chaves da resposta de envio, escritos a
-// mao, um por linha, a partir dos DTOs domain.Send*Result. Identicos nas dez
+// mao, um por linha, a partir dos DTOs domain.Send*Result. Identicos nas doze
 // capabilities depois que SendStickerResult ganhou Timestamp (F137),
-// SendPollResult ganhou Timestamp (CAP-14) e SendTemplateResult ganhou
-// Timestamp (CAP-15).
+// SendPollResult ganhou Timestamp (CAP-14), SendTemplateResult ganhou
+// Timestamp (CAP-15) e SendListResult ganhou Timestamp (CAP-22).
 var sendResultWireKeys = []string{
 	"message_id",
 	"timestamp",
@@ -138,7 +139,7 @@ type sendWireCase struct {
 	serve func(t *testing.T) *httptest.ResponseRecorder
 }
 
-// sendWireCases enumera as ONZE capabilities de envio, uma por entrada. Cada
+// sendWireCases enumera as DOZE capabilities de envio, uma por entrada. Cada
 // serve monta o roteador gorilla/mux da propria capability (os helpers
 // sendXRouter de cada arquivo de teste) e faz um POST autenticado.
 func sendWireCases() []sendWireCase {
@@ -295,6 +296,21 @@ func sendWireCases() []sendWireCase {
 						`"Buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`)
 			},
 		},
+		{
+			nome: "list",
+			rota: "POST /chat/send/list",
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				sm := &contractsfake.SimpleMessenger{
+					SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
+						return sendWireResult("wire-list-1"), nil
+					},
+				}
+				return sendWirePost(t, sendListRouter(sm, &contractsfake.JIDResolver{}),
+					"/chat/send/list",
+					`{"Phone":"5511999999999","Desc":"Escolha",`+
+						`"Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`)
+			},
+		},
 	}
 }
 
@@ -306,12 +322,12 @@ func sendWirePost(t *testing.T, h http.Handler, target, body string) *httptest.R
 	return rec
 }
 
-// TestSendWireContract_FieldNames trava os nomes do wire das ONZE
+// TestSendWireContract_FieldNames trava os nomes do wire das DOZE
 // capabilities de envio, cada uma pela sua rota registrada.
 func TestSendWireContract_FieldNames(t *testing.T) {
 	casos := sendWireCases()
-	if len(casos) != 11 {
-		t.Fatalf("a suite cobre %d capabilities de envio, quero as 11 enumeradas no CAP-13 + CAP-14 + CAP-15 + CAP-21", len(casos))
+	if len(casos) != 12 {
+		t.Fatalf("a suite cobre %d capabilities de envio, quero as 12 enumeradas no CAP-13 + CAP-14 + CAP-15 + CAP-21 + CAP-22", len(casos))
 	}
 
 	for _, caso := range casos {

@@ -104,7 +104,6 @@ var customHandlerSet = &customHandlers{}
 func initCustomHandlers(s *server) {
 	// Adapters
 	waClientLookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
-	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
 	// WithPollOptions liga o guarda-opcoes de enquete: o adapter memoriza o
 	// texto em claro das opcoes depois de cada envio, e o handler de eventos
@@ -155,7 +154,7 @@ func initCustomHandlers(s *server) {
 	sendContactUC := message.NewSendContactUseCase(chatMessenger, jidResolver, logger)
 	sendLocationUC := message.NewSendLocationUseCase(chatMessenger, jidResolver, logger)
 	sendButtonsUC := message.NewSendButtonsUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
-	sendListUC := message.NewSendListUseCase(messageComposer, logger)
+	sendListUC := message.NewSendListUseCase(chatMessenger, jidResolver, logger)
 	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
 	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)

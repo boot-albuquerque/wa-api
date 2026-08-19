@@ -359,17 +359,90 @@ type ButtonsPayload struct {
 	HeaderImageMimeType string
 }
 
-// SendListRequest representa o payload de envio de lista.
+// ListRow é UMA linha de uma seção de lista, com os SEIS campos do
+// listItem histórico (`git show 41bc8e2^:handlers.go`, função SendList).
+//
+// É um DTO de DOMÍNIO, não de protobuf. RowId/RowID/Rowid/Rowid2 existem
+// porque o histórico os aceitava como fallback encadeado nesta ordem exata:
+//
+//	RowId <- RowID <- Rowid <- Rowid2 <- (o Title já resolvido e já trimado)
+//
+// O último nível NÃO é um campo do payload — é o próprio título, usado como
+// identificador quando os quatro campos de ID vêm vazios. Depois de
+// normalizado pelo use case, só Title/Description/RowId carregam valor: os
+// outros três ficam vazios, mesma disciplina de InteractiveButton.ID/ButtonID.
+type ListRow struct {
+	Title       string `json:"title"`
+	Description string `json:"desc"`
+	RowId       string `json:"RowId"`
+	RowID       string `json:"RowID"`
+	Rowid       string `json:"rowId"`
+	Rowid2      string `json:"rowID"`
+}
+
+// ListSection é UMA seção de `Sections`, com Rows já filtradas de linhas
+// sem título quando normalizada pelo use case (ver
+// SendListUseCase.normalizeSections).
+type ListSection struct {
+	Title string    `json:"title"`
+	Rows  []ListRow `json:"rows"`
+}
+
+// SendListRequest representa o payload de envio de lista, com o contrato
+// histórico completo levantado em HOUSEKEEP F149
+// (`git show 41bc8e2^:handlers.go`, função SendList — 290 linhas, o maior
+// handler dos stubs recuperados nesta sessão).
+//
+// DUAS formas de entrada: Sections (preferida, multi-seção) e List (legado,
+// lista plana embrulhada numa seção única no use case). O corpo aceita
+// QUATRO chaves JSON como fallback encadeado, nesta ordem:
+//
+//	Desc <- Body <- body <- text
+//
+// ContextInfo e QuotedMessage do payload histórico NÃO entram: reply-to é
+// dívida separada (F134/F148), decisão do Orchestrator não reaberta aqui
+// (HOUSEKEEP F149).
 type SendListRequest struct {
-	Phone string `json:"Phone"`
-	Desc  string `json:"Desc"`
-	ID    string `json:"Id,omitempty"`
+	Phone      string        `json:"Phone"`
+	ButtonText string        `json:"ButtonText"` // rótulo do botão que abre a lista; default "Select"
+	Desc       string        `json:"Desc"`       // corpo principal. Fallback: Body, body, text
+	Body       string        `json:"Body"`
+	Body2      string        `json:"body"`
+	Text       string        `json:"text"`
+	TopText    string        `json:"TopText"`    // cabeçalho opcional; também default do título da seção legada
+	FooterText string        `json:"FooterText"` // rodapé opcional
+	Sections   []ListSection `json:"Sections"`   // preferida: multi-seção
+	List       []ListRow     `json:"List"`       // legado: lista plana
+	ID         string        `json:"Id,omitempty"`
 }
 
 // SendListResult representa o resultado do envio de lista.
+//
+// Timestamp entrou no CAP-22 pela mesma razão que em SendButtonsResult
+// (CAP-21) e nas outras nove capabilities de envio: a forma
+// {message_id, timestamp, status} é travada em send_wire_contract_test.go
+// como a DÉCIMA SEGUNDA entrada. Decisão F131 (forma ATUAL, não a histórica
+// {Details, Timestamp, Id}) não se reabre aqui.
 type SendListResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// ListPayload é a metadata de protocolo que port.SimpleMessenger.SendList
+// repassa para ListMessage (CAP-22).
+//
+// Sections chega aqui JÁ NORMALIZADO pelo use case: linha sem título
+// descartada, seção que ficou sem linhas descartada, RowId resolvido pela
+// cadeia de fallback (título já trimado é o último nível). O adapter NÃO
+// reaplica fallback nenhum nem descarte nenhum — só traduz para
+// waE2E.ListMessage_Section/Row.
+type ListPayload struct {
+	Body       string
+	ButtonText string
+	Title      string // TopText; vazio significa "sem cabeçalho" (ListMessage.Title fica nil)
+	Footer     string // FooterText; vazio significa "sem rodapé" (ListMessage.FooterText fica nil)
+	Sections   []ListSection
 }
 
 // SendPollRequest representa o payload de envio de enquete.

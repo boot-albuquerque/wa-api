@@ -942,7 +942,44 @@ rules_frozen=true
 #     teste nos dois niveis, nao por log.
 # nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
 # nenhuma linha, coberta ou nao.
-min_func_coverage=665
+# CAP-22 (2026-08-19): func_coverage CAI 665->659 (426/641=66.46% ->
+# 426/646=65.94%), e a queda e' de DENOMINADOR — mesmo mecanismo do CAP-21. O
+# numerador NAO se move (426 antes, 426 depois). Enumerado a partir do diff
+# do golden, linha por linha:
+#   ENTRAM no denominador (5), TODAS UNCOVERED:L1:
+#     pkg/application/usecase/message.normalizeListSections
+#     pkg/application/usecase/message.normalizeRows
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendList
+#     pkg/infra/wa-noise/adapters/chat.listRows
+#     pkg/infra/wa-noise/adapters/chat.listSections
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 426->426. Confere
+#   com a medicao: `go run ./cmd/logcov` imprime 65.9% (426/646 elegiveis).
+# (O diff do golden traz mais 3 linhas FORA do denominador:
+# contractsfake.SimpleMessenger.SendList, EXCLUDED X5 por ser duble de teste;
+# chat.listBizNodes e message.resolveRowID, EXCLUDED X1 por serem triviais e
+# sem caminho de saida. Mais uma linha que so' muda de NUMERO DE LINHA sem
+# mudar de estado: SendListUseCase.Execute (send_list.go:28/31 ->
+# :81/84/87/92 — agora QUATRO recusas de validacao em vez de duas, mesma
+# disciplina "adapter delegante nao loga"/"funcao pura sem logger" abaixo).
+# Golden 2986 -> 2994 linhas: as 5 entradas elegiveis + as 3 EXCLUDED + a
+# renumeracao.)
+# As CINCO uncovered, uma a uma, e por que nao levam log:
+#   - ChatMessengerAdapter.SendList e' o padrao "adapter delegante nao loga",
+#     ja' aceito neste repositorio (mesmo grupo de SendButtons, SendTemplate,
+#     SendPoll e os quinze irmaos de messenger.go — nenhum deles loga).
+#   - listRows e listSections sao funcoes PURAS de pacote (sem receptor, sem
+#     logger em escopo): traduzem []domain.ListRow/[]domain.ListSection para
+#     o wire, sem caminho de erro proprio. Mesma disciplina de
+#     templateButtons e nativeFlowButtons, ja' aceitos.
+#   - normalizeListSections e normalizeRows sao funcoes PURAS de pacote
+#     (sem receptor, sem logger em escopo): implementam os TRES descartes
+#     silenciosos do contrato historico (HOUSEKEEP F149), decisao registrada
+#     e travada por teste nos tres niveis, nao por log — mesma disciplina de
+#     normalizeInteractiveButtons (F148) acima.
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+min_func_coverage=659
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1307,7 +1344,11 @@ min_errpath_coverage=860
 # acima, junto de min_func_coverage: SendButtonsUseCase.headerImageBytes
 # (coberta), normalizeInteractiveButtons, ChatMessengerAdapter.SendButtons e
 # nativeFlowButtons. Nenhuma saida.
-min_eligible=641
+# CAP-22 (2026-08-19): 641->646. As entradas sao CINCO e estao enumeradas
+# acima, junto de min_func_coverage: normalizeListSections, normalizeRows,
+# ChatMessengerAdapter.SendList, listRows e listSections. Nenhuma coberta,
+# nenhuma saida.
+min_eligible=646
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -59,6 +59,19 @@ type SimpleMessengerSendTemplateCall struct {
 	ID      string
 }
 
+// DefaultSentListMessageID é o ID que SimpleMessenger devolve em
+// MessageSendResult.ID sem SendListFunc configurada.
+const DefaultSentListMessageID = "sent-list-message-id"
+
+// SimpleMessengerSendListCall é uma chamada a SendList.
+type SimpleMessengerSendListCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.ListPayload
+	ID      string
+}
+
 // SimpleMessenger é o fake de port.SimpleMessenger.
 type SimpleMessenger struct {
 	SessionGuard
@@ -74,6 +87,9 @@ type SimpleMessenger struct {
 
 	SendTemplateFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error)
 	SendTemplateCalls []SimpleMessengerSendTemplateCall
+
+	SendListFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, id string) (domain.MessageSendResult, error)
+	SendListCalls []SimpleMessengerSendListCall
 }
 
 var _ port.SimpleMessenger = (*SimpleMessenger)(nil)
@@ -112,4 +128,13 @@ func (f *SimpleMessenger) SendTemplate(ctx context.Context, txtID string, target
 		return f.SendTemplateFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentTemplateMessageID}, nil
+}
+
+// SendList implementa port.SimpleMessenger.
+func (f *SimpleMessenger) SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, id string) (domain.MessageSendResult, error) {
+	f.SendListCalls = append(f.SendListCalls, SimpleMessengerSendListCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendListFunc != nil {
+		return f.SendListFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentListMessageID}, nil
 }

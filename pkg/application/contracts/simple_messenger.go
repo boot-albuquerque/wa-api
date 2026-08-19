@@ -79,4 +79,21 @@ type SimpleMessenger interface {
 	// protobuf. QUE a ordem dos botões seja preservada é contrato desta
 	// porta — é a ordem em que eles aparecem no aparelho de quem recebe.
 	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error)
+
+	// SendList monta um ListMessage a partir de payload
+	// (Body/ButtonText/Title/Footer/Sections) e o envia para target.
+	// Mesma disciplina de SendLocation quanto a id e ao resultado devolvido
+	// (CAP-22).
+	//
+	// List cabe AQUI, e não em InteractiveMessenger: send/list não tem
+	// upload nenhum (nenhum header de mídia), então o critério que separou
+	// InteractiveMessenger de SimpleMessenger — upload CONDICIONAL — não se
+	// aplica. É o quinto caso real da mesma fronteira campos-escalares-viram-
+	// protobuf, depois de Location, Contact, Poll e Template.
+	//
+	// A tradução de cada domain.ListSection/ListRow para
+	// waE2E.ListMessage_Section/Row é da IMPLEMENTAÇÃO. QUE a ordem de
+	// seções e linhas seja preservada é contrato desta porta — é a ordem em
+	// que aparecem no aparelho de quem recebe.
+	SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, id string) (domain.MessageSendResult, error)
 }

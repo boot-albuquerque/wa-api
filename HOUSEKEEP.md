@@ -8623,3 +8623,114 @@ anterior: o piso já estava desatualizado em relação ao HEAD, e escrever 855
 sem ter medido o ANTES seria exatamente o número sem lastro que a regra de
 medição deste projeto proíbe. Fica como dívida explícita, com o valor medido
 registrado aqui.
+
+## F149
+
+**Data**: 2026-08-19. **Contexto**: CURRENT_STATE do `send_list`, o último
+stub da superfície de envio. Levantado antes de escrever packet, no mesmo
+formato da F147.
+
+**Onde**: `git show 41bc8e2^:handlers.go`, `SendList` (290 linhas — o maior
+handler dos que restavam).
+
+**O contrato, enumerado**:
+
+Request: `Phone`, `ButtonText` (rótulo do botão que abre a lista, default
+`"Select"`), `Desc`, `TopText` (cabeçalho), `FooterText`, `Sections`,
+`List` (legado), `Id`, `ContextInfo`, `QuotedMessage`.
+
+**DUAS cadeias de fallback**, e as duas são fáceis de implementar errado:
+
+1. corpo: `Desc` ← `Body` ← `body` ← `text` (quatro chaves JSON distintas
+   para o mesmo campo lógico);
+2. id da linha: `RowId` ← `RowID` ← `rowId` ← `rowID` ← **o próprio título**
+   (cinco níveis, e o último é um valor derivado, não um campo).
+
+**DUAS formas de entrada**: `Sections` (preferida, multi-seção) e `List`
+(legado, lista plana que é embrulhada numa seção única). O histórico aceita
+as duas e valida `len(Sections) == 0 && len(List) == 0` => 400.
+
+`ListType` é sempre `SINGLE_SELECT`.
+
+**TRÊS descartes silenciosos** — mais que os dois do `send_buttons` (F147):
+
+```go
+if rowTitle == "" { continue }        // linha sem título some
+if len(rows) == 0 { continue }        // seção que ficou sem linhas some
+if len(protoSections) == 0 { 400 }    // rede: se TUDO sumiu, aí sim reprova
+```
+
+Ou seja: mandar uma seção com três linhas, duas sem título, devolve 200 com
+uma linha. Nada avisa. A rede só pega o caso em que absolutamente tudo foi
+descartado.
+
+**Validações**: `Phone` ausente => 400; corpo ausente (depois da cadeia de
+fallback) => 400 "missing Desc/Body"; `Sections` e `List` ambos vazios => 400.
+
+**Por que registro antes de implementar**: as duas cadeias de fallback e os
+três descartes são decisão de contrato, e escolher por omissão é o que a F121,
+a F135 e a F147 existem para impedir. E há um risco específico de teste: uma
+cadeia de fallback de cinco níveis passa em teste que exercite só o primeiro
+nível — o teste tem de percorrer a cadeia inteira, nível por nível, ou não
+mede nada.
+
+**Status**: não corrigido, nada implementado. Levado ao canal junto com o
+fecho do CAP-21.
+
+## F150
+
+**Data**: 2026-08-19. **Contexto**: CAP-22, implementação de `send_list`, o
+último stub da superfície de envio.
+
+**Correção à F149 — dois detalhes do contrato histórico que a leitura
+anterior não capturou**: `git show 41bc8e2^:handlers.go`, função `SendList`,
+tem MAIS que as duas cadeias de fallback e os três descartes:
+
+1. **O embrulho não é o óbvio.** A mensagem final não é
+   `ListMessage` direto nem `ViewOnceMessage > FutureProofMessage`: é
+   `Message.DocumentWithCaptionMessage` (um `*waE2E.FutureProofMessage`) cujo
+   `Message` interno carrega o `ListMessage`. O comentário do histórico marca
+   o embrulho óbvio como ERRADO — sem o correto a lista chega como texto
+   simples ou nem chega.
+2. **Nó BIZ obrigatório.** `biz > list(type="product_list", v="2")` como
+   `AdditionalNodes` do `SendRequestExtra` — sem ele o servidor do WhatsApp
+   não processa a mensagem como lista interativa. Mesma família do nó BIZ que
+   o CAP-21 já tinha achado para `send_buttons` (`biz > interactive >
+   native_flow`), mas com tag e atributos diferentes.
+
+Os dois foram confirmados como ainda válidos na versão vendorizada de
+`internal/wa-noise`: `waE2E.Message.DocumentWithCaptionMessage` e
+`waE2E.FutureProofMessage` existem tal qual no protobuf atual, e
+`send.RequestExtra.AdditionalNodes` (`internal/wa-noise/capabilities/send/types.go:66`)
+é o mesmo mecanismo que o CAP-21 já usa. Nenhum dos dois estava enumerado no
+"contrato, enumerado" da F149 — ficam registrados aqui para quem reler a F149
+não repetir a omissão.
+
+**Fecha F141 para `/chat/send/list`**: o handler saiu de
+`handler_interactive.go` (que ainda serve `/contact`, `/location` e `/poll`
+com o sentinela genérico `errDecodePayload` no log de decode) para
+`handler_message_list.go`, com o erro CRU do decoder no log — mesma forma de
+`handler_message_buttons.go`/`handler_message_template.go`. Das duas rotas
+que a F141 apontava como pendentes (`send/buttons` e `send/list`), as duas
+estão fechadas agora (buttons no CAP-21).
+
+**Achado incidental, não corrigido — `MessageComposerAdapter` órfão**:
+`SendListUseCase` era o ÚLTIMO consumidor de produção de
+`appport.MessageComposer`/`wachat.NewMessageComposerAdapter`
+(`pkg/infra/wa-noise/adapters/chat/composer.go`). Com a migração para
+`appport.SimpleMessenger`, a variável `messageComposer` em
+`pkg/bootstrap/wiring_handlers.go` ficou sem uso e foi REMOVIDA (Go não
+compila var local não usada) — mas o adapter e a porta `port.MessageComposer`
+em si continuam definidos, sem nenhum consumidor de produção. Não removidos
+nesta sessão: são tipo exportado e porta pública, e apagá-los é decisão de
+escopo maior que esta capability. **Correção sugerida**: se nenhuma
+capability futura precisar de `port.MessageComposer` (o padrão
+"validated"/sem envio real que ele representa terminou com este bloco),
+remover `pkg/application/contracts/*message_composer*`,
+`pkg/infra/wa-noise/adapters/chat/composer.go` e o fake correspondente.
+
+**Status**: os dois itens de contrato — corrigidos (implementados desde já,
+travados por `TestChatMessengerAdapter_SendList_Wrapper` e
+`TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`,
+`pkg/infra/wa-noise/adapters/chat/messenger_list_test.go`). O achado do
+`MessageComposerAdapter` órfão: não corrigido, decisão de escopo pendente.
