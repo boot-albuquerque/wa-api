@@ -7761,3 +7761,151 @@ que não está travada em código compartilhado volta.
 por meio dele os dez pontos de chamada listados acima. Produção NÃO foi
 tocada: as quatro mutações foram revertidas por edição localizada e `git diff
 --name-only` de `handler_interactive.go` e `handler_misc.go` sai vazio.
+
+## F144 — os quatro eixos de fronteira faltavam INTEIROS em seis das dez capabilities de envio
+
+**Data**: 2026-08-19. **Contexto**: CAP-18, varredura sistemática que deveria
+ter vindo ANTES da F142 (eixo do txtID ausente em nove capabilities) e da
+F143 (asserção de caminho feliz fraca em quatro). Nos dois casos anteriores o
+defeito estava em código já commitado e aprovado por avaliação adversarial;
+esta entrada registra a varredura que os teria encontrado de uma vez.
+
+**Onde**: `pkg/presentation/http/handlers/`, os arquivos de teste das dez
+capabilities de envio.
+
+**Os quatro eixos**, com o marcador de COMPORTAMENTO de cada um (e não o nome
+do teste — nome mente, e a F139 e o comentário da F143 já custaram isso duas
+vezes):
+
+| eixo | condição | marcador medido |
+|---|---|---|
+| 1. missing session id | autenticado, `Id` vazio | 400 + `logassert.OutcomeLogged(..., "missing session id")` + porta intacta |
+| 2. corpo malformado | JSON truncado | 400 + causa de decode no log + porta intacta |
+| 3. sucesso não loga | caminho feliz | `assertNoOutcomeLog` (por NÍVEL) |
+| 4. wrong type in context | valor que não satisfaz `userInfo` | 401 (não pânico) + `"unauthorized"` |
+
+**A matriz medida, 10 × 4** (`✓` presente ANTES do CAP-18, `—` ausente):
+
+| capability | eixo 1 | eixo 2 | eixo 3 | eixo 4 |
+|---|---|---|---|---|
+| location | ✓ | ✓ | ✓ | ✓ |
+| contact | ✓ | ✓ | ✓ | ✓ |
+| poll | ✓ | ✓ | ✓ | ✓ |
+| template | ✓ | ✓ | ✓ (inline, não pelo helper) | ✓ |
+| text | — | — | — | — |
+| image | — | — | — | — |
+| audio | — | — | — | — |
+| video | — | — | — | — |
+| document | — | — | — | — |
+| sticker | — | — | — | — |
+
+**Explicação do padrão, e é o que dá confiança na leitura**: as quatro
+completas são exatamente as migradas do CAP-08 em diante, depois que a
+auditoria de conservação passou a exigir que a migração não perdesse eixo. As
+seis vazias vieram do CAP-01 ao CAP-07, antes da auditoria existir. A divisão
+não é aleatória nem por tipo de mídia — é cronológica, e coincide com a data
+em que o gate entrou.
+
+**Duas correções à leitura inicial, ambas medidas:**
+
+1. **`text` não estava a zero de tudo.** `handler_boundary_test.go` cobre
+   `/chat/send/text` (caso `SendMessage`) nos eixos 1, 2 e 4 —
+   `TestHandlers_RejectEmptySessionID:495`, `TestHandlers_RejectMalformedBody:513`,
+   `TestHandlers_RejectWrongTypeInUserInfo:474`. Mas por `handler.ServeHTTP`
+   CRU, **sem rota registrada** (ARMADILHA 2) e **sem asserção de CAUSA**: lá
+   um 400 por decode e um 400 por sessão ausente são indistinguíveis, porque o
+   envelope de erro é o genérico. O eixo 3 não existia em forma nenhuma. As
+   outras cinco não tinham nada, em lugar nenhum.
+2. **O eixo 2 tem DUAS causas legítimas, e a divergência é de produção.**
+   `handler_interactive.go:92` (location/contact/poll) loga o erro-sentinela
+   `errDecodePayload` → `"could not decode payload"`. Já
+   `handler_message_send.go:48`, `handler_media.go` e `handler_media_ext.go`
+   logam o erro CRU do `json.Decoder` → `"unexpected EOF"` para o corpo
+   truncado. Não é defeito (o erro cru carrega MAIS informação), mas é
+   inconsistência de fronteira entre famílias de handler; a tabela nova nomeia
+   as duas formas num campo (`decodeCause`) em vez de uniformizar e esconder.
+
+**NENHUM defeito de produção encontrado.** Os seis handlers respondem 400 sem
+session id, 400 com corpo malformado (sem tocar a porta e sem buscar mídia),
+401 com tipo errado no contexto (a asserção de tipo já é a de duas variáveis,
+`info, ok := ...`), e não emitem `warn`/`error` no caminho feliz. Os eixos
+eram lacuna de TESTE, não de comportamento.
+
+**Correção aplicada**: `pkg/presentation/http/handlers/handler_send_axes_test.go`
+(novo), 24 testes = 6 capabilities × 4 eixos, **numa tabela só**. Cada
+capability contribui uma closure `serve` que monta seu roteador
+(gorilla/mux REGISTRADO, dublês próprios), faz UM POST sob a cadeia `hlog` de
+produção e devolve a mesma forma: resposta, registros de log, contador da
+porta e contador de `MediaFetcher.FetchBytes`. As quatro asserções são
+escritas uma vez cada. A DUPLICAÇÃO foi a causa raiz da F143 e não se repete.
+
+Dois cuidados que a tabela trava e que 24 cópias teriam perdido:
+
+- **Mídia não pode ser buscada antes da validação.** No eixo 2, as cinco
+  capabilities de mídia exigem `fetchCalls == 0` — um handler que baixasse o
+  arquivo antes de ler o corpo passaria em todo o resto.
+- **O contador precisa mover.** O eixo 3 exige `portCalls == 1` e
+  `fetchCalls == 1`: sem a metade positiva, todo "não alcançou a porta" dos
+  outros três eixos seria vácuo.
+
+**Controles negativos EXECUTADOS**, dois por eixo, em capabilities diferentes
+(oito mutações, todas compilaram, todas falharam, todas revertidas por edição
+localizada):
+
+| # | eixo | capability | mutação | saída |
+|---|---|---|---|---|
+| 1 | 1 | text | removida a guarda `txtID == ""` de `handler_message_send.go` | `status: got 200, want 400` |
+| 2 | 1 | image | removida a guarda `txtID == ""` de `handler_media.go` (SendImage) | `status: got 200, want 400` |
+| 3 | 2 | audio | `if err := ...Decode(&req); err != nil {...}` → `_ = ...Decode(&req)` | `co-gate D: campo error ("missing Phone in payload") nao contem "unexpected EOF"` |
+| 4 | 2 | document | idem, em SendDocument | `co-gate D: campo error ("missing Phone in payload") nao contem "unexpected EOF"` |
+| 5 | 3 | video | `hlog...Warn().Msg("ruido no caminho feliz")` antes do 200 | `caminho de sucesso emitiu registro warn: {"level":"warn",...}` |
+| 6 | 3 | sticker | idem | `caminho de sucesso emitiu registro warn: {"level":"warn",...}` |
+| 7 | 4 | image | `info, ok := ...(userInfo)` → `info := ...(userInfo)` (asserção de UMA variável) | `panic: interface conversion: int is not handlers.userInfo` |
+| 8 | 4 | sticker | idem | `panic: interface conversion: int is not handlers.userInfo` |
+
+As mutações 3 e 4 merecem destaque: elas provam que a asserção de CAUSA é que
+morde. O status sozinho também mudaria (500 em vez de 400), mas a mensagem
+mostra que o teste identificou o caminho errado tomado — o corpo truncado
+seguiu para o use case e morreu por `missing Phone`, que é exatamente o falso
+400 que o comentário do eixo 2 descreve.
+
+As mutações 7 e 8 provam o que o eixo 4 existe para provar: com a asserção de
+uma variável o handler entra em PÂNICO, não devolve 401. Em produção seria
+500 pelo recover do servidor, com goroutine derrubada.
+
+**Prova de ISOLAMENTO** (a mutação derruba SÓ o teste do eixo): com a mutação
+5 (ruído `warn` no caminho feliz de `SendVideo`) instalada, `go test ./ -count=1`
+sobre o pacote INTEIRO produziu exatamente uma falha:
+
+```
+--- FAIL: TestSendCapabilities_SuccessEmitsNoOutcomeLog (0.00s)
+    --- FAIL: TestSendCapabilities_SuccessEmitsNoOutcomeLog/video (0.00s)
+        handler_send_axes_test.go:319: caminho de sucesso emitiu registro warn: {"level":"warn","req_id":"da2pr76hokigj54do720","time":"2026-08-19T08:12:12-04:00","message":"ruido no caminho feliz"}
+FAIL
+```
+
+Nenhum outro teste do pacote caiu — inclusive `TestSendVideo_Success_ViaRegisteredRoute`
+e `TestSendCapabilities_AuthenticatedSessionReachesPort/video`, que passam
+pelo mesmo caminho feliz. É a demonstração de que a mutação é fina e que o
+eixo 3 é o ÚNICO que a pega: nenhum teste de caminho de erro nota ruído no
+caminho de sucesso.
+
+**Achado incidental, NÃO corrigido**:
+`handler_send_template_test.go:441` (`TestSendTemplate_SuccessEmitsNoOutcomeLog`)
+mantém o laço por nível INLINE em vez de chamar `assertNoOutcomeLog`, que a
+F143 consolidou. A forma é forte (por nível, não por campo), então não há
+defeito hoje — mas é a última cópia da lógica que a F143 existiu para
+unificar, e cópia sobrevivente é exatamente como a divergência voltou da
+primeira vez. Correção sugerida: substituir o laço pela chamada ao helper.
+Não aplicado por estar fora do escopo do CAP-18 (o pacote proibia tocar
+template) e por exigir decisão de quem definiu a política.
+
+**Status**: CORRIGIDO nesta sessão, no sentido de "lacuna de teste fechada" —
+não havia defeito de produção. Testes que o travam, todos em
+`pkg/presentation/http/handlers/handler_send_axes_test.go`:
+`TestSendCapabilities_MissingSessionID_ViaRegisteredRoute`,
+`TestSendCapabilities_MalformedBody_ViaRegisteredRoute`,
+`TestSendCapabilities_WrongTypeInContext_ViaRegisteredRoute` e
+`TestSendCapabilities_SuccessEmitsNoOutcomeLog`, cada um com os seis subtestes
+`text`, `image`, `audio`, `video`, `document`, `sticker`. Produção NÃO foi
+tocada: `git status --short` acusa apenas o arquivo de teste novo.
