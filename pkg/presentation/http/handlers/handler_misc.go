@@ -67,7 +67,7 @@ func (h *ListNewsletterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// DeleteUserCompleteHandler handles DELETE /admin/users/{id}/complete
+// DeleteUserCompleteHandler handles DELETE /admin/users/{id}/full
 type DeleteUserCompleteHandler struct {
 	usecase *user.DeleteUserCompleteUseCase
 }
@@ -76,7 +76,7 @@ func NewDeleteUserCompleteHandler(uc *user.DeleteUserCompleteUseCase) *DeleteUse
 	return &DeleteUserCompleteHandler{uc}
 }
 func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/admin/users/{id}/complete"
+	const route = "/admin/users/{id}/full"
 
 	vars := mux.Vars(r)
 	uid := vars["id"]
@@ -94,14 +94,14 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// RejectCallHandler handles POST /chat/rejectcall
+// RejectCallHandler handles POST /call/reject
 type RejectCallHandler struct{ usecase *chat.RejectCallUseCase }
 
 func NewRejectCallHandler(uc *chat.RejectCallUseCase) *RejectCallHandler {
 	return &RejectCallHandler{uc}
 }
 func (h *RejectCallHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/rejectcall"
+	const route = "/call/reject"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -174,7 +174,7 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// RequestUnavailableMessageHandler handles POST /chat/requestunavailablemessage
+// RequestUnavailableMessageHandler handles POST /chat/request-unavailable-message
 type RequestUnavailableMessageHandler struct {
 	usecase *chat.RequestUnavailableMessageUseCase
 }
@@ -183,7 +183,7 @@ func NewRequestUnavailableMessageHandler(uc *chat.RequestUnavailableMessageUseCa
 	return &RequestUnavailableMessageHandler{uc}
 }
 func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/requestunavailablemessage"
+	const route = "/chat/request-unavailable-message"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

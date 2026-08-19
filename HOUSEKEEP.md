@@ -8122,7 +8122,156 @@ Alternativa mais barata e sem mudança estrutural: usar
 `mux.CurrentRoute(r).GetPathTemplate()`, que devolve o padrão REGISTRADO e
 não pode divergir por construção.
 
-**Status**: **não corrigido** — é defeito de produção fora do escopo do
-CAP-19, que era de teste. Registrado para decisão. O achado só apareceu
+**Status**: **corrigido no CAP-20** (2026-08-19) — ver o adendo de correção
+no fim desta entrada. O achado só apareceu
 porque a tabela nova pede a rota REAL; a suíte antiga o escondia por chamar
 `handler.ServeHTTP` cru, onde o caminho da requisição é decorativo.
+
+### Adendo do Chief (2026-08-19): são TRÊS, não dois
+
+Varri TODAS as constantes `route` dos handlers contra a saída real de
+`cmd/listroutes`, e o terceiro caso não tinha sido encontrado:
+
+```
+pkg/presentation/http/handlers/handler_misc.go:79
+  const route = "/admin/users/{id}/complete"     <- rota real: /admin/users/{id}/full
+pkg/presentation/http/handlers/handler_misc.go:104
+  const route = "/chat/rejectcall"               <- rota real: /call/reject
+pkg/presentation/http/handlers/handler_misc.go:186
+  const route = "/chat/requestunavailablemessage" <- rota real: /chat/request-unavailable-message
+```
+
+Comando que reproduz, e que deveria virar gate:
+
+```bash
+for r in $(grep -rhoE 'const route = "[^"]+"' pkg/presentation/http/handlers/*.go \
+           | grep -oE '"[^"]+"' | tr -d '"' | sort -u); do
+  go run ./cmd/listroutes 2>/dev/null | grep -q " $r\$" || echo "INEXISTENTE: $r"
+done
+```
+
+Os quinze carimbos foram conferidos um a um; doze batem, três não.
+
+**Por que o terceiro importa mais do que parece**: os três estão no MESMO
+arquivo, o que sugere que o padrão foi copiado de handler em handler sem
+conferir contra a rota registrada. Um gate que compare as constantes `route`
+com a saída de `cmd/listroutes` impede a quarta ocorrência — hoje nada impede,
+e o custo é uma linha de shell no `make check`.
+
+**Correção sugerida, em duas frentes**: corrigir os três literais, e
+acrescentar o gate. Sem o gate, esta entrada vira a próxima F143 — a lição
+escrita que volta a quebrar porque nada a trava.
+
+
+### Correção (CAP-20, 2026-08-19): três literais e um gate
+
+**O que foi corrigido.** Os três `const route` de
+`pkg/presentation/http/handlers/handler_misc.go`, e os comentários de doc
+imediatamente acima de cada handler, que repetiam o MESMO caminho errado:
+
+| linha | de | para | rota registrada em |
+|---|---|---|---|
+| 70 (doc) / 79 (const) | `/admin/users/{id}/complete` | `/admin/users/{id}/full` | `wiring_routes.go:228` |
+| 97 (doc) / 104 (const) | `/chat/rejectcall` | `/call/reject` | `wiring_routes.go:158` |
+| 177 (doc) / 186 (const) | `/chat/requestunavailablemessage` | `/chat/request-unavailable-message` | `wiring_routes.go:160` |
+
+O padrão usado é o da rota REGISTRADA, com o parâmetro na forma `{id}` — não
+o caminho concreto de uma requisição.
+
+A varredura do adendo do Chief foi refeita de forma independente e confirmada:
+das **quinze** constantes `route` dos handlers, **doze batiam** (`/chat/react`,
+`/chat/archive`, `/user/privacy`, `/user/presence`, `/user/presence/subscribe`,
+`/chat/presence`, `/chat/markread`, `/chat/send/contact`, `/chat/send/location`,
+`/chat/send/buttons`, `/chat/send/list`, `/chat/send/poll`) e **três não** —
+exatamente os três acima. Nenhum quarto caso.
+
+**O gate que trava.** `scripts/handler-route-check.sh`, alvo `make
+handler-route`, dentro de `check:` (Makefile:348). Ele extrai todo
+`const route = "..."` de `pkg/presentation/http/handlers/*.go` (excluindo
+`_test.go`) e exige correspondência exata com um caminho de
+`go run ./cmd/listroutes 2>/dev/null`. Propriedades, cada uma por um motivo
+já pago:
+
+- **FALHA FECHADO** em três pontos: `listroutes` não executar, devolver lista
+  VAZIA, ou nenhuma constante `route` ser encontrada. Foi o modo de falha da
+  F129 — gate que passa porque a comparação abortou em silêncio.
+- **`2>/dev/null` obrigatório** no `listroutes`: sem ele as linhas de log
+  entram na lista e viram rotas fantasma (foi assim que se contou 110 em vez
+  de 107). O `set -o pipefail` mantém a falha do comando visível pelo status
+  de saída mesmo com o stderr suprimido — o controle negativo 3 prova isso.
+- **Mensagem que ensina**: valor, `arquivo:linha` e as três rotas registradas
+  de prefixo comum mais longo, e a instrução de corrigir a CONSTANTE em vez de
+  registrar rota nova para casar com o log.
+- **Determinístico**: constantes ordenadas por `arquivo:linha`, rotas por
+  `sort -u`, e o desempate da vizinhança é lexicográfico. Não depende de
+  ordem de glob nem de mapa.
+
+#### Controles negativos, EXECUTADOS
+
+**1 — reintroduz `/chat/rejectcall` (compila, e o gate morde):**
+
+```
+$ make handler-route
+FALHA: constante route aponta para caminho NAO REGISTRADO
+  valor:  "/chat/rejectcall"
+  onde:   pkg/presentation/http/handlers/handler_misc.go:104
+  rotas registradas mais parecidas:
+    /chat/react
+    /chat/request-unavailable-message
+    /chat/archive
+make: *** [handler-route] Error 1
+EXIT:2
+```
+Revertido; gate volta a `EXIT:0`.
+
+**2 — constante `route` NOVA, num handler diferente** (`UnreactHandler`
+acrescentado a `handler_presence.go`, para provar que o gate não pega só os
+três conhecidos):
+
+```
+(compila OK)
+FALHA: constante route aponta para caminho NAO REGISTRADO
+  valor:  "/chat/unreact"
+  onde:   pkg/presentation/http/handlers/handler_presence.go:135
+  rotas registradas mais parecidas:
+    /chat/archive
+    /chat/delete
+    /chat/delete/message
+make: *** [handler-route] Error 1
+EXIT:2
+```
+Revertido; `git diff` de `handler_presence.go` voltou a vazio.
+
+**3 — FALHA FECHADO** (numa cópia do script em `/tmp`, sem tocar no repo):
+
+```
+$ bash /tmp/cap20_gate_broken.sh     # aponta para ./cmd/listroutes-NAO-EXISTE
+FALHA: 'go run ./cmd/listroutes-NAO-EXISTE' nao executou — impossivel validar os carimbos de rota.
+O gate FALHA FECHADO: sem a lista de rotas registradas nao ha' com o que comparar.
+EXIT:1
+
+$ bash /tmp/cap20_gate_empty.sh      # listroutes trocado por `true` (saida vazia)
+FALHA: cmd/listroutes devolveu lista VAZIA de rotas registradas.
+O gate FALHA FECHADO: com lista vazia toda constante 'passaria' por
+ausencia de comparacao, exatamente o modo de falha da F129.
+EXIT:1
+```
+
+#### Verificação
+
+- `make check` completo: **`EXIT:0`**, com
+  `handler-route-check: 15 constantes route conferidas contra 93 rotas
+  registradas; todas existem.` na saída. Sem flake da F110 nesta execução, e
+  sem SIGTERM externo.
+- `go run ./cmd/listroutes 2>/dev/null | sort | wc -l` = **107** (as 93 do
+  gate são caminhos ÚNICOS: o gate compara caminho, e o mesmo caminho aparece
+  sob métodos diferentes).
+- `git diff --name-status --diff-filter=DR` vazio — nada removido nem
+  renomeado.
+
+**O que NÃO foi feito, e por quê**: a correção estrutural sugerida acima
+(constante compartilhada com `wiring_routes.go`, ou
+`mux.CurrentRoute(r).GetPathTemplate()`) não foi aplicada — é mudança de
+wiring, fora do escopo do CAP-20. O gate torna a divergência impossível de
+passar despercebida, que era o ponto; a deduplicação do literal continua
+pendente como dívida de ADR-0004.

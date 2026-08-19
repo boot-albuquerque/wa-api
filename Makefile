@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test handler-route
 
 # Default Go configuration
 GOCMD := go
@@ -312,6 +312,9 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 
 ##@ Modulo de protocolo (internal/wa-noise/)
 
+handler-route: ## Falha se alguma constante `route` de handler HTTP carimbar no log um caminho que nao esta registrado (F146)
+	@bash scripts/handler-route-check.sh
+
 waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
 	@bash scripts/waclient-facade-check.sh
 
@@ -342,7 +345,7 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet test lint coverage-gate log-coverage-gate waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + fachada/tamanho/testes de internal/wa-noise/
+check: build vet test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/wa-noise/
 
 ##@ Utilities
 
