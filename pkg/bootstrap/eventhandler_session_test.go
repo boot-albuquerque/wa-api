@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -12,9 +11,6 @@ import (
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // fakeContactStore devolve um mapa pré-carregado de contatos, ou um erro
@@ -67,10 +63,7 @@ func clientWithContacts(cs store.ContactStore) *wanoise.Client {
 // TestProcessMediaGuardsNilCtx).
 func captureLog(t *testing.T, fn func()) string {
 	t.Helper()
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 	fn()
 	return buf.String()
 }

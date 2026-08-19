@@ -1,12 +1,8 @@
 package bootstrap
 
 import (
-	"bytes"
 	"strings"
 	"testing"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
@@ -21,14 +17,11 @@ import (
 // Esse silêncio é indistinguível de um download que falhou calado, e as duas
 // situações pedem ações opostas de quem investiga.
 
-// capturarLog troca o logger global e devolve o buffer.
-func capturarLog(t *testing.T) *bytes.Buffer {
+// capturarLog routes the global logger into a buffer for this test. See
+// logcapture_test.go: the global itself is never reassigned (F132).
+func capturarLog(t *testing.T) *logCapture {
 	t.Helper()
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
-	return &buf
+	return captureLogInto(t)
 }
 
 func eventoDeMidia(msg *waE2E.Message) *events.Message {

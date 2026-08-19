@@ -6304,11 +6304,196 @@ mas sao binarios de teste distintos e nao disputam com este pool.)
 2. Injetar o logger no caminho de despacho, eliminando a leitura da global.
    Mais alinhado ao resto do repo, mas superficie maior.
 
-**Status**: NAO corrigido, e deliberadamente fora deste bloco. Nao e escopo do
-FIX-F130 e nao foi autorizado. Alem disso, a linhagem deste pool ja custou caro
-(F86, F88): converter recurso ilimitado em limitado exige inventario de
-detentores e medicao do cenario que PIORA, pelas quatro regras do `CLAUDE.md`.
-Merece packet proprio. Referencia cruzada: **F130**.
+**Status**: **CORRIGIDO** no CAP-11 (2026-08-19), com correcao **somente de
+teste**: nenhum arquivo de producao foi tocado. Referencias cruzadas: **F130**,
+**F136**.
+
+### Diagnostico MEDIDO (CAP-11)
+
+A hipotese da entrada original — "o pool e o problema" — esta **parcialmente
+errada**, e a medicao corrigiu o alvo.
+
+**Linha de base**, `go test ./pkg/bootstrap/ -race -count=20`, tres rodadas na
+mesma maquina, em HEAD `ce7d5ca` sem nenhuma modificacao:
+
+| rodada | blocos DATA RACE | saida |
+|---|---|---|
+| 1 | 5 | EXIT:1 |
+| 2 | 22 | EXIT:1 |
+| 3 | 8 | EXIT:1 |
+
+35 blocos no total. Atribuicao por pilha, bloco a bloco (nao por agregado):
+
+- **lado sobrevivente**: `tentarWebhook` em **35 de 35**.
+- **mecanismo que PRODUZIU o trabalho**: `agendarProximaTentativa.func1.1`
+  (o `time.AfterFunc` de `dispatch_retry.go:161`) em **35 de 35**.
+  `reentregar`/`sweepOutboxOnce` (varredura do outbox) em **0 de 35**.
+- **lado que ESCREVE `log.Logger`**, nome por nome, com contagem:
+  `TestSessionEventDispatcher_HandleDeOutroTipo.func1` (9),
+  `TestWalogSeam_ErroDoSDKSaiSemWadebug` (7),
+  `TestLease_RenovacaoNormalNaoAvisa.func2` (4),
+  `TestLease_RetomadaAposExpirarDeixaRastro` (3),
+  `TestLease_RetomadaAposExpirarDeixaRastro.func2` (3),
+  `capturarLog` (2),
+  `TestCapacidades_RelatorioSaiNoLogComTodosOsCampos.func1` (1),
+  mais 6 blocos cujo lado escritor e' o mesmo conjunto em outra combinacao.
+  Note que os `.funcN` sao os **restauradores** (`log.Logger = orig` dentro do
+  `t.Cleanup`/`defer`): a devolucao corre tanto quanto a troca.
+
+O pool nao e' o produtor: ele so' e' o **executor**. Quem mantem trabalho vivo
+depois do fim do teste e' o TIMER de retry.
+
+**Quanto tempo o timer mantem trabalho vivo** (item medido, nao suposto). Os
+tres pontos que armam timer sobrevivente, com a formula
+`base x 2^(n-1) +- 25%` de `atrasoDaTentativa`:
+
+| ponto | base | janela do timer |
+|---|---|---|
+| `dispatch_retry_test.go:47` (`TestRetry_AgendarNaoBloqueiaOChamador`) | 60s | 45–75s |
+| `dispatch_retry_test.go:69` (`TestRetry_OrcamentoDePendentesLimita`, ate' 4 timers) | 60s | 45–75s |
+| `dispatch_outbox_test.go:99` (`TestOutboxWiring_SemOutboxCaiParaAMemoria`) | 30s | 22,5–37,5s |
+
+Confirmado por medicao de fronteira, variando a vida do binario de teste:
+
+```
+count=1 dur=10s exit=0 races=0
+count=3 dur=24s exit=0 races=0
+count=5 dur=38s exit=1 races=7
+count=8 dur=59s exit=0 races=0
+```
+
+Binario que vive <= 24s nao acusa nada; a corrida so' aparece a partir de ~38s,
+que e' exatamente quando a janela de 22,5–37,5s vence. `count=8` com zero
+mostra que **nao e' limiar, e' coincidencia de instante** — nao acusar nao
+prova nada, como a entrada original ja dizia.
+
+**Correcao da entrada original**: o texto dizia "backoff de base 30s". O padrao
+de PRODUCAO e' **8s** desde a F88 (`config.go:53`); os 30s e 60s vem dos
+proprios testes, via `prepararRetry`.
+
+### Confirmacao de que NAO e' defeito de producao
+
+`log.Logger` so' e' escrito em producao em `main.go:170` e `main.go:201`, dentro
+de `Main()`, na partida, antes de existir qualquer despacho: **um escritor,
+nenhum leitor concorrente**. Verificado por
+`grep -rn "log\.Logger *=" --include="*.go" .` sobre a arvore inteira — os
+demais 10 pontos em `pkg/bootstrap` eram todos de teste. Logo, nenhum shutdown
+de pool foi acrescentado: em producao o pool morre com o processo, por desenho,
+e um shutdown novo seria MECANISMO cobrando o preco da Regra 2 por um beneficio
+que producao nao tem.
+
+### Remedio escolhido, e os descartados com o numero que os descartou
+
+**Escolhido — matar o lado ESCRITOR, so' em teste.** `log.Logger` passa a ser
+atribuido **uma unica vez**, por um `TestMain` novo
+(`pkg/bootstrap/logcapture_test.go`), antes de o primeiro teste rodar, para um
+logger cujo sink e' um roteador com mutex. Capturar log vira "instalar um
+buffer no roteador", e o valor que os workers leem nunca mais muda.
+Numero que o justifica: **35 de 35** blocos tem uma ESCRITA de teste em
+`log.Logger` num dos lados. Remover a escrita remove 35 de 35 — e vale tambem
+para qualquer produtor futuro, que um dreno por teste nao cobriria.
+
+- **(B) testes usarem pool LOCAL (`newDispatchPool`)** — descartado por
+  **inviabilidade medida**, nao por gosto. Os testes que vazam nao chamam pool
+  nenhum: chamam `agendarProximaTentativa`, `reagendar` e `sweepOutboxOnce`, e
+  sao essas funcoes de PRODUCAO que chamam o `dispatchGo` de pacote. Nao existe
+  seam. Os seis chamadores de `dispatchGo` estao todos em arquivo de producao;
+  `newDispatchPool` so' e' usado por `dispatch_test.go`, que contribuiu com
+  **0 de 35** blocos. Para (B) funcionar seria preciso injetar o pool na
+  producao — ou seja, (B) vira (C), e deixa de ser a opcao menor.
+- **(A) shutdown/dreno do pool com seam** — descartado: toca producao, e nao
+  basta. Os 35 de 35 blocos vem de `time.AfterFunc`, cujo handle
+  `agendarProximaTentativa` descarta; cancelar os timers exigiria producao
+  guardar os handles. Acrescentaria dois mecanismos para cobrir o que a
+  remocao da escrita cobre com zero.
+- **(C) injetar logger no caminho de despacho** — descartado por escopo: seis
+  sitios de `dispatchGo` mais `tentarWebhook`, `agendarProximaTentativa` e
+  `reentregar`, tudo em producao, para fechar uma corrida que so' existe no
+  binario de teste.
+
+### Regra 1 — inventario de detentores
+
+Nao se aplica: **nenhum recurso ilimitado virou limitado**. O diff nao cria
+pool, semaforo, fila, teto nem rate limit; nao muda tamanho de pool, teto,
+backoff ou politica de retry. O unico recurso novo e' um `sync.Mutex` por
+captura de log, e os seis detentores de `dispatchGo` (`callHookWithHmac`,
+`sendToWS`, `sendToGlobalWebHook`, `sendToGlobalRabbit`,
+`callHookWithHmac-retry`, `outbox-retry`) continuam com o mesmo caminho e o
+mesmo pior caso de antes. A invariante do projeto — *nada que espere por
+relogio ou por par morto pode ocupar slot limitado* — permanece valida: nenhum
+`Lock` do roteador espera por relogio nem por rede; ele so' protege um
+`bytes.Buffer` em memoria.
+
+### Testes que travam o achado
+
+1. `TestF132_CapturaDeLogNaoCorreComDespachoVivo`
+   (`pkg/bootstrap/logcapture_test.go`) — **teste do defeito**, deterministico:
+   poe um worker do pool REAL dentro de `log.Warn()` (o mesmo `log.Warn` de
+   `dispatch_callhook.go:112` que sobreviveu em 35 de 35) e troca a captura 500
+   vezes por cima. Usa `dispatchGo`, e nao um pool local, porque o pool local
+   nunca foi o lado da corrida.
+2. Toda a suite do pacote, sob `-race`: com um unico escritor de `log.Logger`,
+   nao ha' mais o que correr.
+
+### Controles negativos EXECUTADOS
+
+**Controle 1 — reintroduzir o padrao antigo dentro do teste do defeito.**
+Trocado `testLogRouter.install(&logCapture{})` por
+`log.Logger = zerolog.New(&bytes.Buffer{})`. Compila E falha, num unico
+`-count=1`, em 1,3s:
+
+```
+WARNING: DATA RACE
+Write at 0x000102b5a0a0 by goroutine 24:
+  wa-api/pkg/bootstrap.TestF132_CapturaDeLogNaoCorreComDespachoVivo()
+      .../pkg/bootstrap/logcapture_test.go:151 +0x258
+Previous read at 0x000102b5a0a0 by goroutine 25:
+  github.com/rs/zerolog.(*Logger).newEvent()
+  github.com/rs/zerolog/log.Warn()
+  wa-api/pkg/bootstrap.TestF132_CapturaDeLogNaoCorreComDespachoVivo.func1()
+      .../pkg/bootstrap/logcapture_test.go:143 +0xb8
+  wa-api/pkg/bootstrap.(*dispatchPool).runJob()
+      .../pkg/bootstrap/dispatch.go:152 +0x108
+  wa-api/pkg/bootstrap.(*dispatchPool).worker()
+      .../pkg/bootstrap/dispatch.go:119 +0x68
+```
+
+Revertido por edicao localizada; `diff` contra a copia previa: identico.
+
+**Controle 2 — reintroduzir a CONDICAO de campo.** Restaurado o padrao antigo
+(`var buf bytes.Buffer; orig := log.Logger; log.Logger = zerolog.New(&buf)`)
+em **2 dos 10** pontos convertidos, os dois de `lease_test.go`. Sob
+`-race -count=20` a corrida volta, com a mesma forma medida na linha de base:
+
+```
+EXIT:1  races=1
+WARNING: DATA RACE
+Write at 0x0001064460c0 by goroutine 19892:
+  wa-api/pkg/bootstrap.TestLease_RetomadaAposExpirarDeixaRastro()
+      .../pkg/bootstrap/lease_test.go:568 +0x56c
+Previous read at 0x0001064460c0 by goroutine 1742:
+  github.com/rs/zerolog/log.Warn()
+  wa-api/pkg/bootstrap.tentarWebhook()
+      .../pkg/bootstrap/dispatch_callhook.go:112 +0x5cc
+  wa-api/pkg/bootstrap.agendarProximaTentativa.func1.1()
+      .../pkg/bootstrap/dispatch_retry.go:161 +0x88
+  wa-api/pkg/bootstrap.(*dispatchPool).runJob()
+      .../pkg/bootstrap/dispatch.go:152 +0x108
+```
+
+Reverter 2 de 10 pontos ja' faz o defeito voltar — e' o que prova que a raiz
+fechada e' a escrita, e nao o instante. Revertido por copia identica ao estado
+pre-mutacao; `diff`: identico.
+
+**Controle 3 — caminho de producao** nao se aplica: nenhum arquivo de producao
+foi modificado (`git status --short` so' acusa `*_test.go`).
+
+### Verificacao
+
+`go test ./pkg/bootstrap/ -race -count=20`, tres rodadas: **0, 0, 0** blocos
+DATA RACE (linha de base: 5, 22, 8). As rodadas 2 e 3 ainda saem EXIT:1, por um
+defeito DIFERENTE e pre-existente, registrado como **F136** — presente na
+propria linha de base (rodadas 1 e 3), em HEAD, sem nenhuma modificacao minha.
 
 ## F133
 
@@ -6444,3 +6629,59 @@ enviados), não um conserto.
 pelo teste citado acima, para que ninguém o redescubra em produção. Documentado
 na entrada porque um "sucesso" que não distingue do fracasso é exatamente o
 tipo de coisa que vira diagnóstico errado seis meses depois.
+
+## F136
+
+**Data**: 2026-08-19. **Contexto**: descoberto na verificacao do CAP-11
+(FIX-F132), ao rodar `go test ./pkg/bootstrap/ -race -count=20`. **Nao e'
+escopo da F132 e nao foi introduzido por ela** — reproduz em HEAD `ce7d5ca`
+sem nenhuma modificacao.
+
+**Onde**:
+- `pkg/bootstrap/dispatch_retry.go:157` — `retryBytesPendentes.Add(-int64(tamanho))`
+  dentro do `time.AfterFunc`, executado quando o timer vence.
+- `pkg/bootstrap/dispatch_retry_test.go:23-24` e `:29-30` — `prepararRetry`
+  faz `retryBytesPendentes.Store(0)` na entrada E no `t.Cleanup`.
+- `pkg/bootstrap/dispatch_outbox_test.go:80` — a assercao que quebra.
+
+**Problema**: `retryBytesPendentes` fica **NEGATIVO** entre testes. Um timer
+armado por um teste anterior vence depois que `prepararRetry` ja' zerou o
+contador, e o seu `Add(-tamanho)` desconta de um zero — levando o contador a
+`-1024`. `TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria` afirma
+`pendentes != 0` e falha com uma mensagem que descreve o oposto do que
+aconteceu:
+
+```
+--- FAIL: TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria (0.05s)
+    dispatch_outbox_test.go:80: o timer em memoria tambem foi armado (-1024 bytes pendentes); a entrega sairia em duplicata
+```
+
+O diagnostico da mensagem esta' errado: o timer em memoria **nao** foi armado
+(por isso o valor e' negativo e nao positivo). E' o mesmo mecanismo da F132 —
+timer de retry que sobrevive ao teste que o armou — atingindo outro global
+compartilhado.
+
+**Frequencia medida**: 4 de 6 execucoes de `-race -count=20` (linha de base
+rodadas 1 e 3; verificacao pos-F132 rodadas 2 e 3). E' a causa de `make check`
+continuar intermitentemente vermelho DEPOIS da F132.
+
+**Nao ha' defeito de producao aqui**: em producao os `Add(+t)` e `Add(-t)` sao
+balanceados por entrega. O contador so' fica negativo porque o TESTE faz
+`Store(0)` com timer em voo. Referencia cruzada: **F132**.
+
+**Correcao sugerida** (teste): `prepararRetry` nao pode zerar um contador que
+nao e' seu enquanto houver timer alheio em voo. Duas saidas:
+1. a assercao de `TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria` comparar
+   contra a leitura feita no INICIO do teste (delta), em vez de contra o
+   absoluto `0`; e
+2. os testes que armam timer longo (`dispatch_retry_test.go:47` e `:69`, base
+   60s; `dispatch_outbox_test.go:99`, base 30s) nao deixarem timer pendente ao
+   sair — o que, como a F132 mediu, exige a producao guardar o handle do
+   `time.AfterFunc` para poder cancela-lo. So' (1) e' correcao de teste pura.
+
+Qualquer que seja a escolha, ela precisa de controle negativo proprio: um teste
+que so' silencie a assercao passaria com o vazamento no lugar.
+
+**Status**: nao corrigido. Pre-existente e fora do escopo do CAP-11; pela
+politica do `CLAUDE.md`, nao corrijo de graca sem perguntar. Levado ao
+coordenador junto com o relatorio do CAP-11.

@@ -1,12 +1,8 @@
 package bootstrap
 
 import (
-	"bytes"
 	"strings"
 	"testing"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // F91: o ramo `default` de handleEvent despejava a struct inteira com `%+v`.
@@ -85,10 +81,7 @@ func TestUnhandledEventFields_NaoQuebraComEntradaEstranha(t *testing.T) {
 func TestHandleEvent_DefaultNaoLogaValores(t *testing.T) {
 	const segredo = "https://wa.me/settings/linked_devices#2@SEGREDO-DE-PAREAMENTO"
 
-	var buf bytes.Buffer
-	original := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = original })
+	buf := captureLogInto(t)
 
 	evh := &UserEventHandler{UserID: "u1"}
 	evh.handleEvent(&eventoComSegredo{

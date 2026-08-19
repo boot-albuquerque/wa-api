@@ -1,13 +1,9 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // D7 / F104. O que estes testes travam não é o formato do relatório — é a
@@ -83,10 +79,7 @@ func TestCapacidades_MultiAtivaPosseEMultiPod(t *testing.T) {
 func TestCapacidades_RelatorioSaiNoLogComTodosOsCampos(t *testing.T) {
 	limparCapacidades(t)
 
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 
 	publishCapabilities(clusterModeSingle, databaseTypeSQLite)
 

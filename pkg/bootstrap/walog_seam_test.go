@@ -1,12 +1,10 @@
 package bootstrap
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	wanoise "wa-api/internal/wa-noise"
@@ -30,10 +28,7 @@ import (
 // Ambos escrevem no mesmo buffer, que é o ponto: SDK e aplicação saem no
 // mesmo sink JSON.
 func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 
 	// ParseLevel("") = sem --wadebug. Warn e Error têm de sair mesmo assim.
 	bridge := walog.New(log.Logger, walog.ModuleClient, walog.ParseLevel(""))
@@ -42,7 +37,7 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 	errSentinel := errors.New("bad mac")
 	bridge.Sub("Recv").Errorf("decrypt failed: %v", errSentinel)
 
-	recs := decodeRecords(t, &buf)
+	recs := decodeRecords(t, buf)
 	if len(recs) != 1 {
 		t.Fatalf("o SDK emitiu %d registros sem --wadebug, queria 1: %v", len(recs), recs)
 	}
@@ -96,7 +91,7 @@ func TestWalogSeam_ErroDoSDKSaiSemWadebug(t *testing.T) {
 	// esperar o despacho trocaria um defeito silencioso por um teste instavel.
 	esperarDespachoDrenar(t)
 
-	recs = decodeRecords(t, &buf)
+	recs = decodeRecords(t, buf)
 	if len(recs) == 0 {
 		t.Fatal("handleEvent nao emitiu registro nenhum para events.Connected")
 	}

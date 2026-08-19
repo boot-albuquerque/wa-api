@@ -1,13 +1,9 @@
 package bootstrap
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // TestProcessMediaGuardsNilCtx asserts the boundary contract that matters:
@@ -22,10 +18,7 @@ import (
 // observable proxy for the fix is the WARN line below plus the absence of a
 // panic across the call.
 func TestProcessMediaGuardsNilCtx(t *testing.T) {
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 
 	evh := &UserEventHandler{UserID: "user-42", Token: "tok"}
 	postmap := map[string]interface{}{}

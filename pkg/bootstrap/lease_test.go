@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"runtime"
@@ -9,9 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"wa-api/pkg/infra/db"
 )
@@ -563,10 +559,7 @@ func TestLease_RetomadaAposExpirarDeixaRastro(t *testing.T) {
 		t.Fatalf("Claim: %v", err)
 	}
 
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 
 	// Congelamento além do TTL: o lease expirou e foi RETOMADO, não renovado.
 	relogio = relogio.Add(20 * time.Second)
@@ -602,10 +595,7 @@ func TestLease_RenovacaoNormalNaoAvisa(t *testing.T) {
 		t.Fatalf("Claim: %v", err)
 	}
 
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	t.Cleanup(func() { log.Logger = orig })
+	buf := captureLogInto(t)
 
 	// Três renovações dentro do prazo, como na operação normal.
 	for i := 0; i < 3; i++ {

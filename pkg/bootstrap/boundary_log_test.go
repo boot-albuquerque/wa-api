@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,7 +131,10 @@ func (r logRecord) str(key string) string {
 }
 
 // decodeRecords parses the buffer as newline-delimited JSON.
-func decodeRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
+//
+// It takes a fmt.Stringer rather than a *bytes.Buffer so it also accepts
+// *logCapture, whose String() reads under the lock that F132 requires.
+func decodeRecords(t *testing.T, buf fmt.Stringer) []logRecord {
 	t.Helper()
 	var out []logRecord
 	for _, line := range strings.Split(buf.String(), "\n") {
@@ -147,7 +151,7 @@ func decodeRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
 	return out
 }
 
-func boundaryRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
+func boundaryRecords(t *testing.T, buf fmt.Stringer) []logRecord {
 	t.Helper()
 	var out []logRecord
 	for _, rec := range decodeRecords(t, buf) {
