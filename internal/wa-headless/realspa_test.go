@@ -57,6 +57,7 @@ import (
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 
+	"wa-api/internal/wa-headless/capabilities/messagemeta"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	waruntime "wa-api/internal/wa-headless/runtime"
 	"wa-api/internal/wa-headless/spa"
@@ -5689,4 +5690,165 @@ func TestRealSPAMessageModelShape(t *testing.T) {
 	for _, n := range names {
 		t.Logf("  %-12s -> %s", n, shape.Types[n])
 	}
+}
+
+// TestRealSPAMessageMetaInstalls proves the subscription attaches to the REAL
+// collection, which the unit tests cannot: they exercise decoding against a
+// double, and the double cannot be wrong about whether WAWebMsgCollection
+// exists, whether MsgCollection is where the emitter lives, or whether .on
+// accepts a handler.
+//
+// WHAT IT DOES NOT PROVE, said plainly so nobody reads a pass as more than it
+// is: that the 'add' event FIRES. Verifying that needs a message to actually
+// arrive, which no test can cause without sending one, and sending is out of
+// scope for this capability. TestRealSPAMessageMetaDelivery is the instrument
+// for that and needs a human with a phone.
+func TestRealSPAMessageMetaInstalls(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	sub := messagemeta.New(runner, sess.Tab().Evaluate, 0)
+	if err := sub.Install(context.Background(), "real/msgmeta/install"); err != nil {
+		t.Fatalf("Install against the real SPA: %v. The unit tests pass against a double, "+
+			"so a failure here is the collection surface or Meta's contract", err)
+	}
+
+	// Installing twice must not attach a second handler: the guard lives in the
+	// page script, and only the real page can prove the guard is reached.
+	if err := sub.Install(context.Background(), "real/msgmeta/install-again"); err != nil {
+		t.Fatalf("second Install: %v", err)
+	}
+
+	got, err := sub.Drain(context.Background(), "real/msgmeta/drain")
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if got.Reinstalled {
+		t.Error("the drain reported a reinstall right after installing: the page state is " +
+			"not surviving between calls, so no subscription could ever accumulate")
+	}
+	// SHAPE ONLY. Whether events arrived is not asserted — an idle account is
+	// silent, and treating silence as failure would be the instrument inventing
+	// a result.
+	t.Logf("installed; drain returned events=%d dropped=%d seen=%d reinstalled=%v",
+		len(got.Events), got.Dropped, got.Seen, got.Reinstalled)
+	t.Logf("NOTE: this proves the subscription ATTACHES. It does not prove the 'add' " +
+		"event fires — that needs a real message (TestRealSPAMessageMetaDelivery)")
+}
+
+// qrLiveEnv-style gate: this one needs a human to send a message to the lab
+// account while it runs.
+const msgDeliveryEnv = "WA_HEADLESS_MSG_DELIVERY"
+
+// TestRealSPAMessageMetaDelivery is the only instrument that can verify the
+// event name.
+//
+// eventAdd ("add") is taken from whatsapp-web.js's understanding and is NOT
+// verified for this build by anything else. A subscription that installs
+// cleanly and never delivers is indistinguishable from an account nobody is
+// messaging — so this test asks a human to remove that ambiguity.
+//
+// It asserts SHAPE and never prints a jid or an id: invariant 12 and §C6 apply
+// to a test as much as to production.
+func TestRealSPAMessageMetaDelivery(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv(msgDeliveryEnv) == "" {
+		t.Skipf("set %s=1 AND send a message to the lab account while this runs; "+
+			"it is the only way to verify the collection event name fires", msgDeliveryEnv)
+	}
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	sub := messagemeta.New(runner, sess.Tab().Evaluate, 0)
+	if err := sub.Install(context.Background(), "real/delivery/install"); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	// Drain once to discard whatever the collection replayed on load.
+	if _, err := sub.Drain(context.Background(), "real/delivery/prime"); err != nil {
+		t.Fatalf("priming drain: %v", err)
+	}
+
+	const window = 3 * time.Minute
+	t.Logf("SEND A MESSAGE to the lab account now; watching for %s", window)
+	deadline := time.Now().Add(window)
+	for time.Now().Before(deadline) {
+		got, err := sub.Drain(context.Background(), "real/delivery/drain")
+		if err != nil {
+			t.Fatalf("Drain: %v", err)
+		}
+		if got.Reinstalled {
+			t.Fatal("the subscription was lost mid-window; events were missed and this " +
+				"run cannot answer the question it was asked")
+		}
+		if len(got.Events) > 0 {
+			e := got.Events[0]
+			t.Logf("DELIVERED after %s: %s", time.Since(deadline.Add(-window)).Round(time.Second), e)
+			if !e.ID.Present() {
+				t.Error("the delivered event has no message id: msg.id.id did not survive " +
+					"the mapping, which is the field PARIDADE §6.4 chose over _serialized")
+			}
+			if e.Type == "" {
+				t.Error("the delivered event has no type")
+			}
+			if e.Timestamp.IsZero() {
+				t.Error("the delivered event has no timestamp")
+			}
+			if e.JID == "" {
+				t.Error("the delivered event has no jid (value not printed)")
+			}
+			t.Logf("EVENT NAME %q IS CONFIRMED for this build", "add")
+			return
+		}
+		time.Sleep(3 * time.Second)
+	}
+	t.Fatalf("no event arrived in %s. Either nothing was sent, or the collection event "+
+		"name taken from whatsapp-web.js does not fire in this build — and those two are "+
+		"what this test exists to tell apart, so re-run and make sure a message is sent", window)
 }

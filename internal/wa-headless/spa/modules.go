@@ -64,6 +64,20 @@ const (
 	// unpaired profile and PRESENT at T+0.01s on a paired one, so the module
 	// discriminates rather than merely existing.
 	ModuleUserPrefsMeUser = Module("WAWebUserPrefsMeUser")
+	// ModuleMsgCollection holds the message store, and it is NOT in
+	// RequiredAtStartup on purpose.
+	//
+	// The rule this file states is that each capability adds the modules it
+	// uses; the unstated half is that a module only belongs at STARTUP when
+	// nothing above it can work without it. A session with no message stream is
+	// still a session that can be checked for liveness, asked who it belongs to
+	// and stopped cleanly — so failing every boot over it would trade a working
+	// degraded session for none at all.
+	//
+	// capabilities/messagemeta verifies it at install time instead, and names
+	// it when it is missing. Measured 2026-08-19: resolves with MsgCollection
+	// carrying on/off/getModelsArray (PARIDADE-WWEBJS.md §6.4).
+	ModuleMsgCollection = Module("WAWebMsgCollection")
 )
 
 // RequiredAtStartup is verified before any capability runs.

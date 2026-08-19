@@ -1886,3 +1886,60 @@ signal whatever inherited it"*. Restaurado byte-idêntico.
 
 **Status**: CORRIGIDO.
 
+## H24 — o nome do evento da coleção de mensagens é herdado do `wwebjs` e **não verificado**
+
+**Data**: 2026-08-19 · **Contexto**: `onMessageMeta`, quinta capacidade de
+paridade.
+
+**Onde**: `internal/wa-headless/capabilities/messagemeta/messagemeta.go`,
+constante `eventAdd`.
+
+**Problema**: a assinatura escuta `MsgCollection.on('add', ...)`. O nome `add`
+vem do **entendimento** do `whatsapp-web.js`, não de medição contra este build.
+Tudo o mais nesta capacidade foi medido — o módulo, a coleção, a superfície de
+eventos, a forma do modelo, o `_serialized` nulo — **menos isto**.
+
+**Por que não foi medido**: verificar exige uma mensagem CHEGAR, e nenhum teste
+pode causar isso sem enviar uma. Enviar está fora do escopo desta capacidade e
+seria mudar o que o ciclo faz para poder testá-lo.
+
+**A ambiguidade que isto deixa, dita para ninguém ler silêncio como prova**: uma
+assinatura que instala limpo e nunca entrega é **indistinguível** de uma conta
+que ninguém está mensageando. `TestRealSPAMessageMetaInstalls` prova que ela
+ANEXA — não que dispara.
+
+**O instrumento existe**: `TestRealSPAMessageMetaDelivery`, atrás do portão
+`WA_HEADLESS_MSG_DELIVERY`, observa por 3 minutos enquanto um humano envia uma
+mensagem para a conta de laboratório. Ele distingue os dois casos que a ausência
+de evento funde, e a mensagem de falha diz isso em vez de culpar o código.
+
+**Status**: **não verificado, e declarado no código**. O comentário de `eventAdd`
+diz de onde o nome veio e o que falta. Precisa de um humano com telefone.
+
+## H25 — o buffer da assinatura pode descartar, e o teto não tem medição por trás
+
+**Data**: 2026-08-19 · **Contexto**: mesma capacidade.
+
+**Onde**: `DefaultBufferSize = 500` em `messagemeta.go`.
+
+**Problema**: é um recurso LIMITADO, e a regra 1 do `CLAUDE.md` exige inventário
+de quem o disputa e o pior caso de cada um. Aqui o inventário é curto — só o
+handler da coleção escreve, só o `Drain` lê — mas o teto **não sai de medição**:
+não existe número de taxa real de mensagens para esta conta.
+
+**O que torna isso aceitável, e é a única coisa que torna**: exceder o teto é
+**CONTADO e reportado**, não silencioso. `Drain.Dropped` diz quantos foram
+recusados, `Drain.Seen` dá o denominador que torna o número legível, e
+`Drain.Complete()` é falso quando há buraco. Um fluxo que perde em silêncio
+parece completo — é isso que seria pior que não ter fluxo.
+
+**Regra 2 aplicada** (medir onde deveria PIORAR): o cenário em que o mecanismo
+cobra o preço é conta de alto volume com `Drain` esparso. **Não medido** — não
+há conta assim disponível. Declarado em vez de estimado.
+
+**Correção sugerida**: quando houver conta com volume real, medir eventos por
+minuto e o intervalo de drenagem do produto, e só então trocar 500 por um
+número com medição atrás. Até lá o teto é um teto declarado, não calibrado.
+
+**Status**: aberto por desenho, com o custo visível em vez de escondido.
+
