@@ -982,3 +982,61 @@ func TestStartSession_SettleLoopRespectsTheBudgetItWasGiven(t *testing.T) {
 	}
 	t.Logf("gave up after %s on a %s budget (default is %s)", elapsed, budget, spa.DefaultSettleBudget)
 }
+
+// TestStartSession_OwnerIdentityModuleIsEnforced proves the boot demands the
+// module the OWNER IDENTITY lives in, specifically.
+//
+// TestStartSession_MissingModuleClassifiesAsErrModulesMissing already proves
+// that *a* missing module fails the boot — it drops whichever module happens to
+// be first in the list. That is not the same claim: it would keep passing if
+// spa.ModuleUserPrefsMeUser were quietly dropped from RequiredAtStartup, which
+// is exactly the regression this test exists to catch, because that module was
+// ADDED to the inventory on 2026-08-19 and adding it is the whole reason
+// capabilities/owner can rely on it being there.
+//
+// The distinction matters beyond bookkeeping: WAWebUserPrefsMeUser and
+// WAWebUserPrefsInfoStore differ by one word, and the second was already in the
+// list. A rename or a careless edit that collapsed them would leave the boot
+// verifying a module the owner identity does not live in.
+func TestStartSession_OwnerIdentityModuleIsEnforced(t *testing.T) {
+	var withoutIdentity []spa.Module
+	for _, m := range spa.RequiredAtStartup {
+		if m == spa.ModuleUserPrefsMeUser {
+			continue
+		}
+		withoutIdentity = append(withoutIdentity, m)
+	}
+	if len(withoutIdentity) == len(spa.RequiredAtStartup) {
+		t.Fatalf("spa.ModuleUserPrefsMeUser (%q) is not in RequiredAtStartup at all; "+
+			"capabilities/owner reads that module and the boot no longer guarantees it "+
+			"is there", spa.ModuleUserPrefsMeUser)
+	}
+
+	// A page that exposes every required module EXCEPT the identity one.
+	cfg := baseConfig(t, requirePage(t, withoutIdentity))
+	cfg.SettleBudget = negativePathSettleBudget
+
+	sess, err := StartSession(context.Background(), cfg)
+	if err == nil {
+		via := sess.Stop(context.Background())
+		t.Fatalf("StartSession reached READY (stopped_via=%s) on a page missing %q; "+
+			"the boot must fail high with a named cause instead of letting a capability "+
+			"discover it later, mid-operation", via, spa.ModuleUserPrefsMeUser)
+	}
+	var modErr *spa.ErrModulesMissing
+	if !errors.As(err, &modErr) {
+		t.Fatalf("err = %v, want a *spa.ErrModulesMissing", err)
+	}
+	// The error must name THIS module, not merely report a count. CAP-06's
+	// observable is that the message names the cause.
+	var named bool
+	for _, m := range modErr.Missing {
+		if m == spa.ModuleUserPrefsMeUser {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("the failure lists %v, which does not include %q: a boot that fails "+
+			"without naming the module nobody can act on", modErr.Missing, spa.ModuleUserPrefsMeUser)
+	}
+}

@@ -57,6 +57,7 @@ import (
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 
+	"wa-api/internal/wa-headless/capabilities/owner"
 	waruntime "wa-api/internal/wa-headless/runtime"
 	"wa-api/internal/wa-headless/spa"
 )
@@ -5318,4 +5319,160 @@ func TestRealSPALiveQR(t *testing.T) {
 	// picking up a phone. It is not a failure of the module.
 	t.Logf("budget of %s elapsed with %d refreshes and no scan; the session is being "+
 		"closed now, which invalidates the last QR", holdFor, captured)
+}
+
+// TestRealSPARefreshOwnerAgainstProduction runs capabilities/owner against the
+// real SPA, which is the only place its script can be wrong.
+//
+// The unit tests prove the DECODING against a double that imitates the wire
+// shape. They cannot prove the SCRIPT: whether getMaybeMePnUser still exists,
+// whether the WID still carries user/server/_serialized, whether the module
+// still resolves. Every one of those is undocumented Meta contract, and this
+// module's whole catalogue of armadilhas is about doubles that were more
+// well-behaved than the world.
+//
+// PII: presence and SHAPE are asserted and logged; no identifier and no display
+// name is ever printed. That is what owner.Identity.String() is for, and this
+// test uses it rather than formatting fields by hand.
+func TestRealSPARefreshOwnerAgainstProduction(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("this test needs an already-paired profile via " + profileDirOverride +
+			"; on an unpaired one the correct answer is ErrNoOwner, which proves the " +
+			"script runs but not that it reads an identity")
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath:    binary,
+		ProfileDir:    profile,
+		DebuggingPort: freePort(t),
+		UserAgent:     realSPAUserAgent,
+		NavigateURL:   realSPAURL,
+		Runner:        runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	id, err := owner.Refresh(context.Background(), runner, sess.Tab().Evaluate, "real/refresh-owner")
+	if err != nil {
+		t.Fatalf("Refresh against the real SPA: %v. The unit tests pass against a double, "+
+			"so a failure here is the script or Meta's contract, not the decoding", err)
+	}
+
+	// SHAPE assertions only. Values are never read into this test.
+	if !id.Present() {
+		t.Fatal("Refresh returned no error and no identity")
+	}
+	if !id.PN.Present() && !id.LID.Present() {
+		t.Fatal("neither identifier materialised on a paired profile")
+	}
+	// The divergence from wwebjs is only worth having if BOTH really arrive.
+	// If Meta ever ships a build where only one does, this is where we find
+	// out — and the message says what to reconsider rather than just failing.
+	if !id.PN.Present() || !id.LID.Present() {
+		t.Errorf("only one identifier materialised (%s). The decision to keep PN and LID "+
+			"SEPARATE assumed both arrive together, which M3 measured; if that stopped "+
+			"being true, owner.Identity.Present() is still correct but the divergence "+
+			"from whatsapp-web.js needs revisiting", id)
+	}
+	if id.PN.Present() && id.PN.Serialized == "" {
+		t.Error("the PN identifier has no _serialized field: the WID shape M3 measured " +
+			"(user/server/_serialized) has changed")
+	}
+	t.Logf("OWNER READ OK: %s", id)
+	t.Logf("(shape only — owner.Identity.String() redacts, and this test never reads a value)")
+}
+
+// TestRealSPADisplayNameShape measures WHY the owner display name came back
+// empty, instead of leaving capabilities/owner carrying a field nobody has
+// checked.
+//
+// It reports the TYPE and the EMPTINESS of what each candidate getter returns —
+// never the value, which is the account's own name. The point is to tell three
+// things apart that all render as "" downstream: the getter is absent, the
+// getter exists and throws, or the getter exists and legitimately answers empty
+// because this account never set a pushname.
+func TestRealSPADisplayNameShape(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	script := `JSON.stringify((() => {
+		const out = {};
+		const probe = (mod, fn) => {
+			const key = mod + '.' + fn;
+			try {
+				const m = window.require(mod);
+				if (!m) { out[key] = 'MODULE_UNRESOLVED'; return; }
+				if (typeof m[fn] !== 'function') { out[key] = 'GETTER_ABSENT'; return; }
+				const v = m[fn]();
+				if (v === null || v === undefined) { out[key] = 'NULL'; return; }
+				// TYPE and EMPTINESS only. The value is the account's own name.
+				out[key] = typeof v + (typeof v === 'string'
+					? (v.length === 0 ? ':EMPTY' : ':NONEMPTY(len>0)')
+					: ':OBJECT');
+			} catch (e) { out[key] = 'THREW'; }
+		};
+		probe('` + string(spa.ModuleUserPrefsMeUser) + `', 'getMaybeMeDisplayName');
+		probe('` + string(spa.ModuleUserPrefsMeUser) + `', 'getMaybeMePnUser');
+		probe('` + string(spa.ModuleUserPrefsInfoStore) + `', 'getPushname');
+		probe('` + string(spa.ModuleUserPrefsInfoStore) + `', 'getMe');
+		return out;
+	})())`
+
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "real/displayname",
+		func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, script, &raw) }); err != nil {
+		t.Fatalf("probing: %v", err)
+	}
+	var shape map[string]string
+	if err := json.Unmarshal([]byte(raw), &shape); err != nil {
+		t.Fatalf("decoding %q: %v", raw, err)
+	}
+	keys := make([]string, 0, len(shape))
+	for k := range shape {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		t.Logf("  %-50s -> %s", k, shape[k])
+	}
 }

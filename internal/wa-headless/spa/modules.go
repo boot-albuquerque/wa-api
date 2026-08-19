@@ -42,7 +42,7 @@ type Module string
 // break on. Each capability adds the modules it actually uses, and the parity
 // matrix says which capabilities there are.
 //
-// These eight are the ones that make a session a session — the socket, the
+// These are the ones that make a session a session — the socket, the
 // connection state, the command channel, the identity. If any is gone, nothing
 // above it can work, so they are the right thing to fail the boot on.
 const (
@@ -54,6 +54,16 @@ const (
 	ModuleSignalStoreAPI        = Module("WAWebSignalStoreApi")
 	ModuleSocketModel           = Module("WAWebSocketModel")
 	ModuleUserPrefsInfoStore    = Module("WAWebUserPrefsInfoStore")
+	// ModuleUserPrefsMeUser is where the OWNER IDENTITY lives, and it is a
+	// different module from ModuleUserPrefsInfoStore above — a distinction that
+	// cost a lookup to notice, because the names differ by one word.
+	//
+	// It is what whatsapp-web.js reads for the account's wid (Client.js:351-364
+	// in 1.34.7: getMaybeMePnUser() || getMaybeMeLidUser()), and EVIDENCIA-SPA.md
+	// M3 measured it here: the getters answer EMPTY for a full 75s on an
+	// unpaired profile and PRESENT at T+0.01s on a paired one, so the module
+	// discriminates rather than merely existing.
+	ModuleUserPrefsMeUser = Module("WAWebUserPrefsMeUser")
 )
 
 // RequiredAtStartup is verified before any capability runs.
@@ -66,6 +76,17 @@ var RequiredAtStartup = []Module{
 	ModuleSignalStoreAPI,
 	ModuleSocketModel,
 	ModuleUserPrefsInfoStore,
+	// Added 2026-08-19 with capabilities/owner, following the rule stated
+	// above: each capability adds the modules it actually uses. Until then a
+	// boot could reach READY while the module the owner identity lives in was
+	// absent — and the failure would have surfaced later, inside a capability,
+	// instead of at the boot with a named cause.
+	//
+	// Safe to require, measured rather than assumed: M3 recorded the exports of
+	// this module as IDENTICAL on the paired and the unpaired profile, so
+	// demanding it does not break an unpaired boot. What differs between the
+	// profiles is what the getters ANSWER, not whether the module resolves.
+	ModuleUserPrefsMeUser,
 }
 
 // ErrModulesMissing is a boot that stopped because the page no longer exposes

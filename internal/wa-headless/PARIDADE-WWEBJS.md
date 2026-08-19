@@ -147,3 +147,60 @@ Por evidência desta matriz, contra o contrato atual:
 _Levantado em 2026-08-11 (CAP-01), contra `disparazaap` em
 `features/macbook-lucas`. Se o `adapter.ts` mudar, esta matriz vence — refaça a
 busca antes de confiar nela._
+
+---
+
+## 6. Divergências conscientes do `whatsapp-web.js`
+
+O `CLAUDE.md` exige que divergir seja **decisão registrada**, não acidente.
+Esta seção existe para isso. Divergir é aceitável; divergir sem saber é como
+este projeto reescreve os bugs deles junto.
+
+### 6.1 — `refreshOwner` mantém PN e LID SEPARADOS
+
+**O que o `wwebjs` faz** (`Client.js:351-364`, 1.34.7):
+
+```js
+wid: window.require('WAWebUserPrefsMeUser').getMaybeMePnUser()
+  || window.require('WAWebUserPrefsMeUser').getMaybeMeLidUser()
+```
+
+Um campo só. O `||` escolhe o primeiro que existir e **descarta qual dos dois
+respondeu**.
+
+**O que nós fazemos**: `owner.Identity` carrega `PN` e `LID` em campos
+distintos, e `Present()` aceita qualquer um dos dois — a mesma condição que o
+`wwebjs` trata como "existe wid".
+
+**Por quê**: LID e PN são espaços de nomes diferentes para a mesma pessoa, e
+**este produto tem histórico documentado de confundi-los**. Para uma biblioteca
+cujos chamadores só exibem o valor, colapsar é barato. Aqui não é: um chamador
+que segura o resultado precisa saber se tem identidade de telefone ou LID,
+porque os dois não são intercambiáveis ao falar com o servidor.
+
+**O que a divergência assume, e onde isso é verificado**: que os dois chegam
+juntos. A M3 mediu assim, e `TestRealSPARefreshOwnerAgainstProduction` falha com
+mensagem própria se um dia só um materializar — dizendo que `Present()` continua
+correto mas que **esta decisão precisa ser revisitada**, em vez de só quebrar.
+
+### 6.2 — `DisplayName` existe na superfície e **nunca foi visto preenchido**
+
+Medido em 2026-08-19 contra o perfil pareado real:
+
+| getter | resultado |
+|---|---|
+| `WAWebUserPrefsMeUser.getMaybeMeDisplayName` | **`NULL`** (a função existe) |
+| `WAWebUserPrefsMeUser.getMaybeMePnUser` | `object` |
+| `WAWebUserPrefsInfoStore.getPushname` | **`GETTER_ABSENT`** |
+| `WAWebUserPrefsInfoStore.getMe` | **`GETTER_ABSENT`** |
+
+As duas últimas linhas eram **palpites meus**, e a medição as descartou — que é
+o motivo de a regra "medir antes de projetar" existir.
+
+O campo fica na struct porque é onde ele moraria, e o comentário diz que é
+**UNVERIFIED**: ninguém deve tratar um `DisplayName` preenchido como garantido,
+e um vazio não é evidência de nada sobre a sessão. Se é nulo porque a conta não
+tem pushname ou porque este build o guarda noutro lugar continua **UNKNOWN** —
+e `TestRealSPADisplayNameShape` é o instrumento que distingue os casos no dia
+em que mudar.
+
