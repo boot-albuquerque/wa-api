@@ -57,6 +57,7 @@ import (
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 
+	"wa-api/internal/wa-headless/capabilities/backup"
 	"wa-api/internal/wa-headless/capabilities/fetchmessages"
 	"wa-api/internal/wa-headless/capabilities/messagemeta"
 	"wa-api/internal/wa-headless/capabilities/owner"
@@ -5985,4 +5986,102 @@ func TestRealSPAFetchMessagesAgainstProduction(t *testing.T) {
 		}
 	}
 	t.Logf("sample (redacted): %s", one.Messages[len(one.Messages)-1])
+}
+
+// TestRealSPABackupRestoresToAWorkingSession is the only test that can say the
+// word "backup" honestly: it copies the paired profile and then BOOTS THE COPY,
+// requiring the restored session to reach READY with the owner identity
+// present — the same bar the CAP-05 observable uses.
+//
+// A file count is not a backup. Item 11 of this initiative's briefing says an
+// action returning nil is not the operation having succeeded, and nowhere is
+// that truer than here: a corrupt profile copies perfectly and fails only on
+// the day someone needs it.
+//
+// SAFETY. The copy carries the SAME WhatsApp credentials as the original, so
+// two live browsers on the two directories would be two devices on one account.
+// This test never runs them together: the original is stopped before the copy
+// is taken (Backup refuses otherwise) and only the copy is booted afterwards.
+// It sends nothing, logs out of nothing, and deletes the copy when done.
+func TestRealSPABackupRestoresToAWorkingSession(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride +
+			"; restoring an unpaired profile would prove only that an empty profile copies")
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	// The profile must be at rest. If a previous test left a browser up, the
+	// backup refuses and says so — which is the capability working, not a flake.
+	use, err := engine.ProfileInUse(profile)
+	if err != nil {
+		t.Fatalf("checking the profile: %v", err)
+	}
+	if use.InUse() {
+		t.Fatalf("the profile is in use (holder=%q pid=%d live=%v); stop it before backing "+
+			"it up", use.Holder, use.PID, use.Live)
+	}
+
+	dst := filepath.Join(t.TempDir(), "restored-profile")
+	res, err := backup.Backup(profile, dst)
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+	t.Logf("copied %d files (%d bytes, %d skipped) in %s",
+		res.Files, res.Bytes, res.Skipped, res.Took.Round(time.Millisecond))
+	if res.Files < 100 {
+		t.Fatalf("only %d files copied from a profile that should have hundreds; the "+
+			"source may not be what this test thinks it is", res.Files)
+	}
+
+	// THE PROOF: boot the copy. Nothing before this line distinguishes a backup
+	// from a directory full of bytes.
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: dst, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	stopped := false
+	defer func() {
+		if !stopped {
+			h.Stop(context.Background())
+		}
+	}()
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	start := time.Now()
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("the RESTORED profile did not boot after %s: %v. The copy exists and has "+
+			"the right file count; what it does not have is proof of being usable, which "+
+			"is the whole difference between a backup and a directory",
+			time.Since(start).Round(time.Millisecond), err)
+	}
+	t.Logf("restored profile reached READY in %s", time.Since(start).Round(time.Millisecond))
+
+	// READY is not enough: an unpaired profile also reaches READY on a QR page
+	// only if it mounts, and the CAP-05 observable insists on a POSITIVE
+	// identity signal. The restored session must still know who it is.
+	verdict, waited, identityErr := sampleIdentityUntilPresent(
+		sess, runner, identityShapeBudget, identityShapeTick)
+	if verdict != verdictPresent {
+		t.Fatalf("the restored session reached READY but identity=%s (waited %s, err=%v): "+
+			"the copy boots and does not carry the account, which is a backup that would "+
+			"have failed on the day it was needed", verdict, waited, identityErr)
+	}
+	t.Logf("restored identity=%s (waited %s) — the backup is RESTORABLE", verdict, waited)
+
+	via := h.Stop(context.Background())
+	stopped = true
+	if !via.Clean() {
+		t.Errorf("the restored session stopped via %s, want a clean stop", via)
+	}
 }

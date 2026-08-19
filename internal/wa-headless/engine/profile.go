@@ -121,6 +121,55 @@ func ReclaimProfile(dir string, opts ReclaimOptions) (ReclaimResult, error) {
 	return res, nil
 }
 
+// ProfileUse is what a profile's Singleton lock says about who is using it.
+type ProfileUse struct {
+	// LockPresent is whether SingletonLock exists at all.
+	LockPresent bool
+	// Holder is the raw lock target ("<host>-<pid>"), for diagnosis.
+	Holder string
+	// PID is the process the lock names, when it could be parsed.
+	PID int
+	// Live is whether that process is still running ON THIS HOST.
+	//
+	// A lock naming another host's pid cannot be checked from here, and Live is
+	// false in that case — which is NOT the same as "the profile is free". The
+	// caller must treat an unparsed or foreign lock as unknown rather than
+	// absent; LockPresent is what says something is there.
+	Live bool
+}
+
+// InUse reports whether the profile should be treated as busy: a lock exists
+// and either names a live local process or could not be attributed at all.
+//
+// Erring toward "busy" is deliberate. The cost of being wrong is asymmetric:
+// treating a free profile as busy delays a copy, while treating a busy one as
+// free produces a snapshot of files mid-write and calls it a backup.
+func (u ProfileUse) InUse() bool {
+	if !u.LockPresent {
+		return false
+	}
+	return u.Live || u.PID == 0
+}
+
+// ProfileInUse reads the Singleton lock of dir and reports who holds it.
+//
+// It exists because capabilities/backup needs the question answered and must
+// not learn the Singleton file layout to ask it — that layout is this package's
+// knowledge (ADR-0006 D1's boundary applied to profile internals, not only to
+// the driver).
+func ProfileInUse(dir string) (ProfileUse, error) {
+	h, err := readLockHolder(dir)
+	if err != nil {
+		return ProfileUse{}, err
+	}
+	use := ProfileUse{LockPresent: h.present, Holder: h.raw}
+	if h.parsed {
+		use.PID = h.pid
+		use.Live = ProcessAlive(h.pid)
+	}
+	return use, nil
+}
+
 // lockHolder is what SingletonLock claims about its owner.
 type lockHolder struct {
 	present bool

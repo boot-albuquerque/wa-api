@@ -279,3 +279,37 @@ mal carregou.
 Disparar o carregamento sob demanda é fatia futura, e vai precisar de medição
 própria: não se sabe qual chamada a SPA usa para isso neste build.
 
+### 6.6 — `backupNow` recusa perfil em uso, e a cópia só vale depois de restaurada
+
+**Medido antes de projetar**: em **10 segundos** de uma sessão viva e **ociosa**,
+**11 de 1124** arquivos do perfil mudaram ou nasceram. O Chromium mantém LevelDB
+e IndexedDB escrevendo por baixo. Uma cópia tirada com o browser rodando pega
+arquivos no meio da escrita — e o resultado não é um backup levemente
+desatualizado, é um **corrompido que parece bom** até o dia em que alguém
+precisa dele.
+
+Por isso `Backup` **recusa** perfil em uso, e a checagem acontece **antes** de
+qualquer escrita: um backup recusado não deixa diretório pela metade para
+alguém achar depois e confiar.
+
+**O `SingletonLock` não é copiado.** Ele é um SYMLINK cujo alvo nomeia um
+processo (`<host>-<pid>`); levá-lo para dentro da cópia carregaria uma alegação
+sobre um processo que não existe no perfil restaurado — exatamente a condição de
+lock obsoleto que o `ReclaimProfile` existe para limpar.
+
+**E a parte que dá sentido ao nome**: contagem de arquivos não é backup. O item
+11 do briefing diz que uma ação retornando `nil` não é a operação ter tido
+sucesso, e em lugar nenhum isso é mais verdadeiro: um perfil corrompido copia
+perfeitamente. `TestRealSPABackupRestoresToAWorkingSession` **boota a cópia** e
+exige READY **com identidade presente** — a mesma régua do observável da CAP-05.
+
+Medição real: **1124 arquivos, 301 MB, copiados em 1,0 s**; perfil restaurado
+alcançou READY em **10,4 s** com `identity=PRESENT`.
+
+**O perigo que o chamador tem de decidir**: a cópia carrega as MESMAS
+credenciais. Dois browsers vivos nos dois diretórios são dois dispositivos numa
+conta — no nível do perfil são diretórios diferentes, então nada nesta stack
+impede, e o WhatsApp pode invalidar um deles. Por isso `Verify` recebe o boot
+como FUNÇÃO do chamador em vez de bootar sozinho: quem chama teve de decidir que
+o original está parado, e exigir a função é como essa decisão vira explícita.
+

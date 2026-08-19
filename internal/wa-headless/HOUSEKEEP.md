@@ -2015,3 +2015,34 @@ combinação existe.
 
 **Status**: CORRIGIDO.
 
+## H27 — o erro de `Close` no `backup` não tem teste que o exercite
+
+**Data**: 2026-08-19 · **Contexto**: `backupNow`, sexta capacidade de paridade.
+
+**Onde**: `internal/wa-headless/capabilities/backup/backup.go`, `copyFile`.
+
+**O que existe**: o código checa o erro de `out.Close()` e falha o backup se ele
+vier. Isso está certo — `Close` é onde uma escrita bufferizada finalmente falha,
+e ignorá-lo é como um arquivo truncado entra num backup que reporta sucesso.
+
+**O que NÃO existe**: teste que exercite esse caminho. O controle negativo foi
+executado — trocar a checagem por `if false && closeErr != nil` — e a suíte
+**passou**. Pela armadilha 3 deste catálogo, controle que não morde não prova
+nada, então a guarda está **não coberta**.
+
+**Por que não foi coberto**: fazer `Close` falhar de forma portátil é difícil.
+`/dev/full` resolve no Linux e não existe no macOS, onde este trabalho corre;
+disco cheio não se simula num teste; e injetar o escritor exigiria refatorar
+`copyFile` para testabilidade — mudança de desenho para poder testar, no meio da
+entrega da capacidade.
+
+**Correção sugerida**: `copyFile` receber um abridor de destino como parâmetro
+(`func(string) (io.WriteCloser, error)`), com o padrão sendo `os.OpenFile`. Um
+dublê então falha no `Close` sem precisar de sistema de arquivos hostil. É
+refatoração pequena, mas é desenho — e desenho no meio de uma capacidade recém-
+entregue é como se introduz o defeito que ninguém revisa.
+
+**Status**: **guarda presente e não testada, declarada**. Registrado em vez de
+contado como cobertura, porque o custo de fingir aqui é um backup truncado que
+reporta sucesso.
+
