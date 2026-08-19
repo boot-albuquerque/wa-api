@@ -8788,3 +8788,31 @@ nome no corpo do commit: `pkg/application/contracts/message_composer.go`,
 (`ls` devolve "No such file or directory" para os dois). Esta entrada estava
 desatualizada — status "não corrigido" escrito antes do commit que fechou o
 achado, nunca revisado depois.
+
+### Reverificação do Chief (2026-08-19), fechando a lacuna declarada no CAP-24
+
+O CAP-24 auditou as 40 entradas mas RE-EXECUTOU evidência em ~31, deixando
+F114, F115, F118, F119 e F128 sem reverificação — e disse quais, em vez de
+apresentar amostra como varredura completa. Fechei essa lacuna por LEITURA DE
+CÓDIGO, e as cinco continuam verdadeiras:
+
+- **F114** — `ChatMessengerAdapter.SendText`, ramo `preview != nil`, segue
+  montando o `ExtendedTextMessage` sem thumbnail de alta qualidade.
+- **F115** — `SendImage`: `grep -c JPEGThumbnail` no corpo da função devolve
+  **0**. O campo continua não preenchido.
+- **F118** — `SendVideoRequest` continua `{Phone, Video, Caption, ID}`:
+  `MimeType` e `JPEGThumbnail` seguem ausentes do DTO.
+- **F119** — `SendStickerRequest` continua `{Phone, Sticker, ID, MimeType}`:
+  os cinco campos do `stickerStruct` histórico seguem ausentes.
+  (O `Timestamp` do RESULTADO foi corrigido na F137, que é outro achado — não
+  confundir: a F119 é sobre o REQUEST.)
+- **F128** — a divergência segue consciente e registrada: dos três passos do
+  gate histórico de History, a reconstrução preserva dois; a invalidação de
+  cache por token (`userinfocache.Delete`) não foi preservada. O comentário em
+  `get_chat_history.go:63-67` documenta a decisão no próprio código.
+
+Nenhuma das cinco se resolveu de lado, e nenhuma mudou de natureza: as quatro
+primeiras são campo público perdido na migração, e a quinta é divergência
+deliberada. Todas seguem **não corrigidas**, por decisão, e nenhuma tem teste
+que a trave — o que é coerente, porque travar dívida ABERTA não faz sentido:
+o que se trava é decisão fechada.
