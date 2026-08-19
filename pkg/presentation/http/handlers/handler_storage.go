@@ -111,13 +111,11 @@ func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
-	var req domain.S3TestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
-		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
-		return
-	}
-	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
+	// No body is decoded: the connection test reads the STORED configuration,
+	// and the historical handler decoded nothing (`41bc8e2^:handlers.go:6372`).
+	// Decoding here would also make an empty body — which is what every client
+	// of this route sends — answer 400 on a json.EOF.
+	rsp, err := h.usecase.Execute(r.Context(), txtID)
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)

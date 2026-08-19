@@ -20,20 +20,60 @@ type S3ConfigResult struct {
 	Enabled bool   `json:"Enabled,omitempty"`
 }
 
-// S3TestRequest representa a requisição para teste de conexão S3.
-type S3TestRequest struct {
-	Endpoint  string `json:"endpoint"`
-	Region    string `json:"region"`
-	Bucket    string `json:"bucket"`
-	AccessKey string `json:"access_key"`
-	SecretKey string `json:"secret_key"`
-	PathStyle bool   `json:"path_style"`
+// S3ConfigView é a resposta de leitura de `GET /s3/config`.
+//
+// Os campos e as tags são os do SELECT histórico
+// (`41bc8e2^:handlers.go:6322`), e a ausência de `secret_key` é DELIBERADA:
+// aquele SELECT nunca leu `s3_secret_key`, então o segredo não tem por onde
+// sair. AccessKey vem mascarada com MaskedS3AccessKey.
+type S3ConfigView struct {
+	Enabled       bool   `json:"enabled"`
+	Endpoint      string `json:"endpoint"`
+	Region        string `json:"region"`
+	Bucket        string `json:"bucket"`
+	AccessKey     string `json:"access_key"`
+	PathStyle     bool   `json:"path_style"`
+	PublicURL     string `json:"public_url"`
+	MediaDelivery string `json:"media_delivery"`
+	RetentionDays int    `json:"retention_days"`
+}
+
+// MaskedS3AccessKey é o que `GET /s3/config` devolve no lugar da access key.
+// O histórico mascara INCONDICIONALMENTE (`config.AccessKey = "***"`), e não
+// só quando há uma configurada: mascarar por presença revelaria a presença.
+const MaskedS3AccessKey = "***"
+
+// Os três valores aceitos por `media_delivery`, mais o default.
+//
+// Constantes porque as MESMAS strings são a validação do use case, o default
+// da coluna e a asserção do teste que trava o contrato (ADR-0004). O
+// histórico as tinha como literais em três lugares
+// (`41bc8e2^:handlers.go:6232`, `:6240`, e o UPDATE do DELETE em `:6497`).
+const (
+	MediaDeliveryBase64 = "base64"
+	MediaDeliveryS3     = "s3"
+	MediaDeliveryBoth   = "both"
+
+	// DefaultMediaDelivery é o valor que um `media_delivery` vazio assume.
+	DefaultMediaDelivery = MediaDeliveryBase64
+)
+
+// IsValidMediaDelivery reporta se v é um dos três valores aceitos. O vazio
+// NÃO é aceito aqui: quem o trata é o caller, substituindo-o pelo default.
+func IsValidMediaDelivery(v string) bool {
+	return v == MediaDeliveryBase64 || v == MediaDeliveryS3 || v == MediaDeliveryBoth
 }
 
 // S3TestResult representa o resultado do teste de conexão S3.
+//
+// Bucket e Region ecoam a configuração TESTADA — é o corpo histórico
+// (`41bc8e2^:handlers.go:6455`), e é o que distingue "testei o que você
+// configurou" de "respondi 200". Nenhuma credencial aparece aqui.
 type S3TestResult struct {
 	Connected bool   `json:"connected"`
 	Details   string `json:"Details,omitempty"`
+	Bucket    string `json:"Bucket,omitempty"`
+	Region    string `json:"Region,omitempty"`
 }
 
 // HmacConfigRequest representa a requisição para configuração de HMAC.

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"testing"
 
+	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/domain"
@@ -49,7 +50,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"ConfigureS3", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewConfigureS3UseCase(sg, log).Execute(ctx, txtID, domain.S3ConfigRequest{Enabled: true})
+			r, err := newConfigureS3(sg, log).Execute(ctx, txtID, domain.S3ConfigRequest{Enabled: true})
 			return r != nil, err
 		}},
 		{"DeleteHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -57,7 +58,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"DeleteS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewDeleteS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := newDeleteS3Config(sg, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -69,7 +70,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"GetS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"SetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -81,9 +82,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"TestS3Connection", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewTestS3ConnectionUseCase(sg, log).Execute(ctx, txtID, domain.S3TestRequest{
-				Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-			})
+			r, err := newTestS3Connection(sg, log, enabledS3Store(txtID)).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 	}
@@ -188,7 +187,7 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	})
 
 	t.Run("DeleteS3Config zera Enabled", func(t *testing.T) {
-		r, err := storage.NewDeleteS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+		r, err := newDeleteS3Config(sg, log).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -218,9 +217,7 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	})
 
 	t.Run("TestS3Connection marca Connected", func(t *testing.T) {
-		r, err := storage.NewTestS3ConnectionUseCase(sg, log).Execute(ctx, txtID, domain.S3TestRequest{
-			Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-		})
+		r, err := newTestS3Connection(sg, log, enabledS3Store(txtID)).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -233,9 +230,6 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	// mascarado), nao HmacConfigResult. O contrato dele esta' em
 	// hmac_config_test.go.
 	t.Run("leituras devolvem Details", func(t *testing.T) {
-		if r, err := storage.NewGetS3ConfigUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetS3Config = %+v, %v", r, err)
-		}
 		if r, err := storage.NewGetHistoryUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
 			t.Errorf("GetHistory = %+v, %v", r, err)
 		}
@@ -263,7 +257,7 @@ func TestConfigureS3_MediaDelivery(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			log := &contractsfake.Logger{}
-			r, err := storage.NewConfigureS3UseCase(&contractsfake.SessionGuard{}, log).
+			r, err := newConfigureS3(&contractsfake.SessionGuard{}, log).
 				Execute(context.Background(), txtID, domain.S3ConfigRequest{Enabled: true, MediaDelivery: tc.delivery})
 
 			if tc.wantErr {
@@ -302,7 +296,7 @@ func TestConfigureS3_Endpoint(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewConfigureS3UseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
+			r, err := newConfigureS3(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
 				Execute(context.Background(), txtID, domain.S3ConfigRequest{Enabled: true, Endpoint: tc.endpoint})
 
 			if tc.wantErr {
@@ -391,31 +385,27 @@ func TestSetHistory_ValorNegativo(t *testing.T) {
 	}
 }
 
-func TestTestS3Connection_CamposObrigatorios(t *testing.T) {
-	completo := domain.S3TestRequest{
-		Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-	}
+// TestTestS3Connection_SemConfiguracaoHabilitada — o use case deixou de ler o
+// corpo (ele testa a configuracao GRAVADA, `41bc8e2^:handlers.go:6383`), entao
+// a recusa que existe e' a do estado: sem linha, ou com S3 desabilitado.
+func TestTestS3Connection_SemConfiguracaoHabilitada(t *testing.T) {
 	cases := []struct {
 		name  string
-		mutar func(r *domain.S3TestRequest)
+		store *contractsfake.S3ConfigStore
 	}{
-		{"sem endpoint", func(r *domain.S3TestRequest) { r.Endpoint = "" }},
-		{"sem region", func(r *domain.S3TestRequest) { r.Region = "" }},
-		{"sem bucket", func(r *domain.S3TestRequest) { r.Bucket = "" }},
-		{"sem access_key", func(r *domain.S3TestRequest) { r.AccessKey = "" }},
-		{"sem secret_key", func(r *domain.S3TestRequest) { r.SecretKey = "" }},
+		{"nunca configurado", &contractsfake.S3ConfigStore{}},
+		{"configurado e desabilitado", &contractsfake.S3ConfigStore{Stored: map[string]port.S3ConfigRecord{
+			txtID: {Enabled: false, Bucket: "b", Region: "us-east-1"},
+		}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := completo
-			tc.mutar(&req)
-
 			log := &contractsfake.Logger{}
-			r, err := storage.NewTestS3ConnectionUseCase(&contractsfake.SessionGuard{}, log).
-				Execute(context.Background(), txtID, req)
+			r, err := newTestS3Connection(&contractsfake.SessionGuard{}, log, tc.store).
+				Execute(context.Background(), txtID)
 
 			if err == nil {
-				t.Fatal("campo obrigatorio ausente devia ser recusado")
+				t.Fatal("S3 desabilitado devia ser recusado")
 			}
 			if r != nil {
 				t.Error("resultado devia ser nil na recusa")
@@ -425,4 +415,42 @@ func TestTestS3Connection_CamposObrigatorios(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- construtores dos quatro use cases de S3 ------------------------------
+//
+// Os dubles das quatro portas novas vem de contractsfake, que imita as regras
+// REAIS dos adapters de producao (pkg/infra/db/s3_config_repository.go,
+// pkg/infra/auth/s3_secret.go, pkg/infra/storage/s3.go).
+
+func newConfigureS3(sg port.SessionGuard, log port.Logger) *storage.ConfigureS3UseCase {
+	return storage.NewConfigureS3UseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, &contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newDeleteS3Config(sg port.SessionGuard, log port.Logger) *storage.DeleteS3ConfigUseCase {
+	return storage.NewDeleteS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3ClientManager{},
+		&contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newTestS3Connection(sg port.SessionGuard, log port.Logger, store *contractsfake.S3ConfigStore) *storage.TestS3ConnectionUseCase {
+	return storage.NewTestS3ConnectionUseCase(sg, store, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, log)
+}
+
+// enabledS3Store e' o store de quem TEM S3 habilitado, com o segredo no
+// envelope do dublê — a forma que o cifrador real produziria (ADR-0009). Um
+// store vazio transformaria o caminho de sucesso na recusa 400 sem que o teste
+// percebesse.
+func enabledS3Store(userID string) *contractsfake.S3ConfigStore {
+	return &contractsfake.S3ConfigStore{Stored: map[string]port.S3ConfigRecord{
+		userID: {
+			Enabled:       true,
+			Region:        "us-east-1",
+			Bucket:        "b",
+			AccessKey:     "ak",
+			SecretKey:     contractsfake.FakeS3EnvelopePrefix + "sk",
+			MediaDelivery: domain.MediaDeliveryBase64,
+		},
+	}}
 }

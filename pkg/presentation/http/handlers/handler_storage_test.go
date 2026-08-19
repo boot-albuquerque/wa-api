@@ -58,13 +58,53 @@ func newTestConfigureHmacUC(sg appport.SessionGuard, log appport.Logger) *storag
 	return storage.NewConfigureHmacUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.HmacKeyEncryptor{}, &contractsfake.UserInfoHmacCache{}, log)
 }
 
+// Os quatro use cases de S3 com os dubles das quatro portas novas. O store e'
+// o de contractsfake, que imita a regra REAL do adapter de producao
+// (pkg/infra/db/s3_config_repository.go).
+func newTestConfigureS3UC(sg appport.SessionGuard, log appport.Logger) *storage.ConfigureS3UseCase {
+	return storage.NewConfigureS3UseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, &contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newTestGetS3ConfigUC(sg appport.SessionGuard, log appport.Logger) *storage.GetS3ConfigUseCase {
+	return storage.NewGetS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, log)
+}
+
+func newTestDeleteS3ConfigUC(sg appport.SessionGuard, log appport.Logger) *storage.DeleteS3ConfigUseCase {
+	return storage.NewDeleteS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3ClientManager{},
+		&contractsfake.UserInfoS3Cache{}, log)
+}
+
+// newTestTestS3ConnectionUC recebe o store ja' semeado: o caminho de sucesso
+// deste use case exige uma configuracao HABILITADA no banco, e um store vazio
+// o transformaria silenciosamente na recusa 400.
+func newTestTestS3ConnectionUC(sg appport.SessionGuard, log appport.Logger, store *contractsfake.S3ConfigStore) *storage.TestS3ConnectionUseCase {
+	return storage.NewTestS3ConnectionUseCase(sg, store, &contractsfake.S3SecretCipher{}, &contractsfake.S3ClientManager{}, log)
+}
+
+// enabledS3Store devolve um store com S3 habilitado para o usuario "42" da
+// tabela, com o segredo no envelope do dublê — a forma que o cifrador real
+// produziria (ADR-0009).
+func enabledS3Store() *contractsfake.S3ConfigStore {
+	return &contractsfake.S3ConfigStore{Stored: map[string]appport.S3ConfigRecord{
+		"42": {
+			Enabled:       true,
+			Region:        "us-east-1",
+			Bucket:        "b",
+			AccessKey:     "ak",
+			SecretKey:     contractsfake.FakeS3EnvelopePrefix + "sk",
+			MediaDelivery: "base64",
+		},
+	}}
+}
+
 func storageCases() []storageCase {
 	log := silentLogger{}
 	return []storageCase{
 		{
 			name: "ConfigureS3",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/s3/configure",
@@ -74,7 +114,7 @@ func storageCases() []storageCase {
 		{
 			name: "GetS3Config",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetS3ConfigHandler(storage.NewGetS3ConfigUseCase(sg, log))
+				return NewGetS3ConfigHandler(newTestGetS3ConfigUC(sg, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/s3/config",
@@ -82,17 +122,17 @@ func storageCases() []storageCase {
 		{
 			name: "TestS3Connection",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, enabledS3Store()))
 			},
-			method:    http.MethodPost,
-			path:      "/storage/s3/test",
-			body:      `{"endpoint":"e","region":"r","bucket":"b","access_key":"ak","secret_key":"sk"}`,
-			readsBody: true,
+			method: http.MethodPost,
+			path:   "/storage/s3/test",
+			// Sem `readsBody`: o teste de conexao NAO decodifica corpo — ele
+			// testa a configuracao GRAVADA (`41bc8e2^:handlers.go:6372`).
 		},
 		{
 			name: "DeleteS3Config",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewDeleteS3ConfigHandler(storage.NewDeleteS3ConfigUseCase(sg, log))
+				return NewDeleteS3ConfigHandler(newTestDeleteS3ConfigUC(sg, log))
 			},
 			method: http.MethodDelete,
 			path:   "/storage/s3/config",
@@ -325,7 +365,7 @@ func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 		{
 			name: "ConfigureS3/media_delivery invalido",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/s3/configure",
@@ -333,14 +373,18 @@ func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 			wantErr: "media_delivery",
 		},
 		{
-			name: "TestS3Connection/campos obrigatorios ausentes",
+			// A recusa deste use case deixou de ser "campo obrigatorio
+			// ausente no corpo" e passou a ser "nao ha' configuracao
+			// habilitada gravada" — porque ele deixou de ler o corpo. O
+			// store VAZIO e' o estado de quem nunca configurou.
+			name: "TestS3Connection/S3 nao habilitado",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, &contractsfake.S3ConfigStore{}))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/s3/test",
-			body:    `{"endpoint":"e"}`,
-			wantErr: "missing required S3 configuration fields",
+			body:    ``,
+			wantErr: "S3 is not enabled for this user",
 		},
 		{
 			name: "SetProxy/habilitado sem URL",
@@ -401,7 +445,7 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		{
 			name: "ConfigureS3",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			path: "/storage/s3/configure",
 			body: `{"enabled":true,"access_key":"` + logassertAdminToken +
@@ -418,7 +462,7 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		{
 			name: "TestS3Connection",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, enabledS3Store()))
 			},
 			path: "/storage/s3/test",
 			body: `{"secret_key":"` + logassertGlobalHMACKey + `"}`,

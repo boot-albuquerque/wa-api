@@ -367,6 +367,10 @@ func Main() {
 
 	// Set DB reference in S3Manager for lazy client initialization
 	storage.GetS3Manager().SetDB(db)
+	// And the key that unwraps the stored S3 secret (ADR-0009). Without it the
+	// lazy initialization fails closed instead of using the envelope as a
+	// credential.
+	storage.GetS3Manager().SetEncryptionKey(appCtx.GlobalEncryptionKey)
 
 	// Nunca nil e nunca um logger nulo: Warn e Error do sqlstore saem sempre.
 	// --wadebug apenas baixa o piso (ver walog.ParseLevel).

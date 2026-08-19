@@ -8892,6 +8892,13 @@ acima segue válida para `set_history`, `set_proxy`, `test_s3_connection`,
 que travam a correção estão na [[F157]], que é onde o bloco de HMAC foi
 descrito por inteiro.
 
+**ADENDO 2026-08-19 (CAP-29) — as QUATRO rotas de S3 saíram do conjunto.**
+`configure_s3.go`, `get_s3_config.go`, `delete_s3_config.go` e
+`test_s3_connection.go` gravam, leem, revogam e testam de verdade, com o
+segredo cifrado no envelope do [[ADR-0009]]. Restam TRÊS stubs, e a tabela
+acima só continua válida para `set_history`, `set_proxy` e `get_history`. Os
+testes que travam a correção estão na [[F157]], junto com os do bloco de HMAC.
+
 
 ## F152
 
@@ -9762,6 +9769,277 @@ sem lastro. Valor medido fica registrado aqui, como dívida explícita.
 O `count` de `.golangci-baseline` também não foi alterado — ver o adendo na
 [[F155]]: 322 → 325, com `max_complexity` parado em 56.
 
+---
+
+## ADENDO 2026-08-19 (CAP-29) — as quatro rotas de S3, corrigidas
+
+`POST /s3/configure` · `POST /session/s3/config`, `GET /s3/config` ·
+`GET /session/s3/config`, `DELETE /s3/config` · `DELETE /session/s3/config` e
+`POST /s3/test` · `POST /session/s3/test` deixaram de responder 200 sem fazer
+nada. As dez colunas `s3_*` são gravadas, lidas e limpas de verdade, e o
+segredo vai para o banco CIFRADO no envelope `enc:v1:` do
+[[ADR-0009]] — divergência deliberada do histórico, que gravava em claro.
+
+### O que passou a existir
+
+| camada | arquivo |
+|---|---|
+| envelope da cifra | `pkg/infra/auth/s3_secret.go` (`EncryptS3Secret`/`DecryptS3Secret`) |
+| portas | `pkg/application/contracts/s3_config_port.go` (`S3ConfigStore`, `S3SecretCipher`, `S3ClientManager`, `UserInfoS3Cache`) |
+| dublês | `pkg/application/contracts/contractsfake/s3_config.go` |
+| persistência | `pkg/infra/db/s3_config_repository.go` |
+| adapters | `pkg/bootstrap/s3_config_adapters.go` |
+
+**Por que uma porta NOVA de cifra e não `HmacKeyEncryptor`.** Os dois segredos
+têm TIPOS ARMAZENADOS diferentes: `hmac_key` é `BYTEA`/`BLOB` e cruza como
+`[]byte`; `s3_secret_key` é `TEXT` e cruza como a string `enc:v1:...`. Uma
+porta só obrigaria uma das duas pontas a converter, e a conversão é justamente
+onde o envelope se perderia. O **algoritmo não foi duplicado**:
+`auth.EncryptS3Secret` delega para o mesmo `EncryptHMACKey` (AES-GCM) que
+protege a chave HMAC — o que este arquivo acrescenta é o enquadramento.
+
+### A decisão sobre o CACHE, e por que ela diverge do histórico
+
+O histórico publicava SETE campos de S3 no `UserInfoCache`, incluindo
+`S3AccessKey` e **`S3SecretKey` em claro** (`41bc8e2^:handlers.go:6296-6305`).
+O adapter novo publica **DOIS**: `S3Enabled` e `MediaDelivery`.
+
+A razão é medida, não estética. Varri quem LÊ esses campos:
+
+```
+grep -rn "S3SecretKey\|S3AccessKey\|S3Enabled\|MediaDelivery" pkg --include='*.go' | grep -v _test
+```
+
+Os únicos leitores da entrada de cache são
+`pkg/bootstrap/eventhandler_message.go:81-82`, e eles leem exatamente
+`S3Enabled` e `MediaDelivery`. **Ninguém lê `S3SecretKey` nem `S3AccessKey` do
+cache.** Manter a credencial ali seria uma segunda cópia em memória, sob
+`cache.NoExpiration`, sem um único leitor.
+
+O consumidor que de fato precisa do segredo EM CLARO é o cliente do SDK da
+AWS, e ele já o tem: `storage.S3Manager.configs` guarda a `S3Config` com a
+credencial decifrada (`pkg/infra/storage/s3.go:141`), porque assinar requisição
+S3 exige o texto claro. Então a resposta à pergunta do packet é: **o cache não
+guarda o segredo em forma nenhuma — nem claro, nem envelope — e o único
+detentor em memória é o S3Manager, que não tem como não sê-lo.**
+
+### A regressão que esta correção QUASE introduziu
+
+`S3Manager.EnsureClientFromDB` (`pkg/infra/storage/s3.go:62`) lê
+`s3_secret_key` do banco para reconstruir o cliente depois de um restart. Com a
+escrita passando a gravar o envelope e essa leitura intacta, o SDK receberia
+`enc:v1:<base64>` como credencial e TODA subida de mídia falharia de assinatura
+— sem que nenhum teste das quatro rotas percebesse.
+
+Foram os testes que já existiam que denunciaram, antes de qualquer análise:
+
+```
+--- FAIL: TestEnsureClientFromDB_InitializesFromRow (0.00s)
+    s3_manager_test.go:630: expected the client to be lazily initialized from the users row
+--- FAIL: TestUploadToS3_LazyInitFromDB (0.00s)
+    s3_manager_test.go:671: UploadToS3 with lazy init: S3 client not initialized for user user1
+--- FAIL: TestEnsureS3ClientForUser (0.00s)
+    s3_manager_test.go:701: EnsureS3ClientForUser did not initialize the client on the global manager
+```
+
+A correção foi dar ao manager a chave (`SetEncryptionKey`, chamada em
+`main.go` ao lado do `SetDB` que já existia) e fazer a leitura DESENVELOPAR,
+falhando FECHADO quando o valor não tem o prefixo. Não há ramo que use o valor
+armazenado como credencial.
+
+### Os testes que travam a correção, por NOME
+
+**Pela ROTA REGISTRADA** — `pkg/bootstrap/s3_config_route_test.go`. SQLite real
+com o schema de produção, o AES-GCM real de `pkg/infra/auth`, o
+`appCtx.UserInfoCache` real e o `storage.S3Manager` REAL — o mesmo singleton de
+onde `ProcessMediaForS3` tira o cliente. As duas famílias de caminho
+(`/s3/...` e `/session/s3/...`) são exercitadas em subtestes, porque a segunda
+passa pelo wrapper que despacha por MÉTODO (`wiring_routes.go:176`).
+
+| # | teste | o que trava |
+|---|---|---|
+| 1 | `TestS3Route_PostGravaEnvelopeQueDecifraDeVolta` | as dez colunas, uma a uma; o envelope; a IDA E VOLTA da cifra; o cliente registrado; o cache sem credencial |
+| 2 | `TestS3Route_PostMediaDeliveryInvalido_400SemGravar` | 400 e nada gravado |
+| 3 | `TestS3Route_PostMediaDeliveryVazio_ViraBase64` | o default na coluna e no cache |
+| 4 | `TestS3Route_PostSemChaveDeEncriptacao_500SemGravar` | falha FECHADA: 500, coluna vazia, sem cache, sem cliente |
+| 5 | `TestS3Route_GetMascaraEnaoVazaOSegredo` | máscara da access key + busca negativa no CORPO INTEIRO |
+| 6 | `TestS3Route_DeleteRevogaBancoEClienteEmMemoria` | banco limpo **E** cliente fora do S3Manager |
+| 7 | `TestS3Route_DeleteComBancoQuebrado_500SemRemoverOCliente` | a ORDEM: falha de banco não derruba o cliente |
+| 8 | `TestS3Route_TestComS3Desabilitado_400` | a mensagem histórica, sem tocar a rede |
+| 9 | `TestS3Route_TestComFakeOK_200ComBucketERegion` | 200 com Bucket/Region **e** requisição de fato feita |
+| 10 | `TestS3Route_TestComFakeErro_500` | 500, e o endpoint foi tocado |
+| 11 | `TestS3Route_TestComSegredoLegadoSemEnvelope_RecusaSemCairParaPlaintext` | o [[ADR-0009]]: linha legada é recusada e NÃO vira credencial |
+| 12 | `TestS3Route_SegredoNuncaVaiParaOLog` | seis caminhos, incluindo os de erro |
+
+**Do envelope** — `pkg/infra/auth/s3_secret_test.go`:
+`TestS3Secret_RoundTrip`, `TestS3Secret_TwoEncryptionsDiffer`,
+`TestS3Secret_EmptyIsNotEnveloped`, `TestS3Secret_LegacyPlaintextIsRefused`,
+`TestS3Secret_CorruptEnvelopeIsRefused`,
+`TestS3Secret_NoEncryptionKeyFailsClosed`.
+
+**Do repositório contra o schema REAL** — `pkg/infra/db/s3_config_repository_test.go`:
+`TestS3ConfigRepository_SaveELoadPreservamAsDezColunas`,
+`TestS3ConfigRepository_LoadSemSegredo_NaoLeAColuna` (assere também que a
+INSTRUÇÃO não nomeia `s3_secret_key`),
+`TestS3ConfigRepository_DeleteRestauraOEstadoLimpo`,
+`TestS3ConfigRepository_DeleteEhIdempotente`,
+`TestS3ConfigRepository_LoadSemLinha_NaoEhErro`,
+`TestS3ConfigRepository_ColunasNulasCaemNoDefault`,
+`TestS3ConfigRepository_BancoFechado_PropagaOErro`.
+
+**Da leitura preguiçosa** — `pkg/infra/storage/s3_manager_test.go`:
+`TestEnsureClientFromDB_LegacyPlaintextSecretIsRefused` e
+`TestEnsureClientFromDB_NoEncryptionKeyFailsClosed`, ambos novos; e
+`TestEnsureClientFromDB_InitializesFromRow` passou a asserir que
+`cfg.SecretKey` é o texto DECIFRADO, não a string armazenada.
+
+**Do use case** — `pkg/application/usecase/storage/storage_test.go`:
+`TestTestS3Connection_SemConfiguracaoHabilitada` substituiu
+`TestTestS3Connection_CamposObrigatorios`, que media a validação de um corpo
+que o use case deixou de ler.
+
+### Os três controles negativos, EXECUTADOS
+
+**(a) gravar o segredo SEM o envelope (texto claro).** `SecretKey: envelope`
+virou `SecretKey: req.SecretKey` em `configure_s3.go`. A primeira tentativa
+NÃO COMPILOU (`declared and not used: envelope`) — controle que não compila não
+prova nada (ARMADILHA 3), então foi ajustada com `_ = envelope` até compilar E
+falhar:
+
+```
+--- FAIL: TestS3Route_PostGravaEnvelopeQueDecifraDeVolta (0.02s)
+    --- FAIL: TestS3Route_PostGravaEnvelopeQueDecifraDeVolta/caminho_direto (0.01s)
+        s3_config_route_test.go:342: users.s3_secret_key guarda a credencial EM CLARO (ADR-0009)
+    --- FAIL: TestS3Route_PostGravaEnvelopeQueDecifraDeVolta/caminho_/session (0.01s)
+        s3_config_route_test.go:342: users.s3_secret_key guarda a credencial EM CLARO (ADR-0009)
+```
+
+**(b) o DELETE limpar só o banco e não remover o cliente.**
+`uc.clients.RemoveClient(txtID)` comentado em `delete_s3_config.go`. A resposta
+continuou 200 e as colunas continuaram zeradas — o sintoma é IDÊNTICO ao da
+revogação correta, e só a asserção sobre o registro em memória distingue:
+
+```
+--- FAIL: TestS3Route_DeleteRevogaBancoEClienteEmMemoria (0.03s)
+    --- FAIL: TestS3Route_DeleteRevogaBancoEClienteEmMemoria/caminho_direto (0.01s)
+        s3_config_route_test.go:519: o cliente CONTINUA no S3Manager apos a revogacao: a credencial revogada segue subindo midia do usuario
+    --- FAIL: TestS3Route_DeleteRevogaBancoEClienteEmMemoria/caminho_/session (0.02s)
+        s3_config_route_test.go:519: o cliente CONTINUA no S3Manager apos a revogacao: a credencial revogada segue subindo midia do usuario
+```
+
+**(c) aceitar linha legada sem prefixo como texto claro** — o controle do
+[[ADR-0009]]. Em `auth.DecryptS3Secret`, `return "", ErrS3SecretNotEnveloped{}`
+virou `return storedSecret, nil`. O fake de S3 respondia OK de propósito, então
+o 200 abaixo é a prova de que o segredo em claro FOI usado como credencial e
+falou com o endpoint:
+
+```
+--- FAIL: TestS3Route_TestComSegredoLegadoSemEnvelope_RecusaSemCairParaPlaintext (0.01s)
+    s3_config_route_test.go:652: status = 200, quero 500: a linha legada foi ACEITA (corpo: {"code":200,"data":{"connected":true,"Details":"S3 connection test successful","Bucket":"mybucket","Region":"us-east-1"},"success":true}
+        )
+```
+
+A mesma mutação derrubou os dois testes de camada baixa, o que confirma que a
+regra está travada nos três níveis e não só na rota:
+
+```
+--- FAIL: TestS3Secret_LegacyPlaintextIsRefused (0.00s)
+    --- FAIL: TestS3Secret_LegacyPlaintextIsRefused/sUp3r-s3cr3t-s3-key-value (0.00s)
+        s3_secret_test.go:95: err = <nil>, want ErrS3SecretNotEnveloped
+--- FAIL: TestEnsureClientFromDB_LegacyPlaintextSecretIsRefused (0.00s)
+    s3_manager_test.go:704: a plaintext s3_secret_key was ACCEPTED: the legacy row is being used as a credential
+```
+
+Os três foram revertidos por edição localizada, e a árvore voltou à forma final
+antes do `make check`.
+
+### Cobertura de log: as três travas SOBEM
+
+| medida | antes | depois | baseline |
+|---|---|---|---|
+| `func_coverage` | 66.1% (430/651) | 66.2% (438/662) | `min_func_coverage` 661 → 662 |
+| `errpath_coverage` | 86.1% (1196/1389) | 86.4% (1219/1411) | `min_errpath_coverage` 861 → 864 |
+| `eligible` | 651 | 662 | `min_eligible` 651 → 662 |
+
+O NUMERADOR não regrediu em nenhuma: `covered` sobe de 430 para 438.
+
+Vale registrar o caminho até aqui, porque a primeira medição REPROVOU: com as
+funções novas sem log, `func_coverage` caiu para 65.6% (435/663) contra o piso
+de 661. A saída correta não foi baixar o piso nem usar `//log:exempt` — o
+orçamento é `max_exempt_annotations=0`, e gastá-lo aqui seria afrouxar uma
+trava para acomodar código meu. Foi acrescentar log onde ele de fato serve:
+
+- `auth.EncryptS3Secret`/`DecryptS3Secret` passaram a logar sob o próprio
+  `component`. Sem isso, a recusa de uma linha legada saía com
+  `component: auth.DecryptHMACKey`, mandando quem investiga para o caminho
+  errado — e essa recusa é EXATAMENTE o evento que o operador precisa ver
+  ("reconfigure esta credencial"), então nasce em `Warn`.
+- `S3ConfigRepository.LoadS3Config`/`LoadS3ConfigWithoutSecret` deixaram de
+  compartilhar um helper e passaram a logar com o próprio rótulo de query:
+  "a leitura falhou" é evento operacional diferente conforme o segredo fizesse
+  ou não parte dela.
+
+Três funções novas continuam elegíveis e sem log —
+`bootstrap.s3ClientManager.InitializeS3Client` e os dois métodos de
+`bootstrap.s3SecretCipher` —, e é dívida consciente: são adapters que só
+injetam `appCtx.GlobalEncryptionKey` ou remapeiam campos, e o erro deles já é
+logado pelo use case chamador. É a mesma situação do
+`bootstrap.encryptHMACKey`, que já estava `ELIGIBLE uncovered:L1` no golden
+antes desta tarefa.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado (3007 → 3036 linhas). O
+diff mandatório **não** veio vazio, e a explicação é que o conjunto elegível de
+fato mudou:
+
+```
+diff <(cut -f1,2 cmd/logcov/testdata/eligible.golden | sort)      <(go run ./cmd/logcov -golden | cut -f1,2 | sort)
+> pkg/application/contracts/contractsfake.ClearedS3Config                        EXCLUDED
+> pkg/application/contracts/contractsfake.S3ClientManager.InitializeS3Client     EXCLUDED
+> pkg/application/contracts/contractsfake.S3ClientManager.RemoveClient           EXCLUDED
+> pkg/application/contracts/contractsfake.S3ClientManager.TestConnection         EXCLUDED
+> pkg/application/contracts/contractsfake.S3ConfigStore.DeleteS3Config           EXCLUDED
+> pkg/application/contracts/contractsfake.S3ConfigStore.LoadS3Config             EXCLUDED
+> pkg/application/contracts/contractsfake.S3ConfigStore.LoadS3ConfigWithoutSecret EXCLUDED
+> pkg/application/contracts/contractsfake.S3ConfigStore.put                      EXCLUDED
+> pkg/application/contracts/contractsfake.S3ConfigStore.SaveS3Config             EXCLUDED
+> pkg/application/contracts/contractsfake.S3SecretCipher.DecryptS3Secret         EXCLUDED
+> pkg/application/contracts/contractsfake.S3SecretCipher.EncryptS3Secret         EXCLUDED
+> pkg/application/contracts/contractsfake.UserInfoS3Cache.SetS3Config            EXCLUDED
+> pkg/bootstrap.s3ClientManager.InitializeS3Client                               ELIGIBLE
+> pkg/bootstrap.s3ClientManager.RemoveClient                                     EXCLUDED
+> pkg/bootstrap.s3ClientManager.TestConnection                                   EXCLUDED
+> pkg/bootstrap.s3SecretCipher.DecryptS3Secret                                   ELIGIBLE
+> pkg/bootstrap.s3SecretCipher.EncryptS3Secret                                   ELIGIBLE
+> pkg/bootstrap.userInfoS3Cache.SetS3Config                                      ELIGIBLE
+> pkg/domain.IsValidMediaDelivery                                                EXCLUDED
+> pkg/infra/auth.DecryptS3Secret                                                 ELIGIBLE
+> pkg/infra/auth.EncryptS3Secret                                                 ELIGIBLE
+> pkg/infra/auth.ErrS3SecretNotEnveloped.Error                                   EXCLUDED
+> pkg/infra/db.NewS3ConfigRepository                                             EXCLUDED
+> pkg/infra/db.S3ConfigRepository.DeleteS3Config                                 ELIGIBLE
+> pkg/infra/db.S3ConfigRepository.LoadS3Config                                   ELIGIBLE
+> pkg/infra/db.S3ConfigRepository.LoadS3ConfigWithoutSecret                      ELIGIBLE
+> pkg/infra/db.S3ConfigRepository.SaveS3Config                                   ELIGIBLE
+> pkg/infra/db.s3ConfigRow.toRecord                                              EXCLUDED
+> pkg/infra/storage.S3Manager.SetEncryptionKey                                   ELIGIBLE
+```
+
+São TRINTA linhas, todas `>` — só ACRÉSCIMO, e as trinta são funções que este
+bloco criou. Nenhuma linha existente saiu, e nenhuma mudou de estado.
+
+**`.coverage-baseline` — NÃO alterado**, pelo mesmo motivo da [[F148]] e do
+adendo do CAP-27: o gate PASSA (`coverage: 858 decimos de % (piso declarado
+840)`) e imprime "suba min_coverage para 858 neste mesmo PR", mas a deriva é
+anterior a esta tarefa (a F148 mediu 855, o CAP-27 mediu 857) e eu não isolei
+quanto do ponto atual é do CAP-29. Fica registrado como dívida explícita.
+
+O `count` de `.golangci-baseline` também não foi alterado: o gate imprime
+`263 -> 331`, informativo e sem trava, com `max_complexity` parado em 56. O
+salto sobre o valor versionado (263) é anterior — o CAP-27 já media 325 —, e
+esta tarefa acrescenta seis.
+
+**`make check` — EXIT 0.**
+
 ## F158
 
 **Data**: 2026-08-19. **Contexto**: CAP-27, ligando a escrita da chave HMAC
@@ -10090,3 +10368,54 @@ errado é o mesmo erro da F139, da F151 e da F157, agora numa quarta forma.
 
 **Status**: não corrigido. O 0009 evita o dano imediato; o ADR faltante é
 decisão do humano.
+
+## F163
+
+**Data**: 2026-08-19. **Contexto**: CAP-29, ligando as quatro rotas de S3 com o
+segredo cifrado ([[ADR-0009]]). Achado ao procurar quem MAIS escreve em
+`users.s3_secret_key`. É o irmão exato da [[F158]], que era sobre `hmac_key`.
+
+**Onde**:
+
+- `pkg/infra/db/user_repository.go:76` — o INSERT de `CreateUser` grava
+  `rec.S3.SecretKey` cru;
+- `pkg/infra/db/user_repository.go:160` — `addField("s3_secret_key", upd.S3.SecretKey)`
+  no UPDATE de edição;
+- as origens: `pkg/application/usecase/user/add_user.go:138` e
+  `pkg/application/usecase/user/edit_user.go:109`, que copiam
+  `req.S3Config.SecretKey` do corpo da requisição sem passar por cifra
+  nenhuma.
+
+**Problema**: `POST /admin/users` e a edição de usuário gravam a credencial de
+S3 **em texto claro** na coluna. Duas consequências, e a segunda é a que muda o
+comportamento:
+
+1. a credencial de terceiro fica exposta no banco — o mesmo motivo pelo qual o
+   ADR-0009 recusou manter a fidelidade ao histórico;
+2. sob o ADR-0009 essa linha é **INVÁLIDA**. O `add_user` registra o cliente em
+   memória com o texto claro (`add_user.go:145`), então o S3 **funciona
+   enquanto o processo viver**. Depois do restart,
+   `S3Manager.EnsureClientFromDB` recusa o valor sem prefixo, e a subida de
+   mídia daquele usuário PARA — sem que nada tenha mudado na configuração.
+
+O sintoma é especialmente ruim porque é **diferido**: quem cria o usuário vê
+tudo funcionando, e a falha aparece no próximo deploy.
+
+**Evidência**: `pkg/infra/storage/s3_manager_test.go` →
+`TestEnsureClientFromDB_LegacyPlaintextSecretIsRefused` demonstra a recusa
+contra uma linha com segredo cru — que é exatamente a linha que `CreateUser`
+produz hoje.
+
+**Correção sugerida**: dar a `add_user`/`edit_user` a porta
+`appport.S3SecretCipher` (já existe, `pkg/application/contracts/s3_config_port.go`)
+e cifrar antes de montar o `domain.UserRecord`, na MESMA ordem do CAP-29 —
+cifrar, e só então gravar; falha de cifra não grava. É o que a [[F158]] fez
+para a chave HMAC no `add_user`, e o padrão já está no repositório.
+
+Vale considerar, na mesma passada, que o `_ = storage.GetS3Manager().InitializeS3Client(...)`
+de `add_user.go:145` DESCARTA o erro — o usuário nasce com S3 "habilitado" e
+sem cliente, em silêncio. Não medi essa parte; registro porque está na mesma
+linha de código que a correção vai tocar.
+
+**Status**: não corrigido, fora do escopo do CAP-29 (que é das quatro rotas de
+`/s3/*`). Registrado e levado ao canal de decisão.

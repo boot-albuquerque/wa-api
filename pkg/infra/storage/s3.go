@@ -15,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
+
+	"wa-api/pkg/infra/auth"
 )
 
 // S3Config holds S3 configuration for a user
@@ -37,6 +39,13 @@ type S3Manager struct {
 	db      *sqlx.DB
 	clients map[string]*s3.Client
 	configs map[string]*S3Config
+
+	// encryptionKey is the process-wide AES key that unwraps the `enc:v1:`
+	// envelope of users.s3_secret_key (ADR-0009). It is only needed by
+	// EnsureClientFromDB, which is the one path here that reads the column;
+	// every other entry point is handed a config whose SecretKey is already
+	// plaintext.
+	encryptionKey string
 }
 
 // Global S3 manager instance
@@ -58,6 +67,16 @@ func (m *S3Manager) SetDB(db *sqlx.DB) {
 	log.Debug().Bool("hasDB", db != nil).Msg("S3 manager database reference set")
 }
 
+// SetEncryptionKey gives the manager the key that unwraps the stored S3
+// secret. Without it, lazy initialization from the database fails CLOSED:
+// there is no branch that treats the stored value as a plaintext credential.
+func (m *S3Manager) SetEncryptionKey(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.encryptionKey = key
+	log.Debug().Bool("hasEncryptionKey", key != "").Msg("S3 manager encryption key set")
+}
+
 // EnsureClientFromDB loads S3 config from DB and initializes client if enabled. Returns true if client is available.
 func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	if _, _, ok := m.GetClient(userID); ok {
@@ -65,6 +84,7 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	}
 	m.mu.RLock()
 	db := m.db
+	encryptionKey := m.encryptionKey
 	m.mu.RUnlock()
 	if db == nil {
 		log.Warn().Str("userID", userID).Msg("S3 lazy init skipped: no database reference on manager")
@@ -91,13 +111,24 @@ func (m *S3Manager) EnsureClientFromDB(userID string) bool {
 	if !s3DbConfig.Enabled {
 		return false
 	}
+	// The column holds the ADR-0009 envelope, not the credential. Reading it
+	// as plaintext would hand the AWS SDK a base64 blob as a secret key and
+	// turn every upload into a signature failure — and a fallback branch that
+	// "recovers" by using the stored value directly is exactly the silent
+	// plaintext fallback the ADR forbids.
+	plainSecret, err := auth.DecryptS3Secret(s3DbConfig.SecretKey, []byte(encryptionKey))
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).
+			Msg("S3 lazy init aborted: the stored S3 secret could not be unwrapped; the credential must be reconfigured")
+		return false
+	}
 	config := &S3Config{
 		Enabled:       s3DbConfig.Enabled,
 		Endpoint:      s3DbConfig.Endpoint,
 		Region:        s3DbConfig.Region,
 		Bucket:        s3DbConfig.Bucket,
 		AccessKey:     s3DbConfig.AccessKey,
-		SecretKey:     s3DbConfig.SecretKey,
+		SecretKey:     plainSecret,
 		PathStyle:     s3DbConfig.PathStyle,
 		PublicURL:     s3DbConfig.PublicURL,
 		MediaDelivery: s3DbConfig.MediaDelivery,

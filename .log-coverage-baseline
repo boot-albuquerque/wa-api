@@ -1006,7 +1006,7 @@ rules_frozen=true
 # (11: as 4 ELIGIBLE acima e 7 EXCLUDED — NewHmacConfigRepository,
 # bootstrap.hmacKeyEncryptor.EncryptHmacKey e os 5 metodos dos dubles de
 # contractsfake). Nenhuma linha existente muda de estado.
-min_func_coverage=661
+min_func_coverage=662
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1201,7 +1201,7 @@ min_func_coverage=661
 # 1196/1389=86.1%). +8 caminhos de saida no denominador e +8 cobertos: os tres
 # metodos do HmacConfigRepository e o SetHmacKey do cache, todos com Error ou
 # Debug no menor bloco que contem a saida.
-min_errpath_coverage=861
+min_errpath_coverage=864
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1399,7 +1399,7 @@ min_errpath_coverage=861
 # junto de min_func_coverage: os tres metodos de db.HmacConfigRepository e
 # bootstrap.userInfoHmacCache.SetHmacKey. Denominador CRESCE — nao ha'
 # remocao neste PR.
-min_eligible=651
+min_eligible=662
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

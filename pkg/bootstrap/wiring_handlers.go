@@ -283,10 +283,17 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Storage UseCases
-	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, logger)
-	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, logger)
-	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, logger)
-	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
+	// S3 por usuário: banco + envelope de cifra + registro de clientes +
+	// cache, os quatro REAIS. O stub que respondia 200 sem gravar nada é a
+	// F151/F157 do HOUSEKEEP; o segredo cifrado é o ADR-0009.
+	s3Store := db.NewS3ConfigRepository(s.DB)
+	s3Cipher := s3SecretCipher{}
+	s3Clients := s3ClientManager{}
+	s3Cache := userInfoS3Cache{}
+	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, s3Store, s3Cipher, s3Clients, s3Cache, logger)
+	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, s3Store, logger)
+	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, s3Store, s3Cipher, s3Clients, logger)
+	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, s3Store, s3Clients, s3Cache, logger)
 	// HMAC por usuário: banco + cifra + cache, os três REAIS. O stub que
 	// respondia 200 sem gravar nada é a F151/F157 do HOUSEKEEP.
 	hmacKeyStore := db.NewHmacConfigRepository(s.DB)
