@@ -1749,6 +1749,7 @@ pkg/application/contracts/contractsfake.GroupSettings.SetGroupName	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupPhoto	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupTopic	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.UpdateGroupParticipants	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HistoryConfigStore.SaveHistoryLimit	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyStore.DeleteHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyStore.LoadHmacKey	EXCLUDED	X5
@@ -1797,6 +1798,8 @@ pkg/application/contracts/contractsfake.ProfileDataAccess.DeviceInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.OwnJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.ProfilePictureURL	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ProfileDataAccess.PushName	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ProxyConfigStore.LoadWebhookUseProxy	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ProxyConfigStore.SaveProxyConfig	EXCLUDED	X5
 pkg/application/contracts/contractsfake.S3ClientManager.InitializeS3Client	EXCLUDED	X5
 pkg/application/contracts/contractsfake.S3ClientManager.RemoveClient	EXCLUDED	X5
 pkg/application/contracts/contractsfake.S3ClientManager.TestConnection	EXCLUDED	X5
@@ -1846,6 +1849,8 @@ pkg/application/contracts/contractsfake.StoragePort.UploadFile	EXCLUDED	X5
 pkg/application/contracts/contractsfake.TextMessenger.SendText	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserInfoHmacCache.SetHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserInfoS3Cache.SetS3Config	EXCLUDED	X5
+pkg/application/contracts/contractsfake.UserInfoSessionCache.SetHistory	EXCLUDED	X5
+pkg/application/contracts/contractsfake.UserInfoSessionCache.SetProxy	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.CreateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.DeleteUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
@@ -2042,8 +2047,11 @@ pkg/application/usecase/storage.NewGetS3ConfigUseCase	EXCLUDED	X1
 pkg/application/usecase/storage.NewSetHistoryUseCase	EXCLUDED	X1
 pkg/application/usecase/storage.NewSetProxyUseCase	EXCLUDED	X1
 pkg/application/usecase/storage.NewTestS3ConnectionUseCase	EXCLUDED	X1
-pkg/application/usecase/storage.SetHistoryUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,set_history.go:35)
-pkg/application/usecase/storage.SetProxyUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,set_proxy.go:39)
+pkg/application/usecase/storage.SetHistoryUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/storage.SetProxyUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/storage.SetProxyUseCase.disable	ELIGIBLE	covered
+pkg/application/usecase/storage.SetProxyUseCase.enable	ELIGIBLE	covered
+pkg/application/usecase/storage.SetProxyUseCase.resolveWebhookUseProxy	ELIGIBLE	covered
 pkg/application/usecase/storage.TestS3ConnectionUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:47);uncovered:L2(S-ret,add_user.go:73);uncovered:L2(S-ret,add_user.go:93)
 pkg/application/usecase/user.BlockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,block_user.go:47)
@@ -2355,11 +2363,18 @@ pkg/bootstrap.userIDHolderHandler.func1	EXCLUDED	X1
 pkg/bootstrap.userInfoHmacCache.SetHmacKey	ELIGIBLE	covered
 pkg/bootstrap.userInfoID	ELIGIBLE	uncovered:L1
 pkg/bootstrap.userInfoS3Cache.SetS3Config	ELIGIBLE	covered
+pkg/bootstrap.userInfoSessionCache.SetHistory	EXCLUDED	X1
+pkg/bootstrap.userInfoSessionCache.SetProxy	EXCLUDED	X1
+pkg/bootstrap.userInfoSessionCache.publish	EXCLUDED	X1
+pkg/bootstrap.userInfoSessionCache.publishByToken	ELIGIBLE	covered
+pkg/bootstrap.userInfoSessionCache.publishByUserID	ELIGIBLE	covered
 pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:84)
+pkg/bootstrap.withField	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
+pkg/domain.IsSupportedProxyScheme	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
 pkg/domain.IsValidMediaDelivery	EXCLUDED	X1
 pkg/domain.Secret.GoString	EXCLUDED	X1
@@ -2410,6 +2425,7 @@ pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
 pkg/infra/db.NewChatHistoryRepository	EXCLUDED	X1
 pkg/infra/db.NewHmacConfigRepository	EXCLUDED	X1
 pkg/infra/db.NewS3ConfigRepository	EXCLUDED	X1
+pkg/infra/db.NewSessionConfigRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1
@@ -2418,6 +2434,9 @@ pkg/infra/db.S3ConfigRepository.LoadS3Config	ELIGIBLE	covered
 pkg/infra/db.S3ConfigRepository.LoadS3ConfigWithoutSecret	ELIGIBLE	covered
 pkg/infra/db.S3ConfigRepository.SaveS3Config	ELIGIBLE	covered
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
+pkg/infra/db.SessionConfigRepository.LoadWebhookUseProxy	ELIGIBLE	covered
+pkg/infra/db.SessionConfigRepository.SaveHistoryLimit	ELIGIBLE	covered
+pkg/infra/db.SessionConfigRepository.SaveProxyConfig	ELIGIBLE	covered
 pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:99);uncovered:L2(S-consume,session_lease.go:103)
 pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:131)
 pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:115)

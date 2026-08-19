@@ -114,15 +114,51 @@ const MaskedHmacKey = "***"
 // handler histórico (`41bc8e2^:handlers.go:6785`).
 const MinHmacKeyLength = 32
 
+// Os dois esquemas de URL que POST /session/proxy aceita, e nenhum outro.
+//
+// Constantes porque a MESMA lista é a validação do use case e a asserção do
+// teste que trava o contrato (ADR-0004). O histórico as tinha como literais
+// no `if` (`41bc8e2^:handlers.go:6161`), o que é como `https` — que parece
+// obviamente aceitável e NÃO é — entra sem ninguém notar: um proxy HTTPS
+// exige um transporte que este processo não monta.
+const (
+	ProxySchemeHTTP   = "http"
+	ProxySchemeSOCKS5 = "socks5"
+)
+
+// IsSupportedProxyScheme reporta se scheme é um dos dois esquemas de proxy
+// suportados. A comparação é exata e sensível a caixa, como a histórica.
+func IsSupportedProxyScheme(scheme string) bool {
+	return scheme == ProxySchemeHTTP || scheme == ProxySchemeSOCKS5
+}
+
 // ProxyConfigRequest representa a requisição para configuração de Proxy.
+//
+// Os três campos são os do struct histórico (`41bc8e2^:handlers.go:6086`).
+// Os campos `enabled`/`url`/`auth` que estavam aqui nasceram com o stub,
+// nunca existiram no fio e nada em produção os lia — mesma correção que a
+// [[F157]] fez em HmacConfigRequest no CAP-27.
+//
+// WebhookUseProxy é ponteiro para que "ausente" e "explicitamente false"
+// continuem distinguíveis: ausente PRESERVA o valor gravado, e colapsar os
+// dois num bool faria toda escrita de proxy zerar a flag de quem não a
+// mandou.
 type ProxyConfigRequest struct {
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url"`
-	Auth    string `json:"auth,omitempty"`
+	ProxyURL        string `json:"proxy_url"`
+	Enable          bool   `json:"enable"`
+	WebhookUseProxy *bool  `json:"webhook_use_proxy,omitempty"`
 }
 
 // ProxyConfigResult representa o resultado de operação de Proxy.
+//
+// ProxyURL e WebhookUseProxy ecoam a configuração GRAVADA — é o corpo
+// histórico do ramo de habilitação (`41bc8e2^:handlers.go:6191`), e é o que
+// distingue "gravei o que você pediu" de "respondi 200". O ramo de
+// desabilitação histórico responde só `Details`, e é por isso que os dois
+// campos são omitempty/ponteiro em vez de sempre presentes.
 type ProxyConfigResult struct {
-	Details string `json:"Details,omitempty"`
-	Set     bool   `json:"Set,omitempty"`
+	Details         string `json:"Details,omitempty"`
+	Set             bool   `json:"Set,omitempty"`
+	ProxyURL        string `json:"ProxyURL,omitempty"`
+	WebhookUseProxy *bool  `json:"webhook_use_proxy,omitempty"`
 }

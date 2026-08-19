@@ -5802,9 +5802,36 @@ invalidar no lado da ESCRITA (o caminho que altera `users.history`), não no da
 leitura — lá o token já está em mãos e a invalidação acontece uma vez, não uma
 vez por leitura.
 
-**Status**: não corrigido, e é divergência CONSCIENTE do histórico, registrada
-aqui para não ser redescoberta como bug. Os três estados do gate que importam
-para o contrato estão travados em
+**Status**: **CORRIGIDO (2026-08-19, CAP-30)**, pelo caminho que esta própria
+entrada tinha apontado — o lado da ESCRITA, não o da leitura.
+`SetHistoryUseCase` publica o valor fresco no cache depois de o banco
+confirmar, então o gate lê o número certo já na PRIMEIRA requisição seguinte.
+Nenhuma porta de invalidação foi criada e o token não desceu para a camada de
+aplicação: quem resolve a chave por token é o ADAPTER
+(`pkg/bootstrap/session_config_adapters.go`), a partir do userinfo que já viaja
+no contexto da requisição.
+
+**Qual teste a trava**:
+`TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida`
+(`pkg/bootstrap/session_config_route_test.go`). Ele assere a CONSEQUÊNCIA e não
+o cache: conta as chamadas de `HistoryLimit` (o passo (2) da revalidação),
+mostra a linha de base — com `history=0` a leitura é recusada e revalida uma
+vez —, faz `POST /session/history {"history":50}` e exige que a leitura
+seguinte passe **sem nenhuma revalidação nova**. O controle negativo (a2)
+registrado na [[F157]] remove só a publicação por token e o teste falha com
+"o gate revalidou no banco 1 vez(es) DEPOIS da escrita".
+
+`TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches` trava o
+mecanismo, incluindo que a entrada de autenticação é republicada COM expiração
+— republicá-la sob `cache.NoExpiration` tornaria o token imortal naquele cache,
+que seria trocar um custo de consulta por um buraco de revogação.
+
+**Uma correção de fato desta entrada**: ela diz "o cache vive em
+`pkg/bootstrap` e é chaveado por TOKEN". São **dois** caches, e só um deles é
+chaveado por token — ver [[F164]]. A conclusão da entrada não muda, mas o
+conserto precisou tocar os dois.
+
+Os três estados do gate que importam para o contrato continuam travados em
 `TestChatHistoryRoute_GateState*` (`pkg/bootstrap/chat_history_route_test.go`).
 
 ## F129 — chave duplicada no baseline DESATIVOU o piso de `func_coverage` do `log-coverage-gate`
@@ -8899,6 +8926,17 @@ segredo cifrado no envelope do [[ADR-0009]]. Restam TRÊS stubs, e a tabela
 acima só continua válida para `set_history`, `set_proxy` e `get_history`. Os
 testes que travam a correção estão na [[F157]], junto com os do bloco de HMAC.
 
+**ADENDO 2026-08-19 (CAP-30) — as DUAS rotas de ESCRITA de history e proxy
+saíram do conjunto.** `set_history.go` e `set_proxy.go` gravam de verdade e
+publicam nos dois caches de userinfo, e com isso a [[F128]] fecha. Resta UM
+stub, e a tabela acima só continua válida para `get_history` — cujo contrato
+está em decisão, porque o histórico apontava `GetHistory` para as duas rotas e
+ele lia HISTÓRICO DE MENSAGENS, não configuração. A evidência de campo desta
+entrada (`POST /session/history {"history":50}` seguido de `501
+history_disabled`) está travada em
+`TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida`, que reproduz o
+antes e o depois na mesma execução. Os testes estão na [[F157]].
+
 
 ## F152
 
@@ -10040,6 +10078,261 @@ esta tarefa acrescenta seis.
 
 **`make check` — EXIT 0.**
 
+
+### CORREÇÃO — 2026-08-19, CAP-30: as duas rotas de ESCRITA de history e proxy
+
+**Status**: **corrigido** o bloco de history/proxy (`POST /session/history` ·
+`POST /webhook/history` e `POST /session/proxy` · `POST /proxy/set`). Resta
+UMA rota stub desta entrada e da [[F151]]: `GET /webhook/history`
+(`get_history.go`), deixada de fora deliberadamente — o contrato dela estava
+em decisão no canal, porque o histórico apontava `GetHistory` para as DUAS
+rotas e ele lia HISTÓRICO DE MENSAGENS, não configuração.
+
+#### O que passou a acontecer
+
+| rota | efeito real |
+|---|---|
+| `POST /session/history` · `POST /webhook/history` | grava `users.history` **e** publica o valor fresco nos DOIS caches de userinfo |
+| `POST /session/proxy` · `POST /proxy/set` | recusa a sessão CONECTADA antes de qualquer escrita; grava `users.proxy_url` + `users.webhook_use_proxy` e publica `Proxy` nos dois caches; o ramo de desabilitação zera a coluna |
+
+**O que foi acrescentado** (portas novas, adapter, repositório e fiação):
+
+- `pkg/application/contracts/session_config_port.go` — `HistoryConfigStore`,
+  `ProxyConfigStore`, `UserInfoHistoryCache`, `UserInfoProxyCache`.
+- `pkg/infra/db/session_config_repository.go` — as quatro instruções SQL, como
+  constantes nomeadas.
+- `pkg/bootstrap/session_config_adapters.go` — o publicador dos dois caches.
+- `pkg/bootstrap/wiring_handlers.go` — as dependências reais.
+
+#### O achado que mudou o desenho: são DOIS caches de userinfo, não um
+
+O handler histórico conhecia UM cache. Esta árvore tem **dois**, instâncias
+distintas de `*cache.Cache`, com chaves e políticas diferentes — e cada um tem
+os seus leitores. Está registrado por inteiro na [[F164]]; o que importa aqui é
+que publicar em só um deles deixaria metade do defeito de pé, e QUAL metade
+dependeria de qual cache a pessoa lembrou. O adapter publica nos dois, e o
+teste assere os dois.
+
+#### Divergências conscientes do contrato histórico
+
+1. **`egress.ValidateOutboundURL` saiu do `SetProxy`.** O stub validava a URL
+   de proxy com o mesmo validador de webhook/S3, e isso é **incompatível com o
+   contrato**: `IsHTTPURL` só aceita `http`/`https`
+   (`pkg/infra/egress/egress.go:32`), então ele **recusaria `socks5://`** — um
+   dos dois esquemas que a rota existe para aceitar — e **aceitaria `https://`**,
+   que o histórico recusa. Com ele no lugar, a metade socks5 da funcionalidade
+   era impossível. A validação passou a ser a histórica: `url.Parse` mais
+   `domain.IsSupportedProxyScheme`.
+   **A parte de segurança, dita sem maquiagem**: com isso a rota deixa de
+   bloquear proxy em endereço reservado/loopback. É deliberado — um proxy na
+   rede interna é o caso NORMAL de uso, ao contrário de um webhook —, mas é uma
+   trava a menos, e ela protegia zero hoje porque estava num caminho que não
+   gravava nada. Está travado em teste
+   (`TestSetProxy_Esquemas/http_em_loopback_passa`) para que a próxima pessoa
+   veja que é decisão e não descuido.
+2. **Campos do request.** `ProxyConfigRequest` passou a ter
+   `proxy_url`/`enable`/`webhook_use_proxy`, os três do struct histórico
+   (`41bc8e2^:handlers.go:6086`). Os campos `enabled`/`url`/`auth` nasceram com
+   o stub, nunca existiram no fio e nada em produção os lia — mesma correção
+   que o CAP-27 fez em `HmacConfigRequest`.
+3. **A guarda do `SetProxy` roda antes da escrita, mas DEPOIS da
+   decodificação.** O histórico recusava a sessão conectada antes de decodificar
+   o corpo; aqui o corpo é decodificado no handler, na fronteira de fio, como em
+   todas as outras nove rotas de storage. O observável que muda: cliente
+   conectado mandando corpo malformado recebe 400 `could not decode payload`
+   onde o histórico dava 400 `cannot set proxy while connected`. Os dois
+   recusam, os dois são 400, e nenhum dos dois grava.
+4. **`SetProxy` deixou de ter `EnsureSession`.** Ele é o único dos dez que não
+   tem, e a ausência é contrato: a guarda dele é a OPOSTA — recusa a sessão
+   CONECTADA —, e quem não tem sessão nenhuma precisa conseguir configurar o
+   proxy, que é exatamente o estado de quem vai conectar através dele. Por isso
+   ele saiu da tabela de `guardCases()` em `storage_test.go` e da tabela de
+   `storageCases()` em `handler_storage_test.go`; os quatro eixos que aquelas
+   tabelas davam a ele (200, 401, 400 sem `Id`, 400 com corpo malformado) foram
+   reescritos em `TestSetProxyHandler_Eixos`, mais o quinto que elas não tinham
+   (400 com sessão conectada). Nenhum eixo se perdeu.
+
+#### Os testes que travam a correção, por NOME
+
+`pkg/bootstrap/session_config_route_test.go` — pela **ROTA REGISTRADA**
+(`registerCustomRoutes` + `gorilla/mux`), SQLite real com o schema de produção,
+os DOIS caches reais e a cadeia de autenticação **de produção** (`authAlice`
+sobre o `userinfocache` real, com token no header). Isso último não é
+capricho: o gate da [[F128]] se semeia do que o cache de AUTENTICAÇÃO guarda, e
+um dublê de autenticação montando o `Values` à mão teria provado a publicação
+no cache errado sem que nada acusasse. As DUAS famílias de caminho de cada rota
+são exercitadas em subteste.
+
+| # | teste | o que trava |
+|---|---|---|
+| 1 | `TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches` | banco **e** os dois caches; e que a entrada de autenticação foi republicada COM expiração |
+| 1b | `TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida` | a CONSEQUÊNCIA: depois da escrita, a primeira leitura de `/chat/history` não revalida no banco |
+| 2 | `TestSessionConfigRoute_SetHistoryNegativo_400SemGravar` | 400, nada gravado, cache intocado |
+| 3 | `TestSessionConfigRoute_SetHistoryFalhaDeBanco_500SemTocarOCache` | a ORDEM, com erro do driver real (banco fechado) |
+| 4 | `TestSessionConfigRoute_SetProxyConectado_400SemGravar` | a ORDEM da guarda: 400 e `users.proxy_url` intocado |
+| 5-7 | `TestSessionConfigRoute_SetProxyEsquemas` | `http`/`socks5` gravam e publicam; `https`/`ftp` são 400 com a mensagem histórica |
+| 8 | `TestSessionConfigRoute_SetProxySemURL_400SemGravar` | `missing proxy_url in payload` |
+| 9 | `TestSessionConfigRoute_SetProxyURLMalformada_400SemGravar` | `invalid proxy URL format` |
+| 10 | `TestSessionConfigRoute_SetProxyDesabilita_ZeraBancoECaches` | coluna vazia **e** `Proxy` vazio nos dois caches |
+| 11 | `TestSessionConfigRoute_SetProxyFalhaDeBanco_500SemTocarOCache` | a ORDEM, nos dois ramos |
+
+`pkg/application/usecase/storage/session_config_test.go` — a ORDEM e os efeitos
+colaterais, com dublês que registram cada fronteira:
+
+- `TestSetHistory_GravaNoBancoEPublicaNoCache`
+- `TestSetHistory_Negativo_NaoGravaNemPublica`
+- `TestSetHistory_FalhaDeGravacao_NaoTocaOCache` — **teste de ORDEM**
+- `TestSetProxy_ClienteConectado_NaoChamaORepositorio` — **teste de ORDEM**, nos
+  três corpos possíveis (válido, que seria recusado adiante, e desabilitar)
+- `TestSetProxy_Esquemas`
+- `TestSetProxy_HabilitarSemURL_NaoGrava`
+- `TestSetProxy_Desabilitar_ZeraBancoECache`
+- `TestSetProxy_FalhaDeGravacao_NaoTocaOCache` — **teste de ORDEM**, nos dois ramos
+- `TestSetProxy_WebhookUseProxy` — a resolução de três passos do
+  `webhook_use_proxy`, incluindo o caso que PRESERVA o gravado
+- `TestSetProxy_SemSessao_E_Permitido` — o caminho de SUCESSO que morde se
+  alguém trocar `SessionStatusReader` por `SessionGuard`
+
+`pkg/infra/db/session_config_repository_test.go` — o adapter contra o schema
+real (a armadilha da F71): `TestSessionConfigRepository_SaveHistoryLimit`
+(incluindo o zero, que é o desligamento),
+`TestSessionConfigRepository_SaveProxyConfig`,
+`TestSessionConfigRepository_LoadWebhookUseProxy` (os três estados da coluna),
+`TestSessionConfigRepository_LoadSemLinha_NaoEhErro`,
+`TestSessionConfigRepository_EscopoPorUsuario`.
+
+E `pkg/presentation/http/handlers/handler_storage_test.go` ganhou
+`TestSetProxyHandler_Eixos`.
+
+#### Controles negativos EXECUTADOS
+
+**(a) `SetHistory` gravar no banco e NÃO publicar no cache** — removida a linha
+`uc.cache.SetHistory(ctx, txtID, req.History)`. É o controle que fecha a F128:
+
+```
+--- FAIL: TestSetHistory_GravaNoBancoEPublicaNoCache (0.00s)
+    session_config_test.go:103: o cache NAO foi atualizado (0 chamadas): o gate de leitura da F128 vai continuar revalidando no banco uma vez por requisicao ate' o TTL expirar
+--- FAIL: TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches (0.02s)
+    --- FAIL: .../caminho_/webhook (0.01s)
+        session_config_route_test.go:277: appCtx.UserInfoCache[History] = "0", quero "50": saveMessageHistory continua vendo o valor velho
+        session_config_route_test.go:281: cache de autenticacao[History] = "0", quero "50": o gate de /chat/history vai continuar revalidando no banco uma vez por requisicao ate' o TTL expirar (F128)
+    --- FAIL: .../caminho_/session (0.01s)
+        session_config_route_test.go:277: appCtx.UserInfoCache[History] = "0", quero "50": saveMessageHistory continua vendo o valor velho
+        session_config_route_test.go:281: cache de autenticacao[History] = "0", quero "50": o gate de /chat/history vai continuar revalidando no banco uma vez por requisicao ate' o TTL expirar (F128)
+--- FAIL: TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida (0.01s)
+    session_config_route_test.go:319: o gate revalidou no banco 1 vez(es) DEPOIS da escrita: a escrita nao publicou o valor fresco no cache que o gate le', e a F128 continua aberta
+```
+
+**(a2) EXTRA — publicar SÓ no cache por usuário**, o defeito que a [[F164]]
+torna possível: removida a chamada a `publishByToken`. O banco e o cache do
+`saveMessageHistory` ficam certos, e a F128 continua ABERTA:
+
+```
+--- FAIL: TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches (0.02s)
+    --- FAIL: .../caminho_/webhook (0.01s)
+        session_config_route_test.go:281: cache de autenticacao[History] = "0", quero "50": o gate de /chat/history vai continuar revalidando no banco uma vez por requisicao ate' o TTL expirar (F128)
+    --- FAIL: .../caminho_/session (0.01s)
+        session_config_route_test.go:281: cache de autenticacao[History] = "0", quero "50": o gate de /chat/history vai continuar revalidando no banco uma vez por requisicao ate' o TTL expirar (F128)
+--- FAIL: TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida (0.01s)
+    session_config_route_test.go:319: o gate revalidou no banco 1 vez(es) DEPOIS da escrita: a escrita nao publicou o valor fresco no cache que o gate le', e a F128 continua aberta
+```
+
+**(b) mover a guarda de "conectado" do `SetProxy` para DEPOIS do UPDATE** — o
+status continua 400 nos dois casos, e é exatamente por isso que o teste assere o
+repositório e a coluna:
+
+```
+--- FAIL: TestSetProxy_ClienteConectado_NaoChamaORepositorio (0.00s)
+    --- FAIL: .../corpo_valido (0.00s)
+        session_config_test.go:200: a guarda de sessao conectada roda DEPOIS da escrita: o repositorio foi chamado 1 vez(es) e o proxy ja' esta' gravado
+    --- FAIL: .../pedido_de_desabilitar (0.00s)
+        session_config_test.go:200: a guarda de sessao conectada roda DEPOIS da escrita: o repositorio foi chamado 1 vez(es) e o proxy ja' esta' gravado
+--- FAIL: TestSessionConfigRoute_SetProxyConectado_400SemGravar (0.02s)
+    --- FAIL: .../caminho_/proxy (0.01s)
+        session_config_route_test.go:379: a guarda de sessao conectada roda DEPOIS da escrita: users.proxy_url = "http://proxy.invalid:3128"
+    --- FAIL: .../caminho_/session (0.01s)
+        session_config_route_test.go:379: a guarda de sessao conectada roda DEPOIS da escrita: users.proxy_url = "http://proxy.invalid:3128"
+```
+
+**(c) aceitar esquema `https` no proxy** — acrescentado
+`|| scheme == "https"` a `domain.IsSupportedProxyScheme`:
+
+```
+--- FAIL: TestSetProxy_Esquemas (0.00s)
+    --- FAIL: TestSetProxy_Esquemas/https_e'_recusado (0.00s)
+        session_config_test.go:243: URL "https://proxy.invalid:3128" devia ser recusada
+--- FAIL: TestSessionConfigRoute_SetProxyEsquemas (0.07s)
+    --- FAIL: .../caminho_/proxy/https_e'_recusado (0.01s)
+        session_config_route_test.go:412: status = 200, quero 400 (corpo: {"code":200,"data":{"Details":"Proxy configured successfully","Set":true,"ProxyURL":"https://proxy.invalid:3128","webhook_use_proxy":true},"success":true}
+    --- FAIL: .../caminho_/session/https_e'_recusado (0.01s)
+        session_config_route_test.go:412: status = 200, quero 400 (corpo: {"code":200,"data":{"Details":"Proxy configured successfully","Set":true,"ProxyURL":"https://proxy.invalid:3128","webhook_use_proxy":true},"success":true}
+```
+
+Os quatro foram revertidos por edição localizada, e a árvore voltou à forma
+final antes do `make check`.
+
+#### Cobertura de log: as três travas SOBEM
+
+Medido no mesmo instante e na mesma máquina; o ANTES é HEAD `f3cf5c6` extraído
+com `git archive HEAD | tar -x` em diretório temporário.
+
+| medida | antes | depois | baseline |
+|---|---|---|---|
+| `func_coverage` | 66.2% (438/662) | 66.5% (446/671) | `min_func_coverage` 662 → 665 |
+| `errpath_coverage` | 86.4% (1219/1411) | 86.6% (1232/1422) | `min_errpath_coverage` 864 → 866 |
+| `eligible` | 662 | 671 | `min_eligible` 662 → 671 |
+
+O NUMERADOR não regrediu: `covered` sobe de 438 para 446. Das NOVE funções
+elegíveis novas, OITO nascem cobertas. A nona é `bootstrap.withField`, uma
+cópia de mapa sem caminho de erro e sem nada a registrar — e ela **não** ganhou
+log, porque plantar registro para inflar métrica é COV-4 e já foi REQUIRED_FIX
+nesta sessão (F119/FIX-07). A razão sobe mesmo com ela dentro.
+
+`cmd/logcov/testdata/eligible.golden` foi regenerado (3036 → 3055 linhas). O
+diff mandatório **não** veio vazio, e a explicação é que o conjunto elegível
+mudou:
+
+```
+diff <(cut -f1,2 cmd/logcov/testdata/eligible.golden | sort)      <(go run ./cmd/logcov -golden | cut -f1,2 | sort)
+> pkg/application/contracts/contractsfake.HistoryConfigStore.SaveHistoryLimit     EXCLUDED
+> pkg/application/contracts/contractsfake.ProxyConfigStore.LoadWebhookUseProxy    EXCLUDED
+> pkg/application/contracts/contractsfake.ProxyConfigStore.SaveProxyConfig        EXCLUDED
+> pkg/application/contracts/contractsfake.UserInfoSessionCache.SetHistory         EXCLUDED
+> pkg/application/contracts/contractsfake.UserInfoSessionCache.SetProxy           EXCLUDED
+> pkg/application/usecase/storage.SetProxyUseCase.disable                         ELIGIBLE
+> pkg/application/usecase/storage.SetProxyUseCase.enable                          ELIGIBLE
+> pkg/application/usecase/storage.SetProxyUseCase.resolveWebhookUseProxy          ELIGIBLE
+> pkg/bootstrap.userInfoSessionCache.publish                                      EXCLUDED
+> pkg/bootstrap.userInfoSessionCache.publishByToken                               ELIGIBLE
+> pkg/bootstrap.userInfoSessionCache.publishByUserID                              ELIGIBLE
+> pkg/bootstrap.userInfoSessionCache.SetHistory                                   EXCLUDED
+> pkg/bootstrap.userInfoSessionCache.SetProxy                                     EXCLUDED
+> pkg/bootstrap.withField                                                         ELIGIBLE
+> pkg/domain.IsSupportedProxyScheme                                               EXCLUDED
+> pkg/infra/db.NewSessionConfigRepository                                         EXCLUDED
+> pkg/infra/db.SessionConfigRepository.LoadWebhookUseProxy                        ELIGIBLE
+> pkg/infra/db.SessionConfigRepository.SaveHistoryLimit                           ELIGIBLE
+> pkg/infra/db.SessionConfigRepository.SaveProxyConfig                            ELIGIBLE
+```
+
+São DEZENOVE linhas, todas `>` — só ACRÉSCIMO, e as dezenove são funções que
+este bloco criou. Nenhuma linha existente saiu, e nenhuma mudou de estado.
+
+**`.coverage-baseline` — NÃO alterado**, pelo mesmo motivo da [[F148]] e dos
+adendos do CAP-27 e do CAP-29: o gate PASSA (`coverage: 858 decimos de %
+(piso declarado 840)`) e imprime "suba min_coverage para 858 neste mesmo PR",
+mas a deriva é anterior a esta tarefa (F148 mediu 855, CAP-27 mediu 857,
+CAP-29 mediu 858) e eu não isolei quanto do ponto atual é do CAP-30. Fica
+registrado como dívida explícita, agora pela quarta vez — o que já é sinal de
+que o piso deveria ser subido por uma tarefa própria em vez de adiado de novo.
+
+O `count` de `.golangci-baseline` também não foi alterado: o gate imprime
+`263 -> 333`, informativo e sem trava, com `max_complexity` parado em 56. O
+salto sobre o valor versionado (263) é anterior — o CAP-29 já media 331 —, e
+esta tarefa acrescenta dois.
+
+**`make check` — EXIT 0.**
+
 ## F158
 
 **Data**: 2026-08-19. **Contexto**: CAP-27, ligando a escrita da chave HMAC
@@ -10419,3 +10712,124 @@ linha de código que a correção vai tocar.
 
 **Status**: não corrigido, fora do escopo do CAP-29 (que é das quatro rotas de
 `/s3/*`). Registrado e levado ao canal de decisão.
+
+## F164 — existem DOIS caches de userinfo, com leitores distintos, e nada os reconcilia
+
+**Data**: 2026-08-19. **Contexto**: CAP-30, ligando a escrita de
+`POST /session/history`. Achado de lado ao procurar em qual cache publicar o
+valor fresco para fechar a [[F128]] — a resposta era "nos dois", e eu não sabia
+que havia dois.
+
+**Onde**: duas alocações independentes de `*cache.Cache`, nenhuma atribuída à
+outra:
+
+- `pkg/bootstrap/context.go:45` — `appCtx.UserInfoCache`, criado em
+  `NewAppContext()`.
+- `pkg/bootstrap/config.go:59` — `userinfocache`, var de pacote.
+
+```
+$ grep -rnE --include='*.go' 'UserInfoCache = |UserInfoCache:' . | grep -v '_test\.go'
+pkg/bootstrap/context.go:45:            UserInfoCache:    cache.New(5*time.Minute, 10*time.Minute),
+pkg/bootstrap/lifecycle.go:84:                  // abaixo popula o UserInfoCache: filtrar so' na hora de conectar
+```
+
+A segunda linha é comentário. Sobra **uma** atribuição, e é a construção:
+`userinfocache` nunca é atribuído a `appCtx.UserInfoCache` nem o contrário.
+
+**Problema**: os dois guardam a MESMA estrutura (`Values`, com os mesmos
+campos `Id`/`Token`/`History`/`Proxy`/`S3Enabled`/…) e são consumidos por
+caminhos diferentes, com chaves e políticas diferentes:
+
+| | `appCtx.UserInfoCache` | `userinfocache` |
+|---|---|---|
+| chave | **userID** | **token** |
+| expiração | `cache.NoExpiration` em toda escrita | `userCacheTTL` (10 min) |
+| quem preenche | `ensureUserInfoCached` (só no attach de sessão), `connectOnStartup` | `middleware.AuthAlice`, a cada miss |
+| quem lê | `eventhandler_message.go:72` e `:266` (`saveMessageHistory`), `lifecycle_webhook.go` (webhook por usuário, `HmacKeyEncrypted`) | o contexto de TODA requisição autenticada — e portanto o gate de `/chat/history` (`handler_chat_history.go:58`) |
+| quem escreve config | os adapters de HMAC e de S3 (CAP-27/CAP-29) | **ninguém, até o CAP-30** |
+
+Duas consequências, e são de naturezas diferentes:
+
+1. **Escrita de configuração que só publica em um dos dois deixa o outro
+   obsoleto.** Foi exatamente o mecanismo da [[F128]]: publicar em
+   `appCtx.UserInfoCache` não faz o gate de `/chat/history` enxergar nada,
+   porque ele lê do outro. O CAP-30 publica nos dois; **os adapters de HMAC e
+   de S3 publicam só em `appCtx.UserInfoCache`** — o que para eles é
+   provavelmente correto (`HmacKeyEncrypted` e `S3Enabled` só têm leitores
+   por userID, medido no comentário de `s3_config_adapters.go`), mas é
+   correto por acidente e não por regra escrita.
+2. **A obsolescência de `appCtx.UserInfoCache` é PERMANENTE.** Ele é
+   `NoExpiration` e só é preenchido por `ensureUserInfoCached`, que roda no
+   attach da sessão. Um valor errado ali não se corrige sozinho até o processo
+   reiniciar — ao contrário do cache de autenticação, onde o TTL acaba
+   consertando.
+
+**Onde isso morde hoje, além do que o CAP-30 já cobriu**: `saveMessageHistory`
+(`eventhandler_message.go:266`) decide **se a mensagem recebida é persistida**
+a partir do `History` de `appCtx.UserInfoCache`. Antes do CAP-30 nada escrevia
+esse campo depois da carga inicial. Não medi quanto tempo uma sessão fica
+atachada em produção, então não afirmo o tamanho da janela — afirmo o
+mecanismo.
+
+**Correção sugerida**, em ordem de custo:
+
+1. **Escrever a invariante**, hoje inexistente: *toda escrita de configuração
+   publica em todos os caches que têm leitor daquele campo*. Sem ela, cada
+   adapter novo redescobre a interação por acidente — que é o que o CAP-30
+   fez.
+2. **Fundir os dois num só**, chaveado por userID, com `AuthAlice` resolvendo
+   token → userID por uma tabela separada. É a correção de verdade: enquanto
+   forem dois, a pergunta "em qual eu publico?" volta a cada rota de
+   configuração.
+3. Enquanto forem dois, um teste que enumere os campos com leitores nos dois
+   lados e falhe quando um escritor de configuração publique em só um.
+
+**Status**: não corrigido. O CAP-30 contornou o sintoma nas duas rotas dele
+(`session_config_adapters.go` publica nos dois, com o motivo escrito no
+código). A duplicidade em si segue de pé. Achado de lado, levado ao canal.
+
+## F165 — `WebhookHistoryResult.History` tem `omitempty`, então o desligamento não ecoa o valor
+
+**Data**: 2026-08-19. **Contexto**: CAP-30, ao escrever o contrato de resposta
+de `POST /session/history`.
+
+**Onde**: `pkg/domain/webhook.go:26-29`.
+
+```go
+type WebhookHistoryResult struct {
+	Details string `json:"Details,omitempty"`
+	History int    `json:"History,omitempty"`
+}
+```
+
+**Problema**: `POST /session/history {"history":0}` — que é o desligamento do
+histórico, uma operação legítima — responde
+`{"Details":"History configured successfully"}`, **sem o campo `History`**. O
+histórico sempre o incluía (`41bc8e2^:handlers.go:6074`, `map[string]interface{}`
+sem omissão). Quem integra e lê `History` da resposta para confirmar o valor
+gravado não distingue "desliguei" de "o campo sumiu".
+
+Reproduz com a árvore atual:
+
+```
+POST /session/history {"history":0}
+  -> 200 {"code":200,"data":{"Details":"History configured successfully"},"success":true}
+POST /session/history {"history":50}
+  -> 200 {"code":200,"data":{"Details":"History configured successfully","History":50},"success":true}
+```
+
+**Por que não foi corrigido no CAP-30**: o mesmo DTO é o retorno de
+`GetHistoryUseCase` (`get_history.go`), que serve `GET /webhook/history` e está
+**explicitamente fora do escopo** do bloco — o contrato daquela rota está em
+decisão no canal. Tirar o `omitempty` mudaria a resposta dela também, de
+`{"Details":"History configuration retrieved"}` para
+`{"Details":"...","History":0}`, e isso é mexer no contrato de uma rota que a
+tarefa mandava não tocar.
+
+**Correção sugerida**: tirar o `omitempty` de `History` **junto** com o bloco
+que resolver `GET /webhook/history`, ou dar à leitura um DTO próprio
+(`WebhookHistoryView`), como o CAP-27 fez com `HmacConfigView` — a leitura e a
+escrita não devolvem a mesma coisa e já não deviam compartilhar tipo.
+
+**Status**: não corrigido, deliberadamente, por estar preso a um arquivo fora
+do escopo. Registrado e levado ao canal.

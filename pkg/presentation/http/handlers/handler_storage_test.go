@@ -163,20 +163,16 @@ func storageCases() []storageCase {
 			method: http.MethodDelete,
 			path:   "/storage/hmac/config",
 		},
-		{
-			name: "SetProxy",
-			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetProxyHandler(storage.NewSetProxyUseCase(sg, log))
-			},
-			method:    http.MethodPost,
-			path:      "/storage/proxy",
-			body:      `{"enabled":false}`,
-			readsBody: true,
-		},
+		// SetProxy NAO entra nesta tabela: ele e' o unico dos dez que nao
+		// abre com EnsureSession — a guarda dele e' a oposta, recusa a sessao
+		// CONECTADA (`41bc8e2^:handlers.go:6099`). Os mesmos quatro eixos
+		// (401, 400 sem Id, 400 com corpo malformado, 200) estao em
+		// TestSetProxyHandler_Eixos, abaixo.
 		{
 			name: "SetHistory",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(sg, log))
+				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(
+					sg, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/history",
@@ -387,16 +383,6 @@ func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 			wantErr: "S3 is not enabled for this user",
 		},
 		{
-			name: "SetProxy/habilitado sem URL",
-			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetProxyHandler(storage.NewSetProxyUseCase(sg, log))
-			},
-			method:  http.MethodPost,
-			path:    "/storage/proxy",
-			body:    `{"enabled":true}`,
-			wantErr: "proxy URL is required",
-		},
-		{
 			name: "ConfigureHmac/chave curta",
 			build: func(sg appport.SessionGuard) http.Handler {
 				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
@@ -409,12 +395,13 @@ func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 		{
 			name: "SetHistory/valor negativo",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(sg, log))
+				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(
+					sg, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}, log))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/history",
 			body:    `{"history":-1}`,
-			wantErr: "history value cannot be negative",
+			wantErr: "history cannot be negative",
 		},
 	}
 
@@ -485,4 +472,90 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 			logassert.NoSecrets(t, recs)
 		})
 	}
+}
+
+// --- SetProxy: os mesmos eixos, com a guarda que ele de fato tem -----------
+
+// newTestSetProxyHandler monta o handler com os dubles das tres portas novas.
+// `status` decide o estado da sessao, que e' a guarda deste use case: o
+// zero-value do dublê reporta DESCONECTADO, que e' o estado em que o proxy
+// pode ser configurado.
+func newTestSetProxyHandler(status appport.SessionStatusReader) http.Handler {
+	return NewSetProxyHandler(storage.NewSetProxyUseCase(
+		status, &contractsfake.ProxyConfigStore{}, &contractsfake.UserInfoSessionCache{}, true, silentLogger{}))
+}
+
+// TestSetProxyHandler_Eixos cobre, para SetProxy, os quatro eixos que a tabela
+// dos outros nove cobre — 200, 401, 400 sem Id e 400 com corpo malformado.
+// Sem ele, tirar SetProxy da tabela teria custado cobertura em vez de trocar
+// uma guarda por outra.
+func TestSetProxyHandler_Eixos(t *testing.T) {
+	const path = "/storage/proxy"
+	const corpoValido = `{"enable":false}`
+
+	t.Run("200 com sessao desconectada", func(t *testing.T) {
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(&contractsfake.SessionStatusReader{}), req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
+		}
+		env := decodeEnvelope(t, rec)
+		if !env.Success || len(env.Data) == 0 {
+			t.Fatalf("envelope de sucesso mal formado: %s", rec.Body.String())
+		}
+		logassert.NoSecrets(t, recs)
+	})
+
+	t.Run("401 sem userinfo", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido))
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusUnauthorized)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("requisicao nao autenticada alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		logassert.OutcomeLogged(t, recs, errUnauthorized.Error())
+	})
+
+	t.Run("400 sem Id", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("requisicao sem session id alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		got := logassert.OutcomeLogged(t, recs, errMissingSessionID.Error())
+		if got.str("level") != "warn" {
+			t.Fatalf("rejeicao de cliente logada em %q — queria warn", got.str("level"))
+		}
+	})
+
+	t.Run("400 com corpo malformado", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader("{nao-e-json")), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("corpo malformado alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		if got := logassert.OutcomeLogged(t, recs); got.str("error") == "" {
+			t.Fatal("o erro de decodificacao foi logado sem causa")
+		}
+	})
+
+	t.Run("400 com sessao conectada", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{
+			SessionStatusFunc: func(context.Context, string) (bool, bool) { return true, true },
+		}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		logassert.OutcomeLogged(t, recs, "cannot set proxy while connected")
+	})
 }

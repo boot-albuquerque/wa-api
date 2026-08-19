@@ -1006,7 +1006,23 @@ rules_frozen=true
 # (11: as 4 ELIGIBLE acima e 7 EXCLUDED — NewHmacConfigRepository,
 # bootstrap.hmacKeyEncryptor.EncryptHmacKey e os 5 metodos dos dubles de
 # contractsfake). Nenhuma linha existente muda de estado.
-min_func_coverage=662
+# CAP-30 (2026-08-19): 662 -> 665 (438/662 = 66.2% -> 446/671 = 66.5%). O
+# NUMERADOR SOBE de 438 para 446: das NOVE funcoes elegiveis novas, OITO
+# nascem cobertas —
+#   - db.SessionConfigRepository.{SaveHistoryLimit,SaveProxyConfig,
+#     LoadWebhookUseProxy} (Error na falha, Debug na linha ausente);
+#   - bootstrap.userInfoSessionCache.{publishByUserID,publishByToken}
+#     (Debug no no-op de cache miss, Error no tipo inesperado, Info na
+#     publicacao);
+#   - storage.SetProxyUseCase.{enable,disable,resolveWebhookUseProxy}
+#     (Warn nas recusas, Error na falha de gravacao, Info no sucesso).
+# A NONA e' bootstrap.withField, uma copia de mapa sem caminho de erro e sem
+# nada a registrar. Ela NAO ganhou log: plantar registro para inflar metrica e'
+# COV-4, ja' foi REQUIRED_FIX nesta sessao (F119/FIX-07). A razao sobe assim
+# mesmo.
+# Nenhuma funcao ja' coberta regrediu: o diff do golden so' ACRESCENTA linhas
+# (19), e nenhuma linha existente muda de estado.
+min_func_coverage=665
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1201,7 +1217,14 @@ min_func_coverage=662
 # 1196/1389=86.1%). +8 caminhos de saida no denominador e +8 cobertos: os tres
 # metodos do HmacConfigRepository e o SetHmacKey do cache, todos com Error ou
 # Debug no menor bloco que contem a saida.
-min_errpath_coverage=864
+# CAP-30 (2026-08-19): errpath SOBE 864->866 (1219/1411=86.4% ->
+# 1232/1422=86.6%). +11 caminhos de saida no denominador e +13 cobertos. O
+# numerador sobe MAIS que o denominador porque set_proxy.go e set_history.go
+# ja' tinham caminhos de saida que nao registravam nada, e agora registram; a
+# medicao do ANTES (662/438, 1411/1219) foi feita em HEAD f3cf5c6 com
+# `git archive HEAD | tar -x` em diretorio temporario, no mesmo instante e na
+# mesma maquina que a do DEPOIS.
+min_errpath_coverage=866
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1399,7 +1422,11 @@ min_errpath_coverage=864
 # junto de min_func_coverage: os tres metodos de db.HmacConfigRepository e
 # bootstrap.userInfoHmacCache.SetHmacKey. Denominador CRESCE — nao ha'
 # remocao neste PR.
-min_eligible=662
+# CAP-30 (2026-08-19): 662 -> 671. As NOVE entradas estao enumeradas acima,
+# junto de min_func_coverage: as tres de db.SessionConfigRepository, as duas de
+# bootstrap.userInfoSessionCache, bootstrap.withField e as tres de
+# storage.SetProxyUseCase. Denominador CRESCE — nao ha' remocao neste PR.
+min_eligible=671
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

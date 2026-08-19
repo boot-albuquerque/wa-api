@@ -302,8 +302,14 @@ func initCustomHandlers(s *server) {
 	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, hmacKeyStore, hmacEncryptor, hmacCache, logger)
 	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, hmacKeyStore, logger)
 	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, hmacKeyStore, hmacCache, logger)
-	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, logger)
-	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, logger)
+	// History e proxy por usuário: banco + os DOIS caches de userinfo, todos
+	// REAIS. O stub que respondia 200 sem gravar nada é a F151/F157, e a
+	// publicação no cache é o que fecha a F128.
+	sessionConfigStore := db.NewSessionConfigRepository(s.DB)
+	sessionConfigCache := userInfoSessionCache{}
+	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, sessionConfigStore, sessionConfigCache,
+		appCtx.GlobalWebhookUseProxy, logger)
+	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, sessionConfigStore, sessionConfigCache, logger)
 	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
 
 	// Storage Handlers

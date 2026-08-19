@@ -2,7 +2,8 @@
 //
 // Os três eixos que valem asserção aqui, e nenhum outro:
 //
-//  1. a guarda de sessão. Todos os 10 abrem com EnsureSession, e desde a
+//  1. a guarda de sessão. NOVE dos 10 abrem com EnsureSession — SetProxy é a
+//     exceção, e o comentário em guardCases diz por quê —, e desde a
 //     migração da F11 propagam a causa (return err), não mais um
 //     fmt.Errorf de texto fixo que apagava o erro tipado da porta. O teste
 //     assere errors.Is contra a sentinela injetada — se alguém reintroduzir
@@ -35,8 +36,8 @@ const txtID = "user-1"
 // comum: (ok, err). ok reporta se o ponteiro de resultado veio não-nil.
 type execFn func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (ok bool, err error)
 
-// guardCases enumera os 10 use cases pelo que têm em comum — a guarda de
-// sessão — com os argumentos do caminho feliz de cada um.
+// guardCases enumera os nove use cases que têm a guarda de sessão em comum,
+// com os argumentos do caminho feliz de cada um.
 func guardCases() []struct {
 	name string
 	run  execFn
@@ -74,13 +75,16 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"SetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewSetHistoryUseCase(sg, log).Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 10})
+			r, err := newSetHistory(sg, log, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
+				Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 10})
 			return r != nil, err
 		}},
-		{"SetProxy", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewSetProxyUseCase(sg, log).Execute(ctx, txtID, domain.ProxyConfigRequest{})
-			return r != nil, err
-		}},
+		// SetProxy NAO entra nesta tabela, e a ausencia e' contrato e nao
+		// esquecimento: ele e' o unico dos dez que NAO abre com EnsureSession.
+		// A guarda dele e' a oposta — recusa a sessao CONECTADA
+		// (`41bc8e2^:handlers.go:6099`) —, e quem nao tem sessao nenhuma tem de
+		// conseguir configurar o proxy, que e' exatamente o estado de quem vai
+		// conectar atraves dele. Os eixos dele estao em session_config_test.go.
 		{"TestS3Connection", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
 			r, err := newTestS3Connection(sg, log, enabledS3Store(txtID)).Execute(ctx, txtID)
 			return r != nil, err
@@ -197,22 +201,13 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	})
 
 	t.Run("SetHistory espelha History", func(t *testing.T) {
-		r, err := storage.NewSetHistoryUseCase(sg, log).Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 42})
+		r, err := newSetHistory(sg, log, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
+			Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 42})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
 		if r.History != 42 {
 			t.Errorf("History = %d, quero 42", r.History)
-		}
-	})
-
-	t.Run("SetProxy marca Set", func(t *testing.T) {
-		r, err := storage.NewSetProxyUseCase(sg, log).Execute(ctx, txtID, domain.ProxyConfigRequest{})
-		if err != nil {
-			t.Fatalf("erro inesperado: %v", err)
-		}
-		if !r.Set {
-			t.Error("Set = false, quero true")
 		}
 	})
 
@@ -315,41 +310,10 @@ func TestConfigureS3_Endpoint(t *testing.T) {
 	}
 }
 
-func TestSetProxy_URL(t *testing.T) {
-	cases := []struct {
-		name    string
-		req     domain.ProxyConfigRequest
-		wantErr bool
-	}{
-		{name: "desabilitado ignora a URL invalida", req: domain.ProxyConfigRequest{Enabled: false, URL: "nao-e-uma-url"}},
-		{name: "habilitado sem URL e' recusado", req: domain.ProxyConfigRequest{Enabled: true}, wantErr: true},
-		{name: "habilitado com loopback e' recusado", req: domain.ProxyConfigRequest{Enabled: true, URL: "http://127.0.0.1:8080"}, wantErr: true},
-		{name: "habilitado com malformado e' recusado", req: domain.ProxyConfigRequest{Enabled: true, URL: "://x"}, wantErr: true},
-		{name: "habilitado com IP publico passa", req: domain.ProxyConfigRequest{Enabled: true, URL: "http://93.184.216.34:8080"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewSetProxyUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
-				Execute(context.Background(), txtID, tc.req)
-
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("proxy invalido devia ser recusado")
-				}
-				if r != nil {
-					t.Error("resultado devia ser nil na recusa")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("proxy valido recusado: %v", err)
-			}
-			if !r.Set {
-				t.Error("Set = false, quero true")
-			}
-		})
-	}
-}
+// TestSetProxy_URL saiu daqui para session_config_test.go, junto com os
+// outros eixos de SetProxy: a validacao de URL deixou de ser
+// egress.ValidateOutboundURL e passou a ser a historica (so' `http` e
+// `socks5`), o que muda cada um dos cinco casos que existiam aqui.
 
 func TestSetHistory_ValorNegativo(t *testing.T) {
 	cases := []struct {
@@ -363,7 +327,8 @@ func TestSetHistory_ValorNegativo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewSetHistoryUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
+			r, err := newSetHistory(&contractsfake.SessionGuard{}, &contractsfake.Logger{},
+				&contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
 				Execute(context.Background(), txtID, domain.WebhookHistoryRequest{History: tc.history})
 
 			if tc.wantErr {
