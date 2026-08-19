@@ -7540,3 +7540,109 @@ cliente é afetado — mas ela toca `handler_interactive.go`, que serve
 **Status**: NÃO corrigido. Fora do escopo do CAP-15, e o arquivo que
 precisaria mudar (`handler_interactive.go`) é o dos dois stubs que ainda
 faltam recuperar — corrigir aqui criaria conflito com esse bloco.
+
+## F142
+
+**Data**: 2026-08-19. **Contexto**: CAP-16, bloco dedicado a recuperar o eixo
+do `txtID` nas capabilities de envio que não o tinham. Achado do próprio
+escopo do bloco — CORRIGIDO nesta sessão.
+
+**Onde**: `pkg/presentation/http/handlers/`. A auditoria de `TxtID` em todos
+os testes de handler devolvia exatamente quatro ocorrências, em dois arquivos:
+
+```
+handler_message_test.go:179          fake.EnsureSessionCalls[0].TxtID != "user-1"   (send/buttons, send/list)
+handler_send_template_test.go:496    sm.EnsureSessionCalls[0].TxtID != sessionID    (send/template)
+handler_send_template_test.go:502    sm.SendTemplateCalls[0].TxtID  != sessionID    (send/template)
+```
+
+(a quarta é a citação do nome no comentário da linha 468).
+
+**Problema**: das doze capabilities de envio, só três tinham o eixo. As NOVE
+restantes não asseveravam, em teste nenhum, que o `txtID` entregue à porta é o
+do contexto autenticado — nem na guarda de sessão nem no método de envio:
+
+```
+text       image      audio      video      document
+sticker    location   contact    poll
+```
+
+O `txtID` é a identidade da SESSÃO. Sem essa asserção, um handler que
+entregasse à porta um valor diferente do contexto mandaria a mensagem pela
+CONTA ERRADA, e `./pkg/...` inteiro continuaria verde. É a mesma família da
+F125 (vazamento entre tenants do ramo `index`), não higiene de teste. A
+EVAL-15 já tinha medido exatamente esse comportamento em `send/template`
+antes do CAP-15: trocar `txtID` por `"sessao-errada"` no handler não derrubava
+nada.
+
+**Correção aplicada**: `handler_send_session_axis_test.go` (novo), com
+`TestSendCapabilities_AuthenticatedSessionReachesPort` — uma tabela de nove
+casos, cada um pela ROTA REGISTRADA (`gorilla/mux`), com um id sentinela
+PRÓPRIO e distinto do `"user-1"` que `msgAuthed` injeta (com `"user-1"` um
+handler que ignorasse o contexto e usasse uma constante passaria por
+coincidência). Cada caso trava os DOIS pontos da porta, porque são chamadas
+distintas e um defeito pode atingir só uma:
+
+| capability | rota | ponto 1 | ponto 2 | sentinela |
+|---|---|---|---|---|
+| text | POST /chat/send/text | EnsureSession | SendText | `send-text-session-4c81de` |
+| image | POST /chat/send/image | EnsureSession | SendImage | `send-image-session-9a27bf` |
+| audio | POST /chat/send/audio | EnsureSession | SendAudio | `send-audio-session-1f5c30` |
+| video | POST /chat/send/video | EnsureSession | SendVideo | `send-video-session-6d3b92` |
+| document | POST /chat/send/document | EnsureSession | SendDocument | `send-document-session-2e74ac` |
+| sticker | POST /chat/send/sticker | EnsureSession | SendSticker | `send-sticker-session-8b0f65` |
+| location | POST /chat/send/location | EnsureSession | SendLocation | `send-location-session-5c9e18` |
+| contact | POST /chat/send/contact | EnsureSession | SendContact | `send-contact-session-3a6d47` |
+| poll | POST /chat/send/poll | EnsureSession | SendPoll | `send-poll-session-7e2140` |
+
+O teste também trava a própria tabela: falha se o conjunto deixar de ter nove
+casos, se algum sentinela for `"user-1"`, ou se dois casos compartilharem
+sentinela — um id repetido faria a próxima capability passar pela constante do
+vizinho.
+
+Uma tabela e não nove cópias: as nove divergem só em QUAIS dublês montam o
+roteador e em QUAL slice de chamadas guarda o `TxtID`; cada closure resolve
+essas duas divergências dentro de si e devolve a mesma forma (dois slices de
+string), então a asserção — que é o que o arquivo mede — é escrita uma vez.
+Os roteadores (`sendTextRouter`, `sendImageRouter`, …) e os corpos são os já
+existentes de cada arquivo de teste, não réplicas.
+
+**Controle negativo EXECUTADO, nove vezes**: para cada capability, o `txtID`
+do respectivo `usecase.Execute` foi trocado pela constante
+`"sessao-errada-cap16"` e o subteste isolado foi rodado. As nove mordem, nos
+DOIS pontos:
+
+| mutação | arquivo:linha | saída |
+|---|---|---|
+| text | `handler_message_send.go:57` | `EnsureSession recebeu txtID "sessao-errada-cap16", quero "send-text-session-4c81de"` + `o metodo de envio recebeu txtID "sessao-errada-cap16", quero "send-text-session-4c81de"` |
+| image | `handler_media.go:50` | `... quero "send-image-session-9a27bf"` (EnsureSession e envio) |
+| document | `handler_media.go:93` | `... quero "send-document-session-2e74ac"` (EnsureSession e envio) |
+| audio | `handler_media.go:136` | `... quero "send-audio-session-1f5c30"` (EnsureSession e envio) |
+| sticker | `handler_media_ext.go:50` | `... quero "send-sticker-session-8b0f65"` (EnsureSession e envio) |
+| video | `handler_media_ext.go:93` | `... quero "send-video-session-6d3b92"` (EnsureSession e envio) |
+| contact | `handler_interactive.go:52` | `... quero "send-contact-session-3a6d47"` (EnsureSession e envio) |
+| location | `handler_interactive.go:97` | `... quero "send-location-session-5c9e18"` (EnsureSession e envio) |
+| poll | `handler_interactive.go:232` | `... quero "send-poll-session-7e2140"` (EnsureSession e envio) |
+
+A mutação é no argumento de `Execute`, não na leitura do contexto: `txtID`
+continua usado nas linhas de log acima, então o build NÃO quebra por import ou
+variável sem uso (ARMADILHA 3 — mutação que não compila não prova nada).
+
+**Prova de ISOLAMENTO**: com a mutação de `text` no lugar, `go test ./pkg/...
+-count=1` derrubou exatamente UM teste em todo o repositório:
+
+```
+--- FAIL: TestSendCapabilities_AuthenticatedSessionReachesPort (0.00s)
+    --- FAIL: TestSendCapabilities_AuthenticatedSessionReachesPort/text (0.00s)
+FAIL	wa-api/pkg/presentation/http/handlers	1.072s
+```
+
+Nenhum outro pacote caiu junto — a mutação atinge o eixo e nada além dele.
+
+**Status**: CORRIGIDO nesta sessão. Testes que travam: as nove sub-execuções
+de `TestSendCapabilities_AuthenticatedSessionReachesPort`
+(`pkg/presentation/http/handlers/handler_send_session_axis_test.go`), uma por
+capability, cada uma nos dois pontos. Verificação: `go test ./pkg/... -race
+-count=1` EXIT:0; `make check` EXIT:0; `go run ./cmd/listroutes | sort | wc -l`
+= 107. Produção NÃO foi tocada — as nove mutações foram revertidas por cópia
+do arquivo original, e `git status --short` só mostra o arquivo de teste novo.
