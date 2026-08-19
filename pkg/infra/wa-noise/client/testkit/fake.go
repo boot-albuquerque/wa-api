@@ -30,6 +30,7 @@ type Fake struct {
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
 	BuildRevokeFn                    func(chat, sender types.JID, id types.MessageID) *waE2E.Message
 	BuildEditFn                      func(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
+	BuildPollCreationFn              func(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
 	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
 	DownloadFn                       func(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
@@ -148,6 +149,25 @@ func (f *Fake) BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.M
 		return f.BuildEditFn(chat, id, newContent)
 	}
 	return wamessage.BuildEdit(chat, id, newContent)
+}
+
+// BuildPollCreation monta a MESMA mensagem que o cliente real monta,
+// delegando para internal/wa-noise/capabilities/message/poll.go:65 — para
+// onde (*core.Client).BuildPollCreation delega em
+// internal/wa-noise/core/msgsecret_poll.go:65. Mesma disciplina de
+// BuildRevoke e BuildEdit quanto a nao inventar uma montagem propria.
+//
+// ARMADILHA 1 deste repo: duble mais permissivo que a producao esconde o
+// defeito. Este metodo imita duas REGRAS que so' a implementacao real tem —
+// (a) selectableOptionCount fora de [0, len(optionNames)] e' zerado, e (b)
+// MessageContextInfo.MessageSecret e' preenchido com bytes aleatorios, sem o
+// qual o voto nao e' decifravel. Uma montagem inventada aqui deixaria os dois
+// eixos sem medicao.
+func (f *Fake) BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message {
+	if f.BuildPollCreationFn != nil {
+		return f.BuildPollCreationFn(name, optionNames, selectableOptionCount)
+	}
+	return wamessage.BuildPollCreation(name, optionNames, selectableOptionCount)
 }
 
 func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {

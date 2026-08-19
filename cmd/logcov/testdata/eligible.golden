@@ -1819,6 +1819,7 @@ pkg/application/contracts/contractsfake.SessionRegistry.Unregister	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionStatusReader.SessionStatus	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendContact	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendLocation	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SimpleMessenger.SendPoll	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StickerProcessor.ProcessSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
@@ -1940,7 +1941,7 @@ pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	cov
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:28);uncovered:L2(S-ret,send_list.go:31)
 pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:42);uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
-pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:28);uncovered:L2(S-ret,send_poll.go:31);uncovered:L2(S-ret,send_poll.go:34)
+pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
 pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:67);uncovered:L2(S-ret,send_sticker.go:70)
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
@@ -2526,17 +2527,19 @@ pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage	ELIGIBLE	uncovered:L1
-pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:45)
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:80)
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendLocation	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPoll	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X1
@@ -2614,6 +2617,7 @@ pkg/infra/wa-noise/client/testkit.ContactStore.PutManyRedactedPhones	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ContactStore.PutPushName	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ErrClient.SendMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildEdit	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.BuildPollCreation	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildRevoke	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildUnavailableMessageRequest	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.CreateGroup	EXCLUDED	X5

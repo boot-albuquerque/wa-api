@@ -47,14 +47,14 @@ type missingField struct {
 	run   func(mc port.MessageComposer, l port.Logger) error
 }
 
-// composerUseCases cobria SendContact e SendLocation até CAP-08A/CAP-08B
-// migrá-los para port.SimpleMessenger (envio de verdade, não mais
-// "validated"). Os dois eixos que este arquivo cobria para eles —
-// validação de campo obrigatório, propagação de falha de sessão, geração
+// composerUseCases cobria SendContact e SendLocation até CAP-08A/CAP-08B, e
+// SendPoll até o CAP-14, migrá-los para port.SimpleMessenger (envio de
+// verdade, não mais "validated"). Os eixos que este arquivo cobria para eles
+// — validação de campo obrigatório, propagação de falha de sessão, geração
 // de ID no caminho feliz, respeito ao Id do chamador — foram migrados para
-// send_location_test.go e send_contact_test.go, com a mesma disciplina de
-// causa (estrutura entregue à porta) que os demais use cases send_* já
-// exigem. Nenhum eixo foi removido, só realocado com o tipo de porta.
+// send_location_test.go, send_contact_test.go e send_poll_test.go, com a
+// mesma disciplina de causa (estrutura entregue à porta) que os demais use
+// cases send_* já exigem. Nenhum eixo foi removido, só realocado com o tipo de porta.
 func composerUseCases() []composerUC {
 	return []composerUC{
 		{
@@ -95,34 +95,6 @@ func composerUseCases() []composerUC {
 				{"Desc", func(mc port.MessageComposer, l port.Logger) error {
 					_, err := message.NewSendListUseCase(mc, l).Execute(context.Background(), txtID,
 						domain.SendListRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
-			name:    "SendPoll",
-			infoMsg: "poll validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendPollUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendPollRequest{Group: "grupo@g.us", Header: "Qual?", Options: []string{"a", "b"}, ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Group", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendPollUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendPollRequest{Header: "Qual?", Options: []string{"a", "b"}})
-					return err
-				}},
-				{"Header", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendPollUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendPollRequest{Group: "grupo@g.us", Options: []string{"a", "b"}})
-					return err
-				}},
-				// Options é o único campo cuja regra não é "não vazio": uma
-				// enquete de uma opção só é tão inválida quanto nenhuma.
-				{"Options com apenas uma", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendPollUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendPollRequest{Group: "grupo@g.us", Header: "Qual?", Options: []string{"a"}})
 					return err
 				}},
 			},

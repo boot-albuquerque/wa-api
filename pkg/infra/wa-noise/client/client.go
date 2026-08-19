@@ -53,6 +53,19 @@ type Client interface {
 	BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Message
 	BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
 
+	// BuildPollCreation monta a mensagem de criacao de enquete: o
+	// cabecalho, as opcoes em claro e quantas delas podem ser escolhidas.
+	// CAP-14 acrescenta este metodo a interface estreita (ADR-001) porque
+	// /chat/send/poll deixou de so' validar e passou a criar enquete de
+	// verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto BuildPollCreation, definido em
+	// internal/wa-noise/core/msgsecret_poll.go:65). O que se alarga aqui
+	// e' o seam local de wa-api.
+	BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
+
 	// Upload sobe um anexo (imagem, video, audio, documento) aos
 	// servidores do WhatsApp. CAP-02 acrescenta este metodo a interface
 	// estreita (ADR-001) porque o envio de midia real, ao contrario do

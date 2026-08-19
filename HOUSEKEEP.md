@@ -7098,3 +7098,250 @@ FAIL	wa-api/pkg/presentation/http/handlers	0.227s
 2973 linhas antes, 2973 depois; nenhuma função entrou ou saiu do conjunto
 elegível. Golden regenerado com `go run ./cmd/logcov -golden`, como a própria
 mensagem de falha de `TestGoldenBate` instrui.
+
+## F138 — `/chat/send/poll` aceitava, validava e devolvia 200 sem criar enquete nenhuma
+
+**Data**: 2026-08-19. **Contexto**: CAP-14, recuperação de
+`POST /chat/send/poll`.
+
+**Onde**: `pkg/application/usecase/message/send_poll.go:26-59` (antes desta
+sessão).
+
+```go
+	msgID := req.ID
+	if msgID == "" {
+		generated, err := uc.messages.NewMessageID(ctx, txtID)
+		...
+	}
+	result := &domain.SendPollResult{MessageID: msgID, Status: "validated"}
+	uc.logger.Info(ctx, "poll validated", "msgID", msgID)
+	return result, nil            // <- nunca envia nada
+```
+
+**Problema**: mesma classe das oito capabilities de envio já recuperadas. A
+rota validava `Group`, `Header` e `len(Options) >= 2`, chamava `EnsureSession`,
+gerava um ID e devolvia 200 com `status: "validated"`. Nenhuma enquete era
+criada. A porta injetada era `port.MessageComposer`, que só tem `SessionGuard`
+e `NewMessageID` — uma porta que não sabe enviar, e é essa insuficiência que
+causou o defeito em todas as capabilities desta sessão.
+
+**O passo que ninguém adivinha**: o histórico
+(`git show 41bc8e2^:handlers.go`, linha 2805) chamava
+`clientManager.SetPollOptions(txtid, msgid, req.Options)` DEPOIS do envio.
+Guardar o texto em claro das opções não é opcional: o voto chega como
+SHA-256 do texto da opção
+(`internal/wa-noise/capabilities/message/poll.go:38`), e
+`pkg/bootstrap/eventhandler_message.go:113-140` — que já está vivo e
+esperando — casa hash com texto usando `clientManager.GetPollOptions`. Sem as
+opções guardadas, `selected` sai VAZIO e o operador recebe hashes sem
+significado. Uma enquete criada sem esse passo é uma capability entregue pela
+metade.
+
+**Correção aplicada**:
+
+- `port.SimpleMessenger` ganhou `SendPoll` (não porta nova, não
+  `ChatMessenger`): enquete é CRIAÇÃO de mensagem — `ChatMessenger` cobre
+  operação sobre mensagem que JÁ EXISTE — e tem exatamente a forma que define
+  `SimpleMessenger`: campos escalares do request viram protobuf e são
+  enviados, sem etapa de obtenção de bytes e sem upload. Terceiro caso real da
+  mesma fronteira, depois de Location (CAP-08A) e Contact (CAP-08B).
+- A FRONTEIRA do guarda-opções ficou no ADAPTER
+  (`pkg/infra/wa-noise/adapters/chat/messenger.go`), atrás de uma interface
+  estreita `PollOptionRecorder` satisfeita por `*registry.ClientManager`. O
+  motivo de guardar é puramente de wire, não de negócio, e o use case não pode
+  conhecer o `ClientManager`. O adapter guarda sob `resp.ID` — o ID que a
+  sessão REALMENTE usou —, não sob o id pedido pelo chamador: é por aquele que
+  o voto procura (`eventhandler_message.go:117`).
+- `SendPoll` RECUSA-SE a enviar sem registrador (`errNoPollOptionRecorder`).
+  Um wiring que esquecesse `WithPollOptions` produziria, em silêncio, enquete
+  com voto ilegível — pior que enquete não criada.
+- `selectableOptionCount` fixo em `1` (escolha ÚNICA), como o histórico
+  sempre passou. A constante vive no adapter porque `domain.PollPayload` não
+  expõe o campo: a API pública nunca ofereceu múltipla escolha, e oferecer
+  agora seria mudança de contrato, não recuperação.
+- `SendPollResult` ganhou `Timestamp int64 \`json:"timestamp,omitempty"\``,
+  pela mesma razão da F137: as capabilities de envio devolvem
+  `{message_id, timestamp, status}`.
+- `Group` é resolvido com `ResolveJID` (não `ResolveQualifiedJID`), porque o
+  histórico o passava por `ValidateMessageFields` -> `ParseJID`
+  (`41bc8e2^:internal/interfaces/http/handlers/common.go:132`), que aplica o
+  servidor padrão. `ResolveQualifiedJID` recusaria entradas que a rota aceita.
+
+**Status**: CORRIGIDO no CAP-14 (2026-08-19).
+
+**Testes que travam**, nome por nome:
+
+`pkg/application/usecase/message/send_poll_test.go`:
+`TestSendPoll_MissingRequiredField` (4 subtestes: Group, Header,
+Options_nenhuma, Options_apenas_uma), `TestSendPoll_TwoOptionsIsTheBoundary`
+(o caminho de SUCESSO da guarda de contagem, ARMADILHA 2),
+`TestSendPoll_SessionFailurePropagates`,
+`TestSendPoll_InvalidGroupNeverReachesSendPoll`,
+`TestSendPoll_GroupResolvedWithDefaultServerRule` (trava
+`ResolveJID` vs `ResolveQualifiedJID`), `TestSendPoll_CausalSuccess`,
+`TestSendPoll_SendFailureNeverReportsSent`,
+`TestSendPoll_MessageIDIsTheOneActuallySent`.
+
+`pkg/presentation/http/handlers/handler_send_poll_test.go` (todos pela ROTA
+REGISTRADA `gorilla/mux`): `TestSendPoll_Success_ViaRegisteredRoute`,
+`TestSendPoll_RejectUnauthenticated`,
+`TestSendPoll_RejectMissingRequiredField` (4 subtestes, cada um com a CAUSA
+no log), `TestSendPoll_SessionFailure`, `TestSendPoll_InvalidGroupNeverSends`,
+`TestSendPoll_DownstreamFailureNeverReturns200`,
+`TestSendPoll_ClientSuppliedIDIsForwardedButServerIDWins`,
+`TestSendPoll_NoSecretLeak`, `TestSendPoll_MalformedBody_ViaRegisteredRoute`,
+`TestSendPoll_MissingSessionID_ViaRegisteredRoute`,
+`TestSendPoll_WrongTypeInContext_ViaRegisteredRoute`,
+`TestSendPoll_SuccessEmitsNoOutcomeLog` (o eixo que a EVAL-10 provou sumir
+quando se migra tabela).
+
+`pkg/infra/wa-noise/adapters/chat/messenger_poll_test.go`:
+`TestChatMessengerAdapter_SendPoll_NoSession`,
+`TestChatMessengerAdapter_SendPoll_SelectableOptionCountIsOne`,
+`TestChatMessengerAdapter_SendPoll_RealBuilderProducesSelectableOne`,
+`TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID`,
+`TestChatMessengerAdapter_SendPoll_StoredOptionsResolveTheVoteHashes` (ponta a
+ponta do casamento hash->texto),
+`TestChatMessengerAdapter_SendPoll_SendFailureNeverRemembers`,
+`TestChatMessengerAdapter_SendPoll_ClientIDIsForwarded`,
+`TestChatMessengerAdapter_SendPoll_InvalidJIDNeverSends`,
+`TestChatMessengerAdapter_SendPoll_WithoutRecorderRefusesToSend`,
+`TestChatMessengerAdapter_WithPollOptions_ReturnsSameAdapter`.
+
+`pkg/presentation/http/handlers/send_wire_contract_test.go`:
+`TestSendWireContract_FieldNames`, subteste `poll` — a trava dos nomes do wire
+passou de OITO para NOVE capabilities.
+
+**Dublês, e de onde vem a regra**: `testkit.Fake.BuildPollCreation` delega
+para o construtor REAL
+(`internal/wa-noise/capabilities/message/poll.go:65`), para onde
+`(*core.Client).BuildPollCreation` também delega
+(`internal/wa-noise/core/msgsecret_poll.go:65`). Os hashes do teste de ponta a
+ponta vêm de `wamessage.HashPollOptions` — a MESMA função que
+`BuildPollVote` usa —, não de uma reimplementação local. ARMADILHA 1.
+
+**Controles negativos EXECUTADOS** (quatro, cada um revertido por edição
+localizada, com a árvore conferida por `shasum -a 256 -c` em seguida):
+
+1. **ORDEM — devolver sucesso antes de o envio retornar** (`sent, _ :=` em vez
+   de checar `err`):
+
+```
+--- FAIL: TestSendPoll_SendFailureNeverReportsSent (0.00s)
+    send_poll_test.go:219: erro do envio nao chegou ao chamador: got <nil>
+FAIL	wa-api/pkg/application/usecase/message	0.336s
+--- FAIL: TestSendPoll_DownstreamFailureNeverReturns200 (0.00s)
+    handler_send_poll_test.go:214: falha no envio produziu 200: {"code":200,"data":{"message_id":"","timestamp":-62135596800,"status":"sent"},"success":true}
+FAIL	wa-api/pkg/presentation/http/handlers	0.248s
+```
+
+2. **Deixar de chamar o guarda-opções** (linha `a.polls.SetPollOptions(...)`
+   removida) — o controle que importa, porque é o passo que ninguém adivinha:
+
+```
+--- FAIL: TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID (0.00s)
+    messenger_poll_test.go:177: SetPollOptions chamado 0 vez(es), quero exatamente 1
+--- FAIL: TestChatMessengerAdapter_SendPoll_StoredOptionsResolveTheVoteHashes (0.00s)
+    messenger_poll_test.go:226: SetPollOptions chamado 0 vez(es), quero 1 — sem opcoes guardadas o voto e' ilegivel
+FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.192s
+```
+
+3. **`selectableOptionCount` de 1 para 2** — sim, é observável, pelos dois
+   níveis do adapter (o argumento capturado e o protobuf que o construtor
+   REAL produz):
+
+```
+--- FAIL: TestChatMessengerAdapter_SendPoll_SelectableOptionCountIsOne (0.00s)
+    messenger_poll_test.go:102: selectableOptionCount = 2, quero 1 (escolha UNICA, contrato historico)
+--- FAIL: TestChatMessengerAdapter_SendPoll_RealBuilderProducesSelectableOne (0.00s)
+    messenger_poll_test.go:137: SelectableOptionsCount = 2, quero 1
+FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.188s
+```
+
+4. **Guardar sob o id PEDIDO pelo cliente em vez do id do SERVIDOR** — o
+   engano silencioso desta capability, porque compila, envia e passa em todo o
+   resto:
+
+```
+--- FAIL: TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID (0.00s)
+    messenger_poll_test.go:184: msgID guardado = "id-pedido-pelo-cliente", quero o ID que o SERVIDOR devolveu ("id-que-o-sdk-usou"); com o id pedido pelo cliente o voto nunca encontra as opcoes
+    messenger_poll_test.go:188: msgID guardado ("id-pedido-pelo-cliente") diverge do devolvido ao chamador ("id-que-o-sdk-usou")
+FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.185s
+```
+
+**Complemento FIX-14 (2026-08-19) — o WIRING passou a ser travado.**
+
+A EVAL-14 aprovou o CAP-14 e deixou uma observação não bloqueante: nenhum
+teste via a remoção de `.WithPollOptions(clientManager)` de
+`pkg/bootstrap/wiring_handlers.go:115`. O fail-closed do adapter
+(`errNoPollOptionRecorder`) garante que a remoção FALHE ALTO em vez de
+silenciosamente — mas "falha alta em produção" ainda significa descoberto por
+usuário, e não por CI, que é exatamente o custo que a F129 mediu. Fechado
+agora, por coerência com a política anti-regressão deste repositório.
+
+**Testes que travam o wiring**, em `pkg/bootstrap/poll_options_wiring_test.go`:
+
+- `TestPollOptionsRecorderIsWiredIntoChatMessenger` — a trava. Monta os
+  handlers com o `initCustomHandlers` REAL (não um conjunto montado pelo
+  teste, que não exercitaria `wiring_handlers.go`), registra a rota pelo
+  `registerCustomRoutes` de produção, e faz um `POST /chat/send/poll` válido
+  pela ROTA REGISTRADA. Com o wiring no lugar, a execução atravessa handler ->
+  use case -> `ChatMessengerAdapter.SendPoll` -> SDK e morre no SDK
+  (`core.ErrNotLoggedIn`, device sem JID); o teste exige justamente essa causa,
+  para que uma parada ANTES do guarda (validação, sessão) não o faça passar em
+  falso. Sem o wiring, a causa vira `poll option recorder not configured`.
+- `TestPollOptionsRecorderAbsenceIsWhatTheWiringTestDetects` — controle
+  POSITIVO permanente: dirige o MESMO use case sobre um
+  `ChatMessengerAdapter` construído sem `.WithPollOptions`, com o mesmo lookup
+  de cliente da produção, e prova que a causa procurada é de fato a que um
+  wiring quebrado emite. Sem ele, a trava poderia passar para sempre
+  procurando uma string que nada emite — a ARMADILHA 3 na sua forma
+  silenciosa.
+
+**Por que log e não corpo de resposta**: o handler responde 500 com o texto
+genérico `internal server error` (`handler_interactive.go:235`), então a CAUSA
+só é observável no log que o use case emite (`send_poll.go:76`). É medição de
+COMPORTAMENTO pela única saída que carrega a causa — mais forte que um `grep`
+sobre o fonte, porque o que se prova é que a execução real atravessou o guarda.
+
+**Por que um `*wanoise.Client` de verdade e não um dublê**: a produção converte
+o tipo CONCRETO (`waclient.ClientForGetter`, `client.go:160`), então não há
+onde injetar um fake. `wanoise.NewClient(nil, nil)` é o mínimo que faz
+`EnsureSession` (`guard.go:57`) passar — sem sessão, o use case para em
+`send_poll.go:62` e o teste nunca alcançaria o guarda de registrador.
+
+**Controle negativo EXECUTADO** (remoção de `.WithPollOptions(clientManager)`
+de `wiring_handlers.go:115`, revertida por edição localizada em seguida):
+
+```
+--- FAIL: TestPollOptionsRecorderIsWiredIntoChatMessenger (0.06s)
+    poll_options_wiring_test.go:129: o envio de enquete parou no guarda fail-closed: o wiring deixou de ligar o registrador de opcoes ao ChatMessengerAdapter (wiring_handlers.go: .WithPollOptions(clientManager)). Enquanto ele faltar, /chat/send/poll nao envia NENHUMA enquete; se a guarda tambem cair, a enquete e' criada e todo voto chega ilegivel — o voto vem como SHA-256 do texto da opcao, e sem as opcoes memorizadas eventhandler_message.go:131 nao tem com o que casar o hash. log: {"level":"info","table":"users","rows":0,"message":"plaintext API tokens removed from storage"}
+        {"level":"error","txtID":"FIX14","error":"poll option recorder not configured","message":"failed to send poll message"}
+FAIL	wa-api/pkg/bootstrap	0.403s
+```
+
+O baseline de log-coverage NÃO muda com este complemento: o acréscimo é
+exclusivamente de arquivo `_test.go`, que o `logcov` não conta.
+
+**Baseline de cobertura de log alterado, com os números enumerados** (ver a
+justificativa completa em `.log-coverage-baseline`, blocos `CAP-14`):
+
+| medida | HEAD `7f0a727` | atual | por quê |
+|---|---|---|---|
+| `eligible` | 634 | 635 | entra 1: `ChatMessengerAdapter.SendPoll`; sai 0 |
+| `covered` | 425 | 425 | nenhuma função coberta regrediu |
+| `min_func_coverage` | 670 (67,0347%) | 669 (66,9291%) | cai por DENOMINADOR |
+| `min_errpath_coverage` | 859 (1159/1349) | 860 (1165/1355) | SOBE |
+| `max_exempt_annotations` | 0 | 0 | inalterado |
+
+A única entrada é o padrão "adapter delegante não loga", já aceito neste
+repositório (FIX-07, CAP-08A/08B, CAP-09, CAP-10): `grep -cE
+'log\.|hlog\.|logger|Logger' pkg/infra/wa-noise/adapters/chat/messenger.go`
+devolve 0, e os treze irmãos do mesmo arquivo constam todos como
+`uncovered:L1`. NÃO foi plantado log para inflar a métrica — isso é violação
+COV-4 e já foi REQUIRED_FIX nesta sessão (F119).
+
+**Verificação em produção**: NÃO EXECUTADA. O packet proíbe criar enquete em
+conta real (REAL WHATSAPP EVIDENCE: NOT EXECUTED). Os testes provam a
+montagem, a ordem e o casamento hash->texto; não provam que o servidor do
+WhatsApp aceita a mensagem — isso continua pendente de medição em campo.

@@ -287,9 +287,31 @@ type SendPollRequest struct {
 }
 
 // SendPollResult representa o resultado do envio de enquete.
+//
+// Timestamp entrou no CAP-14 pela mesma razão que em SendStickerResult
+// (F137): as capabilities de envio têm a forma {message_id, timestamp,
+// status}, travada em send_wire_contract_test.go. Sem ele, /chat/send/poll
+// seria a única a devolver o instante do envio como nada.
 type SendPollResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// PollPayload é a metadata de protocolo pura que
+// port.SimpleMessenger.SendPoll repassa para PollCreationMessage — sem
+// upload, sem fetch, sem conversão (CAP-14). Name (o cabeçalho da enquete)
+// e Options (o texto em claro de cada opção) são os únicos dois campos que
+// o histórico passava a BuildPollCreation (ver `git show 41bc8e2^:handlers.go`,
+// linha 2796).
+//
+// Não há campo para o número de opções selecionáveis DE PROPÓSITO: o
+// histórico sempre passou 1 (escolha ÚNICA) e nunca expôs isso no payload
+// público. Acrescentar aqui seria mudança de contrato, não recuperação da
+// capability — a constante vive no adapter, junto da montagem do protobuf.
+type PollPayload struct {
+	Name    string
+	Options []string
 }
 
 // DeleteMessageRequest representa o payload de exclusão de mensagem.

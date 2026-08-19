@@ -106,7 +106,13 @@ func initCustomHandlers(s *server) {
 	waClientLookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
 	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
-	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)
+	// WithPollOptions liga o guarda-opcoes de enquete: o adapter memoriza o
+	// texto em claro das opcoes depois de cada envio, e o handler de eventos
+	// o le' para casar o hash SHA-256 do voto com o texto
+	// (eventhandler_message.go:130). Sem ele SendPoll RECUSA-SE a enviar, de
+	// proposito — enquete criada com voto ilegivel e' pior que enquete nao
+	// criada.
+	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup).WithPollOptions(clientManager)
 	mediaDownloader := wachat.NewMediaDownloaderAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
@@ -150,7 +156,7 @@ func initCustomHandlers(s *server) {
 	sendLocationUC := message.NewSendLocationUseCase(chatMessenger, jidResolver, logger)
 	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
 	sendListUC := message.NewSendListUseCase(messageComposer, logger)
-	sendPollUC := message.NewSendPollUseCase(messageComposer, logger)
+	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
 	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
 	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)

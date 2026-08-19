@@ -14,7 +14,10 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// CAP-13 — TRAVA DOS NOMES DO WIRE das OITO capabilities de envio.
+// CAP-13 — TRAVA DOS NOMES DO WIRE das capabilities de envio. Nasceu com
+// OITO; o CAP-14 acrescentou a nona (/chat/send/poll) no mesmo movimento em
+// que ela passou a enviar de verdade. Capability nova que fica de fora desta
+// trava e' a proxima F137.
 //
 // Por que este arquivo existe, separado dos testes de cada rota: todo o resto
 // da suite de envio decodifica `envelope.data` numa struct anonima com as
@@ -37,8 +40,9 @@ import (
 // trava a decisao; nao a reabre.
 
 // sendResultWireKeys sao os nomes das chaves da resposta de envio, escritos a
-// mao, um por linha, a partir dos DTOs domain.Send*Result. Identicos nas oito
-// capabilities depois que SendStickerResult ganhou Timestamp (F137).
+// mao, um por linha, a partir dos DTOs domain.Send*Result. Identicos nas nove
+// capabilities depois que SendStickerResult ganhou Timestamp (F137) e
+// SendPollResult ganhou Timestamp (CAP-14).
 var sendResultWireKeys = []string{
 	"message_id",
 	"timestamp",
@@ -131,7 +135,7 @@ type sendWireCase struct {
 	serve func(t *testing.T) *httptest.ResponseRecorder
 }
 
-// sendWireCases enumera as OITO capabilities de envio, uma por entrada. Cada
+// sendWireCases enumera as NOVE capabilities de envio, uma por entrada. Cada
 // serve monta o roteador gorilla/mux da propria capability (os helpers
 // sendXRouter de cada arquivo de teste) e faz um POST autenticado.
 func sendWireCases() []sendWireCase {
@@ -244,6 +248,20 @@ func sendWireCases() []sendWireCase {
 					`{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"}`)
 			},
 		},
+		{
+			nome: "poll",
+			rota: "POST /chat/send/poll",
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				sm := &contractsfake.SimpleMessenger{
+					SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+						return sendWireResult("wire-poll-1"), nil
+					},
+				}
+				return sendWirePost(t, sendPollRouter(sm, &contractsfake.JIDResolver{}),
+					"/chat/send/poll",
+					`{"Group":"120363313346913103@g.us","Header":"Que horas almocamos?","Options":["12h","13h"]}`)
+			},
+		},
 	}
 }
 
@@ -255,12 +273,12 @@ func sendWirePost(t *testing.T, h http.Handler, target, body string) *httptest.R
 	return rec
 }
 
-// TestSendWireContract_FieldNames trava os nomes do wire das OITO
+// TestSendWireContract_FieldNames trava os nomes do wire das NOVE
 // capabilities de envio, cada uma pela sua rota registrada.
 func TestSendWireContract_FieldNames(t *testing.T) {
 	casos := sendWireCases()
-	if len(casos) != 8 {
-		t.Fatalf("a suite cobre %d capabilities de envio, quero as 8 enumeradas no CAP-13", len(casos))
+	if len(casos) != 9 {
+		t.Fatalf("a suite cobre %d capabilities de envio, quero as 9 enumeradas no CAP-13 + CAP-14", len(casos))
 	}
 
 	for _, caso := range casos {

@@ -81,7 +81,8 @@ func ipmAssertNoOutcomeLog(t *testing.T, recs []logLine) {
 	logassert.NoSecrets(t, recs)
 }
 
-// interactiveCase descreve um dos cinco handlers de envio interativo.
+// interactiveCase descreve um dos handlers de envio interativo que ainda
+// dependem de port.MessageComposer.
 type interactiveCase struct {
 	name string
 	path string
@@ -93,12 +94,13 @@ type interactiveCase struct {
 	emptyBodyErr string
 }
 
-// interactiveCases cobria SendContact e SendLocation até CAP-08A/CAP-08B
-// migrá-los para port.SimpleMessenger (envio de verdade). Os oito eixos que
-// esta tabela cobria para os dois foram realocados para
-// handler_send_location_test.go e handler_send_contact_test.go, no mesmo
-// padrão de handler_send_video_test.go (rota gorilla/mux registrada). O
-// destino de cada um, por nome — `Xxx` é `Location` ou `Contact`:
+// interactiveCases cobria SendContact e SendLocation até CAP-08A/CAP-08B, e
+// SendPoll até o CAP-14, migrá-los para port.SimpleMessenger (envio de
+// verdade). Os oito eixos que esta tabela cobria para os três foram
+// realocados para handler_send_location_test.go, handler_send_contact_test.go
+// e handler_send_poll_test.go, no mesmo padrão de
+// handler_send_video_test.go (rota gorilla/mux registrada). O destino de cada
+// um, por nome — `Xxx` é `Location`, `Contact` ou `Poll`:
 //
 //	unauthorized                     TestSendXxx_RejectUnauthenticated
 //	missing session id               TestSendXxx_MissingSessionID_ViaRegisteredRoute
@@ -134,7 +136,7 @@ type interactiveCase struct {
 //     emite UMA linha de log — os dois casos caem no mesmo ramo.
 //
 // Só DOIS destinos usam o helper
-// `sendLocationServeCapturingLog`/`sendContactServeCapturingLog`, que é o
+// `sendLocationServeCapturingLog`/`sendContactServeCapturingLog`/`sendPollServeCapturingLog`, que é o
 // `sendXxxServe` acrescido da saída de log da requisição: `campo obrigatório
 // ausente` e `session failure`. Os que precisam do log e não usam o helper
 // montam `logassert.Wrap` inline, no padrão de `handler_send_video_test.go`.
@@ -158,15 +160,6 @@ func interactiveCases() []interactiveCase {
 			},
 			validBody:    `{"Phone":"5511999999999","Desc":"cardapio"}`,
 			emptyBodyErr: "missing Phone in payload",
-		},
-		{
-			name: "SendPoll",
-			path: "/chat/send/poll",
-			build: func(mc *contractsfake.MessageComposer) http.Handler {
-				return NewSendPollHandler(message.NewSendPollUseCase(mc, log))
-			},
-			validBody:    `{"Group":"120363@g.us","Header":"almoco?","Options":["sim","nao"]}`,
-			emptyBodyErr: "missing Group in payload",
 		},
 	}
 }

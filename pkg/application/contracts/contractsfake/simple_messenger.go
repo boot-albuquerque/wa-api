@@ -15,6 +15,10 @@ const DefaultSentLocationMessageID = "sent-location-message-id"
 // MessageSendResult.ID sem SendContactFunc configurada.
 const DefaultSentContactMessageID = "sent-contact-message-id"
 
+// DefaultSentPollMessageID é o ID que SimpleMessenger devolve em
+// MessageSendResult.ID sem SendPollFunc configurada.
+const DefaultSentPollMessageID = "sent-poll-message-id"
+
 // SimpleMessengerSendLocationCall é uma chamada a SendLocation.
 type SimpleMessengerSendLocationCall struct {
 	Ctx     context.Context
@@ -33,6 +37,15 @@ type SimpleMessengerSendContactCall struct {
 	ID      string
 }
 
+// SimpleMessengerSendPollCall é uma chamada a SendPoll.
+type SimpleMessengerSendPollCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.PollPayload
+	ID      string
+}
+
 // SimpleMessenger é o fake de port.SimpleMessenger.
 type SimpleMessenger struct {
 	SessionGuard
@@ -42,6 +55,9 @@ type SimpleMessenger struct {
 
 	SendContactFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error)
 	SendContactCalls []SimpleMessengerSendContactCall
+
+	SendPollFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error)
+	SendPollCalls []SimpleMessengerSendPollCall
 }
 
 var _ port.SimpleMessenger = (*SimpleMessenger)(nil)
@@ -62,4 +78,13 @@ func (f *SimpleMessenger) SendContact(ctx context.Context, txtID string, target 
 		return f.SendContactFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentContactMessageID}, nil
+}
+
+// SendPoll implementa port.SimpleMessenger.
+func (f *SimpleMessenger) SendPoll(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error) {
+	f.SendPollCalls = append(f.SendPollCalls, SimpleMessengerSendPollCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendPollFunc != nil {
+		return f.SendPollFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentPollMessageID}, nil
 }

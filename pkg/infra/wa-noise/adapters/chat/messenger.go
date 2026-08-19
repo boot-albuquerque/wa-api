@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"time"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -18,14 +19,48 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// PollOptionRecorder memoriza o texto em claro das opções de uma enquete
+// recém-enviada, indexado pelo ID da mensagem que a criou.
+//
+// Esta é a FRONTEIRA do guarda-opções, e ela fica aqui — na infra, ao lado
+// da montagem do protobuf — de propósito. O motivo de guardar é puramente de
+// wire: o voto chega como SHA-256 do texto da opção
+// (internal/wa-noise/capabilities/message/poll.go:38), então quem recebe o
+// webhook precisa do texto para casar hash com significado
+// (pkg/bootstrap/eventhandler_message.go:130). Isso não é regra de negócio, e
+// o use case não pode conhecer o ClientManager.
+//
+// Interface estreita, e não *registry.ClientManager: o adapter usa UM método
+// dele, e depender do tipo concreto arrastaria o registry inteiro para dentro
+// deste pacote (e para dentro dos testes dele). Em produção é
+// clientManager.SetPollOptions.
+type PollOptionRecorder interface {
+	SetPollOptions(userID, msgID string, options []string)
+}
+
 // ChatMessengerAdapter implementa appport.ChatMessenger.
 type ChatMessengerAdapter struct {
 	*wasession.SessionGuardAdapter
+
+	polls PollOptionRecorder
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
 func NewChatMessengerAdapter(getClient waclient.Getter) *ChatMessengerAdapter {
 	return &ChatMessengerAdapter{SessionGuardAdapter: wasession.NewSessionGuardAdapter(getClient)}
+}
+
+// WithPollOptions liga o registrador de opções de enquete ao adapter e
+// devolve o próprio adapter, para encadear no wiring.
+//
+// É opcional na CONSTRUÇÃO e obrigatório no USO: SendPoll recusa-se a enviar
+// sem ele (ver errNoPollOptionRecorder). Enviar a enquete e não guardar as
+// opções produziria exatamente o defeito que ninguém adivinha — enquete
+// criada, votos ilegíveis —, e um envio que falha é preferível a um envio que
+// mente.
+func (a *ChatMessengerAdapter) WithPollOptions(rec PollOptionRecorder) *ChatMessengerAdapter {
+	a.polls = rec
+	return a
 }
 
 // MarkRead confirma a leitura das mensagens ids.
@@ -443,6 +478,63 @@ func (a *ChatMessengerAdapter) SendContact(ctx context.Context, txtID string, ta
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// singleSelectablePollOption é o número de opções que o votante pode
+// escolher: UMA. É o terceiro argumento que o histórico sempre passou a
+// BuildPollCreation (`git show 41bc8e2^:handlers.go`, linha 2796), e o valor
+// vive aqui — junto da montagem do protobuf — porque domain.PollPayload não
+// o expõe: a API pública nunca ofereceu múltipla escolha, e oferecer agora
+// seria mudança de contrato, não recuperação da capability.
+const singleSelectablePollOption = 1
+
+// errNoPollOptionRecorder é a recusa de enviar enquete sem onde guardar as
+// opções em claro. Ver WithPollOptions.
+var errNoPollOptionRecorder = errors.New("poll option recorder not configured")
+
+// SendPoll monta um PollCreationMessage a partir de payload e o envia para
+// target (CAP-14), memorizando em seguida o texto em claro das opções.
+//
+// A ORDEM importa e é a do histórico (`git show 41bc8e2^:handlers.go`, linhas
+// 2796-2805): monta, envia, e só DEPOIS de o envio retornar sucesso memoriza
+// as opções. Memorizar antes deixaria entrada órfã para uma enquete que nunca
+// existiu; memorizar num envio falho é lixo que só cresce.
+//
+// A chave da memória é resp.ID — o ID que a sessão REALMENTE usou —, e não o
+// id pedido pelo chamador. O voto que chega depois traz o ID da mensagem de
+// criação como o servidor o conhece
+// (pkg/bootstrap/eventhandler_message.go:117); indexar pelo id pedido faria a
+// busca falhar sempre que o chamador não tivesse forçado um.
+func (a *ChatMessengerAdapter) SendPoll(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error) {
+	if a.polls == nil {
+		return domain.MessageSendResult{}, errNoPollOptionRecorder
+	}
+
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := client.BuildPollCreation(payload.Name, payload.Options, singleSelectablePollOption)
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	a.polls.SetPollOptions(txtID, string(resp.ID), payload.Options)
+
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
