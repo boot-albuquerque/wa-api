@@ -5476,3 +5476,217 @@ func TestRealSPADisplayNameShape(t *testing.T) {
 		t.Logf("  %-50s -> %s", k, shape[k])
 	}
 }
+
+// TestRealSPAMessageStoreShape inventories WHERE a message store could live in
+// this build, before any capability is designed against one.
+//
+// It exists because "medir antes de projetar" is this repository's rule and
+// because the alternative is copying a module name out of whatsapp-web.js and
+// discovering it was renamed three builds ago. whatsapp-web.js subscribes to
+// Store.Msg for its message events; which module exposes that collection is
+// undocumented Meta contract and has to be observed here.
+//
+// SHAPE ONLY, and strictly. It reports whether a module resolves, whether a
+// candidate collection exists, whether it has an event-emitter surface, and how
+// many models it holds. It never reads a message, a body, an id or a jid —
+// invariant 12 and C6 apply to a probe exactly as they apply to production.
+func TestRealSPAMessageStoreShape(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride +
+			"; an unpaired one has no message store to inventory")
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	// Candidates, not conclusions. Each is a guess to be confirmed or killed by
+	// the answer, and the guesses are named so a reader can tell which came
+	// from whatsapp-web.js and which from this build's own module list.
+	script := `JSON.stringify((() => {
+		const out = {};
+		const look = (mod) => {
+			try {
+				const m = window.require(mod);
+				if (!m) { out[mod] = 'UNRESOLVED'; return; }
+				const keys = Object.keys(m).sort();
+				out[mod] = 'RESOLVED keys=' + keys.slice(0, 24).join(',');
+			} catch (e) { out[mod] = 'THREW'; }
+		};
+		[
+			'WAWebMsgCollection', 'WAWebChatCollection', 'WAWebContactCollection',
+			'WAWebCollections', 'WAWebMsgStore', 'WAWebMsgModel'
+		].forEach(look);
+
+		// For anything that resolved, report the SHAPE of a plausible collection:
+		// does it emit events, and how many models does it hold? Counts only.
+		const shapeOf = (mod, path) => {
+			try {
+				const m = window.require(mod);
+				const c = path ? m[path] : m;
+				if (!c) return;
+				out[mod + (path ? '.' + path : '') + '#shape'] =
+					'on=' + (typeof c.on === 'function') +
+					' off=' + (typeof c.off === 'function') +
+					' length=' + (typeof c.length === 'number' ? c.length : 'n/a') +
+					' getModelsArray=' + (typeof c.getModelsArray === 'function');
+			} catch (e) {}
+		};
+		shapeOf('WAWebMsgCollection', 'MsgCollection');
+		shapeOf('WAWebMsgCollection', 'default');
+		shapeOf('WAWebChatCollection', 'ChatCollection');
+		return out;
+	})())`
+
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "real/msgstore",
+		func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, script, &raw) }); err != nil {
+		t.Fatalf("probing: %v", err)
+	}
+	var shape map[string]string
+	if err := json.Unmarshal([]byte(raw), &shape); err != nil {
+		t.Fatalf("decoding %q: %v", raw, err)
+	}
+	keys := make([]string, 0, len(shape))
+	for k := range shape {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		t.Logf("  %-34s -> %s", k, shape[k])
+	}
+}
+
+// TestRealSPAMessageModelShape reports the KEY NAMES of a message model, so the
+// metadata mapping is built from what this build exposes instead of from what
+// whatsapp-web.js exposed in some other one.
+//
+// STRICTLY SHAPE. It prints key names, the TYPE of a handful of fields the
+// metadata contract needs, and booleans. It never prints a value — the contract
+// being served here (C5/C6) says WaMessageMeta carries no body and that a raw
+// waJid is a blocker in a log, and a probe that leaked one while measuring how
+// not to leak them would be its own joke.
+func TestRealSPAMessageModelShape(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	script := `JSON.stringify((() => {
+		const out = { models: 0, keys: [], types: {} };
+		const c = window.require('WAWebMsgCollection').MsgCollection;
+		if (!c || typeof c.getModelsArray !== 'function') { out.error = 'NO_COLLECTION'; return out; }
+		const arr = c.getModelsArray();
+		out.models = arr.length;
+		if (arr.length === 0) return out;
+
+		// One model is enough for SHAPE, and taking the last avoids the oldest
+		// records, which are likelier to predate a field rename.
+		const m = arr[arr.length - 1];
+		out.keys = Object.keys(m).sort().slice(0, 60);
+
+		// The fields the metadata contract names (waJid, waMessageId, direction,
+		// type, waTimestamp). TYPE and presence only.
+		const probe = (label, get) => {
+			try {
+				const v = get();
+				if (v === null || v === undefined) { out.types[label] = 'NULL'; return; }
+				if (typeof v === 'object') {
+					out.types[label] = 'object keys=' + Object.keys(v).sort().join('|');
+					return;
+				}
+				out.types[label] = typeof v;
+			} catch (e) { out.types[label] = 'THREW'; }
+		};
+		probe('id',        () => m.id);
+		probe('from',      () => m.from);
+		probe('to',        () => m.to);
+		probe('author',    () => m.author);
+		probe('type',      () => m.type);
+		probe('t',         () => m.t);
+		probe('ack',       () => m.ack);
+		probe('isNewMsg',  () => m.isNewMsg);
+		probe('id.fromMe', () => m.id && m.id.fromMe);
+		// ACCESSORS, asked directly. Object.keys above sees only own enumerable
+		// properties, so a prototype getter is missing from the key list and
+		// still works — the lesson this repository already recorded for
+		// WAWebConnModel.Conn.wid. Designing the metadata mapping off the key
+		// list alone would have missed exactly these.
+		probe('id._serialized', () => m.id && m.id._serialized);
+		probe('id.remote',      () => m.id && m.id.remote);
+		probe('id.id',          () => m.id && m.id.id);
+		probe('mediaKeyTimestamp', () => m.mediaKeyTimestamp);
+		probe('isGroupMsg',     () => m.isGroupMsg);
+		probe('chat',           () => m.chat && 'PRESENT');
+		return out;
+	})())`
+
+	var raw string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "real/msgmodel",
+		func(ctx context.Context) error { return sess.Tab().Evaluate(ctx, script, &raw) }); err != nil {
+		t.Fatalf("probing: %v", err)
+	}
+	var shape struct {
+		Models int               `json:"models"`
+		Keys   []string          `json:"keys"`
+		Types  map[string]string `json:"types"`
+		Error  string            `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &shape); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if shape.Error != "" {
+		t.Fatalf("probe reported %s", shape.Error)
+	}
+	t.Logf("models in collection: %d", shape.Models)
+	t.Logf("model key names (%d): %s", len(shape.Keys), strings.Join(shape.Keys, " "))
+	names := make([]string, 0, len(shape.Types))
+	for k := range shape.Types {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		t.Logf("  %-12s -> %s", n, shape.Types[n])
+	}
+}

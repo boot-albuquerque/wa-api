@@ -217,3 +217,45 @@ Metadata-only é a **12**. Corrigido nos dois lugares. Achado ao ir implementar
 é o que fez a discrepância aparecer, e ela estava no documento desde antes
 desta sessão.
 
+### 6.4 — `msg.id._serialized` é **NULL** neste build; o `wwebjs` depende dele
+
+Medido em 2026-08-19 contra o perfil pareado real, antes de `onMessageMeta` ser
+implementada. O store é `WAWebMsgCollection.MsgCollection` (`on`/`off`/
+`getModelsArray`, 384 modelos); `WAWebMsgStore` — palpite meu — **não existe**.
+
+Forma de um modelo de mensagem, só nomes e tipos:
+
+| campo | resultado |
+|---|---|
+| `id` | objeto, chaves `$1 \| fromMe \| id \| remote` |
+| **`id._serialized`** | **`NULL`** |
+| `id.id` | `string` |
+| `id.remote` | objeto WID (`_serialized`, `server`, `user`) |
+| `id.fromMe` | `boolean` |
+| `from` / `to` | objeto WID |
+| `t` | `number` |
+| `type` | `string` |
+| `ack` | `number` |
+| `author`, `isGroupMsg`, `isNewMsg`, `chat` | `NULL` (conversa 1:1) |
+
+**A divergência**: o `whatsapp-web.js` usa `msg.id._serialized` como
+identificador da mensagem. Neste build esse acessor responde **nulo**. Copiar o
+CÓDIGO deles produziria um `waMessageId` vazio em toda mensagem — e vazio é
+indistinguível de "sem id", que é a classe de defeito que este módulo passou a
+semana caçando.
+
+Copiar o ENTENDIMENTO produz outra coisa: o identificador é composto por
+`fromMe`, `remote` e `id`, e é isso que o `_serialized` deles concatena.
+
+**Decisão**: expor as PARTES (`ID`, `FromMe`, `Remote`) em vez de sintetizar uma
+string. Mesmo raciocínio do §6.1: não perder informação por colapso. Sintetizar
+um identificador à mão é como uma stack começa a discordar do servidor sobre
+qual mensagem é qual — e se um dia o `_serialized` voltar, ele passa a ser mais
+uma fonte a conferir, não a única.
+
+**Como isto foi encontrado**: `Object.keys` no modelo NÃO lista `_serialized`,
+e também não listaria um getter de protótipo que funcionasse — foi a lição já
+registrada para `WAWebConnModel.Conn.wid`. Perguntar ao acessor **diretamente**,
+em vez de confiar na lista de chaves, é o que separou "campo ausente da lista" de
+"campo que responde nulo".
+
