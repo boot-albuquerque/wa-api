@@ -9521,8 +9521,94 @@ mecanismo): exigir a variável e FALHAR FECHADO muda o comportamento de
 inicialização de quem hoje sobe sem configurar nada. Isso é decisão de
 contrato operacional, não limpeza.
 
-**Status**: não corrigido. Fora do escopo do bloco em andamento, e a política
-do projeto proíbe corrigir de graça achado pré-existente sem perguntar.
+### Adendo do CAP-34 (2026-08-19) — corrigido em parte
+
+**O que foi corrigido.** O bloco inline de `main.go` foi EXTRAÍDO para
+`pkg/bootstrap/global_hmac_key.go` — dentro de `Main()` ele lia ponteiros de
+flag do pacote, e nenhum teste conseguia alcançá-lo. Ficaram duas funções:
+
+- `generateGlobalHMACKey()` — desenha 32 caracteres do mesmo alfabeto
+  alfanumérico de antes, agora com `crypto/rand`. Usa amostragem por rejeição
+  em vez de `b % 62`: 256 não é múltiplo de 62, e o módulo simples deixaria as
+  8 primeiras letras do alfabeto mais prováveis que as demais. O formato
+  (32 caracteres alfanuméricos) é idêntico ao anterior, então nada a jusante
+  vê mudança.
+- `resolveGlobalHMACKey(flagValue, envValue)` — mesma precedência de antes
+  (flag › ambiente › gerada) e **nenhum** log com o valor da chave, em nenhum
+  dos três caminhos. A linha de log diz apenas a ORIGEM (`command_line` /
+  `environment` / `generated`); não há prefixo, sufixo, hash nem tamanho.
+
+`main.go` passou a chamar `resolveGlobalHMACKey` e a tratar o erro do sorteio
+como `log.Fatal` — falha da fonte de entropia não é caso a ignorar.
+
+**O que trava a correção** (`pkg/bootstrap/global_hmac_key_test.go`):
+
+| teste | o que trava |
+|---|---|
+| `TestF156_ChaveGeradaNaoApareceNoLog` | a chave gerada não aparece na LINHA INTEIRA capturada (nem prefixo, nem sufixo) — mover o segredo para outro campo continua sendo pego |
+| `TestF156_DuasGeracoesProduzemChavesDiferentes` | sanidade do gerador: constante disfarçada de chave passaria em todo o resto |
+| `TestF156_ChaveGeradaTemFormatoUtilizavel` | tamanho, alfabeto, e ida e volta por `auth.EncryptHMACKey`/`DecryptHMACKey` — o par que `Main()` usa logo depois |
+| `TestF156_ChaveDoAmbienteEUsadaENaoEcoada` | o caminho "configurada por ambiente" usa o valor do operador, não gera nada, e não ecoa o valor |
+| `TestF156_ChaveDaLinhaDeComandoEUsadaENaoEcoada` | idem para a flag, que tem precedência |
+| `TestF156_GeradorEhCriptografico` | teste ESTRUTURAL: exige `crypto/rand` e recusa `math/rand` em `global_hmac_key.go` |
+
+**Controles negativos EXECUTADOS.**
+
+(a) Reintroduzir `.Str("global_hmac_key", key)` na linha de log:
+
+```
+--- FAIL: TestF156_ChaveGeradaNaoApareceNoLog (0.00s)
+    global_hmac_key_test.go:48: a chave HMAC gerada aparece no log:
+        {"level":"warn","source":"generated","global_hmac_key":"jwx8OpM6h1eHISkOAGBLtZr0TGMuaMuj",...}
+    global_hmac_key_test.go:54: um prefixo/sufixo da chave gerada aparece no log ("jwx8OpM6"): ...
+    global_hmac_key_test.go:54: um prefixo/sufixo da chave gerada aparece no log ("TGMuaMuj"): ...
+```
+
+(b) Voltar o gerador para `math/rand` (`rand.Read` no lugar de
+`cryptorand.Read`, versão que COMPILA — ARMADILHA 3):
+
+```
+--- FAIL: TestF156_GeradorEhCriptografico (0.00s)
+    global_hmac_key_test.go:181: global_hmac_key.go não importa crypto/rand: a chave HMAC global precisa de CSPRNG
+    global_hmac_key_test.go:185: global_hmac_key.go usa "math/rand": math/rand não é CSPRNG e não pode gerar chave de assinatura
+```
+
+**Declaração honesta sobre (b).** Só o teste ESTRUTURAL mordeu. Os cinco
+testes de comportamento passaram TODOS com `math/rand` no lugar — e isso não é
+falha deles: uma amostra de `math/rand` e uma de `crypto/rand` são
+indistinguíveis num teste unitário, e qualquer asserção sobre o VALOR
+devolvido que "pegasse" a troca estaria passando por acaso. O que dá para
+travar é a FONTE, e é o que o teste estrutural faz. Se um dia a regra precisar
+valer para o pacote todo (e não só para este arquivo), o lugar é um lint —
+como `TestTokenNaoSaiEmLog` já faz para `Str("token"`.
+
+**O que NÃO foi feito, e por quê.** Continua fora: **exigir** a variável e
+FALHAR FECHADO quando ela faltar. Isso muda o comportamento de inicialização
+de quem hoje sobe sem configurar nada; é decisão de contrato operacional,
+está pendente no canal, e não era do escopo do CAP-34.
+
+**Observação nova, e é argumento FORTE para o fail-closed.** A chave
+auto-gerada muda a CADA REINÍCIO do processo. Enquanto ela era impressa no
+log, havia — por acidente, e por um canal inaceitável — uma forma de
+descobri-la. Agora que o log corretamente cala, **não sobrou nenhum canal
+legítimo**: o consumidor do webhook global não tem como aprender o valor, e o
+valor muda no próximo restart de qualquer forma. Ou seja, o caminho "gerar uma
+aleatória" produz uma assinatura que **ninguém consegue verificar** — o
+serviço gasta CPU assinando e o receptor não tem com o quê conferir. Um
+segredo que ninguém pode conhecer não é um segredo compartilhado; é uma
+assinatura decorativa. Isso deixa três saídas para a decisão pendente:
+(1) exigir a variável e falhar fechado; (2) gerar, mas persistir a chave em
+canal deliberado (arquivo com permissão restrita) para o operador buscá-la;
+(3) não assinar quando não há chave configurada — que é o rebaixamento
+silencioso que o `log.Fatal` de `main.go` (F67 item 2) foi posto ali para
+impedir. A opção (3) está descartada por essa razão; a decisão real é entre
+(1) e (2).
+
+**Status**: **corrigido em parte** nesta sessão (CAP-34) — vazamento em log e
+gerador não-criptográfico, ambos travados por teste. **Não corrigido**: o
+fail-closed, pendente de decisão no canal, agora com a observação acima em
+mãos. Ver [[F169]] para a MESMA classe de vazamento em `admin_token` e
+`global_encryption_key`, que este bloco deliberadamente não tocou.
 
 ## F157
 
@@ -11541,3 +11627,64 @@ comentário prometendo a implementação futura. A F158 foi achada sozinha; a F1
 só apareceu porque o executor continuou lendo depois de encontrar a primeira.
 Regra que fica: **ao encontrar um placeholder, procure os irmãos dele no mesmo
 arquivo antes de fechar o levantamento.**
+
+## F169
+
+**Data**: 2026-08-19. **Contexto**: CAP-34, ao consertar a [[F156]] (chave
+HMAC global em log e gerada com `math/rand`). Achado de lado: os DOIS blocos
+vizinhos, no mesmo arquivo e a poucas dezenas de linhas, têm exatamente o
+mesmo defeito e não foram tocados — o escopo do CAP-34 era só a chave HMAC.
+
+**Onde**: `pkg/bootstrap/main.go:230-240` e `pkg/bootstrap/main.go:245-256`.
+
+```go
+// main.go:238 — token de administração
+b[i] = charset[rand.Intn(len(charset))]      // math/rand
+*adminToken = string(b)
+log.Warn().Str("admin_token", *adminToken).Msg("No admin token provided, generated a random one")
+
+// main.go:254 — chave de encriptação global
+b[i] = charset[rand.Intn(len(charset))]      // math/rand
+*globalEncryptionKey = string(b)
+log.Warn().Str("global_encryption_key", *globalEncryptionKey).Msg("No WA_API_GLOBAL_ENCRYPTION_KEY provided, generated a random one. ...")
+```
+
+**Problema**: idêntico ao da F156, nas duas metades.
+
+1. **Segredo em claro no log.** O `admin_token` dá acesso administrativo à API
+   inteira — quem lê o log age como administrador. A
+   `global_encryption_key` é a chave AES que cifra TODAS as chaves HMAC
+   armazenadas (`auth.EncryptHMACKey`); quem a lê decifra as chaves HMAC de
+   todas as sessões, não só a global.
+2. **Gerador não criptográfico.** Mesmo `math/rand` da F156, com a mesma
+   ressalva: no Go 1.20+ as funções globais são auto-semeadas, então **não** é
+   o caso de semente fixa; o defeito é a classe do gerador, errada para
+   segredo.
+
+Vale notar que a gravidade aqui é MAIOR que a da F156 — a chave HMAC global
+assina; estas duas AUTENTICAM e DECIFRAM.
+
+O `TestTokenNaoSaiEmLog` (`pkg/bootstrap/token_not_logged_test.go`) NÃO pega
+nenhum dos dois: ele varre `Str("token"`, `Str("Token"` e `Str("api_token"`, e
+os campos aqui se chamam `admin_token` e `global_encryption_key`.
+
+**Correção sugerida**: a mesma que o CAP-34 aplicou à chave HMAC — extrair
+cada bloco para função testável, gerar com `crypto/rand` (o
+`generateGlobalHMACKey` de `global_hmac_key.go` já serve de molde, inclusive a
+amostragem por rejeição), e o log dizer apenas a ORIGEM do valor. Ao fazer,
+ACRESCENTE `admin_token` e `global_encryption_key` à lista de padrões
+proibidos do `TestTokenNaoSaiEmLog`, para que a classe fique travada e não só
+os dois sítios.
+
+**Cuidado**: vale aqui a mesma ressalva da F156 — exigir as variáveis e falhar
+fechado muda o comportamento de inicialização de quem hoje sobe sem configurar
+nada, e é decisão de contrato operacional. E, para a
+`global_encryption_key`, a consequência de ela mudar a cada reinício é PIOR
+que a da chave HMAC: toda chave HMAC de sessão já persistida no banco fica
+indecifrável, que é justamente o que a mensagem de log atual avisa em
+maiúsculas — e é por isso que ela vazava, alguém quis dar ao operador uma
+forma de salvar o valor.
+
+**Status**: não corrigido. Fora do escopo do CAP-34, e a política do projeto
+proíbe corrigir de graça achado pré-existente sem perguntar. Ver [[F156]] para
+o bloco irmão já corrigido e para o molde da correção.

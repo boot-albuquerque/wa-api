@@ -266,25 +266,14 @@ func Main() {
 		log.Info().Str("global_webhook", *globalWebhook).Msg("Global webhook configured from command line")
 	}
 
-	// Check for global HMAC key in environment variable
-	if *globalHMACKey == "" {
-		if v := os.Getenv("WA_API_GLOBAL_HMAC_KEY"); v != "" {
-			*globalHMACKey = v
-			log.Info().Msg("Global HMAC key configured from environment variable")
-		} else {
-			// Generate a random key if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*globalHMACKey = string(b)
-			log.Warn().Str("global_hmac_key", *globalHMACKey).Msg("No WA_API_GLOBAL_HMAC_KEY provided, generated a random one")
-		}
-
-	} else {
-		log.Info().Msg("Global HMAC key configured from command line")
+	// Global HMAC key: flag, else environment, else generated. The rules — and
+	// why the value never reaches a log line — live in global_hmac_key.go.
+	resolvedHMACKey, _, err := resolveGlobalHMACKey(*globalHMACKey, os.Getenv(envGlobalHMACKey))
+	if err != nil {
+		log.Fatal().Err(err).
+			Msg("could not resolve the global HMAC key: the entropy source failed")
 	}
+	*globalHMACKey = resolvedHMACKey
 
 	// Seed the AppContext with runtime config so functions in wmiau.go
 	// and helpers.go can access global state without raw globals.
@@ -307,7 +296,7 @@ func Main() {
 	// segurança, e o receptor não tem como perceber a diferença.
 	//
 	// Não há caso legítimo de seguir adiante: *globalHMACKey nunca chega aqui
-	// vazio (linha 276 gera uma chave aleatória quando nenhuma é fornecida),
+	// vazio (resolveGlobalHMACKey gera uma quando nenhuma é fornecida),
 	// então a assinatura é sempre pretendida. A única falha possível é
 	// WA_API_GLOBAL_ENCRYPTION_KEY inválida — configuração, corrigível, e que
 	// o operador precisa ver antes de o serviço atender requisição.

@@ -1030,7 +1030,22 @@ rules_frozen=true
 # (contractsfake.HistoryConfigStore.LoadHistoryLimit, duble). Nenhuma funcao
 # ja' coberta regrediu: o diff do golden so' ACRESCENTA duas linhas, e nenhuma
 # linha existente muda de estado.
-min_func_coverage=666
+# CAP-34 (2026-08-19): 666 -> 667. DUAS funcoes elegiveis novas, da extracao
+# do bloco da chave HMAC global de Main() para pkg/bootstrap/global_hmac_key.go
+# (F156), e AS DUAS nascem COBERTAS:
+#   - bootstrap.resolveGlobalHMACKey — Info nos dois caminhos configurados
+#     (flag, ambiente) e Warn no caminho gerado. Nenhuma delas carrega o valor
+#     da chave: e' exatamente o defeito que a F156 fechou.
+#   - bootstrap.generateGlobalHMACKey — Error no unico caminho de saida por
+#     falha (fonte de entropia), com a causa propagada ao chamador.
+# A terceira entrada nova do golden e' EXCLUDED (bootstrap.hmacKeySource.String,
+# X4 — metodo String() de tipo). Nenhuma funcao ja' coberta regrediu: o diff do
+# golden ACRESCENTA tres linhas e nenhuma linha existente muda de ESTADO; as
+# quatro linhas restantes do diff sao deslocamento de numero de linha em
+# main.go, mais os DOIS sitios L3 que a extracao levou embora de
+# bootstrap.Main (main.go:273 e main.go:286, as duas linhas de log do bloco
+# HMAC que saiu de la').
+min_func_coverage=667
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1232,7 +1247,10 @@ min_func_coverage=666
 # medicao do ANTES (662/438, 1411/1219) foi feita em HEAD f3cf5c6 com
 # `git archive HEAD | tar -x` em diretorio temporario, no mesmo instante e na
 # mesma maquina que a do DEPOIS.
-min_errpath_coverage=867
+# CAP-34 (2026-08-19): 867 -> 868. O caminho de falha de
+# bootstrap.generateGlobalHMACKey (leitura de crypto/rand) nasce coberto por
+# Error com a causa propagada; nenhum caminho existente mudou de estado.
+min_errpath_coverage=868
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1437,7 +1455,10 @@ min_errpath_coverage=867
 # CAP-32 (2026-08-19): 672 -> 673. UMA entrada, enumerada acima junto de
 # min_func_coverage: db.SessionConfigRepository.LoadHistoryLimit. Denominador
 # CRESCE — nao ha' remocao neste PR.
-min_eligible=673
+# CAP-34 (2026-08-19): 673 -> 675. DUAS entradas, enumeradas acima junto de
+# min_func_coverage: bootstrap.resolveGlobalHMACKey e
+# bootstrap.generateGlobalHMACKey. Denominador CRESCE — nao ha' remocao neste PR.
+min_eligible=675
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
