@@ -9892,7 +9892,7 @@ muda para melhor — `auth.DecryptHMACKey` continua falhando com
 (a)), e o webhook desses usuários segue sem `x-hmac-signature`, silenciosamente.
 A correção impede novas linhas ruins; não conserta as existentes.
 
-O caminho proposto segue o mesmo raciocínio que me foi citado como **ADR-0008**
+O caminho proposto segue o mesmo raciocínio que me foi citado como **ADR-0009**
 (envelope versionado para o S3, legado INVÁLIDO e **sem fallback para
 plaintext**). Registro a checagem em vez de a herdar: `docs/adr/` neste
 worktree vai de 0001 a 0007, e não há arquivo 0008 — a referência não pôde ser
@@ -10040,3 +10040,53 @@ falha que produção não teria (o espelho da ARMADILHA 1).
 **Status**: não corrigido — fora do escopo do CAP-28, e o CLAUDE.md proíbe
 corrigir de graça defeito pré-existente sem perguntar. Registrado para
 decisão.
+
+## F162
+
+**Data**: 2026-08-19. **Contexto**: ao instalar o ADR do S3 decidido pelo
+canal, fui conferir se o número 0008 estava livre. Não estava — mas o
+documento também não existia.
+
+**Onde**:
+- `cmd/logcov/main_test.go:98` — comentário citando `(ADR-008)`
+- saída do `make check`: `log-coverage: estagio do gate = ratchet (ADR-008)`
+- `HOUSEKEEP.md`, três ocorrências coladas dessa mesma saída
+
+**Problema**: **`ADR-008` não existe.** `docs/adr/` tinha `0001`..`0007` e
+nada mais. O código e o gate citam, como justificativa do estágio *ratchet*
+do log-coverage, um documento que nunca foi escrito.
+
+Referência pendurada já é ruim — quem vai entender por que o gate é ratchet
+não tem onde ler. Mas o risco real é outro, e foi por pouco: **eu ia numerar
+o ADR do S3 como 0008.** Se tivesse feito, a referência pendurada passaria a
+resolver em silêncio para um documento sobre cifra de credencial de S3, e o
+gate de cobertura de log pareceria justificado por ele. A referência quebrada
+teria virado referência ERRADA, que é pior — porque quebrada avisa, e errada
+convence.
+
+É a mesma classe do defeito que peguei no CAP-25, onde o código citava F151
+(stubs de configuração) para descrever a corrida do QR: cross-reference que
+aponta para o lugar errado é pior que nenhuma.
+
+**Mitigação já aplicada**: o ADR do S3 foi numerado **0009**, e o próprio
+documento explica no cabeçalho por que o 0008 ficou VAGO — para que a próxima
+pessoa não o ocupe sem saber.
+
+**Correção sugerida**, e é decisão do humano qual:
+1. **escrever o ADR-0008** que falta, sobre o estágio *ratchet* do gate de
+   log-coverage (o conteúdo existe espalhado em `METRIC.md`, no
+   `.log-coverage-baseline` e nas entradas de HOUSEKEEP; falta consolidar); ou
+2. **corrigir as citações** para apontar para onde a decisão realmente está
+   registrada, e deixar o 0008 livre.
+
+A opção 1 é melhor: a decisão de ratchet é real, foi tomada, e é citada por
+um teste — merece documento. Enquanto não houver escolha, o 0008 fica
+reservado.
+
+**Nota de método**: isto só apareceu porque conferi se o número estava livre
+antes de usá-lo, em vez de assumir que `ls | tail -1` bastava. `ls` mostra o
+que EXISTE; a colisão estava no que é CITADO. Definir o conjunto pelo lugar
+errado é o mesmo erro da F139, da F151 e da F157, agora numa quarta forma.
+
+**Status**: não corrigido. O 0009 evita o dano imediato; o ADR faltante é
+decisão do humano.
