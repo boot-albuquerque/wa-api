@@ -11903,3 +11903,72 @@ do projeto proíbe corrigir de graça. A correção é de uma linha (trocar por 
 placeholder de 32 bytes) e o trava-teste é estender `chavesDoRunSh` para varrer
 também o `.env.sample`.
 
+
+## F170
+
+**Data**: 2026-08-19. **Contexto**: preparação do bloco da [[F164]]. A F164
+registrou que existem DOIS caches de userinfo; faltava o levantamento NOMINAL
+de quem lê cada um, que é o que decide como unificá-los. Este é esse
+levantamento — feito por leitura, não por amostra.
+
+### Os leitores, nome por nome
+
+**`appCtx.UserInfoCache`** — chave **userID**, `cache.NoExpiration`.
+Doze pontos de leitura, todos em `pkg/bootstrap/`:
+
+```
+lifecycle_webhook.go:23,43,73,103,177   (cinco)
+eventhandler_message.go:72,264          (dois)
+eventhandler_session.go:111
+hmac_config_adapters.go:52
+s3_config_adapters.go:102
+session_config_adapters.go:88
+user_info_cache.go:57
+```
+
+**`userinfocache`** — chave **token**, TTL de `userCacheTTL` = 10 minutos.
+Uma leitura direta (`session_config_adapters.go:152`) **e a fronteira HTTP
+inteira**: `router_setup.go:50` e `wiring_handlers.go:204` passam esse cache
+como `Deps.UserCache`, e `middleware.AuthAlice` (`auth.go:127,160`) o consulta
+em **toda requisição autenticada**.
+
+### O que o levantamento mostra, e não estava na F164
+
+A divisão não é arbitrária nem parcial: **o caminho de MENSAGEM e WEBHOOK lê um
+cache; o caminho HTTP lê o outro.** São doze leitores de um lado e toda a
+fronteira de requisição do outro, sobre estruturas idênticas (`Values`, mesmos
+campos) que nada reconcilia.
+
+Consequência prática, já observada: qualquer configuração publicada em apenas
+um dos dois fica **invisível para metade do sistema**. Foi exatamente por isso
+que o CAP-30 precisou publicar nos DOIS para fechar a F128 — não por
+precaução, mas porque o gate de leitura se semeia do cache de AUTENTICAÇÃO
+enquanto a escrita natural iria para o de userID.
+
+### Por que isso muda o desenho da unificação
+
+A F164 sugeria "unificar". O levantamento diz que unificar exige decidir a
+CHAVE, e as duas escolhas têm custo assimétrico:
+
+- **manter userID**: o middleware passa a precisar resolver token→userID antes
+  de consultar, o que é uma consulta a mais no caminho de TODA requisição;
+- **manter token**: os doze leitores de `bootstrap` passam a precisar do token
+  — que é um SEGREDO — em caminhos que hoje só conhecem o userID, incluindo o
+  tratamento de mensagem. Espalhar segredo por conveniência de cache é troca
+  ruim, e foi o argumento que a [[F128]] já usou para recusar invalidar o cache
+  do lado da leitura.
+
+Há uma terceira via que o levantamento sugere: **manter os dois, e tornar a
+dupla-publicação explícita** numa única porta (o `session_config_adapters` já
+faz isso para History e Proxy), em vez de cada novo consumidor redescobrir que
+precisa publicar duas vezes. Não é unificação, é parar de tratar a duplicidade
+como acidente.
+
+**Status**: não corrigido. Este é o levantamento que faltava para a F164 virar
+bloco; a escolha de chave é decisão de desenho e não de conserto.
+
+**Nota de método**: a F164 nasceu de um executor procurando "em qual cache
+publicar" e descobrindo que a resposta era "nos dois". O achado estava certo, e
+mesmo assim a entrada não bastava para agir — porque afirmava a EXISTÊNCIA da
+duplicidade sem enumerar os leitores. Enumerar mudou a proposta de correção.
+É a mesma lição da F139/F151/F157, agora aplicada a um achado meu.
