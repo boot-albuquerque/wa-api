@@ -5470,3 +5470,653 @@ e "os oito destinos asseveram a causa") eram do MESMO tipo — resumo em bloco
 de um conjunto, escrito sem enumerar o conjunto. As duas passaram por testes
 verdes e por `make check`. O que as pegou foi contar item a item; o que as
 produziu foi descrever em vez de contar.
+
+## F123
+
+**Data**: 2026-08-18. **Contexto**: CURRENT_STATE do CAP-09A (Chat Read
+Path), antes de qualquer implementação.
+
+**Onde**: `pkg/domain/entities.go:44` e `pkg/infra/db/connection.go:144`.
+
+**Problema**: existem DOIS tipos chamados `HistoryMessage`, com formas
+DIFERENTES, e o órfão é o que "parece certo".
+
+- `db.HistoryMessage` é o que o contrato público sempre serializou:
+  `id, user_id, chat_jid, sender_jid, message_id, timestamp, message_type,
+  text_content, media_link, quoted_message_id, data_json`. Tem uso real
+  (`pkg/bootstrap/wiring_delegates.go:26` faz `type HistoryMessage =
+  db.HistoryMessage`).
+- `domain.HistoryMessage` tem ZERO usos e uma forma que nunca existiu no
+  wire: `id, user_id, jid, from, body, timestamp, direction, media_url,
+  status`.
+
+Evidência de que o do `db` é o histórico:
+`git show 3dafae0:handlers.go` (linhas 5012+) faz
+`s.db.Select(&messages, query, ...)` sobre exatamente essas colunas e
+serializa o slice direto na resposta.
+
+**Por que isto é armadilha e não só duplicação**: quem for implementar a
+leitura de histórico vai procurar um tipo no `domain` — é onde a arquitetura
+hexagonal manda olhar — encontrar `domain.HistoryMessage`, e usá-lo por
+parecer a escolha arquitetural correta. O resultado seria mudança silenciosa
+de contrato público: `text_content` viraria `body`, `chat_jid` viraria `jid`,
+`sender_jid` viraria `from`, e apareceriam `direction` e `status` que nunca
+existiram. Nenhum teste atual pegaria isso, porque não há teste de contrato
+da rota — ela devolve stub.
+
+**Correção sugerida**: apagar `domain.HistoryMessage` (não tem uso), ou, se
+houver intenção de futuramente promovê-lo, documentar no próprio tipo que ele
+NÃO é o formato do wire e apontar para `db.HistoryMessage`. A decisão está com
+o Orchestrator.
+
+**Status**: não corrigido — e o CAP-09A NÃO caiu na armadilha: a
+implementação criou uma representação própria na fronteira de application
+(`appport.ChatHistoryMessage`, `pkg/application/contracts/chat_history_port.go`),
+com os MESMOS campos e as MESMAS tags JSON de `db.HistoryMessage`, e o
+adapter de persistência mapeia campo a campo. `domain.HistoryMessage` continua
+órfão e continua candidato a cleanup explícito — apagá-lo é decisão do
+Orchestrator, não trabalho de graça do CAP-09A.
+
+## F124
+
+**Data**: 2026-08-18. **Contexto**: mesmo CURRENT_STATE.
+
+**Onde**: `pkg/bootstrap/wiring_routes.go:129` e `:197`.
+
+```go
+registry.Register("/webhook/history", customChain.Then(ch.Storage.GetHistory), "GET")
+registry.Register("/chat/history",    customChain.Then(ch.Storage.GetHistory), "GET")
+```
+
+**Problema**: duas rotas de significado público diferente compartilham o
+mesmo handler, e o nome do handler (`Storage.GetHistory`) descreve a rota
+ERRADA. `Storage.GetHistory` nunca foi leitor de configuração de webhook: veio
+do commit `3dafae0` ("Implement message history logging"), que criou a tabela
+`message_history` e o dashboard de histórico. É o leitor de histórico de
+MENSAGENS, com nome de configuração.
+
+Importa registrar que **isto não é regressão da migração**: o
+`custom_routes.go` histórico já fazia igual (linha 118 para
+`/webhook/history`, linha 170 para `/chat/history`). A migração reproduziu o
+acoplamento fielmente. Verificável por
+`git show 41bc8e2^:custom_routes.go | grep -n history`.
+
+**Correção sugerida**: quando o CAP-09A separar as duas semânticas, deixar um
+teste ESTRUTURAL provando que as duas rotas não voltam a apontar para o mesmo
+handler por engano — um teste sobre o registro de rotas, não sobre resposta,
+porque o defeito é de fiação e sobreviveria a qualquer teste de payload.
+
+**Status**: CORRIGIDO no CAP-09A (2026-08-18). `/chat/history` passou a
+apontar para `ch.ChatHistory.GetChatHistory`
+(`pkg/presentation/http/handlers/handler_chat_history.go`), e
+`/webhook/history` continua em `ch.Storage.GetHistory`, inalterado.
+
+Testes que travam o achado:
+
+- `TestChatHistoryAndWebhookHistoryAreDistinctHandlers`
+  (`pkg/bootstrap/chat_history_route_test.go`) — teste ESTRUTURAL de fiação:
+  monta o roteador REAL via `registerCustomRoutes` e prova que cada rota
+  devolve algo que só o SEU handler sabe produzir (`/chat/history`, mensagem
+  vinda do banco; `/webhook/history`, o literal
+  `History configuration retrieved`). Identidade de ponteiro não serviria: a
+  chain de middleware embrulha os dois handlers, e dois wrappers distintos
+  comparam diferente mesmo quando o handler embrulhado é o mesmo.
+
+Efeito colateral obrigatório da rota nova, registrado porque custou duas
+falhas de build: `emptyCustomHandlers` (`pkg/bootstrap/router.go:129`) e
+`newRouterForRouteCheck` (`pkg/bootstrap/stdio_route_consistency_test.go`)
+precisam ganhar o grupo `ChatHistory`; sem isso `registerCustomRoutes`
+desreferencia nil e `TestBoundaryLog`, `TestStdioRoutesMatchRegisteredHTTPRoutes`
+e `go run ./cmd/listroutes` morrem com SIGSEGV. **Grupo de handler novo exige
+atualizar os DOIS conjuntos vazios junto com a rota.**
+
+## F125
+
+**Data**: 2026-08-18. **Contexto**: CURRENT_STATE do CAP-09A, antes de
+implementar a recuperação de `GET /chat/history`.
+
+**Onde**: histórico, `git show 3dafae0:handlers.go`, linhas 5053-5080 —
+ramo `chat_jid=index` do handler `GetHistory`.
+
+**Problema**: vazamento de dados entre tenants no contrato histórico.
+
+```go
+// If chat_jid is "index", return mapping of all instances to their chat_jids
+query = `SELECT user_id, chat_jid, MAX(timestamp) as last_message_time
+         FROM message_history
+         GROUP BY user_id, chat_jid
+         ORDER BY user_id, last_message_time DESC`
+...
+err := s.db.Select(&mappings, query)
+```
+
+Sem `WHERE`, sem argumentos. Qualquer usuário autenticado recebia o mapa de
+chats de TODOS os usuários — JIDs de conversa de outros tenants com o
+timestamp da última mensagem. O comentário do autor original diz "all
+instances", então era intencional, não descuido de digitação.
+
+Não é padrão do sistema: no MESMO handler, o ramo de mensagens é escopado
+(`WHERE user_id = $1 AND chat_jid = $2`). A falha é só do ramo `index`.
+
+**Decisão (Orchestrator, 2026-08-18)**: a reconstrução do CAP-09A
+**deliberadamente NÃO preserva** esse comportamento. Precedência declarada:
+isolamento de tenant / fail-closed **acima de** compatibilidade com
+comportamento historicamente inseguro. Um consumidor que dependia de
+enumerar JIDs de outros usuários dependia de uma violação de isolamento.
+
+Os dois comportamentos, enumerados:
+
+- **HISTÓRICO**: query sem `WHERE user_id`; múltiplas chaves `user_id`
+  possíveis na resposta.
+- **ATUAL**: `WHERE user_id = <caller>`; no máximo a chave do caller.
+
+O wire shape `map[user_id][]ChatInfo` é PRESERVADO; só o conteúdo é
+restringido. O isolamento tem de estar **na query**, não em filtragem em
+memória depois de uma consulta global — a filtragem tardia deixa o dado
+passar por log, tracing e mapeamento, e não sobrevive a refactor.
+
+**Proibido explicitamente**: escrever teste que assevere o vazamento. O
+código histórico é evidência arqueológica, não contrato a restaurar.
+
+**Status**: CORRIGIDO no CAP-09A (2026-08-18). O isolamento está NA QUERY, em
+`ChatHistoryRepository.ChatIndexByUser`
+(`pkg/infra/db/chat_history_repository.go`), com `WHERE user_id = ?`.
+
+Os quatro casos, travados em teste contra SQLite REAL com o schema de produção
+(fake de repositório não serve: ele não tem `WHERE` para esquecer):
+
+1. tenant A e B com histórico → só a chave A —
+   `TestChatHistoryRepositoryChatIndexByUser_OnlyTheCallerKey` e
+   `TestChatHistoryRoute_IndexReturnsOnlyCallerTenant` (20 voltas: ordem de
+   mapa em Go é aleatória por desenho).
+2. `chat_jid` coincidente entre tenants → nada de B aparece, e o
+   `MAX(timestamp)` de B não contamina o de A —
+   `TestChatHistoryRepositoryChatIndexByUser_SameChatJIDAcrossTenants` e
+   `TestChatHistoryRoute_IndexIsolatesOnUserIDNotChatJID`.
+3. A sem histórico, B com histórico → mapa vazio para A —
+   `TestChatHistoryRepositoryChatIndexByUser_EmptyMapWhenCallerHasNoHistory` e
+   `TestChatHistoryRoute_IndexEmptyMapWhenCallerHasNoHistory`.
+4. identidade ausente → 401 pelo mecanismo canônico dos handlers, sem corpo de
+   tenant nenhum — `TestChatHistoryRoute_MissingIdentityIsRejected` (e
+   `TestChatHistoryRoute_MissingSessionIDIsRejected` para o id de sessão
+   vazio).
+
+**Controle negativo EXECUTADO** (remoção do `WHERE user_id = ?` do ramo
+`index`): seis testes falham, e a saída mostra o vazamento textualmente —
+
+```
+--- FAIL: TestChatHistoryRepositoryChatIndexByUser_OnlyTheCallerKey (0.01s)
+    chat_history_repository_test.go:177: volta 0: chaves = 2 ([B A]), quero SO' a chave do caller
+--- FAIL: TestChatHistoryRepositoryChatIndexByUser_SameChatJIDAcrossTenants (0.01s)
+    chat_history_repository_test.go:217: got = map[A:[{mesmo@s.whatsapp.net 2026-08-18T12:00:00Z}] B:[{mesmo@s.whatsapp.net 2026-08-18T22:00:00Z}]], quero exatamente um chat sob a chave A
+--- FAIL: TestChatHistoryRepositoryChatIndexByUser_EmptyMapWhenCallerHasNoHistory (0.01s)
+    chat_history_repository_test.go:242: got = map[B:[{b1@s.whatsapp.net 2026-08-18T12:00:00Z}]], quero mapa vazio — nenhum dado de B pode aparecer para A
+--- FAIL: TestChatHistoryRoute_IndexReturnsOnlyCallerTenant (0.01s)
+    chat_history_route_test.go:284: volta 0: dados do tenant B na resposta de A: {"code":200,"data":{"A":[{"chat_jid":"a1@s.whatsapp.net","last_updated":"2026-08-18T12:00:00Z"}],"B":[{"chat_jid":"b1@s.whatsapp.net","last_updated":"2026-08-18T13:00:00Z"}]},"success":true}
+--- FAIL: TestChatHistoryRoute_IndexIsolatesOnUserIDNotChatJID (0.01s)
+    chat_history_route_test.go:316: index = map[A:[{mesmo@s.whatsapp.net 2026-08-18T12:00:00Z}] B:[{mesmo@s.whatsapp.net 2026-08-18T22:00:00Z}]], quero exatamente um chat sob a chave A
+--- FAIL: TestChatHistoryRoute_IndexEmptyMapWhenCallerHasNoHistory (0.01s)
+    chat_history_route_test.go:338: dados do tenant B na resposta de A: {"code":200,"data":{"B":[{"chat_jid":"b1@s.whatsapp.net","last_updated":"2026-08-18T12:00:00Z"}]},"success":true}
+```
+
+Nota de método: a primeira tentativa da mutação removeu o `WHERE` E o
+argumento, e o pacote deixou de COMPILAR (`declared and not used: query`) —
+controle negativo que não compila não prova nada (ARMADILHA 3). Foi ajustada
+até compilar E falhar. Reversão por edição localizada; árvore restaurada
+conferida por `shasum -a 256` idêntico ao de antes da mutação.
+
+## F126 — download com zero byte e erro nil: o histórico respondia 200 com Data URL vazia
+
+**Data**: 2026-08-18
+**Contexto**: CAP-09B — habilitar as cinco capabilities de download
+(Download Image, Download Video, Download Audio, Download Document,
+Download Sticker), que até então devolviam `&domain.DownloadResult{}` vazio.
+
+**Onde**:
+- histórico: `git show 41bc8e2^:handlers.go`, `DownloadImage` na linha 3836
+  (e as quatro funções irmãs), no trecho
+  `dataURL := dataurl.New(imgdata, mimetype)` seguido de
+  `s.Respond(w, r, http.StatusOK, ...)`;
+- hoje: `pkg/application/usecase/message/download_media.go:74`
+  (`if len(data) == 0`).
+
+**Problema**: `imgdata` é declarado `var imgdata []byte` e só é preenchido
+dentro do `if img != nil`. Com `Client.Download` devolvendo `([]byte{}, nil)`,
+`dataurl.New(nil, "image/jpeg").String()` produz `"data:image/jpeg;base64,"` —
+uma Data URL sintaticamente válida e sem conteúdo — e a resposta sai **200**.
+O cliente não tem como distinguir isso de mídia legítima de zero byte, e o
+contrato público da rota promete conteúdo.
+
+Investigação da primitive (não suposição): em
+`internal/wa-noise/capabilities/media/download_transport.go`,
+`DownloadAndDecrypt` só devolve `(data, nil)` depois de `ValidateMedia` e
+`cbcutil.Decrypt`; o único caminho que produz zero byte sem erro é o ramo de
+mídia **não cifrada** (`mediaKey == nil && fileEncSHA256 == nil && mac == nil`)
+com corpo de resposta vazio. Nenhum download de `/chat/download*` passa por
+esse ramo, porque todos carregam `MediaKey`. Ou seja: o caso é alcançável pela
+assinatura, e patológico na prática.
+
+**Correção aplicada (divergência CONSCIENTE do histórico)**: bytes vazios com
+erro nil deixam de ser sucesso. `mediaDownloadFlow.execute` devolve
+`apperr.New("empty_media", apperr.CategoryInternal, ...)` → **500**, e registra
+`media download returned no bytes` em error. Não é conversão automática de
+erro em sucesso nem o contrário: é a recusa de nomear "sucesso" uma resposta
+sem conteúdo.
+
+**Divergência registrada**: Baileys e Evolution API entregam o buffer como
+veio, sem checar tamanho; a diferença aqui é deliberada e vale só na fronteira
+HTTP do wa-api — o SDK vendorizado não foi tocado.
+
+**Status**: **corrigido nesta sessão**, travado por teste em duas camadas:
+- `pkg/application/usecase/message/download_media_test.go`,
+  `TestDownloadUseCases_EmptyBytes_NotSuccess` (cinco capabilities, nome por
+  nome);
+- `pkg/presentation/http/handlers/handler_download_test.go`,
+  `TestDownload_EmptyBytes_NotOK` (pela rota gorilla/mux REGISTRADA, exigindo
+  500 e não 200).
+
+Controle negativo executado no mesmo par de testes está registrado na entrada
+F127 abaixo, junto do controle da Data URL.
+
+## F127 — `/chat/download*` recusa payload que traga só `DirectPath`, embora a primitive o aceite
+
+**Data**: 2026-08-18
+**Contexto**: CAP-09B, achado incidental — **não corrigido**, por ser mudança
+de contrato público fora do escopo do dispatch.
+
+**Onde**: `pkg/application/usecase/message/download_media.go:41`
+(`if req.URL == ""` → `missing_url`, 400), herdado literalmente dos cinco stubs
+anteriores (`pkg/application/usecase/message/download_image.go` e irmãos, antes
+deste commit).
+
+**Problema**: a primitive do SDK trata `URL` e `DirectPath` como **caminhos
+alternativos**, não como um obrigatório mais um opcional. Em
+`internal/wa-noise/capabilities/media/download.go:79-91`, `DownloadMessage`
+faz:
+
+```go
+url, isWebWhatsappNetURL := directURL(msg)
+if len(url) > 0 && !isWebWhatsappNetURL {
+    return DownloadAndDecrypt(...)
+} else if len(msg.GetDirectPath()) > 0 {
+    return DownloadWithPath(...)
+}
+```
+
+Ou seja, um payload com `DirectPath`, `MediaKey`, `FileEncSHA256` e
+`FileSHA256` e **sem** `Url` seria baixável — e é exatamente a forma em que os
+metadados chegam em vários eventos de mensagem. O handler histórico
+(`git show 41bc8e2^:handlers.go:3836`) **não validava `Url`**: montava o
+protobuf com o que viesse e deixava o SDK decidir, então esta rejeição nasceu
+com a migração para use case, não com o produto.
+
+Também vale para `Url` apontando para `web.whatsapp.net`: o SDK ignora essa URL
+(`isWebWhatsappNetURL`) e cai no ramo de `DirectPath` — nós aceitamos a
+requisição por ela ser não-vazia, e ela funciona ou não conforme `DirectPath`
+tenha vindo junto.
+
+**Correção sugerida**: trocar a guarda por "pelo menos um entre `Url` e
+`DirectPath`", mantendo 400 quando ambos faltarem. É relaxamento de validação
+(nenhum payload hoje aceito passaria a ser recusado), mas ainda assim muda o
+contrato observável da rota e merece decisão explícita.
+
+**Status**: **não corrigido**. O comportamento atual está travado por teste
+(`TestDownload_RejectMissingRequiredField` e
+`TestDownloadUseCases_MissingURL_NoPortCall`, nas cinco capabilities), de modo
+que a mudança, quando vier, será deliberada e não acidental.
+
+## F128 — a invalidação do cache de userinfo do gate de History NÃO foi preservada
+
+**Data**: 2026-08-18. **Contexto**: CAP-09A, recuperação de
+`GET /chat/history`. Achado de lado, ao reconstruir o gate de History a partir
+de `git show 3dafae0:handlers.go` (linha 5012+).
+
+**Onde**: histórico, `handlers.go:5019-5024`; atual,
+`pkg/application/usecase/chat/get_chat_history.go` (`Execute`, ramo
+`cachedHistory == 0`).
+
+**Problema**: o handler histórico fazia TRÊS coisas quando o `History` do
+userinfo vinha 0, e a reconstrução preservou duas:
+
+```go
+userinfocache.Delete(token)                                   // (1) NÃO preservado
+err := s.db.QueryRow("SELECT COALESCE(history, 0) FROM users WHERE id = $1", txtid)  // (2) preservado
+if historyLimit == 0 { ...501... }                            // (3) preservado
+```
+
+O passo (1) apagava a entrada do cache, para que a PRÓXIMA requisição já
+enxergasse o valor fresco em vez de repetir a revalidação. Sem ele, um usuário
+que acabou de ligar o histórico paga uma consulta extra à tabela `users` em
+cada requisição até o TTL do cache expirar (`userCacheTTL`,
+`pkg/presentation/http/middleware/auth.go`). A CORRETUDE da requisição atual
+não muda — a revalidação (2) resolve o valor antes de decidir —, só o custo.
+
+Foi deixado de fora deliberadamente: o cache vive em `pkg/bootstrap` e é
+chaveado por TOKEN, então invalidá-lo do use case exigiria uma porta nova
+(`Invalidate(token)`) e levar o token — um segredo — até a camada de
+aplicação só para apagar uma entrada de cache. A troca não se paga por uma
+consulta a mais durante o TTL.
+
+**Correção sugerida**: se a medição mostrar que a consulta extra importa,
+invalidar no lado da ESCRITA (o caminho que altera `users.history`), não no da
+leitura — lá o token já está em mãos e a invalidação acontece uma vez, não uma
+vez por leitura.
+
+**Status**: não corrigido, e é divergência CONSCIENTE do histórico, registrada
+aqui para não ser redescoberta como bug. Os três estados do gate que importam
+para o contrato estão travados em
+`TestChatHistoryRoute_GateState*` (`pkg/bootstrap/chat_history_route_test.go`).
+
+## F129 — chave duplicada no baseline DESATIVOU o piso de `func_coverage` do `log-coverage-gate`
+
+**Data**: 2026-08-18.
+**Contexto**: FIX-GATE, dispatch dedicado ao gate durante a sessão de CAP-09
+(histórico de conversa / download unificado). Achado incidental ao conferir
+por que `make check` vinha verde com o baseline de log em ratchet.
+
+**Onde**: `.log-coverage-baseline`, DUAS atribuições da mesma chave, ambas
+commitadas:
+
+- linha 748 — `min_func_coverage=676` (entrou com FIX-07, commit de CAP-07)
+- linha 768 — `min_func_coverage=674` (entrou com **6fa6270**, CAP-08A/08B)
+
+O executor de CAP-08 **acrescentou** a chave em vez de **editar** a existente.
+
+O leitor, em `Makefile` (alvo `log-coverage-gate`), era:
+
+```make
+min_func=$$(grep -oE '^min_func_coverage=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+```
+
+**Problema**: `grep -oE` devolve **todas** as ocorrências. Com a duplicata,
+`$min_func` vira a string de duas linhas `"676\n674"`, e a comparação seguinte
+`[ "$func_cov" -lt "$min_func" ]` aborta. O `if` do shell trata o **erro** do
+`test` como **FALSO** — isto é, como "não caiu" — e o piso simplesmente
+desaparece.
+
+**Comando que reproduz** (rodado na raiz do worktree, antes da correção):
+
+```sh
+min_func=$(grep -oE '^min_func_coverage=[0-9]+' .log-coverage-baseline | grep -oE '[0-9]+')
+func_cov=1
+if [ "$func_cov" -lt "$min_func" ]; then echo FALHARIA; else echo PASSARIA; fi
+```
+
+**Saída observada**:
+
+```
+min_func=[676
+674]
+(eval):[:1: integer expression expected: 676\n674
+PASSARIA
+```
+
+Com `func_cov=1` — cobertura de log absurdamente baixa — o gate ainda diz
+PASSARIA. Esse é o tamanho do buraco.
+
+**Desde quando**: desde **6fa6270** (`feat(message): habilita envio de
+localizacao e de contato (CAP-08A/08B)`, 2026-08-18), até esta sessão do mesmo
+dia. Nesse intervalo, **qualquer** regressão de `func_coverage` passaria sem
+falhar, e o `EXIT:0` dos gates não significava nada para essa trava.
+Passaram com o piso desativado, sem exceção: **EVAL-08**, **RE-EVAL-08**,
+**CONFIRM-08** e os `make check` do Chief. As outras três travas
+(`min_errpath_coverage`, `min_eligible`, `max_exempt_annotations`) continuaram
+funcionando — a duplicata era só de `min_func_coverage` (confirmado com
+`grep -oE '^[a-z_]+=' .log-coverage-baseline | sort | uniq -c`: `2` apenas para
+`min_func_coverage`, `1` para todas as outras; `.coverage-baseline` tem
+`min_coverage` uma única vez).
+
+**Correção aplicada — frente 1 (dado)**: `.log-coverage-baseline` passa a ter
+**uma** chave `min_func_coverage`, com o valor **medido**, não copiado.
+Os quatro números, medidos nesta sessão e comparados no mesmo instante:
+
+| | eligible | covered | func_coverage | décimos |
+|---|---|---|---|---|
+| HEAD 6fa6270 (árvore limpa, `git archive HEAD \| tar -x` em dir temporário) | 629 | 424 | 67.4086% | 674 |
+| estado atual da árvore (CAP-09A + CAP-09B) | 632 | 425 | 67.2468% | 672 |
+
+A razão CAI 674 → 672 por **denominador**: `covered` **SOBE** 424 → 425. O
+conjunto de elegíveis teve 8 entradas e 5 saídas (net +3), enumerado nome por
+nome no comentário da própria chave no `.log-coverage-baseline` (diff de
+`logcov -golden`, coluna `ELIGIBLE`, HEAD vs atual). As duas funções novas sem
+log L1 são `pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download` e
+`pkg/infra/wa-noise/adapters/chat.downloadableFor`; a ausência de log nelas é a
+convenção "adapter delegante não loga", confirmada por medição e não por
+opinião — `grep -cE 'log\.|hlog\.|logger|Logger'
+pkg/infra/wa-noise/adapters/chat/messenger.go` devolve **0**. Nenhum log foi
+plantado para inflar métrica (COV-4; já foi REQUIRED_FIX nesta sessão, ver
+F119/FIX-07).
+
+**Correção aplicada — frente 2 (gate)**: `Makefile` ganha
+`BASELINE_KEY_READER`, uma função de shell `baseline_key <arquivo> <chave>
+[num]` que **falha alto** e **nomeia a chave** quando ela está duplicada,
+ausente ou vazia (e, com `num`, quando o valor não é inteiro). Alvos
+protegidos, nome por nome:
+
+- **`log-coverage-gate`** — chaves `stage`, `min_func_coverage`,
+  `min_errpath_coverage`, `min_eligible`, `max_exempt_annotations`
+  (`.log-coverage-baseline`)
+- **`coverage-gate`** — chave `min_coverage` (`.coverage-baseline`), que lia
+  com exatamente o mesmo padrão `grep -oE '^chave=[0-9]+' | grep -oE '[0-9]+'`
+  e tinha o mesmo buraco, ainda que sem duplicata hoje
+
+**Correção aplicada — frente 3, achada ao verificar a 2**: existe um SEGUNDO
+leitor do mesmo arquivo, em Go — `readBaselineForTest`
+(`cmd/logcov/main_test.go:113`), usado por `TestBaselineBateComAMedicao`, que
+existe justamente para exigir que os quatro números do baseline sejam os
+medidos. Ele era duplicata-cego de outra forma: montava um `map[string]int` e
+a segunda ocorrência **sobrescrevia** a primeira em silêncio ("vale a
+última"). Por isso o teste passou em 6fa6270 — leu 674, o valor medido na
+época — enquanto o gate lia as duas linhas e não comparava nada. Agora ele
+rastreia as chaves já vistas e dá `t.Fatalf` nomeando a chave e as duas
+linhas.
+
+Nenhum piso foi baixado por conveniência e nenhuma exceção foi acrescentada —
+a mudança só FECHA o gate (§120.6).
+
+**Controles negativos, EXECUTADOS** (todos revertidos por edição localizada;
+`diff` contra a cópia pré-mutação confirmou retorno idêntico após cada um):
+
+(a) duplicata reintroduzida (`min_func_coverage=999` acrescentada ao fim):
+
+```
+log-coverage: estagio do gate = ratchet (ADR-008)
+FALHA: a chave 'min_func_coverage' aparece 2 vezes em .log-coverage-baseline (linhas 814 1044 ).
+       Chave DUPLICADA e' ambigua: o gate le por grep e receberia as duas linhas juntas,
+       o que faria a comparacao numerica abortar e o piso desaparecer em silencio (F129).
+       EDITE a chave existente em vez de acrescentar outra. Gate FALHA FECHADO.
+make: *** [log-coverage-gate] Error 1
+```
+
+(b) piso mordendo de novo (chave única, piso subido 672 → 673) — prova que a
+comparação voltou a acontecer de verdade:
+
+```
+func_coverage    = 672 decimos de % (piso 673)
+errpath_coverage = 858 decimos de % (piso 854)
+eligible         = 632 (piso exato 629)
+exempt           = 0 (teto 0)
+FALHA: func_coverage caiu (672 < 673).
+...
+NOTA: estagio ratchet — regressao encontrada, gate FALHA FECHADO.
+make: *** [log-coverage-gate] Error 1
+```
+
+(c) chave vazia (`min_func_coverage=`):
+
+```
+log-coverage: estagio do gate = ratchet (ADR-008)
+FALHA: a chave 'min_func_coverage' em .log-coverage-baseline esta' VAZIA. Gate FALHA FECHADO.
+make: *** [log-coverage-gate] Error 1
+```
+
+(c2) chave removida por completo:
+
+```
+log-coverage: estagio do gate = ratchet (ADR-008)
+FALHA: a chave 'min_func_coverage' nao existe em .log-coverage-baseline. Gate FALHA FECHADO:
+       chave ausente nao e' licenca para passar.
+make: *** [log-coverage-gate] Error 1
+```
+
+(d) duplicata reintroduzida contra o leitor Go (frente 3):
+
+```
+--- FAIL: TestBaselineBateComAMedicao (1.65s)
+    main_test.go:85: chave "min_func_coverage" duplicada em ../../.log-coverage-baseline (linhas 814 e 1044): chave ambigua desativa o gate em silencio (F129)
+FAIL
+FAIL	wa-api/cmd/logcov	1.902s
+```
+
+E a mesma função aplicada a `.coverage-baseline` (leitura boa e leitura
+duplicada, num probe que faz `include Makefile`):
+
+```
+-- arquivo OK:
+valor=839
+-- arquivo DUPLICADO:
+FALHA: a chave 'min_coverage' aparece 2 vezes em /tmp/cb.dup (linhas 162 169 ).
+       ...
+(gate abortaria: exit 1)
+```
+
+**Lição reutilizável** — e é a parte que sobrevive a este achado:
+**acrescentar uma chave num arquivo de baseline em vez de EDITAR a existente
+desativa o gate em silêncio.** Leitura de arquivo `chave=valor` por `grep` não
+é fail-closed por natureza: `grep` devolve o conjunto, o shell aceita a string
+multi-linha na atribuição, e o `test` numérico converte o erro em "não houve
+regressão". **Todo gate que ler baseline assim tem o mesmo buraco**, e a defesa
+não é disciplina de quem edita, é o leitor recusar chave ambígua. Corolário
+prático: o gate imprimir o baseline inteiro em toda execução (que este já
+fazia, "por design") **não** revelou a duplicata — ninguém lê duas linhas
+iguais separadas por 20 linhas de comentário. Contagem explícita revela;
+impressão não.
+
+**CORREÇÃO DESTA ENTRADA (FIX-09, 2026-08-18): a varredura de "todo gate"
+estava INCOMPLETA.** A lição acima diz "todo gate que ler baseline assim tem o
+mesmo buraco", mas a correção original protegeu só `coverage-gate` e
+`log-coverage-gate` e **deixou o alvo `lint` de fora**. O leitor que sobrou era,
+em `Makefile:213-214`:
+
+```make
+base_max=$$(grep -oE '^max_complexity=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
+base_count=$$(grep -oE '^count=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
+```
+
+Exatamente o padrão da F129, sobre `.golangci-baseline`, e sobre a chave que é
+a **única trava** daquele alvo. Com `max_complexity` duplicada, `base_max` vira
+a string de duas linhas, `[ "$$max" -gt "$$base_max" ]` aborta com "integer
+expression expected", o `if` do shell trata o erro como FALSO e a trava de
+complexidade some em silêncio — a mesma mecânica, um arquivo diferente.
+
+Os dois leitores passaram a usar `baseline_key`, fail-closed. O `if [ -z
+"$$base_max" ]` que existia logo abaixo foi removido junto: `baseline_key` já
+recusa chave ausente, vazia e não-inteira, então aquele teste virou código
+morto que sugeria proteção maior do que havia.
+
+**Varredura completa do Makefile, enumerada** — chaves hoje lidas por
+`baseline_key`, alvo por alvo:
+
+| alvo | arquivo | chaves protegidas |
+|---|---|---|
+| `coverage-gate` | `.coverage-baseline` | `min_coverage` |
+| `lint` | `.golangci-baseline` | `max_complexity`, `count` |
+| `log-coverage-gate` | `.log-coverage-baseline` | `stage`, `min_func_coverage`, `min_errpath_coverage`, `min_eligible`, `max_exempt_annotations` |
+
+Oito chaves, três arquivos, três alvos. **Não sobrou leitor desprotegido**, e a
+verificação foi por busca exaustiva, não por leitura: `grep -n "grep -oE '\^"
+Makefile` devolve só duas linhas, o comentário da linha 54 e a extração da
+contagem de issues de `.lint.out` (que não é baseline e já falha fechado por
+conta própria); `grep -n 'BASELINE_FILE)' Makefile` devolve, além das oito
+chamadas de `baseline_key`, apenas ocorrências dentro de `echo` de mensagem de
+erro e o `grep -E '^(stage|min_|max_)' $(LOGCOV_BASELINE_FILE)` da linha 296,
+que **imprime** o baseline para humanos e não deriva valor nenhum para
+comparação — não é leitor.
+
+
+**Status**: **corrigido** nesta sessão, nas três frentes, com os cinco
+controles negativos acima executados e colados. Travas anti-regressão: o
+próprio `make log-coverage-gate` / `make coverage-gate`, que agora falham
+fechado — controles (a), (b), (c) e (c2) —, e `TestBaselineBateComAMedicao`,
+que agora recusa chave duplicada — controle (d).
+
+**Pendência que NÃO era deste achado, e foi fechada em seguida no mesmo
+dispatch, por ordem do coordenador**: com o piso voltando a comparar,
+`make check` fechou em `EXIT:2` numa única falha —
+`TestBaselineBateComAMedicao` (`cmd/logcov/main_test.go:80`, erro em
+`main_test.go:94`), em `min_errpath_coverage = 854 no baseline, medido 858` e
+`min_eligible = 629 no baseline, medido 632`. Os dois deltas são de
+CAP-09A/CAP-09B (histórico de conversa e download unificado), código real que
+está na árvore: **ratchet-UP honesto**, não afrouxamento. As duas chaves foram
+subidas — `min_errpath_coverage` 854 → 858 e `min_eligible` 629 → 632 — com
+justificativa medida e enumerada nome por nome no próprio
+`.log-coverage-baseline`, que registra explicitamente que essas duas subidas
+são das capabilities e **não** do FIX-GATE. Ponto que a medição desmentiu e
+vale guardar: o conjunto de elegíveis não "cresceu 3" — teve **8 entradas e 5
+saídas** (as cinco `Download*UseCase.Execute` viraram delegação de uma linha e
+caíram por X1), e os caminhos de saída não foram "4 novos" — foram +12 líquidos
+distribuídos por cinco pacotes, com `errpaths_covered` subindo +15, mais que o
+total, porque 10 caminhos (5 cobertos, 5 descobertos) **saíram** junto.
+`make check` fecha agora em **`EXIT:0`**.
+
+## F130
+
+**Data**: 2026-08-18. **Contexto**: `make check` do Chief antes de commitar
+CAP-09A/CAP-09B. Falha INTERMITENTE, não reproduzida na execução seguinte.
+
+**Onde**: `pkg/bootstrap/lease_test.go:448` e `pkg/bootstrap/lease_test.go:527`.
+Nenhum dos dois está no diff do CAP-09 — é defeito PRÉ-EXISTENTE.
+
+**Problema**: corrida de dados entre DOIS testes, detectada sob `-race`:
+
+```
+WARNING: DATA RACE
+Write at 0x000106b1e140 by goroutine 3019:
+  TestLease_RetomadaAposExpirarDeixaRastro()  lease_test.go:527
+Previous read at 0x000106b1e140 by goroutine 3015:
+  zerolog.(*Logger).disabled()
+  bootstrap.(*leaseManager).renewOne()        lease.go:260
+  bootstrap.(*leaseManager).RunHeartbeat()    lease.go:321
+  TestLease_WithoutLiveSessionCheckKeepsRenewing.gowrap1()  lease_test.go:448
+Goroutine 3015 (finished) created at:
+  TestLease_WithoutLiveSessionCheckKeepsRenewing()  lease_test.go:448
+```
+
+A causa é uma goroutine VAZADA. `TestLease_WithoutLiveSessionCheckKeepsRenewing`
+faz:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+go manager.RunHeartbeat(ctx)
+time.Sleep(80 * time.Millisecond)
+```
+
+Ninguém ESPERA a goroutine terminar. Quando o teste retorna, `cancel()` pede
+para ela parar, mas ela pode estar no meio de `log.Warn()` — e sobrevive ao
+teste. Depois, `TestLease_RetomadaAposExpirarDeixaRastro` faz
+`log.Logger = zerolog.New(&buf)` na linha 527, escrevendo a MESMA variável
+global que a goroutine sobrevivente está lendo.
+
+É intermitente porque depende do instante em que a goroutine sai comparado ao
+instante em que o teste seguinte troca o logger. Rodei o pacote isolado duas
+vezes depois (`-count=5` no teste e o pacote inteiro) e passou nas duas — o
+que NÃO significa que não exista: detector de corrida acusando prova que a
+corrida existe; não acusar não prova nada.
+
+**Por que importa mais do que um teste chato**: enquanto ela existir,
+`make check` é intermitentemente vermelho, e todo checkpoint que afirma
+"make check EXIT:0" depende de sorte de escalonamento. Um gate que às vezes
+falha por motivo alheio treina quem lê a rodar de novo até passar — que é
+exatamente como um defeito real passa despercebido.
+
+**Correção sugerida**: fazer o teste ESPERAR a goroutine, em vez de só
+cancelar. `RunHeartbeat` recebendo um `chan struct{}` fechado na saída, ou um
+`sync.WaitGroup` com `defer wg.Wait()` depois do `cancel()`, resolve a raiz.
+Trocar o logger global por um logger injetado no `leaseManager` resolveria a
+outra ponta, e é o caminho mais alinhado ao resto do repo — mas é mudança
+maior e fora do escopo de CAP-09.
+
+**Status**: NÃO corrigido. É pré-existente e fora do escopo da tarefa atual;
+pela política do CLAUDE.md, não corrijo de graça sem perguntar. Levado ao
+canal de decisão junto com o fecho do CAP-09.

@@ -92,6 +92,7 @@ type customHandlers struct {
 	Reaction    *handlers.ReactionHandlers
 	Contact     *handlers.ContactHandlers
 	GroupMgmt   *handlers.GroupManagementHandlers
+	ChatHistory *handlers.ChatHistoryHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -106,6 +107,7 @@ func initCustomHandlers(s *server) {
 	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
 	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)
+	mediaDownloader := wachat.NewMediaDownloaderAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
 	// Declarado aqui, e nao junto dos ContactHandlers: ListChats tambem o
@@ -299,6 +301,15 @@ func initCustomHandlers(s *server) {
 		GetHistory:       handlers.NewGetHistoryHandler(getHistoryUC),
 	}
 
+	// Chat history handlers (/chat/history) — SEPARATE from Storage.GetHistory
+	// (/webhook/history) on purpose: the two routes shared one handler and the
+	// chat branch lost its implementation in the migration (HOUSEKEEP F124).
+	chatHistoryRepo := db.NewChatHistoryRepository(s.DB)
+	chatHistoryHandlers := &handlers.ChatHistoryHandlers{
+		GetChatHistory: handlers.NewGetChatHistoryHandler(
+			chat.NewGetChatHistoryUseCase(chatHistoryRepo, logger)),
+	}
+
 	// Blocklist Handlers
 	blocklistHandlers := &handlers.BlocklistHandlers{
 		GetBlocklist: handlers.NewGetBlocklistHandler(getBlocklistUC),
@@ -310,11 +321,11 @@ func initCustomHandlers(s *server) {
 
 	// Download Handlers (/chat/download*)
 	downloadHandlers := &handlers.DownloadHandlers{
-		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
-		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
-		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
-		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
-		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
+		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(mediaDownloader, logger)),
+		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(mediaDownloader, logger)),
+		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(mediaDownloader, logger)),
+		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(mediaDownloader, logger)),
+		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(mediaDownloader, logger)),
 	}
 
 	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)
@@ -354,6 +365,7 @@ func initCustomHandlers(s *server) {
 		Reaction:    reactionHandlers,
 		Contact:     contactHandlers,
 		GroupMgmt:   groupMgmtHandlers,
+		ChatHistory: chatHistoryHandlers,
 	}
 }
 

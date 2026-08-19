@@ -194,7 +194,13 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 			ch.Storage.DeleteHmacConfig.ServeHTTP(w, r)
 		}
 	})), "POST", "GET", "DELETE")
-	registry.Register("/chat/history", customChain.Then(ch.Storage.GetHistory), "GET")
+	// /chat/history reads the local MESSAGE history and answers messages;
+	// /webhook/history above answers the webhook history configuration. They
+	// are separate handlers, and TestChatHistoryAndWebhookHistoryAreDistinctHandlers
+	// exists to keep them separate: pointing both at Storage.GetHistory is the
+	// exact defect of HOUSEKEEP F124, and no assertion about a response body
+	// would have caught it.
+	registry.Register("/chat/history", customChain.Then(ch.ChatHistory.GetChatHistory), "GET")
 	registry.Register("/chat/delete", customChain.Then(ch.Message.DeleteMessage), "POST")
 	registry.Register("/status/set/text", customChain.Then(ch.Session.SetStatusMessage), "POST")
 	// Static files — keep in routes.go only, not reregistered here

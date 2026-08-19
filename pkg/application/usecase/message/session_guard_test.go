@@ -12,18 +12,25 @@ import (
 )
 
 // guardUC descreve os use cases desta pasta cuja única porta é
-// port.SessionGuard: os 5 download_* e os 2 de manipulação de mensagem já
-// existente (delete, edit). Não geram ID — devolvem o que o request trouxe —
-// e por isso não cabem na tabela de composerUseCases.
+// port.SessionGuard: os 2 de manipulação de mensagem já existente (delete,
+// edit). Não geram ID — devolvem o que o request trouxe — e por isso não
+// cabem na tabela de composerUseCases.
+//
+// Os 5 download_* SAÍRAM desta tabela em CAP-09B: eles deixaram de ter
+// port.SessionGuard como única porta (agora dependem de
+// port.MediaDownloader, que embute SessionGuard) e deixaram de devolver um
+// resultado vazio. Os três eixos que cobriam aqui — campo obrigatório
+// ausente sem consultar a porta, falha de sessão propagada com log, e
+// caminho feliz com EnsureSession exatamente uma vez — foram realocados,
+// nome por nome para as cinco capabilities, em download_media_test.go.
 type guardUC struct {
 	name string
 	// infoMsg é a mensagem do log de sucesso.
 	infoMsg string
-	// wantMsgID é o MessageID esperado no caminho feliz. Vazio para os
-	// download_*, cujo resultado não tem esse campo.
+	// wantMsgID é o MessageID esperado no caminho feliz.
 	wantMsgID string
 	// run executa o use case com um request VÁLIDO e devolve o MessageID do
-	// resultado (vazio quando o resultado não tem um).
+	// resultado.
 	run func(sg port.SessionGuard, l port.Logger) (string, error)
 	// missing traz um request inválido por campo obrigatório.
 	missing []guardMissingField
@@ -37,48 +44,7 @@ type guardMissingField struct {
 const editedID = "3EB0ABC123"
 
 func guardUseCases() []guardUC {
-	// Os 5 download_* são byte a byte a mesma função, com outra mensagem de
-	// log. A tabela reflete isso em vez de repetir o literal 5 vezes.
-	downloads := []struct {
-		name    string
-		infoMsg string
-		exec    func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error)
-	}{
-		{"DownloadImage", "download image validated", func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-			return message.NewDownloadImageUseCase(sg, l).Execute(context.Background(), txtID, req)
-		}},
-		{"DownloadVideo", "download video validated", func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-			return message.NewDownloadVideoUseCase(sg, l).Execute(context.Background(), txtID, req)
-		}},
-		{"DownloadAudio", "download audio validated", func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-			return message.NewDownloadAudioUseCase(sg, l).Execute(context.Background(), txtID, req)
-		}},
-		{"DownloadDocument", "download document validated", func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-			return message.NewDownloadDocumentUseCase(sg, l).Execute(context.Background(), txtID, req)
-		}},
-		{"DownloadSticker", "download sticker validated", func(sg port.SessionGuard, l port.Logger, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-			return message.NewDownloadStickerUseCase(sg, l).Execute(context.Background(), txtID, req)
-		}},
-	}
-
-	out := make([]guardUC, 0, len(downloads)+2)
-	for _, d := range downloads {
-		exec := d.exec
-		out = append(out, guardUC{
-			name:    d.name,
-			infoMsg: d.infoMsg,
-			run: func(sg port.SessionGuard, l port.Logger) (string, error) {
-				_, err := exec(sg, l, domain.DownloadRequest{URL: "https://mmg.whatsapp.net/x"})
-				return "", err
-			},
-			missing: []guardMissingField{
-				{"Url", func(sg port.SessionGuard, l port.Logger) error {
-					_, err := exec(sg, l, domain.DownloadRequest{})
-					return err
-				}},
-			},
-		})
-	}
+	out := make([]guardUC, 0, 2)
 
 	out = append(out,
 		guardUC{

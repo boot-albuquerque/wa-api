@@ -2,231 +2,375 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gorilla/mux"
+
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
+	"wa-api/pkg/domain"
 )
 
-// Os cinco handlers de /chat/download* sao o mesmo corpo repetido cinco vezes:
-// sessionUser, decode, Execute, responde. Testa-los em tabela e' o que faz uma
-// divergencia entre as cinco copias aparecer — e' exatamente o tipo de bug que
-// a duplicacao produz.
+// CAP-09B: as cinco capabilities de download baixam de verdade. Este arquivo
+// as exercita pela ROTA gorilla/mux REGISTRADA (ARMADILHA 2 do repo — defeito
+// de rota só aparece pela rota, nunca por handler.ServeHTTP cru), com a mesma
+// cadeia hlog que router.go instala.
+//
+// A tabela é ENUMERADA e cada coluna é verificável POR NOME: capability,
+// rota exata, media kind, MIME esperado e prefixo esperado de Data. Não há
+// `for _, route := range downloadRoutes` anônimo — a duplicação entre as
+// cinco cópias foi o defeito original.
 
-// downloadUserInfo e' o valor que o middleware de auth guarda no contexto.
-type downloadUserInfo struct{ id string }
-
-func (u downloadUserInfo) Get(key string) string {
-	if key == "Id" {
-		return u.id
-	}
-	return ""
+// downloadRouteCase é uma das cinco capabilities na fronteira HTTP.
+type downloadRouteCase struct {
+	capability string           // nome da capability
+	route      string           // rota registrada, exata
+	kind       domain.MediaKind // media kind que a porta tem de receber
+	mime       string           // MIME do payload e da resposta
+	wantPrefix string           // prefixo esperado de Data
+	newHandler func(md appport.MediaDownloader, l appport.Logger) http.Handler
 }
 
-// downloadCase descreve um dos cinco handlers: como construi-lo sobre as
-// portas fake e qual o corpo valido da sua requisicao.
-type downloadCase struct {
-	name       string
-	newHandler func(sg appport.SessionGuard, l appport.Logger) http.Handler
-}
-
-func downloadCases() []downloadCase {
-	return []downloadCase{
-		{"image", func(sg appport.SessionGuard, l appport.Logger) http.Handler {
-			return NewDownloadImageHandler(message.NewDownloadImageUseCase(sg, l))
-		}},
-		{"video", func(sg appport.SessionGuard, l appport.Logger) http.Handler {
-			return NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sg, l))
-		}},
-		{"audio", func(sg appport.SessionGuard, l appport.Logger) http.Handler {
-			return NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sg, l))
-		}},
-		{"document", func(sg appport.SessionGuard, l appport.Logger) http.Handler {
-			return NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sg, l))
-		}},
-		{"sticker", func(sg appport.SessionGuard, l appport.Logger) http.Handler {
-			return NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sg, l))
-		}},
+func downloadRouteCases() []downloadRouteCase {
+	return []downloadRouteCase{
+		{
+			capability: "Download Image", route: "/chat/downloadimage",
+			kind: domain.MediaKindImage, mime: "image/jpeg", wantPrefix: "data:image/jpeg;base64,",
+			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
+				return NewDownloadImageHandler(message.NewDownloadImageUseCase(md, l))
+			},
+		},
+		{
+			capability: "Download Video", route: "/chat/downloadvideo",
+			kind: domain.MediaKindVideo, mime: "video/mp4", wantPrefix: "data:video/mp4;base64,",
+			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
+				return NewDownloadVideoHandler(message.NewDownloadVideoUseCase(md, l))
+			},
+		},
+		{
+			capability: "Download Audio", route: "/chat/downloadaudio",
+			kind: domain.MediaKindAudio, mime: "audio/ogg", wantPrefix: "data:audio/ogg;base64,",
+			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
+				return NewDownloadAudioHandler(message.NewDownloadAudioUseCase(md, l))
+			},
+		},
+		{
+			capability: "Download Document", route: "/chat/downloaddocument",
+			kind: domain.MediaKindDocument, mime: "application/pdf", wantPrefix: "data:application/pdf;base64,",
+			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
+				return NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(md, l))
+			},
+		},
+		{
+			capability: "Download Sticker", route: "/chat/downloadsticker",
+			kind: domain.MediaKindSticker, mime: "image/webp", wantPrefix: "data:image/webp;base64,",
+			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
+				return NewDownloadStickerHandler(message.NewDownloadStickerUseCase(md, l))
+			},
+		},
 	}
 }
 
-const downloadValidBody = `{"Url":"https://mmg.whatsapp.net/d/f/abc.enc","Mimetype":"image/jpeg"}`
-
-// downloadRequest monta a requisicao com (ou sem) userinfo no contexto.
-func downloadRequest(body string, info any) *http.Request {
-	r := httptest.NewRequest(http.MethodPost, "/chat/downloadimage", strings.NewReader(body))
-	if info != nil {
-		r = r.WithContext(context.WithValue(r.Context(), appport.UserInfoKey, info))
-	}
+// downloadRouter registra o handler pela rota real, como wiring_routes.go:135-139
+// faz.
+func (c downloadRouteCase) router(md appport.MediaDownloader) http.Handler {
+	r := mux.NewRouter()
+	r.Handle(c.route, c.newHandler(md, silentLogger{})).Methods(http.MethodPost)
 	return r
 }
 
-// serveDownload executa o handler sob a mesma cadeia hlog de producao.
-func serveDownload(h http.Handler, r *http.Request) (*httptest.ResponseRecorder, *logCapture) {
-	wrapped, capture := logassert.Wrap(h)
-	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, r)
-	return rec, capture
+// body monta um payload com os SETE campos, com o MIME da capability. Os
+// []byte vão em base64, que é como encoding/json os decodifica.
+func (c downloadRouteCase) body() string {
+	return `{"Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
+		`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+		`"Mimetype":"` + c.mime + `",` +
+		`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+		`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+		`"FileLength":4242}`
 }
 
-// TestDownloadHandlers_Success: sessao valida e payload bem formado devolvem
-// 200 e alcancam o use case exatamente uma vez.
-func TestDownloadHandlers_Success(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := &contractsfake.SessionGuard{}
-			h := tc.newHandler(sg, &contractsfake.Logger{})
+// downloadServe executa a requisição pela rota registrada.
+func (c downloadRouteCase) serve(md appport.MediaDownloader, body string, mut func(*http.Request) *http.Request) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, c.route, strings.NewReader(body))
+	c.router(md).ServeHTTP(rec, mut(req))
+	return rec
+}
 
-			rec, _ := serveDownload(h, downloadRequest(downloadValidBody, downloadUserInfo{id: "42"}))
+// downloadServeCapturingLog é o serve com a saída de log da requisição, para
+// asseverar a CAUSA (co-gate D) e a ausência de segredo.
+func (c downloadRouteCase) serveCapturingLog(t *testing.T, md appport.MediaDownloader, body string, mut func(*http.Request) *http.Request) (*httptest.ResponseRecorder, []logLine) {
+	t.Helper()
+	wrapped, capture := logassert.Wrap(c.router(md))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, c.route, strings.NewReader(body))
+	wrapped.ServeHTTP(rec, mut(req))
+	return rec, capture.Records(t)
+}
+
+type downloadResultBody struct {
+	Mimetype string `json:"Mimetype"`
+	Data     string `json:"Data"`
+}
+
+// TestDownload_Success_ViaRegisteredRoute prova o caminho HTTP -> handler ->
+// use case -> MediaDownloader.Download pela rota REGISTRADA, para cada uma das
+// cinco capabilities: kind correto, MIME correto, Data com o prefixo esperado
+// e carregando os bytes reais.
+func TestDownload_Success_ViaRegisteredRoute(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0xff, 0xfe, 'o', 'k'}
+
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{
+				DownloadFunc: func(_ context.Context, txtID string, desc domain.MediaDescriptor) ([]byte, error) {
+					if txtID != "user-1" {
+						t.Errorf("txtID: got %q, want %q (o Id do contexto)", txtID, "user-1")
+					}
+					if desc.Kind != c.kind {
+						t.Errorf("Kind: got %q, want %q", desc.Kind, c.kind)
+					}
+					if desc.URL != "https://mmg.whatsapp.net/d/f/AbCdEf.enc" {
+						t.Errorf("URL: got %q", desc.URL)
+					}
+					if desc.DirectPath != "/v/t62.7118-24/12345_678_90.enc" {
+						t.Errorf("DirectPath: got %q", desc.DirectPath)
+					}
+					if string(desc.MediaKey) != string([]byte{0x01, 0x02, 0x03, 0x04}) {
+						t.Errorf("MediaKey: got %x", desc.MediaKey)
+					}
+					if desc.Mimetype != c.mime {
+						t.Errorf("Mimetype: got %q, want %q", desc.Mimetype, c.mime)
+					}
+					if string(desc.FileEncSHA256) != string([]byte{0xaa, 0xbb}) {
+						t.Errorf("FileEncSHA256: got %x", desc.FileEncSHA256)
+					}
+					if string(desc.FileSHA256) != string([]byte{0xcc, 0xdd}) {
+						t.Errorf("FileSHA256: got %x", desc.FileSHA256)
+					}
+					if desc.FileLength != 4242 {
+						t.Errorf("FileLength: got %d, want 4242", desc.FileLength)
+					}
+					return payload, nil
+				},
+			}
+
+			rec := c.serve(md, c.body(), msgAuthed)
 
 			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+				t.Fatalf("%s: status %d (corpo: %s)", c.route, rec.Code, rec.Body.String())
 			}
-			if len(sg.EnsureSessionCalls) != 1 {
-				t.Fatalf("EnsureSession chamado %d vezes", len(sg.EnsureSessionCalls))
+			env := decodeEnvelope(t, rec)
+			if !env.Success {
+				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
-			if got := sg.EnsureSessionCalls[0].TxtID; got != "42" {
-				t.Fatalf("use case recebeu txtID %q, esperado o Id do contexto", got)
+
+			var data downloadResultBody
+			if err := json.Unmarshal(env.Data, &data); err != nil {
+				t.Fatalf("envelope.data invalido: %v", err)
 			}
-		})
-	}
-}
-
-// TestDownloadHandlers_NoUserInfo_401: sem o middleware de auth, 401 e o use
-// case NAO e' alcancado.
-func TestDownloadHandlers_NoUserInfo_401(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := &contractsfake.SessionGuard{}
-			h := tc.newHandler(sg, &contractsfake.Logger{})
-
-			rec, _ := serveDownload(h, downloadRequest(downloadValidBody, nil))
-
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, esperado 401", rec.Code)
+			if data.Mimetype != c.mime {
+				t.Errorf("Mimetype: got %q, want %q", data.Mimetype, c.mime)
 			}
-			if len(sg.EnsureSessionCalls) != 0 {
-				t.Fatal("handler falou com a sessao DEPOIS de decidir que nao ha' usuario")
+			if !strings.HasPrefix(data.Data, c.wantPrefix) {
+				t.Fatalf("Data: got %q, want prefixo %q", data.Data, c.wantPrefix)
 			}
-		})
-	}
-}
-
-// TestDownloadHandlers_EmptySessionID_400: userinfo presente mas sem Id.
-func TestDownloadHandlers_EmptySessionID_400(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := &contractsfake.SessionGuard{}
-			h := tc.newHandler(sg, &contractsfake.Logger{})
-
-			rec, _ := serveDownload(h, downloadRequest(downloadValidBody, downloadUserInfo{id: ""}))
-
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, esperado 400", rec.Code)
+			// Mimetype e o prefixo de Data TÊM de concordar.
+			if got := strings.TrimSuffix(strings.TrimPrefix(c.wantPrefix, "data:"), ";base64,"); got != data.Mimetype {
+				t.Errorf("Data anuncia %q, campo Mimetype diz %q", got, data.Mimetype)
 			}
-			if len(sg.EnsureSessionCalls) != 0 {
-				t.Fatal("handler falou com a sessao mesmo sem Id")
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(data.Data, c.wantPrefix))
+			if err != nil {
+				t.Fatalf("payload de Data nao e' base64 valido: %v", err)
+			}
+			if string(decoded) != string(payload) {
+				t.Errorf("Data decodificado: got %x, want %x", decoded, payload)
+			}
+			if n := len(md.DownloadCalls); n != 1 {
+				t.Fatalf("Download chamado %d vez(es) pela rota registrada, quero 1", n)
 			}
 		})
 	}
 }
 
-// TestDownloadHandlers_MalformedPayload_400 exercita o ramo de decode. Co-gate
-// D: o 400 tem de sair com registro warn/error carregando a causa e o req_id.
-func TestDownloadHandlers_MalformedPayload_400(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := &contractsfake.SessionGuard{}
-			h := tc.newHandler(sg, &contractsfake.Logger{})
+// TestDownload_RejectUnauthenticated: sem o middleware de auth, 401 e a porta
+// NÃO é alcançada.
+func TestDownload_RejectUnauthenticated(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{}
 
-			rec, capture := serveDownload(h, downloadRequest(`{"Url":`, downloadUserInfo{id: "42"}))
+			rec := c.serve(md, c.body(), func(r *http.Request) *http.Request { return r })
 
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, esperado 400", rec.Code)
+			assertErrorEnvelope(t, rec, http.StatusUnauthorized)
+			if n := len(md.EnsureSessionCalls); n != 0 {
+				t.Errorf("requisicao nao autenticada alcancou EnsureSession %d vez(es)", n)
 			}
-			if len(sg.EnsureSessionCalls) != 0 {
-				t.Fatal("handler falou com a sessao com payload ilegivel")
+			if n := len(md.DownloadCalls); n != 0 {
+				t.Errorf("requisicao nao autenticada alcancou Download %d vez(es)", n)
 			}
-			got := logassert.OutcomeLogged(t, capture.Records(t))
+		})
+	}
+}
+
+// TestDownload_RejectEmptySessionID: userinfo presente mas sem Id -> 400.
+func TestDownload_RejectEmptySessionID(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{}
+
+			rec := c.serve(md, c.body(), func(r *http.Request) *http.Request { return withUser(r, "") })
+
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
+			if n := len(md.DownloadCalls); n != 0 {
+				t.Errorf("sem Id, Download foi chamado %d vez(es)", n)
+			}
+		})
+	}
+}
+
+// TestDownload_RejectMalformedBody: corpo ilegível é rejeição de CLIENTE (400)
+// e tem de sair registrada em warn com a causa e o req_id.
+func TestDownload_RejectMalformedBody(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{}
+
+			rec, recs := c.serveCapturingLog(t, md, `{"Url":`, msgAuthed)
+
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
+			if n := len(md.EnsureSessionCalls); n != 0 {
+				t.Errorf("corpo ilegivel alcancou EnsureSession %d vez(es)", n)
+			}
+			got := logassert.OutcomeLogged(t, recs)
 			if got.str("level") != "warn" {
-				t.Fatalf("payload ilegivel e' rejeicao de cliente: nivel %q", got.str("level"))
+				t.Errorf("payload ilegivel e' rejeicao de cliente: nivel %q", got.str("level"))
 			}
 		})
 	}
 }
 
-// TestDownloadHandlers_SessionFailure_500: a sessao recusa, o use case propaga,
-// e o handler responde 500 logando a causa em error.
-func TestDownloadHandlers_SessionFailure_500(t *testing.T) {
+// TestDownload_RejectMissingRequiredField: Url ausente é 400 (erro do cliente,
+// não 500), e a porta não é consultada.
+func TestDownload_RejectMissingRequiredField(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{}
+
+			rec, recs := c.serveCapturingLog(t, md, `{"Mimetype":"`+c.mime+`"}`, msgAuthed)
+
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
+			if n := len(md.EnsureSessionCalls); n != 0 {
+				t.Errorf("use case checou sessao antes de validar o payload (%d chamada(s))", n)
+			}
+			if n := len(md.DownloadCalls); n != 0 {
+				t.Errorf("payload invalido alcancou Download %d vez(es)", n)
+			}
+			logassert.OutcomeLogged(t, recs)
+		})
+	}
+}
+
+// TestDownload_SessionFailure_500: a sessão recusa, o use case propaga, o
+// handler responde 500 logando a causa em error, e o download não acontece.
+func TestDownload_SessionFailure_500(t *testing.T) {
 	const cause = "download-session-refused"
 
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := contractsfake.FailSession(errors.New(cause))
-			h := tc.newHandler(&sg, &contractsfake.Logger{})
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{SessionGuard: contractsfake.FailSession(errors.New(cause))}
 
-			rec, capture := serveDownload(h, downloadRequest(downloadValidBody, downloadUserInfo{id: "42"}))
+			rec, recs := c.serveCapturingLog(t, md, c.body(), msgAuthed)
 
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, esperado 500", rec.Code)
+			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			if n := len(md.DownloadCalls); n != 0 {
+				t.Fatalf("sessao recusada mas Download foi chamado %d vez(es)", n)
 			}
-			got := logassert.OutcomeLogged(t, capture.Records(t), cause)
+			got := logassert.OutcomeLogged(t, recs, cause)
 			if got.str("level") != "error" {
-				t.Fatalf("falha real de sessao tem de ser error, foi %q", got.str("level"))
+				t.Errorf("falha real de sessao tem de ser error, foi %q", got.str("level"))
 			}
 		})
 	}
 }
 
-// TestDownloadHandlers_MissingURL_400: o payload decodifica, mas o use case
-// recusa por falta de Url. Ramo de erro distinto do de sessao.
-//
-// O nome dizia 500 e o teste EXIGIA 500 — fixava o defeito da F66: campo
-// obrigatorio ausente e erro do CLIENTE, e responder 500 dizia a ele "o
-// servidor quebrou" quando o remedio estava no payload dele. Invertido, nao
-// relaxado.
-func TestDownloadHandlers_MissingURL_400(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := &contractsfake.SessionGuard{}
-			h := tc.newHandler(sg, &contractsfake.Logger{})
+// TestDownload_DownloaderFailure_NotOK é o eixo que o estado anterior a
+// CAP-09B não podia ter: a porta baixa e FALHA. Isso não pode virar 200 —
+// nem 200 com corpo vazio.
+func TestDownload_DownloaderFailure_NotOK(t *testing.T) {
+	const cause = "downloader-refused-by-sdk"
 
-			rec, capture := serveDownload(h, downloadRequest(`{"Mimetype":"image/jpeg"}`, downloadUserInfo{id: "42"}))
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{
+				DownloadFunc: func(context.Context, string, domain.MediaDescriptor) ([]byte, error) {
+					return nil, errors.New(cause)
+				},
+			}
 
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, esperado 400", rec.Code)
+			rec, recs := c.serveCapturingLog(t, md, c.body(), msgAuthed)
+
+			if rec.Code == http.StatusOK {
+				t.Fatalf("falha do downloader virou 200: %s", rec.Body.String())
 			}
-			if len(sg.EnsureSessionCalls) != 0 {
-				t.Fatal("use case checou sessao antes de validar o payload")
+			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			got := logassert.OutcomeLogged(t, recs, cause)
+			if got.str("level") != "error" {
+				t.Errorf("falha de download tem de ser error, foi %q", got.str("level"))
 			}
-			logassert.OutcomeLogged(t, capture.Records(t))
 		})
 	}
 }
 
-// TestDownloadHandlers_NoSecretLeak planta os tres segredos da F9.4 no caminho
-// do handler — corpo e cabecalho — e exige que o log de saida nao os carregue.
-func TestDownloadHandlers_NoSecretLeak(t *testing.T) {
-	for _, tc := range downloadCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			sg := contractsfake.FailSession(errors.New("download-session-refused"))
-			h := tc.newHandler(&sg, &contractsfake.Logger{})
+// TestDownload_EmptyBytes_NotOK trava na fronteira HTTP a decisão sobre bytes
+// vazios com erro nil (HOUSEKEEP.md F126): 500, não 200 com
+// `"Data":"data:image/jpeg;base64,"` como o fluxo histórico respondia.
+func TestDownload_EmptyBytes_NotOK(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{
+				DownloadFunc: func(context.Context, string, domain.MediaDescriptor) ([]byte, error) {
+					return []byte{}, nil
+				},
+			}
+
+			rec := c.serve(md, c.body(), msgAuthed)
+
+			if rec.Code == http.StatusOK {
+				t.Fatalf("download vazio virou 200: %s", rec.Body.String())
+			}
+			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+		})
+	}
+}
+
+// TestDownload_NoSecretLeak planta os três segredos da F9.4 no caminho do
+// handler — corpo, Id de sessão e cabeçalho — e exige que o log de saída não
+// os carregue.
+func TestDownload_NoSecretLeak(t *testing.T) {
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{SessionGuard: contractsfake.FailSession(errors.New("download-session-refused"))}
 
 			body := `{"Url":"https://example.invalid/` + logassertGlobalEncryptionKey + `"}`
-			r := downloadRequest(body, downloadUserInfo{id: logassertGlobalHMACKey})
-			r.Header.Set("Authorization", logassertAdminToken)
-
-			rec, capture := serveDownload(h, r)
-
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, esperado 500", rec.Code)
+			mut := func(r *http.Request) *http.Request {
+				r.Header.Set("Authorization", logassertAdminToken)
+				return withUser(r, logassertGlobalHMACKey)
 			}
-			logassert.NoSecrets(t, capture.Records(t))
+
+			rec, recs := c.serveCapturingLog(t, md, body, mut)
+
+			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			logassert.NoSecrets(t, recs)
 		})
 	}
 }

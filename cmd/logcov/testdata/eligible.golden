@@ -1765,6 +1765,7 @@ pkg/application/contracts/contractsfake.Logger.Records	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.Reset	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.Warn	EXCLUDED	X5
 pkg/application/contracts/contractsfake.Logger.record	EXCLUDED	X5
+pkg/application/contracts/contractsfake.MediaDownloader.Download	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaFetcher.FetchBytes	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendAudio	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MediaMessenger.SendDocument	EXCLUDED	X5
@@ -1858,7 +1859,9 @@ pkg/application/session.proxyConfigFor	ELIGIBLE	uncovered:L1
 pkg/application/session.qrPayload	EXCLUDED	X1
 pkg/application/session.translateStatusEvent	EXCLUDED	X1
 pkg/application/usecase/chat.ArchiveChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,archive_chat.go:32);uncovered:L2(S-consume,archive_chat.go:36);uncovered:L2(S-ret,archive_chat.go:37)
+pkg/application/usecase/chat.GetChatHistoryUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
+pkg/application/usecase/chat.NewGetChatHistoryUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRejectCallUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRequestUnavailableMessageUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.RejectCallUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,reject_call.go:32);uncovered:L2(S-ret,reject_call.go:36);uncovered:L2(S-consume,reject_call.go:40);uncovered:L2(S-ret,reject_call.go:41)
@@ -1892,11 +1895,11 @@ pkg/application/usecase/group.NewGroupRequestUseCase	EXCLUDED	X1
 pkg/application/usecase/group.NewListGroupsUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ChatPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,chat_presence.go:32);uncovered:L2(S-ret,chat_presence.go:36);uncovered:L2(S-consume,chat_presence.go:40);uncovered:L2(S-ret,chat_presence.go:41)
 pkg/application/usecase/message.DeleteMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_message.go:28);uncovered:L2(S-ret,delete_message.go:31)
-pkg/application/usecase/message.DownloadAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,download_audio.go:28)
-pkg/application/usecase/message.DownloadDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,download_document.go:28)
-pkg/application/usecase/message.DownloadImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,download_image.go:28)
-pkg/application/usecase/message.DownloadStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,download_sticker.go:28)
-pkg/application/usecase/message.DownloadVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,download_video.go:28)
+pkg/application/usecase/message.DownloadAudioUseCase.Execute	EXCLUDED	X7
+pkg/application/usecase/message.DownloadDocumentUseCase.Execute	EXCLUDED	X7
+pkg/application/usecase/message.DownloadImageUseCase.Execute	EXCLUDED	X7
+pkg/application/usecase/message.DownloadStickerUseCase.Execute	EXCLUDED	X7
+pkg/application/usecase/message.DownloadVideoUseCase.Execute	EXCLUDED	X7
 pkg/application/usecase/message.MarkReadUseCase.Execute	ELIGIBLE	uncovered:L2(S-consume,mark_read.go:37);uncovered:L2(S-ret,mark_read.go:38);uncovered:L2(S-ret,mark_read.go:43);uncovered:L2(S-consume,mark_read.go:51);uncovered:L2(S-ret,mark_read.go:52);uncovered:L2(S-ret,mark_read.go:59)
 pkg/application/usecase/message.NewChatPresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewDeleteMessageUseCase	EXCLUDED	X1
@@ -1956,6 +1959,7 @@ pkg/application/usecase/message.isHTTPAudioURL	ELIGIBLE	uncovered:L1;uncovered:L
 pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_document.go:243)
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
 pkg/application/usecase/message.isHTTPVideoURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_video.go:238)
+pkg/application/usecase/message.mediaDownloadFlow.execute	ELIGIBLE	uncovered:L2(S-ret,download_media.go:40)
 pkg/application/usecase/message.resolveAudioMimeType	ELIGIBLE	uncovered:L1
 pkg/application/usecase/message.resolveMimeType	EXCLUDED	X1
 pkg/application/usecase/notification.GetHealthUseCase.Execute	ELIGIBLE	covered
@@ -2159,7 +2163,7 @@ pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
 pkg/bootstrap.buildRouter	ELIGIBLE	covered
-pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:262)
+pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:267)
 pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
@@ -2255,7 +2259,7 @@ pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
-pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:209)
+pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:214)
 pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:77)
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
 pkg/bootstrap.runOutboxSweeper	ELIGIBLE	uncovered:L1
@@ -2318,6 +2322,7 @@ pkg/bootstrap.userInfoID	ELIGIBLE	uncovered:L1
 pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:84)
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
+pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
 pkg/domain.Secret.GoString	EXCLUDED	X1
@@ -2349,6 +2354,9 @@ pkg/infra/constants.IsValidEventType	EXCLUDED	X1
 pkg/infra/constants.init	EXCLUDED	X3
 pkg/infra/db.ChatActivityRepository.GetChatPushNames	ELIGIBLE	uncovered:L1
 pkg/infra/db.ChatActivityRepository.GetLastActivityByUser	ELIGIBLE	uncovered:L1
+pkg/infra/db.ChatHistoryRepository.ChatIndexByUser	ELIGIBLE	covered
+pkg/infra/db.ChatHistoryRepository.HistoryLimit	ELIGIBLE	covered
+pkg/infra/db.ChatHistoryRepository.ListChatMessages	ELIGIBLE	covered
 pkg/infra/db.GenerateRandomID	ELIGIBLE	covered
 pkg/infra/db.GetChatPushNamesByUser	ELIGIBLE	covered
 pkg/infra/db.GetDatabaseConfig	ELIGIBLE	covered
@@ -2356,6 +2364,7 @@ pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
 pkg/infra/db.InitializeDatabase	ELIGIBLE	covered
 pkg/infra/db.InitializeSchema	ELIGIBLE	covered
 pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
+pkg/infra/db.NewChatHistoryRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1
@@ -2524,9 +2533,12 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	unco
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMessageComposerAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/chat.downloadableFor	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,downloader.go:123)
 pkg/infra/wa-noise/adapters/group.GroupAdapter.CreateGroup	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfoFromLink	ELIGIBLE	uncovered:L1
@@ -2600,6 +2612,7 @@ pkg/infra/wa-noise/client/testkit.ErrClient.SendMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildUnavailableMessageRequest	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.CreateGroup	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.Disconnect	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.Download	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.FetchAppState	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.GenerateMessageID	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.GetBlocklist	EXCLUDED	X5
@@ -2775,6 +2788,7 @@ pkg/presentation/http/handlers.DownloadStickerHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DownloadVideoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetAvatarHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetBlocklistHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetContactsHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetContactsLastActivityHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetGroupInfoHandler.ServeHTTP	ELIGIBLE	covered
@@ -2814,6 +2828,7 @@ pkg/presentation/http/handlers.NewDownloadStickerHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewDownloadVideoHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetAvatarHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetBlocklistHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewGetChatHistoryHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetContactsHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetContactsLastActivityHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetGroupInfoHandler	EXCLUDED	X1

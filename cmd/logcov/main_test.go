@@ -117,7 +117,11 @@ func readBaselineForTest(t *testing.T, path string) map[string]int {
 		t.Fatal(err)
 	}
 	out := map[string]int{}
-	for _, line := range strings.Split(string(data), "\n") {
+	// A duplicata de uma chave e' ERRO, nao "vale a ultima". Antes do F129
+	// este parser sobrescrevia em silencio, e por isso nao viu as duas linhas
+	// min_func_coverage= que desativaram o piso do gate em 6fa6270.
+	seen := map[string]int{}
+	for i, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		switch line {
 		case "stage=advisory":
@@ -132,6 +136,10 @@ func readBaselineForTest(t *testing.T, path string) map[string]int {
 			continue
 		}
 		if n, err := strconv.Atoi(strings.Fields(v)[0]); err == nil {
+			if prev, dup := seen[k]; dup {
+				t.Fatalf("chave %q duplicada em %s (linhas %d e %d): chave ambigua desativa o gate em silencio (F129)", k, path, prev, i+1)
+			}
+			seen[k] = i + 1
 			out[k] = n
 		}
 	}

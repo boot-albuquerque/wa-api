@@ -745,7 +745,14 @@ rules_frozen=true
 # nenhuma funcao ja' coberta regrediu — a unica mudanca e' a perda desta
 # UNICA cobertura artificial; min_eligible NAO muda (627), so' `covered`
 # cai 425->424.
-min_func_coverage=676
+# (a linha `min_func_coverage=676` que ficava AQUI foi removida pelo FIX-GATE
+#  de 2026-08-18: ela era uma SEGUNDA atribuicao da mesma chave, e o gate le
+#  este arquivo com `grep -oE '^min_func_coverage=[0-9]+'`, que devolve as DUAS
+#  linhas. O `[ "$func_cov" -lt "$min_func" ]` seguinte abortava com
+#  `integer expression expected` e o `if` tratava o erro como FALSO — o piso de
+#  func_coverage ficou DESATIVADO de 6fa6270 ate' o FIX-GATE. A justificativa
+#  FIX-07 acima continua valendo como historico; a chave ativa e' unica e vive
+#  no fim deste bloco. Ver HOUSEKEEP.md F129.)
 # CAP-08A/CAP-08B (2026-08-18): POST /chat/send/location e
 # POST /chat/send/contact passaram a montar o protobuf e enviar de verdade,
 # via nova porta port.SimpleMessenger implementada em ChatMessengerAdapter.
@@ -765,7 +772,46 @@ min_func_coverage=676
 # cases (SendLocationUseCase.Execute/SendContactUseCase.Execute) migraram de
 # stub "validated" para envio real, e os caminhos de saida novos (invalid
 # JID, downstream failure) nascem cobertos por Warn/Error existentes.
-min_func_coverage=674
+# FIX-GATE (2026-08-18): a chave ativa passa a ser UNICA, e o valor e' o
+# MEDIDO no estado atual da arvore (CAP-09A historico de conversa + CAP-09B
+# download de midia unificado): `go run ./cmd/logcov -json ./pkg` devolve
+# eligible=632, covered=425, func_coverage=67.2468% (672 decimos).
+# Os quatro numeros, medidos e comparados no MESMO commit-base:
+#   HEAD 6fa6270 (arvore limpa, extraida com `git archive HEAD | tar -x`):
+#     eligible=629, covered=424, func_coverage=67.4086% (674 decimos)
+#   estado atual: eligible=632, covered=425, func_coverage=67.2468% (672)
+# A razao CAI 674->672 por DENOMINADOR, nao por regressao: `covered` SOBE
+# 424->425. O conjunto de elegiveis nao cresceu em bloco — ele teve 8
+# entradas e 5 saidas (net +3), enumeradas aqui pela invariante ENUMERATE
+# THE SET (diff de `logcov -golden` HEAD vs atual, coluna ELIGIBLE):
+#   ENTRAM (8):
+#     pkg/application/usecase/chat.GetChatHistoryUseCase.Execute      (coberta)
+#     pkg/application/usecase/message.mediaDownloadFlow.execute       (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ChatIndexByUser              (coberta)
+#     pkg/infra/db.ChatHistoryRepository.HistoryLimit                 (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ListChatMessages             (coberta)
+#     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
+#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (UNCOVERED)
+#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (UNCOVERED)
+#   SAEM (5), todas COBERTAS, colapsadas no mediaDownloadFlow.execute:
+#     pkg/application/usecase/message.DownloadAudioUseCase.Execute
+#     pkg/application/usecase/message.DownloadDocumentUseCase.Execute
+#     pkg/application/usecase/message.DownloadImageUseCase.Execute
+#     pkg/application/usecase/message.DownloadStickerUseCase.Execute
+#     pkg/application/usecase/message.DownloadVideoUseCase.Execute
+#   6 entradas cobertas - 5 saidas cobertas = +1 => covered 424->425. Confere.
+# As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07 e CAP-08A/08B acima). Confirmado por medicao, nao por
+# opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os dez irmaos do
+# mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
+# SendAudio, SendVideo, SendSticker, SendLocation, SendContact) tambem constam
+# como uncovered:L1 em `logcov -list-uncovered`. NAO foi plantado log para
+# inflar a metrica: fazer isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta
+# mesma sessao (FIX-07 / HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha coberta sem substituto, e `covered` SOBE.
+min_func_coverage=672
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -861,7 +907,82 @@ min_func_coverage=674
 # todos cobertos por Warn/Error existentes no use case, mesmo padrao ja'
 # aceito para os demais send_*. Nenhum errpath ja' coberto regrediu —
 # mesmo diff de `logcov -list-uncovered` citado em min_func_coverage.
-min_errpath_coverage=854
+# CAP-09A/CAP-09B (2026-08-18): ratchet-UP 854 -> 858. Esta subida e' das DUAS
+# CAPABILITIES, nao do FIX-GATE — o FIX-GATE (F129) mexeu em
+# min_func_coverage e nos LEITORES de baseline (Makefile e
+# cmd/logcov/main_test.go), em chave nenhuma alem daquela.
+#
+# Medido, nao estimado: `go run ./cmd/logcov -json ./pkg` em HEAD 6fa6270
+# (arvore limpa extraida com `git archive HEAD | tar -x`) contra o estado
+# atual. errpaths 1325 -> 1337 (+12), errpaths_covered 1132 -> 1147 (+15),
+# razao 1147/1337 = 85.7891% = 858 decimos.
+#
+# O +15 coberto ser MAIOR que o +12 total nao e' erro de conta: o CAP-09B
+# REMOVEU 10 caminhos (5 cobertos, 5 descobertos) ao colapsar os cinco
+# Download*UseCase.Execute, e a troca liquida e' favoravel. Os cinco pacotes
+# que mudaram, um por linha (diff de `by_package` do JSON, HEAD vs atual):
+#
+#   pkg/application/usecase/chat        20 -> 25 (+5), cobertos  6 ->  11 (+5)
+#   pkg/application/usecase/message    161 -> 155 (-6), cobertos 83 ->  81 (-2)
+#   pkg/infra/db                        88 ->  91 (+3), cobertos 83 ->  86 (+3)
+#   pkg/infra/wa-noise/adapters/chat    37 ->  41 (+4), cobertos 36 ->  39 (+3)
+#   pkg/presentation/http/handlers     385 -> 391 (+6), cobertos 382 -> 388 (+6)
+#   soma: +5 -6 +3 +4 +6 = +12 ; cobertos +5 -2 +3 +3 +6 = +15. Fecha.
+#
+# ENTRAM, caminho por caminho, com o porque de cada um NASCER coberto:
+#
+# CAP-09A, chat.GetChatHistoryUseCase.Execute (get_chat_history.go) — 5
+# caminhos S-ret, TODOS cobertos por (a), Warn/Error no proprio bloco:
+#   1. HistoryLimit falhou (:73)  — Error "failed to revalidate history setting"
+#   2. history revalidado em 0 (:78) — Warn "message history is disabled"
+#   3. chat_jid vazio (:86)       — Warn "chat_jid is required"
+#   4. ChatIndexByUser falhou (:94) — Error "failed to read chat index"
+#   5. ListChatMessages falhou (:111) — Error "failed to read chat history"
+#
+# CAP-09A, db.ChatHistoryRepository (chat_history_repository.go) — 3 caminhos
+# S-ret, cobertos por (a) E por (b) ao mesmo tempo (log.Error + `%w`):
+#   6. ListChatMessages, query falhou (:71/:73)
+#   7. ChatIndexByUser, query falhou (:120/:122)
+#   8. HistoryLimit, leitura falhou (:165/:167)
+#
+# CAP-09A, handlers.GetChatHistoryHandler.ServeHTTP (handler_chat_history.go)
+# — 6 caminhos: 4 S-http (RespondJSON com 401, 400, 400 e 500) e 2 S-consume
+# (os dois blocos `if err != nil` que NAO propagam o err: o do limit invalido,
+# que constroi apperr novo, e o do Execute, que responde em vez de retornar).
+# Todos cobertos por (a): cada bloco abre com hlog Warn (:42, :49, :68, :81).
+#   9. 401 sem userinfo | 10. 400 sem session id | 11. 400 limit invalido
+#   12. 500 do Execute  | 13. S-consume do limit | 14. S-consume do Execute
+#
+# CAP-09B, adapters/chat (downloader.go) — 4 caminhos, 3 cobertos:
+#   15. Download, Client(txtID) falhou (:38) — `return nil, err`, coberto
+#       por (b): propaga a causa inalterada.
+#   16. Download, downloadableFor falhou (:43) — idem, coberto por (b).
+#   17. Download, `return client.Download(ctx, msg)` (:46) — tupla do callee
+#       verbatim, coberto por (b).
+#   18. downloadableFor, kind desconhecido (:123) — DESCOBERTO, e de proposito:
+#       `apperr.New(..., nil)` constroi erro novo DESCARTANDO causa, o que a
+#       regra (b) nunca aceita, e o adapter nao loga (F129 / FIX-07). E' o
+#       unico errpath novo descoberto, e o unico `>` do diff de
+#       `logcov -list-uncovered` HEAD vs atual.
+#
+# SAEM (CAP-09B), 10 caminhos, 5 cobertos e 5 descobertos: os cinco
+# Download{Image,Video,Audio,Document,Sticker}UseCase.Execute viraram
+# delegacao de uma linha para mediaDownloadFlow.execute e cairam do
+# denominador por X1 (trivial). Cada um levava exatamente 2 caminhos:
+# `missing_url` (apperr.New sem causa e sem Warn — DESCOBERTO) e a falha de
+# EnsureSession (Warn + `return err` — coberto).
+# ENTRA no lugar mediaDownloadFlow.execute (download_media.go), 4 caminhos,
+# 3 cobertos: missing_url (:40) segue descoberto pelo mesmo motivo de sempre,
+# no wanoise session (:44/:45) coberto por (a) e (b), download falhou
+# (:50/:51) coberto por (a) e (b), e empty_media (:70/:71) coberto por (a).
+# Ou seja: 4 descobertos a MENOS no pacote message, que e' de onde vem o ganho.
+#
+# Nenhum errpath ja' coberto regrediu: no diff de `logcov -list-uncovered`
+# HEAD vs atual as UNICAS linhas sao duas ADICOES, ambas em adapters/chat
+# (MediaDownloaderAdapter.Download uncovered:L1 e downloadableFor
+# uncovered:L1;uncovered:L2(S-ret,downloader.go:123)). Nenhuma remocao de
+# linha coberta, nenhuma funcao coberta virando descoberta.
+min_errpath_coverage=858
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -984,7 +1105,53 @@ min_errpath_coverage=854
 # CAP-08A/CAP-08B (2026-08-18): +2 elegiveis novos — ChatMessengerAdapter.
 # SendLocation e ChatMessengerAdapter.SendContact (627->629). Ver
 # justificativa completa em min_func_coverage acima.
-min_eligible=629
+# CAP-09A/CAP-09B (2026-08-18): ratchet-UP 629 -> 632. Tambem esta subida e'
+# das duas capabilities, nao do FIX-GATE (F129), que so' tocou
+# min_func_coverage e os leitores do baseline.
+#
+# O net +3 NAO e' "tres funcoes novas": o conjunto teve 8 ENTRADAS e 5 SAIDAS.
+# Medido com o diff da coluna ELIGIBLE de `go run ./cmd/logcov -golden ./pkg`,
+# HEAD 6fa6270 (arvore limpa via `git archive HEAD | tar -x`) contra o estado
+# atual; 629 + 8 - 5 = 632. ENUMERATE THE SET, nome por nome:
+#
+# ENTRAM (8):
+#   CAP-09A (6)
+#     pkg/application/usecase/chat.GetChatHistoryUseCase.Execute      (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ListChatMessages             (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ChatIndexByUser              (coberta)
+#     pkg/infra/db.ChatHistoryRepository.HistoryLimit                 (coberta)
+#     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
+#   CAP-09B (2 + 1)
+#     pkg/application/usecase/message.mediaDownloadFlow.execute        (coberta)
+#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (DESCOBERTA)
+#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (DESCOBERTA)
+#   (5 do CAP-09A + 3 do CAP-09B = 8; as duas DESCOBERTAS sao a convencao
+#   "adapter delegante nao loga", ver a justificativa de min_func_coverage.)
+#
+# SAEM (5), todas COBERTAS, todas do CAP-09B — viraram delegacao de uma linha
+# para mediaDownloadFlow.execute e passaram a ser EXCLUDED por X1 (trivial):
+#     pkg/application/usecase/message.DownloadImageUseCase.Execute
+#     pkg/application/usecase/message.DownloadVideoUseCase.Execute
+#     pkg/application/usecase/message.DownloadAudioUseCase.Execute
+#     pkg/application/usecase/message.DownloadDocumentUseCase.Execute
+#     pkg/application/usecase/message.DownloadStickerUseCase.Execute
+#
+# NAO entram no denominador, conferido no golden e registrado aqui para nao
+# ser reperguntado — sao funcoes novas das mesmas duas capabilities, mas
+# EXCLUDED:
+#   X1 (trivial, <=2 statements e sem caminho de saida):
+#     pkg/infra/db.NewChatHistoryRepository
+#     pkg/application/usecase/chat.NewGetChatHistoryUseCase
+#     pkg/presentation/http/handlers.NewGetChatHistoryHandler
+#     pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter
+#     pkg/domain.DownloadRequest.Descriptor
+#   X5 (pacote em .logcov-exclude, dublê de teste):
+#     pkg/infra/wa-noise/client/testkit.Fake.Download
+#     pkg/application/contracts/contractsfake.MediaDownloader.Download
+#
+# 6 entradas cobertas - 5 saidas cobertas = +1 => covered 424 -> 425, que e'
+# exatamente o que a justificativa de min_func_coverage acima registra.
+min_eligible=632
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

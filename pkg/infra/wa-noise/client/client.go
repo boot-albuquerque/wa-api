@@ -44,6 +44,19 @@ type Client interface {
 	// protobuf da mensagem.
 	Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
 
+	// Download baixa e decifra o anexo descrito por uma sub-mensagem
+	// protobuf (ImageMessage, VideoMessage, AudioMessage, DocumentMessage
+	// ou StickerMessage). CAP-09B acrescenta este metodo a interface
+	// estreita (ADR-001) porque as cinco rotas /chat/download* deixaram de
+	// so' validar e passaram a baixar de verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto Download) e `DownloadableMessage = core.DownloadableMessage`.
+	// O que se alarga aqui e' o seam local de wa-api — a mesma superficie
+	// que pkg/infra/media/media.go:73 ja' consumia pelo tipo concreto.
+	Download(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
+
 	// Família de grupos
 	GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLink(ctx context.Context, code string) (*types.GroupInfo, error)

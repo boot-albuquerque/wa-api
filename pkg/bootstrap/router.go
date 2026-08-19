@@ -141,6 +141,11 @@ func emptyCustomHandlers() *customHandlers {
 		Reaction:  &handlers.ReactionHandlers{},
 		Contact:   &handlers.ContactHandlers{},
 		GroupMgmt: &handlers.GroupManagementHandlers{},
+		// ChatHistory é um grupo próprio, e não um campo a mais em Storage:
+		// /chat/history e /webhook/history precisam de handlers DISTINTOS
+		// (HOUSEKEEP F124). Ausente daqui, registerCustomRoutes desreferencia
+		// nil ao registrar a rota.
+		ChatHistory: &handlers.ChatHistoryHandlers{},
 	}
 }
 

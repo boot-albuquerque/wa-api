@@ -80,6 +80,7 @@ func newRouterForRouteCheck() *mux.Router {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		ChatHistory: &handlers.ChatHistoryHandlers{},
 	}
 
 	router := mux.NewRouter()

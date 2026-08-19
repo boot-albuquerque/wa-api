@@ -144,6 +144,9 @@ func TestCategory_HTTPStatus(t *testing.T) {
 		// distinguia "o banco caiu" de "esse id nao existe": um retenta, o
 		// outro nunca vai funcionar.
 		{"not found", CategoryNotFound, http.StatusNotFound},
+		// CAP-09A: 501 e' o contrato publico de GET /chat/history para
+		// "o usuario desligou o historico de mensagens" (commit 3dafae0).
+		{"not implemented", CategoryNotImplemented, http.StatusNotImplemented},
 		{"internal", CategoryInternal, http.StatusInternalServerError},
 		{"unknown category defaults to internal", Category("something_new"), http.StatusInternalServerError},
 	}

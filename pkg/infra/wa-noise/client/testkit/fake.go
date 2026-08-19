@@ -28,6 +28,7 @@ type Fake struct {
 	GenerateMessageIDFn              func() types.MessageID
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
 	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
+	DownloadFn                       func(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLinkFn           func(ctx context.Context, code string) (*types.GroupInfo, error)
 	GetGroupInviteLinkFn             func(ctx context.Context, jid types.JID, reset bool) (string, error)
@@ -117,4 +118,15 @@ func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.Med
 		return f.UploadFn(ctx, plaintext, appInfo)
 	}
 	return wanoise.UploadResponse{}, nil
+}
+
+// Download devolve o que DownloadFn devolver. O default e' (nil, nil) —
+// deliberadamente NAO um sucesso com bytes: o caso "sem override" nao deve
+// parecer um download bem-sucedido, ou um teste que esquecesse de configurar o
+// fake passaria por engano.
+func (f *Fake) Download(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error) {
+	if f.DownloadFn != nil {
+		return f.DownloadFn(ctx, msg)
+	}
+	return nil, nil
 }

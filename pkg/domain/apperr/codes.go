@@ -56,6 +56,18 @@ const (
 	// "we broke", and we did not.
 	CategoryNotFound Category = "not_found"
 
+	// CategoryNotImplemented covers a well formed, authorized request for an
+	// endpoint whose FEATURE the user has turned off.
+	//
+	// It exists because GET /chat/history has answered 501 with
+	// "message history is disabled for this user" since commit 3dafae0, and
+	// that 501 is public contract: callers read it as "switch the feature on",
+	// not as "retry" or "fix your payload". None of the categories above can
+	// produce a 501 — CategoryValidation (400) says the payload is wrong when
+	// there is nothing to fix, and CategoryInternal (500) claims we broke when
+	// we did not.
+	CategoryNotImplemented Category = "not_implemented"
+
 	// CategoryInternal covers everything the caller cannot fix by changing
 	// their request: downstream failures, bugs, unexpected state.
 	CategoryInternal Category = "internal"
@@ -82,6 +94,8 @@ func (c Category) HTTPStatus() int {
 		return http.StatusConflict
 	case CategoryNotFound:
 		return http.StatusNotFound
+	case CategoryNotImplemented:
+		return http.StatusNotImplemented
 	case CategoryInternal:
 		return http.StatusInternalServerError
 	default:
