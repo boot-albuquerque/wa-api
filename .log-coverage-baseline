@@ -872,7 +872,37 @@ rules_frozen=true
 # HOUSEKEEP F119).
 # nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
 # nenhuma linha, coberta ou nao.
-min_func_coverage=669
+# CAP-15 (2026-08-19): func_coverage CAI 669->667 (425/635=66.93% ->
+# 425/637=66.70%), e a queda e' inteiramente de DENOMINADOR — mesmo mecanismo
+# ja' registrado no CAP-10 e no CAP-14. Enumerado a partir do diff do golden,
+# linha por linha:
+#   ENTRAM no denominador (2), as duas uncovered:L1:
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate
+#     pkg/infra/wa-noise/adapters/chat.templateButtons
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
+# (O diff do golden traz mais 1 linha FORA do denominador:
+# contractsfake.SimpleMessenger.SendTemplate, EXCLUDED X5 por ser duble de
+# teste. Mais duas linhas que so' mudam de NUMERO DE LINHA sem mudar de
+# estado: SendTemplateUseCase.Execute (send_template.go:28/31/34 ->
+# :58/61/64/67, com uma quarta saida — a validacao de Buttons) e
+# ChatMessengerAdapter.MarkRead (messenger.go:80 -> :81). Golden 2977 -> 2980
+# linhas, que sao exatamente estas 3 entradas novas.)
+# A UNCOVERED e' o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07, CAP-08A/08B, CAP-09, CAP-10 e CAP-14 acima).
+# Confirmado por medicao, nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os QUATORZE
+# irmaos do mesmo arquivo (MarkRead, SendReaction, SendText, SendImage,
+# SendDocument, SendAudio, SendVideo, SendSticker, SendLocation, SendContact,
+# SendPoll, RevokeMessage, EditMessage e agora SendTemplate) constam todos como
+# uncovered:L1 em `logcov -list-uncovered`. NAO foi plantado log para inflar a
+# metrica: fazer isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta sessao
+# (FIX-07 / HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# justificativa: queda de DENOMINADOR, nao de cobertura. O numerador nao se
+# moveu (425 antes, 425 depois) e nenhuma linha saiu do golden.
+min_func_coverage=667
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1051,6 +1081,12 @@ min_func_coverage=669
 # 1165/1355=85.98%). SendPollUseCase.Execute migrou de stub "validated" para
 # envio real, e os caminhos de saida novos (invalid group, falha do envio)
 # nascem cobertos pelos Warn/Error que o proprio use case emite.
+# CAP-15 (2026-08-19): errpath fica em 860 (1165/1355=85.98% ->
+# 1170/1361=85.97%): +6 caminhos de saida no denominador e +5 cobertos.
+# SendTemplateUseCase.Execute migrou de stub "validated" para envio real, e as
+# saidas novas dele (invalid phone, falha do envio) nascem cobertas pelos
+# Warn/Error que o proprio use case emite; as do adapter nao, pelo mesmo
+# padrao "adapter delegante nao loga" registrado em min_func_coverage acima.
 min_errpath_coverage=860
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
@@ -1224,7 +1260,10 @@ min_errpath_coverage=860
 # min_func_coverage acima (RevokeMessage e EditMessage no adapter).
 # CAP-14 (2026-08-19): 634->635. A entrada e' UMA e esta' enumerada acima,
 # junto de min_func_coverage: ChatMessengerAdapter.SendPoll. Nenhuma saida.
-min_eligible=635
+# CAP-15 (2026-08-19): 635->637. As entradas sao DUAS e estao enumeradas
+# acima, junto de min_func_coverage: ChatMessengerAdapter.SendTemplate e
+# templateButtons. Nenhuma saida.
+min_eligible=637
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

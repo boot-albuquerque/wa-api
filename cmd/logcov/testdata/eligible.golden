@@ -1820,6 +1820,7 @@ pkg/application/contracts/contractsfake.SessionStatusReader.SessionStatus	EXCLUD
 pkg/application/contracts/contractsfake.SimpleMessenger.SendContact	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendLocation	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendPoll	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SimpleMessenger.SendTemplate	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StickerProcessor.ProcessSticker	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
@@ -1944,7 +1945,7 @@ pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
 pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:67);uncovered:L2(S-ret,send_sticker.go:70)
-pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:28);uncovered:L2(S-ret,send_template.go:31);uncovered:L2(S-ret,send_template.go:34)
+pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:58);uncovered:L2(S-ret,send_template.go:61);uncovered:L2(S-ret,send_template.go:64);uncovered:L2(S-ret,send_template.go:67)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:129);uncovered:L2(S-ret,send_video.go:134)
 pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covered
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
@@ -2527,7 +2528,7 @@ pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage	ELIGIBLE	uncovered:L1
-pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:80)
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:81)
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	ELIGIBLE	uncovered:L1
@@ -2537,6 +2538,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendLocation	ELIGIBLE	unco
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPoll	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X1
@@ -2546,6 +2548,7 @@ pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMessageComposerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.downloadableFor	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,downloader.go:123)
+pkg/infra/wa-noise/adapters/chat.templateButtons	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.CreateGroup	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfoFromLink	ELIGIBLE	uncovered:L1

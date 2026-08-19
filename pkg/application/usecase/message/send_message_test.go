@@ -27,10 +27,10 @@ const (
 	txtID    = "user-1"
 )
 
-// composerUC descreve um dos 12 use cases send_* construídos sobre
-// port.MessageComposer. Todos têm a mesma forma — validar campos, exigir
-// sessão, gerar ID quando o chamador não deu um — e por isso são exercidos
-// por uma tabela só, em vez de 12 blocos de teste quase idênticos.
+// composerUC descreve um dos use cases send_* que AINDA são construídos
+// sobre port.MessageComposer. Todos têm a mesma forma — validar campos,
+// exigir sessão, gerar ID quando o chamador não deu um — e por isso são
+// exercidos por uma tabela só, em vez de um bloco de teste por use case.
 type composerUC struct {
 	name string
 	// infoMsg é a mensagem do log de sucesso.
@@ -47,14 +47,27 @@ type missingField struct {
 	run   func(mc port.MessageComposer, l port.Logger) error
 }
 
-// composerUseCases cobria SendContact e SendLocation até CAP-08A/CAP-08B, e
-// SendPoll até o CAP-14, migrá-los para port.SimpleMessenger (envio de
-// verdade, não mais "validated"). Os eixos que este arquivo cobria para eles
-// — validação de campo obrigatório, propagação de falha de sessão, geração
-// de ID no caminho feliz, respeito ao Id do chamador — foram migrados para
-// send_location_test.go, send_contact_test.go e send_poll_test.go, com a
-// mesma disciplina de causa (estrutura entregue à porta) que os demais use
-// cases send_* já exigem. Nenhum eixo foi removido, só realocado com o tipo de porta.
+// composerUseCases cobria SendContact e SendLocation até CAP-08A/CAP-08B,
+// SendPoll até o CAP-14 e SendTemplate até o CAP-15, migrá-los para
+// port.SimpleMessenger (envio de verdade, não mais "validated"). Os eixos que
+// este arquivo cobria para eles — validação de campo obrigatório, propagação
+// de falha de sessão, geração de ID no caminho feliz, respeito ao Id do
+// chamador — foram migrados para send_location_test.go, send_contact_test.go,
+// send_poll_test.go e send_template_test.go, com a mesma disciplina de causa
+// (estrutura entregue à porta) que os demais use cases send_* já exigem.
+// Nenhum eixo foi removido, só realocado com o tipo de porta.
+//
+// O destino de cada eixo do SendTemplate, nome por nome:
+//
+//	campo obrigatório ausente   TestSendTemplate_MissingRequiredField
+//	falha de sessão             TestSendTemplate_SessionFailurePropagates
+//	Id do chamador respeitado   TestSendTemplate_MessageIDIsTheOneActuallySent
+//	caminho feliz               TestSendTemplate_CausalSuccess
+//
+// A "geração de ID no caminho feliz" não tem destino porque deixou de
+// existir: o use case não gera mais ID nenhum: o MessageID publicado é o que
+// a porta devolveu (o que o SDK REALMENTE usou), como nas outras oito
+// capabilities já migradas.
 func composerUseCases() []composerUC {
 	return []composerUC{
 		{
@@ -95,32 +108,6 @@ func composerUseCases() []composerUC {
 				{"Desc", func(mc port.MessageComposer, l port.Logger) error {
 					_, err := message.NewSendListUseCase(mc, l).Execute(context.Background(), txtID,
 						domain.SendListRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
-		{
-			name:    "SendTemplate",
-			infoMsg: "template validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendTemplateUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendTemplateRequest{Phone: "5511987654321", Content: "Corpo", Footer: "Rodape", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendTemplateUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendTemplateRequest{Content: "Corpo", Footer: "Rodape"})
-					return err
-				}},
-				{"Content", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendTemplateUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendTemplateRequest{Phone: "5511987654321", Footer: "Rodape"})
-					return err
-				}},
-				{"Footer", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendTemplateUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendTemplateRequest{Phone: "5511987654321", Content: "Corpo"})
 					return err
 				}},
 			},

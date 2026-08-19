@@ -350,16 +350,75 @@ type SendEditMessageResult struct {
 	Status    string `json:"status"`
 }
 
+// Os três tipos de botão de template que o histórico reconhecia
+// (`git show 41bc8e2^:handlers.go`, função SendTemplate). São valores do
+// CONTRATO PÚBLICO — chegam no campo Type do JSON do cliente —, e por isso
+// vivem no domínio e não no adapter: o adapter traduz cada um para o seu
+// protobuf, mas quem os define é a API.
+//
+// Um Type desconhecido NÃO é recusado: o histórico o tratava como
+// quickreply (ramo `default` do switch), e recusá-lo agora rejeitaria
+// payloads que a rota sempre aceitou.
+const (
+	TemplateButtonQuickReply = "quickreply"
+	TemplateButtonURL        = "url"
+	TemplateButtonCall       = "call"
+)
+
+// TemplateButton é UM botão de um template hidratado, com os cinco campos do
+// buttonStruct histórico (`git show 41bc8e2^:handlers.go`, linha 3099).
+//
+// É um DTO de DOMÍNIO, não de protobuf: qual dos três `Hydrated*Button` cada
+// um vira é tradução do adapter. Os campos são deliberadamente NÃO
+// exclusivos entre si — o histórico aceitava um botão com Url e PhoneNumber
+// preenchidos ao mesmo tempo e usava só o que o Type pedia —, e estreitar
+// isso agora recusaria payloads que a rota sempre aceitou.
+//
+// ID é o identificador do botão de resposta rápida. Vazio significa
+// "numere automaticamente", e a numeração é do adapter, junto da montagem do
+// protobuf: é o wire que exige um id decimal por botão.
+type TemplateButton struct {
+	DisplayText string `json:"DisplayText"`
+	ID          string `json:"Id,omitempty"`
+	URL         string `json:"Url,omitempty"`
+	PhoneNumber string `json:"PhoneNumber,omitempty"`
+	Type        string `json:"Type"`
+}
+
 // SendTemplateRequest representa o payload de envio de template.
+//
+// Buttons entrou no CAP-15 (HOUSEKEEP F139): sem ele o DTO tinha perdido o
+// campo que dá SENTIDO à capability — um template hidratado sem botão é uma
+// mensagem de texto com rodapé. O acréscimo é aditivo, mas é mudança de
+// contrato, e não só reconexão de fiação como nos blocos anteriores.
 type SendTemplateRequest struct {
-	Phone   string `json:"Phone"`
-	Content string `json:"Content"`
-	Footer  string `json:"Footer"`
-	ID      string `json:"Id,omitempty"`
+	Phone   string           `json:"Phone"`
+	Content string           `json:"Content"`
+	Footer  string           `json:"Footer"`
+	ID      string           `json:"Id,omitempty"`
+	Buttons []TemplateButton `json:"Buttons"`
 }
 
 // SendTemplateResult representa o resultado do envio de template.
+//
+// Timestamp entrou no CAP-15 pela mesma razão que em SendStickerResult
+// (F137) e SendPollResult (CAP-14): as capabilities de envio têm a forma
+// {message_id, timestamp, status}, travada em send_wire_contract_test.go.
 type SendTemplateResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// TemplatePayload é a metadata de protocolo pura que
+// port.SimpleMessenger.SendTemplate repassa para TemplateMessage — sem
+// upload, sem fetch, sem conversão (CAP-15). Content/Footer/Buttons são os
+// únicos três campos que o histórico preenchia em HydratedFourRowTemplate
+// (`git show 41bc8e2^:handlers.go`, linha 3226); o quarto, TemplateId, era o
+// literal "1" e vive no adapter, junto da montagem do protobuf, porque a API
+// pública nunca o expôs.
+type TemplatePayload struct {
+	Content string
+	Footer  string
+	Buttons []TemplateButton
 }

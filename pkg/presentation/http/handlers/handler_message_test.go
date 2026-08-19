@@ -14,8 +14,8 @@ import (
 	"wa-api/pkg/application/usecase/message"
 )
 
-// Este arquivo cobre o handler de mensagem que ainda usa
-// port.MessageComposer de forma exaustiva: send/template. send/text
+// Este arquivo cobre de forma exaustiva os handlers de mensagem que ainda
+// usam port.MessageComposer: send/buttons e send/list. send/text
 // (SendMessage) migrou para port.TextMessenger no CAP-01 e tem tabela
 // própria em handler_message_send_test.go — sua forma (JIDResolver +
 // SendText) já não cabe nesta tabela.
@@ -30,10 +30,34 @@ import (
 // realocados, nome por nome, para handler_message_mutation_test.go, que
 // ainda cobre as DUAS rotas de delete e não só uma.
 //
-// A tabela permanece porque a forma que ela mede — mesma guarda de
-// autenticacao, mesma guarda de sessao, mesmo decode, mesma traducao de
-// erro do use case — continua sendo a de send/template, e voltará a ter
-// vizinhos quando as capabilities de Button/List/Poll forem recuperadas.
+// send/template SAIU no CAP-15, pelo mesmo motivo: passou a consumir
+// port.SimpleMessenger + port.JIDResolver e a enviar de verdade. Os eixos
+// desta tabela foram realocados, nome por nome, para
+// handler_send_template_test.go:
+//
+//	não autenticado             TestSendTemplate_RejectUnauthenticated
+//	tipo errado no contexto     TestSendTemplate_WrongTypeInContext_ViaRegisteredRoute
+//	session id vazio            TestSendTemplate_MissingSessionID_ViaRegisteredRoute
+//	corpo malformado            TestSendTemplate_MalformedBody_ViaRegisteredRoute
+//	campo obrigatório ausente   TestSendTemplate_RejectMissingRequiredField
+//	falha de sessão             TestSendTemplate_SessionFailure
+//	sucesso                     TestSendTemplate_Success_ViaRegisteredRoute
+//	sucesso sem log de saída    TestSendTemplate_SuccessEmitsNoOutcomeLog
+//	segredo no log              TestSendTemplate_NoSecretLeak
+//	Id do cliente               TestSendTemplate_ClientSuppliedIDIsForwardedButServerIDWins
+//
+// A tabela permanece — e ganhou os DOIS vizinhos que sobraram, send/buttons
+// e send/list — porque a forma que ela mede (mesma guarda de autenticação,
+// mesma guarda de sessão, mesmo decode, mesma tradução de erro do use case)
+// é exatamente a dos dois. Deixá-la vazia seria pior que removê-la: cada
+// `for` deste arquivo passaria a iterar sobre zero casos e a suíte inteira
+// ficaria verde sem medir nada.
+//
+// A cobertura dos dois é aditiva, não duplicada:
+// handler_interactive_test.go mede outros eixos para as mesmas rotas (corpo
+// `{}` com causa, WrongTypeInContext), e nenhum dos eixos exclusivos DESTA
+// tabela — matriz por campo obrigatório, quatro formas de corpo malformado,
+// Id do cliente, ausência de segredo no log — existe lá.
 //
 // Cada caso de saida >=400 passa pelo co-gate D (logassert.OutcomeLogged):
 // o caminho tem de logar, com causa, com req_id, em warn ou error, e sem
@@ -68,18 +92,31 @@ func msgHandlerCases() []msgHandlerCase {
 	log := silentLogger{}
 	return []msgHandlerCase{
 		{
-			name: "SendTemplate",
-			path: "/chat/send/template",
+			name: "SendButtons",
+			path: "/chat/send/buttons",
 			build: func(f *contractsfake.MessageComposer) http.Handler {
-				return NewSendTemplateHandler(message.NewSendTemplateUseCase(f, log))
+				return NewSendButtonsHandler(message.NewSendButtonsUseCase(f, log))
 			},
-			validBody:     `{"Phone":"5511999999999","Content":"corpo","Footer":"rodape"}`,
+			validBody:     `{"Phone":"5511999999999","Body":"escolha"}`,
 			wantMessageID: contractsfake.DefaultMessageID,
 			generatesID:   true,
 			missingField: map[string]string{
-				"Phone":   `{"Content":"corpo","Footer":"rodape"}`,
-				"Content": `{"Phone":"5511999999999","Footer":"rodape"}`,
-				"Footer":  `{"Phone":"5511999999999","Content":"corpo"}`,
+				"Phone": `{"Body":"escolha"}`,
+				"Body":  `{"Phone":"5511999999999"}`,
+			},
+		},
+		{
+			name: "SendList",
+			path: "/chat/send/list",
+			build: func(f *contractsfake.MessageComposer) http.Handler {
+				return NewSendListHandler(message.NewSendListUseCase(f, log))
+			},
+			validBody:     `{"Phone":"5511999999999","Desc":"cardapio"}`,
+			wantMessageID: contractsfake.DefaultMessageID,
+			generatesID:   true,
+			missingField: map[string]string{
+				"Phone": `{"Desc":"cardapio"}`,
+				"Desc":  `{"Phone":"5511999999999"}`,
 			},
 		},
 	}
@@ -102,7 +139,7 @@ func msgServe(t *testing.T, tc msgHandlerCase, fake *contractsfake.MessageCompos
 // msgAuthed e' a mutacao padrao: requisicao autenticada com sessao valida.
 func msgAuthed(r *http.Request) *http.Request { return withUser(r, "user-1") }
 
-// TestMessageHandlers_Success: o caminho feliz dos quatro. E' o unico teste do
+// TestMessageHandlers_Success: o caminho feliz dos dois. E' o unico teste do
 // arquivo que exige AUSENCIA de log — o caminho de sucesso ja e' registrado
 // pelo middleware de fronteira, e um log aqui seria o Cenario 2 do plano
 // (ruido redundante inflando a metrica).
@@ -283,10 +320,10 @@ func TestMessageHandlers_SessionFailure(t *testing.T) {
 	}
 }
 
-// TestMessageHandlers_MessageIDFailure cobre o unico caminho de erro exclusivo
-// de send/text e send/template: a sessao esta' viva, mas a geracao do message
-// ID falha. Os outros dois handlers nunca chegam aqui — e o teste assere isso,
-// para que mover a geracao de ID para eles nao passe despercebido.
+// TestMessageHandlers_MessageIDFailure cobre o caminho de erro exclusivo dos
+// use cases que geram ID: a sessao esta' viva, mas a geracao do message ID
+// falha. O ramo `!generatesID` continua aqui de proposito, para que um
+// handler que PARE de gerar ID (ou que passe a gerar) nao passe despercebido.
 func TestMessageHandlers_MessageIDFailure(t *testing.T) {
 	for _, tc := range msgHandlerCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -319,14 +356,15 @@ func TestMessageHandlers_MessageIDFailure(t *testing.T) {
 	}
 }
 
-// TestMessageHandlers_ClientSuppliedIDSkipsGeneration: com Id no payload,
-// send/template nao toca NewMessageID, e o ID do cliente e' o que volta.
+// TestMessageHandlers_ClientSuppliedIDSkipsGeneration: com Id no payload, os
+// dois handlers nao tocam NewMessageID, e o ID do cliente e' o que volta.
 // Sem este caso, o ramo `if msgID == ""` do use case so' seria exercitado
 // num sentido. (send/text tem o caso equivalente em
 // handler_message_send_test.go, sobre port.TextMessenger.)
 func TestMessageHandlers_ClientSuppliedIDSkipsGeneration(t *testing.T) {
 	bodies := map[string]string{
-		"SendTemplate": `{"Phone":"5511999999999","Content":"corpo","Footer":"rodape","Id":"id-do-cliente"}`,
+		"SendButtons": `{"Phone":"5511999999999","Body":"escolha","Id":"id-do-cliente"}`,
+		"SendList":    `{"Phone":"5511999999999","Desc":"cardapio","Id":"id-do-cliente"}`,
 	}
 
 	for _, tc := range msgHandlerCases() {
@@ -361,7 +399,7 @@ func TestMessageHandlers_ClientSuppliedIDSkipsGeneration(t *testing.T) {
 }
 
 // TestMessageHandlers_NoSecretInLog e' a clausula (d) do co-gate D exercitada
-// contra os quatro handlers com os segredos da F9.4 REALMENTE presentes no
+// contra os handlers da tabela com os segredos da F9.4 REALMENTE presentes no
 // caminho — plantados no corpo da requisicao e no cabecalho Authorization. Sem
 // o segredo no caminho, a ausencia dele no log nao significaria nada.
 //

@@ -88,6 +88,34 @@ func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.
 	return domain.MessageSendResult{}, s.err
 }
 
+// Os quatro métodos de port.SimpleMessenger entraram com o CAP-15, quando
+// SendTemplate migrou de port.MessageComposer (que só validava) para a porta
+// que ENVIA. A tabela só exercita SendTemplate; os outros três existem porque
+// a interface é uma só e o use case a exige inteira — e ficam prontos para
+// quando /chat/send/location, /contact e /poll entrarem nesta tabela.
+//
+// Todos contam em s.calls: o boundary test mede se o handler chegou a AGIR
+// sobre o WhatsApp, e enviar é o ato máximo.
+func (s *spyPort) SendLocation(context.Context, string, domain.JID, domain.LocationPayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendContact(context.Context, string, domain.JID, domain.ContactPayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendPoll(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendTemplate(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
 // FetchLinkPreview implementa port.LinkPreviewFetcher. Não conta como
 // "toque" em s.calls: é uma porta de resolução de metadata, não de ação
 // sobre a sessão — os testes de fronteira medem se o handler AGIU no
@@ -313,8 +341,10 @@ func boundaryCases() []boundaryCase {
 			readsBody: true,
 		},
 		{
-			name:      "SendTemplate",
-			build:     func(s *spyPort) http.Handler { return NewSendTemplateHandler(message.NewSendTemplateUseCase(s, log)) },
+			name: "SendTemplate",
+			build: func(s *spyPort) http.Handler {
+				return NewSendTemplateHandler(message.NewSendTemplateUseCase(s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/send/template",
 			readsBody: true,
@@ -643,6 +673,11 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 // Campos a mais são ignorados na desserialização, então um corpo só serve as
 // dezessete rotas — e um corpo por rota seria uma segunda tabela para divergir
 // da primeira.
+//
+// `Buttons` entrou com o CAP-15: sem ele /chat/send/template passaria a ser
+// recusado na validação e nunca alcançaria a porta, que é exatamente a
+// armadilha que o comentário do teste acima descreve — o caso passaria verde
+// sem exercitar o caminho do erro interno que ele existe para vigiar.
 const corpoValidoParaFronteira = `{
   "Phone": "5511999999999",
   "ChatPhone": "5511999999999",
@@ -666,5 +701,6 @@ const corpoValidoParaFronteira = `{
   "Header": "cabecalho",
   "Footer": "rodape",
   "FileName": "a.pdf",
-  "Options": ["um", "dois"]
+  "Options": ["um", "dois"],
+  "Buttons": [{"DisplayText": "Sim", "Type": "quickreply"}]
 }`

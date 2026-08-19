@@ -37,12 +37,25 @@ type SimpleMessengerSendContactCall struct {
 	ID      string
 }
 
+// DefaultSentTemplateMessageID é o ID que SimpleMessenger devolve em
+// MessageSendResult.ID sem SendTemplateFunc configurada.
+const DefaultSentTemplateMessageID = "sent-template-message-id"
+
 // SimpleMessengerSendPollCall é uma chamada a SendPoll.
 type SimpleMessengerSendPollCall struct {
 	Ctx     context.Context
 	TxtID   string
 	Target  domain.JID
 	Payload domain.PollPayload
+	ID      string
+}
+
+// SimpleMessengerSendTemplateCall é uma chamada a SendTemplate.
+type SimpleMessengerSendTemplateCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.TemplatePayload
 	ID      string
 }
 
@@ -58,6 +71,9 @@ type SimpleMessenger struct {
 
 	SendPollFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error)
 	SendPollCalls []SimpleMessengerSendPollCall
+
+	SendTemplateFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error)
+	SendTemplateCalls []SimpleMessengerSendTemplateCall
 }
 
 var _ port.SimpleMessenger = (*SimpleMessenger)(nil)
@@ -87,4 +103,13 @@ func (f *SimpleMessenger) SendPoll(ctx context.Context, txtID string, target dom
 		return f.SendPollFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentPollMessageID}, nil
+}
+
+// SendTemplate implementa port.SimpleMessenger.
+func (f *SimpleMessenger) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error) {
+	f.SendTemplateCalls = append(f.SendTemplateCalls, SimpleMessengerSendTemplateCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendTemplateFunc != nil {
+		return f.SendTemplateFunc(ctx, txtID, target, payload, id)
+	}
+	return domain.MessageSendResult{ID: DefaultSentTemplateMessageID}, nil
 }

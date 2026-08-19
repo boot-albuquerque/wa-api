@@ -159,7 +159,7 @@ func initCustomHandlers(s *server) {
 	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
 	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
-	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)
+	sendTemplateUC := message.NewSendTemplateUseCase(chatMessenger, jidResolver, logger)
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -535,6 +536,120 @@ func (a *ChatMessengerAdapter) SendPoll(ctx context.Context, txtID string, targe
 
 	a.polls.SetPollOptions(txtID, string(resp.ID), payload.Options)
 
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// hydratedTemplateID é o TemplateId de HydratedFourRowTemplate. O histórico
+// o escrevia como o literal "1" (`git show 41bc8e2^:handlers.go`, linha
+// 3230) e nunca o expôs no payload público, então ele vive aqui — junto da
+// montagem do protobuf —, e como constante nomeada em vez de literal solto
+// (ADR-0004).
+const hydratedTemplateID = "1"
+
+// firstTemplateButtonID é o número do PRIMEIRO botão na numeração automática
+// dos botões de resposta rápida sem ID. O histórico começava em 1 e
+// incrementava a cada botão, INCLUSIVE os de url e de call — que não usam o
+// número, mas consomem uma posição. Preservar esse consumo importa: um
+// template com [url, quickreply] numera o quickreply como "2", e mudar isso
+// mudaria o id que volta no clique de quem já tem a mensagem no aparelho.
+const firstTemplateButtonID = 1
+
+// templateButtons traduz os botões de domínio para os `Hydrated*Button` do
+// wire, preservando a ORDEM (é a ordem em que aparecem no aparelho de quem
+// recebe) e numerando os de resposta rápida sem ID.
+//
+// DIVERGÊNCIA CONSCIENTE DO HISTÓRICO, registrada em HOUSEKEEP F140: o ramo
+// `default` do histórico escrevia `proto.String(string(id))`, e `string(int)`
+// em Go converte para RUNE — `string(1)` é "\x01", um caractere de controle,
+// não "1". O ramo `quickreply` do mesmo switch usava `strconv.Itoa(id)`, que
+// está certo; só o `default` errava. Aqui os DOIS usam strconv.Itoa: o
+// defeito não é reproduzido, e em Go moderno a conversão sequer compilaria
+// sem `rune()` explícito.
+//
+// Type desconhecido cai em quickreply, como no histórico: recusá-lo agora
+// rejeitaria payloads que a rota sempre aceitou.
+func templateButtons(buttons []domain.TemplateButton) []*waE2E.HydratedTemplateButton {
+	out := make([]*waE2E.HydratedTemplateButton, 0, len(buttons))
+
+	id := firstTemplateButtonID
+	for _, item := range buttons {
+		switch item.Type {
+		case domain.TemplateButtonURL:
+			out = append(out, &waE2E.HydratedTemplateButton{
+				HydratedButton: &waE2E.HydratedTemplateButton_UrlButton{
+					UrlButton: &waE2E.HydratedTemplateButton_HydratedURLButton{
+						DisplayText: proto.String(item.DisplayText),
+						URL:         proto.String(item.URL),
+					},
+				},
+			})
+		case domain.TemplateButtonCall:
+			out = append(out, &waE2E.HydratedTemplateButton{
+				HydratedButton: &waE2E.HydratedTemplateButton_CallButton{
+					CallButton: &waE2E.HydratedTemplateButton_HydratedCallButton{
+						DisplayText: proto.String(item.DisplayText),
+						PhoneNumber: proto.String(item.PhoneNumber),
+					},
+				},
+			})
+		default:
+			buttonID := item.ID
+			if buttonID == "" {
+				buttonID = strconv.Itoa(id)
+			}
+			out = append(out, &waE2E.HydratedTemplateButton{
+				HydratedButton: &waE2E.HydratedTemplateButton_QuickReplyButton{
+					QuickReplyButton: &waE2E.HydratedTemplateButton_HydratedQuickReplyButton{
+						DisplayText: proto.String(item.DisplayText),
+						ID:          proto.String(buttonID),
+					},
+				},
+			})
+		}
+		id++
+	}
+
+	return out
+}
+
+// SendTemplate monta um TemplateMessage com HydratedFourRowTemplate a partir
+// de payload e o envia para target (CAP-15). Só HydratedContentText,
+// HydratedFooterText, HydratedButtons e TemplateId são preenchidos — nenhum
+// outro campo do protobuf (HydratedTitleText, TitleText, LocationMessage,
+// DocumentMessage, ImageMessage, VideoMessage), mesma disciplina do histórico
+// (`git show 41bc8e2^:handlers.go`, linha 3226). Sem upload, sem fetch: tudo
+// já chega pronto no payload.
+func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := &waE2E.Message{
+		TemplateMessage: &waE2E.TemplateMessage{
+			HydratedTemplate: &waE2E.TemplateMessage_HydratedFourRowTemplate{
+				HydratedContentText: proto.String(payload.Content),
+				HydratedFooterText:  proto.String(payload.Footer),
+				HydratedButtons:     templateButtons(payload.Buttons),
+				TemplateID:          proto.String(hydratedTemplateID),
+			},
+		},
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 

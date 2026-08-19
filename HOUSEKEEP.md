@@ -7345,3 +7345,198 @@ COV-4 e já foi REQUIRED_FIX nesta sessão (F119).
 conta real (REAL WHATSAPP EVIDENCE: NOT EXECUTED). Os testes provam a
 montagem, a ordem e o casamento hash->texto; não provam que o servidor do
 WhatsApp aceita a mensagem — isso continua pendente de medição em campo.
+
+## F139
+
+**Data**: 2026-08-19. **Contexto**: auditoria da matriz de capabilities antes
+de escolher o próximo bloco. Corrige um erro **meu** de levantamento.
+
+**Onde**: nenhum arquivo — o defeito era do MÉTODO de auditoria, e o registro
+existe para que a próxima auditoria não o repita.
+
+**Problema**: eu classifiquei capabilities como stub por um grep que
+procurava `Details:` ou `"validated"` no corpo do use case. Isso produziu
+falso positivo e falso negativo ao mesmo tempo:
+
+- **Falso positivo** (marquei stub, está implementado): `reject_call`. O
+  cadeia real é `reject_call.go` → `uc.chats.RejectCall` →
+  `MiscAdapter.RejectCall` (`pkg/infra/wa-noise/adapters/misc/adapter.go:59`)
+  → `client.RejectCall`. Ele só devolvia `Details: "Call rejected"` no
+  resultado, e o grep casou com isso.
+- **Falso negativo** (não estavam na minha lista, também implementados):
+  `chat_presence` (SendChatPresence), `send_presence` (SendPresence),
+  `subscribe_presence` (SubscribePresence).
+
+Reportei a matriz errada ao canal de decisão, que escolheu um bloco
+(`reject_call`) que **não existe como trabalho**.
+
+**Método correto**, e é o que a auditoria passou a usar: perguntar quais
+portas de AÇÃO o use case chama, ignorando `EnsureSession`, `NewMessageID`,
+`ResolveJID` e o logger — que são infraestrutura comum a todos, inclusive aos
+stubs. Um use case cujo conjunto de chamadas de porta se resume a essas
+quatro é stub; qualquer chamada de `Send*`, `Revoke*`, `Edit*`, `Reject*`,
+`Download*`, `Subscribe*` significa que a capability age.
+
+**O quadro correto**, enumerado, com os stubs REAIS sendo TRÊS:
+
+| capability | estado | o que falta |
+|---|---|---|
+| send_buttons | STUB | DTO sem `Buttons` |
+| send_list | STUB | DTO sem `Sections`/`Rows` |
+| send_template | STUB | DTO sem `Buttons` (3 subtipos) |
+
+E os três compartilham um problema que os blocos anteriores NÃO tinham: não
+é só fiação morta, o **DTO perdeu o campo que dá sentido à capability**.
+
+- `send_template`: o histórico exigia `Buttons` com no mínimo 1, e três
+  subtipos — QuickReply, Url e Call (`git show 41bc8e2^:handlers.go`,
+  `SendTemplate`, os ramos `HydratedTemplateButton_*`). DTO atual:
+  `Phone, Content, Footer, Id`.
+- `send_buttons`: histórico exigia `Buttons`; DTO atual `Phone, Body, Id`.
+- `send_list`: histórico exigia `Sections` com `Rows`, mais um campo `List`
+  legado; DTO atual `Phone, Desc, Id`.
+
+**Por que importa**: em todos os blocos desta sessão a recuperação foi
+reconectar fiação com o DTO já correto. Aqui é preciso ACRESCENTAR schema, o
+que é mudança de contrato — mesmo sendo aditiva. Chamar isso de "recuperação"
+esconde a diferença.
+
+**Correção sugerida**: nenhuma no código. A lição é de método: auditoria de
+capability se faz pelas chamadas de porta de ação, não por texto do resultado.
+
+**Status**: corrigido no levantamento e comunicado ao canal de decisão, que
+havia escolhido um bloco inexistente com base no erro.
+
+## F140
+
+**Data**: 2026-08-19. **Contexto**: CAP-15, recuperação de
+`POST /chat/send/template`. Divergência CONSCIENTE do histórico, registrada
+porque o CLAUDE.md manda registrar toda divergência — divergir sem saber que
+se está divergindo é como este repo reescreve os bugs dos outros.
+
+**Onde**: histórico, `git show 41bc8e2^:handlers.go`, linha 3218, ramo
+`default` do switch de tipo de botão em `SendTemplate`:
+
+```go
+default:
+    text := item.DisplayText
+    buttons = append(buttons, &waE2E.HydratedTemplateButton{
+        HydratedButton: &waE2E.HydratedTemplateButton_QuickReplyButton{
+            QuickReplyButton: &waE2E.HydratedQuickReplyButton{
+                DisplayText: &text,
+                Id:          proto.String(string(id)),   // <- aqui
+            },
+        },
+    })
+```
+
+Nosso código: `pkg/infra/wa-noise/adapters/chat/messenger.go`, função
+`templateButtons`, ramo `default`.
+
+**Problema**: `string(int)` em Go converte para RUNE, não para decimal.
+`string(1)` é `"\x01"` — um caractere de controle, um byte —, não `"1"`. O
+ramo `quickreply` do MESMO switch (linha 3178) usava `strconv.Itoa(id)`, que
+está certo; só o `default` errava. Ou seja: um botão com
+`Type:"quickreply"` recebia o id `"1"`, e um botão com `Type` vazio ou
+desconhecido — que o histórico manda cair em quickreply — recebia `"\x01"`.
+Dois caminhos para a mesma coisa, um deles produzindo um identificador que
+nenhum cliente reconhece.
+
+Em Go moderno a conversão `string(int)` de uma variável `int` é erro de
+`go vet` (`conversion from int to string yields a string of one rune`), o
+que provavelmente impediria o histórico de compilar como está sob o `make
+check` deste repo.
+
+**Divergência aplicada**: o defeito NÃO foi reproduzido. Os dois ramos usam
+`strconv.Itoa(id)`. O que o histórico fazia está descrito acima; o que
+fazemos é numerar em decimal nos dois ramos; a diferença é deliberada e a
+razão é que o histórico está errado, não que a nossa forma seja mais
+bonita.
+
+O resto da numeração é FIEL ao histórico e foi preservado de propósito,
+inclusive as duas partes que não são óbvias:
+
+- o contador começa em 1 e é incrementado FORA do switch, então botões de
+  `url` e de `call` — que não usam o número — mesmo assim CONSOMEM uma
+  posição: `[url, quickreply]` numera o quickreply como `"2"`;
+- `Id` preenchido no payload VENCE a numeração automática, e o contador
+  anda mesmo assim.
+
+Mudar qualquer um dos dois mudaria o id que volta no clique de quem já tem
+a mensagem no aparelho.
+
+**Testes que travam** (todos em
+`pkg/infra/wa-noise/adapters/chat/messenger_template_test.go`):
+
+- `TestChatMessengerAdapter_SendTemplate_AutomaticButtonNumbering` — assere
+  o TEXTO `"1"` e `"2"`, e imprime os BYTES em caso de falha. Uma asserção
+  de mera presença passaria com o defeito no lugar.
+- `TestChatMessengerAdapter_SendTemplate_UnknownTypeFallsBackToQuickReply` —
+  o ramo `default` especificamente, que é onde o defeito vivia.
+- `TestChatMessengerAdapter_SendTemplate_ExplicitIDBeatsNumbering` — o
+  contador anda mesmo quando o botão anterior trouxe ID próprio.
+- `TestChatMessengerAdapter_SendTemplate_NumberingCountsNonQuickReplyButtons`
+  — url/call consomem posição.
+
+**Controle negativo EXECUTADO**: trocado `strconv.Itoa(id)` por
+`string(rune(id))` em `messenger.go` (com `_ = strconv.Itoa` para manter o
+import vivo — a primeira tentativa não compilou, ARMADILHA 3):
+
+```
+--- FAIL: TestChatMessengerAdapter_SendTemplate_UnknownTypeFallsBackToQuickReply (0.00s)
+    messenger_template_test.go:220: ID = "\x01", quero "1" — o ramo default tem de numerar com strconv.Itoa, nao com string(int), que produz o caractere de controle \x01 (HOUSEKEEP F140)
+--- FAIL: TestChatMessengerAdapter_SendTemplate_AutomaticButtonNumbering (0.00s)
+    messenger_template_test.go:254: botao[0] ID = "\x01" (bytes [1]), quero exatamente "1". `string(int)` em Go converte para RUNE: string(1) e' "\x01", nao "1" (HOUSEKEEP F140)
+    messenger_template_test.go:254: botao[1] ID = "\x02" (bytes [2]), quero exatamente "2". `string(int)` em Go converte para RUNE: string(1) e' "\x01", nao "1" (HOUSEKEEP F140)
+--- FAIL: TestChatMessengerAdapter_SendTemplate_ExplicitIDBeatsNumbering (0.00s)
+    messenger_template_test.go:282: botao[1] ID = "\x02", quero "2": o contador anda mesmo quando o botao anterior trouxe ID proprio
+--- FAIL: TestChatMessengerAdapter_SendTemplate_NumberingCountsNonQuickReplyButtons (0.00s)
+    messenger_template_test.go:308: botao[1] ID = "\x02", quero "2": o botao de url consome uma posicao do contador
+FAIL
+```
+
+Mutação revertida por edição localizada; suíte do pacote verde de novo.
+
+**Status**: corrigido nesta sessão (o defeito nunca chegou a existir no
+nosso código), travado pelos quatro testes acima.
+
+## F141
+
+**Data**: 2026-08-19. **Contexto**: CAP-15, ao escrever a asserção de causa
+do corpo malformado em `handler_send_template_test.go`. Achado INCIDENTAL,
+fora do escopo do bloco — não corrigido, por decisão de escopo.
+
+**Onde**: duas formas de logar a falha de decode convivem no pacote de
+handlers.
+
+- `pkg/presentation/http/handlers/handler_message_template.go`, no ramo do
+  decode: `hlog.FromRequest(r).Warn().Err(err)` — o erro CRU do decoder.
+- `pkg/presentation/http/handlers/handler_interactive.go:227`:
+  `hlog.FromRequest(r).Warn().Err(errDecodePayload)` — o erro-sentinela
+  genérico.
+
+**Problema**: para a mesma classe de falha, o campo `error` do log carrega
+coisas diferentes conforme a rota. Em `/chat/send/template` sai
+`"unexpected EOF"` (ou `"json: cannot unmarshal object into Go struct field
+SendTemplateRequest.Buttons of type []domain.TemplateButton"`); em
+`/chat/send/poll` sai sempre `"could not decode payload"`. Evidência: as
+asserções de `logassert.OutcomeLogged` dos dois arquivos de teste têm de
+pedir substrings diferentes para a MESMA condição —
+`handler_send_poll_test.go` pede `"could not decode payload"`,
+`handler_send_template_test.go` pede `"unexpected EOF"`.
+
+O efeito não é um bug de resposta (as duas devolvem 400 com o mesmo
+envelope genérico), é de OPERAÇÃO: quem monta alerta ou consulta por
+`error` no log precisa conhecer as duas formas.
+
+**Correção sugerida**: padronizar na forma do template — logar o erro CRU
+do decoder e responder com o sentinela genérico. É a mais operável das
+duas: `"unexpected EOF"` e `"cannot unmarshal object into ... .Buttons"`
+dizem ONDE o JSON quebrou, enquanto `"could not decode payload"` só repete
+o que o status já disse. A mudança é de LOG, não de resposta, então nenhum
+cliente é afetado — mas ela toca `handler_interactive.go`, que serve
+`send/buttons` e `send/list`, e esses são escopo de outro bloco.
+
+**Status**: NÃO corrigido. Fora do escopo do CAP-15, e o arquivo que
+precisaria mudar (`handler_interactive.go`) é o dos dois stubs que ainda
+faltam recuperar — corrigir aqui criaria conflito com esse bloco.

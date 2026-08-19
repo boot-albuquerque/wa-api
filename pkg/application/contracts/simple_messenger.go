@@ -59,4 +59,24 @@ type SimpleMessenger interface {
 	// pkg/bootstrap/eventhandler_message.go:130). Onde essa memória vive é
 	// escolha da infra; QUE ela exista é contrato desta porta.
 	SendPoll(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error)
+
+	// SendTemplate monta um TemplateMessage com HydratedFourRowTemplate a
+	// partir de payload (Content/Footer/Buttons) e o envia para target.
+	// Mesma disciplina de SendLocation quanto a id e ao resultado
+	// devolvido (CAP-15).
+	//
+	// Template cabe AQUI pelo mesmo critério que trouxe Poll: é CRIAÇÃO de
+	// mensagem — não operação sobre mensagem que já existe, que é
+	// ChatMessenger —, e tem exatamente a forma que define esta porta,
+	// campos escalares do request virando protobuf e sendo enviados, sem
+	// etapa de obtenção de bytes e sem upload. É o quarto caso real da
+	// mesma fronteira, depois de Location, Contact e Poll.
+	//
+	// A tradução de cada domain.TemplateButton para o seu
+	// `waE2E.Hydrated*Button` é da IMPLEMENTAÇÃO, e com ela a numeração
+	// automática dos botões de resposta rápida sem ID: o formato do
+	// identificador é exigência do wire, e o use case não conhece
+	// protobuf. QUE a ordem dos botões seja preservada é contrato desta
+	// porta — é a ordem em que eles aparecem no aparelho de quem recebe.
+	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error)
 }
