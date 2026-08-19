@@ -636,3 +636,196 @@ func TestStart_PairingTimeoutWithoutOwnershipCheck(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 }
+
+// --- F153: the QR-timeout that kills a session that JUST paired ---------
+//
+// Measured in production, real account, two consecutive pairing attempts
+// against the same user:
+//
+//	First attempt (broke):
+//	  12:00:02  loggedIn=TRUE                     <- authenticated
+//	  12:00:02  Offline sync completed
+//	  12:00:03  Message Received id=3AE00A2FF...   <- real messages arriving
+//	  12:00:03  Message Received id=3A42A5C18...
+//	  12:00:03  WARN  QR timeout killing channel   <- torn down anyway
+//	  12:00:03  INFO  Received kill signal
+//	  12:00:03  ERROR Failed to do initial fetch of app state (x5)
+//	  12:00:03  no session
+//
+//	Second attempt (survived): connected=true, loggedIn=true, jid populated,
+//	qrcode cleared, stable for 30s+, no "QR timeout killing channel" line.
+//	(Log preserved at /tmp/waapi-live/server.log.)
+//
+// Root cause traced to internal/wa-noise/core/qrchan.go: emitQRs (a
+// goroutine driven by a purely LOCAL per-QR-code timer) and handleEvent (a
+// goroutine driven by the REAL PairSuccess arriving over the websocket) both
+// race for a single atomic CAS on qrc.closed. Only the CAS winner's item
+// (success XOR timeout — never both) ever reaches sess.Pair()'s output
+// channel; the loser is dropped silently inside the SDK
+// ("Got status ..., but channel is already closed"). When the local timer
+// wins, this orchestrator's pairing channel sees ONLY "timeout", even though
+// the session authenticated seconds earlier — confirmed by the completely
+// separate session-event bus (Connected/PairSuccess, registered before the
+// QR-channel's own handler in Start, and never gated by that CAS). Whether
+// the timer or the network wins is a genuine, non-deterministic race,
+// exactly matching why the SAME account paired twice with two different
+// outcomes.
+//
+// Invariant written into runPairing: once pairing is CONFIRMED by the
+// session-event bus, no later item from the QR-pairing channel — timeout or
+// a stale QR code — may tear the session down or rewrite its QR state.
+// Before that confirmation, timeout must still tear everything down, as it
+// always has (F98).
+
+// TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing is
+// the direct reproduction of the field defect: the session-event bus
+// confirms Connected BEFORE this orchestrator reads the QR channel's own
+// "timeout" item — the exact ordering measured in the broken attempt above.
+func TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	h.session.PairingEvents = make(chan port.PairingEvent, 1)
+	h.session.PairingEvents <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(h.session.PairingEvents)
+
+	// PairFunc runs inside Start(), synchronously, right after Subscribe
+	// registers this orchestrator's session-event handler — so Emit here
+	// deterministically precedes runPairing consuming the buffered Timeout
+	// item. No sleep, no wall-clock: the order is forced, not raced.
+	h.session.PairFunc = func(ctx context.Context) (<-chan port.PairingEvent, error) {
+		h.session.Emit(port.SessionEvent{Kind: port.SessionEventKindConnected})
+		return h.session.PairingEvents, nil
+	}
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 0 {
+		t.Errorf("Unregister after a CONFIRMED pairing (%v): the live session got torn down", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 0 {
+		t.Errorf("Detach after a CONFIRMED pairing (%v): the live session got torn down", h.attach.DetachCalls)
+	}
+	if len(released) != 0 {
+		t.Errorf("ownership released after a CONFIRMED pairing (%v): the lease was handed away from a live session", released)
+	}
+	if got := h.dispatcher.DispatchedTypes(); indexOf(got, "QRTimeout") >= 0 {
+		t.Errorf("QRTimeout dispatched after a CONFIRMED pairing: %v", got)
+	}
+}
+
+// TestStart_TimeoutWithoutConfirmationStillTearsDownEverything is the F98
+// regression control in the opposite direction: a QR that the user simply
+// never scans (no Connected/PairSuccess ever observed) must still tear down
+// every holder the teardown enumerates today — Unregister, Detach,
+// QRTimeout dispatch, ownership release, and the qrcode column clear. This
+// is the scenario the guard must NOT weaken.
+func TestStart_TimeoutWithoutConfirmationStillTearsDownEverything(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 1)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Unregister, obtive %v", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Detach, obtive %v", h.attach.DetachCalls)
+	}
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Fatalf("esperava ownership liberada para user-1, obtive %v", released)
+	}
+	if got := h.dispatcher.DispatchedTypes(); len(got) != 1 || got[0] != "QRTimeout" {
+		t.Fatalf("esperava despacho de QRTimeout, obtive %v", got)
+	}
+	foundQRClear := false
+	for _, q := range h.db.execQueries {
+		if q == `UPDATE users SET qrcode='' WHERE id=$1` {
+			foundQRClear = true
+		}
+	}
+	if !foundQRClear {
+		t.Fatalf("esperava UPDATE limpando qrcode, obtive %v", h.db.execQueries)
+	}
+}
+
+// TestStart_LateSuccessAfterTimeoutDoesNotResurrectTornDownSession covers
+// the reverse order: if timeout is read BEFORE any confirmation ever
+// arrives, teardown already ran (as F98 requires) and a Success item
+// arriving afterward on the same channel cannot undo it — it can only be a
+// harmless no-op (flip `confirmed`, clear qrcode again).
+func TestStart_LateSuccessAfterTimeoutDoesNotResurrectTornDownSession(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Unregister (do timeout), obtive %v", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Detach (do timeout), obtive %v", h.attach.DetachCalls)
+	}
+	if len(released) != 1 {
+		t.Fatalf("esperava ownership liberada exatamente uma vez, obtive %v", released)
+	}
+}
+
+// TestStart_LateQRAfterSuccessDoesNotResurrectQR covers a QR code event
+// arriving after Success: it must not be dispatched nor rewrite the qrcode
+// column with a stale code the user could scan into a session that is
+// already alive.
+func TestStart_LateQRAfterSuccessDoesNotResurrectQR(t *testing.T) {
+	h := newHarness(t)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "late-code", Timeout: 20 * time.Second}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if got := h.dispatcher.DispatchedTypes(); indexOf(got, "QR") >= 0 {
+		t.Errorf("QR dispatched for a code that arrived AFTER success: %v", got)
+	}
+	for _, q := range h.db.execQueries {
+		if strings.Contains(q, "qrcode=$1") {
+			t.Errorf("qrcode column rewritten with a stale QR image after success: %v", h.db.execQueries)
+		}
+	}
+}

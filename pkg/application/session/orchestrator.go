@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -230,7 +231,32 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err err
 		return aerr
 	}
 
+	// pairingConfirmed is the REAL signal that the session authenticated —
+	// not the "success" item of the pairing channel
+	// (port.PairingEventKindSuccess).
+	//
+	// F153 (measured in production, real account): the pairing channel may
+	// emit ONLY "timeout" even for a session that did authenticate. The
+	// local expiry timer of the last QR code (an independent goroutine in
+	// the vendored SDK) and the real PairSuccess arriving from the server
+	// race for a single CAS on the SDK side; if the timer wins, the SDK
+	// drops the "success" silently and delivers only "timeout" — even when
+	// authentication completed seconds earlier. runPairing alone would never
+	// see the "success" in that case.
+	//
+	// The signal that does NOT lie is the session-event bus: the
+	// Connected/PairSuccess handler of this Subscribe runs whenever
+	// authentication really completes (handleConnectSuccess only fires
+	// Connected after isLoggedIn=true), and it runs BEFORE the QR channel's
+	// own handler in the same dispatch, because it was registered first.
+	// That is why this signal, not the one local to runPairing, guards the
+	// timeout teardown.
+	var pairingConfirmed atomic.Bool
+
 	unsubscribe, serr := sess.Subscribe(func(evt port.SessionEvent) {
+		if evt.Kind == port.SessionEventKindConnected || evt.Kind == port.SessionEventKindPairSuccess {
+			pairingConfirmed.Store(true)
+		}
 		o.handleSessionEvent(ctx, userID, evt)
 	})
 	if serr != nil {
@@ -240,7 +266,7 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err err
 	}
 
 	if !sess.HasCredentials() {
-		return o.runPairing(ctx, sess, userID)
+		return o.runPairing(ctx, sess, userID, &pairingConfirmed)
 	}
 	return o.connectWithRetry(ctx, sess, userID)
 }
@@ -301,7 +327,25 @@ func proxyConfigFor(proxyURL string) port.ProxyConfig {
 
 // runPairing consome o canal de pareamento, replicando o switch de
 // startClient sobre os eventos "code"/"timeout"/"success".
-func (o *Orchestrator) runPairing(ctx context.Context, sess port.Session, userID string) error {
+//
+// Invariant (F153, measured in production with a real account): once the
+// session has really authenticated — signalled by `confirmed`, not by the
+// "success" item of this channel — no later event from this channel may
+// tear the session down or rewrite the QR; before that, "timeout" must tear
+// everything down, as it always has (F98).
+//
+// Why the guard does not use this channel's own "success": the vendored SDK
+// (internal/wa-noise/core/qrchan.go) delivers only ONE terminal item per
+// channel — success XOR timeout, never both — through a single CAS. But
+// that CAS is raced by two independent goroutines: the local expiry timer
+// of the last QR code (emitQRs) and the real PairSuccess arriving from the
+// server (handleEvent). If the timer wins, the SDK drops the "success"
+// silently ("Got status ..., but channel is already closed") and this
+// channel never sees anything but "timeout" — even though authentication
+// completed seconds earlier outside this channel. `confirmed` is fed by the
+// session-event bus (Connected/PairSuccess in Start), which does not go
+// through that CAS and therefore cannot lose the event.
+func (o *Orchestrator) runPairing(ctx context.Context, sess port.Session, userID string, confirmed *atomic.Bool) error {
 	events, err := sess.Pair(ctx)
 	if err != nil {
 		return err
@@ -310,10 +354,19 @@ func (o *Orchestrator) runPairing(ctx context.Context, sess port.Session, userID
 	for evt := range events {
 		switch evt.Kind {
 		case port.PairingEventKindQR:
+			if confirmed.Load() {
+				log.Debug().Str("userid", userID).Msg("ignoring stale QR event after pairing was confirmed")
+				continue
+			}
 			o.onPairingQR(ctx, userID, evt)
 		case port.PairingEventKindTimeout:
+			if confirmed.Load() {
+				log.Warn().Str("userid", userID).Msg("ignoring stale QR-channel timeout: pairing already confirmed by session events (F153)")
+				continue
+			}
 			o.onPairingTimeout(ctx, userID)
 		case port.PairingEventKindSuccess:
+			confirmed.Store(true)
 			o.onPairingSuccess(userID)
 		default:
 			log.Info().Str("event", string(evt.Kind)).Str("userid", userID).Msg("Login event")

@@ -1833,8 +1833,8 @@ pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:195);uncovered:L2(S-ret,orchestrator.go:243);uncovered:L2(S-ret,orchestrator.go:245)
-pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:212)
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:196);uncovered:L2(S-ret,orchestrator.go:269);uncovered:L2(S-ret,orchestrator.go:271)
+pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:213)
 pkg/application/session.Orchestrator.Start.func2	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
@@ -1844,7 +1844,7 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:285)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:311)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithDefaultWebhookUseProxy	EXCLUDED	X1
 pkg/application/session.WithDefaultWebhookUseProxy.func1	EXCLUDED	X6

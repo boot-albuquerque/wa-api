@@ -8816,3 +8816,326 @@ primeiras são campo público perdido na migração, e a quinta é divergência
 deliberada. Todas seguem **não corrigidas**, por decisão, e nenhuma tem teste
 que a trave — o que é coerente, porque travar dívida ABERTA não faz sentido:
 o que se trava é decisão fechada.
+
+## F151
+
+**Data**: 2026-08-19. **Contexto**: validação REAL com conta de WhatsApp
+pareada, autorizada pelo humano. Achado enquanto eu tentava ligar o histórico
+para validar o gate da F128 no outro estado.
+
+**Onde**: `pkg/application/usecase/storage/` — cinco use cases.
+
+**Problema**: cinco rotas de CONFIGURAÇÃO devolvem 200 dizendo
+`"... configuration validated"` e **não gravam nada**. É a mesma classe de
+defeito que esta sessão desmontou em doze capabilities de envio, sobrevivendo
+em configuração.
+
+| rota | use case | resposta |
+|---|---|---|
+| `POST /session/history` | `set_history.go` | `"History configuration validated"` |
+| `POST /session/proxy` | `set_proxy.go` | `"Proxy configuration validated"` |
+| `POST /session/s3/test` | `test_s3_connection.go` | `"S3 connection test validated"` |
+| `POST /session/hmac/config` | `configure_hmac.go` | `"HMAC configuration validated"` |
+| `POST /session/s3/config` | `configure_s3.go` | `"S3 configuration validated"` |
+
+**Evidência de campo, reproduzível**:
+
+```
+POST /session/history {"history":50}
+  -> 200 {"Details":"History configuration validated","History":50}
+GET  /chat/history?chat_jid=index
+  -> 501 {"code":"history_disabled"}      <- nada foi gravado
+```
+
+O `GET /session/status` continua mostrando `"history":"0"`.
+
+O gate de History da F128 está CORRETO e foi ele que denunciou: ele revalida
+no banco, o banco nunca mudou, e o 501 é a resposta certa. O defeito é do lado
+que deveria ter escrito.
+
+**Gravidade**: pior que os stubs de envio. Quem configura S3 recebe sucesso e
+acredita que a mídia está sendo arquivada; quem configura HMAC acredita que os
+webhooks estão assinados. O silêncio aqui produz falsa confiança em
+integração e em segurança, não só ausência de função.
+
+**POR QUE A MINHA AUDITORIA NÃO PEGOU — erro de método, o mesmo da F139**:
+varri `usecase/message/` e `usecase/chat/` e apresentei como "matriz de
+capabilities". `usecase/storage/` e `usecase/session/` NUNCA entraram no
+conjunto. A varredura correta é sobre `find pkg/application/usecase`, sem
+recorte de pasta, e foi ela que revelou estes cinco.
+
+Isto aconteceu DUAS vezes na mesma sessão: na F139 o conjunto errado veio de
+grep por texto; aqui veio de recorte de diretório. A lição não é "grep melhor"
+— é que **definir o conjunto é parte da evidência**, e um levantamento que não
+diz como o conjunto foi formado não é auditoria.
+
+**Correção sugerida**: um bloco por área (storage tem três temas distintos:
+S3, HMAC, proxy/history), cada um recuperando o contrato histórico de
+`git show 41bc8e2^:handlers.go` e travando o wire, como os CAP-13/14/21/22
+fizeram no envio. `test_s3_connection` merece cuidado extra: testar conexão
+S3 real toca credencial e rede.
+
+**Status**: não corrigido, nada implementado. Achado em campo e levado ao
+canal de decisão.
+
+## F152
+
+**Data**: 2026-08-19. **Contexto**: auditoria por LEITURA de
+`pkg/application/usecase/session/`, o outro diretório que a minha varredura de
+capabilities nunca cobriu (ver F151). Feita porque a heurística já me deu
+falso positivo três vezes nesta sessão, e eu ia propor bloco em cima dela.
+
+### O achado principal: pareamento por telefone devolve código VAZIO
+
+**Onde**: `pkg/application/usecase/session/pair_phone.go:26-37`.
+
+`Execute` valida `Phone`, chama `EnsureSession` e devolve
+`&domain.PairPhoneResult{}` — struct **vazia**. O único campo do DTO é
+`LinkingCode`.
+
+**Evidência de campo, contra a sessão pareada de verdade**:
+
+```
+POST /session/pairphone   {"Phone":"55419924XXXXX"}
+  -> 200 {"code":200,"data":{"LinkingCode":""},"success":true}
+```
+
+O pareamento por telefone é a alternativa ao QR para quem não pode apontar a
+câmera. Ele responde **sucesso** com o código vazio: quem integra recebe 200,
+lê `LinkingCode` e não tem o que digitar. Mesma classe de silêncio dos envios,
+numa via de entrada do produto.
+
+Chamar a rota NÃO perturbou a sessão pareada (`/session/status` seguiu
+`connected:true, loggedIn:true`) — o que é a própria confirmação de que ela
+não faz nada.
+
+### Órfãos: dois use cases sem rota nenhuma
+
+`set_status_message.go` e `request_history_sync.go` também devolvem struct
+vazia, mas **não estão registrados em `wiring_routes.go`**. Probe em campo
+devolveu `404` para `/session/statusmessage`. São código morto, não defeito
+alcançável — a distinção muda a gravidade e por isso está escrita aqui em vez
+de virar item da lista acima.
+
+### Comentário que mente sobre a própria rota
+
+`pkg/presentation/http/handlers/handler_session.go:172` diz
+`// PairPhoneHandler handles POST /session/pairphone/{id}`. O caminho
+registrado (`wiring_routes.go:53`) é `/session/pairphone`, sem `{id}` — foi
+por isso que o meu primeiro probe levou 404. O gate `make handler-route` do
+CAP-20 cobre CONSTANTES de rota contra as rotas registradas; **comentário de
+handler não é constante e escapa do gate**. Candidato a extensão do gate.
+
+### Os TRÊS falsos positivos, nominalmente — a parte que justifica a leitura
+
+A heurística ("use case sem porta de ação") apontou estes como stub e a
+leitura inocentou os três:
+
+1. `session/sync_contact_roster.go:49` — chama
+   `uc.appState.SyncContactRoster(ctx, txtID, req.Mode)`. Funcional.
+2. `session/connect.go` — o use case É no-op, mas o handler descarta o
+   retorno (`_, err := h.usecase.Execute(...)`) e faz o trabalho real em
+   `h.StartSession(id, token)`. A rota FUNCIONA; o use case é vestigial.
+   Registrar como stub teria sido erro de diagnóstico.
+3. `message/download_{image,video,audio,document,sticker}.go` — delegam a
+   `mediaDownloadFlow`. Já sabido, repetido aqui por completude do conjunto.
+
+**A lição, e é a mesma da F139 e da F151**: nenhuma das duas heurísticas que
+usei acertou o conjunto. A primeira (grep por `Details:`) perdeu os quatro de
+`session/`, que devolvem struct vazia sem string nenhuma. A segunda (porta de
+ação ausente) marcou oito inocentes. **Só a leitura fechou o conjunto.**
+Levantamento por heurística serve para ORDENAR o que ler, nunca para concluir.
+
+**Status**: não corrigido. `pair_phone` é candidato a bloco próprio; os
+órfãos e o comentário mentiroso aguardam decisão junto com a F151.
+
+## F153
+
+**Data**: 2026-08-19. **Contexto**: CAP-25, achado em campo com conta real —
+um pareamento por QR que autenticou, sincronizou e recebeu mensagens, e um
+segundo depois foi desmontado pelo próprio orchestrator.
+
+**Onde**: `pkg/application/session/orchestrator.go`, `runPairing`
+(consumo do canal de `sess.Pair`, chamado a partir de `Start`).
+
+**Evidência de campo — DUAS medições, no mesmo dia, contra a mesma conta**
+(log completo preservado em `/tmp/waapi-live/server.log`):
+
+Primeira tentativa (quebrou):
+
+```
+12:00:02  loggedIn=TRUE                     <- pareou
+12:00:02  Offline sync completed
+12:00:03  Message Received id=3AE00A2FF...  <- mensagens reais chegando
+12:00:03  Message Received id=3A42A5C18...
+12:00:03  WARN  QR timeout killing channel
+12:00:03  INFO  Received kill signal
+12:00:03  ERROR Failed to do initial fetch of app state (x5)
+12:00:03  no session
+```
+
+Segunda tentativa (sobreviveu): `connected=true`, `loggedIn=true`, jid
+preenchido, `qrcode` limpo, estável por mais de 30s, **sem** a linha "QR
+timeout killing channel".
+
+**Diagnóstico — não é o que a primeira leitura (por inspeção) sugeria.** A
+leitura inicial deste achado apontava para `runPairing` consumindo, num
+único `for/switch`, um canal onde "success" e "timeout" chegariam os dois,
+na ordem errada. Essa leitura estava **incompleta**: o SDK vendorizado
+(`internal/wa-noise/core/qrchan.go:42-156`) garante, por um único
+`atomic.CompareAndSwapUint32(&qrc.closed, ...)` compartilhado entre
+`emitQRs` (timer local por código de QR) e `handleEvent` (eventos reais do
+websocket — `*events.PairSuccess`, `*events.Disconnected`), que **apenas UM
+item terminal** ("success" XOR "timeout") chega a `sess.Pair()`. Quem perde
+o CAS é descartado em silêncio dentro do SDK
+(`"Got status %+v, but channel is already closed"`) — então
+"success" seguido de "timeout" no MESMO canal nunca acontece.
+
+**A causa real é uma corrida entre DOIS relógios independentes do SDK**:
+
+1. `emitQRs` — goroutine própria, dirigida por `time.After(timeout)` LOCAL,
+   por código de QR (`qrCodeTimeout`/`qrCodeFirstTimeout`,
+   `internal/wa-noise/core/qrchan.go:71-101`).
+2. `handleEvent` — dirigida pelo `*events.PairSuccess` que chega de verdade
+   pelo websocket, via `cli.dispatchEvent`
+   (`internal/wa-noise/core/client_events.go:217-232`, síncrono, na ordem de
+   registro dos handlers).
+
+Se o timer local vence o CAS ANTES do `PairSuccess` real ser processado por
+`handleEvent`, o SDK fecha o canal com `QRChannelTimeout` e **descarta o
+"success" verdadeiro** — mesmo que a autenticação já tenha completado (ou
+esteja completando) por fora. `runPairing`, que só vê o canal de
+`sess.Pair()`, nunca recebe `PairingEventKindSuccess` nesse caso: recebe só
+`PairingEventKindTimeout`, e desmonta uma sessão viva.
+
+O que salva o diagnóstico é que o orchestrator já observa um SEGUNDO
+barramento, independente do canal de QR: `sess.Subscribe` (registrado em
+`Start`, ANTES do `sess.Pair` que cria o handler do canal de QR dentro do
+SDK). Esse barramento entrega `Connected`/`PairSuccess`
+(`pkg/infra/wa-noise/runtime/session/events.go`) e **não passa pelo CAS do
+canal de QR** — ele é alimentado direto por `cli.dispatchEvent`, chamado de
+forma síncrona para TODOS os handlers registrados, incluindo o do
+orchestrator. `events.Connected` só é disparado depois de
+`cli.isLoggedIn.Store(true)`
+(`internal/wa-noise/core/connectionevents.go:162-206`,
+`handleConnectSuccess`), então não há risco de ele disparar cedo demais e
+mascarar um timeout legítimo.
+
+**A corrida é não-determinística por desenho** — explica por que a MESMA
+conta pareou duas vezes com dois resultados diferentes: na primeira, o
+usuário escaneou perto do fim da janela de validade do último código; na
+segunda, mais cedo.
+
+**Correção — invariante escrita em `runPairing`**: depois que a sessão é
+CONFIRMADA pelo barramento de eventos de sessão (`Connected` ou
+`PairSuccess`, sinalizado por um `atomic.Bool` compartilhado que `Start`
+passa a `runPairing`), nenhum evento posterior do canal de QR — timeout OU
+um código atrasado — pode desmontar a sessão nem reescrever o QR. Antes
+dessa confirmação, timeout continua desmontando tudo, exatamente como antes
+(F98).
+
+**REGRA 1 — inventário de detentores do teardown de `onPairingTimeout`,
+e o que cada um faz quando NÃO roda no caminho confirmado**:
+
+| detentor | efeito se não rodar após confirmação |
+|---|---|
+| `o.dispatch(..., "QRTimeout", ...)` | nenhum webhook falso de timeout para uma sessão viva — é o efeito desejado |
+| `UPDATE users SET qrcode=''` | não roda; inofensivo, pois `onPairingSuccess` já limpou `qrcode` na confirmação |
+| `o.registry.Unregister(userID)` | handle da sessão viva permanece registrado — é o ponto inteiro do fix |
+| `o.attach.Detach(userID)` | kill-channel não é acionado; transporte da sessão viva continua de pé |
+| `o.releaseOwnership(userID)` | lease NÃO é devolvido — sessão viva continua pertencendo a esta réplica, que é o comportamento correto (ver F98 abaixo, para quando ISSO seria errado) |
+
+Nenhum detentor foi removido do caminho NÃO-confirmado — só ganhou uma
+guarda que verifica `confirmed.Load()` antes de rodar.
+
+**REGRA 2 — medido onde piora**: o cenário que cobra o preço do fix é o QR
+que o usuário nunca escaneia (nenhum `Connected`/`PairSuccess` chega). Teste
+`TestStart_TimeoutWithoutConfirmationStillTearsDownEverything` prova que os
+cinco detentores da tabela acima continuam rodando: 1 `Unregister`, 1
+`Detach`, ownership liberada uma vez, despacho de `QRTimeout`, e o `UPDATE
+users SET qrcode=''` presente em `execQueries`. É a F98 sem regressão.
+
+**REGRA 3 — a invariante, escrita no código** (comentário em `runPairing`,
+`pkg/application/session/orchestrator.go`): *"depois que a sessão autenticou
+de verdade — sinalizado por `confirmed`, não pelo item 'success' deste
+canal —, nenhum evento posterior deste canal pode desmontar a sessão nem
+reescrever o QR; antes disso, 'timeout' tem de desmontar tudo, como sempre
+desmontou (F98)."*
+
+**REGRA 4 — o conserto do conserto**: o guard em si é outro mecanismo
+condicional, então as três regras acima foram aplicadas A ELE:
+inventário (tabela acima), medição do cenário adverso (teste b) e a
+invariante escrita. Um risco adicional considerado e descartado: `confirmed`
+poderia disparar cedo demais e mascarar um timeout LEGÍTIMO se `Connected`
+fosse emitido antes da autenticação real completar — descartado porque
+`handleConnectSuccess` só chama `dispatchEvent(&events.Connected{})` depois
+de `isLoggedIn.Store(true)` (evidência acima), então não há caminho onde o
+guard trava um timeout que deveria ter travado.
+
+**Testes** (`pkg/application/session/orchestrator_test.go`):
+
+a. `TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing` —
+   reprodução exata do defeito medido: `Connected` emitido (via `PairFunc`,
+   síncrono, sem sleep) ANTES do item `timeout` bufferizado ser consumido.
+   Assert: zero `Unregister`, zero `Detach`, zero liberação de ownership,
+   nenhum despacho de `QRTimeout`.
+b. `TestStart_TimeoutWithoutConfirmationStillTearsDownEverything` — controle
+   negativo da F98: sem confirmação nenhuma, os cinco detentores da tabela
+   rodam exatamente uma vez cada (enumerados acima).
+c. `TestStart_LateSuccessAfterTimeoutDoesNotResurrectTornDownSession` —
+   ordem invertida (`timeout` antes de `success` no canal, o único sentido em
+   que o dublê de teste PODE forçar essa ordem — o SDK real nunca entrega os
+   dois no mesmo canal, ver diagnóstico acima): o teardown do timeout já
+   rodou; o `success` tardio não desfaz nada, só é um no-op absorvido por
+   `onPairingSuccess`. Exatamente 1 `Unregister`, 1 `Detach`, 1 liberação de
+   ownership.
+d. `TestStart_LateQRAfterSuccessDoesNotResurrectQR` — um código de QR
+   atrasado chegando depois de `success` não é despachado nem reescreve
+   `qrcode`.
+
+**Controles negativos, executados**:
+
+1. Removida a guarda de `PairingEventKindTimeout` em `runPairing` (voltou a
+   chamar `o.onPairingTimeout` incondicionalmente) e rodado só o teste (a):
+
+   ```
+   === RUN   TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing
+       orchestrator_test.go:711: Unregister after a CONFIRMED pairing ([{user-1}]): the live session got torn down
+       orchestrator_test.go:714: Detach after a CONFIRMED pairing ([{user-1}]): the live session got torn down
+       orchestrator_test.go:717: ownership released after a CONFIRMED pairing ([user-1]): the lease was handed away from a live session
+       orchestrator_test.go:720: QRTimeout dispatched after a CONFIRMED pairing: [Connected QRTimeout]
+   --- FAIL: TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing (0.00s)
+   ```
+
+   Mordeu. Revertido; árvore confirmada limpa em `git diff` do arquivo.
+
+2. Feita a guarda valer SEMPRE (ignorar timeout mesmo sem confirmação — `case
+   port.PairingEventKindTimeout:` virou só o log de aviso + `continue`, sem
+   chamar `o.onPairingTimeout`) e rodado só o teste (b):
+
+   ```
+   === RUN   TestStart_TimeoutWithoutConfirmationStillTearsDownEverything
+       orchestrator_test.go:749: esperava exatamente 1 Unregister, obtive []
+   --- FAIL: TestStart_TimeoutWithoutConfirmationStillTearsDownEverything (0.00s)
+   ```
+
+   Mordeu — prova que o conserto não inverteu a F98. Revertido; árvore
+   confirmada limpa em `git diff` do arquivo.
+
+**Verificação**: `go test ./pkg/... -race -count=1` verde (todos os
+pacotes). `go run ./cmd/listroutes | sort | wc -l` = 107 (inalterado — esta
+capability não mexe em rotas HTTP). `gofmt -l` continua acusando os mesmos
+três arquivos pré-existentes da F133, nenhum novo.
+
+**Proibições respeitadas**: não editado `internal/wa-noise` (a causa raiz do
+SDK — a corrida entre `emitQRs` e `handleEvent` — é upstream; o fix mora
+inteiramente no orchestrator, que é o único lugar com visibilidade dos dois
+barramentos de evento). Não mexido em capabilities de mensagem.
+
+**Nota operacional**: durante esta sessão, `HOUSEKEEP.md` foi modificado
+(F151, F152) por fora deste worker, apesar do packet declarar árvore limpa e
+"nenhuma escrita concorrente" — registrado aqui para o Chief reconciliar; não
+bloqueou este achado, que segue como apêndice puro ao final do arquivo.
+
+**Status**: **corrigido nesta sessão**, guardado pelos quatro testes acima e
+pelos dois controles negativos executados e colados.
