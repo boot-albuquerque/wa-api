@@ -57,6 +57,7 @@ import (
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 
+	"wa-api/internal/wa-headless/capabilities/fetchmessages"
 	"wa-api/internal/wa-headless/capabilities/messagemeta"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	waruntime "wa-api/internal/wa-headless/runtime"
@@ -5884,4 +5885,104 @@ func TestRealSPAMessageMetaDelivery(t *testing.T) {
 	t.Fatalf("no event at all arrived in %s, replayed or fresh. Either nothing was sent, "+
 		"or the collection event name taken from whatsapp-web.js does not fire in this "+
 		"build — and those two are what this test exists to tell apart", window)
+}
+
+// TestRealSPAFetchMessagesAgainstProduction proves the fetch reads the REAL
+// collection: that getModelsArray is there, that the per-chat filter matches
+// something, and that the shared allow-list produces usable metadata from real
+// models rather than only from a double's canned JSON.
+//
+// SHAPE AND COUNTS ONLY. No jid, no id and no body is ever printed — the
+// capability redacts when rendered, and this test relies on that rather than
+// formatting fields by hand.
+func TestRealSPAFetchMessagesAgainstProduction(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	f := fetchmessages.New(runner, sess.Tab().Evaluate)
+
+	// No filter first: this is the only call that can report how much the page
+	// has loaded at all, which every later number is read against.
+	all, err := f.Fetch(context.Background(), "", 10, "real/fetch/all")
+	if err != nil {
+		t.Fatalf("Fetch (no filter): %v", err)
+	}
+	t.Logf("no filter: loaded=%d matched=%d returned=%d truncated=%v",
+		all.Loaded, all.Matched, len(all.Messages), all.Truncated())
+	if all.Loaded == 0 {
+		t.Skip("the page has no messages loaded; there is nothing for this test to read, " +
+			"and asserting against an empty collection would prove only that empty is empty")
+	}
+	if len(all.Messages) == 0 {
+		t.Fatalf("loaded=%d but nothing came back: the metadata mapping produced no usable "+
+			"messages from real models, which the double cannot catch", all.Loaded)
+	}
+
+	// Every returned message must carry the fields the contract names. This is
+	// where a mapping that works on canned JSON and not on real models fails.
+	for i, m := range all.Messages {
+		if !m.ID.Present() {
+			t.Errorf("message %d has no id: msg.id.id did not survive the mapping "+
+				"(PARIDADE §6.4 chose it over the null _serialized)", i)
+		}
+		if m.Type == "" {
+			t.Errorf("message %d has no type", i)
+		}
+		if m.JID == "" {
+			t.Errorf("message %d has no jid (value not printed)", i)
+		}
+		if m.Direction != "in" && m.Direction != "out" {
+			t.Errorf("message %d has direction %q, which is neither in nor out", i, m.Direction)
+		}
+	}
+
+	// Now the FILTER, using a jid taken from what came back rather than
+	// hardcoded — a hardcoded jid would be PII in the source and would rot.
+	chat := all.Messages[len(all.Messages)-1].ID.RemoteJID
+	if chat == "" {
+		t.Skip("no remote jid on the sample message; nothing to filter by")
+	}
+	one, err := f.Fetch(context.Background(), chat, 5, "real/fetch/one")
+	if err != nil {
+		t.Fatalf("Fetch (filtered): %v", err)
+	}
+	t.Logf("filtered: loaded=%d matched=%d returned=%d truncated=%v",
+		one.Loaded, one.Matched, len(one.Messages), one.Truncated())
+	if one.Matched == 0 {
+		t.Fatal("the filter matched nothing for a jid taken from the collection itself; " +
+			"the per-chat filter compares against a field that is not what it reads")
+	}
+	if one.Matched > all.Loaded {
+		t.Fatalf("matched=%d exceeds loaded=%d", one.Matched, all.Loaded)
+	}
+	for _, m := range one.Messages {
+		if m.ID.RemoteJID != chat {
+			t.Fatal("a filtered fetch returned a message from another chat (jids not printed)")
+		}
+	}
+	t.Logf("sample (redacted): %s", one.Messages[len(one.Messages)-1])
 }

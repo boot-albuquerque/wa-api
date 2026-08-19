@@ -259,3 +259,23 @@ registrada para `WAWebConnModel.Conn.wid`. Perguntar ao acessor **diretamente**,
 em vez de confiar na lista de chaves, é o que separou "campo ausente da lista" de
 "campo que responde nulo".
 
+### 6.5 — `fetchMessages` lê o que está CARREGADO, não o histórico
+
+O `whatsapp-web.js` expõe `chat.fetchMessages({limit})`, que pode **pedir mais
+ao servidor**. A nossa implementação lê `WAWebMsgCollection.getModelsArray()`,
+que é o que a SPA já carregou — **340 modelos** medidos contra uma lista de 917
+conversas.
+
+Um chamador que pede 100 e recebe 12 está sendo informado do que está
+**carregado**, não do que **existe**.
+
+A lacuna é declarada em vez de escondida porque a alternativa — devolver uma
+lista curta como se fosse o histórico — é a incompletude silenciosa que este
+módulo vem encontrando em todas as formas. Por isso o `Result` carrega
+`Loaded` (o denominador) e `Matched`, e `Truncated()` diz quando o limite cortou:
+12 de 340 carregados é uma conversa de pouco tráfego; 12 de 12 é uma página que
+mal carregou.
+
+Disparar o carregamento sob demanda é fatia futura, e vai precisar de medição
+própria: não se sabe qual chamada a SPA usa para isso neste build.
+

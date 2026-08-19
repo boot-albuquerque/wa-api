@@ -1964,3 +1964,54 @@ número com medição atrás. Até lá o teto é um teto declarado, não calibra
 
 **Status**: aberto por desenho, com o custo visível em vez de escondido.
 
+## H26 — o teste de posse concorrente culpava a posse quando o host é que não deu conta
+
+**Data**: 2026-08-19 · **Contexto**: `fetchMessages`, ao rodar a suíte inteira
+depois de várias corridas contra a SPA real na mesma máquina.
+
+**Onde**: `internal/wa-headless/core/session_test.go`,
+`TestStartSession_ConcurrentStartOnSameProfileEndToEnd`.
+
+**O que aconteceu**: sob carga cheia da suíte, um browser não respondeu em
+`/json/version` dentro dos 30 s do lançamento. **AMBAS** as partidas falharam, e
+o teste anunciou:
+
+```
+successes=0, want exactly 1 — a second browser must not be born
+silently for the same profile
+```
+
+**O problema não é a instabilidade, é a MENSAGEM.** A asserção `successes == 1`
+funde dois achados opostos:
+
+- **dois** sucessos = a invariante 1 quebrando, que é o defeito que o teste
+  existe para pegar;
+- **zero** sucessos = nada chegou perto o bastante para disputar o perfil, e o
+  run **não diz nada** sobre posse.
+
+Nomear "um segundo browser nasceu em silêncio" quando nenhum nasceu manda quem
+lê investigar um defeito de posse que não aconteceu. Terceira vez nesta semana
+que a condição de um teste é ampla demais para discriminar a hipótese.
+
+**Correção**: `successes == 0` com **todas** as falhas em `StageLaunch` vira
+`Skip` com a causa dita — o host não conseguiu lançar um browser a tempo. Zero
+sucessos por qualquer outro motivo continua falha, porque aí a posse é de fato
+inavaliável e isso precisa aparecer.
+
+**Reproduzido isolado 3/3 PASS**, o que confirma a dependência de carga.
+
+**Controle negativo, e ele revelou algo além do esperado**: desligando
+`acquireOwnership`, o segundo browser **não nasce** — morre no lançamento após
+30 s, porque o próprio Chrome recusa abrir o mesmo perfil. Ou seja, a posse em
+processo **não é a única defesa**; é a que falha **rápido e com causa nomeada**,
+em vez de um timeout enganoso. O teste ainda pega, por outra asserção (*"want
+*BootFailure at StageOwnership"*), e o ramo novo de `Skip` **não** engoliu o
+caso, porque houve um sucesso.
+
+**Ponto cego declarado**: posse quebrada **e** host sobrecarregado ao mesmo
+tempo produziria zero sucessos e um `Skip`. Nesse estado o run genuinamente não
+tem informação sobre posse, então pular é o correto — mas fica registrado que a
+combinação existe.
+
+**Status**: CORRIGIDO.
+

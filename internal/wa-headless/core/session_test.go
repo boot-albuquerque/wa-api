@@ -339,12 +339,38 @@ func TestStartSession_ConcurrentStartOnSameProfileEndToEnd(t *testing.T) {
 	for _, s := range successes {
 		t.Logf("stopped_via=%s", s.Stop(context.Background()))
 	}
+	// TWO SUCCESSES AND ZERO SUCCESSES ARE NOT THE SAME FINDING, and an earlier
+	// version of this check reported both with the message written for the
+	// first. Measured on 2026-08-19: under full-suite load a browser missed the
+	// 30s launch deadline, BOTH starts failed, and the test announced "a second
+	// browser must not be born silently" — naming an ownership defect that had
+	// not happened while the real cause was a loaded host.
+	//
+	// Two successes is the invariant breaking. Zero successes says nothing
+	// about ownership at all: nothing got far enough to contend for it.
+	if len(successes) == 0 {
+		var launchFailures int
+		for _, f := range failures {
+			t.Logf("failure: %v", f)
+			var boot *BootFailure
+			if errors.As(f, &boot) && boot.Stage == StageLaunch {
+				launchFailures++
+			}
+		}
+		if launchFailures == len(failures) && len(failures) > 0 {
+			t.Skipf("neither start reached READY because all %d failed at %s — the host "+
+				"could not launch a browser in time. That is not evidence about ownership: "+
+				"nothing got far enough to contend for the profile", launchFailures, StageLaunch)
+		}
+		t.Fatalf("successes=0 and not every failure was a launch failure; ownership cannot " +
+			"be assessed from this run")
+	}
 	if len(successes) != 1 {
 		for _, f := range failures {
 			t.Logf("failure: %v", f)
 		}
-		t.Fatalf("successes=%d, want exactly 1 — a second browser must not be born "+
-			"silently for the same profile", len(successes))
+		t.Fatalf("successes=%d, want exactly 1 — a second browser was born for the same "+
+			"profile, which is invariant 1 breaking", len(successes))
 	}
 	if len(failures) != 1 {
 		t.Fatalf("failures=%d, want exactly 1", len(failures))

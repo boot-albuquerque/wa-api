@@ -155,7 +155,30 @@ func New(runner *engine.Runner, eval spa.Evaluator, size int) *Subscription {
 // model in this build carries __x_body among ~60 own keys, and any "copy then
 // delete the secrets" shape would ship the body the first time Meta adds a
 // field nobody thought about. The allow-list fails closed.
-const metaExpr = `(function (m) {
+const metaExpr = metaExprShared
+
+// MetaExpr exposes the allow-list to sibling capabilities that must produce the
+// SAME metadata shape — capabilities/fetchmessages, today.
+//
+// It is exported rather than copied because a second allow-list is how a body
+// eventually ships: two lists drift, someone adds a field to one, and the
+// invariant holds in the place that is tested and fails in the place that is
+// not. One list, one test, one place to be wrong.
+const MetaExpr = metaExprShared
+
+// DecodeWire turns one raw metadata object from MetaExpr into a Meta. It is
+// exported for the same reason as MetaExpr: the decoding must not exist twice
+// either, or the two capabilities can disagree about what an absent timestamp
+// or an unknown direction means.
+func DecodeWire(raw []byte) ([]Meta, error) {
+	var events []wireMeta
+	if err := json.Unmarshal(raw, &events); err != nil {
+		return nil, fmt.Errorf("messagemeta: decoding events: %w", err)
+	}
+	return decode(wireDrain{Events: events}).Events, nil
+}
+
+const metaExprShared = `(function (m) {
 	var wid = function (w) { return (w && typeof w._serialized === 'string') ? w._serialized : ''; };
 	var key = (m && m.id) || {};
 	return {
