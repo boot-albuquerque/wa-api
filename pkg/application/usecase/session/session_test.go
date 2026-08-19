@@ -55,6 +55,15 @@ func ctlDe(sg *contractsfake.SessionGuard) *contractsfake.SessionController {
 	}
 }
 
+// pairerDe segue o mesmo idioma de ctlDe: delega EnsureSession ao guard
+// ORIGINAL, para que as chamadas continuem sendo registradas nele. Entrou com
+// o CAP-26, quando PairPhoneUseCase passou a consumir port.PhonePairer.
+func pairerDe(sg *contractsfake.SessionGuard) *contractsfake.PhonePairer {
+	return &contractsfake.PhonePairer{
+		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
+	}
+}
+
 func guardCases() []guardCase {
 	users := &contractsfake.UserRepository{}
 	status := &contractsfake.SessionStatusReader{}
@@ -69,7 +78,8 @@ func guardCases() []guardCase {
 			return session.NewRequestHistorySyncUseCase(sg, log).Execute(context.Background(), txtID, domain.RequestHistorySyncRequest{})
 		}},
 		{"PairPhone", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewPairPhoneUseCase(sg, log).Execute(context.Background(), txtID, domain.PairPhoneRequest{Phone: "5511987654321"})
+			return session.NewPairPhoneUseCase(pairerDe(sg), log).
+				Execute(context.Background(), txtID, domain.PairPhoneRequest{Phone: "5511987654321"})
 		}},
 		{"SetStatusMessage", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewSetStatusMessageUseCase(sg, log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{Body: "ola"})
@@ -188,7 +198,8 @@ func TestValidacaoDePayloadPrecedeAGuardaDeSessao(t *testing.T) {
 		run  func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error)
 	}{
 		{"PairPhone sem Phone", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewPairPhoneUseCase(sg, log).Execute(context.Background(), txtID, domain.PairPhoneRequest{})
+			return session.NewPairPhoneUseCase(pairerDe(sg), log).
+				Execute(context.Background(), txtID, domain.PairPhoneRequest{})
 		}},
 		{"SetStatusMessage sem Body", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewSetStatusMessageUseCase(sg, log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{})

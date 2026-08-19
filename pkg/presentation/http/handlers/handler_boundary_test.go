@@ -53,6 +53,19 @@ func (s *spyPort) Logout(context.Context, string) error {
 	return s.err
 }
 
+// IsPaired e RequestPairingCode entraram com o CAP-26: PairPhoneUseCase passou
+// a consumir port.PhonePairer, porque antes só validava a sessão e devolvia
+// 200 com LinkingCode VAZIO (F152).
+func (s *spyPort) IsPaired(context.Context, string) (bool, error) {
+	s.calls++
+	return false, s.err
+}
+
+func (s *spyPort) RequestPairingCode(context.Context, string, string) (string, error) {
+	s.calls++
+	return "SPY-CODE", s.err
+}
+
 // Detach entrou com a F80: o logout pela API agora solta a sessao depois de
 // desvincular. Nao conta como toque na porta — o boundary test mede se o
 // handler chegou a AGIR, e Detach so' ocorre depois de Logout ja ter agido.

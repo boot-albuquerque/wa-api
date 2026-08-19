@@ -5,6 +5,7 @@ import (
 	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
 	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
 	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
+	wapairing "wa-api/pkg/infra/wa-noise/adapters/pairing"
 	wapresence "wa-api/pkg/infra/wa-noise/adapters/presence"
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
@@ -122,6 +123,7 @@ func initCustomHandlers(s *server) {
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
+	phonePairer := wapairing.NewPhonePairerAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase
@@ -135,7 +137,7 @@ func initCustomHandlers(s *server) {
 	// ele, o logout pela API apagava o store e deixava o cliente
 	// registrado, com /session/status mentindo loggedIn=true (F80).
 	logoutUC := session.NewLogoutUseCase(sessionGuard, NewSessionAttachHook(s), logger)
-	pairPhoneUC := session.NewPairPhoneUseCase(sessionGuard, logger)
+	pairPhoneUC := session.NewPairPhoneUseCase(phonePairer, logger)
 	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
 	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
 	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)

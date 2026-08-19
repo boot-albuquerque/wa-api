@@ -164,7 +164,12 @@ func sessionCases() []sessionCase {
 		{
 			name: "PairPhone",
 			build: func(e error) http.Handler {
-				return NewPairPhoneHandler(session.NewPairPhoneUseCase(guard(e), log))
+				// PairPhone consome PhonePairer desde o CAP-26: precisa PEDIR
+				// o código, não só verificar a sessão. Aqui só importa a
+				// recusa da guarda propagar, então o pairer nasce com a mesma
+				// FailSession.
+				return NewPairPhoneHandler(session.NewPairPhoneUseCase(
+					&contractsfake.PhonePairer{SessionGuard: contractsfake.FailSession(e)}, log))
 			},
 			method:    http.MethodPost,
 			path:      "/session/pairphone",
@@ -326,7 +331,7 @@ func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 	}{
 		{
 			name:    "PairPhone sem Phone",
-			handler: NewPairPhoneHandler(session.NewPairPhoneUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{})),
+			handler: NewPairPhoneHandler(session.NewPairPhoneUseCase(&contractsfake.PhonePairer{}, &contractsfake.Logger{})),
 			path:    "/session/pairphone",
 			want:    "missing Phone",
 		},

@@ -6,6 +6,7 @@ import (
 
 	wanoise "wa-api/internal/wa-noise"
 	wamessage "wa-api/internal/wa-noise/capabilities/message"
+	wapairing "wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -61,6 +62,7 @@ type Fake struct {
 	SendAppStateFn                   func(ctx context.Context, patch appstate.PatchInfo) error
 	FetchAppStateFn                  func(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
 	GetSubscribedNewslettersFn       func(ctx context.Context) ([]*types.NewsletterMetadata, error)
+	PairPhoneFn                      func(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
 	IsConnectedFn                    func() bool
 	IsLoggedInFn                     func() bool
 	LogoutFn                         func(ctx context.Context) error

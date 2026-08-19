@@ -5,6 +5,7 @@ import (
 	"time"
 
 	wanoise "wa-api/internal/wa-noise"
+	wapairing "wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -130,6 +131,26 @@ type Client interface {
 	GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error)
 
 	// Família de sessão (controle)
+
+	// PairPhone pede ao servidor do WhatsApp o codigo de pareamento por
+	// telefone — a alternativa ao QR. Devolve o codigo que o usuario digita
+	// no aparelho. CAP-26 acrescenta este metodo a interface estreita
+	// (ADR-001) porque POST /session/pairphone deixou de so' validar e
+	// passou a devolver codigo de verdade (F152).
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto PairPhone, definido em
+	// internal/wa-noise/core/pair-code.go:50). O que se alarga aqui e' o
+	// seam local de wa-api.
+	//
+	// O tipo do clientType e' wapairing.ClientType, e nao um nome da
+	// fachada: `PairClientType` da raiz e' um APELIDO de tipo para
+	// pairing.ClientType (internal/wa-noise/core/pair-code.go:15), logo os
+	// dois sao o MESMO tipo e *wanoise.Client satisfaz esta assinatura sem
+	// que main.go precise reexportar nada.
+	PairPhone(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
+
 	IsConnected() bool
 	IsLoggedIn() bool
 	Logout(ctx context.Context) error

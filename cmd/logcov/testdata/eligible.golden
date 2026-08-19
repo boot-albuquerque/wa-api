@@ -1779,6 +1779,8 @@ pkg/application/contracts/contractsfake.MessagingPort.PublishError	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishEvent	EXCLUDED	X5
 pkg/application/contracts/contractsfake.MessagingPort.PublishMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.NewsletterReader.ListSubscribed	EXCLUDED	X5
+pkg/application/contracts/contractsfake.PhonePairer.IsPaired	EXCLUDED	X5
+pkg/application/contracts/contractsfake.PhonePairer.RequestPairingCode	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PresenceController.SendChatPresence	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PresenceController.SendPresence	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PresenceController.SubscribePresence	EXCLUDED	X5
@@ -2002,7 +2004,7 @@ pkg/application/usecase/session.NewPairPhoneUseCase	EXCLUDED	X1
 pkg/application/usecase/session.NewRequestHistorySyncUseCase	EXCLUDED	X1
 pkg/application/usecase/session.NewSetStatusMessageUseCase	EXCLUDED	X1
 pkg/application/usecase/session.NewSyncContactRosterUseCase	EXCLUDED	X1
-pkg/application/usecase/session.PairPhoneUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,pair_phone.go:28)
+pkg/application/usecase/session.PairPhoneUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,pair_phone.go:59)
 pkg/application/usecase/session.RequestHistorySyncUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/session.SetStatusMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,set_status_message.go:28)
 pkg/application/usecase/session.SyncContactRosterUseCase.Execute	ELIGIBLE	covered
@@ -2586,6 +2588,9 @@ pkg/infra/wa-noise/adapters/misc.MiscAdapter.RejectCall	ELIGIBLE	uncovered:L1;un
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.RequestUnavailableMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.SyncContactRoster	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,adapter.go:141);uncovered:L2(S-ret,adapter.go:143);uncovered:L2(S-ret,adapter.go:145);uncovered:L2(S-ret,adapter.go:147)
 pkg/infra/wa-noise/adapters/misc.NewMiscAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.IsPaired	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.RequestPairingCode	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/presence.NewPresenceControllerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/presence.PresenceControllerAdapter.SendChatPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,controller.go:56)
 pkg/infra/wa-noise/adapters/presence.PresenceControllerAdapter.SendPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,controller.go:40);uncovered:L2(S-ret,controller.go:43)
@@ -2655,6 +2660,7 @@ pkg/infra/wa-noise/client/testkit.Fake.JoinGroupWithLink	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.LeaveGroup	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.Logout	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.MarkRead	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.PairPhone	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.RejectCall	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SendAppState	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SendChatPresence	EXCLUDED	X5

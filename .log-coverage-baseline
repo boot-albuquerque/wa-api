@@ -986,7 +986,15 @@ rules_frozen=true
 # covered fica em 426 — a unica funcao elegivel removida
 # (MessageComposerAdapter.NewMessageID) ja' estava descoberta
 # (golden: "uncovered:L1"), entao numerador nao muda, so' o denominador cai.
-min_func_coverage=660
+# CAP-26 (2026-08-19): 660->658 (426/645=66.0% -> 426/647=65.8%). Duas
+# funcoes ELIGIBLE novas e DESCOBERTAS entram no denominador:
+# PhonePairerAdapter.IsPaired e PhonePairerAdapter.RequestPairingCode
+# (pkg/infra/wa-noise/adapters/pairing). Nenhum adapter deste repo loga —
+# nenhum recebe port.Logger —, entao acrescentar capability de adapter baixa
+# a razao por construcao; foi o que o CAP-21 (667->665) e o CAP-22 (665->659)
+# ja' fizeram. covered fica em 426: nenhuma funcao coberta regrediu, e o diff
+# do golden so' ACRESCENTA linhas.
+min_func_coverage=658
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1367,7 +1375,11 @@ min_errpath_coverage=860
 # removidas; NewMessageComposerAdapter e contractsfake.MessageComposer.
 # NewMessageID ja' eram EXCLUDED) sai do golden. Ver min_func_coverage e
 # min_errpath_coverage acima para o efeito nas outras duas travas.
-min_eligible=645
+# CAP-26 (2026-08-19): 645 -> 647. As duas funcoes do PhonePairerAdapter
+# (IsPaired, RequestPairingCode) entram como ELIGIBLE; NewPhonePairerAdapter,
+# testkit.Fake.PairPhone e as duas de contractsfake.PhonePairer entram como
+# EXCLUDED. Denominador CRESCE — nao ha' remocao neste PR.
+min_eligible=647
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

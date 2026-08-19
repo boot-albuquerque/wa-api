@@ -8946,8 +8946,191 @@ usei acertou o conjunto. A primeira (grep por `Details:`) perdeu os quatro de
 ação ausente) marcou oito inocentes. **Só a leitura fechou o conjunto.**
 Levantamento por heurística serve para ORDENAR o que ler, nunca para concluir.
 
-**Status**: não corrigido. `pair_phone` é candidato a bloco próprio; os
-órfãos e o comentário mentiroso aguardam decisão junto com a F151.
+**Status**: `pair_phone` **CORRIGIDO no CAP-26** (2026-08-19). Os órfãos
+(`set_status_message.go`, `request_history_sync.go`) e o comentário mentiroso
+do handler continuam **não corrigidos**, aguardando decisão junto com a F151 —
+o CAP-26 não os tocou.
+
+### O que passou a funcionar (CAP-26)
+
+`POST /session/pairphone` devolve o código de verdade. O caminho é
+porta → adapter → use case, como as capabilities anteriores:
+
+- **Porta**: `pkg/application/contracts/phone_pairer.go` — `port.PhonePairer`
+  (`SessionGuard` + `IsPaired` + `RequestPairingCode`).
+- **Adapter**: `pkg/infra/wa-noise/adapters/pairing/adapter.go`, com asserção
+  de porta em tempo de compilação. Chama
+  `client.PairPhone(ctx, phone, true, ClientChrome, "Chrome (Linux)")` — os
+  três parâmetros fixos vindos VERBATIM de `41bc8e2^:handlers.go:733`, porque
+  o servidor do WhatsApp valida o display name e responde 400 fora do
+  conjunto comum.
+- **Seam**: `PairPhone` entrou em `waclient.Client`
+  (`pkg/infra/wa-noise/client/client.go`). A infra já existia — o cliente
+  vendorizado expõe `PairPhone` em `internal/wa-noise/core/pair-code.go:50`,
+  delegando a `capabilities/pairing/paircode.go:49`. O que faltava era a
+  fiação, exatamente como o padrão deste repo previa.
+- **Use case**: `pkg/application/usecase/session/pair_phone.go`. Ordem:
+  `Phone` vazio → `EnsureSession` → **`IsPaired` (guarda `already paired`)** →
+  `RequestPairingCode`.
+
+Contrato historico recuperado (`41bc8e2^:handlers.go:696-747`), e o que
+diverge:
+
+| condição | histórico | CAP-26 |
+|---|---|---|
+| sem sessão | 500 `no session` | 500 `no_session` (categoria validation → o envelope traz `code`/`message` do ADR-002) |
+| payload indecodificável | 400 `could not decode Payload` | 400, inalterado (handler) |
+| `Phone` vazio | 400 `missing Phone in Payload` | 400 `missing Phone in payload` |
+| já pareada | 400 `already paired` | 400 `already paired` |
+| erro do cliente | 400 com o erro | 400 `pair_phone_failed`, mensagem do fork |
+| sucesso | 200 `{"LinkingCode": …}` | 200 `{"LinkingCode": …}` |
+
+**Divergência consciente 1 — a caixa de `Payload`**: o histórico é
+`errors.New("missing Phone in Payload")`, com **P maiúsculo**
+(`41bc8e2^:handlers.go:722`); a constante atual é `"missing Phone in payload"`,
+minúscula. A divergência **não é do CAP-26**: a forma minúscula já estava na
+árvore em `2823a9c` (`git show HEAD:pkg/application/usecase/session/pair_phone.go`),
+tendo entrado na migração do handler para o use case. Foi **PRESERVADA de
+propósito** — a mensagem é contrato público e integrador pode casar por ela, de
+modo que "restaurar fidelidade" agora seria mudança de contrato fora do escopo
+deste bloco. Lado a lado:
+
+| | histórico (`41bc8e2^`) | atual |
+|---|---|---|
+| Phone vazio | `missing Phone in Payload` | `missing Phone in payload` |
+| já pareada | `already paired` | `already paired` (idêntico) |
+
+O comentário em `pair_phone.go` que afirmava "kept verbatim" para as DUAS
+mensagens era **falso** e foi corrigido nesta mesma sessão — achado da revisão,
+não da implementação.
+
+**Divergência consciente 2**: `already paired` é semanticamente
+`CategoryConflict` (409) pela taxonomia da F95 — a requisição está correta e
+só não pode ser atendida NESTE estado. Ficou `CategoryValidation` (400) por
+fidelidade ao contrato histórico, que é o que os integradores existentes leem.
+Se algum dia o 409 for adotado, é mudança de contrato observável e precisa de
+entrada própria.
+
+### Testes que travam o achado
+
+Handler, todos pela **rota registrada** (`gorilla/mux`, `wiring_routes.go:53`)
+— `pkg/presentation/http/handlers/handler_pair_phone_test.go`:
+
+1. `TestPairPhone_Success_ViaRegisteredRoute` — o `LinkingCode` chega
+   PREENCHIDO no corpo. É o teste do defeito medido em campo.
+2. `TestPairPhone_MissingPhone_400_LogsCause` — 400, causa no log em `warn`,
+   e `EnsureSession`/`RequestPairingCode` NÃO chamadas.
+3. `TestPairPhone_AlreadyPaired_400_AndDoesNotRequestCode` — 400
+   `already paired` **e `RequestPairingCodeCalls` VAZIO**. É a prova da ORDEM:
+   o status sozinho não distingue "a guarda mordeu antes" de "mordeu depois de
+   o código já ter sido pedido ao servidor".
+4. `TestPairPhone_PortFailure_400_NoSilentFallback` — falha da porta é 400 e
+   NENHUM 200; a resposta de erro não carrega `LinkingCode`.
+5. `TestPairPhone_WireContract_ViaRegisteredRoute` — envelope do ADR-002 e a
+   chave `LinkingCode` no JSON REAL (`map[string]any`), com as chaves
+   enumeradas à mão e um conjunto de chaves estrangeiras (`linkingCode`,
+   `linking_code`, `code`, `Details`, `Id`) que não podem aparecer. Mesmo
+   estilo de `send_wire_contract_test.go`.
+
+Adapter — `pkg/infra/wa-noise/adapters/pairing/adapter_test.go`:
+
+6. `TestRequestPairingCode_ReturnsCode` — caminho de sucesso uma camada
+   abaixo, e os três parâmetros fixos do contrato com o servidor.
+7. `TestRequestPairingCode_RealPhoneRule` — o dublê aplica a regra REAL de
+   validação de telefone (ARMADILHA 1). Os casos vêm do teste do próprio fork
+   (`internal/wa-noise/capabilities/pairing/paircode_test.go:89-91`).
+8. `TestIsPaired_ReflectsLoggedIn`, `TestPhonePairer_SemSessao`.
+
+O dublê: `pkg/infra/wa-noise/client/testkit/fake_pairing.go` copia a regra de
+`capabilities/pairing/paircode.go:57-62` (strip de não-dígitos, mínimo 7,
+recusa de prefixo `0`) e roda a validação **antes** de `PairPhoneFn`, para que
+nenhum caso de teste consiga desligá-la e ficar mais permissivo que a
+produção. Os valores são não-exportados no subpacote, então a cópia é
+inevitável — o comentário cita o arquivo de origem, que é o que a torna
+auditável.
+
+### Controles negativos EXECUTADOS
+
+**(a) devolver `LinkingCode` vazio de novo** — `pair_phone.go:76`,
+`&domain.PairPhoneResult{LinkingCode: code}` → `&domain.PairPhoneResult{}`
+(com `_ = code` para COMPILAR; a primeira tentativa quebrou o build com
+`declared and not used: code`, que não prova nada):
+
+```
+--- FAIL: TestPairPhone_Success_ViaRegisteredRoute (0.00s)
+    handler_pair_phone_test.go:114: LinkingCode VAZIO no 200 — este e' o defeito da F152, medido em campo
+--- FAIL: TestPairPhone_WireContract_ViaRegisteredRoute (0.00s)
+    handler_pair_phone_test.go:273: data["LinkingCode"]: got , want "WXYZ-2468"
+FAIL	wa-api/pkg/presentation/http/handlers	0.229s
+```
+
+**(b) remover a guarda de already-paired** — o bloco `if paired { … }` do use
+case trocado por `_ = paired`:
+
+```
+--- FAIL: TestPairPhone_AlreadyPaired_400_AndDoesNotRequestCode (0.00s)
+    handler_pair_phone_test.go:171: status: got 200, want 400 (corpo: {"code":200,"data":{"LinkingCode":"WXYZ-2468"},"success":true}
+        )
+FAIL	wa-api/pkg/presentation/http/handlers	0.237s
+```
+
+**(c) INVERTER a ordem** — `RequestPairingCode` movido para ANTES da guarda,
+que é a mutação que (b) NÃO cobre: a guarda continua existindo e continua
+devolvendo 400, só que tarde demais:
+
+```
+--- FAIL: TestPairPhone_AlreadyPaired_400_AndDoesNotRequestCode (0.00s)
+    handler_pair_phone_test.go:186: ORDEM INVERTIDA: RequestPairingCode foi chamada 1 vez(es) numa sessao ja' pareada; a guarda tem de rodar ANTES do pedido de codigo
+FAIL	wa-api/pkg/presentation/http/handlers	0.228s
+```
+
+**(d) tornar o dublê MAIS PERMISSIVO que a produção** — validação de telefone
+do `testkit.Fake` desligada (ARMADILHA 1):
+
+```
+--- FAIL: TestRequestPairingCode_RealPhoneRule (0.00s)
+    --- FAIL: TestRequestPairingCode_RealPhoneRule/so'_simbolos (0.00s)
+        adapter_test.go:100: telefone "+-() " foi aceito; a producao o recusa
+    --- FAIL: TestRequestPairingCode_RealPhoneRule/nacional_(0…) (0.00s)
+        adapter_test.go:100: telefone "0119999999" foi aceito; a producao o recusa
+    --- FAIL: TestRequestPairingCode_RealPhoneRule/curto_demais (0.00s)
+        adapter_test.go:100: telefone "12345" foi aceito; a producao o recusa
+FAIL	wa-api/pkg/infra/wa-noise/adapters/pairing	0.184s
+```
+
+### Efeito nos gates, e a deriva de baseline da F155
+
+O golden de `cmd/logcov` foi regenerado. O `diff` de conjunto pedido pelo
+protocolo **não veio vazio**, e a explicação é o próprio PR — as seis linhas
+acrescentadas são as funções novas, nenhuma removida:
+
+```
+> pkg/application/contracts/contractsfake.PhonePairer.IsPaired	EXCLUDED
+> pkg/application/contracts/contractsfake.PhonePairer.RequestPairingCode	EXCLUDED
+> pkg/infra/wa-noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED
+> pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.IsPaired	ELIGIBLE
+> pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.RequestPairingCode	ELIGIBLE
+> pkg/infra/wa-noise/client/testkit.Fake.PairPhone	EXCLUDED
+```
+
+`.log-coverage-baseline`: `min_func_coverage` 660 → **658**, `min_eligible`
+645 → **647**. O numerador não mexeu (426 funções cobertas); o denominador
+cresceu em 2. **Isto é exatamente a deriva registrada na F155**: nenhum
+adapter deste repo recebe `port.Logger`, então toda capability de adapter nova
+BAIXA `func_coverage` por construção, e o ratchet é afrouxado no mesmo PR —
+CAP-21 fez 667→665, CAP-22 fez 665→659, CAP-26 faz 660→658. Adicionar
+`port.Logger` só a este adapter resolveria o número e quebraria a consistência
+dos seis adapters; a decisão de dar logger a TODOS (ou de mudar a
+elegibilidade da métrica para adapters) continua sendo trabalho da F155, e o
+CAP-26 não a antecipa.
+
+Lint (`.golangci-baseline`): `max_complexity` **inalterado em 56** — a trava
+real não se moveu. O contador informativo foi de **322 para 323**; o +1 é
+`TestPairPhone_WireContract_ViaRegisteredRoute` com `gocyclo 13`, que é o
+preço de enumerar chave por chave em vez de derivar da struct por reflexão —
+o mesmo desenho de `send_wire_contract_test.go`. `count=263` continua parado
+onde a **F155** o descreve; o CAP-26 **não** o atualizou, porque mexer em
+baseline fora do escopo é o movimento que mascara regressão.
 
 ## F153
 
