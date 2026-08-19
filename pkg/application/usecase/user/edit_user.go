@@ -47,8 +47,8 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 				continue
 			}
 			if !isValidEvent(event) {
-				return apperr.New("invalid_event_type", apperr.CategoryValidation,
-					fmt.Sprintf("invalid event type: %s", event), false, nil)
+				return apperr.New(invalidEventTypeCode, apperr.CategoryValidation,
+					fmt.Sprintf(invalidEventTypeMsgFmt, event), false, nil)
 			}
 		}
 	}

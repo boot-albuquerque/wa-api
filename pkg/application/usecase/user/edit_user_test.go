@@ -233,3 +233,73 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 		})
 	}
 }
+
+// TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio cobre o
+// SEGUNDO chamador de isValidEvent (edit_user.go:49).
+//
+// A recusa da F159 não é só de POST /admin/users: `isValidEvent` é do pacote,
+// e PUT /admin/users/{id} passa pela mesma guarda. Sem este teste, metade da
+// mudança de contrato ficaria sem trava.
+func TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		events string
+	}{
+		{name: "evento com typo", events: "Mesage"},
+		{name: "lista mista, um válido e um inválido", events: "Message,Mesage"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{
+				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+			}
+			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+
+			err := uc.Execute(context.Background(),
+				domain.EditUserRequest{UserID: "u1", Events: tt.events})
+			if err == nil {
+				t.Fatal("esperava recusa por tipo de evento desconhecido")
+			}
+			// Recusar, não filtrar: nada é atualizado. Um filtro silencioso
+			// gravaria a lista podada e devolveria sucesso.
+			if len(repo.UpdateUserCalls) != 0 {
+				t.Errorf("UpdateUser chamado %d vezes, queria 0", len(repo.UpdateUserCalls))
+			}
+		})
+	}
+}
+
+// TestEditUserUseCase_Execute_EventosValidosChegamIntactos é o caminho de
+// SUCESSO da mesma guarda: o valor gravado é o do request, sem poda.
+func TestEditUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
+	t.Parallel()
+
+	for _, events := range []string{"Message", "Message,ReadReceipt,Presence", "All", "  Message  "} {
+		t.Run(events, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{
+				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+			}
+			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+
+			if err := uc.Execute(context.Background(),
+				domain.EditUserRequest{UserID: "u1", Events: events}); err != nil {
+				t.Fatalf("erro inesperado: %v", err)
+			}
+			if len(repo.UpdateUserCalls) != 1 {
+				t.Fatalf("UpdateUser chamado %d vezes, queria 1", len(repo.UpdateUserCalls))
+			}
+			upd := repo.UpdateUserCalls[0].Update
+			if upd.Events == nil {
+				t.Fatal("Events = nil, queria informado")
+			}
+			if *upd.Events != events {
+				t.Errorf("Events = %q, queria %q", *upd.Events, events)
+			}
+		})
+	}
+}

@@ -279,3 +279,85 @@ func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
 		t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
 	}
 }
+
+// TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio trava a
+// ORDEM da recusa da F159: validar ANTES de gravar.
+//
+// O eixo de fronteira (status 400 e mensagem do envelope) fica em
+// pkg/bootstrap/add_user_events_route_test.go, pela rota registrada. Aqui a
+// asserção é a que só o dublê enxerga: CreateUser não é chamado NENHUMA vez.
+// A lista mista é o caso que separa RECUSAR de FILTRAR — um filtro
+// silencioso chamaria CreateUser com o evento válido remanescente.
+func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		events string
+	}{
+		{name: "evento com typo", events: "Mesage"},
+		{name: "lista mista, um válido e um inválido", events: "Message,Mesage"},
+		{name: "lista mista, o inválido primeiro", events: "Mesage,Message"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+			if err == nil {
+				t.Fatal("esperava recusa por tipo de evento desconhecido")
+			}
+			if resp != nil {
+				t.Errorf("resposta = %+v, queria nil", resp)
+			}
+			if len(repo.CreateUserCalls) != 0 {
+				t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
+			}
+		})
+	}
+}
+
+// TestAddUserUseCase_Execute_EventosValidosChegamIntactos assegura o caminho
+// de SUCESSO: o campo gravado é o do request, sem reescrita. A validação faz
+// TrimSpace só para decidir, e não normaliza o valor.
+func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		events string
+	}{
+		{name: "um evento válido", events: "Message"},
+		{name: "vários eventos válidos", events: "Message,ReadReceipt,Presence"},
+		{name: "All", events: "All"},
+		{name: "espaços em volta", events: "  Message  "},
+		{name: "events vazio", events: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+			if err != nil {
+				t.Fatalf("erro inesperado: %v", err)
+			}
+			if len(repo.CreateUserCalls) != 1 {
+				t.Fatalf("CreateUser chamado %d vezes, queria 1", len(repo.CreateUserCalls))
+			}
+			if got := repo.CreateUserCalls[0].Rec.Events; got != tt.events {
+				t.Errorf("Events gravado = %q, queria %q", got, tt.events)
+			}
+			if resp.Events != tt.events {
+				t.Errorf("resp.Events = %q, queria %q", resp.Events, tt.events)
+			}
+		})
+	}
+}

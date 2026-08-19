@@ -20,6 +20,9 @@ const (
 	hmacKeyTooShortCode  = "hmac_key_too_short"
 	hmacKeyTooShortMsg   = "HMAC key must be at least 32 characters long"
 	hmacEncryptFailedMsg = "failed to encrypt HMAC key"
+
+	invalidEventTypeCode   = "invalid_event_type"
+	invalidEventTypeMsgFmt = "invalid event type: %s"
 )
 
 // AddUserUseCase adiciona um novo usuário
@@ -90,8 +93,8 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 				continue
 			}
 			if !isValidEvent(event) {
-				return nil, apperr.New("invalid_event_type", apperr.CategoryValidation,
-					fmt.Sprintf("invalid event type: %s", event), false, nil)
+				return nil, apperr.New(invalidEventTypeCode, apperr.CategoryValidation,
+					fmt.Sprintf(invalidEventTypeMsgFmt, event), false, nil)
 			}
 		}
 	}
@@ -176,7 +179,26 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	}, nil
 }
 
+// isValidEvent reports whether the event name is one of
+// domain.SupportedEventTypes.
+//
+// Rejecting an unknown event is a NEW public contract, decided deliberately
+// (HOUSEKEEP F159) — it is not the recovery of an older behaviour. There is
+// no older behaviour to recover: this function used to return true for every
+// input, so the 400 above was dead code, and the pre-migration handler did
+// not validate events at all. Callers that today send a misspelled event and
+// get 200 will start getting 400.
+//
+// The alternative — dropping the unknown entry and carrying on, which the
+// sibling UpdateWebhook route does — was rejected: a rejection is visible to
+// the integrator at the moment of the call and is fixable there, while a
+// silent drop only surfaces later, to the operator, as an event that never
+// arrives.
+//
+// The validator is domain.IsValidEventType and not the identical list in
+// pkg/infra/constants (HOUSEKEEP F168) because this is the application layer:
+// importing infra from here would invert the dependency direction, and
+// pkg/domain depends on nobody.
 func isValidEvent(event string) bool {
-	// This will check against domain.SupportedEventTypes
-	return true
+	return domain.IsValidEventType(event)
 }

@@ -10689,7 +10689,158 @@ tratamento de caixa que o resto do repositório usa para eventos, e um teste
 que rejeite um evento inexistente pelas DUAS rotas (`POST /admin/users` e a de
 edição) — o defeito vive nos dois chamadores.
 
-**Status**: não corrigido, fora do escopo do CAP-27.
+**Status**: **CORRIGIDO** no CAP-33 (2026-08-19).
+`isValidEvent` passa a delegar a `domain.IsValidEventType`
+(`pkg/application/usecase/user/add_user.go:202`).
+
+### A recusa é contrato NOVO, decidido — não é recuperação
+
+O ponto tem de ficar explícito para quem ler daqui a seis meses: **não há
+comportamento histórico sendo restaurado aqui, há um vazio sendo preenchido**.
+Medido no histórico:
+
+| onde | o que fazia |
+|---|---|
+| `AddUser` histórico (`41bc8e2^:handlers.go:5413`) | não validava evento NENHUM; gravava `user.Events` como veio |
+| a estrutura de recusa 400 hoje na árvore | foi INVENTADA pela migração, sem contrato histórico atrás |
+| `UpdateWebhook` histórico (`:472-487`), rota irmã | DESCARTA em silêncio, com `log.Warn("Event type discarded")` |
+
+O canal decidiu **ativar a recusa**: quem mandar evento desconhecido passa a
+receber **400 onde hoje recebe 200**. É mudança de contrato público,
+deliberada. O motivo, registrado também no comentário da função: entre quebrar
+quem manda evento inválido e aceitar em silêncio uma inscrição que nunca vai
+funcionar, a primeira falha é visível ao integrador no momento da chamada e
+corrigível por ele; a segunda o operador só descobre quando o evento não
+chega. Filtrar em silêncio, como a rota irmã faz, seria institucionalizar
+exatamente a classe de falha que esta sessão passou eliminando.
+
+### O segundo chamador
+
+`isValidEvent` é do pacote, e `edit_user.go:49` é o SEGUNDO chamador: a
+mudança de contrato vale também para `PUT /admin/users/{id}`. Metade da
+mudança teria ficado sem trava se a suíte só cobrisse `AddUser`.
+
+### Qual validador, e por quê ([[F168]])
+
+`domain.IsValidEventType` (`pkg/domain/constants.go:89`), **não** o homônimo
+de `pkg/infra/constants/events.go:65`. A razão é de camada e não de gosto:
+`pkg/application/usecase/user` é camada de APLICAÇÃO, e importar
+`pkg/infra/constants` de lá inverteria a direção da dependência —
+`pkg/domain` não depende de ninguém. O próprio comentário do placeholder já
+apontava para `domain.SupportedEventTypes`. A duplicação das duas listas
+CONTINUA: a [[F168]] segue aberta.
+
+### Testes que travam o achado
+
+Pela ROTA REGISTRADA (`registerAdminRoutes` + `gorilla/mux`), contra SQLite
+real e repositório real, em `pkg/bootstrap/add_user_events_route_test.go` —
+é onde o status 400 e a mensagem do envelope existem, porque ambos são
+derivados de `apperr.Category` em `pkg/presentation/http/response.go:53` e não
+escritos pelo handler:
+
+- `TestAdminAddUser_EventosValidosCriamUsuario` — caminho de SUCESSO, 5
+  subtestes: um evento válido; vários separados por vírgula; `All`; espaços em
+  volta (`"  Message  "`, aceito porque o laço faz `TrimSpace` antes de
+  validar, e o valor GRAVADO segue sendo o original — a validação não
+  normaliza o campo); e `events` vazio, o caminho que não pode quebrar.
+- `TestAdminAddUser_EventoDesconhecidoERecusadoENadaEGravado` — 3 subtestes
+  (typo isolado; lista mista com o inválido depois; lista mista com o inválido
+  antes). Assevera status 400, `error.code == "invalid_event_type"`,
+  `error.message == "invalid event type: Mesage"`, e que **nenhuma linha** foi
+  criada em `users` (`COUNT(*) == 0`). A lista mista é o eixo que separa
+  RECUSAR de FILTRAR.
+
+No use case, onde a ORDEM é observável pelo dublê
+(`pkg/application/usecase/user/add_user_test.go`):
+
+- `TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio` — 3
+  subtestes; `CreateUser` chamado **0 vezes**: valida ANTES de gravar.
+- `TestAddUserUseCase_Execute_EventosValidosChegamIntactos` — 5 subtestes; o
+  `Events` gravado é o do request, sem poda.
+
+E o segundo chamador (`pkg/application/usecase/user/edit_user_test.go`):
+
+- `TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio` — 2
+  subtestes; `UpdateUser` chamado **0 vezes**.
+- `TestEditUserUseCase_Execute_EventosValidosChegamIntactos` — 4 subtestes.
+
+### Controles negativos EXECUTADOS
+
+**(a) `isValidEvent` volta a devolver `true` sempre** — a mutação exata do
+defeito (`return true || domain.IsValidEventType(event)`, escrita assim para
+COMPILAR: `return true` deixaria `event` sem uso e quebraria o build em vez de
+falhar teste, que é a ARMADILHA 3):
+
+```
+--- FAIL: TestAdminAddUser_EventoDesconhecidoERecusadoENadaEGravado (0.02s)
+    --- FAIL: .../evento_com_typo (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"events":"Mesage"},"success":true}
+    --- FAIL: .../lista_mista,_um_válido_e_um_inválido (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"events":"Message,Mesage"},"success":true}
+    --- FAIL: .../lista_mista,_o_inválido_primeiro (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"events":"Mesage,Message"},"success":true}
+--- FAIL: TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio (0.00s)
+    --- FAIL: .../evento_com_typo (0.00s)
+        add_user_test.go:312: esperava recusa por tipo de evento desconhecido
+    --- FAIL: .../lista_mista,_um_válido_e_um_inválido (0.00s)
+    --- FAIL: .../lista_mista,_o_inválido_primeiro (0.00s)
+FAIL	wa-api/pkg/bootstrap	0.331s
+FAIL	wa-api/pkg/application/usecase/user	0.196s
+```
+
+**(a′) a mesma mutação, medida no chamador `EditUser`** — porque um teste do
+segundo chamador que não morde seria confiança falsa:
+
+```
+--- FAIL: TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio (0.00s)
+    --- FAIL: .../evento_com_typo (0.00s)
+        edit_user_test.go:265: esperava recusa por tipo de evento desconhecido
+    --- FAIL: .../lista_mista,_um_válido_e_um_inválido (0.00s)
+        edit_user_test.go:265: esperava recusa por tipo de evento desconhecido
+FAIL	wa-api/pkg/application/usecase/user	0.186s
+```
+
+**(b) a RECUSA trocada por FILTRO silencioso** — o laço passa a podar o
+inválido (`continue` + `req.Events = strings.Join(kept, ",")`) e segue para
+gravar. Este é o controle que prova que a suíte mede a DECISÃO, e não só "algo
+aconteceu": a lista mista devolve 200 com `"events":"Message"`, e é o teste
+que cai:
+
+```
+--- FAIL: TestAdminAddUser_EventosValidosCriamUsuario (0.04s)
+    --- FAIL: .../espaços_em_volta (0.01s)
+        add_user_events_route_test.go:104: users.events = "Message", queria "  Message  "
+--- FAIL: TestAdminAddUser_EventoDesconhecidoERecusadoENadaEGravado (0.02s)
+    --- FAIL: .../evento_com_typo (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"s3_config":{...}},"success":true}
+    --- FAIL: .../lista_mista,_um_válido_e_um_inválido (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"events":"Message"},"success":true}
+    --- FAIL: .../lista_mista,_o_inválido_primeiro (0.01s)
+        add_user_events_route_test.go:143: status = 200, queria 400 (corpo: {"code":200,...,"events":"Message"},"success":true}
+--- FAIL: TestAddUserUseCase_Execute_EventosValidosChegamIntactos (0.00s)
+    --- FAIL: .../espaços_em_volta (0.00s)
+        add_user_test.go:356: Events gravado = "Message", queria "  Message  "
+        add_user_test.go:359: resp.Events = "Message", queria "  Message  "
+--- FAIL: TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio (0.00s)
+    --- FAIL: .../evento_com_typo (0.00s)
+        add_user_test.go:312: esperava recusa por tipo de evento desconhecido
+    --- FAIL: .../lista_mista,_um_válido_e_um_inválido (0.00s)
+    --- FAIL: .../lista_mista,_o_inválido_primeiro (0.00s)
+FAIL	wa-api/pkg/bootstrap	0.343s
+FAIL	wa-api/pkg/application/usecase/user	0.196s
+```
+
+O controle (b) derruba de quebra o subteste de espaços em volta, e isso é
+informação: ele prova que a suíte também trava a NÃO-normalização do campo —
+um filtro reescreveria `"  Message  "` para `"Message"` sem ninguém pedir.
+
+Todas as três mutações foram revertidas por edição localizada e a árvore final
+voltou ao verde antes do `make check`.
+
+**Nota de método**: a busca por um TERCEIRO placeholder irmão no pacote foi
+feita (`grep -niE "this will |for now|placeholder|TODO|not implemented|stub"
+pkg/application/usecase/user/*.go`) e não achou nenhum: com a [[F158]] e a
+F159 fechadas, o pacote não tem mais stub prometendo implementação futura.
 
 ## F160
 
@@ -11366,6 +11517,17 @@ a camada que não depende de ninguém, e `pkg/infra/constants` pode reexportar s
 houver consumidor que não deva importar `domain`. **Antes de mover, enumere os
 consumidores de cada uma nome por nome** — não "os consumidores" —, porque é a
 direção da dependência que decide qual sobrevive.
+
+**Escolha feita pela [[F159]] (CAP-33, 2026-08-19)**: o conserto adotou
+`domain.IsValidEventType`. A razão é a direção da dependência —
+`pkg/application/usecase/user` é camada de aplicação e não pode importar
+`pkg/infra/constants` sem inverter o sentido; `pkg/domain` não depende de
+ninguém. Consumidores enumerados nome por nome, fora dos dois arquivos de
+definição: `pkg/application/usecase/user/add_user.go:203` (via `isValidEvent`,
+que `edit_user.go:49` também chama) usa `domain.IsValidEventType`, e
+`pkg/bootstrap/wiring_delegates.go:34` usa `constants.SupportedEventTypes`.
+Isto NÃO resolve a F168: **as duas listas continuam existindo**, com as mesmas
+48 entradas e nada as mantendo iguais.
 
 **Status**: não corrigido, e NÃO deve ser corrigido junto com a F159:
 unificar fonte de verdade toca duas camadas e é refatoração, enquanto a F159 é
