@@ -104,6 +104,9 @@ type mutationCase struct {
 	// mutations conta quantas vezes a porta de mutação DESTA capability foi
 	// chamada.
 	mutations func(*contractsfake.ChatMessenger) int
+	// portTxtID é o txtID que a porta desta capability RECEBEU na primeira
+	// chamada. Vazio quando a porta não foi alcançada.
+	portTxtID func(*contractsfake.ChatMessenger) string
 	// missingField mapeia campo obrigatório ausente -> payload que o omite,
 	// e a causa que o log tem de registrar.
 	missingField map[string]struct{ body, cause string }
@@ -117,6 +120,12 @@ func mutationCases() []mutationCase {
 			validBody:  `{"Phone":"5511999999999","Id":"3EB0ABC123"}`,
 			wantStatus: domain.StatusDeleted,
 			mutations:  func(cm *contractsfake.ChatMessenger) int { return len(cm.RevokeMessageCalls) },
+			portTxtID: func(cm *contractsfake.ChatMessenger) string {
+				if len(cm.RevokeMessageCalls) == 0 {
+					return ""
+				}
+				return cm.RevokeMessageCalls[0].TxtID
+			},
 			missingField: map[string]struct{ body, cause string }{
 				"Phone": {`{"Id":"3EB0ABC123"}`, "missing Phone in payload"},
 				"Id":    {`{"Phone":"5511999999999"}`, "missing Id in payload"},
@@ -128,6 +137,12 @@ func mutationCases() []mutationCase {
 			validBody:  `{"Phone":"5511999999999","Body":"corrigido","Id":"3EB0ABC123"}`,
 			wantStatus: domain.StatusSent,
 			mutations:  func(cm *contractsfake.ChatMessenger) int { return len(cm.EditMessageCalls) },
+			portTxtID: func(cm *contractsfake.ChatMessenger) string {
+				if len(cm.EditMessageCalls) == 0 {
+					return ""
+				}
+				return cm.EditMessageCalls[0].TxtID
+			},
 			missingField: map[string]struct{ body, cause string }{
 				"Phone": {`{"Body":"corrigido","Id":"3EB0ABC123"}`, "missing Phone in payload"},
 				"Body":  {`{"Phone":"5511999999999","Id":"3EB0ABC123"}`, "missing Body in payload"},
@@ -184,16 +199,25 @@ func TestMessageMutation_Success_ViaRegisteredRoute(t *testing.T) {
 				if n := tc.mutations(cm); n != 1 {
 					t.Fatalf("porta de mutacao chamada %d vez(es) pela rota registrada, quero 1", n)
 				}
+				// O txtID que chega a' porta e' o do CONTEXTO autenticado, e
+				// nao um campo do payload nem um valor inventado pelo handler
+				// (eixo da F142). As nove capabilities de ENVIO ganharam este
+				// eixo no CAP-18; estas duas ficaram de fora e so' o
+				// recebem agora (CAP-19).
+				if got := tc.portTxtID(cm); got != "user-1" {
+					t.Fatalf("a porta recebeu txtID %q, quero %q — o Id do contexto autenticado",
+						got, "user-1")
+				}
 				// O caminho de SUCESSO nao emite warn/error: a requisicao ja'
 				// e' registrada pelo middleware de fronteira, e um registro
 				// aqui seria ruido redundante inflando a metrica de log. Eixo
 				// herdado de TestMessageHandlers_Success, que cobria estas
 				// duas capabilities antes do CAP-10.
-				for _, r := range recs {
-					if lvl := r.str("level"); lvl == "warn" || lvl == "error" {
-						t.Fatalf("caminho de sucesso emitiu registro %s: %s", lvl, r.Raw)
-					}
-				}
+				//
+				// A assercao e' o helper compartilhado, e nao uma copia do
+				// laco por nivel: era a UNICA copia restante depois do CAP-17,
+				// e copia de assercao foi a causa raiz da F143 (CAP-19).
+				assertNoOutcomeLog(t, recs)
 			})
 		}
 	}

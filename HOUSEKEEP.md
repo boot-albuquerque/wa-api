@@ -7909,3 +7909,220 @@ não havia defeito de produção. Testes que o travam, todos em
 `TestSendCapabilities_SuccessEmitsNoOutcomeLog`, cada um com os seis subtestes
 `text`, `image`, `audio`, `video`, `document`, `sticker`. Produção NÃO foi
 tocada: `git status --short` acusa apenas o arquivo de teste novo.
+
+## F145
+
+**Data**: 2026-08-19. **Contexto**: levantamento preliminar depois do CAP-18,
+para decidir se a varredura de eixos continua nas capabilities que NÃO são de
+envio. Não é conclusão — é ponto de partida, e está registrado como tal.
+
+**Onde**: capabilities de mutação, leitura e presença.
+
+**Problema**: o CAP-18 fechou os quatro eixos de fronteira nas seis
+capabilities de ENVIO antigas. As capabilities que não são de envio nunca
+passaram por auditoria de eixo, e um levantamento por marcador de
+comportamento sugere lacunas.
+
+Medição preliminar, com o método do CAP-18 (marcador de comportamento, não
+nome de teste), e **as duas ressalvas que já me enganaram três vezes nesta
+sessão**: nome de teste varia entre capabilities para o mesmo eixo, e um
+arquivo pode mencionar um marcador em comentário sem exercitá-lo.
+
+| capability | session id | malformed | sucesso não loga | wrong type |
+|---|---|---|---|---|
+| delete | tem | tem | **falta** | tem |
+| edit | tem | tem | **falta** | tem |
+| reject_call | tem | tem | tem | **falta** |
+| presence | tem | — | tem | **falta** |
+| download (5 rotas) | **falta** | **falta** | **falta** | — |
+| chat history | a confirmar | a confirmar | a confirmar | a confirmar |
+
+`chat history` fica marcado como A CONFIRMAR de propósito: os testes dele
+estão espalhados entre `pkg/bootstrap/chat_history_route_test.go` (fiação),
+`chat_history_wire_contract_test.go` (nomes do wire) e possivelmente outros,
+e um levantamento por arquivo único daria falso negativo — foi assim que eu
+classifiquei `text` como "zero eixos" no CAP-18 quando ele tinha três, ainda
+que por handler cru.
+
+**Por que importa**: os quatro eixos não são preciosismo. O CAP-18 provou,
+por controle negativo, que sem o eixo de *wrong type in context* um valor de
+tipo errado vira **pânico** em vez de 401 — e ninguém saberia. E `download`
+são CINCO rotas públicas sem nenhum dos eixos verificados.
+
+**Correção sugerida**: repetir o método do CAP-18 — matriz medida por
+comportamento, confirmada de forma independente antes de escrever teste,
+tabela única em vez de cópias, e instrução explícita de PARAR e reportar se
+algum eixo revelar defeito de produção em vez de lacuna de teste.
+
+**Status**: não corrigido. Levantamento levado ao canal de decisão junto com
+o relatório do CAP-18; a escolha do próximo bloco está pendente.
+
+### F145 — matriz MEDIDA no CAP-19 (executor), e o que foi fechado
+
+**Data**: 2026-08-19. **Contexto**: execução do bloco CAP-19, a partir do
+levantamento preliminar acima. A matriz abaixo substitui a preliminar: foi
+medida célula por célula, por **comportamento** (o que o teste assevera), e
+não por nome de teste nem por arquivo.
+
+**Convenção das células**, que é onde estava a maior parte do desacordo:
+
+- `rota` — coberto pela ROTA REGISTRADA (gorilla/mux), com asserção de causa;
+- `cru` — existe, mas por `handler.ServeHTTP` CRU. Conta como **lacuna**
+  (ARMADILHA 2): não exercita a cadeia da rota nem extração de parâmetro;
+- `parcial` — existe pela rota, mas sem uma metade do eixo (causa, ou prova
+  de que a porta não foi alcançada);
+- `falta` — não existe em forma nenhuma;
+- `—` — não se aplica, com a razão registrada.
+
+#### Matriz medida ANTES do CAP-19
+
+| capability (rota real) | 1 session id | 2 malformed | 3 sucesso não loga | 4 wrong type | 5 txtID na porta |
+|---|---|---|---|---|---|
+| delete `/chat/delete/message` | rota | rota | **rota** | rota | **falta** |
+| delete `/chat/delete` (alias) | rota | rota | **rota** | rota | **falta** |
+| edit `/chat/send/edit` | rota | rota | **rota** | rota | **falta** |
+| presence `/user/presence` | cru | cru | cru | falta | falta |
+| presence `/user/presence/subscribe` | cru | cru | cru | falta | falta |
+| presence `/chat/presence` | cru | cru | cru | falta | falta |
+| markread `/chat/markread` | cru | cru | cru | falta | falta |
+| react `/chat/react` | cru | cru | cru | falta | falta |
+| reject_call `/call/reject` | cru | cru | cru | falta | falta |
+| request-unavailable `/chat/request-unavailable-message` | cru | cru | cru | falta | falta |
+| archive `/chat/archive` | cru | cru | cru | falta | falta |
+| privacy set `POST /user/privacy` | cru | cru | cru | falta | falta |
+| download `/chat/downloadimage` | parcial | parcial | falta | **falta** | rota |
+| download `/chat/downloadvideo` | parcial | parcial | falta | **falta** | rota |
+| download `/chat/downloadaudio` | parcial | parcial | falta | **falta** | rota |
+| download `/chat/downloaddocument` | parcial | parcial | falta | **falta** | rota |
+| download `/chat/downloadsticker` | parcial | parcial | falta | **falta** | rota |
+| chat history `GET /chat/history` | parcial | **—** | falta | falta | parcial |
+
+**Onde a matriz medida diverge da preliminar** — quatro correções, e a
+preliminar estava errada nas quatro:
+
+1. **`delete` e `edit`, eixo 3: TÊM, não faltam.**
+   `TestMessageMutation_Success_ViaRegisteredRoute` já asseverava a ausência
+   de warn/error, com o laço por NÍVEL escrito inline
+   (`handler_message_mutation_test.go`, antes da linha 190). Um levantamento
+   por marcador `assertNoOutcomeLog` dá falso negativo: a forma correta
+   estava lá, apenas copiada em vez de chamada.
+2. **`presence`, eixo 2: existe, não é "—".** Os quatro handlers de presença
+   decodificam corpo (`handler_presence.go:28,58,84,110`) e
+   `TestPresenceHandlers_MalformedBody` já exercitava o eixo. O problema é
+   que era por handler cru, e não que o eixo não se aplicasse.
+3. **`download`, eixo 4: aplica-se, não é "—".** As cinco rotas passam por
+   `sessionUser` (`handler_session.go:38`), que faz assertion de tipo e
+   depende do `if info == nil` seguinte. Nada travava esse par.
+4. **`delete` e `edit`, eixo 5: FALTAM.** A F142 cobriu **nove capabilities
+   de ENVIO** (`handler_send_session_axis_test.go`); as de mutação ficaram
+   de fora, e nenhum teste olhava para `RevokeMessageCalls[0].TxtID` nem
+   `EditMessageCalls[0].TxtID`.
+
+**Achado colateral, e é o preço concreto do handler cru**:
+`handler_misc_test.go` pede `"/chat/rejectcall"` e
+`"/chat/requestunavailablemessage"`. **Nenhuma das duas rotas existe**: as
+reais são `/call/reject` e `/chat/request-unavailable-message`
+(`pkg/bootstrap/wiring_routes.go:158,160`, confirmado por
+`go run ./cmd/listroutes`). Com handler cru o caminho da requisição é
+decorativo, então o engano nunca falhou nada. Ver F146 abaixo para o mesmo
+literal errado dentro do código de PRODUÇÃO.
+
+**Correção aplicada** — três arquivos, todos de teste:
+
+- `pkg/presentation/http/handlers/handler_nonsend_axes_test.go` (novo):
+  tabela única, 14 capabilities × 4 eixos = 56 subtestes, todas pela rota
+  REGISTRADA, mais o eixo 5 dentro do subteste de caminho feliz. Cobre
+  presence (4), react, reject_call, request-unavailable, archive, privacy
+  set e os 5 downloads.
+- `pkg/bootstrap/chat_history_axes_test.go` (novo): eixos 1, 3, 4 e 5 de
+  `GET /chat/history`, com banco SQLite REAL e o repositório de produção
+  embrulhado num contador (`countingChatHistoryReader`) — um dublê não teria
+  `WHERE user_id` para esquecer. Inclui
+  `TestChatHistoryAxis_MessagesIsolateOnUserID`, o isolamento de tenant do
+  ramo de MENSAGENS, que só existia para o ramo `index`.
+- `pkg/presentation/http/handlers/handler_message_mutation_test.go`: eixo 5
+  para delete (nas duas rotas) e edit; e a cópia inline do laço de nível
+  trocada por `assertNoOutcomeLog` — era a última cópia depois do CAP-17, e
+  cópia de asserção foi a causa raiz da F143.
+
+**Eixo 2 em `chat history` é "—" com premissa travada em teste**: a rota é
+GET e o handler nunca lê `r.Body`
+(`handler_chat_history.go:38-93`).
+`TestChatHistoryAxis_MalformedBodyIsIgnoredBecauseRouteIsGET`
+registra a decisão de forma executável: se algum dia o handler passar a
+decodificar corpo, esse teste falha e o eixo 2 volta a ser obrigatório ali.
+
+**Controles negativos EXECUTADOS** — dois por eixo, em capabilities
+diferentes, todos compilando E falhando:
+
+| eixo | mutação | onde mordeu |
+|---|---|---|
+| 1 | removida a guarda `id == ""` de `sessionUser` (handler_session.go:44) | `.../MissingSessionID/SendPresence` e `/DownloadImage`: `status: got 200, want 400` |
+| 1 | removida a guarda `txtID == ""` de `handler_chat_history.go` | `TestChatHistoryAxis_MissingSessionID`: `status = 200, quero 400 (corpo: {"code":200,"data":[],"success":true})` |
+| 2 | `err != nil` → `err != nil && false` no decode de `DownloadImageHandler` | `.../MalformedBody/DownloadImage`: ``campo `error` ("missing Url in payload") nao contem "unexpected EOF"`` |
+| 2 | idem em `SendPresenceHandler` | `.../MalformedBody/SendPresence`: ``campo `error` ("invalid presence type…") nao contem "could not decode payload"`` |
+| 3 | `Warn().Msg("ruido no caminho feliz")` antes do 200 de `DownloadStickerHandler` | `.../SuccessEmitsNoOutcomeLog/DownloadSticker`: `caminho de sucesso emitiu registro warn` |
+| 3 | idem em `ArchiveChatHandler` | `.../SuccessEmitsNoOutcomeLog/ArchiveChat`: mesma falha |
+| 3 | idem em `GetChatHistoryHandler` | `TestChatHistoryAxis_SuccessEmitsNoOutcomeLog/{mensagens,index}` |
+| 4 | `info, _ := …(userInfo)` → `info := …(userInfo)` em `sessionUser` | **`panic: interface conversion: int is not handlers.userInfo: missing method Get`** em `/SendPresence` e em `/DownloadImage` |
+| 4 | mesma mutação em `handler_chat_history.go` | mesmo `panic` em `TestChatHistoryAxis_WrongTypeInContext` |
+| 5 | `id = "outro-tenant"` em `DownloadImageHandler` | `a porta recebeu txtID "outro-tenant", quero "user-1"` |
+| 5 | idem em `RejectCallHandler` | mesma falha em `/call/reject` |
+| 5 | `txtID = "outro-tenant"` em `DeleteMessageHandler` | falha nas DUAS rotas de delete |
+| 5 | `txtID` lido de `?user=` em `GetChatHistoryHandler` | `ListChatMessages recebeu [B], quero exatamente [A]` e `ChatIndexByUser recebeu [B]` |
+| 5 (tenant) | `WHERE user_id = ?` → `WHERE ? IS NOT NULL` em `ChatHistoryRepository.ListChatMessages` | `TestChatHistoryAxis_MessagesIsolateOnUserID`: mensagens `B-1` e `B-2` na resposta de A |
+
+**Prova de ISOLAMENTO**: a mutação do eixo 3 em `DownloadStickerHandler`
+derrubou **exatamente um** subteste no pacote inteiro
+(`TestNonSendCapabilities_SuccessEmitsNoOutcomeLog/DownloadSticker`). Ela
+também mostra por que a asserção é por NÍVEL: o registro plantado é
+`{"level":"warn",…,"message":"ruido no caminho feliz"}`, **sem campo
+`error`** — a forma fraca `has("error")` o deixaria passar.
+
+A do eixo 2 em `DownloadImageHandler` derrubou dois subtestes, os dois do
+MESMO eixo e da MESMA capability (o novo e o pré-existente
+`TestDownload_RejectMalformedBody/Download_Image`); nenhum outro.
+
+**Defeito de produção encontrado**: NENHUM de comportamento. Os 14 handlers
+e o de histórico já respondiam 400/400/401 corretamente, já não logavam no
+caminho feliz e já usavam o txtID do contexto; o isolamento de tenant do
+histórico segura nos dois ramos. A lacuna era só de teste. (O literal de
+rota errado da F146 é de observabilidade, não de comportamento.)
+
+**Status**: **corrigido**. Testes que travam: os 56 subtestes de
+`handler_nonsend_axes_test.go`, os 9 de `chat_history_axes_test.go`, e o
+eixo 5 acrescentado a `TestMessageMutation_Success_ViaRegisteredRoute`.
+
+## F146
+
+**Data**: 2026-08-19. **Contexto**: CAP-19, ao montar a tabela de eixos pela
+rota REGISTRADA (F145).
+
+**Onde**:
+- `pkg/presentation/http/handlers/handler_misc.go:104` — `const route = "/chat/rejectcall"`
+- `pkg/presentation/http/handlers/handler_misc.go:186` — `const route = "/chat/requestunavailablemessage"`
+- rotas reais em `pkg/bootstrap/wiring_routes.go:158,160`
+
+**Problema**: os dois handlers carimbam no log um campo `route` com um
+caminho que **não existe**. As rotas registradas são `/call/reject` e
+`/chat/request-unavailable-message`; `go run ./cmd/listroutes | grep -i
+reject` devolve `POST /call/reject` e nada mais. Um operador que filtre o log
+por `route="/chat/rejectcall"` encontra os registros, mas quem parta do log
+para a rota não encontra endpoint nenhum — e quem parta da rota para o log
+não acha os registros.
+
+O literal solto é a causa: o caminho está escrito duas vezes, em dois
+arquivos, sem nada que os obrigue a concordar (ADR-0004, "zero string
+literal solta"). `handler_presence.go`, `handler_reaction.go` e o resto de
+`handler_misc.go` têm o mesmo padrão — ali os literais por acaso conferem.
+
+**Correção sugerida**: extrair as constantes de rota para um lugar único que
+`wiring_routes.go` e os handlers compartilhem, e derivar o campo de log dela.
+Alternativa mais barata e sem mudança estrutural: usar
+`mux.CurrentRoute(r).GetPathTemplate()`, que devolve o padrão REGISTRADO e
+não pode divergir por construção.
+
+**Status**: **não corrigido** — é defeito de produção fora do escopo do
+CAP-19, que era de teste. Registrado para decisão. O achado só apareceu
+porque a tabela nova pede a rota REAL; a suíte antiga o escondia por chamar
+`handler.ServeHTTP` cru, onde o caminho da requisição é decorativo.
