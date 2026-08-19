@@ -11323,3 +11323,59 @@ saída a registrar.
 
 **Status**: corrigido nesta sessão, travado pelos testes listados acima e pelos
 quatro controles negativos executados.
+
+## F168
+
+**Data**: 2026-08-19. **Contexto**: verificação da [[F159]] por leitura, para
+montar o bloco de correção. O achado da F159 se confirma; este é o que apareceu
+DE LADO ao decidir qual validador usar no conserto.
+
+**Onde**: duas funções com o mesmo nome, o mesmo corpo e a mesma finalidade:
+
+| onde | função |
+|---|---|
+| `pkg/infra/constants/events.go:65` | `IsValidEventType(name string) bool` |
+| `pkg/domain/constants.go:89` | `IsValidEventType(eventType string) bool` |
+
+Cada uma tem o SEU `SupportedEventTypes` e o SEU `init()` montando um mapa a
+partir dele.
+
+**Medido**: as duas listas têm **48 entradas** e são **idênticas hoje**.
+Comparadas ordenadas, o diff é vazio:
+
+```bash
+diff <(sed -n "/SupportedEventTypes = \[\]string{/,/^}/p" pkg/infra/constants/events.go | grep -oE '"[^"]+"' | sort) \
+     <(sed -n "/SupportedEventTypes = \[\]string{/,/^}/p" pkg/domain/constants.go     | grep -oE '"[^"]+"' | sort)
+# sem saída
+```
+
+**Problema**: nada as mantém iguais. É o princípio já congelado no `CLAUDE.md`
+— *"literal repetido em dois lugares é o mesmo bug esperando divergir"* — só
+que no nível de uma LISTA INTEIRA de 48 itens. No dia em que o WhatsApp
+acrescentar um tipo de evento, alguém atualiza uma e não a outra, e o sintoma
+será um evento aceito num caminho e rejeitado no outro — com as duas funções
+respondendo, cada uma corretamente segundo a sua própria lista.
+
+**Por que isso importa AGORA**: o conserto da F159 (`isValidEvent` devolve
+`true` sempre) tem de escolher UMA das duas. Escolher a errada **não quebra
+nada hoje**, porque são iguais — e é exatamente por isso que a escolha passaria
+despercebida, e ficaria errada até a primeira divergência.
+
+**Correção sugerida**: uma fonte só. `pkg/domain` é a candidata natural por ser
+a camada que não depende de ninguém, e `pkg/infra/constants` pode reexportar se
+houver consumidor que não deva importar `domain`. **Antes de mover, enumere os
+consumidores de cada uma nome por nome** — não "os consumidores" —, porque é a
+direção da dependência que decide qual sobrevive.
+
+**Status**: não corrigido, e NÃO deve ser corrigido junto com a F159:
+unificar fonte de verdade toca duas camadas e é refatoração, enquanto a F159 é
+conserto de stub. Misturar as duas no mesmo diff é o que a política do projeto
+manda evitar. O bloco da F159 vai escolher uma delas COM justificativa escrita,
+e a unificação fica como bloco próprio.
+
+**Nota de método**: a F158 e a F159 são placeholders gêmeos, no MESMO arquivo,
+a vinte linhas um do outro (`add_user.go:157` e `:179`), com o mesmo formato de
+comentário prometendo a implementação futura. A F158 foi achada sozinha; a F159
+só apareceu porque o executor continuou lendo depois de encontrar a primeira.
+Regra que fica: **ao encontrar um placeholder, procure os irmãos dele no mesmo
+arquivo antes de fechar o levantamento.**
