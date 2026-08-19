@@ -1045,7 +1045,28 @@ rules_frozen=true
 # main.go, mais os DOIS sitios L3 que a extracao levou embora de
 # bootstrap.Main (main.go:273 e main.go:286, as duas linhas de log do bloco
 # HMAC que saiu de la').
-min_func_coverage=667
+#
+# CAP-35 (2026-08-19): 667 -> 669. A F169 extraiu de bootstrap.Main os DOIS
+# blocos irmaos do da F156 (token de administracao e chave de encriptacao
+# global) para pkg/bootstrap/startup_secrets.go. QUATRO entradas novas
+# elegiveis, e as QUATRO nascem COBERTAS:
+#   - bootstrap.resolveGlobalEncryptionKey — Info nos dois caminhos
+#     configurados (flag, ambiente); o terceiro caminho deixou de existir,
+#     porque a chave nao e' mais gerada e a ausencia derruba o arranque.
+#   - bootstrap.resolveAdminToken — Info nos dois caminhos configurados e Warn
+#     no gerado. Nenhuma das tres carrega o valor: o Warn traz o CAMINHO do
+#     arquivo 0600 onde o token foi gravado, que descreve onde o segredo esta'
+#     sem revela-lo.
+#   - bootstrap.generateSecret — Error no unico caminho de saida por falha
+#     (fonte de entropia), com a causa propagada.
+#   - bootstrap.writeAdminTokenFile — Error em cada um dos quatro caminhos de
+#     falha (remover o arquivo anterior, criar, escrever, fechar), sempre com
+#     o CAMINHO e nunca com o token.
+# As outras DUAS entradas novas do golden sao EXCLUDED (X4, metodo String() de
+# tipo): bootstrap.adminTokenSource.String e bootstrap.encryptionKeySource.String.
+# Nenhuma funcao ja' coberta regrediu — o diff do golden so' ACRESCENTA, e
+# errpath_coverage ficou identico em 868.
+min_func_coverage=669
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1458,7 +1479,11 @@ min_errpath_coverage=868
 # CAP-34 (2026-08-19): 673 -> 675. DUAS entradas, enumeradas acima junto de
 # min_func_coverage: bootstrap.resolveGlobalHMACKey e
 # bootstrap.generateGlobalHMACKey. Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=675
+# CAP-35 (2026-08-19): 675 -> 679. QUATRO entradas, enumeradas acima junto de
+# min_func_coverage: bootstrap.resolveGlobalEncryptionKey,
+# bootstrap.resolveAdminToken, bootstrap.generateSecret e
+# bootstrap.writeAdminTokenFile. Denominador CRESCE — nao ha' remocao neste PR.
+min_eligible=679
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

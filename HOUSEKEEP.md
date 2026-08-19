@@ -11685,6 +11685,221 @@ indecifrável, que é justamente o que a mensagem de log atual avisa em
 maiúsculas — e é por isso que ela vazava, alguém quis dar ao operador uma
 forma de salvar o valor.
 
-**Status**: não corrigido. Fora do escopo do CAP-34, e a política do projeto
-proíbe corrigir de graça achado pré-existente sem perguntar. Ver [[F156]] para
-o bloco irmão já corrigido e para o molde da correção.
+**Status**: **CORRIGIDO** no CAP-35 (2026-08-19), com remédios DIFERENTES para
+as duas metades. Ver [[F156]] para o bloco irmão e para o molde do gerador.
+
+---
+
+### O que foi feito (CAP-35)
+
+A correção NÃO foi "repetir a F156 duas vezes", e o motivo está no `Cuidado`
+acima: na F156 calar o log era gratuito, porque a chave HMAC global é
+inverificável por construção — muda a cada reinício e ninguém pode usá-la.
+Aqui, o berro `SAVE THIS KEY TO YOUR .ENV FILE OR ALL ENCRYPTED DATA WILL BE
+LOST ON RESTART!` era a **única mitigação** de um desenho que sem ela destrói
+dado. Calar o log e manter a auto-geração teria deixado o cenário
+ESTRITAMENTE PIOR (Regra 1/2 do `CLAUDE.md`): um restart invalidaria em
+silêncio a credencial S3 e a chave HMAC de cada tenant, e ninguém veria.
+
+Decisão do canal: **híbrida**.
+
+**1. `global_encryption_key` → FAIL-CLOSED.** A auto-geração SUMIU. Sem
+`WA_API_GLOBAL_ENCRYPTION_KEY` (ou `-globalencryptionkey`) o processo não sobe.
+Ali a auto-geração não era conveniência: era um gerador de perda de dado, já
+que cada arranque destruiria os segredos do arranque anterior — e o ADR-0009
+manda tratar segredo que não decifra como INVÁLIDO, exigindo reconfiguração.
+A mensagem de erro segue a forma que `validateStackForMode`
+(`pkg/bootstrap/cluster.go:82-89`) já usava: diz o que está errado, NOMEIA a
+variável exata, e diz por que a degradação não é aceitável.
+
+**2. `admin_token` → CANAL DELIBERADO.** Continua sendo gerado quando ausente,
+agora com `crypto/rand`, mas o valor não vai para o log: vai para o arquivo
+`admin_token` no diretório de dados, com modo **0600**, e o log traz apenas o
+CAMINHO. Derrubar o arranque por ele seria custo sem ganho — perder o token
+custa um reinício e nada gravado se torna ilegível.
+
+**Onde**: `pkg/bootstrap/startup_secrets.go` (novo),
+`pkg/bootstrap/main.go` (os dois blocos inline removidos; o token passou a ser
+resolvido depois de `dirDados`, porque o arquivo mora no diretório de dados).
+
+Detalhe que só apareceu ao escrever o código: o arquivo antigo é **removido**
+antes de ser recriado, em vez de truncado. `O_TRUNC` preserva os bits de
+permissão do inode existente, então um `admin_token` deixado como 0644 por uma
+versão anterior continuaria legível por qualquer usuário da máquina apesar da
+constante nova. Travado por
+`TestF169_TokenGeradoSobrescreveArquivoPermissivoAnterior`.
+
+`generateSecret` repete o corpo de `generateGlobalHMACKey` (amostragem por
+rejeição) em vez de compartilhá-lo, e isso é deliberado: o
+`TestF156_GeradorEhCriptografico` assevera que `crypto/rand` é usado DENTRO de
+`global_hmac_key.go`, e uma delegação de uma linha removeria o import e
+desarmaria a asserção que mantém `math/rand` fora de lá. O alfabeto, esse, não
+é repetido — `secretCharset` é definido por referência a `hmacKeyCharset`.
+
+### Testes que travam
+
+Em `pkg/bootstrap/startup_secrets_test.go` (todos passam):
+
+| teste | o que trava |
+|---|---|
+| `TestF169_ChaveDeEncriptacaoAusenteDerrubaOArranque` | sem as duas fontes → erro, nenhum valor devolvido, e a mensagem CONTÉM `WA_API_GLOBAL_ENCRYPTION_KEY` e `-globalencryptionkey` (renomear a variável sem atualizar a mensagem quebra o teste) |
+| `TestF169_ChaveDeEncriptacaoDoAmbienteEUsadaENaoEcoada` | caminho de SUCESSO por ambiente: valor usado tal como veio, e ausente do log |
+| `TestF169_ChaveDeEncriptacaoDaLinhaDeComandoEUsadaENaoEcoada` | idem para a flag, que tem precedência; o valor descartado do ambiente também não pode vazar |
+| `TestF169_TokenGeradoVaiParaArquivo0600ENaoParaOLog` | token gerado → arquivo criado, **modo 0600 asseverado**, conteúdo igual ao token devolvido, log com o CAMINHO e sem o valor |
+| `TestF169_TokenGeradoSobrescreveArquivoPermissivoAnterior` | arquivo 0644 pré-existente sai 0600 (o caso do `O_TRUNC` acima) |
+| `TestF169_TokenDoAmbienteEUsadoENaoEcoado` | token configurado é usado, NENHUM arquivo é escrito, e o valor não vaza |
+| `TestF169_TokenDaLinhaDeComandoEUsadoENaoEcoado` | idem para a flag |
+| `TestF169_DuasGeracoesProduzemTokensDiferentes` | sanidade: constante disfarçada de token passaria em todo o resto |
+| `TestF169_ConstanteDeModoDoArquivoDoTokenEh0600` | amarra `adminTokenFileMode` ao literal `0600` |
+| `TestF169_GeradorEhCriptografico` | teste ESTRUTURAL: exige `crypto/rand`, recusa `math/rand` em `startup_secrets.go` |
+
+Asserção de log é sempre sobre a **linha JSON inteira** capturada (helper
+`exigeLogSemSegredo`), nunca sobre um campo nomeado: mover o segredo para outro
+campo, ou para dentro do texto da mensagem, continua sendo vazamento e continua
+sendo pego. Prefixo e sufixo de 8 caracteres também são recusados.
+
+Além disso, `TestTokenNaoSaiEmLog`
+(`pkg/bootstrap/token_not_logged_test.go`) ganhou `Str("admin_token"` e
+`Str("global_encryption_key"` na lista de padrões proibidos, como o achado
+pedia — a varredura passa a travar a CLASSE em todo o `pkg/`, não os dois
+sítios. `Str("admin_token_file"` não casa com nenhum dos padrões, e é de
+propósito: o caminho descreve onde o segredo está sem revelá-lo.
+
+### Controles negativos EXECUTADOS
+
+**(a) voltar a auto-gerar a chave de encriptação** — substituído o `return`
+de erro por uma geração com `generateSecret`:
+
+```
+--- FAIL: TestF169_ChaveDeEncriptacaoAusenteDerrubaOArranque (0.00s)
+    startup_secrets_test.go:39: resolveGlobalEncryptionKey aceitou a ausência das duas fontes e devolveu "ipmZmpLL5toolOd11M1Z7tPWhLGEivAj"; gerar uma chave aqui invalidaria, a cada reinício, todo segredo já cifrado
+FAIL	wa-api/pkg/bootstrap	0.340s
+```
+
+**(b) voltar a logar o valor dos dois** — acrescentados
+`Str("global_encryption_key_value", envValue)` e
+`Str("admin_token_value", token)`:
+
+```
+--- FAIL: TestF169_ChaveDeEncriptacaoDoAmbienteEUsadaENaoEcoada (0.00s)
+    startup_secrets_test.go:69: o segredo "chave-de-encriptacao-do-operador-nao-pode-vazar" aparece no log:
+    startup_secrets_test.go:69: um prefixo/sufixo do segredo aparece no log ("chave-de"):
+    startup_secrets_test.go:69: um prefixo/sufixo do segredo aparece no log ("de-vazar"):
+--- FAIL: TestF169_TokenGeradoVaiParaArquivo0600ENaoParaOLog (0.00s)
+    startup_secrets_test.go:135: o segredo "E8Twlmz0UX1ByBuNSmZzrgC82oKKz6O5" aparece no log:
+    startup_secrets_test.go:135: um prefixo/sufixo do segredo aparece no log ("E8Twlmz0"):
+    startup_secrets_test.go:135: um prefixo/sufixo do segredo aparece no log ("2oKKz6O5"):
+FAIL	wa-api/pkg/bootstrap	0.310s
+```
+
+**(c) criar o arquivo do token com 0644** — e aqui está o achado do próprio
+conserto: **na primeira tentativa este controle NÃO MORDEU.**
+
+```
+ok  	wa-api/pkg/bootstrap	0.292s
+```
+
+O teste comparava `info.Mode().Perm()` com a constante de produção
+`adminTokenFileMode`. Mudar a constante para `0o644` mudava os DOIS lados da
+comparação — a asserção era uma tautologia, verde com o defeito no lugar. É
+exatamente a ARMADILHA 3 vista pelo outro lado: não é que o controle não
+compilasse, é que ele compilava e a asserção não media nada.
+
+O teste foi corrigido para comparar com um LITERAL independente
+(`modoEsperadoDoArquivoDoToken = 0o600`), e a constante de produção passou a
+ser amarrada a ele por um teste próprio. Repetido o controle:
+
+```
+--- FAIL: TestF169_TokenGeradoVaiParaArquivo0600ENaoParaOLog (0.00s)
+    startup_secrets_test.go:131: modo do arquivo .../admin_token = 0644, esperado 0600 — um token legível por outros usuários apenas troca o canal do vazamento
+--- FAIL: TestF169_TokenGeradoSobrescreveArquivoPermissivoAnterior (0.00s)
+    startup_secrets_test.go:181: modo do arquivo = 0644, esperado 0600 — a permissão antiga sobreviveu
+--- FAIL: TestF169_ConstanteDeModoDoArquivoDoTokenEh0600 (0.00s)
+    startup_secrets_test.go:257: adminTokenFileMode = 0644, esperado 0600 — o arquivo do token de administração não pode ser legível por outro usuário da máquina
+FAIL	wa-api/pkg/bootstrap	0.279s
+```
+
+**(d) extra, o que mordeu no CAP-34** — trocar `crypto/rand` por `math/rand`
+em `generateSecret`:
+
+```
+--- FAIL: TestF169_GeradorEhCriptografico (0.00s)
+    startup_secrets_test.go:285: startup_secrets.go não importa crypto/rand: token de administração e chave AES precisam de CSPRNG
+    startup_secrets_test.go:289: startup_secrets.go usa "math/rand": math/rand não é CSPRNG e não pode gerar credencial
+FAIL	wa-api/pkg/bootstrap	0.273s
+```
+
+Todos os quatro foram revertidos por edição localizada e o arquivo conferido
+byte a byte contra a cópia original antes do gate.
+
+### Gate de cobertura de log
+
+`min_func_coverage` 667 → **669** e `min_eligible` 675 → **679** em
+`.log-coverage-baseline`, com as quatro entradas novas enumeradas lá. As quatro
+nascem COBERTAS, e não por adorno: `generateSecret` e `writeAdminTokenFile`
+registram `Error` em cada caminho de falha, com o CAMINHO do arquivo e nunca com
+o token — o erro já propaga para o `Fatal` do chamador, mas a linha diz QUAL
+passo do arranque falhou, que é a mesma justificativa que o
+`generateGlobalHMACKey` da F156 usa. `errpath_coverage` ficou idêntico em 868.
+
+O diff do golden ACRESCENTA seis linhas e não muda o ESTADO de nenhuma linha
+existente (as outras duas são `EXCLUDED`, X4, métodos `String()` de tipo); as
+quatro linhas restantes do diff bruto são deslocamento de número de linha em
+`main.go`.
+
+### Efeito colateral do fail-closed: quem sobe hoje sem configurar nada
+
+Levantamento feito ANTES do gate, não depois. Quem lê ou define
+`WA_API_GLOBAL_ENCRYPTION_KEY` no repositório:
+
+| arquivo | situação | ação |
+|---|---|---|
+| `run.sh` | já escreve a chave no `.env` que gera (`MinhaChaveDe32Caracteres12345678`) | **não quebra**, nada a mudar |
+| `.env.example` | trazia a variável VAZIA sob "obrigatórias" | **quebraria**; documentado que vazio agora impede o arranque, e por quê |
+| `.env.sample` | traz o placeholder `your_32_byte_encryption_key_here` | não quebra o arranque, mas o valor tem 33 bytes e o AES o rejeita adiante (defeito PRÉ-EXISTENTE, ver abaixo); comentário acrescentado dizendo que a variável é obrigatória |
+| `README.md` | a seção "Credenciais Auto-Geradas" AFIRMAVA que a chave é auto-gerada | **documentação passou a mentir**; reescrita para "o que é obrigatório e o que é gerado", com o motivo do fail-closed e o arquivo 0600 do token |
+| `Dockerfile` | não define a variável | **quebraria** um `docker run` sem `-e`; NÃO recebeu valor padrão de propósito (uma chave embutida na imagem seria a MESMA chave em toda instalação que a puxa, pior que a falha de arranque) — recebeu comentário dizendo que é obrigatória em tempo de execução |
+| `infra/compose.yaml` | sobe só Postgres e RabbitMQ, não o wa-api | não afetado |
+| `.github/workflows/ci.yml` | roda `make check` e `docker build`, nunca o binário | não afetado |
+| `pkg/bootstrap/run_sh_env_test.go` | lê as chaves do `run.sh` e valida o tamanho para AES | não afetado (o `run.sh` continua com uma chave válida) |
+
+Nenhum teste do repositório sobe o processo (`bootstrap.Main()` só é chamado
+por `cmd/core` e `cmd/wss`), então o fail-closed não alcança a suíte.
+
+**Fora do repositório, e portanto NÃO corrigível daqui**: qualquer manifesto de
+deploy, `docker run`, unit de systemd ou `compose` do operador que hoje suba sem
+a variável passa a falhar no arranque, com uma mensagem que nomeia a variável.
+Isso é o comportamento pretendido, mas é uma quebra de contrato operacional e
+precisa de nota de release.
+
+### Achados incidentais, registrados e NÃO corrigidos
+
+**1. Contadores informativos do `.golangci-baseline` e do `.coverage-baseline`
+estão defasados.** No `make check` verde do CAP-35 o gate imprimiu:
+`complexidade maxima 51 (baseline 56)`, `335 issue(s) (informativo, baseline
+263)` e `coverage: 858 decimos (piso 840)`. Os três são ATENÇÕES, não travas, e
+NENHUM vem deste PR: os dois arquivos novos (`startup_secrets.go` e seu teste)
+não produzem issue nenhuma (`grep -c startup_secrets .lint.out` = 0), e 260 dos
+335 issues são `gocyclo` de código antigo. A defasagem é acúmulo de PRs
+anteriores que não subiram os contadores quando o próprio gate mandou. Correção:
+`max_complexity=51`, `count=335`, `min_coverage=858`. Não aplicada aqui porque
+mexer em piso de catraca fora do escopo esconderia, num diff de segurança, uma
+mudança de gate.
+
+**2. Três arquivos pré-existentes não passam por `gofmt`/`goimports`:**
+`pkg/bootstrap/config.go:39` e
+`pkg/application/usecase/message/send_video_internal_test.go:83` (gofmt),
+`pkg/bootstrap/eventhandler.go:8` (goimports). Nenhum foi tocado pelo CAP-35, e
+o lint não trava por isso hoje. Correção: rodar `gofmt -w`/`goimports -w` nos
+três, num PR só disso.
+
+**3. `.env.sample:11` traz `WA_API_GLOBAL_ENCRYPTION_KEY=your_32_byte_encryption_key_here`,
+que tem **33 bytes**. O AES aceita 16, 24 ou 32, então quem copiar o
+`.env.sample` para `.env` e subir passa pelo fail-closed novo e morre adiante em
+`encryptHMACKey` com `invalid key size 33` — exatamente a classe da [[F67]], que
+o `TestRunSh_ChavesTemTamanhoValidoParaAES` trava para o `run.sh` mas não para
+o `.env.sample`. É defeito PRÉ-EXISTENTE e fora do escopo do CAP-35: a política
+do projeto proíbe corrigir de graça. A correção é de uma linha (trocar por um
+placeholder de 32 bytes) e o trava-teste é estender `chavesDoRunSh` para varrer
+também o `.env.sample`.
+

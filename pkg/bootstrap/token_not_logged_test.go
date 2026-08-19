@@ -33,7 +33,16 @@ func TestTokenNaoSaiEmLog(t *testing.T) {
 	// Campos que NOMEIAM o token como valor logado. `token_present` e
 	// `presented_len` (auth.ValidateAdminToken) são o oposto disto: descrevem o
 	// token sem revelá-lo, e são exatamente o que se deve fazer.
-	proibidos := []string{`Str("token"`, `Str("Token"`, `Str("api_token"`}
+	//
+	// `admin_token` e `global_encryption_key` entraram com a F169: os dois
+	// blocos de Main() que os logavam em claro foram removidos, e o padrão
+	// aqui trava a CLASSE, não os dois sítios. `admin_token_file` (o CAMINHO
+	// do arquivo, em startup_secrets.go) não casa com nenhum deles, e é de
+	// propósito: o caminho descreve onde o segredo está sem revelá-lo.
+	proibidos := []string{
+		`Str("token"`, `Str("Token"`, `Str("api_token"`,
+		`Str("admin_token"`, `Str("global_encryption_key"`,
+	}
 
 	visitados := 0
 	err := filepath.Walk(raiz, func(caminho string, info os.FileInfo, err error) error {

@@ -5,8 +5,6 @@ import (
 
 	"flag"
 	"fmt"
-	"math/rand"
-
 	"net/http"
 	"os"
 	"os/signal"
@@ -224,37 +222,17 @@ func Main() {
 		}
 	}
 
-	if *adminToken == "" {
-		if v := os.Getenv("WA_API_ADMIN_TOKEN"); v != "" {
-			*adminToken = v
-		} else {
-			// Generate a random token if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*adminToken = string(b)
-			log.Warn().Str("admin_token", *adminToken).Msg("No admin token provided, generated a random one")
-		}
+	// Global encryption key: flag, else environment, else the process REFUSES to
+	// start. Why it is not generated — and why silencing the old log line alone
+	// would have made things worse — lives in startup_secrets.go.
+	//
+	// The admin token is resolved further down, once the data directory is
+	// known: a generated token is written to a file inside it.
+	resolvedEncryptionKey, _, err := resolveGlobalEncryptionKey(*globalEncryptionKey, os.Getenv(envGlobalEncryptionKey))
+	if err != nil {
+		log.Fatal().Err(err).Msg("could not resolve the global encryption key")
 	}
-
-	if *globalEncryptionKey == "" {
-		if v := os.Getenv("WA_API_GLOBAL_ENCRYPTION_KEY"); v != "" {
-			*globalEncryptionKey = v
-			log.Info().Msg("Encryption key loaded from environment variable")
-		} else {
-			// Generate a random key if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*globalEncryptionKey = string(b)
-			log.Warn().Str("global_encryption_key", *globalEncryptionKey).Msg("No WA_API_GLOBAL_ENCRYPTION_KEY provided, generated a random one. " +
-				"SAVE THIS KEY TO YOUR .ENV FILE OR ALL ENCRYPTED DATA WILL BE LOST ON RESTART!")
-		}
-	}
+	*globalEncryptionKey = resolvedEncryptionKey
 
 	// Check for global webhook in environment variable
 	if *globalWebhook == "" {
@@ -268,9 +246,9 @@ func Main() {
 
 	// Global HMAC key: flag, else environment, else generated. The rules — and
 	// why the value never reaches a log line — live in global_hmac_key.go.
-	resolvedHMACKey, _, err := resolveGlobalHMACKey(*globalHMACKey, os.Getenv(envGlobalHMACKey))
-	if err != nil {
-		log.Fatal().Err(err).
+	resolvedHMACKey, _, errHMAC := resolveGlobalHMACKey(*globalHMACKey, os.Getenv(envGlobalHMACKey))
+	if errHMAC != nil {
+		log.Fatal().Err(errHMAC).
 			Msg("could not resolve the global HMAC key: the entropy source failed")
 	}
 	*globalHMACKey = resolvedHMACKey
@@ -334,6 +312,17 @@ func Main() {
 		os.Exit(1)
 	}
 	defer liberarCluster()
+
+	// Admin token: flag, else environment, else generated. It is resolved HERE,
+	// and not next to the encryption key above, because a generated token is
+	// written to a file inside the data directory — and dirDados is only known
+	// after the cluster block resolved it. See startup_secrets.go for why the
+	// token goes to a 0600 file instead of a log line.
+	resolvedAdminToken, _, errAdmin := resolveAdminToken(*adminToken, os.Getenv(envAdminToken), dirDados)
+	if errAdmin != nil {
+		log.Fatal().Err(errAdmin).Msg("could not resolve the admin token")
+	}
+	*adminToken = resolvedAdminToken
 
 	// Relatório de capacidades (ADR-0005 D7, F104): declara o que este processo
 	// pode e não pode fazer, em UMA linha, antes de qualquer outra coisa
