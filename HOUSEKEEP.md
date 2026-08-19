@@ -6245,6 +6245,19 @@ com a suíte verde, que foi exatamente o REQUIRED_FIX da EVAL-09.
 **Status**: não corrigido. Levado ao canal de decisão junto com o
 CURRENT_STATE do CAP-10.
 
+**Correção do STATUS (CAP-24, 2026-08-19)**: a entrada ficou parada em
+"não corrigido" depois que a decisão já tinha sido tomada e travada. A saída
+1 (**MANTER** a forma atual, `{message_id, timestamp, status}`) foi a
+escolhida, e o teste de forma de wire por capability que a "Correção
+sugerida" pedia existe desde o CAP-13 (F137) e cresceu junto de cada
+capability nova: `TestSendWireContract_FieldNames`
+(`pkg/presentation/http/handlers/send_wire_contract_test.go`), que hoje trava
+**12** capabilities (`len(casos) != 12`, comentário do arquivo cita
+"CAP-13 + CAP-14 + CAP-15 + CAP-21 + CAP-22") e a forma histórica
+(`Details`/`Timestamp`/`Id`) explicitamente descartada no comentário de
+topo do arquivo. **Status real: CORRIGIDO** — decisão tomada e travada em
+teste; nenhuma capability nova pode divergir da forma sem derrubar o teste.
+
 ## F132
 
 **Data**: 2026-08-19. **Contexto**: descoberto ao medir a F130 — e a causa REAL
@@ -8336,6 +8349,19 @@ comportamento preservado por decisão explícita, não por acidente.
 com o dimensionamento do bloco (SendButtons 250 linhas, SendList 290, contra
 161 do SendTemplate já entregue).
 
+**Correção do STATUS (CAP-24, 2026-08-19)**: entrada CURRENT_STATE nunca
+atualizada depois que o CAP-21 decidiu e implementou os dois pontos —
+ver **F148**. Ponto 1 (tipo desconhecido descartado em silêncio): decisão
+**preservar**, travada por `TestSendButtons_UnknownTypeIsSilentlyDiscarded`
+(use case) e `TestSendButtons_UnknownTypeIsSilentlyDiscarded_ViaRegisteredRoute`
+(HTTP) — controle negativo reexecutado nesta sessão (CAP-24): removido o
+`default: continue` de `pkg/application/usecase/message/send_buttons.go`,
+`TestSendButtons_UnknownTypeIsSilentlyDiscarded` morde (`chegaram 3 botao(oes)
+a porta, quero 2`). Ponto 2 (`ContextInfo`/`QuotedMessage`): decisão **fora de
+escopo** (reply-to não implementado; mesma dívida da F134), com a separação da
+validação do destinatário resolvida — ver F148. **Status real: CORRIGIDO**
+(decisão tomada e implementada no CAP-21).
+
 ## F148
 
 **Data**: 2026-08-19. **Contexto**: CAP-21, `POST /chat/send/buttons`. É o
@@ -8677,6 +8703,20 @@ mede nada.
 **Status**: não corrigido, nada implementado. Levado ao canal junto com o
 fecho do CAP-21.
 
+**Correção do STATUS (CAP-24, 2026-08-19)**: entrada CURRENT_STATE nunca
+atualizada depois que o CAP-22 implementou `send_list` — ver **F150**, que
+inclusive corrige dois detalhes de contrato que esta entrada não tinha
+capturado (o embrulho `DocumentWithCaptionMessage`/`FutureProofMessage` e o
+nó BIZ `list(type="product_list", v="2")`). Controles negativos reexecutados
+nesta sessão (CAP-24) sobre `pkg/infra/wa-noise/adapters/chat/messenger_list.go`:
+(1) `ListMessage` enviado sem o embrulho `DocumentWithCaptionMessage` — morde
+em `TestChatMessengerAdapter_SendList_Wrapper` ("a mensagem enviada nao tem
+DocumentWithCaptionMessage"); (2) nó BIZ removido do `SendRequestExtra` —
+morde em `TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`
+("AdditionalNodes nil: o no' BIZ nao foi enviado"). As duas mutações
+compilaram e reverteram por edição localizada, `git diff` vazio depois.
+**Status real: CORRIGIDO** (CAP-22).
+
 ## F150
 
 **Data**: 2026-08-19. **Contexto**: CAP-22, implementação de `send_list`, o
@@ -8732,5 +8772,19 @@ remover `pkg/application/contracts/*message_composer*`,
 **Status**: os dois itens de contrato — corrigidos (implementados desde já,
 travados por `TestChatMessengerAdapter_SendList_Wrapper` e
 `TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`,
-`pkg/infra/wa-noise/adapters/chat/messenger_list_test.go`). O achado do
-`MessageComposerAdapter` órfão: não corrigido, decisão de escopo pendente.
+`pkg/infra/wa-noise/adapters/chat/messenger_list_test.go`; controles
+negativos reexecutados no CAP-24, ver a entrada de correção de STATUS da
+F149 acima). O achado do `MessageComposerAdapter` órfão: **corrigido em
+`3785655`** ("refactor(contracts): remove o andaime de MessageComposer, ja'
+orfao (F150)", HEAD desta sessão) — os cinco arquivos removidos, nome por
+nome no corpo do commit: `pkg/application/contracts/message_composer.go`,
+`pkg/infra/wa-noise/adapters/chat/composer.go`,
+`pkg/infra/wa-noise/adapters/chat/composer_test.go`,
+`pkg/presentation/http/handlers/handler_message_test.go`,
+`pkg/presentation/http/handlers/handler_interactive_test.go`, mais
+`contractsfake.MessageComposer`. Confirmado nesta sessão (CAP-24):
+`pkg/application/contracts/message_composer.go` e
+`pkg/infra/wa-noise/adapters/chat/composer.go` não existem mais na árvore
+(`ls` devolve "No such file or directory" para os dois). Esta entrada estava
+desatualizada — status "não corrigido" escrito antes do commit que fechou o
+achado, nunca revisado depois.
