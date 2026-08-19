@@ -10833,3 +10833,58 @@ escrita não devolvem a mesma coisa e já não deviam compartilhar tipo.
 
 **Status**: não corrigido, deliberadamente, por estar preso a um arquivo fora
 do escopo. Registrado e levado ao canal.
+
+## F166
+
+**Data**: 2026-08-19. **Contexto**: preparando o bloco do `GET /webhook/history`
+depois de o canal decidir religá-lo. Não executei — fui verificar o wiring e
+achei isto.
+
+**Onde**: `pkg/bootstrap/chat_history_route_test.go:486`,
+`TestChatHistoryAndWebhookHistoryAreDistinctHandlers` (o teste estrutural que
+travou a [[F124]]).
+
+**Problema**: o teste prova que as duas rotas são handlers distintos fazendo
+cada uma devolver algo que só o seu handler produz. O comentário dele nomeia os
+dois discriminadores:
+
+> `/chat/history`, mensagens vindas do banco; `/webhook/history`, **o literal
+> de configuração**.
+
+Esse literal — `"History configuration retrieved"` — **é a string inventada
+pelo stub da migração**. Ela nunca existiu no contrato histórico: em
+`41bc8e2^:handlers.go:6497` o `GetHistory` lia histórico de MENSAGENS, com
+`chat_jid`, `limit` e o gate de 501, e servia as duas rotas.
+
+Ou seja: **o discriminador de um teste anti-regressão é uma ficção.** O teste
+passa hoje porque assevera que uma rota devolve um valor fabricado.
+
+**Isto NÃO é dizer que o teste é inútil.** Ele impede o religamento errado, que
+era o defeito da F124, e o faz por fiação e não por payload — o que estava
+certo. O problema é a âncora: no dia em que `/webhook/history` ganhar contrato
+REAL, o discriminador cai, e quem for mexer vai descobrir que o teste dependia
+da coisa errada.
+
+**É uma forma da ARMADILHA 1 que o catálogo ainda não cobria.** A armadilha
+registrada é "dublê mais permissivo que a produção esconde o defeito" — aqui
+não há dublê: é a PRÓPRIA IMPLEMENTAÇÃO que é ficção, e o teste a toma como
+verdade de referência. Proponho a formulação: **um teste não pode usar como
+ponto fixo um valor que só existe porque a implementação é stub** — se o valor
+não vem do contrato, ele some quando o contrato chegar.
+
+**Correção sugerida**: depende da decisão pendente sobre o `/webhook/history`
+(restaurar como sinônimo, aposentar, ou dar contrato real). Em qualquer um dos
+três, o discriminador tem de passar a ser um valor do CONTRATO:
+
+- se a rota ganhar leitura real de configuração, discrimine pelo limite gravado;
+- se for aposentada, o teste vira "esta rota não existe mais";
+- se virar sinônimo, o teste perde o propósito e deve ser removido com
+  justificativa — não deixado passando por acidente.
+
+**Nota de método**: isto só apareceu porque fui verificar o wiring antes de
+executar uma decisão já tomada. A decisão do canal se apoiava numa evidência
+que EU dei pela metade — omiti a F124 ao perguntar. O erro de origem é meu, e
+está dito na mensagem que mandei ao canal.
+
+**Status**: não corrigido. Depende da decisão pendente sobre o contrato da
+rota.
