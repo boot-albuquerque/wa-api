@@ -158,6 +158,40 @@ func TestSessionConfigRepository_LoadSemLinha_NaoEhErro(t *testing.T) {
 	}
 }
 
+// TestSessionConfigRepository_LoadHistoryLimit — a leitura de GET
+// /webhook/history contra o schema REAL, e o round-trip com a escrita.
+//
+// A linha ausente le' 0, isto e', historico DESLIGADO, e nao erro: e' o mesmo
+// fail-closed que ChatHistoryRepository.HistoryLimit da' ao gate
+// (chat_history_repository.go:153), e responder outra coisa faria a rota
+// anunciar um limite que ninguem grava.
+func TestSessionConfigRepository_LoadHistoryLimit(t *testing.T) {
+	database := newSessionConfigRepoDB(t)
+	repo := NewSessionConfigRepository(database)
+	ctx := context.Background()
+
+	for _, quero := range []int{50, 0, 7} {
+		if err := repo.SaveHistoryLimit(ctx, sessionConfigRepoUserID, quero); err != nil {
+			t.Fatalf("SaveHistoryLimit(%d): %v", quero, err)
+		}
+		got, err := repo.LoadHistoryLimit(ctx, sessionConfigRepoUserID)
+		if err != nil {
+			t.Fatalf("LoadHistoryLimit: %v", err)
+		}
+		if got != quero {
+			t.Errorf("LoadHistoryLimit = %d, quero %d", got, quero)
+		}
+	}
+
+	got, err := repo.LoadHistoryLimit(ctx, "quem-nao-existe")
+	if err != nil {
+		t.Fatalf("linha ausente devolveu erro: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("linha ausente = %d, quero 0 (historico desligado)", got)
+	}
+}
+
 // TestSessionConfigRepository_EscopoPorUsuario — escrever para um usuario nao
 // pode tocar a linha do outro. E' a assercao que pega um WHERE esquecido, que
 // e' o defeito que passa em todos os testes de um usuario so'.

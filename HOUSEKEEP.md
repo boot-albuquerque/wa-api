@@ -8937,6 +8937,14 @@ history_disabled`) está travada em
 `TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida`, que reproduz o
 antes e o depois na mesma execução. Os testes estão na [[F157]].
 
+**ADENDO 2026-08-19 (CAP-32) — o conjunto FECHOU: não resta stub nenhum.**
+`get_history.go` lê `users.history` de verdade e `GET /webhook/history`
+responde o limite gravado. A tabela desta entrada não vale mais para NENHUMA
+das dez rotas: as cinco da tabela original e as cinco que a [[F157]]
+acrescentou estão todas ligadas. O contrato da última é NOVO — o histórico
+nunca teve leitura de configuração aqui —, e essa decisão, com as duas opções
+recusadas, está na [[F157]]. Os testes estão lá também.
+
 
 ## F152
 
@@ -10343,6 +10351,167 @@ esta tarefa acrescenta dois.
 
 **`make check` — EXIT 0.**
 
+### CORREÇÃO — 2026-08-19, CAP-32: `GET /webhook/history`, a última das dez
+
+**Status**: **corrigido**. Com esta rota o conjunto desta entrada e da [[F151]]
+fecha: **não resta stub nenhum** dos dez.
+
+#### A decisão, e as duas opções recusadas
+
+O contrato aqui é NOVO, e é preciso dizer por quê. O `GetHistory` histórico
+(`41bc8e2^:handlers.go:6497`) **não lia configuração**: lia HISTÓRICO DE
+MENSAGENS (`chat_jid` obrigatório, `limit` com default 50, o valor especial
+`index`, e o 501 quando `History=0`), e servia AS DUAS rotas —
+`/webhook/history` e `/chat/history` (`custom_routes.go` histórico, linhas 118
+e 170). A string `"History configuration retrieved"` e a ideia de que esta rota
+lê configuração foram **invenção do stub da migração**; nunca existiram.
+
+O canal decidiu **manter as duas rotas separadas e dar a `/webhook/history`
+leitura REAL da configuração**, devolvendo o limite gravado em `users.history`.
+Foram consideradas e recusadas: religar as duas rotas (desfaz o [[F124]] e
+mata o teste estrutural) e aposentar a rota (quebra quem hoje chama e recebe
+200).
+
+#### O que passou a acontecer
+
+| rota | efeito real |
+|---|---|
+| `GET /webhook/history` | lê `users.history` NO BANCO e responde `{"History":<limite>}` — sem `Details`, porque não há texto histórico a reusar |
+
+Ler do BANCO e não do cache é decisão, não acaso: os dois caches de userinfo
+existem para o gate de autenticação e são publicados pelo caminho de ESCRITA,
+e responder uma leitura a partir deles reintroduziria a classe de defeito da
+[[F128]]/[[F164]]. Falha de leitura é **500 sem valor**: responder 0 no erro
+seria indistinguível de "histórico desligado", que é a resposta legítima mais
+comum desta rota.
+
+**O que foi acrescentado**:
+
+- `pkg/application/contracts/session_config_port.go` — `LoadHistoryLimit` em
+  `HistoryConfigStore`, ao lado do `SaveHistoryLimit` que escreve a MESMA
+  coluna.
+- `pkg/infra/db/session_config_repository.go` — `historyLimitSelectQuery`
+  (`SELECT COALESCE(history, 0) FROM users WHERE id = ?`), a mesma forma que
+  `historyDaysQuery` (`user_info_cache.go:27`) e
+  `ChatHistoryRepository.HistoryLimit` (`chat_history_repository.go:153`) já
+  usam, para que o número que a rota informa e o número que o gate impõe não
+  possam ser duas leituras diferentes de uma coluna. Linha ausente lê 0 —
+  fail-closed, igual ao gate.
+- `pkg/application/usecase/storage/get_history.go` — reescrito; recebe a porta.
+- `pkg/bootstrap/wiring_handlers.go` — injeta o `SessionConfigRepository` real.
+
+#### Testes que travam o achado
+
+| teste | o que trava |
+|---|---|
+| `TestGetHistoryRoute_DevolveOLimiteGravado` (`pkg/bootstrap/get_history_route_test.go`) | escrita PELA ROTA seguida de leitura pela rota: 200 com `History=50` |
+| `TestGetHistoryRoute_HistoryZeroApareceNoCorpo` | `history=0` responde `"History":0` PRESENTE no corpo cru — o teste da [[F165]] |
+| `TestGetHistoryRoute_FalhaDeLeitura_500SemValorInventado` | banco fechado → 500, e o corpo não carrega campo `History` |
+| `TestGetHistoryRoute_NaoRespondeMaisOLiteralDoStub` | o corpo não contém mais `"History configuration retrieved"` |
+| `TestSessionConfigRepository_LoadHistoryLimit` (`pkg/infra/db/`) | a query casa com o schema REAL (buraco da [[F71]]) e a linha ausente lê 0 |
+| `TestChatHistoryAndWebhookHistoryAreDistinctHandlers` (reescrito) | religar as duas rotas quebra — ver [[F166]] |
+| `TestStorageUseCases/GetHistory devolve o limite gravado` (`pkg/application/usecase/storage/storage_test.go`) | o use case devolve o limite e NÃO fabrica `Details` |
+
+Os testes de rota são todos pela ROTA REGISTRADA, sobre `gorilla/mux` e sobre
+a cadeia de autenticação de PRODUÇÃO (`authAlice` sobre o `userinfocache`
+real), reusando a fixture do CAP-30 — a leitura e a escrita compartilham o
+MESMO `SessionConfigRepository` sobre o MESMO SQLite com schema real, que é o
+que permite ao teste 1 provar o round-trip em vez de semear a linha na mão.
+
+O teste 2 assere o CORPO CRU e não o struct decodificado, de propósito:
+`json.Unmarshal` entrega 0 tanto para `"History":0` quanto para o campo
+ausente, e asserir pelo struct deixaria a [[F165]] passar de novo.
+
+`/chat/history` segue intacto — a suíte do CAP-09A
+(`pkg/bootstrap/chat_history_route_test.go`) passa sem alteração de asserção.
+
+#### Controles negativos EXECUTADOS
+
+**(a) voltar a devolver o literal fixo** (`get_history.go` respondendo
+`Details: "History configuration retrieved"`):
+
+```
+--- FAIL: TestGetHistoryRoute_DevolveOLimiteGravado (0.01s)
+    get_history_route_test.go:66: History = 0, quero 50 — a rota nao le' users.history (corpo: {"code":200,"data":{"Details":"History configuration retrieved","History":0},"success":true})
+--- FAIL: TestGetHistoryRoute_NaoRespondeMaisOLiteralDoStub (0.01s)
+    get_history_route_test.go:138: a rota voltou a responder "History configuration retrieved" — o stub da F151/F157 esta' de volta
+```
+
+**(b) reintroduzir `omitempty` em `History`** (`pkg/domain/webhook.go`) — o
+controle da [[F165]]:
+
+```
+--- FAIL: TestGetHistoryRoute_HistoryZeroApareceNoCorpo (0.01s)
+    get_history_route_test.go:93: o corpo nao carrega `"History":0`: o `omitempty` do campo History voltou e o desligamento do historico deixou de ecoar o valor lido (F165); corpo: {"code":200,"data":{},"success":true}
+```
+
+Só o teste 2 falhou — que é o desenho: os outros três não medem presença.
+
+**(c) religar as duas rotas**, nas DUAS direções. Apontar `/webhook/history`
+para `ch.ChatHistory.GetChatHistory` falha, mas na verificação de STATUS, sem
+chegar ao discriminador:
+
+```
+--- FAIL: TestChatHistoryAndWebhookHistoryAreDistinctHandlers (0.01s)
+    chat_history_route_test.go:527: /webhook/history: status = 400, quero 200 (corpo: {"code":400,"error":{"code":"missing_chat_jid","message":"chat_jid is required"}...})
+```
+
+Por isso foi executada também a direção INVERSA, que é a forma exata do
+[[F124]] (`/chat/history` apontando para `ch.Storage.GetHistory`), e aí o
+discriminador novo é que morde:
+
+```
+--- FAIL: TestChatHistoryAndWebhookHistoryAreDistinctHandlers (0.01s)
+    chat_history_route_test.go:518: /chat/history respondeu o limite de configuracao de /webhook/history — as duas rotas voltaram a apontar para o mesmo handler: {"code":200,"data":{"History":4242},"success":true}
+```
+
+**(d) fazer a leitura sair do CACHE em vez do banco** (store dublê devolvendo
+o `History` cacheado, 10, em vez do gravado, 4242). Este controle existe para
+MEDIR uma afirmação do comentário do teste em vez de apenas escrevê-la:
+
+```
+--- FAIL: TestChatHistoryAndWebhookHistoryAreDistinctHandlers (0.01s)
+    chat_history_route_test.go:534: /webhook/history: History = 10, quero 4242 — a rota deixou de responder o limite gravado e o discriminador caiu; corpo: {"code":200,"data":{"History":10},"success":true}
+```
+
+Os quatro foram revertidos por edição localizada, e a suíte volta a passar.
+
+#### Gates
+
+**Golden de elegibilidade — regenerado**, e a divergência foi explicada ANTES
+de regenerar, com o diff insensível a deslocamento de linha:
+
+```
+$ diff <(cut -f1,2 cmd/logcov/testdata/eligible.golden | sort) \
+       <(go run ./cmd/logcov -golden | cut -f1,2 | sort)
+> pkg/application/contracts/contractsfake.HistoryConfigStore.LoadHistoryLimit	EXCLUDED
+> pkg/infra/db.SessionConfigRepository.LoadHistoryLimit	ELIGIBLE
+```
+
+Duas entradas, ambas ACRESCENTADAS, ambas funções deste bloco: o dublê
+(EXCLUDED) e o adapter real (ELIGIBLE). Nenhuma linha existente mudou de
+estado, nenhuma saiu.
+
+**`.log-coverage-baseline` — atualizado** (é ratchet-UP): `min_func_coverage`
+665 → 666 e `min_eligible` 672 → 673. A função nova nasce COBERTA (Error na
+falha do driver, Debug no ramo de linha ausente), como as três irmãs dela no
+mesmo repositório.
+
+**`.coverage-baseline` — NÃO alterado**, pelo mesmo motivo dos adendos do
+CAP-27, CAP-29 e CAP-30: o gate PASSA (`coverage: 857 decimos de % (piso
+declarado 840)`) e pede a subida para 857, mas a deriva é anterior a esta
+tarefa (F148 mediu 855, CAP-27 857, CAP-29 e CAP-30 858) e eu não isolei
+quanto do ponto atual é deste bloco. Pela QUINTA vez isto fica registrado como
+dívida em vez de resolvido, o que já é evidência suficiente de que o piso
+precisa de uma tarefa própria.
+
+O `count` de `.golangci-baseline` também não foi alterado: o gate imprime
+`263 -> 335`, informativo e sem trava, com `max_complexity` parado. O salto
+sobre o valor versionado é anterior — o CAP-30 já media 333 —, e esta tarefa
+acrescenta dois.
+
+**`make check` — EXIT 0.**
+
 ## F158
 
 **Data**: 2026-08-19. **Contexto**: CAP-27, ligando a escrita da chave HMAC
@@ -10841,8 +11010,31 @@ que resolver `GET /webhook/history`, ou dar à leitura um DTO próprio
 (`WebhookHistoryView`), como o CAP-27 fez com `HmacConfigView` — a leitura e a
 escrita não devolvem a mesma coisa e já não deviam compartilhar tipo.
 
-**Status**: não corrigido, deliberadamente, por estar preso a um arquivo fora
-do escopo. Registrado e levado ao canal.
+**Status**: **CORRIGIDO no CAP-32** (2026-08-19), junto com o bloco que deu
+contrato real a `GET /webhook/history`, que era exatamente a condição que a
+correção sugerida acima pedia.
+
+**Escolha, e por quê**: tirado o `omitempty`, mantendo o DTO compartilhado —
+não foi criado um `WebhookHistoryView`. O motivo é que a medição desfez a
+premissa de que isto seria mudança de contrato para o `POST`: o handler
+histórico serializava um `map[string]interface{}` com as DUAS chaves
+incondicionalmente (`41bc8e2^:handlers.go:6072-6075`), de modo que
+`"History":0` SEMPRE saía. O `omitempty` é que era a regressão. Tirá-lo
+**restaura** a forma histórica do `POST` em vez de alterá-la, e um DTO próprio
+teria deixado a resposta do `POST /session/history {"history":0}` divergindo do
+histórico sem que nada acusasse.
+
+**Efeito no `POST /session/history` · `POST /webhook/history`**: a resposta de
+`{"history":0}` passa de `{"Details":"History configured successfully"}` para
+`{"Details":"History configured successfully","History":0}`. Para os demais
+valores nada muda. Nenhum teste da árvore asseria a ausência do campo.
+
+**Trava**: `TestGetHistoryRoute_HistoryZeroApareceNoCorpo`
+(`pkg/bootstrap/get_history_route_test.go`), que assere o CORPO CRU — asserir
+pelo struct decodificado não serviria, porque `json.Unmarshal` entrega 0 tanto
+para `"History":0` quanto para o campo ausente. Controle negativo (b) da
+[[F157]], EXECUTADO: reintroduzir o `omitempty` faz esse teste, e só ele,
+falhar.
 
 ## F166
 
@@ -10896,8 +11088,29 @@ executar uma decisão já tomada. A decisão do canal se apoiava numa evidência
 que EU dei pela metade — omiti a F124 ao perguntar. O erro de origem é meu, e
 está dito na mensagem que mandei ao canal.
 
-**Status**: não corrigido. Depende da decisão pendente sobre o contrato da
-rota.
+**Status**: **CORRIGIDO no CAP-32** (2026-08-19). O canal decidiu pela terceira
+opção — leitura real de configuração —, e o discriminador foi reescrito para o
+primeiro dos três caminhos previstos acima: **discrimina pelo limite gravado**.
+
+**O discriminador NOVO**: o teste semeia `users.history = 4242` para o usuário
+e assere que `GET /webhook/history` responde `History == 4242`, decodificando
+`domain.WebhookHistoryResult` em vez de casar substring. É valor de CONTRATO —
+o número que a rota lê da coluna —, e nenhum outro handler pode fabricá-lo,
+porque nenhum outro lê aquela coluna para respondê-la. O lado `/chat/history`
+continua ancorado no que só ele produz (a mensagem vinda do banco), e ganhou a
+asserção espelhada: o corpo dele não pode conter o limite.
+
+O `4242` é deliberadamente DIFERENTE do `History` cacheado que o injetor põe no
+contexto (10). Com isso o mesmo teste também morde se a leitura passar a sair
+do cache em vez do banco — e isso não é suposição: é o controle negativo (d)
+da [[F157]], executado, com a saída colada lá.
+
+**O propósito foi preservado**: o teste continua sendo de FIAÇÃO, e continua
+pegando o religamento nas DUAS direções (controle negativo (c) da [[F157]],
+executado nas duas). O comentário dele foi reescrito para dizer que a âncora
+mudou, e por quê — a formulação proposta acima (*um teste não pode usar como
+ponto fixo um valor que só existe porque a implementação é stub*) está no
+comentário do teste, não só aqui.
 
 ## F167 — a rota de proxy passou a existir, e por isso a recusa de endereço reservado voltou (só quando o WEBHOOK sai pelo proxy)
 

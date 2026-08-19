@@ -15,6 +15,17 @@ type HistoryConfigStore interface {
 	// SaveHistoryLimit writes users.history for userID. The value is already
 	// validated as non-negative by the use case.
 	SaveHistoryLimit(ctx context.Context, userID string, history int) error
+
+	// LoadHistoryLimit reads back the SAME column SaveHistoryLimit writes, for
+	// GET /webhook/history.
+	//
+	// It reads the DATABASE, never a userinfo cache. The caches exist for the
+	// authentication gate and are published on the write path; reading a
+	// configuration back out of them would answer whatever the cache last
+	// happened to hold — the class of defect of F128/F164, which is worse here
+	// because there are TWO userinfo caches with different keys and different
+	// readers.
+	LoadHistoryLimit(ctx context.Context, userID string) (int, error)
 }
 
 // ProxyConfigStore is the persistence port of POST /session/proxy, over the

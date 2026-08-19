@@ -63,7 +63,7 @@ func guardCases() []struct {
 			return r != nil, err
 		}},
 		{"GetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetHistoryUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetHistoryUseCase(sg, &contractsfake.HistoryConfigStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
@@ -224,9 +224,25 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	// GetHmacConfig ficou de fora: ele devolve HmacConfigView (`hmac_key`
 	// mascarado), nao HmacConfigResult. O contrato dele esta' em
 	// hmac_config_test.go.
-	t.Run("leituras devolvem Details", func(t *testing.T) {
-		if r, err := storage.NewGetHistoryUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetHistory = %+v, %v", r, err)
+	// GetHistory nao entra na lista de "devolvem Details": desde o CAP-32 ele
+	// nao devolve Details nenhum. O `Details` que ele respondia
+	// ("History configuration retrieved") era ficcao do stub da migracao, e
+	// nao contrato historico — `41bc8e2^:handlers.go:6497` lia historico de
+	// MENSAGENS (HOUSEKEEP F166). O que a leitura devolve agora e' o limite
+	// gravado, e e' isso que este subteste assere.
+	t.Run("GetHistory devolve o limite gravado", func(t *testing.T) {
+		const gravado = 50
+		store := &contractsfake.HistoryConfigStore{Stored: map[string]int{txtID: gravado}}
+
+		r, err := storage.NewGetHistoryUseCase(sg, store, log).Execute(ctx, txtID)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if r.History != gravado {
+			t.Errorf("History = %d, quero %d", r.History, gravado)
+		}
+		if r.Details != "" {
+			t.Errorf("Details = %q, quero vazio — a leitura nao fabrica texto", r.Details)
 		}
 	})
 }

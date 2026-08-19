@@ -19,6 +19,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/storage"
+	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/wa-noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
@@ -90,7 +91,7 @@ func newChatHistoryFixtureLogging(t *testing.T, injectUser func() *Values, logOu
 		// Os dois handlers sob teste, ambos REAIS.
 		Storage: &handlers.StorageHandlers{
 			GetHistory: handlers.NewGetHistoryHandler(
-				storage.NewGetHistoryUseCase(alwaysSessionGuard{}, logger)),
+				storage.NewGetHistoryUseCase(alwaysSessionGuard{}, db.NewSessionConfigRepository(database), logger)),
 		},
 		ChatHistory: &handlers.ChatHistoryHandlers{
 			GetChatHistory: handlers.NewGetChatHistoryHandler(
@@ -479,23 +480,42 @@ func TestChatHistoryRoute_EmptyResultIs200WithEmptyArray(t *testing.T) {
 //
 // O que ele impede: religar /chat/history a Storage.GetHistory (ou o inverso).
 // A prova e' que cada rota devolve algo que SO' o seu handler sabe produzir —
-// /chat/history, mensagens vindas do banco; /webhook/history, o literal de
-// configuracao. Identidade de ponteiro nao serviria: a chain de middleware
+// /chat/history, mensagens vindas do banco; /webhook/history, o LIMITE GRAVADO
+// em users.history. Identidade de ponteiro nao serviria: a chain de middleware
 // embrulha os dois, e dois wrappers distintos comparariam diferente mesmo se o
 // handler embrulhado fosse o mesmo.
+//
+// O discriminador de /webhook/history MUDOU no CAP-32, e a troca e' o ponto da
+// HOUSEKEEP F166. Ate' entao ele era o literal "History configuration
+// retrieved" — uma string que o STUB da migracao inventou e que nunca existiu
+// no contrato historico (`41bc8e2^:handlers.go:6497` lia historico de
+// MENSAGENS). Um teste anti-regressao ancorado num valor que so' existe porque
+// a implementacao e' stub perde a ancora no dia em que o contrato chega. O
+// discriminador de agora e' um valor de CONTRATO: o numero que a rota le' do
+// banco. Ele nao pode ser fabricado por outro handler porque nenhum outro
+// handler le' aquela coluna para responde-la.
+//
+// `historyDoWebhook` (4242) e' de proposito DIFERENTE do History cacheado (10)
+// que o injetor poe no contexto: assim o teste tambem morde se a leitura
+// passar a sair do cache em vez do banco (F128/F164).
 func TestChatHistoryAndWebhookHistoryAreDistinctHandlers(t *testing.T) {
-	f := newChatHistoryFixture(t, func() *Values { return userValues("A", 10) })
-	f.seedUser(t, "A", 10)
+	const (
+		historyCacheado  = 10
+		historyDoWebhook = 4242
+	)
+
+	f := newChatHistoryFixture(t, func() *Values { return userValues("A", historyCacheado) })
+	f.seedUser(t, "A", historyDoWebhook)
 	f.seedHistoryRow(t, "A", historyChatA, "SO-DO-CHAT", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	const literalDeWebhook = "History configuration retrieved"
+	limiteGravado := fmt.Sprintf("%d", historyDoWebhook)
 
 	chatRec := f.get(t, "/chat/history?chat_jid="+historyChatA)
 	if chatRec.Code != http.StatusOK {
 		t.Fatalf("/chat/history: status = %d, quero 200 (corpo: %s)", chatRec.Code, chatRec.Body.String())
 	}
-	if strings.Contains(chatRec.Body.String(), literalDeWebhook) {
-		t.Fatalf("/chat/history respondeu o literal de /webhook/history — as duas rotas voltaram a apontar para o mesmo handler: %s",
+	if strings.Contains(chatRec.Body.String(), limiteGravado) {
+		t.Fatalf("/chat/history respondeu o limite de configuracao de /webhook/history — as duas rotas voltaram a apontar para o mesmo handler: %s",
 			chatRec.Body.String())
 	}
 	if !strings.Contains(chatRec.Body.String(), "SO-DO-CHAT") {
@@ -506,8 +526,13 @@ func TestChatHistoryAndWebhookHistoryAreDistinctHandlers(t *testing.T) {
 	if webhookRec.Code != http.StatusOK {
 		t.Fatalf("/webhook/history: status = %d, quero 200 (corpo: %s)", webhookRec.Code, webhookRec.Body.String())
 	}
-	if !strings.Contains(webhookRec.Body.String(), literalDeWebhook) {
-		t.Fatalf("/webhook/history deixou de responder %q; corpo: %s", literalDeWebhook, webhookRec.Body.String())
+	var lido domain.WebhookHistoryResult
+	if err := json.Unmarshal(decodeEnvelope(t, webhookRec).Data, &lido); err != nil {
+		t.Fatalf("/webhook/history: data nao e' a configuracao de historico: %v (corpo: %s)", err, webhookRec.Body.String())
+	}
+	if lido.History != historyDoWebhook {
+		t.Fatalf("/webhook/history: History = %d, quero %d — a rota deixou de responder o limite gravado e o discriminador caiu; corpo: %s",
+			lido.History, historyDoWebhook, webhookRec.Body.String())
 	}
 	if strings.Contains(webhookRec.Body.String(), "SO-DO-CHAT") {
 		t.Fatalf("/webhook/history respondeu historico de mensagens — as duas rotas voltaram a apontar para o mesmo handler: %s",

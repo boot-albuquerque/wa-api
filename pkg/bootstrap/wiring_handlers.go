@@ -311,7 +311,7 @@ func initCustomHandlers(s *server) {
 	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, sessionConfigStore, sessionConfigCache,
 		appCtx.GlobalWebhookUseProxy, egress.SystemResolver(), logger)
 	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, sessionConfigStore, sessionConfigCache, logger)
-	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
+	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, sessionConfigStore, logger)
 
 	// Storage Handlers
 	storageHandlers := &handlers.StorageHandlers{

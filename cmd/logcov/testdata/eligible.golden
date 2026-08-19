@@ -1749,6 +1749,7 @@ pkg/application/contracts/contractsfake.GroupSettings.SetGroupName	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupPhoto	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupTopic	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.UpdateGroupParticipants	EXCLUDED	X5
+pkg/application/contracts/contractsfake.HistoryConfigStore.LoadHistoryLimit	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HistoryConfigStore.SaveHistoryLimit	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyStore.DeleteHmacKey	EXCLUDED	X5
@@ -2434,6 +2435,7 @@ pkg/infra/db.S3ConfigRepository.LoadS3Config	ELIGIBLE	covered
 pkg/infra/db.S3ConfigRepository.LoadS3ConfigWithoutSecret	ELIGIBLE	covered
 pkg/infra/db.S3ConfigRepository.SaveS3Config	ELIGIBLE	covered
 pkg/infra/db.SaveMessageToHistory	ELIGIBLE	covered
+pkg/infra/db.SessionConfigRepository.LoadHistoryLimit	ELIGIBLE	covered
 pkg/infra/db.SessionConfigRepository.LoadWebhookUseProxy	ELIGIBLE	covered
 pkg/infra/db.SessionConfigRepository.SaveHistoryLimit	ELIGIBLE	covered
 pkg/infra/db.SessionConfigRepository.SaveProxyConfig	ELIGIBLE	covered

@@ -24,6 +24,9 @@ type HistoryConfigStore struct {
 
 	SaveHistoryLimitFunc  func(ctx context.Context, userID string, history int) error
 	SaveHistoryLimitCalls []HistoryConfigStoreSaveCall
+
+	LoadHistoryLimitFunc  func(ctx context.Context, userID string) (int, error)
+	LoadHistoryLimitCalls []string
 }
 
 var _ port.HistoryConfigStore = (*HistoryConfigStore)(nil)
@@ -39,6 +42,20 @@ func (f *HistoryConfigStore) SaveHistoryLimit(ctx context.Context, userID string
 	}
 	f.Stored[userID] = history
 	return nil
+}
+
+// LoadHistoryLimit implementa port.HistoryConfigStore.
+//
+// Imita a regra REAL do adapter de producao
+// (pkg/infra/db/session_config_repository.go, historyLimitSelectQuery com
+// `COALESCE(history, 0)`): usuario sem linha le' 0, isto e', historico
+// DESLIGADO — nao um erro e nao um default inventado.
+func (f *HistoryConfigStore) LoadHistoryLimit(ctx context.Context, userID string) (int, error) {
+	f.LoadHistoryLimitCalls = append(f.LoadHistoryLimitCalls, userID)
+	if f.LoadHistoryLimitFunc != nil {
+		return f.LoadHistoryLimitFunc(ctx, userID)
+	}
+	return f.Stored[userID], nil
 }
 
 // --- ProxyConfigStore --------------------------------------------------

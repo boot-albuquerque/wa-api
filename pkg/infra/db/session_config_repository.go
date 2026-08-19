@@ -18,6 +18,7 @@ import (
 // `?` is the portable placeholder; db.Rebind translates it to the dialect.
 const (
 	historyLimitUpdateQuery = "UPDATE users SET history = ? WHERE id = ?"
+	historyLimitSelectQuery = "SELECT COALESCE(history, 0) FROM users WHERE id = ?"
 
 	proxyConfigUpdateQuery  = "UPDATE users SET proxy_url = ?, webhook_use_proxy = ? WHERE id = ?"
 	webhookUseProxySelect   = "SELECT COALESCE(webhook_use_proxy, true) FROM users WHERE id = ?"
@@ -54,6 +55,33 @@ func (r *SessionConfigRepository) SaveHistoryLimit(ctx context.Context, userID s
 		return err
 	}
 	return nil
+}
+
+// LoadHistoryLimit implements appport.HistoryConfigStore — the read half of
+// GET /webhook/history.
+//
+// The statement is the SAME shape the two other readers of this column already
+// use (historyDaysQuery, pkg/bootstrap/user_info_cache.go:27, and
+// ChatHistoryRepository.HistoryLimit, pkg/infra/db/chat_history_repository.go:153),
+// so the number this route reports and the number the history gate enforces
+// can never be two different readings of one column.
+//
+// A missing row reads as 0, i.e. history disabled — the same fail-closed
+// answer the gate gives, and never an invented default.
+func (r *SessionConfigRepository) LoadHistoryLimit(ctx context.Context, userID string) (int, error) {
+	var limit int
+	err := r.db.QueryRowxContext(ctx, r.db.Rebind(historyLimitSelectQuery), userID).Scan(&limit)
+	if errors.Is(err, sql.ErrNoRows) {
+		log.Debug().Str("table", sessionConfigTableLabel).Str("user_id", userID).
+			Msg("no user row while reading the history limit; reporting history as disabled")
+		return 0, nil
+	}
+	if err != nil {
+		log.Error().Err(err).Str("table", sessionConfigTableLabel).Str("user_id", userID).
+			Str("query", "load_history_limit").Msg("failed to read the user history limit")
+		return 0, err
+	}
+	return limit, nil
 }
 
 // SaveProxyConfig implements appport.ProxyConfigStore.

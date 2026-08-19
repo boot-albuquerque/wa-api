@@ -123,7 +123,7 @@ func newHistoryAxisFixture(t *testing.T, injectValue func() (any, bool)) *histor
 	ch := emptyCustomHandlers()
 	ch.Storage = &handlers.StorageHandlers{
 		GetHistory: handlers.NewGetHistoryHandler(
-			storage.NewGetHistoryUseCase(alwaysSessionGuard{}, logger)),
+			storage.NewGetHistoryUseCase(alwaysSessionGuard{}, db.NewSessionConfigRepository(database), logger)),
 	}
 	ch.ChatHistory = &handlers.ChatHistoryHandlers{
 		GetChatHistory: handlers.NewGetChatHistoryHandler(

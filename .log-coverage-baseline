@@ -1022,7 +1022,15 @@ rules_frozen=true
 # mesmo.
 # Nenhuma funcao ja' coberta regrediu: o diff do golden so' ACRESCENTA linhas
 # (19), e nenhuma linha existente muda de estado.
-min_func_coverage=665
+# CAP-32 (2026-08-19): 665 -> 666. UMA funcao elegivel nova, e ela nasce
+# COBERTA: db.SessionConfigRepository.LoadHistoryLimit, a leitura de
+# users.history de GET /webhook/history (Error na falha do driver, Debug no
+# ramo "linha ausente", que e' resultado valido e nao erro — a mesma forma que
+# LoadWebhookUseProxy ja' tinha). A outra entrada do golden e' EXCLUDED
+# (contractsfake.HistoryConfigStore.LoadHistoryLimit, duble). Nenhuma funcao
+# ja' coberta regrediu: o diff do golden so' ACRESCENTA duas linhas, e nenhuma
+# linha existente muda de estado.
+min_func_coverage=666
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1426,7 +1434,10 @@ min_errpath_coverage=867
 # junto de min_func_coverage: as tres de db.SessionConfigRepository, as duas de
 # bootstrap.userInfoSessionCache, bootstrap.withField e as tres de
 # storage.SetProxyUseCase. Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=672
+# CAP-32 (2026-08-19): 672 -> 673. UMA entrada, enumerada acima junto de
+# min_func_coverage: db.SessionConfigRepository.LoadHistoryLimit. Denominador
+# CRESCE — nao ha' remocao neste PR.
+min_eligible=673
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -183,7 +183,7 @@ func storageCases() []storageCase {
 		{
 			name: "GetHistory",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetHistoryHandler(storage.NewGetHistoryUseCase(sg, log))
+				return NewGetHistoryHandler(storage.NewGetHistoryUseCase(sg, &contractsfake.HistoryConfigStore{}, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/history",

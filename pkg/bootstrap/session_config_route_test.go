@@ -132,6 +132,11 @@ func newSessionCfgFixture(t *testing.T) *sessionCfgFixture {
 		Storage: &handlers.StorageHandlers{
 			SetHistory: handlers.NewSetHistoryHandler(
 				storage.NewSetHistoryUseCase(alwaysSessionGuard{}, store, userInfoSessionCache{}, logger)),
+			// A LEITURA da mesma configuracao (CAP-32), com o MESMO
+			// repositorio da escrita: e' o que permite ao teste do
+			// round-trip provar que a rota le' a coluna que a outra grava.
+			GetHistory: handlers.NewGetHistoryHandler(
+				storage.NewGetHistoryUseCase(alwaysSessionGuard{}, store, logger)),
 			SetProxy: handlers.NewSetProxyHandler(
 				storage.NewSetProxyUseCase(statusDeSessao{&conectado}, store, userInfoSessionCache{}, true,
 					egress.SystemResolver(), logger)),
