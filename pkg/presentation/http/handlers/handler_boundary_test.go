@@ -73,6 +73,16 @@ func (s *spyPort) SendReaction(context.Context, string, domain.JID, domain.React
 	return domain.MessageSendResult{}, s.err
 }
 
+func (s *spyPort) RevokeMessage(context.Context, string, domain.JID, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
 func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
@@ -285,8 +295,10 @@ func boundaryCases() []boundaryCase {
 			readsBody: true,
 		},
 		{
-			name:      "DeleteMessage",
-			build:     func(s *spyPort) http.Handler { return NewDeleteMessageHandler(message.NewDeleteMessageUseCase(s, log)) },
+			name: "DeleteMessage",
+			build: func(s *spyPort) http.Handler {
+				return NewDeleteMessageHandler(message.NewDeleteMessageUseCase(s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/delete/message",
 			readsBody: true,
@@ -294,7 +306,7 @@ func boundaryCases() []boundaryCase {
 		{
 			name: "SendEditMessage",
 			build: func(s *spyPort) http.Handler {
-				return NewSendEditMessageHandler(message.NewSendEditMessageUseCase(s, log))
+				return NewSendEditMessageHandler(message.NewSendEditMessageUseCase(s, s, log))
 			},
 			method:    http.MethodPost,
 			path:      "/chat/send/edit",

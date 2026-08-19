@@ -144,6 +144,23 @@ type ChatMessengerSendReactionCall struct {
 	Reaction domain.Reaction
 }
 
+// ChatMessengerRevokeMessageCall é uma chamada a RevokeMessage.
+type ChatMessengerRevokeMessageCall struct {
+	Ctx       context.Context
+	TxtID     string
+	Target    domain.JID
+	MessageID string
+}
+
+// ChatMessengerEditMessageCall é uma chamada a EditMessage.
+type ChatMessengerEditMessageCall struct {
+	Ctx       context.Context
+	TxtID     string
+	Target    domain.JID
+	MessageID string
+	NewText   string
+}
+
 // ChatMessenger é o fake de port.ChatMessenger.
 type ChatMessenger struct {
 	SessionGuard
@@ -153,6 +170,12 @@ type ChatMessenger struct {
 
 	SendReactionFunc  func(ctx context.Context, txtID string, target domain.JID, reaction domain.Reaction) (domain.MessageSendResult, error)
 	SendReactionCalls []ChatMessengerSendReactionCall
+
+	RevokeMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error)
+	RevokeMessageCalls []ChatMessengerRevokeMessageCall
+
+	EditMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error)
+	EditMessageCalls []ChatMessengerEditMessageCall
 }
 
 var _ port.ChatMessenger = (*ChatMessenger)(nil)
@@ -171,6 +194,24 @@ func (f *ChatMessenger) SendReaction(ctx context.Context, txtID string, target d
 	f.SendReactionCalls = append(f.SendReactionCalls, ChatMessengerSendReactionCall{Ctx: ctx, TxtID: txtID, Target: target, Reaction: reaction})
 	if f.SendReactionFunc != nil {
 		return f.SendReactionFunc(ctx, txtID, target, reaction)
+	}
+	return domain.MessageSendResult{}, nil
+}
+
+// RevokeMessage implementa port.ChatMessenger.
+func (f *ChatMessenger) RevokeMessage(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error) {
+	f.RevokeMessageCalls = append(f.RevokeMessageCalls, ChatMessengerRevokeMessageCall{Ctx: ctx, TxtID: txtID, Target: target, MessageID: messageID})
+	if f.RevokeMessageFunc != nil {
+		return f.RevokeMessageFunc(ctx, txtID, target, messageID)
+	}
+	return domain.MessageSendResult{}, nil
+}
+
+// EditMessage implementa port.ChatMessenger.
+func (f *ChatMessenger) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error) {
+	f.EditMessageCalls = append(f.EditMessageCalls, ChatMessengerEditMessageCall{Ctx: ctx, TxtID: txtID, Target: target, MessageID: messageID, NewText: newText})
+	if f.EditMessageFunc != nil {
+		return f.EditMessageFunc(ctx, txtID, target, messageID, newText)
 	}
 	return domain.MessageSendResult{}, nil
 }

@@ -151,8 +151,8 @@ func initCustomHandlers(s *server) {
 	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
 	sendListUC := message.NewSendListUseCase(messageComposer, logger)
 	sendPollUC := message.NewSendPollUseCase(messageComposer, logger)
-	deleteMessageUC := message.NewDeleteMessageUseCase(sessionGuard, logger)
-	sendEditMessageUC := message.NewSendEditMessageUseCase(sessionGuard, logger)
+	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
+	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
 	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)
 
 	// Handlers

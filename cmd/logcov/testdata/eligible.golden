@@ -1708,7 +1708,9 @@ pkg/application/contracts/contractsfake.BlocklistManager.UpdateBlocklist	EXCLUDE
 pkg/application/contracts/contractsfake.CallRecorder.Record	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatActivityReader.GetChatPushNames	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatActivityReader.GetLastActivityByUser	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatMessenger.EditMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.MarkRead	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatMessenger.RevokeMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.ArchiveChat	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RejectCall	EXCLUDED	X5
@@ -1894,7 +1896,7 @@ pkg/application/usecase/group.NewGroupManagementUseCase	EXCLUDED	X1
 pkg/application/usecase/group.NewGroupRequestUseCase	EXCLUDED	X1
 pkg/application/usecase/group.NewListGroupsUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ChatPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,chat_presence.go:32);uncovered:L2(S-ret,chat_presence.go:36);uncovered:L2(S-consume,chat_presence.go:40);uncovered:L2(S-ret,chat_presence.go:41)
-pkg/application/usecase/message.DeleteMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_message.go:28);uncovered:L2(S-ret,delete_message.go:31)
+pkg/application/usecase/message.DeleteMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_message.go:47);uncovered:L2(S-ret,delete_message.go:50)
 pkg/application/usecase/message.DownloadAudioUseCase.Execute	EXCLUDED	X7
 pkg/application/usecase/message.DownloadDocumentUseCase.Execute	EXCLUDED	X7
 pkg/application/usecase/message.DownloadImageUseCase.Execute	EXCLUDED	X7
@@ -1932,7 +1934,7 @@ pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
-pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:28);uncovered:L2(S-ret,send_edit_message.go:31);uncovered:L2(S-ret,send_edit_message.go:34)
+pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:50);uncovered:L2(S-ret,send_edit_message.go:53);uncovered:L2(S-ret,send_edit_message.go:68)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:28);uncovered:L2(S-ret,send_list.go:31)
@@ -2523,7 +2525,9 @@ pkg/infra/storage.S3Manager.TestConnection	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.UploadToS3	ELIGIBLE	covered
 pkg/infra/storage.S3Manager.generateS3KeyAt	ELIGIBLE	covered
 pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:45)
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
@@ -2609,6 +2613,8 @@ pkg/infra/wa-noise/client/testkit.ContactStore.PutContactName	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ContactStore.PutManyRedactedPhones	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ContactStore.PutPushName	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ErrClient.SendMessage	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.BuildEdit	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.BuildRevoke	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildUnavailableMessageRequest	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.CreateGroup	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.Disconnect	EXCLUDED	X5

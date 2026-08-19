@@ -14,16 +14,26 @@ import (
 	"wa-api/pkg/application/usecase/message"
 )
 
-// Este arquivo cobre TRÊS handlers de mensagem que ainda usam
-// port.MessageComposer de forma exaustiva: send/edit, delete/message e
-// send/template. send/text (SendMessage) migrou para port.TextMessenger no
-// CAP-01 e tem tabela própria em handler_message_send_test.go — sua forma
-// (JIDResolver + SendText) já não cabe nesta tabela.
+// Este arquivo cobre o handler de mensagem que ainda usa
+// port.MessageComposer de forma exaustiva: send/template. send/text
+// (SendMessage) migrou para port.TextMessenger no CAP-01 e tem tabela
+// própria em handler_message_send_test.go — sua forma (JIDResolver +
+// SendText) já não cabe nesta tabela.
 //
-// Os três restantes tem a MESMA forma — mesma guarda de autenticacao, mesma
-// guarda de sessao, mesmo decode, mesma traducao de erro do use case — e e'
-// por isso que valem uma unica tabela: qualquer divergencia entre eles
-// aparece como uma linha vermelha, e nao como um teste que ninguem escreveu.
+// send/edit e delete/message SAÍRAM desta tabela em CAP-10: deixaram de
+// devolver "validated" sem fazer nada e passaram a consumir
+// port.ChatMessenger + port.JIDResolver para editar/revogar de verdade, o
+// que muda a forma do build e acrescenta eixos (falha do envio, JID que não
+// parseia) que esta tabela não tem. Os eixos que cobriam AQUI —
+// não autenticado, session id vazio, corpo malformado, campo obrigatório
+// ausente, falha de sessão, sucesso, ausência de segredo no log — foram
+// realocados, nome por nome, para handler_message_mutation_test.go, que
+// ainda cobre as DUAS rotas de delete e não só uma.
+//
+// A tabela permanece porque a forma que ela mede — mesma guarda de
+// autenticacao, mesma guarda de sessao, mesmo decode, mesma traducao de
+// erro do use case — continua sendo a de send/template, e voltará a ter
+// vizinhos quando as capabilities de Button/List/Poll forem recuperadas.
 //
 // Cada caso de saida >=400 passa pelo co-gate D (logassert.OutcomeLogged):
 // o caminho tem de logar, com causa, com req_id, em warn ou error, e sem
@@ -37,20 +47,17 @@ const msgSentinelToken = "msg-sentinel-cause-1a2b3c"
 
 var msgSentinelErr = errors.New(msgSentinelToken)
 
-// msgHandlerCase descreve um dos quatro handlers de mensagem.
+// msgHandlerCase descreve um handler de mensagem sobre port.MessageComposer.
 type msgHandlerCase struct {
 	name string
 	path string
-	// build liga o handler ao fake. MessageComposer embute SessionGuard, entao
-	// o mesmo fake serve aos quatro use cases (dois consomem MessageComposer,
-	// dois consomem apenas SessionGuard).
+	// build liga o handler ao fake. MessageComposer embute SessionGuard.
 	build func(*contractsfake.MessageComposer) http.Handler
 	// validBody e' o menor payload que o use case aceita.
 	validBody string
 	// wantMessageID e' o message_id do envelope de sucesso.
 	wantMessageID string
 	// generatesID indica se o use case chama NewMessageID quando Id vem vazio.
-	// Só send/template o faz entre os três desta tabela.
 	generatesID bool
 	// missingField mapeia nome do campo obrigatorio ausente -> payload que o
 	// omite. E' a matriz de rejeicao do use case vista da fronteira HTTP.
@@ -60,33 +67,6 @@ type msgHandlerCase struct {
 func msgHandlerCases() []msgHandlerCase {
 	log := silentLogger{}
 	return []msgHandlerCase{
-		{
-			name: "SendEditMessage",
-			path: "/chat/send/edit",
-			build: func(f *contractsfake.MessageComposer) http.Handler {
-				return NewSendEditMessageHandler(message.NewSendEditMessageUseCase(f, log))
-			},
-			validBody:     `{"Phone":"5511999999999","Body":"corrigido","Id":"msg-1"}`,
-			wantMessageID: "msg-1",
-			missingField: map[string]string{
-				"Phone": `{"Body":"corrigido","Id":"msg-1"}`,
-				"Body":  `{"Phone":"5511999999999","Id":"msg-1"}`,
-				"Id":    `{"Phone":"5511999999999","Body":"corrigido"}`,
-			},
-		},
-		{
-			name: "DeleteMessage",
-			path: "/chat/delete/message",
-			build: func(f *contractsfake.MessageComposer) http.Handler {
-				return NewDeleteMessageHandler(message.NewDeleteMessageUseCase(f, log))
-			},
-			validBody:     `{"Phone":"5511999999999","Id":"msg-1"}`,
-			wantMessageID: "msg-1",
-			missingField: map[string]string{
-				"Phone": `{"Id":"msg-1"}`,
-				"Id":    `{"Phone":"5511999999999"}`,
-			},
-		},
 		{
 			name: "SendTemplate",
 			path: "/chat/send/template",

@@ -811,7 +811,36 @@ rules_frozen=true
 # mesma sessao (FIX-07 / HOUSEKEEP F119).
 # nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
 # nenhuma linha coberta sem substituto, e `covered` SOBE.
-min_func_coverage=672
+# CAP-10 (2026-08-19): delete + edit de mensagem passam a MUTAR de verdade.
+# Numeros MEDIDOS, comparados no mesmo commit-base e na mesma maquina:
+#   HEAD 325c8d7 (arvore limpa, extraida com `git archive HEAD | tar -x`):
+#     eligible=632, covered=425, func_coverage=67.2468% (672 decimos)
+#   estado atual: eligible=634, covered=425, func_coverage=67.0347% (670)
+# A razao CAI 672->670 por DENOMINADOR, nao por regressao: `covered` NAO cai
+# (425 nos dois). O conjunto de elegiveis teve 2 entradas e NENHUMA saida,
+# enumeradas aqui pela invariante ENUMERATE THE SET (diff de `logcov -golden`
+# HEAD vs atual, coluna ELIGIBLE):
+#   ENTRAM (2), as duas UNCOVERED:
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
+# (O diff do golden traz mais 4 linhas, todas EXCLUDED X5 e portanto FORA do
+# denominador: contractsfake.ChatMessenger.RevokeMessage/EditMessage e
+# testkit.Fake.BuildRevoke/BuildEdit — dubles de teste.)
+# As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07 e CAP-08A/08B/CAP-09 acima). Confirmado por medicao,
+# nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os DOZE irmaos do
+# mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
+# SendAudio, SendVideo, SendSticker, SendLocation, SendContact, e agora
+# RevokeMessage e EditMessage) constam todos como uncovered:L1 em
+# `logcov -list-uncovered`. NAO foi plantado log para inflar a metrica: fazer
+# isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta mesma sessao (FIX-07 /
+# HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+min_func_coverage=670
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -982,7 +1011,11 @@ min_func_coverage=672
 # (MediaDownloaderAdapter.Download uncovered:L1 e downloadableFor
 # uncovered:L1;uncovered:L2(S-ret,downloader.go:123)). Nenhuma remocao de
 # linha coberta, nenhuma funcao coberta virando descoberta.
-min_errpath_coverage=858
+# CAP-10 (2026-08-19): errpath SOBE 858->859 (1147/1337=85.79% ->
+# 1159/1349=85.92%). Os dois use cases migraram de stub "validated" para
+# mutacao real, e os caminhos de saida novos (invalid JID, falha do envio)
+# nascem cobertos pelos Warn/Error que os proprios use cases ja' emitem.
+min_errpath_coverage=859
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1151,7 +1184,9 @@ min_errpath_coverage=858
 #
 # 6 entradas cobertas - 5 saidas cobertas = +1 => covered 424 -> 425, que e'
 # exatamente o que a justificativa de min_func_coverage acima registra.
-min_eligible=632
+# CAP-10 (2026-08-19): 632 -> 634, as duas entradas enumeradas no bloco de
+# min_func_coverage acima (RevokeMessage e EditMessage no adapter).
+min_eligible=634
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

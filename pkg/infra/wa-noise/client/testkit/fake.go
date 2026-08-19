@@ -5,6 +5,7 @@ import (
 	"time"
 
 	wanoise "wa-api/internal/wa-noise"
+	wamessage "wa-api/internal/wa-noise/capabilities/message"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -27,6 +28,8 @@ type Fake struct {
 	SendMessageFn                    func(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 	GenerateMessageIDFn              func() types.MessageID
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
+	BuildRevokeFn                    func(chat, sender types.JID, id types.MessageID) *waE2E.Message
+	BuildEditFn                      func(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
 	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
 	DownloadFn                       func(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
@@ -111,6 +114,40 @@ func (f *Fake) BuildUnavailableMessageRequest(chat, sender types.JID, id string)
 		return f.BuildUnavailableMessageFn(chat, sender, id)
 	}
 	return &waE2E.Message{}
+}
+
+// BuildRevoke monta a MESMA mensagem que o cliente real monta.
+//
+// ARMADILHA 1 deste repo: dublê mais permissivo que a produção esconde o
+// defeito. Este método imita uma REGRA — a de que sender vazio marca a
+// revogação como sendo de mensagem PRÓPRIA (FromMe=true, sem Participant)
+// e sender de terceiro a marca como de outro — então delega para a regra
+// REAL, em internal/wa-noise/capabilities/message/builders.go:39
+// (BuildRevoke) e :23 (BuildKey), que é exatamente para onde
+// (*core.Client).BuildRevoke delega em
+// internal/wa-noise/core/message_builders.go:34.
+//
+// ownID/ownLID entram vazios porque o fake não tem sessão pareada; o eixo
+// que os testes medem é o sender, e com ownID vazio a discriminação de
+// BuildKey continua valendo: sender vazio -> FromMe=true; sender não vazio
+// e diferente de ownID -> FromMe=false.
+func (f *Fake) BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Message {
+	if f.BuildRevokeFn != nil {
+		return f.BuildRevokeFn(chat, sender, id)
+	}
+	return wamessage.BuildRevoke(types.EmptyJID, types.EmptyJID, chat, sender, id)
+}
+
+// BuildEdit monta a MESMA mensagem que o cliente real monta, delegando para
+// internal/wa-noise/capabilities/message/builders.go:101 — para onde
+// (*core.Client).BuildEdit delega em
+// internal/wa-noise/core/message_builders.go:75. Mesma disciplina de
+// BuildRevoke quanto a não inventar uma montagem própria.
+func (f *Fake) BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message {
+	if f.BuildEditFn != nil {
+		return f.BuildEditFn(chat, id, newContent)
+	}
+	return wamessage.BuildEdit(chat, id, newContent)
 }
 
 func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {

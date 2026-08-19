@@ -446,6 +446,67 @@ func (a *ChatMessengerAdapter) SendContact(ctx context.Context, txtID string, ta
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// RevokeMessage revoga a mensagem messageID na conversa target (CAP-10).
+//
+// O sender passado a BuildRevoke é types.EmptyJID de propósito: é o que
+// marca a revogação como sendo de mensagem PRÓPRIA (ver
+// internal/wa-noise/capabilities/message/builders.go:29 — com sender vazio
+// a MessageKey sai com FromMe=true e sem Participant). Trocá-lo por
+// qualquer outro JID muda a operação para "revogar mensagem de terceiro
+// como admin de grupo", que esta API nunca expôs. É a mesma montagem do
+// histórico (`git show 41bc8e2^:handlers.go`, linha 2870).
+func (a *ChatMessengerAdapter) RevokeMessage(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	msg := client.BuildRevoke(recipient, types.EmptyJID, types.MessageID(messageID))
+
+	resp, err := client.SendMessage(ctx, recipient, msg)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// EditMessage substitui o texto da mensagem messageID na conversa target
+// (CAP-10). O conteúdo novo é um ExtendedTextMessage só com Text, como no
+// histórico (`git show 41bc8e2^:handlers.go`, na SendEditMessage) — o
+// ContextInfo que aquele handler aceitava não existe em
+// domain.SendEditMessageRequest e NÃO é reintroduzido aqui (achado
+// reportado, ver HOUSEKEEP.md F134).
+func (a *ChatMessengerAdapter) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	newContent := &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(newText),
+		},
+	}
+
+	msg := client.BuildEdit(recipient, types.MessageID(messageID), newContent)
+
+	resp, err := client.SendMessage(ctx, recipient, msg)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // Verificação em tempo de compilação de que o adapter implementa as portas.
 var (
 	_ appport.ChatMessenger   = (*ChatMessengerAdapter)(nil)

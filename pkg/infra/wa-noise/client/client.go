@@ -37,6 +37,22 @@ type Client interface {
 	GenerateMessageID() types.MessageID
 	BuildUnavailableMessageRequest(chat, sender types.JID, id string) *waE2E.Message
 
+	// BuildRevoke monta a mensagem de revogacao ("apagar para todos") da
+	// mensagem id na conversa chat. sender vazio significa mensagem
+	// PROPRIA. BuildEdit monta a substituicao do conteudo da mensagem id
+	// por newContent.
+	//
+	// CAP-10 acrescenta os dois a interface estreita (ADR-001) porque
+	// /chat/delete, /chat/delete/message e /chat/send/edit deixaram de so'
+	// validar e passaram a mutar de verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto BuildRevoke e BuildEdit). O que se alarga aqui e' o seam
+	// local de wa-api.
+	BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Message
+	BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
+
 	// Upload sobe um anexo (imagem, video, audio, documento) aos
 	// servidores do WhatsApp. CAP-02 acrescenta este metodo a interface
 	// estreita (ADR-001) porque o envio de midia real, ao contrario do

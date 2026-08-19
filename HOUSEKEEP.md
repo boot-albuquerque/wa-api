@@ -6337,5 +6337,110 @@ mudanca de comportamento.
 acrescentar `gofmt -l` (falhando se a saida for nao-vazia) ao alvo `check` do
 Makefile, para que isto nao volte em silencio.
 
+**Adendo (FIX-10, 2026-08-19)**: `config.go` nao e o unico. Rodando `gofmt -l`
+sobre a arvore inteira aparecem TRES arquivos, os tres nao formatados ja em
+HEAD (e5b2528) e nenhum deles tocado pelo FIX-10:
+
+```
+$ gofmt -l ./pkg ./cmd
+pkg/application/usecase/message/send_video_internal_test.go
+pkg/bootstrap/config.go
+pkg/presentation/http/handlers/handler_boundary_test.go
+$ git show HEAD:pkg/application/usecase/message/send_video_internal_test.go | gofmt -l /dev/stdin
+/dev/stdin
+$ git show HEAD:pkg/presentation/http/handlers/handler_boundary_test.go | gofmt -l /dev/stdin
+/dev/stdin
+```
+
+Reforca a correcao sugerida: sem `gofmt -l` no alvo `check`, o numero cresce
+em silencio — era um arquivo na F133 e sao tres uma sessao depois.
+
 **Status**: nao corrigido. E pre-existente e fora do escopo do FIX-F130; pela
 politica do `CLAUDE.md`, nao corrijo de graca sem perguntar.
+
+## F134 — `SendEditMessage` perdeu o `ContextInfo` que o payload histórico aceitava
+
+**Data**: 2026-08-19. **Contexto**: CAP-10, recuperação de Delete + Edit
+Message.
+
+**Onde**: `pkg/domain/message.go` (`SendEditMessageRequest`, em torno da linha
+305) contra `git show 41bc8e2^:handlers.go` (`SendEditMessage`, o campo
+`ContextInfo waE2E.ContextInfo` do `editStruct`).
+
+**Problema**: o payload histórico de `POST /chat/send/edit` aceitava um quarto
+campo, `ContextInfo`, com três usos reais:
+
+- `ContextInfo.StanzaID` + `ContextInfo.Participant` — a edição virava uma
+  resposta CITADA (o handler montava `ContextInfo` com `QuotedMessage`);
+- `ContextInfo.MentionedJID` — menções dentro do texto editado.
+
+O DTO atual não tem esse campo. Um cliente que enviava `ContextInfo` hoje tem
+o campo silenciosamente descartado pelo `json.Decode` e recebe 200: a edição
+acontece, mas sem citação e sem menções. Isto **não é regressão do CAP-10** —
+o campo já não existia no DTO antes desta task, quando a rota nem editava; o
+CAP-10 apenas tornou a perda observável, porque agora a mensagem é realmente
+enviada.
+
+Evidência (o campo não existe no DTO atual):
+
+```
+$ grep -n "ContextInfo" pkg/domain/message.go
+(sem saída)
+$ git show 41bc8e2^:handlers.go | grep -n "ContextInfo waE2E.ContextInfo"
+2894:		ContextInfo waE2E.ContextInfo
+```
+
+**Correcao sugerida**: acrescentar a `SendEditMessageRequest` os três campos
+que o histórico usava (`StanzaID`, `Participant`, `MentionedJID`, como
+ponteiros para preservar a distinção ausente/vazio que o handler antigo fazia
+com `!= nil`), propagá-los pelo use case até
+`ChatMessengerAdapter.EditMessage` e montar o `ContextInfo` do
+`ExtendedTextMessage` lá. É mudança de contrato de ENTRADA (aditiva), então
+merece decisão explícita.
+
+**Status**: não corrigido. Fora do escopo do CAP-10, que era fazer a rota
+mutar de verdade; pela política do `CLAUDE.md`, não corrijo de graça sem
+perguntar. Registrado em comentário no código, em
+`pkg/application/usecase/message/send_edit_message.go` (doc de `Execute`) e em
+`pkg/infra/wa-noise/adapters/chat/messenger.go` (doc de `EditMessage`).
+
+## F135 — `Id` de mensagem inexistente ou inválido em delete/edit vira 200 silencioso
+
+**Data**: 2026-08-19. **Contexto**: CAP-10 — o packet pedia explicitamente
+para descobrir e RELATAR o que a primitive faz com `Id` inexistente/inválido.
+
+**Onde**: `internal/wa-noise/capabilities/message/builders.go:39`
+(`BuildRevoke`) e `:101` (`BuildEdit`), alcançados por
+`internal/wa-noise/core/message_builders.go:34` e `:75`.
+
+**Problema**: **os dois construtores não validam nada e não consultam
+armazenamento nenhum**. Recebem o `id` como `types.MessageID` — que é um alias
+de `string`, sem validação — e o copiam para dentro da `MessageKey` do
+protobuf. Não há lookup da mensagem alvo em lugar nenhum do caminho.
+
+Consequência para a fronteira HTTP: `POST /chat/delete`,
+`/chat/delete/message` e `/chat/send/edit` com um `Id` que não existe (ou que
+é lixo sintático) montam uma mensagem BEM FORMADA, o envio é aceito, e a rota
+devolve **200 com `status` de sucesso** — o servidor do WhatsApp simplesmente
+ignora a revogação/edição de uma chave que ele não conhece, e essa recusa
+NUNCA volta pelo `SendMessage`. A API não tem como distinguir "apagou" de "não
+existia".
+
+Evidência (medida, não deduzida): `TestChatMessengerAdapter_Mutation_UnknownIDIsNotValidated`
+em `pkg/infra/wa-noise/adapters/chat/messenger_mutation_test.go` roda os ids
+`""`, `"id-que-nao-existe"`, `"not a message id at all"` e
+`"../../etc/passwd"`; nenhum é recusado, e todos chegam crus a
+`MessageKey.ID`. (O `""` só não é alcançável pela rota porque o use case
+rejeita `Id` vazio antes — a primitive em si o aceita.)
+
+**Correcao sugerida**: nenhuma no nível da primitive — o comportamento é do
+protocolo, e o Baileys tem a mesma propriedade (a revogação é uma mensagem
+como outra qualquer, não um RPC com resposta). O que dá para fazer, se o
+produto exigir, é a API guardar os IDs que ela mesma enviou e recusar 404 para
+um `Id` que ela nunca emitiu — o que é uma feature nova (persistência de IDs
+enviados), não um conserto.
+
+**Status**: não corrigido, por desenho. Travado como comportamento CONHECIDO
+pelo teste citado acima, para que ninguém o redescubra em produção. Documentado
+na entrada porque um "sucesso" que não distingue do fracasso é exatamente o
+tipo de coisa que vira diagnóstico errado seis meses depois.

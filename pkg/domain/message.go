@@ -42,6 +42,18 @@ type LinkPreviewData struct {
 // DEPOIS que client.SendMessage retorna sucesso (CAP-01).
 const StatusSent = "sent"
 
+// StatusDeleted é o valor de DeleteMessageResult.Status para uma mensagem
+// que o wa-noise efetivamente revogou — só aparece DEPOIS que o envio da
+// revogação retorna sucesso (CAP-10).
+//
+// É um valor próprio, e não StatusSent, porque o histórico distinguia os
+// dois no mesmo campo: DeleteMessage devolvia Details="Deleted" e
+// SendEditMessage devolvia Details="Sent"
+// (`git show 41bc8e2^:handlers.go`, linhas 2877 e 2969). A decisão
+// HOUSEKEEP F131 fixou a FORMA do envelope, não os valores; apagar essa
+// distinção seria perder informação que o cliente histórico recebia.
+const StatusDeleted = "deleted"
+
 // SendImageRequest representa o payload de envio de imagem. Image é uma
 // união: aceita tanto data URI ("data:image/...;base64,...", CAP-03) quanto
 // URL http(s) externa (CAP-02) — o mesmo campo e a mesma rota servem os
@@ -286,8 +298,16 @@ type DeleteMessageRequest struct {
 }
 
 // DeleteMessageResult representa o resultado da exclusão de mensagem.
+//
+// Timestamp entra aqui no CAP-10 (decisão HOUSEKEEP F131: manter a forma
+// ATUAL {message_id, timestamp, status}, a das oito capabilities de envio
+// já entregues, e não a histórica {Details, Timestamp, Id}). O acréscimo é
+// aditivo — nenhum campo sai — e alinha estes dois DTOs com
+// SendMessageResult/SendLocationResult, dos quais só divergiam porque
+// nunca tinham chegado a enviar nada.
 type DeleteMessageResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 
@@ -299,8 +319,11 @@ type SendEditMessageRequest struct {
 }
 
 // SendEditMessageResult representa o resultado da edição de mensagem.
+// Mesma disciplina de DeleteMessageResult quanto a Timestamp (CAP-10,
+// HOUSEKEEP F131).
 type SendEditMessageResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 
