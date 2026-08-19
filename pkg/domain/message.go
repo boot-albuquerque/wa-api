@@ -169,6 +169,7 @@ type SendStickerRequest struct {
 // SendStickerResult representa o resultado do envio de sticker.
 type SendStickerResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
 }
 

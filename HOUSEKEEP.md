@@ -7000,3 +7000,101 @@ o que trava a base de 24h — **a defesa em profundidade agora tambem esta'
 travada** (controle negativo 1: 20/20/20). A invariante escrita:
 **nenhum teste deixa timer de retry capaz de vencer durante a corrida**.
 Referencia cruzada: **F132**, **F129**.
+
+## F137
+
+**Data**: 2026-08-19. **Contexto**: CURRENT_STATE do bloco de trava de wire
+das oito capabilities de envio, antes de escrever qualquer teste.
+
+**Onde**: `pkg/domain/message.go:170` (`SendStickerResult`) e
+`pkg/application/usecase/message/send_sticker.go:176`.
+
+**Problema**: `SendStickerResult` é o ÚNICO dos oito resultados de envio sem
+o campo `Timestamp`, e o valor está disponível — o use case simplesmente não
+o mapeia.
+
+Os oito, enumerados, com o que cada um devolve:
+
+| capability | campos |
+|---|---|
+| text (`SendMessageResult`) | message_id, timestamp, status |
+| image (`SendImageResult`) | message_id, timestamp, status |
+| document (`SendDocumentResult`) | message_id, timestamp, status |
+| audio (`SendAudioResult`) | message_id, timestamp, status |
+| video (`SendVideoResult`) | message_id, timestamp, status |
+| location (`SendLocationResult`) | message_id, timestamp, status |
+| contact (`SendContactResult`) | message_id, timestamp, status |
+| **sticker** (`SendStickerResult`) | **message_id, status** |
+
+Comparação direta, mesmo `sent` do mesmo tipo `domain.MessageSendResult`:
+
+```go
+// send_video.go:155
+result := &domain.SendVideoResult{
+    MessageID: sent.ID,
+    Timestamp: sent.Timestamp.Unix(),
+    Status:    domain.StatusSent,
+}
+// send_sticker.go:176
+result := &domain.SendStickerResult{
+    MessageID: sent.ID,
+    Status:    domain.StatusSent,   // <- Timestamp existe em `sent` e e' descartado
+}
+```
+
+O contrato histórico devolvia `Timestamp` em TODOS os envios
+(`git show 41bc8e2^:handlers.go`, o `response := map[string]interface{}{...}`
+de cada handler), então sticker também perdeu fidelidade, não só consistência.
+
+**De quem é**: meu. Entrou no CAP-07 (commit `67fe1c6`), passou por avaliação
+adversarial independente e por `make check` verde. Nenhum dos dois pega
+campo AUSENTE — os testes asseveravam o que estava lá.
+
+**Por que importa agora**: o bloco seguinte trava os nomes de campo do wire
+por capability. Travar o sticker como está congelaria a inconsistência e a
+tornaria deliberada; travá-lo com `Timestamp` exige acrescentar o campo
+antes.
+
+**Correção sugerida**: acrescentar `Timestamp int64 json:"timestamp,omitempty"`
+a `SendStickerResult` e mapear `sent.Timestamp.Unix()`, igual aos sete irmãos.
+É mudança ADITIVA: nenhum cliente quebra por receber um campo a mais, e ela
+restaura tanto a consistência quanto a fidelidade histórica.
+
+**Status**: CORRIGIDO no CAP-13 (2026-08-19). `SendStickerResult` ganhou
+`Timestamp int64 \`json:"timestamp,omitempty"\`` (`pkg/domain/message.go:172`)
+e `send_sticker.go:178` passou a mapear `sent.Timestamp.Unix()`. Depois disso
+as oito capabilities devolvem exatamente `{message_id, timestamp, status}`.
+
+**Testes que travam**: `TestSendWireContract_FieldNames`
+(`pkg/presentation/http/handlers/send_wire_contract_test.go`), subteste
+`sticker`. Ele decodifica o JSON REAL em `map[string]any` pela rota registrada
+`POST /chat/send/sticker` e confere a PRESENÇA de `timestamp` nome por nome —
+asseverar sobre a struct não bastaria, porque struct nomeada continua
+compilando com a tag trocada ou ausente.
+
+**Controle negativo EXECUTADO** (remoção do campo recém-acrescentado, ou seja,
+a reintrodução exata do defeito da F137):
+
+```
+$ # SendStickerResult sem Timestamp + send_sticker.go sem o mapeamento
+$ go test ./pkg/presentation/http/handlers/ -run "TestSendWireContract_FieldNames/sticker" -count=1
+--- FAIL: TestSendWireContract_FieldNames (0.00s)
+    --- FAIL: TestSendWireContract_FieldNames/sticker (0.00s)
+        send_wire_contract_test.go:280: POST /chat/send/sticker: a chave "timestamp" SUMIU do wire. As chaves presentes sao [message_id status].
+FAIL
+FAIL	wa-api/pkg/presentation/http/handlers	0.227s
+```
+
+Árvore restaurada em seguida por edição localizada, e a suíte volta a `ok`.
+
+**Efeito colateral medido, enumerado**: a linha acrescentada em
+`send_sticker.go` deslocou em 1 uma referência de linha do golden de
+`cmd/logcov`. Diferença ÚNICA, antes/depois:
+
+| linha do golden | antes | depois |
+|---|---|---|
+| 1950 (`message.checkStickerDataURISize`) | `send_sticker.go:205` | `send_sticker.go:206` |
+
+2973 linhas antes, 2973 depois; nenhuma função entrou ou saiu do conjunto
+elegível. Golden regenerado com `go run ./cmd/logcov -golden`, como a própria
+mensagem de falha de `TestGoldenBate` instrui.

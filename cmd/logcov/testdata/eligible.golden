@@ -1947,7 +1947,7 @@ pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:129);uncovered:L2(S-ret,send_video.go:134)
 pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covered
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
-pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:205)
+pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:206)
 pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
 pkg/application/usecase/message.decodeVideoDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_video.go:214);uncovered:L2(S-ret,send_video.go:226)

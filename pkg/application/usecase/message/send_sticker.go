@@ -175,6 +175,7 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 
 	result := &domain.SendStickerResult{
 		MessageID: sent.ID,
+		Timestamp: sent.Timestamp.Unix(),
 		Status:    domain.StatusSent,
 	}
 
