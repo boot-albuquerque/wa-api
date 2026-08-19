@@ -252,17 +252,111 @@ type ContactPayload struct {
 	Vcard string
 }
 
+// Os quatro tipos de botão interativo que o histórico reconhecia
+// (`git show 41bc8e2^:handlers.go`, função SendButtons). São valores do
+// CONTRATO PÚBLICO — chegam no campo `type` do JSON do cliente —, e por isso
+// vivem no domínio e não no adapter: o adapter traduz cada um para o `Name`
+// do NativeFlowButton, mas quem os define é a API.
+//
+// O mapa tipo público -> `Name` do wire NÃO é a identidade, e por isso os
+// dois conjuntos de constantes são SEPARADOS (os `Name` vivem no adapter):
+// `copy` vira `cta_copy` no wire. Colapsar os dois conjuntos num só faria a
+// rota passar a aceitar `cta_copy` como tipo de entrada, que nunca foi
+// contrato.
+const (
+	ButtonTypeReply   = "reply"
+	ButtonTypeCTAURL  = "cta_url"
+	ButtonTypeCTACall = "cta_call"
+	ButtonTypeCopy    = "copy"
+)
+
+// InteractiveButton é UM botão de uma mensagem interativa (NativeFlow), com
+// os nove campos do buttonStruct histórico (`git show 41bc8e2^:handlers.go`,
+// linha 2006).
+//
+// É um DTO de DOMÍNIO, não de protobuf: qual `Name` e quais parâmetros cada
+// um vira é tradução do adapter. Os TRÊS pares de campo redundantes existem
+// porque o histórico os aceitava como fallback encadeado, nesta ordem exata:
+//
+//	Title <- Text <- ButtonText
+//	ID    <- ButtonID <- (o Title já resolvido e já truncado)
+//
+// Estreitar isso agora recusaria payloads que a rota sempre aceitou.
+type InteractiveButton struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	Text        string `json:"text"`
+	ButtonText  string `json:"buttonText"`
+	ID          string `json:"id"`
+	ButtonID    string `json:"buttonId"`
+	URL         string `json:"url"`
+	PhoneNumber string `json:"phone_number"`
+	CopyCode    string `json:"copy_code"`
+}
+
 // SendButtonsRequest representa o payload de envio de botões.
+//
+// Text/Title/Footer/Image/Buttons entraram no CAP-21 (HOUSEKEEP F147/F148):
+// o DTO tinha ficado com {Phone, Body, Id} e sem `Buttons` a capability não
+// tem sentido — uma mensagem interativa sem botão é uma mensagem de texto.
+// O acréscimo é aditivo, mas é mudança de contrato, e não só reconexão de
+// fiação.
+//
+// ContextInfo e QuotedMessage do payload histórico NÃO entram: são reply-to,
+// nenhuma das dez capabilities de envio entregues os suporta, e a F134 já
+// registra a dívida equivalente no edit. Decisão do Orchestrator, registrada
+// em HOUSEKEEP F148 junto com o que se fez com a validação que dependia
+// deles.
+//
+// Text é o fallback de Body (`body <- Body <- Text`, na ordem do histórico),
+// e não um campo com significado próprio.
 type SendButtonsRequest struct {
-	Phone string `json:"Phone"`
-	Body  string `json:"Body"`
-	ID    string `json:"Id,omitempty"`
+	Phone   string              `json:"Phone"`
+	Body    string              `json:"Body"`
+	Text    string              `json:"text"`
+	Title   string              `json:"Title"`
+	Footer  string              `json:"Footer"`
+	Image   string              `json:"Image"`
+	Buttons []InteractiveButton `json:"Buttons"`
+	ID      string              `json:"Id,omitempty"`
 }
 
 // SendButtonsResult representa o resultado do envio de botões.
+//
+// Timestamp entrou no CAP-21 pela mesma razão que em SendStickerResult
+// (F137), SendPollResult (CAP-14) e SendTemplateResult (CAP-15): as
+// capabilities de envio têm a forma {message_id, timestamp, status}, travada
+// em send_wire_contract_test.go. Decisão F131 (manter a forma ATUAL, e não a
+// histórica {Details, Timestamp, Id}) não se reabre aqui.
 type SendButtonsResult struct {
 	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+}
+
+// ButtonsPayload é a metadata de protocolo que
+// port.InteractiveMessenger.SendButtons repassa para InteractiveMessage
+// (CAP-21).
+//
+// Buttons chega aqui JÁ NORMALIZADO pelo use case: Title resolvido pela
+// cadeia de fallback e truncado ao limite do wire, ID resolvido, Type em
+// caixa baixa e garantidamente um dos quatro de domínio, e os botões
+// descartados já fora da lista. O adapter só traduz tipo -> `Name` e monta o
+// JSON de parâmetros; ele NÃO reaplica fallback nenhum, porque a ordem
+// "trunca o título e SÓ ENTÃO usa-o como ID" é observável no id que volta no
+// clique de quem recebeu a mensagem.
+//
+// HeaderImage são os bytes JÁ OBTIDOS do header opcional (o use case decide
+// entre data URI e URL externa, como em SendImageUseCase); vazio significa
+// "sem imagem no header", e nesse caso o header carrega Title, se houver. O
+// upload é do adapter — é ele que tem o cliente do wa-noise.
+type ButtonsPayload struct {
+	Body                string
+	Title               string
+	Footer              string
+	Buttons             []InteractiveButton
+	HeaderImage         []byte
+	HeaderImageMimeType string
 }
 
 // SendListRequest representa o payload de envio de lista.

@@ -154,7 +154,7 @@ func initCustomHandlers(s *server) {
 	sendVideoUC := message.NewSendVideoUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendContactUC := message.NewSendContactUseCase(chatMessenger, jidResolver, logger)
 	sendLocationUC := message.NewSendLocationUseCase(chatMessenger, jidResolver, logger)
-	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
+	sendButtonsUC := message.NewSendButtonsUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendListUC := message.NewSendListUseCase(messageComposer, logger)
 	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)

@@ -15,6 +15,9 @@ import (
 
 // Fase 12 — os handlers de /chat/send/{contact,location,buttons,list,poll}.
 //
+// Da lista original sobrou send/list: os outros quatro migraram para portas
+// de envio de verdade (CAP-08A, CAP-08B, CAP-14 e CAP-21).
+//
 // Os cinco tem a MESMA forma: guarda de userinfo inline, guarda de session id,
 // decode do corpo, use case, envelope. E' o que torna a tabela obrigatoria —
 // uma divergencia entre eles (um que esqueca a guarda, um que responda 200 com
@@ -123,6 +126,23 @@ type interactiveCase struct {
 //     UMA só (`if !ok || info == nil`, handler_interactive.go:32 e :77) e
 //     emite UMA linha de log — os dois casos caem no mesmo ramo.
 //
+// SendButtons saiu no CAP-21, ao migrar para port.InteractiveMessenger
+// (envio de verdade, com header opcional de mídia). Os OITO eixos que esta
+// tabela cobria para ele foram realocados para handler_send_buttons_test.go,
+// nome por nome:
+//
+//	unauthorized                     TestSendButtons_RejectUnauthenticated
+//	missing session id               TestSendButtons_MissingSessionID_ViaRegisteredRoute
+//	malformed body                   TestSendButtons_MalformedBody_ViaRegisteredRoute
+//	campo obrigatório ausente        TestSendButtons_RejectMissingRequiredField
+//	session failure                  TestSendButtons_SessionFailure
+//	wrong type in context            TestSendButtons_WrongTypeInContext_ViaRegisteredRoute
+//	no-secret-leak                   TestSendButtons_NoSecretLeak
+//	ausência de log no caminho feliz TestSendButtons_SuccessEmitsNoOutcomeLog
+//
+// TestInteractiveHandlers_MessageIDFailure não tem destino porque o eixo
+// deixou de existir para a rota: o use case não gera mais message ID.
+//
 // Só DOIS destinos usam o helper
 // `sendLocationServeCapturingLog`/`sendContactServeCapturingLog`/`sendPollServeCapturingLog`, que é o
 // `sendXxxServe` acrescido da saída de log da requisição: `campo obrigatório
@@ -131,15 +151,6 @@ type interactiveCase struct {
 func interactiveCases() []interactiveCase {
 	log := &contractsfake.Logger{}
 	return []interactiveCase{
-		{
-			name: "SendButtons",
-			path: "/chat/send/buttons",
-			build: func(mc *contractsfake.MessageComposer) http.Handler {
-				return NewSendButtonsHandler(message.NewSendButtonsUseCase(mc, log))
-			},
-			validBody:    `{"Phone":"5511999999999","Body":"escolha"}`,
-			emptyBodyErr: "missing Phone in payload",
-		},
 		{
 			name: "SendList",
 			path: "/chat/send/list",

@@ -902,7 +902,47 @@ rules_frozen=true
 # nenhuma linha, coberta ou nao.
 # justificativa: queda de DENOMINADOR, nao de cobertura. O numerador nao se
 # moveu (425 antes, 425 depois) e nenhuma linha saiu do golden.
-min_func_coverage=667
+# CAP-21 (2026-08-19): func_coverage CAI 667->665 (425/637=66.70% ->
+# 426/641=66.46%), e a queda e' de DENOMINADOR — mesmo mecanismo do CAP-10,
+# CAP-14 e CAP-15. O numerador SOBE em 1. Enumerado a partir do diff do
+# golden, linha por linha:
+#   ENTRAM no denominador (4):
+#     COBERTA (1):
+#       pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes
+#     UNCOVERED:L1 (3):
+#       pkg/application/usecase/message.normalizeInteractiveButtons
+#       pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendButtons
+#       pkg/infra/wa-noise/adapters/chat.nativeFlowButtons
+#   SAEM (0).
+#   1 entrada coberta - 0 saidas cobertas = +1 => covered 425->426. Confere
+#   com a medicao: `go run ./cmd/logcov` imprime 66.5% (426/641 elegiveis).
+# (O diff do golden traz mais 2 linhas FORA do denominador:
+# contractsfake.InteractiveMessenger.SendButtons, EXCLUDED X5 por ser duble de
+# teste, e chat.bizNativeFlowNodes, EXCLUDED X1 por ser trivial e sem caminho
+# de saida. Mais uma linha que so' muda de NUMERO DE LINHA sem mudar de
+# estado: SendButtonsUseCase.Execute (send_buttons.go:28/31 -> :95/101, as
+# mesmas DUAS recusas de validacao). Golden 2980 -> 2986 linhas: as 4 entradas
+# elegiveis + as 2 EXCLUDED.)
+# As TRES uncovered, uma a uma, e por que nao levam log:
+#   - ChatMessengerAdapter.SendButtons e nativeFlowButtons sao o padrao
+#     "adapter delegante nao loga", ja' aceito neste repositorio (ver FIX-07,
+#     CAP-08A/08B, CAP-09, CAP-10, CAP-14 e CAP-15 acima). Confirmado por
+#     medicao: `grep -cE 'log\.|hlog\.|logger|Logger'
+#     pkg/infra/wa-noise/adapters/chat/messenger_buttons.go` devolve 0, igual
+#     ao messenger.go, onde os QUINZE irmaos (MarkRead, SendReaction,
+#     SendText, SendImage, SendDocument, SendAudio, SendVideo, SendSticker,
+#     SendLocation, SendContact, SendPoll, SendTemplate, templateButtons,
+#     RevokeMessage e EditMessage) tambem constam uncovered:L1.
+#   - normalizeInteractiveButtons e' funcao PURA de pacote (sem receptor, sem
+#     logger em escopo): recebe []domain.InteractiveButton e devolve
+#     []domain.InteractiveButton. Injetar um logger nela existiria SO' para
+#     mover a metrica, que e' violacao COV-4 e ja' foi REQUIRED_FIX nesta
+#     mesma sessao (FIX-07 / HOUSEKEEP F119). O descarte que ela faz e'
+#     silencioso POR DECISAO registrada (HOUSEKEEP F148) e esta' travado por
+#     teste nos dois niveis, nao por log.
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+min_func_coverage=665
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1263,7 +1303,11 @@ min_errpath_coverage=860
 # CAP-15 (2026-08-19): 635->637. As entradas sao DUAS e estao enumeradas
 # acima, junto de min_func_coverage: ChatMessengerAdapter.SendTemplate e
 # templateButtons. Nenhuma saida.
-min_eligible=637
+# CAP-21 (2026-08-19): 637->641. As entradas sao QUATRO e estao enumeradas
+# acima, junto de min_func_coverage: SendButtonsUseCase.headerImageBytes
+# (coberta), normalizeInteractiveButtons, ChatMessengerAdapter.SendButtons e
+# nativeFlowButtons. Nenhuma saida.
+min_eligible=641
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

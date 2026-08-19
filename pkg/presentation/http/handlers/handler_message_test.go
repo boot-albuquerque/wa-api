@@ -15,7 +15,7 @@ import (
 )
 
 // Este arquivo cobre de forma exaustiva os handlers de mensagem que ainda
-// usam port.MessageComposer: send/buttons e send/list. send/text
+// usam port.MessageComposer: send/list. send/text
 // (SendMessage) migrou para port.TextMessenger no CAP-01 e tem tabela
 // própria em handler_message_send_test.go — sua forma (JIDResolver +
 // SendText) já não cabe nesta tabela.
@@ -46,18 +46,39 @@ import (
 //	segredo no log              TestSendTemplate_NoSecretLeak
 //	Id do cliente               TestSendTemplate_ClientSuppliedIDIsForwardedButServerIDWins
 //
-// A tabela permanece — e ganhou os DOIS vizinhos que sobraram, send/buttons
-// e send/list — porque a forma que ela mede (mesma guarda de autenticação,
-// mesma guarda de sessão, mesmo decode, mesma tradução de erro do use case)
-// é exatamente a dos dois. Deixá-la vazia seria pior que removê-la: cada
-// `for` deste arquivo passaria a iterar sobre zero casos e a suíte inteira
-// ficaria verde sem medir nada.
+// send/buttons SAIU no CAP-21, pelo mesmo motivo: passou a consumir
+// port.InteractiveMessenger + port.JIDResolver + port.MediaFetcher e a
+// enviar de verdade. Os eixos desta tabela foram realocados, nome por nome,
+// para handler_send_buttons_test.go:
 //
-// A cobertura dos dois é aditiva, não duplicada:
-// handler_interactive_test.go mede outros eixos para as mesmas rotas (corpo
-// `{}` com causa, WrongTypeInContext), e nenhum dos eixos exclusivos DESTA
-// tabela — matriz por campo obrigatório, quatro formas de corpo malformado,
-// Id do cliente, ausência de segredo no log — existe lá.
+//	sucesso                     TestSendButtons_Success_ViaRegisteredRoute
+//	não autenticado             TestSendButtons_RejectUnauthenticated
+//	tipo errado no contexto     TestSendButtons_WrongTypeInContext_ViaRegisteredRoute
+//	session id vazio            TestSendButtons_MissingSessionID_ViaRegisteredRoute
+//	corpo malformado            TestSendButtons_MalformedBody_ViaRegisteredRoute
+//	campo obrigatório ausente   TestSendButtons_RejectMissingRequiredField
+//	falha de sessão             TestSendButtons_SessionFailure
+//	sucesso sem log de saída    TestSendButtons_SuccessEmitsNoOutcomeLog
+//	segredo no log              TestSendButtons_NoSecretLeak
+//	Id do cliente               TestSendButtons_ClientSuppliedIDIsForwardedButServerIDWins
+//	txtID que chega à porta     TestSendButtons_AuthenticatedSessionReachesPort
+//
+// Os DOIS eixos de geração de ID desta tabela
+// (TestMessageHandlers_MessageIDFailure e a metade `generatesID` de
+// TestMessageHandlers_Success) não têm destino porque deixaram de existir
+// para a rota: o use case não chama mais NewMessageID.
+//
+// A tabela permanece — com send/list, o ÚNICO caso que sobrou — porque a
+// forma que ela mede (mesma guarda de autenticação, mesma guarda de sessão,
+// mesmo decode, mesma tradução de erro do use case) continua sendo a dele.
+// Deixá-la vazia seria pior que removê-la: cada `for` deste arquivo passaria
+// a iterar sobre zero casos e a suíte inteira ficaria verde sem medir nada.
+//
+// A cobertura é aditiva, não duplicada: handler_interactive_test.go mede
+// outros eixos para a mesma rota (corpo `{}` com causa, WrongTypeInContext),
+// e nenhum dos eixos exclusivos DESTA tabela — matriz por campo
+// obrigatório, quatro formas de corpo malformado, Id do cliente, ausência de
+// segredo no log — existe lá.
 //
 // Cada caso de saida >=400 passa pelo co-gate D (logassert.OutcomeLogged):
 // o caminho tem de logar, com causa, com req_id, em warn ou error, e sem
@@ -91,20 +112,6 @@ type msgHandlerCase struct {
 func msgHandlerCases() []msgHandlerCase {
 	log := silentLogger{}
 	return []msgHandlerCase{
-		{
-			name: "SendButtons",
-			path: "/chat/send/buttons",
-			build: func(f *contractsfake.MessageComposer) http.Handler {
-				return NewSendButtonsHandler(message.NewSendButtonsUseCase(f, log))
-			},
-			validBody:     `{"Phone":"5511999999999","Body":"escolha"}`,
-			wantMessageID: contractsfake.DefaultMessageID,
-			generatesID:   true,
-			missingField: map[string]string{
-				"Phone": `{"Body":"escolha"}`,
-				"Body":  `{"Phone":"5511999999999"}`,
-			},
-		},
 		{
 			name: "SendList",
 			path: "/chat/send/list",
@@ -363,8 +370,7 @@ func TestMessageHandlers_MessageIDFailure(t *testing.T) {
 // handler_message_send_test.go, sobre port.TextMessenger.)
 func TestMessageHandlers_ClientSuppliedIDSkipsGeneration(t *testing.T) {
 	bodies := map[string]string{
-		"SendButtons": `{"Phone":"5511999999999","Body":"escolha","Id":"id-do-cliente"}`,
-		"SendList":    `{"Phone":"5511999999999","Desc":"cardapio","Id":"id-do-cliente"}`,
+		"SendList": `{"Phone":"5511999999999","Desc":"cardapio","Id":"id-do-cliente"}`,
 	}
 
 	for _, tc := range msgHandlerCases() {

@@ -19,8 +19,10 @@ import (
 // A EVAL-15 mediu o buraco em send/template: trocar `txtID` por uma constante
 // no handler deixava `./pkg/...` INTEIRO verde. O CAP-15 fechou template
 // (TestSendTemplate_AuthenticatedSessionReachesPort); send/buttons e send/list
-// ja' tinham o eixo pela tabela de handler_message_test.go:179. As NOVE que
-// sobravam sao as deste arquivo:
+// ja' tinham o eixo pela tabela de handler_message_test.go:179 — e quando
+// send/buttons saiu dessa tabela no CAP-21, o eixo foi junto, para
+// TestSendButtons_AuthenticatedSessionReachesPort (send/list continua na
+// tabela). As NOVE que sobravam sao as deste arquivo:
 //
 //	text, image, audio, video, document, sticker, location, contact, poll
 //

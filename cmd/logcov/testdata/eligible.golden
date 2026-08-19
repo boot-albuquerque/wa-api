@@ -1748,6 +1748,7 @@ pkg/application/contracts/contractsfake.GroupSettings.SetGroupName	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupPhoto	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.SetGroupTopic	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupSettings.UpdateGroupParticipants	EXCLUDED	X5
+pkg/application/contracts/contractsfake.InteractiveMessenger.SendButtons	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveQualifiedJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.LinkPreviewFetcher.FetchLinkPreview	EXCLUDED	X5
@@ -1932,7 +1933,8 @@ pkg/application/usecase/message.NewSubscribePresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,react.go:34);uncovered:L2(S-ret,react.go:38);uncovered:L2(S-consume,react.go:42);uncovered:L2(S-ret,react.go:43);uncovered:L2(S-ret,react.go:48)
 pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:69);uncovered:L2(S-ret,send_audio.go:72);uncovered:L2(S-ret,send_audio.go:124);uncovered:L2(S-ret,send_audio.go:129)
 pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
-pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:28);uncovered:L2(S-ret,send_buttons.go:31)
+pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:95);uncovered:L2(S-ret,send_buttons.go:101)
+pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes	ELIGIBLE	covered
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
@@ -1964,6 +1966,7 @@ pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovere
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
 pkg/application/usecase/message.isHTTPVideoURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_video.go:238)
 pkg/application/usecase/message.mediaDownloadFlow.execute	ELIGIBLE	uncovered:L2(S-ret,download_media.go:40)
+pkg/application/usecase/message.normalizeInteractiveButtons	ELIGIBLE	uncovered:L1
 pkg/application/usecase/message.resolveAudioMimeType	ELIGIBLE	uncovered:L1
 pkg/application/usecase/message.resolveMimeType	EXCLUDED	X1
 pkg/application/usecase/notification.GetHealthUseCase.Execute	ELIGIBLE	covered
@@ -2531,6 +2534,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage	ELIGIBLE	uncov
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:81)
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendButtons	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	ELIGIBLE	uncovered:L1
@@ -2547,7 +2551,9 @@ pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	un
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.NewMessageComposerAdapter	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/chat.bizNativeFlowNodes	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.downloadableFor	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,downloader.go:123)
+pkg/infra/wa-noise/adapters/chat.nativeFlowButtons	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.templateButtons	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.CreateGroup	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/group.GroupAdapter.GetGroupInfo	ELIGIBLE	uncovered:L1

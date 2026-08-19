@@ -68,29 +68,29 @@ type missingField struct {
 // existir: o use case não gera mais ID nenhum: o MessageID publicado é o que
 // a porta devolveu (o que o SDK REALMENTE usou), como nas outras oito
 // capabilities já migradas.
+//
+// SendButtons SAIU no CAP-21, pelo mesmo motivo: passou a consumir
+// port.InteractiveMessenger + port.JIDResolver + port.MediaFetcher e a
+// enviar de verdade. O destino de cada eixo, nome por nome, em
+// send_buttons_test.go:
+//
+//	campo obrigatório ausente   TestSendButtons_MissingRequiredField
+//	falha de sessão             TestSendButtons_SessionFailurePropagates
+//	Id do chamador respeitado   TestSendButtons_MessageIDIsTheOneActuallySent
+//	caminho feliz               TestSendButtons_CausalSuccess
+//
+// Os DOIS eixos de geração de ID (TestComposerUseCases_SuccessGeneratesID e
+// TestComposerUseCases_MessageIDFailurePropagates) não têm destino porque
+// deixaram de existir para esta rota, exatamente como aconteceu com
+// SendTemplate: o use case não chama mais NewMessageID, e o MessageID
+// publicado é o que a porta devolveu.
+//
+// A tabela permanece com SendList, o ÚNICO caso que sobrou. Deixá-la com
+// zero entradas seria pior que removê-la: cada `for` deste arquivo passaria
+// a iterar sobre nada e a suíte inteira ficaria verde sem medir coisa
+// alguma.
 func composerUseCases() []composerUC {
 	return []composerUC{
-		{
-			name:    "SendButtons",
-			infoMsg: "buttons validated",
-			run: func(mc port.MessageComposer, l port.Logger, id string) (string, string, error) {
-				r, err := message.NewSendButtonsUseCase(mc, l).Execute(context.Background(), txtID,
-					domain.SendButtonsRequest{Phone: "5511987654321", Body: "Escolha", ID: id})
-				return resultOf(err, func() (string, string) { return r.MessageID, r.Status })
-			},
-			missing: []missingField{
-				{"Phone", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendButtonsUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendButtonsRequest{Body: "Escolha"})
-					return err
-				}},
-				{"Body", func(mc port.MessageComposer, l port.Logger) error {
-					_, err := message.NewSendButtonsUseCase(mc, l).Execute(context.Background(), txtID,
-						domain.SendButtonsRequest{Phone: "5511987654321"})
-					return err
-				}},
-			},
-		},
 		{
 			name:    "SendList",
 			infoMsg: "list validated",

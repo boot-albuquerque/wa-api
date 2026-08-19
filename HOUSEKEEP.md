@@ -8275,3 +8275,351 @@ EXIT:1
 wiring, fora do escopo do CAP-20. O gate torna a divergência impossível de
 passar despercebida, que era o ponto; a deduplicação do literal continua
 pendente como dívida de ADR-0004.
+
+## F147
+
+**Data**: 2026-08-19. **Contexto**: CURRENT_STATE do `send_buttons`, antes de
+escrever packet. Levantamento do contrato histórico, com dois pontos que
+precisam de decisão consciente e não de escolha por omissão.
+
+**Onde**: `git show 41bc8e2^:handlers.go`, função `SendButtons` (250 linhas).
+
+**O contrato, enumerado**:
+
+Tipos de botão, e o mapa tipo→`Name` do protobuf **não é identidade**:
+
+| `Type` do payload | `Name` no NativeFlowButton | params (JSON) |
+|---|---|---|
+| `reply` (e vazio) | `quick_reply` | `display_text`, `id` |
+| `cta_url` | `cta_url` | `display_text`, `url`, `merchant_url` |
+| `cta_call` | `cta_call` | `display_text`, `phone_number` |
+| `copy` | **`cta_copy`** | `display_text`, `copy_code` |
+
+Repare em duas coisas fáceis de errar: `copy` vira `cta_copy`, e no `cta_url`
+a mesma URL é escrita em DOIS campos (`url` e `merchant_url`).
+
+Os parâmetros vão como **string JSON** dentro de `ButtonParamsJSON`, não como
+campos de protobuf. Teste que só verifique presença do botão não mede nada —
+tem de asseverar o CONTEÚDO do JSON.
+
+`Type` é normalizado com `strings.ToLower(strings.TrimSpace(...))`, e vazio
+vira `reply`.
+
+**PONTO 1 — tipo desconhecido é DESCARTADO EM SILÊNCIO**:
+
+```go
+default:
+    continue // Tipo desconhecido, ignora o botão
+```
+
+Diferente do `send_template`, onde o `default` cai em quickreply. Aqui, um
+erro de digitação em `Type` faz o botão **sumir**: o cliente manda três
+botões, recebe 200, e a mensagem sai com dois. Nada avisa.
+
+Há uma rede parcial: se TODOS forem descartados, responde 400 "no valid
+buttons parsed". Mas o descarte parcial é silencioso.
+
+**PONTO 2 — `ContextInfo` e `QuotedMessage`**: o payload histórico tem os
+dois, e eles são reply-to. NENHUMA das dez capabilities entregues suporta
+isso hoje, e a F134 já registra que o `ContextInfo` do edit sumiu do DTO.
+O histórico ainda usa `t.ContextInfo.StanzaID` e `.Participant` dentro de
+`validateMessageFields`, ou seja, o ContextInfo participa da VALIDAÇÃO do
+destinatário, não é só decoração.
+
+**Por que registro antes de implementar**: os dois pontos são decisão de
+contrato. Preservar o descarte silencioso é defensável (fidelidade), corrigi-lo
+é defensável (o cliente merece saber), mas escolher **por omissão** não é — e
+foi assim que a F121 (lat/lon zero) e a F135 (Id inexistente) viraram
+comportamento preservado por decisão explícita, não por acidente.
+
+**Status**: não corrigido, nada implementado. Levado ao canal de decisão junto
+com o dimensionamento do bloco (SendButtons 250 linhas, SendList 290, contra
+161 do SendTemplate já entregue).
+
+## F148
+
+**Data**: 2026-08-19. **Contexto**: CAP-21, `POST /chat/send/buttons`. É o
+bloco que decide os DOIS pontos que a F147 levantou e não resolveu, e que
+introduz no repo a família `waE2E.InteractiveMessage`/`NativeFlowMessage` —
+`grep` dava zero ocorrências antes desta sessão.
+
+**Onde**: `pkg/domain/message.go` (DTOs), `pkg/application/contracts/interactive_messenger.go`
+(porta nova), `pkg/application/usecase/message/send_buttons.go`,
+`pkg/infra/wa-noise/adapters/chat/messenger_buttons.go`,
+`pkg/presentation/http/handlers/handler_message_buttons.go`.
+
+**O defeito corrigido**: a rota validava `Phone` e `Body`, chamava
+`EnsureSession`, gerava um ID e devolvia 200 sem enviar nada. O DTO era
+`{Phone, Body, Id}` — sem `Buttons`, sem `Title`, sem `Footer`, sem `Image`,
+sem o fallback `text`.
+
+### Ponto 1 da F147 — tipo desconhecido: DESCARTE SILENCIOSO PRESERVADO
+
+Decisão: **preservar** o `default: continue` histórico. Um `type` com erro de
+digitação faz o botão SUMIR; o cliente manda três, recebe 200, e saem dois.
+Nada avisa. A rede é parcial e também é histórica: se TODOS forem descartados,
+a resposta é 400 "no valid buttons parsed".
+
+Mesma disciplina da F121 (lat/lon zero) e da F135 (Id inexistente):
+comportamento preservado por decisão EXPLÍCITA, com teste que impede alguém de
+"consertar" sem decidir. Muda contrato público quem recusar o payload E quem
+tratar o desconhecido como `reply` — as duas mutações falham.
+
+Travado em DOIS níveis, porque são duas coisas diferentes: no use case, que os
+botões descartados não chegam à porta; na fronteira HTTP, que o cliente recebe
+**200 com menos botões do que mandou**, que é o que ele observa.
+
+- `TestSendButtons_UnknownTypeIsSilentlyDiscarded` (use case)
+- `TestSendButtons_UnknownTypeIsSilentlyDiscarded_ViaRegisteredRoute` (HTTP)
+- `TestSendButtons_AllButtonsDiscardedIsRejected` (a rede parcial)
+
+Divergência consciente e registrada com o `send_template`: lá o `default` cai
+em `quickreply` (F140). São rotas diferentes com contratos diferentes, e
+uniformizá-las seria mudança de contrato nas duas pontas.
+
+### Ponto 2 da F147 — `ContextInfo`/`QuotedMessage` fora de escopo, E a
+### validação que dependia deles
+
+Reply-to fica FORA (decisão do Orchestrator; a F134 já registra a dívida
+equivalente no edit). O ponto difícil era o outro: o histórico chamava
+
+```go
+recipient, err := validateMessageFields(t.Phone, t.ContextInfo.StanzaID, t.ContextInfo.Participant)
+```
+
+ou seja, o `ContextInfo` participava da validação do DESTINATÁRIO.
+
+**Foi possível separar, e a separação não é arbitrária.** Lendo
+`41bc8e2^:helpers.go`, `validateMessageFields` só usa os dois ponteiros para
+EXIGIR `Participant` quando `StanzaID` é não-nil; com os dois nil — que é o
+caso sempre que o cliente não pede citação — ela se reduz a `parseJID(Phone)`.
+Como o DTO desta versão não tem os campos, eles são estruturalmente sempre
+nil, e o ramo de citação é inalcançável. O equivalente exato do que sobra é
+`JIDResolver.ResolveJID` (a mesma `parseJID`, com servidor padrão), e é ele
+que o use case chama — não `ResolveQualifiedJID`, que é mais estrito e
+recusaria entradas que a rota sempre aceitou.
+
+Dito de outro modo: a citação é parâmetro da MENSAGEM, não do DESTINATÁRIO; o
+histórico só os tinha misturado numa função. Nada de reply-to foi implementado
+por tabela. Travado por `TestSendButtons_PhoneResolvedWithDefaultServerRule`,
+que também exige que `ResolveQualifiedJID` NÃO seja chamado.
+
+### Terceiro descarte silencioso, encontrado durante a implementação
+
+Não estava na F147: o header de imagem. Qualquer falha em obtê-lo (data URI
+que não decodifica, fetch que falha, string que não é nem data URI nem URL)
+era ignorada e a mensagem saía SEM header (`41bc8e2^:handlers.go`, linhas
+2136-2148 — os erros caem em `if ... == nil` e `imgMsg` fica nil).
+
+Decisão: **preservar o contrato HTTP** (nenhuma dessas falhas vira erro para o
+cliente — 400 aqui rejeitaria requisições que a rota sempre aceitou), com UMA
+divergência de OBSERVABILIDADE: cada descarte emite um `Warn` do use case.
+Silêncio total tornava o defeito impossível de diagnosticar em produção.
+Travado por `TestSendButtons_HeaderImageFailureIsSilentlyDropped` (quatro
+formas de falha).
+
+Segunda divergência, mesma da D1 do CAP-03: o teto de 10MB
+(`openGraphImageMaxBytes`, `41bc8e2^:helpers.go:52`) passa a valer TAMBÉM para
+o ramo data URI. Sem isso o limite do ramo URL é um bypass trivial.
+
+### A porta: `InteractiveMessenger`, nova
+
+`SimpleMessenger` define-se por "sem upload, sem fetch, sem conversão", e as
+quatro capacidades que já vivem nela (Location, Contact, Poll, Template) nunca
+sobem nada: `SendButtons` com header de imagem tornaria esse contrato FALSO
+para todas. `MediaMessenger` define-se por "mensagem de MÍDIA, cobrindo o
+upload do anexo" — lá o anexo É a mensagem, o upload é obrigatório e o payload
+é `MediaPayload`; aqui o anexo é decoração de header e na maioria das chamadas
+não existe, e `SendButtons` seria o único método da porta que pode não subir
+nada.
+
+A fronteira, então, é o **upload CONDICIONAL** — uma forma que nenhuma das
+duas tem. Não é porta especulativa: é o primeiro caso REAL dela, mesma
+disciplina com que `MediaMessenger` nasceu com um método só (CAP-02). E não
+recolhe o vizinho por antecipação: `send/list` monta `waE2E.ListMessage` sem
+upload nenhum (`41bc8e2^:handlers.go`, `SendList`) e portanto cabe em
+`SimpleMessenger`.
+
+### Onde cada regra vive, e por quê
+
+A normalização dos botões (fallbacks, truncamento, descarte) fica no USE CASE;
+a tradução para o wire (`Name`, parâmetros, JSON) fica no ADAPTER.
+
+O ponto não óbvio é o truncamento: ele é limite de WIRE (20 caracteres) e mesmo
+assim vive no use case, porque a cadeia do identificador usa o título JÁ
+TRUNCADO (`id = title` acontece DEPOIS do corte, na mesma função histórica).
+Truncar no adapter mudaria o `id` que volta no clique de quem já tem a mensagem
+no aparelho. Travado por `TestSendButtons_IDFallbackChain`, caso
+"titulo TRUNCADO quando os dois vazios", e por
+`TestSendButtons_TitleTruncatesByRuneNotByte` (o corte é por RUNA: com bytes,
+20 acentos sairiam partidos, e um teste só com ASCII passaria).
+
+O mapa tipo→`Name` NÃO é identidade, e por isso os dois conjuntos de constantes
+são SEPARADOS (`domain.ButtonType*` público, `nativeFlowName*` no adapter):
+`copy` vira `cta_copy`. Colapsá-los faria a rota passar a aceitar `cta_copy`
+como tipo de ENTRADA, que nunca foi contrato. Em `cta_url` a MESMA url vai em
+`url` E `merchant_url`.
+
+Os parâmetros viajam como STRING JSON em `ButtonParamsJSON` — nenhum
+compilador protege as chaves. Por isso as asserções do adapter decodificam o
+JSON e conferem chave por chave, incluindo a CONTAGEM de parâmetros de cada
+tipo; um teste que só contasse botões passaria com `display_text` grafado
+errado, e o aparelho de quem recebe é que descobriria.
+
+O nó BIZ (`biz`/`interactive`/`native_flow`) vai em `AdditionalNodes` e é o que
+faz o aparelho DESENHAR os botões. Travado por
+`TestChatMessengerAdapter_SendButtons_BizNodeIsAlwaysSent`, e a presença dele
+com e sem `Id` do cliente por `..._CallerIDIsForwarded` — `SendRequestExtra` é
+UM struct, e montar dois extras separados (um para o ID, outro para os nós)
+derrubaria silenciosamente um dos dois.
+
+### Forma da resposta
+
+`SendButtonsResult` ganhou `Timestamp`, mapeado do envio real, e
+`/chat/send/buttons` entrou como **DÉCIMA PRIMEIRA** entrada de
+`send_wire_contract_test.go` (a trava exige `len(casos) == 11`). Decisão F131
+(manter `{message_id, timestamp, status}`, e não a forma histórica
+`{Details, Timestamp, Id}`) não foi reaberta.
+
+### Eixos que saíram de tabelas, e onde vivem agora
+
+De `handler_message_test.go` (tabela sobre `MessageComposer`) e de
+`handler_interactive_test.go`, tudo para `handler_send_buttons_test.go`:
+
+| eixo | destino |
+|---|---|
+| sucesso | `TestSendButtons_Success_ViaRegisteredRoute` |
+| não autenticado | `TestSendButtons_RejectUnauthenticated` |
+| tipo errado no contexto | `TestSendButtons_WrongTypeInContext_ViaRegisteredRoute` |
+| session id vazio | `TestSendButtons_MissingSessionID_ViaRegisteredRoute` |
+| corpo malformado | `TestSendButtons_MalformedBody_ViaRegisteredRoute` |
+| campo obrigatório ausente | `TestSendButtons_RejectMissingRequiredField` |
+| falha de sessão | `TestSendButtons_SessionFailure` |
+| sucesso não loga (por NÍVEL) | `TestSendButtons_SuccessEmitsNoOutcomeLog` |
+| sem vazamento de segredo | `TestSendButtons_NoSecretLeak` |
+| Id do cliente | `TestSendButtons_ClientSuppliedIDIsForwardedButServerIDWins` |
+| txtID que chega à porta | `TestSendButtons_AuthenticatedSessionReachesPort` |
+| falha do envio não vira 200 | `TestSendButtons_DownstreamFailureNeverReturns200` |
+
+De `send_message_test.go` (use case), para `send_buttons_test.go`:
+`TestSendButtons_MissingRequiredField`,
+`TestSendButtons_SessionFailurePropagates`,
+`TestSendButtons_MessageIDIsTheOneActuallySent`,
+`TestSendButtons_CausalSuccess`.
+
+**Os eixos que NÃO têm destino, e por quê**: os de geração de message ID
+(`TestComposerUseCases_SuccessGeneratesID`,
+`TestComposerUseCases_MessageIDFailurePropagates`,
+`TestMessageHandlers_MessageIDFailure`,
+`TestInteractiveHandlers_MessageIDFailure`) deixaram de existir para esta
+rota — o use case não chama mais `NewMessageID`, e o `message_id` publicado é
+o que a porta devolveu. Mesmo desfecho do CAP-15.
+
+As duas tabelas PERMANECEM, agora com `send/list` como único caso: esvaziá-las
+faria cada `for` iterar sobre zero casos e a suíte ficaria verde sem medir
+nada. O comentário de cada uma lista os destinos nome por nome — foi a
+afirmação em bloco que reprovou a EVAL-08 (F122).
+
+O `handler_send_session_axis_test.go` teve o comentário corrigido: ele
+afirmava que `send/buttons` tinha o eixo do txtID "pela tabela de
+handler_message_test.go:179", o que deixou de ser verdade nesta sessão.
+
+### Controles negativos EXECUTADOS (cinco), com saída colada
+
+**CN-1 — sucesso ANTES de o envio retornar** (resultado montado antes de
+`SendButtons`, erro ignorado):
+
+```
+--- FAIL: TestSendButtons_SendFailureNeverReportsSent (0.00s)
+    send_buttons_test.go:511: erro do envio nao chegou ao chamador: got <nil>
+--- FAIL: TestSendButtons_DownstreamFailureNeverReturns200 (0.00s)
+    handler_send_buttons_test.go:295: falha no envio produziu 200: {"code":200,"data":{"message_id":"","status":"sent"},"success":true}
+--- FAIL: TestSendButtons_CausalSuccess (0.00s)
+    send_buttons_test.go:487: MessageID: got "", want o ID devolvido pela porta
+--- FAIL: TestSendButtons_MessageIDIsTheOneActuallySent
+--- FAIL: TestSendButtons_Success_ViaRegisteredRoute
+--- FAIL: TestSendButtons_ClientSuppliedIDIsForwardedButServerIDWins
+```
+
+**CN-2 — `copy` mapeado para `Name` "copy" em vez de "cta_copy"**:
+
+```
+--- FAIL: TestChatMessengerAdapter_SendButtons_CopyBecomesCTACopy (0.00s)
+    messenger_buttons_test.go:199: Name = "copy", quero "cta_copy" — o tipo publico e' "copy", o do wire NAO e' igual
+--- FAIL: TestChatMessengerAdapter_SendButtons_OrderIsPreserved (0.00s)
+    messenger_buttons_test.go:232: Buttons[3].Name = "copy", quero "cta_copy" (a ORDEM importa)
+```
+
+**CN-3 — `cta_url` escrevendo a url em só um dos dois campos**:
+
+```
+--- FAIL: TestChatMessengerAdapter_SendButtons_CTAURLWritesURLTwice (0.00s)
+    messenger_buttons_test.go:152: merchant_url = "", quero "https://example.invalid/promo" (a MESMA url dos dois lados)
+    messenger_buttons_test.go:158: cta_url tem 2 parametro(s) (map[display_text:Site url:https://example.invalid/promo]), quero display_text, url e merchant_url
+```
+
+**CN-4 — fallback quebrado: `Title` vazio deixando de cair em `Text`**:
+
+```
+--- FAIL: TestSendButtons_TitleFallbackChain/Text_quando_Title_vazio (0.00s)
+    send_buttons_test.go:260: Title: got "C", want "B"
+    send_buttons_test.go:263: ID: got "C", want "B" (o identificador cai no titulo resolvido)
+--- FAIL: TestSendButtons_TitleFallbackChain/espaco_em_branco_nao_conta_como_preenchido (0.00s)
+    send_buttons_test.go:256: caminho feliz falhou: no valid buttons parsed
+--- FAIL: TestSendButtons_Success_ViaRegisteredRoute (0.00s)
+    handler_send_buttons_test.go:122: Buttons: got 3, want 4
+```
+
+**CN-5 — tipo desconhecido deixando de ser descartado (passando a virar
+`reply`)**:
+
+```
+--- FAIL: TestSendButtons_AllButtonsDiscardedIsRejected/tipo_desconhecido (0.00s)
+    send_buttons_test.go:162: todos os botoes descartados, mas o request foi aceito
+--- FAIL: TestSendButtons_UnknownTypeIsSilentlyDiscarded (0.00s)
+    send_buttons_test.go:213: chegaram 3 botao(oes) a porta, quero 2: o de tipo desconhecido SOME
+--- FAIL: TestSendButtons_UnknownTypeIsSilentlyDiscarded_ViaRegisteredRoute (0.00s)
+    handler_send_buttons_test.go:189: chegaram 3 botao(oes) a porta, quero 2 — o de tipo desconhecido SOME
+--- FAIL: TestSendButtons_RejectMissingRequiredField/Buttons_todos_descartados (0.00s)
+    handler_send_buttons_test.go:237: payload invalido (Buttons_todos_descartados) produziu status de sucesso 200
+```
+
+Cada mutação foi revertida por edição localizada e a restauração conferida por
+`shasum -c` dos dois arquivos mutados (`send_buttons.go`,
+`messenger_buttons.go`), com `OK` nas duas linhas depois de cada controle.
+
+**Status**: corrigido nesta sessão. REAL WHATSAPP EVIDENCE: NOT EXECUTED — a
+verificação contra o servidor do WhatsApp não foi feita, e por isso o mapa
+tipo→`Name` e o nó BIZ estão travados contra o HISTÓRICO (que funcionava em
+produção), não contra medição de campo.
+
+### Baselines: um alterado, um deliberadamente NÃO alterado
+
+**`.log-coverage-baseline` — ALTERADO**, com a enumeração exigida escrita no
+próprio arquivo (junto de `min_func_coverage` e de `min_eligible`):
+
+- `min_eligible` 637 -> **641**. Entram QUATRO funções:
+  `SendButtonsUseCase.headerImageBytes` (COBERTA),
+  `normalizeInteractiveButtons`, `ChatMessengerAdapter.SendButtons` e
+  `nativeFlowButtons` (as três `uncovered:L1`). Saem ZERO.
+- `min_func_coverage` 667 -> **665**: 425/637 = 66,70% vira 426/641 = 66,46%.
+  O numerador SOBE 1 (a única entrada coberta); a queda é inteiramente de
+  DENOMINADOR, mesmo mecanismo do CAP-10, CAP-14 e CAP-15.
+- `min_errpath_coverage` INALTERADO em 860 (86,0%, 1178/1369).
+- Fora do denominador, registrado para não ser reperguntado:
+  `contractsfake.InteractiveMessenger.SendButtons` (EXCLUDED X5, dublê) e
+  `bizNativeFlowNodes` (EXCLUDED X1, trivial). Golden 2980 -> 2986 linhas: as
+  4 elegíveis + as 2 EXCLUDED.
+- Nenhum log foi plantado para inflar a métrica (violação COV-4, já
+  REQUIRED_FIX na F119). As três `uncovered` são o padrão "adapter delegante
+  não loga" (duas delas) e uma função PURA de pacote, sem receptor e sem
+  logger em escopo (`normalizeInteractiveButtons`).
+
+**`.coverage-baseline` — NÃO alterado**, e isto é decisão, não esquecimento.
+O gate PASSA (`coverage: 855 decimos de % (piso declarado 840)`) e imprime o
+aviso "a cobertura subiu; suba min_coverage para 855 neste mesmo PR". Não
+subi porque não meço quanto dos 1,5 pontos é desta sessão e quanto é drift
+anterior: o piso já estava desatualizado em relação ao HEAD, e escrever 855
+sem ter medido o ANTES seria exatamente o número sem lastro que a regra de
+medição deste projeto proíbe. Fica como dívida explícita, com o valor medido
+registrado aqui.

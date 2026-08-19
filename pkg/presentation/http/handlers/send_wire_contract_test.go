@@ -15,8 +15,9 @@ import (
 )
 
 // CAP-13 — TRAVA DOS NOMES DO WIRE das capabilities de envio. Nasceu com
-// OITO; o CAP-14 acrescentou a nona (/chat/send/poll) e o CAP-15 a decima
-// (/chat/send/template), cada uma no mesmo movimento em que passou a enviar
+// OITO; o CAP-14 acrescentou a nona (/chat/send/poll), o CAP-15 a decima
+// (/chat/send/template) e o CAP-21 a DECIMA PRIMEIRA
+// (/chat/send/buttons), cada uma no mesmo movimento em que passou a enviar
 // de verdade. Capability nova que fica de fora desta trava e' a proxima
 // F137.
 //
@@ -131,13 +132,13 @@ type sendWireCase struct {
 	// nome e' o rotulo do subteste. Sem barra de proposito: `/` separa
 	// niveis em `go test -run`, e um nome como "POST /chat/send/text"
 	// tornaria impossivel rodar UMA capability isolada — que e' exatamente
-	// o que o controle negativo precisa fazer, oito vezes.
+	// o que o controle negativo precisa fazer, onze vezes.
 	nome  string
 	rota  string
 	serve func(t *testing.T) *httptest.ResponseRecorder
 }
 
-// sendWireCases enumera as DEZ capabilities de envio, uma por entrada. Cada
+// sendWireCases enumera as ONZE capabilities de envio, uma por entrada. Cada
 // serve monta o roteador gorilla/mux da propria capability (os helpers
 // sendXRouter de cada arquivo de teste) e faz um POST autenticado.
 func sendWireCases() []sendWireCase {
@@ -279,6 +280,21 @@ func sendWireCases() []sendWireCase {
 						`"Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`)
 			},
 		},
+		{
+			nome: "buttons",
+			rota: "POST /chat/send/buttons",
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				im := &contractsfake.InteractiveMessenger{
+					SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, string) (domain.MessageSendResult, error) {
+						return sendWireResult("wire-buttons-1"), nil
+					},
+				}
+				return sendWirePost(t, sendButtonsRouter(im, &contractsfake.JIDResolver{}, &contractsfake.MediaFetcher{}),
+					"/chat/send/buttons",
+					`{"Phone":"5511999999999","Body":"Escolha",`+
+						`"Buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`)
+			},
+		},
 	}
 }
 
@@ -290,12 +306,12 @@ func sendWirePost(t *testing.T, h http.Handler, target, body string) *httptest.R
 	return rec
 }
 
-// TestSendWireContract_FieldNames trava os nomes do wire das DEZ
+// TestSendWireContract_FieldNames trava os nomes do wire das ONZE
 // capabilities de envio, cada uma pela sua rota registrada.
 func TestSendWireContract_FieldNames(t *testing.T) {
 	casos := sendWireCases()
-	if len(casos) != 10 {
-		t.Fatalf("a suite cobre %d capabilities de envio, quero as 10 enumeradas no CAP-13 + CAP-14 + CAP-15", len(casos))
+	if len(casos) != 11 {
+		t.Fatalf("a suite cobre %d capabilities de envio, quero as 11 enumeradas no CAP-13 + CAP-14 + CAP-15 + CAP-21", len(casos))
 	}
 
 	for _, caso := range casos {
