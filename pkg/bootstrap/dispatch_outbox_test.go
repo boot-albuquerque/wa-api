@@ -72,12 +72,22 @@ func TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria(t *testing.T) {
 		t.Fatalf("Enqueue: %v", err)
 	}
 
+	antes, _ := MetricasRetry()
 	if !reagendar("https://example.invalid/hook", payloadDeTeste(128), "u1", nil, 1, "e1") {
 		t.Fatal("reagendar devolveu false com outbox disponivel e orcamento restante")
 	}
 
-	if pendentes, _ := MetricasRetry(); pendentes != 0 {
-		t.Errorf("o timer em memoria tambem foi armado (%d bytes pendentes); a entrega sairia em duplicata", pendentes)
+	depois, _ := MetricasRetry()
+	if delta := depois - antes; delta != 0 {
+		// A pergunta é "houve reserva NOVA?", e a resposta é o DELTA — não o
+		// valor absoluto. `retryBytesPendentes` é global: comparar com zero fazia
+		// o teste acusar "timer armado" para um delta NEGATIVO, que é o oposto
+		// (alguém subtraiu sem ter somado nesta janela). Foi a F136.
+		if delta > 0 {
+			t.Errorf("o timer em memoria tambem foi armado (reserva nova de %d bytes); a entrega sairia em duplicata", delta)
+		} else {
+			t.Errorf("retryBytesPendentes caiu %d bytes durante este teste: algum teste anterior deixou timer de retry em voo (ver retryBaseQueNaoDisparaSegundos)", -delta)
+		}
 	}
 
 	// E a linha continua lá, adiada — se o processo cair agora, a varredura a
@@ -96,7 +106,10 @@ func TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria(t *testing.T) {
 // que garante a promessa do D7: sem outbox a entrega NÃO para, degrada.
 // Comportamento idêntico ao de hoje.
 func TestOutboxWiring_SemOutboxCaiParaAMemoria(t *testing.T) {
-	prepararRetry(t, true, 5, 30)
+	// Base que não dispara: este teste ARMA um timer em memória e não o espera.
+	// Com base curta ele disparava no meio de um teste seguinte e subtraía 128 de
+	// um `retryBytesPendentes` já zerado (F136).
+	prepararRetry(t, true, 5, retryBaseQueNaoDisparaSegundos)
 	semOutbox(t)
 
 	if !reagendar("https://example.invalid/hook", payloadDeTeste(128), "u1", nil, 1, "") {
@@ -427,7 +440,8 @@ func TestOutboxWiring_SweeperNaoSobeSemOutbox(t *testing.T) {
 // temporária de banco, que é justamente o cenário em que ele precisa continuar
 // entregando.
 func TestOutboxWiring_BancoFechadoDegradaSemDerrubar(t *testing.T) {
-	prepararRetry(t, true, 5, 30)
+	// Idem: o `reagendar` do fim arma um timer de 16 bytes que ninguém espera.
+	prepararRetry(t, true, 5, retryBaseQueNaoDisparaSegundos)
 
 	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "fechado.db"))
 	if err != nil {

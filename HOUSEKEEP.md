@@ -6682,6 +6682,321 @@ nao e' seu enquanto houver timer alheio em voo. Duas saidas:
 Qualquer que seja a escolha, ela precisa de controle negativo proprio: um teste
 que so' silencie a assercao passaria com o vazamento no lugar.
 
-**Status**: nao corrigido. Pre-existente e fora do escopo do CAP-11; pela
-politica do `CLAUDE.md`, nao corrijo de graca sem perguntar. Levado ao
-coordenador junto com o relatorio do CAP-11.
+---
+
+### Diagnostico MEDIDO (CAP-12) — a entrada original acertou a mecanica e errou o elenco
+
+**Linha de base**, `go test ./pkg/bootstrap/ -race -count=20`, tres rodadas, em
+HEAD `2d4c20b` sem modificacao:
+
+| rodada | falhas de TestOutboxWiring | blocos DATA RACE | saida |
+|---|---|---|---|
+| 1 | 1 (`-1024 bytes`) | 0 | EXIT:1 |
+| 2 | 1 (`-1024 bytes`) | 0 | EXIT:1 |
+| 3 | 1 (`-1024 bytes`) | 0 | EXIT:1 |
+
+**Producao confirmada segura**, e nao por leitura solta: instrumentei
+`agendarProximaTentativa` com uma sonda ARM/FIRE e rodei o pacote inteiro sob
+`-race -count=20`. **100 de 100** armacoes foram atribuidas a corpos de teste
+diretos; **zero** vieram do caminho re-entrante
+(`timer -> dispatchGo -> tentarWebhook -> reagendar -> agendarProximaTentativa`),
+que nesta suite morre antes, em `clientManager.GetHTTPClient("u") == nil`
+(`dispatch_callhook.go:111`). Dentro de um processo todo `Add(-t)` tem `Add(+t)`
+par; o contador so' fica negativo porque o TESTE faz `Store(0)` com timer alheio
+em voo.
+
+**Quem arma o timer contaminante** — medido, nao deduzido. Como os dois
+candidatos de 1024 bytes eram indistinguiveis pelo valor, troquei
+temporariamente o payload de `TestRetry_OrcamentoDePendentesLimita` para 1000
+bytes e rodei tres vezes. Os deltas observados foram `-1000`, `-16` e, no
+controle negativo posterior, `-128`. **Nao ha' um culpado unico**: os quatro
+pontos que armam timer sem espera-lo contaminam, e a diferenca entre eles e' so'
+exposicao.
+
+| teste que arma | bytes | base | armacoes por iteracao |
+|---|---|---|---|
+| `TestRetry_OrcamentoDePendentesLimita` | 1024 | 60s | 4 |
+| `TestRetry_AgendarNaoBloqueiaOChamador` | 1024 | 60s | 1 |
+| `TestOutboxWiring_SemOutboxCaiParaAMemoria` | 128 | 30s | 1 |
+| `TestOutboxWiring_BancoFechadoDegradaSemDerrubar` | 16 | 30s | 1 |
+
+**Quanto tempo depois o timer dispara** (item (c), medido pela sonda, 58 pares
+ARM/FIRE de 1024 bytes): **53,9s no minimo, 66,4s no maximo, 60,6s de media** —
+consistente com `base 60s +- 25%` de jitter. O teste que armou termina em
+milissegundos, entao o timer sobrevive a ele por ~um minuto inteiro. O pacote
+leva ~143s sob `-race -count=20`: cada timer cai em cheio no meio de outro
+teste. Dos 100 armados, 58 dispararam durante a corrida e **42 morreram com o
+processo**.
+
+### Enumeracao dos globais de `prepararRetry` (um por um)
+
+- **`retryBytesPendentes`** — **VULNERAVEL, e contaminado na medicao**. E' o
+  unico dos tres que o trabalho em voo mexe: a closure do `time.AfterFunc`
+  (`dispatch_retry.go:155`) o decrementa incondicionalmente ao vencer. Deltas
+  negativos observados: `-1024`, `-1000`, `-128`, `-16`.
+- **`retryDescartados`** — **NAO contaminado**. So' e' escrito em
+  `dispatch_retry.go:135`, sincronamente dentro de `agendarProximaTentativa`. O
+  unico jeito de trabalho em voo alcanca-lo e' o caminho re-entrante acima, que
+  a sonda mediu em **0 de 100 armacoes**. Latente, nao ativo: se algum dia um
+  teste registrar cliente HTTP para o usuario do retry, ele passa a ser
+  alcancavel. Nenhuma assercao da suite quebraria com um incremento velho —
+  `TestRetry_OrcamentoDePendentesLimita` exige `desc != 0`, e lixo so' ajudaria
+  a passar, o que e' pior que falhar mas nao e' a F136.
+- **`retryAvisouTeto`** — **NAO contaminado**. Mesma alcancabilidade (e mesma
+  medicao de zero) do `retryDescartados`, e ainda mais inofensivo: e' monotonico
+  `false -> true` e **nenhum teste do pacote o le**. Verificado por
+  `grep -rn retryAvisouTeto pkg/bootstrap/`: as unicas referencias sao as duas
+  escritas de `prepararRetry` e a producao.
+
+**Outros globais do pacote com o mesmo padrao** (reset em teste + trabalho
+assincrono), procurados por `grep -rn '\.Store(0)\|\.Store(false)\|\.Store(nil)' *_test.go`:
+
+- **`outboxAtual`** (`dispatch_outbox.go:67`) — **nao sofre do mesmo problema**.
+  Os testes fazem save/restore (`anterior := outboxAtual.Load()` +
+  `t.Cleanup`), nao reset cego, e o unico alcance assincrono e'
+  `outboxSettle`/`outboxDefer`, ambos com guarda `id == ""` logo na entrada
+  (`dispatch_outbox.go:127` e `:148`) — o caminho em memoria passa `outboxID`
+  vazio por definicao.
+- **`currentCapabilities`** (`capabilities.go:87`) — **nao sofre**. O unico
+  escritor de producao e' `publishCapabilities`, chamado de um so' lugar
+  (`main.go:354`), sincronamente no bootstrap. Nenhum worker assincrono escreve.
+
+### Remedio escolhido: (D) — matar a causa — junto de (A)
+
+> **Corrigido pela medicao da EVAL-12 — leia esta secao junto com "Correcao do
+> proprio remedio (FIX-12)", mais abaixo.** A ordem de importancia aqui esta'
+> invertida: quem carrega o peso e' **(A)**, a assercao por delta; **(D)**, a
+> base de 24h, e' defesa em profundidade, e ate' o FIX-12 a sua remocao nao era
+> detectada por teste nenhum (0/0/0 no controle negativo da EVAL-12).
+
+A entrada original dizia que a saida (2) "exige a producao guardar o handle do
+`time.AfterFunc`". **A medicao refuta isso.** O timer nao precisa ser
+cancelado; basta que ele **nunca vença**. Com uma base de 24h o disparo fica
+muito alem da vida do processo de teste (o `go test` estoura em 10min por
+padrao), e nenhum timer em voo pode tocar o contador. E' correcao test-only,
+como (A), mas remove a CAUSA em vez de tolerar o efeito.
+
+Aplicado, entao:
+
+1. **(D)** `retryBaseQueNaoDisparaSegundos = 24 * 60 * 60`
+   (`dispatch_retry_test.go:24`), usada pelos quatro testes que armam sem
+   esperar. `TestRetry_LiberaOrcamentoAoDisparar` fica com base 0 porque ele
+   **espera** o proprio timer drenar — nao deixa nada em voo.
+2. **(A)** a assercao de `TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria`
+   vira DELTA contra uma leitura tirada imediatamente antes do `reagendar`, e a
+   MENSAGEM deixa de mentir: delta positivo diz "timer tambem foi armado",
+   delta negativo diz "alguem deixou timer em voo" — que e' o que um valor
+   negativo realmente significa.
+
+`TestRetry_AgendarNaoBloqueiaOChamador` precisou de um ajuste por causa de (D):
+o seu diagnostico dependia da base curta ("se a implementacao esperar, o teste
+leva um minuto"). Com base de 24h, uma regressao bloqueante travaria ate' o
+timeout do pacote. A chamada passou a rodar em goroutine com `select` de 100ms,
+entao a regressao agora falha em **100ms qualquer que seja a base** — melhor que
+o diagnostico anterior, nao pior.
+
+**Descartados, com o numero que os descartou:**
+
+- **(A) sozinho** — insuficiente por principio, e a medicao mostra por que ele
+  ENGANA: com as bases curtas de volta e so' a assercao por delta, tres rodadas
+  de `-race -count=20` passaram (EXIT:0, 0, 0). A janela vulneravel encolheu de
+  ~50ms (todo o corpo do teste) para a duracao do `reagendar` (~1ms, uma escrita
+  SQLite), 10-50x menor — mas **nao fechada**. Passar tres rodadas nao e'
+  correcao, e' amostra pequena.
+- **(B) isolar o contador por teste (seam/injecao)** — resolve, e custa uma
+  costura de producao para um problema que nao existe em producao.
+- **(C) o cleanup esperar os timers em voo** — exigiria a producao guardar o
+  `*Timer` que hoje descarta. Mesmo raciocinio do CAP-11 ao NAO acrescentar
+  shutdown ao pool: mudanca de producao por beneficio que producao nao tem. A
+  base de 24h entrega o mesmo resultado por zero linhas de producao.
+
+### Controles negativos, EXECUTADOS
+
+**1. Com a correcao, a falha some** — `go test ./pkg/bootstrap/ -race -count=20`,
+tres rodadas:
+
+```
+RUN1 EXIT:0  outbox-failures=0  DATARACE=0
+ok  	wa-api/pkg/bootstrap	142.066s
+RUN2 EXIT:0  outbox-failures=0  DATARACE=0
+ok  	wa-api/pkg/bootstrap	142.665s
+RUN3 EXIT:0  outbox-failures=0  DATARACE=0
+ok  	wa-api/pkg/bootstrap	142.846s
+```
+
+**2. Reintroduzida a condicao, a falha VOLTA.** Restaurei os dois arquivos de
+teste ao conteudo de HEAD (`git show HEAD:... > ...`, sem stash) e rodei tres
+vezes:
+
+```
+HEAD ROUND1 EXIT:0
+HEAD ROUND2 EXIT:1
+--- FAIL: TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria (0.05s)
+    dispatch_outbox_test.go:80: o timer em memoria tambem foi armado (-128 bytes pendentes); a entrega sairia em duplicata
+HEAD ROUND3 EXIT:1
+--- FAIL: TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria (0.05s)
+    dispatch_outbox_test.go:80: o timer em memoria tambem foi armado (-128 bytes pendentes); a entrega sairia em duplicata
+```
+
+Registre-se a honestidade do numero: o defeito e' **intermitente** (0 a 4 falhas
+por rodada de 20; a linha de base deu 1/1/1 e este controle deu 0/1/1). Por isso
+o remedio nao pode ser estatistico — (D) fecha a janela por construcao, e nao
+por probabilidade. Note tambem que este controle expos um QUARTO valor, `-128`
+(`TestOutboxWiring_SemOutboxCaiParaAMemoria`), confirmando que o elenco de
+culpados sao os quatro armadores e nao um.
+
+**3. A correcao NAO cega o teste.** Mutei a producao para armar os DOIS
+mecanismos — a duplicata que o teste existe para impedir — acrescentando em
+`reagendar`, no ramo duravel, `agendarProximaTentativa(...)` antes do
+`return true`. Compilou e MORDEU, com a mensagem do ramo positivo:
+
+```
+--- FAIL: TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria (0.07s)
+    dispatch_outbox_test.go:87: o timer em memoria tambem foi armado (reserva nova de 128 bytes); a entrega sairia em duplicata
+FAIL	wa-api/pkg/bootstrap	0.470s
+```
+
+Mutacao revertida por edicao localizada; `git diff --stat pkg/bootstrap/dispatch_retry.go` vazio.
+
+### Correcao do proprio remedio (FIX-12) — quem carrega o peso NAO e' a base
+
+A EVAL-12 mediu o remedio deste achado e derrubou parte do texto acima. **A
+secao "Remedio escolhido: (D) ... junto de (A)" descrevia (D) — a base de 24h —
+como a cura e (A) — a assercao por delta — como acompanhamento. A medicao diz o
+inverso.**
+
+Controle negativo da EVAL-12: reverter a base de 24h em UM sitio (`prepararRetry`
+de volta a 30s em `TestOutboxWiring_SemOutboxCaiParaAMemoria`) e rodar tres vezes
+`-race -count=20`. Resultado: **0 / 0 / 0 falhas** — nenhum teste acusou. Com a
+assercao ABSOLUTA de HEAD de volta no mesmo sitio, o mesmo controle morde
+**3 / 3** com a assinatura `-1024`.
+
+Leitura correta, entao:
+
+- **A assercao por delta e' o que carrega o peso.** Ela e' que impede o sintoma
+  (falha intermitente com diagnostico invertido) de voltar.
+- **A base de 24h e' defesa em profundidade**, e valiosa: ela fecha a janela por
+  construcao, enquanto o delta apenas a encolhe (de ~50ms para ~1ms — ver o
+  descarte de "(A) sozinho" acima, que continua valido). Mas ate' o FIX-12 a sua
+  remocao **nao era detectada por teste nenhum** — exatamente a lacuna que a
+  politica anti-regressao do `CLAUDE.md` proibe, e o mesmo padrao que ja' custou
+  a F129 (piso de cobertura desativado sem que nada acusasse).
+
+**Trava aplicada (FIX-12)**, `pkg/bootstrap/dispatch_retry_test.go`:
+
+1. `timerCanOutliveTest(outstandingBytes, baseSeconds)` — a invariante como
+   PREDICADO: *um teste so' pode terminar com reserva de retry pendente se a base
+   configurada puser o vencimento do timer alem da vida do binario de teste*.
+2. `requireNoRetryTimerCanFire(t, baseSegundos)`, chamado do `t.Cleanup` de
+   `prepararRetry` ANTES do `Store(0)` (depois dele a evidencia sumiria). Como
+   mora no helper compartilhado, cobre **os quatro sitios que armam hoje**
+   (`TestRetry_AgendarNaoBloqueiaOChamador`,
+   `TestRetry_OrcamentoDePendentesLimita`,
+   `TestOutboxWiring_SemOutboxCaiParaAMemoria`,
+   `TestOutboxWiring_BancoFechadoDegradaSemDerrubar`) e qualquer sitio novo, sem
+   ninguem precisar lembrar de aderir. A falha e' atribuida ao teste que ARMOU, e
+   nao a' vitima que le o contador um minuto depois.
+3. `TestRetry_GuardaDeTimerEmVooNaoEVacua` — a guarda reprova o proprio teste que
+   a aciona, entao nao da' para vê-la falhar sem um `*testing.T` falso; o teste
+   trava o PREDICADO, com os valores medidos dos sitios reais.
+
+Escolhida a forma **(i) comportamental** da alternativa oferecida no packet — a
+guarda mede o CONTADOR real e a base realmente configurada — e nao a **(ii)
+estrutural** sobre as chamadas de `prepararRetry`: (ii) so' veria os sitios que
+existem hoje, quebraria com reformatacao, e nao pegaria um teste NOVO que armasse
+com base curta. (i) pega os tres casos.
+
+**Conversao de `TestRetry_AgendarNaoBloqueiaOChamador` para delta (FIX-12)**: o
+teste ainda afirmava `pend != 1024` (absoluto) e dependia da mesma disciplina nao
+travada. Virou `delta != 1024` com mensagem que distingue os dois lados, no mesmo
+padrao do outbox.
+
+### Controles negativos do FIX-12, EXECUTADOS
+
+**1. O que a EVAL-12 provou que hoje falha.** Com a guarda no lugar, revertida a
+base em UM sitio (`dispatch_outbox_test.go:112`, de
+`retryBaseQueNaoDisparaSegundos` para `30`), tres rodadas de `-race -count=20`:
+
+```
+NC1 ROUND1 EXIT:1 guard-failures=20 datarace=0
+NC1 ROUND2 EXIT:1 guard-failures=20 datarace=0
+NC1 ROUND3 EXIT:1 guard-failures=20 datarace=0
+
+--- FAIL: TestOutboxWiring_SemOutboxCaiParaAMemoria (0.00s)
+    dispatch_retry_test.go:72: o teste terminou com 128 bytes reservados e base de 30s:
+    o timer vence em ~30s, dentro da vida do binario de teste, e vai subtrair de um
+    contador ja' zerado por outro teste (F136). Use retryBaseQueNaoDisparaSegundos,
+    ou espere o timer drenar antes de sair
+```
+
+**20/20/20, e nao 0/0/0**: a deteccao passou de inexistente a deterministica —
+uma falha por iteracao, sem depender de coincidencia de instante. Revertido por
+edicao localizada; `diff` contra a copia pre-mutacao: identico.
+
+**2. A assercao por delta de `AgendarNaoBloqueiaOChamador` morde.** Mutada a
+producao para a reserva sumir (`retryBytesPendentes.Add(-int64(tamanho))` logo
+apos a checagem de teto, em `dispatch_retry.go`):
+
+```
+--- FAIL: TestRetry_AgendarNaoBloqueiaOChamador (0.00s)
+    dispatch_retry_test.go:134: reserva nova de 0 bytes, quero 1024: o reagendamento nao esta' sendo contabilizado
+```
+
+Revertido; `git diff --stat pkg/bootstrap/dispatch_retry.go` vazio.
+
+**3. A assercao nova NAO e' vacua, e a antiga MENTIA.** Injetado no teste um
+`retryBytesPendentes.Add(-1024)` — timer alheio vencendo logo apos o `Store(0)`
+de `prepararRetry`, que e' a assinatura exata da F136 —, com a producao intacta:
+
+- **assercao NOVA (delta)**: `ok  wa-api/pkg/bootstrap 1.346s`. Delta = 1024: a
+  reserva REALMENTE aconteceu, e o lixo alheio do baseline nao a mascara.
+- **assercao ABSOLUTA de HEAD**, restaurada no mesmo sitio sob a MESMA condicao:
+
+```
+--- FAIL: TestRetry_AgendarNaoBloqueiaOChamador (0.00s)
+    dispatch_retry_test.go:132: bytes pendentes = 0, quero 1024: o reagendamento nao esta' sendo contabilizado
+```
+
+  Diagnostico invertido — o reagendamento **estava** contabilizando. E' a F136 na
+  outra assercao.
+
+E o ramo negativo tambem morde: com a reserva mutada para sumir E o `-1024`
+alheio dentro da janela, o delta fica em `-1024` e a mensagem acusa o culpado
+certo:
+
+```
+--- FAIL: TestRetry_AgendarNaoBloqueiaOChamador (0.00s)
+    dispatch_retry_test.go:133: retryBytesPendentes caiu 1024 bytes durante este teste:
+    algum teste anterior deixou timer de retry em voo (ver retryBaseQueNaoDisparaSegundos)
+```
+
+Todas as mutacoes revertidas por edicao localizada; `diff` contra as copias
+pre-mutacao dos tres arquivos: identico nos tres.
+
+**Limite honesto da guarda**: ela so' cobre quem passa por `prepararRetry`. Um
+teste futuro que arme timer de retry sem esse helper fica fora — hoje nao existe
+nenhum (`grep -n 'agendarProximaTentativa\|reagendar(' pkg/bootstrap/*_test.go`
+so' acha corpos que chamam `prepararRetry` antes).
+
+### Verificacao (FIX-12)
+
+```
+VER ROUND1 EXIT:0 falhas=0 DATARACE=0 ok  wa-api/pkg/bootstrap 142.735s
+VER ROUND2 EXIT:0 falhas=0 DATARACE=0 ok  wa-api/pkg/bootstrap 141.996s
+VER ROUND3 EXIT:0 falhas=0 DATARACE=0 ok  wa-api/pkg/bootstrap 141.878s
+```
+
+`make check`: **EXIT:0**. `go run ./cmd/listroutes | sort | wc -l`: **107**.
+`git diff --name-status --diff-filter=DR`: vazio. `gofmt -l ./pkg ./cmd` acusa os
+tres arquivos pre-existentes da **F133**, nenhum deles tocado aqui.
+
+**Status**: **CORRIGIDO** (CAP-12 + FIX-12), test-only —
+`pkg/bootstrap/dispatch_retry.go` nao foi tocado. Travado por:
+`TestOutboxWiring_ReagendarUsaODuravelEnaoODaMemoria` e
+`TestRetry_AgendarNaoBloqueiaOChamador` (as duas por DELTA, controles negativos 2
+e 3 acima), mais `requireNoRetryTimerCanFire`/`timerCanOutliveTest` no
+`t.Cleanup` de `prepararRetry` e `TestRetry_GuardaDeTimerEmVooNaoEVacua`, que sao
+o que trava a base de 24h — **a defesa em profundidade agora tambem esta'
+travada** (controle negativo 1: 20/20/20). A invariante escrita:
+**nenhum teste deixa timer de retry capaz de vencer durante a corrida**.
+Referencia cruzada: **F132**, **F129**.
