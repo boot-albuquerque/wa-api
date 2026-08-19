@@ -5810,14 +5810,32 @@ func TestRealSPAMessageMetaDelivery(t *testing.T) {
 	if err := sub.Install(context.Background(), "real/delivery/install"); err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-	// Drain once to discard whatever the collection replayed on load.
+	// Drain once to discard the first wave of load replay.
 	if _, err := sub.Drain(context.Background(), "real/delivery/prime"); err != nil {
 		t.Fatalf("priming drain: %v", err)
 	}
 
+	// FRESHNESS IS THE DISCRIMINATOR, and it was missing on the first version
+	// of this test — which then PASSED for the wrong reason, on 2026-08-19,
+	// against an image whose timestamp was 19h46m old (ARMADILHAS.md).
+	//
+	// The collection emits 'add' while REPLAYING HISTORY during page load, not
+	// only on live delivery, and the replay outlasts a single priming drain. So
+	// an event alone proves nothing about the thing this test was asked: it
+	// would have passed with nobody sending anything.
+	//
+	// The skew allowance is generous on purpose: the stamp comes from the
+	// server, not from this host, and a few minutes of clock difference is
+	// ordinary. What it must exclude is HISTORY, which is hours or days old.
+	const clockSkewAllowance = 5 * time.Minute
+	startedAt := time.Now().Add(-clockSkewAllowance)
+
 	const window = 3 * time.Minute
 	t.Logf("SEND A MESSAGE to the lab account now; watching for %s", window)
+	t.Logf("(events stamped before %s are HISTORY REPLAY and are ignored)",
+		startedAt.UTC().Format(time.RFC3339))
 	deadline := time.Now().Add(window)
+	replayed := 0
 	for time.Now().Before(deadline) {
 		got, err := sub.Drain(context.Background(), "real/delivery/drain")
 		if err != nil {
@@ -5827,9 +5845,18 @@ func TestRealSPAMessageMetaDelivery(t *testing.T) {
 			t.Fatal("the subscription was lost mid-window; events were missed and this " +
 				"run cannot answer the question it was asked")
 		}
-		if len(got.Events) > 0 {
-			e := got.Events[0]
+		var fresh []messagemeta.Meta
+		for _, e := range got.Events {
+			if e.Timestamp.IsZero() || e.Timestamp.Before(startedAt) {
+				replayed++
+				continue
+			}
+			fresh = append(fresh, e)
+		}
+		if len(fresh) > 0 {
+			e := fresh[0]
 			t.Logf("DELIVERED after %s: %s", time.Since(deadline.Add(-window)).Round(time.Second), e)
+			t.Logf("(ignored %d replayed history event(s) along the way)", replayed)
 			if !e.ID.Present() {
 				t.Error("the delivered event has no message id: msg.id.id did not survive " +
 					"the mapping, which is the field PARIDADE §6.4 chose over _serialized")
@@ -5848,7 +5875,13 @@ func TestRealSPAMessageMetaDelivery(t *testing.T) {
 		}
 		time.Sleep(3 * time.Second)
 	}
-	t.Fatalf("no event arrived in %s. Either nothing was sent, or the collection event "+
-		"name taken from whatsapp-web.js does not fire in this build — and those two are "+
-		"what this test exists to tell apart, so re-run and make sure a message is sent", window)
+	if replayed > 0 {
+		t.Fatalf("no FRESH event arrived in %s, though %d replayed history event(s) came "+
+			"through. So the 'add' subscription demonstrably FIRES — what is unproven is "+
+			"live delivery. Either nothing was sent during the window, or live messages "+
+			"reach the collection by a different event", window, replayed)
+	}
+	t.Fatalf("no event at all arrived in %s, replayed or fresh. Either nothing was sent, "+
+		"or the collection event name taken from whatsapp-web.js does not fire in this "+
+		"build — and those two are what this test exists to tell apart", window)
 }

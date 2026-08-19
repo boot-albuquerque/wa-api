@@ -814,3 +814,65 @@ nomeada, verificado por execução.
 testes não rodam até ele ser resetado. Resetar é apagar um diretório com um
 vínculo de dispositivo vivo — decisão do humano, não minha.
 
+## ARM — o teste de entrega passou sem entrega nenhuma
+
+**Data**: 2026-08-19 · **Contexto**: verificação do nome do evento da coleção de
+mensagens (H24), com um humano enviando a mensagem. Defeito meu, do mesmo dia
+em que escrevi o teste.
+
+**O que o teste reportou**:
+
+```
+SEND A MESSAGE to the lab account now; watching for 3m0s
+DELIVERED after 0s: Meta(jid=<redacted> id=ACB68C... dir=in type=image
+                         at=2026-08-19T02:50:41Z)
+EVENT NAME "add" IS CONFIRMED for this build
+--- PASS
+```
+
+**O que de fato aconteceu**: o carimbo do evento era `02:50:41Z` e o relógio
+marcava `22:37Z`. A mensagem tinha **19h46m** de idade. Não era a que o humano
+acabara de enviar — era uma **imagem antiga**, reposta pela coleção durante o
+carregamento da página.
+
+**Por que passou**: `MsgCollection` emite `add` também ao **repor histórico**, e
+não só na entrega ao vivo. Eu tinha um "drain de escorva" para descartar a
+reposição, mas ela **continua depois** dele. Qualquer evento servia para o
+teste, então ele teria passado **mesmo se ninguém enviasse nada**.
+
+**A frase que eu escrevi no log é o agravante**: *"EVENT NAME 'add' IS CONFIRMED
+for this build"*. A parte verdadeira é que `add` dispara. A parte falsa é o
+contexto — o teste dizia "envie uma mensagem e eu observo", e o que ele observou
+não veio dessa ação.
+
+**A classe, e é a terceira variação dela nesta semana**: um teste que **reporta
+sucesso medindo outra coisa** que não a que declara. Antes foi um teste de boot
+não pareado observando um boot pareado; agora é um teste de entrega observando
+histórico. O padrão comum: **a condição de sucesso era ampla demais para
+discriminar a hipótese**.
+
+A pergunta que teria evitado: *este teste passaria se a ação que ele pede não
+tivesse acontecido?* Se sim, ele não está medindo a ação.
+
+**Correção**: o frescor vira discriminador. Só conta evento carimbado **depois
+do início da janela**, com 5 minutos de tolerância para desvio de relógio — o
+carimbo vem do servidor, não deste host, e o que a tolerância precisa excluir é
+HISTÓRICO, que tem horas ou dias. A reposição passa a ser contada à parte, e a
+mensagem de falha distingue três casos que antes eram um: nada chegou; chegou
+só reposição (logo `add` dispara, mas entrega ao vivo segue sem prova); ou
+chegou evento fresco.
+
+**Status**: CORRIGIDA e **verificada por nova corrida**, com o humano enviando:
+
+```
+(events stamped before 2026-08-19T22:33:19Z are HISTORY REPLAY and are ignored)
+DELIVERED after 54s: Meta(jid=<redacted> id=3A7D... dir=out type=chat
+                          at=2026-08-19T22:39:11Z)
+(ignored 58 replayed history event(s) along the way)
+```
+
+**Os 58 são a prova de que o discriminador carrega peso.** Sem ele, qualquer um
+daqueles 58 teria feito o teste passar — que é literalmente o que aconteceu na
+primeira corrida. Um controle negativo raramente vem tão de graça: a própria
+execução corrigida mostra quantas oportunidades de falso positivo existiam.
+

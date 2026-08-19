@@ -1913,8 +1913,29 @@ ANEXA — não que dispara.
 mensagem para a conta de laboratório. Ele distingue os dois casos que a ausência
 de evento funde, e a mensagem de falha diz isso em vez de culpar o código.
 
-**Status**: **não verificado, e declarado no código**. O comentário de `eventAdd`
-diz de onde o nome veio e o que falta. Precisa de um humano com telefone.
+**Status**: **VERIFICADO em 2026-08-19**, com o humano enviando a mensagem.
+
+```
+DELIVERED after 54s: Meta(jid=<redacted> id=3A7D... dir=out type=chat
+                          at=2026-08-19T22:39:11Z)
+(ignored 58 replayed history event(s) along the way)
+```
+
+O nome `add` **dispara em entrega ao vivo** neste build, e o mapeamento
+sobrevive: `id.id` (o campo que a `PARIDADE §6.4` escolheu no lugar do
+`_serialized` nulo), `type`, `timestamp` e `jid` chegaram todos preenchidos.
+
+**A primeira corrida deu FALSO POSITIVO** e está registrada no `ARMADILHAS.md`:
+o teste aceitava qualquer evento, e a coleção emite `add` ao repor histórico —
+passou contra uma imagem de 19h46m atrás, e teria passado sem envio nenhum. A
+correção foi tornar o **frescor** o discriminador.
+
+**O que fica verificado ao vivo, e o que não**: a direção **`out`** foi
+observada ao vivo (a conta de laboratório está vinculada ao telefone do humano,
+então o que ele envia aparece como saída no dispositivo vinculado). A direção
+**`in`** foi exercitada apenas contra histórico reposto — que é dado real da
+página, não um dublê, mas não é entrega ao vivo. Registrado como está em vez de
+somado.
 
 ## H25 — o buffer da assinatura pode descartar, e o teto não tem medição por trás
 
