@@ -762,3 +762,55 @@ executar zero vezes precisa dizer, no tipo ou na estrutura, o que devolve
 quando não executou — senão devolve o zero-value, e zero-value de veredito é
 sempre a resposta mais perigosa possível.
 
+## ARM — o teste que reportou sucesso medindo o ESTADO OPOSTO ao que o nome dele diz
+
+**Data**: 2026-08-19 · **Contexto**: pareamento do perfil de laboratório por QR
+ao vivo, a pedido do humano. Defeito causado pela ação, não pré-existente.
+
+**Onde**: `internal/wa-headless/realspa_test.go`,
+`TestRealSPAUnpairedBootObservation` (e, por tabela,
+`TestRealSPACaptureQRCode` e `TestRealSPALiveQR`).
+
+**O que aconteceu**: o perfil de laboratório é descrito no próprio arquivo como
+*"descartável e não pareado por construção"*. Depois de ele ser pareado por um
+escaneamento real, o teste que observa o boot **NÃO PAREADO** continuou
+**PASSANDO** — e o que ele registrou foi:
+
+```
+CLASSIFIED AS: APP_READY (has_pane=true has_qr=false)
+--- PASS: TestRealSPAUnpairedBootObservation (11.71s)
+```
+
+Ou seja: um teste chamado *observação de boot não pareado* observou um boot
+**pareado**, gravou no log a lista de seletores de uma tela de conversas como se
+fossem os candidatos de uma tela de QR, e reportou sucesso.
+
+**Por que passou**: ele é um teste de OBSERVAÇÃO — registra, quase não afirma.
+As únicas asserções eram "a SPA respondeu" e "a página renderizou algo", e as
+duas continuam verdadeiras num boot pareado. **O silêncio era o defeito.**
+
+**A generalização, e é a que vale**: "por construção" não é garantia. O perfil de
+laboratório é um DIRETÓRIO; qualquer coisa que o pareie — uma demonstração de QR
+ao vivo, uma corrida perdida — vira a premissa do avesso sem avisar ninguém. Um
+teste cuja conclusão depende de um estado do mundo tem de **checar esse estado**,
+não presumi-lo a partir da própria documentação.
+
+**Correção**: os três testes passam a verificar a pré-condição e falhar
+**nomeando a causa**, não o sintoma:
+
+- observação: *"the lab profile is PAIRED (classified APP_READY, has_pane=true):
+  this test observes what an UNPAIRED boot looks like ... Reset the lab profile"*
+- captura de QR: em vez de *"no QR appeared within 60s"* — que manda o leitor
+  caçar seletor quebrado — *"the lab profile is already PAIRED: it restores a
+  session instead of showing a QR"*
+- QR ao vivo: um perfil já pareado alcança `#pane-side` **na primeira amostra**,
+  antes de qualquer QR ter sido mostrado; reportar isso como *"o escaneamento
+  completou"* creditaria um evento que não foi observado. Agora recusa.
+
+**Status**: CORRIGIDA. Os três falham contra o perfil pareado, com a causa
+nomeada, verificado por execução.
+
+**Consequência aberta**: o perfil de laboratório está PAREADO e esses três
+testes não rodam até ele ser resetado. Resetar é apagar um diretório com um
+vínculo de dispositivo vivo — decisão do humano, não minha.
+

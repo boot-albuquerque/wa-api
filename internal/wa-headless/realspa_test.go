@@ -54,8 +54,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/chromedp"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
+
 	waruntime "wa-api/internal/wa-headless/runtime"
 	"wa-api/internal/wa-headless/spa"
 )
@@ -346,6 +348,28 @@ func TestRealSPAUnpairedBootObservation(t *testing.T) {
 	t.Logf("CLASSIFIED AS: %s (has_pane=%v has_qr=%v url=%s)",
 		class, snap.HasPane, snap.HasQR, snap.URL)
 
+	// THE PRECONDITION, CHECKED INSTEAD OF ASSUMED.
+	//
+	// This test is named for observing an UNPAIRED boot, and everything it
+	// records — which selectors a QR screen carries, which candidates exist —
+	// only means anything on an unpaired profile. The lab profile is
+	// "disposable and unpaired by construction", but construction is not a
+	// guarantee: it is a directory, and anyone who pairs it (a live-QR demo, a
+	// stray run) silently turns this test into an observation of the OPPOSITE
+	// state.
+	//
+	// It happened on 2026-08-19: after the lab profile was paired through
+	// TestRealSPALiveQR, this test kept PASSING while classifying APP_READY
+	// with has_qr=false — reporting success while measuring the wrong thing,
+	// which is the exact failure mode this module spent a cycle hunting
+	// (ARMADILHAS.md). Silence was the bug; the fix is that the precondition
+	// now fails loudly.
+	if class == spa.ClassAppReady || snap.HasPane {
+		t.Fatalf("the lab profile is PAIRED (classified %s, has_pane=%v): this test observes "+
+			"what an UNPAIRED boot looks like, and on a paired profile it would record the "+
+			"opposite state as if it were the subject. Reset the lab profile (%s) to run it",
+			class, snap.HasPane, labProfileDir)
+	}
 	if class == spa.ClassUnresponsive {
 		t.Fatal("the real SPA never answered; nothing was observed, so nothing can be " +
 			"concluded about the selectors")
@@ -5110,4 +5134,201 @@ func TestSamplingLoopAlwaysProbesAtLeastOnce(t *testing.T) {
 	if !shouldProbeAgain(false, now, stillOpen) {
 		t.Fatal("the sampling loop skips its first probe with an open budget")
 	}
+}
+
+// qrDemoEnv gates TestRealSPACaptureQRCode. It is separate from
+// WA_HEADLESS_REAL_SPA on purpose: this test is a manual demonstration, not an
+// observation, and it should never ride along on a normal gated run.
+const qrDemoEnv = "WA_HEADLESS_QR_DEMO"
+
+// TestRealSPACaptureQRCode saves a screenshot of the pairing QR to a file and
+// prints the path. It is a demonstration aid, not a regression test.
+//
+// IT REFUSES AN OVERRIDDEN PROFILE. A QR only appears on an UNPAIRED profile —
+// a paired one restores the session and never shows one — so pointing this at
+// the paired profile could only ever mean one of two things, and both are bad:
+// either the path is wrong, or the profile has lost its pairing. The lab
+// profile is disposable and created on demand, which is exactly what this needs.
+//
+// It does NOT open the image. A test that pops a window on the desktop of
+// whoever runs the suite is a side effect nobody asked for; the caller opens the
+// printed path if they want to look at it.
+//
+// The QR IS A CREDENTIAL: scanning it links a WhatsApp account to this browser
+// profile. The file is written outside the repository for that reason, and the
+// image must not be shared or committed.
+func TestRealSPACaptureQRCode(t *testing.T) {
+	if os.Getenv(qrDemoEnv) == "" {
+		t.Skipf("set %s=1 to capture the pairing QR from the disposable lab profile", qrDemoEnv)
+	}
+	if _, overridden, err := observationProfileDir(); err != nil {
+		t.Fatal(err)
+	} else if overridden {
+		t.Fatalf("%s is set: this test refuses an overridden profile. A QR only appears "+
+			"on an UNPAIRED profile, so aiming it at the paired one means either a wrong "+
+			"path or a profile that lost its pairing — and capturing a QR would make the "+
+			"second case look like success", profileDirOverride)
+	}
+
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	// Wait for the QR to actually be there. Capturing on a timer would produce
+	// a screenshot of a loading spinner and call it a QR — the single-shot
+	// mistake this module already paid for (ARMADILHAS.md).
+	var shot markerReport
+	deadline := time.Now().Add(60 * time.Second)
+	for i := 0; time.Now().Before(deadline); i++ {
+		shot = readMarkers(t, runner, tab, fmt.Sprintf("qr/markers%d", i))
+		if shot.HasQRScan || shot.CanvasCount > 0 {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if !shot.HasQRScan && shot.CanvasCount == 0 {
+		// Name the likely cause instead of only the symptom. A paired lab
+		// profile restores a session and never shows a QR, and "no QR appeared"
+		// alone sends the reader looking for a broken selector.
+		if shot.HasPaneSide {
+			t.Fatalf("the lab profile is already PAIRED (#pane-side present): it restores a "+
+				"session instead of showing a QR. Reset %s to capture one", labProfileDir)
+		}
+		t.Fatalf("no QR appeared within 60s (has_qr_scan=%v canvas_count=%d dom_nodes=%d); "+
+			"capturing now would save a picture of whatever else is on screen",
+			shot.HasQRScan, shot.CanvasCount, shot.DOMNodes)
+	}
+
+	var png []byte
+	if err := runner.Do(context.Background(), engine.OpStateProbe, "qr/screenshot",
+		func(ctx context.Context) error {
+			return chromedp.Run(tab.Context(), chromedp.CaptureScreenshot(&png))
+		}); err != nil {
+		t.Fatalf("capturing the screenshot: %v", err)
+	}
+	if len(png) == 0 {
+		t.Fatal("the screenshot came back empty")
+	}
+
+	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
+	if err := os.WriteFile(out, png, 0o600); err != nil {
+		t.Fatalf("writing %s: %v", out, err)
+	}
+	t.Logf("QR CAPTURED: %s (%d bytes, has_qr_scan=%v canvas_count=%d)",
+		out, len(png), shot.HasQRScan, shot.CanvasCount)
+	t.Logf("this image is a PAIRING CREDENTIAL — do not share it, do not commit it")
+}
+
+// qrLiveEnv gates TestRealSPALiveQR; qrLiveMinutesEnv overrides how long the
+// session is held open.
+const (
+	qrLiveEnv        = "WA_HEADLESS_QR_LIVE"
+	qrLiveMinutesEnv = "WA_HEADLESS_QR_MINUTES"
+
+	defaultQRLiveMinutes = 5
+	// qrRecaptureInterval is well under WhatsApp's own QR rotation, so the file
+	// on disk is never far behind what the live page is showing. The exact
+	// rotation period is NOT measured here and is not claimed anywhere.
+	qrRecaptureInterval = 10 * time.Second
+)
+
+// TestRealSPALiveQR holds a session open and keeps a CURRENT pairing QR on disk
+// for as long as the budget lasts.
+//
+// It exists because TestRealSPACaptureQRCode produces a DEAD QR by construction:
+// the QR is bound to the socket session that issued it, so closing the browser
+// invalidates it immediately. A screenshot of a QR is not a QR — that is the
+// whole difference between the two tests, and it is the same "the artefact
+// outlived the thing that gave it meaning" mistake the module has met before.
+//
+// Same refusal as the capture test: an overridden profile is rejected, because
+// a QR on the PAIRED profile would mean the pairing was lost, and this test
+// would make that look like success.
+//
+// It stops as soon as the page becomes APP_READY — which is what a completed
+// scan looks like from here — and it never sends, never logs out, and never
+// touches a profile other than the disposable lab one.
+func TestRealSPALiveQR(t *testing.T) {
+	if os.Getenv(qrLiveEnv) == "" {
+		t.Skipf("set %s=1 to hold a live pairing QR from the disposable lab profile", qrLiveEnv)
+	}
+	if _, overridden, err := observationProfileDir(); err != nil {
+		t.Fatal(err)
+	} else if overridden {
+		t.Fatalf("%s is set: this test refuses an overridden profile", profileDirOverride)
+	}
+
+	minutes := defaultQRLiveMinutes
+	if v := os.Getenv(qrLiveMinutesEnv); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			t.Fatalf("%s=%q is not a positive number of minutes", qrLiveMinutesEnv, v)
+		}
+		minutes = n
+	}
+	holdFor := time.Duration(minutes) * time.Minute
+
+	runner := engine.NewRunner()
+	_, tab := openRealSPA(t, runner)
+
+	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
+	capture := func(label string) error {
+		var png []byte
+		if err := runner.Do(context.Background(), engine.OpStateProbe, label,
+			func(ctx context.Context) error {
+				return chromedp.Run(tab.Context(), chromedp.CaptureScreenshot(&png))
+			}); err != nil {
+			return err
+		}
+		if len(png) == 0 {
+			return errors.New("empty screenshot")
+		}
+		return os.WriteFile(out, png, 0o600)
+	}
+
+	t.Logf("holding a LIVE session for %s; the QR on disk is refreshed every %s",
+		holdFor, qrRecaptureInterval)
+	t.Logf("file: %s — it is a PAIRING CREDENTIAL, do not share or commit it", out)
+
+	start := time.Now()
+	deadline := start.Add(holdFor)
+	captured := 0
+	for i := 0; time.Now().Before(deadline); i++ {
+		m := readMarkers(t, runner, tab, fmt.Sprintf("liveqr/markers%d", i))
+
+		// A profile that was ALREADY paired reaches #pane-side on the first
+		// sample, before any QR was ever shown. Reporting that as "the scan
+		// completed" would credit a scan that never happened — an instrument
+		// claiming an event it did not observe.
+		if m.HasPaneSide && captured == 0 {
+			t.Fatalf("the lab profile was already PAIRED before any QR was shown "+
+				"(#pane-side at t+%s): there is nothing to scan. Reset %s to pair again",
+				time.Since(start).Round(time.Second), labProfileDir)
+		}
+		// A completed scan is what APP_READY looks like from out here.
+		if m.HasPaneSide {
+			t.Logf("PAIRED at t+%s: #pane-side present — the scan completed and the "+
+				"lab profile now holds a session", time.Since(start).Round(time.Second))
+			return
+		}
+		if m.HasQRScan || m.CanvasCount > 0 {
+			if err := capture(fmt.Sprintf("liveqr/shot%d", i)); err != nil {
+				t.Logf("t+%s: capture failed: %v", time.Since(start).Round(time.Second), err)
+			} else {
+				captured++
+				t.Logf("t+%-7s QR refreshed (#%d)", time.Since(start).Round(time.Second), captured)
+			}
+		} else {
+			t.Logf("t+%-7s no QR on screen yet (dom_nodes=%d)",
+				time.Since(start).Round(time.Second), m.DOMNodes)
+		}
+		time.Sleep(qrRecaptureInterval)
+	}
+
+	if captured == 0 {
+		t.Fatalf("no QR was ever captured in %s", holdFor)
+	}
+	// Running out the budget without a scan is the ordinary outcome of nobody
+	// picking up a phone. It is not a failure of the module.
+	t.Logf("budget of %s elapsed with %d refreshes and no scan; the session is being "+
+		"closed now, which invalidates the last QR", holdFor, captured)
 }
