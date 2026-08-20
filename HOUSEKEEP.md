@@ -12663,3 +12663,81 @@ plano.
 
 **Status**: não corrigido, nada implementado. Fora do escopo da F127, que era
 deletar código morto. Levado ao canal de decisão.
+
+---
+
+## F175 — `FetchTimeout` é declarado e nunca aplicado, e o preview de link consome TODO o orçamento de escrita do servidor
+
+**Data**: 2026-08-20. **Contexto**: medição pedida pela [[F174]] — "medir antes
+de projetar". A medição não confirmou a hipótese da F174 (falta de cache): achou
+uma coisa pior e mais barata de consertar.
+
+**Onde**: `pkg/infra/media/opengraph/fetch.go:37`.
+
+```go
+FetchTimeout    = 5 * time.Second
+```
+
+**Problema**: esta constante aparece **uma única vez em todo o repositório**, na
+linha onde é declarada. Nada a aplica.
+
+Controle negativo da própria medição, para não confundir "não achei" com "não
+existe": as irmãs do MESMO bloco são usadas — `PageMaxBytes` tem 2 usos de
+produção e `ImageMaxBytes` tem 25. E existe um `appStateFetchTimeout` noutro
+pacote (`adapters/misc/adapter.go:24`) que É aplicado via
+`context.WithTimeout`. O padrão existe no projeto; aqui ele foi esquecido.
+
+**O que vale de verdade, medido**:
+
+| grandeza | valor | onde |
+|---|---|---|
+| tempo limite pretendido | 5 s | `fetch.go:37` (morto) |
+| tempo limite EFETIVO | **60 s** | `NewSafeHTTPClient`, `bootstrap/http.go:47` |
+| buscas HTTP por preview | **2** | página + imagem (`fetch.go:94` e `:151`) |
+| pior caso por envio | **120 s** | 2 × 60 s |
+| `WriteTimeout` do servidor | **120 s** | `bootstrap/main.go:439` |
+
+**A coincidência é o achado**: o pior caso do preview (120 s) é EXATAMENTE o
+`WriteTimeout` do servidor. Sobra ZERO para o envio de WhatsApp que vem depois.
+Com o `FetchTimeout` pretendido de 5 s, o preview custaria no máximo 10 s e
+sobrariam 110 s. A constante morta é a diferença inteira.
+
+**E o preview bloqueia o envio.** `pkg/application/usecase/message/send_message.go:52-56`
+chama `FetchLinkPreview` SINCRONAMENTE, antes de `SendText`:
+
+```go
+if req.LinkPreview {
+    if data, found := uc.previews.FetchLinkPreview(ctx, req.Body); found {
+        preview = &data
+    }
+}
+sent, err := uc.messages.SendText(ctx, txtID, recipient, req.Body, preview, req.ID)
+```
+
+Uma URL lenta ou hostil no corpo da mensagem atrasa — ou mata por
+`WriteTimeout` — o envio de uma mensagem de WhatsApp. O cliente recebe conexão
+morta sem resposta, sem saber se a mensagem saiu.
+
+**Duas buscas é o caso NORMAL, não o pior caso raro**: `FetchOpenGraphImage` só
+retorna cedo quando a página não declara `og:image` (`fetch.go:142`). Qualquer
+site real declara.
+
+**Memória**: `PageMaxBytes` 2 MiB + `ImageMaxBytes` 10 MiB = até **12 MiB**
+retidos por preview em voo, sem teto de concorrência (é a [[F174]]).
+
+**Correção sugerida**: aplicar o `FetchTimeout` que já está declarado, via
+`context.WithTimeout` em `FetchOpenGraphData`, seguindo o padrão que
+`adapters/misc/adapter.go:136` já usa. Decidir se os 5 s valem para a chamada
+INTEIRA (as duas buscas) ou por busca — a primeira forma é a que garante teto,
+e é a que eu escolheria.
+
+**Regra 2 do CLAUDE.md aplicada a esta correção**: medir onde ela PIORA. Um teto
+de 5 s para as duas buscas fará preview de site lento porém legítimo falhar mais
+vezes do que hoje. Isso é aceitável — preview é enfeite, envio é a função —, mas
+tem de ser dito e testado, não descoberto depois. O comportamento de falha já é
+degradação silenciosa (`found=false`, mensagem segue sem preview), o que torna a
+troca segura: encurtar o teto NÃO derruba o envio, só remove o enfeite.
+
+**Status**: não corrigido, nada implementado. É a prioridade 1 do projeto (o
+caminho de envio) e a correção é pequena, mas mexe em comportamento de tempo
+limite — levado ao canal com a medição.
