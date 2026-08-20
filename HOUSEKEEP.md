@@ -14796,3 +14796,63 @@ ao `wanoise_lid_map`, fundindo os dois conjuntos quando ambos existirem (as 3
 conversas). Sem normalização na escrita e sem migração — que é também a opção
 reversível, e a única que não decide hoje o que fazer com linhas cujo PN talvez
 nunca exista.
+
+---
+
+## F183 — CORRIGIDA. Verificação em produção da decisão (a)
+
+**Data**: 2026-08-20.
+
+### O fluxo natural do cliente, antes e depois
+
+Mesma máquina, mesmas sessões, mesma consulta — só o binário muda:
+
+| | conversas com registos | vazias |
+|---|---|---|
+| **antes** | 4 | 26 |
+| **depois** | **30** | **0** |
+
+Listar conversas, escolher uma, pedir o histórico dela: **funciona para todas**.
+
+### A fusão, provada com uma conversa que tem as DUAS chaves
+
+Não bastava a tradução — três conversas têm linhas sob ambos os identificadores,
+e ler só o telefone trocaria o vazio por metade. Medido em campo:
+
+```
+conversa: 141665318760687@lid (12 linhas) + 556799999643@s.whatsapp.net (15)
+pedindo só pelo @lid -> 27 devolvidas, sem duplicados
+```
+
+**12 + 15 = 27.** A deduplicação por `message_id` fez o seu trabalho e nenhuma
+mensagem apareceu duas vezes.
+
+E o registo de fusão aparece no log de produção com os números das duas origens,
+que é o que permite a um operador ver de onde veio cada linha:
+
+```
+INF chat history: merged rows stored under the phone JID
+    chatJID=218699785101369@lid underLID=0 underPN=1 returned=1
+```
+
+### Zero traduções falharam
+
+`lid not translated` apareceu **0 vezes**. Coerente com a medição prévia: o mapa
+local cobre 362 de 365 LIDs do histórico, e cobriu **100%** das conversas do
+fluxo.
+
+### O que continua verdadeiro, e não foi resolvido
+
+A `/chat/list` continua a devolver `@lid`, e as linhas continuam gravadas sob o
+telefone. **Isto conserta o sintoma no ponto onde o cliente o sente, sem tocar em
+nada gravado** — que foi a decisão (a) do canal, e a única reversível.
+
+O conserto de fundo — normalizar a escrita — continua a **não** ser recomendado,
+pela razão que o Baileys deu e a nossa medição sozinha nunca daria: **o telefone
+pode não existir**, por privacidade do dono do número. Fixar uma chave hoje seria
+perder o LID, que é o único identificador sempre verdadeiro.
+
+**Status**: **CORRIGIDA**. Travada por nove testes — cinco pela rota registada
+(`TestChatHistoryLID_*` em `chat_history_route_test.go`) e quatro no use case
+(`get_chat_history_lid_test.go`) — com seis controlos negativos executados, e
+verificada contra o WhatsApp real com a medição antes/depois acima.
