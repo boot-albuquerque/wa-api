@@ -313,3 +313,38 @@ impede, e o WhatsApp pode invalidar um deles. Por isso `Verify` recebe o boot
 como FUNÇÃO do chamador em vez de bootar sozinho: quem chama teve de decidir que
 o original está parado, e exigir a função é como essa decisão vira explícita.
 
+---
+
+## 7. Passagem de auditoria — as seis, conferidas contra o que a matriz prometia
+
+Feita em 2026-08-19, depois de a sexta capacidade entrar. O alvo parou de mudar,
+então auditar passou a valer.
+
+| # | capacidade | onde vive | testes | prova contra a SPA real |
+|---|---|---|:---:|---|
+| 1 | `livenessCheck` | `capabilities/liveness` | 6 | `TestRealSPALivenessAgainstProduction` |
+| 2 | `getBrowserPid` | `runtime.Holder.BrowserPID` | 2 | coberto pelo `SIGKILL` em `runtime/` |
+| 3 | `refreshOwner` | `capabilities/owner` | 7 | `TestRealSPARefreshOwnerAgainstProduction` |
+| 4 | `onMessageMeta` | `capabilities/messagemeta` | 9 | `...MessageMetaInstalls` + `...MessageMetaDelivery` |
+| 5 | `fetchMessages` | `capabilities/fetchmessages` | 8 | `TestRealSPAFetchMessagesAgainstProduction` |
+| 6 | `backupNow` | `capabilities/backup` | 7 | `TestRealSPABackupRestoresToAWorkingSession` |
+
+**A auditoria achou uma lacuna, e na capacidade que esta própria matriz ranqueia
+em PRIMEIRO lugar**: `liveness` era a única das seis **sem prova contra a página
+real**. Todas as outras cinco tinham. Ela foi construída primeiro, quando o
+hábito de fechar cada fatia com uma corrida real ainda não estava firme, e
+ninguém percebeu porque a suíte estava verde — que é exatamente o motivo de uma
+passagem de auditoria existir depois de o alvo parar.
+
+Fechada com `TestRealSPALivenessAgainstProduction`, e ela entregou um número que
+não existia: **pior latência de 1 ms em 5 amostras** contra a página real. Isso
+importa mais que o PASS — o `spa.Monitor` afirma no comentário ser *"seguro para
+chamar de um caminho que segura slot limitado"*, e até aqui essa afirmação era
+prosa. O teste falha se a ida e volta passar de 1 s, porque uma sonda de segundos
+falsificaria o desenho sem quebrar mais nada.
+
+**O `getBrowserPid` é o único sem teste com portão contra a SPA real, e de
+propósito**: o que ele tem de provar é a recusa quando o pid deixa de significar
+algo, e isso exige **matar o browser** — barato contra um perfil descartável,
+caro contra um perfil que custou um humano com telefone para parear.
+

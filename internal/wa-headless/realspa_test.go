@@ -59,6 +59,7 @@ import (
 
 	"wa-api/internal/wa-headless/capabilities/backup"
 	"wa-api/internal/wa-headless/capabilities/fetchmessages"
+	"wa-api/internal/wa-headless/capabilities/liveness"
 	"wa-api/internal/wa-headless/capabilities/messagemeta"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	waruntime "wa-api/internal/wa-headless/runtime"
@@ -6083,5 +6084,87 @@ func TestRealSPABackupRestoresToAWorkingSession(t *testing.T) {
 	stopped = true
 	if !via.Clean() {
 		t.Errorf("the restored session stopped via %s, want a clean stop", via)
+	}
+}
+
+// TestRealSPALivenessAgainstProduction closes a gap an audit found: liveness is
+// the capability the parity matrix ranks FIRST, and it was the only one of the
+// six with no proof against the real page.
+//
+// What a double cannot answer: whether web.whatsapp.com actually responds to
+// the liveness expression, and how long it takes. The unit tests drive the
+// signal logic with canned answers; the number below is the only evidence that
+// the probe is cheap enough to be called on a hot path, which is the assumption
+// spa.Monitor's whole design rests on ("it never blocks longer than the
+// StateProbe budget, so it is safe to call from a path that holds a limited
+// slot").
+//
+// Read-only. It never kills the browser — SIGKILL against this profile would
+// leave a dirty Singleton on an account that took a human with a phone to pair.
+// The PROCESS_GONE path is covered against a throwaway profile in
+// runtime/holder_test.go, which is where destroying a browser is free.
+func TestRealSPALivenessAgainstProduction(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	checker := liveness.New(sess.ProcessAlive, runner, sess.Tab().Evaluate)
+
+	const samples = 5
+	var worst time.Duration
+	for i := 0; i < samples; i++ {
+		got := checker.Check(context.Background(), fmt.Sprintf("real/liveness%d", i))
+		if !got.Alive || got.Signal != liveness.SignalAlive {
+			t.Fatalf("sample %d: alive=%v signal=%s class=%s err=%v — a session that just "+
+				"reached READY must answer ALIVE, and anything else here is the real page "+
+				"disagreeing with the signal logic the unit tests exercise",
+				i, got.Alive, got.Signal, got.Class, got.Err)
+		}
+		if !got.PageProbed {
+			t.Fatalf("sample %d reported PageProbed=false on a live process", i)
+		}
+		if got.Latency > worst {
+			worst = got.Latency
+		}
+		t.Logf("  sample %d: signal=%s latency=%s", i, got.Signal, got.Latency.Round(time.Millisecond))
+	}
+
+	probes, failures, last, consecutive := checker.Stats()
+	t.Logf("LIVENESS OK: %d probes, %d failures, worst latency %s, last %s, streak %d",
+		probes, failures, worst.Round(time.Millisecond), last.Round(time.Millisecond), consecutive)
+
+	if failures != 0 || consecutive != 0 {
+		t.Errorf("failures=%d consecutive=%d against a healthy session", failures, consecutive)
+	}
+	// The design claims this probe is safe on a hot path. A round trip in the
+	// SECONDS would falsify that without failing anything else, so it is worth
+	// an assertion rather than only a log line.
+	if worst > time.Second {
+		t.Errorf("worst liveness round trip was %s. spa.Monitor is documented as safe to "+
+			"call from a path holding a limited slot; at this cost that claim needs "+
+			"re-examining, not just noting", worst)
 	}
 }
