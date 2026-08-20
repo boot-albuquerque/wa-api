@@ -1691,7 +1691,48 @@ morreu não tem por onde.
 **Correção sugerida**: acrescentar `PID int` ao `BootFailure`. Mudança estreita e
 aditiva — não feita porque nada neste escopo precisou dela.
 
-**Status**: não corrigido, aguardando consumidor que justifique.
+**Status**: ~~não corrigido, aguardando consumidor que justifique.~~
+**CORRIGIDO em 2026-08-20 (LOOP 06.9)**.
+
+`BootFailure` ganha `PID int`, populado no `fail()` e renderizado no `Error()`.
+Zero é **omitido**, não impresso: `pid=0` lê como um id de processo real para
+quem faz `grep`.
+
+**A TENSÃO COM O H23, resolvida por USO e não por gosto.** O H23 **recusou**
+devolver um pid depois que ele deixa de significar algo, porque sistemas
+operacionais reusam pids e agir sobre um obsoleto alcança o processo que herdou
+o número. Este campo é o mesmo número com propósito oposto: **obsoleto por
+construção** — um `BootFailure` só existe depois de o browser ter sido
+derrubado — e existe para **correlacionar** a falha com o registro do sistema
+operacional. Correlação não é ação. Está escrito no campo.
+
+**Teste sem subir browser**, como a orquestração pediu:
+`TestBootFailurePIDIsRenderedForCorrelation`. `BootFailure` é um VALOR, e o que
+ele renderiza é propriedade do valor, não do boot que o produziu — um teste que
+falhasse um boot real dependeria de qual estágio quebrou e exercitaria a
+formatação só por acidente. Controle negativo executado: imprimir `pid=0` faz
+falhar.
+
+### Dois controles que NÃO morderam, e o que fiz com cada um
+
+**A ordem de leitura do pid.** Escrevi que ler antes do `CleanStop` era carga.
+O controle que inverteu **PASSOU** — `Browser.PID()` devolve o mesmo número
+depois da parada, que é exatamente o que o H23 mediu. Comentário corrigido para
+dizer que a ordem é legibilidade, não correção. **Segunda vez no mesmo dia** que
+escrevo "a ordem importa" sem verificar.
+
+**A guarda da fronteira com o H23 foi REMOVIDA.** Eu tinha escrito um teste
+varrendo `session.go` por `ProcessAlive(pid)`, `syscall.Kill` e `Signal(`, para
+garantir que nada age sobre o campo. Uma mutação com `engine.ProcessAlive(e.PID)`
+passou direto: a grafia diferia. E alargar não é opção — `session.go`
+LEGITIMAMENTE chama `engine.ProcessAlive` para o `Session.ProcessAlive` (H21),
+então o identificador não pode ser proibido, e texto não distingue "pid da
+sessão viva" de "pid obsoleto do BootFailure". É o H32 outra vez.
+
+Removi em vez de manter. **Teste que não morde é pior que teste nenhum**: é
+garantia falsa, e achar este silencioso foi sorte. A fronteira passa a ser
+mantida pelo comentário e pela revisão, com essa limitação dita no lugar onde o
+teste estava.
 
 ## H19 — a sequência ler-e-limpar da marca de suspeita não tem teste próprio
 

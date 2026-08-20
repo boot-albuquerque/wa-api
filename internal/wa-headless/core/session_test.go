@@ -1066,3 +1066,75 @@ func TestStartSession_OwnerIdentityModuleIsEnforced(t *testing.T) {
 			"without naming the module nobody can act on", modErr.Missing, spa.ModuleUserPrefsMeUser)
 	}
 }
+
+// TestBootFailurePIDIsRenderedForCorrelation covers H18 WITHOUT launching a
+// browser: BootFailure is a value, and what it renders is a property of the
+// value, not of the boot that produced it.
+//
+// Doing it this way is not only cheaper. A test that failed a real boot would
+// depend on which stage happened to fail and on the machine having a spare
+// Chrome, and it would exercise the FORMATTING only incidentally — the thing a
+// future reader actually consumes.
+func TestBootFailurePIDIsRenderedForCorrelation(t *testing.T) {
+	cases := []struct {
+		name       string
+		fail       BootFailure
+		wantPID    string
+		wantNoText string
+	}{
+		{
+			name: "a launched browser is named, so the failure can be matched " +
+				"against the operating system's own record of that process",
+			fail:    BootFailure{Stage: StageNotReady, StoppedVia: engine.StopViaBrowserClose, PID: 4242, Cause: errors.New("boom")},
+			wantPID: "pid=4242",
+		},
+		{
+			name: "a failure BEFORE launch has no process, and must not print pid=0 — " +
+				"a zero reads like a real process id to whoever greps for it",
+			fail:       BootFailure{Stage: StageOwnership, PID: 0, Cause: errors.New("boom")},
+			wantNoText: "pid=",
+		},
+		{
+			name:    "the pid survives even when there is no StoppedVia to hang it on",
+			fail:    BootFailure{Stage: StageLaunch, PID: 77, Cause: errors.New("boom")},
+			wantPID: "pid=77",
+		},
+	}
+
+	for _, c := range cases {
+		got := c.fail.Error()
+		if c.wantPID != "" && !strings.Contains(got, c.wantPID) {
+			t.Errorf("%s:\n got  %q\n want it to contain %q", c.name, got, c.wantPID)
+		}
+		if c.wantNoText != "" && strings.Contains(got, c.wantNoText) {
+			t.Errorf("%s:\n got  %q\n want it NOT to contain %q", c.name, got, c.wantNoText)
+		}
+		// The pid must never cost the diagnosis that was already there.
+		if !strings.Contains(got, string(c.fail.Stage)) {
+			t.Errorf("%s: the stage disappeared from %q", c.name, got)
+		}
+		if !strings.Contains(got, "boom") {
+			t.Errorf("%s: the cause disappeared from %q", c.name, got)
+		}
+	}
+}
+
+// NOTE: a TestBootFailurePIDIsNotAnInvitationToSignal was written here on
+// 2026-08-20 and REMOVED the same day, because its negative control did not
+// bite.
+//
+// It scanned session.go for "ProcessAlive(pid)", "syscall.Kill" and "Signal(",
+// meaning to enforce that nothing acts on BootFailure.PID — the boundary that
+// keeps this field from contradicting H23. A mutation that added
+// engine.ProcessAlive(e.PID) passed straight through: the spelling differed.
+//
+// Widening it is not available either. session.go LEGITIMATELY calls
+// engine.ProcessAlive for Session.ProcessAlive (H21), so the identifier cannot
+// be forbidden, and a text scan cannot tell "the live session's pid" from "the
+// BootFailure's stale one". That is the H32 conclusion again: text does not
+// read code structure. An AST guard could, and costs more than one field
+// justifies.
+//
+// So the boundary is held by the doc comment on BootFailure.PID and by review,
+// NOT by a test — stated here because a test that does not bite is worse than
+// no test: it is false assurance, and finding this one silent was luck.

@@ -129,13 +129,34 @@ type BootFailure struct {
 	// WasSuspect records whether the profile's suspect marker was set before
 	// this boot attempt started.
 	WasSuspect bool
+	// PID is the browser process this attempt launched, or zero when it failed
+	// before launching one.
+	//
+	// FOR CORRELATION, NEVER FOR ACTION — and the distinction is what keeps this
+	// field from contradicting H23, which REFUSED to hand out a pid once it
+	// stopped meaning anything. That refusal was about a pid a caller might
+	// SIGNAL: operating systems reuse pids, so acting on a stale one reaches
+	// whatever inherited the number.
+	//
+	// This pid is stale BY CONSTRUCTION — a BootFailure only exists after the
+	// browser was torn down — and it is here so a failure can be matched
+	// against the operating system's own record of that process. Nothing in
+	// this module signals it, and a caller that does has misread the field.
+	PID int
 }
 
 func (e *BootFailure) Error() string {
-	if e.StoppedVia != "" {
-		return fmt.Sprintf("core: boot failed at %s (stopped_via=%s): %v", e.Stage, e.StoppedVia, e.Cause)
+	// The pid is omitted when it is zero rather than printed as "pid=0". A
+	// failure before launch has no process, and "pid=0" reads like one.
+	var pid string
+	if e.PID != 0 {
+		pid = fmt.Sprintf(" pid=%d", e.PID)
 	}
-	return fmt.Sprintf("core: boot failed at %s: %v", e.Stage, e.Cause)
+	if e.StoppedVia != "" {
+		return fmt.Sprintf("core: boot failed at %s (stopped_via=%s%s): %v",
+			e.Stage, e.StoppedVia, pid, e.Cause)
+	}
+	return fmt.Sprintf("core: boot failed at %s%s: %v", e.Stage, pid, e.Cause)
 }
 
 // Unwrap lets callers errors.As/errors.Is through to the underlying cause —
@@ -334,9 +355,19 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	// StopVia and marks the profile suspect on a dirty stop. fail is the one
 	// place that happens, so no later branch can forget it.
 	fail := func(stage BootStage, cause error) (*Session, error) {
+		// Read before the stop for readability, NOT for correctness — and
+		// saying so is a correction. This comment first claimed the order was
+		// load-bearing; the negative control that inverted it PASSED, which is
+		// what exposed the claim as wrong. engine.Browser.PID() returns the
+		// same number after a stop, which is precisely what H23 measured and
+		// why that finding exists at all.
+		pid := browser.PID()
 		via := engine.CleanStop(context.Background(), runner, browser)
 		release()
-		return nil, &BootFailure{Stage: stage, Cause: cause, StoppedVia: via, WasSuspect: wasSuspect}
+		return nil, &BootFailure{
+			Stage: stage, Cause: cause, StoppedVia: via,
+			WasSuspect: wasSuspect, PID: pid,
+		}
 	}
 
 	// THE SESSION'S LIFETIME IS NOT THE BOOT'S LIFETIME.
