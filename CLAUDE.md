@@ -48,6 +48,44 @@ identidade LID/PN, roster, avatar, histórico, presença, envio, pareamento —
 - **Evolution API** (`https://github.com/evolution-foundation/evolution-api`)
   — API HTTP sobre Baileys, com os mesmos problemas de produto que este
   projeto tem (listar conversas, nomear contatos, servir avatar).
+- **whatsapp-web.js** (`https://github.com/pedroslopez/whatsapp-web.js`) — a
+  referência que **dirige a mesma SPA que nós**. Para qualquer problema de
+  módulo, seletor ou API de página, é a mais próxima do nosso terreno: quando
+  o Baileys fala protocolo e nós falamos DOM, é o wwebjs que já esteve
+  exatamente onde estamos.
+
+  Consulte-o especialmente para: **nomes de módulo do `window.require`**,
+  ordem de chamadas dentro da página, e o que a página exige antes de uma
+  operação. E leia as **issues abertas** dele como fonte de primeira classe —
+  elas dizem o que está QUEBRADO hoje, que é informação que o código não dá.
+
+### A resposta NEGATIVA também é informação
+
+Regra aprendida em 2026-08-20, no `sendText` (HOUSEKEEP H34):
+
+O envio parou em `No LID for user`. A pergunta natural — *"como o wwebjs
+resolve?"* — teve resposta **negativa**: ele **não resolve**. São issues abertas
+de set/2025 a jan/2026 (`#3834`, `#5750`), morrendo no mesmo
+`findOrCreateLatestChat → toUserLidOrThrow`.
+
+**Isso não é um beco: é um dado.** Significa que copiar o caminho da referência
+teria falhado mesmo se tivesse sido copiado, e que a solução tem de vir de outro
+lugar. Veio: o Baileys, que fala protocolo, mantém um `LIDMappingStore` com
+fallback para **USync**. Nós dirigimos a SPA, então não precisamos do store — só
+precisamos **chamar a resolução que a página já tem**, e ela está no
+`WAWebQueryExistsJob.queryWidExists`, que o wwebjs usa no `getNumberId` e **não**
+antes de enviar. Fazer isso ANTES é a diferença.
+
+Ou seja: **as três referências foram necessárias, e nenhuma sozinha bastava.**
+O wwebjs deu o nome do módulo, o Baileys deu o entendimento do que é resolver
+identidade, e a issue aberta do wwebjs deu a informação de que aquele caminho
+está quebrado. Registre sempre qual referência respondeu o quê — inclusive quando
+a resposta for "esta aqui não resolve".
+
+**Quatro módulos que a lista do wwebjs usaria não existem no nosso build**
+(`WAWebSendMsg`, `WAWebMsgSend`, `WAWebSendMessage`, `WAWebComposeMessage`).
+Copiar a lista falharia em quatro de quatro — o que é a própria razão de a regra
+dizer para copiar o ENTENDIMENTO e medir o resto.
 
 Os dois já erraram nos caminhos que estamos prestes a percorrer. Ler o
 código atual não basta: **os históricos de commits e as issues são onde a
