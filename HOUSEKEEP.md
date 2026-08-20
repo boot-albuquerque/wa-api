@@ -14578,3 +14578,62 @@ Duas coisas de uma vez:
 `poll`, `buttons`, `list` e `template` **enviam e agora também recebem**. A
 incoerência "capability de envio sem recepção" fecha-se — quatro de quatro,
 todas verificadas contra o WhatsApp real, não só em teste.
+
+---
+
+## VERIFICAÇÃO EM PRODUÇÃO — a edição (etapa (b) da DECISÃO 21)
+
+**Data**: 2026-08-20. Linha de base: **0 linhas `edit`** em 23630. Sessões
+reconectaram sozinhas pela terceira vez.
+
+**A edição grava, com o texto novo E com a ligação:**
+
+```
+3EB0E3F8862610B8D1AEC0 | edit | "TEXTO EDITADO em campo"
+                       | quoted_message_id = 3EB094E87348AE01BF5C76
+```
+
+O `quoted_message_id` aponta para o ID da mensagem original que eu tinha enviado
+segundos antes. Sem essa coluna a edição seria uma linha solta, e o cliente veria
+um texto novo sem saber o que ele substitui.
+
+### O que eu NÃO consegui provar desta vez, e digo-o em vez de o esconder
+
+A contagem de `dropped from history` deu **zero**, e nas duas rondas anteriores eu
+recusei aceitar zero como prova e **forcei** um descarte. Desta vez **não
+consegui**, e a razão merece ser dita com todas as letras em vez de virar um
+silêncio conveniente.
+
+Tentei com `/chat/request-unavailable-message`, que devia produzir uma mensagem de
+protocolo de outro tipo. Devolveu `500`, por causa de ambiente e não de payload:
+
+```
+ERR failed to encrypt peer message: can't encrypt message for device:
+    no signal session established with 90937376170214_1:0
+```
+
+**Não consegui forçar porque já não há por onde**: verifiquei rota a rota, e as
+**quinze** rotas que enviam mensagem têm agora ramo de recepção — `text`,
+`image`, `audio`, `document`, `video`, `sticker`, `location`, `contact`, `poll`,
+`buttons`, `template`, `list`, `edit`, `react` e `delete`. Nenhuma coisa que a
+nossa própria API saiba enviar cai fora da classificação.
+
+Isso é um resultado, não uma desculpa — mas também **não substitui** a prova de
+campo que faltou. O que sustenta o aviso hoje:
+
+- `TestHistorico_DescarteDeixaRastro` passa **com o ramo da edição já no lugar**
+  (correu no `make check` desta mudança), portanto o aviso continua a disparar
+  para o não classificado;
+- a prova de campo do aviso existe, mas é da ronda ANTERIOR, quando forcei uma
+  lista antes de o ramo dela existir.
+
+Fica registado como lacuna conhecida: o aviso está provado em teste com o código
+de hoje, e em campo com o código de ontem à tarde. Para o provar em campo com o
+código de hoje seria preciso um tipo que a nossa API não envia — o que só
+acontecerá quando chegar mensagem de terceiro de um dos tipos ainda sem ramo.
+
+### Balanço
+
+`/chat/send/edit` fecha a lista: **quinze de quinze** rotas de envio têm recepção.
+A incoerência que abriu esta frente — capability que envia e não recebe — deixa de
+existir para tudo o que este projeto envia.
