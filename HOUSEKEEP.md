@@ -15192,4 +15192,34 @@ público, mantê-la exige que a divergência seja **declarada** em vez de herdad
 As duas são defensáveis; herdar sem decidir não é, e é o modo de falha que a
 própria F131 nomeia.
 
-**Status**: não corrigido, achado de varredura. Contrato HTTP, item 3.1.
+**Status**: **PARCIALMENTE CORRIGIDO** — a trava existe, a divergência continua.
+
+**O que foi feito** (decisão (b) do canal): `message_op_wire_contract_test.go`
+trava as três rotas, **cada uma contra o SEU vocabulário**. A `react` é travada
+na forma que ela REALMENTE tem, medida em campo, e não na que deveria ter.
+
+Isso é deliberado: forçá-la à forma nova num teste seria mudar contrato público
+de passagem. O que a trava impede é a divergência **mudar outra vez sem ninguém
+reparar** — que é o defeito que a [[F131]] nomeia.
+
+E `TestMessageOpWireContract_ReactDivergeDasOutras` torna a divergência
+**visível em vez de implícita**: ele falha, de propósito, no dia em que ela
+acabar. Sem ele, alinhar a `react` passaria calado — bastava trocar duas listas
+nos casos. O controlo negativo confirma a mensagem que quem o fizer vai ler:
+
+```
+a react passou a devolver message_id: a divergencia da F190 ACABOU.
+   Se foi decisao, remova este teste e alinhe as listas em messageOpWireCases.
+   Se nao foi, alguem mudou contrato publico sem reparar.
+```
+
+**O que NÃO foi feito, e continua a precisar de decisão**: alinhar a `react`.
+Um cliente que leia `message_id` das treze rotas de envio continua a partir ao
+ler a reação. Contrato HTTP, item 3.1.
+
+**Achado de lado, registado sem corrigir**: a resposta da `react` é construída
+como `map[string]interface{}` literal
+(`pkg/application/usecase/message/react.go:85-89`), enquanto as catorze irmãs
+usam um `*Result` tipado do domínio. É por isso que ela escapou à disciplina:
+não há tipo onde pendurar a tag, e portanto nada que uma revisão de DTO
+apanhasse.
