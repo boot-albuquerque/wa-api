@@ -3149,3 +3149,66 @@ cobre também o código que ainda vai ser escrito lá dentro.
 
 **Status**: **corrigido** nesta sessão, com os dois testes acima e controle
 negativo colado.
+
+## F96 — `make check` está VERMELHO por toolchain, e não por código: `covdata` ausente
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da CAP-07 (`sendText`) no
+`internal/wa-headless`; o gate foi rodado antes de commitar e reprovou.
+
+**Onde**: `Makefile:132-133` (alvo `coverage-gate`).
+
+**Sintoma**: o alvo falha, e a falha é por pacote SEM arquivo de teste:
+
+```
+# wa-api/cmd/core
+go: no such tool "covdata"
+# wa-api/cmd/listroutes
+go: no such tool "covdata"
+# wa-api/cmd/wss
+go: no such tool "covdata"
+# wa-api/pkg/infra/wa-noise/client/testkit
+go: no such tool "covdata"
+make: *** [coverage-gate] Error 1
+```
+
+**Causa medida**: a toolchain em uso é a BAIXADA por `GOTOOLCHAIN=auto`, e o
+diretório de ferramentas dela não tem `covdata`:
+
+```
+$ go env GOROOT
+/Users/albuquerque/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64
+$ ls $(go env GOROOT)/pkg/tool/darwin_arm64/
+asm cgo compile cover fix link preprofile vet
+```
+
+O `go test -coverprofile` chama `covdata` para produzir o perfil VAZIO de um
+pacote sem testes. Pacote com testes não passa por esse caminho — que é por que
+o gate reprova exatamente nos quatro pacotes sem `_test.go`.
+
+**Não é do código.** Reproduzido em `wa-api/cmd/core`, pacote que a tarefa não
+tocou:
+
+```
+$ go test -count=1 -coverprofile=/tmp/c3.out wa-api/cmd/core
+# wa-api/cmd/core
+go: no such tool "covdata"
+```
+
+Cobertura de pacote único e cobertura multi-pacote com `-coverpkg` funcionam
+normalmente; só o caminho do pacote sem testes quebra.
+
+**Correção sugerida** (uma das três, e é decisão de ambiente, não de código):
+
+1. Fixar `GOTOOLCHAIN` numa instalação local completa em vez da baixada.
+2. Reinstalar/completar a toolchain do módulo.
+3. Excluir do `COVER_PKGS` os pacotes sem testes — **o pior dos três**, porque
+   troca um problema de ambiente por uma mentira permanente no denominador da
+   cobertura.
+
+**Impacto no fechamento desta sessão**: as etapas `build`, `vet` e `test -race`
+passam; `coverage-gate` reprova. Ou seja, `make check` NÃO está verde, e a razão
+está integralmente fora do diff — registrada aqui para que o commit desta sessão
+não seja lido como "gate verde".
+
+**Status**: aberto — diagnosticado com a causa isolada e reproduzida em pacote
+não tocado; correção é de ambiente e depende de decisão do humano.

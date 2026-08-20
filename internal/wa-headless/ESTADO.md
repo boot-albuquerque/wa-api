@@ -37,7 +37,18 @@ aplicada.
 | capacidades | `capabilities/` | as seis da paridade |
 | observabilidade | `observability/` | `OpLog`, com política de redação |
 
-## 2. Paridade com o `whatsapp-web.js` — COMPLETA
+## 2. Paridade com o `whatsapp-web.js`
+
+> **O alvo declarado (2026-08-20)**: implementar neste projeto as
+> funcionalidades do `whatsapp-web.js`, fazendo **engenharia reversa de JS para
+> Go sobre a SPA**. As seis capacidades abaixo são o piso dessa paridade — o que
+> o `wa-noise` não cobre pelo protocolo — e não o teto.
+>
+> A H34/H35 mostrou como cada método portado tende a custar: o wwebjs dá o NOME
+> do módulo e a ORDEM das chamadas, mas nem os nomes nem o comportamento
+> sobrevivem intactos a este build. Quatro módulos da lista dele não existem
+> aqui; `queryWidExists` existe mas ele a chama no lugar errado; `_serialized`
+> da mensagem é `NULL`. **Portar é medir, não traduzir.**
 
 Seis capacidades, não catorze: as outras oito o `wa-noise` já serve pelo
 protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
@@ -50,6 +61,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `onMessageMeta` | `capabilities/messagemeta` | entrega ao vivo em 54 s, 58 reposições ignoradas |
 | `fetchMessages` | `capabilities/fetchmessages` | 340 carregados, filtro por chat casa |
 | `backupNow` | `capabilities/backup` | restaura com identidade presente; custo medido nos dois perfis (§6.6) |
+| `sendText` | `capabilities/send` | **laço fechado real**: conta A envia, conta B recebe o MESMO id em 1 s |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -58,6 +70,14 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 3. **`msg.id._serialized` é NULL aqui** — eles dependem dele; nós expomos as partes.
 4. **`fetchMessages` lê o CARREGADO**, não pede ao servidor. Declarado, com
    `Loaded` como denominador e `Truncated()`.
+5. **`sendText` resolve a identidade ANTES de abrir o chat** — o wwebjs só chama
+   `queryWidExists` no `getNumberId`, e por isso as issues dele (#3834, #5750)
+   morrem em `No LID for user`. Neste build, 397 de 399 mensagens vivem sob
+   `@lid`: resolver primeiro não é otimização, é a condição de funcionar (H34).
+6. **`sendText` VERIFICA a pós-condição** — o wwebjs devolve assim que a página
+   aceita a chamada. Aqui o envio só retorna depois de a mensagem aparecer na
+   coleção, contra a identidade RESOLVIDA. É a invariante 14, e foi ela que
+   expôs o defeito da verificação em vez de escondê-lo.
 
 ## 3. Invariantes travadas em teste
 

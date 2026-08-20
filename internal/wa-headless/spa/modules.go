@@ -101,6 +101,20 @@ const (
 	// works when there is no chat yet, which is the ordinary case for a first
 	// message.
 	ModuleFindChatAction = Module("WAWebFindChatAction")
+	// ModuleQueryExistsJob resolves a phone number to the identity the SERVER
+	// knows, which on this build is a LID.
+	//
+	// This is the piece that unblocks sending, and it is a QUERY — it goes to
+	// WhatsApp, it does not convert locally. Measured 2026-08-20 against a
+	// number never spoken to: queryWidExists returns
+	// {biz, bizInfo, isUsernameSearch, wid} with wid.server === "lid".
+	//
+	// Baileys has to build this itself — a LIDMappingStore with a USync
+	// fallback — because it speaks the protocol. Driving the SPA, the mapping
+	// is already there and this is how it is asked. Same understanding, a
+	// fraction of the machinery, which is the whole reason the parity document
+	// says to copy the UNDERSTANDING and not the code.
+	ModuleQueryExistsJob = Module("WAWebQueryExistsJob")
 )
 
 // RequiredAtStartup is verified before any capability runs.

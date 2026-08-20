@@ -33,9 +33,16 @@ import (
 
 // Verification bounds. Sending is fast; the message appearing in the local
 // collection is what takes a moment.
-const (
+// These two are var, not const, for ONE reason: the tests compress the clock.
+// Production never assigns them, and a 20-second budget inside a unit suite
+// would buy nothing — the failure paths are what need exercising, and each one
+// would otherwise sit out the full wait.
+var (
 	verifyBudget = 20 * time.Second
 	verifyTick   = 500 * time.Millisecond
+)
+
+const (
 	// clockSkewAllowance widens the "is this message mine and new" window,
 	// because the timestamp comes from the server and not from this host.
 	clockSkewAllowance = 2 * time.Minute
@@ -110,6 +117,10 @@ func Text(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 		Stage string `json:"stage"`
 		OK    bool   `json:"ok"`
 		Why   string `json:"why"`
+		// JID is the identity the SERVER returned, not the one the caller
+		// passed. They differ on this build, and verification needs the
+		// server's — see the note where it is parked.
+		JID string `json:"jid"`
 	}
 	dispatchDeadline := time.Now().Add(verifyBudget)
 	for {
@@ -141,7 +152,10 @@ func Text(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 
 	// VERIFY. Nothing above proves the message exists — the page accepting a
 	// call is not the account having sent anything.
-	res, err := verify(ctx, runner, eval, toJID, sentAt, label)
+	if out.JID == "" {
+		return Result{}, fmt.Errorf("%w: the page reported success without a resolved identity", ErrDispatch)
+	}
+	res, err := verify(ctx, runner, eval, out.JID, sentAt, label)
 	if err != nil {
 		return Result{}, err
 	}
@@ -171,19 +185,46 @@ func dispatchScript(toJID, text string) string {
 			const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
 			// createWid BUILDS a wid from text; asChatWid only VALIDATES one
 			// that already exists. Passing the string straight to asChatWid
-			// fails with "e.isUser is not a function", which is the page saying
-			// it was handed a string where it expected an object — measured,
-			// not guessed, and the reason the two calls are separate here.
-			const raw = WidFactory.createWid(` + strconv.Quote(toJID) + `);
-			if (!raw) { park({ stage, ok: false, why: 'WID_NULL' }); return; }
-			const wid = WidFactory.asChatWid(raw);
-			if (!wid) { park({ stage, ok: false, why: 'NOT_A_CHAT_WID' }); return; }
+			// fails with "e.isUser is not a function" — the page saying it was
+			// handed a string where it expected an object.
+			const local = WidFactory.createWid(` + strconv.Quote(toJID) + `);
+			if (!local) { park({ stage, ok: false, why: 'WID_NULL' }); return; }
+
+			// ASK THE SERVER WHO THIS IS. A locally-built wid carries the phone
+			// number, and this build wants the LID — opening a chat with the
+			// phone wid fails with "No LID for user" for anyone never spoken
+			// to. queryWidExists is the SPA's own resolution, and it answers
+			// with the identity the server knows: measured here as
+			// wid.server === "lid".
+			//
+			// This is the step whatsapp-web.js performs in getNumberId and NOT
+			// before sending, which is why its own issues (#3834, #5750) end at
+			// findOrCreateLatestChat -> toUserLidOrThrow with no fix. Doing it
+			// first is the difference.
+			const Query = window.require('` + string(spa.ModuleQueryExistsJob) + `');
+			const exists = await Query.queryWidExists(local);
+			if (!exists || !exists.wid) {
+				park({ stage, ok: false, why: 'NOT_ON_WHATSAPP' });
+				return;
+			}
+			const wid = exists.wid;
+
+			// PARK THE RESOLVED JID, because verification depends on it.
+			// Measured on 2026-08-20 against conta-A: of 399 models in the
+			// collection, 397 carry server "lid", one "c.us" and one "g.us".
+			// A verifier comparing against the PHONE jid handed to this
+			// function therefore matches nothing, and reports ErrUnverified
+			// for a send that worked — which is what it did, for a message
+			// confirmed present, fromMe and six minutes old.
+			const jid = (typeof wid._serialized === 'string') ? wid._serialized : '';
+			if (!jid) { park({ stage, ok: false, why: 'WID_NOT_SERIALIZED' }); return; }
 
 			// A chat that does not exist yet is the ORDINARY case for a first
 			// message, so obtaining one cannot be a lookup. Measured: get()
 			// returns null for a correspondent never spoken to, and
 			// ChatCollection.find throws "this.findImpl is not a function".
 			// findOrCreateLatestChat is the call that works either way.
+			// The chat is looked up by the SERVER'S wid, not the phone one.
 			let chat = ChatCollection.get(wid);
 			if (!chat) {
 				const Find = window.require('` + string(spa.ModuleFindChatAction) + `');
@@ -194,7 +235,7 @@ func dispatchScript(toJID, text string) string {
 			stage = 'dispatch';
 			const Send = window.require('` + string(spa.ModuleSendTextMsgChatAction) + `');
 			await Send.sendTextMsgToChat(chat, ` + strconv.Quote(text) + `);
-			park({ stage, ok: true, why: '' });
+			park({ stage, ok: true, why: '', jid: jid });
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 120) });
 		}
@@ -210,15 +251,19 @@ func dispatchScript(toJID, text string) string {
 // replays history, so "an outgoing message to this chat exists" is true for
 // every chat that ever had one. Without the timestamp bound this would confirm
 // sends that never happened — the exact false positive the delivery test hit.
+// resolvedJID, NOT the caller's jid: this build stores messages under the LID
+// identity the server returns, so verifying against what the caller typed
+// matches nothing. The parameter is named for the distinction because losing it
+// costs a false ErrUnverified on a send that succeeded.
 func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
-	toJID string, sentAt time.Time, label string) (Result, error) {
+	resolvedJID string, sentAt time.Time, label string) (Result, error) {
 
 	start := time.Now()
 	deadline := start.Add(verifyBudget)
 	for probed := false; !probed || time.Now().Before(deadline); probed = true {
 		var raw string
 		if err := runner.Do(ctx, engine.OpStateProbe, label+"/verify", func(ctx context.Context) error {
-			return eval(ctx, verifyScript(toJID), &raw)
+			return eval(ctx, verifyScript(resolvedJID), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("send: verifying: %w", err)
 		}
@@ -242,12 +287,12 @@ func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 
 // verifyScript reuses messagemeta's allow-list, so a verified send cannot carry
 // content that a drained event would not — one list, one place to be wrong.
-func verifyScript(toJID string) string {
+func verifyScript(resolvedJID string) string {
 	return `JSON.stringify((() => {
 		const coll = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
 		if (!coll || typeof coll.getModelsArray !== 'function') { return []; }
 		const meta = ` + messagemeta.MetaExpr + `;
-		const want = ` + strconv.Quote(toJID) + `;
+		const want = ` + strconv.Quote(resolvedJID) + `;
 		const out = [];
 		const all = coll.getModelsArray();
 		for (let i = all.length - 1; i >= 0 && out.length < 40; i--) {

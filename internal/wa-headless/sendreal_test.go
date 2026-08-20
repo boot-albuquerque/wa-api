@@ -77,10 +77,19 @@ func TestRealSPASendAndReceiveBetweenAccounts(t *testing.T) {
 	}
 	t.Logf("SENT and VERIFIED on the sender: %s", res)
 
-	// The receiving half. Fresh only: the collection replays history, and an
-	// old inbound message would confirm nothing about this send.
+	// The receiving half. FRESHNESS IS NOT ENOUGH, and this test learned it the
+	// expensive way: on 2026-08-20 it reported a closed loop after accepting an
+	// inbound `type=image` that arrived 23 SECONDS BEFORE the send, with an id
+	// unrelated to the one just dispatched. It was fresh, it was inbound, and
+	// it was somebody else's message. The run passed and proved nothing.
+	//
+	// The discriminator that actually answers the question was available all
+	// along: a WhatsApp message keeps the SAME id on both sides, so the only
+	// event that closes this loop is the one whose id equals what the sender
+	// returned. Freshness is kept below as a cheap pre-filter, not as proof.
 	deadline := time.Now().Add(90 * time.Second)
 	replayed := 0
+	other := 0
 	for time.Now().Before(deadline) {
 		d, err := sub.Drain(context.Background(), "loop/drain")
 		if err != nil {
@@ -98,7 +107,13 @@ func TestRealSPASendAndReceiveBetweenAccounts(t *testing.T) {
 			if m.Direction != messagemeta.DirectionIn {
 				continue
 			}
+			if m.ID.ID != res.ID.ID {
+				other++
+				continue
+			}
 			t.Logf("RECEIVED on the other account: %s", m)
+			t.Logf("(matched the sender's id %s)", res.ID.ID)
+			t.Logf("(ignored %d unrelated fresh inbound event(s))", other)
 			t.Logf("(ignored %d replayed history event(s))", replayed)
 			if !m.ID.Present() {
 				t.Error("the received event has no message id")
@@ -111,8 +126,10 @@ func TestRealSPASendAndReceiveBetweenAccounts(t *testing.T) {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	t.Fatalf("the message was SENT and verified on the sender, but never arrived as a FRESH "+
-		"inbound event on the receiver within 90s (%d replayed events seen). Either delivery "+
-		"is slower than this budget, or the receiving subscription does not see this class "+
-		"of message", replayed)
+	t.Fatalf("the message was SENT and verified on the sender (id=%s), but no inbound event "+
+		"with that id arrived on the receiver within 90s (%d replayed, %d unrelated fresh "+
+		"inbound). The two counters separate the causes: replayed>0 with unrelated=0 means "+
+		"nothing is arriving at all, while unrelated>0 means events flow and only OURS is "+
+		"missing — which would mean the id does not survive the trip and this assertion, "+
+		"not the delivery, is what needs remeasuring", res.ID.ID, replayed, other)
 }

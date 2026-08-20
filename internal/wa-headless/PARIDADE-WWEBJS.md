@@ -340,6 +340,49 @@ o original está parado, e exigir a função é como essa decisão vira explíci
 
 ---
 
+### 6.7 — `sendText` resolve a identidade ANTES de abrir a conversa
+
+**O que o `wwebjs` faz**: `sendMessage` vai direto a
+`findOrCreateLatestChat(wid)` com um WID construído do número. A resolução pelo
+servidor existe na biblioteca, em `getNumberId` →
+`WAWebQueryExistsJob.queryWidExists`, mas **não é usada no caminho de envio**.
+
+**O que fazemos**: chamamos `queryWidExists` PRIMEIRO e abrimos a conversa com o
+`wid` que o servidor devolveu.
+
+**Por que divergimos**: neste build o WID do número não basta. Sem a resolução,
+`findOrCreateLatestChat` lança `No LID for user` para qualquer destinatário com
+quem nunca se falou. As issues abertas do próprio `wwebjs` (#3834, #5750,
+set/2025 a jan/2026) morrem nesse mesmo ponto sem correção — ou seja, copiar o
+caminho dele teria reproduzido o defeito dele.
+
+A medição que sustenta a escolha: de 399 modelos em `WAWebMsgCollection`,
+**397 sob `@lid`**, 1 sob `c.us`, 1 sob `g.us`. Este build é LID-first, e o
+número de telefone é entrada do usuário, não identidade.
+
+O Baileys resolve o mesmo problema com maquinaria muito maior — um
+`LIDMappingStore` com fallback para USync — porque fala o protocolo e precisa
+manter o mapeamento. Dirigindo a SPA, o mapeamento já está lá; basta perguntar.
+**Mesmo entendimento, uma fração da máquina**, que é exatamente o que este
+documento pede que se copie.
+
+### 6.8 — `sendText` VERIFICA a pós-condição; o `wwebjs` retorna na aceitação
+
+**O que o `wwebjs` faz**: devolve assim que a página aceita a chamada.
+
+**O que fazemos**: o envio só retorna depois de a mensagem APARECER na coleção
+local, filtrada pela identidade resolvida e por um limite de frescor. É a
+invariante 14 (o envio lança em falha e nunca devolve sucesso silencioso).
+
+**O que isso comprou, concretamente**: a verificação foi o que expôs o defeito
+da própria verificação. Ela comparava com o jid de TELEFONE e por isso nunca
+casava — e o `ErrUnverified` resultante levou à sonda que mediu os 397/399.
+Sem a pós-condição, o envio teria devolvido sucesso e o erro de identidade
+ficaria invisível até alguém notar mensagem faltando. Ver H34.
+
+**Custo medido**: 1–2 ms de espera no caminho feliz (`waited=1ms`, `waited=2ms`
+em duas execuções reais). A pós-condição não é cara; a ausência dela é.
+
 ## 7. Passagem de auditoria — as seis, conferidas contra o que a matriz prometia
 
 Feita em 2026-08-19, depois de a sexta capacidade entrar. O alvo parou de mudar,

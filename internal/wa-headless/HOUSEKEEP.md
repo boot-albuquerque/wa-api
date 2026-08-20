@@ -2600,6 +2600,225 @@ para LID neste build — os candidatos visíveis são `asUserLidOrThrow` e
 contato com quem nunca se falou é a pergunta, e é onde o Baileys e a Evolution
 API têm história.
 
-**Status**: aberto — fronteira de protocolo alcançada, com o caminho medido até
-ela e a pergunta seguinte formulada.
+### Resolvido (2026-08-20) — a página já sabia resolver, e ninguém perguntou
 
+O LID **não** precisou ser construído: a SPA tem a resolução pronta em
+`WAWebQueryExistsJob.queryWidExists(wid)`, que devolve `{wid}` com
+`wid.server === "lid"`. Passou a ser chamada ANTES de abrir o chat, e o
+`findOrCreateLatestChat` recebe o wid do SERVIDOR em vez do construído a partir
+do número. O `No LID for user` desapareceu.
+
+A pista veio do whatsapp-web.js — não das issues dele, que dão o problema como
+aberto (#3834, #5750), mas do CÓDIGO: `getNumberId` usa exatamente essa chamada,
+só que **não** antes de enviar. Fazer isso primeiro é a diferença inteira. A
+regra que isso gerou está no `CLAUDE.md` ("A resposta NEGATIVA também é
+informação").
+
+### O quinto defeito, e ele fingiu ser o quarto
+
+Destravado o LID, o envio passou a falhar com `ErrUnverified` — "dispatchou e
+nenhuma mensagem de saída apareceu". **Era falso negativo: o envio funcionava.**
+
+Medido em `probe_sendjid_test.go` contra conta-A, varrendo a coleção inteira:
+
+| medida | valor |
+|---|---|
+| modelos em `MsgCollection` | 399 |
+| por servidor | `lid` **397** · `c.us` 1 · `g.us` 1 |
+| a mensagem "não enviada" | PRESENTE, `fromMe=true`, `t=2026-08-20 15:21:44` (6 min antes da sonda) |
+
+O `verifyScript` comparava `m.id.remote_jid` com o JID de TELEFONE recebido por
+parâmetro. Num build onde 397 de 399 mensagens vivem sob `@lid`, esse filtro
+descarta tudo — sempre, para qualquer envio. **Correção**: o dispatch estaciona
+o `_serialized` do wid resolvido e a verificação usa ESSE, não o que o chamador
+digitou. O parâmetro chama-se `resolvedJID` para que a distinção não se perca.
+
+> **A sonda errou primeiro, e o erro vale registro.** A primeira versão leu os
+> "últimos 25" de `getModelsArray()` e achou mensagens de set/2025, com uma de
+> jul/2026 fora de ordem no meio — **a coleção não é ordenada por tempo**.
+> "Últimos N do array" ≠ "N mais recentes". Só varrendo tudo e ordenando por `t`
+> a mensagem recém-enviada apareceu. O instrumento mediu a fatia errada antes de
+> medir a coisa certa, exatamente como o CLAUDE.md avisa.
+
+**Testes que travam** (`internal/wa-headless/`):
+
+- `TestRealSPASendAndReceiveBetweenAccounts` — laço fechado real.
+- `probe_sendjid_test.go::TestProbeOutgoingRemoteJID` — a medição, guardada por
+  `WA_PROBE_SENDJID`, que reproduz a distribuição de servidores.
+
+**Controle negativo A, EXECUTADO** — reintroduzido `verify(..., toJID, ...)`:
+
+```
+sendreal_test.go:76: send: send: dispatched but no outgoing message appeared within 20s (recipient not printed)
+--- FAIL: TestRealSPASendAndReceiveBetweenAccounts (40.96s)
+```
+
+Sintoma original reproduzido exatamente.
+
+### Suíte unitária da capacidade (a lacuna que o gate denunciou)
+
+A `capabilities/send` foi entregue **sem nenhum teste unitário**, sozinha entre
+as seis capacidades. Quem apontou foi o `coverage-gate`, ao listá-la junto com
+os pacotes sem `_test.go` (ver F96 na raiz). Agora tem sete, em
+`capabilities/send/send_test.go`.
+
+O dublê imita a REGRA REAL e diz de onde ela vem: responde à consulta de
+verificação **apenas** sob `storedUnder`, porque a medição da sonda mostrou 397
+de 399 mensagens sob `@lid`. Um dublê que respondesse para qualquer jid deixaria
+o defeito desta entrada passar verde.
+
+| teste | trava |
+|---|---|
+| `TestVerificationUsesTheRESOLVEDIdentity` | a regressão desta entrada — e assere QUAL jid foi consultado, não só o resultado |
+| `TestSuccessWithoutAnIdentityIsRefused` | `ok:true` sem identidade é recusa, não sucesso silencioso |
+| `TestNotOnWhatsAppIsErrNoChat` | as três falhas permanecem distinguíveis |
+| `TestPageRefusalIsErrDispatch` | o motivo dado pela página não se perde |
+| `TestNothingAppearingIsErrUnverified` | a pós-condição em si |
+| `TestStaleMessagesDoNotVerifyASend` | o limite de frescor |
+| `TestAlreadyCancelledContextNeverDispatches` | ORDEM: quem desistiu não tem mensagem enviada em seu nome |
+
+**Três controles negativos, EXECUTADOS:**
+
+```
+### CONTROL 1 — verificar contra o jid de telefone do chamador (o defeito)
+--- FAIL: TestVerificationUsesTheRESOLVEDIdentity (0.16s)
+    Text: send: dispatched but no outgoing message appeared within 150ms
+
+### CONTROL 2 — remover o limite de frescor
+--- FAIL: TestStaleMessagesDoNotVerifyASend (0.00s)
+    got <nil>, want ErrUnverified
+
+### CONTROL 3 — remover a guarda de identidade ausente
+--- FAIL: TestSuccessWithoutAnIdentityIsRefused (0.15s)
+    got ...no outgoing message appeared..., want ErrDispatch
+```
+
+O controle 1 reproduz o sintoma de produção palavra por palavra.
+
+**Status**: corrigido — LID resolvido pela própria página, verificação passando
+a comparar contra a identidade do servidor, com controle negativo executado em
+campo (`sendreal_test.go`) e três controles na suíte unitária.
+
+## H35 — o laço fechado passou com a mensagem de OUTRA pessoa
+
+**Data**: 2026-08-20 · **Contexto**: primeira execução verde do
+`TestRealSPASendAndReceiveBetweenAccounts`, logo após o conserto da H34.
+
+**O teste PASSOU e não provou nada.** Os campos do log denunciam:
+
+```
+SENT and VERIFIED on the sender: send.Result(id=3EB022B6E694D81AD12A5B at=2026-08-20T19:28:44Z ...)
+RECEIVED on the other account:   Meta(... id=2A45804B4DB29280B9F9 dir=in type=image at=2026-08-20T19:28:21Z)
+```
+
+Id diferente, `type=image` contra um envio de texto, e **23 segundos ANTES** do
+próprio envio. O teste aceitou uma mensagem alheia como prova de entrega.
+
+**Causa**: o discriminador era só o FRESCOR — `m.Timestamp.Before(sentAt)` com
+`sentAt` recuado 2 minutos por causa de desvio de relógio. Frescor separa
+"histórico replicado" de "chegou agora"; **não** separa "chegou agora" de "é a
+minha". Numa conta viva, a segunda distinção é a única que responde à pergunta.
+
+Isto é a mesma armadilha da entrega de H24 (falso positivo com imagem replicada
+de 19h46m) reaparecendo com um disfarce novo: lá o frescor foi a CORREÇÃO, aqui
+o frescor foi o DEFEITO. A lição não é "use frescor", é **"use o discriminador
+que responde à pergunta que você está fazendo"**.
+
+**Correção**: exigir que o id do evento recebido seja igual ao id devolvido pelo
+emissor. Uma mensagem do WhatsApp mantém o MESMO id nos dois lados, então esse é
+o discriminador exato — e estava disponível o tempo todo, no valor de retorno
+que o teste já imprimia.
+
+Verde depois da correção, com os dois contadores zerados:
+
+```
+SENT and VERIFIED on the sender: send.Result(id=3EB0C878CEA660A3563AC1 at=2026-08-20T19:29:48Z waited=2ms)
+RECEIVED on the other account:   Meta(... id=3EB0C878CEA660A3563AC1 dir=in type=chat at=2026-08-20T19:29:49Z)
+(matched the sender's id 3EB0C878CEA660A3563AC1)
+```
+
+**Controle negativo, e o PRIMEIRO não valeu.** Anular a comparação de id
+(`if false && ...`) fez o teste **PASSAR** — porque naquela rodada a primeira
+inbound fresca por acaso foi a certa. Controle não-determinístico não prova que
+a asserção morde. Refeito de forma determinística, procurando um id que não pode
+existir (`res.ID.ID+"-CONTROL"`):
+
+```
+sendreal_test.go:129: the message was SENT and verified on the sender (id=3EB0CED028D6CC10AEA3C4),
+but no inbound event with that id arrived on the receiver within 90s (77 replayed, 3 unrelated fresh inbound)
+--- FAIL: TestRealSPASendAndReceiveBetweenAccounts (110.57s)
+```
+
+**E esse controle entregou a prova que faltava**: `3 unrelated fresh inbound` em
+90 segundos. O falso positivo não foi azar — numa conta viva há mensagens
+alheias chegando o tempo todo, e a asserção antiga aceitaria qualquer uma.
+
+**Status**: corrigido — discriminador trocado por igualdade de id, com controle
+negativo determinístico executado e a mensagem de falha instrumentada para
+separar as causas (`replayed` vs `unrelated`).
+
+
+
+## H36 — teste sem prazo transforma contenção de máquina em 20 minutos de suíte parada
+
+**Data**: 2026-08-20 · **Contexto**: `make check` durante o fechamento da H34/H35.
+
+**O que aconteceu**: `make check` FALHOU com
+
+```
+panic: test timed out after 20m0s
+	running tests:
+		TestBrowserChainVerifiesTheModuleInventory (18m28s)
+```
+
+O mesmo teste, executado isolado logo em seguida, **PASSA em 2,08 s**. Não é o
+teste que está errado no que afirma — é o que ele faz quando o ambiente não
+coopera.
+
+**Onde**: `internal/wa-headless/integration_test.go:389-405`. As três chamadas
+que falam com o navegador usam `context.Background()`:
+
+```go
+browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{...})
+tab, err := engine.OpenTab(context.Background(), browser)
+err := tab.Navigate(runner, requirePage(t, spa.RequiredAtStartup), "nav/complete")
+```
+
+**Problema**: sem prazo, um Chrome que sobe mas não responde não produz falha —
+produz ESPERA. A prova de que foi isso: o processo ficou vivo e ocioso durante
+todo o travamento.
+
+```
+PID    ELAPSED  COMMAND
+31345    19:12  ... --headless=new --no-sandbox --disable-dev-shm-usage ...
+```
+
+Lançado pelo teste, vivo 19 minutos, sem nunca ter respondido. O `Launch`
+retornou (o processo existe); o que ficou pendurado foi a conversa com ele.
+
+Dois custos, e o segundo é pior que o primeiro:
+
+1. **Diagnóstico apagado.** A suíte morre por timeout do PACOTE, então a falha
+   aponta para "20 minutos" em vez de "o navegador não respondeu ao OpenTab".
+   Vinte minutos de sinal viram uma linha inútil.
+2. **O navegador VAZA.** O `panic` do timeout não roda `defer`, então o
+   `CleanStop` nunca acontece e o Chrome fica. Numa máquina que já estava sob
+   contenção, o remédio piora a doença — a execução seguinte começa com um
+   processo a mais disputando.
+
+**Correção sugerida**: dar prazo às três chamadas, com o orçamento vindo do
+`engine.DefaultDeadlines` que já existe para exatamente isto (`OpBoot`,
+`OpNavigate`), em vez de `context.Background()`. O `Runner.Do` já aplica
+política por `OpKind`; o caminho de teste é que a contorna.
+
+**Vale para os vizinhos**: este achado provavelmente NÃO é só deste teste.
+Enumerar todos os `context.Background()` que alimentam chamada de navegador nos
+testes de integração faz parte do conserto — a H30 ensinou que "um dublê ignora
+o `ctx`" quase nunca é um dublê só.
+
+**Por que não corrigi agora**: está fora do escopo da tarefa de envio, e mexer
+em prazo de teste de integração muda o que a suíte considera falha. Pelo
+`CLAUDE.md`, isso se registra e se pergunta, não se conserta de graça.
+
+**Status**: aberto — medido (18m28s travado contra 2,08s isolado, com o pid do
+navegador vazado como evidência), correção proposta, aguardando decisão.

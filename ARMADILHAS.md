@@ -876,3 +876,48 @@ daqueles 58 teria feito o teste passar — que é literalmente o que aconteceu n
 primeira corrida. Um controle negativo raramente vem tão de graça: a própria
 execução corrigida mostra quantas oportunidades de falso positivo existiam.
 
+
+## ARM — o frescor consertou um teste e ARRUINOU o seguinte
+
+A armadilha anterior termina em triunfo: o frescor era o discriminador que
+faltava, e os 58 eventos replicados provaram que ele carregava peso. Esta
+começa exatamente daí — porque **a lição foi guardada errada**.
+
+Guardei "use frescor". A lição verdadeira era "use o discriminador que responde
+à pergunta que você está fazendo".
+
+No teste de laço fechado (conta A envia, conta B recebe), a pergunta mudou. Não
+é mais *"isto chegou agora ou é histórico?"* — é *"isto é a MINHA mensagem?"*.
+Frescor não responde a essa. E o teste passou assim:
+
+```
+SENT and VERIFIED on the sender: send.Result(id=3EB022B6E694D81AD12A5B at=2026-08-20T19:28:44Z ...)
+RECEIVED on the other account:   Meta(... id=2A45804B4DB29280B9F9 dir=in type=image at=2026-08-20T19:28:21Z)
+```
+
+Id diferente. `type=image` para um envio de texto. E carimbada **23 segundos
+antes do próprio envio**. Verde, e provando nada.
+
+**A conta estava viva.** É essa a diferença entre os dois casos: no teste de
+entrega, o único tráfego era o histórico, e frescor bastava para isolar o
+presente. Numa conta que recebe mensagens de verdade, o presente está cheio de
+gente. O controle negativo determinístico mediu quantas: **3 inbound frescas
+alheias em 90 segundos**. A asserção antiga aceitaria qualquer uma das três.
+
+**O discriminador certo estava à mão o tempo todo**: uma mensagem do WhatsApp
+mantém o MESMO id nos dois lados. O emissor já devolvia esse id, e o teste já o
+imprimia na linha de cima — a prova estava no log, não usada.
+
+**E o primeiro controle negativo não valeu.** Anular a comparação de id com
+`if false && ...` fez o teste PASSAR: naquela rodada, a primeira inbound fresca
+por acaso foi a certa. Um controle cujo resultado depende de sorte não prova que
+a asserção morde. Só a mutação determinística — procurar um id que não pode
+existir — produziu a falha.
+
+**As duas regras que sobram:**
+
+1. Quando a pergunta do teste mudar, **reavalie o discriminador**. Herdar o da
+   tarefa anterior é como este defeito nasceu: o mecanismo estava certo, e
+   estava respondendo a outra pergunta.
+2. **Controle negativo não-determinístico é controle nenhum.** Se a mutação pode
+   passar por sorte, aperte-a até que a falha seja obrigatória.
