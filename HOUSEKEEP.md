@@ -12910,5 +12910,61 @@ de fiação numa recusa de subir o processo inteiro. Isso é fail-closed legíti
 para uma chave de encriptação ([[F169]]); para um lançador de sessão, é decisão
 de operação, não de código.
 
-**Status**: não corrigido. A parte (1) é trava e cabe em bloco próprio; a parte
-(2) é contrato HTTP e é do humano. Levado ao canal e ao humano.
+**Status da parte (1), a TRAVA**: **CORRIGIDA** no CAP-42, decisão (a) do canal
+— `pkg/bootstrap/start_session_wiring_test.go`,
+`TestStartSessionIsWiredIntoConnectHandler`.
+
+O canal reafirmou a fronteira que eu tinha traçado: *"a trava pela rota
+registrada prova apenas que o bootstrap liga o lançador; a decisão sobre a
+resposta 200 sem lançador permanece um contrato HTTP separado, portanto a guarda
+de nil deve ficar fora desta mudança."* O bloco é SÓ teste — `wiring_handlers.go`
+e `handler_session.go` não foram tocados.
+
+**O desenho, e por que ele cobre DUAS formas do defeito.** O teste tem duas
+asserções em série:
+
+1. depois de `initCustomHandlers`, `Connect.StartSession` **não pode ser nil** —
+   pega o decorador removido do wiring;
+2. substituído por um stub que sinaliza num canal, um `GET /session/connect`
+   pela ROTA REGISTRADA tem de invocá-lo — pega o handler que deixou de chamar.
+
+**O que o teste NÃO faz, de propósito**: não usa o status como discriminador. O
+`200 "connecting"` sai de qualquer jeito — é ESSE o defeito. Um teste que
+asserisse status passaria com E sem a fiação.
+
+**Controles negativos do COORDENADOR — dois, e mordem por razões DIFERENTES**,
+que é o que prova a cobertura das duas formas:
+
+CN-1, removendo `.WithStartSession(s.startSession)` de `wiring_handlers.go:410`:
+
+```
+--- FAIL: TestStartSessionIsWiredIntoConnectHandler (0.01s)
+    start_session_wiring_test.go:95: StartSession is nil after initCustomHandlers — the wiring in initConnectHandler (wiring_handlers.go:410) no longer calls .WithStartSession(s.startSession). Without it, GET /session/connect responds 200 {"status":"connecting"} but no WhatsApp session starts: the response lies.
+```
+
+CN-2, fiação INTACTA mas o handler deixando de chamar
+(`go h.StartSession(...)` removido de `handler_session.go:96`):
+
+```
+--- FAIL: TestStartSessionIsWiredIntoConnectHandler (2.01s)
+    start_session_wiring_test.go:112: StartSession was not invoked within the timeout — the handler at GET /session/connect responded 200 but never called StartSession. If .WithStartSession(s.startSession) is still in wiring_handlers.go:410, then the handler itself stopped calling it (check handler_session.go:91-96).
+```
+
+**Nos DOIS casos o status continuou 200** — confirmação empírica de que asserir
+status nunca teria travado nada. Os dois arquivos restaurados por edição
+localizada e conferidos com `diff`.
+
+**Sem `time.Sleep` fixo**: `h.StartSession` é disparado com `go`
+(`handler_session.go:96`), então o teste espera num canal com buffer via `select`
+com timeout de 2 s, e restaura o global `customHandlerSet` no `Cleanup`.
+Verificado: **10 execuções** (`-count=10`) e **3 sob `-race`**, todas verdes —
+não é formalidade num teste que envolve goroutine e canal.
+
+**Gate**: `make check` EXIT 0, rodado por mim. Zero arquivos deletados, zero
+testes removidos, um acrescentado. Conjunto elegível IDÊNTICO — nada a regenerar.
+
+**Status da parte (2), a RESPOSTA QUE MENTE**: não corrigido, e não é meu.
+Decidir se `200 "connecting"` sem lançador é aceitável é CONTRATO HTTP, item
+3.1. Aguarda o humano. A trava agora impede que a fiação suma em silêncio, mas
+NÃO conserta a resposta: se alguém remover o decorador e ignorar o gate
+vermelho, a rota continua a mentir.
