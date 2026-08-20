@@ -5335,8 +5335,60 @@ o resto. Não é urgente (não é vazamento dos três segredos da F9.4), mas é
 divergência de comportamento entre handlers irmãos que deveria ser
 deliberada, não acidental.
 
-**Status**: **NÃO CORRIGIDO** — fora do escopo do FIX-07b (só teste). Fica
-pendente de decisão do usuário sobre se `user_id` deve ou não ser logado.
+**Status**: **CORRIGIDO** em 2026-08-20, decisão (a) do canal — o `user_id`
+SAIU do handler de texto, alinhando com os seis de mídia.
+
+**Verificado antes de mexer**: `handler_message_send.go` carimbava
+`Str("user_id", txtID)` nos DOIS ramos de erro (decode e use case); os seis
+handlers de mídia não carimbam nada equivalente — nem `user_id`, nem `path`,
+porque a cadeia `hlog` já injeta o caminho.
+
+**Por que alinhar por BAIXO e não por cima**: o repositório já tem o eixo de
+no-secret-leak como valor declarado, e cinco dos seis handlers irmãos já
+escolheram não logar. Alinhar por cima espalharia por seis lugares o que só um
+fazia. Um Id de sessão em log é superfície de correlação — mais branda que um
+segredo global, e ainda assim uma escolha que os outros não fizeram.
+
+**Teste que trava a decisão**: `TestSendText_ErrorLogsOmitSessionID`. Ele assere
+de DUAS formas, e a segunda é a que importa a prazo:
+
+1. o campo `user_id` não está presente (`r.Fields["user_id"]`);
+2. o VALOR do id de sessão não aparece no registro cru (`r.Raw`) — pega quem o
+   recolocar sob outro nome de campo.
+
+**Os DOIS ramos são exercitados**, e isso não é zelo excessivo: ambos
+carimbavam. Cobrir só um deixaria o outro livre — exatamente a forma de falha da
+[[F163]], onde criação e edição eram dois pontos de escrita e cobrir um só teria
+deixado o defeito vivo.
+
+**Controles negativos do COORDENADOR, um por ramo:**
+
+CN-1, devolvendo `user_id` ao ramo de DECODE:
+
+```
+--- FAIL: TestSendText_ErrorLogsOmitSessionID/decode_failure
+    field user_id is back on the text handler error log (F120) ...
+    record: {"level":"warn",...,"user_id":"f120-session-id",...,"message":"send message payload could not be decoded"}
+```
+
+CN-2, devolvendo ao ramo do USE CASE:
+
+```
+--- FAIL: TestSendText_ErrorLogsOmitSessionID/use_case_failure
+    record: {"level":"error",...,"user_id":"f120-session-id",...,"message":"send message use case failed"}
+```
+
+Restaurado e conferido que o arquivo ficou sem nenhuma ocorrência de
+`Str("user_id"`.
+
+**Nota sobre o eixo**: isto NÃO é a F9.4. Um Id de sessão não é
+`admin_token`/`global_encryption_key`/`global_hmac_key`, e
+`logassert.NoSecrets` não o apanharia — foi por isso que o teste assere o nome
+do campo diretamente, em vez de reusar o helper de segredos.
+
+**Gate**: `make check` EXIT 0. Diff de 2 remoções em produção e 58 linhas de
+teste — a proporção certa quando a correção é pequena e a trava é o que dura.
+
 
 ## F121 — `SendLocationRequest.Latitude`/`Longitude` == 0 é indistinguível de
 "campo ausente"; um ponto sobre o equador ou o meridiano de Greenwich é

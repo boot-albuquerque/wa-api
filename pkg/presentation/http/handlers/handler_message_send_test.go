@@ -325,3 +325,61 @@ func TestSendText_NoSecretLeak(t *testing.T) {
 	}
 	logassert.NoSecrets(t, capture.Records(t))
 }
+
+// TestSendText_ErrorLogsOmitSessionID locks the F120 parity decision: the text
+// handler must NOT stamp the caller's session id on its error logs, because
+// the six media handlers do not, and a session id in a log is a correlation
+// surface.
+//
+// This is NOT the F9.4 axis: a session id is not one of the three global
+// secrets, and logassert.NoSecrets would not catch it. The field name is
+// asserted directly, on purpose.
+//
+// Both error branches are exercised, because they were BOTH stamping it
+// (handler_message_send.go, decode failure and use-case failure). Covering one
+// would leave the other free — the same shape as the two write points in F163.
+func TestSendText_ErrorLogsOmitSessionID(t *testing.T) {
+	const sessionID = "f120-session-id"
+
+	cases := []struct {
+		name string
+		tm   *contractsfake.TextMessenger
+		body string
+	}{
+		{
+			name: "decode failure",
+			tm:   &contractsfake.TextMessenger{},
+			body: `{not json`,
+		},
+		{
+			name: "use case failure",
+			tm:   &contractsfake.TextMessenger{SessionGuard: contractsfake.FailSession(errors.New("f120-cause"))},
+			body: `{"Phone":"5511999999999","Body":"ola"}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped, capture := logassert.Wrap(sendTextRouter(tc.tm, &contractsfake.JIDResolver{}))
+
+			req := httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader(tc.body))
+			req = withUser(req, sessionID)
+
+			rec := httptest.NewRecorder()
+			wrapped.ServeHTTP(rec, req)
+
+			if rec.Code < 400 {
+				t.Fatalf("status = %d, want an error status (body %s)", rec.Code, rec.Body.String())
+			}
+
+			for _, r := range capture.Records(t) {
+				if _, present := r.Fields["user_id"]; present {
+					t.Fatalf("field user_id is back on the text handler error log (F120); the six media handlers do not stamp it. record: %s", r.Raw)
+				}
+				if strings.Contains(r.Raw, sessionID) {
+					t.Fatalf("session id leaked into the error log under another field name (F120). record: %s", r.Raw)
+				}
+			}
+		})
+	}
+}
