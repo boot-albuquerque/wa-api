@@ -12312,3 +12312,80 @@ possivelmente diferente.
 
 **Status**: não corrigido. Fora do escopo do CAP-39, que é a cobertura. Levado
 ao canal de decisão.
+
+---
+
+## F173 — o teste de paridade stdio×HTTP só olha para UM lado, e 28 rotas caíram no lado cego
+
+**Data**: 2026-08-20. **Contexto**: levantamento do estado real do envio de
+mensagem e das operações de chat, depois de fechada a rodada F154/F168/F164/F171.
+Achado de lado, ao contar rotas.
+
+**Onde**: `pkg/bootstrap/stdio_route_consistency_test.go:29`
+(`TestStdioRoutesMatchRegisteredHTTPRoutes`) e
+`pkg/infra/stdio/stdio_routes_*.go`.
+
+**Problema**: o teste percorre a tabela do **stdio** e pergunta ao roteador real
+se cada par (método, caminho) casa. Isso pega a direção "o stdio promete o que o
+HTTP não tem" — que foi o defeito da F99 — e **não pega** a direção inversa:
+rota registrada no HTTP que nunca ganhou entrada no stdio simplesmente não
+existe para aquele transporte, em silêncio.
+
+O comentário do teste recusa manter "uma lista de rotas esperadas", e a razão é
+boa: seria uma TERCEIRA tabela, e a próxima rota nova entraria divergente nas
+três. Mas essa objeção **não se aplica à direção inversa**, que não precisa de
+lista nenhuma — basta percorrer as rotas REGISTRADAS e perguntar se a tabela do
+stdio as cobre. As duas fontes já existem.
+
+**Medição** (`registry.Register` em `wiring_routes.go` contra `httpPath` em
+`stdio_routes_*.go`): 87 rotas registradas, 60 declaradas no stdio, **28
+registradas sem entrada no stdio**:
+
+```
+/chat/delete/message      /chat/downloadsticker     /chat/list
+/chat/send/template       /group/joinapprovalmode   /group/requestparticipants
+/group/updaterequestparticipants                    /hmac/config
+/hmac/configure           /proxy/set                /s3/config
+/s3/configure             /s3/test                  /session/profile
+/session/profile/full     /session/s3/config        /session/s3/test
+/session/ws               /user/blocklist           /user/contacts/last-activity
+/user/contacts/sync       /user/history/sync        /user/lid/{jid}
+/user/presence/subscribe  /user/privacy             /user/profile/{jid}
+/user/status              /webhook/history
+```
+
+**Nem todas são defeito, e isso importa**: `/session/ws` é upgrade de WebSocket
+e não cabe num transporte de requisição/resposta. Rotas com parâmetro de caminho
+(`/user/lid/{jid}`, `/user/profile/{jid}`) precisariam de forma de despacho que
+a tabela estática do stdio talvez não suporte. A lista é o ponto de partida da
+triagem, não a lista de bugs.
+
+**O caso que mais dói, e que é da prioridade do projeto**: `/chat/list` (`GET`,
+`ch.User.ListChats()`) — LISTAR CONVERSAS — não tem entrada no stdio. E o motivo
+de ninguém ter notado está à vista: a tabela TEM `chat.send.list`, que parece
+listagem e é envio de mensagem interativa de lista. Um quase-homônimo cobrindo o
+buraco.
+
+Vale notar também que **todas as rotas de configuração consertadas nesta sessão**
+— `/hmac/config`, `/s3/config`, `/proxy/set`, `/webhook/history` (F157, F169,
+F167, F124) — estão no lado cego. O trabalho existe na API e não existe para
+quem usa o stdio.
+
+**Falso positivo descartado antes de registrar**: a primeira medição acusou
+`/admin/users` como "prometida pelo stdio e inexistente no HTTP". É artefato do
+meu grep, que só leu `wiring_routes.go`; as rotas de admin são registradas por
+`registerAdminRoutes` no subroteador de `router.go:286`. O teste de consistência
+passa, e é ele a autoridade nessa direção.
+
+**Correção sugerida**, em duas partes independentes:
+
+1. **O mecanismo** — acrescentar a asserção da direção inversa ao mesmo teste,
+   percorrendo as rotas registradas e exigindo entrada no stdio, com uma lista
+   de EXCEÇÕES nomeadas e justificadas (WebSocket, rotas com parâmetro) em vez
+   de silêncio. Exceção documentada é aceitável; ausência silenciosa não. Isto
+   NÃO precisa de terceira tabela.
+2. **O conteúdo** — decidir, rota a rota, quais das 28 devem ganhar entrada.
+   Acrescentar método RPC ao stdio é ADIÇÃO DE CONTRATO PÚBLICO, item 3.1.
+
+**Status**: não corrigido. O mecanismo é conserto de gate e cabe em bloco
+próprio; o conteúdo é contrato público e não decido. Levado ao canal e ao humano.
