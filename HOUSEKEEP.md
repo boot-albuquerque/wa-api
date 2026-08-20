@@ -14370,8 +14370,35 @@ prever pela leitura e medir.
 travado por `TestHistorico_EnqueteGravaComAPergunta`,
 `TestHistorico_BotoesGravaComOCorpo`, `TestHistorico_BotoesLegadoTambemGrava` e
 `TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder`, mais a medição acima. Os
-outros **dezassete** tipos continuam sem ramo, `list` e `template` entre eles, e
-esses dois são capabilities que entregamos. Pendente de decisão do canal.
+outros tipos continuam sem ramo.
+
+**CORRIGIDO na consolidação da sessão (2026-08-20)**: esta frase dizia "outros
+dezassete tipos continuam sem ramo, `list` e `template` entre eles". **As duas
+metades ficaram falsas**: `list` e `template` ganharam ramo na etapa (a) da
+DECISÃO 20, e o número é outro.
+
+Contado agora, com os ramos REAIS da cadeia de `saveMessageHistory` — não por
+`grep` do nome, que casa também as menções em comentário e foi o meu primeiro
+instrumento aqui:
+
+**Com ramo (14 + 1):** `image`, `video`, `audio`, `document`, `sticker`,
+`contact`, `location`, `pollCreation`, `interactive`, `buttons`, `list`,
+`template`, `reaction`, `protocol` (apagar), mais a edição por
+`ProtocolMessage_MESSAGE_EDIT`.
+
+**Sem ramo, e REAIS** (11): `pollUpdate` (o voto numa enquete),
+`buttonsResponse`, `interactiveResponse`, `listResponse`, `event`,
+`liveLocation`, `ptv`, `groupInvite`, `order`, `product`, `contactsArray`.
+
+**Sem ramo mas NÃO são falhas** (2): `documentWithCaption` e `lottieSticker` são
+invólucros que o `UnwrapRaw` já abre ([[F188]]) — o que chega ao classificador é
+o conteúdo de dentro, e esse tem ramo.
+
+Os três `*Response` merecem nota: o classificador de SYNC já os reconhece
+(`buttons_response`, `list_response`), e o de tempo real não. É a [[F187]] a
+apontar para os mesmos ramos por outro caminho.
+
+Pendente de decisão do canal.
 
 ---
 
