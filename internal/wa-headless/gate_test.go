@@ -503,6 +503,11 @@ var (
 		// resolver", que é exatamente a distinção que o registro existe para
 		// preservar.
 		"abandonado", "abandonada",
+		// MEDIDO conta como ABERTO: significa que a medição existe e a
+		// CONSEQUÊNCIA dela ainda não foi aplicada. Classificá-lo como fechado
+		// deixaria um achado cuja ação pendente ninguém veria — que é a forma
+		// exata do problema que o H29 registra.
+		"medido", "medida",
 	}
 	closedStatusTokens = []string{
 		"corrigido", "corrigida", "fechado", "fechada",

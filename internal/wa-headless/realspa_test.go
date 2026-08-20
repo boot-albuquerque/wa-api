@@ -6630,3 +6630,138 @@ func TestRealSPALongHoldUnderLoad(t *testing.T) {
 	t.Logf("NOTE: %s under load is a SAMPLE. Production holds sessions longer, and this "+
 		"says nothing about the range beyond it", holdFor)
 }
+
+// concurrentSessionsEnv gates TestRealSPAConcurrentSessionsScaling.
+const concurrentSessionsEnv = "WA_HEADLESS_CONCURRENT_SESSIONS"
+
+// TestRealSPAConcurrentSessionsScaling verifies a claim this module INHERITED
+// and never checked: ADR-0006 and runtime/doc.go say a pre-login session costs
+// 474-790 MB across 6 to 9 processes, "scaling linearly to three concurrent
+// sessions with no degradation".
+//
+// That sentence is load-bearing — it is what puts a 16 GB host "in the range of
+// TENS of sessions" — and nothing in this repository has ever run two browsers
+// at once to see. This module has spent a week falsifying inherited assertions
+// that nobody had exercised.
+//
+// PRE-LOGIN ON PURPOSE, and for two reasons. It is the condition the original
+// number was measured under, so the comparison is like-for-like. And it avoids
+// the hazard that rules out the obvious alternative: the two paired profiles on
+// this machine belong to the SAME account, and running both at once puts two
+// live devices on one account, which WhatsApp may answer by invalidating one.
+//
+// It uses the raw engine rather than core.StartSession, because StartSession
+// requires APP_READY and an unpaired profile never gets there — it stops at the
+// QR screen, which is exactly the state being measured.
+func TestRealSPAConcurrentSessionsScaling(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv(concurrentSessionsEnv) == "" {
+		t.Skipf("set %s=1 to launch concurrent pre-login sessions against the real SPA",
+			concurrentSessionsEnv)
+	}
+	binary := findChrome(t)
+
+	type session struct {
+		browser *engine.Browser
+		tab     *engine.Tab
+		runner  *engine.Runner
+	}
+
+	const wave = 3
+	var live []session
+	defer func() {
+		for _, s := range live {
+			s.tab.Close()
+			engine.CleanStop(context.Background(), s.runner, s.browser)
+		}
+	}()
+
+	type reading struct {
+		n         int
+		totalMB   int
+		perSessMB int
+		procs     int
+		latencyMS int64
+	}
+	var readings []reading
+
+	for n := 1; n <= wave; n++ {
+		runner := engine.NewRunner()
+		browser, err := (&engine.Launcher{BinaryPath: binary, Runner: runner}).Launch(
+			context.Background(), engine.LaunchConfig{
+				ProfileDir:    t.TempDir(),
+				DebuggingPort: freePort(t),
+				UserAgent:     realSPAUserAgent,
+			})
+		if err != nil {
+			t.Fatalf("launching session %d: %v", n, err)
+		}
+		tab, err := engine.OpenTab(context.Background(), browser)
+		if err != nil {
+			t.Fatalf("opening tab %d: %v", n, err)
+		}
+		if err := tab.Navigate(runner, realSPAURL, fmt.Sprintf("conc/nav%d", n)); err != nil {
+			t.Fatalf("navigating session %d: %v", n, err)
+		}
+		live = append(live, session{browser: browser, tab: tab, runner: runner})
+
+		// Let the login screen settle before measuring: a page still mounting
+		// is not the steady state the inherited number describes.
+		deadline := time.Now().Add(45 * time.Second)
+		for time.Now().Before(deadline) {
+			snap, class := spa.Probe(context.Background(), runner, tab.Evaluate,
+				fmt.Sprintf("conc/probe%d", n))
+			if snap.HasQR || class == spa.ClassLoginRequired {
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+
+		// Measure EVERY live session, not only the newest: the claim is about
+		// what happens to the ones already running when another arrives.
+		var totalKB, procs int
+		var worstLat time.Duration
+		for i, s := range live {
+			kb, p := profileTreeRSSKB(t, s.browser.PID())
+			totalKB += kb
+			procs += p
+			start := time.Now()
+			var out string
+			if err := s.runner.Do(context.Background(), engine.OpStateProbe,
+				fmt.Sprintf("conc/lat%d-%d", n, i),
+				func(ctx context.Context) error {
+					return s.tab.Evaluate(ctx, "String(1+1)", &out)
+				}); err != nil {
+				t.Errorf("session %d stopped answering once %d were running: %v", i+1, n, err)
+			}
+			if d := time.Since(start); d > worstLat {
+				worstLat = d
+			}
+		}
+		r := reading{n: n, totalMB: totalKB / 1024, perSessMB: totalKB / 1024 / n,
+			procs: procs, latencyMS: worstLat.Milliseconds()}
+		readings = append(readings, r)
+		t.Logf("%d session(s): total=%dMB per-session=%dMB procs=%d worst-latency=%dms",
+			r.n, r.totalMB, r.perSessMB, r.procs, r.latencyMS)
+	}
+
+	// THE CLAIM, checked: per-session cost must not grow as sessions are added.
+	// "Linear" means the Nth session costs what the first did; a super-linear
+	// curve is what would break the capacity arithmetic the doc rests on.
+	first, last := readings[0], readings[len(readings)-1]
+	t.Logf("INHERITED CLAIM: 474-790MB per session, 6-9 processes, linear to three")
+	t.Logf("MEASURED: 1 session %dMB/%dproc -> %d sessions %dMB per session, %d procs total",
+		first.perSessMB, first.procs, last.n, last.perSessMB, last.procs)
+
+	if first.perSessMB == 0 {
+		t.Fatal("the first session measured 0MB; the RSS probe did not work and nothing " +
+			"here can be concluded")
+	}
+	growth := float64(last.perSessMB) / float64(first.perSessMB)
+	t.Logf("per-session cost at %d sessions is %.2fx the single-session cost", last.n, growth)
+	if growth > 1.5 {
+		t.Errorf("per-session cost grew %.2fx from 1 to %d sessions. The inherited claim of "+
+			"LINEAR scaling is what puts a 16GB host 'in the range of tens of sessions'; at "+
+			"this curve that arithmetic is wrong", growth, last.n)
+	}
+}

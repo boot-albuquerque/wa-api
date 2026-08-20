@@ -2512,3 +2512,48 @@ executado **sem pipe**, para o código de saída chegar ao `&&`.
 Se a saída precisa ser filtrada, rode duas vezes ou guarde o código de saída
 antes de filtrar.
 
+## H33 — a linearidade herdada CONFIRMA, mas o custo por sessão está 30% acima do teto herdado
+
+**Data**: 2026-08-20 · **Contexto**: primeira vez que este repositório roda mais
+de um browser ao mesmo tempo.
+
+**A afirmação verificada**, de `runtime/doc.go:5` e da ADR-0006: *"474-790 MB por
+sessão através de 6 a 9 processos, escalando linearmente até três sessões
+concorrentes, sem degradação"*. Ela é **carga**: é o que põe um host de 16 GB
+*"na faixa de DEZENAS de sessões"*.
+
+**Nada neste repositório tinha rodado dois browsers ao mesmo tempo.** A
+afirmação vinha do spike e foi herdada sem exercício.
+
+**Medido, pré-login (a MESMA condição do número original), contra a SPA real:**
+
+| sessões | total | por sessão | processos | pior latência |
+|---:|---:|---:|---:|---:|
+| 1 | 1023 MB | 1023 MB | 9 | 0 ms |
+| 2 | 2004 MB | 1002 MB | 18 | 0 ms |
+| 3 | 2600 MB | **866 MB** | 31 | 1 ms |
+
+**A FORMA da afirmação se sustenta, e melhor que o prometido**: o custo por
+sessão **CAI** para 0,85× com três concorrentes. Não há curva super-linear, e
+nenhuma sessão já rodando parou de responder quando outra subiu — a latência
+ficou em 0-1 ms nas três medições.
+
+**O NÚMERO não se sustenta**: 1023 MB por sessão contra o teto herdado de 790 MB
+— **30% acima**, na mesma condição. A contagem de processos casa (9), então não é
+outra topologia de processo; é mais memória nos mesmos processos.
+
+**O que isso faz com a aritmética de capacidade.** Com 790 MB, 16 GB dão ~20
+sessões; com 1023 MB, ~15. E a ADR-0006 **já avisa** que o número dela é um
+PISO, medido pré-login — uma sessão pareada com histórico custa mais, e a
+medição de retenção deste mesmo dia registrou uma pareada assentando em
+700-800 MB **depois** de um pico de 1740 MB.
+
+**O que NÃO foi medido, e é o que faltaria para uma decisão de capacidade**:
+sessões **pareadas** concorrentes. Não foi feito de propósito — os dois perfis
+pareados desta máquina são da MESMA conta, e dois dispositivos ativos ao mesmo
+tempo podem fazer o WhatsApp invalidar um. Precisaria de duas contas.
+
+**Status**: MEDIDO. A linearidade fica confirmada; o teto de 790 MB fica
+**falsificado para este build/host** e precisa ser lido como o que era — uma
+medição de outro momento, não uma constante.
+
