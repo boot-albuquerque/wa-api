@@ -15067,3 +15067,48 @@ teriam desaparecido **em silêncio**, e eu não teria como saber que aconteceram
 
 **Status**: varredura (a) concluída. Nada corrigido, por instrução do canal.
 Segue para (b), os cinco downloads.
+
+---
+
+## VARREDURA (b) — os cinco downloads: passam, e o ciclo da mídia fecha
+
+**Data**: 2026-08-20. Base64, sem S3, por decisão do canal.
+
+Era o grupo onde eu tinha apostado que estariam os defeitos — nunca correu, e é o
+único que depende do caminho de bytes de volta. **Apostei errado, e é uma
+medição que vale registar precisamente por isso.**
+
+| rota | resposta | bytes | conteúdo |
+|---|---|---|---|
+| `/chat/downloadimage` | `200` | 73 | **idêntico** |
+| `/chat/downloaddocument` | `200` | 191 | **idêntico** |
+| `/chat/downloadaudio` | `200` | 8044 | **idêntico** |
+| `/chat/downloadvideo` | `200` | 144 | **idêntico** |
+| `/chat/downloadsticker` | `200` | 550 | **idêntico** |
+
+**A comparação é de SHA-256, não de tamanho.** Tamanho igual com conteúdo
+corrompido é um resultado possível e passaria numa verificação de comprimento —
+foi por isso que comparei os bytes contra os ficheiros originais que eu própria
+tinha enviado.
+
+Os descritores vieram do `datajson` do evento recebido, que é exatamente o que um
+cliente teria do webhook: `URL`, `directPath`, `mediaKey`, `fileEncSHA256`,
+`fileSHA256`, `fileLength`. Nenhum foi inventado.
+
+**O ciclo fecha**: enviar → receber → recuperar, com os mesmos bytes, para os
+cinco tipos de mídia.
+
+### O eixo que fica por verificar, e é decisão registada
+
+**S3 = NÃO VERIFICADO EM CAMPO.** O canal decidiu base64-only para esta varredura,
+para não misturar dois eixos: com um caminho de armazenamento novo, qualquer
+falha passaria a ter duas causas possíveis em vez de uma.
+
+Corrijo a razão que constava do inventário: o bloqueio **deixou de ser "pendente
+de autorização"**. O humano indicou MinIO, e verifiquei que está a correr
+(container `filarapida-minio`, `/minio/health/live` = 200). Passa a ser
+**pendente de decisão de escopo** — a peça existe, a decisão é se entra agora ou
+como eixo próprio.
+
+**Status**: varredura (b) concluída, zero achados. Segue para (c), a manipulação
+de chat, com as condições que o canal impôs para as destrutivas.
