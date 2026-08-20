@@ -15217,6 +15217,21 @@ a react passou a devolver message_id: a divergencia da F190 ACABOU.
 Um cliente que leia `message_id` das treze rotas de envio continua a partir ao
 ler a reação. Contrato HTTP, item 3.1.
 
+### Verificação em produção da própria trava
+
+Uma trava de contrato só vale se o dublê servir a mesma forma que a produção —
+senão trava uma ficção. Medido contra o servidor a correr:
+
+```
+/chat/send/edit       -> ['message_id', 'status', 'timestamp']
+/chat/react           -> ['Details', 'Id', 'Timestamp']
+/chat/delete/message  -> ['message_id', 'status', 'timestamp']
+```
+
+**Bate chave por chave com o que os testes travam**, incluindo a divergência da
+`react`. É a Armadilha 1 verificada na direção que interessa: o dublê não é mais
+simples nem mais permissivo que o servidor — é igual.
+
 **Achado de lado, registado sem corrigir**: a resposta da `react` é construída
 como `map[string]interface{}` literal
 (`pkg/application/usecase/message/react.go:85-89`), enquanto as catorze irmãs
