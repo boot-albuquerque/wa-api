@@ -2259,6 +2259,8 @@ pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
 pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:393);uncovered:L2(S-ret,lease.go:397)
+pkg/bootstrap.listMessageInside	EXCLUDED	X1
+pkg/bootstrap.listText	EXCLUDED	X1
 pkg/bootstrap.livenessHandler	EXCLUDED	X1
 pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1
 pkg/bootstrap.lockSingleInstance	ELIGIBLE	uncovered:L2(S-consume,cluster.go:114);uncovered:L2(S-ret,cluster.go:116)
@@ -2367,6 +2369,7 @@ pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6
 pkg/bootstrap.tamanhoDoPayload	EXCLUDED	X1
+pkg/bootstrap.templateText	EXCLUDED	X1
 pkg/bootstrap.tentarWebhook	ELIGIBLE	covered
 pkg/bootstrap.unhandledEventFields	ELIGIBLE	uncovered:L1
 pkg/bootstrap.updateAndGetUserSubscriptions	ELIGIBLE	covered

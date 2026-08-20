@@ -14372,3 +14372,90 @@ travado por `TestHistorico_EnqueteGravaComAPergunta`,
 `TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder`, mais a medição acima. Os
 outros **dezassete** tipos continuam sem ramo, `list` e `template` entre eles, e
 esses dois são capabilities que entregamos. Pendente de decisão do canal.
+
+---
+
+## F188 — a biblioteca não desembrulha os invólucros `FutureProofMessage`, e o classificador não os conhece
+
+**Data**: 2026-08-20. **Contexto**: encontrado ao implementar a etapa (a) da
+DECISÃO 20 — o ramo de recepção da lista.
+
+O `waE2E.Message` declara **muitos** campos do tipo `FutureProofMessage`, que são
+invólucros de compatibilidade: `viewOnceMessage`, `viewOnceMessageV2`,
+`ephemeralMessage`, `editedMessage`, `documentWithCaptionMessage`,
+`lottieStickerMessage`, `groupMentionedMessage`, entre outros.
+
+**Medido**: a biblioteca vendorizada **não desembrulha nenhum deles** antes de
+entregar o evento. O único desembrulho que ela faz é o de `DeviceSentMessage`
+(`internal/wa-noise/capabilities/message/protocol.go:75`).
+
+Consequência: uma mensagem embrulhada chega ao classificador **com o invólucro**,
+nenhum ramo casa, e ela é descartada — o mecanismo da [[F184]], por uma via
+diferente.
+
+**O `documentWithCaptionMessage` foi tratado** nesta etapa, porque é o invólucro
+que o nosso próprio `/chat/send/list` usa. Os outros **não**, e isso é decisão
+consciente e não esquecimento: desembrulhar `viewOnceMessage` ou
+`ephemeralMessage` muda a classificação de mensagens que hoje caem noutro sítio,
+o que é mudança de comportamento fora do escopo que o canal decidiu.
+
+**E corrijo uma leitura minha**: na ampliação da [[F184]] eu escrevi que
+`GetDocumentWithCaptionMessage` era "o wrapper comum de documento com legenda". É
+um invólucro **genérico**. O nome enganou-me — e enganaria quem lesse a
+enumeração depois de mim, que é pior, porque a lista parecia autoritativa.
+
+**Correção sugerida**: um desembrulho único no topo da classificação, aplicado a
+todos os `FutureProofMessage`, com a mensagem interna a seguir a mesma cadeia.
+É o que o invólucro existe para permitir. Precisa de decisão porque muda o que se
+grava para view-once e efémeras.
+
+**Status**: não corrigido, exceto o `documentWithCaptionMessage`.
+
+---
+
+## F189 — o orçamento de isenções do logcov conta MENÇÕES, não anotações
+
+**Data**: 2026-08-20. **Contexto**: o `make check` falhou com
+`max_exempt_annotations = 0 no baseline, medido 1` — e **eu não tinha isentado
+nada**. Tinha escrito um comentário a explicar *por que não* usei a isenção.
+
+**O defeito**: as duas metades do mecanismo medem coisas diferentes.
+
+| | onde | o que faz |
+|---|---|---|
+| a REGRA | `rules.go:160` (`ruleX8Exempt`) | exige que o comentário **comece** por `log:exempt`, depois de `TrimPrefix("//")` e `TrimSpace`, e esteja no bloco de documentação da declaração |
+| o ORÇAMENTO | `analyzer.go:210` (`countExemptAnnotations`) | `strings.Count(data, "//log:exempt")` sobre o **ficheiro inteiro**, sem olhar a posição nem a sintaxe |
+
+Um texto que apenas **menciona** o token — dentro de uma frase, no meio de um
+parágrafo, a explicar que a isenção *não* foi usada — não isenta função nenhuma,
+mas **conta para o orçamento**.
+
+**Evidência**: o golden emitido no mesmo instante **não tem nenhuma entrada X8**
+(zero funções isentas), e o orçamento acusou 1. As duas medições do mesmo
+mecanismo discordaram sobre o mesmo ficheiro.
+
+**Por que isto importa mais do que o incómodo**: o orçamento existe para que
+ninguém abra isenções em massa sem que se veja. Um contador que dispara com
+documentação faz duas coisas más ao mesmo tempo:
+
+1. **produz falso positivo** — o gate acusa dívida que não existe;
+2. **desencoraja documentar o mecanismo** — a saída mais fácil para quem tropeça
+   nisto é apagar a frase, e o repositório fica com um mecanismo que ninguém
+   pode explicar por escrito no código que o usa. Numa base que trata o "porquê"
+   como património ([[F123]], onde apagar um tipo obrigou a reescrever seis
+   comentários em vez de os deletar), isso é caro.
+
+**Correção sugerida**: o contador passa a usar o mesmo critério da regra — varrer
+os `*ast.CommentGroup` de declaração e contar os que `ruleX8Exempt` aceita. As
+duas metades passam a medir a mesma coisa, que é o mínimo que se pede a um
+mecanismo com duas metades ([[F168]], [[F187]]: é a terceira vez hoje que duas
+fontes de verdade divergem).
+
+**Contorno aplicado agora**: o comentário em
+`pkg/bootstrap/eventhandler_message.go` nomeia a anotação em prosa em vez de a
+soletrar, com nota a dizer porquê. É contorno, não correção — e o próprio
+contorno é sintoma do ponto 2.
+
+**Status**: não corrigido. É o instrumento de medição, não o código medido — a
+mesma família dos três buracos corrigidos hoje (fixtures de SQLite sem WAL,
+formatação não verificada, pacotes sem teste).

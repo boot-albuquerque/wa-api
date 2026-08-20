@@ -282,3 +282,140 @@ func lerLinha(t *testing.T, evh *UserEventHandler, id string) (tipo, texto strin
 	}
 	return tipo, texto
 }
+
+// --- template e list: a etapa (a) da DECISÃO 20 -------------------------------
+
+// TestHistorico_ListaEmbrulhadaGrava é o teste que a intuição não escreveria.
+//
+// A lista que o NOSSO /chat/send/list envia não vem como ListMessage no topo:
+// vem dentro de DocumentWithCaptionMessage (messenger_list.go:116), que apesar
+// do nome é um FutureProofMessage — invólucro genérico, não documento com
+// legenda. Foi por isso que o campo mediu `wire_type=media` para uma lista.
+//
+// Um teste montado com waE2E.Message{ListMessage: ...} passaria com um ramo que
+// NUNCA dispara em produção. É a Armadilha 1 na direção do emissor: o dublê
+// tem de imitar o que o nosso adapter constrói de facto.
+func TestHistorico_ListaEmbrulhadaGrava(t *testing.T) {
+	evh := handlerComHistorico(t, "u-list")
+	buf := capturarLog(t)
+
+	evt := eventoNaoClassificavel("MSG-LIST", "media") // wire_type medido em campo
+	evt.Message = &waE2E.Message{
+		DocumentWithCaptionMessage: &waE2E.FutureProofMessage{
+			Message: &waE2E.Message{ListMessage: &waE2E.ListMessage{
+				Title:       proto("Menu do dia"),
+				Description: proto("escolha"),
+				ButtonText:  proto("Ver"),
+			}},
+		},
+	}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
+		t.Fatalf("lista embrulhada continua a ser descartada: %s", saida)
+	}
+	tipo, txt := lerLinha(t, evh, "MSG-LIST")
+	if tipo != "list" {
+		t.Errorf("message_type = %q, quero \"list\"", tipo)
+	}
+	if txt != "Menu do dia" {
+		t.Errorf("text_content = %q, quero \"Menu do dia\"", txt)
+	}
+}
+
+// TestHistorico_ListaNoTopoTambemGrava cobre a lista NÃO embrulhada, que outro
+// cliente pode enviar. O ramo existe para o que chega, não só para o que sai.
+func TestHistorico_ListaNoTopoTambemGrava(t *testing.T) {
+	evh := handlerComHistorico(t, "u-list-topo")
+
+	evt := eventoNaoClassificavel("MSG-LIST-TOPO", "text")
+	evt.Message = &waE2E.Message{ListMessage: &waE2E.ListMessage{
+		Description: proto("so descricao"),
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	tipo, txt := lerLinha(t, evh, "MSG-LIST-TOPO")
+	if tipo != "list" {
+		t.Errorf("message_type = %q, quero \"list\"", tipo)
+	}
+	// Sem título, cai na descrição — a precedência do listText.
+	if txt != "so descricao" {
+		t.Errorf("text_content = %q, quero \"so descricao\"", txt)
+	}
+}
+
+// TestHistorico_TemplateGrava cobre o TemplateMessage, que o nosso
+// /chat/send/template envia SEM invólucro (messenger.go:633) — a assimetria com
+// a lista está verificada no adapter, não suposta.
+func TestHistorico_TemplateGrava(t *testing.T) {
+	evh := handlerComHistorico(t, "u-tpl")
+
+	evt := eventoNaoClassificavel("MSG-TPL", "text")
+	evt.Message = &waE2E.Message{TemplateMessage: &waE2E.TemplateMessage{
+		HydratedTemplate: &waE2E.TemplateMessage_HydratedFourRowTemplate{
+			// O título é um oneof no proto, não um campo simples — por isso
+			// vai embrulhado. Descoberto pelo compilador, e vale a nota: o
+			// getter GetHydratedTitleText() esconde o oneof, então a leitura
+			// do código de produção não denuncia a forma da escrita.
+			Title: &waE2E.TemplateMessage_HydratedFourRowTemplate_HydratedTitleText{
+				HydratedTitleText: "Titulo do template",
+			},
+			HydratedContentText: proto("corpo"),
+		},
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	tipo, txt := lerLinha(t, evh, "MSG-TPL")
+	if tipo != "template" {
+		t.Errorf("message_type = %q, quero \"template\"", tipo)
+	}
+	if txt != "Titulo do template" {
+		t.Errorf("text_content = %q, quero o titulo", txt)
+	}
+}
+
+// TestHistorico_TemplateSemTituloUsaOCorpo trava a precedência do templateText.
+// Sem este teste, devolver sempre o corpo passaria no teste acima se o título
+// fosse ignorado — e a precedência é o que decide o que o operador lê na lista.
+func TestHistorico_TemplateSemTituloUsaOCorpo(t *testing.T) {
+	evh := handlerComHistorico(t, "u-tpl-sem-titulo")
+
+	evt := eventoNaoClassificavel("MSG-TPL-2", "text")
+	evt.Message = &waE2E.Message{TemplateMessage: &waE2E.TemplateMessage{
+		HydratedTemplate: &waE2E.TemplateMessage_HydratedFourRowTemplate{
+			HydratedContentText: proto("so corpo"),
+		},
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	if _, txt := lerLinha(t, evh, "MSG-TPL-2"); txt != "so corpo" {
+		t.Errorf("text_content = %q, quero \"so corpo\"", txt)
+	}
+}
+
+// TestHistorico_InvolucroSemListaNaoViraLista é o controle negativo do ajudante:
+// DocumentWithCaptionMessage é um invólucro GENÉRICO, e nem tudo o que vem
+// dentro dele é lista. Sem este teste, um listMessageInside que devolvesse algo
+// não-nil para qualquer invólucro passaria nos dois testes de lista acima.
+func TestHistorico_InvolucroSemListaNaoViraLista(t *testing.T) {
+	evh := handlerComHistorico(t, "u-inv")
+
+	evt := eventoNaoClassificavel("MSG-INV", "media")
+	evt.Message = &waE2E.Message{
+		DocumentWithCaptionMessage: &waE2E.FutureProofMessage{
+			Message: &waE2E.Message{Conversation: proto("nao sou lista")},
+		},
+	}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	var tipo string
+	err := evh.DB.QueryRow("SELECT message_type FROM message_history WHERE message_id = 'MSG-INV'").Scan(&tipo)
+	if err == nil && tipo == "list" {
+		t.Fatal("invólucro SEM lista foi classificado como lista: listMessageInside devolve não-nil a mais")
+	}
+}
