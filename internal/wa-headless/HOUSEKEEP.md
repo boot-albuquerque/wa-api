@@ -92,10 +92,63 @@ redigir; (c) manter o texto e travar por catraca de PII na saída. O item 5 da
 Definition of Done (`HANDOFF-INICIATIVA.md`) exige zero PII em log verificado
 por catraca, então (c) sozinho não fecha.
 
-**Status**: **não corrigido** — é débito consciente do CAP-02, com o raio já
+**Status**: ~~**não corrigido** — é débito consciente do CAP-02, com o raio já
 limitado por `maxErrTextLen` e travado por `TestAddTruncatesErrorText`. A
 decisão exige saber a forma dos erros reais, que o CAP-04 vai produzir;
-escolher agora seria projetar sem medida.
+escolher agora seria projetar sem medida.~~
+**CORRIGIDO em 2026-08-19 (LOOP 06.4)** — a pré-condição que esta entrada
+impunha foi satisfeita, e a política saiu de MEDIÇÃO. Ver a resolução abaixo.
+
+### Resolução — a medição primeiro, porque ela estreitou o problema
+
+A entrada dizia que escolher sem medir seria projetar às cegas. Então o primeiro
+passo foi produzir os erros reais contra um browser de verdade e ler o que eles
+carregam:
+
+| caso | vaza? | texto do erro |
+|---|:---:|---|
+| `throw new Error("SEGREDO")` | **SIM** | `exception "Uncaught" (0:9): Error: SEGREDO…` |
+| `throw {chat: "SEGREDO"}` | não | `exception "Uncaught" (0:9): Object` |
+| retorno não-JSON | não | **erro nenhum** |
+| referência inexistente | não | `ReferenceError: nonExistente is not defined` |
+
+**O vetor é UM só, e é estreito**: a mensagem de um `Error` lançado pela página.
+Objeto lançado vira o nome do tipo; `ReferenceError` nomeia um identificador do
+nosso próprio script. Nenhuma delas é conta alheia.
+
+E o erro tem **estrutura**: `exception "<marcador>" (linha:col): Tipo: mensagem`.
+Isso permitiu a opção (a) da entrada numa forma melhor que "registrar só a
+classe": **preservar a forma e descartar só a mensagem**. O que sobra —
+marcador, posição, tipo do erro — é vocabulário do driver, e é o que torna o
+erro diagnosticável.
+
+**Escape hatch mantido**: sob `WA_HEADLESS_OP_TRACE` o texto completo sobrevive.
+A política é sobre o que se registra **por padrão**, não sobre destruir
+diagnóstico — e há teste que falha se o toggle parar de preservar.
+
+**Falha FECHADA**: marcador reconhecido com cauda que a política não sabe
+interpretar perde a cauda inteira. Quando a forma é desconhecida é exatamente
+quando um redator não pode adivinhar onde acaba a parte segura.
+
+**RESÍDUO DECLARADO, com teste**: a detecção ancora no marcador MEDIDO
+(`exception "`). Uma exceção que chegue noutro formato futuro **não é
+reconhecida**, e o único anteparo é a truncagem — que limita raio, não conteúdo.
+Por isso a truncagem foi MANTIDA junto com a redação: os dois falham de formas
+diferentes. `TestResidualRiskIsBoundedByTruncation` trava isso.
+
+**Uma afirmação minha caiu no controle negativo.** Eu escrevi que a ORDEM
+importava — que truncar antes de redigir manteria meia mensagem. O controle que
+inverte a ordem **PASSOU**, e isso provou a afirmação falsa: o marcador fica no
+COMEÇO da string e a truncagem corta o FIM, então a redação reconhece a forma
+nos dois casos. Comentário e nome do teste corrigidos para dizer o que o
+mecanismo realmente garante. Um teste nomeado por uma propriedade que o código
+não tem é falsa garantia — a classe exata que este módulo passou a semana
+caçando.
+
+**Controles negativos executados**: não redigir nada (falha); falhar ABERTO numa
+forma não reconhecida (falha); redigir também sob o toggle (falha, porque mata o
+diagnóstico que o toggle existe para dar). O quarto, da ordem, não mordeu — e
+está registrado acima como correção em vez de escondido.
 
 ## H2 — a fundação subiu o Go do módulo inteiro para 1.26
 
