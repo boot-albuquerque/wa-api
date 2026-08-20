@@ -39,7 +39,7 @@ func TestAddUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -80,7 +80,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
@@ -98,7 +98,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 		CreateUserFunc: func(context.Context, domain.UserRecord) (bool, error) { return false, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, logger)
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger)
 
 	_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 	if !errors.Is(err, boom) {
@@ -171,7 +171,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err != nil {
@@ -210,6 +210,17 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			// anterior só exigia len != 0, e por isso não viu a chave sendo
 			// gravada em CLARO (F158). A prova de ida e volta contra o
 			// AES-GCM real está em pkg/bootstrap/add_user_hmac_route_test.go.
+			// S3 secret key must be enveloped, not plaintext (F163).
+			if tt.wantS3Enabled && tt.req.S3Config != nil && tt.req.S3Config.SecretKey != "" {
+				stored := rec.S3.SecretKey
+				if stored == tt.req.S3Config.SecretKey {
+					t.Errorf("S3 SecretKey stored as PLAINTEXT — got %q", stored)
+				}
+				want := contractsfake.FakeS3EnvelopePrefix + tt.req.S3Config.SecretKey
+				if stored != want {
+					t.Errorf("S3 SecretKey = %q, want %q (fake cipher output)", stored, want)
+				}
+			}
 			if tt.wantHmacConfig {
 				if len(rec.HmacKey) == 0 {
 					t.Error("HmacKey gravada vazia")
@@ -234,7 +245,7 @@ func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
 		EncryptHmacKeyFunc: func(string) ([]byte, error) { return nil, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, encryptor, logger)
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger)
 
 	resp, err := uc.Execute(context.Background(),
 		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32})
@@ -264,7 +275,7 @@ func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
 
 	repo := &contractsfake.UserRepository{}
 	encryptor := &contractsfake.HmacKeyEncryptor{}
-	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.Logger{})
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 	_, err := uc.Execute(context.Background(),
 		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1]})
@@ -304,7 +315,7 @@ func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(),
 				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
@@ -342,7 +353,7 @@ func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(),
 				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
@@ -359,5 +370,38 @@ func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 				t.Errorf("resp.Events = %q, queria %q", resp.Events, tt.events)
 			}
 		})
+	}
+}
+
+// TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario locks the ORDER
+// contract for the S3 secret key (F163): encrypt BEFORE write; a cipher
+// failure must not create the user row.
+func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("s3 encryption key not configured")
+	repo := &contractsfake.UserRepository{}
+	s3Cipher := &contractsfake.S3SecretCipher{
+		EncryptS3SecretFunc: func(string) (string, error) { return "", boom },
+	}
+	logger := &contractsfake.Logger{}
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, s3Cipher, logger)
+
+	resp, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{
+			Name:  "alice",
+			Token: "tok",
+			S3Config: &domain.S3Config{
+				Enabled: true, SecretKey: "my-s3-secret",
+			},
+		})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want to wrap boom", err)
+	}
+	if resp != nil {
+		t.Errorf("resp = %+v, want nil", resp)
+	}
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser called %d times, want 0", len(repo.CreateUserCalls))
 	}
 }

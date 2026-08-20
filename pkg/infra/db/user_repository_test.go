@@ -56,7 +56,7 @@ func newUserTestDB(t *testing.T) *sqlx.DB {
 
 func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 	ctx := context.Background()
 
 	if _, err := uc.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "shared"}); err != nil {
@@ -82,7 +82,7 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 // requisições simultâneas com o mesmo token passavam ambas pela checagem.
 func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
 	const attempts = 8
 	var wg sync.WaitGroup
@@ -119,7 +119,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 
 func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
 	resp, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 	if err != nil {
@@ -138,7 +138,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
-	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{})
+	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
 	if _, err := add.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "alice-token"}); err != nil {
 		t.Fatalf("add alice: %v", err)
@@ -148,7 +148,7 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 		t.Fatalf("add bob: %v", err)
 	}
 
-	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), discardLogger{})
+	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, discardLogger{})
 	err = edit.Execute(ctx, domain.EditUserRequest{UserID: bob.ID, Token: "alice-token"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("edit error = %v, want user.ErrDuplicateToken", err)
@@ -170,13 +170,13 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{}).
+	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
 		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "old-token"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
-	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), discardLogger{}).
+	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, discardLogger{}).
 		Execute(ctx, domain.EditUserRequest{UserID: created.ID, Token: "new-token"}); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, discardLogger{}).
+	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
 		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "secret-token"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}

@@ -11297,8 +11297,90 @@ de `add_user.go:145` DESCARTA o erro — o usuário nasce com S3 "habilitado" e
 sem cliente, em silêncio. Não medi essa parte; registro porque está na mesma
 linha de código que a correção vai tocar.
 
-**Status**: não corrigido, fora do escopo do CAP-29 (que é das quatro rotas de
-`/s3/*`). Registrado e levado ao canal de decisão.
+**Status**: **CORRIGIDO** no CAP-43, decisão (b) do canal — cifrar na escrita E
+escrever a migração, com a ressalva literal: *"migração das credenciais
+existentes explicitamente pendente de decisão humana"*.
+
+**O que mudou**: um port próprio `S3SecretCipher` — não o reuso do de HMAC,
+porque segredo distinto merece cifrador distinto — injetado como DEPENDÊNCIA nos
+DOIS casos de uso (`NewAddUserUseCase` e `NewEditUserUseCase`,
+`wiring_handlers.go:227-228`). A ordem é contrato e está travada: **validar,
+cifrar, escrever**; falha de cifra não grava linha.
+
+**Por que os DOIS pontos, e por que isso é o coração da tarefa**: são duas
+escritas distintas (`user_repository.go:76` no INSERT e `:160` no UPDATE), e um
+teste que cubra só uma deixa a outra livre. Foi EXATAMENTE assim que este
+defeito sobreviveu ao lado da [[F158]] já corrigida: consertaram o `hmac_key` e
+não olharam o irmão na mesma tabela.
+
+**Testes que travam o achado**: `TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario`
+e `TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario` (os dois de ORDEM),
+mais asserções de envelope nos casos de sucesso de ambos os caminhos.
+
+**Controles negativos do COORDENADOR, um por ponto de escrita:**
+
+CN-1, removendo a cifra do caminho de EDIÇÃO:
+
+```
+--- FAIL: TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario
+    edit_user_test.go:335: err = <nil>, want to wrap boom
+--- FAIL: .../s3_habilitado_with_secret_enveloped_(F163)
+    edit_user_test.go:239: S3 SecretKey stored as PLAINTEXT
+```
+
+CN-2, removendo a cifra do caminho de CRIAÇÃO:
+
+```
+--- FAIL: TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario
+    add_user_test.go:399: err = <nil>, want to wrap boom
+--- FAIL: .../s3_habilitado_inicializa_o_cliente
+    add_user_test.go:217: S3 SecretKey stored as PLAINTEXT — got "sk"
+```
+
+**ERRO MEU no CN-2, e é [[armadilha 3]] pela SEGUNDA vez no mesmo dia**: a
+primeira mutação usou `s3Config.SecretKey`, variável fora de escopo naquele
+ponto, e QUEBROU O BUILD. `FAIL ... [build failed]` não é controle negativo — é
+mutação que não chegou a existir. Refiz com `req.S3Config.SecretKey`, confirmei
+que **compila** e só então li a falha. Cole-se a regra: a mutação tem de
+compilar, falhar, e ser o defeito.
+
+**O dublê NÃO é mais permissivo que a produção** (armadilha 1), e o mérito é de
+quem o escreveu antes: `contractsfake.S3SecretCipher` imita as regras REAIS de
+`pkg/infra/auth/s3_secret.go`, cita esse arquivo no comentário, e usa
+`FakeS3EnvelopePrefix = "fake-enc:v1:"` — prefixo DELIBERADAMENTE diferente do
+de produção, para que uma asserção que confunda os dois esteja a medir o dublê e
+não o sistema. Segredo vazio produz vazio; valor sem prefixo é ERRO.
+
+**A migração, escrita e NÃO executada**:
+`scripts/migrate_s3_secret_to_envelope.go`. Está fora do build por
+`//go:build ignore` — mais forte que "não é chamada" —, tem
+`-dry-run` verdadeiro por omissão, zero importadores (`grep` vazio), e o
+cabeçalho diz **"PENDENTE DE AUTORIZAÇÃO HUMANA — NÃO EXECUTE"** citando a
+decisão do canal palavra por palavra.
+
+**ERRO DE PROCESSO MEU, registrado porque custou uma rodada**: rodei os meus
+controles negativos na árvore de trabalho ENQUANTO o executor trabalhava. O
+`make check` dele compilou dentro dessa janela e deu vermelho por ruído meu, não
+por defeito. Avisei-o antes que investigasse, e confirmei que o teste passava
+isolado.
+
+É o falso alarme nº 1 que a [[F154]] documenta — escrita por mim horas antes.
+**Medi árvore em movimento, e depois fiz o executor medir a minha.** Regra
+adotada: enquanto houver worker ativo, controle negativo do coordenador ESPERA.
+Leitura é segura; mutação não.
+
+**Golden**: regenerado, e a divergência era de POSIÇÃO. O gate disse
+`set is IDENTICAL (same 3060 entries with same status) ... regeneration is safe`
+— efeito direto da [[F154]], terceira vez que ela se paga no mesmo dia — e
+confirmei por `diff` independente dos dois primeiros campos.
+
+**Gate**: `make check` EXIT 0, rodado por mim com a árvore PARADA. Zero arquivos
+deletados, zero testes removidos, dois acrescentados.
+
+**O que NÃO foi feito, e é do humano**: as linhas que já estão em texto claro no
+banco continuam lá. Enquanto a migração não for autorizada e executada, esses
+usuários continuam com o comportamento diferido descrito acima — S3 funciona até
+o próximo restart.
 
 ## F164 — existem DOIS caches de userinfo, com leitores distintos, e nada os reconcilia
 

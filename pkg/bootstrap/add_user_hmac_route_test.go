@@ -67,7 +67,7 @@ func newAddUserRouteFixture(t *testing.T) *addUserRouteFixture {
 
 	// As MESMAS dependências que wiring_handlers.go:217 monta em produção:
 	// o repositório real e o cifrador real, não um dublê.
-	addUserUC := user.NewAddUserUseCase(db.NewUserRepository(database), hmacKeyEncryptor{}, logger)
+	addUserUC := user.NewAddUserUseCase(db.NewUserRepository(database), hmacKeyEncryptor{}, s3SecretCipher{}, logger)
 	userHandlers := handlers.NewUserHandlers(
 		nil, addUserUC, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)

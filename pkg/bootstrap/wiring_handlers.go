@@ -224,8 +224,8 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
-	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, logger)
-	editUserUC := user.NewEditUserUseCase(userRepo, logger)
+	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
+	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)

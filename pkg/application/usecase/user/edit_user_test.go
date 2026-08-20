@@ -42,7 +42,7 @@ func TestEditUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{UserExistsFunc: tt.existsFunc}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -94,7 +94,7 @@ func TestEditUserUseCase_Execute_UpdateErrors(t *testing.T) {
 				UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error { return tt.updateErr },
 			}
 			logger := &contractsfake.Logger{}
-			uc := user.NewEditUserUseCase(repo, logger)
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, logger)
 
 			err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Name: "novo"})
 			if !errors.Is(err, tt.wantIs) {
@@ -113,7 +113,7 @@ func TestEditUserUseCase_Execute_InvalidEventEntriesAreSkipped(t *testing.T) {
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 	}
-	uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Events: "Message,, ,ReadReceipt"}); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
@@ -184,15 +184,22 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 			},
 		},
 		{
-			name: "s3 habilitado",
+			name: "s3 habilitado with secret enveloped (F163)",
 			req: domain.EditUserRequest{
 				UserID:   "u1",
-				S3Config: &domain.S3Config{Enabled: true, Bucket: "b", Region: "r"},
+				S3Config: &domain.S3Config{Enabled: true, Bucket: "b", Region: "r", SecretKey: "my-s3-secret"},
 			},
 			assert: func(t *testing.T, upd domain.UserUpdate) {
 				t.Helper()
 				if upd.S3 == nil || !upd.S3.Enabled {
-					t.Errorf("S3 = %v, queria habilitado", upd.S3)
+					t.Errorf("S3 = %v, want enabled", upd.S3)
+				}
+				if upd.S3.SecretKey == "my-s3-secret" {
+					t.Error("S3 SecretKey stored as PLAINTEXT")
+				}
+				want := contractsfake.FakeS3EnvelopePrefix + "my-s3-secret"
+				if upd.S3.SecretKey != want {
+					t.Errorf("S3 SecretKey = %q, want %q", upd.S3.SecretKey, want)
 				}
 			},
 		},
@@ -217,7 +224,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			if err := uc.Execute(context.Background(), tt.req); err != nil {
 				t.Fatalf("erro inesperado: %v", err)
@@ -257,7 +264,7 @@ func TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			err := uc.Execute(context.Background(),
 				domain.EditUserRequest{UserID: "u1", Events: tt.events})
@@ -284,7 +291,7 @@ func TestEditUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			if err := uc.Execute(context.Background(),
 				domain.EditUserRequest{UserID: "u1", Events: events}); err != nil {
@@ -301,5 +308,33 @@ func TestEditUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 				t.Errorf("Events = %q, queria %q", *upd.Events, events)
 			}
 		})
+	}
+}
+
+// TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario locks the ORDER
+// contract for the S3 secret key on the EDIT path (F163): encrypt BEFORE
+// write; a cipher failure must not update the user row.
+func TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("s3 encryption key not configured")
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	s3Cipher := &contractsfake.S3SecretCipher{
+		EncryptS3SecretFunc: func(string) (string, error) { return "", boom },
+	}
+	logger := &contractsfake.Logger{}
+	uc := user.NewEditUserUseCase(repo, s3Cipher, logger)
+
+	err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID:   "u1",
+		S3Config: &domain.S3Config{Enabled: true, SecretKey: "my-s3-secret"},
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want to wrap boom", err)
+	}
+	if len(repo.UpdateUserCalls) != 0 {
+		t.Errorf("UpdateUser called %d times, want 0", len(repo.UpdateUserCalls))
 	}
 }

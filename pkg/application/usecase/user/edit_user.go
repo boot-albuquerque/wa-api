@@ -14,13 +14,19 @@ import (
 
 // EditUserUseCase edita um usuário existente
 type EditUserUseCase struct {
-	users  appport.UserRepository
-	logger appport.Logger
+	users    appport.UserRepository
+	s3Cipher appport.S3SecretCipher
+	logger   appport.Logger
 }
 
-// NewEditUserUseCase cria uma nova instância
-func NewEditUserUseCase(users appport.UserRepository, logger appport.Logger) *EditUserUseCase {
-	return &EditUserUseCase{users: users, logger: logger}
+// NewEditUserUseCase cria uma nova instância.
+//
+// s3Cipher encrypts the S3 secret key before it reaches the database,
+// following the same pattern AddUserUseCase uses for the HMAC key (F158)
+// and for the S3 key (F163). The port is S3-specific because the stored
+// type is a TEXT envelope (ADR-0009), not BYTEA.
+func NewEditUserUseCase(users appport.UserRepository, s3Cipher appport.S3SecretCipher, logger appport.Logger) *EditUserUseCase {
+	return &EditUserUseCase{users: users, s3Cipher: s3Cipher, logger: logger}
 }
 
 // Execute edita um usuário
@@ -83,7 +89,19 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		upd.WebhookUseProxy = req.ProxyConfig.WebhookUseProxy
 	}
 	if req.S3Config != nil {
-		upd.S3 = req.S3Config
+		// Encrypt the S3 secret before it reaches the database (F163,
+		// ADR-0009). The ORDER is the contract: encrypt, then write.
+		// A failure returns BEFORE UpdateUser.
+		s3Copy := *req.S3Config
+		if s3Copy.SecretKey != "" {
+			envelope, err := uc.s3Cipher.EncryptS3Secret(s3Copy.SecretKey)
+			if err != nil {
+				uc.logger.Error(ctx, s3SecretEncryptFailedMsg, "userID", req.UserID, "error", err)
+				return fmt.Errorf("%s: %w", s3SecretEncryptFailedMsg, err)
+			}
+			s3Copy.SecretKey = envelope
+		}
+		upd.S3 = &s3Copy
 	}
 
 	if err := uc.users.UpdateUser(ctx, req.UserID, upd); err != nil {

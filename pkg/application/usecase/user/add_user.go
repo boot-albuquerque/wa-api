@@ -21,26 +21,30 @@ const (
 	hmacKeyTooShortMsg   = "HMAC key must be at least 32 characters long"
 	hmacEncryptFailedMsg = "failed to encrypt HMAC key"
 
+	s3SecretEncryptFailedMsg = "failed to encrypt S3 secret key"
+
 	invalidEventTypeCode   = "invalid_event_type"
 	invalidEventTypeMsgFmt = "invalid event type: %s"
 )
 
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
-	users     appport.UserRepository
-	encryptor appport.HmacKeyEncryptor
-	logger    appport.Logger
+	users      appport.UserRepository
+	encryptor  appport.HmacKeyEncryptor
+	s3Cipher   appport.S3SecretCipher
+	logger     appport.Logger
 }
 
 // NewAddUserUseCase cria uma nova instância.
 //
-// The encryptor is a dependency and not a package-level helper because the
-// AES key lives in the process configuration (appCtx.GlobalEncryptionKey),
-// which the application layer must not reach for. It is the same port
-// ConfigureHmacUseCase uses, so both writers of users.hmac_key produce the
-// same ciphertext format (HOUSEKEEP F158).
-func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, logger appport.Logger) *AddUserUseCase {
-	return &AddUserUseCase{users: users, encryptor: encryptor, logger: logger}
+// The encryptor and s3Cipher are dependencies and not package-level helpers
+// because the AES key lives in the process configuration
+// (appCtx.GlobalEncryptionKey), which the application layer must not reach
+// for. Each port matches a column writer: encryptor → users.hmac_key
+// (F158), s3Cipher → users.s3_secret_key (F163). Separate ports because
+// the two columns have different stored types (BYTEA vs TEXT envelope).
+func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger) *AddUserUseCase {
+	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger}
 }
 
 // Execute adiciona um novo usuário
@@ -84,6 +88,23 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		encryptedHmacKey = encrypted
 	}
 
+	// Encrypt the S3 secret key if provided (F163, ADR-0009).
+	//
+	// Same ORDER contract as the HMAC key above: encrypt before write. A
+	// failure returns BEFORE CreateUser, so the column never holds plaintext.
+	// The in-memory S3 client (below) receives the PLAINTEXT — the AWS SDK
+	// signs with it, and the envelope would produce a client that fails every
+	// request.
+	var s3SecretEnvelope string
+	if req.S3Config != nil && req.S3Config.SecretKey != "" {
+		envelope, err := uc.s3Cipher.EncryptS3Secret(req.S3Config.SecretKey)
+		if err != nil {
+			uc.logger.Error(ctx, s3SecretEncryptFailedMsg, "error", err)
+			return nil, fmt.Errorf("%s: %w", s3SecretEncryptFailedMsg, err)
+		}
+		s3SecretEnvelope = envelope
+	}
+
 	// Validate events
 	if req.Events != "" {
 		eventList := strings.Split(req.Events, ",")
@@ -106,6 +127,10 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
+	s3ForRecord := *req.S3Config
+	if s3SecretEnvelope != "" {
+		s3ForRecord.SecretKey = s3SecretEnvelope
+	}
 	created, err := uc.users.CreateUser(ctx, domain.UserRecord{
 		ID:              id,
 		Name:            req.Name,
@@ -115,7 +140,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		Events:          req.Events,
 		ProxyURL:        req.ProxyConfig.ProxyURL,
 		WebhookUseProxy: webhookUseProxy,
-		S3:              *req.S3Config,
+		S3:              s3ForRecord,
 		HmacKey:         encryptedHmacKey,
 		History:         req.History,
 	})
