@@ -4,9 +4,22 @@ Consolidação de 2026-08-19, pedida pela orquestração depois de a matriz de
 paridade fechar. É um retrato: o que existe, o que está PROVADO, o que está
 aberto e por quê, e o que depende de decisão humana.
 
-Números vieram do repositório, não de memória: **254 testes**, **12 pacotes**,
-**45 commits** em `feature/wa-headless-foundation` (nada empurrado), **6
-armadilhas** catalogadas, **20 achados fechados** e **9 abertos**.
+Números vieram do repositório, não de memória. **Atualizados em 2026-08-20**,
+porque um documento de estado que envelhece em silêncio vira citação errada — que
+é o defeito registrado no H29:
+
+| | escrito em 19/08 | agora |
+|---|---:|---:|
+| testes | 254 | **261** |
+| pacotes | 12 | **12** |
+| commits (nada empurrado) | 45 | **56** |
+| achados fechados | 20 | **22** |
+| achados abertos | 9 | **10** |
+
+A contagem de abertos aplica a leitura humana que o próprio instrumento pede:
+o scanner marca **H5** e **H14** como abertos porque têm vários status, e ambos
+estão fechados. O aberto novo é o **H32**, e ele é `abandonado` — um achado
+deixado de lado com o motivo escrito, que conta como aberto de propósito.
 
 ---
 
@@ -96,7 +109,21 @@ virou número: **19 ms** de pior caso contra 2 ms sequencial.
 | H18 | `BootFailure` sem PID — aguardava consumidor; hoje há seis capacidades, então é o mais maduro para reabrir |
 | H25 | teto de 500 no buffer **sem medição** — precisa de conta de volume real |
 
+| H32 | auditoria de constantes **ABANDONADA** — varredura de texto não lê estrutura de código, e a alternativa (AST) custa mais que o achado justifica |
+
 **Nenhum deles é guarda sem teste.** Essa categoria zerou com o H27.
+
+### Achados de 2026-08-20, todos de auditoria sobre o próprio trabalho
+
+- **H30** — os quatro dublês das capacidades **ignoravam o `ctx`**, e a produção
+  não ignora. Uma capacidade chamada com contexto cancelado errava em produção e
+  **passava** nos testes: o chamador que já desistiu recebia dado *fabricado*.
+- **H31** — enumerando as 72 exportadas contra os testes, achei
+  `liveness.NewWithMonitor`: um construtor que **inventei** para um chamador que
+  nunca existiu. API exportada é promessa; removida.
+- **H32** — a auditoria de constantes foi abandonada, e o commit dela saiu com o
+  portão **vermelho** porque eu rodei o gate dentro de um *pipe* e o `&&` viu o
+  status do `tail`. **Gate dentro de pipe não é gate.**
 
 ## 5. Depende do humano
 
