@@ -6392,6 +6392,13 @@ type longHoldSample struct {
 	reinstall bool
 	rssKB     int
 	procs     int
+
+	// burstOldestAge is how old the NEWEST surviving event was when a drain
+	// reported drops, and burstFresh how many of them were recent. Together
+	// they say whether a burst was history replay or live traffic — see the
+	// comment at the drain call.
+	burstOldestAge time.Duration
+	burstFresh     int
 }
 
 // TestRealSPALongHoldUnderLoad measures a session held for an hour WITH THE
@@ -6408,6 +6415,17 @@ type longHoldSample struct {
 // stack, and a session held for hours under load is exactly where a leak would
 // show. The spike measured 474-790 MB pre-login across 6 to 9 processes; what
 // nobody has measured is whether that number MOVES over an hour of use.
+//
+// WHAT "UNDER LOAD" MEANS HERE, said before the result can be over-read: OUR
+// capabilities poll every tick — liveness, owner, fetch, drain. It does NOT
+// mean WhatsApp traffic is flowing. Against a quiet account the drain returns
+// zero from the third sample onwards, so this measures a session being USED
+// while the account is idle, which is one condition and not the general case.
+//
+// The distinction matters because it is the same one this module keeps getting
+// wrong in the other direction: a test whose name promises more than its
+// condition delivers. Sustained inbound traffic is a different measurement and
+// would need an account nobody has.
 //
 // It asserts only what would be a defect under any policy — the process must
 // not die on its own, and the subscription must not silently vanish. Everything
@@ -6487,6 +6505,38 @@ func TestRealSPALongHoldUnderLoad(t *testing.T) {
 		}
 		if d, err := sub.Drain(context.Background(), fmt.Sprintf("long/drain%d", i)); err == nil {
 			s.drained, s.dropped, s.reinstall = len(d.Events), d.Dropped, d.Reinstalled
+
+			// WHAT gets dropped is the question Drain.Dropped cannot answer: it
+			// counts how many, never which, because a refused event is never
+			// materialised. So when a burst drops something, report the AGE
+			// RANGE of the events that DID come through in the same drain.
+			//
+			// The inference is by elimination and is stated as such: if every
+			// event that survived the burst is hours old, the burst is history
+			// replay and the ceiling costs nothing in production. If fresh ones
+			// are in there, a live delivery could have been the one refused —
+			// and that is a gap rather than a curiosity (H25).
+			if d.Dropped > 0 && len(d.Events) > 0 {
+				oldest, newest := d.Events[0].Timestamp, d.Events[0].Timestamp
+				fresh := 0
+				for _, e := range d.Events {
+					if e.Timestamp.Before(oldest) {
+						oldest = e.Timestamp
+					}
+					if e.Timestamp.After(newest) {
+						newest = e.Timestamp
+					}
+					if time.Since(e.Timestamp) < 5*time.Minute {
+						fresh++
+					}
+				}
+				s.burstOldestAge = time.Since(newest)
+				s.burstFresh = fresh
+				t.Logf("  BURST at t+%s: dropped=%d, of the %d that came through the "+
+					"NEWEST is %s old and %d are under 5min",
+					s.at.Round(time.Second), d.Dropped, len(d.Events),
+					time.Since(newest).Round(time.Second), fresh)
+			}
 		}
 		s.rssKB, s.procs = profileTreeRSSKB(t, pid)
 
@@ -6537,6 +6587,27 @@ func TestRealSPALongHoldUnderLoad(t *testing.T) {
 	t.Logf("  liveness not-alive: %d | identity absent: %d | reinstalls: %d | dropped: %d",
 		deadCount, noIDCount, reinstallCount, totalDropped)
 	t.Logf("  latency worst: %s", worstLat.Round(time.Millisecond))
+	// The burst verdict, by elimination, or an honest absence of one.
+	var bursts, burstsWithFresh int
+	for _, s := range samples {
+		if s.dropped > 0 {
+			bursts++
+			if s.burstFresh > 0 {
+				burstsWithFresh++
+			}
+		}
+	}
+	switch {
+	case bursts == 0:
+		t.Logf("  bursts: none — the ceiling was never reached in this run")
+	case burstsWithFresh == 0:
+		t.Logf("  bursts: %d, and NONE carried an event under 5min old. By elimination "+
+			"the drops are history replay, not live delivery (H25)", bursts)
+	default:
+		t.Logf("  bursts: %d, of which %d carried a FRESH event. A live delivery could "+
+			"have been the one refused — this is a gap, not a curiosity (H25)",
+			bursts, burstsWithFresh)
+	}
 	t.Logf("  RSS first=%dMB last=%dMB min=%dMB max=%dMB (%d processes)",
 		first.rssKB/1024, last.rssKB/1024, minRSS/1024, maxRSS/1024, last.procs)
 	if first.rssKB > 0 {
