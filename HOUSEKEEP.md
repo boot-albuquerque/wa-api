@@ -9436,8 +9436,71 @@ e dizer qual ocorreu — "conjunto inalterado, apenas posições" versus
 do golden e mantê-lo só na saída de diagnóstico, já que o gate existe para
 travar o CONJUNTO, não a posição.
 
-**Status**: não corrigido — é gate, fora do escopo do CAP-25, e mexer em gate
-no mesmo commit da correção que ele julga é má ideia. Registrado para decisão.
+**Status**: **CORRIGIDO** no CAP-36, em commit próprio — separado da correção
+que o gate julgava, que era a razão de ter ficado pendente desde o CAP-25.
+
+**O que mudou**: `cmd/logcov/main_test.go` ganhou `diagnoseGoldenDivergence`,
+que compara os dois primeiros campos (nome e status) como IDENTIDADE e ignora o
+terceiro. `TestGoldenBate` passou a emitir o diagnóstico em vez da contagem de
+linhas.
+
+**O que NÃO mudou, de propósito**: o gate continua reprovando em QUALQUER
+divergência, inclusive a de posição pura — `if got != string(want)` está
+intacto. A mudança é de DIAGNÓSTICO, não de severidade. E o formato do golden
+não foi tocado: tirar o número de linha, citado acima como "alternativa mais
+forte", muda artefato versionado e ficou fora do escopo.
+
+**Testes que travam o achado** (`cmd/logcov/main_test.go`):
+`TestDiagnoseGoldenPositionOnly`, `TestDiagnoseGoldenEntryAdded`,
+`TestDiagnoseGoldenEntryRemoved`, `TestDiagnoseGoldenStatusChanged`,
+`TestDiagnoseGoldenMixedChanges`. Os quatro primeiros repetem a asserção 5
+vezes e o último 10, porque a comparação usa mapa e ordem de mapa em Go é
+aleatória por desenho.
+
+**Controles negativos EXECUTADOS por mim (coordenador), além dos do executor** —
+os dois contra o golden versionado real, restaurado depois por edição
+localizada e conferido com `diff` contra backup:
+
+CN-1, mutação SÓ de posição (`eligible.golden:1861`, `orchestrator.go:196` →
+`orchestrator.go:999`; nome e status intactos):
+
+```
+--- FAIL: TestGoldenBate (1.28s)
+    main_test.go:47: golden diverged: set is IDENTICAL (same 3068 entries with same status) but line positions changed; regeneration is safe:
+          go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden
+FAIL	wa-api/cmd/logcov	1.603s
+```
+
+É exatamente o caso que custou duas investigações: continua REPROVANDO, mas
+agora diz que o conjunto está igual e que regenerar é seguro.
+
+CN-2, mutação de CONJUNTO (remoção da linha 1862 do golden):
+
+```
+--- FAIL: TestGoldenBate (1.27s)
+    main_test.go:47: golden diverged: the eligible SET changed
+
+        ADDED:
+          + pkg/application/session.Orchestrator.Start.func1 (ELIGIBLE)
+
+        regenerate ONLY after verifying these changes are intentional:
+          go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden
+FAIL	wa-api/cmd/logcov	1.421s
+```
+
+O elemento aparece NOMEADO, que é o que faltava.
+
+**Gate**: `make check` EXIT 0, rodado por mim depois do executor. Auditoria de
+conservação: zero arquivos deletados, zero funções de teste removidas, cinco
+acrescentadas.
+
+**Limite conhecido, medido e não corrigido**: `diagnoseGoldenDivergence` monta
+`wantByName`/`gotByName` por iteração de mapa. Se o MESMO nome aparecesse duas
+vezes com status diferentes, o vencedor seria não-determinístico e o teste de
+determinismo não morderia, porque ele repete a MESMA entrada. Medido: o golden
+tem 3068 linhas e ZERO nomes repetidos (`cut -f1 ... | sort | uniq -d` vazio),
+então o defeito não é alcançável hoje. Fica registrado porque deixa de ser
+inalcançável no dia em que o gerador emitir nome repetido.
 
 ## F155
 
