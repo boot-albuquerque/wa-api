@@ -9,7 +9,25 @@
 #   202 em cinco funções de 40 reduz a complexidade real em todo lugar e
 #   *aumenta* a contagem de 1 para 5. Travar na contagem é premiar quem deixa
 #   o monolito de pé. (Achado da revisão de arquitetura da Fase 7.)
-max_complexity=56
+# F172 (2026-08-20): 56 -> 51. Ratchet-DOWN por ordem do proprio alvo lint, que
+# avisava "a complexidade maxima caiu (51 < 56). Baixe max_complexity para 51
+# neste mesmo PR" ha' pelo menos quatro rodadas (logs da CAP-36 a CAP-40) sem
+# que ninguem baixasse. Com o teto em 56 contra medicao de 51, havia CINCO
+# pontos de folga em que a complexidade podia voltar a subir sem o gate
+# reclamar — a trava desligada exatamente na faixa que ela existe para proteger.
+#
+# Teto EXATO, por decisao explicita, e o numero foi MEDIDO na hora de aplicar
+# (nao copiado de relatorio anterior — foi assim que a F171 quase commitou a
+# catraca de cobertura ja' com folga).
+#
+# O custo, aceito e declarado: uma funcao NOVA de complexidade 52 passa a
+# reprovar o gate, mesmo sendo legitima. Isto NAO e' simetrico ao piso de
+# cobertura da F171 — cobertura que cai e' quase sempre defeito, enquanto
+# complexidade que sobe pode ser consequencia honesta de uma feature. Quem
+# esbarrar aqui tem duas saidas legitimas: decompor a funcao, ou subir o teto
+# NESTE arquivo com justificativa escrita. Subir o teto nao e' derrota; subir
+# em silencio e' que seria.
+max_complexity=51
 # vendor-wa-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código

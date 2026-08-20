@@ -12366,8 +12366,41 @@ número SOBE quando se quebra função grande em pequenas. Decidir entre teto
 exato e teto com folga é política, e é a mesma pergunta da F171 com uma resposta
 possivelmente diferente.
 
-**Status**: não corrigido. Fora do escopo do CAP-39, que é a cobertura. Levado
-ao canal de decisão.
+**Status**: **CORRIGIDO** — `max_complexity` 56 → 51, decisão (a) do canal, em
+commit próprio.
+
+**O número foi MEDIDO na hora de aplicar**, não copiado desta entrada: 51,
+confirmado no `make check` imediatamente anterior à mudança. É a lição da
+[[F171]], onde o aviso pedia 858 e a medição do momento já era 859.
+
+**Controle negativo EXECUTADO**: com `max_complexity=50`, um ponto abaixo do
+medido, o gate reprova:
+
+```
+FALHA: a maior funcao do repo piorou (51 > 50).
+       A trava e' a complexidade maxima, nao a contagem: decompor uma funcao
+       gigante em varias menores AUMENTA a contagem e MELHORA o repo.
+make: *** [lint] Error 1
+```
+
+Restaurado para 51 por edição localizada; conferido que existe UMA só linha
+`^max_complexity=` ativa.
+
+**O custo, aceito e escrito no próprio arquivo**: uma função NOVA de
+complexidade 52 passa a reprovar, mesmo sendo legítima. Por isso o comentário
+diz explicitamente que subir o teto com justificativa escrita é saída LEGÍTIMA —
+subir o teto não é derrota, subir em silêncio é que seria. Sem essa frase, o
+próximo a esbarrar no gate escolheria entre decompor às pressas ou contornar.
+
+**Gate**: `make check` EXIT 0, e o aviso `ATENCAO: a complexidade maxima caiu`
+desapareceu da saída.
+
+**Não corrigido, e de propósito**: a chave `count` do mesmo arquivo está em 263
+contra 338 medidos. É INFORMATIVA por desenho e nunca trava — o cabeçalho do
+`.golangci-baseline` explica que travar na contagem premiaria quem deixa o
+monolito de pé, porque decompor AUMENTA a contagem. Atualizá-la não protegeria
+nada; deixá-la desatualizada também não custa nada. Registrado aqui só para que
+a divergência não seja lida como esquecimento.
 
 ---
 
