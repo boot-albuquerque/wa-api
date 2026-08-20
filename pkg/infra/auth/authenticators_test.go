@@ -27,7 +27,7 @@ import (
 // consulta — e é justamente a consulta que decide quem entra.
 func newAuthTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
+	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestLookupUser_ReportsErrorOnBrokenSchema(t *testing.T) {
 	// Banco aberto sem schema: a query falha. O contrato é (nil, err), nunca
 	// (nil, nil) — porque (nil, nil) significa "não autenticado" e um erro de
 	// infraestrutura sendo lido como "não autenticado" mascara indisponibilidade.
-	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db"))
+	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

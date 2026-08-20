@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/mux"
 	_ "modernc.org/sqlite"
 
+	dbpkg "wa-api/pkg/infra/db"
+
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -30,7 +32,7 @@ import (
 // `users`, e' o banco que faz o caminho de erro morder.
 func ipmSQLite(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "wa.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "wa.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

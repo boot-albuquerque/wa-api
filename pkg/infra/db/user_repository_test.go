@@ -35,11 +35,8 @@ func (discardLogger) Error(context.Context, string, ...any) {}
 
 func newUserTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	// O busy_timeout é o mesmo que initializeSQLite aplica em produção. Sem
-	// ele o teste de concorrência abaixo recebe SQLITE_BUSY imediatamente e
-	// falha de forma intermitente.
 	db, err := sqlx.Open("sqlite",
-		filepath.Join(t.TempDir(), "user.db")+"?_pragma=busy_timeout(10000)")
+		filepath.Join(t.TempDir(), "user.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

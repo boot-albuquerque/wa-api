@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	dbpkg "wa-api/pkg/infra/db"
+
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/domain"
@@ -20,7 +22,7 @@ import (
 // pkg/infra/db/migrations_test.go.
 func openDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "health.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "health.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

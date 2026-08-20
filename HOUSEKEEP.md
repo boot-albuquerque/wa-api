@@ -11204,9 +11204,59 @@ compartilhada com a string de pragmas de produção, usada pelos fixtures. Não
 "acrescentar busy_timeout em cada um" — isso repetiria o literal 16 vezes e
 deixaria a divergência livre para voltar.
 
-**Status**: não corrigido ainda. Decisão (b) do canal recebida; o bloco vai
-sair com a forma corrigida pela medição acima, e o achado NOVO que ela produziu
-está na [[F177]].
+**Status**: **CORRIGIDA** no CAP-44, junto com a [[F177]] — decisão (a) do canal
+depois de eu reportar que a medição mudara a forma do conserto.
+
+`db.SQLitePragmas` (`pkg/infra/db/connection.go:22`) é agora a fonte única, e
+carrega os TRÊS pragmas. Os dois pontos de produção e os 16 fixtures de arquivo
+usam-na; os 2 de `:memory:` ficam de fora, com o motivo REAL escrito no
+comentário — o pool abre bancos SEPARADOS por conexão, então não há disputa a
+gerir.
+
+**Valor de produção conferido byte a byte** contra o histórico
+(`git show HEAD:...`): idêntico. Era a ressalva literal do canal — *"desde que a
+constante contenha apenas a parte dos pragmas, preservando as duas formas de
+montagem da URL"* —, porque `main.go:367` prefixa `"file:"` e usa
+`filepath.ToSlash` enquanto `connection.go` concatena direto.
+
+**O teste é o melhor detalhe deste bloco**: `connection_test.go` não assere a
+STRING da constante — consulta o `PRAGMA` de volta da conexão e compara o valor
+EFETIVO, para os três. Uma asserção sobre o literal provaria que alguém
+escreveu o texto certo; esta prova que o SQLite o aceitou e aplicou.
+
+**Controle negativo do COORDENADOR**, removendo `busy_timeout` da constante:
+
+```
+connection_test.go:37: PRAGMA busy_timeout = "0", want "10000"
+FAIL	wa-api/pkg/infra/db	0.718s
+```
+
+**Corrida, que era o defeito original**: `go test ./pkg/bootstrap/ -race -count=3`
+→ `ok 34.811s`. É o pacote onde o `database is locked (5)` apareceu.
+
+**Gate**: `make check` EXIT 0, rodado por mim com a árvore PARADA. Zero arquivos
+deletados, zero testes removidos.
+
+**FALSO ALARME MEU, evitado a tempo, e registrado porque é a lição da [[F154]]
+aplicada do lado certo**: durante a edição li a constante DUAS vezes com apenas
+dois pragmas, faltando um DIFERENTE em cada leitura — uma delas sem
+`foreign_keys(1)`, o que desligaria verificação de chave estrangeira em produção,
+em silêncio. Parecia defeito grave.
+
+NÃO intervim: era árvore em movimento, e o executor estava a construir a
+constante incrementalmente. Um REQUIRED_FIX ali teria interrompido trabalho
+correto por um defeito inexistente — exatamente o que EU causei na [[F163]] ao
+mutar a árvore durante o gate do executor.
+
+A regra fica em duas partes: **não mutar árvore de worker ativo**, e **não
+concluir a partir de leitura de árvore em movimento**. Ler é seguro; ler e
+DECIDIR não é.
+
+**O que este bloco significa além de si mesmo**: até aqui, todo `make check`
+verde desta sessão foi medido sobre SQLite sem WAL e sem espera — configuração
+diferente da produção. Como esse verde foi o critério para aceitar e recusar
+blocos o dia inteiro, corrigir a ferramenta de medição vale mais que o defeito
+que ela media.
 
 ## F162
 
@@ -13127,5 +13177,13 @@ Constante, e não função, se o valor for fixo.
 PARTE DOS PRAGMAS, não a URL inteira, senão a unificação quebra um dos dois.
 Verificar antes de escrever.
 
-**Status**: não corrigido, nada implementado. Achado ao executar a F161; será
-levado ao canal junto com o resultado dela.
+**Status**: **CORRIGIDA** no CAP-44, no mesmo bloco da [[F161]] — e no mesmo
+bloco de propósito, porque esta é PRÉ-CONDIÇÃO daquela: sem constante única, o
+conserto dos fixtures levaria o mesmo literal a DEZOITO lugares em vez de dois.
+
+`db.SQLitePragmas` substitui os dois literais de produção
+(`connection.go` e `main.go`). O cuidado registrado acima foi respeitado: a
+constante é SÓ o sufixo de pragmas, e cada ponto continua montando a URL como
+montava — `"file:"` + `ToSlash` num, concatenação direta no outro.
+
+Conferido byte a byte contra o histórico: o valor final montado não mudou.

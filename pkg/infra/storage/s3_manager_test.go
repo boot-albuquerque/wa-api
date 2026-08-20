@@ -16,6 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"wa-api/pkg/infra/auth"
+	dbpkg "wa-api/pkg/infra/db"
 )
 
 // fakeS3 is an in-process stand-in for an S3-compatible endpoint. The AWS SDK
@@ -538,7 +539,7 @@ func TestGetPublicURL_PresignFailsOnBadCredentials(t *testing.T) {
 
 func openStorageTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "storage.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "storage.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

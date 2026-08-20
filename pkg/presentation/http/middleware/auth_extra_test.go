@@ -10,6 +10,7 @@ import (
 	"wa-api/pkg/domain"
 
 	appport "wa-api/pkg/application/contracts"
+	dbpkg "wa-api/pkg/infra/db"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/jmoiron/sqlx"
@@ -201,7 +202,7 @@ func TestAuthAliceCachedEntryWithoutIDIsRejected(t *testing.T) {
 // falha: o banco existe mas não tem a tabela. O corpo devolvido é genérico,
 // então o registro de ERROR é o único lugar onde a causa fica.
 func TestAuthAliceQueryErrorLogsAndReturns500(t *testing.T) {
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

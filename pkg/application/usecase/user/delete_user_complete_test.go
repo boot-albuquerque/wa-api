@@ -11,6 +11,8 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 
+	dbpkg "wa-api/pkg/infra/db"
+
 	// DeleteUserCompleteUseCase ainda fala com *sql.DB direto (não passou pela
 	// F6), então o único jeito de testá-lo é contra um banco de verdade. O
 	// driver é o mesmo que o resto do repositório usa em teste.
@@ -20,7 +22,7 @@ import (
 // openTestDB abre um sqlite descartável e roda as instruções de ddl nele.
 func openTestDB(t *testing.T, ddl ...string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "delete.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "delete.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

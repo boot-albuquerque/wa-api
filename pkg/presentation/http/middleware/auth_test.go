@@ -20,7 +20,7 @@ import (
 
 func newAuthTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

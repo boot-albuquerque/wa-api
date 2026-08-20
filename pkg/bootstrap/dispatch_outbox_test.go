@@ -22,7 +22,7 @@ import (
 func instalarOutboxDeTeste(t *testing.T) *dbpkg.WebhookOutboxRepository {
 	t.Helper()
 
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "outbox.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "outbox.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestOutboxWiring_SetupSemBancoNaoLiga(t *testing.T) {
 // tem de instalar o runtime, senão nada do resto acontece e o sistema fica
 // silenciosamente sem durabilidade.
 func TestOutboxWiring_SetupComBancoLiga(t *testing.T) {
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "setup.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "setup.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestOutboxWiring_BancoFechadoDegradaSemDerrubar(t *testing.T) {
 	// Idem: o `reagendar` do fim arma um timer de 16 bytes que ninguém espera.
 	prepararRetry(t, true, 5, retryBaseQueNaoDisparaSegundos)
 
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "fechado.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "fechado.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

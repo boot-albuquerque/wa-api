@@ -124,7 +124,7 @@ func newChatHistoryFixtureLogging(t *testing.T, injectUser func() *Values, logOu
 // temporario — mesma via de pkg/infra/db/migrations_test.go.
 func newChatHistoryDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	database, err := sqlx.Open("sqlite", t.TempDir()+"/chat_history.db?_pragma=busy_timeout(5000)")
+	database, err := sqlx.Open("sqlite", t.TempDir()+"/chat_history.db"+db.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
