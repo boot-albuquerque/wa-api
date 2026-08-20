@@ -2922,3 +2922,81 @@ dois é o canônico não foi medido.
 
 **Status**: aberto — simplificação identificada com o caminho de medição
 escrito, não aplicada, aguardando decisão.
+
+## H39 — o roster descreve 390 pessoas DUAS vezes, e a ligação é de mão única
+
+**Data**: 2026-08-20 · **Contexto**: CAP-08 (`listContacts`), medida antes de
+projetar com o instrumento da H37.
+
+**A medição**, contra o perfil de laboratório:
+
+| medida | valor |
+|---|---|
+| modelos em `WAWebContactCollection` | **944** |
+| identidades `c.us` distintas | 454 |
+| identidades `lid` distintas | 489 |
+| linhas `lid` carregando `phoneNumber` | 398 (390 telefones distintos) |
+| desses 390, quantos existem como linha `c.us` própria | **390 — todos** |
+| linhas `c.us` carregando um `lid` | **0** |
+
+**O que isso significa**: cerca de 390 pessoas aparecem duas vezes. Uma listagem
+que devolvesse `getModelsArray()` cru reportaria 944 contatos para ~545 pessoas
+— errado de um jeito que nenhum chamador consegue detectar, porque as duas
+linhas parecem válidas.
+
+**A junção é de MÃO ÚNICA**, e isso decide a implementação: a linha `lid`
+conhece o telefone, a linha de telefone não conhece o LID (0 de 454). A fusão
+tem de andar `lid → phone`; a aresta inversa não existe neste build.
+
+O único campo de identidade cruzada presente no modelo é `phoneNumber`
+(398 ocorrências). `lid`, `pn`, `pnForLid`, `alternateWid` não existem.
+
+**Segunda medição, que só apareceu no teste contra a SPA real**: fundi **398
+linhas em 390 pessoas**. Oito pessoas carregam **dois LIDs**. Ficar com o último
+faria essas oito dependerem da ordem das linhas na página — a mesma dependência
+que o contrato de ordenação recusa. Qual LID é canônico NÃO se sabe, então o
+desempate é o menor string: arbitrário, mas igual toda vez.
+
+**O nome dos campos existe por causa disso**: `Roster.Merged` conta LINHAS
+fundidas, não pessoas duplicadas. Os dois números diferem (398 contra 390), e
+chamar de "pessoas" tornaria `Rows - Merged` mentira.
+
+**A superfície de nome está quase vazia neste perfil**, e a medição decide o que
+a capacidade pode prometer:
+
+```
+getName          1 de 944      getShortName     0 de 944
+getPushname    456 de 944      getVerifiedName 22 de 944
+```
+
+`getName` lê a agenda, e o perfil de laboratório tem uma entrada salva. É
+propriedade do PERFIL, não do build — mas uma capacidade que prometesse "nome"
+devolveria vazio para 943 de 944. Só `pushname` é utilizável, e mesmo ele cobre
+288 das 545 pessoas depois da fusão.
+
+**Onde ficou**: `internal/wa-headless/capabilities/contacts/`, com a fusão em GO
+e não na página, para ser exercitável por dublê em vez de só por conta viva.
+
+**Testes que travam**: nove em `contacts_test.go`, mais
+`TestRealSPAListsContactsWithoutDoubleCounting` contra o roster ao vivo, que
+assere que nada some (`pessoas + fundidas <= linhas`, com no máximo 5 linhas não
+contabilizadas — a medição achou 1, um grupo).
+
+**Cinco controles negativos, EXECUTADOS:**
+
+```
+1. não fundir              -> got 2 contacts from 2 rows for one person
+2. sobrescrever no lugar de completar -> the phone row's name was erased by the empty lid row
+3. descartar lid sem par   -> got 1, want 3
+4. remover a ordenação     -> reversed=999@lid|111@c.us|333@c.us|777@lid|888@lid
+5. último LID vence        -> LID="999@lid", want the stable choice 222@lid
+```
+
+**Um teste que NÃO mordia foi corrigido antes de entrar**: a primeira versão da
+asserção de ordem alimentava a mesma entrada repetidas vezes e comparava o
+resultado consigo mesmo. Passava — e passaria com a ordenação apagada, porque a
+fusão acumula num slice em ordem de entrada. Trocado por alimentar as linhas em
+ordem invertida e exigir o mesmo roster, que é o contrato de verdade.
+
+**Status**: corrigido/entregue — capacidade implementada a partir da medição,
+com prova ao vivo (944 → 545) e cinco controles negativos.

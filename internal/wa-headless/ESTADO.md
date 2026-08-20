@@ -62,6 +62,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `fetchMessages` | `capabilities/fetchmessages` | 340 carregados, filtro por chat casa |
 | `backupNow` | `capabilities/backup` | restaura com identidade presente; custo medido nos dois perfis (§6.6) |
 | `sendText` | `capabilities/send` | **laço fechado real**: conta A envia, conta B recebe o MESMO id em 1 s |
+| `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 545 pessoas**, 398 fundidas |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -78,6 +79,13 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
    aceita a chamada. Aqui o envio só retorna depois de a mensagem aparecer na
    coleção, contra a identidade RESOLVIDA. É a invariante 14, e foi ela que
    expôs o defeito da verificação em vez de escondê-lo.
+7. **`listContacts` FUNDE as duas linhas da mesma pessoa** — o roster carrega
+   390 pessoas duas vezes (uma `@c.us`, uma `@lid`), e a ligação só existe no
+   sentido `lid → phone`. Devolver as linhas cruas daria 944 contatos para 545
+   pessoas. Ver H39.
+8. **`listContacts` promete `pushname`, não `name`** — `getName` responde para
+   1 de 944 e `getShortName` para nenhum neste perfil. Prometer "nome" seria
+   prometer vazio.
 
 ## 3. Invariantes travadas em teste
 

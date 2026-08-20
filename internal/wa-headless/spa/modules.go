@@ -115,6 +115,28 @@ const (
 	// fraction of the machinery, which is the whole reason the parity document
 	// says to copy the UNDERSTANDING and not the code.
 	ModuleQueryExistsJob = Module("WAWebQueryExistsJob")
+	// ModuleContactCollection is the roster.
+	//
+	// Measured 2026-08-20 on the lab profile: 944 models, split 454 "c.us" /
+	// 489 "lid" / 1 "g.us". That split is nothing like the message collection's
+	// 397-of-399 lid, and the reason is duplication — see ModuleContactGetters.
+	ModuleContactCollection = Module("WAWebContactCollection")
+	// ModuleContactGetters reads a contact model's fields.
+	//
+	// Measured 2026-08-20 over all 944 models, and the numbers decide what a
+	// listing may promise:
+	//
+	//	getName          1 of 944    <- the address book, and the lab profile has one entry
+	//	getShortName     0 of 944
+	//	getPushname    456 of 944
+	//	getVerifiedName 22 of 944
+	//	getIsBusiness   25 of 944
+	//
+	// So pushname is the only name worth returning here, and getName being
+	// empty is a property of the PROFILE (nothing saved to the address book),
+	// not of the build. A listing that promised "name" would return nothing
+	// for 943 of 944 people.
+	ModuleContactGetters = Module("WAWebContactGetters")
 )
 
 // RequiredAtStartup is verified before any capability runs.
