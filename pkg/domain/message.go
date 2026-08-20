@@ -517,6 +517,23 @@ type SendEditMessageResult struct {
 	Status    string `json:"status"`
 }
 
+// SendReactionResult é o resultado de POST /chat/react.
+//
+// Nasceu na F190, e o motivo de não ter nascido antes é o achado que a entrada
+// regista: a rota devolvia um `map[string]interface{}` literal, montado dentro
+// do use case. Sem tipo, não havia onde pendurar uma tag JSON — e portanto não
+// havia nada que uma revisão de DTO apanhasse. Foi por isso que a `react` ficou
+// com a forma histórica `{Details, Timestamp, Id}` enquanto as catorze irmãs
+// migraram para esta.
+//
+// Tipar o resultado não é cerimónia: é o que põe a rota debaixo da mesma
+// disciplina das outras, incluindo a trava de nomes de wire.
+type SendReactionResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
 // Os três tipos de botão de template que o histórico reconhecia
 // (`git show 41bc8e2^:handlers.go`, função SendTemplate). São valores do
 // CONTRATO PÚBLICO — chegam no campo Type do JSON do cliente —, e por isso

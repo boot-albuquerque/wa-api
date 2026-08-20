@@ -104,14 +104,19 @@ func messageOpWireCases() []messageOpWireCase {
 			},
 		},
 		{
-			// A react é travada na forma HISTÓRICA porque é essa que ela
-			// devolve — medido contra o servidor real em 2026-08-20:
+			// A react ESTEVE travada na forma histórica, porque era essa que
+			// ela devolvia — medido contra o servidor real em 2026-08-20:
 			//   {"Details":"Sent","Id":"3EB0D89C...","Timestamp":1787255613}
-			// Isto DOCUMENTA a divergência da F190; não a aprova.
+			//
+			// Alinhada na F190 depois de autorização explícita do humano: o
+			// use case passou a devolver um domain.SendReactionResult tipado
+			// em vez de um map literal. O tipo é o que importa mais do que os
+			// nomes — sem ele não havia onde pendurar a tag, e foi por isso
+			// que a rota escapou a esta trava.
 			nome:      "react",
 			rota:      "POST /chat/react",
-			esperadas: formaHistorica,
-			alheias:   append(append([]string{}, formaNova...), vocabularioF123...),
+			esperadas: formaNova,
+			alheias:   append(append([]string{}, formaHistorica...), vocabularioF123...),
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.ChatMessenger{
 					SendReactionFunc: func(context.Context, string, domain.JID, domain.Reaction) (domain.MessageSendResult, error) {
@@ -168,37 +173,55 @@ func TestMessageOpWireContract_FieldNames(t *testing.T) {
 	}
 }
 
-// TestMessageOpWireContract_ReactDivergeDasOutras é a asserção que torna a
-// F190 VISÍVEL em vez de implícita.
+// TestMessageOpWireContract_TodasNaMesmaForma substitui o
+// TestMessageOpWireContract_ReactDivergeDasOutras, que existia para tornar a
+// divergência da F190 VISÍVEL e falhava, de propósito, no dia em que ela
+// acabasse.
 //
-// Os testes acima passariam se um dia a react fosse alinhada com as outras —
-// bastaria alguém trocar as duas listas. Este falha, de propósito, no dia em
-// que a divergência acabar: obriga quem a alinhar a vir aqui, ler a F190, e
-// remover a trava conscientemente, em vez de a mudança passar como detalhe.
-func TestMessageOpWireContract_ReactDivergeDasOutras(t *testing.T) {
-	var react, edit map[string]any
+// Esse dia chegou, e o teste fez exatamente o que devia: obrigou quem alinhou a
+// react a vir aqui, ler a F190, e remover a trava conscientemente em vez de a
+// mudança passar como detalhe. A mensagem que ele deu foi
+// "a divergencia da F190 ACABOU. Se foi decisao, remova este teste".
+//
+// Foi decisão, e este é o que fica no lugar: a afirmação passa a ser que as
+// TRÊS estão na mesma forma. Um teste que só verificasse cada uma isoladamente
+// deixaria a próxima divergir sem que a INCOERÊNCIA fosse dita em lado nenhum.
+func TestMessageOpWireContract_TodasNaMesmaForma(t *testing.T) {
+	chaves := map[string][]string{}
 	for _, caso := range messageOpWireCases() {
 		var obj map[string]any
 		if err := json.Unmarshal(decodeEnvelope(t, caso.serve(t)).Data, &obj); err != nil {
 			t.Fatalf("%s: %v", caso.rota, err)
 		}
-		switch caso.nome {
-		case "react":
-			react = obj
-		case "edit":
-			edit = obj
-		}
+		chaves[caso.nome] = sendWireChavesOrdenadas(obj)
 	}
 
-	if _, ok := edit["message_id"]; !ok {
-		t.Fatal("edit deixou de devolver message_id; a premissa deste teste caiu")
+	if len(chaves) < 2 {
+		t.Fatal("menos de duas operacoes: nao ha' o que comparar")
 	}
-	if _, ok := react["message_id"]; ok {
-		t.Fatal("a react passou a devolver message_id: a divergencia da F190 ACABOU.\n" +
-			"       Se foi decisao, remova este teste e alinhe as listas em messageOpWireCases.\n" +
-			"       Se nao foi, alguem mudou contrato publico sem reparar.")
+
+	var referencia string
+	for nome, ks := range chaves {
+		if referencia == "" {
+			referencia = nome
+			continue
+		}
+		if !mesmasChaves(chaves[referencia], ks) {
+			t.Errorf("%s devolve %v e %s devolve %v: as operacoes sobre mensagem divergem no wire.\n"+
+				"       Se a divergencia for deliberada, ela tem de estar REGISTADA — foi assim que a F190 nasceu.",
+				referencia, chaves[referencia], nome, ks)
+		}
 	}
-	if _, ok := react["Id"]; !ok {
-		t.Fatal("a react deixou de devolver Id sem passar a devolver message_id: o wire ficou sem identificador nenhum")
+}
+
+func mesmasChaves(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
 	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -24,7 +24,7 @@ func NewReactUseCase(cm appport.ChatMessenger, jr appport.JIDResolver, logger ap
 }
 
 // Execute sends a reaction
-func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.ReactRequest) (map[string]interface{}, error) {
+func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.ReactRequest) (*domain.SendReactionResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
@@ -82,9 +82,18 @@ func (uc *ReactUseCase) Execute(ctx context.Context, userID string, req domain.R
 
 	uc.logger.Info(ctx, "Reaction sent", "timestamp", fmt.Sprintf("%v", resp.Timestamp), "id", msgid, "user_id", userID)
 
-	return map[string]interface{}{
-		"Details":   "Sent",
-		"Timestamp": resp.Timestamp.Unix(),
-		"Id":        msgid,
+	// F190. Era um map literal com {Details, Timestamp, Id} — a forma HISTÓRICA
+	// que a F131 descartou por escrito para toda a superfície de envio. A
+	// reação envia uma mensagem e devolve os mesmos três valores semânticos que
+	// as catorze irmãs; devolvê-los com outros nomes obrigava um cliente a ter
+	// dois parsers para a mesma coisa.
+	//
+	// O tipo é o que importa aqui, mais do que os nomes: sem ele não havia onde
+	// pendurar a tag, e foi por isso que esta rota escapou à trava de wire por
+	// tanto tempo.
+	return &domain.SendReactionResult{
+		MessageID: msgid,
+		Timestamp: resp.Timestamp.Unix(),
+		Status:    domain.StatusSent,
 	}, nil
 }

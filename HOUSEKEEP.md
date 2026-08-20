@@ -15315,9 +15315,31 @@ a react passou a devolver message_id: a divergencia da F190 ACABOU.
    Se nao foi, alguem mudou contrato publico sem reparar.
 ```
 
-**O que NÃO foi feito, e continua a precisar de decisão**: alinhar a `react`.
-Um cliente que leia `message_id` das treze rotas de envio continua a partir ao
-ler a reação. Contrato HTTP, item 3.1.
+**A `react` foi ALINHADA** (autorização direta do humano, 2026-08-20, depois de
+a decisão do canal na DECISÃO 29 a ter preterido — o humano é quem decide quando
+as duas instâncias divergem).
+
+O conserto **não foi trocar strings**: foi **tipar o resultado**. Nasceu
+`domain.SendReactionResult` com `{message_id, timestamp, status}`, e o use case
+deixou de devolver um `map[string]interface{}` literal.
+
+Isso importa mais que os nomes, porque **a falta de tipo era a CAUSA da fuga**:
+sem tipo não havia onde pendurar a tag, logo não havia nada que uma revisão de
+DTO apanhasse, e por isso a rota escapou à trava de wire enquanto as catorze
+irmãs migravam. Trocar só os nomes deixaria a próxima rota a escapar pela mesma
+porta.
+
+`TestMessageOpWireContract_ReactDivergeDasOutras` **cumpriu o seu papel e saiu**:
+ele existia para falhar no dia em que a divergência acabasse, e falhou, obrigando
+quem alinhou a vir aqui ler a entrada. No lugar dele ficou
+`TestMessageOpWireContract_TodasNaMesmaForma`, que afirma o que agora é verdade —
+as três estão na mesma forma — e denuncia a próxima que divergir.
+
+Dois controlos negativos executados. **O primeiro que escrevi NÃO mordeu**: pus
+`MessageID: ""` e o teste passou, porque ele verifica a PRESENÇA da chave e ela
+continuava presente com valor vazio. Não era inversão, era ruído — a mesma
+lição do CN-28 da [[F181]]. Refeito com o handler a servir o mapa histórico, e aí
+a trava disparou nas três chaves.
 
 ### Verificação em produção da própria trava
 
