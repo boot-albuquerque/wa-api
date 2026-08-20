@@ -2080,6 +2080,7 @@ pkg/application/usecase/user.ListChatsUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.nomesDeContato	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.nomesDeGrupo	ELIGIBLE	covered
 pkg/application/usecase/user.ListChatsUseCase.nomesDoHistorico	ELIGIBLE	covered
+pkg/application/usecase/user.ListChatsUseCase.preencherTelefones	ELIGIBLE	covered
 pkg/application/usecase/user.ListUsersUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.NewAddUserUseCase	EXCLUDED	X1
 pkg/application/usecase/user.NewBlockUserUseCase	EXCLUDED	X1
@@ -2109,6 +2110,7 @@ pkg/application/usecase/user.normalizarPaginacao	ELIGIBLE	uncovered:L1
 pkg/application/usecase/user.normalizeToLID	ELIGIBLE	covered
 pkg/application/usecase/user.ordenar	EXCLUDED	X1
 pkg/application/usecase/user.ordenar.func1	EXCLUDED	X6
+pkg/application/usecase/user.soNumero	EXCLUDED	X1
 pkg/bootstrap.InitPrivateIPBlocks	ELIGIBLE	covered
 pkg/bootstrap.InitRabbitMQ	EXCLUDED	X1
 pkg/bootstrap.IsPrivateOrLoopback	ELIGIBLE	uncovered:L1

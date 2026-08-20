@@ -1091,7 +1091,26 @@ rules_frozen=true
 # perda de denominador bem coberto. Zero testes de comportamento vivo foram
 # removidos: 21 tinham equivalente em pkg/infra/media/opengraph, 2 ja' estavam
 # migrados para pkg/infra/media/sticker, e 6 exercitavam o codigo morto que sai.
-min_func_coverage=665
+# F181 (2026-08-20): func 665 -> 666, eligible 675 -> 676.
+#
+# Ratchet-UP, e vale registar COMO se chegou aqui, porque o gate mudou o desenho
+# em vez de so' o bloquear.
+#
+# preencherTelefones nasceu a registar apenas a PRIMEIRA falha e a continuar o
+# laco. O gate recusou: a regra S-consume ancora o caminho no CORPO do
+# `if err != nil`, e o meu aviso estava aninhado num `if falhas == 1` — o
+# caminho de erro em si continuava mudo, e errpath_coverage caiu para 866.
+#
+# As saidas obvias eram piores. Registar por conversa produz uma linha por item
+# de pagina sempre que a sessao esta' fora (F180). Baixar o piso teria sido
+# tratar o gate como obstaculo.
+#
+# A recusa levou a uma estrutura melhor: PARAR na primeira falha. Nao e' economia
+# de log, e' o que a falha significa — GetPNForLID so' falha quando a sessao nao
+# esta' registada, e isso nao muda entre uma conversa e a seguinte da mesma
+# pagina. Continuar produzia N chamadas condenadas. Agora ha' uma linha, com a
+# causa, e zero trabalho desperdicado a seguir.
+min_func_coverage=666
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1543,7 +1562,7 @@ min_errpath_coverage=867
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=675
+min_eligible=676
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

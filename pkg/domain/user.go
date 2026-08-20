@@ -180,6 +180,28 @@ type ChatSummary struct {
 	PushName     string `json:"push_name,omitempty"`
 	FullName     string `json:"full_name,omitempty"`
 	BusinessName string `json:"business_name,omitempty"`
+
+	// Phone é o número de telefone da conversa, quando o mapeamento local o
+	// resolve. Acréscimo da F181.
+	//
+	// Existe porque NOME e IDENTIFICADOR LEGÍVEL são problemas diferentes, e
+	// só o primeiro é insolúvel. Medido nas contas reais: das 48 conversas
+	// sem nome, 44 pessoas não estão no roster — para elas não há nome a
+	// obter, e o Baileys confirma que pode nunca haver. Mas as 48 resolvem
+	// para telefone, 100%.
+	//
+	// `182699419517150@lid` não diz nada a ninguém; `556799881100` é
+	// reconhecível, pesquisável e colável. É o que o próprio WhatsApp mostra
+	// quando não tem nome.
+	//
+	// É campo PRÓPRIO e NÃO substitui JID de propósito: o JID é o que o
+	// cliente usa nas outras rotas, e trocá-lo repetiria o erro que a F183
+	// acabou de evitar. Também não vira Name: um cliente que ordene ou
+	// pesquise por nome passaria a misturar nomes com números.
+	//
+	// Vazio para grupos, para newsletters e para quem não tem mapeamento —
+	// ausência é resposta, não falha.
+	Phone string `json:"phone,omitempty"`
 }
 
 // ChatListPage é uma fatia da lista de conversas, com o total para que o
