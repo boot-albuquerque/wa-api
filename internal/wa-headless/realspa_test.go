@@ -6319,3 +6319,243 @@ func TestRealSPAConcurrentCapabilities(t *testing.T) {
 			"them running one after another", peak)
 	}
 }
+
+// longHoldEnv gates TestRealSPALongHoldUnderLoad; longHoldMinutesEnv sets how
+// long it runs.
+const (
+	longHoldEnv        = "WA_HEADLESS_LONG_HOLD"
+	longHoldMinutesEnv = "WA_HEADLESS_LONG_HOLD_MINUTES"
+
+	defaultLongHoldMinutes = 60
+	longHoldTick           = 60 * time.Second
+)
+
+// profileTreeRSSKB sums the resident memory of a browser process and its
+// children, in kilobytes.
+//
+// The TREE, not the process: Chromium is many processes — browser, renderer,
+// GPU, utility — and the phase-6 spike measured a pre-login session at 474-790
+// MB across 6 to 9 of them. Sampling only the parent would report a fraction
+// and call it the session's cost.
+func profileTreeRSSKB(t *testing.T, pid int) (total int, procs int) {
+	t.Helper()
+	out, err := exec.Command("ps", "-Ao", "pid=,ppid=,rss=").Output()
+	if err != nil {
+		t.Logf("ps failed: %v", err)
+		return 0, 0
+	}
+	type row struct{ ppid, rss int }
+	all := map[int]row{}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 {
+			continue
+		}
+		p, e1 := strconv.Atoi(f[0])
+		pp, e2 := strconv.Atoi(f[1])
+		rss, e3 := strconv.Atoi(f[2])
+		if e1 != nil || e2 != nil || e3 != nil {
+			continue
+		}
+		all[p] = row{ppid: pp, rss: rss}
+	}
+	// Walk descendants breadth-first from pid.
+	want := map[int]bool{pid: true}
+	for changed := true; changed; {
+		changed = false
+		for p, r := range all {
+			if !want[p] && want[r.ppid] {
+				want[p] = true
+				changed = true
+			}
+		}
+	}
+	for p := range want {
+		if r, ok := all[p]; ok {
+			total += r.rss
+			procs++
+		}
+	}
+	return total, procs
+}
+
+// longHoldSample is one observation of a session held UNDER LOAD.
+type longHoldSample struct {
+	at        time.Duration
+	alive     bool
+	signal    liveness.Signal
+	latency   time.Duration
+	identity  bool
+	fetched   int
+	drained   int
+	dropped   int
+	reinstall bool
+	rssKB     int
+	procs     int
+}
+
+// TestRealSPALongHoldUnderLoad measures a session held for an hour WITH THE
+// CAPABILITIES RUNNING, which is the shape the product will actually have.
+//
+// The earlier retention measurement held a session IDLE for ten minutes. That
+// answered "does an untouched session survive", which is not the question:
+// production holds a session while a liveness timer ticks, commands fetch, and
+// a subscription drains. Measuring the easy scenario is how this module already
+// misread the backup cost by 5× — the number was real and the condition was the
+// favourable one.
+//
+// MEMORY IS SAMPLED because ADR-0006 D6 names it the binding constraint of this
+// stack, and a session held for hours under load is exactly where a leak would
+// show. The spike measured 474-790 MB pre-login across 6 to 9 processes; what
+// nobody has measured is whether that number MOVES over an hour of use.
+//
+// It asserts only what would be a defect under any policy — the process must
+// not die on its own, and the subscription must not silently vanish. Everything
+// else is a timeline for a decision that does not exist yet.
+func TestRealSPALongHoldUnderLoad(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv(longHoldEnv) == "" {
+		t.Skipf("set %s=1 to hold a session under load (default %d minutes)",
+			longHoldEnv, defaultLongHoldMinutes)
+	}
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	minutes := defaultLongHoldMinutes
+	if v := os.Getenv(longHoldMinutesEnv); v != "" {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n <= 0 {
+			t.Fatalf("%s=%q is not a positive number of minutes", longHoldMinutesEnv, v)
+		}
+		minutes = n
+	}
+	holdFor := time.Duration(minutes) * time.Minute
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	stopped := false
+	defer func() {
+		if !stopped {
+			h.Stop(context.Background())
+		}
+	}()
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	pid := sess.Browser().PID()
+
+	checker := liveness.New(sess.ProcessAlive, runner, sess.Tab().Evaluate)
+	fetcher := fetchmessages.New(runner, sess.Tab().Evaluate)
+	sub := messagemeta.New(runner, sess.Tab().Evaluate, 0)
+	if err := sub.Install(context.Background(), "long/install"); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	t.Logf("holding UNDER LOAD for %s, sampling every %s (pid=%d)", holdFor, longHoldTick, pid)
+
+	var samples []longHoldSample
+	start := time.Now()
+	for i := 0; time.Since(start) <= holdFor; i++ {
+		s := longHoldSample{at: time.Since(start)}
+
+		got := checker.Check(context.Background(), fmt.Sprintf("long/live%d", i))
+		s.alive, s.signal, s.latency = got.Alive, got.Signal, got.Latency
+
+		if id, err := owner.Refresh(context.Background(), runner, sess.Tab().Evaluate,
+			fmt.Sprintf("long/owner%d", i)); err == nil {
+			s.identity = id.Present()
+		}
+		if res, err := fetcher.Fetch(context.Background(), "", 10,
+			fmt.Sprintf("long/fetch%d", i)); err == nil {
+			s.fetched = len(res.Messages)
+		}
+		if d, err := sub.Drain(context.Background(), fmt.Sprintf("long/drain%d", i)); err == nil {
+			s.drained, s.dropped, s.reinstall = len(d.Events), d.Dropped, d.Reinstalled
+		}
+		s.rssKB, s.procs = profileTreeRSSKB(t, pid)
+
+		samples = append(samples, s)
+		t.Logf("t+%-8s alive=%-5v %-16s lat=%-7s id=%-5v fetch=%-3d drain=%-3d drop=%-3d "+
+			"reinst=%-5v rss=%dMB/%dproc",
+			s.at.Round(time.Second), s.alive, s.signal, s.latency.Round(time.Millisecond),
+			s.identity, s.fetched, s.drained, s.dropped, s.reinstall,
+			s.rssKB/1024, s.procs)
+
+		if !engine.ProcessAlive(pid) {
+			t.Fatalf("the held browser process died at t+%s with nobody asking it to. "+
+				"Whatever the right policy for socket or identity loss turns out to be, a "+
+				"process disappearing on its own is a defect under all of them",
+				s.at.Round(time.Second))
+		}
+		time.Sleep(longHoldTick)
+	}
+
+	// The timeline is the deliverable. Report the trends rather than assert a
+	// shape nothing has measured.
+	first, last := samples[0], samples[len(samples)-1]
+	var worstLat time.Duration
+	var deadCount, noIDCount, reinstallCount, totalDropped int
+	minRSS, maxRSS := first.rssKB, first.rssKB
+	for _, s := range samples {
+		if s.latency > worstLat {
+			worstLat = s.latency
+		}
+		if !s.alive {
+			deadCount++
+		}
+		if !s.identity {
+			noIDCount++
+		}
+		if s.reinstall {
+			reinstallCount++
+		}
+		totalDropped += s.dropped
+		if s.rssKB < minRSS {
+			minRSS = s.rssKB
+		}
+		if s.rssKB > maxRSS {
+			maxRSS = s.rssKB
+		}
+	}
+	t.Logf("TIMELINE over %s, %d samples:", holdFor, len(samples))
+	t.Logf("  liveness not-alive: %d | identity absent: %d | reinstalls: %d | dropped: %d",
+		deadCount, noIDCount, reinstallCount, totalDropped)
+	t.Logf("  latency worst: %s", worstLat.Round(time.Millisecond))
+	t.Logf("  RSS first=%dMB last=%dMB min=%dMB max=%dMB (%d processes)",
+		first.rssKB/1024, last.rssKB/1024, minRSS/1024, maxRSS/1024, last.procs)
+	if first.rssKB > 0 {
+		t.Logf("  RSS drift last/first = %.2fx", float64(last.rssKB)/float64(first.rssKB))
+	}
+
+	if reinstallCount > 0 {
+		t.Errorf("the subscription had to be reinstalled %d time(s): the page state did not "+
+			"survive, and events were lost in each gap", reinstallCount)
+	}
+
+	via := h.Stop(context.Background())
+	stopped = true
+	if !via.Clean() {
+		t.Errorf("stopped via %s after a long hold under load; want a clean stop", via)
+	}
+	if engine.ProcessAlive(pid) {
+		t.Errorf("pid %d survived a clean stop after a long hold (orphan)", pid)
+	}
+	t.Logf("NOTE: %s under load is a SAMPLE. Production holds sessions longer, and this "+
+		"says nothing about the range beyond it", holdFor)
+}

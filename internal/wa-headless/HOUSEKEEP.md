@@ -2022,7 +2022,41 @@ há conta assim disponível. Declarado em vez de estimado.
 minuto e o intervalo de drenagem do produto, e só então trocar 500 por um
 número com medição atrás. Até lá o teto é um teto declarado, não calibrado.
 
-**Status**: aberto por desenho, com o custo visível em vez de escondido.
+**MEDIDO EM 2026-08-20, e o cenário apareceu sozinho.** Esta entrada dizia que
+o pior caso — "conta de alto volume com `Drain` esparso" — **não fora medido**
+porque não havia conta assim disponível. Havia: a **sincronização de histórico
+de um perfil recém-pareado**.
+
+Na primeira corrida de retenção sob carga contra o laboratório re-pareado, com
+`Drain` a cada 60 s:
+
+```
+t+0s     drain=0    drop=0
+t+1m0s   drain=500  drop=37     <- o buffer ENCHEU
+t+2m0s   drain=2    drop=0
+```
+
+`drain=500` é exatamente o `DefaultBufferSize`. O buffer saturou e **37 eventos
+foram recusados**, num intervalo de 60 s, sem conta de alto volume nenhuma — só
+o WhatsApp repondo histórico depois do pareamento.
+
+**O que isso confirma e o que não confirma.** Confirma que o teto é alcançável
+em condição ordinária, e que o descarte contado era a decisão certa: sem
+`Dropped`, esses 37 sumiriam em silêncio e o fluxo pareceria completo. **Não**
+confirma que 500 é errado — o pico é transitório e some na amostra seguinte.
+
+**O que a medição muda no problema**: o pior caso deixa de ser hipotético e
+passa a ter forma conhecida — **rajada logo após o pareamento**, não volume
+sustentado. Isso importa porque as duas pedem remédios diferentes: rajada pede
+buffer maior ou drenagem mais frequente **na janela inicial**; volume sustentado
+pediria repensar o mecanismo.
+
+**Correção sugerida, revista**: drenar mais rápido enquanto a sessão é nova, ou
+dimensionar o teto pela rajada de sincronização medida — não por um número de
+mensagens por minuto que ninguém tem.
+
+**Status**: aberto por desenho, agora **com o pior caso MEDIDO** em vez de
+declarado como indisponível.
 
 ## H26 — o teste de posse concorrente culpava a posse quando o host é que não deu conta
 
