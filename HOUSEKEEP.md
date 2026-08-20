@@ -3304,3 +3304,73 @@ prazo disfarçado de constante.
 
 **Status**: corrigido — causa medida nos dois regimes, correção verificada no
 regime que falhava.
+
+
+## F98 — dois arquivos fora de `gofmt` desde 2026-08-08, deixados de propósito
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da F96, quando o `gofmt -l` do
+gate os listou.
+
+**Onde**: `pkg/bootstrap/config.go` e
+`pkg/presentation/http/handlers/handler_session_test.go`.
+
+**O que é**: deriva de formatação pré-existente. Confirmado que NÃO foram
+tocados por este trabalho (`git show --name-only` do commit não os lista) e que
+o último commit a mexer no primeiro é de 2026-08-08. O `lint` os conta como
+informativo, então nada trava.
+
+**Decisão da orquestração, e a razão dela**: NÃO formatar agora. Estão fora do
+write set desta feature, e um commit mecânico aumentaria desnecessariamente a
+superfície de conflito do merge futuro — que já tem 34 conflitos conhecidos com
+`feature/macbook-lucas`.
+
+**Correção sugerida**: `gofmt -w` nos dois, num commit isolado, **no closeout**,
+e só se a política final exigir árvore globalmente `gofmt`-clean.
+
+**Status**: aberto — deliberadamente adiado, com a razão registrada.
+
+## F99 — o `coverage-gate` joga fora a evidência de que precisa quando falha
+
+**Data**: 2026-08-20 · **Contexto**: uma execução do `make check` reprovou no
+`coverage-gate` e não deixou NADA para diagnosticar.
+
+**Onde**: `Makefile:133`.
+
+```make
+@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=... -coverprofile=$(COVERAGE_OUT) > /dev/null
+```
+
+**Problema**: o `> /dev/null` existe para não poluir a saída no caminho feliz —
+e no caminho de falha ele apaga exatamente o que se precisa ler. O log do gate
+mostrou `make: *** [coverage-gate] Error 1` logo depois do lint, sem uma única
+linha de `--- FAIL`, sem nome de pacote, sem nada.
+
+Reexecutado isolado logo em seguida, passou (`coverage: 838/838`), e o
+`make check` completo seguinte também (`MAKE_CHECK_EXIT=0`). Ou seja: a falha
+era transitória — provavelmente da mesma família de contenção da F97 — e o gate
+tornou impossível confirmar isso, porque a evidência foi descartada no instante
+em que passou a importar.
+
+**Custo concreto nesta sessão**: escrevi num commit que o gate estava "verde
+ponta a ponta" tendo lido só a ausência de linhas `FAIL` — que o `> /dev/null`
+garante mesmo quando há falha. A afirmação acabou verdadeira, verificada depois
+com `make check` completo e `exit 0`, mas foi feita sem evidência. **O gate
+convida a esse erro.**
+
+**Correção sugerida**: mandar o stdout para um arquivo em vez do vazio, e
+imprimi-lo apenas quando o passo falhar.
+
+```make
+@$(GOTEST) ... > $(COVERAGE_OUT).log 2>&1 || { cat $(COVERAGE_OUT).log; exit 1; }
+```
+
+Mantém o caminho feliz silencioso e devolve o diagnóstico no único momento em
+que ele vale alguma coisa.
+
+**Vale para os vizinhos**: o mesmo padrão `> /dev/null` deve ser procurado nos
+outros alvos antes de aparecer de novo — a F97 e esta entrada são a mesma
+lição vista de dois lados, uma sobre prazo escolhido por conveniência e outra
+sobre silêncio escolhido por conveniência.
+
+**Status**: aberto — medido (falha sem diagnóstico, seguida de duas execuções
+verdes), correção escrita, não aplicada por ser fora do escopo da capacidade.

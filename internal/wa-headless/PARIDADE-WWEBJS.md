@@ -452,6 +452,14 @@ O que ela move é a ligação `lid → phone`, que é a única aresta cruzada de
 build e da qual a deduplicação depende. Cada ligação nova é uma pessoa que deixa
 de ser contada duas vezes.
 
+**A pós-condição é falsificável, e essa foi a parte difícil.** Como a chamada
+devolve `undefined`, sucesso do comando não prova nada, e "o roster já estava
+atualizado" era indistinguível de "o sync nunca rodou". A prova é a marca
+`contact-sync-refresh-seconds`, que o refresh regenera a cada execução e que um
+controle de 45 s ociosos mostrou não derivar sozinha. Com produção alterada para
+não chamar o sync, o detector dispara contra a SPA real — e denuncia pelo tempo:
+5 ms contra 42 s.
+
 **Classificação**: MELHORIA INTENCIONAL, sem baseline no `wwebjs` — não conta
 como item de paridade, e não deve ser lida como tal.
 

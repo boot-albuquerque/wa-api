@@ -52,58 +52,42 @@ func TestProbeContactShape(t *testing.T) {
 	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
 	// this pass counts which of them separate that row from the rest. Counters
 	// only; no identity leaves the page.
-	// DOES A SYNC CHANGE ANYTHING? The previous pass answered the cheaper
-	// question first and the answer was NO GAP: of 391 contacts the chats
-	// reference, 391 are already in the roster of 944. So membership is not
-	// what priming would fix.
+	// DOES THE CANDIDATE MARK CHANGE ON ITS OWN?
 	//
-	// What IS thin is names: getName answered for 1 of 944. This pass measures
-	// whether the page's own contact sync populates them, with a snapshot
-	// before and after — because "we called it and things look fine" is not a
-	// measurement.
+	// Diffing all of localStorage across a sync showed exactly one interesting
+	// key moving: contact-sync-refresh-seconds. (WAWebTimeSpentSession also
+	// moves, but it moves constantly and means nothing here.)
 	//
-	// It runs on a LAB account, and the call is the same periodic refresh the
-	// page performs on its own every 86400s. Async, so store-and-poll.
+	// "It changed after I called the sync" is not attribution. This pass reads
+	// it three times — before an idle wait, after the idle wait, and after the
+	// sync — so a key that drifts on its own is caught before it becomes a
+	// detector. The idle wait is the CONTROL and it is the whole point of the
+	// experiment.
+	//
+	// The value is a refresh interval in seconds, not account data.
 	const script = `(() => {
-		window.__waHeadlessPrime = { stage: 'pending' };
-		const snap = () => {
-			const CC = window.require('WAWebContactCollection').ContactCollection;
-			const G = window.require('WAWebContactGetters');
-			const all = CC.getModelsArray();
-			let name = 0, pushname = 0, shortName = 0, verified = 0;
-			const servers = {};
-			for (const c of all) {
-				try {
-					const sv = (c.id && c.id.server) || '?';
-					servers[sv] = (servers[sv] || 0) + 1;
-					if (G.getName && G.getName(c)) name++;
-					if (G.getPushname && G.getPushname(c)) pushname++;
-					if (G.getShortName && G.getShortName(c)) shortName++;
-					if (G.getVerifiedName && G.getVerifiedName(c)) verified++;
-				} catch (e) {}
-			}
-			return { total: all.length, withName: name, withPushname: pushname,
-				withShortName: shortName, withVerifiedName: verified, servers: servers };
+		window.__waHeadlessMark = { stage: 'pending' };
+		const read = () => {
+			try { return String(localStorage.getItem('contact-sync-refresh-seconds')); }
+			catch (e) { return 'THREW'; }
 		};
 		(async () => {
-			const out = { stage: 'done' };
+			const r = { stage: 'done' };
 			try {
-				out.before = snap();
-				const t0 = Date.now();
-				const B = window.require('WAWebContactSyncBridge');
-				try {
-					const r = await B.doFullContactSync();
-					out.syncReturned = (r === undefined) ? 'undefined'
-						: (r === null ? 'null' : (typeof r === 'object' ? Object.keys(r).join(',') : String(r).slice(0, 60)));
-				} catch (e) {
-					out.syncError = String((e && e.message) || e).slice(0, 200);
-				}
-				out.syncMs = Date.now() - t0;
-				out.after = snap();
+				r.t0 = read();
+				// CONTROL: idle for longer than the sync takes, touching nothing.
+				await new Promise(res => setTimeout(res, 45000));
+				r.t1_afterIdle = read();
+				const start = Date.now();
+				await window.require('WAWebContactSyncBridge').doFullContactSync();
+				r.syncMs = Date.now() - start;
+				r.t2_afterSync = read();
+				r.movedWhileIdle = r.t0 !== r.t1_afterIdle;
+				r.movedBySync = r.t1_afterIdle !== r.t2_afterSync;
 			} catch (e) {
-				out.fatal = String((e && e.message) || e).slice(0, 200);
+				r.error = String((e && e.message) || e).slice(0, 180);
 			}
-			window.__waHeadlessPrime = out;
+			window.__waHeadlessMark = r;
 		})();
 		return 'kicked';
 	})()`
@@ -116,7 +100,7 @@ func TestProbeContactShape(t *testing.T) {
 	}
 	for i := 0; ; i++ {
 		if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts/poll", func(c context.Context) error {
-			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessPrime || {stage:"missing"})`, &raw)
+			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessMark || {stage:"missing"})`, &raw)
 		}); err != nil {
 			t.Fatalf("probe poll: %v", err)
 		}
@@ -128,5 +112,5 @@ func TestProbeContactShape(t *testing.T) {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	t.Logf("prime before/after: %s", raw)
+	t.Logf("mark attribution: %s", raw)
 }

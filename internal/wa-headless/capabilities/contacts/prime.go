@@ -53,7 +53,37 @@ var (
 	primeTick   = 2 * time.Second
 )
 
+// syncMarkKey is the localStorage entry the refresh REGENERATES on every run,
+// and it is what makes this capability's success claim falsifiable.
+//
+// It is not a configuration value, despite the name. Measured 2026-08-20 with
+// the idle period as the control:
+//
+//	read                526473
+//	after 45s IDLE      526473   <- does not drift on its own
+//	after doFullContactSync   549772   <- moves
+//
+// That control is the reason this key can be trusted as a mark: "it changed
+// after I called the sync" is not attribution, and every other candidate
+// failed. isContactSyncCompleted holds 31 rows permanently pending, before and
+// after; CONTACT_CHECKSUM is absent in both. Diffing the whole of localStorage
+// across a run is what surfaced this one.
+//
+// Residual risk, stated rather than hidden: a background refresh landing inside
+// our window would move it too. The idle control bounds that at 45 seconds of
+// observed stillness, not at zero.
+const syncMarkKey = "contact-sync-refresh-seconds"
+
 var (
+	// ErrPrimeDidNotRun is the postcondition that keeps this capability
+	// honest: the page returned without error and the refresh mark did NOT
+	// move, so the sync did not execute.
+	//
+	// Without it, "the roster was already current" and "the sync never ran"
+	// are the same observation, and a doFullContactSync replaced by a no-op
+	// would be reported as a healthy refresh. A detector that cannot fail is
+	// not a detector.
+	ErrPrimeDidNotRun = fmt.Errorf("contacts: the refresh returned but the page's sync mark did not move")
 	// ErrPrime is the page refusing or throwing.
 	ErrPrime = fmt.Errorf("contacts: the page refused the roster refresh")
 	// ErrRosterShrank is the postcondition, and it is the reason this
@@ -84,11 +114,23 @@ type Snapshot struct {
 	// cross-identity link this build provides (0 of 454 phone rows carry a lid,
 	// see H39), so it is what deduplication depends on.
 	LidWithPhone int
+	// SyncPending is how many rows the page has NOT marked
+	// isContactSyncCompleted, and it is the observable proof that a refresh
+	// actually ran.
+	//
+	// Without it this capability could not fail: "the roster was already
+	// current" and "the sync never executed" both show up as nothing changing,
+	// so a doFullContactSync replaced by a no-op would be reported as healthy.
+	// A detector that cannot distinguish those is not a detector.
+	//
+	// Measured on the lab profile: 944 rows all carry the field, 913 marked
+	// completed, 31 pending.
+	SyncPending int
 }
 
 func (s Snapshot) String() string {
-	return fmt.Sprintf("total=%d pushname=%d name=%d verified=%d lidWithPhone=%d",
-		s.Total, s.WithPushname, s.WithName, s.WithVerifiedName, s.LidWithPhone)
+	return fmt.Sprintf("total=%d pushname=%d name=%d verified=%d lidWithPhone=%d pending=%d",
+		s.Total, s.WithPushname, s.WithName, s.WithVerifiedName, s.LidWithPhone, s.SyncPending)
 }
 
 // PrimeResult is what a refresh did, stated as a difference.
@@ -99,11 +141,24 @@ type PrimeResult struct {
 	// when measured — and a caller budgeting around this needs the number
 	// rather than an assumption.
 	Waited time.Duration
+
+	// The refresh mark, unexported because its VALUE means nothing to a caller
+	// — only whether it moved, which Ran() answers.
+	markBefore, markAfter string
 }
 
 // Added is how many contacts appeared. Measured at zero on a profile with no
 // membership gap, which is the ordinary case rather than a failure.
 func (r PrimeResult) Added() int { return r.After.Total - r.Before.Total }
+
+// Ran reports whether the page's own refresh mark moved.
+//
+// It is the difference between "there was nothing to do" and "nothing was
+// done", and it is the only evidence available for that distinction: the sync
+// returns undefined, so its return value says nothing at all.
+func (r PrimeResult) Ran() bool {
+	return r.markBefore != "" && r.markAfter != "" && r.markBefore != r.markAfter
+}
 
 // Linked is how many more "@lid" rows learned their phone number.
 //
@@ -117,8 +172,8 @@ func (r PrimeResult) Linked() int { return r.After.LidWithPhone - r.Before.LidWi
 func (r PrimeResult) Changed() bool { return r.Before != r.After }
 
 func (r PrimeResult) String() string {
-	return fmt.Sprintf("contacts.PrimeResult(added=%d linked=%d changed=%t waited=%s | before: %s | after: %s)",
-		r.Added(), r.Linked(), r.Changed(), r.Waited.Round(time.Millisecond), r.Before, r.After)
+	return fmt.Sprintf("contacts.PrimeResult(ran=%t added=%d linked=%d changed=%t waited=%s | before: %s | after: %s)",
+		r.Ran(), r.Added(), r.Linked(), r.Changed(), r.Waited.Round(time.Millisecond), r.Before, r.After)
 }
 
 const primeStateKey = "__waHeadlessContactPrime"
@@ -129,6 +184,7 @@ type wireSnapshot struct {
 	WithName         int `json:"with_name"`
 	WithVerifiedName int `json:"with_verified_name"`
 	LidWithPhone     int `json:"lid_with_phone"`
+	SyncPending      int `json:"sync_pending"`
 }
 
 func (w wireSnapshot) toSnapshot() Snapshot {
@@ -138,15 +194,18 @@ func (w wireSnapshot) toSnapshot() Snapshot {
 		WithName:         w.WithName,
 		WithVerifiedName: w.WithVerifiedName,
 		LidWithPhone:     w.LidWithPhone,
+		SyncPending:      w.SyncPending,
 	}
 }
 
 type wirePrime struct {
-	Stage  string       `json:"stage"`
-	OK     bool         `json:"ok"`
-	Why    string       `json:"why"`
-	Before wireSnapshot `json:"before"`
-	After  wireSnapshot `json:"after"`
+	Stage      string       `json:"stage"`
+	OK         bool         `json:"ok"`
+	Why        string       `json:"why"`
+	Before     wireSnapshot `json:"before"`
+	After      wireSnapshot `json:"after"`
+	MarkBefore string       `json:"mark_before"`
+	MarkAfter  string       `json:"mark_after"`
 }
 
 func primeKickScript() string {
@@ -157,7 +216,7 @@ func primeKickScript() string {
 			const CC = window.require('` + string(spa.ModuleContactCollection) + `').ContactCollection;
 			const G = window.require('` + string(spa.ModuleContactGetters) + `');
 			const all = CC.getModelsArray();
-			let name = 0, pushname = 0, verified = 0, lidWithPhone = 0;
+			let name = 0, pushname = 0, verified = 0, lidWithPhone = 0, pending = 0;
 			for (const c of all) {
 				try {
 					if (G.getName && G.getName(c)) { name++; }
@@ -167,16 +226,24 @@ func primeKickScript() string {
 					if (c.id && c.id.server === 'lid' && c.phoneNumber && c.phoneNumber.user) {
 						lidWithPhone++;
 					}
+					// The page's own completion mark, which is what proves a
+					// refresh executed rather than merely returned.
+					if (!c.isContactSyncCompleted) { pending++; }
 				} catch (e) {}
 			}
 			return { total: all.length, with_pushname: pushname,
 				with_name: name, with_verified_name: verified,
-				lid_with_phone: lidWithPhone };
+				lid_with_phone: lidWithPhone, sync_pending: pending };
+		};
+		const mark = () => {
+			try { return String(localStorage.getItem(` + strconv.Quote(syncMarkKey) + `)); }
+			catch (e) { return ''; }
 		};
 		(async () => {
 			let stage = 'snapshot';
 			try {
 				const before = snap();
+				const markBefore = mark();
 				stage = 'sync';
 				const B = window.require('` + string(spa.ModuleContactSyncBridge) + `');
 				// It returns undefined; there is nothing to inspect in the
@@ -184,7 +251,8 @@ func primeKickScript() string {
 				// from the collection rather than read from a return value.
 				await B.doFullContactSync();
 				stage = 'verify';
-				park({ stage: 'done', ok: true, why: '', before: before, after: snap() });
+				park({ stage: 'done', ok: true, why: '', before: before, after: snap(),
+					mark_before: markBefore, mark_after: mark() });
 			} catch (e) {
 				park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 160) });
 			}
@@ -242,9 +310,18 @@ func (l *Lister) Prime(ctx context.Context, label string) (PrimeResult, error) {
 	}
 
 	out := PrimeResult{
-		Before: w.Before.toSnapshot(),
-		After:  w.After.toSnapshot(),
-		Waited: time.Since(start),
+		Before:     w.Before.toSnapshot(),
+		After:      w.After.toSnapshot(),
+		Waited:     time.Since(start),
+		markBefore: w.MarkBefore,
+		markAfter:  w.MarkAfter,
+	}
+	// THE POSTCONDITION THAT MAKES SUCCESS FALSIFIABLE. Checked BEFORE the
+	// shrink check, because a refresh that never ran cannot have damaged
+	// anything and reporting it as intact would be the wrong sentence.
+	if !out.Ran() {
+		return PrimeResult{}, fmt.Errorf("%w (the command returned after %s and the "+
+			"roster was left as it was found)", ErrPrimeDidNotRun, out.Waited.Round(time.Millisecond))
 	}
 	// THE POSTCONDITION. A refresh that lost contacts is the one outcome the
 	// caller cannot detect for themselves, and it is worse than not refreshing.

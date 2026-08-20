@@ -65,7 +65,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 544 pessoas**, 398 fundidas |
 | `fetchContactAvatar` | `capabilities/avatar` | 12 contatos ao vivo: 4 com foto, 8 sem, **0 falhas** |
 | `onContact` | `capabilities/contacts` (`subscribe.go`) | 6 buscas de avatar → **7 eventos `change`**, 0 `add` |
-| `primeContactRoster` | `capabilities/contacts` (`prime.go`) | refresh de **42 s**; liga `lid→phone`, não acrescenta pessoa |
+| `primeContactRoster` | `capabilities/contacts` (`prime.go`) | refresh de **42 s**, com pós-condição falsificável (`ran=true`); liga `lid→phone`, não acrescenta pessoa |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -283,6 +283,14 @@ tarde quieta. Como 24 dos 46 eventos vinham de `profilePicThumb`, e o
 `fetchContactAvatar` escreve esses campos, a capacidade de avatar virou o
 estímulo. É a mesma ideia do parágrafo acima vista do outro lado: encadear
 capacidades não só encontra defeitos, também torna as provas determinísticas.
+
+**Quinto — um detector que não pode falhar não é detector (H45)**. O
+`primeContactRoster` tratava "nada mudou" como sucesso, o que torna
+indistinguíveis *"já estava atualizado"* e *"o sync nunca rodou"*. A saída não
+foi argumentar: foi procurar uma marca observável, descartar DOIS candidatos por
+medição, e achar a terceira diffando todo o `localStorage` por hash. E então
+controlá-la — 45 s ociosos provando que ela não deriva sozinha. Sem esse
+controle, "mudou depois que eu chamei" seria coincidência com cara de prova.
 
 **Quarto, e é o mais desconfortável (H45)**: um instrumento pode passar em todos
 os seus próprios testes e ainda estar medindo a coisa errada. O `primeContactRoster`

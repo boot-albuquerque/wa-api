@@ -55,6 +55,17 @@ func TestRealSPAPrimeDoesNotDamageTheRoster(t *testing.T) {
 	}
 	t.Logf("%s", got)
 
+	// THE POSTCONDITION, and it is the one that makes this test able to fail.
+	// The sync returns undefined, so command success proves nothing; the page's
+	// own refresh mark moving is the evidence that it executed.
+	//
+	// Negative control EXECUTED against this very test: with production changed
+	// so it does not call doFullContactSync, this line fires and the failure
+	// even carries the tell — "returned after 5ms" against the real 42s.
+	if !got.Ran() {
+		t.Fatal("the refresh did not run: the page's sync mark did not move, so the " +
+			"assertions below would be describing a roster nobody touched")
+	}
 	if got.Before.Total == 0 {
 		t.Fatal("the roster was empty BEFORE the refresh; this account has contacts, " +
 			"so a zero baseline means the snapshot is broken and the postcondition " +

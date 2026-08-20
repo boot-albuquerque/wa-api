@@ -3512,6 +3512,65 @@ MENOR"**, e é a única que o chamador não consegue detectar sozinho.
 O terceiro importa mais aqui que nas outras capacidades: quem desistiu não deve
 ter uma mutação de 42 segundos disparada em seu nome.
 
+### O buraco que a orquestração nomeou: o detector não podia falhar
+
+A versão acima tratava "nada mudou" como sucesso. Isso torna
+**indistinguíveis** *"o roster já estava atualizado"* e *"o sync nunca
+executou"* — um `doFullContactSync` trocado por no-op seria reportado como
+refresh saudável. Um detector que não pode falhar não é detector.
+
+**Três candidatos a marca observável, e DOIS falharam na medição:**
+
+| candidato | resultado |
+|---|---|
+| `isContactSyncCompleted` nas linhas | 944 têm o campo, 913 marcadas — e as **31 pendentes seguem 31** antes e depois de um sync completo. São permanentemente pendentes, não marca por execução. |
+| `CONTACT_CHECKSUM` em prefs | **ausente** antes e depois |
+| `contact-sync-refresh-seconds` | **muda** |
+
+Parei de adivinhar candidato a candidato e fiz a medição genérica: retrato de
+TODO o `localStorage` por hash, antes e depois. De 84 chaves, moveram-se duas —
+`WAWebTimeSpentSession` (que se move o tempo todo e nada significa) e
+`contact-sync-refresh-seconds`.
+
+**E "mudou depois que eu chamei" não é atribuição.** O controle:
+
+```
+leitura                 526473
+após 45 s OCIOSOS       526473   <- não deriva sozinho
+após doFullContactSync  549772   <- move
+```
+
+Apesar do nome, não é configuração: é valor que o refresh REGENERA a cada
+execução. E regenera mesmo quando não há trabalho a fazer — nas execuções
+medidas o roster já estava atualizado (`linked=0`, `pending` inalterado) e a
+marca moveu assim mesmo, que é exatamente o que a torna utilizável.
+
+> **Risco residual, dito em vez de escondido**: um refresh de fundo caindo
+> dentro da nossa janela também moveria a marca. O controle limita isso a 45
+> segundos de imobilidade observada, não a zero.
+
+**`ErrPrimeDidNotRun`**, verificado ANTES do encolhimento — um refresh que nunca
+rodou não pode ter danificado nada, e reportar `ErrRosterShrank` mandaria o
+leitor atrás da falha errada.
+
+**Os dois controles negativos que a orquestração exigiu, EXECUTADOS:**
+
+```
+A (unitário) remover a checagem de execução
+   -> got <nil>, want ErrPrimeDidNotRun
+
+B (AO VIVO, código de produção, SPA real) produção deixa de chamar o sync
+   -> Prime: contacts: the refresh returned but the page's sync mark did not move
+      (the command returned after 5ms and the roster was left as it was found)
+```
+
+O B é o que ela pediu literalmente — provar que o detector falha quando o
+priming não acontece — e a mensagem entrega o indício sozinha: **5 ms contra os
+42 s reais**.
+
+**Prova ao vivo final**: `ran=true added=0 linked=0 changed=false waited=42,059s`,
+roster legível depois (`521 pessoas / 944 linhas / 421 fundidas`).
+
 **Status**: entregue — nascida de medição sem referência, com a promessa do nome
-corrigida no comentário, o instrumento corrigido depois da prova ao vivo, e três
-controles negativos.
+corrigida, o instrumento corrigido depois da prova ao vivo, uma pós-condição
+falsificável e cinco controles negativos (três de forma, dois de execução).

@@ -19,6 +19,18 @@ type primeDouble struct {
 	failStage     string
 	failWhy       string
 	kicks         int
+	// markBefore/markAfter reproduce the page's refresh mark. They DIFFER by
+	// default, because a page whose sync ran is the ordinary case; a test that
+	// wants the "it never ran" shape sets them equal, which is exactly the
+	// no-op the detector exists to catch.
+	markBefore, markAfter string
+}
+
+func (p *primeDouble) marks() (string, string) {
+	if p.markBefore == "" && p.markAfter == "" {
+		return "526473", "549772" // the measured before/after
+	}
+	return p.markBefore, p.markAfter
 }
 
 func (p *primeDouble) eval(ctx context.Context, expr string, out *string) error {
@@ -31,8 +43,11 @@ func (p *primeDouble) eval(ctx context.Context, expr string, out *string) error 
 			*out = fmt.Sprintf(`{"stage":%q,"ok":false,"why":%q}`, p.failStage, p.failWhy)
 			return nil
 		}
-		*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","before":%s,"after":%s}`,
-			snapJSON(p.before), snapJSON(p.after))
+		mb, ma := p.marks()
+		*out = fmt.Sprintf(
+			`{"stage":"done","ok":true,"why":"","before":%s,"after":%s,`+
+				`"mark_before":%q,"mark_after":%q}`,
+			snapJSON(p.before), snapJSON(p.after), mb, ma)
 		return nil
 	}
 	p.kicks++
@@ -42,8 +57,8 @@ func (p *primeDouble) eval(ctx context.Context, expr string, out *string) error 
 
 func snapJSON(s wireSnapshot) string {
 	return fmt.Sprintf(`{"total":%d,"with_pushname":%d,"with_name":%d,`+
-		`"with_verified_name":%d,"lid_with_phone":%d}`,
-		s.Total, s.WithPushname, s.WithName, s.WithVerifiedName, s.LidWithPhone)
+		`"with_verified_name":%d,"lid_with_phone":%d,"sync_pending":%d}`,
+		s.Total, s.WithPushname, s.WithName, s.WithVerifiedName, s.LidWithPhone, s.SyncPending)
 }
 
 func primer(p *primeDouble) *Lister { return New(engine.NewRunner(), p.eval) }
@@ -208,5 +223,90 @@ func TestTheLinkageIsWhatGetsReported(t *testing.T) {
 	}
 	if !strings.Contains(got.String(), "linked=23") {
 		t.Fatalf("the rendering hides the only number that moved: %s", got)
+	}
+}
+
+// TestARefreshThatNEVERRANIsAFailure is the postcondition the orchestration
+// required, and the gap this capability shipped with until it was named.
+//
+// The sync returns undefined, so its return value proves nothing. Without a
+// mark, "the roster was already current" and "doFullContactSync was never
+// called" are the SAME observation — and the earlier version reported both as
+// success. A detector that cannot fail is not a detector.
+//
+// The mark is the page's own contact-sync-refresh-seconds, which a 45-second
+// idle control showed does not drift on its own and which every measured sync
+// moved.
+func TestARefreshThatNeverRanIsAFailure(t *testing.T) {
+	compressPrimeClock(t)
+	same := wireSnapshot{Total: 944, WithPushname: 456, LidWithPhone: 421, SyncPending: 31}
+	p := &primeDouble{
+		before:     same,
+		after:      same,
+		markBefore: "526473",
+		markAfter:  "526473", // the sync did not run
+	}
+	_, err := primer(p).Prime(context.Background(), "t/prime")
+	if !errors.Is(err, ErrPrimeDidNotRun) {
+		t.Fatalf("got %v, want ErrPrimeDidNotRun: the mark did not move, so nothing "+
+			"ran, and reporting success would make this capability unfalsifiable", err)
+	}
+}
+
+// TestARefreshThatRanWithNothingToDoIsSuccess is the other side, and both are
+// needed: on a roster that is already current the numbers do not move, and that
+// must remain a healthy outcome. The mark is what separates it from the case
+// above.
+func TestARefreshThatRanWithNothingToDoIsSuccess(t *testing.T) {
+	compressPrimeClock(t)
+	same := wireSnapshot{Total: 944, WithPushname: 456, LidWithPhone: 421, SyncPending: 31}
+	got, err := primer(&primeDouble{
+		before: same, after: same,
+		markBefore: "526473", markAfter: "549772", // it ran
+	}).Prime(context.Background(), "t/prime")
+	if err != nil {
+		t.Fatalf("a refresh that ran and found nothing produced an error: %v", err)
+	}
+	if !got.Ran() {
+		t.Fatalf("Ran()=false while the mark moved: %s", got)
+	}
+	if got.Changed() {
+		t.Fatalf("Changed()=true for identical snapshots: %s", got)
+	}
+	if !strings.Contains(got.String(), "ran=true") {
+		t.Fatalf("the rendering hides the only proof there is: %s", got)
+	}
+}
+
+// TestAnAbsentMarkIsNotProofOfARun: a page that cannot report the mark at all
+// must not be read as a successful refresh. Empty is not "moved".
+func TestAnAbsentMarkIsNotProofOfARun(t *testing.T) {
+	compressPrimeClock(t)
+	same := wireSnapshot{Total: 10}
+	_, err := primer(&primeDouble{
+		before: same, after: same,
+		markBefore: "", markAfter: "549772",
+	}).Prime(context.Background(), "t/prime")
+	if !errors.Is(err, ErrPrimeDidNotRun) {
+		t.Fatalf("got %v — a mark that was missing beforehand cannot show movement", err)
+	}
+}
+
+// TestTheDidNotRunCheckComesBeforeTheShrinkCheck. A refresh that never executed
+// cannot have damaged anything, and reporting ErrRosterShrank for it would send
+// the reader after the wrong failure.
+func TestTheDidNotRunCheckComesBeforeTheShrinkCheck(t *testing.T) {
+	compressPrimeClock(t)
+	_, err := primer(&primeDouble{
+		before:     wireSnapshot{Total: 944},
+		after:      wireSnapshot{Total: 900},
+		markBefore: "526473", markAfter: "526473",
+	}).Prime(context.Background(), "t/prime")
+	if !errors.Is(err, ErrPrimeDidNotRun) {
+		t.Fatalf("got %v, want ErrPrimeDidNotRun — the sync never ran, so the "+
+			"smaller roster is not damage it caused", err)
+	}
+	if errors.Is(err, ErrRosterShrank) {
+		t.Fatal("the shrink check ran first and named the wrong failure")
 	}
 }
