@@ -628,7 +628,42 @@ F64 fecha quando cada item tiver sido movido para uma destas situações:
 Enquanto isso não acontece, a categoria A inteira permanece como está **por
 decisão**, não por esquecimento.
 
-**Status**: **não corrigidos, por decisão registrada acima.**
+**Status**: **REFERÊNCIA, não trabalho pendente** — e a entrada já dizia isso no
+próprio corpo (*"Esta entrada é registro de decisão, não trabalho pendente"*).
+Estava a aparecer na lista de abertos por classificação errada do campo Status,
+não por haver dívida.
+
+**MEDIÇÃO de 2026-08-20**, refeita com o comando que a própria entrada
+documenta, porque um inventário de 2026-08-07 não descreve a árvore de hoje:
+
+| onde | `TODO` |
+|---|---|
+| nosso código de produção (`pkg/`, `cmd/`, fora de teste) | **1** |
+| nossos testes | **0** |
+| `FIXME` / `XXX` / `HACK` em qualquer lugar nosso | **0** |
+| módulo vendorizado (`internal/`) | 32 — acompanha o upstream, não é nosso |
+
+De 38 para 1. O único remanescente é
+`pkg/presentation/http/middleware/doc.go:9` — *"Implementar cada middleware
+quando o roadmap demandar"* —, que é marcador de documentação, não dívida
+escondida.
+
+**FALSO POSITIVO do meu próprio grep, registrado porque custaria a próxima
+varredura**: a busca por `// *TODO` acusou três ocorrências em teste. Nenhuma é
+marcador: é a palavra portuguesa **"todo"** dentro de uma frase — *"um handler
+que logasse TODO request em warn passaria em cada asserção..."* —, em maiúsculas
+por ênfase, em `handler_send_template_test.go:437`,
+`handler_send_buttons_test.go:480` e `handler_send_poll_test.go:375`.
+
+Quem repetir a varredura vai encontrá-las de novo. O comando da entrada
+(`grep -rnE '(//|/\*)\s*(TODO|FIXME|XXX|HACK)\b'`) não as filtra, porque elas
+estão MESMO depois de `//`. A filtragem tem de ser pela LEITURA, não pelo
+padrão — e é por isso que este parágrafo existe.
+
+**Por que isto importa além do número**: esta é a TERCEIRA entrada que a
+varredura de 2026-08-20 encontrou mal classificada, junto com a [[F111]] (dívida
+já paga) e a [[F174]] (duplicata que eu criei). Três tipos diferentes de ruído,
+um só efeito: quem lê o inventário não sabe se um número é problema real.
 
 ## F65 — `GetManyLIDsForPNs` devolve o mapa INVERTIDO em produção; o dublê de teste esconde
 
