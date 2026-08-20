@@ -11169,8 +11169,33 @@ antes de usá-lo, em vez de assumir que `ls | tail -1` bastava. `ls` mostra o
 que EXISTE; a colisão estava no que é CITADO. Definir o conjunto pelo lugar
 errado é o mesmo erro da F139, da F151 e da F157, agora numa quarta forma.
 
-**Status**: não corrigido. O 0009 evita o dano imediato; o ADR faltante é
-decisão do humano.
+**Status**: **CORRIGIDO** — `docs/adr/0008-estagios-do-gate-de-cobertura-de-log.md`
+escrito, decisão (a) do canal. As três citações vivas (`Makefile:243`,
+`Makefile:255`, `cmd/logcov/main_test.go:96`) passam a apontar para um documento
+que existe, e o buraco na numeração dos ADRs fecha.
+
+O ADR documenta o que o mecanismo FAZ, lido do `Makefile`, não o que se supunha:
+os três estágios, as quatro chaves guardadas, os três pontos de fail-closed, e a
+razão de o baseline ser impresso em toda execução.
+
+**E documenta DOIS desvios entre o modelo e a implementação, medidos ao
+escrevê-lo** — porque um ADR que descreve a intenção e omite a implementação é
+pior que nenhum:
+
+1. **`floor` é hoje indistinguível de `ratchet`.** O `case` aceita
+   `advisory|ratchet|floor`, mas a lógica de falha é uma condição só:
+   `if [ "$stage" != "advisory" ]`. Nada em `Makefile`, `cmd/logcov/` ou
+   `scripts/` trata `floor` diferente. O modelo tem três estágios; a
+   implementação tem dois. Não é defeito hoje (`stage=ratchet` é o valor em
+   uso), mas quem declarar `floor` esperando rigor maior receberá o de
+   `ratchet`, sem aviso.
+
+2. **O rótulo `eligible = N (piso exato M)` está errado.** A checagem é
+   `-lt`, então CRESCER é permitido — e deve ser: a CAP-38 e a CAP-40 cresceram
+   o denominador legitimamente. É piso, não valor exato. Rótulo mais estrito que
+   o comportamento treina quem lê a duvidar da mensagem em vez do código.
+
+Os dois ficam como dívida CONHECIDA, escrita, em vez de surpresa.
 
 ## F163
 
