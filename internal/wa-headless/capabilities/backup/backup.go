@@ -54,12 +54,34 @@ type Result struct {
 	Source, Destination string
 }
 
+// destOpener creates the destination file for one copied entry.
+//
+// It exists as a parameter because the guard that matters most here — the error
+// from Close — cannot be reached otherwise. Close is where a buffered write
+// finally fails, and making it fail on a real filesystem needs a full disk or a
+// hostile mount; neither belongs in a test. H27 recorded that guard as PRESENT
+// AND UNTESTED for exactly that reason, and this is the seam that closes it.
+//
+// A parameter rather than a package-level variable: a swappable global would
+// race between parallel tests and would be reachable from production, which is
+// a larger door than the one being opened.
+type destOpener func(path string) (io.WriteCloser, error)
+
+// osDestOpener is the production opener.
+func osDestOpener(path string) (io.WriteCloser, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+}
+
 // Backup copies src to dst.
 //
 // The order is load-bearing: the in-use check happens BEFORE anything is
 // written, so a refused backup leaves no half-written directory for someone to
 // find later and mistake for a real one.
 func Backup(src, dst string) (Result, error) {
+	return backupWith(src, dst, osDestOpener)
+}
+
+func backupWith(src, dst string, open destOpener) (Result, error) {
 	var res Result
 
 	absSrc, err := filepath.Abs(src)
@@ -116,7 +138,7 @@ func Backup(src, dst string) (Result, error) {
 			res.Skipped++
 			return nil
 		}
-		n, err := copyFile(path, target)
+		n, err := copyFile(path, target, open)
 		if err != nil {
 			return err
 		}
@@ -151,7 +173,7 @@ func requireEmptyOrAbsent(dir string) error {
 	return nil
 }
 
-func copyFile(src, dst string) (int64, error) {
+func copyFile(src, dst string, open destOpener) (int64, error) {
 	in, err := os.Open(src)
 	if err != nil {
 		// A file that vanished between the walk and the open is a profile that
@@ -162,10 +184,16 @@ func copyFile(src, dst string) (int64, error) {
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	out, err := open(dst)
 	if err != nil {
 		return 0, fmt.Errorf("creating %s: %w", dst, err)
 	}
+
+	// CLOSE IS ALWAYS CALLED, including when the copy failed. Returning early on
+	// copyErr would leave the descriptor open and — worse for a backup — would
+	// skip the flush whose failure is the thing being guarded against. A copy
+	// error and a close error are then reported in that order, because the
+	// first one explains the second.
 	n, copyErr := io.Copy(out, in)
 	closeErr := out.Close()
 	if copyErr != nil {

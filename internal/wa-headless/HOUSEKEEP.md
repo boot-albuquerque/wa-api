@@ -2102,9 +2102,34 @@ dublê então falha no `Close` sem precisar de sistema de arquivos hostil. É
 refatoração pequena, mas é desenho — e desenho no meio de uma capacidade recém-
 entregue é como se introduz o defeito que ninguém revisa.
 
-**Status**: **guarda presente e não testada, declarada**. Registrado em vez de
-contado como cobertura, porque o custo de fingir aqui é um backup truncado que
-reporta sucesso.
+**Status**: ~~**guarda presente e não testada, declarada**~~
+**CORRIGIDO em 2026-08-19 (LOOP 06.5)**.
+
+**A costura**: `copyFile` passa a receber um `destOpener` — um parâmetro, não uma
+variável de pacote. Global trocável correria entre testes paralelos e ficaria
+alcançável da produção, que é porta maior do que a que se queria abrir.
+`Backup` delega para `backupWith(src, dst, osDestOpener)`.
+
+**E a orquestração acrescentou uma propriedade que eu não tinha enunciado**:
+provar que o `Close` é **SEMPRE CHAMADO**, não só que o erro dele é verificado.
+São coisas diferentes, e a segunda passa enquanto a primeira falha — um retorno
+antecipado no erro do `io.Copy` deixa o descritor aberto e **pula o flush que a
+guarda existe para vigiar**, e um teste que só afirmasse o erro do `Close`
+jamais alcançaria esse caminho.
+
+**Três controles negativos, executados**:
+- engolir o erro de `Close` — **este é o que passava antes**, e agora falha com
+  *"a backup whose files failed to flush reported success"*;
+- retornar cedo no erro de cópia — *"destination 0 was never closed after the
+  copy failed: the descriptor leaks and the flush that this guard exists for
+  never happens"*;
+- produção deixar de usar o opener real — derruba dois testes, porque uma costura
+  que a produção não atravessa faz todos os outros medirem o que ninguém roda.
+
+**Verificado também contra a SPA real**: o backup do perfil pareado segue
+restaurável — 1163 arquivos, 292 MB, READY em 9,9 s com `identity=PRESENT`.
+
+**Consequência para o módulo**: não resta nenhuma guarda sem teste.
 
 ## H28 — a guarda de PII do H6 era por arquivo, e uma capacidade nova não herdava nenhuma
 

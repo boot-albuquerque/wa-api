@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -166,5 +167,116 @@ func TestVerifyRequiresAnActualBoot(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("a successful boot reported %v", err)
+	}
+}
+
+// failingCloser writes fine and fails on Close, which is how a buffered write
+// really fails: the bytes go into a buffer, the flush happens at Close, and the
+// disk being full or the mount going away surfaces THERE and nowhere earlier.
+type failingCloser struct {
+	w         io.Writer
+	closeErr  error
+	closed    bool
+	writeErr  error
+	bytesSeen int
+}
+
+func (f *failingCloser) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	f.bytesSeen += len(p)
+	return f.w.Write(p)
+}
+
+func (f *failingCloser) Close() error {
+	f.closed = true
+	return f.closeErr
+}
+
+// TestCloseErrorFailsTheBackup closes H27: the guard existed and nothing
+// exercised it, so turning it off did not fail the suite. That is the
+// definition of an untested guard, and this module treats those as debt.
+func TestCloseErrorFailsTheBackup(t *testing.T) {
+	src := profileFixture(t, false)
+	dst := filepath.Join(t.TempDir(), "copy")
+	boom := errors.New("disk full on flush")
+
+	var opened []*failingCloser
+	open := func(path string) (io.WriteCloser, error) {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		fc := &failingCloser{w: f, closeErr: boom}
+		opened = append(opened, fc)
+		return fc, nil
+	}
+
+	_, err := backupWith(src, dst, open)
+	if err == nil {
+		t.Fatal("a backup whose files failed to flush reported success; that is how a " +
+			"truncated file ends up in a backup nobody doubts until they need it")
+	}
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want it to wrap the Close failure", err)
+	}
+	if len(opened) == 0 {
+		t.Fatal("the injected opener was never used; this test proves nothing")
+	}
+}
+
+// TestCloseIsCalledEvenWhenTheCopyFails is the property the error check alone
+// does NOT give. Returning early on a copy error would leave the descriptor
+// open and skip the flush — and a test that only asserted the Close ERROR is
+// surfaced would still pass, because it never reaches that path.
+func TestCloseIsCalledEvenWhenTheCopyFails(t *testing.T) {
+	src := profileFixture(t, false)
+	dst := filepath.Join(t.TempDir(), "copy")
+	copyBoom := errors.New("write failed mid-copy")
+
+	var opened []*failingCloser
+	open := func(path string) (io.WriteCloser, error) {
+		fc := &failingCloser{w: io.Discard, writeErr: copyBoom}
+		opened = append(opened, fc)
+		return fc, nil
+	}
+
+	_, err := backupWith(src, dst, open)
+	if err == nil {
+		t.Fatal("a backup whose copy failed reported success")
+	}
+	if !errors.Is(err, copyBoom) {
+		t.Fatalf("err = %v, want it to wrap the copy failure: a copy error explains a "+
+			"close error, so it is the one to report", err)
+	}
+	if len(opened) == 0 {
+		t.Fatal("the injected opener was never used")
+	}
+	for i, fc := range opened {
+		if !fc.closed {
+			t.Fatalf("destination %d was never closed after the copy failed: the descriptor "+
+				"leaks and the flush that this guard exists for never happens", i)
+		}
+	}
+}
+
+// TestProductionPathStillUsesTheRealOpener guards the seam itself. An injection
+// point that production stopped going through would make every test above
+// measure something nothing runs.
+func TestProductionPathStillUsesTheRealOpener(t *testing.T) {
+	src := profileFixture(t, false)
+	dst := filepath.Join(t.TempDir(), "copy")
+
+	got, err := Backup(src, dst)
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+	if got.Files == 0 {
+		t.Fatal("Backup copied nothing through the production opener")
+	}
+	body, err := os.ReadFile(filepath.Join(dst, "Local State"))
+	if err != nil || len(body) == 0 {
+		t.Fatalf("the production path did not write real bytes: %v", err)
 	}
 }
