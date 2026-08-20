@@ -14921,3 +14921,53 @@ mesma.
 **Status**: diagnóstico refeito. O "sem nome" não é corrigível com os dados que
 temos; o "sem identificador legível" é, para 100% dos casos, e é decisão de
 contrato.
+
+---
+
+## F181 — CORRIGIDA na metade que era corrigível. Verificação em produção
+
+**Data**: 2026-08-20.
+
+### A listagem, antes e depois
+
+Mesma máquina, mesma conta, mesma consulta — só o binário muda:
+
+| | com nome | com telefone | **legível ao humano** |
+|---|---|---|---|
+| **antes** | 9 | 0 | **9 de 50** |
+| **depois** | 9 | 45 | **49 de 50** |
+
+O número de NOMES não mudou, e não devia: o nome não existe nos nossos dados
+para 44 destas pessoas, e pelo Baileys pode nunca existir. O que mudou é que
+`182699419517150@lid` passou a vir acompanhado de `554184099531`.
+
+### A que sobra, identificada em vez de arredondada
+
+Uma única conversa continua sem nome e sem telefone:
+`120363182785770500@newsletter`. **Está correto** — um canal não tem número de
+telefone. Não é resíduo por explicar.
+
+### As três invariantes, medidas em produção
+
+```
+conversas @lid SEM telefone : 0     (100% resolvidas)
+grupos COM telefone         : 0     (grupo não tem número, e o store recusaria)
+na_pagina=5 com total=733           (o custo cresce com a PÁGINA, não com o total)
+```
+
+A terceira é a que mais me importava e é a que um teste sozinho não prova
+convincentemente: o log de produção mostra `na_pagina=5` numa conta com 733
+conversas. Resolver antes de fatiar teria feito 733.
+
+### O que NÃO foi corrigido, e é decisão registada
+
+**O nome.** Para 44 das 48 conversas não há nome em fonte nenhuma — nem roster,
+nem `pushName`, sob nenhum dos dois identificadores. O Baileys diz por escrito
+que para estes casos pode não haver nada a obter, e inventar um seria pior que
+mostrar o número.
+
+**Status**: **CORRIGIDA** na metade do identificador legível — de 9 para 49 em 50.
+A metade do NOME fica **fechada como não corrigível com os dados disponíveis**,
+com a razão registada, em vez de ficar aberta para sempre a envenenar o
+inventário. Travada por sete testes em `list_chats_test.go` e seis controlos
+negativos.
