@@ -2055,8 +2055,31 @@ pediria repensar o mecanismo.
 dimensionar o teto pela rajada de sincronização medida — não por um número de
 mensagens por minuto que ninguém tem.
 
-**Status**: aberto por desenho, agora **com o pior caso MEDIDO** em vez de
-declarado como indisponível.
+**REPRODUZIDO**: a segunda corrida deu `drain=500 drop=13` no mesmo instante
+(t+1m). Duas observações independentes, então a rajada é característica do
+pareamento e não acaso de uma execução.
+
+**A PERGUNTA QUE ISTO ABRE, e que eu NÃO respondi**: os eventos descartados são
+**perdidos** ou são **reposição de histórico** que ninguém queria?
+
+A rajada acontece exatamente quando o WhatsApp repõe o histórico, e a
+`TestRealSPAMessageMetaDelivery` já mediu que a coleção emite `add` para
+mensagens antigas durante o carregamento — foi por isso que aquele teste precisou
+do discriminador de frescor. Se os 37 e os 13 descartados são todos histórico, o
+teto de 500 não custa nada em produção; se uma entrega AO VIVO puder cair nessa
+janela, é lacuna real.
+
+**As duas leituras cabem no mesmo dado**, e é isso que torna a pergunta
+necessária em vez de retórica. `Drain.Dropped` conta quantos, não QUAIS — por
+construção, já que o evento descartado nunca é materializado.
+
+**Como medir**: registrar o carimbo dos eventos que ATRAVESSAM durante a rajada.
+Se todos forem antigos, o descarte é de histórico por eliminação. Não medido
+ainda — declarado para não virar suposição confortável, que é a leitura que eu
+teria adotado sem escrever isto.
+
+**Status**: aberto por desenho, agora **com o pior caso MEDIDO e REPRODUZIDO**,
+e com uma pergunta aberta explícita sobre o que exatamente se perde.
 
 ## H26 — o teste de posse concorrente culpava a posse quando o host é que não deu conta
 
