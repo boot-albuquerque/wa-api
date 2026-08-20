@@ -14194,3 +14194,86 @@ não voltar a silenciar isto.
 
 A [[F184]] e a [[F185]] **continuam abertas**: o que se corrigiu foi a
 invisibilidade, não o descarte. Os ramos em falta são a etapa (b) do canal.
+
+---
+
+## F187 — DOIS classificadores de mensagem, divergentes, e o de tempo real é o PIOR dos dois
+
+**Data**: 2026-08-20. **Contexto**: encontrado ao abrir `eventhandler_message.go`
+para implementar a etapa (b) da [[F184]]. Achado incidental — não faz parte do
+escopo decidido pelo canal, e por isso fica registado sem correção.
+
+O repositório tem **duas** cadeias de classificação de mensagem recebida, uma por
+caminho de ingestão:
+
+| | ficheiro | usada por |
+|---|---|---|
+| tempo real | `eventhandler_message.go:283` | mensagem que chega agora |
+| sync em lote | `eventhandler_history.go:153` | histórico sincronizado |
+
+Elas **não concordam**, e a divergência tem duas formas.
+
+### 1. O caminho de tempo real DESCARTA o texto que o próprio ramo extraiu
+
+Medido, não deduzido:
+
+```
+CAMINHO AO VIVO -> message_type="contact" text_content=":contact:"
+                   (displayName enviado = "Yasmin Albuquerque")
+RESULTADO: PERDE o nome
+```
+
+A causa está em `eventhandler_message.go:308-330`. O ramo de contacto faz
+`textContent = contact.GetDisplayName()` — e o bloco de extração logo abaixo
+sobrescreve-o incondicionalmente:
+
+```go
+} else {
+    textContent = caption   // caption está vazio para contact/location
+}
+if textContent == "" {
+    textContent = defaultHistoryTextFor(messageType, textContent)  // ":contact:"
+}
+```
+
+A atribuição no ramo **não tem efeito nenhum**. Vale para `contact`
+(`GetDisplayName`) e para `location` (`GetName`). O caminho de sync **não** tem
+este bloco e por isso preserva os dois.
+
+**A medição que quase me enganou, e que registo porque a lição é do método**:
+olhei a tabela real e vi 32 contactos COM nome, o que parecia refutar a
+hipótese. Só que classificar as linhas por hora — "o lote das 11:01:18 é sync, o
+resto é ao vivo" — é grosseiro demais: o sync chega em lotes ao longo do tempo,
+não num instante. As 32 linhas com nome vieram todas do caminho de sync. **A
+heurística de timestamp media a coisa errada.** Só um teste que exercita o
+caminho ao vivo diretamente decidiu a questão.
+
+E a `location` mostrava o sinal desde o início, se eu o tivesse lido: **41 linhas
+`:location:` contra 4 com nome real**, na mesma tabela. Dois escritores, duas
+respostas.
+
+### 2. O caminho de tempo real tem MENOS ramos
+
+O de sync reconhece `buttons_response` e `list_response`; o de tempo real não
+reconhece nenhum dos dois. Ou seja, parte da [[F184]] **já está resolvida no
+outro caminho** — o código que falta ao caminho ao vivo existe, escrito, neste
+repositório, a duzentas linhas de distância.
+
+### Por que isto é pior que uma duplicação vulgar
+
+É a [[F168]] outra vez, noutra forma: **duas fontes de verdade para a mesma
+regra**. Só que aqui elas já divergiram, e divergiram na direção contra-intuitiva
+— o caminho de tempo real, que é o que serve o utilizador que está a conversar
+agora, é o mais pobre dos dois.
+
+**Correção sugerida**: uma só função de classificação, usada pelos dois
+caminhos, com o comportamento do de sync como base por ser o mais completo. É
+mudança de conteúdo gravado (o `text_content` de `contact` e `location` deixa de
+ser placeholder), portanto precisa de decisão — e de uma resposta sobre o que
+fazer com as linhas já gravadas com `:contact:`/`:location:`.
+
+**Status**: **não corrigido**, achado incidental fora do escopo. **Mas afeta a
+etapa (b) já decidida**: o ramo novo da enquete tem de escrever em `caption`, e
+não em `textContent`, senão o mesmo bloco come a pergunta da enquete exatamente
+como come o nome do contacto. Sem esta medição eu teria escrito o ramo errado e
+o teste de campo teria mostrado `:poll:` onde devia estar a pergunta.
