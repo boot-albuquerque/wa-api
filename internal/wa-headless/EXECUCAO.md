@@ -2659,3 +2659,32 @@ pareado íntegro: nenhuma mensagem enviada, nenhum QR, nenhum logout, nenhum
 | H16 | aberto **de propósito** — não fechável por amostragem; fechamento falso seria pior que a lacuna declarada |
 | H2, H5, H6, H18 | pré-existentes, fora do escopo deste ciclo |
 
+## LOOP 06.7 — o laboratório volta a ser não-pareado por construção
+
+O perfil de laboratório estava PAREADO desde 2026-08-19, e isso mantinha três
+testes travados. O humano se declarou disponível para escanear QR, o que
+destravou a única opção cuja janela dependia dele.
+
+**MOVIDO, NÃO APAGADO.** Apagar 313 MB com vínculo de dispositivo vivo é
+irreversível; mover é igualmente eficaz e recuperável. O antigo está em
+`.lab/test-account-profile.pareado-20260820-095952`, gitignorado.
+
+**A verificação que importa é a primeira**: o
+`TestRealSPAUnpairedBootObservation` voltou a observar `LOGIN_REQUIRED`,
+`has_qr=true`, `#pane-side=false` — **o que o nome dele diz**. Enquanto o
+laboratório esteve pareado ele PASSAVA reportando `APP_READY`, que foi a
+armadilha do teste medindo o estado oposto ao seu nome.
+
+**Re-pareado com o humano**: `PAIRED at t+1m0s`, e o pareamento **persistiu** —
+verificado por REBOOT e não pelo marcador: 3/3 ciclos, `identity=PRESENT`
+(676µs / 984µs / 1,4ms), paradas limpas, `SingletonLock=0`, sem órfãos.
+
+**Número que apareceu de brinde**: o perfil novo tem **68 MB / 674 arquivos**
+contra **313 MB / 1188** do antigo. Um perfil recém-pareado não carrega
+histórico, e isso importa para a `capabilities/backup`: o custo de uma cópia
+escala com a idade da conta, não com o número de sessões.
+
+**Efeito colateral registrado**: a conta do humano passa a listar DOIS
+dispositivos de laboratório — o do perfil arquivado e o novo. Desconectar o
+antigo é ação dele.
+
