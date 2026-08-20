@@ -2375,3 +2375,41 @@ saiu. Ela volta quando um chamador precisar, **com teste**.
 **Status**: CORRIGIDO. O conjunto agora tem 71 exportadas, 2 sem menção nominal,
 ambas verificadas como exercitadas.
 
+## H32 — auditoria de constantes ABANDONADA: varredura de texto é o instrumento errado
+
+**Data**: 2026-08-20 · **Contexto**: terceira passagem de auditoria sobre o
+próprio módulo, durante a espera da medição longa.
+
+**A pergunta era boa**: quais constantes de produção têm medição por trás e
+quais são palpite? É a regra *"medir antes de projetar"* virada para o código já
+escrito.
+
+**O instrumento não foi.** Duas tentativas, ambas com varredura de texto:
+
+1. A primeira reportou **0 de 6 com citação de medição** — resultado que eu
+   sabia estar errado, porque o `healthyUpperBound` cita o M7.3. A janela de 14
+   linhas não alcançava o comentário de derivação, que é longo de propósito.
+2. A segunda, com janela de 45 linhas, capturou a palavra **`const`** como se
+   fosse nome de constante e continuou perdendo a maioria — `DefaultSettleBudget`,
+   `DefaultBufferSize`, os prazos por classe de operação.
+
+**Por que parei em vez de tentar a terceira**: é a mesma conclusão a que o
+`TestNoProductionCodeReadsPageText` chegou por outro caminho — **varredura de
+texto não lê estrutura de código**. Ali a correção foi AST, e funcionou. Aqui um
+auditor de constantes por AST é investimento maior do que o achado justifica,
+porque as constantes que de fato decidem comportamento — os três termos do `C`,
+os orçamentos por classe — **já foram auditadas e ancoradas** no H14, com teste
+que liga cada uma à linha do `EVIDENCIA-SPA.md` de onde saiu.
+
+**O que fica registrado, e é o motivo desta entrada existir**: um método
+descartado em silêncio volta a ser tentado. Se alguém quiser esta auditoria, o
+caminho é AST, não `grep`, e o valor esperado é baixo porque a parte cara já está
+coberta.
+
+**O que a tentativa CONFIRMOU de passagem**: o `bootPollInterval = 50ms` no
+`engine/launcher.go` é a única constante que apareceu nas duas varreduras **sem
+citação de origem**. Não é achado forte — o instrumento é ruim —, mas é ponta
+solta anotada.
+
+**Status**: abandonado deliberadamente, com o motivo e a alternativa escritos.
+
