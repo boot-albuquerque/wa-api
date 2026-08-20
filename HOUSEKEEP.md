@@ -15417,3 +15417,57 @@ mediria outra coisa e deixaria a dúvida de se o antes e o depois são comparáv
 **Status**: verificado em campo. Continuam abertos, e registados acima: a
 unificação dos dois classificadores num só, e o backfill das 41 linhas de
 `location` já gravadas com placeholder.
+
+---
+
+## VERIFICAÇÃO EM PRODUÇÃO — react alinhada, cadeia unificada, F184 residual
+
+**Data**: 2026-08-20.
+
+### O que ficou PROVADO em campo
+
+**A `react` devolve a forma nova:**
+
+```
+/chat/react -> ['message_id', 'status', 'timestamp']
+```
+
+**A cadeia unificada preserva o texto**, com envios novos pelo binário novo:
+
+| enviado | gravado |
+|---|---|
+| `Name="Teste Unificacao"` | `Teste Unificacao` |
+| `DisplayName="Contato Unificado"` | `Contato Unificado` |
+| reação `🎯` | `🎯` |
+
+Contacto e localização atravessam agora a MESMA função que o caminho de sync, e
+continuam a preservar o nome — a unificação não desfez a correção da [[F187]].
+
+### O que NÃO ficou provado, e digo-o em vez de o arredondar
+
+**Os nove ramos novos da [[F184]] residual não foram exercitados contra o
+servidor real.** `poll_update`, `event`, `ptv`, `group_invite`, `order`,
+`product`, `contacts_array`, `interactive_response` e `live_location` **não
+apareceram na tabela**, porque nenhum chegou — a nossa API não envia nenhum
+deles, e nenhum terceiro mandou um durante a janela.
+
+Estão provados **em teste**, com valores literais e dois controlos negativos.
+Não estão provados em campo. A diferença importa: um erro de getter — como o
+`GetTitle()` que não compilava no `ProductMessage` — seria apanhado pelo
+compilador, mas um getter que compila e devolve o campo ERRADO só apareceria com
+tráfego real.
+
+**Zero descartes desde o reinício** é coerente, mas **não é prova de nada** pela
+mesma razão de sempre: pode significar "nada não classificado chegou". Já não
+consigo forçar um descarte — todos os tipos que a nossa API sabe enviar têm ramo,
+e agora quase todos os que o protocolo define também.
+
+### Balanço da frente
+
+| | |
+|---|---|
+| rotas de envio provadas | 13/13 |
+| downloads, com bytes idênticos | 5/5 |
+| manipulação de chat | 5/5 |
+| tipos com ramo de classificação | 25 dos 26 enumerados |
+| classificadores | **1**, era 2 |
