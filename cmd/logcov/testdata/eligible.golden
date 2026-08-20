@@ -2567,6 +2567,7 @@ pkg/infra/messaging.safeGo.func1	EXCLUDED	X1
 pkg/infra/messaging.safeGo.func2	EXCLUDED	X1
 pkg/infra/messaging.setRabbitDisabled	ELIGIBLE	uncovered:L1
 pkg/infra/messaging.setRabbitState	ELIGIBLE	uncovered:L1
+pkg/infra/stdio.DynamicRouteTargets	ELIGIBLE	uncovered:L1
 pkg/infra/stdio.ID.MarshalJSON	EXCLUDED	X4
 pkg/infra/stdio.ID.String	EXCLUDED	X4
 pkg/infra/stdio.ID.UnmarshalJSON	EXCLUDED	X4

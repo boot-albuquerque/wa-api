@@ -121,12 +121,26 @@ type RouteTarget struct {
 // e `session.disconnect` passaram a ser despachados com POST contra rotas
 // registradas como GET, e o mux devolvia 404 (F99).
 //
-// Só as estáticas: as dinâmicas montam o caminho a partir dos params da
-// requisição, e sem uma requisição real não há caminho a conferir.
+// Only static routes: dynamic routes build the path from request params,
+// so there is no path to expose without a live request.
 func StaticRouteTargets() map[string]RouteTarget {
 	out := make(map[string]RouteTarget, len(staticRoutes))
 	for name, route := range staticRoutes {
 		out[name] = RouteTarget{Method: route.httpMethod, Path: route.httpPath}
+	}
+	return out
+}
+
+// DynamicRouteTargets exposes the dynamic JSON-RPC → HTTP table.
+//
+// Dynamic routes build their HTTP path from request params at dispatch time,
+// so the path is not enumerable here. The RPC method name and HTTP method
+// ARE fixed and are what the consistency test needs to verify that a
+// structural exception citing a dynamic route is not orphaned.
+func DynamicRouteTargets() map[string]string {
+	out := make(map[string]string, len(dynamicRoutes))
+	for name, route := range dynamicRoutes {
+		out[name] = route.httpMethod
 	}
 	return out
 }

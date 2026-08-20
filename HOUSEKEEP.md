@@ -12387,5 +12387,88 @@ passa, e é ele a autoridade nessa direção.
 2. **O conteúdo** — decidir, rota a rota, quais das 28 devem ganhar entrada.
    Acrescentar método RPC ao stdio é ADIÇÃO DE CONTRATO PÚBLICO, item 3.1.
 
-**Status**: não corrigido. O mecanismo é conserto de gate e cabe em bloco
-próprio; o conteúdo é contrato público e não decido. Levado ao canal e ao humano.
+**Status da parte (1), o MECANISMO**: **CORRIGIDO** no CAP-40, decisão (a) do
+canal — o teste REPROVA, não é advisory. Advisory foi exatamente o que deixou a
+catraca de cobertura destravada por duas rodadas ([[F171]]).
+
+`TestRegisteredHTTPRoutesHaveStdioEntry` percorre o roteador REAL via
+`router.Walk` e exige que cada par (método, caminho) esteja num de três lugares:
+a tabela do stdio, uma EXCEÇÃO estrutural, ou a lista de PENDÊNCIAS.
+
+**Por que três listas e não duas.** Se o gate reprovasse tudo, reprovaria HOJE
+nas 28 rotas existentes, e o caminho de menor resistência seria enfraquecê-lo
+até parar de incomodar. As duas listas têm significados deliberadamente
+distintos: EXCEÇÃO é motivo ESTRUTURAL (`/session/ws` é upgrade de WebSocket e
+não cabe em transporte requisição/resposta); PENDÊNCIA é omissão conhecida
+aguardando decisão de contrato, e o comentário diz que a lista deve ENCOLHER e
+nunca crescer. São 32 pendências hoje. O gate tolera essas e reprova qualquer
+rota NOVA fora das três — trava a sangria sem fingir que o passado está
+resolvido, e impede que "não fizemos ainda" se disfarce de "não se aplica".
+
+A mensagem de falha nomeia as duas saídas válidas e PROÍBE explicitamente
+despejar em `knownPending`. Sem isso, quem esbarrasse no gate poria a rota lá
+por reflexo e a lista cresceria — o oposto do objetivo.
+
+**A descoberta**: rotas com parâmetro de caminho NÃO são gaps. `/user/lid/{jid}`
+e as de `/admin/users/{id}` são despachadas por rotas DINÂMICAS do stdio, que a
+tabela estática não expressa. Foi verificado, não assumido.
+
+**O buraco que eu recusei, dentro do próprio gate.** A primeira entrega
+registrava essa descoberta em PROSA: `"path parameter; dispatched by stdio
+dynamic route user.lid"`. Conferi que `user.lid` existe, então a frase era
+verdadeira — o problema é que NADA a verificava. Apagar `user.lid` deixaria a
+rota isenta por um despacho inexistente, com o teste verde. Um comentário
+fazendo o trabalho de uma verificação, dentro do gate que existe para eliminar
+essa classe: seria construir a fechadura com a chave pendurada nela.
+
+Corrigido: `stdio.DynamicRouteTargets()` (acessor de LEITURA, sem tocar nas
+tabelas, na forma de `StaticRouteTargets()`), e a exceção passa a NOMEAR a rota
+dinâmica como dado. O teste reprova exceção órfã E exceção cujo `httpMethod`
+divergiu — a segunda pega o caso sutil de a rota sobreviver mudando de método,
+que foi literalmente o defeito da F99.
+
+**Controles negativos do COORDENADOR, três:**
+
+CN-1, renomeando `user.lid` na tabela dinâmica:
+
+```
+stdio_route_consistency_test.go:117: structural exception "GET /user/lid/{jid}" cites dynamic route "user.lid", but it does not exist in the stdio dynamic table — exception is orphaned
+```
+
+CN-2, registrando `/chat/brandnew` sem entrada no stdio:
+
+```
+stdio_route_consistency_test.go:208: registered HTTP route GET /chat/brandnew has no stdio entry and is not in any known list.
+  Two valid options:
+  (1) add an RPC method to the stdio route table (public contract addition), or
+  (2) add it to structuralExceptions with a structural justification.
+  Do NOT add it to knownPending — that list tracks historical gaps and must shrink, not grow.
+```
+
+CN-3, provando que a direção ANTIGA não foi enfraquecida (mutei `session.connect`
+para POST, que é o defeito histórico da F99):
+
+```
+stdio_route_consistency_test.go:50: session.connect: o stdio despacha POST /session/connect, mas o caminho está registrado com OUTRO método; o mux recusa antes do handler
+```
+
+Todos restaurados por edição localizada, conferidos com `git diff` contra HEAD.
+
+**Sobre `min_func_coverage` ter BAIXADO 669→668**, que num repositório com a
+F171 fresca merece justificativa e não passagem livre: é aritmética de
+denominador, não perda de cobertura. `DynamicRouteTargets` entrou como
+`ELIGIBLE uncovered:L1` — a MESMA classificação do irmão `StaticRouteTargets`,
+sem exceção especial. Com 455 cobertas, 455/680 = 669 décimos e 455/681 = 668.
+As alternativas eram piores: recusar o acessor (mantendo o buraco da exceção
+órfã) ou pôr um log numa função de leitura pura só para agradar o gate. O piso
+ficou COLADO na medição — `func_coverage = 668 (piso 668)`, folga zero.
+
+**Gate**: `make check` EXIT 0, rodado por mim. Zero arquivos deletados, zero
+testes removidos, um acrescentado. Golden regenerado com a mudança de conjunto
+auditada por diff independente: entra exatamente uma entrada,
+`pkg/infra/stdio.DynamicRouteTargets`.
+
+**Status da parte (2), o CONTEÚDO**: não corrigido, e não é meu. Quais das rotas
+pendentes ganham entrada no stdio é ADIÇÃO DE CONTRATO PÚBLICO, item 3.1.
+Aguarda o humano. A lista de 32 pendências no teste é o inventário dessa
+decisão.

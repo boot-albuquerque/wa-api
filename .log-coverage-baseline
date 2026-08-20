@@ -1066,7 +1066,10 @@ rules_frozen=true
 # tipo): bootstrap.adminTokenSource.String e bootstrap.encryptionKeySource.String.
 # Nenhuma funcao ja' coberta regrediu — o diff do golden so' ACRESCENTA, e
 # errpath_coverage ficou identico em 868.
-min_func_coverage=669
+#
+# F173 parte 1 (2026-08-20): 669->668. Denominador subiu 1 (DynamicRouteTargets,
+# acessor puro sem log — nao ha' caminho de erro a cobrir), numerador inalterado.
+min_func_coverage=668
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1496,7 +1499,13 @@ min_errpath_coverage=868
 #   handlers.WebhookHandlerContext.publishValues   EXCLUDED X1
 # Net: +3 -2 = +1 elegivel. covered: +2 -2 = 0 (455 antes, 455 depois).
 # func_coverage nao muda (669). Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=680
+#
+# F173 parte 1 (2026-08-20): min_eligible 680->681 (+1, ratchet-UP honesto).
+# ENTRA (1):
+#   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
+#     exportado para que o teste de paridade stdio x HTTP verifique que as
+#     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
+min_eligible=681
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
