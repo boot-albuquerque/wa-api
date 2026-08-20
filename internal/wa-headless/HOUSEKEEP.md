@@ -2822,3 +2822,103 @@ em prazo de teste de integração muda o que a suíte considera falha. Pelo
 
 **Status**: aberto — medido (18m28s travado contra 2,08s isolado, com o pid do
 navegador vazado como evidência), correção proposta, aguardando decisão.
+
+## H37 — o registro de módulos É enumerável, mas por nenhuma das portas que o wwebjs usa
+
+**Data**: 2026-08-20 · **Contexto**: escolhida a próxima capacidade a portar,
+antes de projetar qualquer coisa. Toda capacidade até aqui pagou o mesmo imposto
+— adivinhar nome de módulo a partir da referência e descobrir que não existe
+aqui (quatro em quatro no `sendText`, H34).
+
+**A pergunta**: dá para ENUMERAR o registro deste build? Se der, o imposto acaba.
+
+**Três portas medidas, todas as três fechadas:**
+
+| porta | resultado medido |
+|---|---|
+| `window.require.m` | ausente — `require` só tem `length,name,prototype` |
+| `window.__debug` | **ausente** — é por aqui que o whatsapp-web.js enumera |
+| `webpackChunkwhatsapp_web_client` | existe, mas é array **VAZIO** com `push` **NATIVO** |
+
+A terceira é a que engana: o global existe, então uma tentativa às cegas
+"funcionaria" — `push` aceita, nada acontece, e o callback nunca roda. A
+primeira versão da sonda devolveu exatamente `CALLBACK_NEVER_RAN`, e só medir
+`String(chunk.push)` distinguiu "a porta está fechada" de "eu bati errado".
+
+**A porta que abre: os próprios bundles.** Os nomes de módulo são literais de
+string no JavaScript que a página já baixou. Buscar os recursos `.js` de
+`performance.getEntriesByType('resource')` acerta o cache e devolve o inventário
+DESTE build:
+
+```
+bundles=65  bytes=38.014.594  distinct=12.674   (~16 s)
+```
+
+**Nome em bundle NÃO é módulo carregável**, e a diferença é grande o bastante
+para não ser detalhe: no padrão de contatos/avatar/presença, **165 nomes
+casaram e só 105 resolveram** no `window.require`. Um terço era identificador
+qualquer. Por isso a sonda valida cada candidato e reporta o que ele exporta.
+
+**Onde ficou**: `internal/wa-headless/probe_modmap_test.go`, guardada por
+`WA_PROBE_MODMAP=1`, com o padrão em `WA_PROBE_MODMAP_RE`. Não é teste, é
+INSTRUMENTO — e é o que torna barata cada capacidade que ainda falta portar.
+
+**O que ela já entregou, de graça, na primeira consulta:**
+
+```
+WAWebContactCollection        :: ContactCollectionImpl,ContactCollection
+WAWebContactGetters           :: getContactUnsafe,getId,getPushname,getIsBusiness,
+                                 getVerifiedName,getName,getShortName,getLabels,...
+WAWebContactUtils             :: getContactDataFromContactModel,splitContactName,
+                                 mergeSortedContacts,canSaveAsMyContact,...
+WAWebProfilePicThumbCollection:: ProfilePicThumbCollection
+WAWebContactProfilePicThumbBridge :: requestProfilePicFromServer,profilePicResync,...
+WAWebPresenceChatAction       :: markComposing,markPaused,markRecording,
+                                 sendPresenceAvailable,sendPresenceUnavailable,...
+```
+
+Ou seja: `listContacts`, `fetchContactAvatar`, `onContact` e presença deixaram
+de ser pesquisa e passaram a ser implementação.
+
+**Status**: aberto como MELHORIA disponível — o instrumento existe e está
+medido; o que falta é usá-lo nas capacidades restantes.
+
+## H38 — o `sendText` recompõe à mão uma operação que a página já oferece pronta
+
+**Data**: 2026-08-20 · **Contexto**: primeira consulta ao instrumento da H37,
+logo após fechar o `sendText`.
+
+**Onde**: `internal/wa-headless/capabilities/send/send.go`, no `dispatchScript`.
+Nossa sequência é `createWid` → `queryWidExists` → `ChatCollection.get` →
+`findOrCreateLatestChat`.
+
+**O achado**: a página tem essa composição pronta.
+
+```
+WAWebContactlessChatUtils :: PHONE_NUMBER_VALIDATION_REGEX, getChatByWid,
+                             queryExistsAndGetChat, queryExistsAndGetChatCached,
+                             getErrorStr
+```
+
+`queryExistsAndGetChat` é literalmente "resolve a identidade e devolve o chat" —
+o passo que a H34 custou uma sessão para descobrir que precisava existir. E há
+a variante **em cache**, que a nossa não tem: hoje todo envio para o mesmo
+destinatário refaz a consulta ao servidor.
+
+**Por que NÃO troquei agora**: a versão atual está medida, travada por sete
+testes com três controles negativos, e provada em campo num laço fechado. Trocar
+o miolo do envio logo depois de estabilizá-lo é mudança sem pressão de defeito,
+e escopo de outra tarefa.
+
+**Se for trocar, o que medir antes**: (1) `queryExistsAndGetChat` lança ou
+devolve `null` para quem não tem WhatsApp? — de que lado fica o `ErrNoChat`
+muda; (2) o que a variante `Cached` guarda e por quanto tempo, porque cache de
+identidade contra LID errado seria pior que a consulta repetida; (3) se o
+`getErrorStr` dá motivo melhor que a string de exceção que estacionamos hoje.
+
+**Também aparece `WAWebFindChat`** com a mesma superfície de
+`WAWebFindChatAction` (`findExistingChat`, `findOrCreateLatestChat`). Qual dos
+dois é o canônico não foi medido.
+
+**Status**: aberto — simplificação identificada com o caminho de medição
+escrito, não aplicada, aguardando decisão.
