@@ -288,7 +288,23 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 			textContent = protocolMsg.GetKey().GetID() // Store the deleted message ID
 		}
 		log.Info().Str("deletedMessageID", textContent).Str("messageID", evt.Info.ID).Msg("Delete message detected")
-		// Check for reactions
+	} else if protocolMsg := evt.Message.GetProtocolMessage(); protocolMsg.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT {
+		// HOUSEKEEP F188, com a causa CERTA à segunda tentativa.
+		//
+		// A edição não se perdia por vir embrulhada — UnwrapRaw já a
+		// desembrulhou (events/message.go:159). Perdia-se porque, depois do
+		// desembrulho, ela é uma ProtocolMessage, e o ramo acima só reconhece
+		// GetType() == 0, que é REVOKE (o apagar). MESSAGE_EDIT é 14: nenhum
+		// ramo casava, e a guarda descartava.
+		//
+		// O texto novo vem em protocolMsg.EditedMessage, e a chave aponta para
+		// a mensagem ORIGINAL — é por isso que o ID editado vai para
+		// replyToMessageID, que é a coluna quoted_message_id: sem essa
+		// ligação a edição fica uma linha solta, e o cliente não sabe o que
+		// ela edita.
+		messageType = messageTypeEdit
+		caption = editedText(protocolMsg)
+		replyToMessageID = protocolMsg.GetKey().GetID()
 	} else if reaction := evt.Message.GetReactionMessage(); reaction != nil {
 		messageType = "reaction"
 		replyToMessageID = reaction.GetKey().GetID()
@@ -338,18 +354,21 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 		// (messenger.go:633). Verificado no adapter antes de escrever o ramo.
 		messageType = messageTypeTemplate
 		caption = templateText(tpl)
-	} else if list := listMessageInside(evt.Message); list != nil {
-		// A lista NÃO vem como ListMessage no topo, e é por isso que este ramo
-		// usa um ajudante em vez de um getter direto.
+	} else if list := evt.Message.GetListMessage(); list != nil {
+		// O getter direto BASTA, e a primeira versão deste ramo não achava que
+		// bastasse — vale registar porquê, para ninguém o "consertar" de volta.
 		//
-		// O nosso /chat/send/list embrulha-a em DocumentWithCaptionMessage
-		// (messenger_list.go:116-120), que apesar do nome é um
-		// FutureProofMessage — invólucro genérico de compatibilidade, não um
-		// documento com legenda. Foi essa a razão de o campo ter medido
-		// `wire_type=media` para uma lista: o servidor rotula pelo invólucro.
+		// O nosso /chat/send/list embrulha a lista em
+		// DocumentWithCaptionMessage (messenger_list.go:116), e daí eu ter
+		// escrito um ajudante que desembrulhava. Mas events.Message.UnwrapRaw
+		// (events/message.go:155) já desembrulhou esse invólucro antes de o
+		// evento nos chegar, e o ajudante nunca chegava à sua segunda linha.
+		// Era código morto abençoado por um teste que montava o evento à mão,
+		// sem UnwrapRaw — a produção nunca vê aquela forma (HOUSEKEEP F188).
 		//
-		// Um ramo `evt.Message.GetListMessage()`, que é o que a intuição pede,
-		// NUNCA dispararia para as nossas próprias listas.
+		// O `wire_type=media` medido em campo para uma lista continua a ser
+		// verdade e continua a vir do invólucro: o servidor rotula pelo que
+		// está por fora, mesmo que o cliente desembrulhe.
 		messageType = messageTypeList
 		caption = listText(list)
 	} else if buttons := evt.Message.GetButtonsMessage(); buttons != nil {
@@ -485,34 +504,21 @@ const (
 	messageTypeButtons  = "buttons"
 	messageTypeTemplate = "template"
 	messageTypeList     = "list"
+	messageTypeEdit     = "edit"
 )
 
-// listMessageInside returns the ListMessage carried by msg, whether it sits at
-// the top level or inside the DocumentWithCaptionMessage wrapper.
+// editedText is the new text of an edit, taken from the edited message the
+// protocol part carries.
 //
-// The wrapper is why this helper exists instead of a plain getter. Our own
-// /chat/send/list wraps the list in DocumentWithCaptionMessage
-// (adapters/chat/messenger_list.go:116), which despite the name is a
-// FutureProofMessage — a generic forward-compatibility envelope, not a document
-// with a caption. A message that carries a list therefore answers nil to
-// GetListMessage, and the branch a reader would write first never fires.
-//
-// The top-level case is checked too, because the branch exists for what
-// ARRIVES, not for what we send: another client may well send the list
-// unwrapped.
-//
-// Only THIS wrapper is unwrapped. The proto declares many more
-// FutureProofMessage envelopes (viewOnceMessage, ephemeralMessage,
-// editedMessage, …) and the vendored library does not unwrap any of them
-// before handing us the event — so those still reach the chain wrapped and
-// still get dropped. That is measured debt, recorded in HOUSEKEEP F188, not an
-// oversight: unwrapping them changes how messages that today land elsewhere get
-// classified, which is a behaviour change beyond the decided scope.
-func listMessageInside(msg *waE2E.Message) *waE2E.ListMessage {
-	if list := msg.GetListMessage(); list != nil {
-		return list
+// It reads Conversation first and ExtendedText second because those are the two
+// shapes a plain text message takes, and an edit of anything else (a caption,
+// say) falls through to the placeholder — enough for the row to exist, which is
+// the whole point.
+func editedText(pm *waE2E.ProtocolMessage) string {
+	if c := pm.GetEditedMessage().GetConversation(); c != "" {
+		return c
 	}
-	return msg.GetDocumentWithCaptionMessage().GetMessage().GetListMessage()
+	return pm.GetEditedMessage().GetExtendedTextMessage().GetText()
 }
 
 // listText picks the caption for a list: the title when it has one, the
@@ -578,6 +584,8 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 		return ":template:"
 	case messageTypeList:
 		return ":list:"
+	case messageTypeEdit:
+		return ":edit:"
 	case "contact":
 		if textContent == "" {
 			return ":contact:"

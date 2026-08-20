@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
 
+	waCommon "wa-api/internal/wa-noise/protocol/proto/waCommon"
 	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
@@ -128,7 +129,7 @@ func TestHistorico_MensagemGravadaNaoViraRuido(t *testing.T) {
 
 	evt := eventoNaoClassificavel("MSG-TEXTO", "text")
 	evt.Message = &waE2E.Message{Conversation: proto("oi")}
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
 		t.Fatalf("mensagem COM conteudo produziu aviso de descarte: %s", saida)
@@ -189,7 +190,7 @@ func TestHistorico_EnqueteGravaComAPergunta(t *testing.T) {
 		},
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
 		t.Fatalf("enquete continua a ser descartada: %s", saida)
@@ -218,7 +219,7 @@ func TestHistorico_BotoesGravaComOCorpo(t *testing.T) {
 		Body: &waE2E.InteractiveMessage_Body{Text: proto(corpo)},
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	tipo, txt := lerLinha(t, evh, "MSG-BTN-B")
 	if tipo != "buttons" {
@@ -241,7 +242,7 @@ func TestHistorico_BotoesLegadoTambemGrava(t *testing.T) {
 		ContentText: proto(corpo),
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	tipo, txt := lerLinha(t, evh, "MSG-BTN-LEG")
 	if tipo != "buttons" {
@@ -262,7 +263,7 @@ func TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder(t *testing.T) {
 	evt := eventoNaoClassificavel("MSG-POLL-VAZIA", "poll")
 	evt.Message = &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
 		t.Fatalf("enquete sem pergunta voltou a ser descartada: %s", saida)
@@ -285,16 +286,19 @@ func lerLinha(t *testing.T, evh *UserEventHandler, id string) (tipo, texto strin
 
 // --- template e list: a etapa (a) da DECISÃO 20 -------------------------------
 
-// TestHistorico_ListaEmbrulhadaGrava é o teste que a intuição não escreveria.
+// TestHistorico_ListaEmbrulhadaGrava parte da forma que o NOSSO adapter
+// constrói — a lista dentro de DocumentWithCaptionMessage
+// (messenger_list.go:116) — e verifica que ela chega ao histórico.
 //
-// A lista que o NOSSO /chat/send/list envia não vem como ListMessage no topo:
-// vem dentro de DocumentWithCaptionMessage (messenger_list.go:116), que apesar
-// do nome é um FutureProofMessage — invólucro genérico, não documento com
-// legenda. Foi por isso que o campo mediu `wire_type=media` para uma lista.
+// O que ele prova mudou depois de eu medir, e o nome ficou porque a ENTRADA
+// continua a ser a lista embrulhada. O que ele NÃO prova é que exista um
+// desembrulho nosso: UnwrapRaw já tratou o invólucro antes de o evento nos
+// chegar, e o ramo que dispara é o `GetListMessage()` do topo.
 //
-// Um teste montado com waE2E.Message{ListMessage: ...} passaria com um ramo que
-// NUNCA dispara em produção. É a Armadilha 1 na direção do emissor: o dublê
-// tem de imitar o que o nosso adapter constrói de facto.
+// A primeira versão deste teste montava o evento à mão, sem UnwrapRaw, e por
+// isso exercitava um ajudante que desembrulhava — código que a produção nunca
+// executa. Passava, com controlo negativo e tudo, num caminho imaginário
+// (HOUSEKEEP F188). Agora passa pelo `gravar`, que refaz o caminho real.
 func TestHistorico_ListaEmbrulhadaGrava(t *testing.T) {
 	evh := handlerComHistorico(t, "u-list")
 	buf := capturarLog(t)
@@ -310,7 +314,7 @@ func TestHistorico_ListaEmbrulhadaGrava(t *testing.T) {
 		},
 	}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
 		t.Fatalf("lista embrulhada continua a ser descartada: %s", saida)
@@ -334,7 +338,7 @@ func TestHistorico_ListaNoTopoTambemGrava(t *testing.T) {
 		Description: proto("so descricao"),
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	tipo, txt := lerLinha(t, evh, "MSG-LIST-TOPO")
 	if tipo != "list" {
@@ -366,7 +370,7 @@ func TestHistorico_TemplateGrava(t *testing.T) {
 		},
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	tipo, txt := lerLinha(t, evh, "MSG-TPL")
 	if tipo != "template" {
@@ -390,17 +394,22 @@ func TestHistorico_TemplateSemTituloUsaOCorpo(t *testing.T) {
 		},
 	}}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	if _, txt := lerLinha(t, evh, "MSG-TPL-2"); txt != "so corpo" {
 		t.Errorf("text_content = %q, quero \"so corpo\"", txt)
 	}
 }
 
-// TestHistorico_InvolucroSemListaNaoViraLista é o controle negativo do ajudante:
-// DocumentWithCaptionMessage é um invólucro GENÉRICO, e nem tudo o que vem
-// dentro dele é lista. Sem este teste, um listMessageInside que devolvesse algo
-// não-nil para qualquer invólucro passaria nos dois testes de lista acima.
+// TestHistorico_InvolucroSemListaNaoViraLista guarda a fronteira do invólucro:
+// DocumentWithCaptionMessage é GENÉRICO, e nem tudo o que vem dentro dele é
+// lista.
+//
+// Nasceu como controlo negativo de um ajudante que já não existe, e sobrevive
+// porque a pergunta continua a valer depois do UnwrapRaw: uma conversa que
+// viajou dentro do invólucro tem de ser classificada como TEXTO, não como
+// lista. Se alguém voltar a escrever um desembrulho manual — e a tentação
+// existe, porque o nome do campo sugere documento — este teste morde.
 func TestHistorico_InvolucroSemListaNaoViraLista(t *testing.T) {
 	evh := handlerComHistorico(t, "u-inv")
 
@@ -411,11 +420,117 @@ func TestHistorico_InvolucroSemListaNaoViraLista(t *testing.T) {
 		},
 	}
 
-	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+	gravar(evh, evt)
 
 	var tipo string
 	err := evh.DB.QueryRow("SELECT message_type FROM message_history WHERE message_id = 'MSG-INV'").Scan(&tipo)
 	if err == nil && tipo == "list" {
 		t.Fatal("invólucro SEM lista foi classificado como lista: listMessageInside devolve não-nil a mais")
 	}
+}
+
+// --- edição: a única perda REAL da F188 ---------------------------------------
+
+// TestHistorico_EdicaoGravaComOTextoNovo trava o defeito com a causa CERTA.
+//
+// A edição não se perdia por vir embrulhada — UnwrapRaw desembrulha-a. Perdia-se
+// porque, depois do desembrulho, ela é uma ProtocolMessage, e a cadeia só
+// reconhecia GetType() == 0 (REVOKE, o apagar). MESSAGE_EDIT é 14.
+//
+// Este teste passa pelo `gravar`, ou seja, pelo desembrulho real — se montasse
+// a ProtocolMessage à mão no topo, provaria um caminho que a produção não tem.
+func TestHistorico_EdicaoGravaComOTextoNovo(t *testing.T) {
+	evh := handlerComHistorico(t, "u-edit")
+	buf := capturarLog(t)
+
+	evt := eventoNaoClassificavel("MSG-EDIT", "text")
+	evt.Message = &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{
+		Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type:          waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(),
+			Key:           &waCommon.MessageKey{ID: proto("MSG-ORIGINAL")},
+			EditedMessage: &waE2E.Message{Conversation: proto("texto EDITADO")},
+		}},
+	}}
+	gravar(evh, evt)
+
+	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
+		t.Fatalf("edicao continua a ser descartada: %s", saida)
+	}
+	tipo, txt := lerLinha(t, evh, "MSG-EDIT")
+	if tipo != "edit" {
+		t.Errorf("message_type = %q, quero \"edit\"", tipo)
+	}
+	if txt != "texto EDITADO" {
+		t.Errorf("text_content = %q, quero o texto novo", txt)
+	}
+}
+
+// TestHistorico_EdicaoLigaAMensagemOriginal é o que separa uma linha ÚTIL de uma
+// linha solta. Sem a ligação, o cliente vê uma edição e não sabe o que ela edita
+// — o que é quase tão inútil como não a ter.
+func TestHistorico_EdicaoLigaAMensagemOriginal(t *testing.T) {
+	evh := handlerComHistorico(t, "u-edit-key")
+
+	evt := eventoNaoClassificavel("MSG-EDIT-2", "text")
+	evt.Message = &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{
+		Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type:          waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(),
+			Key:           &waCommon.MessageKey{ID: proto("MSG-ORIGINAL-2")},
+			EditedMessage: &waE2E.Message{Conversation: proto("novo")},
+		}},
+	}}
+	gravar(evh, evt)
+
+	var quoted string
+	if err := evh.DB.QueryRow(
+		"SELECT COALESCE(quoted_message_id,'') FROM message_history WHERE message_id = 'MSG-EDIT-2'",
+	).Scan(&quoted); err != nil {
+		t.Fatalf("linha nao gravada: %v", err)
+	}
+	if quoted != "MSG-ORIGINAL-2" {
+		t.Errorf("quoted_message_id = %q, quero \"MSG-ORIGINAL-2\": sem a ligacao a edicao e' uma linha solta", quoted)
+	}
+}
+
+// TestHistorico_ApagarContinuaAApagar é o controle que a edição obriga: os dois
+// casos são ProtocolMessage e passam pelo MESMO if. Trocar a ordem dos ramos, ou
+// alargar a condição do apagar, faria uma edição ser gravada como delete — o que
+// seria trocar perda silenciosa por CORRUPÇÃO silenciosa, estritamente pior.
+func TestHistorico_ApagarContinuaAApagar(t *testing.T) {
+	evh := handlerComHistorico(t, "u-del")
+
+	evt := eventoNaoClassificavel("MSG-DEL", "text")
+	evt.Message = &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+		Type: waE2E.ProtocolMessage_REVOKE.Enum(),
+		Key:  &waCommon.MessageKey{ID: proto("MSG-APAGADA")},
+	}}
+	gravar(evh, evt)
+
+	tipo, txt := lerLinha(t, evh, "MSG-DEL")
+	if tipo != "delete" {
+		t.Fatalf("message_type = %q, quero \"delete\": a edicao roubou o ramo do apagar", tipo)
+	}
+	if txt != "MSG-APAGADA" {
+		t.Errorf("text_content = %q, quero o id da mensagem apagada", txt)
+	}
+}
+
+// gravar entrega o evento ao histórico PELO CAMINHO DA PRODUÇÃO: o que o teste
+// montou em Message passa por RawMessage e por UnwrapRaw antes de chegar ao
+// classificador.
+//
+// Isto não é cerimónia, é a correção de um defeito medido. UnwrapRaw
+// (events/message.go:119-162) desembrulha NOVE invólucros — deviceSent,
+// ephemeral, as três variantes de viewOnce, lottieSticker, documentWithCaption,
+// botInvoke e edited — antes de o evento nos chegar. Um teste que atribua
+// Message à mão vê uma forma que a produção NUNCA vê.
+//
+// A primeira versão destes testes fazia exatamente isso, e o custo está na
+// HOUSEKEEP F188: abençoou um ramo de código morto que desembrulhava listas,
+// com controlo negativo e tudo — mordendo num caminho imaginário. É a Armadilha
+// 1, o dublê que diverge da produção, numa forma difícil de ver: o dublê era
+// mais SIMPLES que a produção, não mais permissivo.
+func gravar(evh *UserEventHandler, evt *events.Message) {
+	evt.RawMessage = evt.Message
+	evh.saveMessageHistory(evt.UnwrapRaw(), &eventState{postmap: map[string]any{}})
 }

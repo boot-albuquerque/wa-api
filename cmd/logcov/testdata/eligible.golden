@@ -2227,6 +2227,7 @@ pkg/bootstrap.dispatchPool.Metrics	ELIGIBLE	uncovered:L1
 pkg/bootstrap.dispatchPool.runJob	ELIGIBLE	uncovered:L1
 pkg/bootstrap.dispatchPool.runJob.func1	ELIGIBLE	covered
 pkg/bootstrap.dispatchPool.worker	EXCLUDED	X1
+pkg/bootstrap.editedText	EXCLUDED	X1
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.encryptionKeySource.String	EXCLUDED	X4
@@ -2259,7 +2260,6 @@ pkg/bootstrap.leaseManager.forget	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.ownedSessions	ELIGIBLE	uncovered:L1
 pkg/bootstrap.leaseManager.renewOne	EXCLUDED	X1
 pkg/bootstrap.leaseSettings	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lease.go:393);uncovered:L2(S-ret,lease.go:397)
-pkg/bootstrap.listMessageInside	EXCLUDED	X1
 pkg/bootstrap.listText	EXCLUDED	X1
 pkg/bootstrap.livenessHandler	EXCLUDED	X1
 pkg/bootstrap.livenessHandler.func1	ELIGIBLE	uncovered:L1

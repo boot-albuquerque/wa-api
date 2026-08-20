@@ -14375,7 +14375,7 @@ esses dois são capabilities que entregamos. Pendente de decisão do canal.
 
 ---
 
-## F188 — a biblioteca não desembrulha os invólucros `FutureProofMessage`, e o classificador não os conhece
+## F188 — ~~a biblioteca não desembrulha os invólucros~~ **ERRADA**. A edição de mensagem perde-se, e por outra razão
 
 **Data**: 2026-08-20. **Contexto**: encontrado ao implementar a etapa (a) da
 DECISÃO 20 — o ramo de recepção da lista.
@@ -14409,7 +14409,65 @@ todos os `FutureProofMessage`, com a mensagem interna a seguir a mesma cadeia.
 É o que o invólucro existe para permitir. Precisa de decisão porque muda o que se
 grava para view-once e efémeras.
 
-**Status**: não corrigido, exceto o `documentWithCaptionMessage`.
+### CORREÇÃO — esta entrada estava ERRADA, e o erro custou código morto
+
+**Data**: 2026-08-20, no mesmo dia, ao começar a implementar a correção que ela
+própria pedia.
+
+**O que eu escrevi**: "a biblioteca vendorizada não desembrulha nenhum deles".
+**Falso.** `events.Message.UnwrapRaw()`
+(`internal/wa-noise/protocol/types/events/message.go:119-162`) desembrulha
+**nove** invólucros antes de o evento chegar a nós: `deviceSentMessage`,
+`botInvokeMessage`, `ephemeralMessage`, `viewOnceMessage`, `viewOnceMessageV2`,
+`viewOnceMessageV2Extension`, `lottieStickerMessage`,
+`documentWithCaptionMessage` e `editedMessage`.
+
+Eu tinha procurado o desembrulho em `capabilities/message/protocol.go`, encontrei
+lá só o de `DeviceSentMessage`, e **concluí a partir de onde procurei**. O
+desembrulho verdadeiro está uma camada adiante, na linha
+`return t.DispatchEvent(evt.UnwrapRaw())` do mesmo ficheiro — que eu li e não vi.
+
+**Medido, com o desembrulho REAL aplicado:**
+
+| entrada | depois do `UnwrapRaw` | grava? |
+|---|---|---|
+| lista em `documentWithCaptionMessage` | `GetListMessage()` = true **no topo** | sim |
+| imagem em `viewOnceMessageV2` | `GetImageMessage()` = true | **sim**, como `image` |
+| texto em `ephemeralMessage` | `GetConversation()` = "efemera" | **sim**, como `text` |
+| edição em `editedMessage` | `GetProtocolMessage()`, tipo `MESSAGE_EDIT` | **NÃO** |
+
+**View-once e ephemeral nunca estiveram partidos.** A entrada acusava um defeito
+que não existe.
+
+**O que sobra de verdadeiro é UM caso, e por outra causa**: a edição. Não se
+perde por estar embrulhada — chega desembrulhada. Perde-se porque, depois do
+desembrulho, é uma `ProtocolMessage` de tipo `MESSAGE_EDIT`, e a cadeia só
+reconhece `GetType() == 0`, que é `REVOKE` (o apagar). Nenhum ramo casa e a
+guarda descarta.
+
+### O CUSTO: um ramo de código morto, e um teste que o abençoou
+
+`listMessageInside` nasceu a tratar o caso embrulhado — que **nunca acontece**,
+porque `UnwrapRaw` já correu. O ramo do invólucro é código morto.
+
+E o teste `TestHistorico_ListaEmbrulhadaGrava` montava o evento **à mão, sem
+`UnwrapRaw`**, produzindo uma forma que o classificador nunca vê em produção. O
+controlo negativo CN-11 até "mordeu" — mas mordeu num caminho imaginário.
+
+**É a Armadilha 1 na forma pura, e cometida por mim no mesmo dia em que a citei
+duas vezes**: o dublê era diferente da produção, e por isso validou código que a
+produção não executa. A verificação em campo passou (a lista gravou) e isso
+mascarou o erro: ela gravou pelo ramo do TOPO, não pelo que eu tinha escrito
+para ela.
+
+**A lição operacional**, que vale mais que o achado: um dublê de `events.Message`
+tem de ser construído com `RawMessage` + `UnwrapRaw()`, nunca atribuindo
+`Message` diretamente. É a única forma de o teste ver o que a produção vê.
+
+**Status**: entrada **corrigida**. O que resta dela — a edição descartada — é o
+que a etapa (b) da DECISÃO 21 vai tratar, com a causa certa desta vez.
+
+**Status**: ver a correção acima — a entrada original estava errada.
 
 ---
 
