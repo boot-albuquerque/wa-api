@@ -14637,3 +14637,87 @@ acontecerá quando chegar mensagem de terceiro de um dos tipos ainda sem ramo.
 `/chat/send/edit` fecha a lista: **quinze de quinze** rotas de envio têm recepção.
 A incoerência que abriu esta frente — capability que envia e não recebe — deixa de
 existir para tudo o que este projeto envia.
+
+---
+
+## F183 — TERCEIRA versão do diagnóstico, agora medida no fluxo do cliente
+
+**Data**: 2026-08-20, ao voltar à F183 por decisão (d) do canal.
+
+Esta entrada já teve **dois** diagnósticos errados, ambos meus, ambos por
+generalizar de uma amostra pequena. Escrevo o terceiro com os números do fluxo
+completo, e deixo os dois anteriores visíveis em vez de os apagar — um achado
+que muda de causa três vezes ensina mais sobre método do que sobre o defeito.
+
+| versão | o que eu disse | por que caiu |
+|---|---|---|
+| 1ª | "`/chat/history` só entende PN" | medi um usuário com uma conversa |
+| 2ª | "a mesma conversa fica sob DOIS `chat_jid`" | medi UM par de contas; acontece em **3** de 363 |
+| 3ª | abaixo | medido no fluxo inteiro, 30 conversas |
+
+### A medição que decide
+
+Percorri as 30 conversas que o `/chat/list` devolve e perguntei o histórico de
+cada uma, com o JID que a própria listagem deu:
+
+```
+listadas                                : 30
+encontradas DIRETO pelo jid listado     :  3
+encontradas só DEPOIS de traduzir LID→PN: 27
+sem mapeamento LID→PN                   :  0
+não existem em esquema nenhum           :  0
+```
+
+**Noventa por cento do fluxo natural devolve `200` com lista vazia.** E as 27 não
+estão perdidas: estão gravadas sob o PN, e **a tradução recupera todas**.
+
+### O que isto corrige nas versões anteriores
+
+**A 2ª versão exagerou.** "A mesma conversa sob dois `chat_jid`" acontece em **3**
+conversas de 363, não é a regra. Eu tinha medido o par `qr2`↔`destino`, que por
+acaso é um dos três.
+
+**E a 2ª versão errou na peça de solução.** Eu escrevi que "a informação para
+unificar EXISTE e está a ser deitada fora", apontando o `Info.SenderAlt`. Medido
+na tabela inteira: `SenderAlt` está preenchido em **13 de 5063** linhas `@lid` —
+**0,26%**. As três ou quatro linhas em que o vi eram as mensagens ao vivo que eu
+próprio tinha acabado de enviar. Normalizar na escrita com `SenderAlt` cobriria
+um quarto de um por cento.
+
+### A peça que REALMENTE resolve, medida
+
+O banco já tem `wanoise_lid_map` (3353 linhas). Contra os 365 LIDs distintos que
+o histórico usa como `chat_jid`:
+
+```
+resolvíveis pelo mapa : 362   (99,2%)
+sem mapeamento        :   3
+```
+
+E no fluxo do cliente, a cobertura foi de **100%**: as 27 conversas vazias
+resolveram todas.
+
+**A primeira consulta deu ZERO resolvíveis**, e era artefacto de formato: o mapa
+guarda o utilizador sem sufixo (`90937376170214`) e o histórico guarda
+`90937376170214@lid`. É a [[F181]] outra vez — conjuntos "disjuntos" que são a
+mesma coisa escrita de duas maneiras. Só não me enganou porque a F181 me tinha
+ensinado a desconfiar de zero.
+
+### O que isto muda no conserto
+
+A 2ª versão concluiu "não é tradução na leitura, é normalização na escrita".
+**Com os números certos, a conclusão inverte-se para o caso comum**: a tradução
+na leitura resolve 27 das 30, com um `JOIN` local e **zero idas ao protocolo**.
+
+A normalização na escrita continua a fazer sentido como conserto de fundo, mas:
+- só serve para o que entrar DEPOIS dela;
+- não pode usar `SenderAlt`, que não vem em 99,7% dos casos;
+- teria de usar o mesmo mapa, e aí é a mesma tradução, só que mais cedo.
+
+E as **3** conversas com as duas chaves obrigam a que a leitura **funda** os dois
+conjuntos em vez de escolher um — pedir pelo LID tem de devolver também o que
+está sob o PN, senão troca-se um vazio por uma metade.
+
+**Status**: não corrigido, diagnóstico agora medido no fluxo completo. Continua a
+ser decisão de contrato — mas o custo caiu muito: a peça existe, é local, e
+cobre 99,2%.
