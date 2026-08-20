@@ -10,7 +10,7 @@ qualquer coisa que grave no banco. O padrão comum de quase todas é o mesmo:
 
 ---
 
-## 1. Dublê mais permissivo que a produção esconde o defeito
+## 1. Dublê DIVERGENTE da produção — esconde defeito, ou abençoa código morto
 
 O modo de falha mais frequente aqui. O teste passa, a rota real quebra.
 
@@ -29,6 +29,51 @@ dublê cita isso.
 
 **Como pegar**: escreva um teste que force os dois lados a divergirem. Se o
 dublê e a produção concordam sempre, o teste não está medindo a regra.
+
+### O título dizia "mais permissivo", e isso deixava metade da armadilha de fora
+
+Corrigido em 2026-08-20, depois de eu cair na metade que não estava escrita.
+
+Um dublê **mais permissivo** aceita o que a produção recusa, e o efeito é
+esconder um defeito. Foram os três casos da tabela acima, e é a forma que a
+formulação antiga cobria.
+
+Mas um dublê pode divergir por ser **mais SIMPLES**, e aí o efeito é outro e
+pior de detetar: ele **abençoa código morto** — cria confiança em código que a
+produção nunca executa.
+
+**O caso** (HOUSEKEEP F188). O nosso `/chat/send/list` embrulha a lista em
+`DocumentWithCaptionMessage`, então escrevi um ajudante para a desembrulhar na
+recepção, e um teste que montava o evento **à mão**, atribuindo `Message`
+diretamente. Só que a produção chama `events.Message.UnwrapRaw()`, que **já
+desembrulhou** aquele invólucro antes de o evento chegar ao classificador. O
+ajudante nunca alcançava a sua segunda linha.
+
+O que passou verde com código morto no meio:
+
+- o teste;
+- o **controlo negativo** — que mordeu, mas num caminho imaginário;
+- o `make check`;
+- e a **verificação em campo**, porque a lista gravou de facto: pelo ramo do
+  topo, não pelo que eu tinha escrito para ela.
+
+**Por que escapa**: a formulação "mais permissivo" faz procurar um dublê que
+aceita DEMAIS. Este aceitava de menos — construía um objeto mais pobre que o
+real. Ninguém à procura de permissividade olha para lá.
+
+**Regra acrescentada**: quando o objeto do teste passa por uma TRANSFORMAÇÃO no
+caminho de produção — desembrulho, normalização, decoração, hidratação —, o
+dublê tem de passar pela mesma transformação. Construir o objeto no estado final
+que se imagina é adivinhar; construí-lo no estado inicial e deixar a produção
+transformá-lo é medir.
+
+Para `events.Message` neste repositório, isso significa: monta-se em
+`RawMessage` e chama-se `UnwrapRaw()`. **Nunca** se atribui `Message`
+diretamente.
+
+**Como pegar esta metade**: pergunte, de cada ramo que o teste exercita, *quantas
+vezes a produção passa aqui?* Se a resposta honesta for "não sei", o dublê não
+está a imitar o caminho — está a imitar o destino.
 
 ---
 

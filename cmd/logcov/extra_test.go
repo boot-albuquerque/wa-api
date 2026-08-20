@@ -320,7 +320,20 @@ func TestCountExemptAnnotationsEmArquivoIlegivel(t *testing.T) {
 	if err := os.Mkdir(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(sub+"/a.go", []byte("//log:exempt teste\n"), 0o600); err != nil {
+	// O fixture era, LITERALMENTE, um ficheiro cujo conteudo inteiro e'
+	// "//log:exempt teste\n" — sem sequer uma clausula `package`. Sob o
+	// contador antigo isso valia 1, porque ele fazia strings.Count sobre o
+	// texto cru e nao olhava a sintaxe.
+	//
+	// Ou seja: o teste CODIFICAVA O DEFEITO da HOUSEKEEP F189 como contrato
+	// (ARMADILHAS.md, 2). Um ficheiro que nem e' Go valido contava como
+	// isencao de producao, e este teste garantia que continuasse a contar.
+	//
+	// Agora e' Go valido com uma isencao REAL. O que este teste mede — que um
+	// diretorio sem permissao de leitura produz erro em vez de zero silencioso
+	// — continua igual; o que mudou e' que o fixture passou a significar o que
+	// o nome dele diz.
+	if err := os.WriteFile(sub+"/a.go", []byte("package proibido\n\n//log:exempt teste\nfunc F() error { return nil }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	n, err := countExemptAnnotations(dir)

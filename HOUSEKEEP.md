@@ -14580,9 +14580,47 @@ fontes de verdade divergem).
 soletrar, com nota a dizer porquê. É contorno, não correção — e o próprio
 contorno é sintoma do ponto 2.
 
-**Status**: não corrigido. É o instrumento de medição, não o código medido — a
-mesma família dos três buracos corrigidos hoje (fixtures de SQLite sem WAL,
-formatação não verificada, pacotes sem teste).
+**Status**: **CORRIGIDO**. O contador passa a usar o MESMO critério da regra:
+parseia o ficheiro e pergunta a `ruleX8Exempt` pelo bloco de doc de cada
+declaração. Orçamento e regra medem a mesma coisa.
+
+### E havia um SEGUNDO defeito na mesma função, que eu não tinha visto
+
+O comentário dizia "ignorando arquivos de teste" e **o código não os ignorava**:
+o filtro era só `.go`. Uma anotação num teste entrava na conta de produção. Só
+apareceu ao reescrever a função — a entrada original acusava um defeito e havia
+dois.
+
+### E um TERCEIRO, que o gate me obrigou a encontrar: um teste que codificava o
+### defeito como contrato
+
+`TestCountExemptAnnotationsEmArquivoIlegivel` falhou com a correção, e a razão
+importa: o fixture dele era, **literalmente**, um ficheiro cujo conteúdo inteiro
+era `//log:exempt teste
+` — **sem sequer uma cláusula `package`**.
+
+Sob o contador antigo isso valia 1. Ou seja, o teste **garantia** que um ficheiro
+que nem é Go válido contasse como isenção de produção. É a Armadilha 2 do
+`ARMADILHAS.md` na forma pura, e eu não a teria encontrado sem o gate — ela não
+está no caminho de ninguém que não mexa nesta função.
+
+Corrigido o fixture, não o teste: o que ele mede — que um diretório sem permissão
+produz erro em vez de zero silencioso — continua igual. O que mudou é que o
+fixture passou a significar o que o nome dele diz.
+
+### Travado por
+
+`TestContagemDeIsencoes_MencaoEmProsaNaoConta` (o defeito medido),
+`_AnotacaoDeVerdadeConta` (o controlo na direção oposta — sem ele, um contador
+que devolvesse sempre zero passaria no primeiro), `_IgnoraArquivosDeTeste` e
+`_ArquivoQueNaoParseiaFalhaAlto`. Três controlos negativos executados; o CN-36
+reproduz o `strings.Count` original e o teste morde.
+
+**Efeito colateral útil**: o token deixa de ser radioativo em prosa. Dá para
+documentar a anotação no código que a discute sem disparar o gate — e um
+mecanismo que ninguém pode explicar por escrito é um mecanismo que ninguém
+entende. O contorno que eu tinha aplicado (nomear a anotação em prosa em vez de a
+soletrar) deixa de ser necessário.
 
 ---
 

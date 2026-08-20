@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"os"
@@ -192,22 +193,62 @@ func readDepguardDirs(path string) ([]string, error) {
 	return dirs, nil
 }
 
-// countExemptAnnotations conta os //log:exempt sob um diretorio, ignorando
-// arquivos de teste. E' a mesma contagem do criterio de pronto via grep.
+// countExemptAnnotations conta as funcoes EXEMPTAS sob um diretorio, ignorando
+// arquivos de teste.
+//
+// HOUSEKEEP F189 — esta funcao contava MENCOES, nao anotacoes, e o comentario
+// mentia em dois pontos.
+//
+// (1) Contava `strings.Count(data, "//log:exempt")` sobre o arquivo INTEIRO,
+// sem olhar posicao nem sintaxe. Escrever o token dentro de uma frase — num
+// comentario que explica por que a isencao NAO foi usada, por exemplo — somava
+// ao orcamento sem isentar funcao nenhuma. Aconteceu comigo em 2026-08-20: o
+// golden emitido no mesmo instante nao tinha nenhuma entrada X8, e o orcamento
+// acusou 1. As duas metades do mesmo mecanismo discordavam sobre o mesmo
+// arquivo.
+//
+// (2) O comentario dizia "ignorando arquivos de teste" e o codigo nao os
+// ignorava: o filtro era so' `.go`. Um `//log:exempt` num teste entrava na
+// conta de producao.
+//
+// Agora usa o MESMO criterio da regra que decide a isencao: parseia o arquivo e
+// pergunta a `ruleX8Exempt` pelo bloco de doc de cada declaracao. Orcamento e
+// regra passam a medir a mesma coisa, que e' o minimo que se pede a um
+// mecanismo com duas metades.
+//
+// O efeito colateral util e' que o token deixa de ser radioativo em prosa: da'
+// para DOCUMENTAR a anotacao no codigo que a discute sem disparar o gate — e um
+// mecanismo que ninguem pode explicar por escrito e' um mecanismo que ninguem
+// entende.
 func countExemptAnnotations(root string) (int, error) {
 	n := 0
+	fset := token.NewFileSet()
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		data, err := os.ReadFile(path) //nolint:gosec // caminho vem do walk
-		if err != nil {
-			return err
+		// ParseComments e' obrigatorio: sem ele os blocos de doc nao chegam a
+		// existir na arvore, e a contagem daria zero sempre — um gate que nunca
+		// dispara e' pior que um que dispara de mais.
+		file, perr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if perr != nil {
+			return fmt.Errorf("logcov: parse de %s para contar isencoes: %w", path, perr)
 		}
-		n += strings.Count(string(data), "//log:exempt")
+		for _, decl := range file.Decls {
+			var doc *ast.CommentGroup
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				doc = d.Doc
+			case *ast.GenDecl:
+				doc = d.Doc
+			}
+			if ok, _ := ruleX8Exempt(doc); ok {
+				n++
+			}
+		}
 		return nil
 	})
 	if os.IsNotExist(err) {
