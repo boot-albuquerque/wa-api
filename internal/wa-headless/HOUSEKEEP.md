@@ -2339,3 +2339,39 @@ estava, e agora está TESTADA onde não estava.
 
 **Status**: CORRIGIDO.
 
+## H31 — enumerando o conjunto: uma API exportada que eu inventei e ninguém usa
+
+**Data**: 2026-08-20 · **Contexto**: segunda passagem de auditoria sobre o meu
+próprio trabalho, durante a espera da medição longa.
+
+**O método, e ele importa mais que o achado**: em vez de afirmar cobertura no
+agregado, **enumerei o conjunto** — as 72 funções e métodos exportados da
+produção do módulo, cruzados contra qualquer menção nos testes. Afirmação
+agregada não é evidência; a lista, sim.
+
+**Resultado**: três sem menção nominal. Duas delas são cobertura indireta
+legítima e foram **verificadas antes de eu concluir qualquer coisa**:
+
+- `DecodeWire` — chamada por `capabilities/fetchmessages`, exercitada pelos
+  testes dele;
+- `Unwrap` — exercitada implicitamente por `errors.As`/`errors.Is` nos testes do
+  `core`.
+
+**A terceira era código morto meu**: `liveness.NewWithMonitor`, que escrevi *"so
+a caller that already keeps failure history does not start a second streak"*.
+Esse chamador **nunca existiu**. Eu inventei um construtor exportado para um
+caso hipotético — exatamente a cerimônia de abstração que o molde em
+`capabilities/send/doc.go` manda não criar, e que eu li antes de escrever a
+capacidade.
+
+**Por que isso não é só faxina**: API exportada é **promessa**. Uma que ninguém
+pediu ainda tem de ser mantida, e apareceria numa auditoria futura como
+"cobertura faltando" em vez de "código que não devia existir" — que é a leitura
+errada, e a que eu mesmo quase fiz.
+
+**Correção**: removida, com uma nota no lugar dizendo o que havia ali e por que
+saiu. Ela volta quando um chamador precisar, **com teste**.
+
+**Status**: CORRIGIDO. O conjunto agora tem 71 exportadas, 2 sem menção nominal,
+ambas verificadas como exercitadas.
+

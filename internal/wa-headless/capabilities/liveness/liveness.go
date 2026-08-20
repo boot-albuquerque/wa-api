@@ -92,11 +92,12 @@ func New(processAlive func() bool, runner *engine.Runner, eval spa.Evaluator) *C
 	}
 }
 
-// NewWithMonitor builds a Checker over an existing monitor, so a caller that
-// already keeps failure history for a session does not start a second streak.
-func NewWithMonitor(processAlive func() bool, m *spa.Monitor) *Checker {
-	return &Checker{processAlive: processAlive, monitor: m}
-}
+// NOTE: an earlier NewWithMonitor was removed here on 2026-08-20. It existed
+// "so a caller that already keeps failure history does not start a second
+// streak", and no such caller was ever written. An exported constructor with no
+// user is a promise nobody asked for, and the capability template in
+// capabilities/send/doc.go says not to invent abstraction ceremony — this was
+// mine. It comes back when a caller needs it, with a test.
 
 // Check runs one liveness check.
 //
