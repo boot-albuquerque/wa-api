@@ -11170,9 +11170,43 @@ com regras de conexão divergentes é literal repetido esperando para divergir
 do dublê, e o dublê está sendo MAIS restritivo que a produção, o que produz
 falha que produção não teria (o espelho da ARMADILHA 1).
 
-**Status**: não corrigido — fora do escopo do CAP-28, e o CLAUDE.md proíbe
-corrigir de graça defeito pré-existente sem perguntar. Registrado para
-decisão.
+**MEDIÇÃO de 2026-08-20**, feita ao executar a decisão (b) do canal (varrer os
+outros fixtures). Ela mostra que **esta entrada subestimava o problema**, e o
+conserto muda de forma por causa disso.
+
+A produção não aplica só `busy_timeout`. Aplica TRÊS pragmas
+(`pkg/infra/db/connection.go:128`):
+
+```
+?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)
+```
+
+E `journal_mode(WAL)` importa para concorrência tanto quanto o `busy_timeout`:
+sem WAL, um escritor bloqueia leitores; com WAL, leitores e escritor convivem.
+
+**Divergência medida nos 16 fixtures de teste baseados em ARQUIVO** (os 2 de
+`:memory:` ficam de fora, não há disputa de arquivo):
+
+| pragma | fixtures que o têm |
+|---|---|
+| `journal_mode(WAL)` | **ZERO** |
+| `busy_timeout` | 3 — e um deles com valor DIFERENTE do de produção (5000 contra 10000, `chat_history_route_test.go:127`) |
+| `foreign_keys` | 6 |
+
+Ou seja: **nenhum** fixture reproduz a configuração de concorrência da produção,
+e o que a entrada descrevia como "falta `busy_timeout` num fixture" é, na
+verdade, **a conexão de teste inteira configurada diferente da real** — a
+[[armadilha 1]] na camada de infraestrutura. Um teste que passa sobre SQLite sem
+WAL e sem espera não está a medir o que a produção faz.
+
+**Correção sugerida, na forma que a medição pede**: uma constante ÚNICA e
+compartilhada com a string de pragmas de produção, usada pelos fixtures. Não
+"acrescentar busy_timeout em cada um" — isso repetiria o literal 16 vezes e
+deixaria a divergência livre para voltar.
+
+**Status**: não corrigido ainda. Decisão (b) do canal recebida; o bloco vai
+sair com a forma corrigida pela medição acima, e o achado NOVO que ela produziu
+está na [[F177]].
 
 ## F162
 
@@ -13050,3 +13084,48 @@ Decidir se `200 "connecting"` sem lançador é aceitável é CONTRATO HTTP, item
 3.1. Aguarda o humano. A trava agora impede que a fiação suma em silêncio, mas
 NÃO conserta a resposta: se alguém remover o decorador e ignorar o gate
 vermelho, a rota continua a mentir.
+
+
+---
+
+## F177 — a string de pragmas de produção está DUPLICADA, sem constante que as una
+
+**Data**: 2026-08-20. **Contexto**: [[F161]], ao medir a divergência entre
+fixtures de teste e produção. Achado de lado: fui procurar a fonte de verdade
+dos pragmas e encontrei DUAS.
+
+**Onde**:
+
+- `pkg/infra/db/connection.go:128`
+- `pkg/bootstrap/main.go:367`
+
+Os dois carregam, por extenso, a MESMA string:
+
+```
+?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)
+```
+
+**Problema**: é o mesmo padrão de duas fontes de verdade que esta sessão já
+consertou duas vezes — as listas de 48 eventos ([[F168]]) e os dois caches de
+userinfo ([[F164]]). Quem mudar o `busy_timeout` num lugar e não no outro faz o
+banco principal e o *store* divergirem em silêncio, e a divergência só aparece
+sob carga.
+
+O ADR-0004 e o CLAUDE.md já enunciam a regra que isto viola: *"Zero string
+literal solta. Toda string que carrega significado vira constante nomeada. Literal
+repetido em dois lugares é o mesmo bug esperando divergir."*
+
+**Agravante**: a [[F161]] mostrou que os fixtures de teste também precisam desta
+string. Sem constante, o mesmo literal passaria a existir em DEZOITO lugares.
+
+**Correção sugerida**: uma constante exportada em `pkg/infra/db` — o pacote que
+já é dono da conexão — usada pelos dois pontos de produção e pelos fixtures.
+Constante, e não função, se o valor for fixo.
+
+**Cuidado**: `main.go:367` prefixa `file:` e usa `filepath.ToSlash`, enquanto
+`connection.go:128` concatena direto ao `dbPath`. A constante deve ser só a
+PARTE DOS PRAGMAS, não a URL inteira, senão a unificação quebra um dos dois.
+Verificar antes de escrever.
+
+**Status**: não corrigido, nada implementado. Achado ao executar a F161; será
+levado ao canal junto com o resultado dela.
