@@ -76,7 +76,32 @@
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 831 -> 832. Os testes portados de 3ac8073 (GetManyLIDsForPNs, no adapter e
 # no use case) somam cobertura sobre codigo que veio junto. Ratchet-UP.
-min_coverage=832
+# F96 (2026-08-20): 832 -> 838. Ratchet-UP HONESTO, e o denominador foi
+# verificado explicitamente porque esta mudanca nasceu de um gate quebrado.
+#
+# Contexto: `make check` estava vermelho com `go: no such tool "covdata"` nos
+# QUATRO pacotes sem arquivo de teste (cmd/core, cmd/listroutes, cmd/wss,
+# pkg/infra/wa-noise/client/testkit). Nao era o nosso codigo nem a nossa
+# configuracao: a toolchain de MODULO do Go 1.26 publica 8 ferramentas e
+# constroi as outras 10 sob demanda no GOCACHE; o caminho de cobertura de um
+# pacote SEM testes procura em GOTOOLDIR e nao acha. Medido re-baixando a
+# toolchain (mesmas 8 ferramentas) e confirmando que `go tool covdata` funciona
+# pela resolucao sob demanda. E' bug do Go, nao ambiente incompleto.
+#
+# A saida NAO foi mexer no denominador. Tirar os pacotes sem teste do
+# -coverpkg foi medido e MENTE: o perfil perde as linhas deles e a cobertura
+# SOBE artificialmente (num experimento de dois pacotes, 80,0% -> 83,3%).
+#
+# O que foi feito: os quatro pacotes ganharam testes REAIS — nao TestNoop.
+# cmd/listroutes trava a ordenacao estavel de que o harness golden depende;
+# cmd/wss trava que o argv do operador sobrevive e que --mode=stdio nao
+# duplica; cmd/core trava que ele NAO injeta modo (a unica diferenca para o
+# wss) e que a tabela de rotas nao e' vazia; testkit assere em tempo de
+# compilacao que os dublês satisfazem waclient.Client e store.ContactStore.
+#
+# Denominador CONFERIDO apos a mudanca: os quatro pacotes continuam presentes
+# em coverage.out. A subida vem de teste novo sobre codigo que ja' existia.
+min_coverage=838
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

@@ -3,8 +3,11 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+
+	"wa-api/internal/wa-headless/observability"
 )
 
 // testPolicy gives every class a distinct, short budget so that "Do used the
@@ -147,5 +150,135 @@ func TestNewRunnerUsesTheMeasuredDefaults(t *testing.T) {
 	if NewRunner().Policy != DefaultDeadlines {
 		t.Fatal("NewRunner must carry DefaultDeadlines; a Runner with a zero policy " +
 			"fails every operation instantly")
+	}
+}
+
+// The four cases HOUSEKEEP H42 demands, kept together because the defect was
+// precisely that two of them were indistinguishable from a third.
+//
+// A derived context reports DeadlineExceeded whether the operation's own clock
+// ran out or the caller's already had, so classifying on ctx.Err() blamed the
+// target for a page it never consulted. The fix attaches a private cause to the
+// operation's own timeout and reads context.Cause, which stays correct even
+// when the two deadlines coincide.
+
+// 1. The caller's deadline is SHORTER than the operation's. This is the case
+// that produced two false conclusions in one session: the error said "deadline
+// of 5s exceeded" while what had run out were the caller's 60 seconds.
+func TestDoBlamesTheCallerWhenTheParentDeadlineExpiresFirst(t *testing.T) {
+	r := &Runner{Policy: testPolicy, Log: observability.NewOpLog()}
+	// Navigate's budget is 300ms; the caller allows 20ms.
+	parent, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err := r.Do(parent, OpNavigate, "parent-expires", func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	var te *TimeoutError
+	if errors.As(err, &te) {
+		t.Fatalf("the caller's expiry was reported as the operation's own deadline: %v", err)
+	}
+	var ge *CallerGaveUpError
+	if !errors.As(err, &ge) {
+		t.Fatalf("got %T (%v), want *CallerGaveUpError", err, err)
+	}
+	if !strings.Contains(err.Error(), "CALLER") {
+		t.Fatalf("the message must name the caller, not the target: %v", err)
+	}
+	if n := r.Log.Timeouts(); n != 0 {
+		t.Fatalf("Timeouts()=%d, want 0 — a caller that ran out of budget is not a "+
+			"target that stopped answering", n)
+	}
+	if n := r.Log.CallerGaveUp(); n != 1 {
+		t.Fatalf("CallerGaveUp()=%d, want 1", n)
+	}
+}
+
+// 2. The caller CANCELS. This one already passed before the fix, and that is
+// the trap it documents: Canceled is distinguishable from DeadlineExceeded, so
+// the protected half made both halves look protected.
+func TestDoBlamesTheCallerOnCancellationAndRecordsItAsSuch(t *testing.T) {
+	r := &Runner{Policy: testPolicy, Log: observability.NewOpLog()}
+	parent, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	err := r.Do(parent, OpNavigate, "parent-cancelled", func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	var te *TimeoutError
+	if errors.As(err, &te) {
+		t.Fatalf("cancellation was reported as a deadline: %v", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want it to unwrap to context.Canceled", err)
+	}
+	if n := r.Log.Timeouts(); n != 0 {
+		t.Fatalf("Timeouts()=%d, want 0 — a clean stop must not read as an outage", n)
+	}
+	if n := r.Log.CallerGaveUp(); n != 1 {
+		t.Fatalf("CallerGaveUp()=%d, want 1", n)
+	}
+}
+
+// 3. The operation's OWN deadline. The fix must not make real timeouts vanish,
+// which is the failure a caller would never notice until a dead session was
+// reported as healthy.
+func TestDoStillReportsTheOperationsOwnDeadline(t *testing.T) {
+	r := &Runner{Policy: testPolicy, Log: observability.NewOpLog()}
+	// StateProbe's budget is 40ms; the caller allows far more.
+	parent, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := r.Do(parent, OpStateProbe, "own-deadline", func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	var te *TimeoutError
+	if !errors.As(err, &te) {
+		t.Fatalf("got %T (%v), want *TimeoutError", err, err)
+	}
+	if te.Op != OpStateProbe {
+		t.Fatalf("the timeout named %s, want %s", te.Op, OpStateProbe)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("a real timeout must still unwrap to context.DeadlineExceeded")
+	}
+	if n := r.Log.Timeouts(); n != 1 {
+		t.Fatalf("Timeouts()=%d, want 1", n)
+	}
+	if n := r.Log.CallerGaveUp(); n != 0 {
+		t.Fatalf("CallerGaveUp()=%d, want 0 — this was the operation's own clock", n)
+	}
+}
+
+// 4. Success, with a caller whose deadline is nearby. The classification reads
+// the context AFTER the call, so an operation that finished in time must not be
+// reclassified by a parent that expires a moment later.
+func TestDoReportsSuccessWithoutBlamingAnyone(t *testing.T) {
+	r := &Runner{Policy: testPolicy, Log: observability.NewOpLog()}
+	parent, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := r.Do(parent, OpNavigate, "fine", func(ctx context.Context) error { return nil })
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if n := r.Log.Timeouts(); n != 0 {
+		t.Fatalf("Timeouts()=%d, want 0", n)
+	}
+	if n := r.Log.CallerGaveUp(); n != 0 {
+		t.Fatalf("CallerGaveUp()=%d, want 0", n)
+	}
+	recs := r.Log.Records()
+	if len(recs) != 1 || recs[0].Result != observability.ResultOK {
+		t.Fatalf("records=%v, want a single ok", recs)
 	}
 }

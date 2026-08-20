@@ -3210,5 +3210,97 @@ passam; `coverage-gate` reprova. Ou seja, `make check` NÃO está verde, e a raz
 está integralmente fora do diff — registrada aqui para que o commit desta sessão
 não seja lido como "gate verde".
 
-**Status**: aberto — diagnosticado com a causa isolada e reproduzida em pacote
-não tocado; correção é de ambiente e depende de decisão do humano.
+### Resolvido (2026-08-20) — e NÃO é correção de toolchain, é contorno local
+
+**O diagnóstico inicial estava errado, e medir derrubou-o.** A hipótese era
+download truncado da toolchain de módulo. Executei a correção: movi a toolchain
+de lado (reversível) e forcei re-download. Vieram **exatamente as mesmas 8
+ferramentas**.
+
+**A causa real**: a toolchain de MÓDULO do Go 1.26 publica 8 ferramentas
+(`asm cgo compile cover fix link preprofile vet`) e constrói as outras 10 —
+`covdata`, `pprof`, `trace`, `test2json`, `nm`, `objdump`, `pack`, `doc`,
+`addr2line`, `buildid` — **sob demanda no `GOCACHE`**. A prova: `go tool -n
+covdata` resolve para `~/Library/Caches/go-build/.../covdata`, e
+`go tool covdata` funciona.
+
+Onde quebra: cobertura de pacote COM teste funciona; de pacote SEM arquivo de
+teste falha, porque esse caminho procura em `GOTOOLDIR` em vez de usar a
+resolução sob demanda. **É bug do Go 1.26**, não ambiente incompleto e não
+código nosso.
+
+`GOTOOLCHAIN=local` não serve: `/usr/local/go` é **go1.24.2** — o `go version`
+dizia 1.26 porque o `auto` já trocava — e o `go.mod` exige ≥1.26. A 1.24.2 local
+É completa (18 ferramentas), só velha demais.
+
+**A alternativa tentadora foi MEDIDA e MENTE.** Manter o pacote sem teste apenas
+em `-coverpkg`, sem ser alvo de teste, produz perfil com ZERO linhas dele e a
+cobertura SOBE artificialmente — num experimento de dois pacotes, de 80,0% para
+83,3%. Não foi proposta.
+
+**A saída aplicada**: os quatro pacotes ganharam testes REAIS, o que faz o
+caminho quebrado deixar de ser exercido sem tocar no denominador.
+
+| pacote | propriedade travada |
+|---|---|
+| `cmd/listroutes` | a saída é ORDENADA e estável — o harness golden compara por diff, e ordem de mapa em Go é aleatória por desenho |
+| `cmd/wss` | o argv do operador SOBREVIVE (substituir em vez de estender perderia o nome do programa e toda flag), e `--mode=stdio` não duplica |
+| `cmd/core` | ele **não** injeta modo — a única diferença para o `wss` — e a tabela de rotas não é vazia |
+| `testkit` | asserção em tempo de COMPILAÇÃO de que os dublês satisfazem `waclient.Client` e `store.ContactStore` (ARMADILHAS §1) |
+
+> **Um desses testes achou algo e o defeito era MEU.** A asserção "toda rota
+> declara método" falhou em `/admin`. Não é defeito do router: é
+> `PathPrefix("/admin").Subrouter()` (`pkg/bootstrap/router.go:268`), ponto de
+> montagem cujos métodos vivem nos filhos. A asserção foi trocada pela que
+> realmente vale: rota sem método precisa ter algo montado SOB ela, porque folha
+> sem método é inalcançável. 101 rotas, 1 ponto de montagem.
+
+**Denominador CONFERIDO depois**, que era condição explícita: os quatro pacotes
+continuam presentes em `coverage.out`. Cobertura 83,2% → **83,8%**, e o piso foi
+subido para 838 no mesmo commit, como o próprio gate manda.
+
+**Como registrar isto**: é **contorno local para um bug do Go 1.26** no caminho
+de cobertura de pacote sem arquivo de teste — NÃO correção da toolchain. Se o Go
+corrigir, os testes continuam valendo por si.
+
+**Status**: corrigido — `make check` verde ponta a ponta (build, vet, race,
+lint, coverage 838/838, log-coverage em ratchet, facade e filesize).
+
+
+## F97 — o teste do launcher perdia uma corrida com a própria limpeza que ele testa
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da F96, ao rodar o gate completo.
+
+**Onde**: `internal/wa-headless/engine/launcher_test.go`,
+`TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers`.
+
+**O sintoma**: falha com *"the browser never started, so this test did not
+exercise the cleanup"* — ou seja, a PRECONDIÇÃO do teste, não o comportamento.
+
+**A medição é o que separa flake de defeito:**
+
+| execução | falhas |
+|---|---|
+| isolado, sob `-cover` | **0 de 6** |
+| dentro do run de cobertura do repo inteiro | **2 de 2** |
+
+Não é raro: é determinístico naquele modo.
+
+**A causa**: o teste corre contra si mesmo. O `Launch` MATA o navegador quando o
+endpoint não responde — que é o comportamento sob teste — mas o falso escreve o
+marcador de um shell que precisa ser escalonado antes. Com orçamento de boot de
+`300ms`, instrumentar todo o repositório deixa a partida de processo lenta o
+bastante para o shell morrer antes do `touch`, toda vez.
+
+**Correção**: `300ms` → `2s`, com a razão escrita no código. Nada é enfraquecido:
+o endpoint continua nunca respondendo, o `Launch` continua falhando, e a limpeza
+continua sendo o que se assere. O teste IRMÃO logo abaixo já usava `5s`.
+
+**Verificado**: o run completo de cobertura, que falhava 2/2, passou limpo.
+
+**Nota de método**: o valor `300ms` não estava protegendo nada — era só "rápido".
+Um número escolhido por conveniência dentro de um teste que mata processos é um
+prazo disfarçado de constante.
+
+**Status**: corrigido — causa medida nos dois regimes, correção verificada no
+regime que falhava.

@@ -2840,9 +2840,66 @@ Os dois lados do contraste vivem no mesmo pacote, então não é questão de sor
 que o navegador subiu e desiste; o outro entra numa conversa que nunca termina.
 **Isso reforça a correção proposta acima em vez de a substituir.**
 
-**Status**: aberto — medido duas vezes (18m28s travado contra 2,08s isolado; e
-uma segunda ocorrência que falha em 6s por ter prazo), correção proposta,
-aguardando decisão.
+### Corrigido (2026-08-20), e a causa raiz não era o teste
+
+Autorizado pela orquestração. Ao enumerar — que era parte do pedido — a causa
+apareceu num lugar melhor que 106 sítios de teste: **`OpenTab` é um dos poucos
+pontos de entrada do navegador que NÃO passa pelo `Runner`**, então nenhuma
+política de prazo se aplicava a ele. `PrimeTab` é `chromedp.Run(tab)` sem
+limite algum.
+
+**O conserto óbvio estaria ERRADO, e o próprio código já avisava.** O comentário
+do tipo `Tab` diz que o chromedp amarra as goroutines do alvo ao contexto do
+PRIMEIRO `Run`, então envolver `tabCtx` num `WithTimeout` mataria a aba quando o
+prazo vencesse — trocando trava sem limite por aba que morre no relógio, o que é
+pior: quebra a invariante 15 e falha minutos depois, longe da chamada.
+
+Por isso o limite cerca a **espera**, não o contexto: o priming roda em `tabCtx`,
+ilimitado como precisa ser, e quem carrega o prazo é a espera do chamador. No
+estouro a aba é fechada — o que cancela `tabCtx` e desbloqueia a goroutine, então
+não vaza.
+
+**Enumeração, que era o pedido explícito:**
+
+| ponto de entrada | limitado? |
+|---|---|
+| `OpenTabWithin` | agora sim, internamente (`DefaultDeadlines.For(OpBoot)`) |
+| `PrimeTab` | 1 único chamador de produção — a goroutine limitada acima |
+| `Navigate`, `Screenshot` | recebem `Runner` |
+| `Evaluate` | **zero** chamadores de produção fora do `engine`; sempre dentro de `runner.Do` |
+
+Os outros 106 `context.Background()` dos testes são pais de `runner.Do`, que já
+aplica prazo por operação. Editá-los não acrescentaria limite nenhum — só ruído
+no diff, misturando mudança mecânica com mudança de comportamento.
+
+**Dois testes, um por direção**, porque as duas falhas são opostas:
+
+- `engine/TestOpenTabStopsWaitingWhenPrimingNeverAnswers` — o prazo é aplicado e
+  a falha é classificada como timeout DESTA operação.
+- `TestOpenTabPrimingBudgetDoesNotBoundTheTab` (SPA real) — a aba responde
+  **53.300 vezes ao longo de 6 s**, o dobro do orçamento de priming de 3 s.
+
+**Dois controles negativos, EXECUTADOS:**
+
+```
+1. remover o limite  -> got *fmt.wrapError (could not dial ...: context deadline
+                        exceeded), want *TimeoutError naming the priming
+2. limitar o CONTEXTO (o conserto ingênuo)
+                     -> the tab stopped answering after 0 call(s) ...: context canceled
+```
+
+O segundo é o mais valioso: prova que a correção "óbvia" mataria toda sessão, e
+mataria *antes da primeira chamada*.
+
+> **O controle 1 corrigiu uma afirmação que eu ia fazer.** Sem o limite, este
+> caminho NÃO trava para sempre — falha em 10 s, no timeout de dial do próprio
+> chromedp. Logo o bloqueio que o teste usa está no DIAL, enquanto a trava de
+> campo (18m28s, com a pilha em `RemoteAllocator.Allocate`) foi depois dele. O
+> teste está honesto sobre seu alcance no comentário; o limite cobre os dois por
+> construção, porque cerca a espera inteira e não uma etapa.
+
+**Status**: corrigido — causa raiz em `engine/tab.go`, dois testes em direções
+opostas e dois controles negativos executados.
 
 ## H37 — o registro de módulos É enumerável, mas por nenhuma das portas que o wwebjs usa
 
@@ -3218,9 +3275,54 @@ opostas.
 mudança no que a suíte classifica como falha. Pelo `CLAUDE.md`, isso se registra
 e se pergunta.
 
-**Status**: aberto — medido com três execuções (duas conclusões falsas e a
-terceira que as derrubou), correção e controle negativo escritos, aguardando
-decisão.
+### Corrigido (2026-08-20), pela via ESTRUTURAL
+
+Autorizado pela orquestração, que pediu explicitamente para preferir distinguir
+a causa de forma estrutural em vez de inferir por `parent.Err()` — mais robusto
+quando os dois prazos coincidem. Go 1.26 tem `context.WithTimeoutCause`, então:
+
+```go
+ctx, cancel := context.WithTimeoutCause(parent, deadline, errOperationDeadline)
+timedOut     := errors.Is(context.Cause(ctx), errOperationDeadline)
+callerGaveUp := !timedOut && ctx.Err() != nil
+```
+
+A causa privada nunca chega ao chamador; existe só para o `context.Cause`
+separar o relógio desta operação do relógio de quem chamou.
+
+**Observabilidade também**, como pedido: novo `observability.ResultCallerGaveUp`,
+distinto de `ResultTimeout`, com `OpLog.CallerGaveUp()` ao lado de `Timeouts()`.
+`Timeouts()` deliberadamente não conta o novo — um desligamento que cancela
+cinquenta operações em voo reportaria cinquenta timeouts e faria uma parada
+limpa parecer incidente.
+
+**Erro novo**: `CallerGaveUpError`, que nomeia o chamador e diz *"the target was
+not asked"*. Ele desembrulha para a causa do pai, então `errors.Is` continua
+funcionando para quem só quer saber se foi cancelamento ou expiração.
+
+**Os quatro testes exigidos**, em `engine/runner_test.go`:
+
+| caso | exige |
+|---|---|
+| prazo do pai MENOR que o da operação | não é `*TimeoutError`; `Timeouts()==0`; `CallerGaveUp()==1` |
+| cancelamento do pai | idem, e desembrulha para `context.Canceled` |
+| prazo genuíno da operação | É `*TimeoutError`; `Timeouts()==1`; `CallerGaveUp()==0` |
+| sucesso com pai próximo do fim | nenhum dos dois contadores sobe |
+
+**Controle negativo, EXECUTADO** — revertendo para `ctx.Err() == DeadlineExceeded`:
+
+```
+--- FAIL: TestDoBlamesTheCallerWhenTheParentDeadlineExpiresFirst
+    the caller's expiry was reported as the operation's own deadline:
+    Navigate(parent-expires): deadline of 300ms exceeded
+```
+
+**E o irmão de cancelamento CONTINUOU PASSANDO com o defeito de volta** — que é
+precisamente a armadilha desta entrada: a metade protegida dava a impressão de
+que as duas estavam.
+
+**Status**: corrigido — classificação estrutural por `context.Cause`,
+observabilidade separada, quatro testes e controle negativo executado.
 
 ## H43 — `onContact` escuta `change`, não `add`: o vocabulário do irmão não serve aqui
 

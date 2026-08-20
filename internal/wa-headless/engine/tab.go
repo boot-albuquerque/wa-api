@@ -10,6 +10,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -33,15 +34,63 @@ type Tab struct {
 // start anything. Closing the tab does NOT stop the browser — that is CleanStop's
 // job, and conflating the two is how a shutdown ends up bypassing the protocol.
 func OpenTab(parent context.Context, b *Browser) (*Tab, error) {
+	return OpenTabWithin(parent, b, DefaultDeadlines.For(OpBoot))
+}
+
+// OpenTabWithin is OpenTab with an explicit bound on the PRIMING.
+//
+// THE BOUND IS ON THE WAIT, NOT ON THE CONTEXT, and that distinction is the
+// whole design. The comment on Tab explains why PrimeTab must receive the tab's
+// own context: chromedp binds the target's goroutines to whatever context the
+// first Run is given, so a per-operation context would kill the target the
+// moment that operation finished. Wrapping tabCtx in a WithTimeout would
+// therefore trade an unbounded hang for a tab that dies on a timer, which is
+// worse — it would break invariant 15 (a session's lifetime ends only at Stop).
+//
+// So priming runs on tabCtx, unbounded as it must be, and the CALLER's wait for
+// it is what carries the deadline. On expiry the tab is closed, which cancels
+// tabCtx and unblocks the priming goroutine — it does not leak.
+//
+// WHY THIS EXISTS (HOUSEKEEP H36). OpenTab is one of the few browser entry
+// points that does not go through Runner, so no deadline policy applied to it.
+// On 2026-08-20, under host contention, a priming that never answered hung
+// TestBrowserChainVerifiesTheModuleInventory for 18m28s until the package's own
+// 20-minute timeout killed the suite. Two costs, and the second is worse than
+// the first: the failure read as "20 minutes" instead of "the tab never
+// primed", and the panic skipped every defer, so the browser was left running
+// — measured alive and idle 19 minutes later, on a host that was already short
+// of resources.
+func OpenTabWithin(parent context.Context, b *Browser, primeBudget time.Duration) (*Tab, error) {
 	alloc, cancelAlloc := chromedp.NewRemoteAllocator(parent, b.WebSocketURL())
 	tabCtx, cancelTab := chromedp.NewContext(alloc)
 
 	t := &Tab{ctx: tabCtx, cancelTab: cancelTab, cancelAlloc: cancelAlloc}
-	if err := PrimeTab(tabCtx); err != nil {
+
+	// Buffered, so the goroutine can always finish its send and exit even when
+	// nobody is left waiting for it.
+	done := make(chan error, 1)
+	go func() { done <- PrimeTab(tabCtx) }()
+
+	timer := time.NewTimer(primeBudget)
+	defer timer.Stop()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Close()
+			return nil, err
+		}
+		return t, nil
+	case <-timer.C:
+		// Close FIRST, then report. Closing is what unblocks the goroutine, and
+		// reporting before releasing would be the "returned an error and left
+		// the resource" shape this module has met before.
 		t.Close()
-		return nil, err
+		return nil, &TimeoutError{Op: OpBoot, Label: "open_tab/prime", Deadline: primeBudget}
+	case <-parent.Done():
+		t.Close()
+		return nil, parent.Err()
 	}
-	return t, nil
 }
 
 // Context is the tab's lifetime context.

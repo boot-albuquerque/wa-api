@@ -20,17 +20,32 @@ import (
 	"time"
 )
 
-// Result classifies the outcome of one operation. The three values are kept
-// distinct because collapsing them is exactly the misdiagnosis this package
-// exists to prevent: "the target answered with an error" and "the target did
-// not answer" are different claims about a session's health.
+// Result classifies the outcome of one operation. The values are kept distinct
+// because collapsing them is exactly the misdiagnosis this package exists to
+// prevent: "the target answered with an error" and "the target did not answer"
+// are different claims about a session's health.
 type Result string
 
 const (
-	ResultOK       Result = "ok"
-	ResultTimeout  Result = "deadline_exceeded"
-	ResultError    Result = "error"
-	envTraceToggle        = "WA_HEADLESS_OP_TRACE"
+	ResultOK      Result = "ok"
+	ResultTimeout Result = "deadline_exceeded"
+	ResultError   Result = "error"
+	// ResultCallerGaveUp is the CALLER's context ending before the operation's
+	// own budget did — a cancelled parent, or a parent whose deadline was
+	// shorter than the operation's.
+	//
+	// It exists because it used to be counted as ResultTimeout, and the two
+	// demand opposite actions: a timeout says the target is slow or dead and
+	// invites a retry or an escalation, while this says the caller stopped
+	// waiting and a retry would be work nobody asked for. Mixed together, the
+	// timeout count answers neither question.
+	//
+	// Measured cost of the collapse, 2026-08-20: it produced two false
+	// conclusions in one session — "the handler saturated the page" and "the
+	// session dies when idle" — because the error text blamed a 5s operation
+	// budget when what had expired was the caller's 60s one. See HOUSEKEEP H42.
+	ResultCallerGaveUp Result = "caller_gave_up"
+	envTraceToggle            = "WA_HEADLESS_OP_TRACE"
 	// maxErrTextLen bounds what an operation error contributes to the record.
 	// It bounds the blast RADIUS; the redaction below bounds the CONTENT, and
 	// both are kept because they fail differently: truncation still holds if a
@@ -117,12 +132,30 @@ func (l *OpLog) Records() []OpRecord {
 	return out
 }
 
-// Timeouts counts operations that blew their budget — the number that says
+// Timeouts counts operations that blew THEIR OWN budget — the number that says
 // whether a run was conducted or merely survived.
+//
+// It deliberately does not count ResultCallerGaveUp. A shutdown that cancels
+// fifty in-flight operations would otherwise report fifty timeouts and make a
+// clean stop look like an outage.
 func (l *OpLog) Timeouts() int {
 	n := 0
 	for _, r := range l.Records() {
 		if r.Result == ResultTimeout {
+			n++
+		}
+	}
+	return n
+}
+
+// CallerGaveUp counts operations that ended because the caller's context did.
+//
+// A run with a high count here is not an unhealthy target: it is a caller whose
+// budgets are too small for the work it asks for, which is a different repair.
+func (l *OpLog) CallerGaveUp() int {
+	n := 0
+	for _, r := range l.Records() {
+		if r.Result == ResultCallerGaveUp {
 			n++
 		}
 	}

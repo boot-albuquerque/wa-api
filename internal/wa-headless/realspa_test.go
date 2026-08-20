@@ -7044,3 +7044,56 @@ func eval2(t *testing.T, runner *engine.Runner, tab *engine.Tab, label, script s
 	}
 	return out
 }
+
+// TestOpenTabPrimingBudgetDoesNotBoundTheTab guards the direction OPPOSITE to
+// HOUSEKEEP H36's fix, and it is why that fix bounds a WAIT and not a context.
+//
+// chromedp binds the target's goroutines to whatever context the first Run
+// receives, so priming through a WithTimeout context would kill the tab when
+// that timeout fired. That would trade an unbounded hang for a tab that dies on
+// a timer — worse, because it breaks invariant 15 (a session's lifetime ends
+// only at Stop) and it would do so minutes later, far from this call.
+//
+// The budget here is deliberately SHORTER than the observation window that
+// follows, so a budget that leaked into the tab's lifetime shows up as the tab
+// going silent partway through.
+func TestOpenTabPrimingBudgetDoesNotBoundTheTab(t *testing.T) {
+	requireRealSPA(t)
+	runner := engine.NewRunner()
+	l := &engine.Launcher{BinaryPath: findChrome(t), Runner: runner}
+	b, err := l.Launch(context.Background(), engine.LaunchConfig{
+		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	defer engine.CleanStop(context.Background(), engine.NewRunner(), b)
+
+	const primeBudget = 3 * time.Second
+	tab, err := engine.OpenTabWithin(context.Background(), b, primeBudget)
+	if err != nil {
+		t.Fatalf("OpenTabWithin: %v", err)
+	}
+	defer tab.Close()
+
+	// Keep asking for longer than the priming budget. The tab answering
+	// throughout is the assertion; no sleep is used, because the point is that
+	// it keeps ANSWERING rather than that time passed.
+	deadline := time.Now().Add(2 * primeBudget)
+	calls := 0
+	for time.Now().Before(deadline) {
+		var out string
+		if err := runner.Do(context.Background(), engine.OpEvaluate, "tab/alive", func(ctx context.Context) error {
+			return tab.Evaluate(ctx, `JSON.stringify({ok:true})`, &out)
+		}); err != nil {
+			t.Fatalf("the tab stopped answering after %d call(s) and %s — the priming "+
+				"budget leaked into the tab's lifetime: %v", calls, time.Until(deadline), err)
+		}
+		calls++
+	}
+	if calls == 0 {
+		t.Fatal("the tab was never exercised, so this proved nothing")
+	}
+	t.Logf("tab answered %d times across %s, twice the %s priming budget",
+		calls, 2*primeBudget, primeBudget)
+}

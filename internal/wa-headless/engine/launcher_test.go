@@ -192,8 +192,23 @@ func TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "started")
 	l := &Launcher{
 		BinaryPath: fakeChromium(t, marker),
-		Runner:     shortBootRunner(300 * time.Millisecond),
-		Hostname:   testHost,
+		// TWO SECONDS, NOT 300ms, AND THE REASON IS A RACE THIS TEST HAD WITH
+		// ITSELF. Launch kills the browser when the endpoint does not answer —
+		// that is the behaviour under test — but the fake writes its marker
+		// from a shell that has to be scheduled first. With a 300ms budget, a
+		// loaded host kills the shell before it touches the file, and the test
+		// fails on its own PRECONDITION ("the browser never started"), not on
+		// the behaviour.
+		//
+		// Measured 2026-08-20: 0 of 6 failures running alone, 2 of 2 under the
+		// whole-repo coverage run, where instrumenting every package makes
+		// process start-up slow enough to lose the race every time.
+		//
+		// Nothing is weakened by the larger budget: the endpoint still never
+		// answers, Launch still fails, and the cleanup is still what is
+		// asserted. The sibling test below already uses 5s for the same reason.
+		Runner:   shortBootRunner(2 * time.Second),
+		Hostname: testHost,
 	}
 
 	// A port nothing serves: the endpoint never answers.

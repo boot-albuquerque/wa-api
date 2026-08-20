@@ -11,6 +11,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,6 +44,33 @@ func (e *TimeoutError) Error() string {
 
 func (e *TimeoutError) Unwrap() error { return context.DeadlineExceeded }
 
+// errOperationDeadline is the private cause attached to an operation's OWN
+// timeout. It is never returned to a caller; it exists so that
+// context.Cause can tell this operation's clock from the caller's.
+var errOperationDeadline = errors.New("engine: the operation's own deadline")
+
+// CallerGaveUpError is "the caller stopped waiting" — which is not a claim
+// about the target at all.
+//
+// It exists for the same reason TimeoutError does: so a caller can branch on
+// the cause instead of reading a string. Retrying this is work nobody asked
+// for, while retrying a TimeoutError may be exactly right.
+//
+// It unwraps to the parent's cause, so errors.Is keeps working for code that
+// only cares whether it was a cancellation or an expiry.
+type CallerGaveUpError struct {
+	Op    OpKind
+	Label string
+	Cause error
+}
+
+func (e *CallerGaveUpError) Error() string {
+	return fmt.Sprintf("%s(%s): the CALLER's context ended first (%v); the target was not asked",
+		e.Op, e.Label, e.Cause)
+}
+
+func (e *CallerGaveUpError) Unwrap() error { return e.Cause }
+
 // Runner applies a DeadlinePolicy to every operation it executes, and records
 // each one.
 //
@@ -73,7 +101,17 @@ func NewRunner() *Runner {
 // error otherwise.
 func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(context.Context) error) error {
 	deadline := r.Policy.For(k)
-	ctx, cancel := context.WithTimeout(parent, deadline)
+	// WithTimeoutCause, not WithTimeout, and the cause is what makes the
+	// classification below structural instead of inferred.
+	//
+	// ctx derives from parent, so ctx.Err() reports DeadlineExceeded whether
+	// THIS operation ran out of time or the CALLER already had. Those are
+	// opposite diagnoses, and the code used to report both as the operation's
+	// own 5s budget being blown — blaming the target for a page it never
+	// consulted. Attaching a private cause makes the two distinguishable even
+	// when the deadlines coincide, which no comparison of parent.Err() can
+	// promise. See HOUSEKEEP H42.
+	ctx, cancel := context.WithTimeoutCause(parent, deadline, errOperationDeadline)
 	defer cancel()
 
 	start := time.Now()
@@ -83,7 +121,12 @@ func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(conte
 	// The context is consulted, not the error: a driver is free to report a
 	// blown deadline as any error it likes, or as none at all, and trusting its
 	// wording would put the classification in someone else's hands.
-	timedOut := ctx.Err() == context.DeadlineExceeded
+	//
+	// The CAUSE separates whose clock ran out. Only our own cause is this
+	// operation timing out; anything else that ended the context came from the
+	// caller.
+	timedOut := errors.Is(context.Cause(ctx), errOperationDeadline)
+	callerGaveUp := !timedOut && ctx.Err() != nil
 
 	rec := observability.OpRecord{
 		Op:         string(k),
@@ -95,6 +138,8 @@ func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(conte
 	switch {
 	case timedOut:
 		rec.Result = observability.ResultTimeout
+	case callerGaveUp:
+		rec.Result = observability.ResultCallerGaveUp
 	case err != nil:
 		rec.Result = observability.ResultError
 	}
@@ -108,6 +153,12 @@ func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(conte
 
 	if timedOut {
 		return &TimeoutError{Op: k, Label: label, Deadline: deadline}
+	}
+	if callerGaveUp {
+		// Name the caller, not the target. The message is the whole point of
+		// this branch: the previous wording sent two investigations after a
+		// page that had never been asked anything.
+		return &CallerGaveUpError{Op: k, Label: label, Cause: context.Cause(parent)}
 	}
 	return err
 }
