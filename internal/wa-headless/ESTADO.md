@@ -8,18 +8,21 @@ Números vieram do repositório, não de memória. **Atualizados em 2026-08-20**
 porque um documento de estado que envelhece em silêncio vira citação errada — que
 é o defeito registrado no H29:
 
-| | escrito em 19/08 | agora |
-|---|---:|---:|
-| testes | 254 | **261** |
-| pacotes | 12 | **12** |
-| commits (nada empurrado) | 45 | **56** |
-| achados fechados | 20 | **22** |
-| achados abertos | 9 | **10** |
+| | escrito 19/08 | 20/08 (manhã) | **agora** |
+|---|---:|---:|---:|
+| testes | 254 | 261 | **263** |
+| pacotes | 12 | 12 | **12** |
+| commits (nada empurrado) | 45 | 56 | **61** |
+| achados fechados | 20 | 22 | **23** |
+| achados abertos | 9 | 10 | **10** |
 
 A contagem de abertos aplica a leitura humana que o próprio instrumento pede:
 o scanner marca **H5** e **H14** como abertos porque têm vários status, e ambos
-estão fechados. O aberto novo é o **H32**, e ele é `abandonado` — um achado
-deixado de lado com o motivo escrito, que conta como aberto de propósito.
+estão fechados. Os abertos novos desde 19/08 são o **H32** (`abandonado`) e o
+**H33** (`medido`) — os dois estados que o vocabulário do gate ganhou hoje, e
+ambos contam como abertos de propósito: *abandonado* é achado deixado de lado com
+o motivo escrito, *medido* é medição feita cuja consequência pode não ter sido
+aplicada.
 
 ---
 
@@ -129,6 +132,37 @@ medição, e precisaria de uma conta que ninguém tem.
 degrada** — não perde identidade, não perde a assinatura, não acumula memória
 nem processo, e para limpo no fim.
 
+## 3.3 Sessões CONCORRENTES, e a primeira afirmação herdada a ser falsificada
+
+Até 2026-08-20 este repositório **nunca tinha rodado dois browsers ao mesmo
+tempo**. A afirmação de `runtime/doc.go` e da ADR-0006 — *474–790 MB por sessão,
+escalando linearmente até três* — vinha do spike e nunca fora exercitada. E ela
+é carga: é o que põe um host de 16 GB *"na faixa de dezenas de sessões"*.
+
+| sessões | total | por sessão | processos | pior latência |
+|---:|---:|---:|---:|---:|
+| 1 | 1023 MB | 1023 MB | 9 | 0 ms |
+| 2 | 2004 MB | 1002 MB | 18 | 0 ms |
+| 3 | 2600 MB | **866 MB** | 31 | 1 ms |
+
+**A FORMA se confirma, e melhor que o prometido**: o custo por sessão CAI para
+0,85× com três concorrentes, e nenhuma sessão já rodando parou de responder
+quando outra subiu. Medi TODAS as sessões vivas a cada onda, não só a nova —
+porque a afirmação é sobre o que acontece com as que já estão lá.
+
+**O NÚMERO se falsifica**: 1023 MB contra o teto de 790 MB, **30% acima**, na
+mesma condição pré-login e com os **mesmos 9 processos**. Mais memória na mesma
+topologia, o que descarta a explicação fácil.
+
+**A consequência foi APLICADA, não só registrada**: o `runtime/doc.go` passou a
+carregar a re-medição e a aritmética que ela muda — **~15 sessões em 16 GB** no
+lugar de ~20.
+
+**O que segue sem medição, e é o que decide capacidade de verdade**: sessões
+**PAREADAS** concorrentes. Não foi feito de propósito — os dois perfis pareados
+desta máquina são da MESMA conta, e dois dispositivos ativos podem fazer o
+WhatsApp invalidar um. Precisa de duas contas, e isso é decisão do humano.
+
 ## 4. Aberto, e por quê
 
 | # | por que segue aberto |
@@ -144,6 +178,7 @@ nem processo, e para limpo no fim.
 | H25 | teto de 500 no buffer **sem medição** — precisa de conta de volume real |
 
 | H32 | auditoria de constantes **ABANDONADA** — varredura de texto não lê estrutura de código, e a alternativa (AST) custa mais que o achado justifica |
+| H33 | **MEDIDO**: linearidade confirmada, teto de 790 MB falsificado. Segue aberto porque sessões PAREADAS concorrentes precisam de uma segunda conta |
 
 **Nenhum deles é guarda sem teste.** Essa categoria zerou com o H27.
 
@@ -158,6 +193,13 @@ nem processo, e para limpo no fim.
 - **H32** — a auditoria de constantes foi abandonada, e o commit dela saiu com o
   portão **vermelho** porque eu rodei o gate dentro de um *pipe* e o `&&` viu o
   status do `tail`. **Gate dentro de pipe não é gate.**
+- **H18** — `BootFailure` ganhou o PID, para **correlação e nunca ação** — a
+  fronteira que o separa do H23. Dois controles negativos **não morderam**: a
+  ordem de leitura do pid (afirmação minha, falsa) e a guarda da fronteira, que
+  **removi** em vez de manter, porque teste que não morde é garantia falsa.
+- **H30/H31** — ver acima. Junto com o H18, os três vieram de **auditar o próprio
+  trabalho**, não de escrever código novo.
+- **H33** — a primeira afirmação HERDADA que este módulo falsificou com número.
 
 ## 5. Depende do humano
 
