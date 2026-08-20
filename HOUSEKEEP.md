@@ -14307,10 +14307,35 @@ num movimento arriscaria piorar o caminho bom para consertar o mau, que é o
 oposto do que se quer. Fica como trabalho próprio, agora com a divergência
 reduzida a algo que se pode enumerar.
 
-**As linhas JÁ GRAVADAS com `:contact:` e `:location:` continuam assim.** São 41
-linhas de `location` com placeholder, medidas. O nome está no `datajson` de cada
-uma e um backfill é possível — mas é reescrita de dado histórico, e não a faço
-sem decisão explícita.
+**As linhas JÁ GRAVADAS com `:contact:` e `:location:` continuam assim** — e o
+backfill que eu propunha para elas **NÃO TEM VALOR**, ao contrário do que esta
+entrada afirmava.
+
+**CORREÇÃO (2026-08-20, ao medir antes de pedir autorização).** Eu tinha escrito
+que eram "41 linhas de `location`, e o nome está no `datajson` de cada uma".
+**Falso nas duas metades.**
+
+Medido:
+
+| | |
+|---|---|
+| linhas com marcador | 43 (42 `location` + 1 `contact`) |
+| com `locationMessage`/`contactMessage` no `datajson` | **43** |
+| **com NOME recuperável** | **2** |
+
+As 41 restantes **têm** a sub-mensagem — o que falta é o **nome**. São
+localizações enviadas só com coordenadas, que é uso normal do WhatsApp. Para elas
+`:location:` é o valor **CORRETO**, não um defeito.
+
+E as duas recuperáveis são `3EB0ADFE7F75DB0EF73F11` e `3EB030E9AD8CBFA23A2C2A` —
+as mensagens de teste que eu própria enviei na varredura (a), às 15:45 de hoje.
+**Zero linhas de dado real do utilizador.**
+
+**Conclusão**: o backfill reescreveria dado histórico para recuperar dois
+registos sintéticos meus. O risco é real e o ganho é nulo. **Não deve ser feito**
+— e a razão de eu ter proposto o contrário foi ter olhado para as duas linhas que
+eu tinha acabado de criar e generalizado para as 43, que é o mesmo erro de
+amostra que cometi três vezes na [[F183]] e uma na [[F188]].
 
 **Nota original preservada** — afetou a etapa (b) já decidida na altura: o ramo novo da enquete tem de escrever em `caption`, e
 não em `textContent`, senão o mesmo bloco come a pergunta da enquete exatamente
