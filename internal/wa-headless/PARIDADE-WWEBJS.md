@@ -417,6 +417,22 @@ objeto carregando `.id`. Passar o wid lança em `isNewsletter`. A forma veio de
 LER a fonte do `profilePicResync` no próprio build — não de documentação, não da
 referência.
 
+### 6.11 — `onContact` escuta `change`; o evento do `wwebjs` para contatos não é o mesmo que para mensagens
+
+**O que o `wwebjs` faz**: liga em `add` nas coleções, e é de onde o nosso
+`onMessageMeta` tirou a palavra — verificada desde então para MENSAGENS.
+
+**O que fazemos**: para CONTATOS ligamos em `change`, e mantemos `add` ligado por
+precaução com o nome do evento viajando em cada evento.
+
+**Por que divergimos**: medido em 90 s no roster ao vivo, `add` disparou **zero**
+vezes e `change` **sete**. Dos 35 nomes vistos pelo catch-all, todos eram
+`change` ou `change:<campo>`. Um roster muda por linha ATUALIZADA, não inserida.
+
+O risco desta divergência é o que a torna importante: ligar em `add` aqui
+instalaria sem erro e entregaria nada — falha sem sintoma, indistinguível de uma
+agenda parada.
+
 ## 7. Passagem de auditoria — as seis, conferidas contra o que a matriz prometia
 
 Feita em 2026-08-19, depois de a sexta capacidade entrar. O alvo parou de mudar,

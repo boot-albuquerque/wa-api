@@ -64,6 +64,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `sendText` | `capabilities/send` | **laço fechado real**: conta A envia, conta B recebe o MESMO id em 1 s |
 | `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 544 pessoas**, 398 fundidas |
 | `fetchContactAvatar` | `capabilities/avatar` | 12 contatos ao vivo: 4 com foto, 8 sem, **0 falhas** |
+| `onContact` | `capabilities/contacts` (`subscribe.go`) | 6 buscas de avatar → **7 eventos `change`**, 0 `add` |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -94,6 +95,10 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 10. **`fetchContactAvatar` pergunta ao SERVIDOR, não ao cache** — o
     `ProfilePicThumbCollection` tinha 68 modelos para 544 pessoas, e só 33 com
     URL. Servir dali responderia "sem avatar" para quase toda a agenda.
+11. **`onContact` escuta `change`, não `add`** — o `messagemeta` liga em `add` e
+    funciona para mensagens; para contatos, `add` disparou ZERO vezes em 90 s e
+    `change` disparou 7. Um roster muda por linha atualizada. Copiar a palavra
+    do irmão instalaria limpo e não entregaria nada. Ver H43.
 
 ## 3. Invariantes travadas em teste
 
@@ -263,6 +268,19 @@ Corolário prático, também da H41: um teste ao vivo deve CONTAR os desfechos, 
 abortar no primeiro. `t.Fatalf` no primeiro contato teria escondido se o
 problema era aquele contato ou o caminho todo — e os dois exigem conserto
 diferente. Foi `present=3 absent=8 failed=1` que deu o diagnóstico.
+
+**Segundo corolário, da H43**: quando a prova depende de um evento acontecer,
+PROVOQUE o evento. Esperar o roster mudar sozinho funcionaria — ele muda 7 vezes
+em 90 s — mas um teste que depende de a conta alheia estar movimentada falha numa
+tarde quieta. Como 24 dos 46 eventos vinham de `profilePicThumb`, e o
+`fetchContactAvatar` escreve esses campos, a capacidade de avatar virou o
+estímulo. É a mesma ideia do parágrafo acima vista do outro lado: encadear
+capacidades não só encontra defeitos, também torna as provas determinísticas.
+
+**Terceiro, e é sobre AMBIGUIDADE (H43)**: "nada disparou" não distingue "este
+build não tem esse evento" de "ficou quieto". A sonda passou a disparar um evento
+privado em si mesma e conferir que o próprio handler o viu. Sem esse auto-teste,
+todos os zeros medidos seriam ilegíveis.
 
 ## 6. O que esta semana ensinou, em uma frase cada
 

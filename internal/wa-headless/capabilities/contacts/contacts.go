@@ -134,6 +134,36 @@ type wire struct {
 	Rows []row `json:"rows"`
 }
 
+// RowExpr maps one contact model to the row shape, and it is EXPORTED so the
+// change subscription uses the same one.
+//
+// Two extractors would drift: someone widens the listing to carry a new field
+// and the subscription keeps sending the old shape, or — worse — one of them
+// stops applying the page's isPSA predicate and the sentinel comes back through
+// whichever door was not fixed. Same reasoning as messagemeta.MetaExpr, and for
+// the same reason: one list, one place to be wrong.
+const RowExpr = `(function (c) {
+	const G = window.require('` + string(spa.ModuleContactGetters) + `');
+	const str = function (v) { return (typeof v === 'string') ? v : ''; };
+	let id;
+	try { id = c.id; } catch (e) { return null; }
+	if (!id || !id.user || !id.server) { return null; }
+	let phoneUser = '';
+	try { if (c.phoneNumber && c.phoneNumber.user) { phoneUser = c.phoneNumber.user; } } catch (e) {}
+	let pushname = '', verified = '', biz = false;
+	try { pushname = str(G.getPushname && G.getPushname(c)); } catch (e) {}
+	try { verified = str(G.getVerifiedName && G.getVerifiedName(c)); } catch (e) {}
+	try { biz = !!(G.getIsBusiness && G.getIsBusiness(c)); } catch (e) {}
+	// The page's own predicates decide what is a person. A rule written here
+	// from jid shapes would be a guess; isPSA is not.
+	const pred = function (name) {
+		try { return typeof id[name] === 'function' ? !!id[name]() : false; } catch (e) { return false; }
+	};
+	return { user: id.user, server: id.server, phone_user: phoneUser,
+		pushname: pushname, verified_name: verified, is_business: biz,
+		is_psa: pred('isPSA'), is_user: pred('isUser') };
+})`
+
 // script reads the collection and returns RAW rows. It deliberately does not
 // merge: merging in the page would put the one piece of real logic here
 // somewhere only a live account can exercise.
@@ -142,29 +172,12 @@ func script() string {
 		const mod = window.require('` + string(spa.ModuleContactCollection) + `');
 		const coll = mod && mod.ContactCollection;
 		if (!coll || typeof coll.getModelsArray !== 'function') { return { ok: false }; }
-		const G = window.require('` + string(spa.ModuleContactGetters) + `');
-		const str = (v) => (typeof v === 'string' ? v : '');
+		const row = ` + RowExpr + `;
 		const all = coll.getModelsArray();
 		const rows = [];
 		for (let i = 0; i < all.length; i++) {
-			const c = all[i];
-			let id;
-			try { id = c.id; } catch (e) { continue; }
-			if (!id || !id.user || !id.server) { continue; }
-			let phoneUser = '';
-			try { if (c.phoneNumber && c.phoneNumber.user) { phoneUser = c.phoneNumber.user; } } catch (e) {}
-			let pushname = '', verified = '', biz = false;
-			try { pushname = str(G.getPushname && G.getPushname(c)); } catch (e) {}
-			try { verified = str(G.getVerifiedName && G.getVerifiedName(c)); } catch (e) {}
-			try { biz = !!(G.getIsBusiness && G.getIsBusiness(c)); } catch (e) {}
-			// The page's own predicates decide what is a person. A rule written
-			// here from jid shapes would be a guess; isPSA is not.
-			const pred = (name) => {
-				try { return typeof id[name] === 'function' ? !!id[name]() : false; } catch (e) { return false; }
-			};
-			rows.push({ user: id.user, server: id.server, phone_user: phoneUser,
-				pushname: pushname, verified_name: verified, is_business: biz,
-				is_psa: pred('isPSA'), is_user: pred('isUser') });
+			const r = row(all[i]);
+			if (r) { rows.push(r); }
 		}
 		return { ok: true, rows: rows };
 	})())`
@@ -293,6 +306,27 @@ func merge(rows []row) Roster {
 		return sortKey(out.Contacts[i]) < sortKey(out.Contacts[j])
 	})
 	return out
+}
+
+// contactOf builds the single-row view of a person, WITHOUT merging. A change
+// event carries one row, so there is no second row to fold in — and pretending
+// otherwise would report a lid-only view of someone whose phone is known.
+func contactOf(r row) Contact {
+	c := Contact{
+		Pushname:     strings.TrimSpace(r.Pushname),
+		VerifiedName: strings.TrimSpace(r.VerifiedName),
+		IsBusiness:   r.IsBusiness,
+	}
+	switch r.Server {
+	case serverLID:
+		c.LID = r.User + "@" + serverLID
+		if r.PhoneUser != "" {
+			c.PN = r.PhoneUser + "@" + serverPhone
+		}
+	case serverPhone:
+		c.PN = r.User + "@" + serverPhone
+	}
+	return c
 }
 
 func sortKey(c Contact) string {

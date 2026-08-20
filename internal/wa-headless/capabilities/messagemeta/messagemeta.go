@@ -223,14 +223,19 @@ func (s *Subscription) installScript() string {
 // eventAdd is the collection event this subscribes to.
 //
 // TAKEN FROM whatsapp-web.js's understanding (it listens for 'add' on the
-// message collection) and NOT YET VERIFIED against this build: verifying it
-// requires a message to actually arrive, which no test can cause without
-// sending one. TestRealSPAMessageMetaDelivery is the instrument that confirms
-// it, and it needs a human to send a message to the lab account.
+// message collection) and now VERIFIED against this build.
 //
-// Until that runs, a Subscription that installs cleanly and never delivers is
-// indistinguishable from an account nobody is messaging — stated here so nobody
-// reads silence as proof.
+// This comment used to say the opposite — that confirming it required a human
+// to send a message to the lab account, and that until then silence must not be
+// read as proof. That was true when written and stopped being true on
+// 2026-08-20, when a second account was paired: TestRealSPASendAndReceiveBetween
+// Accounts sends from one and observes the arrival on the other, with NO human
+// involved. The receiving half came through this subscription, carrying the
+// SAME message id the sender returned, one second after the send.
+//
+// The correction is recorded rather than quietly applied, because a stale
+// "unverified" is its own hazard: it invites someone to re-do work that is
+// done, or to distrust a path that has evidence.
 const eventAdd = "add"
 
 var drainScript = `JSON.stringify((() => {

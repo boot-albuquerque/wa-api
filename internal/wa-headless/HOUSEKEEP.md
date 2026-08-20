@@ -3135,3 +3135,185 @@ capacidades em prova de integração vale mais que uma bateria a mais na mesma.
 
 **Status**: corrigido — filtro por predicado da página, com dois controles
 negativos e o efeito medido no roster ao vivo.
+
+## H42 — prazo do PAI estourado é reportado como prazo da OPERAÇÃO, e isso produziu duas conclusões falsas
+
+**Data**: 2026-08-20 · **Contexto**: medição da superfície de eventos de contato
+(CAP-10, `onContact`).
+
+**Onde**: `internal/wa-headless/engine/runner.go:74-113`.
+
+```go
+ctx, cancel := context.WithTimeout(parent, deadline)
+...
+timedOut := ctx.Err() == context.DeadlineExceeded
+...
+if timedOut { return &TimeoutError{Op: k, Label: label, Deadline: deadline} }
+```
+
+**O problema**: `ctx` DERIVA de `parent`. Se o prazo do pai já expirou, o
+derivado também reporta `DeadlineExceeded`, e o erro sai dizendo
+
+```
+StateProbe(probe/contactev): deadline of 5s exceeded
+```
+
+quando o que acabou foram os **60 s do chamador**. A mensagem acusa a página de
+não responder em 5 s; a página nunca foi consultada.
+
+**A guarda existente NÃO cobre este caso.**
+`TestDoDoesNotReportParentCancellationAsTimeout`
+(`engine/runner_test.go:126`) protege o cancelamento do pai — e funciona,
+porque `context.Canceled` é distinguível. Expiração do pai é
+`DeadlineExceeded`, exatamente o valor que a classificação usa. A metade
+protegida deu a impressão de que as duas estavam.
+
+**O custo, medido nesta sessão: DUAS conclusões falsas seguidas.**
+
+1. Uma sonda ligou um handler `'all'` na `ContactCollection` e não conseguiu ler
+   os próprios resultados: seis tentativas, todas com "deadline of 5s exceeded".
+   Conclusão a que cheguei: *o handler saturou a página*. Cheguei a reduzir de
+   60 para 8 handlers e escrever o comentário explicando o custo.
+2. O controle — mesma espera de 90 s **sem nada ligado** — falhou idêntico.
+   Nova conclusão: *a sessão para de responder quando fica ociosa*. Também
+   falsa.
+
+A verdade só apareceu com a terceira medição
+(`TestProbeIdleResponsiveness`, com contexto de 12 minutos): a página responde
+após 90 s de ociosidade em **2 ms**, e responde em todos os intervalos testados
+(0 s, 10 s, 20 s, 30 s, 60 s, 90 s). O que expirava era o `nCycleReadyDeadline`
+de 60 s que eu havia passado como pai enquanto dormia 90 s dentro dele.
+
+> **Erro meu no harness, e é o mesmo dos dois lados.** Passei um contexto de
+> BOOT para uma medição LONGA. Mas um erro de chamador que produz uma mensagem
+> apontando para o alvo é precisamente o que esta entrada registra: com a
+> atribuição correta, a primeira execução teria dito "seu orçamento acabou" e
+> não teria custado duas hipóteses.
+
+**Correção sugerida**: consultar o pai antes de culpar a operação.
+
+```go
+if timedOut {
+    if parent.Err() != nil {
+        return fmt.Errorf("%s(%s): the CALLER's context ended first: %w", k, label, parent.Err())
+    }
+    return &TimeoutError{Op: k, Label: label, Deadline: deadline}
+}
+```
+
+**O teste que trava, e o controle negativo que ele exige**: um `Do` cujo pai
+tem prazo menor que o da operação, com a asserção de que o erro NÃO é
+`*TimeoutError` e nomeia o chamador. O controle é reverter para
+`ctx.Err() == context.DeadlineExceeded` e confirmar que volta a sair
+`TimeoutError` — porque o teste irmão de cancelamento passa hoje e ainda assim
+esta metade está descoberta, que é a própria razão de o controle ser
+obrigatório.
+
+**Vale para o registro de observabilidade também**: `rec.Result` recebe
+`ResultTimeout` no mesmo ramo, então toda métrica de timeout deste módulo mistura
+"o alvo demorou" com "o chamador desistiu". As duas contagens querem ações
+opostas.
+
+**Por que não corrigi agora**: está fora do escopo da capacidade em curso, e é
+mudança no que a suíte classifica como falha. Pelo `CLAUDE.md`, isso se registra
+e se pergunta.
+
+**Status**: aberto — medido com três execuções (duas conclusões falsas e a
+terceira que as derrubou), correção e controle negativo escritos, aguardando
+decisão.
+
+## H43 — `onContact` escuta `change`, não `add`: o vocabulário do irmão não serve aqui
+
+**Data**: 2026-08-20 · **Contexto**: CAP-10 (`onContact`).
+
+**A armadilha**: o `capabilities/messagemeta` liga em `add` na coleção de
+mensagens e funciona. Copiar essa palavra para contatos instalaria limpo e não
+entregaria nada — **a falha sem sintoma**: nenhum erro, nenhum log, só silêncio
+indistinguível de "ninguém mudou nada".
+
+**Medido em 90 s sobre o roster ao vivo**, com handlers nomeados para
+`add/change/remove/reset/update/sort/sync/destroy`:
+
+| evento | disparos |
+|---|---|
+| `change` | **7** |
+| `add` | 0 |
+| `remove`, `reset`, `update`, `sort`, `sync`, `destroy` | 0 |
+
+Pelo catch-all: **35 nomes distintos**, TODOS `change` ou `change:<campo>`,
+agrupados em `profilePicThumb` 24, `businessProfile` 22, `change` 7.
+
+A razão é estrutural e vale para qualquer coleção deste tipo: um roster muda por
+linha ATUALIZADA, não por linha inserida.
+
+### O auto-teste que tornou a medição confiável
+
+"Nada disparou" é **ambíguo** entre *"este build não tem esse evento"* e *"o
+roster ficou quieto"*, e a primeira versão da sonda embarcou essa ambiguidade —
+reportou `allSupported: false` com todos os contadores em zero, o que não
+distinguia nada.
+
+A sonda passou a disparar um evento privado em si mesma
+(`CC.trigger('waHeadlessSelfTest')`) e a verificar que o handler o viu. Viu:
+`selfTestSeen: true`. Logo o vocabulário funciona e **os zeros acima são zeros
+de verdade**.
+
+**`add` continua ligado assim mesmo.** Noventa segundos quietos não provam que
+um contato novo não chegaria por ali, ligar um segundo nome não custa nada, e o
+nome do evento viaja com cada evento — então os contadores dirão a verdade
+depois, em vez de um comentário ter de adivinhar hoje.
+
+### A prova ao vivo PROVOCA a mudança em vez de esperar
+
+Esperar funcionaria (7 eventos em 90 s ociosos), mas um teste que depende de a
+conta alheia estar movimentada falha numa tarde quieta e passa numa barulhenta.
+
+Como 24 dos 46 eventos de campo vinham de `profilePicThumb`, e o
+`fetchContactAvatar` escreve exatamente esses campos, **a capacidade de avatar
+virou o estímulo**. Resultado: 6 buscas de avatar → **7 eventos `change`, 0
+`add`**.
+
+É a segunda prova de integração de um par nesta sessão — a saída de uma
+capacidade sendo a entrada de outra, que foi o que pegou a H41.
+
+**Reúso, não segunda lista**: `RowExpr` foi extraída e é a MESMA usada pela
+listagem e pela assinatura. Duas extratoras divergiriam — e a pior divergência
+seria uma delas parar de aplicar o `isPSA`, trazendo de volta pela outra porta
+exatamente o que a H41 tirou. Mesmo motivo do `messagemeta.MetaExpr`.
+
+**Quatro controles negativos, EXECUTADOS:**
+
+```
+1. ligar só em 'add' (copiar o irmão) -> the subscription does not bind "change"
+2. deixar a sentinela PSA passar      -> the PSA sentinel survived the subscription
+3. engolir o flag Reinstalled         -> the subscription was lost and put back, and the drain did not say so
+4. marcar evento de linha única como fundido -> a single-row event must not claim to be merged
+```
+
+**Status**: entregue — vocabulário medido com auto-teste, prova ao vivo com
+estímulo determinístico, quatro controles negativos.
+
+## H44 — comentário que dizia "NÃO VERIFICADO" sobre algo já verificado
+
+**Data**: 2026-08-20 · **Contexto**: leitura do `messagemeta` antes de escrever
+o `onContact`.
+
+**Onde**: `internal/wa-headless/capabilities/messagemeta/messagemeta.go`, no
+comentário de `eventAdd`.
+
+O comentário dizia que o evento `add` fora tirado do whatsapp-web.js e **NÃO
+verificado** neste build, que verificar "exige um humano enviar mensagem para a
+conta de laboratório", e que até lá silêncio não deveria ser lido como prova.
+
+Era verdade quando escrito. Deixou de ser em 2026-08-20, quando a segunda conta
+foi pareada: o `TestRealSPASendAndReceiveBetweenAccounts` envia de uma e observa
+a chegada na outra **sem humano nenhum**, e a metade receptora passa por essa
+assinatura, carregando o MESMO id que o emissor devolveu, um segundo depois.
+
+**Por que isto é um achado e não só um typo**: um "não verificado" velho tem
+custo próprio. Convida alguém a refazer trabalho que está feito, ou a
+desconfiar de um caminho que tem evidência — e neste repositório o comentário é
+onde a evidência mora.
+
+**Status**: corrigido — comentário atualizado nomeando o teste que verifica, com
+o registro de que a afirmação anterior era correta na data em que foi escrita.
