@@ -303,8 +303,33 @@ sucesso, e em lugar nenhum isso é mais verdadeiro: um perfil corrompido copia
 perfeitamente. `TestRealSPABackupRestoresToAWorkingSession` **boota a cópia** e
 exige READY **com identidade presente** — a mesma régua do observável da CAP-05.
 
-Medição real: **1124 arquivos, 301 MB, copiados em 1,0 s**; perfil restaurado
-alcançou READY em **10,4 s** com `identity=PRESENT`.
+**Medição corrigida em 2026-08-20**, porque a primeira era uma amostra só e eu
+a apresentei como se fosse o custo de um backup. Não era: era o custo de um
+backup de conta VELHA, medido com o cache frio.
+
+Dois perfis, mesma máquina, mesmo instante, três rodadas cada:
+
+| perfil | arquivos | tamanho | rodada 1 (fria) | rodada 2 | rodada 3 |
+|---|---:|---:|---:|---:|---:|
+| recém-pareado | 758 | 80,4 MB | 411 ms | 111 ms | 96 ms |
+| pareado há meses | 1188 | 314,1 MB | 1,03 s | 369 ms | 208 ms |
+
+**Duas variáveis, e eu só tinha visto uma.**
+
+1. **O tamanho escala com a IDADE DA CONTA, não com o número de sessões** —
+   3,9× entre um perfil recém-pareado e um com meses de histórico. Um perfil
+   novo não carrega conversa nenhuma.
+2. **A vazão é dominada pelo estado do cache de página**: 195 → 841 MB/s no
+   mesmo perfil, entre a primeira e a terceira rodada. A diferença entre frio e
+   quente é de 3 a 5×, **maior que a diferença entre os dois perfis**.
+
+**A leitura errada que isto corrige**: *"o backup custa ~1 s"* virou número
+citável a partir de UMA amostra fria de UM perfil velho. O certo é: o custo
+depende do tamanho do perfil e do estado do cache, e uma amostra única não
+distingue os dois. Repetir foi o que separou.
+
+O restauro segue provado: perfil restaurado alcança READY com `identity=PRESENT`
+nos dois perfis.
 
 **O perigo que o chamador tem de decidir**: a cópia carrega as MESMAS
 credenciais. Dois browsers vivos nos dois diretórios são dois dispositivos numa

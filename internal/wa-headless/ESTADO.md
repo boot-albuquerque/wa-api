@@ -33,7 +33,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `refreshOwner` | `capabilities/owner` | PN e LID presentes, `display_name` NULL |
 | `onMessageMeta` | `capabilities/messagemeta` | entrega ao vivo em 54 s, 58 reposições ignoradas |
 | `fetchMessages` | `capabilities/fetchmessages` | 340 carregados, filtro por chat casa |
-| `backupNow` | `capabilities/backup` | 1163 arquivos restaurados, READY 9,9 s, identidade presente |
+| `backupNow` | `capabilities/backup` | restaura com identidade presente; custo medido nos dois perfis (§6.6) |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
