@@ -58,7 +58,7 @@ var sendResultWireKeys = []string{
 // (`git show 41bc8e2^:handlers.go`), e portanto a troca mais provavel de quem
 // no futuro "restaurar fidelidade" ao historico — foi assim que a F123 nasceu
 // em /chat/history. `jid`, `from`, `body`, `direction` e `media_url` sao o
-// vocabulario do tipo orfao domain.HistoryMessage, que tambem nunca existiu
+// vocabulario do tipo domain.HistoryMessage, apagado na F123, que tambem nunca existiu
 // aqui.
 var sendForeignWireKeys = []string{
 	"Details",
@@ -100,7 +100,7 @@ func assertSendWireKeys(t *testing.T, rota string, obj map[string]any) {
 	for _, proibida := range sendForeignWireKeys {
 		if _, ok := obj[proibida]; ok {
 			t.Errorf("%s: a chave %q APARECEU no wire. Esse nome e' de outro vocabulario "+
-				"(forma historica do envio ou tipo orfao domain.HistoryMessage) e nunca existiu "+
+				"(forma historica do envio ou tipo apagado na F123o domain.HistoryMessage) e nunca existiu "+
 				"nesta resposta.\n       Chaves presentes: %v",
 				rota, proibida, sendWireChavesOrdenadas(obj))
 		}

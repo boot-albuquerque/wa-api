@@ -50,8 +50,10 @@ var chatIndexWireKeys = []string{
 	"last_updated",
 }
 
-// orphanWireKeys e' o vocabulario do tipo ORFAO domain.HistoryMessage
-// (pkg/domain/entities.go:44), que NUNCA existiu no wire. A troca por estes
+// orphanWireKeys e' o vocabulario do tipo domain.HistoryMessage, que NUNCA
+// existiu no wire e foi APAGADO na limpeza da F123. O tipo ja' nao pode ser
+// usado por engano; estas chaves continuam proibidas porque nada impede
+// alguem de as escrever a' mao. A troca por estes
 // nomes e' precisamente a mutacao que este arquivo tem de impedir: quem no
 // futuro "arrumar" o handler para usar o tipo orfao cai na F123, e nenhum
 // outro teste do repo acusa.
@@ -96,7 +98,7 @@ func assertWireKeys(t *testing.T, ramo string, obj map[string]any, esperadas []s
 	for _, proibida := range orphanWireKeys {
 		if _, ok := obj[proibida]; ok {
 			t.Errorf("%s: a chave %q APARECEU no wire. Esse e' o vocabulario do tipo orfao "+
-				"domain.HistoryMessage (HOUSEKEEP F123), que nunca existiu nesta resposta.\n"+
+				"tipo apagado na F123 (HOUSEKEEP), cujo vocabulario nunca existiu nesta resposta.\n"+
 				"       Chaves presentes: %v", ramo, proibida, chavesOrdenadas(obj))
 		}
 	}

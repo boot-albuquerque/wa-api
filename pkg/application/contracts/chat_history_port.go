@@ -16,9 +16,11 @@ import (
 // application->infra dependency, and any future column added for persistence
 // reasons would silently leak into the response.
 //
-// It is NOT domain.HistoryMessage (pkg/domain/entities.go:44): that type has
-// zero uses and a shape (jid/from/body/direction/status) that never existed on
-// the wire. See HOUSEKEEP F123.
+// It is NOT the old domain.HistoryMessage: that type had zero uses and a shape
+// (jid/from/body/direction/status) that never existed on the wire. It was
+// DELETED in the F123 cleanup, so the type itself can no longer be reached by
+// mistake — but the forbidden vocabulary is still guarded on the wire, because
+// nothing stops someone from hand-writing those key names. See HOUSEKEEP F123.
 type ChatHistoryMessage struct {
 	ID              int       `json:"id"`
 	UserID          string    `json:"user_id"`

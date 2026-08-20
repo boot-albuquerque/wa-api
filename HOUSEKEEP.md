@@ -5624,7 +5624,50 @@ houver intenção de futuramente promovê-lo, documentar no próprio tipo que el
 NÃO é o formato do wire e apontar para `db.HistoryMessage`. A decisão está com
 o Orchestrator.
 
-**Status**: não corrigido — e o CAP-09A NÃO caiu na armadilha: a
+**Status**: **CORRIGIDO** em 2026-08-20 — `domain.HistoryMessage` APAGADO,
+decisão (a) do canal, que a entrada abaixo dizia caber ao Orchestrator.
+
+**Medição antes de apagar**: zero usos de produção. O único acerto de
+`grep domain.HistoryMessage` fora de teste era um COMENTÁRIO em
+`chat_history_port.go:19` avisando para não o usar. `go build ./...` e
+`go vet ./pkg/...` limpos depois da deleção.
+
+**Por que apagar em vez de documentar** (a entrada oferecia as duas): conter uma
+armadilha por teste é bom; eliminá-la é melhor. Os dois guardas de wire
+continuam válidos e continuam necessários — o tipo já não pode ser usado por
+engano, mas nada impede alguém de escrever `"jid"`/`"from"` à mão.
+
+**Controle negativo do COORDENADOR**, devolvendo uma chave órfã ao wire
+(`chat_jid` → `jid` em `chat_history_port.go`):
+
+```
+--- FAIL: TestChatHistoryWireContract_MessageFieldNames
+    a chave "chat_jid" SUMIU do wire
+    a chave "jid" APARECEU no wire. Esse e' o vocabulario do tipo orfao ...
+```
+
+Morde nos DOIS sentidos — chave que sumiu E chave proibida que apareceu.
+
+**O que quase virou defeito novo, e é a razão desta nota**: apagar o tipo deixou
+SEIS referências a ele em comentários e mensagens de teste. Isso é exatamente a
+doença da [[F61]] — documentação citando o que não existe —, que eu tinha medido
+e reportado como cara horas antes. Deixá-las teria criado instâncias novas do
+problema no mesmo dia em que o denunciei.
+
+Mas apagar as referências perderia a EXPLICAÇÃO de por que aquelas chaves são
+proibidas. As seis foram reescritas para dizer que o tipo **existiu e foi
+removido**, preservando o motivo. Uma trava sem o porquê é a próxima a ser
+removida por alguém que não entende o que ela protege.
+
+**O `fmt-gate` da [[F133]], criado horas antes, mordeu em MIM**: a deleção deixou
+`entities.go` fora do formato e o gate acusou. Primeira vez que ele pegou algo
+na prática — e pegou o autor.
+
+**Gate**: `make check` EXIT 0, com os dois guardas de wire verdes.
+
+---
+
+**Registro histórico** — o CAP-09A NÃO caiu na armadilha: a
 implementação criou uma representação própria na fronteira de application
 (`appport.ChatHistoryMessage`, `pkg/application/contracts/chat_history_port.go`),
 com os MESMOS campos e as MESMAS tags JSON de `db.HistoryMessage`, e o
