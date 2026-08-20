@@ -2046,3 +2046,53 @@ entregue é como se introduz o defeito que ninguém revisa.
 contado como cobertura, porque o custo de fingir aqui é um backup truncado que
 reporta sucesso.
 
+## H28 — a guarda de PII do H6 era por arquivo, e uma capacidade nova não herdava nenhuma
+
+**Data**: 2026-08-19 · **Contexto**: a orquestração pediu para "fechar a captura
+de texto da página com um teste negativo de PII". Ao conferir, o **H6 já estava
+fechado** desde 2026-08-12 — o `textScript` e o `TextSample` foram REMOVIDOS, não
+guardados, e quatro testes travam isso.
+
+**Erro meu, primeiro**: eu reportei o H6 como ABERTO. A minha varredura de status
+leu o `~~não corrigido~~` **riscado** e parou antes da linha de resolução. Corrigi
+a afirmação com a orquestração em vez de seguir com a premissa errada.
+
+**A lacuna REAL, que a conferência expôs**: a proteção existia **por arquivo**.
+`spa/` tinha os quatro testes do H6; cada capacidade nova (`owner`,
+`messagemeta`, `fetchmessages`) trouxe a sua própria guarda. Uma capacidade
+escrita amanhã **não herdaria nenhuma** — a proteção voltava a depender de
+alguém lembrar, que é a mesma forma do achado original ("a proteção dependia de
+uma coisa só").
+
+**Correção**: `TestNoProductionCodeReadsPageText` no `gate_test.go`, ao lado do
+portão que já mantém o `chromedp` dentro do `engine/`. Varre **literais de
+string** de todo o código de produção do módulo, por AST.
+
+**Duas distinções que só apareceram por errar primeiro**:
+
+1. **Comentário não é código.** A primeira versão varria texto cru e acusou o
+   `spa/page.go`, cujo comentário **explica o H6**. Um portão que pune quem
+   documenta o perigo ensina a parar de documentar. Passou a varrer só
+   `ast.BasicLit` do tipo string.
+2. **Contagem não é captura.** `innerText.length` diz QUANTO texto a página
+   mostra; `innerText` entrega o texto. O `PageSnapshot.TextLength` é construído
+   sobre a primeira, e é o que deixa o classificador distinguir página carregando
+   de página renderizada sem nunca segurar uma palavra. A primeira versão acusou
+   essa linha, e é por isso que a regra está escrita em vez de presumida.
+
+**A isenção que DECAI.** O `spa/probe.go` é isento porque o `markerScript` lê o
+texto para dentro de uma variável DA PÁGINA e devolve só quais marcadores de um
+conjunto fechado casaram — o próprio conserto do H6, opção 2. Mas isentar por
+ARQUIVO é mais largo que o excusado: permitiria qualquer `.innerText` futuro ali.
+Então a isenção está amarrada aos testes que a justificam
+(`TestProbeDiscardsMarkersItNeverAskedAbout`,
+`TestMarkerScriptNeverReturnsPageText`) e o portão FALHA se um deles sumir.
+
+**Três controles negativos, executados**:
+- capacidade nova lendo `body.innerText` → acusada, com o arquivo e a linha;
+- `innerText.length` → passa, e a distinção segura;
+- apagar `TestMarkerScriptNeverReturnsPageText` → *"the exemption is now
+  unbounded: either restore the guard or remove the exemption"*.
+
+**Status**: CORRIGIDO.
+

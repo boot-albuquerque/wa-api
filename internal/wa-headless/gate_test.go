@@ -18,6 +18,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -321,4 +322,161 @@ func untypedFieldsOf(fset *token.FileSet, spec *ast.TypeSpec) []string {
 			fset.Position(field.Pos()), spec.Name.Name, fieldName(field), name))
 	}
 	return found
+}
+
+// pageTextReaders are the ways a script can pull PAGE CONTENT into this
+// process.
+//
+// They are named here rather than checked ad hoc because that is the whole
+// point of this gate: the H6 finding was a text capture guarded by ONE
+// selector, and its fix removed the capture entirely. What the fix did not do
+// is stop the NEXT reader from being written — every capability that reads the
+// page today has its own test, and a capability added tomorrow would have none.
+var pageTextReaders = []string{
+	".innerText",
+	".textContent",
+	".innerHTML",
+	"__x_body",
+}
+
+// countingSuffixes are reads that produce a NUMBER rather than content, and are
+// therefore allowed.
+//
+// The distinction is not a loophole, it is the actual rule. `innerText.length`
+// tells you how much text a page is showing; `innerText` hands you the text. On
+// a paired account that text begins with the chat list — contact names and
+// message previews — and the number does not. spa.PageSnapshot.TextLength is
+// built on exactly this, and it is what lets the classifier tell a loading page
+// from a rendered one without ever holding a word of it.
+//
+// A first, cruder version of this gate flagged that line, which is how the
+// distinction came to be written down instead of assumed.
+var countingSuffixes = []string{".length"}
+
+// allowedTextReaderFiles are files permitted to mention those readers in a
+// STRING, with the reason.
+//
+// An allow-list rather than a directory exemption: a whole directory going
+// quiet is how a guard rots. Every entry is a decision someone made once, and
+// adding to it should feel like the change it is.
+var allowedTextReaderFiles = map[string]string{
+	// markerScript reads body text INTO A PAGE VARIABLE and returns only which
+	// of a closed list of known markers matched — never the text. That is the
+	// H6 fix itself, option 2 of the corrections its entry proposed: redact at
+	// the boundary so the field carries matches instead of prose.
+	"spa/probe.go": "markerScript matches a closed marker set; the text never leaves the page",
+}
+
+// exemptionGuards names the tests that make each exemption safe.
+//
+// An exemption BY FILE is broader than the thing being excused: it would let
+// any future .innerText into spa/probe.go unnoticed, which is how an
+// allow-list turns into a hole. Tying it to the tests that constrain the
+// excused code means the exemption DECAYS if its justification is deleted —
+// remove the guard and the gate stops accepting the file.
+var exemptionGuards = map[string][]string{
+	"spa/probe.go": {
+		"TestProbeDiscardsMarkersItNeverAskedAbout",
+		"TestMarkerScriptNeverReturnsPageText",
+	},
+}
+
+// TestNoProductionCodeReadsPageText is invariant 12 and §C6 enforced across the
+// whole module instead of capability by capability.
+//
+// It scans STRING LITERALS ONLY, via the AST. Two reasons, both learned by
+// getting it wrong first: page reading happens inside JavaScript, which lives
+// in Go strings, so that is where the risk actually is; and a comment that
+// NAMES the hazard is the opposite of the hazard — the first version of this
+// test flagged spa/page.go's own explanation of H6, which would have taught
+// people to stop documenting it.
+//
+// Scoped to production files. Tests read page text on purpose: the shape probes
+// in realspa_test.go exist to measure what a page exposes, and they are the
+// reason this module knows what to keep out.
+func TestNoProductionCodeReadsPageText(t *testing.T) {
+	var offenders []string
+
+	for _, path := range goFiles(t, false) {
+		rel := strings.TrimPrefix(filepath.ToSlash(path), "./")
+		var allowed bool
+		for suffix := range allowedTextReaderFiles {
+			if strings.HasSuffix(rel, suffix) {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			continue
+		}
+
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			text := lit.Value
+			// Remove the counting forms before looking for the content forms,
+			// so `innerText.length` does not read as `innerText`.
+			for _, reader := range pageTextReaders {
+				for _, suffix := range countingSuffixes {
+					text = strings.ReplaceAll(text, reader+suffix, "")
+				}
+			}
+			for _, reader := range pageTextReaders {
+				if strings.Contains(text, reader) {
+					offenders = append(offenders, fmt.Sprintf("%s:%d has %q inside a string",
+						rel, fset.Position(lit.Pos()).Line, reader))
+				}
+			}
+			return true
+		})
+	}
+
+	// An exemption is only as good as the test that bounds it.
+	for file, guards := range exemptionGuards {
+		for _, guard := range guards {
+			if !testExistsInModule(t, guard) {
+				t.Errorf("%s is exempt from the page-text gate because %q bounds it, and "+
+					"that test no longer exists. The exemption is now unbounded: either "+
+					"restore the guard or remove the exemption",
+					file, guard)
+			}
+		}
+	}
+
+	if len(offenders) > 0 {
+		t.Fatalf("production code reads PAGE CONTENT, which invariant 12 and §C6 forbid "+
+			"(WaMessageMeta carries no body, and a raw waJid in a log is a blocker). H6 was "+
+			"exactly this: a capture guarded by one selector, against a paired account whose "+
+			"body text is the chat list — contact names and message previews. If a reader is "+
+			"genuinely needed, add the file to allowedTextReaderFiles with the reason, so the "+
+			"decision is visible instead of implied:\n  %s",
+			strings.Join(offenders, "\n  "))
+	}
+}
+
+// testExistsInModule reports whether a test function of that name is declared
+// anywhere in the module's test sources.
+func testExistsInModule(t *testing.T, name string) bool {
+	t.Helper()
+	needle := "func " + name + "("
+	for _, path := range goFiles(t, true) {
+		if !strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if strings.Contains(string(body), needle) {
+			return true
+		}
+	}
+	return false
 }
