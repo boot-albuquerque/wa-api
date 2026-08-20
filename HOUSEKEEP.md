@@ -13641,3 +13641,61 @@ ser pela AUSÊNCIA de conteúdo de mídia na mensagem, não pelo rótulo.
 **Status**: não corrigido, nada implementado. Fora do escopo da verificação de
 ponta a ponta, que é provar o ENVIO — e o envio funcionou. Registrado para
 decisão.
+
+---
+
+## F181 — `/chat/list` devolve 96% das conversas SEM NOME, e os LIDs que ela devolve não existem no roster
+
+**Data**: 2026-08-20. **Contexto**: verificação de ponta a ponta com duas contas
+reais pareadas. Etapa (b) autorizada pelo canal depois de a prova de envio
+passar. Achado ao exercitar a rota, não por leitura de código.
+
+**Onde**: `GET /chat/list` (`ch.User.ListChats()`, registrado em
+`wiring_routes.go:95`) contra `GET /user/contacts`.
+
+**Medição de campo**, conta com 3334 contactos no roster:
+
+| grandeza | valor |
+|---|---|
+| conversas devolvidas por `/chat/list` | 50 |
+| **sem nome** (`name` e `push_name` vazios) | **48 (96%)** |
+| JIDs `@lid` na listagem | 50 (todos) |
+| JIDs `@s.whatsapp.net` na listagem | 0 |
+| contactos no roster | 3334 — sendo 2451 `@lid` e 882 `@s.whatsapp.net` |
+| contactos `@lid` do roster COM nome | 269 |
+| **interseção entre os JIDs da listagem e o roster** | **ZERO** |
+
+**O que a medição descarta**, e por isso vale mais que a primeira hipótese:
+
+- **Não é campo vazio na junção**: nenhuma das 48 sem nome tem `PushName` no
+  roster, porque **nenhuma delas está no roster**.
+- **Não é incompatibilidade de FORMATO** (`@lid` contra `@s.whatsapp.net`): o
+  roster TEM 2451 chaves `@lid`, e ainda assim a interseção é zero. São
+  conjuntos de LIDs genuinamente disjuntos.
+- **Não é roster vazio ou não sincronizado**: 3334 contactos, 269 deles `@lid`
+  com nome.
+
+Até as DUAS que têm nome (`Renato Serena`, `Studio Anchieta`) **não estão no
+roster** — o nome delas vem de outro lugar, provavelmente do `push_name` que
+chegou numa mensagem recente.
+
+**Por que isto importa para o produto**: listar conversas é a prioridade 2 do
+projeto. Uma lista em que 96% das linhas são números opacos de 15 dígitos não é
+utilizável — o operador não sabe com quem está a falar.
+
+**Onde procurar, antes de projetar**: o `CLAUDE.md` manda consultar Baileys e
+Evolution API ANTES de resolver qualquer problema de identidade LID/PN, e este é
+exatamente esse problema. Existe `GET /user/lid/{jid}` no repositório, o que
+sugere que alguém já enfrentou a tradução — verificar o que ela faz é o primeiro
+passo, não inventar mapeamento novo.
+
+**Cuidado antes de "consertar" (Regra 2)**: a correção óbvia — resolver cada LID
+da listagem por chamada individual — transforma uma listagem em N idas ao
+protocolo. Com 50 conversas visíveis e mais em scroll, isso é exatamente o tipo
+de amplificação que a [[F113]]/[[F175]] documentam no preview de link. Medir o
+custo ANTES de escolher a forma.
+
+**Status**: não corrigido, nada implementado. Fora do escopo da verificação, que
+era provar o ENVIO — e ele está provado. Registrado para decisão; é candidato
+forte a próxima prioridade, porque toca a prioridade 2 do projeto e foi medido
+contra dados reais.
