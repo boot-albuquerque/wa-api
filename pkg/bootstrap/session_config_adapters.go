@@ -3,9 +3,7 @@ package bootstrap
 import (
 	"context"
 	"strconv"
-	"time"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 
 	appport "wa-api/pkg/application/contracts"
@@ -73,18 +71,17 @@ func (c userInfoSessionCache) SetProxy(ctx context.Context, userID, proxyURL str
 	c.publish(ctx, userID, userInfoProxyField, proxyURL)
 }
 
-// publish updates field in both userinfo caches.
-func (c userInfoSessionCache) publish(ctx context.Context, userID, field, value string) {
-	c.publishByUserID(userID, field, value)
-	c.publishByToken(ctx, userID, field, value)
-}
-
-// publishByUserID republishes the appCtx.UserInfoCache entry of userID.
+// publish updates field in both userinfo caches through publishUserInfo (F164).
+//
+// It reads the EXISTING entry from the userID cache, applies the field
+// update, and publishes the result to BOTH caches in one call. The token
+// for the second cache is resolved from the request context when available,
+// falling back to the Token stored in the cached Values.
 //
 // A missing entry is a DELIBERATE no-op, like the HMAC and S3 adapters:
 // building a partial entry from the one field this write knows about was the
 // F70 defect, and the entry is rebuilt in full by ensureUserInfoCached.
-func (userInfoSessionCache) publishByUserID(userID, field, value string) {
+func (userInfoSessionCache) publish(ctx context.Context, userID, field, value string) {
 	cached, found := appCtx.UserInfoCache.Get(userID)
 	if !found {
 		log.Debug().Str("userid", userID).Str("field", field).
@@ -94,64 +91,18 @@ func (userInfoSessionCache) publishByUserID(userID, field, value string) {
 	values, ok := cached.(Values)
 	if !ok {
 		log.Error().Str("userid", userID).Str("field", field).
-			Msg("cached user info has an unexpected type; session configuration not published to the user-id cache")
+			Msg("cached user info has an unexpected type; session configuration not published")
 		return
 	}
-	appCtx.UserInfoCache.Set(userID, withField(values, field, value), cache.NoExpiration)
+
+	token := ""
+	if requestInfo, ctxOk := ctx.Value(appport.UserInfoKey).(Values); ctxOk {
+		token = requestInfo.Get(userInfoTokenField)
+	}
+
+	publishUserInfo(userID, token, withField(values, field, value))
 	log.Info().Str("userid", userID).Str("field", field).
-		Msg("user info cache updated with the session configuration")
-}
-
-// publishByToken republishes the authentication cache entry of this request.
-//
-// This is the half that closes F128: the entry it refreshes is the one
-// AuthAlice hands to the next request, which is where the chat-history gate
-// reads its seed value from.
-//
-// The REMAINING TTL is preserved rather than reset, and never replaced by
-// cache.NoExpiration. That is not tidiness: userCacheTTL is what bounds how
-// long a token survives in this cache after the users row behind it changes,
-// so an entry written here without an expiry would keep authenticating a
-// revoked token for the life of the process.
-func (userInfoSessionCache) publishByToken(ctx context.Context, userID, field, value string) {
-	requestInfo, ok := ctx.Value(appport.UserInfoKey).(Values)
-	if !ok {
-		log.Debug().Str("userid", userID).Str("field", field).
-			Msg("request carries no user info; session configuration not published to the token cache")
-		return
-	}
-	token := requestInfo.Get(userInfoTokenField)
-	if token == "" {
-		log.Debug().Str("userid", userID).Str("field", field).
-			Msg("request user info carries no token; session configuration not published to the token cache")
-		return
-	}
-
-	cached, expiration, found := userinfocache.GetWithExpiration(token)
-	if !found {
-		log.Debug().Str("userid", userID).Str("field", field).
-			Msg("token not in the authentication cache; the next request loads it from the database")
-		return
-	}
-	values, ok := cached.(Values)
-	if !ok {
-		log.Error().Str("userid", userID).Str("field", field).
-			Msg("cached user info has an unexpected type; session configuration not published to the token cache")
-		return
-	}
-
-	ttl := cache.NoExpiration
-	if !expiration.IsZero() {
-		ttl = time.Until(expiration)
-		if ttl <= 0 {
-			log.Debug().Str("userid", userID).Str("field", field).
-				Msg("authentication cache entry already expired; not republishing it")
-			return
-		}
-	}
-	userinfocache.Set(token, withField(values, field, value), ttl)
-	log.Info().Str("userid", userID).Str("field", field).
-		Msg("authentication cache updated with the session configuration")
+		Msg("user info caches updated with the session configuration")
 }
 
 // withField returns a COPY of values with field set. Copying, and not mutating

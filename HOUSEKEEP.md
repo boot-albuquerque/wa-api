@@ -11263,9 +11263,41 @@ mecanismo.
 3. Enquanto forem dois, um teste que enumere os campos com leitores nos dois
    lados e falhe quando um escritor de configuração publique em só um.
 
-**Status**: não corrigido. O CAP-30 contornou o sintoma nas duas rotas dele
-(`session_config_adapters.go` publica nos dois, com o motivo escrito no
-código). A duplicidade em si segue de pé. Achado de lado, levado ao canal.
+**Status**: **CORRIGIDO** no CAP-38 (F164, 2026-08-19). A decisão foi a terceira
+via que o levantamento F170 sugeriu: **manter os dois caches e tornar a
+dupla-publicação explícita num único ponto** — `publishUserInfo`
+(`pkg/bootstrap/publish_userinfo.go`).
+
+As dez escritas (seis por userID, quatro por token) passam todas por
+`publishUserInfo(userID, token, values)`, que escreve nos DOIS caches com as
+respectivas chaves. Quando o token não é passado pelo chamador, ele é resolvido
+a partir de `values.Get("Token")` — o campo já existe em toda entrada porque
+`ensureUserInfoCached` e `connectOnStartup` o gravam a partir da coluna do
+banco.
+
+O achado NOVO registrado pela F170 — as três escritas de `handler_webhook.go`
+usavam `cache.NoExpiration` em vez do `userCacheTTL` — foi corrigido junto:
+`publishUserInfo` NUNCA escreve com `cache.NoExpiration` no cache de token.
+Entradas novas recebem `tokenCacheTTL` (10 min, mesmo valor que
+`middleware.userCacheTTL`); entradas existentes preservam o TTL remanescente.
+
+**Testes que travam o achado** (`pkg/bootstrap/publish_userinfo_test.go`):
+`TestPublishUserInfoWritesBothCaches`,
+`TestPublishUserInfoResolvesTokenFromValues`,
+`TestPublishUserInfoPreservesRemainingTTL`,
+`TestPublishUserInfoTokenCacheNeverGetsNoExpiration`,
+`TestPublishUserInfoDeterministic` (50 rodadas),
+`TestTokenCacheTTLMatchesMiddleware`.
+
+**Controles negativos EXECUTADOS:**
+- CN-A: `publishUserInfo` escrevendo só no cache de userID →
+  `TestPublishUserInfoWritesBothCaches` FAIL ("did not write to the token cache"),
+  `TestPublishUserInfoCNA_OnlyUserIDCacheFailsInvariant` FAIL.
+- CN-B: `publishUserInfo` escrevendo só no cache de token →
+  `TestPublishUserInfoWritesBothCaches` FAIL ("did not write to the user-id cache"),
+  `TestPublishUserInfoCNB_OnlyTokenCacheFailsInvariant` FAIL.
+- CN-C: `TestPublishUserInfoCNC_OrderMatters` verifica que os dois caches
+  concordam mesmo partindo de vazio.
 
 ## F165 — `WebhookHistoryResult.History` tem `omitempty`, então o desligamento não ecoa o valor
 
@@ -12036,7 +12068,13 @@ session_config_adapters.go:88
 user_info_cache.go:57
 ```
 
-**`userinfocache`** — chave **token**, TTL de `userCacheTTL` = 10 minutos.
+**`userinfocache`** — chave **token**, TTL de `userCacheTTL` = 10 minutos
+**quando escrito por AuthAlice** (auth.go:207). **PORÉM** as três escritas de
+`handler_webhook.go` (`:172`, `:259`, `:296`) usavam `cache.NoExpiration` — ou
+seja, entradas escritas por ali NUNCA expiravam, e o TTL deixava de ser a rede
+de segurança que justificava tolerar a obsolescência. Achado NOVO, corrigido
+junto da F164 no CAP-38.
+
 Uma leitura direta (`session_config_adapters.go:152`) **e a fronteira HTTP
 inteira**: `router_setup.go:50` e `wiring_handlers.go:204` passam esse cache
 como `Deps.UserCache`, e `middleware.AuthAlice` (`auth.go:127,160`) o consulta
@@ -12074,8 +12112,83 @@ faz isso para History e Proxy), em vez de cada novo consumidor redescobrir que
 precisa publicar duas vezes. Não é unificação, é parar de tratar a duplicidade
 como acidente.
 
-**Status**: não corrigido. Este é o levantamento que faltava para a F164 virar
-bloco; a escolha de chave é decisão de desenho e não de conserto.
+**Status**: **CORRIGIDO** no CAP-38 (2026-08-19). A terceira via que este
+levantamento sugeriu — manter os dois caches e tornar a dupla-publicação
+explícita — foi a escolhida. `publishUserInfo` é o ponto único. O TTL do
+cache de token, que a F170 registrava como 10 min MAS que as três escritas de
+`handler_webhook.go` escreviam com `cache.NoExpiration`, foi corrigido junto:
+nenhuma escrita pode mais usar `NoExpiration` no cache de token.
+
+**Verificação do COORDENADOR, além da do executor.** O bloco chegou com um
+defeito que eu recusei e devolvi como REQUIRED_FIX antes de qualquer commit, e
+ele vale registro porque é a [[armadilha 1]] na forma mais cara:
+
+`handler_webhook.go` tinha `publishValues` caindo num fallback silencioso
+(`ctx.UserCache.Set(token, ...)`) quando o port não estivesse fiado — ou seja,
+escrevendo SÓ o cache de token, que é o defeito desta própria entrada,
+reintroduzido uma camada acima. A justificativa escrita no código era
+"compatibilidade com testes que não fiam o bootstrap completo".
+
+Medido, e é o que tornou a recusa objetiva em vez de estética:
+
+```
+$ grep -rc "PublishUserInfo" pkg --include="*_test.go" | grep -v ":0"
+pkg/bootstrap/publish_userinfo_test.go:18
+```
+
+Zero em `handler_webhook_test.go`. Portanto TODO teste de handler exercitava o
+ramo antigo: os dez testes provavam que `publishUserInfo` funciona, e nenhum
+provava que o handler CHEGA nele — justamente nos três sites que motivaram o
+achado, por serem os do `NoExpiration`. Um dublê mais permissivo que a produção
+não esconde só um defeito; aqui ele garantia que a invariante da tarefa nunca
+fosse verificada onde ela falhava.
+
+Corrigido na forma que o repositório já tinha: fallback eliminado, e
+`requirePublishUserInfo` dá `panic` na CONSTRUÇÃO — não no atendimento da
+requisição — espelhando `pkg/bootstrap/router.go:75-83`. Chamado pelos três
+construtores que escrevem, e não pelo de GET, que não publica.
+
+Testes que fecham o buraco: `TestWebhookHandlers_F164_BothCachesAgree` (POST,
+PUT e DELETE pelo handler) e `TestWebhookHandlers_F164_NilPublishUserInfo_Panics`.
+
+**Controles negativos executados por MIM, nos dois níveis:**
+
+CN-I, removendo a guarda de `panic`:
+
+```
+--- FAIL: TestWebhookHandlers_F164_NilPublishUserInfo_Panics/NewSetWebhookHandler
+    handler_webhook_test.go:761: NewSetWebhookHandler did not panic with nil PublishUserInfo
+    (idem NewUpdateWebhookHandler e NewDeleteWebhookHandler)
+```
+
+CN-II, removendo a escrita no cache de token dentro do próprio `publishUserInfo`:
+
+```
+--- FAIL: TestPublishUserInfoWritesBothCaches
+    publish_userinfo_test.go:32: publishUserInfo did not write to the token cache
+--- FAIL: TestPublishUserInfoResolvesTokenFromValues
+--- FAIL: TestPublishUserInfoTokenCacheNeverGetsNoExpiration
+--- FAIL: TestPublishUserInfoCNA_OnlyUserIDCacheFailsInvariant
+--- FAIL: TestPublishUserInfoCNB_OnlyTokenCacheFailsInvariant
+```
+
+Os dois arquivos restaurados por cópia de backup, conferidos com `diff`.
+
+**Auditoria de escrita direta**: depois da mudança, as únicas ocorrências de
+`UserInfoCache.Set` / `userinfocache.Set` fora de teste estão DENTRO de
+`publish_userinfo.go` (linhas 36 e 48); as demais ocorrências no grep são
+comentários. Não sobrou caminho paralelo.
+
+**Gate**: `make check` EXIT 0, rodado por mim. Zero arquivos deletados, zero
+funções de teste removidas, doze acrescentadas.
+
+**Regeneração do golden, auditada e não aceita de confiança**: o executor
+regenerou `eligible.golden` e subiu `min_eligible` 679→680, enumerando a
+mudança no comentário do baseline. Conferi por diff independente dos dois
+primeiros campos e bate elemento por elemento — ENTRAM `publishUserInfo`,
+`resolveTokenCacheTTL` e `userInfoSessionCache.publish`; SAEM `publishByToken`
+e `publishByUserID`. Isso só foi barato porque a [[F154]] fechou uma hora
+antes: sem ela, a alternativa era regenerar às cegas.
 
 **Nota de método**: a F164 nasceu de um executor procurando "em qual cache
 publicar" e descobrindo que a resposta era "nos dois". O achado estava certo, e

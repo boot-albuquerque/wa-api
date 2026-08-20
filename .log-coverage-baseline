@@ -1483,7 +1483,20 @@ min_errpath_coverage=868
 # min_func_coverage: bootstrap.resolveGlobalEncryptionKey,
 # bootstrap.resolveAdminToken, bootstrap.generateSecret e
 # bootstrap.writeAdminTokenFile. Denominador CRESCE — nao ha' remocao neste PR.
-min_eligible=679
+# CAP-38 (2026-08-19): 679 -> 680. Ponto unico de publicacao de userinfo (F164).
+# ENTRAM (3):
+#   bootstrap.publishUserInfo              ELIGIBLE covered
+#   bootstrap.resolveTokenCacheTTL         ELIGIBLE uncovered:L1
+#   bootstrap.userInfoSessionCache.publish ELIGIBLE covered (era EXCLUDED X1)
+# SAEM (2):
+#   bootstrap.userInfoSessionCache.publishByToken  ELIGIBLE covered
+#   bootstrap.userInfoSessionCache.publishByUserID ELIGIBLE covered
+# EXCLUDED novos (fora do denominador):
+#   bootstrap.initCustomHandlers.func1             EXCLUDED X6
+#   handlers.WebhookHandlerContext.publishValues   EXCLUDED X1
+# Net: +3 -2 = +1 elegivel. covered: +2 -2 = 0 (455 antes, 455 depois).
+# func_coverage nao muda (669). Denominador CRESCE — nao ha' remocao neste PR.
+min_eligible=680
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

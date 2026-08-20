@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
 
@@ -79,10 +78,9 @@ func ensureUserInfoCached(db *sqlx.DB, userID string) error {
 		hmacKeyEncrypted = base64.StdEncoding.EncodeToString(hmacKey)
 	}
 
-	// A chave é o token vindo do BANCO, não o recebido por parâmetro: é o
-	// token que os leitores usam (evh.Token vem da mesma origem), e gravar
-	// sob outra chave criaria uma entrada que ninguém encontra.
-	appCtx.UserInfoCache.Set(userID, Values{M: map[string]string{
+	// publishUserInfo writes to BOTH caches (F164). The token is in the
+	// Values map under "Token", so publishUserInfo resolves it from there.
+	publishUserInfo(userID, dbToken, Values{M: map[string]string{
 		"Id":                 txtid,
 		"Name":               name,
 		"Jid":                jid,
@@ -94,7 +92,7 @@ func ensureUserInfoCached(db *sqlx.DB, userID string) error {
 		"MediaDelivery":      mediaDelivery,
 		"History":            fmt.Sprintf("%d", history),
 		userInfoHmacKeyField: hmacKeyEncrypted,
-	}}, cache.NoExpiration)
+	}})
 
 	log.Info().Str("userid", txtid).Msg("User info carregado do banco para o cache")
 	return nil

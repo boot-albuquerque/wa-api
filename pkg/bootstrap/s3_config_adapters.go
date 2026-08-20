@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 
 	appport "wa-api/pkg/application/contracts"
@@ -124,7 +123,7 @@ func (userInfoS3Cache) SetS3Config(userID string, enabled bool, mediaDelivery st
 	updated.M[userInfoS3EnabledField] = enabledText
 	updated.M[userInfoMediaDeliveryField] = mediaDelivery
 
-	appCtx.UserInfoCache.Set(userID, updated, cache.NoExpiration)
+	publishUserInfo(userID, "", updated)
 	log.Info().Str("userid", userID).Bool("s3_enabled", enabled).Str("media_delivery", mediaDelivery).
 		Msg("user info cache updated with the S3 configuration")
 }

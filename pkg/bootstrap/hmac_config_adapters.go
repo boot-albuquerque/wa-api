@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"encoding/base64"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
 
@@ -76,7 +75,7 @@ func (userInfoHmacCache) SetHmacKey(userID string, encryptedKey []byte) {
 	updated.M[userInfoHmacKeyField] = encoded
 	updated.M[userInfoHasHmacField] = hasHmac
 
-	appCtx.UserInfoCache.Set(userID, updated, cache.NoExpiration)
+	publishUserInfo(userID, "", updated)
 	log.Info().Str("userid", userID).Bool("has_hmac", len(encryptedKey) > 0).
 		Msg("user info cache updated with the HMAC configuration")
 }

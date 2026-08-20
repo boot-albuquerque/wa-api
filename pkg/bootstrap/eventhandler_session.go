@@ -9,7 +9,6 @@ import (
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
 
@@ -113,8 +112,8 @@ func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *even
 		log.Warn().Msg("No user info cached on pairing?")
 	} else {
 		st.txtid = myuserinfo.(Values).Get("Id")
-		v := updateUserInfo(myuserinfo, "Jid", jid.String())
-		appCtx.UserInfoCache.Set(evh.UserID, v, cache.NoExpiration)
+		v := updateUserInfo(myuserinfo, "Jid", jid.String()).(Values)
+		publishUserInfo(evh.UserID, evh.Token, v)
 		log.Info().Str("jid", jid.String()).Str("userid", st.txtid).Msg("User information set")
 	}
 

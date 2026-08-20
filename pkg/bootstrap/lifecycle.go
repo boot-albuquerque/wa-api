@@ -11,7 +11,6 @@ import (
 	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
 
@@ -111,7 +110,7 @@ func (s *server) connectOnStartup() {
 				"History":            fmt.Sprintf("%d", history),
 				userInfoHmacKeyField: hmacKeyEncrypted,
 			}}
-			appCtx.UserInfoCache.Set(txtid, v, cache.NoExpiration)
+			publishUserInfo(txtid, token, v)
 			// Gets and set subscription to webhook events
 			eventarray := strings.Split(events, ",")
 

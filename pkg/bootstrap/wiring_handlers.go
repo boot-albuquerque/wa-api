@@ -205,6 +205,15 @@ func initCustomHandlers(s *server) {
 		SupportedEvents: supportedEventTypes,
 		FindInSlice:     slices.Contains[[]string, string],
 		UpdateUserInfo:  updateUserInfo,
+		PublishUserInfo: func(userID, token string, values interface{}) {
+			v, ok := values.(Values)
+			if !ok {
+				log.Error().Str("userid", userID).
+					Msg("webhook handler passed unexpected type to PublishUserInfo")
+				return
+			}
+			publishUserInfo(userID, token, v)
+		},
 	}
 	webhookHandlers := &WebhookHandlers{
 		GetWebhook:    handlers.NewGetWebhookHandler(whCtx),

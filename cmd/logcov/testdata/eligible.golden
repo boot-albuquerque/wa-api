@@ -2134,7 +2134,7 @@ pkg/bootstrap.UserEventHandler.GetWAClient	EXCLUDED	X1
 pkg/bootstrap.UserEventHandler.decoratePollVote	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.decryptSecretEncryptedMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleAppState	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.handleAppStateSyncComplete	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:29)
+pkg/bootstrap.UserEventHandler.handleAppStateSyncComplete	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:28)
 pkg/bootstrap.UserEventHandler.handleBlocklist	ELIGIBLE	uncovered:L3(zerolog,eventhandler_contact.go:28)
 pkg/bootstrap.UserEventHandler.handleBlocklistChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallAccept	ELIGIBLE	covered
@@ -2143,9 +2143,9 @@ pkg/bootstrap.UserEventHandler.handleCallOfferNotice	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallRelayLatency	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallTerminate	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleChatPresence	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:273)
+pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:272)
 pkg/bootstrap.UserEventHandler.handleConnectFailure	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleConnected	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:89)
+pkg/bootstrap.UserEventHandler.handleConnected	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:88)
 pkg/bootstrap.UserEventHandler.handleDisconnected	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleEvent	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleEvent.func1	EXCLUDED	X1
@@ -2154,8 +2154,8 @@ pkg/bootstrap.UserEventHandler.handleGroupInfo	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleHistorySync	ELIGIBLE	uncovered:L1
 pkg/bootstrap.UserEventHandler.handleIdentityChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleJoinedGroup	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:261)
-pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:267)
+pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:260)
+pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:266)
 pkg/bootstrap.UserEventHandler.handleLoggedOut	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleMediaRetry	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleMessage	ELIGIBLE	uncovered:L1
@@ -2165,15 +2165,15 @@ pkg/bootstrap.UserEventHandler.handleNewsletterLiveUpdate	ELIGIBLE	uncovered:L3(
 pkg/bootstrap.UserEventHandler.handleNewsletterMuteChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:323)
 pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:329)
-pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:291)
-pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:113)
+pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:290)
+pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:112)
 pkg/bootstrap.UserEventHandler.handlePicture	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handlePresence	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handlePrivacySettings	ELIGIBLE	uncovered:L3(zerolog,eventhandler_contact.go:34)
 pkg/bootstrap.UserEventHandler.handleReceipt	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamError	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamReplaced	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:279)
+pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:278)
 pkg/bootstrap.UserEventHandler.handleUndecryptableMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleUserAbout	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.persistHistorySync	ELIGIBLE	covered
@@ -2243,7 +2243,8 @@ pkg/bootstrap.hmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X7
 pkg/bootstrap.hmacKeySource.String	EXCLUDED	X4
 pkg/bootstrap.init	EXCLUDED	X3
 pkg/bootstrap.initConnectHandler	EXCLUDED	X1
-pkg/bootstrap.initCustomHandlers	ELIGIBLE	uncovered:L1
+pkg/bootstrap.initCustomHandlers	ELIGIBLE	covered
+pkg/bootstrap.initCustomHandlers.func1	EXCLUDED	X6
 pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
@@ -2279,6 +2280,7 @@ pkg/bootstrap.outcomeFor	EXCLUDED	X1
 pkg/bootstrap.prepareCluster	ELIGIBLE	covered
 pkg/bootstrap.prepareCluster.func1	EXCLUDED	X6
 pkg/bootstrap.publishCapabilities	ELIGIBLE	covered
+pkg/bootstrap.publishUserInfo	ELIGIBLE	covered
 pkg/bootstrap.rateLimitObserver.limiterFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.rateLimitObserver.middleware	EXCLUDED	X1
 pkg/bootstrap.rateLimitObserver.middleware.func1	ELIGIBLE	covered
@@ -2307,9 +2309,10 @@ pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	covered
 pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:75)
+pkg/bootstrap.resolveTokenCacheTTL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
 pkg/bootstrap.runOutboxSweeper	ELIGIBLE	uncovered:L1
-pkg/bootstrap.s3ClientManager.InitializeS3Client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,s3_config_adapters.go:55)
+pkg/bootstrap.s3ClientManager.InitializeS3Client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,s3_config_adapters.go:54)
 pkg/bootstrap.s3ClientManager.RemoveClient	EXCLUDED	X1
 pkg/bootstrap.s3ClientManager.TestConnection	EXCLUDED	X7
 pkg/bootstrap.s3MediaUploader.ProcessMediaForS3	ELIGIBLE	uncovered:L1
@@ -2374,9 +2377,7 @@ pkg/bootstrap.userInfoID	ELIGIBLE	uncovered:L1
 pkg/bootstrap.userInfoS3Cache.SetS3Config	ELIGIBLE	covered
 pkg/bootstrap.userInfoSessionCache.SetHistory	EXCLUDED	X1
 pkg/bootstrap.userInfoSessionCache.SetProxy	EXCLUDED	X1
-pkg/bootstrap.userInfoSessionCache.publish	EXCLUDED	X1
-pkg/bootstrap.userInfoSessionCache.publishByToken	ELIGIBLE	covered
-pkg/bootstrap.userInfoSessionCache.publishByUserID	ELIGIBLE	covered
+pkg/bootstrap.userInfoSessionCache.publish	ELIGIBLE	covered
 pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:84)
 pkg/bootstrap.withField	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeAdminTokenFile	ELIGIBLE	covered
@@ -3035,6 +3036,7 @@ pkg/presentation/http/handlers.UserHandlers.ListUsers.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.UserHandlers.UnblockUser	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.UnblockUser.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.WSHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session_ws.go:71)
+pkg/presentation/http/handlers.WebhookHandlerContext.publishValues	EXCLUDED	X1
 pkg/presentation/http/handlers.decodeAndRespond	ELIGIBLE	covered
 pkg/presentation/http/handlers.groupHandler.ServeHTTP	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.handleCreateGroup	ELIGIBLE	covered
@@ -3052,6 +3054,7 @@ pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2
 pkg/presentation/http/handlers.isClientCausedSessionError	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.newGroupHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
+pkg/presentation/http/handlers.requirePublishUserInfo	EXCLUDED	X1
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered
 pkg/presentation/http/handlers.simpleErr.Error	EXCLUDED	X4
 pkg/presentation/http/middleware.AuthAdmin	EXCLUDED	X1
