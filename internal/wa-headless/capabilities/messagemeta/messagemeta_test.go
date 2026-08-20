@@ -23,6 +23,16 @@ type pageDouble struct {
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
+	// THE DOUBLE HONOURS ctx, because the production Evaluate does.
+	//
+	// engine.Tab.Evaluate derives from the caller's context, so a cancelled or
+	// expired ctx fails there. A double that ignored ctx would be better
+	// behaved than the world in exactly the axis ARMADILHAS §1 warns about —
+	// and it would let a capability fabricate a successful answer for a caller
+	// that had already given up.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if p.err != nil {
 		return p.err
 	}
@@ -252,4 +262,23 @@ func TestTimestampZeroWhenAbsent(t *testing.T) {
 		t.Fatalf("direction=%s, want out", got.Events[0].Direction)
 	}
 	_ = time.Now
+}
+
+// TestCancelledContextIsNotAFabricatedSuccess exercises the axis the doubles
+// used to ignore.
+//
+// engine.Tab.Evaluate derives from the caller's context, so in production a
+// cancelled ctx fails. The doubles in this file returned their canned answer
+// regardless, which made every capability test blind to cancellation: a
+// capability that swallowed the error from runner.Do would still pass.
+//
+// A caller that has given up must not receive a manufactured answer — that is
+// worse than an error, because it looks like data.
+func TestCancelledContextIsNotAFabricatedSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sub(&pageDouble{install: `{"installed":true}`}).Install(ctx, "t/cancel"); err == nil {
+		t.Fatal("a cancelled context produced a successful answer; the caller had already " +
+			"given up and got manufactured data instead of an error")
+	}
 }

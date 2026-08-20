@@ -2291,3 +2291,51 @@ enganou o leitor humano.
 
 **Status**: CORRIGIDO.
 
+## H30 — todos os dublês das capacidades ignoravam o `ctx`, e a produção não ignora
+
+**Data**: 2026-08-20 · **Contexto**: passagem de auditoria sobre os meus próprios
+dublês, feita durante a espera de uma medição longa. Nenhuma capacidade tinha
+passado por essa pergunta desde que foi escrita.
+
+**A pergunta que produziu o achado** é a do catálogo, virada para dentro: *em que
+EIXO o meu dublê é melhor-comportado que o mundo?*
+
+**Onde**: os quatro `pageDouble` em `capabilities/{liveness,owner,messagemeta,
+fetchmessages}/*_test.go`.
+
+**Problema**: `engine.Tab.Evaluate` **deriva do contexto do chamador**
+(`tab.go:124-127`) — prazo e cancelamento viajam, e um `ctx` cancelado falha lá.
+Os dublês devolviam a resposta pronta **sem olhar o `ctx`**.
+
+E o `engine.Runner.Do` chama `f(ctx)` **sem verificar** se o pai já foi
+cancelado (`runner.go:74-80`): ele confia em `f` respeitar o contexto. Em
+produção `f` é o `Evaluate` e o contrato se cumpre; nos testes `f` era o dublê e
+não se cumpria.
+
+**A consequência exata**: uma capacidade chamada com contexto já cancelado
+**erra em produção e PASSA nos meus testes**. Uma mudança futura que engolisse o
+erro do `runner.Do` continuaria verde.
+
+**Por que isso é pior que um erro**: o chamador que já desistiu recebe um dado
+**fabricado**, e dado fabricado parece dado. É a mesma família do instrumento que
+responde sem ter medido.
+
+**Correção**: os quatro dublês passam a imitar a REGRA REAL — `if err :=
+ctx.Err(); err != nil { return err }` — com o comentário dizendo de onde a regra
+vem. E cada capacidade ganhou
+`TestCancelledContextIsNotAFabricatedSuccess`. O do `liveness` afirma coisa
+diferente dos outros três, porque ele devolve `Report` e não erro: a sessão não
+pode ser reportada **ALIVE** pela palavra de uma sonda que nunca rodou.
+
+**Controle negativo executado**: devolver o dublê do `owner` ao estado anterior
+faz falhar com *"a cancelled context produced a successful answer; the caller had
+already given up and got manufactured data instead of an error"*.
+
+**O que NÃO foi mudado, e é decisão**: o `Runner.Do` continua sem checar o pai
+antes de chamar `f`. Acrescentar a checagem lá pareceria mais seguro e mudaria o
+contrato de toda operação do módulo — inclusive as que legitimamente querem
+rodar até o fim para registrar `stopped_via`. A responsabilidade fica onde já
+estava, e agora está TESTADA onde não estava.
+
+**Status**: CORRIGIDO.
+

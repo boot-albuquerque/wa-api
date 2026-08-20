@@ -23,6 +23,16 @@ type pageDouble struct {
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
+	// THE DOUBLE HONOURS ctx, because the production Evaluate does.
+	//
+	// engine.Tab.Evaluate derives from the caller's context, so a cancelled or
+	// expired ctx fails there. A double that ignored ctx would be better
+	// behaved than the world in exactly the axis ARMADILHAS §1 warns about —
+	// and it would let a capability fabricate a successful answer for a caller
+	// that had already given up.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	i := p.calls
 	p.calls++
 	if i < len(p.errs) && p.errs[i] != nil {
@@ -171,5 +181,30 @@ func TestEverySignalIsSet(t *testing.T) {
 		if got.Signal == "" {
 			t.Errorf("%s: Signal is empty; it would fall through every switch a caller writes", name)
 		}
+	}
+}
+
+// TestCancelledContextIsNotAFabricatedSuccess exercises the axis the double
+// used to ignore, and liveness is where it matters most: this is the capability
+// a hot path calls, so it is the likeliest to be handed a context whose caller
+// has already given up.
+//
+// It returns a Report rather than an error, so the assertion is different from
+// the other capabilities: the session must NOT be reported alive on the word of
+// a probe that never ran.
+func TestCancelledContextIsNotAFabricatedSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got := newChecker(true, &pageDouble{answers: []string{"true"}}).Check(ctx, "t/cancel")
+	if got.Alive {
+		t.Fatal("reported ALIVE from a probe that could not run: the page was never asked, " +
+			"and answering for it is how a dead session looks healthy")
+	}
+	if got.Err == nil {
+		t.Fatal("the cancellation was not carried in the report")
+	}
+	if got.Signal == SignalAlive {
+		t.Fatalf("signal=%s on a cancelled probe", got.Signal)
 	}
 }
