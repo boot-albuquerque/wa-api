@@ -13695,7 +13695,79 @@ protocolo. Com 50 conversas visíveis e mais em scroll, isso é exatamente o tip
 de amplificação que a [[F113]]/[[F175]] documentam no preview de link. Medir o
 custo ANTES de escolher a forma.
 
+**INVESTIGAÇÃO ADICIONAL, medida na mesma sessão de campo** — porque o
+`CLAUDE.md` manda ver o que já existe ANTES de projetar tradução LID/PN:
+
+**A tradução inversa EXISTE e está implementada.** Não é preciso inventá-la:
+
+| peça | onde |
+|---|---|
+| `GetPNForLID` (adapter) | `pkg/infra/wa-noise/adapters/user/adapter.go:119` |
+| `CachedLIDMap.GetPNForLID` (SDK) | `internal/wa-noise/persistence/store/sqlstore/lidmap.go:123` |
+| **resolução em LOTE com cache, já em uso** | `pkg/infra/wa-noise/adapters/user/blocklist.go:104-114` (`getCachedPNForLID`) |
+
+O `blocklist.go` já resolve LIDs em lote com cache — ou seja, **o padrão que a
+correção da listagem precisa já está escrito neste repositório**, e o cuidado da
+Regra 2 registado acima (não fazer N idas ao protocolo) tem solução pronta a
+copiar.
+
+**E a investigação produziu um achado de CONTRATO, registrado como [[F182]]**:
+`GET /user/lid/{jid}` devolve **500 "internal server error"** quando recebe um
+LID em vez de um PN. Medido:
+
+```
+$ curl /user/lid/78026737999990@lid
+{"code":500,"error":"internal server error","success":false}
+
+# no log:
+ERR Failed to get LID error="invalid GetLIDForPN call with non-PN JID 78026737999990@lid"
+```
+
+O servidor SABE que o cliente passou o tipo errado, e responde como se a culpa
+fosse dele.
+
 **Status**: não corrigido, nada implementado. Fora do escopo da verificação, que
 era provar o ENVIO — e ele está provado. Registrado para decisão; é candidato
-forte a próxima prioridade, porque toca a prioridade 2 do projeto e foi medido
-contra dados reais.
+forte a próxima prioridade, porque toca a prioridade 2 do projeto, foi medido
+contra dados reais, e **as peças da correção já existem**.
+
+---
+
+## F182 — `GET /user/lid/{jid}` responde 500 a um erro do CLIENTE
+
+**Data**: 2026-08-20. **Contexto**: investigação da [[F181]], em campo.
+
+**Onde**: `pkg/application/usecase/user/get_user_lid.go:46`.
+
+**Problema**: a rota aceita apenas **PN**. Passando um **LID**, o adapter recusa
+com `invalid GetLIDForPN call with non-PN JID`, e a resposta ao cliente é:
+
+```
+{"code":500,"error":"internal server error","success":false}
+```
+
+Isso é **erro do cliente devolvido como falha do servidor**. O cliente não tem
+como descobrir que passou o tipo errado: a mensagem útil fica no log do
+servidor, e ele recebe uma frase genérica que sugere avaria interna.
+
+**O comentário do código explica por que o 500 existe** — e a explicação é boa
+para o caso que ela cobre:
+
+> *"NÃO é 404: aqui a PORTA falhou — o store quebrou, e o cliente não tem como
+> saber se aquele número tem LID ou não. Reportar 'não encontrado' faria ele
+> PARAR de tentar diante de uma falha transitória."*
+
+Está certo para falha de store. **Mas JID do tipo errado não é falha de store** —
+é validação, e é determinística: repetir não vai adiantar. O caminho de validação
+e o de falha de infraestrutura foram fundidos num só.
+
+**Correção sugerida**: distinguir os dois. JID que não é PN → `400`, com
+mensagem que diga o que se esperava. Falha do store → continua `500`, pelo
+motivo que o comentário já defende bem.
+
+**Cuidado**: `ResolveQualifiedJID` (`:37`) já valida FORMATO e devolve 400. O
+que falta é validar o TIPO (PN contra LID) — provavelmente no mesmo ponto, antes
+de chamar o adapter, para que a regra fique num lugar só.
+
+**Status**: não corrigido. É mudança de contrato HTTP — passa a devolver 400
+onde hoje devolve 500 —, item 3.1. Levado ao canal e ao humano.
