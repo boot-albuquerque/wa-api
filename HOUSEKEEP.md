@@ -9158,8 +9158,34 @@ S3, HMAC, proxy/history), cada um recuperando o contrato histórico de
 fizeram no envio. `test_s3_connection` merece cuidado extra: testar conexão
 S3 real toca credencial e rede.
 
-**Status**: não corrigido, nada implementado. Achado em campo e levado ao
-canal de decisão.
+**Status**: **JÁ CORRIGIDO** — pela [[F157]], nesta mesma sessão, e esta entrada
+ficou aberta porque ninguém voltou a fechá-la depois de o conjunto maior ser
+resolvido.
+
+**Verificado em 2026-08-20**, um a um, no código atual:
+
+| rota / use case | grava? |
+|---|---|
+| `set_history.go` | `uc.store.SaveHistoryLimit` + `uc.cache.SetHistory` |
+| `set_proxy.go` | `uc.store.SaveProxyConfig` + `uc.cache.SetProxy` |
+| `configure_hmac.go` | `uc.keys.SaveHmacKey` + `uc.cache.SetHmacKey` |
+| `configure_s3.go` | `uc.store.SaveS3Config` |
+| `test_s3_connection.go` | **não grava, e é correto** — é operação de TESTE, devolve `domain.S3TestResult` |
+
+A palavra `validated` desapareceu dos cinco. A única ocorrência restante está
+DENTRO de um comentário em `set_proxy.go:115`, explicando por que a URL não é
+validada ali — não é mensagem de resposta.
+
+**QUARTA entrada de dívida fantasma encontrada em 2026-08-20**, junto com a
+[[F111]] (corrigida pela F130), a [[F64]] (referência marcada como trabalho) e a
+[[F174]] (duplicata que eu criei). O padrão é sempre o mesmo: um bloco conserta
+o defeito, fecha a entrada cujo número está no packet, e deixa aberta a outra
+que descreve a mesma coisa por outro ângulo.
+
+A regra que a F111 registou vale igual aqui: **bloco que conserta um defeito
+deve fechar TODAS as entradas que o descrevem.** A F157 tinha até o ADENDO
+abaixo apontando para si mesma — e ainda assim a entrada ficou como "não
+corrigido, nada implementado", que é o oposto do que aconteceu.
 
 **ADENDO 2026-08-19 — leia a [[F157]] antes de agir nesta entrada.** O
 conjunto aqui é INCOMPLETO: são DEZ rotas, não cinco, e há uma classe de
