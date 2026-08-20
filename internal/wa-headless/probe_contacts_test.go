@@ -3,7 +3,9 @@ package waheadless
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
@@ -33,7 +35,7 @@ func TestProbeContactShape(t *testing.T) {
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
-	ctx, cancel := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	sess, err := h.Session(ctx)
 	if err != nil {
@@ -50,40 +52,81 @@ func TestProbeContactShape(t *testing.T) {
 	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
 	// this pass counts which of them separate that row from the rest. Counters
 	// only; no identity leaves the page.
-	const script = `JSON.stringify((() => {
-		const coll = window.require('WAWebContactCollection').ContactCollection;
-		const all = coll.getModelsArray();
-		const out = { total: all.length, byPredicate: {}, shortUsers: {}, oddballs: [] };
-		const preds = ['isUser','isServer','isPSA','isGroup','isNewsletter','isBroadcast','isLid'];
-		for (const p of preds) { out.byPredicate[p] = 0; }
-		for (let i = 0; i < all.length; i++) {
-			const id = all[i].id;
-			if (!id) { continue; }
-			for (const p of preds) {
-				try { if (typeof id[p] === 'function' && id[p]()) { out.byPredicate[p]++; } } catch (e) {}
+	// DOES A SYNC CHANGE ANYTHING? The previous pass answered the cheaper
+	// question first and the answer was NO GAP: of 391 contacts the chats
+	// reference, 391 are already in the roster of 944. So membership is not
+	// what priming would fix.
+	//
+	// What IS thin is names: getName answered for 1 of 944. This pass measures
+	// whether the page's own contact sync populates them, with a snapshot
+	// before and after — because "we called it and things look fine" is not a
+	// measurement.
+	//
+	// It runs on a LAB account, and the call is the same periodic refresh the
+	// page performs on its own every 86400s. Async, so store-and-poll.
+	const script = `(() => {
+		window.__waHeadlessPrime = { stage: 'pending' };
+		const snap = () => {
+			const CC = window.require('WAWebContactCollection').ContactCollection;
+			const G = window.require('WAWebContactGetters');
+			const all = CC.getModelsArray();
+			let name = 0, pushname = 0, shortName = 0, verified = 0;
+			const servers = {};
+			for (const c of all) {
+				try {
+					const sv = (c.id && c.id.server) || '?';
+					servers[sv] = (servers[sv] || 0) + 1;
+					if (G.getName && G.getName(c)) name++;
+					if (G.getPushname && G.getPushname(c)) pushname++;
+					if (G.getShortName && G.getShortName(c)) shortName++;
+					if (G.getVerifiedName && G.getVerifiedName(c)) verified++;
+				} catch (e) {}
 			}
-			const len = (id.user || '').length;
-			out.shortUsers[len] = (out.shortUsers[len] || 0) + 1;
-			// Anything with an implausibly short user: report its PREDICATES,
-			// never its value, so the filter can be written against a rule the
-			// page owns instead of against a length.
-			if (len <= 4 && out.oddballs.length < 10) {
-				const d = { len: len, server: id.server };
-				for (const p of preds) {
-					try { d[p] = (typeof id[p] === 'function') ? !!id[p]() : 'n/a'; } catch (e) { d[p] = 'THREW'; }
+			return { total: all.length, withName: name, withPushname: pushname,
+				withShortName: shortName, withVerifiedName: verified, servers: servers };
+		};
+		(async () => {
+			const out = { stage: 'done' };
+			try {
+				out.before = snap();
+				const t0 = Date.now();
+				const B = window.require('WAWebContactSyncBridge');
+				try {
+					const r = await B.doFullContactSync();
+					out.syncReturned = (r === undefined) ? 'undefined'
+						: (r === null ? 'null' : (typeof r === 'object' ? Object.keys(r).join(',') : String(r).slice(0, 60)));
+				} catch (e) {
+					out.syncError = String((e && e.message) || e).slice(0, 200);
 				}
-				try { d.isMe = !!all[i].isMe; } catch (e) {}
-				out.oddballs.push(d);
+				out.syncMs = Date.now() - t0;
+				out.after = snap();
+			} catch (e) {
+				out.fatal = String((e && e.message) || e).slice(0, 200);
 			}
-		}
-		return out;
-	})())`
+			window.__waHeadlessPrime = out;
+		})();
+		return 'kicked';
+	})()`
 
 	var raw string
-	if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts", func(c context.Context) error {
+	if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts/kick", func(c context.Context) error {
 		return sess.Tab().Evaluate(c, script, &raw)
 	}); err != nil {
-		t.Fatalf("probe: %v", err)
+		t.Fatalf("probe kick: %v", err)
 	}
-	t.Logf("contact shape: %s", raw)
+	for i := 0; ; i++ {
+		if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts/poll", func(c context.Context) error {
+			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessPrime || {stage:"missing"})`, &raw)
+		}); err != nil {
+			t.Fatalf("probe poll: %v", err)
+		}
+		if !strings.Contains(raw, `"stage":"pending"`) {
+			break
+		}
+		if i > 90 {
+			t.Fatal("the sync never settled")
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Logf("prime before/after: %s", raw)
 }

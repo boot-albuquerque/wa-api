@@ -162,6 +162,18 @@ const (
 	// createWid BUILDS from a string; asChatWid only VALIDATES an existing wid,
 	// and handing it a string fails with "e.isUser is not a function".
 	ModuleWidFactory = Module("WAWebWidFactory")
+	// ModuleContactSyncBridge asks the page to refresh the roster.
+	//
+	// MEASURED COST AND MEASURED EFFECT, 2026-08-20, on the lab profile:
+	// doFullContactSync() took 41.9 SECONDS, returned undefined, and moved one
+	// number — verified business names, 52 to 56. Total contacts unchanged at
+	// 944; getName unchanged at 1; pushname unchanged at 456.
+	//
+	// So it is a refresh, not a fetch. It does not add people and it cannot
+	// invent address-book names the primary device does not have. The
+	// capability built on it reports the before/after rather than claiming to
+	// have "primed" anything.
+	ModuleContactSyncBridge = Module("WAWebContactSyncBridge")
 )
 
 // RequiredAtStartup is verified before any capability runs.

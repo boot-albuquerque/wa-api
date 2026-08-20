@@ -433,6 +433,28 @@ O risco desta divergência é o que a torna importante: ligar em `add` aqui
 instalaria sem erro e entregaria nada — falha sem sintoma, indistinguível de uma
 agenda parada.
 
+### 6.12 — `primeContactRoster` não tem baseline no `wwebjs`, e o nome promete demais
+
+**O que o `wwebjs` faz**: nada. É a única das catorze sem equivalente lá, então
+não houve o que copiar — nem entendimento, nem nome de módulo, nem issue aberta.
+
+**O que fazemos**: chamamos `WAWebContactSyncBridge.doFullContactSync` e
+reportamos a DIFERENÇA entre antes e depois, em vez de afirmar que "preparamos"
+o roster.
+
+**Por que a forma é essa**: medido, e o nome não sobrevive à medição. Não há
+lacuna de pertencimento — dos 391 contatos que a `ChatCollection` referencia
+pela regra da própria página, 391 já estavam no roster de 944. A chamada custa
+**42 segundos**, devolve `undefined`, não acrescenta pessoas e não popula nomes
+de agenda (`getName` responde para 1 de 944 antes e depois).
+
+O que ela move é a ligação `lid → phone`, que é a única aresta cruzada deste
+build e da qual a deduplicação depende. Cada ligação nova é uma pessoa que deixa
+de ser contada duas vezes.
+
+**Classificação**: MELHORIA INTENCIONAL, sem baseline no `wwebjs` — não conta
+como item de paridade, e não deve ser lida como tal.
+
 ## 7. Passagem de auditoria — as seis, conferidas contra o que a matriz prometia
 
 Feita em 2026-08-19, depois de a sexta capacidade entrar. O alvo parou de mudar,

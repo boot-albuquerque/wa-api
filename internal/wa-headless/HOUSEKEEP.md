@@ -3419,3 +3419,99 @@ onde a evidência mora.
 
 **Status**: corrigido — comentário atualizado nomeando o teste que verifica, com
 o registro de que a afirmação anterior era correta na data em que foi escrita.
+
+## H45 — `primeContactRoster`: o nome promete o que o mecanismo não faz, e o que ele faz eu quase não medi
+
+**Data**: 2026-08-20 · **Contexto**: CAP-11, a ÚNICA das catorze que o
+whatsapp-web.js não tem. Sem referência para copiar, tudo saiu de medição.
+
+### A pergunta barata primeiro: existe lacuna a preencher?
+
+Antes de acionar qualquer sync numa conta real, medi se o roster está incompleto
+— usando `WAWebNonAddressBookContactsJob.getAllContactsFromChatCollectionIntoChunks`,
+que é LEITURA pura (percorre a `ChatCollection` e filtra pela regra da própria
+página, `getIsEligibleForContactSync`).
+
+| medida | valor |
+|---|---|
+| contatos no roster | 944 |
+| chats | 383 |
+| contatos referenciados pelos chats | 391 |
+| **referenciados que faltam no roster** | **0** |
+| política de atualização da própria página | 86 400 s |
+
+**Não há lacuna de pertencimento.** Nada a "preencher".
+
+### Ler antes de chamar, porque a família muta
+
+O enumerador (H37) trouxe `doFullContactSync`, `syncContactList`,
+`runSyncDirtyContactsJob`. Os três são invólucros minificados que a fonte não
+explica — mas `markContactsSyncCompleted` escreve através de
+`LidAwareContactsDB.bulkCreateOrMerge`. Disparar às cegas numa conta seria
+experimento no roster de alguém, então li antes.
+
+### O que a chamada realmente faz, medido antes/depois
+
+```
+before  944 contatos · getName 1 · pushname 456 · verifiedName 52
+after   944 contatos · getName 1 · pushname 456 · verifiedName 56
+custo   41,9 SEGUNDOS, devolvendo undefined
+```
+
+É **refresh, não fetch**. Não acrescenta pessoas, e não pode inventar nomes de
+agenda que o aparelho primário não tem — daí `getName` responder para 1 de 944
+antes e depois.
+
+### E aí a prova ao vivo mostrou que eu medi a coisa ERRADA
+
+O teste passou, e o log entregou o que o meu instrumento não via: depois do
+refresh, o `List` leu **521 pessoas de 944 linhas, merged=421**, onde antes lia
+**544 de 944, merged=398**.
+
+Mais linhas `@lid` haviam ganhado `phoneNumber`, então mais delas fundiram. O
+refresh tinha feito algo material — e o meu `PrimeResult` chamou de
+`changed=false`, porque eu contava NOMES.
+
+**A correção**: `Snapshot.LidWithPhone` e `PrimeResult.Linked()`. É o número
+certo de vigiar porque a aresta `lid → phone` é a ÚNICA ligação cruzada que este
+build oferece (0 de 454 linhas de telefone carregam lid — H39), então é dela que
+a deduplicação depende. Cada ligação nova é uma pessoa que deixa de ser contada
+duas vezes.
+
+**Segunda execução, já com o instrumento certo:**
+
+```
+added=0 linked=0 changed=false waited=42,056s
+before/after idênticos, lidWithPhone=421 nos dois
+```
+
+Primeira chamada faz o trabalho, segunda não tem o que fazer — e ainda cobra 42
+segundos. É o estado estacionário, e é por isso que `Changed()==false` é sucesso
+e não falha.
+
+> **Ressalva de atribuição, dita porque a medição não a isola.** Os 398 → 421
+> foram observados ENTRE execuções, não dentro de uma. Como o `lidWithPhone` só
+> passou a existir depois — que é precisamente a omissão — não posso descartar
+> que um sync de fundo tenha feito parte. O que a segunda execução prova é o
+> estado estacionário; a atribuição do salto é plausível, não isolada.
+
+### A pós-condição é contra DANO, não contra ausência de melhora
+
+A chamada muta. A falha que importa não é "nada melhorou" — é **"o roster voltou
+MENOR"**, e é a única que o chamador não consegue detectar sozinho.
+`ErrRosterShrank` carrega os dois números.
+
+**Três controles negativos, EXECUTADOS:**
+
+```
+1. remover a pós-condição de encolhimento -> got <nil>, want ErrRosterShrank: 944 -> 900 reportado como sucesso
+2. tratar "nada mudou" como falha          -> an unchanged roster produced an error
+3. validar o contexto DEPOIS do kick       -> kicked the sync 1 time(s) for a caller that had given up
+```
+
+O terceiro importa mais aqui que nas outras capacidades: quem desistiu não deve
+ter uma mutação de 42 segundos disparada em seu nome.
+
+**Status**: entregue — nascida de medição sem referência, com a promessa do nome
+corrigida no comentário, o instrumento corrigido depois da prova ao vivo, e três
+controles negativos.

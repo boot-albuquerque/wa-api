@@ -65,6 +65,7 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 544 pessoas**, 398 fundidas |
 | `fetchContactAvatar` | `capabilities/avatar` | 12 contatos ao vivo: 4 com foto, 8 sem, **0 falhas** |
 | `onContact` | `capabilities/contacts` (`subscribe.go`) | 6 buscas de avatar → **7 eventos `change`**, 0 `add` |
+| `primeContactRoster` | `capabilities/contacts` (`prime.go`) | refresh de **42 s**; liga `lid→phone`, não acrescenta pessoa |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -99,6 +100,12 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
     funciona para mensagens; para contatos, `add` disparou ZERO vezes em 90 s e
     `change` disparou 7. Um roster muda por linha atualizada. Copiar a palavra
     do irmão instalaria limpo e não entregaria nada. Ver H43.
+12. **`primeContactRoster` é REFRESH, não fetch** — e é a única das catorze sem
+    equivalente no wwebjs, então nasceu inteira de medição. Não há lacuna de
+    pertencimento (391 de 391 contatos referenciados pelos chats já estavam no
+    roster); o que a chamada move é a ligação `lid → phone`, e ela custa 42 s.
+    A pós-condição é contra DANO (roster que encolhe), não contra ausência de
+    melhora. Ver H45.
 
 ## 3. Invariantes travadas em teste
 
@@ -276,6 +283,14 @@ tarde quieta. Como 24 dos 46 eventos vinham de `profilePicThumb`, e o
 `fetchContactAvatar` escreve esses campos, a capacidade de avatar virou o
 estímulo. É a mesma ideia do parágrafo acima vista do outro lado: encadear
 capacidades não só encontra defeitos, também torna as provas determinísticas.
+
+**Quarto, e é o mais desconfortável (H45)**: um instrumento pode passar em todos
+os seus próprios testes e ainda estar medindo a coisa errada. O `primeContactRoster`
+contava NOMES e reportou `changed=false` para um refresh que religou 23 linhas
+`@lid` ao telefone — mudança que o `List` viu na hora (544 pessoas viraram 521
+sobre as mesmas 944 linhas) e que o meu `Snapshot` não tinha campo para ver.
+Quem denunciou foi a prova AO VIVO, ao imprimir o roster depois. Testes de dublê
+não podiam pegar isso: eles só sabem os campos que eu decidi medir.
 
 **Terceiro, e é sobre AMBIGUIDADE (H43)**: "nada disparou" não distingue "este
 build não tem esse evento" de "ficou quieto". A sonda passou a disparar um evento
