@@ -15112,3 +15112,84 @@ como eixo próprio.
 
 **Status**: varredura (b) concluída, zero achados. Segue para (c), a manipulação
 de chat, com as condições que o canal impôs para as destrutivas.
+
+---
+
+## VARREDURA (c) — manipulação de chat: as cinco passam, e sobra um achado de contrato
+
+**Data**: 2026-08-20. **Escopo restringido pelo humano**, mais apertado do que o
+que o canal tinha aprovado: **não** apagar conta, **não** mudar nome ou avatar, e
+das destrutivas **apenas apagar e/ou editar mensagens**.
+
+Por isso ficaram **de fora**, e não por esquecimento:
+
+- **`/chat/delete`** — apaga a CONVERSA inteira, não é operação de mensagem;
+- **`/chat/archive`** — mexe no estado da conversa do humano. É reversível, mas
+  não foi autorizada.
+
+### O que passou
+
+| rota | resposta | efeito verificado |
+|---|---|---|
+| `/chat/presence` (`composing`) | `200` | — |
+| `/chat/presence` (`paused`) | `200` | — |
+| `/chat/react` | `200` | **sim**: reação chegou com o emoji `👍` e ligada ao `message_id` certo |
+| `/chat/markread` | `200` | — |
+| `/chat/delete/message` | `200 deleted` | **sim**: o destino recebeu `delete` com o ID da mensagem apagada |
+
+O apagar foi feito numa mensagem criada **especificamente para isso**, com a
+evidência prévia registada duas vezes — ao criar e imediatamente antes de apagar —
+como o canal exigiu por ser irreversível.
+
+`presence` e `markread` devolvem `200` e **não têm rasto observável do nosso
+lado**. Registo isso como limitação da verificação, não como sucesso: o que ficou
+provado é que a rota aceita e responde, não que o aparelho do outro lado mudou de
+estado.
+
+---
+
+## F190 — `/chat/react` devolve a forma HISTÓRICA de resposta, e três rotas de mensagem ficam fora da trava de contrato
+
+**Data**: 2026-08-20. **Contexto**: varredura (c). Não é a [[F131]] — é o que
+sobrou dela, medido.
+
+A [[F131]] decidiu, e travou, que a superfície de envio devolve
+`{message_id, timestamp, status}`, com a forma histórica
+`{Details, Timestamp, Id}` **explicitamente descartada**. Está correta e está
+travada por `TestSendWireContract_FieldNames`.
+
+**Só que trava DOZE rotas, e há três operações que devolvem mensagem e ficam de
+fora:**
+
+| rota | forma devolvida | travada? |
+|---|---|---|
+| as 12 de `/chat/send/*` | `{message_id, timestamp, status}` | **sim** |
+| `/chat/send/edit` | `{message_id, timestamp, status}` | **não** |
+| `/chat/delete/message` | `{message_id, timestamp, status}` | **não** |
+| `/chat/react` | `{Details, Id, Timestamp}` | **não** |
+
+Medido em campo:
+
+```
+/chat/delete/message -> {"message_id":"3EB0D89C...","timestamp":...,"status":"deleted"}
+/chat/react          -> {"Details":"Sent","Id":"3EB0D89C...","Timestamp":...}
+```
+
+**São dois problemas diferentes, e vale separá-los:**
+
+1. **`/chat/react` diverge de facto.** Ela ENVIA uma mensagem e devolve os mesmos
+   três valores semânticos — identificador, instante, resultado — com os nomes
+   que a F131 descartou. Um cliente que leia `message_id` das treze rotas de
+   envio **parte** ao ler a resposta da reação. É a incoerência que a F131 se
+   propôs a acabar, sobrevivendo numa rota que a decisão não alcançou.
+2. **`edit` e `delete/message` seguem a convenção mas não estão travadas.**
+   Renomear `message_id` nelas passa com a suíte verde — que foi exatamente o
+   `REQUIRED_FIX` que originou o teste. A trava protege 12 de 15.
+
+**Correção sugerida**: alargar `TestSendWireContract_FieldNames` às três, e
+decidir o que fazer com a `/chat/react` — alinhá-la custa mudança de contrato
+público, mantê-la exige que a divergência seja **declarada** em vez de herdada.
+As duas são defensáveis; herdar sem decidir não é, e é o modo de falha que a
+própria F131 nomeia.
+
+**Status**: não corrigido, achado de varredura. Contrato HTTP, item 3.1.
