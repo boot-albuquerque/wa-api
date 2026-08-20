@@ -14998,3 +14998,72 @@ A metade do NOME fica **fechada como não corrigível com os dados disponíveis*
 com a razão registada, em vez de ficar aberta para sempre a envenenar o
 inventário. Travada por sete testes em `list_chats_test.go` e seis controlos
 negativos.
+
+---
+
+## VARREDURA (a) — os cinco envios que faltavam: 13 de 13 provados, e DOIS achados
+
+**Data**: 2026-08-20. **Contexto**: decisão (d) do canal — varrer envio, download e
+manipulação, **sem corrigir pelo caminho**, e só depois decidir a ordem dos
+consertos.
+
+### Os cinco passam
+
+| rota | resposta | chegou como |
+|---|---|---|
+| `/chat/send/audio` | `200 sent` | `audio` |
+| `/chat/send/video` | `200 sent` | `video`, com a legenda |
+| `/chat/send/sticker` | `200 sent` | `sticker` |
+| `/chat/send/location` | `200 sent` | `location` |
+| `/chat/send/contact` | `200 sent` | `contact` |
+
+Nenhuma ausente, nenhum descarte. **A tabela de envio fecha em 13 de 13 contra o
+WhatsApp real.**
+
+Nota de instrumento: o `ffmpeg` da máquina está partido (`libx265` em falta), e
+os ficheiros foram gerados por bytes — WAV real pelo módulo `wave`, WebP 512×512
+por PIL, e um MP4 mínimo com `ftyp`/`moov`/`mdat`. São formatos **reconhecíveis
+por assinatura**, não ficheiros inventados: um dublê que o servidor rejeitasse
+mediria a rejeição, não a rota.
+
+### ACHADO 1 — a [[F187]] medida EM CAMPO, e é pior do que em teste
+
+Eu conhecia a F187 por um teste que eu próprio escrevi. Agora está medida contra
+o servidor real, **com envios nossos**:
+
+```
+enviei Name="Praca da Liberdade"  -> gravado text_content = ":location:"
+enviei Name="Contato Varredura"   -> gravado text_content = ":contact:"
+```
+
+E o nome **está no evento**, intacto, dentro do `datajson`:
+
+```
+locationMessage.name        = "Praca da Liberdade"
+contactMessage.displayName  = "Contato Varredura"
+```
+
+Ou seja: o dado chega, é serializado para dentro da coluna de diagnóstico, e o
+campo que o cliente lê recebe um marcador. Não é ausência de informação como na
+[[F181]] — **é informação presente e descartada na escrita**.
+
+Isto sobe a gravidade da F187: ela deixa de ser "duas fontes de verdade
+divergentes", que soa a dívida de arquitetura, e passa a ser **perda de dado
+observável em rota que acabámos de declarar funcional**.
+
+### ACHADO 2 — mensagens reais de terceiros a serem descartadas AGORA
+
+Dois avisos de descarte no log, de mensagens que não são minhas (`2AAF42B1...`,
+`2A45804B...`), ambas com `wire_type=media`:
+
+```
+WARN received message dropped from history: no content extracted for its type
+     message_id=2AAF42B1F90F1185FD63  wire_type=media  message_type=text
+```
+
+É a [[F184]] residual a acontecer em tráfego real, não em teste sintético. E é a
+[[F186]] a fazer o seu trabalho: sem o registo do descarte, estas duas mensagens
+teriam desaparecido **em silêncio**, e eu não teria como saber que aconteceram.
+
+**Status**: varredura (a) concluída. Nada corrigido, por instrução do canal.
+Segue para (b), os cinco downloads.
