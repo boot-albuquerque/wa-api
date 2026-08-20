@@ -13774,7 +13774,7 @@ onde hoje devolve 500 —, item 3.1. Levado ao canal e ao humano.
 
 ---
 
-## F183 — `/chat/list` devolve LID, `/chat/history` só entende PN: o fluxo natural do cliente devolve 200 VAZIO
+## F183 — a MESMA conversa fica gravada sob DOIS `chat_jid`, e o fluxo natural do cliente devolve 200 VAZIO
 
 **Data**: 2026-08-20. **Contexto**: etapa (b) da verificação de campo, com duas
 contas reais pareadas. O canal levantou a hipótese de que "mídia, histórico,
@@ -13831,3 +13831,188 @@ deixaria a mesma armadilha para o próximo esquema que aparecer.
 **Status**: não corrigido. É contrato HTTP, item 3.1 — e é o irmão direto da
 [[F181]], com quem deve ser decidido em conjunto: consertar uma sem a outra deixa
 o fluxo do cliente quebrado na metade que ficou.
+
+### CORREÇÃO da própria F183 — medida depois, e o diagnóstico inicial estava ERRADO
+
+**Data**: 2026-08-20, poucas horas depois. A hipótese cai porque a medição a
+contrariou (CLAUDE.md: achado com diagnóstico errado é pior que nenhum, porque
+parece resolvido).
+
+**O que eu escrevi acima**: "`/chat/history` só entende PN". **Falso.** A rota
+aceita os dois esquemas e devolve registos nos dois — eu tinha medido UM usuário
+com UMA conversa e generalizei.
+
+**O que se passa de facto**, medido na tabela inteira:
+
+| origem da linha | LID | PN | grupo |
+|---|---|---|---|
+| recebimento ao vivo | 4906 | 4116 | 13927 |
+| sync em lote | 148 | 507 | 15 |
+
+Os dois esquemas convivem em ambas as origens. **Não há regra que o cliente
+possa seguir para saber qual pedir.**
+
+E o caso concreto, isolado nas duas contas reais — a conversa entre `qr2`
+(PN `554192421234`, LID `90937376170214`) e `destino`, no histórico do destino:
+
+| `chat_jid` | linhas | enviadas | recebidas |
+|---|---|---|---|
+| `554192421234@s.whatsapp.net` | 15 | 14 | 1 |
+| `90937376170214@lid` | 3 | 0 | 3 |
+
+**Uma conversa, dezoito mensagens, duas chaves.** Nenhuma consulta devolve a
+conversa inteira: pedir pelo PN esconde as três recebidas ao vivo, pedir pelo LID
+esconde as quinze. O cliente não vê erro em nenhum dos casos.
+
+Isto é **pior** que o diagnóstico original. "A rota não entende LID" seria um
+defeito de tradução na fronteira HTTP. O que existe é **fragmentação no
+armazenamento**: as linhas já entram na tabela com chaves diferentes para o mesmo
+par de interlocutores, e nenhuma tradução na leitura conserta isso — traduzir
+`@lid`→PN na consulta devolveria as quinze e continuaria a esconder as três.
+
+**A informação para unificar EXISTE e está a ser deitada fora.** O evento traz
+`Info.SenderAlt` com o PN completo — medido nas próprias linhas `@lid`:
+
+```
+3EB0C5449848A16ECED120 | SenderAlt = 554192421234:37@s.whatsapp.net
+3EB05BFA14AF03430019BD | SenderAlt = 554192421234:37@s.whatsapp.net
+```
+
+Ele é serializado para dentro do `datajson` e **nunca usado** para normalizar
+`chat_jid`/`sender_jid` na escrita.
+
+**Correção sugerida, revista**: normalizar na ESCRITA, usando `SenderAlt`/
+`RecipientAlt` quando presentes, e não só traduzir na leitura. Uma migração terá
+de reconciliar as linhas já gravadas — e o `UNIQUE(user_id, message_id)` ajuda,
+porque a mesma mensagem não está duplicada, está apenas sob chave diferente.
+
+**Cuidado (Regra 1 — inventário de detentores)**: normalizar na escrita põe uma
+resolução LID→PN no caminho de CADA mensagem recebida. Isso é exatamente o que a
+[[F181]] avisa: se a resolução for síncrona e por mensagem, o caminho de
+recepção passa a depender de ida-e-volta ao protocolo. O `getCachedPNForLID` em
+lote do `blocklist.go:104` é o padrão a copiar; `SenderAlt`, quando vem no
+evento, dispensa a ida ao protocolo por completo.
+
+**O que continua válido da entrada original**: o `200` com lista vazia, sem erro
+e sem aviso. Esse é o sintoma, e o cuidado da Regra 2 mantém-se — JID que não
+casa não pode continuar a devolver `200` vazio.
+
+
+---
+
+## F184 — enquete e mensagem com botões são RECEBIDAS e nunca gravadas no histórico: desaparecem em silêncio
+
+**Data**: 2026-08-20. **Contexto**: varredura de campo da decisão (b) do canal —
+exercitar mídia, botões e enquetes com as duas contas reais pareadas.
+
+**Medição, com isolamento limpo**: cinco mensagens enviadas de `qr2` para
+`destino` no mesmo minuto, mesma configuração, mesmo par de contas. A ÚNICA
+variável é o tipo da mensagem.
+
+| # | tipo | `message_id` | resposta HTTP | log `Message Received` | gravado no histórico |
+|---|---|---|---|---|---|
+| 1 | imagem | `3EB05BFA14AF03430019BD` | `200 sent` | sim (`type: media`) | **sim** (`image`) |
+| 2 | documento | `3EB0C5449848A16ECED120` | `200 sent` | sim (`type: media`) | **sim** (`document`) |
+| 3 | enquete | `3EB06ABF289C9D46888E88` | `200 sent` | sim (`type: poll`) | **NÃO** |
+| 4 | botões | `3EB03A918C69836F93D120` | `200 sent` | sim (`type: text`) | **NÃO** |
+| 5 | botões | `3EB0FFB3B4E159F461217C` | `200 sent` | sim (`type: text`) | **NÃO** |
+
+Contagem direta na tabela, id a id: `1 / 1 / 0 / 0 / 0`.
+
+A imagem e o documento, enviados nos MESMOS dez segundos e para o mesmo
+destinatário, gravaram. Não é histórico desligado, não é sessão caída, não é
+janela de tempo: **é o tipo da mensagem**.
+
+**Causa, não sintoma** — `pkg/bootstrap/eventhandler_message.go:277-313`. A
+cadeia de classificação tem ramo para `delete`, `reaction`, `image`, `video`,
+`audio`, `document`, `sticker`, `contact`, `location`. **Não tem ramo para
+enquete nem para mensagem interativa/botões.** Então:
+
+1. `messageType` fica no valor inicial `"text"` (linha 277);
+2. `textContent` fica vazio — não há `Conversation` nem `ExtendedTextMessage`, e
+   `caption` é `""`;
+3. `defaultHistoryTextFor("text", "")` (linha 392) não tem `case "text"` e
+   devolve `""`;
+4. a guarda de gravação (linha 350) exige
+   `textContent != "" || mediaLink != "" || messageType != "text" && ...` —
+   **tudo falso**, e a linha nunca é escrita.
+
+Nada é registado. Nem `Warn`, nem `Debug`, nem contador. A mensagem chega, é
+logada como recebida, e evapora entre o log e a tabela.
+
+**Por que isto importa mais do que parece**: o projeto ENTREGA `/chat/send/poll`
+e `/chat/send/buttons` como capabilities (CAP-14 e CAP-21, com DTO, teste e
+entrada de HOUSEKEEP próprios). Manda-se a enquete com sucesso e ela some do
+histórico do destinatário. **A capability de envio existe sem a de recepção** —
+o que torna o par inutilizável para qualquer cliente que dependa de `/chat/history`
+para reconstruir a conversa.
+
+**Correção sugerida**:
+1. acrescentar os ramos em falta (`GetPollCreationMessage`, `GetButtonsMessage`,
+   `GetInteractiveMessage`, `GetListMessage`, `GetTemplateMessage`) com os tipos
+   correspondentes;
+2. acrescentar os `case` em `defaultHistoryTextFor` (`:poll:`, `:buttons:`, …),
+   pelo mesmo padrão já usado para mídia;
+3. **e, independentemente disso**, fazer a guarda da linha 350 dizer alguma coisa
+   quando descarta. Um `Debug` com o tipo bastaria para este achado ter aparecido
+   no primeiro dia em vez de num teste de campo.
+
+O ponto 3 é o que vale para além destes tipos: a lista de ramos vai voltar a
+ficar desatualizada na próxima vez que o WhatsApp acrescentar um formato. **O
+descarte silencioso é o defeito permanente; a lista incompleta é só a ocorrência
+de hoje.**
+
+**Status**: não corrigido. Escopo de recepção, adjacente às capabilities
+[[F181]]/[[F183]] mas independente delas — este não é problema de identidade, é
+de classificação.
+
+---
+
+## F185 — três botões pedidos, dois enviados, `200` sem dizer que um sumiu (confirmação em campo da F148)
+
+**Data**: 2026-08-20. **Contexto**: mesma varredura da [[F184]]. Não é achado
+novo — é a [[F148]] **medida contra o servidor real**, e registada porque a
+entrada original a descreve como risco e esta é a evidência de que ela morde.
+
+**Como me mordeu a mim, sem eu estar à procura**: mandei botões com
+`"type":"quickreply"`, que é o vocabulário do `/chat/send/template`. Resposta:
+
+```
+{"code":400,"error":{"code":"no_valid_buttons","message":"no valid buttons parsed"}}
+```
+
+Repetido com `"type":"reply"`: `200 sent`. Ou seja, **a mesma palavra é válida
+numa rota e faz o botão desaparecer na outra**, e a mensagem de erro não diz
+quais são os tipos aceites.
+
+**O caso pior, medido**: três botões, um deles com o tipo errado no meio.
+
+```
+Buttons: [ {c1,"Valido1",reply}, {c2,"Sumido",quickreply}, {c3,"Valido2",reply} ]
+→ {"code":200,"data":{"message_id":"3EB0FFB3B4E159F461217C","status":"sent"}}
+```
+
+`200`, `status: sent`, e **nenhum sinal de que o botão do meio não foi**. O
+descarte está em `normalizeInteractiveButtons`
+(`pkg/application/usecase/message/send_buttons.go:195-200`): tipo fora dos quatro
+conhecidos cai no `default: continue`.
+
+Isto é comportamento **preservado por decisão explícita** e travado por
+`TestSendButtons_UnknownTypeIsSilentlyDiscarded` — a F148 já diz isso. O que esta
+entrada acrescenta é: a decisão foi tomada por compatibilidade com payloads
+históricos, e o preço dela foi cobrado na primeira utilização real, a mim, em
+dois dos três envios de botão da sessão.
+
+**Correção sugerida** — a mais barata primeiro, e nenhuma delas mexe no contrato:
+1. `Warn` por botão descartado, com o `type` recebido e a lista dos aceites. O
+   comportamento não muda; o diagnóstico deixa de ser impossível. É exatamente o
+   que o `headerImageBytes` já faz, no MESMO ficheiro, para o descarte da imagem
+   de header — a divergência entre os dois descartes é interna, não histórica;
+2. a mensagem de `no_valid_buttons` passar a enumerar os tipos válidos.
+
+Mudar o `default` para cair em `reply` seria mudança de contrato público e
+continua a precisar de decisão — não é isto que se propõe aqui.
+
+**Status**: não corrigido. O ponto 1 é aditivo e não toca o contrato; o resto
+depende de decisão. Ver [[F184]], ponto 3: é o mesmo defeito de fundo — descarte
+sem registo — em duas camadas diferentes.
