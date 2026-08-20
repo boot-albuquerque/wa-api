@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -479,4 +480,123 @@ func testExistsInModule(t *testing.T, name string) bool {
 		}
 	}
 	return false
+}
+
+// housekeepPath is the module's incidental-findings log.
+const housekeepPath = "HOUSEKEEP.md"
+
+// openStatusTokens and closedStatusTokens are how an entry's status line is
+// classified. Both lists come from MEASURING the file, not from deciding what
+// people should have written: the vocabulary already in use is what a reader
+// has to cope with.
+var (
+	openStatusTokens = []string{
+		"não corrigido", "nao corrigido", "aberto",
+		"guarda presente e não testada", "não verificado",
+		// PARTIAL counts as open: it means work remains, and classifying it as
+		// closed is exactly the reading that made H5 look finished when its
+		// item 3 was still a human decision.
+		"parcialmente corrigido", "parcialmente corrigida",
+	}
+	closedStatusTokens = []string{
+		"corrigido", "corrigida", "fechado", "fechada",
+		"verificado", "confirmado", "decidido",
+	}
+)
+
+// strikethrough matches a ~~...~~ span, which in this file means SUPERSEDED
+// text kept for history.
+var strikethrough = regexp.MustCompile(`(?s)~~.*?~~`)
+
+// TestHousekeepEntriesAreMachineReadable makes the findings log readable by a
+// tool, because reading it by eye produced three wrong reports in one day.
+//
+// THE DEFECT THIS EXISTS FOR. Statuses in this file are superseded by striking
+// the old one through and writing the new one after it — good for a human, and
+// a trap for a scan: a naive grep finds the STRUCK text first and reports a
+// closed finding as open. On 2026-08-19 that made H2, H5 and H6 read as open
+// when all three were closed, and two of them were reported that way before the
+// mistake was caught by actually opening the entries.
+//
+// So this test enforces the two properties that make a scan trustworthy:
+// every entry HAS an authoritative status, and every authoritative status
+// begins with a word from the vocabulary the file already uses. It does not
+// try to be clever about entries carrying several statuses — those get listed
+// for a human to read, which is honest about what a tool can settle.
+func TestHousekeepEntriesAreMachineReadable(t *testing.T) {
+	body, err := os.ReadFile(housekeepPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", housekeepPath, err)
+	}
+
+	entryHeading := regexp.MustCompile(`(?m)^## (H\d+)\b`)
+	// The separator class after the colon is consumed BEFORE capturing, not
+	// trimmed after: stripping a struck-through status leaves "· " or "— "
+	// behind, and a capture that stops at the next "*" would grab only the
+	// separator and report it as the status.
+	statusLine := regexp.MustCompile(`\*{0,2}Status[^*:]*\*{0,2}:[\s*·—–-]*([^\n*]{3,60})`)
+
+	src := string(body)
+	locs := entryHeading.FindAllStringSubmatchIndex(src, -1)
+	if len(locs) == 0 {
+		t.Fatalf("%s has no ## H entries; this test is guarding nothing", housekeepPath)
+	}
+
+	var missing, unknown, multi []string
+	for i, loc := range locs {
+		name := src[loc[2]:loc[3]]
+		end := len(src)
+		if i+1 < len(locs) {
+			end = locs[i+1][0]
+		}
+		// Authoritative text only: superseded statuses are struck through, and
+		// reading them is precisely the bug.
+		entry := strikethrough.ReplaceAllString(src[loc[0]:end], "")
+
+		found := statusLine.FindAllStringSubmatch(entry, -1)
+		if len(found) == 0 {
+			missing = append(missing, name)
+			continue
+		}
+		if len(found) > 1 {
+			multi = append(multi, fmt.Sprintf("%s (%d statuses)", name, len(found)))
+		}
+		for _, m := range found {
+			// Stripping a struck-through status leaves its separator behind —
+			// "**Status**: ~~aberto~~ · **DECIDIDO**" becomes "**Status**: ·
+			// **DECIDIDO**". Trimming the leftovers is what lets the surviving
+			// status be read instead of the punctuation in front of it.
+			s := strings.ToLower(strings.Trim(strings.TrimSpace(m[1]), " ·*—-–:"))
+			var known bool
+			for _, tok := range append(append([]string{}, openStatusTokens...), closedStatusTokens...) {
+				if strings.HasPrefix(s, tok) {
+					known = true
+					break
+				}
+			}
+			if !known {
+				unknown = append(unknown, fmt.Sprintf("%s: %q", name, m[1]))
+			}
+		}
+	}
+
+	if len(missing) > 0 {
+		t.Errorf("these entries carry NO authoritative status, so nothing can tell whether "+
+			"they are open — H22 was written that way and went unnoticed: %s",
+			strings.Join(missing, ", "))
+	}
+	if len(unknown) > 0 {
+		t.Errorf("these statuses start with a word outside the vocabulary the file already "+
+			"uses, so a scan cannot classify them. Either use an existing word or add the "+
+			"new one to openStatusTokens/closedStatusTokens deliberately:\n  %s",
+			strings.Join(unknown, "\n  "))
+	}
+	if len(multi) > 0 {
+		// NOT a failure: an entry resolved in stages legitimately carries a
+		// status per stage (H5 has one for the whole finding and one for its
+		// item 3). Logged so a reader knows which entries a tool cannot settle
+		// on its own.
+		t.Logf("entries with several authoritative statuses — read these by hand: %s",
+			strings.Join(multi, ", "))
+	}
 }

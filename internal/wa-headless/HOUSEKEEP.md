@@ -1838,6 +1838,13 @@ comportamento correto hoje).
 **Regra que fica**: `-run` seletivo valida a mudança, **não autoriza o commit**.
 O que autoriza é a suíte.
 
+**Status**: **CORRIGIDO em 2026-08-19**. `Tab.Screenshot` passou para o `engine/`,
+o portão voltou ao verde e a suíte completa está verde sob `-race`.
+
+*(Esta linha faltava. A entrada foi escrita sem status nenhum, e o
+`TestHousekeepEntriesAreMachineReadable` — acrescentado no mesmo dia — é o que
+não deixa isso passar de novo.)*
+
 ## H23 — `engine.Browser.PID()` devolve o mesmo número depois da parada, e o SO reusa PIDs
 
 **Data**: 2026-08-19 · **Contexto**: `getBrowserPid`, quarta capacidade de
@@ -2093,6 +2100,59 @@ Então a isenção está amarrada aos testes que a justificam
 - `innerText.length` → passa, e a distinção segura;
 - apagar `TestMarkerScriptNeverReturnsPageText` → *"the exemption is now
   unbounded: either restore the guard or remove the exemption"*.
+
+**Status**: CORRIGIDO.
+
+## H29 — o instrumento com que eu leio ESTE arquivo era inconfiável, e produziu três reportes errados
+
+**Data**: 2026-08-19 · **Contexto**: a orquestração escolheu o H5 a partir de uma
+lista de "abertos" que eu forneci. Ao abrir a entrada, o H5 estava **fechado**.
+
+**O defeito, e ele é do LEITOR, não do arquivo**: statuses aqui são superados
+riscando o antigo e escrevendo o novo depois. Isso é bom para quem lê com os
+olhos e é armadilha para varredura: um `grep` acha o texto **riscado primeiro**
+e reporta achado fechado como aberto.
+
+**Custo medido, no mesmo dia**: três entradas têm status riscado — **H2, H5 e
+H6** — e eu reportei **duas** delas à orquestração como abertas. O H6 foi
+escolhido com base nessa premissa errada; o H5 idem. Nos dois casos o erro só
+apareceu porque fui ABRIR a entrada antes de mexer, não porque a varredura
+melhorou.
+
+E o H5 estava fechado **duas vezes**: os itens 1 e 2 em 2026-08-12 (com controle
+negativo que deixou 7 órfãos, mesma ordem de grandeza do achado original), e o
+item 3 **DECIDIDO pelo usuário** no mesmo dia — opção A, o sinal fica.
+
+**Segundo defeito, meu, achado pela mesma medição**: o **H22** foi escrito **sem
+linha de status nenhuma**. Nada podia dizer se estava aberto. Acrescentado.
+
+**Correção**: `TestHousekeepEntriesAreMachineReadable` no `gate_test.go`. Ele
+remove os trechos riscados **antes** de procurar status, e então exige duas
+propriedades que tornam qualquer varredura confiável:
+
+1. **toda entrada tem status autoritativo** — pega o caso do H22;
+2. **todo status começa com palavra do vocabulário que o arquivo já usa** — o
+   vocabulário foi MEDIDO do arquivo, não decidido: um status inventado deixa de
+   ser classificável em silêncio.
+
+**O que ele NÃO tenta fazer**: decidir entradas com vários status. O H5 tem um do
+achado inteiro e outro do item 3; o H14 tem um por etapa. Essas são LISTADAS para
+leitura humana. Uma ferramenta que adivinhasse ali seria a mesma classe de
+instrumento que causou o problema — um que não distingue dois estados e responde
+mesmo assim.
+
+**Duas correções do próprio instrumento, achadas rodando**:
+- `PARCIALMENTE CORRIGIDO` não estava no vocabulário. Entrou como **ABERTO**:
+  significa que sobra trabalho, e classificá-lo como fechado é exatamente a
+  leitura que fez o H5 parecer terminado enquanto o item 3 era decisão humana.
+- remover o texto riscado deixa o separador para trás (`Status: · **DECIDIDO**`),
+  e a primeira versão capturava o `·` como se fosse o status. O separador passou
+  a ser consumido **antes** da captura.
+
+**Três controles negativos, executados**: entrada sem status → acusada pelo nome;
+status fora do vocabulário → acusado; riscar o único status de uma entrada
+fechada → ela vira "sem status autoritativo", que é precisamente o buraco que
+enganou o leitor humano.
 
 **Status**: CORRIGIDO.
 
