@@ -12714,9 +12714,25 @@ if req.LinkPreview {
 sent, err := uc.messages.SendText(ctx, txtID, recipient, req.Body, preview, req.ID)
 ```
 
-Uma URL lenta ou hostil no corpo da mensagem atrasa — ou mata por
-`WriteTimeout` — o envio de uma mensagem de WhatsApp. O cliente recebe conexão
-morta sem resposta, sem saber se a mensagem saiu.
+**CORREÇÃO da minha primeira formulação** (escrita minutos antes, e imprecisa
+num ponto que muda o diagnóstico): eu disse que o `WriteTimeout` "mata o envio".
+Não mata. Verificado:
+
+- em Go, `WriteTimeout` põe prazo na CONEXÃO; **não cancela o contexto do
+  handler**;
+- o caminho de envio **não checa `ctx.Err()`** antes de mandar
+  (`send_message.go`, `adapters/chat/messenger.go`: zero ocorrências de
+  `ctx.Err()`/`ctx.Done()`).
+
+Logo o que acontece de facto é PIOR de um jeito e melhor de outro: a mensagem
+**muito provavelmente É ENVIADA**, porque o handler continua rodando depois de a
+conexão morrer — mas o cliente recebe conexão morta e **não sabe disso**.
+
+O risco real não é perda: é **duplicação silenciosa**. Um cliente que não recebe
+resposta reenvia. `req.ID` é passado adiante (`send_message.go:58`), então há
+idempotência DISPONÍVEL — mas só funciona se o cliente reenviar com o MESMO
+`Id`. Cliente que gera ID novo a cada tentativa manda a mensagem duas vezes, e o
+usuário final vê duas.
 
 **Duas buscas é o caso NORMAL, não o pior caso raro**: `FetchOpenGraphImage` só
 retorna cedo quando a página não declara `og:image` (`fetch.go:142`). Qualquer
