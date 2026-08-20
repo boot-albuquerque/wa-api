@@ -14721,3 +14721,78 @@ está sob o PN, senão troca-se um vazio por uma metade.
 **Status**: não corrigido, diagnóstico agora medido no fluxo completo. Continua a
 ser decisão de contrato — mas o custo caiu muito: a peça existe, é local, e
 cobre 99,2%.
+
+---
+
+## F183 — o que Baileys e Evolution API fazem, e onde vamos divergir
+
+**Data**: 2026-08-20. Consulta obrigatória pelo `CLAUDE.md` antes de projetar
+qualquer solução de identidade LID/PN. Registada aqui porque a regra exige que a
+divergência seja **consciente e escrita**, não descoberta depois.
+
+### Baileys
+
+Um mantenedor responde, na discussão que é literalmente a nossa pergunta —
+resolver `@lid` no `messaging-history.set`:
+
+- **guardar o LID como fallback "is the correct behavior here"**;
+- em Baileys v7 **não há forma fiável de resolver todo `@lid` histórico** para
+  telefone: às vezes o WhatsApp manda o LID e mais nada, e não sobra contra o que
+  resolver;
+- a resolução recomendada é **em camadas**: já é PN? → cache de contactos →
+  ficheiro persistente de mapeamento;
+- `contact.phoneNumber` **pode ser indefinido**, porque depende da definição de
+  privacidade de número do utilizador. Ou seja, **há casos em que o PN não existe
+  para nós, por escolha do dono do número.**
+
+### Evolution API
+
+Tem uma *meta-issue* a rastrear exatamente isto, e a conclusão é que **não há
+plano**: "partial fixes have landed in various versions but the community reports
+symptoms persist". Estão no mesmo buraco, sem decisão de arquitetura registada.
+
+### O que isto muda no NOSSO desenho — e derruba a minha inclinação, pela segunda vez
+
+Eu vinha inclinada a **normalizar na escrita**, convertendo tudo para PN. As duas
+fontes dizem que isso é errado, e por uma razão que a nossa medição sozinha não
+mostrava:
+
+**O PN pode não existir.** Não é "ainda não resolvemos" — é privacidade do dono
+do número. Normalizar na escrita obriga a escolher uma chave no momento em que a
+informação pode não estar disponível, e é **lossy e de sentido único**: a linha
+gravada perde o LID, que era o único identificador verdadeiro que tínhamos.
+
+Guardar o LID e **traduzir na leitura** mantém as duas hipóteses abertas: se o
+mapeamento chegar depois — e o Baileys diz que chega, por eventos posteriores —
+as linhas antigas passam a resolver sem migração nenhuma.
+
+### Onde DIVERGIMOS deles, e por que podemos
+
+Nós estamos numa posição **melhor** que ambos, e vale dizer porquê em vez de o
+tratar como sorte: a nossa biblioteca vendorizada já **persiste** o mapeamento em
+`wanoise_lid_map` (3353 linhas). Medido contra o histórico: **362 de 365** LIDs
+distintos (99,2%), e **100%** das 30 conversas do fluxo do cliente.
+
+Os dois projetos lutam com a resolução porque dependem de cache em memória e de
+ficheiros de auth. Nós temos uma tabela, no mesmo banco, com um `JOIN` de
+distância. **A divergência é: eles recomendam camadas com fallback incerto; nós
+podemos fazer uma junção local determinística, e só cair para camadas no resto.**
+
+### Uma diferença medida que vale registar
+
+A Evolution API aponta `addressingMode` e `remoteJidAlt` como os campos que
+desambiguam. Medido na nossa tabela:
+
+- `AddressingMode` está **vazio em 23633 de 23633 linhas** — 100%;
+- `SenderAlt` está preenchido em **13 de 5063** linhas `@lid` — 0,26%.
+
+Ou seja, **os dois campos que a referência aponta como solução não estão
+disponíveis para nós**. Quem seguisse o conselho deles à letra construiria sobre
+areia — e é exatamente o tipo de coisa que só aparece medindo os nossos dados em
+vez de ler a receita.
+
+**Conclusão para a decisão de contrato**: tradução na LEITURA, com junção local
+ao `wanoise_lid_map`, fundindo os dois conjuntos quando ambos existirem (as 3
+conversas). Sem normalização na escrita e sem migração — que é também a opção
+reversível, e a única que não decide hoje o que fazer com linhas cujo PN talvez
+nunca exista.
