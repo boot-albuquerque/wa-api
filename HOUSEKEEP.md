@@ -13572,3 +13572,72 @@ só o campo que doeu repetiria o erro que gerou esta entrada.
 **Status**: não corrigido, nada implementado. Achado em campo durante a
 verificação de ponta a ponta, fora do escopo dela — que é provar o ENVIO.
 Registrado para decisão.
+
+---
+
+## F180 — o aviso de "mídia de tipo não tratado" dispara em TODA mensagem de TEXTO: 25 de 30 no teste de campo
+
+**Data**: 2026-08-20. **Contexto**: verificação de ponta a ponta com DUAS contas
+reais pareadas, autorizada pelo humano. Achado ao ler o log de um envio de texto
+que funcionou.
+
+**Onde**: `pkg/bootstrap/eventhandler_message.go:250-257`, alcançado
+incondicionalmente por `:58-59`:
+
+```go
+if !*skipMedia {
+    evh.processMessageMedia(evt, s3Config, st)
+}
+```
+
+**Problema**: `processMessageMedia` corre para **toda** mensagem recebida, não
+só para as de mídia. Uma mensagem de texto não tem nenhum dos tipos que a função
+trata (imagem, vídeo, áudio, documento, sticker, álbum), então `tratou` fica
+`false` e o aviso dispara:
+
+```
+WARN mensagem de midia de tipo nao tratado; nada foi baixado e nada sera'
+     entregue para ela   media_type=  message_id=3EB028E2BA0699D00529CA
+```
+
+**Medição de campo**, numa sessão curta com duas contas reais — 30 ocorrências:
+
+| `type` | ocorrências |
+|---|---|
+| `text` | **25** |
+| vazio | 27 (sobrepõe-se ao acima; o campo `media_type` é que vem vazio) |
+| `media` | 4 |
+| `image` | 2 |
+| `video` | 2 |
+
+**Cinco sextos do aviso são falso positivo**, e no tipo de mensagem mais comum
+que existe.
+
+**A ironia está no próprio comentário do código**, vinte linhas acima, que
+adicionou o caso do álbum exatamente para evitar isto:
+
+> *"Reconhecê-lo aqui não é tratá-lo — é impedir que o aviso abaixo dispare em
+> todo álbum enviado, o que transformaria um diagnóstico útil em ruído de
+> rotina."*
+
+Quem escreveu protegeu o caso RARO (álbum) e deixou passar o caso COMUM (texto).
+O aviso existe para dizer "chegou mídia que não sabemos baixar" — uma condição
+que merece investigação. Afogado em texto, ele deixa de ser lido.
+
+**Correção sugerida**: a mesma forma que o álbum usa — reconhecer que mensagem
+sem conteúdo de mídia não é caso de aviso. O ponto exato (guarda antes da
+chamada em `:58`, ou reconhecimento dentro de `processMessageMedia`) é decisão
+de desenho: a primeira evita o trabalho, a segunda mantém a função como único
+lugar que sabe o que é mídia.
+
+**Cuidado (Regra 2 do CLAUDE.md — medir onde PIORA)**: silenciar por
+`type == "text"` é a correção óbvia e a errada. `type` vem do SDK e nem sempre
+está preenchido — na medição acima, 27 ocorrências tinham `media_type` VAZIO e
+25 tinham `type=text`, o que significa que os conjuntos **não coincidem**. Uma
+guarda por `type` deixaria escapar as duas restantes, que podem ser mídia real
+não reconhecida — exatamente o que o aviso existe para apanhar. A guarda tem de
+ser pela AUSÊNCIA de conteúdo de mídia na mensagem, não pelo rótulo.
+
+**Status**: não corrigido, nada implementado. Fora do escopo da verificação de
+ponta a ponta, que é provar o ENVIO — e o envio funcionou. Registrado para
+decisão.
