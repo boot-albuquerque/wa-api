@@ -13493,3 +13493,82 @@ conferido comparando `go.mod`/`go.sum` antes e depois. As duas hipóteses caíra
 medição encontrado no mesmo dia, e a razão de registrar os três juntos é essa:
 `make check` EXIT 0 foi o critério com que aceitei e recusei blocos a sessão
 inteira. Três vezes ele mediu menos do que eu supunha.
+
+---
+
+## F179 — `PUT /admin/users/{id}` grava `events` no banco e NÃO atualiza o cache: a edição não tem efeito enquanto o processo viver
+
+**Data**: 2026-08-20. **Contexto**: **validação REAL**, com conta de WhatsApp
+pareada e autorizada pelo humano, durante a montagem da verificação de ponta a
+ponta. Achado em campo, não por leitura de código.
+
+**Onde**:
+
+- `pkg/bootstrap/lifecycle_webhook.go:70-82` (`updateAndGetUserSubscriptions`)
+- `pkg/application/usecase/user/edit_user.go` — **zero** referências a cache
+
+**Evidência de campo, na ordem em que apareceu**:
+
+1. Criei um usuário via `POST /admin/users` **sem** `events`. O QR foi gerado
+   (`hasQR=true` no log) mas nunca chegou ao WebSocket que a página `devui`
+   escuta:
+
+   ```
+   WARN Skipping webhook. Not subscribed for this type
+        subscribedEvents=[] type=QR userID=9fd825d670919312e5801ce91be758e4
+   ```
+
+2. Editei o usuário: `PUT /admin/users/{id}` com `{"events":"All"}` → `200 ok`.
+
+3. Confirmei que **o banco gravou**: `GET /admin/users` devolve `events: 'All'`.
+
+4. Reconectei — e o log **continuou** a dizer `subscribedEvents=[]`.
+
+**A causa**, medida no código depois de ver o sintoma:
+
+```go
+userinfo2, found2 := appCtx.UserInfoCache.Get(evh.UserID)
+if found2 {
+    currentEvents = userinfo2.(Values).Get("Events")   // <- cache PRIMEIRO
+} else {
+    // só aqui vai ao banco
+}
+```
+
+O despacho lê o **cache primeiro** e só consulta o banco no miss. E
+`edit_user.go` **não publica no cache** — grava e pronto. Para um usuário que já
+esteja em cache (qualquer um que tenha conectado uma vez), **a edição de eventos
+não produz efeito nenhum enquanto o processo viver**.
+
+`appCtx.UserInfoCache` é `cache.NoExpiration` — não há TTL que corrija isto
+sozinho. Só um restart.
+
+**É a classe da [[F164]] num caminho que ela NÃO cobriu.** A F164 enumerou dez
+pontos de escrita e criou `publishUserInfo` para os unificar. As dez eram de
+`pkg/bootstrap/` e dos handlers de webhook. **Nenhuma era o caso de uso de
+edição de usuário**, que vive em `pkg/application/usecase/user/` — e por isso
+escapou ao inventário.
+
+**Por que a F164 não o apanhou, e é a lição**: o inventário dela foi feito por
+`grep` de `UserInfoCache.Set` / `userinfocache.Set` — ou seja, encontrou quem
+ESCREVE no cache. Este ponto não escreve; ele escreve no BANCO e deveria
+escrever no cache. **Um inventário de escritores não encontra quem deixou de ser
+escritor.**
+
+**Sintoma para o operador**: configura eventos por API, recebe `200`, o `GET`
+confirma o valor gravado — e nada muda. Diagnóstico natural seria "os eventos
+não funcionam", quando o que não funciona é a propagação.
+
+**Correção sugerida**: `edit_user.go` passa pelo ponto único da F164. Isso exige
+que o `publishUserInfo` (hoje em `pkg/bootstrap/`) seja alcançável a partir de
+`pkg/application/usecase/user/`, o que é inversão de camada — o caminho provável
+é um port em `appport`, no molde do `S3SecretCipher` da [[F163]].
+
+**Cuidado antes de aplicar (Regra 1)**: enumerar TODOS os campos que a edição
+toca, não só `events`. `edit_user.go` mexe em webhook, proxy, S3, HMAC e
+histórico — se `events` está a divergir, os outros provavelmente também. Corrigir
+só o campo que doeu repetiria o erro que gerou esta entrada.
+
+**Status**: não corrigido, nada implementado. Achado em campo durante a
+verificação de ponta a ponta, fora do escopo dela — que é provar o ENVIO.
+Registrado para decisão.
