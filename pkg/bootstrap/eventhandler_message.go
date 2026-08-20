@@ -380,7 +380,38 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 			}
 		}
 	} else {
-		log.Debug().Str("messageType", messageType).Str("messageID", evt.Info.ID).Msg("Skipping empty message from history")
+		// DISCARD RECORD (HOUSEKEEP F184). The message arrived, was logged as
+		// received, and is about to be dropped: it never reaches the history
+		// table and no client can ever see it again.
+		//
+		// This used to be a Debug saying "Skipping empty message", and both
+		// halves of that were wrong enough to hide a defect for a whole
+		// release. Debug is invisible at the production level, and "empty"
+		// is a misdiagnosis: a poll and a buttons message carry plenty of
+		// content — what is empty is OUR classification of them, because the
+		// chain above has no branch for their type. The operator reading
+		// "empty message" would look for a sender sending blanks, not for a
+		// missing case in a switch.
+		//
+		// wire_type is the field that names the defect out loud: it reads
+		// "poll" while message_type reads "text", and that gap IS the bug.
+		// Logging only our own classification would have kept the defect
+		// invisible, since our classification is precisely what is broken.
+		//
+		// Level is Warn, not Debug, because losing a received message is not
+		// routine. Measured on the live sessions of 2026-08-20: 5 discards in
+		// 17 received over a 15-minute window, and 3 of those 5 were the
+		// synthetic poll/buttons of the F184 measurement — the steady-state
+		// rate is closer to 2 in 14, mostly status broadcasts. That is signal,
+		// not the F180 kind of noise; if status broadcasts later prove to
+		// dominate, the fix is to recognise them, not to silence this again.
+		log.Warn().
+			Str("userid", evh.UserID).
+			Str("message_id", evt.Info.ID).
+			Str("wire_type", evt.Info.Type).
+			Str("message_type", messageType).
+			Str("reason", discardReasonUnclassified).
+			Msg("received message dropped from history: no content extracted for its type")
 	}
 }
 
@@ -389,6 +420,15 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 // (contact e location) foram mantidos literalmente: o switch inteiro já só
 // roda com textContent vazio, então eles são sempre verdadeiros, mas removê-los
 // seria alterar o código e não movê-lo.
+// discardReasonUnclassified is the reason recorded when saveMessageHistory
+// drops a received message: the classification chain produced no type, no text
+// and no media link for it, so the save guard has nothing to write.
+//
+// It is a named constant rather than a literal because it is the string an
+// operator greps for, and a reason that only exists as a literal at one call
+// site is a reason that silently changes wording on the next edit (ADR-0004).
+const discardReasonUnclassified = "unclassified_no_content"
+
 func defaultHistoryTextFor(messageType, textContent string) string {
 	switch messageType {
 	case "image":

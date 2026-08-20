@@ -190,7 +190,23 @@
 # A queda vem de o codigo deletado ser MELHOR coberto que a media (era codigo
 # antigo com suite madura, ja' migrado para opengraph e sticker). Zero testes de
 # comportamento vivo removidos — auditoria por teste na entrada F127.
-min_coverage=858
+# F186 (2026-08-20): 858 -> 861. Ratchet-UP por ordem do proprio alvo, que
+# avisou "a cobertura subiu; suba min_coverage para 861 neste mesmo PR".
+#
+# E' teste novo sobre codigo que ja' existia — o registo do descarte (decisao
+# (c) do canal) nao acrescentou comportamento, so' observabilidade, e os cinco
+# testes que o travam exercitam caminhos que nenhum outro alcancava: a guarda
+# de gravacao de historico pelo ramo do DESCARTE (saveMessageHistory so' era
+# exercitada pelo ramo que grava) e o `default` de
+# normalizeInteractiveButtons, que ate' agora so' tinha teste do RESULTADO do
+# descarte, nunca do descarte em si.
+#
+# Nada saiu do denominador. A unica funcao nova, acceptedButtonTypes, e'
+# EXCLUIDA por X1 no golden de logcov (um unico return) — verificado antes de
+# regenerar o golden, e nao ao contrario: o diagnostico da F154 nomeou a
+# mudanca ("o CONJUNTO elegivel mudou; ADDED acceptedButtonTypes"), em vez de
+# me deixar carimbar um diff de 1900 linhas.
+min_coverage=861
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

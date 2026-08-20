@@ -655,3 +655,143 @@ func TestSendButtons_HeaderImageFailureIsSilentlyDropped(t *testing.T) {
 // um payload que não seja PNG de verdade não produziria "image/png" e a
 // asserção mediria outra coisa.
 const onePixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+// TestSendButtons_DroppedButtonIsRecorded trava a F185: três botões pedidos,
+// um com o tipo errado no meio, e o cliente recebe 200 sem saber que um sumiu.
+//
+// O que se trava aqui NÃO é o descarte — esse é comportamento preservado por
+// decisão (F148) e continua travado por
+// TestSendButtons_UnknownTypeIsSilentlyDiscarded, logo acima. O que se trava é
+// o REGISTRO do descarte, que é o que faltava para o defeito ser
+// diagnosticável em produção.
+//
+// O tipo é asserido EXATAMENTE como o chamador o escreveu ("quickreply"), sem
+// normalizar: foi assim que ele mordeu em campo, e um registro que mostrasse a
+// forma já normalizada esconderia justamente o espaço a mais ou a maiúscula,
+// que são os erros mais prováveis.
+func TestSendButtons_DroppedButtonIsRecorded(t *testing.T) {
+	im := &contractsfake.InteractiveMessenger{}
+	logger := &contractsfake.Logger{}
+
+	req := validButtonsRequest()
+	req.ID = "cliente-123"
+	req.Buttons = []domain.InteractiveButton{
+		{Title: "Valido1", Type: domain.ButtonTypeReply},
+		{Title: "Sumido", Type: "quickreply"},
+		{Title: "Valido2", Type: domain.ButtonTypeReply},
+	}
+
+	result, err := newSendButtons(im, buttonsJIDResolver(), &contractsfake.MediaFetcher{}, logger).
+		Execute(context.Background(), userID, req)
+	if err != nil {
+		t.Fatalf("envio recusado: %v (o descarte é parcial, o resto tem de ir)", err)
+	}
+	if result == nil {
+		t.Fatal("sem resultado")
+	}
+
+	// O comportamento NÃO pode ter mudado: dois botões enviados, não três.
+	if n := len(im.SendButtonsCalls); n != 1 {
+		t.Fatalf("SendButtons chamado %d vez(es), quero 1", n)
+	}
+	if got := len(im.SendButtonsCalls[0].Payload.Buttons); got != 2 {
+		t.Fatalf("botões enviados = %d, quero 2 (o registro não pode alterar o descarte)", got)
+	}
+
+	var rec *contractsfake.LogRecord
+	for i, r := range logger.Records() {
+		if r.Level == contractsfake.LevelWarn && strings.Contains(r.Msg, "button dropped") {
+			rec = &logger.Records()[i]
+			break
+		}
+	}
+	if rec == nil {
+		t.Fatalf("nenhum Warn de botão descartado; registros = %+v", logger.Records())
+	}
+
+	// O canal exigiu três campos: tipo recebido, razão e identificador.
+	for _, tc := range []struct{ key, want string }{
+		{"receivedType", "quickreply"},
+		// Literal de propósito, e não a constante: o teste é de pacote
+		// EXTERNO, e a razão é a string que o operador grepa no log. Asserir
+		// a constante faria o teste acompanhar qualquer reescrita da palavra
+		// em silêncio — que é justamente o que não pode acontecer com um
+		// identificador de wire.
+		{"reason", "unknown_button_type"},
+		{"clientMsgID", "cliente-123"},
+		{"title", "Sumido"},
+	} {
+		got, ok := rec.Keyval(tc.key)
+		if !ok {
+			t.Errorf("campo %q ausente do registro de descarte", tc.key)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("campo %q = %v, quero %q", tc.key, got, tc.want)
+		}
+	}
+
+	// O registro tem de dizer o que ERA aceite, senão o operador fica a saber
+	// que errou e não a saber o que acertar.
+	accepted, ok := rec.Keyval("acceptedTypes")
+	if !ok {
+		t.Fatal("campo acceptedTypes ausente")
+	}
+	for _, want := range []string{domain.ButtonTypeReply, domain.ButtonTypeCTAURL,
+		domain.ButtonTypeCTACall, domain.ButtonTypeCopy} {
+		if !strings.Contains(accepted.(string), want) {
+			t.Errorf("acceptedTypes = %q, não menciona %q", accepted, want)
+		}
+	}
+
+	if !rec.IsStructured() {
+		t.Errorf("registro de descarte não é estruturado: %+v", rec.Keyvals)
+	}
+}
+
+// TestSendButtons_ValidTypesProduceNoDropRecord é o controle POSITIVO do teste
+// acima: sem o par, um Warn emitido em TODO envio passaria nas mesmas
+// asserções e ninguém notaria até o log encher.
+//
+// É a Armadilha 2 do ARMADILHAS.md aplicada ao registro: testar só que o aviso
+// APARECE não prova que ele aparece apenas quando deve.
+func TestSendButtons_ValidTypesProduceNoDropRecord(t *testing.T) {
+	im := &contractsfake.InteractiveMessenger{}
+	logger := &contractsfake.Logger{}
+
+	req := validButtonsRequest()
+	req.Buttons = []domain.InteractiveButton{
+		{Title: "Sim", Type: domain.ButtonTypeReply},
+		{Title: "Nao", Type: domain.ButtonTypeReply},
+	}
+
+	if _, err := newSendButtons(im, buttonsJIDResolver(), &contractsfake.MediaFetcher{}, logger).
+		Execute(context.Background(), userID, req); err != nil {
+		t.Fatalf("envio válido recusado: %v", err)
+	}
+
+	for _, r := range logger.Records() {
+		if strings.Contains(r.Msg, "button dropped") {
+			t.Fatalf("aviso de descarte emitido sem descarte: %+v", r)
+		}
+	}
+}
+
+// TestSendButtons_NoValidButtonsErrorNamesAcceptedTypes trava a outra metade da
+// F185: a recusa dizia "no valid buttons parsed" e não dizia quais são os
+// tipos aceites, deixando o chamador sem saída — foi exatamente o que me
+// aconteceu em campo, porque "quickreply" é válido no /chat/send/template.
+func TestSendButtons_NoValidButtonsErrorNamesAcceptedTypes(t *testing.T) {
+	logger := &contractsfake.Logger{}
+	req := validButtonsRequest()
+	req.Buttons = []domain.InteractiveButton{{Title: "Sumido", Type: "quickreply"}}
+
+	_, err := newSendButtons(&contractsfake.InteractiveMessenger{}, buttonsJIDResolver(),
+		&contractsfake.MediaFetcher{}, logger).Execute(context.Background(), userID, req)
+	if err == nil {
+		t.Fatal("todos os botões descartados e mesmo assim aceitou")
+	}
+	if !strings.Contains(err.Error(), domain.ButtonTypeReply) {
+		t.Errorf("erro %q não enumera os tipos aceites", err.Error())
+	}
+}

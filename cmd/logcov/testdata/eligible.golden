@@ -1958,7 +1958,7 @@ pkg/application/usecase/message.NewSubscribePresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,react.go:34);uncovered:L2(S-ret,react.go:38);uncovered:L2(S-consume,react.go:42);uncovered:L2(S-ret,react.go:43);uncovered:L2(S-ret,react.go:48)
 pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:69);uncovered:L2(S-ret,send_audio.go:72);uncovered:L2(S-ret,send_audio.go:124);uncovered:L2(S-ret,send_audio.go:129)
 pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
-pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:95);uncovered:L2(S-ret,send_buttons.go:101)
+pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:95);uncovered:L2(S-ret,send_buttons.go:119)
 pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes	ELIGIBLE	covered
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
@@ -1976,6 +1976,7 @@ pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:129);uncovered:L2(S-ret,send_video.go:134)
 pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covered
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
+pkg/application/usecase/message.acceptedButtonTypes	EXCLUDED	X1
 pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:206)
 pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)

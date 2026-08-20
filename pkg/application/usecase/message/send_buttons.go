@@ -96,10 +96,28 @@ func (uc *SendButtonsUseCase) Execute(ctx context.Context, txtID string, req dom
 			"missing Phone, Body or Buttons", false, nil)
 	}
 
-	buttons := normalizeInteractiveButtons(req.Buttons)
+	buttons, dropped := normalizeInteractiveButtons(req.Buttons)
+	// DISCARD RECORD (HOUSEKEEP F185). The discard itself is preserved
+	// behaviour (F148); what changes here is that it stops being invisible.
+	// The same file already Warns on every reason the header image can be
+	// dropped (headerImageBytes below) — the button discard was the odd one
+	// out, and that divergence is internal, not historical.
+	for _, d := range dropped {
+		uc.logger.Warn(ctx, "buttons button dropped: unknown type",
+			"txtID", txtID,
+			// clientMsgID, not the server message ID: the discard happens
+			// BEFORE the send, so no server ID exists yet. req.ID is the only
+			// identifier the caller can correlate on, and it is empty when the
+			// caller did not supply one.
+			"clientMsgID", req.ID,
+			"receivedType", d.ReceivedType,
+			"title", d.Title,
+			"reason", buttonDropReasonUnknownType,
+			"acceptedTypes", acceptedButtonTypes())
+	}
 	if len(buttons) == 0 {
 		return nil, apperr.New("no_valid_buttons", apperr.CategoryValidation,
-			"no valid buttons parsed", false, nil)
+			"no valid buttons parsed, accepted types: "+acceptedButtonTypes(), false, nil)
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
@@ -161,8 +179,9 @@ func (uc *SendButtonsUseCase) Execute(ctx context.Context, txtID string, req dom
 // "Consertar" isto é mudança de contrato público e precisa de decisão, não
 // de um `default` reescrito de passagem; travado por
 // TestSendButtons_UnknownTypeIsSilentlyDiscarded.
-func normalizeInteractiveButtons(in []domain.InteractiveButton) []domain.InteractiveButton {
+func normalizeInteractiveButtons(in []domain.InteractiveButton) ([]domain.InteractiveButton, []droppedButton) {
 	out := make([]domain.InteractiveButton, 0, len(in))
+	var dropped []droppedButton
 
 	for _, btn := range in {
 		title := strings.TrimSpace(btn.Title)
@@ -196,6 +215,11 @@ func normalizeInteractiveButtons(in []domain.InteractiveButton) []domain.Interac
 		case domain.ButtonTypeReply, domain.ButtonTypeCTAURL,
 			domain.ButtonTypeCTACall, domain.ButtonTypeCopy:
 		default:
+			// Reporting the discard instead of swallowing it. The function
+			// stays pure — it returns what it dropped and lets the caller do
+			// the logging, so the discard is assertable in a test without a
+			// log double.
+			dropped = append(dropped, droppedButton{ReceivedType: btn.Type, Title: title})
 			continue
 		}
 
@@ -209,7 +233,39 @@ func normalizeInteractiveButtons(in []domain.InteractiveButton) []domain.Interac
 		})
 	}
 
-	return out
+	return out, dropped
+}
+
+// droppedButton is one button that normalizeInteractiveButtons refused, kept
+// so the caller can say WHICH button went and why.
+//
+// ReceivedType is the type exactly as the caller wrote it, NOT the lowercased
+// and trimmed form: the whole point of the record is to show the operator the
+// typo they made, and normalising it first would hide a stray space or a
+// capital letter — the two mistakes most likely to produce a silent discard.
+type droppedButton struct {
+	ReceivedType string
+	Title        string
+}
+
+// buttonDropReasonUnknownType is the reason recorded when a button is refused
+// for its type. Named for the same reason as discardReasonUnclassified in the
+// bootstrap package: it is what an operator greps for (ADR-0004).
+const buttonDropReasonUnknownType = "unknown_button_type"
+
+// acceptedButtonTypes lists the four types normalizeInteractiveButtons keeps.
+//
+// It exists because "no valid buttons parsed" without the list is a dead end
+// for the caller: `quickreply` is valid at /chat/send/template and discarded
+// here, so a caller who knows one route has every reason to expect the other
+// to agree. That was measured in the field (F185) on the first real use.
+func acceptedButtonTypes() string {
+	return strings.Join([]string{
+		domain.ButtonTypeReply,
+		domain.ButtonTypeCTAURL,
+		domain.ButtonTypeCTACall,
+		domain.ButtonTypeCopy,
+	}, ", ")
 }
 
 // headerImageBytes obtém os bytes da imagem de header, ou devolve nil.

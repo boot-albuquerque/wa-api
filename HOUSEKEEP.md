@@ -13937,8 +13937,31 @@ enquete nem para mensagem interativa/botões.** Então:
    `textContent != "" || mediaLink != "" || messageType != "text" && ...` —
    **tudo falso**, e a linha nunca é escrita.
 
-Nada é registado. Nem `Warn`, nem `Debug`, nem contador. A mensagem chega, é
-logada como recebida, e evapora entre o log e a tabela.
+**CORREÇÃO, feita ao implementar a correção** (2026-08-20, mesma sessão): eu
+escrevi acima que "nada é registado, nem `Warn`, nem `Debug`, nem contador".
+**Falso.** Existia um registo, na linha 382:
+
+```go
+log.Debug().Str("messageType", messageType).Str("messageID", evt.Info.ID).
+    Msg("Skipping empty message from history")
+```
+
+Só o encontrei ao abrir o ficheiro para corrigir. Afirmar a ausência sem ler o
+`else` é o mesmo erro de método da [[F183]] — concluir a partir do que eu
+esperava, não do que estava lá.
+
+E, no entanto, o defeito é real, por **duas** razões que a existência do registo
+não desfaz, e que são mais interessantes que a ausência que eu supus:
+
+1. **`Debug` é invisível no nível de produção.** O servidor corre em `info`. O
+   registo existia e nunca foi visto por ninguém.
+2. **"Skipping empty message" é um diagnóstico ERRADO.** A mensagem não está
+   vazia — uma enquete traz pergunta e opções. O que está vazio é a NOSSA
+   classificação dela. Um operador que lesse essa linha procuraria um remetente
+   a mandar mensagens em branco, não um `case` em falta num `switch`.
+
+Um registo invisível que, quando visível, aponta para o lado errado é pior do
+que a ausência que eu tinha suposto: a ausência ao menos não engana.
 
 **Por que isto importa mais do que parece**: o projeto ENTREGA `/chat/send/poll`
 e `/chat/send/buttons` como capabilities (CAP-14 e CAP-21, com DTO, teste e
@@ -14016,3 +14039,119 @@ continua a precisar de decisão — não é isto que se propõe aqui.
 **Status**: não corrigido. O ponto 1 é aditivo e não toca o contrato; o resto
 depende de decisão. Ver [[F184]], ponto 3: é o mesmo defeito de fundo — descarte
 sem registo — em duas camadas diferentes.
+
+---
+
+## F186 — o registo do descarte, implementado: decisão (c) do canal
+
+**Data**: 2026-08-20. **Contexto**: o canal escolheu **(c)** entre as três
+opções de escopo, com um requisito acrescentado: *"deve incluir o tipo recebido,
+a razão do descarte e o identificador da mensagem"*.
+
+Não é achado novo — é a **correção** do fundo comum da [[F184]] e da [[F185]],
+que é o que vale mais que qualquer uma delas: **descarte sem registo**. A lista
+de tipos vai voltar a ficar desatualizada na próxima vez que o WhatsApp
+acrescentar um formato; o silêncio é o defeito permanente.
+
+**Nenhum comportamento muda.** Nada passa a ser gravado, nada passa a ser
+enviado, nenhum contrato HTTP se altera. O que muda é que os dois descartes
+deixam de ser invisíveis.
+
+### As duas camadas
+
+**1. `pkg/bootstrap/eventhandler_message.go`** — a guarda de gravação de
+histórico. O `Debug` com diagnóstico errado passa a `Warn` com os campos que
+identificam a causa:
+
+```
+warn  message_id=MSG-POLL  wire_type=poll  message_type=text
+      reason=unclassified_no_content
+      "received message dropped from history: no content extracted for its type"
+```
+
+O campo decisivo é o **`wire_type`**: ele diz `poll` enquanto o `message_type`
+diz `text`, e **essa diferença É o defeito**. Registar só a nossa classificação
+teria mantido tudo invisível, porque a nossa classificação é precisamente o que
+está partido.
+
+**2. `pkg/application/usecase/message/send_buttons.go`** — o descarte de botão.
+`normalizeInteractiveButtons` passa a devolver o que descartou, e o `Execute`
+regista:
+
+```
+warn  clientMsgID=...  receivedType=quickreply  title=Sumido
+      reason=unknown_button_type  acceptedTypes="reply, cta_url, cta_call, copy"
+      "buttons button dropped: unknown type"
+```
+
+Três decisões de forma, cada uma com motivo:
+
+- **`receivedType` é o tipo COMO O CHAMADOR O ESCREVEU**, sem `ToLower` nem
+  `TrimSpace`. O objetivo do registo é mostrar o erro de digitação; normalizar
+  primeiro esconderia o espaço a mais e a maiúscula, que são os dois enganos
+  mais prováveis.
+- **`clientMsgID`, não o ID do servidor.** O descarte acontece ANTES do envio,
+  logo não existe ID de servidor. É o único identificador com que o chamador
+  pode correlacionar, e fica vazio quando ele não o forneceu — limitação
+  registada no comentário do call site.
+- **A função continua PURA**: devolve o que descartou e deixa o registo ao
+  chamador. O descarte fica assertável em teste sem dublê de log.
+
+E a recusa `no_valid_buttons` passa a **enumerar os tipos aceites**. Sem isso o
+chamador fica num beco: `quickreply` é válido no `/chat/send/template` e some no
+`/chat/send/buttons`, que foi exatamente como a [[F185]] me mordeu.
+
+### Testes, e a armadilha que quase os tornou inúteis
+
+Cinco testes novos. **`captureLogInto` liga um zerolog SEM filtro de nível** —
+está dito em `eventhandler_qr_test.go:23` — portanto ele vê `Debug`. Um teste
+que só procurasse o texto do aviso **passaria com o defeito no lugar**, porque o
+defeito não era a ausência do registo, era o NÍVEL dele. Por isso
+`TestHistorico_DescarteDeixaRastro` decodifica o JSON e assere `"level":"warn"`
+separadamente. Sem essa asserção o teste não morde.
+
+Os dois controlos POSITIVOS (`..._NaoViraRuido`, `..._ValidTypesProduceNoDropRecord`)
+existem por causa da [[F180]]: um aviso emitido em TODO envio passaria em todas
+as outras asserções, e transformaria esta correção no defeito que ela imita.
+
+### Seis controlos negativos, EXECUTADOS
+
+| # | mutação | teste | resultado |
+|---|---|---|---|
+| 1 | remove o `Warn` de botão descartado | `DroppedButtonIsRecorded` | FAIL — `nenhum Warn de botão descartado` |
+| 2 | emite o `Warn` de botão sempre | `ValidTypesProduceNoDropRecord` | FAIL — `aviso de descarte emitido sem descarte` |
+| 3 | erro volta a não enumerar tipos | `NoValidButtonsErrorNamesAcceptedTypes` | FAIL — `não enumera os tipos aceites` |
+| 4 | **restaura o `Debug` original literal** | `Historico_DescarteDeixaRastro` | FAIL — `nenhum registro de descarte` |
+| 5 | **só o nível volta a `Debug`** | `Historico_DescarteDeixaRastro` | FAIL — `registrado em nível debug, quero warn` |
+| 6 | grava nunca, avisa sempre | `Historico_MensagemGravadaNaoViraRuido` | FAIL — `mensagem COM conteudo produziu aviso` |
+
+O **CN-5 é o que importa**: mantém a mensagem e todos os campos e muda só o
+nível. É a mutação que um teste de substring não apanharia, e é a forma exata em
+que o defeito original vivia.
+
+### Regra 2 — medir onde a correção PIORA
+
+A pergunta que faz o cenário aparecer: *que entrada faz este aviso virar o
+problema?* Resposta: um descarte frequente. Medido nas sessões vivas, janela de
+15 minutos:
+
+| | |
+|---|---|
+| mensagens recebidas (log) | 17 |
+| linhas gravadas | 12 |
+| **descartes** | **5** |
+
+Três dos cinco eram a enquete e os dois botões sintéticos da medição da F184. O
+regime permanente é mais perto de **2 em 14**, e um desses dois é
+`status@broadcast`. Isso é sinal, não ruído do tipo da [[F180]] (que media 25 em
+30). Se os broadcasts de status vierem a dominar, a correção é **reconhecê-los**,
+não voltar a silenciar isto.
+
+**Status**: **CORRIGIDO**. Travado por `TestHistorico_DescarteDeixaRastro`,
+`TestHistorico_MensagemGravadaNaoViraRuido`,
+`TestSendButtons_DroppedButtonIsRecorded`,
+`TestSendButtons_ValidTypesProduceNoDropRecord` e
+`TestSendButtons_NoValidButtonsErrorNamesAcceptedTypes`.
+
+A [[F184]] e a [[F185]] **continuam abertas**: o que se corrigiu foi a
+invisibilidade, não o descarte. Os ramos em falta são a etapa (b) do canal.
