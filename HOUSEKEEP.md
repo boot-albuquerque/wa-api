@@ -15277,3 +15277,28 @@ como `map[string]interface{}` literal
 usam um `*Result` tipado do domínio. É por isso que ela escapou à disciplina:
 não há tipo onde pendurar a tag, e portanto nada que uma revisão de DTO
 apanhasse.
+
+---
+
+## F187 — verificação em produção: os MESMOS envios, uma hora depois
+
+**Data**: 2026-08-20.
+
+A verificação usa **exatamente os mesmos envios** que expuseram o defeito na
+varredura (a), com os mesmos valores. Só o binário mudou.
+
+| | antes | depois |
+|---|---|---|
+| `Name="Praca da Liberdade"` | `:location:` | **`Praca da Liberdade`** |
+| `DisplayName="Contato Varredura"` | `:contact:` | **`Contato Varredura`** |
+
+O nome já estava no `datajson` das duas linhas antigas — o que mudou não foi a
+informação chegar, foi ela deixar de ser deitada fora entre o ramo e a coluna.
+
+**Nota sobre a escolha do instrumento**: repetir o envio idêntico, em vez de
+inventar um caso novo, é o que torna a comparação honesta. Um valor diferente
+mediria outra coisa e deixaria a dúvida de se o antes e o depois são comparáveis.
+
+**Status**: verificado em campo. Continuam abertos, e registados acima: a
+unificação dos dois classificadores num só, e o backfill das 41 linhas de
+`location` já gravadas com placeholder.
