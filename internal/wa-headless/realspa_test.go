@@ -5223,6 +5223,15 @@ func TestRealSPACaptureQRCode(t *testing.T) {
 const (
 	qrLiveEnv        = "WA_HEADLESS_QR_LIVE"
 	qrLiveMinutesEnv = "WA_HEADLESS_QR_MINUTES"
+	// qrLiveProfileEnv points this at a FRESH profile to pair, instead of the
+	// default lab one. It exists so more than one account can be paired on this
+	// machine — each into its own directory, because invariant 1 is one profile
+	// per session owner and two accounts in one directory is two owners.
+	qrLiveProfileEnv = "WA_HEADLESS_QR_PROFILE"
+	// qrLiveOutEnv chooses where the image lands, so two concurrent pairings do
+	// not overwrite each other's QR — which would silently show one account's
+	// code as if it were the other's.
+	qrLiveOutEnv = "WA_HEADLESS_QR_OUT"
 
 	defaultQRLiveMinutes = 5
 	// qrRecaptureInterval is well under WhatsApp's own QR rotation, so the file
@@ -5251,10 +5260,17 @@ func TestRealSPALiveQR(t *testing.T) {
 	if os.Getenv(qrLiveEnv) == "" {
 		t.Skipf("set %s=1 to hold a live pairing QR from the disposable lab profile", qrLiveEnv)
 	}
-	if _, overridden, err := observationProfileDir(); err != nil {
-		t.Fatal(err)
-	} else if overridden {
-		t.Fatalf("%s is set: this test refuses an overridden profile", profileDirOverride)
+	target := os.Getenv(qrLiveProfileEnv)
+	if target == "" {
+		if _, overridden, err := observationProfileDir(); err != nil {
+			t.Fatal(err)
+		} else if overridden {
+			t.Fatalf("%s is set: this test refuses an overridden profile", profileDirOverride)
+		}
+	} else if _, err := os.Stat(target); err == nil {
+		t.Fatalf("%s already exists. Pairing into a directory that already has a session "+
+			"would put two accounts in one profile, which is invariant 1 broken; point "+
+			"this at a fresh path", target)
 	}
 
 	minutes := defaultQRLiveMinutes
@@ -5268,9 +5284,32 @@ func TestRealSPALiveQR(t *testing.T) {
 	holdFor := time.Duration(minutes) * time.Minute
 
 	runner := engine.NewRunner()
-	_, tab := openRealSPA(t, runner)
+	var tab *engine.Tab
+	if target == "" {
+		_, tab = openRealSPA(t, runner)
+	} else {
+		browser, err := (&engine.Launcher{BinaryPath: findChrome(t), Runner: runner}).Launch(
+			context.Background(), engine.LaunchConfig{
+				ProfileDir: target, DebuggingPort: freePort(t), UserAgent: realSPAUserAgent,
+			})
+		if err != nil {
+			t.Fatalf("launch into %s: %v", target, err)
+		}
+		t.Cleanup(func() { engine.CleanStop(context.Background(), runner, browser) })
+		tab, err = engine.OpenTab(context.Background(), browser)
+		if err != nil {
+			t.Fatalf("OpenTab: %v", err)
+		}
+		t.Cleanup(tab.Close)
+		if err := tab.Navigate(runner, realSPAURL, "liveqr/navigate"); err != nil {
+			t.Fatalf("Navigate: %v", err)
+		}
+	}
 
 	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
+	if v := os.Getenv(qrLiveOutEnv); v != "" {
+		out = v
+	}
 	capture := func(label string) error {
 		png, err := tab.Screenshot(runner, label)
 		if err != nil {
@@ -5305,11 +5344,30 @@ func TestRealSPALiveQR(t *testing.T) {
 			return
 		}
 		if m.HasQRScan || m.CanvasCount > 0 {
+			// WhatsApp stops rotating the QR after a few minutes and covers it
+			// with a "click to reload" overlay. Without this, the loop kept
+			// capturing that overlay while logging "QR refreshed" — the FILE
+			// was refreshing, the CODE was dead. A message that reports the
+			// wrong subject is the defect class this module keeps meeting, and
+			// this one was mine.
+			reloaded := eval2(t, runner, tab, fmt.Sprintf("liveqr/reload%d", i), `JSON.stringify((() => {
+				const b = [...document.querySelectorAll('button,[role=button],div')]
+					.find(e => /recarregar o QR|Click to reload|Selecione para recarregar/i.test(e.innerText||''));
+				if (!b) return false;
+				b.click();
+				return true;
+			})())`)
+			if reloaded == "true" {
+				t.Logf("t+%-7s QR EXPIRADO — recarregado", time.Since(start).Round(time.Second))
+				time.Sleep(3 * time.Second)
+			}
 			if err := capture(fmt.Sprintf("liveqr/shot%d", i)); err != nil {
 				t.Logf("t+%s: capture failed: %v", time.Since(start).Round(time.Second), err)
 			} else {
 				captured++
-				t.Logf("t+%-7s QR refreshed (#%d)", time.Since(start).Round(time.Second), captured)
+				// "captured", not "refreshed": what this loop guarantees is that
+				// the file matches the screen, not that the code is new.
+				t.Logf("t+%-7s QR captured (#%d)", time.Since(start).Round(time.Second), captured)
 			}
 		} else {
 			t.Logf("t+%-7s no QR on screen yet (dom_nodes=%d)",
@@ -6764,4 +6822,225 @@ func TestRealSPAConcurrentSessionsScaling(t *testing.T) {
 			"LINEAR scaling is what puts a 16GB host 'in the range of tens of sessions'; at "+
 			"this curve that arithmetic is wrong", growth, last.n)
 	}
+}
+
+// phoneLinkEnv gates TestRealSPALinkByPhoneNumber; phoneLinkNumberEnv carries
+// the number and phoneLinkProfileEnv the profile directory to create.
+const (
+	phoneLinkEnv        = "WA_HEADLESS_LINK_BY_PHONE"
+	phoneLinkNumberEnv  = "WA_HEADLESS_LINK_NUMBER"
+	phoneLinkProfileEnv = "WA_HEADLESS_LINK_PROFILE"
+	phoneLinkMinutesEnv = "WA_HEADLESS_LINK_MINUTES"
+
+	defaultPhoneLinkMinutes = 6
+)
+
+// TestRealSPALinkByPhoneNumber links a NEW profile to an account using the
+// eight-character code flow instead of a QR.
+//
+// It exists because the QR needs a camera pointed at this screen, and the code
+// flow does not: whoever holds the phone types eight characters, wherever they
+// are. For pairing a second account to build a send/receive pair, that is the
+// difference between "possible" and "possible only if the phone is in the room".
+//
+// THE NUMBER IS PII AND NEVER LOGGED. It arrives by environment variable so it
+// stays out of the source, it is typed into WhatsApp's own login form, and this
+// test prints only the LINK CODE — which is a one-time credential for a pairing
+// the account holder is already performing, not an identifier of anyone.
+//
+// It cannot complete the pairing. Only the phone can. The session is held so the
+// code stays valid, and the test reports whether the link landed.
+func TestRealSPALinkByPhoneNumber(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv(phoneLinkEnv) == "" {
+		t.Skipf("set %s=1 with %s and %s to link a profile by phone code",
+			phoneLinkEnv, phoneLinkNumberEnv, phoneLinkProfileEnv)
+	}
+	number := os.Getenv(phoneLinkNumberEnv)
+	profile := os.Getenv(phoneLinkProfileEnv)
+	if number == "" || profile == "" {
+		t.Fatalf("%s and %s are both required", phoneLinkNumberEnv, phoneLinkProfileEnv)
+	}
+	if _, err := os.Stat(profile); err == nil {
+		t.Fatalf("%s already exists. Linking into a profile that already has a session "+
+			"would put two accounts in one directory; point this at a fresh path", profile)
+	}
+	minutes := defaultPhoneLinkMinutes
+	if v := os.Getenv(phoneLinkMinutesEnv); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			minutes = n
+		}
+	}
+
+	binary := findChrome(t)
+	runner := engine.NewRunner()
+	browser, err := (&engine.Launcher{BinaryPath: binary, Runner: runner}).Launch(
+		context.Background(), engine.LaunchConfig{
+			ProfileDir: profile, DebuggingPort: freePort(t), UserAgent: realSPAUserAgent,
+		})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	defer engine.CleanStop(context.Background(), runner, browser)
+	tab, err := engine.OpenTab(context.Background(), browser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tab.Close()
+	if err := tab.Navigate(runner, realSPAURL, "link/nav"); err != nil {
+		t.Fatal(err)
+	}
+
+	eval := func(label, script string) string {
+		var out string
+		if err := runner.Do(context.Background(), engine.OpStateProbe, label,
+			func(ctx context.Context) error { return tab.Evaluate(ctx, script, &out) }); err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		return out
+	}
+
+	// Wait for the login screen before touching anything: clicking into a page
+	// still mounting is the single-shot mistake this module already paid for.
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
+		if eval("link/ready", `JSON.stringify(!!document.querySelector('[data-testid=link-device-qrcode-alt-linking-hint]'))`) == "true" {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// CLICK UNTIL THE FORM APPEARS, not once and hope.
+	//
+	// Measured: the entry point is in the DOM before its handler is attached,
+	// so a click fired the moment the element exists does nothing — and the
+	// page stays on the QR screen looking exactly like a page that was never
+	// clicked. Two runs failed that way, and the diagnostic screenshot is what
+	// separated "the click did not take" from "the form is somewhere else".
+	//
+	// Polling for the FIELD while re-clicking the ENTRY POINT is the honest
+	// shape: the postcondition is the form, not the click returning true.
+	fieldDeadline := time.Now().Add(45 * time.Second)
+	var formUp bool
+	for time.Now().Before(fieldDeadline) {
+		if eval("link/field", `JSON.stringify(!!document.querySelector('[data-testid=phone-number-input]'))`) == "true" {
+			formUp = true
+			break
+		}
+		eval("link/hint", `JSON.stringify((() => {
+			const el = document.querySelector('[data-testid=link-device-qrcode-alt-linking-hint]');
+			if (!el) return false;
+			el.click();
+			return true;
+		})())`)
+		time.Sleep(2 * time.Second)
+	}
+	if !formUp {
+		t.Fatal("the phone-number form never appeared after repeatedly clicking the entry point")
+	}
+
+	// Typing goes through the native setter plus an input event: assigning
+	// .value alone leaves React's state untouched, and the form would submit
+	// empty — the same React-does-not-see-it problem the orchestration channel
+	// had today.
+	typed := eval("link/type", `JSON.stringify((() => {
+		const el = document.querySelector('[data-testid=phone-number-input]');
+		if (!el) return {ok:false, why:'NO_INPUT'};
+		const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+		setter.call(el, `+strconv.Quote(number)+`);
+		el.dispatchEvent(new Event('input', {bubbles:true}));
+		return {ok:true, len: el.value.length};
+	})())`)
+	if !strings.Contains(typed, `"ok":true`) {
+		// LOOK at the screen instead of guessing. Two runs failed here with
+		// NO_INPUT and a hypothesis ("the click did not take") that was never
+		// checked; a screenshot and the visible controls say what is actually
+		// there.
+		if png, sErr := tab.Screenshot(runner, "link/diag"); sErr == nil {
+			out := filepath.Join(os.TempDir(), "wa-headless-link-diag.png")
+			if wErr := os.WriteFile(out, png, 0o600); wErr == nil {
+				t.Logf("DIAGNÓSTICO: %s", out)
+			}
+		}
+		t.Logf("controles visíveis: %s", eval("link/diagshape", `JSON.stringify((() => {
+			const out = {buttons: [], inputs: [], url: location.href};
+			document.querySelectorAll('button,[role=button],a').forEach(e => {
+				const t = (e.innerText||'').trim().slice(0,32);
+				if (t) out.buttons.push(t + '|' + (e.getAttribute('data-testid')||''));
+			});
+			document.querySelectorAll('input').forEach(e => {
+				out.inputs.push('type=' + e.type + ' testid=' + (e.getAttribute('data-testid')||''));
+			});
+			return out;
+		})())`))
+		t.Fatalf("could not fill the number field: %s", typed)
+	}
+	// Same reasoning for the button: poll until it is both present and enabled.
+	// A disabled Avançar means the field has not been accepted yet, and
+	// clicking it would look like success and do nothing.
+	btnDeadline := time.Now().Add(20 * time.Second)
+	var clickedNext bool
+	for time.Now().Before(btnDeadline) {
+		got := eval("link/next", `JSON.stringify((() => {
+			const b = [...document.querySelectorAll('button,[role=button]')]
+				.find(e => (e.innerText||'').trim() === 'Avançar');
+			if (!b) return {found:false};
+			if (b.disabled || b.getAttribute('aria-disabled') === 'true') return {found:true, enabled:false};
+			b.click();
+			return {found:true, enabled:true};
+		})())`)
+		if strings.Contains(got, `"enabled":true`) {
+			clickedNext = true
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	if !clickedNext {
+		t.Fatal("the 'Avançar' button never became clickable after filling the number")
+	}
+
+	// The code appears as a row of single characters. Read it, and keep
+	// re-reading: it rotates like the QR does.
+	codeScript := `JSON.stringify((() => {
+		const el = document.querySelector('[data-link-code]');
+		if (el) return el.getAttribute('data-link-code');
+		const body = document.body ? document.body.innerText : '';
+		const m = body.match(/\b([A-Z0-9]{4}[\s-]?[A-Z0-9]{4})\b/);
+		return m ? m[1] : '';
+	})())`
+
+	hold := time.Duration(minutes) * time.Minute
+	t.Logf("holding for %s — enter the code on the phone", hold)
+	var lastCode string
+	start := time.Now()
+	for time.Since(start) < hold {
+		raw := eval("link/code", codeScript)
+		code := strings.Trim(raw, `"`)
+		if code != "" && code != lastCode {
+			lastCode = code
+			t.Logf("LINK CODE: %s   (t+%s)", code, time.Since(start).Round(time.Second))
+		}
+		if eval("link/paired", `JSON.stringify(!!document.querySelector('#pane-side'))`) == "true" {
+			t.Logf("PAIRED at t+%s — the code was accepted and the profile now holds a session",
+				time.Since(start).Round(time.Second))
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
+	t.Fatalf("no pairing within %s. Last code shown was %q — either it was not entered, "+
+		"or it was entered on a phone whose number is not the one this profile asked for",
+		hold, lastCode)
+}
+
+// eval2 runs a page expression and returns its raw answer, logging failures
+// rather than failing the test — used where a probe is opportunistic (the QR
+// reload) and its absence is normal.
+func eval2(t *testing.T, runner *engine.Runner, tab *engine.Tab, label, script string) string {
+	t.Helper()
+	var out string
+	if err := runner.Do(context.Background(), engine.OpStateProbe, label,
+		func(ctx context.Context) error { return tab.Evaluate(ctx, script, &out) }); err != nil {
+		return ""
+	}
+	return out
 }

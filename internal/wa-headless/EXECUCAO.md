@@ -2688,3 +2688,42 @@ escala com a idade da conta, não com o número de sessões.
 dispositivos de laboratório — o do perfil arquivado e o novo. Desconectar o
 antigo é ação dele.
 
+## LOOP 07.0 — duas contas pareadas, e o par emissor/receptor passa a existir
+
+O humano forneceu dois números e pediu autonomia: operar os dois lados sem
+consentimento a cada validação.
+
+**O que não funcionou, e por quê**: o fluxo de **código por telefone**
+(`link-device-qrcode-alt-linking-hint` → campo → *Avançar* → código de 8
+caracteres) foi instrumentado e **funciona** — dois códigos foram exibidos e
+rotacionaram corretamente —, mas o pareamento não completou nas duas janelas
+tentadas. Ficou como ferramenta pronta, não como caminho descartado.
+
+**O que funcionou**: QR ao vivo, um por perfil, em paralelo. O
+`TestRealSPALiveQR` ganhou `WA_HEADLESS_QR_PROFILE` e `WA_HEADLESS_QR_OUT` —
+sem o segundo, dois pareamentos simultâneos sobrescreveriam a imagem um do
+outro e mostrariam o QR de uma conta como se fosse o da outra.
+
+**UM DEFEITO MEU, achado por OLHAR a imagem em vez de ler o log**: o WhatsApp
+para de rotacionar o QR depois de alguns minutos e cobre com *"Selecione para
+recarregar"*. A ferramenta seguia capturando a sobreposição e registrando
+`QR refreshed (#39)` — o que atualizava era o ARQUIVO, não o código. A mensagem
+nomeava o sujeito errado. Corrigido em dois lugares: passa a clicar no
+recarregar, e o log diz `QR captured`, que é o que o laço de fato garante.
+
+**Mapeamento VERIFICADO, não anotado**: o humano corrigiu a associação
+perfil↔número, e em vez de aceitar eu medi — comparando os quatro últimos
+dígitos da identidade PN de cada perfil, sem imprimir número nenhum.
+`conta-A` = …8244, `conta-B` = …1234, ambos **CONFERE=true**. Se a correção
+estivesse invertida, ou se eu tivesse trocado os perfis nas várias tentativas,
+isto teria acusado.
+
+**Ambas persistiram por reboot**: 3/3 ciclos cada, identidade presente,
+paradas limpas, `SingletonLock=0`, sem órfãos.
+
+**O que isto destrava e o que ainda falta**: com duas contas distintas, a
+validação de RECEBIMENTO ao vivo deixa de depender de terceiros — uma conta
+manda, a outra recebe, e a direção `in` fecha sozinha. Mas **enviar não existe**:
+`capabilities/send` é só um `doc.go`. A CAP-07 deixa de ser escopo especulativo
+e passa a ser o que falta para o ciclo fechado.
+
