@@ -164,7 +164,18 @@
 # REQUIRED_FIX 1 da EVAL-09) cobre statements que nenhum outro teste
 # alcancava. Ratchet-UP honesto, por ordem do proprio alvo coverage-gate,
 # que avisou "a cobertura subiu; suba min_coverage para 840 neste mesmo PR".
-min_coverage=840
+# CAP-39 (2026-08-19): 840 -> 859. Ratchet-UP por ordem do proprio alvo
+# coverage-gate, que avisava "a cobertura subiu; suba min_coverage para 858
+# neste mesmo PR" ha' pelo menos duas rodadas sem que ninguem subisse. Com o
+# piso em 840 contra medicao de 859, a catraca tinha 19 decimos de FOLGA: dava
+# para REMOVER cobertura ate' 84,0% sem o gate reclamar — a protecao estava
+# desligada exatamente na faixa onde importa. Registrado como F171.
+#
+# O valor e' 859 e nao 858 porque a CAP-38 (F164, 121cb12) acrescentou doze
+# testes; 858 era a medicao de ANTES dela. Piso EXATO por decisao explicita,
+# ciente do custo: remocao legitima de codigo bem coberto passa a exigir ajuste
+# deste arquivo no mesmo PR.
+min_coverage=859
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

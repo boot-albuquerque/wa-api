@@ -12242,5 +12242,73 @@ deleção, que é o mesmo defeito já registrado sobre a chave `count` do
 vendorizado. Decidir entre "piso exato" e "piso com folga declarada" é escolha
 de política, não limpeza.
 
-**Status**: não corrigido. Fora do escopo do CAP-37, e é decisão de política de
-gate — levada ao canal de decisão.
+**Status**: **CORRIGIDO** no CAP-39, em commit sozinho — a política deste
+repositório é não mexer em gate no mesmo commit da correção que ele julga.
+
+**O valor é 859, não 858.** O aviso pedia 858, que era a medição de ANTES da
+CAP-38; os doze testes daquele bloco subiram para 859. Fixar o número que o
+aviso dizia teria deixado a catraca com um décimo de folga no dia seguinte ao
+commit — medir na hora de aplicar, e não copiar o número do relatório, é o que
+evita isso.
+
+**Piso EXATO, por decisão explícita e ciente do custo**: remoção legítima de
+código bem coberto passa a exigir ajuste deste arquivo no mesmo PR. A
+alternativa (piso com folga declarada) foi considerada e recusada.
+
+**Controle negativo EXECUTADO**: com `min_coverage=860`, um ponto acima do
+medido, o gate reprova:
+
+```
+coverage: 859 decimos de % (piso declarado 860 decimos de %) — atual 85.9%
+FALHA: a cobertura caiu (85.9% < piso declarado).
+       Codigo novo sem teste, ou teste deletado.
+make: *** [coverage-gate] Error 1
+```
+
+Restaurado para 859 por edição localizada. Conferido que existe UMA só linha
+`^min_coverage=` ativa — o gate já falhou por chave duplicada antes, e a string
+`min_coverage=840` também aparecia num comentário histórico na linha 131, o que
+fez a minha primeira tentativa de substituição casar em dois lugares.
+
+**Gate**: `make check` EXIT 0, e o aviso de cobertura desapareceu da saída.
+
+---
+
+## F172 — a MESMA catraca destravada, agora no teto de complexidade
+
+**Data**: 2026-08-19. **Contexto**: CAP-39 (F171). Apareceu ao ler a saída do
+`make check` inteira em vez de só a linha de cobertura.
+
+**Onde**: `.golangci-baseline`, chave `max_complexity=56`.
+
+**Problema**: toda execução imprime
+
+```
+lint: complexidade maxima 51 (baseline 56) | 336 issue(s) (informativo, baseline 263)
+ATENCAO: a complexidade maxima caiu (51 < 56). Baixe max_complexity para 51 neste mesmo PR.
+```
+
+É a F171 na outra direção: a complexidade medida caiu para 51 e o teto continua
+em 56, então há CINCO pontos de folga em que a complexidade pode voltar a subir
+sem o gate reclamar. Advisory, EXIT 0 — e destravado exatamente na faixa que a
+catraca existe para proteger.
+
+**Pré-existente, verificado**: a linha é idêntica, com os mesmos números, nos
+logs de `make check` da CAP-36, CAP-37 e CAP-38. Não é efeito de nenhum bloco
+desta rodada.
+
+**Correção sugerida**: `max_complexity=51`, em commit próprio, pelo mesmo
+raciocínio da F171 — medindo na hora de aplicar, não copiando o número daqui.
+
+**A diferença que impede tratar como idêntica à F171**: baixar o teto de
+complexidade não é simétrico a subir o piso de cobertura. Cobertura que cai é
+quase sempre defeito; complexidade que sobe pode ser consequência legítima de
+uma feature, e um teto colado no mínimo histórico transforma qualquer função
+nova de tamanho médio em reprovação de gate. Vale notar que a chave `count`
+(263, informativa) do mesmo arquivo já é conhecida por punir decomposição — o
+número SOBE quando se quebra função grande em pequenas. Decidir entre teto
+exato e teto com folga é política, e é a mesma pergunta da F171 com uma resposta
+possivelmente diferente.
+
+**Status**: não corrigido. Fora do escopo do CAP-39, que é a cobertura. Levado
+ao canal de decisão.
