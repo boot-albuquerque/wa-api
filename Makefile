@@ -340,7 +340,8 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 	./internal/wa-noise/persistence/store/ ./internal/wa-noise/persistence/store/sqlstore/ \
 	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/proto/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
 	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \
-	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/
+	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/ \
+	./internal/wa-noise/protocol/argo/
 
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)

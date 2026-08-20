@@ -13314,3 +13314,61 @@ constante é SÓ o sufixo de pragmas, e cada ponto continua montando a URL como
 montava — `"file:"` + `ToSlash` num, concatenação direta no outro.
 
 Conferido byte a byte contra o histórico: o valor final montado não mudou.
+
+---
+
+## F178 — `internal/wa-noise/protocol/argo/` tem cinco testes que NUNCA correram
+
+**Data**: 2026-08-20. **Contexto**: [[F133]]. Depois de o gate se provar
+incompleto DUAS vezes no mesmo dia — fixtures de SQLite sem WAL ([[F161]]) e
+formatação não verificada (F133) —, fiz a pergunta sistemática: **o que MAIS o
+`make check` não verifica?**
+
+**Onde**: `Makefile`, variável `WACLIENT_TEST_PKGS` (linhas 329-344).
+
+**Problema**: 33 pacotes de `internal/wa-noise/` têm arquivo `_test.go`. A lista
+do gate tinha **32**. O que faltava era `./internal/wa-noise/protocol/argo/`,
+com **cinco** testes que passam e que o `make check` nunca executou.
+
+**Teste que existe e não corre é pior que teste inexistente**: dá a impressão de
+cobertura sem a fornecer. Quem mexer em `argo.go` vê testes ao lado do arquivo,
+assume que o gate os cobre, e a regressão passa.
+
+**FALSO POSITIVO do meu próprio método, registrado porque quase virou o
+achado**: a primeira comparação acusou **quinze** pacotes fora do gate,
+incluindo `protocol/binary/` e `capabilities/group/` — que estão na lista. O erro
+foi meu: parseei o `Makefile` com `tr ' \\' '\n\n'`, que não lida com as
+continuações de linha. O método correto é pedir ao próprio `make` a expansão:
+
+```bash
+make -s -n waclient-test | tr ' ' '\n' | grep '^\./internal' | sed 's|/*$|/|' | sort -u
+```
+
+Com ele, o resultado é UM pacote, não quinze. **Não parseie Makefile à mão
+quando o `make` sabe expandir.**
+
+**Correção aplicada**: `./internal/wa-noise/protocol/argo/` acrescentado ao
+`WACLIENT_TEST_PKGS`. Conferido que agora nenhum pacote com teste fica de fora
+(`comm` entre as duas listas devolve vazio).
+
+**Controle negativo EXECUTADO** — e a primeira tentativa não provou nada, porque
+o meu `grep` cortou a saída antes do resultado. Refeito com captura completa:
+
+```
+$ make waclient-test   # com um t.Fatal plantado em argo_test.go
+EXIT=2
+    argo_test.go:6: CN: prova que o gate roda argo
+FAIL	wa-api/internal/wa-noise/protocol/argo	0.150s
+```
+
+Antes desta correção, esse mesmo teste quebrado teria passado despercebido.
+Restaurado por cópia de backup, conferido com `diff`.
+
+**O que a varredura descartou, e vale registrar para não ser refeita**: o alvo
+`test` JÁ roda com `-race` (`Makefile:121`), e `go mod tidy` NÃO produz drift —
+conferido comparando `go.mod`/`go.sum` antes e depois. As duas hipóteses caíram.
+
+**Status**: **CORRIGIDO** nesta entrada. É o TERCEIRO buraco no instrumento de
+medição encontrado no mesmo dia, e a razão de registrar os três juntos é essa:
+`make check` EXIT 0 foi o critério com que aceitei e recusei blocos a sessão
+inteira. Três vezes ele mediu menos do que eu supunha.
