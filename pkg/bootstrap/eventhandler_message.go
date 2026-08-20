@@ -311,6 +311,35 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 	} else if location := evt.Message.GetLocationMessage(); location != nil {
 		messageType = "location"
 		textContent = location.GetName()
+	} else if poll := evt.Message.GetPollCreationMessage(); poll != nil {
+		// F184, etapa (b). Antes deste ramo a enquete caía no messageType
+		// inicial "text", ficava sem conteúdo e a guarda de gravação
+		// descartava-a: recebida, logada, e nunca gravada.
+		//
+		// O texto vai para `caption`, NÃO para `textContent`, e isso não é
+		// estilo. O bloco de extração abaixo faz `textContent = caption`
+		// incondicionalmente quando não há Conversation nem ExtendedText, o
+		// que APAGA qualquer textContent atribuído aqui — é o defeito medido
+		// na F187, que hoje come o DisplayName do contacto e o Name da
+		// localização. Escrever em caption é o que sobrevive a esse bloco.
+		messageType = messageTypePoll
+		caption = poll.GetName()
+	} else if interactive := evt.Message.GetInteractiveMessage(); interactive != nil {
+		// É ESTE o formato que o nosso próprio /chat/send/buttons produz:
+		// messenger_buttons.go:217 monta waE2E.Message{InteractiveMessage:...}
+		// com NativeFlowMessage. Verificado no código do adapter antes de
+		// escrever o ramo — casar o receptor com o que o emissor realmente
+		// envia é o que distingue este ramo de um palpite.
+		messageType = messageTypeButtons
+		caption = interactive.GetBody().GetText()
+	} else if buttons := evt.Message.GetButtonsMessage(); buttons != nil {
+		// O formato LEGADO de botões. Não é o que nós enviamos, mas é o que
+		// pode chegar de outro cliente, e o ramo de recepção existe para o
+		// que CHEGA, não para o que sai. Deixá-lo de fora faria o teste de
+		// campo passar com os nossos próprios envios e continuar a perder os
+		// de terceiros — a Armadilha 1, medida contra o emissor errado.
+		messageType = messageTypeButtons
+		caption = buttons.GetContentText()
 	}
 
 	// Extract text content for non-reaction and non-delete messages
@@ -420,6 +449,22 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 // (contact e location) foram mantidos literalmente: o switch inteiro já só
 // roda com textContent vazio, então eles são sempre verdadeiros, mas removê-los
 // seria alterar o código e não movê-lo.
+// messageTypePoll and messageTypeButtons are the history message_type values
+// for the two kinds the classification chain gained in the F184 (b) step.
+//
+// They are constants while their eight older siblings ("image", "video", …)
+// are still literals, and that is deliberate rather than inconsistent: each of
+// these appears in TWO places — the classification branch and
+// defaultHistoryTextFor — and a value repeated twice is the same bug waiting to
+// diverge (ADR-0004). Converting the older eight would mix a rename into a
+// behaviour change in one diff, which is exactly the shape of change where a
+// defect goes unnoticed; CLAUDE.md says to convert what you touched, not the
+// whole file.
+const (
+	messageTypePoll    = "poll"
+	messageTypeButtons = "buttons"
+)
+
 // discardReasonUnclassified is the reason recorded when saveMessageHistory
 // drops a received message: the classification chain produced no type, no text
 // and no media link for it, so the save guard has nothing to write.
@@ -441,6 +486,10 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 		return ":document:"
 	case "sticker":
 		return ":sticker:"
+	case messageTypePoll:
+		return ":poll:"
+	case messageTypeButtons:
+		return ":buttons:"
 	case "contact":
 		if textContent == "" {
 			return ":contact:"

@@ -165,3 +165,120 @@ func linhaComMensagem(t *testing.T, saida, trecho string) map[string]any {
 	}
 	return nil
 }
+
+// --- F184, etapa (b): os ramos que faltavam ---------------------------------
+
+// TestHistorico_EnqueteGravaComAPergunta trava o defeito medido em campo: a
+// enquete `3EB06ABF289C9D46888E88` foi enviada, recebida, logada, e a contagem
+// na tabela deu ZERO.
+//
+// A asserção é sobre a PERGUNTA, não sobre o tipo. Gravar a enquete como
+// ":poll:" faria o teste do tipo passar com metade do defeito no lugar — e essa
+// metade é justamente a que a F187 explica: escrever em textContent em vez de
+// caption seria apagado pelo bloco de extração, e o resultado seria ":poll:".
+func TestHistorico_EnqueteGravaComAPergunta(t *testing.T) {
+	evh := handlerComHistorico(t, "u-poll")
+	buf := capturarLog(t)
+
+	pergunta := "Qual o melhor dia?"
+	evt := eventoNaoClassificavel("MSG-POLL-B", "poll")
+	evt.Message = &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{
+		Name: proto(pergunta),
+		Options: []*waE2E.PollCreationMessage_Option{
+			{OptionName: proto("Segunda")}, {OptionName: proto("Terca")},
+		},
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
+		t.Fatalf("enquete continua a ser descartada: %s", saida)
+	}
+
+	tipo, txt := lerLinha(t, evh, "MSG-POLL-B")
+	if tipo != "poll" {
+		t.Errorf("message_type = %q, quero \"poll\"", tipo)
+	}
+	if txt != pergunta {
+		t.Errorf("text_content = %q, quero a pergunta %q (\":poll:\" aqui significa que o texto foi escrito em textContent e o bloco de extracao o apagou — F187)", txt, pergunta)
+	}
+}
+
+// TestHistorico_BotoesGravaComOCorpo cobre o formato que o NOSSO
+// /chat/send/buttons produz de facto: waE2E.Message{InteractiveMessage},
+// montado em messenger_buttons.go:217. Foi verificado no adapter antes de o
+// ramo ser escrito — um ramo de recepção que não case com o emissor real é a
+// Armadilha 1 na direção oposta.
+func TestHistorico_BotoesGravaComOCorpo(t *testing.T) {
+	evh := handlerComHistorico(t, "u-btn")
+	corpo := "Escolha uma opcao"
+
+	evt := eventoNaoClassificavel("MSG-BTN-B", "text")
+	evt.Message = &waE2E.Message{InteractiveMessage: &waE2E.InteractiveMessage{
+		Body: &waE2E.InteractiveMessage_Body{Text: proto(corpo)},
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	tipo, txt := lerLinha(t, evh, "MSG-BTN-B")
+	if tipo != "buttons" {
+		t.Errorf("message_type = %q, quero \"buttons\"", tipo)
+	}
+	if txt != corpo {
+		t.Errorf("text_content = %q, quero %q", txt, corpo)
+	}
+}
+
+// TestHistorico_BotoesLegadoTambemGrava cobre o formato ButtonsMessage, que nós
+// NÃO enviamos mas que pode chegar de outro cliente. Sem ele, o teste de campo
+// passaria com os nossos próprios envios e continuaria a perder os de terceiros.
+func TestHistorico_BotoesLegadoTambemGrava(t *testing.T) {
+	evh := handlerComHistorico(t, "u-btn-legado")
+	corpo := "Corpo legado"
+
+	evt := eventoNaoClassificavel("MSG-BTN-LEG", "text")
+	evt.Message = &waE2E.Message{ButtonsMessage: &waE2E.ButtonsMessage{
+		ContentText: proto(corpo),
+	}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	tipo, txt := lerLinha(t, evh, "MSG-BTN-LEG")
+	if tipo != "buttons" {
+		t.Errorf("message_type = %q, quero \"buttons\"", tipo)
+	}
+	if txt != corpo {
+		t.Errorf("text_content = %q, quero %q", txt, corpo)
+	}
+}
+
+// TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder é a fronteira: sem nome, o
+// ramo não pode voltar a produzir conteúdo vazio, senão a guarda descarta e o
+// defeito volta pela porta dos fundos.
+func TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder(t *testing.T) {
+	evh := handlerComHistorico(t, "u-poll-vazia")
+	buf := capturarLog(t)
+
+	evt := eventoNaoClassificavel("MSG-POLL-VAZIA", "poll")
+	evt.Message = &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{}}
+
+	evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
+		t.Fatalf("enquete sem pergunta voltou a ser descartada: %s", saida)
+	}
+	if _, txt := lerLinha(t, evh, "MSG-POLL-VAZIA"); txt != ":poll:" {
+		t.Errorf("text_content = %q, quero \":poll:\"", txt)
+	}
+}
+
+func lerLinha(t *testing.T, evh *UserEventHandler, id string) (tipo, texto string) {
+	t.Helper()
+	err := evh.DB.QueryRow(
+		"SELECT message_type, text_content FROM message_history WHERE message_id = ?", id,
+	).Scan(&tipo, &texto)
+	if err != nil {
+		t.Fatalf("linha %s nao gravada: %v", id, err)
+	}
+	return tipo, texto
+}
