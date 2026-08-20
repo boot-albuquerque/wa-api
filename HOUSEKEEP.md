@@ -11039,6 +11039,37 @@ essa, a regra deveria dizê-lo, para parar de gerar esta dúvida.
 os nomes de teste — qualquer que seja o lado. A ambiguidade custa mais que a
 escolha.
 
+**MEDIÇÃO acrescentada em 2026-08-20**, para que a decisão não seja tomada no
+escuro. O atrito NÃO está distribuído: está quase todo em nome de teste.
+
+Identificadores em português no código de PRODUÇÃO — **quatro**, nomeados:
+
+| onde | função |
+|---|---|
+| `pkg/bootstrap/dispatch_retry.go:63` | `atrasoDaTentativa` |
+| `pkg/bootstrap/dispatch_retry.go:124` | `agendarProximaTentativa` |
+| `pkg/bootstrap/dispatch_outbox.go:248` | `resolverChaveHMAC` |
+| `pkg/application/usecase/user/list_chats.go:117` | `(*ListChatsUseCase).nomesDeContato` |
+
+Nomes de TESTE em português: **41**.
+
+Ou seja: a regra do CLAUDE.md já está praticamente cumprida onde ela mais
+importa, e converter os quatro de produção é trabalho de minutos. A pergunta
+real é só sobre os 41 nomes de teste.
+
+**ARMADILHA no caminho desta medição, registrada porque é a do dia inteiro
+virada contra mim**: a PRIMEIRA medição devolveu **zero** identificadores de
+produção em português. Estava errada — a expansão de variável com a lista de
+arquivos falhou em silêncio e o `grep` não leu arquivo nenhum, devolvendo vazio
+com status de sucesso. Só percebi porque eu tinha visto `resolverChaveHMAC` com
+os próprios olhos minutos antes.
+
+"Zero" era o resultado BONITO — o que confirmaria que a regra já estava
+cumprida. Foi exatamente por isso que quase passou. Vale como regra de método:
+**medição que confirma o que você espera merece mais desconfiança, não menos**,
+e ferramenta que devolve vazio com exit 0 tem de ser conferida contra um caso
+que você SABE que existe antes de virar número num documento de decisão.
+
 **Status**: não corrigido. É decisão do humano sobre a própria regra dele;
 não altero `CLAUDE.md` por conta própria.
 
