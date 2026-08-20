@@ -383,6 +383,40 @@ ficaria invisível até alguém notar mensagem faltando. Ver H34.
 **Custo medido**: 1–2 ms de espera no caminho feliz (`waited=1ms`, `waited=2ms`
 em duas execuções reais). A pós-condição não é cara; a ausência dela é.
 
+### 6.9 — `listContacts` devolve PESSOAS, e o `wwebjs` devolve linhas
+
+**O que o `wwebjs` faz**: `getContacts()` entrega a coleção como está.
+
+**O que fazemos**: fundimos as duas linhas da mesma pessoa e descartamos o que a
+página não chama de pessoa.
+
+**Por que divergimos**: medido neste build, 390 pessoas têm DUAS linhas — uma
+`@c.us` e uma `@lid` — e a ligação só existe no sentido `lid → phone`. Entregar
+as linhas cruas daria 944 contatos para 544 pessoas, e o chamador não teria como
+notar, porque as duas linhas parecem válidas.
+
+Há ainda uma linha marcada `isPSA()` pela própria página: sentinela de sistema
+que também é `isUser()`. Ela custou a H41 e só apareceu porque a capacidade
+seguinte usou esta saída como entrada.
+
+### 6.10 — `fetchContactAvatar`: ausência de foto é RESPOSTA, não erro
+
+**O que o `wwebjs` faz**: `getProfilePicUrl()` devolve `undefined` quando não há
+foto, misturando "não tem" com "não deu certo" num único valor vazio.
+
+**O que fazemos**: `Avatar.Present` separa os dois, e só a página recusando
+produz erro.
+
+**Por que divergimos**: medido em 12 contatos ao vivo — 10 com foto, 2 sem, 0
+exceções, 0 `null`. Quem não tem foto devolve resultado NORMAL com os campos de
+URL ausentes. Colapsar isso em vazio faria o chamador tratar 2 de cada 12
+pessoas como falha de rede, e tentar de novo para sempre.
+
+**E a chamada não recebe um wid**, o que nenhuma referência diz: ela recebe um
+objeto carregando `.id`. Passar o wid lança em `isNewsletter`. A forma veio de
+LER a fonte do `profilePicResync` no próprio build — não de documentação, não da
+referência.
+
 ## 7. Passagem de auditoria — as seis, conferidas contra o que a matriz prometia
 
 Feita em 2026-08-19, depois de a sexta capacidade entrar. O alvo parou de mudar,

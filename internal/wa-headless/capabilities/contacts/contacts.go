@@ -119,6 +119,13 @@ type row struct {
 	Pushname     string `json:"pushname"`
 	VerifiedName string `json:"verified_name"`
 	IsBusiness   bool   `json:"is_business"`
+	// IsPSA marks a public-service-announcement row: a system sentinel, not a
+	// person. Exactly one exists in the 944, and it is also isUser(), which is
+	// why filtering on "is it a user" let it through.
+	IsPSA bool `json:"is_psa"`
+	// IsUser is the page's own answer to "is this an individual". Carried so
+	// the drop rule is the page's rule and not a guess about jid shapes.
+	IsUser bool `json:"is_user"`
 }
 
 // wire is the page's answer.
@@ -150,8 +157,14 @@ func script() string {
 			try { pushname = str(G.getPushname && G.getPushname(c)); } catch (e) {}
 			try { verified = str(G.getVerifiedName && G.getVerifiedName(c)); } catch (e) {}
 			try { biz = !!(G.getIsBusiness && G.getIsBusiness(c)); } catch (e) {}
+			// The page's own predicates decide what is a person. A rule written
+			// here from jid shapes would be a guess; isPSA is not.
+			const pred = (name) => {
+				try { return typeof id[name] === 'function' ? !!id[name]() : false; } catch (e) { return false; }
+			};
 			rows.push({ user: id.user, server: id.server, phone_user: phoneUser,
-				pushname: pushname, verified_name: verified, is_business: biz });
+				pushname: pushname, verified_name: verified, is_business: biz,
+				is_psa: pred('isPSA'), is_user: pred('isUser') });
 		}
 		return { ok: true, rows: rows };
 	})())`
@@ -183,13 +196,28 @@ const (
 	serverLID   = "lid"
 )
 
+// isPerson decides what the roster may return, using the PAGE'S predicates.
+//
+// The first version dropped only "g.us" rows and kept everything else. That let
+// through a single row with a one-character user which the page marks
+// isPSA() — a system sentinel that is ALSO isUser(), so no is-it-a-user check
+// would have caught it. It was found by the avatar capability, whose request
+// for that row's picture hung for the full budget and never answered.
+//
+// The rule is therefore the page's own, not a shape heuristic: a person is a
+// row the page calls a user and does not call a PSA. Measured over 944 rows:
+// isUser 943, isGroup 1, isPSA 1, isServer 0, isNewsletter 0.
+func isPerson(r row) bool {
+	if r.IsPSA || !r.IsUser {
+		return false
+	}
+	return r.Server == serverPhone || r.Server == serverLID
+}
+
 // merge folds the two rows describing one person into one Contact.
 //
 // It walks lid -> phone because that is the only edge the build provides: the
 // lid row carries phoneNumber, the phone row carries nothing pointing back.
-// Rows that are neither user space (a group, measured at 1 of 944) are dropped,
-// because a group is not a contact and returning it as one would be the same
-// silent wrongness the deduplication exists to prevent.
 func merge(rows []row) Roster {
 	out := Roster{Rows: len(rows)}
 
@@ -197,7 +225,7 @@ func merge(rows []row) Roster {
 	byPhone := make(map[string]*Contact, len(rows))
 	order := make([]*Contact, 0, len(rows))
 	for _, r := range rows {
-		if r.Server != serverPhone {
+		if r.Server != serverPhone || !isPerson(r) {
 			continue
 		}
 		c := &Contact{
@@ -211,7 +239,7 @@ func merge(rows []row) Roster {
 	}
 
 	for _, r := range rows {
-		if r.Server != serverLID {
+		if r.Server != serverLID || !isPerson(r) {
 			continue
 		}
 		lid := r.User + "@" + serverLID

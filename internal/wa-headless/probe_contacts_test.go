@@ -40,65 +40,42 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// Second pass: is the roster DOUBLE-COUNTING people? The first pass
-	// measured 454 c.us against 489 lid, which is nothing like the message
-	// collection's 397-of-399 lid, and a listing that returned both
-	// representations of one person would be wrong in a way no caller could
-	// detect. Counters and hashes only — never an identity in the clear.
+	// Third pass: WHICH ROWS ARE NOT PEOPLE?
+	//
+	// The avatar proof hung on exactly one contact, and the redacted shape said
+	// server=c.us userLen=1 — a single digit, which is a system sentinel and
+	// not a person. listContacts had returned it as one.
+	//
+	// The fix must not be a length heuristic. The page carries its own
+	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
+	// this pass counts which of them separate that row from the rest. Counters
+	// only; no identity leaves the page.
 	const script = `JSON.stringify((() => {
-		const out = {};
 		const coll = window.require('WAWebContactCollection').ContactCollection;
 		const all = coll.getModelsArray();
-		out.total = all.length;
-
-		// Which cross-identity fields does the model actually carry?
-		const fieldHits = {};
-		const candidates = ['phoneNumber','lid','pn','userLid','pnForLid','lidForPn','alternateWid','deviceJid'];
-		const pnUsers = new Set(), lidUsers = new Set();
-		let linkedPnFromLid = 0, linkedLidFromPn = 0;
+		const out = { total: all.length, byPredicate: {}, shortUsers: {}, oddballs: [] };
+		const preds = ['isUser','isServer','isPSA','isGroup','isNewsletter','isBroadcast','isLid'];
+		for (const p of preds) { out.byPredicate[p] = 0; }
 		for (let i = 0; i < all.length; i++) {
-			const c = all[i];
-			for (const f of candidates) {
-				try {
-					const v = c[f];
-					if (v !== undefined && v !== null && v !== '') {
-						fieldHits[f] = (fieldHits[f] || 0) + 1;
-					}
-				} catch (e) { /* getter may throw */ }
+			const id = all[i].id;
+			if (!id) { continue; }
+			for (const p of preds) {
+				try { if (typeof id[p] === 'function' && id[p]()) { out.byPredicate[p]++; } } catch (e) {}
 			}
-			try {
-				const id = c.id;
-				if (!id) { continue; }
-				if (id.server === 'c.us') {
-					pnUsers.add(id.user);
-					if (c.lid && c.lid.user) { linkedLidFromPn++; }
-				} else if (id.server === 'lid') {
-					lidUsers.add(id.user);
-					if (c.phoneNumber && c.phoneNumber.user) { linkedPnFromLid++; }
+			const len = (id.user || '').length;
+			out.shortUsers[len] = (out.shortUsers[len] || 0) + 1;
+			// Anything with an implausibly short user: report its PREDICATES,
+			// never its value, so the filter can be written against a rule the
+			// page owns instead of against a length.
+			if (len <= 4 && out.oddballs.length < 10) {
+				const d = { len: len, server: id.server };
+				for (const p of preds) {
+					try { d[p] = (typeof id[p] === 'function') ? !!id[p]() : 'n/a'; } catch (e) { d[p] = 'THREW'; }
 				}
-			} catch (e) { /* skip */ }
+				try { d.isMe = !!all[i].isMe; } catch (e) {}
+				out.oddballs.push(d);
+			}
 		}
-		out.fieldHits = fieldHits;
-		out.distinctPn = pnUsers.size;
-		out.distinctLid = lidUsers.size;
-		out.lidRowsCarryingAPhone = linkedPnFromLid;
-		out.pnRowsCarryingALid = linkedLidFromPn;
-
-		// THE QUESTION: do the two halves describe the same people? Count how
-		// many phone identities are reachable from the lid rows.
-		const phonesFromLidRows = new Set();
-		for (let i = 0; i < all.length; i++) {
-			try {
-				const c = all[i];
-				if (c.id && c.id.server === 'lid' && c.phoneNumber && c.phoneNumber.user) {
-					phonesFromLidRows.add(c.phoneNumber.user);
-				}
-			} catch (e) { /* skip */ }
-		}
-		let overlap = 0;
-		phonesFromLidRows.forEach(u => { if (pnUsers.has(u)) { overlap++; } });
-		out.phonesReachableFromLidRows = phonesFromLidRows.size;
-		out.overlapWithPnRows = overlap;
 		return out;
 	})())`
 

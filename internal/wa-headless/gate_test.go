@@ -512,6 +512,13 @@ var (
 	closedStatusTokens = []string{
 		"corrigido", "corrigida", "fechado", "fechada",
 		"verificado", "confirmado", "decidido",
+		// ENTREGUE conta como FECHADO, e é palavra distinta de "corrigido" de
+		// propósito: uma capacidade NOVA não conserta nada, e escrever
+		// "corrigido" nela diria que havia defeito onde havia ausência. Entrou
+		// deliberadamente, que é o que este gate exige de qualquer palavra
+		// nova — a alternativa seria torcer a entrada para caber no
+		// vocabulário, e aí o registro passa a mentir para agradar a ferramenta.
+		"entregue", "entregues",
 	}
 )
 

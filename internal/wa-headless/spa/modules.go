@@ -137,6 +137,31 @@ const (
 	// not of the build. A listing that promised "name" would return nothing
 	// for 943 of 944 people.
 	ModuleContactGetters = Module("WAWebContactGetters")
+	// ModuleContactProfilePicThumbBridge asks the SERVER for an avatar.
+	//
+	// THE ARGUMENT IS NOT A WID. Measured 2026-08-20: passing a wid to
+	// requestProfilePicFromServer throws "Cannot read properties of undefined
+	// (reading 'isNewsletter')" — the page reading a field off a `.id` a wid
+	// does not have. Reading profilePicResync's own source settled the shape:
+	//
+	//	function k(t){ ... t.map(... yield v(t.id, {tcToken, commonGid}) ...) }
+	//
+	// so the call takes an object CARRYING .id, and resync takes an array of
+	// them. Both were then confirmed against the live account.
+	//
+	// The local ProfilePicThumbCollection is not a substitute: it held 68
+	// models for 545 people, and only 33 of those carried an eurl.
+	ModuleContactProfilePicThumbBridge = Module("WAWebContactProfilePicThumbBridge")
+	// ModuleWidFactory BUILDS an identity from text.
+	//
+	// It was a bare literal inside the send script until a second capability
+	// needed it. A module name repeated in two places is the same bug waiting
+	// to diverge — the page renames it once and only one call site is fixed —
+	// which is why ADR-0004 has no exception for "it is only used twice".
+	//
+	// createWid BUILDS from a string; asChatWid only VALIDATES an existing wid,
+	// and handing it a string fails with "e.isUser is not a function".
+	ModuleWidFactory = Module("WAWebWidFactory")
 )
 
 // RequiredAtStartup is verified before any capability runs.

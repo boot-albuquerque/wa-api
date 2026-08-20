@@ -2820,8 +2820,29 @@ o `ctx`" quase nunca é um dublê só.
 em prazo de teste de integração muda o que a suíte considera falha. Pelo
 `CLAUDE.md`, isso se registra e se pergunta, não se conserta de graça.
 
-**Status**: aberto — medido (18m28s travado contra 2,08s isolado, com o pid do
-navegador vazado como evidência), correção proposta, aguardando decisão.
+### Segunda ocorrência (2026-08-20), e o contraste é o argumento
+
+Numa execução posterior do `make check`, sob a mesma contenção, quem caiu foi
+outro teste do mesmo pacote:
+
+```
+--- FAIL: TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers (6.09s)
+    launcher_test.go:215: the browser never started, so this test did not exercise the cleanup
+```
+
+3/3 verdes ao rodar isolado logo em seguida. Mesma causa, **comportamento
+oposto**: este falha em 6 segundos dizendo exatamente o que faltou, enquanto o
+`TestBrowserChainVerifiesTheModuleInventory` fica pendurado 18 minutos e mata a
+suíte por timeout de pacote.
+
+Os dois lados do contraste vivem no mesmo pacote, então não é questão de sorte:
+é a diferença entre uma chamada com prazo e uma sem. O `launcher_test` verifica
+que o navegador subiu e desiste; o outro entra numa conversa que nunca termina.
+**Isso reforça a correção proposta acima em vez de a substituir.**
+
+**Status**: aberto — medido duas vezes (18m28s travado contra 2,08s isolado; e
+uma segunda ocorrência que falha em 6s por ter prazo), correção proposta,
+aguardando decisão.
 
 ## H37 — o registro de módulos É enumerável, mas por nenhuma das portas que o wwebjs usa
 
@@ -3000,3 +3021,117 @@ ordem invertida e exigir o mesmo roster, que é o contrato de verdade.
 
 **Status**: corrigido/entregue — capacidade implementada a partir da medição,
 com prova ao vivo (944 → 545) e cinco controles negativos.
+
+## H40 — `fetchContactAvatar`: ausência não é erro, e a chamada não recebe um wid
+
+**Data**: 2026-08-20 · **Contexto**: CAP-09, medida com o instrumento da H37.
+
+**A chamada não recebe um wid.** `requestProfilePicFromServer(wid)` lança
+`Cannot read properties of undefined (reading 'isNewsletter')` — a página lendo
+um campo de um `.id` que o wid não tem. Quem resolveu foi LER A FONTE do vizinho
+`profilePicResync`:
+
+```js
+function k(t){ ... t.map(... yield v(t.id, {tcToken:t.tcToken, commonGid:t.commonGid})
+                          return {id:t.id, eurl:n.eurl, tag:n.tag, previewEurl:...} )}
+```
+
+Ele mapeia um ARRAY de `{id, tcToken, commonGid}`. Logo o argumento CARREGA
+`.id`. `requestProfilePicFromServer({ id: wid })` funciona, e
+`profilePicResync([{ id: wid }])` também. Nenhuma das duas foi adivinhada.
+
+**Ausência de foto NÃO é erro**, e esse é o contrato. Doze contatos ao vivo:
+
+| desfecho | n | chaves devolvidas |
+|---|---|---|
+| com foto | 10 | `eurl,previewEurl,filehash,fullDirectPath,previewDirectPath,id,tag,timestamp,stale,eurlStale` |
+| **sem foto** | 2 | `id,tag,timestamp,stale,eurlStale` — **sem `eurl`** |
+| exceção | 0 | |
+| `null` | 0 | |
+
+Quem não tem foto devolve resultado NORMAL com os campos de URL ausentes. Mapear
+isso para erro estaria errado para 2 de cada 12 pessoas, e o chamador ouviria "a
+busca falhou" onde a verdade é "não há foto".
+
+**O cache local não serve de substituto**: 68 modelos em
+`ProfilePicThumbCollection` para 544 pessoas, e só 33 com `eurl`. Servir dali
+responderia "sem avatar" para quase toda a agenda enquanto o servidor tem.
+
+**Testes**: oito em `capabilities/avatar/avatar_test.go`, mais
+`TestRealSPAFetchesAvatarsForRealContacts`, que se alimenta do `listContacts` —
+prova de integração do par, porque a identidade que uma capacidade escolhe é a
+que a outra tem de aceitar. Ao vivo: 12 contatos, 4 com foto, 8 sem, 0 falhas.
+
+**Quatro controles negativos, EXECUTADOS:**
+
+```
+1. ausência tratada como erro     -> a contact without a picture produced an error
+2. página recusando = "sem foto"  -> got <nil>, want ErrRequest
+3. validar o jid DEPOIS do kick   -> the page was asked 1 time(s) for a jid that was never valid
+4. imprimir a URL no String()     -> String() leaked "SECRET"
+```
+
+**Erro meu no caminho, e ele é de MEDIÇÃO.** Uma passagem anterior reportou
+"12 pedidos, 0 exceções" e eu li isso como "os dois espaços de identidade
+funcionam". Ela não disse isso: a sonda **não registrava qual servidor** havia
+consultado, então uma amostra que calhou de ser toda `lid` pareceu cobrir os
+dois. Só quando a prova ao vivo falhou em UM contato é que a lacuna apareceu. A
+sonda passou a contar por servidor — e a resposta correta é que `c.us` responde
+normalmente (4/4, todos com foto).
+
+**Status**: entregue — implementada a partir da medição, com prova ao vivo nos
+dois desfechos e quatro controles negativos.
+
+## H41 — a capacidade de avatar encontrou um defeito na de contatos, entregue horas antes
+
+**Data**: 2026-08-20 · **Contexto**: primeira execução da prova ao vivo da H40.
+
+**O sintoma**: de 12 contatos, 11 responderam e **1 travou** — pedido que nunca
+resolve e nunca lança, consumindo o orçamento inteiro de 30 s.
+
+**Não abortei no primeiro erro**, e foi isso que deu o diagnóstico: o teste
+original fazia `t.Fatalf` no primeiro contato, o que esconderia se o problema
+era aquele contato ou o caminho todo — e os dois exigem conserto diferente.
+Trocado por CONTAR e seguir, o quadro virou `present=3 absent=8 failed=1`.
+
+**A identificação, sem imprimir a identidade**: o teste passou a descrever a
+CLASSE do jid que falha. Saiu `server=c.us userLen=1 allDigits=true` — um
+usuário de **um dígito**. Não é pessoa: é sentinela de sistema.
+
+**A causa, e ela está na H39 e não aqui**: o `listContacts` devolvia essa linha
+como contato. O filtro que escrevi descartava `g.us` e mantinha o resto — e a
+sentinela é `isUser() === true`, então nenhuma verificação de "isto é um
+indivíduo" a pegaria.
+
+**O filtro certo é o predicado da PÁGINA, não uma heurística de formato.**
+Medido sobre as 944 linhas:
+
+```
+isUser 943 · isGroup 1 · isPSA 1 · isServer 0 · isNewsletter 0 · isBroadcast 0
+```
+
+A linha de um dígito é a **única** com `isPSA() === true`. A regra passou a ser
+"é pessoa quem a página chama de user e não chama de PSA", com os dois
+predicados vindo da página para o Go decidir.
+
+**Efeito medido**: roster ao vivo de 545 para **544** pessoas, `phone-only` de
+64 para 63 — exatamente uma linha, a certa. E a prova de avatar passou a
+`4 present / 8 absent / 0 failed`.
+
+**Dois controles negativos, EXECUTADOS** (o filtro vive em dois laços separados,
+e um filtro aplicado só a um deles deixaria a sentinela entrar pelo outro):
+
+```
+TestAPSARowIsNotAPerson            -> a PSA sentinel was returned as a contact
+TestAPSAOnTheLIDSideIsAlsoDropped  -> a PSA row on the lid side survived
+```
+
+**A lição, que é sobre ORDEM DE DESCOBERTA**: a H39 tinha medição prévia, nove
+testes, cinco controles negativos e prova ao vivo com as três somas fechando —
+e ainda assim embarcou este defeito, porque a medição perguntou "quantas
+pessoas?" e nunca "isto é uma pessoa?". Quem fez a pergunta certa foi a
+capacidade SEGUINTE, ao usar a saída da anterior como entrada. Encadear
+capacidades em prova de integração vale mais que uma bateria a mais na mesma.
+
+**Status**: corrigido — filtro por predicado da página, com dois controles
+negativos e o efeito medido no roster ao vivo.

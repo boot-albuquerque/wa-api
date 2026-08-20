@@ -35,7 +35,7 @@ func rowsJSON(rows ...string) string {
 
 func phoneRow(user, pushname string) string {
 	return fmt.Sprintf(`{"user":%q,"server":"c.us","phone_user":"","pushname":%q,`+
-		`"verified_name":"","is_business":false}`, user, pushname)
+		`"verified_name":"","is_business":false,"is_psa":false,"is_user":true}`, user, pushname)
 }
 
 // lidRow mirrors the REAL rule measured on 2026-08-20: a lid row may carry a
@@ -45,7 +45,7 @@ func phoneRow(user, pushname string) string {
 // direction pass green.
 func lidRow(user, phoneUser, pushname string) string {
 	return fmt.Sprintf(`{"user":%q,"server":"lid","phone_user":%q,"pushname":%q,`+
-		`"verified_name":"","is_business":false}`, user, phoneUser, pushname)
+		`"verified_name":"","is_business":false,"is_psa":false,"is_user":true}`, user, phoneUser, pushname)
 }
 
 // TestTheSamePersonInTwoRowsBecomesOneContact is the reason this package
@@ -138,7 +138,7 @@ func TestGroupsAreNotContacts(t *testing.T) {
 	p := &pageDouble{answer: rowsJSON(
 		phoneRow("111", "Ana"),
 		`{"user":"120363","server":"g.us","phone_user":"","pushname":"Grupo",`+
-			`"verified_name":"","is_business":false}`,
+			`"verified_name":"","is_business":false,"is_psa":false,"is_user":false}`,
 	)}
 	got, _ := lister(p).List(context.Background(), "t/list")
 	if len(got.Contacts) != 1 {
@@ -276,5 +276,46 @@ func TestASecondLidForTheSamePersonIsResolvedStably(t *testing.T) {
 			t.Fatalf("Merged=%d, want 2 — it counts rows folded in, not people "+
 				"duplicated, which is why the live numbers were 398 and 390", got.Merged)
 		}
+	}
+}
+
+// TestAPSARowIsNotAPerson.
+//
+// The roster holds exactly one row the page marks isPSA(): a system sentinel
+// with a one-character user. It is ALSO isUser(), so no "is this an individual"
+// check catches it, and the first version of this package returned it as a
+// contact.
+//
+// It was not found by reading the roster. It was found by the avatar
+// capability, which asked the server for that row's picture and got a request
+// that hung for the full budget and never answered — one of twelve contacts
+// failing while eleven worked.
+func TestAPSARowIsNotAPerson(t *testing.T) {
+	psa := `{"user":"0","server":"c.us","phone_user":"","pushname":"",` +
+		`"verified_name":"","is_business":false,"is_psa":true,"is_user":true}`
+	p := &pageDouble{answer: rowsJSON(phoneRow("111", "Ana"), psa)}
+	got, err := lister(p).List(context.Background(), "t/list")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got.Contacts) != 1 {
+		t.Fatalf("a PSA sentinel was returned as a contact: %v", got.Contacts)
+	}
+	if got.Rows != 2 {
+		t.Fatalf("Rows=%d, want 2 — the denominator counts what the page held, "+
+			"including what was dropped", got.Rows)
+	}
+}
+
+// TestAPSAOnTheLIDSideIsAlsoDropped: the drop rule must not live on one branch.
+// The phone pass and the lid pass are separate loops, and a filter applied to
+// only one of them would let the sentinel back in through the other.
+func TestAPSAOnTheLIDSideIsAlsoDropped(t *testing.T) {
+	psa := `{"user":"0","server":"lid","phone_user":"","pushname":"",` +
+		`"verified_name":"","is_business":false,"is_psa":true,"is_user":true}`
+	p := &pageDouble{answer: rowsJSON(phoneRow("111", "Ana"), psa)}
+	got, _ := lister(p).List(context.Background(), "t/list")
+	if len(got.Contacts) != 1 {
+		t.Fatalf("a PSA row on the lid side survived: %v", got.Contacts)
 	}
 }

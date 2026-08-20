@@ -62,7 +62,8 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 | `fetchMessages` | `capabilities/fetchmessages` | 340 carregados, filtro por chat casa |
 | `backupNow` | `capabilities/backup` | restaura com identidade presente; custo medido nos dois perfis (§6.6) |
 | `sendText` | `capabilities/send` | **laço fechado real**: conta A envia, conta B recebe o MESMO id em 1 s |
-| `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 545 pessoas**, 398 fundidas |
+| `listContacts` | `capabilities/contacts` | roster ao vivo **944 linhas → 544 pessoas**, 398 fundidas |
+| `fetchContactAvatar` | `capabilities/avatar` | 12 contatos ao vivo: 4 com foto, 8 sem, **0 falhas** |
 
 ### Divergências CONSCIENTES do `wwebjs` (§6 da paridade)
 
@@ -86,6 +87,13 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 8. **`listContacts` promete `pushname`, não `name`** — `getName` responde para
    1 de 944 e `getShortName` para nenhum neste perfil. Prometer "nome" seria
    prometer vazio.
+9. **`fetchContactAvatar` trata ausência como resposta, não como erro** — 2 de
+   12 contatos não têm foto, e a página responde normalmente com os campos de
+   URL ausentes. Devolver erro ali diria "a busca falhou" onde a verdade é "não
+   há foto". Ver H40.
+10. **`fetchContactAvatar` pergunta ao SERVIDOR, não ao cache** — o
+    `ProfilePicThumbCollection` tinha 68 modelos para 544 pessoas, e só 33 com
+    URL. Servir dali responderia "sem avatar" para quase toda a agenda.
 
 ## 3. Invariantes travadas em teste
 
@@ -238,6 +246,23 @@ WhatsApp invalidar um. Precisa de duas contas, e isso é decisão do humano.
 4. **Alguém de outro número enviar** — prova a direção `in` ao vivo.
 5. **Conta de volume real** — calibra o H25.
 6. **CAP-07 `sendText`** — fora da matriz; decisão de produto.
+
+## 5.1 A ordem de descoberta importa mais que uma bateria a mais
+
+A H41 é o caso: o `listContacts` saiu com medição prévia, nove testes, cinco
+controles negativos e prova ao vivo com as três somas fechando — e ainda assim
+embarcou uma linha de sistema como se fosse pessoa. A medição perguntou
+"quantas pessoas?" e nunca "isto é uma pessoa?".
+
+Quem fez a pergunta certa foi a capacidade SEGUINTE, ao usar a saída da anterior
+como entrada: o pedido de avatar para aquela linha travou 30 s sem responder e
+sem lançar. **Encadear capacidades em prova de integração vale mais que mais uma
+bateria sobre a mesma.**
+
+Corolário prático, também da H41: um teste ao vivo deve CONTAR os desfechos, não
+abortar no primeiro. `t.Fatalf` no primeiro contato teria escondido se o
+problema era aquele contato ou o caminho todo — e os dois exigem conserto
+diferente. Foi `present=3 absent=8 failed=1` que deu o diagnóstico.
 
 ## 6. O que esta semana ensinou, em uma frase cada
 

@@ -181,7 +181,7 @@ func dispatchScript(toJID, text string) string {
 		(async () => {
 		let stage = 'resolve';
 		try {
-			const WidFactory = window.require('WAWebWidFactory');
+			const WidFactory = window.require('` + string(spa.ModuleWidFactory) + `');
 			const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
 			// createWid BUILDS a wid from text; asChatWid only VALIDATES one
 			// that already exists. Passing the string straight to asChatWid
