@@ -12834,3 +12834,81 @@ regenerar no golden.
 concorrência) continua aberta, e o modo de falha por duplicação descrito acima
 continua possível para clientes que reenviem com `Id` novo. O teto de 5 s reduz
 muito a janela; não a fecha.
+
+---
+
+## F176 — o IRMÃO do defeito de fiação da enquete: se `WithStartSession` sumir, `/session/connect` responde 200 "connecting" e nada conecta
+
+**Data**: 2026-08-20. **Contexto**: levantamento do caminho de envio. Fui
+verificar se as 13 rotas de envio tinham teste de caminho de SUCESSO
+(armadilha 2 do `ARMADILHAS.md`) e a hipótese CAIU: têm, 22 arquivos de teste,
+incluindo contrato de wire. O achado apareceu na pergunta seguinte.
+
+**A pergunta que produziu o achado**: existe UM teste que prova a FIAÇÃO — rota
+real → handler → usecase → adapter REAL → SDK. É o
+`pkg/bootstrap/poll_options_wiring_test.go`, e ele existe porque a fiação da
+enquete JÁ falhou uma vez (CAP-14). Perguntei então quantos decoradores de
+fiação opcional existem, já que este projeto vem provando que defeitos andam em
+pares.
+
+São **dois** em todo o wiring:
+
+| onde | decorador | tem trava? |
+|---|---|---|
+| `pkg/bootstrap/wiring_handlers.go:116` | `.WithPollOptions(clientManager)` | **sim** (`poll_options_wiring_test.go`) |
+| `pkg/bootstrap/wiring_handlers.go:410` | `.WithStartSession(s.startSession)` | **não** |
+
+**Problema**: `ConnectHandler.ServeHTTP`
+(`pkg/presentation/http/handlers/handler_session.go:89-98`) faz:
+
+```go
+hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartSession", h.StartSession != nil).Msg("ConnectHandler starting WhatsApp client")
+if h.StartSession != nil {
+    info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
+    go h.StartSession(id, info.Get("Token"))
+}
+customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
+```
+
+O `RespondJSON(w, 200, {"status":"connecting"})` está **fora** do `if`. Se o
+`.WithStartSession(...)` desaparecer de `wiring_handlers.go:410`, a rota
+responde **200 "connecting"** e **nada conecta**. A resposta mente.
+
+**Por que isto é pior que o caso da enquete**: `/session/connect` é o PRIMEIRO
+passo de tudo. Sem sessão não há envio, não há chat, não há nada — e o cliente
+recebe confirmação de sucesso. O defeito da enquete degradava um recurso; este
+degrada o produto inteiro, com 200 na cara.
+
+**A mitigação que existe, e o seu limite**: o log carrega
+`hasStartSession=false`. É observável — mas só para quem for procurar, e ninguém
+procura quando a API respondeu 200.
+
+**O que os testes existentes cobrem, e o que NÃO cobrem**:
+`handler_session_test.go:567` injeta um `StartSession` falso e prova que o
+handler o USA. Isso é teste de handler correto, e não prova que o bootstrap o
+LIGA — que é exatamente a distinção que o `poll_options_wiring_test.go` foi
+escrito para fechar do outro lado. Em `pkg/bootstrap/*_test.go` não há teste que
+exercite `/session/connect` pela rota real; a única menção é um comentário
+histórico sobre a F99 no teste de paridade do stdio.
+
+**Correção sugerida**, duas partes independentes:
+
+1. **A trava**: teste de fiação para `/session/connect`, no molde do
+   `poll_options_wiring_test.go` — pela ROTA REGISTRADA, asserindo que o
+   lançador de sessão foi de facto invocado. O molde já existe; não é desenho
+   novo.
+2. **A resposta que mente**: decidir se `200 "connecting"` sem lançador é
+   aceitável. Não corrijo por conta própria porque mudar isso é **contrato
+   HTTP** — item 3.1. A alternativa óbvia (500 quando `StartSession` é nil)
+   troca uma mentira por uma falha alta, mas muda o que clientes existentes
+   recebem.
+
+**Cuidado com a "correção óbvia" (Regra 1/2 do CLAUDE.md)**: pôr `panic` na
+construção, como fizemos na [[F164]], é tentador e aqui pode ser PIOR — a
+`ConnectHandler` é construída no arranque, e um `panic` transformaria um defeito
+de fiação numa recusa de subir o processo inteiro. Isso é fail-closed legítimo
+para uma chave de encriptação ([[F169]]); para um lançador de sessão, é decisão
+de operação, não de código.
+
+**Status**: não corrigido. A parte (1) é trava e cabe em bloco próprio; a parte
+(2) é contrato HTTP e é do humano. Levado ao canal e ao humano.
