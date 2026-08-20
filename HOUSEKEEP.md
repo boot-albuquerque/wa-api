@@ -14459,3 +14459,64 @@ contorno é sintoma do ponto 2.
 **Status**: não corrigido. É o instrumento de medição, não o código medido — a
 mesma família dos três buracos corrigidos hoje (fixtures de SQLite sem WAL,
 formatação não verificada, pacotes sem teste).
+
+---
+
+## VERIFICAÇÃO EM PRODUÇÃO — template e list (etapa (a) da DECISÃO 20)
+
+**Data**: 2026-08-20. Linha de base antes de mexer: **0 linhas `template`, 0
+linhas `list`** em 23626; sessões reconectaram sozinhas outra vez, como no
+reinício anterior.
+
+**As duas gravam:**
+
+```
+3EB009E11BC20D28168C57 | list     | "Menu do dia"
+3EB0F58911CD454F3FAB1B | template | "corpo do template"
+```
+
+A lista grava **pelo caminho embrulhado** — é a confirmação em campo de que o
+`listMessageInside` era necessário e de que um `GetListMessage()` direto nunca
+teria disparado.
+
+### O template gravou o CORPO, não o título — e isso está certo
+
+Parei para verificar em vez de dar por bom, porque o meu teste trava a
+precedência título-primeiro. **`SendTemplate` nunca põe o título**
+(`messenger.go:636` monta apenas `HydratedContentText`, `HydratedFooterText` e
+`HydratedButtons`), e o `SendTemplateRequest` **não tem campo `Title`** — o
+`"Title"` que eu mandei no JSON foi ignorado na desserialização, por ser campo
+desconhecido.
+
+Ou seja: não há defeito, e o `templateText` fez o correto ao cair no corpo. Fica
+registado que o ramo do título **só é exercitado por templates de TERCEIROS** —
+o que é legítimo, pela mesma razão do ramo `ButtonsMessage` legado: o classificador
+existe para o que CHEGA, não para o que sai.
+
+### A prova que já aprendi a não dispensar
+
+`dropped from history` deu **zero** outra vez. E outra vez isso não prova nada —
+agora com um risco novo: eu tinha acabado de acrescentar quatro ramos, e um deles
+podia ter silenciado o aviso por acidente.
+
+Forcei uma **edição de mensagem**, porque `editedMessage` é um dos invólucros que
+a [[F188]] diz não serem desembrulhados:
+
+```
+WARN received message dropped from history: no content extracted for its type
+     message_id=3EB0EE245FAC316DCF1839  wire_type=text
+     message_type=text  reason=unclassified_no_content
+```
+
+Duas coisas de uma vez:
+
+1. **O aviso continua a morder** depois dos quatro ramos novos.
+2. **A [[F188]] está medida em campo**, e não só lida no proto: a edição de
+   mensagem é de facto descartada. Deixa de ser dívida inferida e passa a dívida
+   observada.
+
+### Balanço das quatro capabilities
+
+`poll`, `buttons`, `list` e `template` **enviam e agora também recebem**. A
+incoerência "capability de envio sem recepção" fecha-se — quatro de quatro,
+todas verificadas contra o WhatsApp real, não só em teste.
