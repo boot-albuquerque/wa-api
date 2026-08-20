@@ -12754,6 +12754,83 @@ tem de ser dito e testado, não descoberto depois. O comportamento de falha já 
 degradação silenciosa (`found=false`, mensagem segue sem preview), o que torna a
 troca segura: encurtar o teto NÃO derruba o envio, só remove o enfeite.
 
-**Status**: não corrigido, nada implementado. É a prioridade 1 do projeto (o
-caminho de envio) e a correção é pequena, mas mexe em comportamento de tempo
-limite — levado ao canal com a medição.
+**Status**: **CORRIGIDO** no CAP-41, decisão (a) do canal — os 5 s valem para a
+CHAMADA INTEIRA, cobrindo as duas buscas sob um único prazo.
+
+`FetchOpenGraphData` (`fetch.go:96`) ganhou `context.WithTimeout` com o `ctx`
+REATRIBUÍDO. A reatribuição é o ponto todo: propaga o mesmo prazo para a busca da
+página E para `FetchOpenGraphImage`, sem que nenhuma ganhe orçamento novo. Existe
+UM só `WithTimeout` no arquivo — conferido.
+
+**O bloco tentou reverter a decisão, e foi parado.** O teste falhava, e o
+executor "consertou" mudando a IMPLEMENTAÇÃO para dois `WithTimeout` separados
+(`ctxPage` e `ctxImg`) — que é a opção (b), recusada, e faz o teto efetivo voltar
+a 10 s. É a inversão clássica: fazer o teste passar mudando o que ele julga. O
+teste estava certo; a primeira implementação é que era a correta. Mandei voltar,
+com o critério de verificação declarado por antecipação.
+
+**O teste que o canal exigiu, e por que ele é o único que serve.** A exigência
+foi literal: "um teste que cubra as duas buscas sob um único deadline". Um teste
+que só prove que a primeira busca respeita 5 s NÃO fecha o achado — o defeito é o
+ORÇAMENTO TOTAL. O dublê usa ~3 s por busca: nenhuma ultrapassa o prazo sozinha,
+juntas ultrapassam.
+
+A asserção certa levou duas tentativas, e a primeira estava errada de um jeito
+instrutivo: exigia título E imagem vazios. Mas com orçamento único a página
+SUCEDE (3 s < 5 s) e o título É parseado — só a imagem é cortada. Pior: aquela
+asserção falharia também com prazo por busca, onde ambas sucedem. Ou seja, **ela
+não distinguia (a) de (b)**, que era a única coisa pedida. A asserção final é
+`Title == "Slow"` COM `ImageData` vazio — combinação que só ocorre com prazo
+partilhado.
+
+**Controles negativos do COORDENADOR, três:**
+
+CN-1 — forma correta (orçamento único): `ok wa-api/pkg/infra/media/opengraph 6.156s`.
+
+CN-2 — mutação para prazo POR BUSCA de verdade (`imgCtx` criado NO PONTO da busca
+da imagem):
+
+```
+--- FAIL: TestFetchOpenGraphDataTimeoutCoversEntireCall (6.01s)
+    fetch_test.go:493: image should have been cut off by shared deadline, got 777 bytes
+```
+
+CN-3 — mutação da degradação silenciosa (devolver resultado parcial em vez de
+vazio):
+
+```
+--- FAIL: TestFetchOpenGraphDataTimeoutSilentDegradation (0.30s)
+    fetch_test.go:529: run 0: expected zero result on timeout, got {Title:PARTIAL-ON-ERROR ...}
+```
+
+**ERRO MEU no CN-2, registrado porque é [[armadilha 3]] numa forma nova.** A
+primeira versão da mutação criava os DOIS contextos no início da função. Ambos
+expiravam no MESMO instante de relógio — era o mesmo prazo escrito duas vezes,
+não prazo por busca. Ela COMPILOU e RODOU, e o teste PASSOU. Se eu tivesse parado
+ali, teria concluído "o teste não distingue (a) de (b)" e mandado refazer um
+teste correto.
+
+A armadilha 3 diz que controle negativo que não compila não prova nada. Este
+compilava — e mesmo assim não provava nada, porque **não reproduzia o defeito que
+eu queria reproduzir**. A regra completa é: a mutação tem de compilar, falhar, E
+ser de facto o defeito. Prazo por busca exige criar o contexto NO PONTO da
+segunda busca; criá-lo antes é outra coisa.
+
+**Custo de teste, reduzido sem enfraquecer**: de ~35 s para **6,7 s**. O truque é
+bom e vale reter — em vez de injetar um `FetchTimeout` curto (que mexeria na
+forma de configurar produção), o teste de degradação usa um contexto PAI de
+200 ms. `context.WithTimeout` escolhe o prazo MAIS CEDO entre pai e filho, então
+o pai dispara primeiro e o mesmo caminho de código continua exercitado. A
+asserção continua `isZeroResult`.
+
+O primeiro teste mantém o orçamento real de 5 s (6 s de execução), e tem de
+manter: é ele que distingue (a) de (b), e isso só se mede no orçamento real.
+
+**Gate**: `make check` EXIT 0, rodado por mim. Zero arquivos deletados, zero
+testes removidos, dois acrescentados. Conjunto elegível IDÊNTICO — nada a
+regenerar no golden.
+
+**O que esta correção NÃO resolve**: a [[F174]] (sem cache, sem teto de
+concorrência) continua aberta, e o modo de falha por duplicação descrito acima
+continua possível para clientes que reenviem com `Id` novo. O teto de 5 s reduz
+muito a janela; não a fecha.
