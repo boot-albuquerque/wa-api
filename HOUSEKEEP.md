@@ -14272,8 +14272,47 @@ mudança de conteúdo gravado (o `text_content` de `contact` e `location` deixa 
 ser placeholder), portanto precisa de decisão — e de uma resposta sobre o que
 fazer com as linhas já gravadas com `:contact:`/`:location:`.
 
-**Status**: **não corrigido**, achado incidental fora do escopo. **Mas afeta a
-etapa (b) já decidida**: o ramo novo da enquete tem de escrever em `caption`, e
+**Status**: **CORRIGIDO na perda de dado; a unificação em si continua aberta.**
+
+### O que foi feito (decisão (b) do canal, 2026-08-20)
+
+**A perda de dado acabou.** `contact` e `location` passam a escrever em `caption`,
+que é o que sobrevive ao bloco de extração. As duas atribuições que "não tinham
+efeito nenhum" passam a ter.
+
+**E os dois caminhos convergem em dois pontos:** `buttons_response` e
+`list_response`, que existiam **apenas** no classificador de sync, passam a
+existir também no de tempo real — com **os mesmos nomes de tipo, à letra**. Se
+divergissem, um cliente que filtre por `message_type` veria a mesma interação com
+dois nomes conforme a mensagem tivesse chegado ao vivo ou por sincronização, que
+é literalmente o que esta entrada descreve.
+
+Travado por `TestHistorico_ContactoPreservaONome`,
+`TestHistorico_LocalizacaoPreservaONome`,
+`TestHistorico_SemNomeCaiNoPlaceholder` e
+`TestHistorico_RespostasDeBotaoELista`, com três controlos negativos executados.
+O **CN-34** é o que vale: reverte **só** a localização e o teste morde — consertar
+o contacto e esquecer a localização era o modo de falha mais provável, e um teste
+único não o apanharia.
+
+### O que NÃO foi feito, e é decisão consciente
+
+**Uma só função para os dois caminhos.** Os dois classificadores continuam
+separados; o que mudou é que deixaram de divergir nos pontos medidos.
+
+A razão de não os fundir agora: **o caminho de sync é o que funciona melhor**, e
+os dois diferem em mais coisas do que as medidas — tratamento de
+`quotedMessageID`, o ramo de álbum, a ordem das mensagens de protocolo. Fundi-los
+num movimento arriscaria piorar o caminho bom para consertar o mau, que é o
+oposto do que se quer. Fica como trabalho próprio, agora com a divergência
+reduzida a algo que se pode enumerar.
+
+**As linhas JÁ GRAVADAS com `:contact:` e `:location:` continuam assim.** São 41
+linhas de `location` com placeholder, medidas. O nome está no `datajson` de cada
+uma e um backfill é possível — mas é reescrita de dado histórico, e não a faço
+sem decisão explícita.
+
+**Nota original preservada** — afetou a etapa (b) já decidida na altura: o ramo novo da enquete tem de escrever em `caption`, e
 não em `textContent`, senão o mesmo bloco come a pergunta da enquete exatamente
 como come o nome do contacto. Sem esta medição eu teria escrito o ramo errado e
 o teste de campo teria mostrado `:poll:` onde devia estar a pergunta.

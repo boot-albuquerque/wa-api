@@ -534,3 +534,106 @@ func gravar(evh *UserEventHandler, evt *events.Message) {
 	evt.RawMessage = evt.Message
 	evh.saveMessageHistory(evt.UnwrapRaw(), &eventState{postmap: map[string]any{}})
 }
+
+// --- F187: o caminho de tempo real deixa de descartar o que extraiu ----------
+
+// TestHistorico_ContactoPreservaONome trava o defeito EXATO medido em campo:
+// mandei DisplayName="Contato Varredura" e ficou gravado ":contact:", com o
+// nome intacto dentro do datajson.
+//
+// A asserção é sobre o NOME, e não sobre o tipo. Gravar como "contact" com o
+// texto ":contact:" faria um teste de tipo passar com o defeito inteiro no
+// lugar — e era esse o estado antes desta correção.
+func TestHistorico_ContactoPreservaONome(t *testing.T) {
+	evh := handlerComHistorico(t, "u-contact-nome")
+
+	evt := eventoNaoClassificavel("MSG-CONTACT", "text")
+	evt.Message = &waE2E.Message{ContactMessage: &waE2E.ContactMessage{
+		DisplayName: proto("Yasmin Albuquerque"),
+		Vcard:       proto("BEGIN:VCARD\nEND:VCARD"),
+	}}
+	gravar(evh, evt)
+
+	tipo, txt := lerLinha(t, evh, "MSG-CONTACT")
+	if tipo != "contact" {
+		t.Errorf("message_type = %q, quero \"contact\"", tipo)
+	}
+	if txt != "Yasmin Albuquerque" {
+		t.Errorf("text_content = %q, quero o nome: \":contact:\" aqui significa que o bloco de extracao apagou a atribuicao do ramo (F187)", txt)
+	}
+}
+
+// TestHistorico_LocalizacaoPreservaONome é o par do teste acima. Os dois
+// existem separados porque as duas atribuições são independentes: consertar uma
+// e esquecer a outra é o modo de falha mais provável, e um teste só não o pega.
+func TestHistorico_LocalizacaoPreservaONome(t *testing.T) {
+	evh := handlerComHistorico(t, "u-loc-nome")
+
+	evt := eventoNaoClassificavel("MSG-LOC", "text")
+	evt.Message = &waE2E.Message{LocationMessage: &waE2E.LocationMessage{
+		Name:             proto("Praca da Liberdade"),
+		DegreesLatitude:  proto64(-19.9320),
+		DegreesLongitude: proto64(-43.9376),
+	}}
+	gravar(evh, evt)
+
+	if _, txt := lerLinha(t, evh, "MSG-LOC"); txt != "Praca da Liberdade" {
+		t.Errorf("text_content = %q, quero o nome da localizacao", txt)
+	}
+}
+
+// TestHistorico_SemNomeCaiNoPlaceholder é a fronteira: sem nome, o marcador
+// continua a ser o que se grava. Sem este teste, escrever o nome SEMPRE (mesmo
+// vazio) passaria nos dois testes acima e faria a linha ficar sem conteúdo — o
+// que a guarda de gravação descartaria, trocando um placeholder por uma perda.
+func TestHistorico_SemNomeCaiNoPlaceholder(t *testing.T) {
+	evh := handlerComHistorico(t, "u-contact-vazio")
+	buf := capturarLog(t)
+
+	evt := eventoNaoClassificavel("MSG-CONTACT-VAZIO", "text")
+	evt.Message = &waE2E.Message{ContactMessage: &waE2E.ContactMessage{
+		Vcard: proto("BEGIN:VCARD\nEND:VCARD"),
+	}}
+	gravar(evh, evt)
+
+	if saida := buf.String(); strings.Contains(saida, "dropped from history") {
+		t.Fatalf("contacto sem nome passou a ser DESCARTADO: %s", saida)
+	}
+	if _, txt := lerLinha(t, evh, "MSG-CONTACT-VAZIO"); txt != ":contact:" {
+		t.Errorf("text_content = %q, quero \":contact:\"", txt)
+	}
+}
+
+// TestHistorico_RespostasDeBotaoELista trava os dois ramos que existiam APENAS
+// no caminho de sync (eventhandler_history.go:181 e :184).
+//
+// Os nomes de tipo são asseridos à letra, iguais aos que o outro caminho grava:
+// se os dois divergirem, um cliente que filtre por message_type vê a mesma
+// interação com dois nomes conforme a mensagem tenha vindo ao vivo ou por
+// sincronização — que é exatamente a F187.
+func TestHistorico_RespostasDeBotaoELista(t *testing.T) {
+	evh := handlerComHistorico(t, "u-resp")
+
+	btn := eventoNaoClassificavel("MSG-BTN-RESP", "text")
+	btn.Message = &waE2E.Message{ButtonsResponseMessage: &waE2E.ButtonsResponseMessage{
+		SelectedButtonID: proto("opcao-1"),
+	}}
+	gravar(evh, btn)
+
+	lst := eventoNaoClassificavel("MSG-LIST-RESP", "text")
+	lst.Message = &waE2E.Message{ListResponseMessage: &waE2E.ListResponseMessage{
+		SingleSelectReply: &waE2E.ListResponseMessage_SingleSelectReply{
+			SelectedRowID: proto("linha-3"),
+		},
+	}}
+	gravar(evh, lst)
+
+	if tipo, txt := lerLinha(t, evh, "MSG-BTN-RESP"); tipo != "buttons_response" || txt != "opcao-1" {
+		t.Errorf("resposta de botao = (%q, %q), quero (\"buttons_response\", \"opcao-1\")", tipo, txt)
+	}
+	if tipo, txt := lerLinha(t, evh, "MSG-LIST-RESP"); tipo != "list_response" || txt != "linha-3" {
+		t.Errorf("resposta de lista = (%q, %q), quero (\"list_response\", \"linha-3\")", tipo, txt)
+	}
+}
+
+func proto64(f float64) *float64 { return &f }

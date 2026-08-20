@@ -323,11 +323,35 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 	} else if sticker := evt.Message.GetStickerMessage(); sticker != nil {
 		messageType = "sticker"
 	} else if contact := evt.Message.GetContactMessage(); contact != nil {
+		// HOUSEKEEP F187. Estas duas linhas escreviam em `textContent`, e a
+		// atribuição NÃO TINHA EFEITO NENHUM: o bloco de extração abaixo faz
+		// `textContent = caption` incondicionalmente quando não há Conversation
+		// nem ExtendedText, e o nome ia para o lixo antes de ser gravado.
+		//
+		// Medido em campo com os nossos próprios envios: mandei
+		// DisplayName="Contato Varredura" e ficou gravado ":contact:", com o
+		// nome intacto dentro do datajson. Não era ausência de informação — era
+		// informação presente e descartada na escrita.
+		//
+		// O caminho de sync (eventhandler_history.go:177) nunca teve este
+		// bloco, e por isso sempre preservou os dois. As 32 linhas de contacto
+		// com nome real na tabela vieram todas de lá.
 		messageType = "contact"
-		textContent = contact.GetDisplayName()
+		caption = contact.GetDisplayName()
 	} else if location := evt.Message.GetLocationMessage(); location != nil {
 		messageType = "location"
-		textContent = location.GetName()
+		caption = location.GetName()
+	} else if buttons := evt.Message.GetButtonsResponseMessage(); buttons != nil {
+		// Os dois ramos de RESPOSTA existiam só no caminho de sync
+		// (eventhandler_history.go:181 e :184). Os nomes de tipo são
+		// deliberadamente os MESMOS — `buttons_response`, `list_response` — para
+		// os dois caminhos convergirem em vez de inventarem vocabulários
+		// paralelos, que é como a F187 nasceu.
+		messageType = messageTypeButtonsResponse
+		caption = buttons.GetSelectedButtonID()
+	} else if listResp := evt.Message.GetListResponseMessage(); listResp != nil {
+		messageType = messageTypeListResponse
+		caption = listResp.GetSingleSelectReply().GetSelectedRowID()
 	} else if poll := evt.Message.GetPollCreationMessage(); poll != nil {
 		// F184, etapa (b). Antes deste ramo a enquete caía no messageType
 		// inicial "text", ficava sem conteúdo e a guarda de gravação
@@ -505,6 +529,13 @@ const (
 	messageTypeTemplate = "template"
 	messageTypeList     = "list"
 	messageTypeEdit     = "edit"
+
+	// messageTypeButtonsResponse e messageTypeListResponse repetem, à letra, os
+	// valores que eventhandler_history.go já grava. São constantes porque agora
+	// existem em DOIS caminhos, e um valor duplicado em dois sítios é o mesmo
+	// bug à espera de divergir — que é literalmente o que a F187 é.
+	messageTypeButtonsResponse = "buttons_response"
+	messageTypeListResponse    = "list_response"
 )
 
 // editedText is the new text of an edit, taken from the edited message the
@@ -586,6 +617,10 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 		return ":list:"
 	case messageTypeEdit:
 		return ":edit:"
+	case messageTypeButtonsResponse:
+		return ":buttons_response:"
+	case messageTypeListResponse:
+		return ":list_response:"
 	case "contact":
 		if textContent == "" {
 			return ":contact:"

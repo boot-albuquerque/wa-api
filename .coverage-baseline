@@ -217,7 +217,14 @@
 # Tirar codigo morto do denominador sobe a percentagem sem que nada tenha
 # passado a ser testado. Fica dito para o numero nao ser lido como merito que nao
 # e': o merito sao os tres testes; o resto e' aritmetica.
-min_coverage=862
+# F187 (2026-08-20): 862 -> 863. Ratchet-UP por ordem do proprio alvo.
+#
+# E' teste novo sobre codigo que ja' existia. Os quatro testes acrescentados
+# exercitam ramos que nenhum outro alcancava: contact e location pelo caminho de
+# TEMPO REAL (a suite so' os tocava pelo caminho de sync, que nunca teve o
+# defeito) e os dois ramos de resposta, que ate' agora so' existiam no outro
+# caminho. Nada saiu do denominador.
+min_coverage=863
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,
