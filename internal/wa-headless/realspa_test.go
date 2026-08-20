@@ -50,6 +50,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -6166,5 +6168,154 @@ func TestRealSPALivenessAgainstProduction(t *testing.T) {
 		t.Errorf("worst liveness round trip was %s. spa.Monitor is documented as safe to "+
 			"call from a path holding a limited slot; at this cost that claim needs "+
 			"re-examining, not just noting", worst)
+	}
+}
+
+// TestRealSPAConcurrentCapabilities is the hardening pass the local test cannot
+// do: several capabilities driving ONE real session at the same time.
+//
+// Every capability was proven alone. The product will not use them alone — a
+// liveness timer ticks while a command fetches messages while a subscription
+// drains — and "each works" is not "they work together". This module has spent
+// a week finding that the interesting failures live in the combination.
+//
+// It asserts SHAPE and consistency, never content, and it never sends.
+func TestRealSPAConcurrentCapabilities(t *testing.T) {
+	requireRealSPA(t)
+	binary := findChrome(t)
+	profile, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overridden {
+		t.Skip("needs a paired profile via " + profileDirOverride)
+	}
+	if err := requireExistingProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	sess, err := h.Session(bootCtx)
+	cancelBoot()
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	// Overlap is measured here too. Against the real page an evaluation is
+	// slower, so coincidence is likelier — but likelier is not measured.
+	var inFlight, maxInFlight int64
+	countedEval := func(ctx context.Context, expr string, out *string) error {
+		n := atomic.AddInt64(&inFlight, 1)
+		for {
+			m := atomic.LoadInt64(&maxInFlight)
+			if n <= m || atomic.CompareAndSwapInt64(&maxInFlight, m, n) {
+				break
+			}
+		}
+		defer atomic.AddInt64(&inFlight, -1)
+		return sess.Tab().Evaluate(ctx, expr, out)
+	}
+
+	checker := liveness.New(sess.ProcessAlive, runner, countedEval)
+	fetcher := fetchmessages.New(runner, countedEval)
+	sub := messagemeta.New(runner, countedEval, 0)
+	if err := sub.Install(context.Background(), "conc/install"); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	const rounds = 5
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []string
+		// The owner identity must be the SAME on every read. A session cannot
+		// change account mid-run, so any variation is the concurrency corrupting
+		// an answer — the one assertion here that a single-threaded test cannot
+		// make at all.
+		identities = map[string]int{}
+	)
+	record := func(format string, args ...any) {
+		mu.Lock()
+		errs = append(errs, fmt.Sprintf(format, args...))
+		mu.Unlock()
+	}
+
+	start := make(chan struct{})
+	for r := 0; r < rounds; r++ {
+		wg.Add(4)
+		go func(r int) {
+			defer wg.Done()
+			<-start
+			got := checker.Check(context.Background(), fmt.Sprintf("conc/live%d", r))
+			if !got.Alive {
+				record("liveness round %d: signal=%s err=%v", r, got.Signal, got.Err)
+			}
+		}(r)
+		go func(r int) {
+			defer wg.Done()
+			<-start
+			id, err := owner.Refresh(context.Background(), runner, countedEval,
+				fmt.Sprintf("conc/owner%d", r))
+			if err != nil {
+				record("owner round %d: %v", r, err)
+				return
+			}
+			mu.Lock()
+			identities[id.PN.Serialized+"|"+id.LID.Serialized]++
+			mu.Unlock()
+		}(r)
+		go func(r int) {
+			defer wg.Done()
+			<-start
+			res, err := fetcher.Fetch(context.Background(), "", 5, fmt.Sprintf("conc/fetch%d", r))
+			if err != nil {
+				record("fetch round %d: %v", r, err)
+				return
+			}
+			for i, m := range res.Messages {
+				if !m.ID.Present() || m.Type == "" {
+					record("fetch round %d msg %d came back incomplete", r, i)
+				}
+			}
+		}(r)
+		go func(r int) {
+			defer wg.Done()
+			<-start
+			d, err := sub.Drain(context.Background(), fmt.Sprintf("conc/drain%d", r))
+			if err != nil {
+				record("drain round %d: %v", r, err)
+				return
+			}
+			if d.Reinstalled {
+				record("drain round %d had to reinstall: the subscription was lost while "+
+					"other capabilities were driving the same page", r)
+			}
+		}(r)
+	}
+	close(start)
+	wg.Wait()
+
+	if len(errs) > 0 {
+		t.Fatalf("%d failure(s) with capabilities running concurrently:\n  %s",
+			len(errs), strings.Join(errs, "\n  "))
+	}
+	if len(identities) != 1 {
+		t.Fatalf("the owner identity came back %d different ways across concurrent reads "+
+			"(values not printed); one session cannot change account mid-run, so this is "+
+			"an answer reaching the wrong caller", len(identities))
+	}
+
+	peak := atomic.LoadInt64(&maxInFlight)
+	t.Logf("%d rounds × 4 capabilities: no failures, identity stable, PEAK OVERLAP %d", rounds, peak)
+	if peak < 2 {
+		t.Fatalf("peak overlap was %d: the capabilities never coincided, so this measured "+
+			"them running one after another", peak)
 	}
 }

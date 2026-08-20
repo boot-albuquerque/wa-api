@@ -55,6 +55,33 @@ Além das do `HANDOFF §6`, três nasceram nesta semana:
 - **nada lê texto de página** — portão de módulo por AST, com isenção que
   **decai** se o teste que a justifica sumir.
 
+## 3.1 Endurecimento sob concorrência (2026-08-19)
+
+Toda capacidade foi provada **sozinha**. O produto não vai usá-las sozinhas: um
+timer de liveness bate enquanto um comando busca mensagens enquanto uma
+assinatura drena. *"Cada uma funciona"* não é *"elas funcionam juntas"*, e este
+módulo passou a semana descobrindo que a falha interessante mora na combinação.
+
+| teste | escala | resultado |
+|---|---|---|
+| `TestConcurrentCapabilityCallsOnOneSession` | 8 chamadores × 6 iterações, fixture local | **PEAK OVERLAP 8**, latência de pior caso 2 ms → **19 ms** sob sobreposição |
+| `TestRealSPAConcurrentCapabilities` | 5 rodadas × 4 capacidades, SPA real | **PEAK OVERLAP 20**, identidade estável |
+
+**Os dois MEDEM A PRÓPRIA SOBREPOSIÇÃO**, e isso não é ornamento: um teste de
+concorrência cujos chamadores nunca coincidem prova **serialização**, não
+segurança, e o `-race` não tem o que detectar. Com ida e volta de 2 ms isso era
+possibilidade real, não pedantismo. Ambos falham se o pico ficar abaixo de 2.
+
+**A asserção que só a concorrência permite**: a identidade do dono tem de voltar
+IGUAL em todas as leituras simultâneas. Uma sessão não muda de conta no meio da
+corrida, então qualquer variação seria uma resposta chegando ao chamador errado —
+e um teste sequencial não consegue nem formular isso.
+
+**O que ficou provado**: a afirmação que o `spa.Monitor` fazia no próprio
+comentário — *"seguro para uso concorrente: um timer de sonda e um caminho de
+comando podem ambos perguntar"* — deixou de ser prosa. E o custo da concorrência
+virou número: **19 ms** de pior caso contra 2 ms sequencial.
+
 ## 4. Aberto, e por quê
 
 | # | por que segue aberto |

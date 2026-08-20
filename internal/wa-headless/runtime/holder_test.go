@@ -9,11 +9,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
+	"wa-api/internal/wa-headless/capabilities/liveness"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/spa"
@@ -424,5 +427,132 @@ func TestBrowserPIDAfterCleanStopIsRefusedToo(t *testing.T) {
 	if _, err := h.BrowserPID(); err == nil {
 		t.Fatalf("BrowserPID answered after a clean stop; engine still holds pid %d and "+
 			"the OS may have reassigned it", pid)
+	}
+}
+
+// TestConcurrentCapabilityCallsOnOneSession exercises the claim spa.Monitor
+// makes in its own doc comment — "safe for concurrent use: a probe timer and a
+// command path can both ask" — against a real browser instead of leaving it as
+// prose.
+//
+// The product's shape is exactly this: a liveness timer ticking while a command
+// handler drives the same session. Nothing in this module had ever run two
+// evaluations against one tab at the same time, so the claim was untested where
+// it matters — chromedp serialises on the tab context, and whether that
+// serialisation holds under a dozen callers is a fact about the driver, not
+// about our types.
+//
+// IT MEASURES ITS OWN OVERLAP. A concurrency test whose callers never coincide
+// proves serialisation, not safety, and -race has nothing to detect. At a 2ms
+// round trip that is a real possibility, so the peak number of in-flight
+// evaluations is counted and asserted rather than hoped for.
+func TestConcurrentCapabilityCallsOnOneSession(t *testing.T) {
+	const (
+		callers    = 8
+		iterations = 6
+	)
+
+	runner := engine.NewRunner()
+	cfg := holderConfig(t, t.TempDir())
+	cfg.Runner = runner
+	h := NewHolder(cfg)
+	defer h.Stop(context.Background())
+
+	sess, err := h.Session(context.Background())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+
+	var inFlight, maxInFlight int64
+	countedEval := func(ctx context.Context, expr string, out *string) error {
+		n := atomic.AddInt64(&inFlight, 1)
+		for {
+			m := atomic.LoadInt64(&maxInFlight)
+			if n <= m || atomic.CompareAndSwapInt64(&maxInFlight, m, n) {
+				break
+			}
+		}
+		defer atomic.AddInt64(&inFlight, -1)
+		return sess.Tab().Evaluate(ctx, expr, out)
+	}
+	checker := liveness.New(sess.ProcessAlive, runner, countedEval)
+
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		errs  []string
+		alive int
+		start = make(chan struct{})
+		worst time.Duration
+	)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			<-start
+			for j := 0; j < iterations; j++ {
+				// Two different callers of the same session: a liveness probe
+				// and a direct evaluation, which is what a capability does.
+				got := checker.Check(context.Background(), fmt.Sprintf("conc/live%d-%d", id, j))
+				var out string
+				evalErr := runner.Do(context.Background(), engine.OpStateProbe,
+					fmt.Sprintf("conc/eval%d-%d", id, j),
+					func(ctx context.Context) error {
+						return countedEval(ctx, "String(2+2)", &out)
+					})
+
+				mu.Lock()
+				if got.Alive {
+					alive++
+				} else {
+					errs = append(errs, fmt.Sprintf("liveness %d-%d: signal=%s err=%v",
+						id, j, got.Signal, got.Err))
+				}
+				if evalErr != nil {
+					errs = append(errs, fmt.Sprintf("eval %d-%d: %v", id, j, evalErr))
+				} else if out != "4" {
+					// An answer meant for another caller would look exactly
+					// like this, which is the failure mode a shared tab has.
+					errs = append(errs, fmt.Sprintf("eval %d-%d returned %q, want 4", id, j, out))
+				}
+				if got.Latency > worst {
+					worst = got.Latency
+				}
+				mu.Unlock()
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	if len(errs) > 0 {
+		shown := errs
+		if len(shown) > 8 {
+			shown = shown[:8]
+		}
+		t.Fatalf("%d failure(s) across %d concurrent callers:\n  %s",
+			len(errs), callers, strings.Join(shown, "\n  "))
+	}
+	if want := callers * iterations; alive != want {
+		t.Fatalf("alive=%d, want %d", alive, want)
+	}
+
+	probes, failures, _, consecutive := checker.Stats()
+	if failures != 0 || consecutive != 0 {
+		t.Errorf("the monitor recorded failures=%d streak=%d under concurrency alone",
+			failures, consecutive)
+	}
+	if probes != callers*iterations {
+		t.Errorf("the monitor counted %d probes, want %d: a lost increment is the counter "+
+			"racing", probes, callers*iterations)
+	}
+
+	peak := atomic.LoadInt64(&maxInFlight)
+	t.Logf("%d callers × %d iterations: all alive, worst latency %s, PEAK OVERLAP %d",
+		callers, iterations, worst.Round(time.Millisecond), peak)
+	if peak < 2 {
+		t.Fatalf("peak overlap was %d: the callers never coincided, so this measured "+
+			"SERIALISATION and not concurrency. Nothing here says the shared state is "+
+			"safe", peak)
 	}
 }
