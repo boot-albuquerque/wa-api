@@ -13771,3 +13771,63 @@ de chamar o adapter, para que a regra fique num lugar só.
 
 **Status**: não corrigido. É mudança de contrato HTTP — passa a devolver 400
 onde hoje devolve 500 —, item 3.1. Levado ao canal e ao humano.
+
+---
+
+## F183 — `/chat/list` devolve LID, `/chat/history` só entende PN: o fluxo natural do cliente devolve 200 VAZIO
+
+**Data**: 2026-08-20. **Contexto**: etapa (b) da verificação de campo, com duas
+contas reais pareadas. O canal levantou a hipótese de que "mídia, histórico,
+botões e enquetes revelam o mesmo problema de identidade" da [[F181]]. **A
+hipótese confirma-se, e o histórico é o caso pior** — porque falha em silêncio.
+
+**Medição, isolada passo a passo:**
+
+| consulta | resultado |
+|---|---|
+| `/chat/list` (qr2) | 50 conversas, **todos os JIDs `@lid`** |
+| `/chat/history?chat_jid=<lid vindo da listagem>` | `200`, **ZERO registos** |
+| `/chat/history?chat_jid=5516981818244@s.whatsapp.net` (PN) | `200`, **1 registo** |
+
+E os registos que o histórico devolve usam `@s.whatsapp.net` nos DOIS campos de
+identidade — medido em 15 registos: `chat_jid` 15/15 PN, `sender_jid` 15/15 PN.
+Zero `@lid`.
+
+**As duas rotas usam esquemas de endereçamento DIFERENTES para as mesmas
+conversas.** A listagem fala LID; o histórico fala PN. Não há tradução entre elas
+no caminho do cliente.
+
+**O fluxo natural está quebrado**: listar conversas → escolher uma → pedir o
+histórico dela é a sequência óbvia de qualquer cliente, e devolve lista vazia.
+
+**Por que isto é pior que a [[F181]]**: a F181 é visível — o operador vê números
+em vez de nomes e percebe que algo falta. Esta falha em SILÊNCIO. O cliente
+recebe `200` com `[]` e conclui "esta conversa não tem mensagens". Não há erro,
+não há aviso, não há nada no log a dizer que o JID estava no esquema errado.
+
+É a classe do **"200 prematuro"** já agrupada nesta sessão ([[F108]], [[F135]],
+[[F176]]): a API responde sucesso quando não fez o que o cliente pediu. Aqui com
+o agravante de o cliente ter usado exatamente o identificador que a própria API
+lhe deu uma chamada antes.
+
+**Isolamento feito, para não confundir causas**: o primeiro `501` foi
+`history_disabled` — histórico desligado para aquele usuário. Liguei via
+`/session/history`, repeti, e o LID passou a devolver `200` com zero. O PN, na
+mesma condição, devolve registo. **A variável é o esquema do JID, não a
+configuração.**
+
+**Correção sugerida**: as duas rotas têm de concordar. Três caminhos, e a
+escolha é de contrato:
+1. `/chat/history` aceita LID e traduz internamente (as peças existem — ver
+   [[F181]]: `GetPNForLID` e o `getCachedPNForLID` em lote do `blocklist.go`);
+2. `/chat/list` devolve PN, ou devolve ambos os identificadores;
+3. as duas passam a devolver os DOIS, e o cliente escolhe.
+
+**Cuidado (Regra 2)**: qualquer que seja a escolha, **um JID que não casa não
+pode continuar a devolver `200` vazio**. Se a tradução falhar ou o esquema for
+inesperado, o cliente tem de saber. Corrigir a tradução e manter o silêncio
+deixaria a mesma armadilha para o próximo esquema que aparecer.
+
+**Status**: não corrigido. É contrato HTTP, item 3.1 — e é o irmão direto da
+[[F181]], com quem deve ser decidido em conjunto: consertar uma sem a outra deixa
+o fluxo do cliente quebrado na metade que ficou.
