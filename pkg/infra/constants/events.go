@@ -1,67 +1,19 @@
 package constants
 
-// SupportedEventTypes lists all event types the system recognizes.
-var SupportedEventTypes = []string{
-	"Message",
-	"UndecryptableMessage",
-	"Receipt",
-	"MediaRetry",
-	"ReadReceipt",
-	"GroupInfo",
-	"JoinedGroup",
-	"Picture",
-	"BlocklistChange",
-	"Blocklist",
-	"Connected",
-	"Disconnected",
-	"ConnectFailure",
-	"KeepAliveRestored",
-	"KeepAliveTimeout",
-	"QRTimeout",
-	"LoggedOut",
-	"ClientOutdated",
-	"TemporaryBan",
-	"StreamError",
-	"StreamReplaced",
-	"PairSuccess",
-	"PairError",
-	"QR",
-	"QRScannedWithoutMultidevice",
-	"PrivacySettings",
-	"PushNameSetting",
-	"UserAbout",
-	"AppState",
-	"AppStateSyncComplete",
-	"HistorySync",
-	"OfflineSyncCompleted",
-	"OfflineSyncPreview",
-	"CallOffer",
-	"CallAccept",
-	"CallTerminate",
-	"CallOfferNotice",
-	"CallRelayLatency",
-	"Presence",
-	"ChatPresence",
-	"IdentityChange",
-	"CATRefreshError",
-	"NewsletterJoin",
-	"NewsletterLeave",
-	"NewsletterMuteChange",
-	"NewsletterLiveUpdate",
-	"FBMessage",
-	"All",
-}
+import "wa-api/pkg/domain"
 
-var eventTypeMap map[string]bool
+// SupportedEventTypes is a defensive copy of domain.SupportedEventTypes.
+// Aliasing (var X = domain.X) would share the backing array, so a write
+// to one slice header's index would silently corrupt the other. A copy
+// costs 48 pointers once at init and eliminates that class of bug.
+var SupportedEventTypes []string
 
 func init() {
-	eventTypeMap = make(map[string]bool)
-	for _, eventType := range SupportedEventTypes {
-		eventTypeMap[eventType] = true
-	}
+	SupportedEventTypes = make([]string, len(domain.SupportedEventTypes))
+	copy(SupportedEventTypes, domain.SupportedEventTypes)
 }
 
-// IsValidEventType reports whether name is a recognized event type.
+// IsValidEventType delegates to domain.IsValidEventType — single source of truth.
 func IsValidEventType(name string) bool {
-	return eventTypeMap[name]
+	return domain.IsValidEventType(name)
 }

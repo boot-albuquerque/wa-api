@@ -11678,11 +11678,58 @@ que `edit_user.go:49` também chama) usa `domain.IsValidEventType`, e
 Isto NÃO resolve a F168: **as duas listas continuam existindo**, com as mesmas
 48 entradas e nada as mantendo iguais.
 
-**Status**: não corrigido, e NÃO deve ser corrigido junto com a F159:
-unificar fonte de verdade toca duas camadas e é refatoração, enquanto a F159 é
-conserto de stub. Misturar as duas no mesmo diff é o que a política do projeto
-manda evitar. O bloco da F159 vai escolher uma delas COM justificativa escrita,
-e a unificação fica como bloco próprio.
+**Status**: **CORRIGIDO** no CAP-37, em bloco próprio como estava previsto —
+separado da F159, que era conserto de stub.
+
+**A decisão**: `pkg/domain` é a FONTE, `pkg/infra/constants` DERIVA. Direção de
+camada: infra pode importar domain, domain não pode importar infra.
+
+**Ciclo, verificado antes de escrever, não depois**: `go list -deps ./pkg/domain`
+não contém nenhum pacote sob `wa-api/pkg/infra`, e as dependências internas de
+`pkg/infra/constants` são só `wa-api/pkg/domain` e `wa-api/pkg/domain/apperr`.
+
+**O que mudou**: `pkg/infra/constants/events.go` deixou de repetir os 48
+literais e passou a ser **cópia defensiva** de `domain.SupportedEventTypes`;
+`constants.IsValidEventType` delega para `domain.IsValidEventType`, e o
+`eventTypeMap` local sumiu.
+
+Cópia, e não `var X = domain.X`: aliasing faria os dois nomes apontarem para o
+MESMO array de trás, e uma escrita por índice num deles corromperia o outro em
+silêncio. Ninguém escreve hoje — mas o aliasing é armadilha plantada, e custa 48
+ponteiros uma vez no `init()` para não existir.
+
+**A armadilha que a forma nova introduziu, e foi MEDIDA**: `SupportedEventTypes`
+passou a ser declarada vazia e preenchida no `init()`. O consumidor
+`pkg/bootstrap/wiring_delegates.go:34` faz `var supportedEventTypes =
+constants.SupportedEventTypes` no nível de pacote — se a ordem de inicialização
+fosse outra, ele capturaria um slice `nil` e o despacho deixaria de reconhecer
+QUALQUER evento, em silêncio. Go inicializa um pacote importado por completo
+antes do importador, então é seguro; mas isso foi CONFIRMADO com um teste
+descartável no pacote `bootstrap` asserindo `len(supportedEventTypes) == 48`,
+que passou. Não foi deduzido da especificação.
+
+**Testes que travam o achado** (`pkg/infra/constants/events_test.go`):
+`TestConstantsAndDomainDescribeSameSet` e `TestIsValidEventTypeAgreesWithDomain`.
+
+**Controle negativo do COORDENADOR** — o do executor prova que o teste morde;
+este prova que a DERIVAÇÃO é real, que é a coisa que a tarefa existia para
+criar. Removi `"All"` (`pkg/domain/constants.go:75`) só do lado do DOMAIN:
+
+```
+--- FAIL: TestIsValidEventType/all
+    events_test.go:32: IsValidEventType("All") = false, want true
+FAIL	wa-api/pkg/infra/constants	0.311s
+FAIL	wa-api/pkg/application/usecase/user	0.197s
+```
+
+O efeito ATRAVESSOU: `constants.IsValidEventType` passou a recusar `"All"` sem
+que ninguém tocasse em `pkg/infra`, e o consumidor da F159 quebrou junto. Antes
+desta mudança, mexer num lado não faria o outro piscar — que era o defeito.
+`pkg/domain/constants.go` restaurado por cópia do backup, conferido com `diff`.
+
+**Gate**: `make check` EXIT 0, rodado por mim depois do executor. Auditoria de
+conservação: zero arquivos deletados, zero funções de teste removidas, duas
+acrescentadas.
 
 **Nota de método**: a F158 e a F159 são placeholders gêmeos, no MESMO arquivo,
 a vinte linhas um do outro (`add_user.go:157` e `:179`), com o mesmo formato de
@@ -12035,3 +12082,52 @@ publicar" e descobrindo que a resposta era "nos dois". O achado estava certo, e
 mesmo assim a entrada não bastava para agir — porque afirmava a EXISTÊNCIA da
 duplicidade sem enumerar os leitores. Enumerar mudou a proposta de correção.
 É a mesma lição da F139/F151/F157, agora aplicada a um achado meu.
+
+---
+
+## F171 — a catraca de cobertura está destravada: o gate PEDE para subir o piso e ninguém subiu
+
+**Data**: 2026-08-19. **Contexto**: CAP-37 (F168). Achado ao rodar `make check`
+por cima do executor. Não tem relação com a mudança da CAP-37 — foi só onde
+apareceu.
+
+**Onde**: `.coverage-baseline:167` (`min_coverage=840`) contra a medição atual.
+
+**Problema**: toda execução de `make check` imprime
+
+```
+coverage: 858 decimos de % (piso declarado 840 decimos de %) — atual 85.8%
+ATENCAO: a cobertura subiu. Suba min_coverage para 858 neste mesmo PR.
+```
+
+O aviso é **advisory**: o alvo sai com EXIT 0 e o gate passa. Mas o mecanismo é
+uma CATRACA, e uma catraca com folga de 18 décimos de ponto não trava nada
+dentro dessa folga: dá para remover cobertura até 84,0% sem que o gate reclame.
+É precisamente a proteção que o `.coverage-baseline` existe para dar, e ela está
+desligada na faixa onde importa.
+
+**Evidência de que é pré-existente, não desta rodada**: a mesma linha, com os
+mesmos números, aparece no log do `make check` da CAP-36 (`f9f48db`), antes de
+qualquer mudança da CAP-37. Não é efeito colateral do bloco.
+
+**Evidência de que o projeto conhece o procedimento**: o próprio
+`.coverage-baseline:166` documenta a vez ANTERIOR em que isso aconteceu — "que
+avisou 'a cobertura subiu; suba min_coverage para 840 neste mesmo PR'" — e o
+piso foi de facto subido para 840 naquela ocasião. Ou seja: a convenção existe,
+está escrita, e desta vez não foi seguida.
+
+**Correção sugerida**: `min_coverage=858`, em commit PRÓPRIO, sozinho. Subir
+piso é mudança de gate, e a política deste repositório (a mesma que segurou a
+F154 desde o CAP-25) é não mexer em gate no mesmo commit da correção que ele
+julga.
+
+**Cuidado, e é o que impede aplicar de graça**: 858 é a medição de HOJE, com a
+árvore de HOJE. Subir o piso para o valor exato do momento faz qualquer remoção
+legítima de código bem coberto reprovar o gate — a catraca passa a punir
+deleção, que é o mesmo defeito já registrado sobre a chave `count` do
+`.golangci-baseline`. O `Makefile:27` já discute isso para o caso do módulo
+vendorizado. Decidir entre "piso exato" e "piso com folga declarada" é escolha
+de política, não limpeza.
+
+**Status**: não corrigido. Fora do escopo do CAP-37, e é decisão de política de
+gate — levada ao canal de decisão.
