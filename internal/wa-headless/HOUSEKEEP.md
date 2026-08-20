@@ -2413,3 +2413,28 @@ solta anotada.
 
 **Status**: abandonado deliberadamente, com o motivo e a alternativa escritos.
 
+### E o commit desta entrada saiu com o portão VERMELHO — H22 de novo, em mim
+
+O `TestHousekeepEntriesAreMachineReadable` **reprovou** neste commit, porque
+`abandonado` não estava no vocabulário de status. Eu vi a palavra `FAIL` na saída
+e commitei mesmo assim.
+
+**A causa mecânica**: rodei o gate dentro de um **pipe** (`go test ... | tail -1`),
+e o código de saída do pipe é o do `tail`, não o do `go test`. O `&&` que
+protegia o `git commit` estava a jusante e nunca viu a falha.
+
+**É o H22 na forma mais literal possível**: aquela entrada diz *"`-run` seletivo
+valida a mudança, não autoriza o commit — o que autoriza é a suíte"*. Eu rodei a
+suíte certa, ela reprovou, e o encanamento comeu o resultado. A regra estava
+certa e o comando estava errado.
+
+**Correção dupla**: `abandonado`/`abandonada` entram no vocabulário como **ABERTO**
+— um achado deixado de lado com motivo escrito não é resolvido, e classificá-lo
+como fechado apagaria a diferença entre *"resolvido"* e *"decidi não resolver"*,
+que é a distinção que este registro existe para preservar. E o gate passa a ser
+executado **sem pipe**, para o código de saída chegar ao `&&`.
+
+**Regra que fica, mais estreita que a do H22**: gate dentro de pipe não é gate.
+Se a saída precisa ser filtrada, rode duas vezes ou guarde o código de saída
+antes de filtrar.
+

@@ -497,6 +497,12 @@ var (
 		// closed is exactly the reading that made H5 look finished when its
 		// item 3 was still a human decision.
 		"parcialmente corrigido", "parcialmente corrigida",
+		// ABANDONADO é um desfecho legítimo e conta como ABERTO: o achado não
+		// foi resolvido, foi deixado de lado com o motivo escrito. Classificá-lo
+		// como fechado apagaria a diferença entre "resolvido" e "decidi não
+		// resolver", que é exatamente a distinção que o registro existe para
+		// preservar.
+		"abandonado", "abandonada",
 	}
 	closedStatusTokens = []string{
 		"corrigido", "corrigida", "fechado", "fechada",
