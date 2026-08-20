@@ -1069,7 +1069,29 @@ rules_frozen=true
 #
 # F173 parte 1 (2026-08-20): 669->668. Denominador subiu 1 (DynamicRouteTargets,
 # acessor puro sem log — nao ha' caminho de erro a cobrir), numerador inalterado.
-min_func_coverage=668
+# F127 (2026-08-20): remocao de pkg/infra/media/media_utils.go, codigo MORTO.
+# Este e' o primeiro ratchet-DOWN por DELECAO LEGITIMA, e e' exatamente o custo
+# que a decisao da F171 aceitou por escrito: "remocao legitima de codigo bem
+# coberto passa a exigir ajuste deste arquivo no mesmo PR".
+#
+# SAEM 7 elegiveis (e 5 EXCLUDED, fora do denominador), enumeradas pelo proprio
+# gate — a mensagem do TestGoldenBate nomeou cada uma, efeito direto da F154:
+#   media.ExtractFirstURL              ELIGIBLE
+#   media.FetchURLBytes                ELIGIBLE
+#   media.FetchURLBytes.func1          ELIGIBLE
+#   media.GetOpenGraphData             ELIGIBLE
+#   media.encodeJPEGThumbnail          ELIGIBLE
+#   media.fetchOpenGraphDataInternal   ELIGIBLE
+#   media.fetchOpenGraphImage          ELIGIBLE
+# ENTRAM: nenhuma (conferido por diff independente do golden).
+#
+# func_coverage CAI 668->665 e errpath_coverage 868->866 porque o codigo
+# deletado era MELHOR coberto que a media do repo — o que e' esperado: era
+# codigo antigo, migrado, com suite madura. A queda NAO e' perda de teste; e'
+# perda de denominador bem coberto. Zero testes de comportamento vivo foram
+# removidos: 21 tinham equivalente em pkg/infra/media/opengraph, 2 ja' estavam
+# migrados para pkg/infra/media/sticker, e 6 exercitavam o codigo morto que sai.
+min_func_coverage=665
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1274,7 +1296,7 @@ min_func_coverage=668
 # CAP-34 (2026-08-19): 867 -> 868. O caminho de falha de
 # bootstrap.generateGlobalHMACKey (leitura de crypto/rand) nasce coberto por
 # Error com a causa propagada; nenhum caminho existente mudou de estado.
-min_errpath_coverage=868
+min_errpath_coverage=866
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1505,7 +1527,7 @@ min_errpath_coverage=868
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=681
+min_eligible=674
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -4854,7 +4854,59 @@ risco — zero chamador de produção — mas fora do escopo fechado do
 CAP-01.1, que é aditivo (só ligou o fio até então solto), não uma faxina de
 dead code em arquivo que a task não tinha motivo para tocar.
 
-**Status**: **NÃO CORRIGIDO** — registrado para decisão do usuário.
+**Status**: **CORRIGIDO** — arquivo e teste deletados, decisão (a) do canal.
+
+**A premissa da entrada foi VERIFICADA antes de deletar, e quase falhou.** Ela
+dizia "zero chamador de produção". O pacote `pkg/infra/media` **tem** importador
+de produção (`pkg/bootstrap/wiring_delegates.go:10`) — mas usa `ProcessMedia`,
+`FileToBase64` e `MediaS3Config`, que vivem em `media.go`, `base64.go` e
+`outgoing_media.go`. A afirmação vale para o ARQUIVO, não para o pacote. Deletar
+com base na leitura agregada teria sido correto por acidente.
+
+Auditoria símbolo a símbolo (não agregada): os SEIS exportados de
+`media_utils.go` — `NewUserSemaphoreManager`, `UserSemaphoreManager`,
+`FetchURLBytes`, `GetOpenGraphData`, `ExtractFirstURL`, `OpenGraphResult` — têm
+zero uso qualificado fora do arquivo E zero uso por outro arquivo do próprio
+pacote. `go build ./...` limpo após a deleção.
+
+**AUDITORIA DE CONSERVAÇÃO DE TESTE, por teste, dos 29 removidos:**
+
+- **21 — LEGITIMATE, duplicados**: têm equivalente nominal em
+  `pkg/infra/media/opengraph/` (os oito `TestFetchURLBytes*`, os oito
+  `TestFetchOpenGraphImage*`, os quatro `TestFetchOpenGraphDataInternal*` que lá
+  são `TestFetchOpenGraphData*`, e `TestExtractFirstURL`, que lá está dividido em
+  `_AchaAPrimeira` e `_SemURL`).
+- **2 — LEGITIMATE, já migrados**: `TestEncodeJPEGThumbnail` e
+  `TestEncodeJPEGThumbnailErro` existem em `pkg/infra/media/sticker/sticker_test.go`
+  com o mesmo nome. Este era o caso de risco: `encodeJPEGThumbnail` TEM
+  equivalente VIVO (`sticker.EncodeJPEGThumbnail`, usado por
+  `opengraph/fetch.go:175`), então apagar os testes sem verificar teria perdido
+  cobertura de comportamento em uso.
+- **6 — LEGITIMATE, morrem com o código**: `TestUserSemaphoreManagerForUser`,
+  os quatro `TestGetOpenGraphData*` (cache hit, cache com tipo errado,
+  busca-e-armazena, recuperação de pânico) e `TestGetOpenGraphDataSemVagaNoPool`.
+  Confirmado que `opengraph` NÃO reimplementou cache, semáforo nem `recover()`:
+  não há comportamento vivo a descobrir.
+
+**O gate reprovou a deleção, e isso foi bom.** `TestGoldenBate` não disse
+"divergiu": disse `the eligible SET changed` e NOMEOU as doze entradas removidas
+(7 elegíveis + 5 EXCLUDED). Efeito direto da [[F154]], fechada horas antes — sem
+ela, a alternativa era regenerar às cegas. Conferido por diff independente que
+NADA entrou, só saíram.
+
+**Ratchet-DOWN em quatro chaves, e é a primeira vez que o custo da [[F171]]
+aparece**: `min_eligible` 681→674, `min_func_coverage` 668→665,
+`min_errpath_coverage` 868→866 e `min_coverage` 859→858. A decisão (a) da F171
+aceitou isto POR ESCRITO uma hora antes — "remoção legítima de código bem
+coberto passa a exigir ajuste deste arquivo no mesmo PR" — e aconteceu na
+PRIMEIRA deleção seguinte.
+
+Não é recuo: com o piso frouxo em 840, a queda de 0,1pp teria passado sem que
+ninguém notasse nem justificasse. **O objetivo da catraca nunca foi impedir que
+a cobertura caia — foi impedir que caia em silêncio.** As quatro quedas estão
+justificadas por escrito nos respectivos baselines.
+
+**Gate**: `make check` EXIT 0, piso colado na medição nos dois arquivos.
 
 ---
 
@@ -12561,3 +12613,53 @@ auditada por diff independente: entra exatamente uma entrada,
 pendentes ganham entrada no stdio é ADIÇÃO DE CONTRATO PÚBLICO, item 3.1.
 Aguarda o humano. A lista de 32 pendências no teste é o inventário dessa
 decisão.
+
+
+---
+
+## F174 — o caminho VIVO de link preview perdeu o cache e o limite de concorrência que o código morto tinha
+
+**Data**: 2026-08-20. **Contexto**: F127. Achado ao auditar o que os testes do
+arquivo deletado cobriam — não ao procurar defeito.
+
+**Onde**: `pkg/infra/media/opengraph/` (caminho vivo) contra o antigo
+`pkg/infra/media/media_utils.go` (deletado).
+
+**Problema**: o `GetOpenGraphData` que saiu tinha DUAS proteções que a
+implementação viva **não** tem:
+
+1. **cache** de resultado por URL;
+2. **semáforo por usuário** (`UserSemaphoreManager`), limitando buscas
+   concorrentes.
+
+Medido: `grep` por `cache.`, `recover()`, `semaphore`/`Semaphore` e
+`chan struct{}` em `pkg/infra/media/opengraph/*.go` (fora de teste) devolve
+VAZIO. Não foram reimplementadas.
+
+E o caminho é quente: `pkg/application/usecase/message/send_message.go:53` chama
+`FetchLinkPreview` a CADA envio de texto com `req.LinkPreview` ligado. Sem
+cache, mandar a mesma URL dez vezes faz dez buscas HTTP ao site de destino; sem
+semáforo, não há teto de concorrência por usuário.
+
+**Por que isto NÃO é regressão introduzida agora**: o `GetOpenGraphData` com
+cache e semáforo estava MORTO — zero chamadores de produção, confirmado símbolo
+a símbolo na F127. O caminho vivo nunca teve as proteções. A deleção não tirou
+nada de ninguém; ela apenas tornou visível que as proteções existiam só no
+código que ninguém chamava.
+
+**Cuidado antes de "restaurar" (Regra 1 e 2 do CLAUDE.md)**: reintroduzir o
+semáforo é converter um recurso ILIMITADO em limitado, e a invariante deste
+projeto é explícita — *nada que espere por relógio ou por par morto pode ocupar
+slot limitado*. Uma busca de OpenGraph espera por um servidor de terceiros, que
+é exatamente um par que pode estar morto. O `UserSemaphoreManager` deletado
+precisaria ser auditado contra essa invariante ANTES de voltar, não depois. O
+mesmo vale para o cache: cache sem TTL de um recurso externo é vazamento de
+memória com nome bonito.
+
+**Correção sugerida**: medir primeiro. Quantas buscas de preview por minuto o
+caminho vivo faz hoje, e com que repetição de URL? Sem esse número, "pôr um
+cache" é especulação — e a regra do projeto é que especulação não entra no
+plano.
+
+**Status**: não corrigido, nada implementado. Fora do escopo da F127, que era
+deletar código morto. Levado ao canal de decisão.
