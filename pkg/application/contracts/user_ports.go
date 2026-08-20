@@ -8,6 +8,25 @@ import (
 )
 
 // ContactDirectory expõe as consultas sobre contatos e usuários WhatsApp.
+// LIDResolver is the one-method view of the LID→phone translation, for callers
+// that need ONLY that.
+//
+// It exists next to ContactDirectory, which already provides the same method,
+// because ContactDirectory carries a dozen others — avatar, roster, presence,
+// privacy. A use case that depends on the fat interface to translate one
+// identifier declares a dependency on everything it does NOT use, and the next
+// method added to ContactDirectory becomes a compile-time problem for a use
+// case that never wanted it.
+//
+// Any ContactDirectory satisfies this, so no adapter changes.
+type LIDResolver interface {
+	// GetPNForLID resolves the phone JID of a @lid. An unknown mapping is an
+	// empty JID with a NIL error — absence is an answer, not a failure — so a
+	// caller that only checks err would silently treat "unknown" as "resolved
+	// to the empty string".
+	GetPNForLID(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error)
+}
+
 type ContactDirectory interface {
 	SessionGuard
 

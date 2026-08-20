@@ -341,8 +341,12 @@ func initCustomHandlers(s *server) {
 	// chat branch lost its implementation in the migration (HOUSEKEEP F124).
 	chatHistoryRepo := db.NewChatHistoryRepository(s.DB)
 	chatHistoryHandlers := &handlers.ChatHistoryHandlers{
+		// WithLIDResolver liga a tradução @lid→telefone na LEITURA (F183).
+		// userAdapter satisfaz LIDResolver pelo mesmo GetPNForLID que já
+		// serve /user/lid/{jid} — é a peça existente, não uma nova.
 		GetChatHistory: handlers.NewGetChatHistoryHandler(
-			chat.NewGetChatHistoryUseCase(chatHistoryRepo, logger)),
+			chat.NewGetChatHistoryUseCase(chatHistoryRepo, logger).
+				WithLIDResolver(userAdapter)),
 	}
 
 	// Blocklist Handlers

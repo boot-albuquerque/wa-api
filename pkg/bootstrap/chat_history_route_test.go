@@ -3,10 +3,12 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -49,8 +51,9 @@ const (
 // injectUser nil NAO poe nada no contexto — e' o caso do chamador sem
 // identidade.
 type chatHistoryFixture struct {
-	db     *sqlx.DB
-	router *mux.Router
+	db       *sqlx.DB
+	router   *mux.Router
+	resolver *lidResolverStub
 }
 
 func newChatHistoryFixture(t *testing.T, injectUser func() *Values) *chatHistoryFixture {
@@ -58,10 +61,49 @@ func newChatHistoryFixture(t *testing.T, injectUser func() *Values) *chatHistory
 	return newChatHistoryFixtureLogging(t, injectUser, nil)
 }
 
+// lidResolverStub é o dublê de appport.LIDResolver.
+//
+// Imita a REGRA REAL do adapter, não uma versão conveniente dela
+// (adapters/user/adapter.go:119 e sqlstore/lidmap.go:125): mapeamento
+// desconhecido devolve JID VAZIA com erro NIL, porque ausência é resposta e não
+// falha; e um JID que não seja @lid é ERRO, porque o store recusa a chamada.
+//
+// A regra do erro importa: um dublê permissivo que devolvesse ""/nil para um PN
+// deixaria passar um use case que chamasse o resolvedor com o identificador
+// errado, e o teste ficaria verde contra produção vermelha (ARMADILHAS.md, 1).
+type lidResolverStub struct {
+	mapa   map[string]string
+	falha  error
+	chamou []string
+}
+
+func (r *lidResolverStub) GetPNForLID(_ context.Context, _ string, lid domain.JID) (domain.JID, error) {
+	r.chamou = append(r.chamou, string(lid))
+	if r.falha != nil {
+		return "", r.falha
+	}
+	if !strings.HasSuffix(string(lid), "@lid") {
+		return "", errors.New("store recusa: identificador nao e' @lid")
+	}
+	if pn, ok := r.mapa[string(lid)]; ok {
+		return domain.JID(pn), nil
+	}
+	return "", nil
+}
+
 // newChatHistoryFixtureLogging permite capturar o que os use cases logam. Com
 // logOut nil o logger e' Nop: a maioria dos testes nao olha para o log, e um
 // logger silencioso mantem a saida do `go test` legivel.
 func newChatHistoryFixtureLogging(t *testing.T, injectUser func() *Values, logOut io.Writer) *chatHistoryFixture {
+	t.Helper()
+	return newChatHistoryFixtureFull(t, injectUser, logOut, &lidResolverStub{})
+}
+
+// newChatHistoryFixtureFull permite escolher o resolvedor de LID. Os outros
+// construtores passam um stub VAZIO — que resolve nada e devolve o
+// comportamento anterior à F183 — para que os testes existentes continuem a
+// medir o que mediam.
+func newChatHistoryFixtureFull(t *testing.T, injectUser func() *Values, logOut io.Writer, resolver *lidResolverStub) *chatHistoryFixture {
 	t.Helper()
 
 	database := newChatHistoryDB(t)
@@ -95,7 +137,7 @@ func newChatHistoryFixtureLogging(t *testing.T, injectUser func() *Values, logOu
 		},
 		ChatHistory: &handlers.ChatHistoryHandlers{
 			GetChatHistory: handlers.NewGetChatHistoryHandler(
-				chat.NewGetChatHistoryUseCase(repo, logger)),
+				chat.NewGetChatHistoryUseCase(repo, logger).WithLIDResolver(resolver)),
 		},
 	}
 
@@ -117,7 +159,7 @@ func newChatHistoryFixtureLogging(t *testing.T, injectUser func() *Values, logOu
 
 	router := mux.NewRouter()
 	registerCustomRoutes(router, alice.New(inject), ch)
-	return &chatHistoryFixture{db: database, router: router}
+	return &chatHistoryFixture{db: database, router: router, resolver: resolver}
 }
 
 // newChatHistoryDB aplica o schema de producao num SQLite de arquivo
@@ -561,4 +603,126 @@ func TestChatHistoryRoute_DoesNotLogSecrets(t *testing.T) {
 			t.Errorf("log vazou %q: %s", proibido, capturado.String())
 		}
 	}
+}
+
+// --- F183: tradução @lid→telefone na LEITURA ---------------------------------
+
+// TestChatHistoryLID_TraduzEDevolveOQueEstaSobOTelefone é o defeito MEDIDO em
+// campo: das 30 conversas que /chat/list devolve, 27 vinham vazias porque a
+// listagem entrega @lid e as linhas estão gravadas sob o telefone.
+//
+// Pela ROTA REGISTADA, não pelo handler cru: a extração do parâmetro faz parte
+// do defeito, e um handler montado sem padrão de rota não a exercita — foi
+// assim que a F81 sobreviveu.
+func TestChatHistoryLID_TraduzEDevolveOQueEstaSobOTelefone(t *testing.T) {
+	const lid = "182699419517150@lid"
+	const pn = "556799881100@s.whatsapp.net"
+
+	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil,
+		&lidResolverStub{mapa: map[string]string{lid: pn}})
+	f.seedHistoryRow(t, "U-LID", pn, "MSG-SOB-PN", time.Now().Add(-time.Minute))
+
+	rec := f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200", rec.Code)
+	}
+	msgs := chatHistoryMessages(t, rec)
+	if len(msgs) != 1 {
+		t.Fatalf("registos = %d, quero 1: pedir pelo @lid devolveu vazio, que e' o defeito da F183", len(msgs))
+	}
+	if msgs[0].MessageID != "MSG-SOB-PN" {
+		t.Errorf("message_id = %q, quero MSG-SOB-PN", msgs[0].MessageID)
+	}
+}
+
+// TestChatHistoryLID_FundeAsDuasChaves trava a parte que separa "corrigido" de
+// "meio corrigido". Três conversas reais têm linhas sob AMBAS as chaves;
+// traduzir e ler só o telefone trocaria um vazio por METADE — pior, porque uma
+// lista vazia pelo menos parece errada.
+func TestChatHistoryLID_FundeAsDuasChaves(t *testing.T) {
+	const lid = "182699419517150@lid"
+	const pn = "556799881100@s.whatsapp.net"
+
+	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil,
+		&lidResolverStub{mapa: map[string]string{lid: pn}})
+	agora := time.Now()
+	f.seedHistoryRow(t, "U-LID", pn, "MSG-ANTIGA-PN", agora.Add(-2*time.Hour))
+	f.seedHistoryRow(t, "U-LID", lid, "MSG-RECENTE-LID", agora.Add(-time.Minute))
+
+	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid)))
+	if len(msgs) != 2 {
+		t.Fatalf("registos = %d, quero 2 (as duas chaves fundidas)", len(msgs))
+	}
+	// E fundidas em ORDEM: a mais recente primeiro, independentemente da chave.
+	if msgs[0].MessageID != "MSG-RECENTE-LID" || msgs[1].MessageID != "MSG-ANTIGA-PN" {
+		t.Errorf("ordem = [%s %s], quero a mais recente primeiro", msgs[0].MessageID, msgs[1].MessageID)
+	}
+}
+
+// TestChatHistoryLID_SemMapeamentoDevolveOQueTem: LID desconhecido devolve JID
+// vazia SEM erro, e a leitura tem de continuar a servir o que está sob o LID.
+func TestChatHistoryLID_SemMapeamentoDevolveOQueTem(t *testing.T) {
+	const lid = "999999999999@lid"
+
+	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil,
+		&lidResolverStub{mapa: map[string]string{}})
+	f.seedHistoryRow(t, "U-LID", lid, "MSG-SOB-LID", time.Now())
+
+	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid)))
+	if len(msgs) != 1 || msgs[0].MessageID != "MSG-SOB-LID" {
+		t.Fatalf("registos = %d: LID sem mapeamento nao pode perder o que ja' estava sob ele", len(msgs))
+	}
+}
+
+// TestChatHistoryLID_ResolvedorEmFalhaNuncaPioraALeitura é a invariante que eu
+// quero travada: este use case NÃO exige sessão viva, e o resolvedor passa pelo
+// cliente da sessão. Se traduzir passasse a ser obrigatório, uma leitura
+// puramente local começaria a falhar com o telemóvel offline — a correção
+// tornaria um cenário ESTRITAMENTE PIOR, que é a falha de 2026-08-08 outra vez.
+func TestChatHistoryLID_ResolvedorEmFalhaNuncaPioraALeitura(t *testing.T) {
+	const lid = "182699419517150@lid"
+
+	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil,
+		&lidResolverStub{falha: errors.New("sessao offline")})
+	f.seedHistoryRow(t, "U-LID", lid, "MSG-SOB-LID", time.Now())
+
+	rec := f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200: resolvedor em falha nao pode derrubar uma leitura local", rec.Code)
+	}
+	msgs := chatHistoryMessages(t, rec)
+	if len(msgs) != 1 || msgs[0].MessageID != "MSG-SOB-LID" {
+		t.Fatalf("registos = %d, quero 1: com o resolvedor em falha a leitura tem de devolver o de antes", len(msgs))
+	}
+}
+
+// TestChatHistoryLID_PedidoPorTelefoneNaoChamaOResolvedor é o controle na
+// direção oposta, e não é zelo: o store REAL recusa GetPNForLID com um
+// identificador que não seja @lid (sqlstore/lidmap.go:125). Chamar o resolvedor
+// para um PN produziria erro em produção — e, com um dublê permissivo, verde no
+// teste.
+func TestChatHistoryLID_PedidoPorTelefoneNaoChamaOResolvedor(t *testing.T) {
+	const pn = "556799881100@s.whatsapp.net"
+
+	stub := &lidResolverStub{mapa: map[string]string{}}
+	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil, stub)
+	f.seedHistoryRow(t, "U-LID", pn, "MSG-PN", time.Now())
+
+	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(pn)))
+	if len(msgs) != 1 {
+		t.Fatalf("registos = %d, quero 1", len(msgs))
+	}
+	if len(stub.chamou) != 0 {
+		t.Errorf("resolvedor chamado com %v: o store real recusa quem nao e' @lid", stub.chamou)
+	}
+}
+
+// chatHistoryMessages decodifica a lista de mensagens do envelope do ADR-002.
+func chatHistoryMessages(t *testing.T, rec *httptest.ResponseRecorder) []appport.ChatHistoryMessage {
+	t.Helper()
+	var msgs []appport.ChatHistoryMessage
+	if err := json.Unmarshal(decodeEnvelope(t, rec).Data, &msgs); err != nil {
+		t.Fatalf("data nao e' lista de mensagens: %v (corpo: %s)", err, rec.Body.String())
+	}
+	return msgs
 }

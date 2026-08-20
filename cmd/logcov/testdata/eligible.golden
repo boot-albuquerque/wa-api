@@ -1890,6 +1890,9 @@ pkg/application/session.qrPayload	EXCLUDED	X1
 pkg/application/session.translateStatusEvent	EXCLUDED	X1
 pkg/application/usecase/chat.ArchiveChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,archive_chat.go:32);uncovered:L2(S-consume,archive_chat.go:36);uncovered:L2(S-ret,archive_chat.go:37)
 pkg/application/usecase/chat.GetChatHistoryUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/chat.GetChatHistoryUseCase.WithLIDResolver	EXCLUDED	X1
+pkg/application/usecase/chat.GetChatHistoryUseCase.mergeAlternateKey	ELIGIBLE	covered
+pkg/application/usecase/chat.GetChatHistoryUseCase.mergeAlternateKey.func1	EXCLUDED	X6
 pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewGetChatHistoryUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRejectCallUseCase	EXCLUDED	X1

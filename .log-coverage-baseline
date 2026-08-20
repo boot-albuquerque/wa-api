@@ -1296,7 +1296,23 @@ min_func_coverage=665
 # CAP-34 (2026-08-19): 867 -> 868. O caminho de falha de
 # bootstrap.generateGlobalHMACKey (leitura de crypto/rand) nasce coberto por
 # Error com a causa propagada; nenhum caminho existente mudou de estado.
-min_errpath_coverage=866
+# F183 (2026-08-20): errpath 866 -> 867, eligible 674 -> 675.
+#
+# Ratchet-UP por ordem do proprio alvo. A funcao nova elegivel e'
+# mergeAlternateKey, que nasce com os DOIS caminhos de falha registados: o
+# resolvedor que falha (sessao offline) e a leitura da chave alternativa que
+# falha. Nenhum dos dois derruba a leitura — devolvem o que ja' se devolvia —
+# mas ambos deixam rasto, porque o chamador acabou de receber MENOS linhas do
+# que existem e isso e' o que ele precisaria de saber.
+#
+# Registo tambem o que NAO entrou: a fusao das duas chaves ficou DENTRO de
+# mergeAlternateKey em vez de ser funcao propria. Como funcao separada era
+# elegivel e nao tinha nada que valesse registar — aritmetica pura, sem modo de
+# falha — e func_coverage caia um decimo. As tres saidas eram inventar um log
+# para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
+# operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
+# gate como obstaculo em vez de o ouvir.
+min_errpath_coverage=867
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1527,7 +1543,7 @@ min_errpath_coverage=866
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=674
+min_eligible=675
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
