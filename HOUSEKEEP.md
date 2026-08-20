@@ -13985,6 +13985,45 @@ ficar desatualizada na próxima vez que o WhatsApp acrescentar um formato. **O
 descarte silencioso é o defeito permanente; a lista incompleta é só a ocorrência
 de hoje.**
 
+### AMPLIAÇÃO medida (2026-08-20, depois da F186): são DEZANOVE tipos, não dois
+
+Enumerado por contagem, não por impressão. O protocolo oferece **83** getters de
+mensagem em `waE2E`; a cadeia de classificação tem **9** ramos (8 de conteúdo
+mais o `ProtocolMessage`).
+
+Destes, os que carregam conteúdo visível ao utilizador e **não têm ramo**:
+
+```
+GetPollCreationMessage          GetInteractiveResponseMessage   GetEditedMessage
+GetPollUpdateMessage            GetListMessage                  GetGroupInviteMessage
+GetButtonsMessage               GetListResponseMessage          GetOrderMessage
+GetButtonsResponseMessage       GetTemplateMessage              GetProductMessage
+GetInteractiveMessage           GetEventMessage                 GetContactsArrayMessage
+GetLiveLocationMessage          GetPtvMessage                   GetLottieStickerMessage
+GetDocumentWithCaptionMessage
+```
+
+**Dezanove.** A enquete e os botões que eu medi em campo são dois deles — foram
+os que calhou eu exercitar, não os únicos.
+
+Três consequências que a medição em campo sozinha não mostrava:
+
+1. **`GetTemplateMessage` e `GetListMessage` estão na lista, e o projeto ENTREGA
+   `/chat/send/template` e `/chat/send/list`.** Somam-se a `/chat/send/poll` e
+   `/chat/send/buttons`: são **quatro** capabilities de envio cuja recepção não
+   existe, não duas.
+2. **`GetDocumentWithCaptionMessage` é o wrapper comum de documento com
+   legenda.** Se for esse o formato que o WhatsApp usa quando há legenda, o
+   documento que eu medi a gravar só gravou por vir sem ela — não verifiquei, e
+   assumir seria repetir o erro da [[F183]].
+3. **`GetEditedMessage`** significa que a edição de mensagem provavelmente
+   também se perde, o que liga isto à [[F134]].
+
+Isto confirma o ponto 3 da correção sugerida como o que mais vale: **a lista vai
+voltar a ficar desatualizada**. Dezanove em falta hoje, com 83 tipos e o
+protocolo a crescer, é o argumento de que acrescentar ramos é remendo e o
+registo do descarte ([[F186]], já feito) é a proteção permanente.
+
 **Status**: não corrigido. Escopo de recepção, adjacente às capabilities
 [[F181]]/[[F183]] mas independente delas — este não é problema de identidade, é
 de classificação.
