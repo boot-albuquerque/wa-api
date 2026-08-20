@@ -4812,9 +4812,37 @@ precisa sincronizar o fim da goroutine de `RunHeartbeat` (contexto cancelado
 + `<-done` ou `sync.WaitGroup`) antes de retornar, em vez de deixá-la morrer
 por conta própria depois que o teste já saiu.
 
-**Status**: **NÃO CORRIGIDO** — fora do escopo do CAP-01, e a correção mexe
-em `pkg/bootstrap/lease_test.go`, arquivo que esta task não toca. Registrado
-para decisão do usuário sobre quando corrigir.
+**Status**: **JÁ CORRIGIDO** — pela [[F130]], em 2026-08-18/19, e esta entrada
+ficou desatualizada porque ninguém voltou para a fechar.
+
+A F130 é a MESMA corrida vista de outro ângulo: ela enumerou os CINCO
+lançamentos de `RunHeartbeat` que vazavam goroutine em `lease_test.go` e travou
+todos com `sync.WaitGroup`, na ordem certa de `defer`. O comentário que ela
+deixou no código explica a armadilha:
+
+```go
+// F130: cancelling is not enough — nobody waited for the goroutine, so it
+// ... cancel() (declared last) runs FIRST, then wg.Wait(). Swapping the two
+```
+
+Cancelar o contexto não bastava — ninguém esperava pela goroutine, e ela
+continuava a escrever depois de o teste ter terminado. É por isso que a corrida
+aparecia entre testes DIFERENTES.
+
+**Verificado hoje, 2026-08-20**: `go test ./pkg/bootstrap/ -race -run TestLease
+-count=10` → `ok 4.117s`. Dez rodadas limpas. E o `-race -count=3` do pacote
+inteiro, rodado no CAP-44, também passou.
+
+**Por que registro isto em vez de apagar a entrada**: um inventário que mostra
+dívida JÁ PAGA é tão pouco confiável quanto um que esconde dívida. As duas
+falhas apareceram na mesma varredura de 2026-08-20: esta (dívida fantasma) e a
+[[F174]] (duplicata que EU criei). Nos dois casos o custo é o mesmo — quem lê
+deixa de saber se um número é um problema real.
+
+**Regra que sai daí**: bloco que conserta um defeito deve fechar TODAS as
+entradas que o descrevem, não só aquela cujo número está no packet. A F130
+fechou a si mesma e deixou a F111 aberta, descrevendo o mesmo defeito com outro
+nome.
 
 ---
 
