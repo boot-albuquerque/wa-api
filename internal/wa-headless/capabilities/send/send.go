@@ -1,0 +1,261 @@
+// Package send dispatches a text message through the real SPA.
+//
+// IT VERIFIES THE POSTCONDITION, and that is the capability rather than an
+// extra. Invariant 14 says sendText throws on failure and never returns silent
+// success, and item 11 of this initiative's briefing says a driver call
+// returning nil is not the WhatsApp operation having happened. A send that only
+// checked "the page did not throw" would report success for a message the
+// server never accepted — and the caller would find out from a user, later.
+//
+// THE SURFACE WAS MEASURED, not copied. On 2026-08-20 against this build:
+//
+//	WAWebSendTextMsgChatAction  sendTextMsgToChat/3, addAndSendTextMsg/3
+//	WAWebWidFactory             asChatWid/1, asUserWidOrThrow/1
+//	WAWebChatCollection         find, get, add, getModelsArray
+//
+// Four names guessed from other builds — WAWebSendMsg, WAWebMsgSend,
+// WAWebSendMessage, WAWebComposeMessage — do not exist here. Copying the
+// reference implementation's module list would have failed on all four.
+package send
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"wa-api/internal/wa-headless/capabilities/messagemeta"
+	"wa-api/internal/wa-headless/engine"
+	"wa-api/internal/wa-headless/spa"
+)
+
+// Verification bounds. Sending is fast; the message appearing in the local
+// collection is what takes a moment.
+const (
+	verifyBudget = 20 * time.Second
+	verifyTick   = 500 * time.Millisecond
+	// clockSkewAllowance widens the "is this message mine and new" window,
+	// because the timestamp comes from the server and not from this host.
+	clockSkewAllowance = 2 * time.Minute
+)
+
+var (
+	// ErrNoChat is a recipient the page could not resolve to a chat.
+	ErrNoChat = fmt.Errorf("send: the recipient did not resolve to a chat")
+	// ErrDispatch is the send call itself failing or throwing.
+	ErrDispatch = fmt.Errorf("send: the page refused the send")
+	// ErrUnverified is the one that matters: the send call returned without
+	// error and NO outgoing message appeared. The page said yes and nothing
+	// happened, which is precisely the silent success invariant 14 forbids.
+	ErrUnverified = fmt.Errorf("send: dispatched but no outgoing message appeared")
+)
+
+// Result is a message this session sent, identified the same way every other
+// capability identifies one.
+type Result struct {
+	ID        messagemeta.MessageID
+	Timestamp time.Time
+	// Waited is how long verification took. A number worth having: it is the
+	// difference between "the send is confirmed" and "the send is confirmed
+	// eventually", and only measurement tells them apart.
+	Waited time.Duration
+}
+
+// String redacts, like every other rendering in this module.
+func (r Result) String() string {
+	return fmt.Sprintf("send.Result(id=%s at=%s waited=%s)",
+		r.ID.ID, r.Timestamp.UTC().Format(time.RFC3339), r.Waited.Round(time.Millisecond))
+}
+
+// Text sends text to a chat and returns only after proving it was sent.
+//
+// The four steps are separated on purpose, and each failure names WHICH one
+// broke: a recipient that does not resolve, a page that refuses, and a
+// dispatch that leaves no trace are three different problems with three
+// different repairs, and one generic "send failed" would hide that.
+func Text(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
+	toJID, text, label string) (Result, error) {
+
+	if strings.TrimSpace(toJID) == "" {
+		return Result{}, fmt.Errorf("send: empty recipient")
+	}
+	if text == "" {
+		// An empty send would "succeed" while producing nothing, which is the
+		// silent success this package exists to refuse.
+		return Result{}, fmt.Errorf("send: empty text")
+	}
+
+	// RESOLVE + ACT, in the STORE-AND-POLL shape.
+	//
+	// Not one call, because engine.Tab.Evaluate does NOT await promises: an
+	// async page function is stringified as a Promise, which decodes to an
+	// empty object and reads exactly like a dispatch that failed with no
+	// reason. That is what the first version did, and the symptom — "refused
+	// the send at  ()" with both fields empty — is what gave it away.
+	//
+	// So the page starts the work, parks the outcome on a named global, and Go
+	// polls for it. Same shape as the message subscription, and for the same
+	// reason: the clock stays on this side.
+	sentAt := time.Now().Add(-clockSkewAllowance)
+	var kicked string //nolint // o valor é ignorado: o resultado vem do poll
+	if err := runner.Do(ctx, engine.OpStateProbe, label+"/dispatch", func(ctx context.Context) error {
+		return eval(ctx, dispatchScript(toJID, text), &kicked)
+	}); err != nil {
+		return Result{}, fmt.Errorf("%w: %v", ErrDispatch, err)
+	}
+
+	var out struct {
+		Stage string `json:"stage"`
+		OK    bool   `json:"ok"`
+		Why   string `json:"why"`
+	}
+	dispatchDeadline := time.Now().Add(verifyBudget)
+	for {
+		var raw string
+		if err := runner.Do(ctx, engine.OpStateProbe, label+"/dispatch-result", func(ctx context.Context) error {
+			return eval(ctx, dispatchResultScript, &raw)
+		}); err != nil {
+			return Result{}, fmt.Errorf("%w: %v", ErrDispatch, err)
+		}
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return Result{}, fmt.Errorf("send: unexpected dispatch answer: %w", err)
+		}
+		if out.Stage != "pending" {
+			break
+		}
+		if time.Now().Before(dispatchDeadline) {
+			time.Sleep(verifyTick)
+			continue
+		}
+		return Result{}, fmt.Errorf("%w: the page never settled the dispatch within %s",
+			ErrDispatch, verifyBudget)
+	}
+	switch {
+	case out.Stage == "resolve" && !out.OK:
+		return Result{}, fmt.Errorf("%w (%s)", ErrNoChat, out.Why)
+	case !out.OK:
+		return Result{}, fmt.Errorf("%w at %s (%s)", ErrDispatch, out.Stage, out.Why)
+	}
+
+	// VERIFY. Nothing above proves the message exists — the page accepting a
+	// call is not the account having sent anything.
+	res, err := verify(ctx, runner, eval, toJID, sentAt, label)
+	if err != nil {
+		return Result{}, err
+	}
+	return res, nil
+}
+
+// sendStateKey is where the page parks the dispatch outcome.
+const sendStateKey = "__waHeadlessSendResult"
+
+// dispatchResultScript reads the parked outcome. "pending" means the page is
+// still working — distinct from a failure, because a caller that treated
+// "not finished" as "failed" would retry a send that is about to succeed.
+const dispatchResultScript = `JSON.stringify((() => {
+	const s = window[` + `"` + sendStateKey + `"` + `];
+	if (!s) { return { stage: 'dispatch', ok: false, why: 'STATE_MISSING' }; }
+	return s;
+})())`
+
+func dispatchScript(toJID, text string) string {
+	return `JSON.stringify((() => {
+		window[` + strconv.Quote(sendStateKey) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(sendStateKey) + `] = v; };
+		(async () => {
+		let stage = 'resolve';
+		try {
+			const WidFactory = window.require('WAWebWidFactory');
+			const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
+			// createWid BUILDS a wid from text; asChatWid only VALIDATES one
+			// that already exists. Passing the string straight to asChatWid
+			// fails with "e.isUser is not a function", which is the page saying
+			// it was handed a string where it expected an object — measured,
+			// not guessed, and the reason the two calls are separate here.
+			const raw = WidFactory.createWid(` + strconv.Quote(toJID) + `);
+			if (!raw) { park({ stage, ok: false, why: 'WID_NULL' }); return; }
+			const wid = WidFactory.asChatWid(raw);
+			if (!wid) { park({ stage, ok: false, why: 'NOT_A_CHAT_WID' }); return; }
+
+			// A chat that does not exist yet is the ORDINARY case for a first
+			// message, so obtaining one cannot be a lookup. Measured: get()
+			// returns null for a correspondent never spoken to, and
+			// ChatCollection.find throws "this.findImpl is not a function".
+			// findOrCreateLatestChat is the call that works either way.
+			let chat = ChatCollection.get(wid);
+			if (!chat) {
+				const Find = window.require('` + string(spa.ModuleFindChatAction) + `');
+				chat = await Find.findOrCreateLatestChat(wid);
+			}
+			if (!chat) { park({ stage, ok: false, why: 'CHAT_NOT_FOUND' }); return; }
+
+			stage = 'dispatch';
+			const Send = window.require('` + string(spa.ModuleSendTextMsgChatAction) + `');
+			await Send.sendTextMsgToChat(chat, ` + strconv.Quote(text) + `);
+			park({ stage, ok: true, why: '' });
+		} catch (e) {
+			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 120) });
+		}
+		})();
+		return { started: true };
+	})())`
+}
+
+// verify polls the message collection for an OUTGOING message to this chat,
+// stamped after the send began.
+//
+// Freshness is the discriminator, and it is not decoration: the collection
+// replays history, so "an outgoing message to this chat exists" is true for
+// every chat that ever had one. Without the timestamp bound this would confirm
+// sends that never happened — the exact false positive the delivery test hit.
+func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
+	toJID string, sentAt time.Time, label string) (Result, error) {
+
+	start := time.Now()
+	deadline := start.Add(verifyBudget)
+	for probed := false; !probed || time.Now().Before(deadline); probed = true {
+		var raw string
+		if err := runner.Do(ctx, engine.OpStateProbe, label+"/verify", func(ctx context.Context) error {
+			return eval(ctx, verifyScript(toJID), &raw)
+		}); err != nil {
+			return Result{}, fmt.Errorf("send: verifying: %w", err)
+		}
+		msgs, err := messagemeta.DecodeWire([]byte(raw))
+		if err != nil {
+			return Result{}, fmt.Errorf("send: verifying: %w", err)
+		}
+		for _, m := range msgs {
+			if !m.ID.FromMe || !m.ID.Present() {
+				continue
+			}
+			if m.Timestamp.Before(sentAt) {
+				continue
+			}
+			return Result{ID: m.ID, Timestamp: m.Timestamp, Waited: time.Since(start)}, nil
+		}
+		time.Sleep(verifyTick)
+	}
+	return Result{}, fmt.Errorf("%w within %s (recipient not printed)", ErrUnverified, verifyBudget)
+}
+
+// verifyScript reuses messagemeta's allow-list, so a verified send cannot carry
+// content that a drained event would not — one list, one place to be wrong.
+func verifyScript(toJID string) string {
+	return `JSON.stringify((() => {
+		const coll = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
+		if (!coll || typeof coll.getModelsArray !== 'function') { return []; }
+		const meta = ` + messagemeta.MetaExpr + `;
+		const want = ` + strconv.Quote(toJID) + `;
+		const out = [];
+		const all = coll.getModelsArray();
+		for (let i = all.length - 1; i >= 0 && out.length < 40; i--) {
+			let m;
+			try { m = meta(all[i]); } catch (e) { continue; }
+			if (m.id.remote_jid !== want) { continue; }
+			out.push(m);
+		}
+		return out;
+	})())`
+}

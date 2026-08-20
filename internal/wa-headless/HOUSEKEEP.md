@@ -2557,3 +2557,49 @@ tempo podem fazer o WhatsApp invalidar um. Precisaria de duas contas.
 **falsificado para este build/host** e precisa ser lido como o que era — uma
 medição de outro momento, não uma constante.
 
+## H34 — o envio esbarra em LID: este build exige LID e o número de telefone não basta
+
+**Data**: 2026-08-20 · **Contexto**: CAP-07 (`sendText`), autorizada depois que
+duas contas foram pareadas e o par emissor/receptor passou a existir.
+
+**Onde parou**: `findOrCreateLatestChat(wid)` lança **`No LID for user`** para um
+WID construído a partir do número (`5541…@c.us`).
+
+**O que isso significa**: este build é **LID-first**. Abrir conversa com alguém
+exige o **LID** — o espaço de identidade que a Meta introduziu ao lado do
+número — e o PN sozinho não resolve. É precisamente a fronteira que o item de
+identidade LID/PN do briefing nomeia, e que o `CLAUDE.md` manda pesquisar no
+Baileys e na Evolution API **antes** de projetar.
+
+**Não vou resolver por tentativa.** Já são quatro correções nesta capacidade, e
+todas vieram de MEDIÇÃO — nenhuma de palpite. Uma quinta às cegas sobre
+identidade seria exatamente como este projeto reescreve os bugs alheios.
+
+### As quatro correções que a medição já produziu, e o que cada uma matou
+
+| # | sintoma | causa medida |
+|---|---|---|
+| 1 | `stage` e `why` vazios | **`Evaluate` não espera promessas** — um script `async` vira `Promise` e `JSON.stringify` produz `{}`, que decodifica como falha sem motivo. Trocado por *store-and-poll*: a página estaciona o resultado, o Go drena. Mesmo padrão da assinatura de mensagens, e pelo mesmo motivo — o relógio fica do lado Go. |
+| 2 | `e.isUser is not a function` | `asChatWid` **valida** um WID; quem **constrói** a partir de texto é `createWid`. Passar a string direto entrega objeto errado. |
+| 3 | `this.findImpl is not a function` | `ChatCollection.find` não está ligado à implementação neste build. |
+| 4 | `CHAT_NOT_FOUND` / `No LID` | `ChatCollection.get` devolve `null` para quem **nunca conversou** — o caso ORDINÁRIO de uma primeira mensagem. Obter chat não é consulta: é `WAWebFindChatAction.findOrCreateLatestChat`. |
+
+**Módulos que NÃO existem neste build**, e que uma cópia da lista da referência
+teria usado: `WAWebSendMsg`, `WAWebMsgSend`, `WAWebSendMessage`,
+`WAWebComposeMessage`. Quatro em quatro.
+
+**O que existe e está medido**: `WAWebSendTextMsgChatAction`
+(`sendTextMsgToChat/3`, `addAndSendTextMsg/3`, `createTextMsgData/3`),
+`WAWebWidFactory` (`createWid/1`, `asChatWid/1`, `asUserLidOrThrow`,
+`createUserLidOrThrow`), `WAWebFindChatAction`
+(`findExistingChat`, `findOrCreateLatestChat`), `WAWebChatCollection`.
+
+**Próximo passo, e ele é pesquisa e não tentativa**: descobrir como o PN resolve
+para LID neste build — os candidatos visíveis são `asUserLidOrThrow` e
+`createUserLidOrThrow` no próprio `WidFactory`, mas COMO se obtém o LID de um
+contato com quem nunca se falou é a pergunta, e é onde o Baileys e a Evolution
+API têm história.
+
+**Status**: aberto — fronteira de protocolo alcançada, com o caminho medido até
+ela e a pergunta seguinte formulada.
+

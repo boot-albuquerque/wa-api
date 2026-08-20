@@ -78,6 +78,29 @@ const (
 	// it when it is missing. Measured 2026-08-19: resolves with MsgCollection
 	// carrying on/off/getModelsArray (PARIDADE-WWEBJS.md §6.4).
 	ModuleMsgCollection = Module("WAWebMsgCollection")
+	// ModuleChatCollection and ModuleSendTextMsgChatAction are what
+	// capabilities/send needs, and like the message store they are NOT in
+	// RequiredAtStartup: a session that cannot send is still a session that can
+	// be checked, identified and stopped, so failing every boot over them would
+	// trade a working degraded session for none.
+	//
+	// MEASURED 2026-08-20 against this build: ChatCollection carries get/find/
+	// add/getModelsArray, and SendTextMsgChatAction carries sendTextMsgToChat/3
+	// plus addAndSendTextMsg/3. Four names taken from other builds
+	// (WAWebSendMsg, WAWebMsgSend, WAWebSendMessage, WAWebComposeMessage) do
+	// not resolve here at all.
+	ModuleChatCollection        = Module("WAWebChatCollection")
+	ModuleSendTextMsgChatAction = Module("WAWebSendTextMsgChatAction")
+	// ModuleFindChatAction is how a chat is OBTAINED, and it is a different
+	// module from the collection that STORES chats.
+	//
+	// Measured 2026-08-20: ChatCollection.get returns null for a correspondent
+	// this account has never talked to, and ChatCollection.find throws
+	// "this.findImpl is not a function". WAWebFindChatAction carries
+	// findExistingChat and findOrCreateLatestChat — the second is the one that
+	// works when there is no chat yet, which is the ordinary case for a first
+	// message.
+	ModuleFindChatAction = Module("WAWebFindChatAction")
 )
 
 // RequiredAtStartup is verified before any capability runs.
