@@ -14856,3 +14856,68 @@ perder o LID, que é o único identificador sempre verdadeiro.
 (`TestChatHistoryLID_*` em `chat_history_route_test.go`) e quatro no use case
 (`get_chat_history_lid_test.go`) — com seis controlos negativos executados, e
 verificada contra o WhatsApp real com a medição antes/depois acima.
+
+---
+
+## F181 — medida de novo, com instrumento melhor: NÃO é junção partida, é ausência. E há um conserto óbvio que não é o nome.
+
+**Data**: 2026-08-20, ao atacar a F181 por decisão (a) do canal.
+
+Vim desconfiada da minha própria entrada. A F181 conclui que os conjuntos de LID
+são "genuinamente disjuntos", e eu tinha acabado de descobrir na [[F183]] que
+"interseção zero" entre estas bases costuma ser artefacto de FORMATO — a primeira
+junção com o mapa deu 0 de 365 quando a resposta certa era 362 de 365.
+
+**A F181 aguenta.** Medido agora com o mapa na mão, para as 48 conversas `@lid`
+da listagem:
+
+| | |
+|---|---|
+| têm linha no roster sob o LID | 2 |
+| têm linha no roster sob o telefone | 2 |
+| **não têm linha em esquema nenhum** | **44** |
+| **sem tradução LID→telefone** | **0** |
+
+Não é junção partida. **As 44 pessoas não estão no roster**, nem sob um
+identificador nem sob o outro.
+
+E as outras fontes não salvam: dos 50 chats listados, **4** têm `sender_push_name`
+no histórico (procurando nas DUAS chaves). O roster do `qr2` tem 3339 contactos,
+e as conversas ativas simplesmente não estão entre eles.
+
+### O código já fazia o que eu ia desenhar
+
+`ListChatsUseCase` já normaliza a atividade para o espaço `@lid`, já aliasa as
+três tabelas de nome para o mesmo espaço, e já junta roster + grupos +
+`pushName` do histórico. Há inclusive uma correção anterior registada no
+comentário de `nomesDoHistorico` — a lista aproveitava 11 de 480 chats enquanto
+7273 mensagens tinham nome. **Não há junção nova a escrever.**
+
+### O conserto que a medição revela, e que não é o nome
+
+Todas as 48 traduzem. Portanto, para **100%** das conversas sem nome, nós temos o
+**número de telefone** e mostramos um LID.
+
+É isto que faz a diferença de produto: `182699419517150@lid` não diz nada a
+ninguém; `556799881100` é reconhecível, pesquisável e colável. **E é exatamente o
+que o próprio WhatsApp faz** quando não há nome — mostra o número, não um
+identificador interno.
+
+Ou seja: o problema chamado "96% das conversas sem NOME" tem duas metades, e só
+uma delas é insolúvel.
+
+- **O nome** não existe nos nossos dados, e pelo [[F183]]/Baileys pode nunca
+  existir: para quem não está na agenda e nunca mandou `pushName`, não há nome a
+  obter. Inventar um seria pior.
+- **O identificador legível** existe para 100% dos casos e está a ser escondido.
+
+**Correção sugerida**: a listagem passa a expor o telefone quando o resolve —
+como campo próprio, sem substituir o `jid`, para não repetir o erro de trocar o
+identificador que o cliente usa noutras rotas. Custo: uma resolução em LOTE por
+listagem, com o `GetManyLIDsForPNs` que já existe (`adapters/user/adapter.go`),
+não uma ida ao protocolo por conversa — que é a [[F181]] avisando contra si
+mesma.
+
+**Status**: diagnóstico refeito. O "sem nome" não é corrigível com os dados que
+temos; o "sem identificador legível" é, para 100% dos casos, e é decisão de
+contrato.
