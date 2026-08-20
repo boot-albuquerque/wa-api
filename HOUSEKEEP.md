@@ -14277,3 +14277,98 @@ etapa (b) já decidida**: o ramo novo da enquete tem de escrever em `caption`, e
 não em `textContent`, senão o mesmo bloco come a pergunta da enquete exatamente
 como come o nome do contacto. Sem esta medição eu teria escrito o ramo errado e
 o teste de campo teria mostrado `:poll:` onde devia estar a pergunta.
+
+---
+
+## VERIFICAÇÃO EM PRODUÇÃO — F184 etapa (b) e F186, medidas contra o WhatsApp real
+
+**Data**: 2026-08-20. **Contexto**: decisão (c) do canal — implementar (b), depois
+reiniciar UMA vez e validar as duas correções em campo. O reinício era o risco, e
+pagou-se uma vez por duas correções em vez de uma vez por cada.
+
+### Linha de base, registada ANTES de mexer
+
+```
+sessões: qr2 e destino, ambas connected=true loggedIn=true
+message_history: 23622 linhas
+  text 13710 | image 6639 | sticker 1151 | unknown 689 | audio 689
+  video 507 | document 149 | location 45 | contact 32
+  buttons_response 9 | list_response 2
+  poll 0 | buttons 0          <- os dois tipos novos NÃO existiam
+avisos "dropped from history" no log: 0   (binário antigo)
+```
+
+A própria linha de base confirma a [[F187]]: existem `buttons_response` e
+`list_response`, tipos que **só o classificador de sync sabe reconhecer**.
+
+### O reinício
+
+As duas sessões **reconectaram sozinhas**. O risco que motivou a DECISÃO 19 não
+se materializou: as credenciais persistem no datadir e o `loggedIn` voltou a
+`true` em menos de vinte segundos, sem leitura de QR.
+
+### As quatro provas
+
+**1. A enquete grava, e grava COM A PERGUNTA:**
+
+```
+3EB05EAC4783F01CD43903 | poll | "F184b: qual o melhor dia?"
+```
+
+Não `:poll:`. É a confirmação em campo de que escrever em `caption` em vez de
+`textContent` era carregado — a lição da [[F187]], que o CN-8 já tinha travado em
+teste.
+
+**2. Os botões gravam, com o corpo:**
+
+```
+3EB09DFA274FB8E10648A7 | buttons | "Escolha uma opcao"
+```
+
+**3. O descarte de botão aparece no log REAL, em nível de produção:**
+
+```
+WRN buttons button dropped: unknown type
+    receivedType=quickreply  reason=unknown_button_type  title=Descartado
+    acceptedTypes="reply, cta_url, cta_call, copy"  clientMsgID=
+```
+
+Os três campos que o canal exigiu estão lá, num servidor a correr em `info` — que
+é precisamente o que o `Debug` original não conseguia.
+
+**4. E a prova que quase não fiz.** A contagem de `dropped from history` deu
+**zero**, e é tentador declarar vitória: já não se descarta nada. **Mas zero não
+prova nada** — pode ser "nada não classificado chegou" tanto como "o aviso não
+funciona". Silêncio nunca é evidência.
+
+Forcei o caso enviando uma LISTA, tipo que a enumeração da [[F184]] diz não ter
+ramo de recepção:
+
+```
+WRN received message dropped from history: no content extracted for its type
+    message_id=3EB0750E9C4CD30A4D16C3  wire_type=media
+    message_type=text  reason=unclassified_no_content
+```
+
+O aviso dispara, em `WARN`, com os campos certos. **E confirma a dívida que eu
+tinha levantado por enumeração**: `/chat/send/list` é capability que entregamos, e
+a mensagem que ela envia é descartada na recepção — agora com rasto, em vez de em
+silêncio.
+
+Detalhe que só o campo mostrou: o `wire_type` da lista é **`media`**, não `list`.
+A enumeração previu o descarte; ela não previa o rótulo. É a diferença entre
+prever pela leitura e medir.
+
+### Registo das duas provas, como a política manda
+
+| achado | prova de teste | prova de campo |
+|---|---|---|
+| [[F186]] (registo do descarte) | 6 CNs executados | `WRN` nos dois descartes, servidor em `info` |
+| [[F184]] etapa (b) | 4 CNs executados | enquete e botões gravados, com o texto certo |
+
+**Status da [[F184]]**: **parcialmente corrigido**. Enquete e botões gravam —
+travado por `TestHistorico_EnqueteGravaComAPergunta`,
+`TestHistorico_BotoesGravaComOCorpo`, `TestHistorico_BotoesLegadoTambemGrava` e
+`TestHistorico_EnqueteSemPerguntaCaiNoPlaceholder`, mais a medição acima. Os
+outros **dezassete** tipos continuam sem ramo, `list` e `template` entre eles, e
+esses dois são capabilities que entregamos. Pendente de decisão do canal.
