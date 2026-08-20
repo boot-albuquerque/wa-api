@@ -27,7 +27,23 @@
 # esbarrar aqui tem duas saidas legitimas: decompor a funcao, ou subir o teto
 # NESTE arquivo com justificativa escrita. Subir o teto nao e' derrota; subir
 # em silencio e' que seria.
-max_complexity=51
+# F187 (2026-08-20): max_complexity 51 -> 50, count 263 -> 341.
+#
+# A COMPLEXIDADE MAXIMA CAIU, e isso e' contra-intuitivo o suficiente para
+# merecer explicacao: eu acabara de criar classifyMessage, que tem complexidade
+# 30 — um switch com vinte e tal ramos, inerente ao que a funcao E'.
+#
+# Mas essa cadeia estava ANTES dentro de saveMessageHistory, somada a tudo o
+# resto que o handler faz. Extrai-la reduziu o pico do repositorio mais do que a
+# funcao nova acrescentou. Dividir classifyMessage para baixar os 30 seria
+# recriar o problema de "a mesma regra em varios sitios" que a F187 acabou de
+# fechar.
+#
+# A contagem de 263 -> 341 e' INFORMATIVA por desenho (ver o cabecalho deste
+# ficheiro) e e' acumulada do dia inteiro, sobretudo de testes novos. Medida por
+# diretorio: internal/wa-noise/core 52, pkg/bootstrap 27,
+# pkg/presentation/http/handlers 24. O ficheiro novo contribui com UM.
+max_complexity=50
 # vendor-wa-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
@@ -41,7 +57,7 @@ max_complexity=51
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 261 -> 262. Uma issue nova, do metodo GetManyLIDsForPNs portado de
 # 3ac8073. max_complexity inalterado (56).
-count=263
+count=341
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

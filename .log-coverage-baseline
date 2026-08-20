@@ -1563,7 +1563,26 @@ min_errpath_coverage=867
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
 min_eligible=676
-max_exempt_annotations=0
+# F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
+# a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
+# era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
+#
+# A PRIMEIRA isencao do repositorio, e vale registar por que a valvula existe.
+#
+# classifyMessage (pkg/bootstrap/message_classify.go) e' a cadeia de
+# classificacao unificada dos dois caminhos de ingestao. Nao tem modo de falha —
+# nao devolve erro, nao chama nada que possa falhar, so' olha para um struct e
+# devolve outro — e corre no caminho de CADA mensagem recebida. Um log ali nao
+# teria nada de util a dizer e apareceria milhares de vezes por dia, que e' a
+# F180 na sua pior forma.
+#
+# As alternativas eram piores: inventar um log destroi o proprio log; baixar o
+# piso de func_coverage desliga a protecao para TODAS as outras funcoes.
+#
+# Nota: esta anotacao so' e' contabilizada corretamente porque a F189 foi
+# corrigida hoje. Antes, o contador fazia strings.Count sobre o ficheiro inteiro
+# e teria contado tambem as mencoes ao token no comentario que a justifica.
+max_exempt_annotations=1
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de

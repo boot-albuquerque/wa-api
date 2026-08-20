@@ -14295,10 +14295,40 @@ O **CN-34** é o que vale: reverte **só** a localização e o teste morde — c
 o contacto e esquecer a localização era o modo de falha mais provável, e um teste
 único não o apanharia.
 
-### O que NÃO foi feito, e é decisão consciente
+### A unificação FOI FEITA (autorização direta do humano, 2026-08-20)
 
-**Uma só função para os dois caminhos.** Os dois classificadores continuam
-separados; o que mudou é que deixaram de divergir nos pontos medidos.
+`pkg/bootstrap/message_classify.go` — uma só cadeia, usada pelos dois caminhos.
+
+**E ela elimina a CLASSE de defeito, não só a ocorrência.** A função devolve o
+texto FINAL: não há `caption` e `textContent` a competirem, logo não há bloco a
+jusante que possa sobrescrever o que um ramo atribuiu. O mecanismo desta entrada
+deixa de ser **possível de escrever**.
+
+**A divergência tinha-se INVERTIDO no meio do conserto**, o que é a prova de que
+remendar um dos lados nunca ia chegar: primeiro o caminho de tempo real
+reconhecia MENOS tipos; depois de corrigido, passou a reconhecer SEIS a mais que
+o de sync. Duas fontes de verdade divergem nas duas direções.
+
+**Uma diferença sobrevive, de propósito**: o caminho de sync continua a chamar
+`unknown` ao que não reconhece, e o de tempo real chama `text`. Não as alinhei
+porque isto é dado GRAVADO — 689 linhas com `message_type = "unknown"` — e mudar
+o rótulo tornaria a coluna inconsistente entre o que lá está e o que entrar.
+Trocaria uma divergência de código, invisível ao cliente, por uma de DADO, que
+ele vê. Alinhá-las é decisão de produto com migração.
+
+### E um teste MEU falhou como teste, que é o achado mais útil deste bloco
+
+`TestClassificacao_OsDoisCaminhosConcordam` comparava o classificador com o que a
+produção grava — e **os dois lados passam pela mesma função**. Mutá-la move os
+dois por igual. O CN-41 não mordeu, e a asserção era **tautológica**.
+
+Um teste que não pode falhar é pior que nenhum, porque parece proteção.
+
+O que ficou: `TestClassificacao_ValoresLiterais`, com a tabela escrita à MÃO e
+não derivada do classificador — derivá-la reintroduziria a tautologia. A mesma
+mutação que passou incólume passa a morder com `Text = ":contact:", quero "Ana"`.
+E o comentário do primeiro teste foi corrigido para dizer o que ele **realmente**
+prova: que o caminho CHAMA o classificador, não que a classificação está certa.
 
 A razão de não os fundir agora: **o caminho de sync é o que funciona melhor**, e
 os dois diferem em mais coisas do que as medidas — tratamento de

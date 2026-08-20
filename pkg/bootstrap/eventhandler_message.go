@@ -275,161 +275,22 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 		return
 	}
 
-	messageType := "text"
-	textContent := ""
+	// A classificação vive em message_classify.go, PARTILHADA com o caminho de
+	// sincronização (F187). Havia duas cadeias aqui e lá, e elas divergiram —
+	// primeiro o tempo real reconhecia menos tipos e descartava o texto que
+	// extraía, depois, corrigido, passou a reconhecer SEIS a mais que o outro.
+	// Duas fontes de verdade divergem nas duas direções; a única saída é não
+	// haver duas.
+	classificacao := classifyMessage(evt.Message)
+	messageType := classificacao.Type
+	textContent := classificacao.Text
+	replyToMessageID := classificacao.QuotedID
 	mediaLink := ""
-	caption := ""
-	replyToMessageID := ""
 
-	// Check for delete messages first
-	if protocolMsg := evt.Message.GetProtocolMessage(); protocolMsg != nil && protocolMsg.GetType() == 0 {
-		messageType = "delete"
-		if protocolMsg.GetKey() != nil {
-			textContent = protocolMsg.GetKey().GetID() // Store the deleted message ID
-		}
-		log.Info().Str("deletedMessageID", textContent).Str("messageID", evt.Info.ID).Msg("Delete message detected")
-	} else if protocolMsg := evt.Message.GetProtocolMessage(); protocolMsg.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT {
-		// HOUSEKEEP F188, com a causa CERTA à segunda tentativa.
-		//
-		// A edição não se perdia por vir embrulhada — UnwrapRaw já a
-		// desembrulhou (events/message.go:159). Perdia-se porque, depois do
-		// desembrulho, ela é uma ProtocolMessage, e o ramo acima só reconhece
-		// GetType() == 0, que é REVOKE (o apagar). MESSAGE_EDIT é 14: nenhum
-		// ramo casava, e a guarda descartava.
-		//
-		// O texto novo vem em protocolMsg.EditedMessage, e a chave aponta para
-		// a mensagem ORIGINAL — é por isso que o ID editado vai para
-		// replyToMessageID, que é a coluna quoted_message_id: sem essa
-		// ligação a edição fica uma linha solta, e o cliente não sabe o que
-		// ela edita.
-		messageType = messageTypeEdit
-		caption = editedText(protocolMsg)
-		replyToMessageID = protocolMsg.GetKey().GetID()
-	} else if reaction := evt.Message.GetReactionMessage(); reaction != nil {
-		messageType = "reaction"
-		replyToMessageID = reaction.GetKey().GetID()
-		textContent = reaction.GetText() // This will be the emoji
-	} else if img := evt.Message.GetImageMessage(); img != nil {
-		messageType = "image"
-		caption = img.GetCaption()
-	} else if video := evt.Message.GetVideoMessage(); video != nil {
-		messageType = "video"
-		caption = video.GetCaption()
-	} else if audio := evt.Message.GetAudioMessage(); audio != nil {
-		messageType = "audio"
-	} else if doc := evt.Message.GetDocumentMessage(); doc != nil {
-		messageType = "document"
-		caption = doc.GetCaption()
-	} else if sticker := evt.Message.GetStickerMessage(); sticker != nil {
-		messageType = "sticker"
-	} else if contact := evt.Message.GetContactMessage(); contact != nil {
-		// HOUSEKEEP F187. Estas duas linhas escreviam em `textContent`, e a
-		// atribuição NÃO TINHA EFEITO NENHUM: o bloco de extração abaixo faz
-		// `textContent = caption` incondicionalmente quando não há Conversation
-		// nem ExtendedText, e o nome ia para o lixo antes de ser gravado.
-		//
-		// Medido em campo com os nossos próprios envios: mandei
-		// DisplayName="Contato Varredura" e ficou gravado ":contact:", com o
-		// nome intacto dentro do datajson. Não era ausência de informação — era
-		// informação presente e descartada na escrita.
-		//
-		// O caminho de sync (eventhandler_history.go:177) nunca teve este
-		// bloco, e por isso sempre preservou os dois. As 32 linhas de contacto
-		// com nome real na tabela vieram todas de lá.
-		messageType = "contact"
-		caption = contact.GetDisplayName()
-	} else if location := evt.Message.GetLocationMessage(); location != nil {
-		messageType = "location"
-		caption = location.GetName()
-	} else if buttons := evt.Message.GetButtonsResponseMessage(); buttons != nil {
-		// Os dois ramos de RESPOSTA existiam só no caminho de sync
-		// (eventhandler_history.go:181 e :184). Os nomes de tipo são
-		// deliberadamente os MESMOS — `buttons_response`, `list_response` — para
-		// os dois caminhos convergirem em vez de inventarem vocabulários
-		// paralelos, que é como a F187 nasceu.
-		messageType = messageTypeButtonsResponse
-		caption = buttons.GetSelectedButtonID()
-	} else if listResp := evt.Message.GetListResponseMessage(); listResp != nil {
-		messageType = messageTypeListResponse
-		caption = listResp.GetSingleSelectReply().GetSelectedRowID()
-	} else if poll := evt.Message.GetPollCreationMessage(); poll != nil {
-		// F184, etapa (b). Antes deste ramo a enquete caía no messageType
-		// inicial "text", ficava sem conteúdo e a guarda de gravação
-		// descartava-a: recebida, logada, e nunca gravada.
-		//
-		// O texto vai para `caption`, NÃO para `textContent`, e isso não é
-		// estilo. O bloco de extração abaixo faz `textContent = caption`
-		// incondicionalmente quando não há Conversation nem ExtendedText, o
-		// que APAGA qualquer textContent atribuído aqui — é o defeito medido
-		// na F187, que hoje come o DisplayName do contacto e o Name da
-		// localização. Escrever em caption é o que sobrevive a esse bloco.
-		messageType = messageTypePoll
-		caption = poll.GetName()
-	} else if interactive := evt.Message.GetInteractiveMessage(); interactive != nil {
-		// É ESTE o formato que o nosso próprio /chat/send/buttons produz:
-		// messenger_buttons.go:217 monta waE2E.Message{InteractiveMessage:...}
-		// com NativeFlowMessage. Verificado no código do adapter antes de
-		// escrever o ramo — casar o receptor com o que o emissor realmente
-		// envia é o que distingue este ramo de um palpite.
-		messageType = messageTypeButtons
-		caption = interactive.GetBody().GetText()
-	} else if tpl := evt.Message.GetTemplateMessage(); tpl != nil {
-		// O /chat/send/template envia TemplateMessage no topo, sem invólucro
-		// (messenger.go:633). Verificado no adapter antes de escrever o ramo.
-		messageType = messageTypeTemplate
-		caption = templateText(tpl)
-	} else if list := evt.Message.GetListMessage(); list != nil {
-		// O getter direto BASTA, e a primeira versão deste ramo não achava que
-		// bastasse — vale registar porquê, para ninguém o "consertar" de volta.
-		//
-		// O nosso /chat/send/list embrulha a lista em
-		// DocumentWithCaptionMessage (messenger_list.go:116), e daí eu ter
-		// escrito um ajudante que desembrulhava. Mas events.Message.UnwrapRaw
-		// (events/message.go:155) já desembrulhou esse invólucro antes de o
-		// evento nos chegar, e o ajudante nunca chegava à sua segunda linha.
-		// Era código morto abençoado por um teste que montava o evento à mão,
-		// sem UnwrapRaw — a produção nunca vê aquela forma (HOUSEKEEP F188).
-		//
-		// O `wire_type=media` medido em campo para uma lista continua a ser
-		// verdade e continua a vir do invólucro: o servidor rotula pelo que
-		// está por fora, mesmo que o cliente desembrulhe.
-		messageType = messageTypeList
-		caption = listText(list)
-	} else if buttons := evt.Message.GetButtonsMessage(); buttons != nil {
-		// O formato LEGADO de botões. Não é o que nós enviamos, mas é o que
-		// pode chegar de outro cliente, e o ramo de recepção existe para o
-		// que CHEGA, não para o que sai. Deixá-lo de fora faria o teste de
-		// campo passar com os nossos próprios envios e continuar a perder os
-		// de terceiros — a Armadilha 1, medida contra o emissor errado.
-		messageType = messageTypeButtons
-		caption = buttons.GetContentText()
+	if classificacao.DeletedID != "" {
+		log.Info().Str("deletedMessageID", classificacao.DeletedID).
+			Str("messageID", evt.Info.ID).Msg("Delete message detected")
 	}
-
-	// Extract text content for non-reaction and non-delete messages
-	if messageType != "reaction" && messageType != "delete" {
-		if conv := evt.Message.GetConversation(); conv != "" {
-			textContent = conv
-		} else if ext := evt.Message.GetExtendedTextMessage(); ext != nil {
-			textContent = ext.GetText()
-			// Check if this is a reply to another message
-			if contextInfo := ext.GetContextInfo(); contextInfo != nil && contextInfo.GetStanzaID() != "" {
-				replyToMessageID = contextInfo.GetStanzaID()
-			}
-		} else {
-			textContent = caption
-		}
-
-		// Set default text content for media messages without captions
-		if textContent == "" {
-			textContent = defaultHistoryTextFor(messageType, textContent)
-		}
-	}
-
-	// Check for replies in regular conversation messages too.
-	// For regular text messages, reply detection currently relies on
-	// ExtendedTextMessage handled above; plain Conversation messages
-	// carry no reply context in the WhatsApp message structure, so
-	// there is nothing further to do here.
 
 	// Try to get media link from S3 data if available
 	if s3Data, ok := st.postmap["s3"].(map[string]interface{}); ok {
@@ -536,6 +397,35 @@ const (
 	// bug à espera de divergir — que é literalmente o que a F187 é.
 	messageTypeButtonsResponse = "buttons_response"
 	messageTypeListResponse    = "list_response"
+
+	// Os oito tipos mais antigos eram literais espalhados pela cadeia. Passam a
+	// constantes agora porque a classificação foi extraída para
+	// message_classify.go e cada valor passou a existir em DOIS sítios — o
+	// ramo e o marcador —, que é o limiar do ADR-0004.
+	//
+	// Não é conversão em massa por estética: são exatamente os valores que a
+	// extração tocou.
+	messageTypeText     = "text"
+	messageTypeDelete   = "delete"
+	messageTypeReaction = "reaction"
+	messageTypeImage    = "image"
+	messageTypeVideo    = "video"
+	messageTypeAudio    = "audio"
+	messageTypeDocument = "document"
+	messageTypeSticker  = "sticker"
+	messageTypeContact  = "contact"
+	messageTypeLocation = "location"
+
+	// F184 residual: os nove tipos que chegavam e eram descartados.
+	messageTypePollUpdate          = "poll_update"
+	messageTypeInteractiveResponse = "interactive_response"
+	messageTypeEvent               = "event"
+	messageTypeLiveLocation        = "live_location"
+	messageTypePtv                 = "ptv"
+	messageTypeGroupInvite         = "group_invite"
+	messageTypeOrder               = "order"
+	messageTypeProduct             = "product"
+	messageTypeContactsArray       = "contacts_array"
 )
 
 // editedText is the new text of an edit, taken from the edited message the
@@ -621,6 +511,24 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 		return ":buttons_response:"
 	case messageTypeListResponse:
 		return ":list_response:"
+	case messageTypePollUpdate:
+		return ":poll_update:"
+	case messageTypeInteractiveResponse:
+		return ":interactive_response:"
+	case messageTypeEvent:
+		return ":event:"
+	case messageTypeLiveLocation:
+		return ":live_location:"
+	case messageTypePtv:
+		return ":ptv:"
+	case messageTypeGroupInvite:
+		return ":group_invite:"
+	case messageTypeOrder:
+		return ":order:"
+	case messageTypeProduct:
+		return ":product:"
+	case messageTypeContactsArray:
+		return ":contacts_array:"
 	case "contact":
 		if textContent == "" {
 			return ":contact:"

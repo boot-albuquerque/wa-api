@@ -144,72 +144,27 @@ func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accoun
 		return false
 	}
 
-	// Extract message type and content
-	messageType := "unknown"
-	textContent := ""
+	// A classificação vive em message_classify.go, PARTILHADA com o caminho de
+	// tempo real (F187). As duas cadeias divergiram nas DUAS direções ao longo
+	// do dia; a única forma de pararem é não haver duas.
+	classificacao := classifyMessage(message)
+	messageType := classificacao.Type
+	textContent := classificacao.Text
+	quotedMessageID := classificacao.QuotedID
 	mediaLink := ""
-	quotedMessageID := ""
 
-	if message.GetConversation() != "" {
-		messageType = "text"
-		textContent = message.GetConversation()
-	} else if ext := message.GetExtendedTextMessage(); ext != nil {
-		messageType = "text"
-		textContent = ext.GetText()
-		if contextInfo := ext.GetContextInfo(); contextInfo != nil {
-			quotedMessageID = contextInfo.GetStanzaID()
-		}
-	} else if img := message.GetImageMessage(); img != nil {
-		messageType = "image"
-		textContent = img.GetCaption()
-	} else if vid := message.GetVideoMessage(); vid != nil {
-		messageType = "video"
-		textContent = vid.GetCaption()
-	} else if audio := message.GetAudioMessage(); audio != nil {
-		messageType = "audio"
-	} else if doc := message.GetDocumentMessage(); doc != nil {
-		messageType = "document"
-		textContent = doc.GetCaption()
-	} else if sticker := message.GetStickerMessage(); sticker != nil {
-		messageType = "sticker"
-	} else if location := message.GetLocationMessage(); location != nil {
-		messageType = "location"
-		textContent = location.GetName()
-	} else if contact := message.GetContactMessage(); contact != nil {
-		messageType = "contact"
-		textContent = contact.GetDisplayName()
-	} else if buttons := message.GetButtonsResponseMessage(); buttons != nil {
-		messageType = "buttons_response"
-		textContent = buttons.GetSelectedButtonID()
-	} else if list := message.GetListResponseMessage(); list != nil {
-		messageType = "list_response"
-		textContent = list.GetSingleSelectReply().GetSelectedRowID()
-	} else if reaction := message.GetReactionMessage(); reaction != nil {
-		messageType = "reaction"
-		textContent = reaction.GetText()
-		if key := reaction.GetKey(); key != nil {
-			quotedMessageID = key.GetID()
-		}
-	}
-
-	// Set default text for media messages without captions
-	if textContent == "" && messageType != "text" && messageType != "reaction" && messageType != "delete" {
-		switch messageType {
-		case "image":
-			textContent = ":image:"
-		case "video":
-			textContent = ":video:"
-		case "audio":
-			textContent = ":audio:"
-		case "document":
-			textContent = ":document:"
-		case "sticker":
-			textContent = ":sticker:"
-		case "contact":
-			textContent = ":contact:"
-		case "location":
-			textContent = ":location:"
-		}
+	// A ÚNICA diferença que sobrevive de propósito: este caminho chama
+	// "unknown" ao que não reconhece, e o de tempo real chama "text".
+	//
+	// Não as alinhei porque isto é dado GRAVADO: há 689 linhas com
+	// `message_type = "unknown"` na tabela, e mudar o rótulo agora tornaria a
+	// coluna inconsistente entre o que já lá está e o que entrar a seguir —
+	// trocaria uma divergência de código, invisível ao cliente, por uma
+	// divergência de DADO, que ele vê.
+	//
+	// Alinhá-las é decisão de produto com migração, não limpeza de código.
+	if messageType == messageTypeText && textContent == "" {
+		messageType = "unknown"
 	}
 
 	// Get message timestamp
