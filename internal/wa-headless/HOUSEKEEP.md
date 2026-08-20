@@ -2078,8 +2078,41 @@ Se todos forem antigos, o descarte é de histórico por eliminação. Não medid
 ainda — declarado para não virar suposição confortável, que é a leitura que eu
 teria adotado sem escrever isto.
 
-**Status**: aberto por desenho, agora **com o pior caso MEDIDO e REPRODUZIDO**,
-e com uma pergunta aberta explícita sobre o que exatamente se perde.
+### A pergunta aberta foi RESPONDIDA — 2026-08-20, por eliminação
+
+O que se perde na rajada é **reposição de histórico**, não entrega ao vivo.
+
+O instrumento registra o CARIMBO dos eventos que **atravessam** a rajada, já que
+`Dropped` conta quantos e nunca quais — um evento recusado não chega a ser
+materializado. Resultado:
+
+```
+BURST at t+1m0s: dropped=421, of the 500 that came through
+                 the NEWEST is 14m52s old and 0 are under 5min
+bursts: 1, and NONE carried an event under 5min old.
+```
+
+**421 descartados**, e dos 500 que passaram o mais NOVO tinha quase 15 minutos.
+Se houvesse entrega ao vivo misturada na janela, ela apareceria entre os que
+atravessaram — a fila é FIFO e um evento recente não teria como estar só do lado
+recusado. A inferência é por eliminação e está dita como tal no código.
+
+**O que isso muda na leitura do achado**: o teto de 500 **não custa entrega em
+produção**. Ele custa histórico repetido, que é precisamente o que a
+`TestRealSPAMessageMetaDelivery` já aprendeu a ignorar — e por isso ela precisou
+do discriminador de frescor.
+
+**O que NÃO muda**: o teto continua sem medição de rajada sustentada, e
+`Drain.Dropped` continua sendo a única defesa contra perda silenciosa. A decisão
+de contar o descarte segue sendo o que torna o teto aceitável, agora por dois
+motivos em vez de um.
+
+**E a leitura confortável estava certa** — o que só se sabe porque foi medida.
+Eu registrei explicitamente que a adotaria sem verificar; verificar custou uma
+corrida de quatro minutos.
+
+**Status**: aberto por desenho, com o pior caso **MEDIDO, REPRODUZIDO e
+CARACTERIZADO**: rajada de histórico após o pareamento, sem custo de entrega.
 
 ## H26 — o teste de posse concorrente culpava a posse quando o host é que não deu conta
 
