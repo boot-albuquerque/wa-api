@@ -6695,8 +6695,54 @@ $ git show HEAD:pkg/presentation/http/handlers/handler_boundary_test.go | gofmt 
 Reforca a correcao sugerida: sem `gofmt -l` no alvo `check`, o numero cresce
 em silencio — era um arquivo na F133 e sao tres uma sessao depois.
 
-**Status**: nao corrigido. E pre-existente e fora do escopo do FIX-F130; pela
-politica do `CLAUDE.md`, nao corrijo de graca sem perguntar.
+**Status**: **CORRIGIDO** no CAP-45, e o achado tinha CRESCIDO desde 2026-08-19.
+
+**Medição de 2026-08-20**: eram QUATRO arquivos fora do `gofmt`, não um —
+`pkg/bootstrap/config.go`, `pkg/application/usecase/message/send_video_internal_test.go`,
+`pkg/application/usecase/user/add_user.go` e
+`pkg/bootstrap/stdio_route_consistency_test.go`.
+
+**E DOIS deles entraram em commits MEUS de hoje**: `31f76ee` (F163) e `b293ff9`
+(F173 parte 1). No `add_user.go` o executor acrescentou o campo `s3Cipher` ao
+struct e não realinhou o bloco; passou no gate porque o gate não olhava.
+
+**Por que isto importa mais do que 46 linhas de alinhamento**: usei
+`make check` EXIT 0 como critério de aceitação em cada bloco desta sessão, e
+recusei três entregas com base nele. Ele deixou passar arquivos mal formatados
+que eu própria commitei. É a SEGUNDA vez no mesmo dia que a ferramenta de
+medição se prova incompleta — a primeira foram os fixtures de SQLite sem WAL
+([[F161]]).
+
+**A correção tem duas partes, e a segunda é a que impede a reincidência:**
+
+1. `gofmt -w` nos quatro. Diff simétrico — 19 inserções contra 19 remoções —,
+   que é a assinatura de mudança só de alinhamento. `go build ./...` limpo.
+2. **`fmt-gate` novo no `Makefile`**, dentro de `check`, entre `vet` e `test`.
+   Falha nomeando os arquivos e dizendo o comando de correção. Cobre `pkg/` e
+   `cmd/` apenas: `internal/wa-noise/` é vendorizado e acompanha o upstream.
+
+**Controle negativo EXECUTADO**: desalinhei um `import` em `config.go`
+de propósito e o gate reprovou:
+
+```
+FALHA: arquivos fora do formato gofmt:
+       pkg/bootstrap/config.go
+       Rode: gofmt -w <arquivo>
+make: *** [fmt-gate] Error 1
+```
+
+Restaurado por cópia de backup, conferido com `diff`.
+
+**Gate**: `make check` EXIT 0 com o alvo novo incluído, imprimindo
+`fmt: pkg/ e cmd/ formatados`.
+
+**O que o comentário do alvo registra, e é o argumento de existir**: arquivo
+desalinhado não quebra nada sozinho. O dano é que o próximo diff que tocar o
+arquivo mistura reformatação com mudança de comportamento, e a revisão deixa de
+conseguir separar as duas — que é exatamente o tipo de diff em que um defeito
+passa despercebido, como o CLAUDE.md já diz sobre conversão em massa de idioma.
+
+---
 
 ## F134 — `SendEditMessage` perdeu o `ContextInfo` que o payload histórico aceitava
 

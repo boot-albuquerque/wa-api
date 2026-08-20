@@ -345,7 +345,25 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/wa-noise/
+check: build vet fmt-gate test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + formatacao + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/wa-noise/
+
+fmt-gate: ## Falha se algum .go de pkg/ ou cmd/ divergir do gofmt (F133)
+	@# Por que este gate existe: ate' 2026-08-20 o `make check` NAO verificava
+	@# formatacao, e QUATRO arquivos divergiam sem que nada avisasse — dois deles
+	@# entraram em commits do mesmo dia que passaram no gate verde. Arquivo
+	@# desalinhado nao quebra nada sozinho; o dano e' que o proximo diff que
+	@# tocar o arquivo mistura reformatacao com mudanca de comportamento, e a
+	@# revisao deixa de conseguir separar as duas.
+	@#
+	@# So' pkg/ e cmd/: internal/wa-noise/ e' vendorizado e acompanha o upstream.
+	@out=$$($(GOCMD)fmt -l pkg cmd 2>/dev/null); \
+	 if [ -n "$$out" ]; then \
+	   echo "FALHA: arquivos fora do formato gofmt:"; \
+	   echo "$$out" | sed 's/^/       /'; \
+	   echo "       Rode: gofmt -w <arquivo>"; \
+	   exit 1; \
+	 fi; \
+	 echo "fmt: pkg/ e cmd/ formatados"
 
 ##@ Utilities
 

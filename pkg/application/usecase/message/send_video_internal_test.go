@@ -80,15 +80,15 @@ func TestDecodeVideoDataURIWithLimit_EarlyRejection_BeforeFullDecode(t *testing.
 // (estreitas) e Document ("data:" com dois-pontos).
 func TestIsDataVideo_WidestDiscrimination(t *testing.T) {
 	cases := map[string]bool{
-		"data:video/mp4;base64,AAAA": true,
+		"data:video/mp4;base64,AAAA":       true,
 		"data:application/pdf;base64,AAAA": true,
 		"data:image/png;base64,AAAA":       true,
-		"data":                              true,
-		"dat":                               false,
-		"da":                                false,
-		"d":                                 false,
-		"":                                  false,
-		"http://exemplo.com/v.mp4":          false,
+		"data":                             true,
+		"dat":                              false,
+		"da":                               false,
+		"d":                                false,
+		"":                                 false,
+		"http://exemplo.com/v.mp4":         false,
 	}
 	for raw, want := range cases {
 		if got := isDataVideo(raw); got != want {

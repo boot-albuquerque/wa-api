@@ -29,10 +29,10 @@ const (
 
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
-	users      appport.UserRepository
-	encryptor  appport.HmacKeyEncryptor
-	s3Cipher   appport.S3SecretCipher
-	logger     appport.Logger
+	users     appport.UserRepository
+	encryptor appport.HmacKeyEncryptor
+	s3Cipher  appport.S3SecretCipher
+	logger    appport.Logger
 }
 
 // NewAddUserUseCase cria uma nova instância.

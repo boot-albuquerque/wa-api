@@ -36,8 +36,8 @@ var (
 
 	globalHMACKeyEncrypted []byte
 
-	webhookRetryEnabled      = flag.Bool("webhookretry", true, "Enable webhook retry mechanism")
-	webhookRetryCount        = flag.Int("retrycount", 5, "Number of times to retry failed webhooks")
+	webhookRetryEnabled = flag.Bool("webhookretry", true, "Enable webhook retry mechanism")
+	webhookRetryCount   = flag.Int("retrycount", 5, "Number of times to retry failed webhooks")
 	// A base do backoff exponencial: as esperas são base×1, ×2, ×4, ×8.
 	//
 	// O padrão era 30, o que com 5 tentativas dava 30+60+120+240 = 450s —
