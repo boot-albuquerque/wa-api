@@ -12827,8 +12827,26 @@ caminho vivo faz hoje, e com que repetição de URL? Sem esse número, "pôr um
 cache" é especulação — e a regra do projeto é que especulação não entra no
 plano.
 
-**Status**: não corrigido, nada implementado. Fora do escopo da F127, que era
-deletar código morto. Levado ao canal de decisão.
+**Status**: **DUPLICATA da [[F113]]**, registrada em 2026-08-18 — dois dias
+antes desta. A F113 já descreve o MESMO defeito, no MESMO caminho
+(`Fetcher.FetchLinkPreview`, usado por `SendMessageUseCase.Execute` quando
+`LinkPreview=true`): sem cache, sem teto de concorrência, e já registrava o
+tempo limite de 60 s do `NewSafeHTTPClient`.
+
+**Erro meu**: registei um achado sem verificar se ele já existia. Num documento
+de 115 entradas isso não é só ruído — é o inventário a perder confiabilidade,
+porque quem o lê passa a não saber se dois números são dois problemas ou um.
+
+**A entrada CANÔNICA é a F113.** O que esta acrescenta e vale reter está movido
+para lá: as proteções existiam no `GetOpenGraphData` MORTO, deletado na [[F127]],
+e a deleção não as tirou de ninguém — apenas tornou visível que viviam no código
+que ninguém chamava.
+
+**O que NÃO era duplicata**: a [[F175]] (o `FetchTimeout` declarado e nunca
+aplicado, e o pior caso de 120 s coincidindo com o `WriteTimeout` do servidor)
+é achado genuinamente novo. A F113 registava os 60 s do cliente; não ligava
+isso à constante morta nem ao orçamento de escrita. Essa ligação foi o que a
+medição produziu, e foi ela que se corrigiu no CAP-41.
 
 ---
 
