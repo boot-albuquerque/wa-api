@@ -95,6 +95,40 @@ comentário — *"seguro para uso concorrente: um timer de sonda e um caminho de
 comando podem ambos perguntar"* — deixou de ser prosa. E o custo da concorrência
 virou número: **19 ms** de pior caso contra 2 ms sequencial.
 
+## 3.2 Retenção de UMA HORA sob carga (2026-08-20)
+
+`TestRealSPALongHoldUnderLoad`, 60 amostras contra o perfil pareado, com
+liveness, owner, fetch e drain rodando a cada minuto.
+
+```
+liveness not-alive: 0 | identity absent: 0 | reinstalls: 0 | dropped: 13
+latency: mediana 2ms, pior 96ms (a PRIMEIRA amostra, logo após o boot)
+RSS: first=1740MB last=760MB min=655MB max=1740MB — deriva 0,44x
+processos: 9 em 59 amostras, 10 em uma
+```
+
+**A hipótese que motivou medir era VAZAMENTO, e o dado aponta o contrário.**
+A memória cai monotonicamente do pico de boot e assenta em torno de 700-800 MB;
+a contagem de processos não cresce. Dois eixos independentes concordam, e nenhum
+dos dois foi projetado para provar isso — vieram junto porque a amostragem os
+incluía.
+
+**Os 13 descartes são todos da rajada do minuto 1** (H25), e nenhuma amostra
+posterior descartou. A assinatura seguiu entregando em volume baixo — ~23
+eventos esparsos ao longo dos 59 minutos restantes —, o que resolve por
+evidência a ambiguidade do H24: assinatura viva, não apenas instalada.
+
+**O que este número NÃO autoriza.** É tentador dividir 16 GB por 800 MB e
+declarar capacidade. Não faço isso aqui por três motivos: a `runtime/doc.go` já
+avisa que os números do spike são um PISO; esta é UMA sessão, e nada mediu a
+interação entre sessões concorrentes no mesmo host; e "sob carga" aqui são as
+NOSSAS sondas, com a conta ociosa — tráfego de entrada sustentado é outra
+medição, e precisaria de uma conta que ninguém tem.
+
+**O que ele autoriza**: dizer que uma sessão segurada por uma hora **não
+degrada** — não perde identidade, não perde a assinatura, não acumula memória
+nem processo, e para limpo no fim.
+
 ## 4. Aberto, e por quê
 
 | # | por que segue aberto |
