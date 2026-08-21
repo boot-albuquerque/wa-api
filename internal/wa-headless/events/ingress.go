@@ -184,8 +184,13 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 		// file are versioned together; a name that does not match means one of
 		// them changed alone, and forwarding it would let a subscriber match on
 		// a string that means nothing.
+		//
+		// The list is PageTypes, not KnownTypes, and that is deliberate: a
+		// session.* name arriving from the page would mean the page is claiming
+		// to know something only this process can know, which is exactly the
+		// forgery this filter exists to refuse.
 		known := false
-		for _, k := range KnownTypes {
+		for _, k := range PageTypes {
 			if k == t {
 				known = true
 				break
@@ -195,7 +200,7 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			continue
 		}
 		evs = append(evs, Event{
-			Type: t, Seq: r.Seq, At: time.UnixMilli(r.At),
+			Type: t, Origin: SourcePage, Seq: r.Seq, At: time.UnixMilli(r.At),
 			ChatJID: r.Chat, MessageID: r.Msg, FromMe: r.FromMe,
 			Kind: r.Kind, Ack: r.Ack, BodyLen: r.BodyLen,
 		})

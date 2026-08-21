@@ -6736,3 +6736,124 @@ A diferença entre "não implementamos" e "medimos que este caminho não entrega
 não adianta. As três agora dizem.
 
 **Status**: entregue.
+
+---
+
+## H88 — o ciclo de vida da sessão entra no barramento por uma porta, não por dependência
+
+**Data**: 2026-08-21.
+**Contexto**: LIFECYCLE-EVENTS, a família que a orquestração mandou fechar
+antes de voltar às capacidades.
+
+### O problema que a decisão evita
+
+Os seis tipos que o barramento já tinha vêm todos das coleções da página. Os
+eventos de sessão do upstream — `READY`, `DISCONNECTED`, `STATE_CHANGED` — não
+vêm de coleção nenhuma: **a página não tem como saber** que um boot verificou um
+inventário de módulos, nem que o Go decidiu pará-la. Esses fatos só existem
+deste lado.
+
+O movimento óbvio seria o `core` publicar no Hub. Isso faria a camada que **é
+dona do browser** depender da camada que apenas o reporta, e todo consumidor
+futuro do barramento arrastaria o ciclo de vida da sessão atrás de si.
+
+### O que foi feito
+
+Uma porta, com as três pontas separadas:
+
+```
+core (declara o callback)  →  runtime (o único que conhece os dois lados)  →  events (segunda porta do Hub)
+```
+
+- `core/lifecycle.go`: `LifecycleFact` / `LifecycleObserver`, e
+  `StartConfig.OnLifecycle`. **`core` não importa `events`.**
+- `events`: `Hub.PublishSessionState`, `Origin` (`page` / `local`), e a divisão
+  de `KnownTypes` em `PageTypes` + `LocalTypes`.
+- `runtime/lifecycle.go`: `Holder.AttachHub` e `StateWatcher`. **É o único
+  arquivo que importa os dois.**
+
+Quatro tipos novos: `session.ready`, `session.boot_failed`, `session.stopped`,
+`session.state_changed`.
+
+### As quatro decisões que não são estilo
+
+1. **`Seq` fica ZERO nos fatos locais.** O Hub conta salto de sequência como
+   evento perdido. Um fato de ciclo de vida com sequência inventada entre dois
+   eventos de página seria contado como perda — e o teste
+   `TestLifecycleFactsDoNotCorruptTheGapCount` mede exatamente isso: com `Seq:
+   999` o contador de lacunas foi a **991**.
+
+2. **`Reason` é vocabulário FECHADO** (um `BootStage`, um `StopVia`), nunca um
+   erro formatado. Mensagem de erro é por onde um caminho de perfil ou um jid
+   acabaria vazando para o único lugar que toda capacidade lê.
+
+3. **O observer roda FORA do mutex da sessão.** Um handler que reage à morte
+   derrubando mais coisa chama `Stop` de volta. O controle negativo que emitiu
+   dentro do lock não falhou com mensagem: **travou**, e o Go reportou
+   `panic: test timed out after 40s`.
+
+4. **Só a TRANSIÇÃO é evento.** O `StateWatcher` produz um veredito por tique e
+   publica só quando ele muda. Um barramento que repete "ainda vivo" a cada dois
+   segundos é heartbeat vestido de evento: custa um acordar a cada assinante
+   para não dizer nada, e enterra a mensagem que importava. O **primeiro**
+   veredito sempre é evento — sem ele, quem assina uma sessão já morta não ouve
+   nada até ela mudar de novo, o que para um processo morto é nunca.
+
+### O que NÃO entrou, e por quê
+
+`AUTHENTICATED`, `CODE_RECEIVED`, `LOADING_SCREEN` e `REMOTE_SESSION_SAVED`
+ficam `MISSING` **com motivo escrito**: não há fatia de pareamento, não há store
+remoto, e o loop de settle mede CLASSES de página e não progresso de carga.
+Declarar os quatro custaria nada e compraria um barramento que parece completo.
+
+`AUTHENTICATION_FAILURE` subiu para `PARTIAL`: o evento carrega o **estágio** do
+boot, mas não a **classe da página**, que é o que distingue "ainda montando" de
+"tela de QR, precisa de um humano". `BootFailure` guarda a classe na mensagem de
+erro, e mensagem de erro não entra no barramento (ver decisão 2). Fechar isso
+pede um campo próprio em `BootFailure` — registrado, não feito.
+
+### Defeito encontrado de lado: o gate do ledger contava a coisa errada
+
+`TestTheLedgerUsesOnlyTheDeclaredVocabulary` procurava estados por **forma**
+(maiúsculas entre crases, em qualquer lugar do arquivo). Uma NOTA que citou o
+vocabulário de liveness deste módulo fez o gate acusar três estados que nunca
+foram estados: `ALIVE`, `PROCESS_GONE`, `APP_ABSENT`.
+
+A primeira correção — "o estado é a terceira célula" — **perdeu 28 linhas em
+silêncio**, porque o ledger tem TRÊS formatos de tabela (sete colunas, quatro, e
+duas para as caudas inteiramente não atacadas). O gate passou verde com 110 de
+138 `MISSING`.
+
+A correção certa lê o **cabeçalho da própria tabela** (`estado`) e usa aquele
+índice nas linhas abaixo. É a terceira vez que este arquivo aprende a mesma
+lição: ancore no que o documento diz de si, nunca no que as linhas parecem.
+
+**Controles negativos executados** (todos falharam como devido):
+
+| mutação | teste | saída |
+|---|---|---|
+| `LifecycleFact{Phase: PhaseReady}` sem `WasSuspect` | `TestLifecycle_ReadyRemembersTheProfileWasSuspect` | "a verified recovery is indistinguishable from an ordinary start" |
+| emitir o stop DENTRO do mutex | `TestLifecycle_ObserverMayCallBackIntoTheSession` | `panic: test timed out after 40s` |
+| não copiar `bf.Stage` para o `Reason` | `TestLifecycle_BootFailureCarriesTheStage` + `...EarliestFailureReports` | `reason "", want the stage "not_ready"` |
+| `Origin: SourcePage` no publish local | `TestPublishSessionState_DeliversWithALocalOrigin` | `origin = "page", want "local"` |
+| `Seq: 999` no publish local | `TestLifecycleFactsDoNotCorruptTheGapCount` | `gaps = 991, want 0` |
+| `MessageAdded` também em `LocalTypes` | `TestTypeListsAreDisjointAndComplete` | `"message.added" is in both` |
+| `AttachHub` sem a recusa pós-boot | `TestAttachHub_RefusesAfterTheBootItWouldHaveMissed` | "accepted a Holder that had already booted" |
+| `moved := true` no watcher | `TestStateWatcher_OnlyTransitionsReachTheBus` | `9 events for one unchanging state` |
+| watcher suprimindo o primeiro veredito | idem | `condition never held within 5s` |
+| `getBatteryStatus` de `MISSING` para `PROVEN` (linha de DUAS colunas) | `TestTheLedgerScoreboardMatchesItsRows` | `says 138 MISSING and the rows contain 137` |
+| estado `ALMOST` numa linha de SETE colunas | `TestTheLedgerUsesOnlyTheDeclaredVocabulary` | `state "ALMOST" is not in the declared vocabulary` |
+
+As duas últimas provam que o gate corrigido enxerga os **três** formatos de
+tabela — que é a falha que a primeira correção tinha.
+
+### Um erro meu no caminho
+
+O primeiro `TestStateWatcher_OnlyTransitionsReachTheBus` começava com o processo
+VIVO e um avaliador que falhava, e acusou o watcher de repetir eventos. Não
+repetia: `PAGE_SLOW` vira `PAGE_UNRESPONSIVE` quando a sequência de falhas cruza
+o limiar do monitor, então a perna "estado que não muda" estava medindo um
+estado que muda sozinho. Trocado por `PROCESS_GONE`, que é estável porque
+curto-circuita antes de qualquer sonda de página.
+
+**Status**: entregue.

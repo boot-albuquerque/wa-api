@@ -171,7 +171,7 @@ func TestTheEventCarriesNoContent(t *testing.T) {
 // installed for a name nothing subscribes to, or the reverse.
 func TestThePageAndGoAgreeOnTheEventNames(t *testing.T) {
 	script := installScript()
-	for _, ty := range KnownTypes {
+	for _, ty := range PageTypes {
 		if !strings.Contains(script, "'"+string(ty)+"'") {
 			t.Errorf("the ingress installs no handler that emits %q", ty)
 		}
@@ -179,7 +179,7 @@ func TestThePageAndGoAgreeOnTheEventNames(t *testing.T) {
 	// And nothing is emitted that Go would throw away.
 	for _, emitted := range []string{"message.added", "message.ack", "chat.changed"} {
 		found := false
-		for _, ty := range KnownTypes {
+		for _, ty := range PageTypes {
 			if string(ty) == emitted {
 				found = true
 			}

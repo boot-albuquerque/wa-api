@@ -204,6 +204,9 @@ type StartConfig struct {
 	// unless single ownership is proven by a lease outside this package.
 	Hostname            string
 	AllowForeignProfile bool
+	// OnLifecycle receives this session's lifecycle facts. Nil is the ordinary
+	// case; see core/lifecycle.go for why this is a callback and not a bus.
+	OnLifecycle LifecycleObserver
 }
 
 // Session is a live, READY headless session — the state that outlives a
@@ -219,6 +222,15 @@ type Session struct {
 	// caller's boot context — see the sessionCtx block in StartSession — so
 	// the only thing that ends a live session is Stop.
 	cancelSession context.CancelFunc
+
+	// wasSuspect records that this profile carried a suspect marker when the
+	// boot that produced this session started. It is reported with the ready
+	// fact, because a ready that RECOVERED a suspect profile is a different
+	// thing from an ordinary one.
+	wasSuspect bool
+	// onLifecycle is the observer this session was started with, so a Stop
+	// reaches the same listener a ready did.
+	onLifecycle LifecycleObserver
 
 	mu      sync.Mutex
 	stopped bool
@@ -282,6 +294,14 @@ func (s *Session) Stop(ctx context.Context) engine.StopVia {
 	if s.release != nil {
 		s.release()
 	}
+	obs := s.onLifecycle
+	s.mu.Unlock()
+	// OUTSIDE THE LOCK, and the manual Unlock above is why the deferred one is
+	// not used on this path. An observer that calls back into Stop — which a
+	// "the session died, tear everything down" handler does on its first day —
+	// would deadlock against the mutex this function still held.
+	emit(obs, stopFact(via))
+	s.mu.Lock()
 	return via
 }
 
@@ -292,6 +312,26 @@ func (s *Session) Stop(ctx context.Context) engine.StopVia {
 // navigation is StageNotReady, full stop. There is no fallback to a pairing
 // flow here — that is a separate, human-authorised slice.
 func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
+	sess, err := startSession(ctx, cfg)
+	if err != nil {
+		// EVERY FAILURE PATH REPORTS, and this wrapper is why. The boot has a
+		// dozen returns and a fact emitted at each of them would be a dozen
+		// places to forget one — which is the same reasoning that put the
+		// teardown behind a single fail().
+		f := LifecycleFact{Phase: PhaseBootFailed}
+		var bf *BootFailure
+		if errors.As(err, &bf) {
+			f.Reason, f.WasSuspect = string(bf.Stage), bf.WasSuspect
+		}
+		emit(cfg.OnLifecycle, f)
+		return nil, err
+	}
+	sess.onLifecycle = cfg.OnLifecycle
+	emit(cfg.OnLifecycle, LifecycleFact{Phase: PhaseReady, WasSuspect: sess.wasSuspect})
+	return sess, nil
+}
+
+func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	if cfg.BinaryPath == "" {
 		return nil, &BootFailure{Stage: StageConfig, Cause: fmt.Errorf("core: BinaryPath is required")}
 	}
@@ -468,5 +508,6 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		cancelSession: cancelSession,
 		profileDir:    absProfile,
 		release:       release,
+		wasSuspect:    wasSuspect,
 	}, nil
 }

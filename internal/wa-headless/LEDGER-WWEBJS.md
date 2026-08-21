@@ -299,15 +299,21 @@ nem `PARTIAL` sem justificativa explícita.
 
 ## Events
 
-Trinta e um eventos no upstream. Nós **não temos barramento de eventos**: as
-capacidades que observam mudanças o fazem por assinatura pontual. Isso é
-divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
+Trinta e um eventos no upstream. Nós temos barramento (`events/`) desde a H87,
+com **duas** origens: a página (uma instalação, um buffer, uma sequência) e este
+processo (fatos de ciclo de vida, que a página não tem como conhecer). As duas
+não compartilham relógio nem sequência, e o `Origin` do evento diz qual é qual.
+
+O ciclo de vida chega ao barramento por uma **porta**, não por dependência:
+`core` declara um callback e não conhece `events`; `events` expõe uma segunda
+porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lados
+(H88).
 
 | upstream | wa-headless | estado | nota |
 |---|---|---|---|
-| `AUTHENTICATED` | — | `MISSING` | sem equivalente |
-| `AUTHENTICATION_FAILURE` | — | `MISSING` | sem equivalente |
-| `READY` | core.StartSession | `PROVEN` | — |
+| `AUTHENTICATED` | — | `MISSING` | **sem observável neste build**: o boot ou chega a APP_READY verificado ou falha; não há um degrau "credenciais aceitas, app ainda montando" que este módulo consiga distinguir (H88) |
+| `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PARTIAL` | o evento carrega o ESTÁGIO do boot; um boot que morre em `not_ready` contra uma tela de QR é o caso do upstream, mas o MOTIVO (a classe da página) não viaja no evento — `BootFailure` o guarda na mensagem de erro, e mensagem de erro não entra no barramento (H88) |
+| `READY` | events.SessionReady | `PROVEN` | no barramento desde a H88, e distingue um ready ORDINÁRIO de um que recuperou um perfil suspeito — a quitação da invariante 2 fica contada em vez de inferida |
 | `CHAT_REMOVED` | — | `MISSING` | sem equivalente |
 | `CHAT_ARCHIVED` | events.ChatChanged | `PARTIAL` | o nosso evento é grosso: diz que a conversa mudou, não QUAL campo (H87) |
 | `MESSAGE_RECEIVED` | events.MessageAdded | `PROVEN` | disparado ao vivo por um envio (H87) |
@@ -328,13 +334,13 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | `GROUP_MEMBERSHIP_REQUEST` | — | `MISSING` | sem equivalente |
 | `GROUP_UPDATE` | — | `MISSING` | sem equivalente |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
-| `CODE_RECEIVED` | — | `MISSING` | sem equivalente |
-| `LOADING_SCREEN` | — | `MISSING` | sem equivalente |
-| `DISCONNECTED` | capabilities/liveness | `PARTIAL` | detectamos sessão morta; não emitimos evento |
-| `STATE_CHANGED` | capabilities/liveness | `PARTIAL` | idem |
+| `CODE_RECEIVED` | — | `MISSING` | **depende de uma família que não existe**: o pareamento por código não é uma fatia deste módulo (H88) |
+| `LOADING_SCREEN` | — | `MISSING` | **sem observável neste build**: o loop de settle mede CLASSES de página, não progresso de carga (H88) |
+| `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
+| `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
 | `BATTERY_CHANGED` | — | `MISSING` | sem equivalente |
 | `INCOMING_CALL` | — | `MISSING` | sem equivalente |
-| `REMOTE_SESSION_SAVED` | — | `MISSING` | sem equivalente |
+| `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
 | `VOTE_UPDATE` | — | `MISSING` | sem equivalente |
 
 ## Placar
@@ -342,8 +348,8 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 41 | 18% |
-| `PARTIAL` | 36 | 16% |
+| `PARTIAL` | 37 | 16% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 139 | 63% |
+| `MISSING` | 138 | 63% |
 | **total** | **220** | |

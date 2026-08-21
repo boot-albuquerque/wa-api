@@ -60,22 +60,75 @@ const (
 	// worth delivering anyway, because "go look" is more than silence, and is
 	// stated here rather than discovered.
 	MessageReaction Type = "message.reaction"
+
+	// SessionReady is a session reaching a VERIFIED ready: the page classified
+	// APP_READY and the module inventory passed on that same boot. It is not
+	// "the browser started".
+	SessionReady Type = "session.ready"
+	// SessionBootFailed is a boot that did not reach ready. Reason is the boot
+	// STAGE, which is what says whether the repair is waiting, relaunching, or
+	// a human with a phone.
+	SessionBootFailed Type = "session.boot_failed"
+	// SessionStopped is a session torn down through the module's one shutdown
+	// path, carrying how it went (Reason is the StopVia).
+	SessionStopped Type = "session.stopped"
+	// SessionStateChanged is a liveness verdict that DIFFERS from the previous
+	// one. Every probe produces a verdict; only a transition is an event,
+	// because a bus that repeats "still alive" twice a second is a heartbeat
+	// wearing an event's clothes.
+	SessionStateChanged Type = "session.state_changed"
 )
 
-// KnownTypes is every type the ingress installs a handler for. It exists so a
+// Source says where an event came from, because the two origins do not share a
+// clock or a sequence and a subscriber that sorts by Seq needs to know which
+// events are even comparable.
+type Source string
+
+const (
+	// SourcePage is the SPA's own collections, sequenced in the page.
+	SourcePage Source = "page"
+	// SourceLocal is this process observing itself — a boot, a stop, a
+	// liveness transition. It has NO page sequence, so Seq is zero and stays
+	// zero: inventing one would put lifecycle facts into an order they were
+	// never measured in.
+	SourceLocal Source = "local"
+)
+
+// PageTypes is every type the ingress installs a handler for. It exists so a
 // test can assert the page side and the Go side agree, which is the failure
 // nobody notices: a handler installed for an event nothing subscribes to, or a
 // subscription for an event never installed.
-var KnownTypes = []Type{
+var PageTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
 	MessageRevoked, MessageEdited, ContactChanged, MessageReaction,
 }
+
+// LocalTypes is every type published from Go rather than from the page.
+//
+// THE SPLIT IS NOT BOOKKEEPING. The page/Go agreement test asserts that every
+// name in the install script has a Type and back; a lifecycle name would fail
+// that test for the right reason — the page really does not emit it — and the
+// only way to keep the test honest is to say which list it governs.
+var LocalTypes = []Type{
+	SessionReady, SessionBootFailed, SessionStopped, SessionStateChanged,
+}
+
+// KnownTypes is every type this bus can deliver, from either origin.
+var KnownTypes = append(append([]Type{}, PageTypes...), LocalTypes...)
 
 // EVERY TYPE HERE IS ONE THIS MODULE CAN TRIGGER AND HAS TRIGGERED. The upstream
 // has 31 events and it would be easy to declare 31 names, install 31 listeners,
 // and ship a bus whose quiet halves nobody notices. A name that has never been
 // seen firing is a promise, not a capability — so a type is added when a live
 // test can make it happen on demand, and not before.
+//
+// THE RULE COST THE LIFECYCLE FAMILY FOUR NAMES. The upstream has nine session
+// events; this bus has four, because AUTHENTICATED, CODE_RECEIVED,
+// LOADING_SCREEN and REMOTE_SESSION_SAVED have no observable in this build —
+// there is no pairing slice, no remote store, and the settle loop measures page
+// CLASSES rather than load progress. Declaring them would have cost nothing and
+// bought a bus that looks complete. They are in the ledger with that reason
+// written down instead (H88).
 
 // Event is one thing that happened.
 //
@@ -85,11 +138,17 @@ var KnownTypes = []Type{
 // looks. Identity is a jid, which callers need to route on; bodies are lengths.
 type Event struct {
 	Type Type
+	// Origin says whether the page produced this or this process did. It is
+	// always set on delivery; a zero Origin reaching a subscriber is a bug in
+	// whoever built the event, and a test asserts both producers fill it.
+	Origin Source
 	// Seq is assigned IN THE PAGE, before the boundary. Two events observed by
 	// different subscribers can be ordered against each other because of it,
 	// and a gap in it is a dropped event that nobody has to guess about.
 	Seq int64
-	// At is when the page saw it, in the page's own clock. It is reported for
+	// At is when it was seen: the PAGE's clock for SourcePage, Go's for
+	// SourceLocal. Two events from different origins are therefore not
+	// comparable by this field, which is why Origin exists. It is reported for
 	// diagnosis and never used to decide anything — invariant 6 keeps decisions
 	// on this side.
 	At time.Time
@@ -111,11 +170,21 @@ type Event struct {
 	// BodyLen is the message body's length in UTF-16 units — the page's own
 	// measure — never the body.
 	BodyLen int
+
+	// State is the lifecycle state for the session.* events: the liveness
+	// signal for SessionStateChanged, empty otherwise.
+	State string
+	// Reason is why, for the session.* events — a boot stage, a StopVia, a
+	// page class. It is a CLOSED vocabulary from this module's own constants,
+	// never a formatted error: an error string is where a profile path or a
+	// jid would eventually leak into the one place every capability reads.
+	Reason string
 }
 
 func (e Event) String() string {
-	return fmt.Sprintf("events.Event(type=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d)",
-		e.Type, e.Seq, e.Replay, e.ChatJID != "", e.MessageID != "", e.FromMe, e.Kind, e.Ack, e.BodyLen)
+	return fmt.Sprintf("events.Event(type=%s origin=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d state=%s reason=%s)",
+		e.Type, e.Origin, e.Seq, e.Replay, e.ChatJID != "", e.MessageID != "", e.FromMe, e.Kind, e.Ack, e.BodyLen,
+		e.State, e.Reason)
 }
 
 // Handler receives one event. It runs on the Hub's delivery goroutine, so a
@@ -251,6 +320,32 @@ func (h *Hub) deliver(e Event) {
 	for _, fn := range targets {
 		fn(e)
 	}
+}
+
+// PublishSessionState is how a source OUTSIDE the page reports a lifecycle
+// fact: a boot that reached ready, a stop, a liveness verdict that moved.
+//
+// WHY THE HUB HAS A SECOND DOOR AT ALL. Everything else on this bus is
+// something the SPA did, and the pump is the only one allowed to say so. But a
+// session's own life is not visible from inside the page: the page cannot know
+// that its process was launched by a boot that verified an inventory, nor that
+// Go has decided to stop it. Those facts exist only here, so they enter here.
+//
+// THE DIRECTION OF THE DEPENDENCY IS THE POINT. This does not import core, and
+// core does not import this. core hands its facts to a callback it declares
+// itself, and the composition layer is the only place that knows both sides —
+// which is what keeps "how a session is born" out of every capability that
+// merely wants to hear about it.
+//
+// Seq stays zero: see SourceLocal.
+func (h *Hub) PublishSessionState(t Type, state, reason string) {
+	h.deliver(Event{
+		Type:   t,
+		Origin: SourceLocal,
+		At:     time.Now(),
+		State:  state,
+		Reason: reason,
+	})
 }
 
 // Stats reports what the bus knows about itself.
