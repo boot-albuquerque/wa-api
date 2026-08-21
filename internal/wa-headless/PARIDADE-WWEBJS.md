@@ -822,3 +822,17 @@ existente, não carrega bytes. O caminho para bytes é `prepRawMedia` com
 2. **Não convertemos nada.** O `wwebjs` converte para WebP; nós exigimos WebP e
    dizemos isso. Enfiar um codificador no meio de um envio troca *"você mandou
    os bytes errados"* por *"sua figurinha ficou estranha"*.
+
+## §6.29 — localização e vCard: MISSING, com busca fechada
+
+`wwebjs` expõe `Location` e `Contact` como tipos de mensagem enviáveis. Neste
+build **não há primitivo de envio exportado** para eles — quatro buscas
+independentes estão registradas na H75, incluindo a superfície completa de envio
+do `Cmd`, que tem cinco chaves e nenhuma relevante.
+
+O parser de ENTRADA dá a forma da mensagem
+(`{type, kind, loc, lat, lng, clientUrl}`), o que ajuda quem retomar, mas o que
+falta não é a forma do dado: é a função que o aceita.
+
+**Status na ordenação da orquestração**: `MISSING`, com justificativa medida, e
+não `PARTIAL`.

@@ -5811,3 +5811,51 @@ um controle mente por não se aplicar, e as três foram pegas pelo mesmo `assert
 **Status**: entregue.
 **Testes**: `capabilities/send/sticker_test.go` (4 testes, três com controle
 acima) e `stickerreal_test.go`.
+
+---
+
+## H75 — localização e vCard: não entregues, e a busca está fechada
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, últimos dois itens da ordem que a orquestração deu.
+
+### Quatro buscas independentes, e nenhuma achou um caminho de envio
+
+| busca | resultado |
+|---|---|
+| enumeração por nome (`Location`, `Vcard`) | **só módulos de exibição**: `WAWebFormatLocationMsgText`, `WAWebLocationMsgDisplayClass`, `WAWebVcardMsgDisplayClass`, `WAWebSendLocationChatAction` (que exporta apenas `displayName`, ou seja, é um componente React) |
+| grep pelo campo do protocolo, `degreesLatitude` | achou o **parser de ENTRADA** — protobuf para modelo — e nada de saída |
+| módulos `AddAndSend*` carregáveis | **nenhum** |
+| superfície de envio do `Cmd` | `sendDeleteMsgs`, `sendPttRecording`, `sendRevokeMsgs`, `sendStarMsgs`, `sendUnstarMsgs` — e **zero** com `location`, `vcard` ou `contactcard` |
+
+### O que isso significa, dito com precisão
+
+Não existe primitivo de envio **exportado e carregável** para tipos de mensagem
+arbitrários neste build. O texto tem o seu
+(`WAWebSendTextMsgChatAction.sendTextMsgToChat`), a mídia tem o dela
+(`prepRawMedia` + o método do `MediaPrep`), e localização e vCard não têm
+equivalente.
+
+O parser de entrada mostra a FORMA que a mensagem tem quando chega —
+`{type: MSG_TYPE.LOCATION, kind: MsgKind.Location, loc, lat, lng, clientUrl}` —
+e isso é útil para quem for tentar de novo. O que falta não é a forma do dado: é
+a função que o aceita.
+
+### Por que parei aqui
+
+O caminho restante é dirigir a UI da página — abrir o anexo, escolher
+localização, capturar a chamada. Isso é técnica nova, muda a natureza do módulo
+(que hoje nunca toca no DOM), e não foi autorizado.
+
+**Não inventei um caminho.** A alternativa seria montar `msgData` à mão e
+procurar uma função interna não exportada para engoli-lo, que é exatamente o tipo
+de chute que a H69 cobrou caro.
+
+### O que a próxima tentativa herda
+
+O instrumento da H73 e as quatro buscas acima. Quem retomar não precisa refazer
+nenhuma delas — precisa de uma quinta ideia, e a mais provável é interceptar a
+chamada real com a UI da página, que é o que a orquestração já apontou como
+"instrumentação de captura real" na decisão que abriu esta sequência.
+
+**Status**: não entregue.

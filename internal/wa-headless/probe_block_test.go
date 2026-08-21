@@ -78,6 +78,13 @@ func TestProbeBlockShape(t *testing.T) {
 			out.canSetMyPushname = !!(C.canSetMyPushname && C.canSetMyPushname());
 			out.pushnameLen = (C.pushname || '').length;
 		} catch (e) { out.canSetMyPushname = 'THREW'; }
+		try {
+			const Cmd = window.require('WAWebCmd').Cmd;
+			const proto = Object.getPrototypeOf(Cmd) || {};
+			const keys = Object.keys(proto).concat(Object.keys(Cmd));
+			out.cmdSendKeys = keys.filter(k => /^send/i.test(k)).sort();
+			out.cmdLocationish = keys.filter(k => /location|vcard|contactcard/i.test(k));
+		} catch (e) { out.cmdSendKeys = 'THREW:' + String(e).slice(0, 80); }
 		out.blockContact = src('WAWebBlockContactAction', 'blockContact');
 		out.unblockContact = src('WAWebBlockContactAction', 'unblockContact');
 		out.blockUnblockUser = src('WAWebBlockUserJob', 'blockUnblockUser');
