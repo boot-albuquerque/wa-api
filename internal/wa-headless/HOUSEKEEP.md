@@ -7373,7 +7373,12 @@ teto do harness registrado.
 **Contexto**: reabertura da H50 com autorização humana para
 `syncToAddressbook=true`.
 
-### A quarta hipótese da H50 tem, pela primeira vez, uma observação a favor
+### A quarta hipótese da H50 teve uma observação a favor — e ela NÃO se sustentou
+
+> **CORREÇÃO, escrita no mesmo dia, algumas horas depois.** O parágrafo abaixo
+> descreve o que foi observado, e a leitura causal que eu tirei dele está
+> **errada**. Leia a seção "O que a repetição fez com esta hipótese" no fim
+> desta entrada antes de usar qualquer coisa daqui.
 
 Com as duas contas salvas na agenda uma da outra **e sincronizadas**, o teste ao
 vivo leu `subscribed=true` — o que **nunca** tinha acontecido. A H50 registrou a
@@ -7417,11 +7422,10 @@ seguidas, **uma delas com orçamento de 120 s** contra os 20 s padrão:
 
 > **Não é constante de tempo.** Dois minutos inteiros e `isSubscribed` não vira.
 
-Isso derruba a hipótese mais barata e deixa uma nova, que a H50 não tinha:
-**a subscrição parece funcionar uma vez por janela**. As duas ocorrências
-positivas conhecidas (H50 e esta) foram ambas a PRIMEIRA tentativa depois de um
-intervalo longo; todas as seguintes, em minutos, falharam. Isso tem cara de
-limitação de taxa do servidor, e não de defeito local.
+Isso derruba a hipótese mais barata e sugeriu uma nova — **a subscrição parece
+funcionar uma vez por janela** — que a tentativa com 40 minutos de intervalo
+também derrubou. Ver a seção final: nenhuma das duas ocorrências positivas está
+explicada.
 
 `subscribeBudget` virou `var` com `SetSubscribeBudget`, exatamente para que essa
 distinção seja mensurável em vez de discutível — e o doc diz que é para isso, em
@@ -7475,9 +7479,40 @@ exceção só por marcador `no-runner:` e motivo escrito.
 **Controle negativo executado**: remover o `Runner` de um dos dois consertos →
 `StartConfig literal(s) with no Runner at session_test.go:422`.
 
-**Status**: parcialmente entregue — leitor de digitação corrigido e travado; a
-subscrição tem uma observação positiva e uma hipótese nova, medida contra a
-alternativa mais barata e sobrevivendo a ela. A F100 ganhou gate.
+### O que a repetição fez com esta hipótese
+
+Quatro tentativas depois, sob condições variadas, a subscrição **não voltou a
+funcionar nenhuma vez**:
+
+| tentativa | condição | resultado |
+|---|---|---|
+| 1 | orçamento padrão de 20 s | não subscrito |
+| 2 | repetição imediata | não subscrito |
+| 3 | orçamento de **120 s** | não subscrito |
+| 4 | ~40 min de intervalo | não subscrito |
+| 5 | **esquecer, re-salvar com sync, e medir em seguida** — a sequência exata que produziu o sucesso, e desta vez com mudança real (`hadName=false`) | não subscrito |
+
+A tentativa 5 é a que decide. Ela reproduz o cenário do sucesso passo a passo e
+não reproduz o sucesso.
+
+**Então a leitura causal cai.** "Sincronizar a agenda destrava a subscrição" era
+uma inferência de UMA observação, e este repositório já tem regra para isso:
+quando a medição contraria a hipótese, a hipótese cai — inclusive se já estiver
+escrita num HOUSEKEEP com número, porque um achado com diagnóstico errado é pior
+que nenhum, já que parece resolvido.
+
+O que continua verdade: `subscribed=true` foi observado duas vezes na história
+do projeto (H50 e aqui), e nenhuma das duas foi explicada. O que deixa de ser
+verdade é que a agenda seja a explicação.
+
+**Estado de laboratório**: as contas continuam salvas uma na outra, com
+`syncToAddressbook=true`. Não faz mal e aproxima o laboratório do mundo real;
+desfaz com `WA_LAB_MUTUAL=forget`.
+
+**Status**: parcialmente entregue — leitor de digitação corrigido e travado, que
+é um defeito real consertado. A subscrição continua **sem explicação**, agora com
+cinco tentativas negativas documentadas e uma hipótese a menos. A F100 ganhou
+gate.
 
 ---
 
