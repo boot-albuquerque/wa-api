@@ -5859,3 +5859,86 @@ chamada real com a UI da página, que é o que a orquestração já apontou como
 "instrumentação de captura real" na decisão que abriu esta sequência.
 
 **Status**: não entregue.
+
+---
+
+## H76 — o ledger global de paridade, e o número que ele revelou
+
+**Data**: 2026-08-21
+**Contexto**: decisão da orquestração — *"(3) agora é prioridade absoluta.
+Pare de abrir novas capabilities e construa o GLOBAL-WWEBJS-PARITY-LEDGER antes
+de decidir localização/vCard/status."*
+**Onde**: `internal/wa-headless/LEDGER-WWEBJS.md`,
+`internal/wa-headless/gate_ledger_test.go`,
+`internal/wa-headless/testdata/wwebjs-v1.34.7-surface.txt`.
+
+### Eu tinha recebido esta ordem em 21/08 00:01 e NÃO tinha cumprido
+
+A orquestração mandou criar o ledger naquele momento. Eu segui implementando por
+família e mantendo o `PARIDADE-WWEBJS.md`, que **não é a mesma coisa**: ele lista
+o que foi ATACADO, e por construção não mostra o que nunca foi procurado.
+
+Isso está registrado como falha de execução minha, não como decisão.
+
+### O número
+
+Upstream fixado: **v1.34.7**, SHA `f935b500117e264c2b3abc25b63a280bd98182a7`,
+2026-04-24. Superfície extraída do **código-fonte** da tag — `Client`, as
+estruturas públicas e os 31 eventos.
+
+| estado | itens | fração |
+|---|---|---|
+| `PROVEN` | 35 | 15% |
+| `PARTIAL` | 31 | 14% |
+| `BLOCKED` | 2 | — |
+| `INTENTIONAL_DIFFERENCE` | 2 | — |
+| `MISSING` | 150 | **68%** |
+| **total** | **220** | |
+
+**Duzentos e vinte itens, e 150 nunca foram procurados.** Eu vinha medindo
+progresso pelo número de capacidades de que me lembrava — que é exatamente o que
+a orquestração previu ao pedir o ledger.
+
+### O que estava invisível e agora tem linha
+
+Famílias inteiras: **canais/newsletters**, **listas de transmissão**,
+**chamadas**, **comércio** (pedidos, pagamentos, catálogo), **pedidos de entrada
+em grupo**, **configurações de grupo** (quem pode falar, quem pode editar
+informação), **configurações de download automático**, **agenda de contatos**,
+**notas de cliente**, **eventos agendados**, **votos de enquete**.
+
+E itens soltos que passariam despercebidos: `markChatUnread` (temos o inverso),
+`sendStateRecording` (temos "digitando", não "gravando"), `Message.pin` (fixar
+MENSAGEM é distinto de fixar conversa), `getInviteInfo` (ler convite de terceiro,
+distinto de `getInviteCode`).
+
+### A regra de completude virou GATE, não intenção
+
+A orquestração chamou de "gate conceitual". Uma intenção não pega o modo de falha
+real: alguém acrescenta uma capacidade, atualiza a linha que estava olhando, e
+não repara nas doze que não estava.
+
+Quatro testes, todos com controle negativo executado:
+
+| teste | controle negativo | falha observada |
+|---|---|---|
+| cobre a superfície inteira | remover uma linha | `1 upstream item(s) are absent … getWWebVersion` |
+| só o vocabulário declarado | inventar `TODO_LATER` | `state "TODO_LATER" is not in the declared vocabulary` |
+| placar bate com as linhas | inflar `PROVEN` para 90 | `the scoreboard says 90 PROVEN and the rows contain 35` |
+| fixa um upstream exato | apagar o SHA | `the ledger does not record "f935b500…"` |
+
+**A superfície é versionada**, não buscada no GitHub: um gate que busca falha
+offline e, pior, passa a medir outro upstream no dia em que a tag se mexer — que
+é a deriva que o pin existe para impedir.
+
+### Duas armadilhas conhecidas reapareceram ao escrever o gate
+
+1. O teste de vocabulário acusou **dezoito nomes de EVENTO** como estados
+   inválidos: eles também são maiúsculas. Forma não separa; **dado** separa — a
+   superfície fixada lista os eventos, então eles são excluídos por nome. É a
+   mesma lição do padrão de status do HOUSEKEEP, três commits atrás.
+2. O placar veio um a mais em cada estado, porque a **tabela de vocabulário**
+   declara cada estado uma vez e estava sendo contada como dado. Recorte por
+   seção, não por forma.
+
+**Status**: entregue.

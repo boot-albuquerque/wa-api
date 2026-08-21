@@ -1,3 +1,15 @@
+> **ESTE ARQUIVO NÃO É A FONTE DE VERDADE DA PARIDADE.**
+>
+> Ele registra o que foi **atacado**, capacidade por capacidade, com a divergência
+> deliberada de cada uma e o porquê. Isso continua valendo — é onde mora o
+> *entendimento*.
+>
+> Mas ele não consegue, por construção, mostrar o que **nunca foi procurado**. A
+> fonte de verdade da paridade é o `LEDGER-WWEBJS.md`, gerado da superfície
+> pública real de um commit fixado do upstream, e travado por gate.
+>
+> Quando os dois discordarem, o ledger vence.
+
 # Paridade com o `whatsapp-web.js` — a definição executável de "equivalente"
 
 O `HANDOFF-INICIATIVA.md` §1 diz que o `wa-headless` precisa ser
