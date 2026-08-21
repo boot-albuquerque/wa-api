@@ -14,7 +14,11 @@ type policyDouble struct {
 	ok         bool
 	stage, why string
 	already    bool
+	// settleReads makes the double answer "settling" for the first N reads,
+	// which is what the page does while the metadata catches up (~1s live).
+	settleReads int
 
+	reads      int
 	kicks      int
 	lastScript string
 }
@@ -24,12 +28,17 @@ func (p *policyDouble) eval(ctx context.Context, expr string, out *string) error
 		return err
 	}
 	if strings.Contains(expr, "const s = window[") {
+		p.reads++
 		if !p.ok {
 			stage := p.stage
 			if stage == "" {
 				stage = "apply"
 			}
 			*out = fmt.Sprintf(`{"stage":%q,"ok":false,"why":%q}`, stage, p.why)
+			return nil
+		}
+		if !p.already && p.reads <= p.settleReads {
+			*out = `{"stage":"settling","ok":false,"why":""}`
 			return nil
 		}
 		*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","already":%t}`, p.already)
@@ -123,19 +132,21 @@ func TestTheGroupsOwnGateIsAskedFirst(t *testing.T) {
 	}
 }
 
-// TestARealPolicyChangeIsUnverified, for the reason H58 measured.
-func TestARealPolicyChangeIsUnverified(t *testing.T) {
+// TestARealPolicyChangeISVerified, and it used to assert the opposite (H85).
+// The metadata becomes visible in this session in about a second; the earlier
+// belief came from a control that wrote the value the group already had.
+func TestARealPolicyChangeIsVerified(t *testing.T) {
 	compressPartClock(t)
 	d := &policyDouble{ok: true}
 	got, err := policer(d).SetPolicy(context.Background(), testGroupJID, PolicyInfoAdminsOnly, true, "t")
 	if err != nil {
 		t.Fatalf("SetPolicy: %v", err)
 	}
-	if got.Verified || got.NoOp {
-		t.Fatalf("a real change claims to be confirmed: %s", got)
+	if !got.Verified {
+		t.Fatalf("a real change is not reported as confirmed: %s", got)
 	}
-	if strings.Contains(d.lastScript, "stage: 'settling'") {
-		t.Fatal("the script waits on metadata this build does not refresh in-session")
+	if !strings.Contains(d.lastScript, "stage: 'settling'") {
+		t.Fatal("the script does not hand the settling decision to Go")
 	}
 	noop := &policyDouble{ok: true, already: true}
 	n, err := policer(noop).SetPolicy(context.Background(), testGroupJID, PolicyInfoAdminsOnly, true, "t")
@@ -144,6 +155,28 @@ func TestARealPolicyChangeIsUnverified(t *testing.T) {
 	}
 	if !n.NoOp || !n.Verified {
 		t.Fatalf("a no-op is not reported as confirmed: %s", n)
+	}
+}
+
+// TestAPolicyThatNeverLandsIsUnchangedNotATimeout. The two have different
+// repairs, and this file has already spent a correction on the difference.
+func TestAPolicyThatNeverLandsIsUnchangedNotATimeout(t *testing.T) {
+	compressPartClock(t)
+	settling := func(_ context.Context, expr string, out *string) error {
+		if strings.Contains(expr, "const s = window[") {
+			*out = `{"stage":"settling","ok":false,"why":""}`
+			return nil
+		}
+		*out = `{"started":true}`
+		return nil
+	}
+	_, err := New(engine.NewRunner(), settling).
+		SetPolicy(context.Background(), testGroupJID, PolicyInfoAdminsOnly, true, "t")
+	if !errors.Is(err, ErrPolicyUnchanged) {
+		t.Fatalf("got %v, want ErrPolicyUnchanged", err)
+	}
+	if strings.Contains(err.Error(), "never settled") {
+		t.Fatalf("a policy that did not land is reported as a hung page: %v", err)
 	}
 }
 
@@ -268,5 +301,31 @@ func TestEveryPolicyHasAReadField(t *testing.T) {
 	if len(field) != len(known) {
 		t.Errorf("the field map has %d entries and the known set has %d; one of them "+
 			"was extended without the other", len(field), len(known))
+	}
+}
+
+// TestThePolicyIsWaitedFor. Live it takes about a second, so the Go side has to
+// keep reading — the same lesson as H61, arriving in this file by correction
+// rather than by failure.
+func TestThePolicyIsWaitedFor(t *testing.T) {
+	compressPartClock(t)
+	d := &policyDouble{ok: true, settleReads: 2}
+	got, err := policer(d).SetPolicy(context.Background(), testGroupJID, PolicyMessagesAdminsOnly, true, "t")
+	if err != nil {
+		t.Fatalf("SetPolicy: %v", err)
+	}
+	if !got.Verified {
+		t.Fatalf("the settled change is not reported as verified: %s", got)
+	}
+	if d.reads < 3 {
+		t.Fatalf("only %d read(s): the first answer was accepted instead of waited on", d.reads)
+	}
+	// AND THE FIELD READ BACK IS THE METADATA'S, not the property name: they
+	// differ, and reading the wrong one would never see the change.
+	if !strings.Contains(policyResultScript, "s.md[s.field]") {
+		t.Fatal("the settling read does not use the parked field name")
+	}
+	if !strings.Contains(d.lastScript, `field: "announce"`) {
+		t.Fatal("the parked field is not the metadata's own name")
 	}
 }

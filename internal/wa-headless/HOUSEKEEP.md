@@ -6263,8 +6263,8 @@ Cada capacidade nova vinha pagando o mesmo pedágio, uma execução ao vivo por 
 
 | classe | o que acontece | onde foi medido |
 |---|---|---|
-| `IMMEDIATE` | o modelo move nesta sessão, em menos de um segundo | favoritar, bloquear, editar, silenciar, arquivar/fixar conversa, encaminhar, enviar, reagir, apagar, etiquetas, assunto de grupo, código de convite |
-| `CROSS_SESSION` | chega ao servidor e esta sessão nunca vê | participantes (H58), políticas (H79), contador de não-lidas (H78) |
+| `IMMEDIATE` | o modelo move nesta sessão, em menos de um segundo | favoritar, bloquear, editar, silenciar, arquivar/fixar conversa, encaminhar, enviar, reagir, apagar, etiquetas, assunto de grupo, código de convite, **políticas de grupo (H85)** |
+| `CROSS_SESSION` | chega ao servidor e esta sessão nunca vê | participantes (H58), contador de não-lidas (H78) — **políticas saíram daqui na H85** |
 | `NOTHING` | aceito e nada acontece em lugar nenhum | verbo do `Cmd` sem ouvinte (H78), fixar mensagem (H81) |
 
 ### A hipótese óbvia está ERRADA, e vale dizer qual é
@@ -6534,3 +6534,67 @@ conversa inteira de novo.
 **Status**: entregue.
 **Testes**: `events/events_test.go` (11 testes, incluindo `-race` com assinantes
 entrando e saindo durante a entrega) e `eventbusreal_test.go` (as sete).
+
+---
+
+## H85 — a classificação estava errada, e o controle é que não podia falhar
+
+**Data**: 2026-08-21
+**Contexto**: a orquestração mandou usar o barramento novo para investigar os
+`CROSS_SESSION`. A investigação corrigiu a própria pergunta.
+
+### O que a investigação perguntou
+
+Duas explicações cabiam em "a sessão não vê a mudança", e exigem consertos
+diferentes: a sessão **recebe** a notificação e não a aplica, ou a notificação
+**não chega**. Até o barramento existir não havia como distinguir.
+
+### O que ela mediu
+
+```
+8 eventos nos segundos após a mudança; 8 deles nomeiam o grupo que mudou
+a política ficou visível NESTA SESSÃO após 1s
+```
+
+**A sessão recebe.** E mais: **o modelo atualiza**. A política de grupo não é
+`CROSS_SESSION` — é `IMMEDIATE`, em cerca de um segundo.
+
+### Por que eu tinha classificado errado, e a causa é de método
+
+O controle do classificador para "política" escrevia **o valor que o grupo já
+tinha**, para não mudar nada. E **um no-op não pode mover um leitor** — ele
+reportou "não move aqui" pela razão trivial de que nada mudou.
+
+Esse resultado então "confirmou" um palpite anterior herdado da H58 ("metadata de
+grupo é obsoleta"), que era verdade para PARTICIPANTES e foi generalizada demais.
+
+> **Um controle que não pode falhar não é controle.**
+
+É a mesma família de erro dos controles negativos que passavam — e desta vez o
+controle inválido não deixou passar um teste fraco: fez uma medição correta
+parecer confirmar uma hipótese errada, que é pior, porque virou documentação.
+
+### O que foi corrigido
+
+| onde | antes | agora |
+|---|---|---|
+| controle do classificador | no-op | vira e desvira de verdade, com restauração aguardada |
+| `SetPolicy` | `Verified: false`, sem pós-condição | pós-condição real; `Verified: true`; `ErrPolicyUnchanged` |
+| tabela da H82 | políticas em `CROSS_SESSION` | políticas em `IMMEDIATE` |
+| teste ao vivo | exigia `verified=false` | exige `verified=true`; mede `waited=1.027s` |
+
+**A H58 continua de pé** para participantes: aquilo foi mudança real, sondada por
+noventa segundos, e confirmada entre sessões. O erro não foi a medição da H58 —
+foi eu ter transformado uma medição num princípio geral.
+
+### E eu deixei estado no grupo de laboratório
+
+A restauração da sonda chamava `setGroupProperty` **sem aguardar a promessa** — o
+`Evaluate` não aguarda, então ela era abandonada. O grupo ficou com
+`announcement=false` quando o original era `true`, e só apareceu porque a
+execução seguinte leu o valor e ele não batia.
+
+Reposto, e a sonda agora **espera do lado Go** e falha alto se a restauração não
+assentar. Pedir uma restauração não é restaurar.
+
+**Status**: corrigido.

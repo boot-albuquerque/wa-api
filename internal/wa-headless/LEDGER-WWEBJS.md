@@ -219,9 +219,9 @@ nem `PARTIAL` sem justificativa explícita.
 | `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `setSubject` | group.SetSubject | `PROVEN` | sim | sim | sim | H64: o assunto vive em chat.formattedTitle |
 | `setDescription` | — | `MISSING` | — | — | — | — |
-| `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
-| `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
-| `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
+| `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
+| `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
+| `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `deletePicture` | — | `MISSING` | — | — | — | — |
 | `setPicture` | — | `MISSING` | — | — | — | — |
 | `getInviteCode` | group.InviteCode | `PROVEN` | sim | sim | sim | H57: a chamada popula o MODELO; o retorno é undefined |
@@ -341,8 +341,8 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 34 | 15% |
-| `PARTIAL` | 38 | 17% |
+| `PROVEN` | 37 | 16% |
+| `PARTIAL` | 35 | 15% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
 | `MISSING` | 144 | 65% |

@@ -80,8 +80,10 @@ func TestRealSPAFlipsAGroupPolicyAcrossSessions(t *testing.T) {
 		if got.NoOp {
 			t.Fatal("flipping to the opposite of what was read was reported as a no-op")
 		}
-		if got.Verified {
-			t.Fatal("a real policy change claims to be verified; this build cannot confirm one in-session")
+		// VERIFIED IS TRUE NOW (H85). This assertion used to demand the
+		// opposite, on a belief built from a control that could not fail.
+		if !got.Verified {
+			t.Fatal("a real policy change is not reported as verified; it is visible in ~1s")
 		}
 	})
 

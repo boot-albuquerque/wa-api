@@ -84,15 +84,24 @@ func TestProbeWriteConfirmationClass(t *testing.T) {
 			}`,
 		},
 		{
-			"group policy (control: known CROSS_SESSION)", "not-here",
+			// A REAL FLIP, AND THE CONTROL THAT WAS WRONG BEFORE. This case used
+			// to write the value the group already had, to avoid changing
+			// anything — and a no-op CANNOT move a reader, so it reported
+			// "not-here" for the trivial reason that nothing changed. That
+			// wrong answer then confirmed a wrong prior: policies were filed as
+			// CROSS_SESSION when they are visible here in about one second.
+			//
+			// A control that cannot fail is not a control. This one flips and
+			// flips back, which is a real change and is restored.
+			"group policy (control: known IMMEDIATE, ~1s)", "IMMEDIATE",
 			`async () => {
 				const W = window.require('WAWebWidFactory');
 				const C = window.require('WAWebChatCollection').ChatCollection;
 				const chat = C.get(W.createWid(` + strconv.Quote(gjid) + `));
 				const md = chat.groupMetadata;
-				// THE VALUE IT ALREADY HAS: this measures visibility, not policy.
 				const A = window.require('WAWebSetPropertyGroupAction');
-				await A.setGroupProperty(chat, 'announcement', md.announce ? 1 : 0);
+				window.__wcPolicyWas = !!md.announce;
+				await A.setGroupProperty(chat, 'announcement', md.announce ? 0 : 1);
 			}`,
 			`() => {
 				const W = window.require('WAWebWidFactory');
@@ -155,6 +164,53 @@ func TestProbeWriteConfirmationClass(t *testing.T) {
 		}); err == nil {
 			t.Logf("MIRROR: %s", e)
 		}
+	}()
+
+	// The policy control changes a real setting; it is put back whatever the
+	// rest of the run does.
+	defer func() {
+		var was string
+		if err := runner.Do(context.Background(), engine.OpStateProbe, "probe/wc-restore", func(x context.Context) error {
+			return sess.Tab().Evaluate(x, `(() => {
+				try {
+					if (window.__wcPolicyWas === undefined) { return 'nothing to restore'; }
+					const W = window.require('WAWebWidFactory');
+					const C = window.require('WAWebChatCollection').ChatCollection;
+					const chat = C.get(W.createWid(`+strconv.Quote(gjid)+`));
+					// PARKED, NOT AWAITED HERE: Evaluate does not await, so the
+					// promise this returns would be abandoned. An earlier
+					// version called it and returned immediately, and the
+					// restore did not take — the lab group carried a flipped
+					// policy until it was noticed.
+					window.__wcRestore = 'pending';
+					window.require('WAWebSetPropertyGroupAction')
+						.setGroupProperty(chat, 'announcement', window.__wcPolicyWas ? 1 : 0)
+						.then(() => { window.__wcRestore = 'done'; },
+						      e => { window.__wcRestore = 'FAILED: ' + String(e).slice(0, 100); });
+					return 'asked to restore to ' + String(window.__wcPolicyWas);
+				} catch (e) { return 'RESTORE FAILED: ' + String(e).slice(0, 120); }
+			})()`, &was)
+		}); err != nil {
+			t.Errorf("restoring the policy: %v", err)
+			return
+		}
+		t.Logf("policy control: %s", was)
+		// AND WAITED FOR, from Go. A restore that is only asked for is a
+		// restore that may not happen.
+		for i := 0; i < 40; i++ {
+			var st string
+			if err := runner.Do(context.Background(), engine.OpStateProbe, "probe/wc-restore-poll", func(x context.Context) error {
+				return sess.Tab().Evaluate(x, `window.__wcRestore || "unknown"`, &st)
+			}); err != nil {
+				break
+			}
+			if st != "pending" {
+				t.Logf("policy control restore: %s", st)
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		t.Error("the policy control restore never settled; the lab group may carry a flipped policy")
 	}()
 
 	for _, c := range cases {

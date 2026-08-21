@@ -1502,3 +1502,31 @@ para monotônico; zero é o padrão certo só para "reiniciou".
 
 Nas duas direções o remédio é o mesmo: o comentário do dublê diz de onde a regra
 vem, e a regra é a da produção.
+
+## Um controle que não pode falhar não é controle
+
+**Medido em 2026-08-21 (H85), e este errou para o lado pior.**
+
+O classificador de escrita tinha um controle "política de grupo = CROSS_SESSION".
+Para não alterar o grupo, ele escrevia **o valor que o grupo já tinha**.
+
+**Um no-op não pode mover um leitor.** O controle respondeu "não move aqui" pela
+razão trivial de que nada mudou — e esse resultado confirmou uma hipótese
+herdada, que virou tabela, que virou o contrato de uma capacidade
+(`Verified: false`) e um teste ao vivo exigindo o comportamento errado.
+
+Medida com uma virada real, a política fica visível **na mesma sessão em ~1s**.
+
+**Isto é pior que um controle negativo que passa.** Aquele deixa um teste fraco
+existir; este fez uma medição correta parecer *confirmar* uma hipótese falsa, e
+aí a hipótese foi escrita como fato.
+
+**A regra**: antes de aceitar o resultado de um controle, pergunte *o que faria
+este controle FALHAR?* Se a resposta é "nada", ele não mediu.
+
+**E o corolário sobre segurança**: a vontade de não mexer no fixture foi o que
+produziu o no-op. O jeito certo é mudar de verdade e **restaurar** — e restaurar
+esperando, do lado Go. Nesta mesma sonda a restauração chamava a página sem
+aguardar a promessa (`Evaluate` não aguarda), o grupo ficou com a política
+trocada, e só apareceu porque a execução seguinte leu um valor que não batia.
+**Pedir uma restauração não é restaurar.**

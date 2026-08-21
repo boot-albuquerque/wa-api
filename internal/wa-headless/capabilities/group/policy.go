@@ -24,9 +24,19 @@ import (
 // without that would have flipped the lab group's policies one candidate at a
 // time.
 //
-// VERIFIED IS FALSE for a real change, for the reason H58 measured: this build
-// does not refresh group metadata in the session that changed it. PolicyOf reads
-// what a session sees, and the honest proof is across sessions.
+// VERIFIED IS TRUE, AND IT USED TO BE FALSE — the correction matters more than
+// the capability. This file assumed H58's finding about group metadata applied
+// here, and the classifier "confirmed" it. The confirmation was worthless: its
+// control wrote the value the group already had, and a no-op cannot move a
+// reader.
+//
+// Measured properly, with a real flip: the policy becomes visible IN THIS
+// SESSION after about ONE SECOND. So the change is observable and the
+// postcondition is real.
+//
+// H58 still stands for PARTICIPANTS — that was a real change polled for ninety
+// seconds — and the lesson is that "group metadata is stale" was too broad a
+// story built from one measurement.
 
 // Policy names one of the group's settings.
 type Policy string
@@ -57,6 +67,9 @@ var (
 	ErrUnknownPolicy = fmt.Errorf("group: unknown group policy")
 	// ErrCannotSetPolicy is the group's own canSetGroupProperty saying no.
 	ErrCannotSetPolicy = fmt.Errorf("group: this account cannot change this group's policies")
+	// ErrPolicyUnchanged is the postcondition: the call returned and the
+	// group's metadata still reads the old value.
+	ErrPolicyUnchanged = fmt.Errorf("group: the page accepted the policy change and the metadata did not move")
 )
 
 // PolicyChange is what a policy change did.
@@ -66,7 +79,9 @@ type PolicyChange struct {
 	Wanted bool
 	// NoOp is true when the group already had it.
 	NoOp bool
-	// Verified is true only for a no-op — see Membership.Verified.
+	// Verified says the metadata was READ BACK carrying the new value. It is
+	// true for a real change here, unlike Membership.Verified — the difference
+	// is measured, not assumed, and correcting it was H85.
 	Verified bool
 	Waited   time.Duration
 }
@@ -113,10 +128,15 @@ func (m *Manager) SetPolicy(ctx context.Context, groupJID string, p Policy, on b
 		if err := json.Unmarshal([]byte(raw), &out); err != nil {
 			return PolicyChange{}, fmt.Errorf("group: unexpected policy answer: %w", err)
 		}
-		if out.Stage != "pending" {
+		if out.Stage != "pending" && out.Stage != "settling" {
 			break
 		}
 		if !time.Now().Before(deadline) {
+			// A settling stage that ran out of budget is a policy that did not
+			// take, not a page that hung.
+			if out.Stage == "settling" {
+				return PolicyChange{}, fmt.Errorf("%w within %s", ErrPolicyUnchanged, createBudget)
+			}
 			return PolicyChange{}, fmt.Errorf("%w: the page never settled within %s", ErrPolicy, createBudget)
 		}
 		time.Sleep(createTick)
@@ -131,7 +151,7 @@ func (m *Manager) SetPolicy(ctx context.Context, groupJID string, p Policy, on b
 		return PolicyChange{}, fmt.Errorf("%w at %s (%s)", ErrPolicy, out.Stage, out.Why)
 	}
 	return PolicyChange{Policy: p, Wanted: on, NoOp: out.Already,
-		Verified: out.Already, Waited: time.Since(start)}, nil
+		Verified: true, Waited: time.Since(start)}, nil
 }
 
 // PolicyOf reports what this session sees for one of the group's settings.
@@ -205,10 +225,10 @@ func policyScript(groupJID string, p Policy, on bool) string {
 			// the app's own switch compares the value to 1.
 			await A.setGroupProperty(chat, ` + strconv.Quote(string(p)) + `, ` + value + `);
 
-			// NO POSTCONDITION: this build does not refresh group metadata in
-			// the session that changed it (H58), so waiting on md would answer
-			// with the old value for as long as the budget allowed.
-			park({ stage: 'done', ok: true, why: '', already: false });
+			// THE METADATA IS PARKED and Go polls it: measured at ~1s, and the
+			// await settles well before that (H61).
+			park({ stage: 'settling', ok: true, why: '', already: false,
+				want: want, md: md, field: ` + strconv.Quote(field[p]) + ` });
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 160) });
 		}
@@ -230,8 +250,17 @@ func policyReadScript(groupJID string, p Policy) string {
 	})()`
 }
 
+// policyResultScript re-reads the parked metadata each round rather than
+// trusting a value captured before the change landed.
 const policyResultScript = `JSON.stringify((() => {
 	const s = window[` + `"` + policyStateKey + `"` + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
+	if (s.stage === 'settling') {
+		const now = !!(s.md && s.md[s.field]);
+		if (now === s.want) {
+			return { stage: 'done', ok: true, why: '', already: false };
+		}
+		return { stage: 'settling', ok: false, why: '' };
+	}
 	return s;
 })())`
