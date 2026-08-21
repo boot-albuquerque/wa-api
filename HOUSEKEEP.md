@@ -1558,9 +1558,71 @@ chama `abrirWS`, ou abrir o socket automaticamente ao renderizar o card de
 uma sessão já pareada. A ausência de reconexão continua valendo; o que falta
 é uma forma de abrir o socket **sem** efeito colateral de sessão.
 
-**Status**: **não corrigido** — descoberto durante o teste, e a decisão de
-UI é do dono do painel. Contornado no teste com um observador injetado pelo
-console, que abre `/session/ws` direto.
+**Status**: **CORRIGIDO** em 2026-08-21 (decisão 40=b do canal: abrir o socket
+automaticamente no card de sessão já pareada). A página foi entretanto partida
+em `assets/sessions.js`; a abertura vive agora em `sessions.js:103`.
+
+**O que foi feito** — e por que NÃO é "abrir ao renderizar", como a correção
+sugerida dizia:
+
+`desenhar()` corre de 3 em 3 segundos (`POLL_MS`). Abrir o socket "ao
+renderizar" abriria a cada passagem, e isso É reconexão automática — a mesma
+coisa que este painel proíbe de propósito, porque "um socket que reabre sozinho
+esconde o sintoma". A abertura ficou no ramo de **criação** do card
+(`if (!card) { ... }`), que corre uma vez por sessão, condicionada a
+`s.autenticado && s.temToken`. Caiu o socket, fica caído — e aparece.
+
+Junto veio o **indicador de estado** (`.ws`, "eventos ligados"/"sem eventos",
+`sessions.js:167` e `devui.css`). Sem ele a correção seria pior que o defeito:
+o operador julgaria estar a observar quando a ligação já tinha caído — e o
+momento em que ela cai é precisamente a rajada de HistorySync da F85.
+
+**Testes que o travam** (`pkg/presentation/http/devui/devui_test.go`):
+
+- `TestPainel_AbreOSocketAoCriarOCard` — o defeito: card criado sem socket.
+- `TestPainel_NaoReabreSocketACadaRepintura` — o limite: nenhuma abertura em
+  `desenhar` fora do ramo de criação.
+- `TestPainel_MostraOEstadoDoSocket` — o indicador lê `readyState` ao repintar.
+
+**Controlos negativos executados** — e dois deles falharam à primeira, o que é
+o ponto:
+
+CN-1, remover a abertura da criação: mordeu.
+
+```
+--- FAIL: TestPainel_AbreOSocketAoCriarOCard
+    o card é criado sem abrir o socket: observar continua a exigir clicar
+    em Conectar, que tem efeito colateral de sessão (F77).
+--- FAIL: TestPainel_NaoReabreSocketACadaRepintura
+```
+
+CN-2, mover a abertura para FORA das chaves do `if (!card)` (= reconexão
+automática): **passou verde na primeira versão do teste**. A asserção comparava
+POSIÇÕES — "abrirWS aparece entre o `if (!card)` e o `pintar`" — e fora do bloco
+a chamada continua entre os dois marcos. Proximidade textual não é contenção, e
+a diferença entre as duas é exatamente o defeito. Reescrito com casamento de
+chaves (`blocoDoIf`), morde:
+
+```
+--- FAIL: TestPainel_AbreOSocketAoCriarOCard
+--- FAIL: TestPainel_NaoReabreSocketACadaRepintura
+```
+
+CN-3, cravar o indicador em vivo (`ws && ws.readyState === WebSocket.OPEN` →
+`true`): **passou verde na primeira versão**, porque a busca era no ficheiro
+inteiro e `abrirWS` também consulta `readyState` (`sessions.js:277`, na espera
+pela abertura) — o teste media a presença da palavra, não o indicador. Escopado
+ao bloco de `pintar`, morde:
+
+```
+--- FAIL: TestPainel_MostraOEstadoDoSocket
+    o cartão não lê o readyState ao repintar: o indicador não distingue
+    socket vivo de morto [...]
+```
+
+Os dois controlos que falharam são a armadilha nº1 do `ARMADILHAS.md` na sua
+forma mais barata: **um teste que passa mas não morde**. Ambos passariam por
+revisão — o defeito estava na asserção, não no assunto.
 
 ## F78 — `/session/connect` não é idempotente numa sessão já conectada
 
@@ -2336,6 +2398,53 @@ correções sugeridas acima: podar e truncar (1) reduz a chance de cair, mas
 **Evidência incidental da F75 na mesma linha**: o registro de fronteira saiu
 como `"url":"/session/ws?token=REDACTED"`. A redação está funcionando no
 caminho real, e não só no teste.
+
+### Releitura de 2026-08-21: metade do diagnóstico caducou, e ninguém tinha reparado
+
+Ao pegar a F85 para corrigir (decisão 41=c do canal: **os dois lados**), a
+primeira coisa medida foi o código atual — e o **"Onde" desta entrada aponta
+para linhas que já não existem**. `sessions.html:183-196` (`log()`) e `:346-353`
+(`ws.onmessage`) descreviam um painel de eventos colado à lista de sessões. Esse
+painel **mudou de casa**: os eventos vivem hoje em `assets/eventos.js`, na sua
+própria rota, e o `onmessage` de `sessions.js:261` já não acumula DOM nenhum —
+trata `qr`, `qrtimeout` e `pairsuccess` e mais nada.
+
+Estado real das quatro correções sugeridas, verificado linha a linha:
+
+| # | sugerido em 2026-08-08 | estado em 2026-08-21 |
+|---|---|---|
+| 1a | podar o log com teto de linhas | **já feito** — `eventos.js:13,38`, `MAX_LINHAS = 2000` com remoção do mais antigo |
+| 1b | truncar a carga | **parcial** — só `qrCodeBase64` (`eventos.js:76`); o resto sai em `JSON.stringify` inteiro (`:78`) |
+| 2 | coalescer eventos do mesmo tipo | não feito |
+| 3 | backpressure no servidor | não feito |
+| 4 | reconexão automática no painel | não feito, **e em conflito com o desenho** — ver abaixo |
+
+O item 1a não foi feito *por causa desta entrada*: foi feito ao mudar os eventos
+de página, por outra razão, e o teto ficou lá. Ou seja, **a correção mais barata
+da F85 já estava aplicada há dias sem que a entrada soubesse** — e uma entrada
+que se lê como pendente quando metade está feita é pior que nenhuma, porque faz
+gastar a sessão a redescobrir o terreno.
+
+**O item 4 contradiz uma decisão explícita do painel.** `eventos.js:63` diz, em
+comentário: *"Sem religação automática: num painel de diagnóstico, um socket que
+reabre sozinho esconde o sintoma que se quer observar."* O item 4 pede
+exatamente a religação. As duas posições são defensáveis e **não podem ser
+decididas por quem estiver a mexer no ficheiro** — é escolha de produto. O que a
+F77 fez em 2026-08-21 é a via do meio e resolve o sintoma real desta entrada
+("o painel mente em silêncio"): não religa, mas **mostra** que caiu, com um
+indicador por cartão. Uma queda deixa de ser invisível sem deixar de ser uma
+queda.
+
+**Sobra, portanto, para a F85 propriamente dita**: 1b, 2 e 3. E o 3 converte um
+recurso ILIMITADO em limitado (fila por conexão), o que aciona as regras do
+`CLAUDE.md` — inventário de detentores e medição no cenário em que o mecanismo
+**piora**, não naquele em que ajuda. Não fazer junto com 1b.
+
+**Antes de qualquer um dos três, falta medir o que ninguém mediu**: se, com o
+teto de 2000 linhas já no lugar, o painel ainda estoura os 5s de `writeTimeout`
+numa rajada de HistorySync. A medição de 2026-08-10 é anterior à mudança de
+página. Sem repetir a medição contra o código atual, corrigir 1b/2/3 é agir
+sobre uma hipótese de agosto de 8 que já se sabe parcialmente falsa.
 
 ## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
 

@@ -87,7 +87,21 @@ function desenhar() {
   for (const s of sessoes) {
     vistos.add(s.id);
     let card = g.querySelector(`.card[data-id="${CSS.escape(s.id)}"]`);
-    if (!card) { card = criarCard(s); g.appendChild(card); }
+    if (!card) {
+      card = criarCard(s);
+      g.appendChild(card);
+      // F77: o socket abre aqui, na CRIAÇÃO do card, e não dentro de
+      // `acao(s,"conectar")`. Antes, observar e conectar eram a MESMA ação:
+      // depois da primeira queda do socket o painel ficava cego a eventos até
+      // alguém clicar em Conectar — e clicar dispara `/session/connect`, com
+      // efeito colateral de sessão.
+      //
+      // NA CRIAÇÃO, e não a cada repintura, porque `desenhar()` corre de 3 em
+      // 3 segundos: reabrir a cada passagem seria RECONEXÃO AUTOMÁTICA, que é
+      // deliberadamente proibida neste painel — "um socket que reabre sozinho
+      // esconde o sintoma". Um socket que morre continua morto e visível.
+      if (s.autenticado && s.temToken) abrirWS(s);
+    }
     pintar(card, s);
   }
   for (const c of [...g.querySelectorAll(".card")]) {
@@ -111,6 +125,7 @@ function criarCard(s) {
       <span class="dot"></span>
       <span class="nome"></span>
       <span class="tok"></span>
+      <span class="ws" title="estado do WebSocket de eventos"></span>
     </div>
     <div class="estado">—</div>
     <div class="jid"></div>
@@ -143,6 +158,16 @@ function pintar(card, s) {
   card.querySelector(".dot").className = "dot " + cls;
   card.querySelector(".nome").textContent = s.nome;
   card.querySelector(".tok").textContent = s.temToken ? "token local" : "sem token";
+
+  // F77/F85: o estado do socket fica VISÍVEL. Abrir sozinho e não mostrar
+  // seria pior que não abrir — o operador acharia que está a observar quando
+  // a ligação já caiu, e é precisamente durante a rajada de HistorySync que
+  // ela cai (F85).
+  const ws = sockets.get(s.id);
+  const vivo = ws && ws.readyState === WebSocket.OPEN;
+  const elWS = card.querySelector(".ws");
+  elWS.textContent = vivo ? "eventos ligados" : "sem eventos";
+  elWS.className = "ws " + (vivo ? "on" : "off");
   card.querySelector(".estado").textContent = estado;
   card.querySelector(".jid").textContent = s.jid;
   card.querySelector(".sem-token").hidden = s.temToken;

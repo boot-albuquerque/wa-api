@@ -691,3 +691,121 @@ func TestPainel_FalhaDeQRNaoFicaEmEspera(t *testing.T) {
 		t.Error("o estado de falha não oferece nova tentativa")
 	}
 }
+
+// --- F77: observar deixa de exigir conectar ---------------------------------
+//
+// Abrir o socket e pedir conexão eram a MESMA ação. Depois da primeira queda
+// do socket o painel ficava cego a eventos até alguém clicar em Conectar — e
+// clicar dispara /session/connect, com efeito colateral de sessão.
+//
+// A correção da F192 tinha AGRAVADO isto: o socket passou a ser aguardado
+// ANTES de o connect sair, o que era necessário para o QR não se perder, mas
+// tornou as duas ações ainda mais a mesma coisa.
+
+// blocoDoIf devolve o corpo do `if` cujo cabeçalho começa em `cabecalho`,
+// casando chaves.
+//
+// A primeira versão destes testes comparava POSIÇÕES ("abrirWS aparece entre o
+// `if (!card)` e o `pintar`"), e por isso não mordeu no controlo negativo que
+// moveu a chamada para FORA das chaves: fora do bloco, ela continua entre os
+// dois marcos. Proximidade textual não é contenção — e a diferença entre as
+// duas É o defeito que este teste existe para travar.
+func blocoDoIf(t *testing.T, js, cabecalho string) string {
+	t.Helper()
+	i := strings.Index(js, cabecalho)
+	if i < 0 {
+		t.Fatalf("não encontrei %q no script", cabecalho)
+	}
+	abre := strings.Index(js[i:], "{")
+	if abre < 0 {
+		t.Fatalf("%q não abre bloco", cabecalho)
+	}
+	abre += i
+	nivel := 0
+	for j := abre; j < len(js); j++ {
+		switch js[j] {
+		case '{':
+			nivel++
+		case '}':
+			nivel--
+			if nivel == 0 {
+				return js[abre+1 : j]
+			}
+		}
+	}
+	t.Fatalf("bloco de %q não fecha", cabecalho)
+	return ""
+}
+
+func TestPainel_AbreOSocketAoCriarOCard(t *testing.T) {
+	js := servido(t, "sessions.js")
+	bloco := blocoDoIf(t, js, "if (!card)")
+
+	if !strings.Contains(bloco, "criarCard(s)") {
+		t.Fatalf("o bloco casado não é o da criação do card: %s", bloco)
+	}
+	if !strings.Contains(bloco, "abrirWS(s)") {
+		t.Fatalf("o card é criado sem abrir o socket: observar continua a exigir "+
+			"clicar em Conectar, que tem efeito colateral de sessão (F77).\n%s", bloco)
+	}
+	// Só para sessão JÁ PAREADA e com token: sem token a autenticação do socket
+	// falha, e sem pareamento não há o que observar.
+	if !strings.Contains(bloco, "s.autenticado") || !strings.Contains(bloco, "s.temToken") {
+		t.Errorf("abertura automática não condicionada a sessão pareada com token:\n%s", bloco)
+	}
+}
+
+// TestPainel_NaoReabreSocketACadaRepintura é o limite da correção, e é o que
+// impede a F77 de virar outro defeito.
+//
+// `desenhar()` corre de 3 em 3 segundos. Abrir o socket a cada passagem seria
+// RECONEXÃO AUTOMÁTICA — deliberadamente proibida neste painel, porque um
+// socket que reabre sozinho esconde o sintoma que o painel existe para mostrar.
+// A abertura tem de estar DENTRO do `if (!card)`, e o corpo do laço que corre
+// em toda repintura não pode conter nenhuma.
+func TestPainel_NaoReabreSocketACadaRepintura(t *testing.T) {
+	js := servido(t, "sessions.js")
+	criacao := blocoDoIf(t, js, "if (!card)")
+
+	// Aberturas dentro de `desenhar` que NÃO estejam no bloco de criação são
+	// reabertura por repintura.
+	desenhar := blocoDoIf(t, js, "function desenhar(")
+	fora := strings.Count(desenhar, "abrirWS(") - strings.Count(criacao, "abrirWS(")
+	if fora != 0 {
+		t.Fatalf("há %d chamada(s) a abrirWS em `desenhar` fora do ramo de criação do "+
+			"card: como `desenhar` corre de 3 em 3 segundos, isso é reconexão "+
+			"automática, proibida neste painel", fora)
+	}
+	if strings.Count(criacao, "abrirWS(") != 1 {
+		t.Errorf("esperava exatamente uma abertura na criação do card, vi %d",
+			strings.Count(criacao, "abrirWS("))
+	}
+}
+
+// TestPainel_MostraOEstadoDoSocket: abrir sozinho e não mostrar seria PIOR que
+// não abrir — o operador acharia que observa quando a ligação já caiu, e é
+// precisamente durante a rajada de HistorySync que ela cai (F85).
+func TestPainel_MostraOEstadoDoSocket(t *testing.T) {
+	js := servido(t, "sessions.js")
+	css := servido(t, "devui.css")
+
+	// Escopado a `pintar`, e não ao ficheiro: `abrirWS` também consulta
+	// `readyState` (na espera pela abertura), e uma busca no ficheiro inteiro
+	// passava por causa DESSA ocorrência mesmo com o indicador cravado em
+	// "ligados" — media a presença da palavra, não o indicador.
+	pintar := blocoDoIf(t, js, "function pintar(")
+
+	if !strings.Contains(pintar, "readyState === WebSocket.OPEN") {
+		t.Error("o cartão não lê o readyState ao repintar: o indicador não " +
+			"distingue socket vivo de morto, e abrir sozinho sem mostrar o estado " +
+			"é pior que não abrir — o operador julga observar quando a ligação caiu")
+	}
+	for _, marca := range []string{"eventos ligados", "sem eventos"} {
+		if !strings.Contains(pintar, marca) {
+			t.Errorf("falta o rótulo %q na repintura do cartão", marca)
+		}
+	}
+	if !strings.Contains(css, ".ws.off") {
+		t.Error("o estado 'sem eventos' não tem estilo próprio: fica indistinguível do resto")
+	}
+}

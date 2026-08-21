@@ -737,6 +737,45 @@ para tempo, para contador e para estado — e é irmão do erro de ler
 `users.connected` antes do logout (F93), onde a medição estava certa e o
 INSTANTE estava errado.
 
+### Duas formas de asserção que ficam verdes com o defeito (F77, 2026-08-21)
+
+A nº25 diz que controlo negativo verde é defeito no teste. Estes são os dois
+mecanismos que produziram isso na mesma sessão, ambos ao testar um ficheiro de
+texto (JS servido) por `strings.Contains`. Ambos passariam por revisão: o
+defeito está na asserção, e a asserção *parece* falar do assunto certo.
+
+**1. Proximidade textual não é contenção.** O teste afirmava que a abertura do
+socket estava no ramo de criação do card, e media-o por POSIÇÕES:
+
+```go
+if !(criacao < abre && abre < pintar) { ... }   // não morde
+```
+
+O controlo negativo moveu a chamada para FORA das chaves do `if (!card)` — que
+é exatamente o defeito, porque o laço corre de 3 em 3 segundos e aquilo vira
+reconexão automática. Fora do bloco, a chamada continua **entre** os dois
+marcos. Verde. Só casando chaves (`blocoDoIf`, extraindo o corpo real do `if`)
+a asserção passou a falar de contenção:
+
+```go
+fora := strings.Count(desenhar, "abrirWS(") - strings.Count(criacao, "abrirWS(")
+if fora != 0 { ... }   // morde
+```
+
+**2. Buscar no ficheiro inteiro quando o termo existe por outro motivo.** O
+teste do indicador de estado procurava `readyState === WebSocket.OPEN` em todo
+o `sessions.js`. Cravar o indicador em vivo (`ws && ws.readyState === ...` →
+`true`) deixou-o verde: `abrirWS` também consulta `readyState`, noutra linha e
+por outra razão (esperar a abertura). O teste media a presença da palavra no
+ficheiro, não o comportamento do indicador. Escopar ao bloco da função que
+repinta resolveu.
+
+O padrão comum aos dois: **a asserção estava a um nível de granularidade mais
+grosso do que a propriedade**. Ficheiro quando a propriedade é da função;
+intervalo quando a propriedade é do bloco. Sempre que o teste inspeciona texto
+em vez de comportamento, a pergunta a fazer é *qual é a menor região onde esta
+propriedade tem de valer?* — e é essa que a asserção tem de recortar.
+
 ## 13. Teste verde prova que o código está certo, não que está A CORRER
 
 Em 2026-08-21 a correção do QR (F192) esteve horas com o rótulo "corrigida,
