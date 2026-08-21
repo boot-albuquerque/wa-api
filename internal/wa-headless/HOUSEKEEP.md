@@ -6712,3 +6712,27 @@ mim" de "recebida" e o nosso `message.added` cobre as duas sem separar. É
 divergência real, não equivalência.
 
 **Status**: entregue.
+
+---
+
+## H87 (continuação) — a reação entra, e três eventos de grupo saem com motivo
+
+**Data**: 2026-08-21.
+
+`message.reaction` é o sexto tipo, disparado ao vivo por `react.Add`. O que ele
+entrega está dito no tipo: **que as reações se moveram, não quais são**. A flag
+em que ele viaja é pegajosa na sessão (H53) e o agregado que diria o emoji não
+tem fonte neste build (H83). "Vá olhar" é mais que silêncio, e é honesto.
+
+### E três eventos do upstream saem de `MISSING` mudo para `MISSING` medido
+
+`GROUP_JOIN`, `GROUP_LEAVE` e `GROUP_ADMIN_CHANGED` **não podem ser entregues por
+este barramento**, e isso não é opinião: a H86 mediu **zero** eventos na sessão
+que mudou os participantes, contra oito para uma mudança de política no mesmo
+grupo no mesmo minuto.
+
+A diferença entre "não implementamos" e "medimos que este caminho não entrega"
+é a diferença entre uma linha que convida alguém a tentar e uma que diz por onde
+não adianta. As três agora dizem.
+
+**Status**: entregue.

@@ -51,6 +51,15 @@ const (
 	// ContactChanged is a contact record moving — a name, a picture, a
 	// presence-adjacent field.
 	ContactChanged Type = "contact.changed"
+	// MessageReaction is somebody reacting to a message, or taking it back.
+	//
+	// IT ANSWERS "SOMETHING HAPPENED", NOT "WHAT IT IS NOW. The flag it rides on
+	// is sticky within a session (H53) and the aggregate that would say which
+	// emoji has no source on this build (H83). A subscriber learns that a
+	// message's reactions moved and has nowhere to read them from — which is
+	// worth delivering anyway, because "go look" is more than silence, and is
+	// stated here rather than discovered.
+	MessageReaction Type = "message.reaction"
 )
 
 // KnownTypes is every type the ingress installs a handler for. It exists so a
@@ -59,7 +68,7 @@ const (
 // subscription for an event never installed.
 var KnownTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
-	MessageRevoked, MessageEdited, ContactChanged,
+	MessageRevoked, MessageEdited, ContactChanged, MessageReaction,
 }
 
 // EVERY TYPE HERE IS ONE THIS MODULE CAN TRIGGER AND HAS TRIGGERED. The upstream

@@ -10,6 +10,7 @@ import (
 
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/edit"
+	"wa-api/internal/wa-headless/capabilities/react"
 	"wa-api/internal/wa-headless/capabilities/revoke"
 	"wa-api/internal/wa-headless/capabilities/send"
 	"wa-api/internal/wa-headless/core"
@@ -129,6 +130,20 @@ func TestRealSPAEachEventTypeCanBeMadeToHappen(t *testing.T) {
 			if _, err := cs.SetArchived(context.Background(), chatJID, false, "types/unarchive"); err != nil {
 				t.Errorf("RESTORE FAILED — the lab chat is left archived: %v", err)
 			}
+		}
+	}
+
+	// message.reaction — reacting to the probe message. Adding is the half H53
+	// proved; the reaction is taken back right after.
+	r := react.New(runner, eval)
+	if _, err := r.Add(ctx, sent.ID.ID, "\U0001F44D", "types/react"); err != nil {
+		t.Errorf("react: %v", err)
+	} else {
+		if !fired(events.MessageReaction, 20*time.Second) {
+			t.Errorf("%s never fired after a reaction", events.MessageReaction)
+		}
+		if _, err := r.Remove(context.Background(), sent.ID.ID, "types/unreact"); err != nil {
+			t.Errorf("RESTORE FAILED — a reaction is left on the probe message: %v", err)
 		}
 	}
 

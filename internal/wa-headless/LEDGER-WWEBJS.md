@@ -319,12 +319,12 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
 | `MESSAGE_EDIT` | events.MessageEdited | `PROVEN` | disparado ao vivo por uma edição (H87) |
 | `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | idem |
-| `MESSAGE_REACTION` | — | `MISSING` | sem equivalente |
+| `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
 | `MEDIA_UPLOADED` | — | `MISSING` | sem equivalente |
 | `CONTACT_CHANGED` | events.ContactChanged | `PARTIAL` | instalado; NÃO provado neste barramento — nada aqui faz outra conta mudar o perfil (H87) |
-| `GROUP_JOIN` | — | `MISSING` | sem equivalente |
-| `GROUP_LEAVE` | — | `MISSING` | sem equivalente |
-| `GROUP_ADMIN_CHANGED` | — | `MISSING` | sem equivalente |
+| `GROUP_JOIN` | — | `MISSING` | **medido impossível neste barramento**: mudança de participante produz ZERO evento na sessão que a fez (H86) |
+| `GROUP_LEAVE` | — | `MISSING` | idem GROUP_JOIN (H86) |
+| `GROUP_ADMIN_CHANGED` | — | `MISSING` | idem GROUP_JOIN (H86) |
 | `GROUP_MEMBERSHIP_REQUEST` | — | `MISSING` | sem equivalente |
 | `GROUP_UPDATE` | — | `MISSING` | sem equivalente |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
@@ -342,8 +342,8 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 41 | 18% |
-| `PARTIAL` | 35 | 15% |
+| `PARTIAL` | 36 | 16% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 140 | 63% |
+| `MISSING` | 139 | 63% |
 | **total** | **220** | |

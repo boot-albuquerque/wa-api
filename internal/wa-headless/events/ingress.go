@@ -274,6 +274,7 @@ func installScript() string {
 			catch (e) { s.dropped++; }
 		};
 		const onEdit = (m) => { try { push(msgRow('` + string(MessageEdited) + `', m)); } catch (e) { s.dropped++; } };
+		const onReaction = (m) => { try { push(msgRow('` + string(MessageReaction) + `', m)); } catch (e) { s.dropped++; } };
 		const onContact = (c) => {
 			try {
 				push({ type: '` + string(ContactChanged) + `',
@@ -305,10 +306,15 @@ func installScript() string {
 		MC.on('change:revokeSender', onRevoke);
 		MC.on('change:type', onRevoke);
 		MC.on('change:latestEditMsgKey', onEdit);
+		// hasReaction is STICKY (H53), so this fires when a reaction is ADDED
+		// and, on the same session, may not fire again when it is taken back.
+		// That asymmetry belongs in the type's doc, not in a silent gap.
+		MC.on('change:hasReaction', onReaction);
 		CC.on('change', onChat);
 		s.handlers = [[MC, 'add', onAdd], [MC, 'change:ack', onAck],
 			[MC, 'change:isRevokedMsg', onRevoke], [MC, 'change:revokeSender', onRevoke],
 			[MC, 'change:type', onRevoke], [MC, 'change:latestEditMsgKey', onEdit],
+			[MC, 'change:hasReaction', onReaction],
 			[CC, 'change', onChat]];
 
 		// The contact collection is optional: a build without it should give a
