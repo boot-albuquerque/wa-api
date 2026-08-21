@@ -1,6 +1,7 @@
 package devui
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,7 +45,7 @@ func TestEnabled_ValoresAceitos(t *testing.T) {
 // página, e não um índice de diretório.
 func TestHandler_RaizServeOIndex(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200", rec.Code)
@@ -80,7 +81,7 @@ func TestPaginaSuportaMultiplasSessoes(t *testing.T) {
 
 func TestHandler_ArquivoNomeado(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+indexFile, nil))
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+indexFile, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200", rec.Code)
 	}
@@ -91,7 +92,7 @@ func TestHandler_ArquivoNomeado(t *testing.T) {
 // sucesso.
 func TestHandler_ArquivoInexistenteDa404(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"nao-existe.html", nil))
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"nao-existe.html", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, quero 404", rec.Code)
 	}
@@ -108,7 +109,7 @@ func TestHandler_NaoEscapaDoDiretorio(t *testing.T) {
 	} {
 		t.Run(alvo, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, alvo, nil))
+			Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, alvo, nil))
 			if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "package devui") {
 				t.Errorf("%s vazou código-fonte", alvo)
 			}
@@ -121,7 +122,7 @@ func TestHandler_NaoEscapaDoDiretorio(t *testing.T) {
 // existe — que é o pior modo de falha de uma ferramenta de diagnóstico.
 func TestHandler_NaoDeixaCachear(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath, nil))
 	if got := rec.Header().Get("Cache-Control"); got != cacheControl {
 		t.Errorf("Cache-Control = %q, quero %q", got, cacheControl)
 	}
@@ -161,7 +162,7 @@ func TestHandler_RedirectsPathWithoutTrailingSlash(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, strings.TrimSuffix(BasePath, "/"), nil)
 
-	Handler().ServeHTTP(rec, req)
+	Handler(tokenDeTeste).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMovedPermanently {
 		t.Fatalf("status = %d, quero %d (redirecionamento para a forma com barra)", rec.Code, http.StatusMovedPermanently)
@@ -178,7 +179,7 @@ func TestHandler_ServesIndexOnBasePath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, BasePath, nil)
 
-	Handler().ServeHTTP(rec, req)
+	Handler(tokenDeTeste).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d para %s, quero 200", rec.Code, BasePath)
@@ -192,7 +193,7 @@ func TestHandler_ServesIndexOnBasePath(t *testing.T) {
 func servido(t *testing.T, nome string) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+nome, nil))
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+nome, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET %s%s = %d, quero 200", BasePath, nome, rec.Code)
 	}
@@ -240,7 +241,8 @@ func TestPainel_NaoTemLoginNemAdicionarExistente(t *testing.T) {
 
 	for _, proibido := range []string{
 		"Adicionar existente",
-		`id="admin"`, // o campo permanente de token no cabeçalho
+		`id="admin"`,      // o campo permanente de token no cabeçalho
+		`id="nova-admin"`, // o token de admin pedido ao criar sessão
 	} {
 		if strings.Contains(html, proibido) {
 			t.Errorf("o painel voltou a ter %q: a listagem vem da API e o token de admin "+
@@ -330,13 +332,115 @@ func TestHandler_ServeOsModulos(t *testing.T) {
 		"devui.css": "text/css",
 	} {
 		rec := httptest.NewRecorder()
-		Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+nome, nil))
+		Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+nome, nil))
 		if rec.Code != http.StatusOK {
 			t.Errorf("GET %s = %d, quero 200", nome, rec.Code)
 			continue
 		}
 		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, prefixo) {
 			t.Errorf("%s: Content-Type = %q, quero %s*", nome, ct, prefixo)
+		}
+	}
+}
+
+// tokenDeTeste é o valor que o Handler entrega em /devui/config nos testes.
+// Não é um segredo — é uma marca reconhecível, para que uma asserção de
+// "o token saiu" não possa passar por acidente com uma string vazia.
+const tokenDeTeste = "admin-de-teste-1234"
+
+// TestConfig_EntregaOTokenDeAdmin trava a decisão de 2026-08-20: o painel
+// deixou de pedir o token de admin e passa a recebê-lo do servidor.
+//
+// A consequência está escrita no comentário de Handler e foi decidida pelo
+// humano: esta camada é de desenvolvimento, e um segundo segredo a proteger
+// uma ferramenta que só corre com WA_API_DEV_UI ligado protege pouco e
+// atrapalha sempre.
+func TestConfig_EntregaOTokenDeAdmin(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler(tokenDeTeste).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"config", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %sconfig = %d, quero 200", BasePath, rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, quero application/json", ct)
+	}
+
+	var c struct {
+		AdminToken string `json:"adminToken"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil {
+		t.Fatalf("resposta não é JSON: %v (corpo: %s)", err, rec.Body.String())
+	}
+	// O valor EXATO, e não "não vazio": um handler que devolvesse uma
+	// constante qualquer passaria numa asserção de presença.
+	if c.AdminToken != tokenDeTeste {
+		t.Errorf("adminToken = %q, quero %q", c.AdminToken, tokenDeTeste)
+	}
+}
+
+// TestConfig_NaoVazaEmOutraRota: o token só sai por /devui/config. Se o
+// FileServer o servisse por engano noutro caminho, um ficheiro estático
+// passaria a conter uma credencial.
+func TestConfig_NaoVazaEmOutraRota(t *testing.T) {
+	for _, nome := range []string{"sessions.html", "eventos.html", "devui.js", "sessions.js"} {
+		if strings.Contains(servido(t, nome), tokenDeTeste) {
+			t.Errorf("%s contém o token de admin: ele só deve sair por %sconfig", nome, BasePath)
+		}
+	}
+}
+
+// TestPainel_GeraOTokenDaSessao trava o formato pedido: wa_noise_ mais um
+// valor de crypto.getRandomValues.
+//
+// A asserção inclui getRandomValues de propósito. Um gerador que usasse
+// Math.random produziria um token com o prefixo certo e entropia previsível —
+// passaria num teste de formato e falharia no que interessa.
+func TestPainel_GeraOTokenDaSessao(t *testing.T) {
+	js := servido(t, "devui.js")
+
+	if !strings.Contains(js, `"wa_noise_"`) {
+		t.Error("o gerador não usa o prefixo wa_noise_")
+	}
+	if !strings.Contains(js, "crypto.getRandomValues") {
+		t.Error("o token não vem de crypto.getRandomValues: Math.random é previsível por desenho")
+	}
+	// A procura é pela CHAMADA `Math.random(`, e não pelo nome solto.
+	//
+	// A primeira versão procurava "Math.random" e falhou — por causa do
+	// comentário que explica POR QUE não se usa Math.random. É exatamente a
+	// HOUSEKEEP F189, que eu tinha acabado de corrigir do lado do logcov: um
+	// verificador que conta MENÇÕES em vez de USOS pune quem documenta o
+	// mecanismo, e a saída fácil é apagar a explicação.
+	if strings.Contains(js, "Math.random(") {
+		t.Error("Math.random() é chamado no módulo: não serve para gerar credencial")
+	}
+
+	// E o campo tem de ser SÓ DE LEITURA: um token gerado que o utilizador
+	// possa reescrever à mão volta a ser um token escolhido por pessoa.
+	if !strings.Contains(servido(t, "sessions.html"), `id="nova-token" autocomplete="off" spellcheck="false" readonly`) {
+		t.Error("o campo do token não é readonly")
+	}
+}
+
+// TestDeLoopback aceita as duas formas de endereço, e recusa o resto.
+//
+// A tabela inclui um endereço COM porta e outro SEM porque `RemoteAddr` traz
+// porta e um endereço vindo de outra camada pode não trazer — testar só uma
+// forma deixaria metade da função sem exercício.
+func TestDeLoopback(t *testing.T) {
+	for entrada, quero := range map[string]bool{
+		"127.0.0.1:54321": true,
+		"127.0.0.1":       true,
+		"[::1]:8080":      true,
+		"::1":             true,
+		"192.168.1.10:80": false,
+		"10.0.0.5":        false,
+		"":                false,
+		"nao-e-um-ip":     false,
+	} {
+		if got := deLoopback(entrada); got != quero {
+			t.Errorf("deLoopback(%q) = %v, quero %v", entrada, got, quero)
 		}
 	}
 }

@@ -26,10 +26,10 @@
   <form method="dialog" class="corpo">
     <h2>Nova sessão</h2>
     <p class="ajuda">Cria o utilizador na API já inscrito em todos os eventos. O token é
-      devolvido pela criação e guardado neste navegador — é a única altura em que a API o expõe.</p>
+      gerado aqui e guardado neste navegador — a API só o devolve na criação.</p>
     <label class="campo"><span>nome</span><input id="nova-nome" autocomplete="off" required></label>
-    <label class="campo"><span>token da sessão</span><input id="nova-token" autocomplete="off" spellcheck="false" required></label>
-    <label class="campo"><span>token de admin</span><input id="nova-admin" autocomplete="off" spellcheck="false" required></label>
+    <label class="campo"><span>token da sessão (gerado)</span>
+      <input id="nova-token" autocomplete="off" spellcheck="false" readonly></label>
     <div class="rodape">
       <button value="cancel">Cancelar</button>
       <button type="button" class="primary" id="nova-criar">Criar</button>

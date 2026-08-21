@@ -79,6 +79,13 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
+	// AdminToken existe aqui, e não como parâmetro de registerCustomRoutes,
+	// por uma razão prática: o parâmetro obrigaria a tocar nas nove chamadas
+	// de teste que a função já tem, e nenhuma delas se importa com este
+	// valor. O campo vazio é o caso normal — só o devui o consome, e o devui
+	// só existe com WA_API_DEV_UI ligado.
+	AdminToken string
+
 	Profile     *customhttp.ProfileHandler
 	ProfileFull *customhttp.ProfileFullHandler
 	Message     *MessageHandlers

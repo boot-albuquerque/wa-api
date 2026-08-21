@@ -8,7 +8,7 @@
 // Aqui a ligação existe porque a página existe: fechar o separador fecha os
 // sockets, que é o que se espera de um observador.
 
-import { Tokens, listarSessoes, $ } from "./devui.js";
+import { Tokens, listarSessoes, carregarConfig, $ } from "./devui.js";
 
 const MAX_LINHAS = 2000; // acima disto o navegador engasga e o painel deixa de servir
 const sockets = new Map(); // id -> WebSocket
@@ -105,6 +105,7 @@ async function sincronizar() {
   }
 }
 
+await carregarConfig();
 sincronizar();
 setInterval(sincronizar, 5000);
 window.addEventListener("beforeunload", () => {

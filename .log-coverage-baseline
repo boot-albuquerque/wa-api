@@ -1110,7 +1110,20 @@ rules_frozen=true
 # esta' registada, e isso nao muda entre uma conversa e a seguinte da mesma
 # pagina. Continuar produzia N chamadas condenadas. Agora ha' uma linha, com a
 # causa, e zero trabalho desperdicado a seguir.
-min_func_coverage=666
+# devui (2026-08-20): func 666 -> 667. Ratchet-UP, e a razao NAO e' teste novo.
+#
+# deLoopback nasceu com um `if err != nil { host = remoteAddr }` — erro engolido
+# sem registo — e o gate acusou. A resposta obvia seria por' um log, mas
+# "endereco sem porta" e' formato NORMAL e nao falha: o aviso seria ruido.
+#
+# Reescrita para testar as duas formas do endereco em vez de tratar o erro, a
+# funcao deixou de ter caminho de erro nenhum e as duas metades passaram a
+# triviais (X1). O denominador de funcoes elegiveis encolheu, e a percentagem
+# subiu por isso.
+#
+# Fica registado porque um numero que melhora sem merito e' tao suspeito como um
+# que piora sem explicacao.
+min_func_coverage=667
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o

@@ -52,7 +52,6 @@ export const API = {
 // e a razão de existir um botão "adicionar existente".
 export const Tokens = {
   CHAVE: "wa-devui-tokens",
-  CHAVE_ADMIN: "wa-devui-admin",
 
   todos() {
     try { return JSON.parse(localStorage.getItem(this.CHAVE) || "{}"); }
@@ -70,9 +69,35 @@ export const Tokens = {
     localStorage.setItem(this.CHAVE, JSON.stringify(m));
   },
 
-  admin() { return localStorage.getItem(this.CHAVE_ADMIN) || ""; },
-  guardarAdmin(v) { localStorage.setItem(this.CHAVE_ADMIN, v); },
+  admin() { return adminEmMemoria; },
 };
+
+// O token de admin vem DO SERVIDOR, não do utilizador.
+//
+// A API exige-o em `/admin/*` — medido, `401` sem ele — mas fazer alguém
+// escrevê-lo num painel que só existe com WA_API_DEV_UI ligado é pedir uma
+// senha para entrar numa sala que já está aberta.
+//
+// A consequência de segurança está escrita em devui.go, no comentário de
+// Handler, e não é pequena: quem alcança o painel passa a ter acesso
+// administrativo. A proteção real é, e sempre foi, a variável de ambiente.
+let adminEmMemoria = "";
+
+export async function carregarConfig() {
+  try {
+    const r = await fetch("config", { cache: "no-store" });
+    if (!r.ok) return false;
+    const c = await r.json();
+    adminEmMemoria = c.adminToken || "";
+    // EM MEMÓRIA, e não no localStorage: o token vem do servidor a cada
+    // carregamento, então guardá-lo só criaria uma cópia que sobrevive ao
+    // servidor que a emitiu — e que fica desatualizada em silêncio quando ele
+    // é reiniciado com outro.
+    return adminEmMemoria !== "";
+  } catch {
+    return false;
+  }
+}
 
 // listarSessoes devolve a lista COMO A API A VÊ, com o token local anexado
 // quando existir.
@@ -103,3 +128,19 @@ export async function listarSessoes() {
 export const soDigitos = (v) => String(v || "").replace(/\D+/g, "");
 
 export const $ = (id) => document.getElementById(id);
+
+// novoToken gera o token de uma sessão nova.
+//
+// `wa_noise_` + 32 hex de crypto.getRandomValues, que são 128 bits de
+// entropia. Gerado no cliente porque é o cliente que o guarda: pedi-lo ao
+// servidor obrigaria a uma rota nova para produzir um valor que ninguém
+// precisa de reproduzir.
+//
+// getRandomValues e NÃO Math.random: este valor é a credencial da sessão, e
+// Math.random é previsível por desenho — o gerador do V8 não é
+// criptográfico, e um token adivinhável é um token que não existe.
+export function novoToken() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return "wa_noise_" + [...b].map((n) => n.toString(16).padStart(2, "0")).join("");
+}

@@ -38,7 +38,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	//
 	// Os headers de segurança CONTINUAM valendo: só a autenticação sai.
 	if devui.Enabled() {
-		devChain := alice.New(securityHeadersMiddleware).Then(devui.Handler())
+		devChain := alice.New(securityHeadersMiddleware).Then(devui.Handler(ch.AdminToken))
 		registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")
 		registry.Register(strings.TrimSuffix(devui.BasePath, "/"), devChain, "GET")
 	}

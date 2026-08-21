@@ -334,6 +334,9 @@ func buildRouter(d Deps) *mux.Router {
 	}
 	router.Handle("/health/ready", alice.New().Then(readinessHandler(ready))).Methods("GET")
 
+	// O devui precisa do token de admin para o entregar ao painel; ver
+	// devui.Handler para a consequência de segurança disso.
+	d.CustomHandlers.AdminToken = d.AdminToken
 	registerCustomRoutes(router, c, d.CustomHandlers)
 
 	if d.StaticDir != "" {

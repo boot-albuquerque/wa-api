@@ -20,7 +20,7 @@
 //     lista, e ocupavam metade do ecrã mesmo quando não se estava a olhar
 //     para eles.
 
-import { API, Tokens, listarSessoes, $ } from "./devui.js";
+import { API, Tokens, listarSessoes, carregarConfig, novoToken, $ } from "./devui.js";
 import { ENVIO, CHAT } from "./operacoes.js";
 
 const POLL_MS = 3000;
@@ -36,7 +36,8 @@ async function atualizar() {
     // do que uma grelha vazia sem explicação (HOUSEKEEP F94: um vazio mudo é
     // indistinguível de "não há nada" e de "não consigo ver").
     mostrarAviso(r.status === 401 || r.status === 0
-      ? "Sem acesso à listagem. O token de admin é pedido ao criar uma sessão e fica guardado neste navegador."
+      ? "Sem acesso à listagem. O token de admin vem do servidor em /devui/config — " +
+        "se isto persistir, o painel foi servido por uma instância sem WA_API_DEV_UI."
       : `Não consegui listar as sessões (HTTP ${r.status}).`);
     return;
   }
@@ -376,8 +377,10 @@ function responder(el, classe, txt) {
 
 $("btn-nova").onclick = () => {
   $("nova-nome").value = "";
-  $("nova-token").value = "";
-  $("nova-admin").value = Tokens.admin();
+  // Gerado a cada abertura, e não reaproveitado: se alguém abrir o diálogo,
+  // desistir e voltar, o token de arranque tem de ser outro. Reusar faria dois
+  // "cancelar" seguidos proporem a mesma credencial.
+  $("nova-token").value = novoToken();
   const resp = $("nova-resposta");
   resp.hidden = true; resp.className = "resposta";
   $("dlg-nova").showModal();
@@ -399,17 +402,15 @@ $("nova-criar").onclick = async () => {
   const resp = $("nova-resposta");
   const nome = $("nova-nome").value.trim();
   const token = $("nova-token").value.trim();
-  const adm = $("nova-admin").value.trim();
 
-  if (!nome || !token || !adm) {
-    return responder(resp, "err", "Preencha nome, token da sessão e token de admin.");
-  }
+  if (!nome) return responder(resp, "err", "Dê um nome à sessão.");
+  if (!token) return responder(resp, "err", "O token não foi gerado. Feche e reabra o diálogo.");
 
-  Tokens.guardarAdmin(adm);
   const r = await API.admin("POST", "/admin/users", { name: nome, token, events: "All" });
   if (!r.ok) {
     return responder(resp, "err", r.status === 401
-      ? "HTTP 401 — o token de admin não foi aceite."
+      ? "HTTP 401 — o servidor recusou o token de admin que ele próprio entregou. " +
+        "Recarregue a página: o servidor pode ter reiniciado com outro."
       : `HTTP ${r.status}\n${JSON.stringify(r.body, null, 2)}`);
   }
 
@@ -425,6 +426,9 @@ $("nova-criar").onclick = async () => {
 
 // ---- ciclo ------------------------------------------------------------------
 
+// A configuração vem PRIMEIRO: sem o token de admin, a listagem devolve 401 e
+// o painel mostraria "sem acesso" no arranque antes de ter tentado obtê-lo.
+await carregarConfig();
 atualizar();
 setInterval(atualizar, POLL_MS);
 window.addEventListener("beforeunload", () => {
