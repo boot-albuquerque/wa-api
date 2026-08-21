@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wa-api — eventos</title>
+<link rel="stylesheet" href="devui.css">
+<style>
+  main { padding:0; display:flex; flex-direction:column; height:calc(100vh - 55px); }
+  .barra { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--surface); }
+  .barra label { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+  .barra input[type=text] { width:200px; }
+  .fluxo { flex:1; overflow-y:auto; padding:8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>wa-api <small>eventos</small></h1>
+  <nav>
+    <a href="sessions.html">Sessões</a>
+    <a href="eventos.html" aria-current="page">Eventos</a>
+  </nav>
+</header>
+
+<main>
+  <div class="barra">
+    <span class="lbl" id="resumo">0 ligados</span>
+    <label>filtro <input type="text" id="filtro" placeholder="tipo ou texto" autocomplete="off"></label>
+    <label><input type="checkbox" id="seguir" checked style="width:auto"> seguir o fim</label>
+    <button id="btn-limpar">Limpar</button>
+  </div>
+  <div class="fluxo log" id="fluxo">
+    <div class="vazio" id="vazio" style="margin:24px">
+      A ligar aos WebSockets das sessões com token neste navegador…
+    </div>
+  </div>
+</main>
+
+<script type="module" src="eventos.js"></script>
+</body>
+</html>
