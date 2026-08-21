@@ -123,6 +123,8 @@ declarado do projeto: métodos principais de envio e chat.
 | presença (observação) | `capabilities/presence` | implementada e **NÃO PROVADA**: `isSubscribed` não se mantém (H50) |
 | `listChats` | `capabilities/chats` | **384 conversas, 384 com título**, 2 grupos, 122 com não-lidas |
 | `markRead` | `capabilities/chats` (`markread.go`) | 9 testes, 4 controles; caminho real **não exercitado ao vivo** (H52) |
+| `react` (add) | `capabilities/react` | **provado**: `hasReaction` false→true em 0,5 s |
+| `react` (remove) | `capabilities/react` | funciona; **não verificável na sessão** — `Result.Verified` diz isso (H53) |
 
 ### O que este módulo consegue e não consegue provar
 

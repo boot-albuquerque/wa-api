@@ -37,33 +37,54 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// THE NEXT BATCH OF MESSAGE OPERATIONS, read before design.
+	// THE REACTION ROW, read instead of guessed.
 	//
-	// Three capabilities behave differently and each has been guessed wrong by
-	// somebody: sendConversationSeen, sendReactionToMsg and the quoted-message
-	// helper. The last four capabilities all cost a correction at exactly this
-	// step when the argument shape was assumed (H40, H46, H49) — so this reads.
+	// hasReaction is sticky within a session; getReactionEmojisAndSum did not
+	// return the {sum} I assumed. Two guesses is one too many, so this reads the
+	// actual state: the account holds a message that was reacted to and then
+	// un-reacted, which is exactly the case that needs distinguishing.
+	//
+	// No emoji and no identity leave the page — only lengths and flags.
 	const script = `JSON.stringify((() => {
 		const out = {};
-		const read = (mod, names) => {
-			let m = null;
-			try { m = window.require(mod); } catch (e) { out[mod] = 'REQUIRE_FAILED'; return; }
-			if (!m) { out[mod] = 'NULL'; return; }
-			const bag = {};
-			for (const n of (names || Object.keys(m))) {
-				try {
-					const f = m[n];
-					bag[n] = (typeof f === 'function')
-						? { arity: f.length, src: String(f).slice(0, 330) }
-						: { kind: typeof f };
-				} catch (e) { bag[n] = 'THREW'; }
-			}
-			out[mod] = bag;
-		};
-		read('WAWebChatSendConversationSeen', ['sendConversationSeen']);
-		read('WAWebSendReactionMsgAction', ['sendReactionToMsg']);
-		read('WAWebQuotedMsgModelUtils', ['createQuotedMsgObj']);
-		read('WAWebSendTextMsgChatAction', ['sendTextMsgToChat']);
+		const coll = window.require('WAWebMsgCollection').MsgCollection;
+		const RC = window.require('WAWebReactionsCollection').ReactionsCollection;
+		const U = window.require('WAWebReactionsUtils');
+
+		out.reactionRows = RC.getModelsArray().length;
+		const rows = RC.getModelsArray().slice(0, 3).map(r => {
+			const o = { keys: Object.keys(r).filter(k => k.indexOf('__x_') === 0).slice(0, 20).join(',') };
+			try {
+				const s = r.senders && typeof r.senders.getModelsArray === 'function'
+					? r.senders.getModelsArray() : [];
+				o.senders = s.map(x => ({
+					emojiLen: (x.reactionText || '').length,
+					hasEmoji: !!(x.reactionText && x.reactionText.length),
+					ack: (typeof x.ack === 'number') ? x.ack : null
+				}));
+			} catch (e) { o.sendersErr = String((e && e.message) || e).slice(0, 100); }
+			try { o.aggCount = r.aggregateEmoji ? r.aggregateEmoji.length : -1; } catch (e) {}
+			return o;
+		});
+		out.rows = rows;
+
+		// What do the display helpers actually RETURN? Shape, not content.
+		for (const m of coll.getModelsArray()) {
+			try {
+				if (!m.hasReaction) { continue; }
+				out.sample = { sticky: true };
+				for (const fn of ['getReactionEmojisAndSum', 'getReactionAggregates', 'getReactionForDisplay']) {
+					try {
+						const v = U[fn] && U[fn](m);
+						out.sample[fn] = (v === undefined) ? 'undefined'
+							: (v === null ? 'null'
+							: (Array.isArray(v) ? 'array/' + v.length
+							: (typeof v === 'object' ? Object.keys(v).join(',') : typeof v + ':' + String(v).slice(0, 20))));
+					} catch (e) { out.sample[fn] = 'THREW: ' + String((e && e.message) || e).slice(0, 60); }
+				}
+				break;
+			} catch (e) {}
+		}
 		return out;
 	})())`
 
@@ -73,5 +94,5 @@ func TestProbeContactShape(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	t.Logf("op signatures: %s", raw)
+	t.Logf("reaction rows: %s", raw)
 }

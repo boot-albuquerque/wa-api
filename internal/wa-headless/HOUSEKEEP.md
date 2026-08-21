@@ -4051,3 +4051,53 @@ depende de terceiros para o que ele mesmo escreve.
 **Status**: parcialmente entregue — chamada correta lida da fonte, pós-condição
 implementada, nove testes e quatro controles negativos; caminho real não
 exercitado ao vivo, com as duas tentativas e a hipótese registradas.
+
+## H53 — reagir: a pós-condição teve de ser DESCOBERTA, e as duas metades não são iguais
+
+**Data**: 2026-08-20 · **Contexto**: lote de operações de mensagem.
+
+**Não havia caso para copiar.** Medido antes de escrever: de 395 mensagens da
+conta, **ZERO** carregavam reação e a `ReactionsCollection` estava **vazia**. A
+pós-condição não podia ser aprendida de um exemplo existente — teve de ser
+criada.
+
+**Adicionar: provado.** `hasReaction` vai de `false` a `true` em ~0,5 s. A prova
+manda uma mensagem para a conta par e reage à PRÓPRIA mensagem, então nada é
+feito na mensagem de outra pessoa.
+
+### Remover funciona, e eu levei três medições para acreditar
+
+A verificação falhou três vezes seguidas com "a reação ainda está lá". As três
+vezes eu estava errado, e a página estava certa:
+
+| tentativa | o que li | o que era |
+|---|---|---|
+| 1 | leitura imediata após o `await` | corrida — li antes de a página aplicar |
+| 2 | espera de 30 s pelo `hasReaction` | o campo é **GRUDENTO na sessão**: fica `true` |
+| 3 | `getReactionEmojisAndSum().sum` | a forma do retorno não é essa; devolveu nada |
+
+**E a evidência de que a remoção funciona veio de fora da sessão**: TRÊS leituras
+em sessões NOVAS mostraram `hasReaction` falso em todas as mensagens e **zero**
+linhas na `ReactionsCollection`. O efeito é real e persistido; o que não existe é
+como observá-lo de dentro da sessão que o causou.
+
+**A decisão, e ela é de contrato e não de código**: `Result.Verified` distingue
+as duas metades. `Add` verifica; `Remove` não, e diz isso. Um `Result` que
+escondesse a diferença deixaria "removido" ser lido com a mesma força de
+"adicionado", que não é o que a evidência sustenta.
+
+> Polir isso com um `poll` que nunca converge teria produzido **uma capacidade
+> que sempre falha em algo que sempre funciona** — pior que não verificar.
+
+**Quatro controles negativos, EXECUTADOS**: verificar também na remoção; remover
+a pós-condição do `Add`; passar o id em vez do modelo; aceitar emoji vazio no
+`Add` (que é como o protocolo REMOVE, e aceitá-lo faria o oposto do pedido, em
+silêncio).
+
+**Ainda respeitando a regra da página**: `WAWebReactionsUtils.canReactToMessage`
+é consultado antes, porque existe por um motivo que não conhecemos e contorná-lo
+seria pedir ao app que quebre a própria guarda.
+
+**Status**: entregue — adicionar provado com pós-condição descoberta, remover
+implementado e declarado NÃO VERIFICÁVEL na sessão, com a evidência de que
+funciona e quatro controles negativos.

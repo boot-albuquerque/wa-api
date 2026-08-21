@@ -271,6 +271,22 @@ const (
 	// Marking read without naming what was read is not something the protocol
 	// offers, which is why the key is looked up rather than omitted.
 	ModuleSendConversationSeen = Module("WAWebChatSendConversationSeen")
+	// ModuleSendReactionMsgAction reacts to a message.
+	//
+	// sendReactionToMsg(msg, emoji) — the MESSAGE MODEL and a string, read from
+	// the app's own call. An empty string is how a reaction is removed, which
+	// is the same call rather than a second one.
+	//
+	// The argument is the model, not the id: the same shape that cost H40, H46
+	// and H49 a correction each when it was assumed the other way.
+	ModuleSendReactionMsgAction = Module("WAWebSendReactionMsgAction")
+	// ModuleReactionsCollection holds reaction rows.
+	//
+	// Measured 2026-08-20: this account had ZERO — no message carried
+	// hasReaction and the collection was empty. So the postcondition for
+	// reacting could not be copied from an existing case; it had to be
+	// discovered by creating one.
+	ModuleReactionsCollection = Module("WAWebReactionsCollection")
 )
 
 // RequiredAtStartup is verified before any capability runs.
