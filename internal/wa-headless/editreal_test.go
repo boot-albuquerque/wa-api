@@ -68,7 +68,7 @@ func TestRealSPAEditsAMessageItJustSent(t *testing.T) {
 	}
 	t.Logf("edited: %s", got)
 
-	if got.ToLen != len(after) || got.FromLen != len(before) {
+	if got.ToLen != utf16Len(after) || got.FromLen != utf16Len(before) {
 		t.Fatalf("the lengths do not match what was sent and asked for: %s", got)
 	}
 	if !got.Recorded {

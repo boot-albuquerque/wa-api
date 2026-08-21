@@ -77,8 +77,8 @@ func TestRealSPAForwardsItsOwnMessage(t *testing.T) {
 	if got.NewID == "" {
 		t.Fatalf("no copy id: %s", got)
 	}
-	if got.BodyLen != len(body) {
-		t.Errorf("the copy's body length is %d and the original's is %d", got.BodyLen, len(body))
+	if got.BodyLen != utf16Len(body) {
+		t.Errorf("the copy's body length is %d and the original's is %d", got.BodyLen, utf16Len(body))
 	}
 
 	// A chat that is not loaded must be refused rather than created.

@@ -4854,3 +4854,85 @@ Todos com `assert` de que a mutação se aplica — a lição da H62.
 **Status**: entregue.
 **Testes**: `capabilities/forward/forward_test.go` (13 testes, seis com controle
 negativo acima) e `forwardreal_test.go` (prova ao vivo).
+
+---
+
+## H64 — renomear grupo, e um teste que falhou com o efeito correto aplicado
+
+**Data**: 2026-08-21
+**Contexto**: último módulo não localizado da superfície do whatsapp-web.js.
+**Onde**: `internal/wa-headless/capabilities/group/subject.go`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/utf16len_test.go`.
+
+### A assinatura foi legível de primeira
+
+`WAWebSetSubjectGroupAction.setGroupSubject` tem invólucro **síncrono**:
+
+```
+setGroupSubject(chat, subject = "")
+```
+
+**O default é o problema.** Chamar sem o segundo argumento **apaga o nome do
+grupo**. A capacidade passa o assunto explicitamente e recusa string vazia com
+`ErrEmptySubject` — há controle negativo para as duas coisas.
+
+**Sem palpite de admin**: renomear é governado por uma configuração por grupo que
+pode permitir qualquer membro, então recusar por conta própria negaria um ato que
+o grupo permite. A recusa da página passa adiante.
+
+### A pós-condição é AUTO-MEDIDORA, e a medição saiu
+
+Qual campo do modelo carrega o assunto neste build nunca havia sido medido. Em
+vez de escolher um, o script tenta `subject`, `name` e `formattedTitle`, e
+**reporta qual moveu**:
+
+```
+MEASURED: on this build a group's subject lives in chat.formattedTitle
+```
+
+`Rename.Field` existe para isso. Uma capacidade que não sabe dizer onde olhou não
+pode ser conferida pela próxima pessoa.
+
+### A falha que valeu mais que o sucesso
+
+```
+renamed: group.Rename(fromLen=49 toLen=72 field=formattedTitle already=false waited=1.019s)
+the new subject's length is 72 and 74 was asked for
+```
+
+**O rename tinha funcionado.** A asserção comparava `len()` do Go (bytes) com
+`.length` do JS (unidades UTF-16), e o travessão do assunto do grupo de
+laboratório custa 2 de diferença.
+
+Pior desfecho possível: asserção errada em teste ao vivo gasta uma execução
+inteira para não dizer nada, e manda a próxima pessoa depurar a capacidade certa.
+
+**E estava latente em outros dois lugares** — os testes ao vivo de editar (H60) e
+encaminhar (H63) fazem a mesma comparação e passavam por serem ASCII. Corrigidos
+os três com `utf16Len`, que tem teste próprio com casos que DIFEREM de `len()`
+(travessão: 1 unidade / 3 bytes; emoji: 2 unidades / 4 bytes) para não virar
+sinônimo num refactor. Entrada no `ARMADILHAS.md`.
+
+### Restauração que não é cosmética
+
+Todo teste ao vivo de grupo acha o grupo de laboratório **pelo assunto**. Uma
+execução que renomeasse e parasse faria a próxima **criar um segundo grupo**. O
+`defer` diz isso na mensagem de erro.
+
+### Controles negativos EXECUTADOS
+
+Todos com `assert` de aplicação.
+
+| mutação | falha observada |
+|---|---|
+| usar o default vazio do app | `the call does not pass the subject explicitly` |
+| deixar passar assunto vazio | `got <nil>, want ErrEmptySubject` |
+| assumir um único campo | `the result script does not consider 'name'` |
+| script confia no `await` | `the apply branch does not hand the settling decision to Go` |
+| `settling` indistinto de travamento | `got …never settled…, want ErrSubjectUnchanged` |
+
+**Status**: entregue.
+**Testes**: `capabilities/group/subject_test.go` (10 testes, cinco com controle
+acima), `subjectreal_test.go` (prova ao vivo, restaura) e
+`utf16len_test.go::TestUTF16LenMatchesJavaScript`.

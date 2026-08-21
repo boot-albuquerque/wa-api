@@ -1122,3 +1122,37 @@ dia:
 | mutou a camada errada | passa | asserir a camada onde o defeito vive |
 | apontou para o teste do ramo vizinho | passa | rodar o teste do ramo mutado |
 | **não se aplicou** | passa | asserir que a mutação existe antes de mutar |
+
+## `len()` em Go conta bytes; `.length` em JS conta unidades UTF-16
+
+**Medido em 2026-08-21, por uma prova ao vivo que falhou com o efeito CORRETO
+já aplicado.**
+
+O teste do rename de grupo pediu um assunto contendo travessão e comparou o
+comprimento devolvido pela página com `len()` do Go:
+
+```
+the new subject's length is 72 and 74 was asked for
+```
+
+O rename **tinha funcionado**. A asserção é que estava errada — e este é o pior
+dos dois desfechos, porque uma asserção errada num teste ao vivo gasta uma
+execução inteira para não dizer nada, e a próxima pessoa vai depurar a
+capacidade.
+
+O travessão custa 3 bytes e 1 unidade. Emoji fora do BMP custa 4 bytes e **2**
+unidades, por ser par substituto.
+
+**A parte que faz disto armadilha e não erro de digitação**: a mesma comparação
+estava nos testes ao vivo de **editar** e **encaminhar**, e passava — porque
+aquelas strings eram ASCII. Latente, não ausente. Um dia alguém põe um emoji no
+texto de teste e três testes quebram por um motivo que não tem nada a ver com o
+que eles medem.
+
+**A regra**: qualquer comprimento que atravesse a fronteira Go↔página se compara
+em unidades UTF-16. O ajudante é `utf16Len` (`internal/wa-headless/utf16len_test.go`),
+e ele tem teste próprio com casos que DIFEREM de `len()` — para que não vire
+sinônimo de `len()` num refactor.
+
+**Vale para toda fronteira com JavaScript**, não só esta: índices de `slice`,
+posições de menção, limites de truncamento.

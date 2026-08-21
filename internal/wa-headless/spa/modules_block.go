@@ -147,3 +147,13 @@ const (
 	// package surfaces it rather than flattening it to "failed".
 	ModuleForwardMessagesToChat = Module("WAWebForwardMessagesToChat")
 )
+
+// ModuleSetSubjectGroupAction renames a group. Its wrapper is SYNCHRONOUS, so
+// the shape is exact:
+//
+//	setGroupSubject(chat, subject = "")
+//
+// The first argument is unproxied inside, which is this build's way of saying
+// it wants a MODEL. The default of "" is the app's, not ours: this package
+// refuses an empty subject rather than silently clearing a group's name.
+const ModuleSetSubjectGroupAction = Module("WAWebSetSubjectGroupAction")

@@ -631,7 +631,7 @@ cuja chave é `$MuteImpl3`, artefato de minificação. Nós dirigimos o **modelo
 | `wwebjs` | estado |
 |---|---|
 | `Message.forward` | módulo localizado (`WAWebChatForwardMessage`), assinatura async — precisa de experimento |
-| `Chat.setSubject` | módulo não localizado |
+| `Chat.setSubject` | **entregue** (H64) — `WAWebSetSubjectGroupAction.setGroupSubject` |
 | participantes de grupo | **não entregue** (H58) — bloqueio nomeado, medição preservada |
 | link de convite de grupo | **parcialmente entregue** (H57) — `queryGroupInvite` trava |
 
@@ -655,3 +655,25 @@ forwardMessagesToChats({msgs, chats, includeCaption, appendedText})
    com e sem legenda são atos diferentes, e escolher por conta própria seria
    escolher o que outras pessoas leem.
 4. **O campo `reasons` do erro sobrevive** até o chamador.
+
+## §6.20 — renomear grupo
+
+`wwebjs` expõe `GroupChat.setSubject(subject)`. A assinatura foi legível de
+primeira porque o invólucro é síncrono:
+
+```
+setGroupSubject(chat, subject = "")
+```
+
+**Onde divergimos de propósito:**
+
+1. **Passamos o assunto explicitamente e recusamos vazio.** O default do app é a
+   string vazia, que **apaga o nome do grupo**. Renomear para nada não é
+   renomear.
+2. **Não palpitamos sobre admin.** Renomear é governado por configuração por
+   grupo que pode permitir qualquer membro; a recusa da página passa adiante.
+3. **A pós-condição é auto-medidora** e reporta o campo que carregou a mudança.
+   Neste build é `chat.formattedTitle` — medido, não escolhido.
+
+Com isto, a superfície do whatsapp-web.js está fechada exceto pelos dois
+bloqueios nomeados: participantes (H58) e link de convite (H57).
