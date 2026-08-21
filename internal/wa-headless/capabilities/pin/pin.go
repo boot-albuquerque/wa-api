@@ -161,9 +161,19 @@ func (p *Pinner) set(ctx context.Context, msgID string, on bool, label string) (
 
 // PinnedIn lists the message ids pinned in a conversation.
 //
-// IT IS CORRECT AT SESSION START AND STALE AFTER A CHANGE THIS SESSION MADE, so
-// it is both the reader a caller wants and the only honest proof this module
-// has — used from a later session.
+// WHETHER IT GOES STALE AFTER A PIN IS UNKNOWN, AND SAYING SO IS THE POINT.
+//
+// This doc used to state that it is "correct at session start and stale after a
+// change this session made", which is a claim about what happens after a
+// successful pin — and no successful pin has ever been observed here. Pinning
+// is accepted by the page and nothing is pinned (H81), so the sentence
+// described the aftermath of an event that never occurred. It was inherited
+// from H58's participant measurement, the same over-broad generalisation that
+// had to be corrected in group.PolicyOf (H90).
+//
+// What IS known: the reader works, and the account has nothing pinned. When a
+// pin succeeds, the write class can be measured with spa.ClassifyWriteExpr like
+// any other, and this comment can then say something it has evidence for.
 func (p *Pinner) PinnedIn(ctx context.Context, chatJID, label string) ([]string, error) {
 	if strings.TrimSpace(chatJID) == "" {
 		return nil, ErrNoChat

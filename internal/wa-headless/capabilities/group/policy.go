@@ -156,8 +156,25 @@ func (m *Manager) SetPolicy(ctx context.Context, groupJID string, p Policy, on b
 
 // PolicyOf reports what this session sees for one of the group's settings.
 //
-// IT IS CORRECT AT SESSION START AND STALE AFTER A CHANGE THIS SESSION MADE,
-// the same as Count — which is what makes cross-session the only honest proof.
+// IT IS CORRECT AFTER A CHANGE THIS SESSION MADE, and this doc used to say the
+// opposite. The correction is worth keeping visible rather than quietly
+// rewritten:
+//
+// The old text claimed policies went stale in the session that changed them,
+// "the same as Count — which is what makes cross-session the only honest
+// proof". That came from H58, which measured PARTICIPANT changes staying
+// invisible for ninety seconds and generalised the finding to everything
+// living on the group metadata. H85 measured policies specifically and found
+// them visible in about ONE SECOND, with eight bus events to go with it; the
+// classification that said otherwise had come from a control that wrote the
+// value the group already held, and a no-op cannot move a reader.
+//
+// H90 contradicted the old text again from a different direction: a set-then-
+// read in a single session reports true -> false, in that session, every time.
+//
+// Count IS still the stale case, and merging the two was the original mistake.
+// SetPolicy therefore verifies in-session and returns Verified: true, which
+// would have been unreachable if this doc had been right.
 func (m *Manager) PolicyOf(ctx context.Context, groupJID string, p Policy, label string) (bool, error) {
 	if !strings.HasSuffix(strings.TrimSpace(groupJID), "@g.us") {
 		return false, ErrNotGroup

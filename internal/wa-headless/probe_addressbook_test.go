@@ -76,8 +76,17 @@ func TestProbeAddressbook(t *testing.T) {
 			out.contact.found = !!c;
 			if (c) {
 				out.contact.fields = Object.keys(c);
+				// THE FLAGS THE PRIVACY FILTER WOULD CARE ABOUT, read through the
+				// getters AND through the raw storage. The model keeps its
+				// properties behind "__x_" and exposes them by getter; reading
+				// only one of the two would report "absent" for a field that is
+				// merely somewhere else.
 				out.contact.isAddressBookContact = c.isAddressBookContact;
 				out.contact.isMyContact = c.isMyContact;
+				out.contact.raw_isAddressBookContact = c.__x_isAddressBookContact;
+				out.contact.raw_isMyContact = c.__x_isMyContact;
+				out.contact.raw_syncToAddressbook = c.__x_syncToAddressbook;
+				out.contact.raw_isContactSyncCompleted = c.__x_isContactSyncCompleted;
 				out.contact.hasName = !!c.name;
 				out.contact.hasPushname = !!c.pushname;
 				out.contact.hasShortName = !!c.shortName;

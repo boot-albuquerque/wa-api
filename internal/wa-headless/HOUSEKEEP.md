@@ -3918,6 +3918,30 @@ observação está provada.
 **O que reabriria o caso**: salvar uma conta na agenda da outra e reexecutar. É
 ação humana no aparelho, e por isso está registrada aqui em vez de tentada.
 
+> **ATUALIZAÇÃO 2026-08-21 (H91): tentado, e a hipótese ficou MAIS PRECISA em
+> vez de resolvida.** A H90 entregou `addressbook.Save`, então salvar uma conta
+> na outra deixou de exigir aparelho. Feito, com `syncToAddressbook=false`. O
+> teste de presença **continua pulando** com `not subscribed`. Mas a medição do
+> registro de contato depois do save diz por quê:
+>
+> | campo | valor |
+> |---|---|
+> | `isAddressBookContact` | **1** |
+> | `name` / `pushname` / `shortName` | todos presentes |
+> | `__x_syncToAddressbook` | false |
+> | `__x_isContactSyncCompleted` | **0** |
+>
+> O contato existe e é de agenda **localmente**. O que não aconteceu foi a
+> SINCRONIZAÇÃO — e o filtro de "visto por último: meus contatos" é avaliado no
+> servidor, que só conhece o que foi sincronizado. A hipótese quatro deixa de ser
+> "talvez seja privacidade" e passa a ser: *o servidor não considera contato quem
+> nunca foi sincronizado, e `syncToAddressbook=false` não sincroniza*.
+>
+> **Nova condição de reabertura, mais estreita**: repetir com
+> `syncToAddressbook=true`, que escreve na agenda do TELEFONE físico. Continua
+> sendo autorização humana — mas agora por uma razão medida, e não por não haver
+> outro caminho.
+
 > **Defeito real encontrado no caminho, e corrigido**: a primeira versão de
 > `Observe` subscrevia e lia na MESMA chamada de página. `subscribeUserPresence`
 > retorna antes de `isSubscribed` virar, então era corrida — passou uma vez e
@@ -7072,3 +7096,76 @@ carrega nome nessa linha, nada depois dela prova coisa alguma.
 | isentar um arquivo cujo relógio só existe em comentário | idem | "is allowlisted (…) and no longer contains a clock; remove the exception" |
 
 **Status**: entregue (o achado do `group.go:274` fica pendente).
+
+---
+
+## H91 — as duas correções que a orquestração mandou fazer, e a H50 reaberta pela metade
+
+**Data**: 2026-08-21.
+
+### 1. O `setTimeout` saiu de `group.go` — a allowlist não é lugar de morar
+
+A H90 nomeou `capabilities/group/group.go:274` na allowlist do gate novo em vez
+de corrigir, por estar fora do escopo. A decisão que voltou foi explícita e vale
+guardar como regra:
+
+> *Não quero uma violação conhecida da invariante 6 estabilizada numa allowlist.
+> A allowlist pode existir apenas enquanto a correção está no mesmo bloco.*
+
+A espera pelo chat recém-criado agora **parkeia** `awaiting_chat` e para. O laço
+de polling que já existia no Go passou a tratar esse estágio como "continue", e
+o script de leitura virou `ensureVerifyScript`: síncrono, gasta um turno
+procurando o chat, e escreve o resultado final quando acha.
+
+Dois ganhos que não eram o objetivo:
+
+- **O corpo de verificação virou uma string compartilhada** (`verifyFnJS`), usada
+  pelos dois caminhos. Antes existia uma cópia só; agora que há dois lugares
+  perguntando "quem está de fato no grupo?", uma cópia que divergisse deixaria um
+  caminho aplicando a pós-condição e o outro deixando de aplicar.
+- **"Criado mas invisível" deixou de ser "a página não respondeu"**. Os dois
+  compartilhavam uma mensagem. O grupo existe no servidor — `createGroup`
+  devolveu um wid — e a coleção nunca o mostrou; quem lesse "never settled"
+  procuraria no lugar errado.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| laço do Go sem tratar `awaiting_chat` | `TestTheChatIsWaitedForFromGo` | `Ensure: … at awaiting_chat ()` |
+| remover a mensagem específica de "criado mas invisível" | `TestAGroupThatNeverAppearsSaysSo` | `err = … the page never settled within 200ms, want the created-but-invisible reason` |
+
+### 2. `PolicyOf` — e um TERCEIRO lugar com a mesma frase herdada
+
+O doc de `PolicyOf` afirmava que políticas ficam stale na sessão que as mudou,
+"como o `Count`". Falso desde a H85 e contrariado de novo pela H90. Corrigido —
+e o comentário agora **conta a correção** em vez de simplesmente ficar certo,
+porque a generalização errada da H58 é a coisa que se repete.
+
+Procurando a frase, achei-a em mais três arquivos:
+
+| onde | veredito |
+|---|---|
+| `group/participants.go:189` (`Count`) | **verdadeira** — é o caso stale de verdade (H58) |
+| `chats/markunread.go:89` (`UnreadCount`) | **verdadeira** — medida na despromoção do `sendSeen` |
+| `pin/pin.go:164` (`PinnedIn`) | **afirmação sem medição** — corrigida |
+
+A do `pin` merece nota: ela descreve o que acontece *depois de um pin
+bem-sucedido*, e **nunca houve um** (H81 — a página aceita e nada é fixado).
+Descrevia o rescaldo de um evento que não ocorre, que é a forma exata do defeito
+da H83. O comentário agora diz que a classe de escrita é desconhecida e como
+medi-la quando um pin passar a funcionar.
+
+### 3. H50 reaberta, e a quarta hipótese ficou mais estreita
+
+Ver a atualização dentro da própria H50. Resumo: salvar deixou de precisar de
+humano, o save funcionou (`isAddressBookContact = 1`, nome presente), e a
+presença **continua sem subscrição** — porque `isContactSyncCompleted = 0`. O
+servidor não conhece um contato que nunca foi sincronizado.
+
+**Estado de laboratório deixado de propósito**: as duas contas ficam salvas uma
+na outra, com os nomes `wa-headless-lab A` e `wa-headless-lab B`. É configuração
+útil e reconhecível como artefato de teste; desfazer com
+`WA_LAB_MUTUAL=forget go test -run TestLabMutualAddressbookSave`.
+
+**Status**: entregue.

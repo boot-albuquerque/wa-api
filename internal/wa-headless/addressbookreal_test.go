@@ -185,3 +185,71 @@ func TestAddressbookDeleteIsIdempotentReal(t *testing.T) {
 		t.Fatalf("the second delete failed with something unexpected: %v", second)
 	}
 }
+
+// TestLabMutualAddressbookSave puts each lab account in the other's contact
+// list, and exists to reopen a finding that was closed as human-only.
+//
+// H50 could not prove presence OBSERVATION. Three hypotheses were knocked down
+// by measurement; the fourth was privacy — WhatsApp can restrict "last seen and
+// online" to contacts, and the two lab accounts do not have each other saved.
+// The reopening condition recorded there was "an action on the physical
+// handset", because nothing in this module could save a contact.
+//
+// addressbook.Save can. Whether it is ENOUGH is the open question: the
+// last-seen filter is evaluated on the server, and a contact that exists only
+// in this session's contact store may not count. That is precisely why this is
+// worth one cheap run — syncToAddressbook stays FALSE, so nothing reaches
+// anybody's phone, and the experiment is reversible by TestLabForgetEachOther.
+func TestLabMutualAddressbookSave(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_LAB_MUTUAL") == "" {
+		t.Skip("set WA_LAB_MUTUAL=save|forget")
+	}
+	mode := os.Getenv("WA_LAB_MUTUAL")
+	if mode != "save" && mode != "forget" {
+		t.Fatal("WA_LAB_MUTUAL must be save or forget")
+	}
+	fromProfile := os.Getenv("WA_SEND_FROM_PROFILE")
+	toProfile := os.Getenv("WA_SEND_TO_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	selfA := os.Getenv("WA_SELF_JID")
+	if fromProfile == "" || toProfile == "" || peer == "" || selfA == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE, WA_SEND_TO_PROFILE, WA_SEND_TO_JID and WA_SELF_JID are required")
+	}
+
+	leg := func(what, profile, number, name string) {
+		t.Helper()
+		runner := engine.NewRunner()
+		h := waruntime.NewHolder(core.StartConfig{
+			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+			UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+		})
+		defer h.Stop(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		sess, err := h.Session(ctx)
+		if err != nil {
+			t.Fatalf("%s: boot: %v", what, err)
+		}
+		ab := addressbook.New(runner, sess.Tab().Evaluate)
+		if mode == "forget" {
+			if err := ab.Delete(ctx, number, what+"/forget"); err != nil {
+				t.Errorf("%s: forget: %v", what, err)
+				return
+			}
+			t.Logf("%s: forgotten", what)
+			return
+		}
+		// syncToPhone is FALSE and stays false. True would write into the
+		// address book of a physical handset, which is the one thing this whole
+		// experiment exists to avoid needing.
+		saved, err := ab.Save(ctx, number, name, "", false, what+"/save")
+		if err != nil {
+			t.Fatalf("%s: save: %v", what, err)
+		}
+		t.Logf("%s: %s", what, saved)
+	}
+
+	leg("A saves B", fromProfile, peer, labContactName+" B")
+	leg("B saves A", toProfile, selfA, labContactName+" A")
+}

@@ -146,18 +146,30 @@ func (m *Manager) Ensure(ctx context.Context, subject string, participants []str
 	deadline := time.Now().Add(createBudget)
 	for {
 		var raw string
+		// ONE SCRIPT FOR BOTH WAITS. ensureVerifyScript returns the parked
+		// state unchanged unless the state is 'awaiting_chat', in which case it
+		// spends this turn looking for the chat. Reading and re-checking are
+		// therefore the same evaluation, and the number of turns is decided
+		// here rather than in the page (invariant 6).
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return m.eval(ctx, ensureResultScript, &raw)
+			return m.eval(ctx, ensureVerifyScript, &raw)
 		}); err != nil {
 			return Group{}, fmt.Errorf("%w: %v", ErrCreate, err)
 		}
 		if err := json.Unmarshal([]byte(raw), &out); err != nil {
 			return Group{}, fmt.Errorf("group: unexpected answer: %w", err)
 		}
-		if out.Stage != "pending" {
+		if out.Stage != "pending" && out.Stage != "awaiting_chat" {
 			break
 		}
 		if !time.Now().Before(deadline) {
+			// A CREATE THAT NEVER APPEARED IS NOT A PAGE THAT HUNG, and the
+			// two used to share one message. The group exists on the server —
+			// createGroup returned a wid — and the collection never showed it.
+			if out.Stage == "awaiting_chat" {
+				return Group{}, fmt.Errorf("%w at verify (CREATED_BUT_NOT_IN_COLLECTION within %s)",
+					ErrCreate, createBudget)
+			}
 			return Group{}, fmt.Errorf("%w: the page never settled within %s", ErrCreate, createBudget)
 		}
 		time.Sleep(createTick)
@@ -191,7 +203,7 @@ func ensureScript(subject string, participants []string) string {
 	for _, p := range participants {
 		quoted = append(quoted, strconv.Quote(p))
 	}
-	return `JSON.stringify((() => {
+	return `JSON.stringify((() => {` + verifyFnJS + `
 		window[` + strconv.Quote(ensureStateKey) + `] = { stage: 'pending', ok: false, why: '' };
 		const park = (v) => { window[` + strconv.Quote(ensureStateKey) + `] = v; };
 		(async () => {
@@ -266,44 +278,29 @@ func ensureScript(subject string, participants []string) string {
 				const res = await Job.createGroup(args, members, []);
 				if (!res || !res.wid) { park({ stage, ok: false, why: 'NO_WID_RETURNED' }); return; }
 				created = true;
-				// The chat may take a moment to appear; the Go side owns the
-				// clock, so a bounded number of turns is all that happens here.
+				// THE CHAT TAKES A MOMENT TO APPEAR, AND THE WAITING IS GO'S.
+				//
+				// This used to loop here with setTimeout, and the comment above
+				// it claimed the Go side owned the clock — which was false where
+				// it was written: a page that sleeps decides its own timeout
+				// during a reload, a throttled tab and a hung renderer, where Go
+				// can neither see the decision nor cancel it (invariant 6).
+				//
+				// So it parks and stops. Go's existing poll loop sees
+				// 'awaiting_chat' and evaluates ensureVerifyScript, which does
+				// the same lookup once per turn under the caller's budget.
 				const gid = WidFactory.asGroupWidOrThrow(res.wid);
-				for (let i = 0; i < 20 && !chat; i++) {
-					chat = Chats.get(gid) || findExisting();
-					if (!chat) { await new Promise(r => setTimeout(r, 250)); }
-				}
-				if (!chat) { park({ stage: 'verify', ok: false, why: 'CREATED_BUT_NOT_IN_COLLECTION' }); return; }
+				park({
+					stage: 'awaiting_chat', ok: false, why: '',
+					gid: (gid && gid._serialized) || '',
+					want: want,
+					resolved: resolved.map(w => w._serialized),
+				});
+				return;
 			}
 
 			stage = 'verify';
-			// WHO IS ACTUALLY IN IT. The participant list is read back from the
-			// page rather than assumed from what was asked for.
-			let present = [];
-			try {
-				const md = chat.groupMetadata;
-				const parts = md && md.participants;
-				const arr = parts && (typeof parts.getModelsArray === 'function'
-					? parts.getModelsArray() : (parts.toArray ? parts.toArray() : []));
-				present = (arr || []).map(p => {
-					try { return (p.id && p.id._serialized) || ''; } catch (e) { return ''; }
-				}).filter(Boolean);
-			} catch (e) {}
-
-			const missing = [];
-			for (const w of resolved) {
-				const s = w._serialized;
-				if (s && present.indexOf(s) === -1) { missing.push('redacted'); }
-			}
-
-			park({
-				stage: 'done', ok: true, why: '',
-				jid: (chat.id && chat.id._serialized) || '',
-				subject: subjectOf(chat),
-				participants: present.length,
-				created: created,
-				missing: missing
-			});
+			park(verify(chat, created, resolved.map(w => w._serialized)));
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 180) });
 		}
@@ -312,8 +309,75 @@ func ensureScript(subject string, participants []string) string {
 	})())`
 }
 
-const ensureResultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + ensureStateKey + `"` + `];
+// verifyFnJS is the participant read-back, defined ONCE and injected into both
+// the create script and the poll script.
+//
+// It exists as a shared string rather than as two copies because the two paths
+// ask the identical question — "who is actually in this group?" — and a copy
+// that drifts would let one path enforce the postcondition while the other
+// quietly stopped.
+const verifyFnJS = `
+	const subjectOfChat = (c) => {
+		try { return (c.groupMetadata && c.groupMetadata.subject) || c.formattedTitle || ''; }
+		catch (e) { return ''; }
+	};
+	const verify = (chat, created, wantedSerialized) => {
+		// WHO IS ACTUALLY IN IT. The participant list is read back from the
+		// page rather than assumed from what was asked for.
+		let present = [];
+		try {
+			const md = chat.groupMetadata;
+			const parts = md && md.participants;
+			const arr = parts && (typeof parts.getModelsArray === 'function'
+				? parts.getModelsArray() : (parts.toArray ? parts.toArray() : []));
+			present = (arr || []).map(p => {
+				try { return (p.id && p.id._serialized) || ''; } catch (e) { return ''; }
+			}).filter(Boolean);
+		} catch (e) {}
+		const missing = [];
+		for (const w of wantedSerialized || []) {
+			if (w && present.indexOf(w) === -1) { missing.push('redacted'); }
+		}
+		return {
+			stage: 'done', ok: true, why: '',
+			jid: (chat.id && chat.id._serialized) || '',
+			subject: subjectOfChat(chat),
+			participants: present.length,
+			created: created,
+			missing: missing
+		};
+	};
+`
+
+// ensureVerifyScript is one TURN of the wait that used to happen in the page.
+//
+// Synchronous by design: it asks the model what it holds right now and answers
+// in a single evaluation, which is what keeps the deciding — how many turns,
+// how long — on the Go side where the caller's context can reach it.
+const ensureVerifyScript = `JSON.stringify((() => {
+	const KEY = ` + `"` + ensureStateKey + `"` + `;
+	const s = window[KEY];
 	if (!s) { return { stage: 'create', ok: false, why: 'STATE_MISSING' }; }
-	return s;
+	if (s.stage !== 'awaiting_chat') { return s; }
+	try {` + verifyFnJS + `
+		const Chats = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
+		let chat = s.gid ? Chats.get(s.gid) : null;
+		if (!chat) {
+			// The subject fallback, same as the create path's findExisting.
+			const all = typeof Chats.getModelsArray === 'function' ? Chats.getModelsArray() : [];
+			for (const c of all) {
+				try {
+					if (c.id && c.id.server === 'g.us' && subjectOfChat(c) === s.want) { chat = c; break; }
+				} catch (e) {}
+			}
+		}
+		if (!chat) { return s; }
+		const done = verify(chat, true, s.resolved);
+		window[KEY] = done;
+		return done;
+	} catch (e) {
+		return { stage: 'verify', ok: false, why: String((e && e.message) || e).slice(0, 180) };
+	}
 })())`
+
+

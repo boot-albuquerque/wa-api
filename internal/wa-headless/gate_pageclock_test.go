@@ -28,15 +28,18 @@ import (
 // allowed and is listed below: recording when something happened does not move
 // a decision into the page, and events/ingress.go says so where it does it.
 func TestNoClockInProductionPageScripts(t *testing.T) {
-	// Each entry is a KNOWN occurrence with the reason it is allowed, or the
-	// finding that records it. An allowlist with no reasons is a list of things
-	// nobody has to think about again.
+	// Each entry is a KNOWN occurrence with the reason it is allowed. An
+	// allowlist with no reasons is a list of things nobody has to think about
+	// again.
+	//
+	// IT HELD A SECOND ENTRY FOR ABOUT AN HOUR. capabilities/group/group.go
+	// slept in the page and was listed here as a pre-existing finding. The
+	// instruction that removed it is worth keeping: a known violation must not
+	// stabilise inside an allowlist, and an exception may exist only while the
+	// fix is in the same block. It was fixed in that block (H90).
 	allowed := map[string]string{
 		"events/ingress.go": "Date.now() STAMPS an event's time; Event.At documents that it " +
 			"is reported for diagnosis and never used to decide anything",
-		"capabilities/group/group.go": "PRE-EXISTING, recorded in HOUSEKEEP as an open finding " +
-			"(H90): the group-create wait sleeps in the page. Not fixed here — it is outside " +
-			"the task that found it, and this gate names it rather than hiding it",
 	}
 
 	clock := regexp.MustCompile(`\b(setTimeout|setInterval|requestAnimationFrame|Date\.now)\s*\(`)

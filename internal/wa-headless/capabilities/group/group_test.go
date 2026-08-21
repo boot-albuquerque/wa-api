@@ -21,6 +21,12 @@ type pageDouble struct {
 	created      bool
 	missing      int
 
+	// awaitingReads makes the double answer 'awaiting_chat' for the first N
+	// polls, which is what the page does between createGroup returning and the
+	// chat appearing in the collection.
+	awaitingReads int
+
+	reads      int
 	kicks      int
 	lastScript string
 }
@@ -31,6 +37,17 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 		return err
 	}
 	if strings.Contains(expr, "const s = window[") {
+		p.reads++
+		// THE CREATED-BUT-NOT-YET-VISIBLE TURN. The page parks 'awaiting_chat'
+		// after createGroup returns and stops; each Go poll spends one turn
+		// looking for the chat. The double answers that stage for the first
+		// awaitingReads polls so the loop is actually exercised — a double that
+		// answered 'done' immediately would leave the whole wait untested,
+		// which is how the sleep survived in the page for as long as it did.
+		if p.awaitingReads > 0 && p.reads <= p.awaitingReads {
+			*out = `{"stage":"awaiting_chat","ok":false,"why":""}`
+			return nil
+		}
 		if !p.ok {
 			stage := p.stage
 			if stage == "" {
@@ -212,5 +229,58 @@ func TestCancelledContextNeverCreatesAGroup(t *testing.T) {
 	}
 	if p.kicks != 0 {
 		t.Fatalf("created %d group(s) for a caller that had given up", p.kicks)
+	}
+}
+
+// THE WAIT FOR THE NEW CHAT IS GO'S, and this is the test that says so.
+//
+// The page used to loop with setTimeout while the chat appeared in the
+// collection. It worked, and it put a deadline where a caller's context could
+// not reach it — during a reload, a throttled tab, a hung renderer. Now the
+// page parks 'awaiting_chat' and stops; each poll here spends one turn.
+func TestTheChatIsWaitedForFromGo(t *testing.T) {
+	compressClock(t)
+	p := &pageDouble{
+		ok: true, jid: labGroupID, subject: labSubject, participants: 2, created: true,
+		awaitingReads: 3,
+	}
+	got, err := manager(p).Ensure(context.Background(), labSubject, []string{peer}, "t")
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if got.JID != labGroupID {
+		t.Fatalf("got %+v", got)
+	}
+	if p.reads <= p.awaitingReads {
+		t.Errorf("%d reads for %d awaiting turns; Go did not poll", p.reads, p.awaitingReads)
+	}
+	if p.kicks != 1 {
+		t.Errorf("%d kicks; the create must run once and the polling must not re-create", p.kicks)
+	}
+	// And the create script must not sleep. The module-wide gate says the same
+	// thing; this says it where somebody editing THIS script will see it.
+	for _, banned := range []string{"setTimeout(", "setInterval("} {
+		if strings.Contains(p.lastScript, banned) {
+			t.Errorf("the create script contains %q; invariant 6 puts the clock on this side", banned)
+		}
+	}
+}
+
+// A CREATE THAT NEVER APPEARS IS NOT A PAGE THAT HUNG, and the two used to
+// share one message. The group exists on the server — createGroup returned a
+// wid — and the collection never showed it; a caller told "the page never
+// settled" would look in the wrong place.
+func TestAGroupThatNeverAppearsSaysSo(t *testing.T) {
+	compressClock(t)
+	p := &pageDouble{ok: true, jid: labGroupID, awaitingReads: 1 << 30}
+	_, err := manager(p).Ensure(context.Background(), labSubject, []string{peer}, "t")
+	if err == nil {
+		t.Fatal("a chat that never appears must not succeed")
+	}
+	if !strings.Contains(err.Error(), "CREATED_BUT_NOT_IN_COLLECTION") {
+		t.Fatalf("err = %v, want the created-but-invisible reason", err)
+	}
+	if strings.Contains(err.Error(), "never settled") {
+		t.Error("the error blames the page for hanging; it answered every time")
 	}
 }
