@@ -121,6 +121,7 @@ declarado do projeto: métodos principais de envio e chat.
 | envio a GRUPO | `capabilities/send` | texto enviado ao grupo de laboratório e **verificado** |
 | presença (anúncio) | `capabilities/presence` | implementado, 10 testes — **sem pós-condição local, por natureza** |
 | presença (observação) | `capabilities/presence` | implementada e **NÃO PROVADA**: `isSubscribed` não se mantém (H50) |
+| `listChats` | `capabilities/chats` | **384 conversas, 384 com título**, 2 grupos, 122 com não-lidas |
 
 **Fatoração que a presença forçou (H50)**: o que `send` e `presence` compartilham
 é a RESOLUÇÃO DE IDENTIDADE, não a obtenção do chat — porque enviar quer criar

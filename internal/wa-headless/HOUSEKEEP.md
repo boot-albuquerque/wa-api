@@ -3930,3 +3930,56 @@ ação humana no aparelho, e por isso está registrada aqui em vez de tentada.
 testes; observação implementada e NÃO PROVADA contra a conta par, com três
 hipóteses derrubadas, uma quarta registrada e a ação humana que a resolveria
 nomeada.
+
+## H51 — listar conversas: o getter ÓBVIO responde para 1 chat em 384
+
+**Data**: 2026-08-20 · **Contexto**: maior buraco restante de "chat" — não há
+produto de conversa sem listar conversas.
+
+**A armadilha, e ela passaria em toda suíte de dublê:**
+
+| campo | cobertura, medida sobre os 384 chats |
+|---|---|
+| `WAWebChatGetters.getName` | **1** |
+| `formattedTitle` | **384** |
+| nenhum dos dois | 0 |
+
+`WAWebChatGetters` EXPORTA `getName`. Alcançá-lo é o movimento natural — e
+produziria uma listagem com título para uma conversa a cada 384. Pior: passaria
+em todo teste unitário, porque um dublê devolve o que mandarem. É a mesma
+armadilha do roster, onde `getName` também respondia para 1 de 944 (H39): num
+dispositivo companheiro a agenda vive no telefone, e `formattedTitle` é o que o
+app renderiza.
+
+**Por isso a asserção é sobre o SCRIPT**: é o único lugar onde um dublê não pode
+mentir. E a prova ao vivo mede COBERTURA de título — 384 de 384 — que é a única
+coisa que só uma conta real diz.
+
+> **Correção de uma asserção minha, na primeira execução**: o teste procurava a
+> string `getName` e falhou no COMENTÁRIO do script, que explica por que não usar
+> `getName`. Trocado para procurar a CHAMADA (`getName(`). Casar texto onde se
+> queria chamada é como uma guarda acaba policiando prosa (H32).
+
+**A ordem é NOSSA, não da página.** A coleção foi medida `newest-first`, mas nada
+documenta isso, e uma lista cuja ordem muda por baixo é uma que ninguém consegue
+comparar. Ordenar custa nada e remove a dependência — mesma lição da H39, onde a
+listagem de contatos quase herdou a ordem da página.
+
+O empate quebra pela identidade, porque duas conversas podem compartilhar
+carimbo e duas chamadas não podem discordar sobre uma lista que ninguém mudou.
+
+**O limite se aplica DEPOIS da ordenação.** Antes dela, "as dez mais recentes"
+devolveria as dez que a página guardou primeiro, que é outra coisa.
+
+**`WithUnread` conta a LOJA INTEIRA, não a página devolvida.** Quem pergunta "há
+algo esperando" não está perguntando sobre as dez primeiras conversas.
+
+**Medido ao vivo**: 384 conversas, 384 com título, 2 grupos, **122 com
+não-lidas**, ordenação verificada sobre carimbos reais.
+
+**Quatro controles negativos, EXECUTADOS**: usar `getName`; remover a ordenação;
+aplicar o limite antes de ordenar; calcular `WithUnread` a partir da página
+devolvida.
+
+**Status**: entregue — campo certo escolhido por medição, ordenação e limite
+decididos deste lado, denominadores honestos, e quatro controles negativos.

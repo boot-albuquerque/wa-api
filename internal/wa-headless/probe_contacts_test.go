@@ -37,35 +37,50 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// IS THIS SESSION'S PAGE STABLE AT ALL?
+	// CAN A CHAT LIST SHOW A NAME AT ALL?
 	//
-	// A previous probe found window.__waHeadlessSub "missing" for eighty
-	// seconds on this profile — and that global is assigned on the FIRST line
-	// of the script that plants it, so its absence means the page it was
-	// assigned in is gone. A reloading page would explain both that and a
-	// presence subscription that never persists, and attributing the presence
-	// failure to the subscription without checking this would blame the wrong
-	// thing.
-	//
-	// So: plant a marker, read it repeatedly, and see whether it survives. A
-	// reads counter that keeps climbing means one page; a counter that resets
-	// means the page is being replaced under us.
-	const script = `(() => {
-		if (!window.__waHeadlessLife) {
-			window.__waHeadlessLife = { reads: 0, path: location.pathname };
+	// WAWebChatGetters exports getName, and the obvious move is to promise it.
+	// But getName on CONTACTS answered for 1 of 944 on this profile (H39), so
+	// assuming chats are different is exactly the guess this project keeps
+	// paying for. Counted, never printed.
+	const script = `JSON.stringify((() => {
+		const out = {};
+		const Chats = window.require('WAWebChatCollection').ChatCollection;
+		const G = window.require('WAWebChatGetters');
+		const all = Chats.getModelsArray();
+		out.total = all.length;
+		let name = 0, formatted = 0, both = 0, neither = 0, groupNamed = 0, groups = 0;
+		for (const c of all) {
+			let n = '', f = '';
+			try { n = (G.getName && G.getName(c)) || ''; } catch (e) {}
+			try { f = (typeof c.formattedTitle === 'string') ? c.formattedTitle : ''; } catch (e) {}
+			if (n) { name++; }
+			if (f) { formatted++; }
+			if (n && f) { both++; }
+			if (!n && !f) { neither++; }
+			try {
+				if (c.id && c.id.server === 'g.us') { groups++; if (n || f) { groupNamed++; } }
+			} catch (e) {}
 		}
-		window.__waHeadlessLife.reads++;
-		return JSON.stringify(window.__waHeadlessLife);
-	})()`
+		out.withGetName = name; out.withFormattedTitle = formatted;
+		out.withBoth = both; out.withNeither = neither;
+		out.groups = groups; out.groupsNamed = groupNamed;
+		// Is the collection already ordered by recency, or must we sort?
+		const ts = all.map(c => (typeof c.t === 'number' ? c.t : 0));
+		let desc = true, asc = true;
+		for (let i = 1; i < ts.length; i++) {
+			if (ts[i] > ts[i-1]) { desc = false; }
+			if (ts[i] < ts[i-1]) { asc = false; }
+		}
+		out.collectionOrder = desc ? 'newest-first' : (asc ? 'oldest-first' : 'unordered');
+		return out;
+	})())`
 
 	var raw string
-	for i := 0; i < 8; i++ {
-		if err := runner.Do(ctx, engine.OpStateProbe, "probe/life", func(c context.Context) error {
-			return sess.Tab().Evaluate(c, script, &raw)
-		}); err != nil {
-			t.Fatalf("probe: %v", err)
-		}
-		t.Logf("sample %d: %s", i, raw)
-		time.Sleep(3 * time.Second)
+	if err := runner.Do(ctx, engine.OpStateProbe, "probe/chats", func(c context.Context) error {
+		return sess.Tab().Evaluate(c, script, &raw)
+	}); err != nil {
+		t.Fatalf("probe: %v", err)
 	}
+	t.Logf("chat naming: %s", raw)
 }

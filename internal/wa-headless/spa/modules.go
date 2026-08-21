@@ -249,6 +249,18 @@ const (
 	// ModulePresenceCollection holds what is known about each presence:
 	// isOnline, isSubscribed, chatstate{type}, typingUserIds, recordingUserIds.
 	ModulePresenceCollection = Module("WAWebPresenceCollection")
+	// ModuleChatGetters reads a chat's fields.
+	//
+	// IT EXPORTS getName AND getName IS THE WRONG ONE. Measured 2026-08-20
+	// over all 384 chats: getName answered for **1**, while formattedTitle
+	// answered for **384**. A listing built on the obvious getter would show a
+	// title for one conversation out of every 384 — and would look correct in
+	// every unit test, because a double would return whatever it was told.
+	//
+	// The same trap as the contact roster, where getName also answered for 1 of
+	// 944 (H39). On a companion device the address book lives on the phone;
+	// formattedTitle is what the app itself renders.
+	ModuleChatGetters = Module("WAWebChatGetters")
 )
 
 // RequiredAtStartup is verified before any capability runs.
