@@ -239,6 +239,8 @@ func newRouterForRouteCheck() *mux.Router {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Newsletter:  &handlers.NewsletterHandlers{},
+		Label:       &handlers.LabelHandlers{},
 		ChatHistory: &handlers.ChatHistoryHandlers{},
 	}
 

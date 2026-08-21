@@ -599,3 +599,95 @@ func TestPainel_LoteRelataFalhasParciais(t *testing.T) {
 		t.Error("o lote não relata falhas parciais: sessões que não foram removidas ficariam invisíveis")
 	}
 }
+
+// --- F192: "Gerar novo QR" não podia depender só do WebSocket --------------
+//
+// Medido em 2026-08-20 contra o servidor real, com o socket a entrar 3s
+// depois do `connect`:
+//
+//	0.433s HTTP connect(sem-ws)  -> 200 {"status":"connecting"}
+//	3.461s HTTP qr(depois-de-3s) -> len=1870   <- o QR EXISTE no banco
+//	3.481s WS(tardio) OPEN
+//	21.366s WS(tardio) MSG type=QR             <- 17,9s de silêncio
+//
+// O QR emitido a ~1,4s foi despachado para ZERO conexões e desapareceu. O
+// painel só tinha essa entrada: sem evento, ficava em "Pedindo QR à API…"
+// sem prazo e sem erro. As três travas abaixo cobrem as três metades da
+// correção — esperar o socket, sondar a rota autoritativa, e falhar alto.
+
+// TestPainel_ConectarEsperaOSocketAntesDePedirQR trava a ORDEM.
+//
+// Inverter as duas linhas — disparar `connect` e só depois abrir o socket —
+// reabre exatamente a corrida medida acima, e passaria em qualquer teste que
+// só verificasse que ambas as chamadas existem.
+func TestPainel_ConectarEsperaOSocketAntesDePedirQR(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	// Casa a FORMA DA CHAMADA, nunca o nome nu: procurar "abrirWS" casaria o
+	// comentário que explica a função, e procurar "/session/connect" casaria
+	// a declaração da constante. É a armadilha F189, que já custou três
+	// sessões a este repositório.
+	const abertura = "await abrirWS(s);"
+	const pedido = `await API.sessao(s.token, "GET", ROTA_CONNECT);`
+
+	iAbertura := strings.Index(js, abertura)
+	iPedido := strings.Index(js, pedido)
+	if iAbertura < 0 {
+		t.Fatalf("o painel não espera o socket abrir: %q não aparece em sessions.js", abertura)
+	}
+	if iPedido < 0 {
+		t.Fatalf("o painel não pede a conexão: %q não aparece em sessions.js", pedido)
+	}
+	if iAbertura >= iPedido {
+		t.Errorf("o `connect` (offset %d) sai ANTES de o socket abrir (offset %d): "+
+			"o QR despachado nessa janela é entregue a zero conexões e perde-se", iPedido, iAbertura)
+	}
+
+	// E a espera tem de ser real: uma `abrirWS` que devolva undefined faz o
+	// `await` acima resolver no mesmo tick e a ordem volta a não valer nada.
+	if !strings.Contains(js, "return new Promise((resolve) => {") ||
+		!strings.Contains(js, `ws.addEventListener("open"`) {
+		t.Error("abrirWS não resolve no evento `open` do socket: o `await` seria decorativo")
+	}
+}
+
+// TestPainel_ConectarSondaARotaDeQR: o WebSocket é um canal COM PERDA, e
+// `users.qrcode` — servido por GET /session/qr — é a fonte durável do mesmo
+// código. Sem esta sondagem, todo evento perdido é um cartão preso para
+// sempre.
+//
+// É o que a Evolution API faz em connectToWhatsapp: depois de conectar, ela
+// LÊ o QR guardado em vez de confiar só no evento.
+func TestPainel_ConectarSondaARotaDeQR(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	if !strings.Contains(js, `const ROTA_QR = "/session/qr";`) {
+		t.Fatal("a rota de QR não está declarada como constante em sessions.js")
+	}
+	// Outra vez a forma da CHAMADA: "ROTA_QR" sozinho casa os comentários que
+	// explicam a sondagem, e "/session/qr" casa a própria declaração.
+	if !strings.Contains(js, `await API.sessao(s.token, "GET", ROTA_QR);`) {
+		t.Error("o painel nunca busca o QR pela rota REST: um evento perdido no WebSocket " +
+			"deixa o cartão preso em \"Pedindo QR à API…\" sem prazo")
+	}
+	if !strings.Contains(js, "aguardarQR(s);") {
+		t.Error("a sondagem existe mas ninguém a dispara depois do connect")
+	}
+}
+
+// TestPainel_FalhaDeQRNaoFicaEmEspera: um pedido que não produz QR nenhum
+// dentro da janela falhou, e o painel tem de o dizer. Espera sem fim é
+// indistinguível de painel partido — foi assim que este defeito chegou até
+// aqui.
+func TestPainel_FalhaDeQRNaoFicaEmEspera(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	if !strings.Contains(js, "falhouQR(s);") {
+		t.Error("a janela de espera do QR fecha sem chamar falhouQR: o cartão fica em " +
+			"\"Pedindo QR à API…\" indefinidamente, que é o sintoma original")
+	}
+	// A saída tem de ser accionável, não só um texto de erro.
+	if !strings.Contains(js, "Tentar de novo") {
+		t.Error("o estado de falha não oferece nova tentativa")
+	}
+}

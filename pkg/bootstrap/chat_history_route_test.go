@@ -129,6 +129,8 @@ func newChatHistoryFixtureFull(t *testing.T, injectUser func() *Values, logOut i
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Newsletter:  &handlers.NewsletterHandlers{},
+		Label:       &handlers.LabelHandlers{},
 
 		// Os dois handlers sob teste, ambos REAIS.
 		Storage: &handlers.StorageHandlers{

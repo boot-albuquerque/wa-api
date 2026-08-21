@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -828,4 +829,185 @@ func TestStart_LateQRAfterSuccessDoesNotResurrectQR(t *testing.T) {
 			t.Errorf("qrcode column rewritten with a stale QR image after success: %v", h.db.execQueries)
 		}
 	}
+}
+
+// --- F192: um Start de cada vez por utilizador ---------------------------
+//
+// O defeito, medido em 2026-08-20 contra o servidor real com a sessão
+// `qr-teste`: `GET /session/connect` numa sessão que JÁ estava a parear NÃO
+// era um no-op — abria um SEGUNDO fluxo de pareamento e deixava o primeiro
+// órfão. Os dois emissores de QR ficavam vivos, ambos a escrever
+// `users.qrcode`, e os códigos chegavam intercalados ao painel:
+//
+//	1.080s HTTP connect(1)                     -> 200 connecting
+//	1.838s WS MSG type=QR qrlen=1850
+//	6.092s HTTP connect(2, durante pareamento) -> 200 connecting
+//	6.736s WS MSG type=QR qrlen=1846   <- fluxo 2
+//	19.681s WS MSG type=QR qrlen=1874  <- fluxo 1
+//	21.904s WS MSG type=QR qrlen=1850  <- fluxo 2
+//	26.772s WS MSG type=QR qrlen=1838  <- fluxo 1
+//
+// O que morde aqui é a CAUSA (um segundo Pair para o mesmo utilizador), não
+// o sintoma (o painel piscar): silenciar o sintoma no painel deixaria os dois
+// clientes de pé no servidor.
+
+// startEmCurso põe um Start a correr e preso dentro do pareamento, e devolve
+// uma função que o liberta. É o estado "a sessão está a parear agora" — o
+// mesmo em que a medição acima chamou o segundo connect.
+func startEmCurso(t *testing.T, h *harness, userID string) (liberta func()) {
+	t.Helper()
+	eventos := make(chan port.PairingEvent)
+	h.session.PairingEvents = eventos
+
+	emPareamento := make(chan struct{})
+	var mu sync.Mutex
+	primeira := true
+	h.session.PairFunc = func(context.Context) (<-chan port.PairingEvent, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if primeira {
+			primeira = false
+			close(emPareamento)
+			return eventos, nil
+		}
+		// Qualquer Start SEGUINTE recebe um canal JÁ FECHADO, para retornar
+		// de imediato em vez de bloquear no consumo de eventos.
+		//
+		// Sem isto, o controlo negativo desta trava falha por TRAVAMENTO em
+		// vez de por asserção — e um controlo que trava não diz o que
+		// quebrou. A guarda que estes testes protegem tem de ser provada por
+		// uma contagem, não pela ausência de progresso.
+		vazio := make(chan port.PairingEvent)
+		close(vazio)
+		return vazio, nil
+	}
+
+	terminou := make(chan struct{})
+	go func() {
+		defer close(terminou)
+		_ = h.orch.Start(context.Background(), userID, "tok")
+	}()
+
+	select {
+	case <-emPareamento:
+	case <-time.After(2 * time.Second):
+		t.Fatal("o primeiro Start não chegou a Pair")
+	}
+	return func() {
+		close(eventos)
+		select {
+		case <-terminou:
+		case <-time.After(2 * time.Second):
+			t.Fatal("o primeiro Start não retornou depois de o canal fechar")
+		}
+	}
+}
+
+func TestStartRecusaSegundoFluxoEnquantoOPrimeiroPareia(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	pairesAntes := len(h.session.PairCalls)
+
+	err := h.orch.Start(context.Background(), "u1", "tok")
+	if err == nil {
+		t.Fatal("o segundo Start devolveu nil: um segundo fluxo de pareamento foi iniciado para o mesmo utilizador")
+	}
+	if got := appErrCodeDe(err); got != codeSessionStartAlreadyInFlight {
+		t.Fatalf("código = %q, quero %q (erro: %v)", got, codeSessionStartAlreadyInFlight, err)
+	}
+	if got := len(h.session.PairCalls); got != pairesAntes {
+		t.Fatalf("Pair foi chamado %d vezes a mais: o segundo fluxo arrancou mesmo assim", got-pairesAntes)
+	}
+}
+
+// TestStartRecusaAntesDeReivindicarPosse trava a ORDEM. A guarda corre ANTES
+// da reivindicação de posse; instalada depois, dois Starts concorrentes
+// tocariam o lease do mesmo utilizador antes de um desistir — e um teste que
+// só olhasse para o erro devolvido continuaria verde.
+func TestStartRecusaAntesDeReivindicarPosse(t *testing.T) {
+	var reivindicacoes int
+	h := newHarness(t, WithOwnershipCheck(
+		func(string) bool { reivindicacoes++; return true },
+		func(string) {},
+	))
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	antes := reivindicacoes
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err == nil {
+		t.Fatal("esperava recusa do segundo Start")
+	}
+	if reivindicacoes != antes {
+		t.Fatalf("o Start recusado reivindicou posse %d vez(es): a guarda está DEPOIS da reivindicação",
+			reivindicacoes-antes)
+	}
+}
+
+// TestStartDeOutroUtilizadorNaoEBloqueado: a chave é por utilizador. Se fosse
+// global, um pareamento em curso pararia o painel inteiro.
+func TestStartDeOutroUtilizadorNaoEBloqueado(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u2", "tok"); err != nil {
+		t.Fatalf("Start de outro utilizador foi bloqueado: %v", err)
+	}
+}
+
+// TestStartLibertaAChaveAoTerminar é o teste da Regra 4 do CLAUDE.md: o
+// conserto também é um mecanismo. Se a chave não fosse devolvida, a guarda
+// trocaria "dois fluxos concorrentes" por "utilizador que nunca mais
+// conecta" — estritamente pior que o defeito original.
+func TestStartLibertaAChaveAoTerminar(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	liberta()
+
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start depois de o anterior terminar foi recusado: %v", err)
+	}
+}
+
+// TestStartCedeChaveEstagnada: mesmo que um Start nunca retorne, a chave
+// caduca em startInFlightTTL. É o teto que impede o estado absorvente.
+func TestStartCedeChaveEstagnada(t *testing.T) {
+	agora := time.Unix(0, 0)
+	h := newHarness(t, WithClock(func() time.Time { return agora }))
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err == nil {
+		t.Fatal("esperava recusa dentro do TTL")
+	}
+
+	agora = agora.Add(startInFlightTTL + time.Second)
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("chave estagnada não foi cedida depois de %v: %v", startInFlightTTL, err)
+	}
+}
+
+func appErrCodeDe(err error) string {
+	var e *apperr.AppError
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
 }

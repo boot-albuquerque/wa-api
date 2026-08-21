@@ -213,6 +213,12 @@ func TestReadExcludeFile(t *testing.T) {
 		"pkg/application/contracts/contractsfake/",
 		"internal/wa-noise/",
 		"pkg/infra/wa-noise/client/testkit/",
+		// F193 (2026-08-21): o extrato de adaptadores saiu do denominador por
+		// decisao de arquitetura — a camada nao e' ponto de instrumentacao,
+		// quem loga a falha e' o use case. Esta linha e' o que torna a
+		// exclusao VISIVEL: acrescentar ou remover um extrato sem passar por
+		// aqui reprova.
+		"pkg/infra/wa-noise/adapters/",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)

@@ -128,19 +128,21 @@ func Routes(d Deps) []RouteInfo {
 // ServeHTTP on them.
 func emptyCustomHandlers() *customHandlers {
 	return &customHandlers{
-		Message:   &MessageHandlers{},
-		Session:   &SessionHandlers{},
-		Webhook:   &WebhookHandlers{},
-		User:      &handlers.UserHandlers{},
-		Group:     &handlers.GroupHandlers{},
-		Storage:   &handlers.StorageHandlers{},
-		Misc:      &handlers.MiscHandlers{},
-		Blocklist: &handlers.BlocklistHandlers{},
-		Download:  &handlers.DownloadHandlers{},
-		Presence:  &handlers.PresenceHandlers{},
-		Reaction:  &handlers.ReactionHandlers{},
-		Contact:   &handlers.ContactHandlers{},
-		GroupMgmt: &handlers.GroupManagementHandlers{},
+		Message:    &MessageHandlers{},
+		Session:    &SessionHandlers{},
+		Webhook:    &WebhookHandlers{},
+		User:       &handlers.UserHandlers{},
+		Group:      &handlers.GroupHandlers{},
+		Storage:    &handlers.StorageHandlers{},
+		Misc:       &handlers.MiscHandlers{},
+		Blocklist:  &handlers.BlocklistHandlers{},
+		Download:   &handlers.DownloadHandlers{},
+		Presence:   &handlers.PresenceHandlers{},
+		Reaction:   &handlers.ReactionHandlers{},
+		Contact:    &handlers.ContactHandlers{},
+		GroupMgmt:  &handlers.GroupManagementHandlers{},
+		Newsletter: &handlers.NewsletterHandlers{},
+		Label:      &handlers.LabelHandlers{},
 		// ChatHistory é um grupo próprio, e não um campo a mais em Storage:
 		// /chat/history e /webhook/history precisam de handlers DISTINTOS
 		// (HOUSEKEEP F124). Ausente daqui, registerCustomRoutes desreferencia

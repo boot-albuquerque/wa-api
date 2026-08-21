@@ -126,6 +126,8 @@ func newSessionCfgFixture(t *testing.T) *sessionCfgFixture {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Newsletter:  &handlers.NewsletterHandlers{},
+		Label:       &handlers.LabelHandlers{},
 
 		// Os dois handlers sob teste, com as MESMAS dependencias que
 		// wiring_handlers.go monta em producao.

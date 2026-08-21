@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +34,24 @@ const (
 	// qrCodeDataURIPrefix é o cabeçalho do data URI que o cliente coloca
 	// direto num <img src>.
 	qrCodeDataURIPrefix = "data:image/png;base64,"
+
+	// startInFlightTTL é o teto de tempo que uma entrada de startInFlight
+	// pode segurar um userID antes de ser considerada ESTAGNADA e cedida a
+	// um Start novo.
+	//
+	// Existe por causa da Regra 4 do CLAUDE.md — o conserto também é um
+	// mecanismo e também precisa do seu pior caso examinado. A guarda troca
+	// "duas sessões concorrentes para o mesmo utilizador" por "uma de cada
+	// vez"; sem teto, um único Start que nunca retornasse (canal de
+	// pareamento que o SDK não fecha) tornaria o utilizador PERMANENTEMENTE
+	// incapaz de conectar, que é estritamente pior que o defeito original.
+	// Com teto, o pior caso é uma janela, não um estado absorvente.
+	//
+	// O valor cobre o pior caso medido do fluxo de pareamento com folga:
+	// qrCodeFirstBatchSize (6) códigos × qrCodeTimeout (20s) = 120s até o
+	// timeout do SDK — medido em 2026-08-20, 6 códigos entre 03:24:40 e
+	// 03:26:20 e QRTimeout em 03:26:40.
+	startInFlightTTL = 3 * time.Minute
 )
 
 // userStore é a superfície mínima de banco que o orchestrator usa.
@@ -53,6 +72,87 @@ type userStore interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+// startInFlight serializa Start POR utilizador.
+//
+// Motivo, medido em 2026-08-20 contra o servidor real: `GET /session/connect`
+// numa sessão que JÁ estava a parear não era um no-op — abria um SEGUNDO
+// fluxo de pareamento e órfãos o primeiro. Os dois emissores de QR ficavam
+// vivos ao mesmo tempo, ambos a escrever `users.qrcode`, e os códigos
+// chegavam intercalados ao painel:
+//
+//	1.080s HTTP connect(1)                        -> 200 connecting
+//	1.838s WS MSG type=QR qrlen=1850
+//	6.092s HTTP connect(2, durante pareamento)    -> 200 connecting
+//	6.736s WS MSG type=QR qrlen=1846   <- fluxo 2
+//	19.681s WS MSG type=QR qrlen=1874  <- fluxo 1
+//	21.904s WS MSG type=QR qrlen=1850  <- fluxo 2
+//	26.772s WS MSG type=QR qrlen=1838  <- fluxo 1
+//
+// Do lado do utilizador isso É "gerar novo QR não funciona": o painel pisca
+// entre dois códigos de fluxos diferentes e só um deles é escaneável a cada
+// instante.
+//
+// A Evolution API fecha exatamente esta porta em
+// instance.controller.ts::connectToWhatsapp — `if (state == 'connecting')
+// return instance.qrCode;`, isto é, devolve o QR que já existe em vez de
+// criar outro socket. Divergimos na FORMA e não no fundo: o nosso
+// `/session/connect` mantém o corpo `{"status":"connecting"}` (é contrato
+// com clientes que não o painel) e quem lê o QR que já existe é o
+// `GET /session/qr`, que já era a rota autoritativa. Registado no
+// HOUSEKEEP.md (F192).
+//
+// # Inventário de detentores (Regra 1 do CLAUDE.md)
+//
+// O que passa a disputar uma chave, e o pior caso de cada um:
+//
+//   - fluxo de pareamento por QR: até 120s (6 códigos × 20s) até o SDK
+//     fechar o canal por timeout;
+//   - connectWithRetry (sessão já pareada): maxConnectionRetries tentativas
+//     com espera linear attempt×connectionRetryWait, ~15s no padrão;
+//   - recusa por posse: retorna de imediato, antes de materializar nada.
+//
+// A chave é POR UTILIZADOR e não é um slot de um pool partilhado: um
+// utilizador preso não atrasa nenhum outro, e nada aqui ocupa recurso
+// limitado global. É por isso que esta guarda não viola a invariante do
+// projeto ("nada que espere por relógio ou por par morto pode ocupar slot
+// limitado") mesmo esperando por relógio: o único recurso que ela ocupa é o
+// direito de parear a si próprio, que é precisamente o que se quer
+// serializar.
+type startInFlight struct {
+	mu    sync.Mutex
+	since map[string]time.Time
+}
+
+func newStartInFlight() *startInFlight {
+	return &startInFlight{since: make(map[string]time.Time)}
+}
+
+// acquire marca userID como em curso e devolve true. Devolve false quando já
+// há um Start vivo para esse userID — a não ser que a entrada esteja mais
+// velha que ttl, caso em que é considerada estagnada e CEDIDA ao chamador
+// novo (ver startInFlightTTL).
+//
+// Não loga, e não é isenta por anotação: a decisão que ela implementa é
+// registada pelo CHAMADOR, em Start, com userid e nível Warn. As duas contam
+// para o denominador do gate de log — ver F192 no HOUSEKEEP.md, que traz os
+// números medidos e a razão de não os mascarar.
+func (f *startInFlight) acquire(userID string, now time.Time, ttl time.Duration) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if since, busy := f.since[userID]; busy && now.Sub(since) < ttl {
+		return false
+	}
+	f.since[userID] = now
+	return true
+}
+
+// release devolve a chave de userID. Ver acquire quanto ao gate de log.
+func (f *startInFlight) release(userID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.since, userID)
+}
+
 // Orchestrator conduz o ciclo de vida de uma sessão: resolve a configuração
 // no banco, materializa a sessão pelo SessionProvider, registra os handles,
 // anexa o handler de domínio e então pareia ou conecta.
@@ -71,6 +171,13 @@ type Orchestrator struct {
 	dispatcher port.SessionEventDispatcher
 	attach     port.SessionAttachHook
 	db         userStore
+
+	// inFlight serializa Start por utilizador. Ver startInFlight.
+	inFlight *startInFlight
+
+	// now é a fonte de tempo da guarda de startInFlight, substituível nos
+	// testes para exercitar a expiração sem dormir.
+	now func() time.Time
 
 	// defaultWebhookUseProxy é o valor global aplicado quando o usuário não
 	// tem webhook_use_proxy definido (hoje appCtx.GlobalWebhookUseProxy).
@@ -112,6 +219,17 @@ type Orchestrator struct {
 // corrigir no payload.
 const codeSessionOwnedByAnotherReplica = "session_owned_by_another_replica"
 
+// codeSessionStartAlreadyInFlight é devolvido quando já existe um Start vivo
+// para o utilizador. Ver startInFlight para a medição que o motivou.
+//
+// CategoryConflict, pela mesma razão do código acima: o pedido está correto e
+// autorizado, só chegou enquanto outro igual ainda corre. Hoje o
+// ConnectHandler dispara Start em goroutine e só REGISTA o erro — o cliente
+// continua a receber 200 {"status":"connecting"}, que é o contrato de
+// /session/connect e não muda por causa desta guarda. O QR que já existe sai
+// pelo GET /session/qr, exatamente como na Evolution API.
+const codeSessionStartAlreadyInFlight = "session_start_already_in_flight"
+
 type Option func(*Orchestrator)
 
 // WithOwnershipCheck instala a verificação de posse do ADR-0005 D2.
@@ -143,6 +261,12 @@ func WithSleep(sleep func(time.Duration)) Option {
 	return func(o *Orchestrator) { o.sleep = sleep }
 }
 
+// WithClock substitui a fonte de tempo da guarda de startInFlight (usado nos
+// testes para exercitar startInFlightTTL sem dormir três minutos).
+func WithClock(now func() time.Time) Option {
+	return func(o *Orchestrator) { o.now = now }
+}
+
 // WithS3Provisioner registra o provisionamento de cliente S3 por usuário.
 func WithS3Provisioner(fn func(userID string)) Option {
 	return func(o *Orchestrator) { o.ensureS3 = fn }
@@ -172,6 +296,8 @@ func NewOrchestrator(
 		maxConnectionRetries: defaultMaxConnectionRetries,
 		connectionRetryWait:  defaultConnectionRetryWait,
 		sleep:                time.Sleep,
+		inFlight:             newStartInFlight(),
+		now:                  time.Now,
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -188,6 +314,23 @@ func NewOrchestrator(
 // PairingEvent é consumido aqui, como startClient consome o qrChan hoje);
 // no caminho já pareado retorna assim que a conexão sobe.
 func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err error) {
+	// Serialização por utilizador ANTES da posse, e não depois: reivindicar a
+	// posse é o primeiro efeito observável de Start, e deixá-la fora da
+	// guarda faria dois Starts concorrentes tocarem o lease do mesmo
+	// utilizador antes de um deles desistir. A ORDEM é o ponto — inverter
+	// estas duas passa em qualquer teste que só olhe para o resultado final.
+	if !o.inFlight.acquire(userID, o.now(), startInFlightTTL) {
+		log.Warn().Str("userid", userID).Msg("start already in flight for this user; not starting a second pairing flow")
+		return apperr.New(
+			codeSessionStartAlreadyInFlight,
+			apperr.CategoryConflict,
+			"a session start is already in flight for this user; read the current QR from GET /session/qr",
+			false,
+			nil,
+		)
+	}
+	defer o.inFlight.release(userID)
+
 	// Posse ANTES de materializar qualquer coisa: criar a sessão e só depois
 	// descobrir que ela é de outra réplica deixaria cliente e registries
 	// sujos, e o caminho de limpeza teria de desfazer o que nem devia ter
@@ -526,8 +669,24 @@ func translateStatusEvent(evt port.SessionEvent) (string, map[string]any) {
 		return "LoggedOut", loggedOutPayload(evt.LoggedOut)
 	case port.SessionEventKindPairSuccess:
 		return "PairSuccess", pairSuccessPayload(evt.PairSuccess)
+	// F194: o QR NÃO é despachado por aqui, e o vazio é deliberado.
+	//
+	// Havia DOIS escritores do mesmo evento, e o primeiro código chegava
+	// duplicado ao cliente em todos os ciclos medidos — 6ms de intervalo,
+	// payload idêntico. Os seguintes não duplicavam porque só existem no
+	// canal de pareamento.
+	//
+	// O escritor que fica é o do canal de pareamento (onPairingQR), e não
+	// este, porque é o COMPLETO: a cópia que saía daqui vinha sem Timeout, e
+	// portanto sem `expiresAt` — um cliente que se guiasse por ela ficava sem
+	// a validade e sem barra de progresso.
+	//
+	// É seguro calar este caminho: QR só existe durante o pareamento, e o
+	// pareamento só corre quando a sessão NÃO tem credenciais
+	// (orchestrator.go:411), que é exatamente quando runPairing está de pé
+	// para o receber.
 	case port.SessionEventKindQR:
-		return "QR", qrPayload(evt.QR)
+		return "", nil
 	case port.SessionEventKindStreamReplaced:
 		return "StreamReplaced", map[string]any{"event": "stream_replaced"}
 	default:
@@ -602,23 +761,26 @@ func buildQRPayload(code string, validade time.Duration) map[string]any {
 	// Validade real daquele código específico, em RFC3339, para o cliente
 	// repassar como está em vez de assumir uma janela fixa.
 	//
-	// São 60s para o PRIMEIRO código e 20s para os demais — não o contrário,
-	// como o comentário anterior afirmava até a F69. qrchan.go:72 aplica
-	// qrCodeFirstTimeout quando ainda restam qrCodeFirstBatchSize códigos na
-	// fila, ou seja, no primeiro. Quem programasse um cliente a partir do texto
-	// anterior erraria a barra de progresso do primeiro QR por 40 segundos.
+	// São 20s para TODOS os códigos, incluindo o primeiro. A F69 corrigiu a
+	// afirmação anterior ("20s no primeiro, 60s nos demais") para "60s no
+	// primeiro", e depois disso a CONSTANTE mudou e este texto não acompanhou:
+	// `qrCodeFirstTimeout = qrCodeTimeout` em
+	// internal/wa-noise/core/pair_constants.go:23, com o comentário a dizer
+	// que a igualdade é deliberada — um QR de pareamento é uma credencial, e
+	// triplicar a janela de exposição do primeiro código não compra nada.
+	//
+	// Medido em 2026-08-20 (F195): os seis códigos chegaram de 20 em 20
+	// segundos, o primeiro inclusive — 03:24:40, 03:25:00, 03:25:20, 03:25:40,
+	// 03:26:00, 03:26:20.
+	//
+	// NENHUM código depende deste número, e é assim que tem de continuar:
+	// `expiresAt` vem do Timeout real do evento. O comentário é para quem
+	// programa o cliente, e é exatamente por isso que estar errado engana.
 	if validade > 0 {
 		payload["expiresAt"] = time.Now().Add(validade).Format(time.RFC3339)
 	}
 
 	return payload
-}
-
-func qrPayload(q *port.SessionQREvent) map[string]any {
-	if q == nil {
-		return buildQRPayload("", 0)
-	}
-	return buildQRPayload(q.Code, q.Timeout)
 }
 
 func (o *Orchestrator) dispatch(ctx context.Context, userID, eventType string, payload map[string]any) {

@@ -86,6 +86,8 @@ func newHmacRouteFixture(t *testing.T) *hmacRouteFixture {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Newsletter:  &handlers.NewsletterHandlers{},
+		Label:       &handlers.LabelHandlers{},
 		ChatHistory: &handlers.ChatHistoryHandlers{},
 
 		// Os tres handlers sob teste, com as MESMAS dependencias que

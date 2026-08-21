@@ -22,6 +22,13 @@ const (
 	userInfoHistoryField = "History"
 	userInfoProxyField   = "Proxy"
 	userInfoTokenField   = "Token"
+
+	// userInfoIDField é a chave do id do utilizador dentro da entrada. Vira
+	// constante com a F200: o republicador varre a cache por token à procura
+	// das entradas deste utilizador, e um literal divergente ali faria a
+	// varredura não encontrar nada — falhando em silêncio, que é exatamente o
+	// modo de falha que a F200 é.
+	userInfoIDField = "Id"
 )
 
 // userInfoSessionCache implements appport.UserInfoHistoryCache and

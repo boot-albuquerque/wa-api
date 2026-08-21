@@ -24,6 +24,29 @@ import { API, Tokens, listarSessoes, carregarConfig, novoToken, $ } from "./devu
 import { ENVIO, CHAT } from "./operacoes.js";
 
 const POLL_MS = 3000;
+
+// Rotas de sessão usadas por este painel. Nomeadas em vez de literais soltos
+// porque o mesmo caminho aparece em mais de um sítio e literal repetido é o
+// mesmo bug à espera de divergir (ADR-0004).
+const ROTA_CONNECT = "/session/connect";
+const ROTA_DISCONNECT = "/session/disconnect";
+const ROTA_LOGOUT = "/session/logout";
+const ROTA_QR = "/session/qr";
+
+// Janela em que o painel espera o QR depois de pedir `connect`, e o intervalo
+// entre sondagens de ROTA_QR dentro dela.
+//
+// 12s cobre com folga o pior caso medido em 2026-08-20 contra o servidor
+// real: entre o `connect` e o primeiro QR passaram-se 640ms a 1,4s em todas
+// as corridas. Passada a janela sem QR nenhum, o pedido FALHOU de facto e
+// dizê-lo é melhor do que continuar a mostrar "Pedindo QR à API…".
+const QR_ESPERA_MS = 12000;
+const QR_SONDA_MS = 1000;
+
+// Teto para o handshake do WebSocket. Não é o tempo até o QR: é só até o
+// socket ficar OPEN, que na mesma medição levou 5ms a 13ms.
+const WS_ABERTURA_MS = 5000;
+
 let sessoes = [];
 
 // ---- listagem ---------------------------------------------------------------
@@ -155,9 +178,13 @@ function esconderQR(card) {
   card.querySelector(".ttl").hidden = true;
 }
 
-// A barra usa o `expiresAt` que a PRÓPRIA API manda. Não há contagem fixa de
-// 20s: o primeiro código vale 60s, e assumir 20 mostraria expirado o que ainda
-// é válido.
+// A barra usa o `expiresAt` que a PRÓPRIA API manda, e é isso que a torna
+// correta independentemente da janela — que já mudou duas vezes.
+//
+// Hoje são 20s para todos os códigos, o primeiro inclusive (medido na F195;
+// `qrCodeFirstTimeout = qrCodeTimeout` em pair_constants.go:23). O comentário
+// anterior aqui dizia 60s para o primeiro e estava errado desde que a
+// constante mudou. Não assuma nenhum dos dois: leia o `expiresAt`.
 function iniciarTTL(id, iso) {
   pararTTL(id);
   const fim = Date.parse(iso);
@@ -185,6 +212,22 @@ function pararTTL(id) {
 // aqui duplicaria o que `eventos.html` faz.
 const sockets = new Map();
 
+// abrirWS resolve SÓ quando o socket está OPEN (ou quando desistiu dele).
+//
+// Devolver antes disso foi o defeito de 2026-08-20. `acao(s,"conectar")`
+// abria o socket e disparava `GET /session/connect` no MESMO tick; o registo
+// do socket do lado do servidor (AddWSConn, em handler_session_ws.go) só
+// acontece depois do upgrade concluir, e o QR despachado nessa janela não tem
+// para onde ir — o fan-out entrega a zero conexões e o evento desaparece.
+// Medido, com o socket a entrar 3s depois do `connect`:
+//
+//	0.433s HTTP connect(sem-ws) -> 200 {"status":"connecting"}
+//	3.461s HTTP qr(depois-de-3s) -> len=1870   <- o QR EXISTE
+//	3.481s WS(tardio) OPEN
+//	21.366s WS(tardio) MSG type=QR             <- 17,9s de silêncio
+//
+// O QR emitido a ~1,4s nunca chegou ao socket. Esperar o OPEN fecha a
+// corrida; a sondagem de ROTA_QR em aguardarQR cobre o que ela não fechar.
 function abrirWS(s) {
   fecharWS(s.id);
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -201,6 +244,66 @@ function abrirWS(s) {
     if (tipo.includes("pairsuccess") || tipo === "connected" || tipo === "loggedout") atualizar();
   };
   ws.onclose = () => sockets.delete(s.id);
+
+  // Resolve em vez de rejeitar no erro e no tempo esgotado: o `connect` tem
+  // de sair de qualquer maneira. Um socket que não abriu degrada para a
+  // sondagem, não cancela o pareamento.
+  return new Promise((resolve) => {
+    if (ws.readyState === WebSocket.OPEN) return resolve(true);
+    const pronto = (v) => resolve(v);
+    ws.addEventListener("open", () => pronto(true), { once: true });
+    ws.addEventListener("error", () => pronto(false), { once: true });
+    setTimeout(() => pronto(false), WS_ABERTURA_MS);
+  });
+}
+
+// aguardarQR sonda `GET /session/qr` até um QR aparecer ou a janela fechar.
+//
+// Existe porque o WebSocket é um canal COM PERDA e o painel não tinha mais
+// nenhuma entrada: qualquer evento perdido — socket ainda a abrir, Start a
+// falhar depois do 200, sessão já pareada — deixava o cartão preso em
+// "Pedindo QR à API…" sem prazo e sem erro. `users.qrcode`, que é o que esta
+// rota devolve, é a fonte durável do mesmo código.
+//
+// É o que a Evolution API faz em connectToWhatsapp: depois de conectar, ela
+// espera e LÊ o QR guardado (`await delay(2000); return instance.qrCode`) em
+// vez de confiar só no evento.
+async function aguardarQR(s) {
+  const fim = Date.now() + QR_ESPERA_MS;
+  while (Date.now() < fim) {
+    const card = cardDe(s.id);
+    // O cartão saiu da grelha (sessão removida): não há o que esperar.
+    if (!card) return;
+    // Já há QR desenhado — pelo socket ou pela sondagem anterior — ou a
+    // janela expirou e o overlay de "Gerar novo QR" já está no lugar.
+    if (card.querySelector(".qr img") || card.querySelector(".qr .over")) return;
+
+    const r = await API.sessao(s.token, "GET", ROTA_QR);
+    const imagem = r.body?.data?.QRCode || "";
+    if (imagem) return mostrarQR(s.id, imagem);
+
+    await new Promise((r2) => setTimeout(r2, QR_SONDA_MS));
+  }
+  falhouQR(s);
+}
+
+// falhouQR troca o "Pedindo QR à API…" perpétuo por um erro accionável.
+//
+// Um pedido que não produz QR nenhum dentro da janela falhou, e o painel tem
+// de o dizer: um estado de espera sem fim é indistinguível de um painel
+// partido, e foi assim que este defeito chegou até aqui.
+function falhouQR(s) {
+  const card = cardDe(s.id); if (!card) return;
+  const qr = card.querySelector(".qr");
+  if (qr.querySelector("img") || qr.querySelector(".over")) return;
+  qr.hidden = false;
+  qr.innerHTML = '<div class="msg">A API aceitou o pedido mas não emitiu QR nenhum. ' +
+    "Uma sessão já pareada não gera QR — use Logout para desvincular antes de parear outra vez.</div>";
+  const o = document.createElement("div");
+  o.className = "over";
+  o.innerHTML = '<button type="button">Tentar de novo</button>';
+  o.querySelector("button").onclick = () => acao(s, "conectar");
+  qr.appendChild(o);
 }
 
 function fecharWS(id) {
@@ -236,19 +339,25 @@ async function acao(s, qual) {
     "Leitura e manipulação de conversas. Apagar mensagem é IRREVERSÍVEL do lado de quem recebeu.");
 
   if (qual === "conectar") {
-    abrirWS(s);
     const qr = card.querySelector(".qr");
     qr.hidden = false; qr.classList.remove("expirado");
     qr.innerHTML = '<div class="msg">Pedindo QR à API…</div>';
-    await API.sessao(s.token, "GET", "/session/connect");
+    // ORDEM: o socket ABERTO antes de o `connect` sair. Ver abrirWS para a
+    // medição do que acontece quando esta ordem se inverte — inverter as duas
+    // linhas continua a passar em qualquer teste que só olhe para o fim.
+    await abrirWS(s);
+    await API.sessao(s.token, "GET", ROTA_CONNECT);
     setTimeout(atualizar, 800);
+    // Sem await: a sondagem corre ao lado do painel, e prender `acao` aqui
+    // deixaria o botão em espera durante toda a janela.
+    aguardarQR(s);
     return;
   }
 
   if (qual === "desconectar") {
     // Derruba o TRANSPORTE e mantém o pareamento: reconecta depois sem QR
     // novo. É diferente de logout.
-    await API.sessao(s.token, "GET", "/session/disconnect");
+    await API.sessao(s.token, "GET", ROTA_DISCONNECT);
     fecharWS(s.id); esconderQR(card);
     setTimeout(atualizar, 800);
     return;
@@ -265,7 +374,7 @@ async function acao(s, qual) {
       okTexto: "Desvincular",
     });
     if (!ok) return;
-    await API.sessao(s.token, "POST", "/session/logout");
+    await API.sessao(s.token, "POST", ROTA_LOGOUT);
     fecharWS(s.id); esconderQR(card);
     setTimeout(atualizar, 800);
   }

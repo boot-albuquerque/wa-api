@@ -79,6 +79,18 @@ const (
 	ParticipantChangeReject  = core.ParticipantChangeReject
 )
 
+// Newsletters (canais).
+//
+// Reexportados no levantamento de paridade de 2026-08-20, quando as onze
+// capacidades de newsletter entraram na fachada estreita: o consumidor
+// (pkg/infra/wa-noise/adapters/misc) precisa de NOMEAR estes tipos para montar
+// os parametros, e o gate waclient-facade proibe-o de importar core direto.
+type (
+	CreateNewsletterParams      = core.CreateNewsletterParams
+	GetNewsletterMessagesParams = core.GetNewsletterMessagesParams
+	GetNewsletterUpdatesParams  = core.GetNewsletterUpdatesParams
+)
+
 // Perfil e midia.
 type (
 	GetProfilePictureParams = core.GetProfilePictureParams

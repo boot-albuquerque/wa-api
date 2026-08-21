@@ -210,7 +210,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewRejectCallHandler(chat.NewRejectCallUseCase(ops, jids, log))
 			},
-			validBody:    `{"call_from":"5511999999999","call_id":"CALL1"}`,
+			validBody:    `{"call_from":"5511999999999@s.whatsapp.net","call_id":"CALL1"}`,
 			emptyBodyErr: "missing call_from in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.RejectCallFunc = func(context.Context, string, domain.JID, string) error { return err }
@@ -236,7 +236,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewRequestUnavailableMessageHandler(chat.NewRequestUnavailableMessageUseCase(ops, jids, log))
 			},
-			validBody:    `{"chat":"5511999999999","sender":"5511888888888","id":"MSG1"}`,
+			validBody:    `{"chat":"5511999999999@s.whatsapp.net","sender":"5511888888888@s.whatsapp.net","id":"MSG1"}`,
 			emptyBodyErr: "missing Chat in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.RequestUnavailableMessageFunc = func(context.Context, string, domain.JID, domain.JID, string) (domain.UnavailableMessageAck, error) {
@@ -251,7 +251,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewArchiveChatHandler(chat.NewArchiveChatUseCase(ops, jids, log))
 			},
-			validBody:    `{"jid":"5511999999999","archive":true}`,
+			validBody:    `{"jid":"5511999999999@s.whatsapp.net","archive":true}`,
 			emptyBodyErr: "missing jid in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.ArchiveChatFunc = func(context.Context, string, domain.JID, bool) error { return err }

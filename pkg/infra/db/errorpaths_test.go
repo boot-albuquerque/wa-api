@@ -528,7 +528,8 @@ func TestApplyMigration_PostgresBranchExecutesUpSQL(t *testing.T) {
 		// rejection this loop uses as evidence never happens. Skipping it here
 		// would silently drop coverage of its branch, so it gets its own
 		// assertion below: TestApplyMigration_PortableDDLBranchStillRuns.
-		if m.ID == migrationIDSessionLeases || m.ID == migrationIDWebhookOutbox {
+		if m.ID == migrationIDSessionLeases || m.ID == migrationIDWebhookOutbox ||
+			m.ID == migrationIDLabels {
 			continue
 		}
 		err := applyMigration(pg, m)
@@ -1290,6 +1291,12 @@ func TestApplyMigration_PortableDDLBranchStillRuns(t *testing.T) {
 	}{
 		{migrationIDSessionLeases, "session_leases"},
 		{migrationIDWebhookOutbox, "webhook_outbox"},
+		// F191: as três tabelas de etiqueta. Uma por linha porque o teste
+		// prova a EXISTÊNCIA de cada uma — provar só a primeira deixaria as
+		// outras duas por conta da esperança.
+		{migrationIDLabels, "wa_labels"},
+		{migrationIDLabels, "wa_label_chats"},
+		{migrationIDLabels, "wa_label_messages"},
 	} {
 		t.Run(tc.table, func(t *testing.T) {
 			raw := openTestDB(t)
