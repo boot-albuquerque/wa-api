@@ -327,6 +327,11 @@ func TestStartSession_ConcurrentStartOnSameProfileEndToEnd(t *testing.T) {
 			sess, err := StartSession(context.Background(), StartConfig{
 				BinaryPath: binary, ProfileDir: profile,
 				DebuggingPort: port, NavigateURL: url,
+				// THE HARNESS BUDGET. This config is built by hand rather than
+				// through baseConfig, which is exactly how it kept the PRODUCT's
+				// 30s while every other test in the package had 150 — the F100
+				// note that said the first fix was too narrow, made concrete.
+				Runner: harnessRunner(),
 			})
 			mu.Lock()
 			defer mu.Unlock()
@@ -419,6 +424,7 @@ func TestStartSession_CyclesTwice(t *testing.T) {
 			ProfileDir:    profileDir,
 			DebuggingPort: freePortT(t),
 			NavigateURL:   url,
+			Runner:        harnessRunner(),
 		}
 		sess, err := StartSession(context.Background(), cfg)
 		if err != nil {

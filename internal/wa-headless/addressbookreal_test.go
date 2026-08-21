@@ -240,10 +240,16 @@ func TestLabMutualAddressbookSave(t *testing.T) {
 			t.Logf("%s: forgotten", what)
 			return
 		}
-		// syncToPhone is FALSE and stays false. True would write into the
-		// address book of a physical handset, which is the one thing this whole
-		// experiment exists to avoid needing.
-		saved, err := ab.Save(ctx, number, name, "", false, what+"/save")
+		// SYNC IS OPT-IN PER RUN, and true reaches a physical handset.
+		//
+		// The first pass ran with false, on purpose, because it was cheap and
+		// reversible. It was not enough: the contact came back
+		// isAddressBookContact=1 with isContactSyncCompleted=0, and the
+		// server-side "my contacts" filter only knows what was SYNCED (H91).
+		// True is the next measurement and it needs a human's word, which is
+		// why it is a flag and not a default.
+		sync := os.Getenv("WA_LAB_MUTUAL_SYNC") == "1"
+		saved, err := ab.Save(ctx, number, name, "", sync, what+"/save")
 		if err != nil {
 			t.Fatalf("%s: save: %v", what, err)
 		}

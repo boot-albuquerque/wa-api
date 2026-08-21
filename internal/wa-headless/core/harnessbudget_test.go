@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -137,4 +138,104 @@ func TestTheInjectedBudgetGovernsTheTabPrimingToo(t *testing.T) {
 	if !strings.Contains(src, "engine.OpenTabWithin(sessionCtx, browser, runner.Policy.For(engine.OpBoot))") {
 		t.Fatal("the boot does not pass the runner's own boot budget to the tab priming")
 	}
+}
+
+// TestEveryBootInTheseTestsCarriesTheHarnessBudget stops F100 from coming back
+// through the door it kept using.
+//
+// The budget was introduced once, in baseConfig, and two tests that build a
+// StartConfig by hand never got it. They kept the PRODUCT's thirty seconds
+// while the rest of the package had a hundred and fifty, and under contention
+// they were the ones that failed — which read as flakiness rather than as a
+// config that was missed.
+//
+// A rule stated in a comment would have been missed the same way. This is the
+// same rule as a gate: every StartConfig literal in this package's tests names
+// a Runner.
+func TestEveryBootInTheseTestsCarriesTheHarnessBudget(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+	var offenders []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(e.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		lines := strings.Split(string(body), "\n")
+		for i, raw := range lines {
+			// STRIP THE STRING LITERALS BEFORE MATCHING, and the first run of
+			// this gate is why: it flagged its OWN source, because the line that
+			// searches for the marker contains the marker. Comments were already
+			// being skipped; a quoted string is the same trap wearing different
+			// punctuation, and this repository has now met it in three forms.
+			line := withoutStringLiterals(raw)
+			if !strings.Contains(line, "StartConfig{") ||
+				strings.HasPrefix(strings.TrimSpace(raw), "//") {
+				continue
+			}
+			// An explicit exception, with a reason, for a config that never
+			// boots — the same discipline the page-clock gate's allowlist uses.
+			exempt := strings.Contains(raw, "no-runner:")
+			for k := i - 1; k >= 0 && k >= i-3 && !exempt; k-- {
+				if !strings.HasPrefix(strings.TrimSpace(lines[k]), "//") {
+					break
+				}
+				exempt = strings.Contains(lines[k], "no-runner:")
+			}
+			if exempt {
+				continue
+			}
+			// Read forward to the literal's closing brace, shallowly: these are
+			// all flat literals, and a brace counter would be more machinery
+			// than the thing it checks.
+			found := false
+			for j := i; j < len(lines) && j < i+16; j++ {
+				if strings.Contains(lines[j], "Runner:") {
+					found = true
+					break
+				}
+				if j > i && strings.TrimSpace(lines[j]) == "}" {
+					break
+				}
+			}
+			if !found {
+				offenders = append(offenders, e.Name()+":"+strconv.Itoa(i+1))
+			}
+		}
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("StartConfig literal(s) with no Runner at %s — they would boot on the "+
+			"PRODUCT's %s instead of the harness's %s, and fail under contention as F100 "+
+			"did eight times. Use harnessRunner().",
+			strings.Join(offenders, ", "), engine.DefaultDeadlines.Boot, harnessBootBudget)
+	}
+}
+
+// withoutStringLiterals blanks the contents of double-quoted strings, so a gate
+// that looks for a token in CODE is not satisfied by the same token appearing
+// inside a string — including the gate's own source.
+//
+// Naive by design: it does not handle backtick strings or escaped quotes. It is
+// used on one package's test files, all of which are ordinary Go, and a helper
+// that pretended to lex Go would be a worse thing to trust than a stated limit.
+func withoutStringLiterals(line string) string {
+	var b strings.Builder
+	in := false
+	for _, r := range line {
+		if r == '"' {
+			in = !in
+			b.WriteRune(r)
+			continue
+		}
+		if in {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

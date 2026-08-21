@@ -104,6 +104,8 @@ func TestLifecycle_BootFailureCarriesTheStage(t *testing.T) {
 // at each return would be a fact somebody forgets to emit at one of them.
 func TestLifecycle_EvenTheEarliestFailureReports(t *testing.T) {
 	rec := &recorder{}
+	// no-runner: this config never reaches a browser — it returns at the very
+	// first validation, which is the whole property under test.
 	cfg := StartConfig{OnLifecycle: rec.observe} // no BinaryPath: the first return.
 	if _, err := StartSession(context.Background(), cfg); err == nil {
 		t.Fatal("an empty config must not boot")

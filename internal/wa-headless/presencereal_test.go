@@ -79,6 +79,24 @@ func TestRealSPAPresenceCrossesBetweenAccounts(t *testing.T) {
 	}
 	t.Logf("announcing account identified: %s", me)
 
+	// THE BUDGET IS RAISABLE FROM THE ENVIRONMENT, for one specific question.
+	//
+	// H50 saw isSubscribed flip true ONCE and false on every run after. H91
+	// synced the accounts into each other's address books and it flipped true
+	// again — once. Two readings of that are possible and they call for opposite
+	// work: either the subscription genuinely does not take, or it takes longer
+	// than the twenty seconds nobody measured. Raising the budget is how the
+	// two are told apart, and it is a knob rather than a new default because a
+	// number changed to make a test pass is not a measurement.
+	if raw := os.Getenv("WA_PRESENCE_SUBSCRIBE_BUDGET"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			t.Fatalf("WA_PRESENCE_SUBSCRIBE_BUDGET=%q: %v", raw, err)
+		}
+		presence.SetSubscribeBudget(d)
+		t.Logf("subscription budget raised to %s for this run", d)
+	}
+
 	rxSide := presence.New(rxRunner, rx.Tab().Evaluate)
 	txSide := presence.New(txRunner, tx.Tab().Evaluate)
 

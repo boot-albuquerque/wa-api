@@ -33,10 +33,19 @@ import (
 var (
 	opBudget = 30 * time.Second
 	opTick   = 500 * time.Millisecond
-	// subscribeBudget bounds the wait for a subscription to be reflected.
-	// Measured: subscribeUserPresence returns before isSubscribed flips, so a
-	// read in the same breath is a race — it passed once and failed the next
-	// run.
+)
+
+// subscribeBudget bounds the wait for a subscription to be reflected.
+//
+// Measured: subscribeUserPresence returns before isSubscribed flips, so a read
+// in the same breath is a race — it passed once and failed the next run.
+//
+// VAR, NOT CONST, because twenty seconds is a number nobody measured against
+// the case that matters. H94 needs to distinguish "this subscription never
+// takes" from "it does not take within twenty seconds", and those two call for
+// completely different work: one is a protocol problem and the other is a
+// constant. A budget that cannot be moved cannot answer that question.
+var (
 	subscribeBudget = 20 * time.Second
 	subscribeTick   = time.Second
 )
@@ -88,10 +97,23 @@ type Snapshot struct {
 	// first.
 	Subscribed bool
 	Online     bool
-	// ChatState is the page's own word: measured values include "composing",
-	// "recording", "paused", "available" and "unavailable". It is carried
-	// verbatim rather than mapped, because a value this package has not seen
-	// must not be silently turned into one it has.
+	// ChatState is DERIVED from the presence model's typing and recording
+	// lists, not copied from a field.
+	//
+	// The doc here used to say it was "the page's own word", which was inherited
+	// from the reference and never measured: this build's chatstate.type is
+	// undefined and its chatstates collection is empty. The values below are
+	// this module's own constants, produced from lists that do move (H94).
+	//
+	// Historic note, kept because it is the reason the wording changed: the
+	// original claim said the page's own measured values include "composing",
+	// "recording", "paused", "available" and "unavailable", and that they were
+	// carried verbatim rather than mapped. None of that was ever observed here.
+	//
+	// What this reports now is "composing" when somebody is typing, "recording"
+	// when somebody is recording audio, and "" otherwise. Only the first two
+	// can be produced by this build's model, so the other three are gone rather
+	// than left in a doc as things a caller might see.
 	ChatState string
 }
 
@@ -322,8 +344,33 @@ func observeScript(ofJID string) string {
 			const coll = window.require('` + string(spa.ModulePresenceCollection) + `').PresenceCollection;
 			const p = coll.get(r.wid);
 			if (!p) { park({ stage: 'done', ok: true, why: '', subscribed: false }); return; }
+			// WHERE THE TYPING ACTUALLY LIVES ON THIS BUILD.
+			//
+			// This used to read p.chatstate.type, which is what the reference
+			// documents. Measured on the real page: chatstate is an object whose
+			// own fields are all model plumbing, its "type" is UNDEFINED, and the
+			// (no backticks in here: this comment lives inside a Go raw string,
+			// and one backtick would end it — which is exactly how this line
+			// broke the build the first time)
+			// chatstates collection is empty. The presence model instead carries
+			// two ARRAYS — typingUserIds and recordingUserIds — and those are
+			// what move.
+			//
+			// So the old reader could never report anything but "": it was the
+			// same defect as the reaction aggregate that was called every time
+			// and threw every time (H83), except quieter, because reading an
+			// undefined field does not even throw. A capability that always
+			// answers the same thing is indistinguishable from one that is not
+			// wired at all — and this one shipped.
+			//
+			// COUNTS, NEVER THE IDS. Those arrays hold identities.
 			let cs = '';
-			try { if (p.chatstate && p.chatstate.type != null) { cs = String(p.chatstate.type); } } catch (e) {}
+			try {
+				const typing = Array.isArray(p.typingUserIds) ? p.typingUserIds.length : 0;
+				const recording = Array.isArray(p.recordingUserIds) ? p.recordingUserIds.length : 0;
+				if (typing > 0) { cs = 'composing'; }
+				else if (recording > 0) { cs = 'recording'; }
+			} catch (e) {}
 			park({
 				stage: 'done', ok: true, why: '',
 				subscribed: !!p.isSubscribed, online: !!p.isOnline, chatstate: cs
@@ -341,3 +388,20 @@ const resultScript = `JSON.stringify((() => {
 	if (!s) { return { stage: 'announce', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+
+// SetSubscribeBudget changes how long Observe waits for a subscription to be
+// reflected.
+//
+// IT EXISTS FOR ONE MEASUREMENT, and the doc says so rather than leaving a knob
+// with no stated purpose: H50 and H91 both saw isSubscribed flip true exactly
+// once and false afterwards, and the default twenty seconds was never measured
+// against that case. Telling "never takes" apart from "takes longer than the
+// default" is the only reason to move it.
+//
+// It is not a per-call option because the budget belongs to the page's
+// behaviour, not to a caller's patience.
+func SetSubscribeBudget(d time.Duration) {
+	if d > 0 {
+		subscribeBudget = d
+	}
+}

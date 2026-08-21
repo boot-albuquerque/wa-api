@@ -7364,3 +7364,117 @@ implementados e travados por teste; `INCOMING_CALL` e a prova ao vivo de
 `reject` continuam sem disparo, com o caminho todo medido. O achado da inundação
 do barramento fica pendente de decisão. A F100 fica **corrigida na causa** e o
 teto do harness registrado.
+
+---
+
+## H94 — presença: a agenda destravou a subscrição UMA vez, e o leitor de digitação lia um campo que não existe
+
+**Data**: 2026-08-21.
+**Contexto**: reabertura da H50 com autorização humana para
+`syncToAddressbook=true`.
+
+### A quarta hipótese da H50 tem, pela primeira vez, uma observação a favor
+
+Com as duas contas salvas na agenda uma da outra **e sincronizadas**, o teste ao
+vivo leu `subscribed=true` — o que **nunca** tinha acontecido. A H50 registrou a
+mesma coisa uma vez e nunca mais; a H91, com `sync=false`, não conseguiu nem
+isso.
+
+O que ficou faltando na mesma execução: `online=false` e `chatstate=""` enquanto
+a outra conta anunciava `composing`.
+
+### E aí apareceu um defeito de verdade, na capacidade entregue
+
+`Observe` lia `p.chatstate.type`, que é o que a referência documenta. Medido
+neste build, no modelo de presença real:
+
+| campo | valor |
+|---|---|
+| `chatstate.type` | **undefined** |
+| coleção `chatstates` | **vazia** |
+| `typingUserIds` | `array` — **é aqui** |
+| `recordingUserIds` | `array` |
+
+**O leitor antigo não podia reportar outra coisa senão `""`.** É a mesma classe
+do defeito da H83 (o agregado de reações que era chamado sempre e lançava
+sempre), só que mais silenciosa: ler campo indefinido nem lança. Uma capacidade
+que sempre responde a mesma coisa é indistinguível de uma que não está ligada —
+e esta foi entregue assim.
+
+Corrigido: `composing` quando `typingUserIds` não está vazio, `recording` quando
+`recordingUserIds` não está. **Contagens, nunca os ids** — aquelas listas contêm
+identidades.
+
+O doc do `Snapshot.ChatState` afirmava valores "medidos" que jamais foram
+observados aqui (`paused`, `available`, `unavailable`). Reescrito para dizer o
+que este build produz de fato, com a afirmação antiga preservada como o motivo
+da mudança.
+
+### O que continua sem resposta, com a hipótese trocada
+
+Depois daquela única execução boa, a subscrição voltou a falhar. Três execuções
+seguidas, **uma delas com orçamento de 120 s** contra os 20 s padrão:
+
+> **Não é constante de tempo.** Dois minutos inteiros e `isSubscribed` não vira.
+
+Isso derruba a hipótese mais barata e deixa uma nova, que a H50 não tinha:
+**a subscrição parece funcionar uma vez por janela**. As duas ocorrências
+positivas conhecidas (H50 e esta) foram ambas a PRIMEIRA tentativa depois de um
+intervalo longo; todas as seguintes, em minutos, falharam. Isso tem cara de
+limitação de taxa do servidor, e não de defeito local.
+
+`subscribeBudget` virou `var` com `SetSubscribeBudget`, exatamente para que essa
+distinção seja mensurável em vez de discutível — e o doc diz que é para isso, em
+vez de deixar um botão sem propósito declarado.
+
+**Próximo experimento, barato**: repetir depois de um intervalo longo. Se voltar
+a passar, a hipótese de janela ganha uma segunda observação.
+
+### Um vazamento de PII meu, na sonda
+
+A primeira execução da sonda de presença imprimiu quatro dígitos de um número de
+conta, porque o texto de erro da própria página cita o jid que ela recusou.
+Mensagem de erro não é isenta da regra. A sonda agora redige antes de reportar,
+no ponto onde a mensagem é MONTADA, não onde é lida.
+
+### E a oitava vez que uma asserção casou com a própria prosa
+
+O teste do leitor novo procurava `p.chatstate.type` no script e achou **o
+comentário que explica por que o script não o lê mais**. Mesmo conserto que a
+`capabilities/call` precisou: tirar os comentários antes de casar. O helper está
+duplicado nos dois pacotes porque um auxiliar de teste não atravessa pacote sem
+virar código de produção que ninguém chama.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| `typing = 0` fixo no script | `TestTheTypingStateIsReadFromTheListsThatMove` | `the observe script does not read p.typingUserIds` |
+
+### E a F100 caiu mais duas vezes, pelo mesmo buraco
+
+O `make check` reprovou de novo com `deadline of 30s` — depois de o teto do
+harness já estar em 150 s. Causa: **dois testes montam o `StartConfig` à mão** e
+nunca receberam o `Runner` do harness. Ficaram com o prazo de PRODUÇÃO enquanto
+o resto do pacote tinha cinco vezes mais, e sob contenção eram justamente eles
+que caíam — o que se lê como intermitência, não como configuração esquecida.
+
+É exatamente a nota da F100 que dizia que a primeira correção era estreita
+demais, agora concreta.
+
+Uma regra em comentário seria esquecida do mesmo jeito, então virou **gate**:
+todo literal `StartConfig{` nos testes deste pacote nomeia um `Runner`, com
+exceção só por marcador `no-runner:` e motivo escrito.
+
+> **O gate reprovou a si mesmo na primeira execução**, porque a linha que
+> procura `StartConfig{` contém `StartConfig{` dentro de uma string. Comentário
+> já era ignorado; string entre aspas é a mesma armadilha com pontuação
+> diferente. Terceira forma dela nesta sessão — prosa, comentário, e agora
+> literal — e as três se resolvem tirando o que não é código antes de casar.
+
+**Controle negativo executado**: remover o `Runner` de um dos dois consertos →
+`StartConfig literal(s) with no Runner at session_test.go:422`.
+
+**Status**: parcialmente entregue — leitor de digitação corrigido e travado; a
+subscrição tem uma observação positiva e uma hipótese nova, medida contra a
+alternativa mais barata e sobrevivendo a ela. A F100 ganhou gate.

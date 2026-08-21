@@ -286,3 +286,52 @@ func (p *lateSubscribeDouble) eval(ctx context.Context, expr string, out *string
 	*out = `{"started":true}`
 	return nil
 }
+
+// THE TYPING STATE COMES FROM THE LISTS THAT MOVE, not from a field that does
+// not exist on this build.
+//
+// The reader used to take p.chatstate.type. Measured on the real page: that is
+// undefined, the chatstates collection is empty, and the model instead carries
+// typingUserIds and recordingUserIds. A reader of an undefined field does not
+// even throw — it just answers "" forever, which is indistinguishable from a
+// capability that was never wired (H94).
+func TestTheTypingStateIsReadFromTheListsThatMove(t *testing.T) {
+	script := observeScript("5541999999999@c.us")
+	for _, want := range []string{"p.typingUserIds", "p.recordingUserIds"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the observe script does not read %s", want)
+		}
+	}
+	// COMMENTS STRIPPED. The script explains, at length, why it no longer reads
+	// p.chatstate.type — and a plain Contains finds the explanation. This
+	// repository has now written a guard that matched its own prose EIGHT times;
+	// the helper below is the same one capabilities/call needed, duplicated
+	// because a test helper cannot cross packages without becoming production
+	// code that nothing calls.
+	if strings.Contains(withoutComments(script), "p.chatstate.type") {
+		t.Error("the observe script reads p.chatstate.type, which is undefined on this build")
+	}
+	// COUNTS, NEVER THE IDS: those lists hold identities, and this is the one
+	// place they could leak into a Snapshot that gets logged.
+	if strings.Contains(script, "typingUserIds[0]") || strings.Contains(script, "typingUserIds.join") {
+		t.Error("the observe script reads an identity out of the typing list")
+	}
+}
+
+// withoutComments removes // line comments, so an assertion about what a page
+// script DOES cannot be satisfied — or defeated — by what it SAYS.
+//
+// Deliberately naive: it does not understand "//" inside a string literal. No
+// script in this package contains one, and a helper pretending to be a
+// JavaScript parser would be worse to trust than a stated limit.
+func withoutComments(script string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(script, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
