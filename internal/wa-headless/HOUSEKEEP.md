@@ -5942,3 +5942,50 @@ offline e, pior, passa a medir outro upstream no dia em que a tag se mexer — q
    seção, não por forma.
 
 **Status**: entregue.
+
+---
+
+## H77 — o ledger tinha uma linha errada, e a auditoria que a achou tem um ponto cego
+
+**Data**: 2026-08-21
+**Contexto**: primeira onda do `COMPLETE-FAMILIES` que a orquestração ordenou.
+**Onde**: `internal/wa-headless/LEDGER-WWEBJS.md`.
+
+### O erro
+
+Marquei `Chat.sendStateRecording` como `MISSING` com a nota *"temos digitando,
+não gravando"*. **Já existia**: `presence.StateRecording`, mapeado para
+`markRecording`, com o mapeamento asserido em teste unitário desde antes.
+
+O mapeamento do ledger foi feito **de memória** sobre 220 itens, e pelo menos um
+saiu errado — na direção pessimista, que é a menos perigosa das duas mas
+continua sendo uma linha que mandaria alguém reimplementar o que existe.
+
+### A auditoria, e por que ela quase não pegou
+
+Rodei uma varredura dos 120 nomes `MISSING` contra o nosso código. Ela devolveu
+17 candidatos, e **quase todos eram colisão de palavra genérica em outra
+classe** — `mute` aparece porque temos `Client.muteChat`, mas a linha `MISSING`
+era `Channel.mute`, que de fato não temos.
+
+**O ponto cego**: `sendStateRecording` NÃO apareceu na varredura, porque o nosso
+identificador é `StateRecording`/`markRecording`. Nomes iguais são coincidência;
+nomes diferentes são o normal, porque o `CLAUDE.md` manda escolher o nome que
+descreve a NOSSA semântica.
+
+Ou seja: a auditoria por nome tem recall ruim por desenho. Ela é útil como rede,
+não como prova.
+
+### O que fica valendo
+
+1. **A linha corrigida** para `PARTIAL`, com a prova ao vivo bloqueada pelo mesmo
+   impedimento da observação de presença (H50), que exige as duas contas na
+   agenda uma da outra — ação de telefone, humana.
+2. **A anotação de que o mapeamento é de memória.** Cada família que for aberta
+   deve reconferir suas próprias linhas contra o código antes de trabalhar, em
+   vez de confiar no estado que eu escrevi.
+3. O gate do ledger **não pega isto** e não pode: ele garante que toda linha
+   existe e que o placar bate, não que o ESTADO de cada linha esteja certo.
+   Isso é limitação real e está dita aqui em vez de descoberta de novo.
+
+**Status**: corrigido.

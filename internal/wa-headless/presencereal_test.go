@@ -135,6 +135,15 @@ func TestRealSPAPresenceCrossesBetweenAccounts(t *testing.T) {
 	// AND IT MUST STOP. A client that only ever announced composing would leave
 	// the other side showing a typing indicator forever, which is worse than
 	// never announcing at all.
+	// RECORDING was implemented and never exercised against the page — the
+	// ledger audit found it, and a mapping table asserted in a unit test proves
+	// the NAME is right and not that the page accepts the call. Announcing it
+	// costs one round trip and turns a PARTIAL into something measured.
+	if err := txSide.Set(ctx, toJID, presence.StateRecording, "presence/record"); err != nil {
+		t.Fatalf("announcing recording: %v", err)
+	}
+	t.Log("recording announced; the page accepted markRecording")
+
 	if err := txSide.Set(ctx, toJID, presence.StatePaused, "presence/pause"); err != nil {
 		t.Fatalf("Set(paused): %v", err)
 	}

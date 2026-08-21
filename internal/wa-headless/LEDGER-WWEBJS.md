@@ -173,7 +173,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `markUnread` | — | `MISSING` | — | — | — | — |
 | `fetchMessages` | capabilities/fetchmessages | `PROVEN` | sim | sim | sim | — |
 | `sendStateTyping` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
-| `sendStateRecording` | — | `MISSING` | — | — | — | temos "digitando", não "gravando" |
+| `sendStateRecording` | presence.StateRecording | `PARTIAL` | sim | bloqueada (H50) | sim | **linha corrigida**: eu a marquei MISSING de memória e ela JÁ EXISTIA, mapeada para `markRecording`. A prova ao vivo esbarra no mesmo bloqueio da observação de presença |
 | `clearState` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
 | `getContact` | — | `MISSING` | — | — | — | não atacado |
 | `getLabels` | — | `MISSING` | — | — | — | não atacado |
@@ -342,9 +342,9 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 35 | 15% |
-| `PARTIAL` | 31 | 14% |
+| `PARTIAL` | 32 | 14% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 150 | 68% |
+| `MISSING` | 149 | 67% |
 | **total** | **220** | |
 
