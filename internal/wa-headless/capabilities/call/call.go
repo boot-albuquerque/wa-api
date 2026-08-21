@@ -167,8 +167,29 @@ func (m *Manager) Reject(ctx context.Context, callerJID, callID, label string) e
 	return nil
 }
 
-// Place ORIGINATES a call, and it is the one method in this module that makes
-// hardware in somebody's pocket make noise.
+// Place ORIGINATES a call — except that on this build, measured, it does not.
+//
+// READ THIS BEFORE USING IT. Five hypotheses were eliminated against the real
+// page, with a human confirming that no handset rang (H93, H95):
+//
+//	the environment            isCallingEnabled true, browser supported,
+//	                          crossOriginIsolated, SharedArrayBuffer, WebAssembly
+//	the VOIP stack             ensureVoipInitialized() resolves
+//	the order                  initialising before dialling changed nothing
+//	the calls tab              the app navigates there first; doing the same
+//	                          changed nothing
+//	the reader                 every container on the call collection watched by
+//	                          name; pendingOutgoingCall stays null, the model map
+//	                          stays size 0
+//
+// startWAWebVoipCall resolves with undefined and nothing moves anywhere. That
+// is the NOTHING class (H82) — the page accepts a call and no part of the
+// application reacts — for the third time in this repository.
+//
+// The method is kept, implemented exactly as the application's own call sites
+// do it, because the alternative is deleting a correct implementation of a path
+// that may work under a condition not yet found. What is NOT kept is a doc that
+// implies it works.
 //
 // IT IS NOT IN THE UPSTREAM. whatsapp-web.js has no way to place a call at all;
 // this build does, and the module scan found it (WAWebVoipStartCall). So this

@@ -230,6 +230,38 @@ func TestProbeCalls(t *testing.T) {
 				out.init = 'module absent: ' + String(e && e.message);
 			}
 
+			// THE READER THAT HAS NEVER COUNTED ANYTHING.
+			//
+			// H93 stopped exactly here: conta-A read zero calls after dialling,
+			// and that zero could not be used as a negative because the reader
+			// had never been observed counting a call. Before any conclusion
+			// about the dial, this dumps EVERY plausible container on the call
+			// collection, by name and size — so a later run with a call in
+			// flight can say which one moves.
+			try {
+				const C = window.require('WAWebCallCollection');
+				out.containers = {};
+				for (const k of Object.keys(C)) {
+					try {
+						const v = C[k];
+						if (v instanceof Map) { out.containers[k] = 'Map size=' + v.size; continue; }
+						if (Array.isArray(v)) { out.containers[k] = 'array len=' + v.length; continue; }
+						if (v && typeof v.getModelsArray === 'function') {
+							out.containers[k] = 'collection models=' + v.getModelsArray().length; continue;
+						}
+						if (v && typeof v.size === 'number') { out.containers[k] = 'sized=' + v.size; continue; }
+						if (v && typeof v.length === 'number') { out.containers[k] = 'lengthed=' + v.length; continue; }
+						out.containers[k] = shape(v);
+					} catch (e) { out.containers[k] = 'threw'; }
+				}
+				const holder = C.CallCollection || C.default || C;
+				out.containers['<holder>.getModelsArray'] =
+					holder && typeof holder.getModelsArray === 'function'
+						? 'models=' + holder.getModelsArray().length : 'absent';
+			} catch (e) {
+				out.containers = 'module absent';
+			}
+
 			// Alternatives the reference does not use, in case this build has a
 			// first-class path where it had to improvise.
 			for (const name of [

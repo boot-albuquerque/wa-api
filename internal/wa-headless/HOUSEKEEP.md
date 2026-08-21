@@ -7478,3 +7478,68 @@ exceção só por marcador `no-runner:` e motivo escrito.
 **Status**: parcialmente entregue — leitor de digitação corrigido e travado; a
 subscrição tem uma observação positiva e uma hipótese nova, medida contra a
 alternativa mais barata e sobrevivendo a ela. A F100 ganhou gate.
+
+---
+
+## H95 — a chamada não sai: cinco hipóteses eliminadas, e o zero que finalmente vale
+
+**Data**: 2026-08-21.
+**Contexto**: continuação autorizada da H93, com o usuário liberando as duas
+pendências físicas.
+
+### O bloqueio da H93 era o INSTRUMENTO, e ele foi consertado primeiro
+
+A H93 parou num zero que não podia interpretar: a conta-A lia zero chamadas
+depois de discar, e aquele leitor **nunca tinha sido observado contando uma**.
+Dois defeitos diferentes produzem o mesmo zero.
+
+O conserto foi despejar **todo contêiner** da coleção de chamadas, por nome e
+tamanho, antes e durante:
+
+```
+$CallCollectionImpl$p_1  Map:0        pendingOutgoingCall  null
+pendingOffers            object       lastActiveCall       null
+pendingVoipCapChecks     object       pendingCallLink      null
+isInConnectedCall        boolean      #models              0
+```
+
+`pendingOutgoingCall` é exatamente o campo que ficaria não-nulo numa chamada
+saindo. **Nada mudou em nada, por 20 s.** Agora o zero vale.
+
+### Cinco hipóteses, todas derrubadas por medição
+
+| hipótese | como caiu |
+|---|---|
+| ambiente headless não suporta | `isCallingEnabled` true, navegador suportado, `crossOriginIsolated`, `SharedArrayBuffer`, WASM |
+| a pilha VOIP não sobe | `ensureVoipInitialized()` **resolve** |
+| falta inicializar ANTES de discar | implementado (forma da H34); sem mudança |
+| falta abrir a aba de Chamadas | os call sites do app fazem `setActiveNavBarItem(Calls)` + `navigateToVoipCallsTab({})` antes; feito igual, `navBar:ok tab:ok`; sem mudança |
+| o leitor não conta | todo contêiner observado por nome; `pendingOutgoingCall` continua `null` |
+
+E o que ninguém tinha lido: **`startWAWebVoipCall` devolve `undefined`**. A
+capacidade dava `await` e descartava o valor — certo para uma capacidade,
+inútil para um diagnóstico.
+
+### Conclusão
+
+Classe **NOTHING** (H82), terceira ocorrência neste repositório: a página aceita
+e nenhuma parte do aplicativo reage. Diferente das duas anteriores, esta vem com
+o campo que deveria mudar identificado por nome, o que torna a próxima
+investigação muito mais barata.
+
+`Place` fica no código, implementado exatamente como os call sites do app, mas
+**o doc dele agora diz que não funciona** e lista as cinco eliminações. Uma
+capacidade que não faz nada e não diz isso é pior que uma ausente.
+
+### O que sobra para tentar, quando houver ideia nova
+
+- O app pode exigir um COMPONENTE montado, não só a aba navegada — a H78 mostrou
+  que `Cmd` só age com ouvinte ligado, e um ouvinte pode viver num componente
+  React que a navegação não instancia sozinha.
+- Ler o que `WAWebVoipCallBlockedModals.showCallBlockedModalIfNeeded` decide:
+  o app tem modal para "não deu para ligar", e se ele é consultado internamente,
+  a razão da recusa está lá.
+
+**Status**: não entregue — cinco hipóteses eliminadas, causa isolada até o ponto
+de "a função devolve `undefined` e nada reage", e o campo que mudaria nomeado
+para quem continuar.
