@@ -76,3 +76,43 @@ func TestMidia_CabecalhoDeAlbumNaoViraRuido(t *testing.T) {
 		t.Errorf("cabecalho de album gerou aviso de 'nao tratado'; todo album enviado poluiria o log: %s", saida)
 	}
 }
+
+// --- F180: o aviso de mídia não tratada não pode disparar em texto ----------
+//
+// processMessageMedia corre para TODA mensagem recebida. Antes da guarda, uma
+// mensagem de texto produzia "mensagem de midia de tipo nao tratado" — medido
+// em campo, 25 de 30 ocorrências eram `type=text`.
+//
+// O teste tem DOIS lados de propósito. Só o primeiro (texto não avisa) deixaria
+// passar a correção preguiçosa de apagar o aviso; só o segundo (mídia avisa)
+// deixaria passar o defeito original. É o par que define o comportamento.
+
+func TestProcessMedia_TextoNaoDisparaAvisoDeMidia(t *testing.T) {
+	evh := &UserEventHandler{UserID: "u-texto"}
+	buf := capturarLog(t)
+
+	evt := eventoNaoClassificavel("MSG-TEXTO", "text")
+	evt.Message = &waE2E.Message{Conversation: proto("ola")}
+
+	evh.processMessageMedia(evt, messageS3Config{}, &eventState{postmap: map[string]any{}})
+
+	if strings.Contains(buf.String(), "midia de tipo nao tratado") {
+		t.Fatalf("mensagem de TEXTO disparou o aviso de mídia não tratada (F180): %s", buf.String())
+	}
+}
+
+func TestProcessMedia_MidiaAnunciadaENaoTratadaAindaAvisa(t *testing.T) {
+	evh := &UserEventHandler{UserID: "u-midia"}
+	buf := capturarLog(t)
+
+	// O servidor DISSE que era mídia e a mensagem não traz nenhum dos tipos
+	// que sabemos tratar. É exatamente o caso da F102, e tem de continuar a
+	// avisar — silenciá-lo seria trocar um defeito por outro.
+	evt := eventoNaoClassificavel("MSG-MIDIA", messageWireTypeMedia)
+
+	evh.processMessageMedia(evt, messageS3Config{}, &eventState{postmap: map[string]any{}})
+
+	if !strings.Contains(buf.String(), "midia de tipo nao tratado") {
+		t.Fatalf("mídia anunciada e não tratada deixou de avisar: %s", buf.String())
+	}
+}

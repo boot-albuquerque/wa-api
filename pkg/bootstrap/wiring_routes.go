@@ -155,6 +155,27 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 
 	// Misc routes (newsletter, privacy, call, archive)
 	registry.Register("/newsletter/list", customChain.Then(ch.Misc.ListNewsletter), "GET")
+
+	// Newsletter operation routes. The parity survey of 2026-08-20 found the
+	// library exposing twelve capabilities against the one route we had
+	// (/newsletter/list); these are the other eleven.
+	// Etiquetas (F191). Só LEITURA: a biblioteca não sabe criá-las (LIB-01),
+	// e uma rota de escrita responderia 200 sem fazer nada — o defeito da
+	// F198, que não se acrescenta de propósito.
+	registry.Register("/labels", customChain.Then(ch.Label.ListLabels), "GET")
+	registry.Register("/labels/{id}/chats", customChain.Then(ch.Label.ListLabelChat), "GET")
+
+	registry.Register("/newsletter/create", customChain.Then(ch.Newsletter.Create), "POST")
+	registry.Register("/newsletter/info", customChain.Then(ch.Newsletter.Info), "POST")
+	registry.Register("/newsletter/info-invite", customChain.Then(ch.Newsletter.InfoInvite), "POST")
+	registry.Register("/newsletter/follow", customChain.Then(ch.Newsletter.Follow), "POST")
+	registry.Register("/newsletter/unfollow", customChain.Then(ch.Newsletter.Unfollow), "POST")
+	registry.Register("/newsletter/mute", customChain.Then(ch.Newsletter.Mute), "POST")
+	registry.Register("/newsletter/messages", customChain.Then(ch.Newsletter.Messages), "POST")
+	registry.Register("/newsletter/updates", customChain.Then(ch.Newsletter.Updates), "POST")
+	registry.Register("/newsletter/mark-viewed", customChain.Then(ch.Newsletter.MarkViewed), "POST")
+	registry.Register("/newsletter/react", customChain.Then(ch.Newsletter.React), "POST")
+	registry.Register("/newsletter/subscribe", customChain.Then(ch.Newsletter.Subscribe), "POST")
 	registry.Register("/call/reject", customChain.Then(ch.Misc.RejectCall), "POST")
 	registry.Register("/chat/archive", customChain.Then(ch.Misc.ArchiveChat), "POST")
 	registry.Register("/chat/request-unavailable-message", customChain.Then(ch.Misc.RequestUnavailableMessage), "POST")

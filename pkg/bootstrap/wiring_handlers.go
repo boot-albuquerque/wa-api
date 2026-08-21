@@ -102,6 +102,8 @@ type customHandlers struct {
 	Contact     *handlers.ContactHandlers
 	GroupMgmt   *handlers.GroupManagementHandlers
 	ChatHistory *handlers.ChatHistoryHandlers
+	Newsletter  *handlers.NewsletterHandlers
+	Label       *handlers.LabelHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -146,9 +148,9 @@ func initCustomHandlers(s *server) {
 	// registrado, com /session/status mentindo loggedIn=true (F80).
 	logoutUC := session.NewLogoutUseCase(sessionGuard, NewSessionAttachHook(s), logger)
 	pairPhoneUC := session.NewPairPhoneUseCase(phonePairer, logger)
-	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
-	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
-	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
+	getStatusUC := session.NewGetStatusUseCase(sessionGuard, userRepo, logger)
+	setStatusMessageUC := session.NewSetStatusMessageUseCase(miscAdapter, logger)
+	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(miscAdapter, logger)
 	syncContactRosterUC := session.NewSyncContactRosterUseCase(miscAdapter, logger)
 
 	// Message UseCases
@@ -232,7 +234,7 @@ func initCustomHandlers(s *server) {
 	// User UseCases
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
 	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
-	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, logger)
+	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, userInfoRepublisher{db: s.DB}, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
@@ -269,6 +271,7 @@ func initCustomHandlers(s *server) {
 	sessionCounter := sessioncount.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
+	newsletterOpsUC := notification.NewNewsletterOpsUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
 	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
@@ -412,6 +415,8 @@ func initCustomHandlers(s *server) {
 		Contact:     contactHandlers,
 		GroupMgmt:   groupMgmtHandlers,
 		ChatHistory: chatHistoryHandlers,
+		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
+		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
 	}
 }
 

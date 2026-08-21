@@ -172,6 +172,11 @@ func (evh *UserEventHandler) decryptSecretEncryptedMessage(evt *events.Message) 
 	}
 }
 
+// messageWireTypeMedia é o valor que o servidor do WhatsApp põe em
+// MessageInfo.Type quando a mensagem carrega mídia. É constante e não literal
+// porque decide se um aviso é ruído ou diagnóstico (F180).
+const messageWireTypeMedia = "media"
+
 func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config messageS3Config, st *eventState) {
 	isIncoming := !evt.Info.IsFromMe
 	chatJID := evt.Info.Sender.String()
@@ -249,7 +254,19 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 		tratou = true
 	}
 
-	if !tratou {
+	// F180: o aviso só faz sentido quando o SERVIDOR disse que havia mídia.
+	//
+	// processMessageMedia corre para TODA mensagem recebida, não só as de
+	// mídia (:58-59, sem condição). Antes desta guarda, uma mensagem de texto
+	// — que legitimamente não tem imagem, vídeo, áudio, documento, sticker
+	// nem álbum — caía aqui e produzia um Warn. Medido em campo: 25 de 30
+	// ocorrências eram `type=text` com `media_type` vazio.
+	//
+	// Um aviso que dispara no caso NORMAL não avisa de nada: treina quem lê o
+	// log a ignorá-lo, e aí ele deixa de servir para o caso em que morde de
+	// verdade — mídia que o servidor anunciou e nós não soubemos tratar, que
+	// é a F102 e continua a valer.
+	if !tratou && evt.Info.Type == messageWireTypeMedia {
 		log.Warn().
 			Str("userid", evh.UserID).
 			Str("message_id", evt.Info.ID).

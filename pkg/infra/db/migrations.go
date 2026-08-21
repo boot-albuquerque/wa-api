@@ -132,6 +132,12 @@ var migrations = []Migration{
 		UpSQL:   addLeaseOwnerAddrSQL,
 		DownSQL: addLeaseOwnerAddrDownSQL,
 	},
+	{
+		ID:      migrationIDLabels,
+		Name:    "add_labels",
+		UpSQL:   addLabelsSQL,
+		DownSQL: addLabelsDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
@@ -141,6 +147,11 @@ const migrationIDBlankPlaintextToken = 16
 // migrationIDLeaseOwnerAddr acrescenta o endereço do dono à tabela de posse
 // (ADR-0007, decisão 1).
 const migrationIDLeaseOwnerAddr = 17
+
+// migrationIDLabels acompanha a F191: os três eventos de etiqueta que a
+// biblioteca emite (LabelEdit, LabelAssociationChat, LabelAssociationMessage)
+// chegavam e eram deitados fora. Estas tabelas são onde eles passam a parar.
+const migrationIDLabels = 18
 
 // migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
 // mesmo motivo da constante acima: três lugares a referenciam.
@@ -249,6 +260,86 @@ CREATE INDEX IF NOT EXISTS idx_session_leases_expires_at ON session_leases (expi
 `
 
 const addSessionLeasesDownSQL = `DROP TABLE IF EXISTS session_leases;`
+
+// addLabelsSQL cria as três tabelas de etiqueta (F191).
+//
+// POR QUE TRÊS E NÃO UMA: a etiqueta em si tem nome e cor; a associação a uma
+// CONVERSA e a associação a uma MENSAGEM são coisas diferentes, com chaves
+// diferentes, e o WhatsApp emite um evento distinto para cada. Enfiá-las numa
+// tabela só obrigaria a colunas nulas que só valem para metade das linhas.
+//
+// `labeled` é BOOLEAN e não "a linha existe": o evento de DESetiquetar chega
+// como `labeled=false`, e apagar a linha perderia o instante em que isso
+// aconteceu — que é o que distingue "nunca teve" de "tinha e tiraram".
+const addLabelsSQL = `
+CREATE TABLE IF NOT EXISTS wa_labels (
+    user_id       TEXT        NOT NULL,
+    label_id      TEXT        NOT NULL,
+    name          TEXT        NOT NULL DEFAULT '',
+    color         INTEGER     NOT NULL DEFAULT 0,
+    predefined_id INTEGER     NOT NULL DEFAULT 0,
+    deleted       BOOLEAN     NOT NULL DEFAULT FALSE,
+    updated_at    TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id)
+);
+CREATE TABLE IF NOT EXISTS wa_label_chats (
+    user_id    TEXT        NOT NULL,
+    label_id   TEXT        NOT NULL,
+    chat_jid   TEXT        NOT NULL,
+    labeled    BOOLEAN     NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid)
+);
+CREATE TABLE IF NOT EXISTS wa_label_messages (
+    user_id    TEXT        NOT NULL,
+    label_id   TEXT        NOT NULL,
+    chat_jid   TEXT        NOT NULL,
+    message_id TEXT        NOT NULL,
+    labeled    BOOLEAN     NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wa_label_chats_user_chat ON wa_label_chats (user_id, chat_jid);
+`
+
+// addLabelsSQLiteSQL é a mesma coisa sem TIMESTAMPTZ, que o SQLite não conhece
+// — mesmo motivo de addSessionLeasesSQLiteSQL.
+const addLabelsSQLiteSQL = `
+CREATE TABLE IF NOT EXISTS wa_labels (
+    user_id       TEXT      NOT NULL,
+    label_id      TEXT      NOT NULL,
+    name          TEXT      NOT NULL DEFAULT '',
+    color         INTEGER   NOT NULL DEFAULT 0,
+    predefined_id INTEGER   NOT NULL DEFAULT 0,
+    deleted       BOOLEAN   NOT NULL DEFAULT 0,
+    updated_at    TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id)
+);
+CREATE TABLE IF NOT EXISTS wa_label_chats (
+    user_id    TEXT      NOT NULL,
+    label_id   TEXT      NOT NULL,
+    chat_jid   TEXT      NOT NULL,
+    labeled    BOOLEAN   NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid)
+);
+CREATE TABLE IF NOT EXISTS wa_label_messages (
+    user_id    TEXT      NOT NULL,
+    label_id   TEXT      NOT NULL,
+    chat_jid   TEXT      NOT NULL,
+    message_id TEXT      NOT NULL,
+    labeled    BOOLEAN   NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wa_label_chats_user_chat ON wa_label_chats (user_id, chat_jid);
+`
+
+const addLabelsDownSQL = `
+DROP TABLE IF EXISTS wa_label_messages;
+DROP TABLE IF EXISTS wa_label_chats;
+DROP TABLE IF EXISTS wa_labels;
+`
 
 // addSenderPushNameSQL acompanha a F84: o pushName que o WhatsApp manda em
 // cada mensagem passa a ter coluna própria.
@@ -800,6 +891,12 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	} else if migration.ID == migrationIDSessionLeases {
 		if db.DriverName() == "sqlite" {
 			_, err = tx.Exec(addSessionLeasesSQLiteSQL)
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDLabels {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(addLabelsSQLiteSQL)
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}

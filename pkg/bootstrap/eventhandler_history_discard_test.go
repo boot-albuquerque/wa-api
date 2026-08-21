@@ -637,3 +637,82 @@ func TestHistorico_RespostasDeBotaoELista(t *testing.T) {
 }
 
 func proto64(f float64) *float64 { return &f }
+
+// --- F184: o caminho de SUCESSO -------------------------------------------
+//
+// O teste acima trava o DESCARTE. Este trava a GRAVAÇÃO, e existe por causa da
+// armadilha nº2 do ARMADILHAS.md: três defeitos deste repositório viviam atrás
+// de suítes que só exercitavam a guarda. Com só o teste de descarte, apagar os
+// ramos de enquete e de botões da classificação faria a F184 voltar inteira e
+// a suíte continuaria verde — o descarte passaria a acontecer e a deixar
+// rastro, que é exatamente o que o outro teste pede.
+//
+// Sobre o dublê e a armadilha nº1: `evt.Message` é atribuído diretamente, sem
+// FutureProofMessage, porque é essa a forma que `classifyMessage` recebe na
+// produção — o desembrulho acontece ANTES, e o contrato está escrito em
+// message_classify.go:48 ("de `events.Message.Message` depois de `UnwrapRaw`").
+// O dublê imita a fronteira real, não uma anterior a ela.
+//
+// Medido em campo em 2026-08-21, com as duas contas pareadas, contra o
+// servidor real — foi o que mostrou que a F184 já estava corrigida pela
+// unificação da F187 sem que a entrada o dissesse:
+//
+//	POST /chat/send/poll    -> 200, e message_history: message_type=poll
+//	POST /chat/send/buttons -> 200, e message_history: message_type=buttons
+func TestHistorico_EnqueteEBotoesSaoGravadas(t *testing.T) {
+	casos := []struct {
+		nome      string
+		msg       *waE2E.Message
+		wantTipo  string
+		wantTexto string
+	}{
+		{
+			nome: "enquete",
+			msg: &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{
+				Name: proto("Qual dia?"),
+				Options: []*waE2E.PollCreationMessage_Option{
+					{OptionName: proto("segunda")},
+					{OptionName: proto("terca")},
+				},
+			}},
+			wantTipo:  "poll",
+			wantTexto: "Qual dia?",
+		},
+		{
+			nome: "botoes",
+			msg: &waE2E.Message{InteractiveMessage: &waE2E.InteractiveMessage{
+				Body: &waE2E.InteractiveMessage_Body{Text: proto("Confirma?")},
+			}},
+			wantTipo:  "buttons",
+			wantTexto: "Confirma?",
+		},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			evh := handlerComHistorico(t, "u-grava-"+c.nome)
+			evt := eventoNaoClassificavel("MSG-"+c.nome, c.wantTipo)
+			evt.Message = c.msg
+
+			evh.saveMessageHistory(evt, &eventState{postmap: map[string]any{}})
+
+			var tipo, texto string
+			err := evh.DB.QueryRow(
+				`SELECT message_type, COALESCE(text_content,'') FROM message_history WHERE message_id=?`,
+				"MSG-"+c.nome,
+			).Scan(&tipo, &texto)
+			if err != nil {
+				t.Fatalf("%s NÃO foi gravada no histórico (F184): %v", c.nome, err)
+			}
+			if tipo != c.wantTipo {
+				t.Errorf("message_type = %q, quero %q", tipo, c.wantTipo)
+			}
+			// O TEXTO importa tanto quanto o tipo: gravar a linha com o tipo
+			// certo e o conteúdo perdido deixa o histórico legível para uma
+			// máquina e inútil para uma pessoa.
+			if texto != c.wantTexto {
+				t.Errorf("text_content = %q, quero %q — o conteúdo da mensagem foi perdido", texto, c.wantTexto)
+			}
+		})
+	}
+}
