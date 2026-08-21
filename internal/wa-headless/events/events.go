@@ -44,13 +44,29 @@ const (
 	// ChatChanged is a conversation's own fields moving — unread, archived,
 	// pinned, muted.
 	ChatChanged Type = "chat.changed"
+	// MessageRevoked is a message deleted for everyone, seen from either side.
+	MessageRevoked Type = "message.revoked"
+	// MessageEdited is a message whose text was replaced.
+	MessageEdited Type = "message.edited"
+	// ContactChanged is a contact record moving — a name, a picture, a
+	// presence-adjacent field.
+	ContactChanged Type = "contact.changed"
 )
 
 // KnownTypes is every type the ingress installs a handler for. It exists so a
 // test can assert the page side and the Go side agree, which is the failure
 // nobody notices: a handler installed for an event nothing subscribes to, or a
 // subscription for an event never installed.
-var KnownTypes = []Type{MessageAdded, MessageAck, ChatChanged}
+var KnownTypes = []Type{
+	MessageAdded, MessageAck, ChatChanged,
+	MessageRevoked, MessageEdited, ContactChanged,
+}
+
+// EVERY TYPE HERE IS ONE THIS MODULE CAN TRIGGER AND HAS TRIGGERED. The upstream
+// has 31 events and it would be easy to declare 31 names, install 31 listeners,
+// and ship a bus whose quiet halves nobody notices. A name that has never been
+// seen firing is a promise, not a capability — so a type is added when a live
+// test can make it happen on demand, and not before.
 
 // Event is one thing that happened.
 //

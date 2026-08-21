@@ -201,6 +201,9 @@ func TestTheIngressIsIdempotentAndBounded(t *testing.T) {
 	if !strings.Contains(script, "if (s.buf.length >= s.cap) { s.dropped++; return; }") {
 		t.Fatal("the page buffer is unbounded, or drops without counting")
 	}
+	if !strings.Contains(script, "looksRevoked") {
+		t.Fatal("the revoke handler emits on a field change without checking the message reads as revoked")
+	}
 	if !strings.Contains(script, "s.handlers = [[MC, 'add', onAdd]") {
 		t.Fatal("the handlers are not recorded, so Uninstall cannot remove them")
 	}

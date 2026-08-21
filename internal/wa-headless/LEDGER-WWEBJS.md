@@ -309,19 +309,19 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | `AUTHENTICATION_FAILURE` | — | `MISSING` | sem equivalente |
 | `READY` | core.StartSession | `PROVEN` | — |
 | `CHAT_REMOVED` | — | `MISSING` | sem equivalente |
-| `CHAT_ARCHIVED` | — | `MISSING` | sem equivalente |
-| `MESSAGE_RECEIVED` | capabilities/messagemeta | `PARTIAL` | H24/H25: metadados apenas, invariante 12 |
+| `CHAT_ARCHIVED` | events.ChatChanged | `PARTIAL` | o nosso evento é grosso: diz que a conversa mudou, não QUAL campo (H87) |
+| `MESSAGE_RECEIVED` | events.MessageAdded | `PROVEN` | disparado ao vivo por um envio (H87) |
 | `MESSAGE_CIPHERTEXT` | — | `MISSING` | sem equivalente |
 | `MESSAGE_CIPHERTEXT_FAILED` | — | `MISSING` | sem equivalente |
-| `MESSAGE_CREATE` | capabilities/messagemeta | `PARTIAL` | idem |
-| `MESSAGE_REVOKED_EVERYONE` | — | `MISSING` | sem equivalente |
+| `MESSAGE_CREATE` | events.MessageAdded | `PARTIAL` | o mesmo evento cobre os dois; o upstream distingue criada de recebida e nós não (H87) |
+| `MESSAGE_REVOKED_EVERYONE` | events.MessageRevoked | `PROVEN` | disparado ao vivo; reconhecido pelo predicado de TRÊS sinais que a capacidade de apagar mede (H87) |
 | `MESSAGE_REVOKED_ME` | — | `MISSING` | sem equivalente |
-| `MESSAGE_ACK` | capabilities/ack | `PARTIAL` | lemos sob demanda; não emitimos evento |
-| `MESSAGE_EDIT` | — | `MISSING` | sem equivalente |
-| `UNREAD_COUNT` | — | `MISSING` | sem equivalente |
+| `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
+| `MESSAGE_EDIT` | events.MessageEdited | `PROVEN` | disparado ao vivo por uma edição (H87) |
+| `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | idem |
 | `MESSAGE_REACTION` | — | `MISSING` | sem equivalente |
 | `MEDIA_UPLOADED` | — | `MISSING` | sem equivalente |
-| `CONTACT_CHANGED` | contacts.onContact | `PARTIAL` | H43 |
+| `CONTACT_CHANGED` | events.ContactChanged | `PARTIAL` | instalado; NÃO provado neste barramento — nada aqui faz outra conta mudar o perfil (H87) |
 | `GROUP_JOIN` | — | `MISSING` | sem equivalente |
 | `GROUP_LEAVE` | — | `MISSING` | sem equivalente |
 | `GROUP_ADMIN_CHANGED` | — | `MISSING` | sem equivalente |
@@ -341,10 +341,9 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 37 | 16% |
+| `PROVEN` | 41 | 18% |
 | `PARTIAL` | 35 | 15% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 144 | 65% |
+| `MISSING` | 140 | 63% |
 | **total** | **220** | |
-

@@ -6648,3 +6648,67 @@ sessões viu 1 e depois 2. Nada ficou para trás.
 
 **Status**: corrigido — a H58 continua válida, com o escopo agora estreito e
 medido em vez de generalizado.
+
+---
+
+## H87 — cinco tipos de evento, cada um provado por ser DISPARADO
+
+**Data**: 2026-08-21
+**Contexto**: a ordem da orquestração, depois da fundação do barramento: mapear
+os eventos que faltam.
+**Onde**: `internal/wa-headless/events/`, `internal/wa-headless/eventtypesreal_test.go`.
+
+### A regra que governa quais tipos existem
+
+O upstream tem 31 eventos. Seria fácil declarar 31 nomes, instalar 31 ouvintes, e
+entregar um barramento cujas metades mudas ninguém percebe por meses.
+
+> **Um nome que nunca foi visto disparando é uma promessa, não uma capacidade.**
+
+Então um tipo entra quando um teste ao vivo consegue **fazê-lo acontecer sob
+demanda**, com uma capacidade que este módulo já entrega. Cinco entraram:
+
+```
+live events by type map[chat.changed:15 message.ack:4 message.added:1
+                        message.edited:1 message.revoked:2]
+```
+
+`contact.changed` está instalado e **reportado como NÃO provado neste
+barramento** — nada aqui faz outra conta mudar o próprio perfil. A coleção já
+provou disparar (H43); o que não está provado é este caminho.
+
+### O revoke precisou do predicado, não do campo
+
+`change:isRevokedMsg` sozinho **não disparou**. A capacidade de apagar já sabia
+por quê: a pós-condição dela checa TRÊS sinais (`isRevokedMsg`, `type ===
+'revoked'`, `revokeSender`) porque este build não concorda consigo mesmo sobre
+qual se move.
+
+O ouvinte agora escuta os três campos e emite só quando o predicado inteiro dá
+positivo — assim `change:type`, que dispara por outros motivos, não produz falso
+evento.
+
+### O defeito que a intermitência denunciou
+
+`message.added` disparou numa execução e não na seguinte. Não era rede: o
+`Replay` era desligado só num lote **não vazio**, e numa página quieta o primeiro
+evento REAL — possivelmente minutos depois — vinha marcado como histórico. Um
+assinante que ignora replay o ignorava.
+
+A janela de replay agora fecha **após o primeiro dreno, vazio ou não**: se havia
+rajada de histórico, ela já estava no buffer quando o primeiro dreno rodou; se o
+dreno veio vazio, não havia rajada.
+
+**Intermitência é sintoma, não categoria.** Marcar como flake teria deixado o
+defeito.
+
+### Placar
+
+`PROVEN` 41, `PARTIAL` 35, `BLOCKED` 2, `INTENTIONAL_DIFFERENCE` 2,
+`MISSING` 140, de 220.
+
+`MESSAGE_CREATE` fica `PARTIAL` de propósito: o upstream distingue "criada por
+mim" de "recebida" e o nosso `message.added` cobre as duas sem separar. É
+divergência real, não equivalência.
+
+**Status**: entregue.

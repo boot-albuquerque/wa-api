@@ -258,3 +258,33 @@ func TestAnUnreadableAnswerIsAnErrorNotSilence(t *testing.T) {
 		t.Fatal("a page answering garbage was accepted")
 	}
 }
+
+// TestAQuietStartDoesNotMarkTheFirstREALEventAsReplay. The replay burst, if any,
+// is already buffered when the first drain runs; if that drain is empty there
+// was no replay, and a later event is not history.
+//
+// This was a live flake before it was a test: the same send produced
+// message.added on one run and nothing on the next, because the subscriber
+// skipped what the pump had mislabelled.
+func TestAQuietStartDoesNotMarkTheFirstRealEventAsReplay(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{
+		{},                                // a quiet page: nothing buffered
+		{row("message.added", 1, "REAL")}, // and then something happens
+	}}
+	h := NewHub()
+	var replay, live []string
+	h.Subscribe(func(e Event) {
+		if e.Replay {
+			replay = append(replay, e.MessageID)
+		} else {
+			live = append(live, e.MessageID)
+		}
+	})
+	runPump(t, f, h, 2)
+	if len(replay) != 0 {
+		t.Fatalf("a quiet start marked real events as replay: %v", replay)
+	}
+	if len(live) != 1 || live[0] != "REAL" {
+		t.Fatalf("the real event was not delivered live: %v", live)
+	}
+}

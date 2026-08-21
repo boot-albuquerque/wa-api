@@ -3527,3 +3527,27 @@ O segundo usa orçamento pequeno de propósito: a propriedade é "o deadline lim
 a espera", e prová-la com 90 s custaria 90 s para aprender o mesmo.
 
 **Status**: corrigido.
+
+### OITAVA OCORRÊNCIA, 2026-08-21 — e ela mostra que o conserto foi ESTREITO demais
+
+```
+--- FAIL: TestBrowserChainReportsAWedgedPageAsUnresponsive (50.00s)
+--- FAIL: TestStartSession_FailureTearsDownDeterministicallyWithNoOrphan (32.05s)
+```
+
+Árvore limpa nos dois pacotes; isolados, passam em **9,5 s** contra tetos de 50 s
+e 32 s. Na execução seguinte do `make check`, sem tocar em nada, verde.
+
+O conserto anterior injetou o orçamento de harness em `core.baseConfig` e
+`runtime.holderConfig`. **Estes dois testes não passam por lá** — têm prazos
+próprios, escritos no corpo deles.
+
+Ou seja: eu consertei os três testes que estavam falhando, não a CLASSE de
+problema. O `TestTheHarnessBudgetIsNotTheProductBudget` protege o deadline de
+produto e não diz nada sobre testes que trazem o próprio relógio.
+
+**Correção sugerida, não aplicada**: os prazos escritos dentro de testes de
+integração deveriam vir do mesmo `harnessBootBudget`, para que exista UM número a
+ajustar. Fica registrado em vez de emendado agora, porque mexer nos prazos de
+dois testes que acabaram de falhar é o momento errado para decidir qual é o valor
+certo.

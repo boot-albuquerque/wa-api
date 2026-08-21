@@ -94,9 +94,17 @@ func (p *Pump) Run(ctx context.Context) error {
 			e.Replay = firstAfterInstall
 			p.hub.deliver(e)
 		}
-		if len(batch) > 0 {
-			firstAfterInstall = false
-		}
+		// THE WINDOW CLOSES AFTER THE FIRST DRAIN, EMPTY OR NOT. It used to
+		// close only on a non-empty one, and that is wrong on a QUIET page: the
+		// replay burst, if there is one, is already buffered when the first
+		// drain runs. If that drain comes back empty there was no replay, and
+		// keeping the flag set marks the next real event — possibly minutes
+		// later — as history.
+		//
+		// It showed up as a flaky live test: the same send produced
+		// message.added on one run and nothing on the next, because a
+		// subscriber that skips replay skipped it.
+		firstAfterInstall = false
 		if !sleepCtx(ctx, PollInterval) {
 			return ctx.Err()
 		}
@@ -253,6 +261,30 @@ func installScript() string {
 
 		const onAdd = (m) => { try { push(msgRow('` + string(MessageAdded) + `', m)); } catch (e) { s.dropped++; } };
 		const onAck = (m) => { try { push(msgRow('` + string(MessageAck) + `', m)); } catch (e) { s.dropped++; } };
+		// A REVOKED MESSAGE IS RECOGNISED BY THE SAME PREDICATE THE REVOKE
+		// CAPABILITY USES, not by one field. Listening to change:isRevokedMsg
+		// alone was measured NOT firing; the capability's own postcondition
+		// checks three signals because this build does not agree with itself
+		// about which one moves. The handler runs on all three and emits only
+		// when the message actually reads as revoked, so change:type — which
+		// fires for other reasons — cannot produce a false one.
+		const looksRevoked = (m) => !!(m && (m.isRevokedMsg || m.type === 'revoked' || m.revokeSender));
+		const onRevoke = (m) => {
+			try { if (looksRevoked(m)) { push(msgRow('` + string(MessageRevoked) + `', m)); } }
+			catch (e) { s.dropped++; }
+		};
+		const onEdit = (m) => { try { push(msgRow('` + string(MessageEdited) + `', m)); } catch (e) { s.dropped++; } };
+		const onContact = (c) => {
+			try {
+				push({ type: '` + string(ContactChanged) + `',
+					// A CONTACT HAS NO CHAT AND NO MESSAGE. Its identity goes in
+					// chat because that is the field callers route on, and the
+					// alternative — a second identity field used by one type —
+					// is worse than one field whose doc says what it holds.
+					chat: (c && c.id && c.id._serialized) || '',
+					msg: '', fromMe: false, kind: 'contact', ack: 0, bodyLen: 0 });
+			} catch (e) { s.dropped++; }
+		};
 		const onChat = (c) => {
 			try {
 				push({ type: '` + string(ChatChanged) + `',
@@ -266,8 +298,28 @@ func installScript() string {
 		// every message and fill the buffer with noise.
 		MC.on('add', onAdd);
 		MC.on('change:ack', onAck);
+		// NARROW FIELDS, not 'change'. Subscribing to every field of every
+		// message would fill the buffer with noise and make a drop mean
+		// nothing; these are the fields the corresponding capability moves.
+		MC.on('change:isRevokedMsg', onRevoke);
+		MC.on('change:revokeSender', onRevoke);
+		MC.on('change:type', onRevoke);
+		MC.on('change:latestEditMsgKey', onEdit);
 		CC.on('change', onChat);
-		s.handlers = [[MC, 'add', onAdd], [MC, 'change:ack', onAck], [CC, 'change', onChat]];
+		s.handlers = [[MC, 'add', onAdd], [MC, 'change:ack', onAck],
+			[MC, 'change:isRevokedMsg', onRevoke], [MC, 'change:revokeSender', onRevoke],
+			[MC, 'change:type', onRevoke], [MC, 'change:latestEditMsgKey', onEdit],
+			[CC, 'change', onChat]];
+
+		// The contact collection is optional: a build without it should give a
+		// bus with five types, not a boot failure.
+		try {
+			const CT = window.require('` + string(spa.ModuleContactCollection) + `').ContactCollection;
+			if (CT && typeof CT.on === 'function') {
+				CT.on('change', onContact);
+				s.handlers.push([CT, 'change', onContact]);
+			}
+		} catch (e) {}
 		s.installed = true;
 		window[KEY] = s;
 		return { installed: true, already: false };
