@@ -42,7 +42,7 @@ func TestEditUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{UserExistsFunc: tt.existsFunc}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -94,7 +94,7 @@ func TestEditUserUseCase_Execute_UpdateErrors(t *testing.T) {
 				UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error { return tt.updateErr },
 			}
 			logger := &contractsfake.Logger{}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, logger)
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, logger)
 
 			err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Name: "novo"})
 			if !errors.Is(err, tt.wantIs) {
@@ -113,7 +113,7 @@ func TestEditUserUseCase_Execute_InvalidEventEntriesAreSkipped(t *testing.T) {
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 	}
-	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Events: "Message,, ,ReadReceipt"}); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
@@ -224,7 +224,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			if err := uc.Execute(context.Background(), tt.req); err != nil {
 				t.Fatalf("erro inesperado: %v", err)
@@ -264,7 +264,7 @@ func TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			err := uc.Execute(context.Background(),
 				domain.EditUserRequest{UserID: "u1", Events: tt.events})
@@ -291,7 +291,7 @@ func TestEditUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 			repo := &contractsfake.UserRepository{
 				UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 			}
-			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			if err := uc.Execute(context.Background(),
 				domain.EditUserRequest{UserID: "u1", Events: events}); err != nil {
@@ -325,7 +325,7 @@ func TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario(t *testing.T) {
 		EncryptS3SecretFunc: func(string) (string, error) { return "", boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewEditUserUseCase(repo, s3Cipher, logger)
+	uc := user.NewEditUserUseCase(repo, s3Cipher, &contractsfake.UserInfoRepublisher{}, logger)
 
 	err := uc.Execute(context.Background(), domain.EditUserRequest{
 		UserID:   "u1",
@@ -336,5 +336,82 @@ func TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario(t *testing.T) {
 	}
 	if len(repo.UpdateUserCalls) != 0 {
 		t.Errorf("UpdateUser called %d times, want 0", len(repo.UpdateUserCalls))
+	}
+}
+
+// --- F200 / F201: a edição tem de republicar a cache -------------------------
+
+// TestEditUser_RepublicaAposEscritaBemSucedida trava a CAUSA da F200: a edição
+// entrava no banco e o processo continuava a ler o valor velho da cache, que é
+// escrita sob NoExpiration e nunca expira. Medido contra o servidor real: sete
+// sondas ao longo de 413s com `history=30` no banco não gravaram nada, e um
+// reinício resolveu — ver HOUSEKEEP F200.
+func TestEditUser_RepublicaAposEscritaBemSucedida(t *testing.T) {
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	rep := &contractsfake.UserInfoRepublisher{}
+
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", History: 30,
+	}); err != nil {
+		t.Fatalf("Execute = %v", err)
+	}
+
+	if len(rep.RepublishCalls) != 1 {
+		t.Fatalf("RepublishUser chamado %d vez(es), quero 1 — a edição entra no banco e o processo nunca a vê", len(rep.RepublishCalls))
+	}
+	if got := rep.RepublishCalls[0].UserID; got != "u1" {
+		t.Fatalf("republicou %q, quero \"u1\"", got)
+	}
+}
+
+// TestEditUser_NaoRepublicaQuandoAEscritaFalha é o outro lado: republicar uma
+// escrita que falhou publicaria na cache um valor que o banco NÃO tem — e,
+// como a entrada por user id não expira, esse valor errado ficaria para sempre.
+func TestEditUser_NaoRepublicaQuandoAEscritaFalha(t *testing.T) {
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error {
+			return errors.New("banco fora")
+		},
+	}
+	rep := &contractsfake.UserInfoRepublisher{}
+
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: 30}); err == nil {
+		t.Fatal("Execute devolveu nil apesar de a escrita ter falhado")
+	}
+
+	if len(rep.RepublishCalls) != 0 {
+		t.Fatalf("republicou %d vez(es) depois de a escrita falhar — a cache passaria a ter um valor que o banco não tem", len(rep.RepublishCalls))
+	}
+}
+
+// TestEditUser_RepublicaDEPOISDaEscritaENaoAntes trava a ORDEM. Inverter as
+// duas chamadas passa em todos os outros testes deste ficheiro: ambos os
+// caminhos continuariam a chamar as duas coisas uma vez. O que distingue é
+// QUANDO — por isso o dublê conta as escritas já feitas no instante em que é
+// chamado.
+func TestEditUser_RepublicaDEPOISDaEscritaENaoAntes(t *testing.T) {
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	rep := &contractsfake.UserInfoRepublisher{
+		ContadorDeEscritas: func() int { return len(repo.UpdateUserCalls) },
+	}
+
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: 30}); err != nil {
+		t.Fatalf("Execute = %v", err)
+	}
+
+	if len(rep.EscritasAoSerChamado) != 1 {
+		t.Fatalf("republicador chamado %d vez(es)", len(rep.EscritasAoSerChamado))
+	}
+	if rep.EscritasAoSerChamado[0] != 1 {
+		t.Fatalf("republicou com %d escritas feitas, quero 1 — a republicação está ANTES da escrita",
+			rep.EscritasAoSerChamado[0])
 	}
 }

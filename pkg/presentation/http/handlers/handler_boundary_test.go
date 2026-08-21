@@ -40,6 +40,21 @@ func (s *spyPort) EnsureSession(context.Context, string) error {
 	return s.err
 }
 
+// SetStatusMessage entrou com a F198, pelo mesmo motivo que Disconnect e
+// Logout entraram com a F79: o use case só validava a sessão e devolvia 200
+// sem chamar nada. É a TERCEIRA vez que este padrão aparece neste repositório.
+// historySpy embrulha o spyPort para o teste de fronteira do history sync: o
+// use case precisa da porta nova (F198) e o spy só sabe validar a sessão.
+type historySpy struct{ *spyPort }
+
+func (h *historySpy) RequestHistorySync(context.Context, string, appport.HistoryAnchor, int) (string, error) {
+	return "REQ-SPY", h.err
+}
+
+func (s *spyPort) SetStatusMessage(context.Context, string, string) error {
+	return s.err
+}
+
 // Disconnect e Logout entraram com a F79: os use cases correspondentes
 // passaram a consumir SessionController, porque antes só validavam a sessão
 // e devolviam 200 sem encerrar nada.
@@ -424,7 +439,7 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "GetStatus",
-			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, s, s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, s, log)) },
 			method:    http.MethodGet,
 			path:      "/session/status",
 			readsBody: false,
@@ -668,7 +683,7 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 	spy := &spyPort{err: wasession.ErrNoSession("user-1", nil)}
 	rec := httptest.NewRecorder()
 
-	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, spy, silentLogger{})).
+	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, silentLogger{})).
 		ServeHTTP(rec, withUser(httptest.NewRequest(http.MethodGet, "/session/status", nil), "user-1"))
 
 	if rec.Code != http.StatusBadRequest {

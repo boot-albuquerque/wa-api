@@ -145,7 +145,7 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 		t.Fatalf("add bob: %v", err)
 	}
 
-	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, discardLogger{})
+	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, discardLogger{})
 	err = edit.Execute(ctx, domain.EditUserRequest{UserID: bob.ID, Token: "alice-token"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("edit error = %v, want user.ErrDuplicateToken", err)
@@ -173,7 +173,7 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 		t.Fatalf("add: %v", err)
 	}
 
-	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, discardLogger{}).
+	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, discardLogger{}).
 		Execute(ctx, domain.EditUserRequest{UserID: created.ID, Token: "new-token"}); err != nil {
 		t.Fatalf("edit: %v", err)
 	}

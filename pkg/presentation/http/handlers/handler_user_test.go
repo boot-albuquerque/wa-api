@@ -71,7 +71,7 @@ func (f *uhFakes) handlers() *UserHandlers {
 	return NewUserHandlers(
 		user.NewListUsersUseCase(f.users, f.logger, f.sessions),
 		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger),
-		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, f.logger),
+		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewDeleteUserUseCase(f.users, f.logger),
 		user.NewCheckUserUseCase(f.contacts, f.logger),
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
@@ -312,11 +312,15 @@ func uhSessionRoutes() []uhSessionRoute {
 			r.Handle("/user/lid/{jid}", h.GetUserLID()).Methods(http.MethodGet)
 			return r
 		},
-			http.MethodGet, "/user/lid/5511999", "", false},
+			// F182: JID QUALIFICADO, porque é o que a rota aceita. Em produção
+			// "5511999" cru devolve 400 invalid_jid — medido — mas o dublê de
+			// JIDResolver devolve-o inalterado, e por isso este caso passava a
+			// exercitar um caminho impossível. Ver F202.
+			http.MethodGet, "/user/lid/5511999@s.whatsapp.net", "", false},
 		{"BlockUser", func(h *UserHandlers) http.Handler { return h.BlockUser() },
-			http.MethodPost, "/user/block", `{"Phone":"5511999"}`, true},
+			http.MethodPost, "/user/block", `{"Phone":"5511999@s.whatsapp.net"}`, true},
 		{"UnblockUser", func(h *UserHandlers) http.Handler { return h.UnblockUser() },
-			http.MethodPost, "/user/unblock", `{"Phone":"5511999"}`, true},
+			http.MethodPost, "/user/unblock", `{"Phone":"5511999@s.whatsapp.net"}`, true},
 	}
 }
 

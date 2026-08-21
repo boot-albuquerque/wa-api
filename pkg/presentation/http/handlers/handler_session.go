@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
@@ -271,7 +272,18 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, domain.RequestHistorySyncRequest{})
+	// F198: até 2026-08-21 o handler passava um pedido VAZIO. O DTO
+	// documentava count, chat_jid, oldest_msg_id, oldest_msg_from_me e
+	// oldest_msg_timestamp, e nenhum deles era lido — o corpo do cliente ia
+	// para o lixo e a rota respondia 200.
+	var req domain.RequestHistorySyncRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Msg("could not decode payload")
+		customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+		return
+	}
+
+	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Str("user_id", id).Msg("session use case failed")

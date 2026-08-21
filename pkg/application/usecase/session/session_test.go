@@ -64,9 +64,22 @@ func pairerDe(sg *contractsfake.SessionGuard) *contractsfake.PhonePairer {
 	}
 }
 
+// statusDe embrulha o guarda num StatusMessageSetter, como pairerDe faz para
+// o pareamento. O use case passou a consumir a porta nova com a F198.
+func histDe(sg *contractsfake.SessionGuard) *contractsfake.HistorySyncRequester {
+	return &contractsfake.HistorySyncRequester{
+		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
+	}
+}
+
+func statusDe(sg *contractsfake.SessionGuard) *contractsfake.StatusMessageSetter {
+	return &contractsfake.StatusMessageSetter{
+		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
+	}
+}
+
 func guardCases() []guardCase {
 	users := &contractsfake.UserRepository{}
-	status := &contractsfake.SessionStatusReader{}
 	return []guardCase{
 		{"Disconnect", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewDisconnectUseCase(ctlDe(sg), log).Execute(context.Background(), txtID, domain.DisconnectRequest{})
@@ -75,21 +88,20 @@ func guardCases() []guardCase {
 			return session.NewLogoutUseCase(ctlDe(sg), &contractsfake.SessionDetacher{}, log).Execute(context.Background(), txtID, domain.LogoutRequest{})
 		}},
 		{"RequestHistorySync", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewRequestHistorySyncUseCase(sg, log).Execute(context.Background(), txtID, domain.RequestHistorySyncRequest{})
+			return session.NewRequestHistorySyncUseCase(histDe(sg), log).Execute(context.Background(), txtID, domain.RequestHistorySyncRequest{ChatJid: "c@s.whatsapp.net", OldestMsgID: "M1"})
 		}},
 		{"PairPhone", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewPairPhoneUseCase(pairerDe(sg), log).
 				Execute(context.Background(), txtID, domain.PairPhoneRequest{Phone: "5511987654321"})
 		}},
 		{"SetStatusMessage", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewSetStatusMessageUseCase(sg, log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{Body: "ola"})
+			return session.NewSetStatusMessageUseCase(statusDe(sg), log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{Body: "ola"})
 		}},
 		{"GetQR", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
 			return session.NewGetQRUseCase(sg, users, log).Execute(context.Background(), txtID)
 		}},
-		{"GetStatus", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewGetStatusUseCase(sg, status, users, log).Execute(context.Background(), txtID)
-		}},
+		// GetStatus NÃO entra: desde a F196 ele não consulta o SessionGuard, e
+		// é essa a correção. Ver TestGetStatus_DesconectadaDevolveEstado.
 	}
 }
 
@@ -135,14 +147,11 @@ func TestUseCases_ComSessao_LogamOSucesso(t *testing.T) {
 			users := &contractsfake.UserRepository{ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
 				return []domain.UserListEntry{{ID: txtID}}, nil
 			}}
-			status := &contractsfake.SessionStatusReader{}
 
 			var err error
 			switch tc.name {
 			case "GetQR":
 				_, err = session.NewGetQRUseCase(sg, users, log).Execute(context.Background(), txtID)
-			case "GetStatus":
-				_, err = session.NewGetStatusUseCase(sg, status, users, log).Execute(context.Background(), txtID)
 			default:
 				_, err = tc.run(sg, log)
 			}
@@ -202,7 +211,7 @@ func TestValidacaoDePayloadPrecedeAGuardaDeSessao(t *testing.T) {
 				Execute(context.Background(), txtID, domain.PairPhoneRequest{})
 		}},
 		{"SetStatusMessage sem Body", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewSetStatusMessageUseCase(sg, log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{})
+			return session.NewSetStatusMessageUseCase(statusDe(sg), log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{})
 		}},
 	}
 	for _, tc := range cases {
@@ -356,7 +365,7 @@ func TestGetStatus(t *testing.T) {
 				}}
 				log := &contractsfake.Logger{}
 
-				r, err := session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, status, users, log).
+				r, err := session.NewGetStatusUseCase(status, users, log).
 					Execute(context.Background(), txtID)
 
 				if err != nil {
@@ -377,7 +386,7 @@ func TestGetStatus(t *testing.T) {
 			return []domain.UserListEntry{entry}, nil
 		}}
 
-		r, err := session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, &contractsfake.SessionStatusReader{}, users, &contractsfake.Logger{}).
+		r, err := session.NewGetStatusUseCase(&contractsfake.SessionStatusReader{}, users, &contractsfake.Logger{}).
 			Execute(context.Background(), txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
@@ -438,7 +447,7 @@ func TestGetStatus(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, status, users, log).
+		r, err := session.NewGetStatusUseCase(status, users, log).
 			Execute(context.Background(), txtID)
 
 		if !errors.Is(err, errDB) {
@@ -461,7 +470,7 @@ func TestGetStatus(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, &contractsfake.SessionStatusReader{}, users, log).
+		r, err := session.NewGetStatusUseCase(&contractsfake.SessionStatusReader{}, users, log).
 			Execute(context.Background(), txtID)
 
 		assertNoSessionAppErr(t, err)

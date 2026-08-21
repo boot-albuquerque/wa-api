@@ -14,9 +14,10 @@ import (
 
 // EditUserUseCase edita um usuário existente
 type EditUserUseCase struct {
-	users    appport.UserRepository
-	s3Cipher appport.S3SecretCipher
-	logger   appport.Logger
+	users       appport.UserRepository
+	s3Cipher    appport.S3SecretCipher
+	republisher appport.UserInfoRepublisher
+	logger      appport.Logger
 }
 
 // NewEditUserUseCase cria uma nova instância.
@@ -25,8 +26,11 @@ type EditUserUseCase struct {
 // following the same pattern AddUserUseCase uses for the HMAC key (F158)
 // and for the S3 key (F163). The port is S3-specific because the stored
 // type is a TEXT envelope (ADR-0009), not BYTEA.
-func NewEditUserUseCase(users appport.UserRepository, s3Cipher appport.S3SecretCipher, logger appport.Logger) *EditUserUseCase {
-	return &EditUserUseCase{users: users, s3Cipher: s3Cipher, logger: logger}
+// republisher drops this user's cached info after a successful write. See
+// appport.UserInfoRepublisher and HOUSEKEEP F200/F201: without it the edit
+// reached the database and NOTHING else in the process ever saw it.
+func NewEditUserUseCase(users appport.UserRepository, s3Cipher appport.S3SecretCipher, republisher appport.UserInfoRepublisher, logger appport.Logger) *EditUserUseCase {
+	return &EditUserUseCase{users: users, s3Cipher: s3Cipher, republisher: republisher, logger: logger}
 }
 
 // Execute edita um usuário
@@ -104,6 +108,10 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		upd.S3 = &s3Copy
 	}
 
+	// A ORDEM é o contrato, e está travada em teste: republicar ANTES de a
+	// escrita ter sucesso publicaria na cache um valor que o banco não tem —
+	// e como a entrada por user id não expira, esse valor errado ficaria lá
+	// para sempre.
 	if err := uc.users.UpdateUser(ctx, req.UserID, upd); err != nil {
 		if errors.Is(err, ErrDuplicateToken) {
 			return ErrDuplicateToken
@@ -135,6 +143,12 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 			storage.GetS3Manager().RemoveClient(req.UserID)
 		}
 	}
+
+	// Depois da escrita, e só depois dela: o processo lê estes valores da
+	// cache, não do banco. Sem isto, a edição entra no banco e fica invisível
+	// até o processo reiniciar (F200), e o token substituído continua a
+	// autenticar (F201).
+	uc.republisher.RepublishUser(ctx, req.UserID)
 
 	return nil
 }
