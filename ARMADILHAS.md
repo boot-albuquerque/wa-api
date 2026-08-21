@@ -1025,3 +1025,70 @@ teste de pré-condição do bloqueio, escrito no mesmo dia. Buraco achado num te
 **Travado por**: `capabilities/edit/edit_test.go::TestTheAppsOwnGateIsAskedFirst`
 e `capabilities/block/block_test.go::TestTheAppsOwnPreconditionIsCheckedHere`,
 ambos com o controle negativo executado registrado no HOUSEKEEP.
+
+## O `await` da página não é a conclusão
+
+**Medido em 2026-08-21, por uma prova ao vivo que falhou.**
+
+```js
+await Cmd.sendStarMsgs(chat, [msg], true);
+return { after: !!msg.star };     // ← devolve o valor ANTIGO
+```
+
+A promessa resolve antes de o modelo virar. A execução ao vivo devolveu
+`before=false after=false` contra um `star` que **funcionou** — o mesmo teste
+com espera mediu **696 ms** até o campo mudar. Uma leitura imediata falharia
+sempre.
+
+**Por que a sonda tinha passado**: ela dormia 800 ms com `setTimeout`. A sonda
+mediu a página; a capacidade mediu a promessa. São perguntas diferentes, e a
+sonda não avisa qual das duas respondeu.
+
+**O conserto NÃO é dormir na página.** Isso funcionaria e violaria a invariante
+6 — a espera viraria uma duração que nada em Go consegue ver, compor ou
+comprimir num teste. O modelo vivo é **estacionado** no estado e o Go relê um
+booleano dele a cada volta:
+
+```js
+park({ stage: 'settling', before, want, msg });   // o MODELO, não o valor
+```
+
+E o script de leitura nunca entrega o modelo ao `JSON.stringify` — lê um campo e
+monta a resposta.
+
+**Distinga os dois desfechos.** Orçamento esgotado em `settling` é *"a flag não
+moveu"*, não *"a página travou"*: têm conserto diferente, e um erro genérico
+esconde qual dos dois aconteceu.
+
+**Onde mais isto vale**: qualquer capacidade cujo efeito seja um campo de
+modelo. As H50 e H53 já tinham tropeçado nisto sem que o padrão fosse nomeado.
+
+**Travado por**: `capabilities/star/star_test.go::TestTheAwaitIsNotTheCompletion`
+(que assere as DUAS camadas — ver abaixo por quê) e
+`::TestAFlagThatNeverSettlesIsUnchangedNotATimeout`.
+
+## O controle negativo tem de mutar a camada que o teste observa
+
+**Medido em 2026-08-21, por dois controles negativos que PASSARAM.**
+
+O teste do parágrafo acima assere que o Go continua lendo enquanto a página diz
+`settling`. O controle negativo reescreveu o **script da página** para confiar no
+`await` — e o teste **passou**, porque o dublê responde `settling` independente
+do que o script diga. O defeito medido em produção vivia no script, e o teste
+travava só o lado Go.
+
+O segundo caso foi mais simples e igualmente instrutivo: a mutação removeu a
+pós-condição do Go, e eu rodei o teste do caminho de **prazo esgotado**. São
+ramos diferentes; nenhum teste cobria o ramo mutado.
+
+**As duas regras que saem daí:**
+
+1. **Se o defeito pode viver no script da página, o teste tem de asserir o
+   script** — `stage: 'settling'` presente, `after: !!msg.star` ausente. Dublê
+   nenhum substitui isso, porque o dublê não executa o script.
+2. **Ao rodar um controle negativo, rode o teste do RAMO que você mutou**, não um
+   parente. Um controle negativo apontado para o teste errado é um controle
+   negativo que mentiu, e ele mente dizendo "está coberto".
+
+Nas duas vezes o buraco só apareceu porque o controle foi executado. Um controle
+negativo escrito e não rodado teria deixado ambos passar.

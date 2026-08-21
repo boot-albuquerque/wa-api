@@ -59,3 +59,31 @@ const (
 	// message, so it is not the predicate it sounds like. canEditText is.
 	ModuleMessageEditUtils = Module("WAWebMessageEditUtils")
 )
+
+// The starring modules, settled by EXPERIMENT rather than reading, because
+// sendStarMsgs is an async wrapper whose toString() shows only that it discards
+// its first argument (probe_star_test.go).
+const (
+	// ModuleCmdForStar is the layer that WORKS, and it is not the bridge the
+	// name search suggested. Three shapes were tried one at a time against a
+	// real message; the first moved the flag and the other two were never
+	// needed:
+	//
+	//	Cmd.sendStarMsgs(chat, [msg], true)
+	//	Cmd.sendUnstarMsgs(chat, [msg], true)
+	//
+	// Both take the CHAT MODEL and an ARRAY OF MESSAGE MODELS.
+	ModuleCmdForStar = ModuleCmd
+
+	// ModuleStarredMsgCollection is here to record a NEGATIVE result, which is
+	// why it has no use anywhere in this package.
+	//
+	// PARIDADE-WWEBJS.md §6.14 listed it as the postcondition for starring, on
+	// the strength of its name. The experiment measured it THROWING — the
+	// probe's count came back -1 both before and after a star that demonstrably
+	// worked. The real signal is msg.star on the model.
+	//
+	// The entry stays so the next reader does not spend the same probe
+	// rediscovering that a plausible-sounding collection is the wrong question.
+	ModuleStarredMsgCollection = Module("WAWebStarredMsgCollection")
+)

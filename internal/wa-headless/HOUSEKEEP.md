@@ -4613,3 +4613,89 @@ e ela pegou o autor da regra. A agulha virou `A.sendMessageEdit(`.
 **Status**: entregue.
 **Testes**: `capabilities/edit/edit_test.go` (13 testes) e
 `editreal_test.go` (prova ao vivo, com envio próprio e recusa de mensagem alheia).
+
+---
+
+## H61 — favoritar mensagem, e o `await` que não era a conclusão
+
+**Data**: 2026-08-21
+**Contexto**: continuação da superfície do whatsapp-web.js.
+**Onde**: `internal/wa-headless/capabilities/star/`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/probe_star_test.go`.
+
+### A leitura não bastava, então a medição foi EXPERIMENTO
+
+`sendStarMsgs` é async: o `toString()` mostra
+`function u(e,t,n){return d(t,n)}` — o bastante para saber que o primeiro
+argumento é descartado, e não o bastante para saber o resto. É o limite já
+catalogado.
+
+Três formas candidatas foram tentadas **uma de cada vez** contra uma mensagem
+real, julgadas por mover a flag. A primeira venceu e as outras nunca foram
+usadas:
+
+```
+Cmd.sendStarMsgs(chat, [msg], true)
+Cmd.sendUnstarMsgs(chat, [msg], true)
+```
+
+Experimento é medição legítima quando é barato e reversível, e favoritar é o
+efeito externo mais seguro desta superfície inteira: a flag é **local**, o par
+nunca a vê.
+
+### A medição contrariou o que eu já tinha ESCRITO
+
+A `PARIDADE-WWEBJS.md` §6.14 dava `WAWebStarredMsgCollection` como pós-condição,
+pela força do nome. O experimento mediu a coleção **lançando**: a contagem voltou
+`-1` antes e depois de um `star` que demonstravelmente funcionou.
+
+Uma pós-condição construída sobre ela teria aprovado tudo, inclusive o fracasso.
+A entrada foi **corrigida**, não remendada — a linha estava errada nas duas
+colunas.
+
+### O achado principal, pago com uma falha ao vivo
+
+```
+Star: star: the page accepted the change and the flag did not move (before=false after=false)
+```
+
+O `await` resolve **antes** de o modelo virar. O mesmo teste, com espera, mediu
+**696 ms** até `msg.star` mudar. A sonda só tinha passado porque dormia 800 ms
+com `setTimeout` — ela mediu a PÁGINA, a capacidade mediu a PROMESSA.
+
+O conserto não foi dormir na página (funcionaria e violaria a invariante 6): o
+modelo vivo é estacionado no estado e o Go relê um booleano a cada volta.
+Orçamento esgotado em `settling` devolve `ErrFlagUnchanged`, não "página travou"
+— consertos diferentes.
+
+Virou entrada no `ARMADILHAS.md`, porque as H50 e H53 já haviam tropeçado nisto
+sem o padrão estar nomeado.
+
+### Prova ao vivo
+
+```
+starred:  star.Result(before=false after=true  already=false waited=696ms)
+restored: star.Result(before=true  after=false already=false waited=509ms)
+```
+
+O no-op redundante foi exercitado no mesmo teste. A restauração roda de um
+`defer` registrado antes.
+
+### Controles negativos EXECUTADOS — e DOIS passaram
+
+| mutação | primeira execução | depois de corrigir o teste |
+|---|---|---|
+| script confia no `await` | **passou** | `the apply branch does not hand the settling decision to Go` |
+| pós-condição do Go removida | **passou** (rodei o teste do ramo errado) | `got <nil>, want ErrFlagUnchanged` |
+| `settling` indistinto de página travada | `got …never settled…, want ErrFlagUnchanged` | — |
+| consultar a coleção medida lançando | `the script consults the collection that was measured throwing` | — |
+
+As duas falhas de controle viraram entrada própria no `ARMADILHAS.md`: **o
+controle negativo tem de mutar a camada que o teste observa**, e tem de ser
+apontado para o teste do ramo mutado. Um controle apontado para um parente mente
+dizendo "está coberto".
+
+**Status**: entregue.
+**Testes**: `capabilities/star/star_test.go` (12 testes, quatro com controle
+negativo registrado acima) e `starreal_test.go` (prova ao vivo, reversível).

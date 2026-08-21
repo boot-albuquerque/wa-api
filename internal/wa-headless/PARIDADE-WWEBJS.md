@@ -537,7 +537,7 @@ restantes, então nenhuma delas está bloqueada por desconhecimento:
 | `wwebjs` | ação neste build | verificação |
 |---|---|---|
 | `Message.forward` | `WAWebChatForwardMessage.forwardMessages` | id na conversa destino |
-| `Message.star` | `WAWebChatSendStarMsgsBridge.sendStarMsgs` | `WAWebStarredMsgCollection` |
+| `Message.star` | ~~`WAWebChatSendStarMsgsBridge.sendStarMsgs`~~ **`Cmd.sendStarMsgs`** | ~~`WAWebStarredMsgCollection`~~ **`msg.star`** |
 | `Chat.mute` | `WAWebChatMuteBridge.sendConversationMute` | `WAWebMuteGetters.getIsMuted` |
 | `Message.edit` | `WAWebSendMessageEditAction.sendMessageEdit` | `WAWebMessageEditUtils.msgTypeSupportsEditing` |
 
@@ -566,3 +566,44 @@ síncrona e o `toString()` a mostra inteira.
 **O que a referência não podia dar**: que `latestEditMsgKey` está DEFINIDO em
 mensagens nunca editadas. Isso é fato deste build, medido, e é o que separa uma
 pós-condição real de uma que aprova tudo.
+
+### Correção da §6.14 — a linha de favoritar estava errada nas DUAS colunas
+
+A tabela acima foi montada a partir de nomes de módulo devolvidos pela sonda de
+enumeração, e favoritar foi a única linha em que o nome enganou nas duas metades.
+O experimento (`probe_star_test.go`) mediu:
+
+| coluna | o que a tabela dizia | o que a página faz |
+|---|---|---|
+| ação | `WAWebChatSendStarMsgsBridge.sendStarMsgs` | **`Cmd.sendStarMsgs(chat, [msg], true)`** |
+| verificação | `WAWebStarredMsgCollection` | **`msg.star`** — a coleção **lança** |
+
+A contagem da coleção voltou `-1` antes e depois de um `star` que
+demonstravelmente funcionou (`msgStar` foi de `false` para `true`). Uma
+pós-condição construída sobre ela teria aprovado tudo, inclusive o fracasso.
+
+Isto é a regra do `CLAUDE.md` sendo aplicada contra o próprio autor: **a medição
+contrariou a hipótese, então a hipótese cai** — e a entrada é corrigida em vez de
+ficar parecendo resolvida.
+
+## §6.16 — favoritar mensagem
+
+`wwebjs` expõe `Message.star()` / `unstar()`. **O nome do módulo que a busca
+sugeria estava errado**, e a verificação também — ver a correção da §6.14 acima.
+O que a página faz, medido por experimento:
+
+```
+Cmd.sendStarMsgs(chat, [msg], true)      // modelo do chat, ARRAY de modelos
+Cmd.sendUnstarMsgs(chat, [msg], true)
+```
+
+**Onde divergimos de propósito:**
+
+1. **Nós esperamos.** O `await` resolve antes de `msg.star` virar — medidos
+   696 ms de atraso. O `wwebjs` devolve o retorno da chamada, o que na prática
+   significa devolver antes de o efeito existir.
+2. **Nós distinguimos "não moveu" de "travou"**, porque têm conserto diferente.
+3. **Redundância é no-op.**
+
+**Onde a referência não podia ajudar**: a assimetria não é dela — é uma
+propriedade deste build, e só um experimento contra a página viva a mostra.
