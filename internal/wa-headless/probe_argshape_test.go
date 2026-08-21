@@ -33,6 +33,19 @@ func argProbeDepth() int {
 	return 1
 }
 
+// shapesJSON encodes the per-argument hints, or null when every argument should
+// be probed as an object.
+func shapesJSON(shapes []string) string {
+	if len(shapes) == 0 {
+		return "null"
+	}
+	b, err := json.Marshal(shapes)
+	if err != nil {
+		return "null"
+	}
+	return string(b)
+}
+
 func TestProbeArgumentShapes(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_PROBE_ARGSHAPE") == "" {
@@ -58,25 +71,28 @@ func TestProbeArgumentShapes(t *testing.T) {
 	targets := []struct {
 		mod, fn string
 		arity   int
+		shapes  []string
 		note    string
 	}{
 		// CONTROLS: already known from readable sources.
-		{"WAWebBlockContactAction", "blockContact", 1,
+		{"WAWebBlockContactAction", "blockContact", 1, nil,
 			"known: {bizOptOutArgs, blockEntryPoint, contact, skipCtwa1pdNbfSignal}"},
-		{"WAWebForwardMessagesToChat", "forwardMessagesToChats", 1,
+		{"WAWebForwardMessagesToChat", "forwardMessagesToChats", 1, nil,
 			"known: {msgs, chats, includeCaption, appendedText}"},
 		// THE BLOCKED ONES.
-		{"WAWebPollsSendPollCreationMsgAction", "createPollCreationMsgData", 1, "H69"},
-		{"WAWebPollsSendPollCreationMsgAction", "sendPollCreation", 1, "H69"},
-		{"WAWebEditLabelAssociationBridge", "editLabelAssociation", 2, "H72"},
-		{"WAWebTextStatusAction", "setMyTextStatus", 5, "H66"},
+		{"WAWebPollsSendPollCreationMsgAction", "sendPollCreation", 1, nil, "H69, closed"},
+		{"WAWebEditLabelAssociationBridge", "editLabelAssociation", 2,
+			[]string{"array", "array"}, "H72 — both arguments are lists"},
+		{"WAWebTextStatusAction", "setMyTextStatus", 5,
+			[]string{"string", "string", "string", "string", "string"}, "H66 — primitives"},
 	}
 
 	for _, tg := range targets {
 		var raw string
 		script := `JSON.stringify(await (` + spa.ArgumentProbeExpr + `)(` +
 			strconv.Quote(tg.mod) + `, ` + strconv.Quote(tg.fn) + `, ` +
-			strconv.Itoa(tg.arity) + `, ` + strconv.Itoa(argProbeDepth()) + `))`
+			strconv.Itoa(tg.arity) + `, ` + strconv.Itoa(argProbeDepth()) + `, ` +
+			shapesJSON(tg.shapes) + `))`
 		// Evaluate does not await promises, so the call is parked and polled —
 		// the same shape every capability in this module uses.
 		kick := `(() => { window.__argProbe = null;

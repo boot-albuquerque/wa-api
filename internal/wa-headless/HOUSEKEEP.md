@@ -5519,7 +5519,8 @@ H69 acabou de cobrar. Espera um chamador qualificado pelo módulo.
 | devolver `nil` para conversa sem etiqueta | `an unlabelled chat returned nil` |
 | não normalizar os ids para string | `the script does not normalise label ids to strings` |
 
-**Status**: entregue (leitura); escrita **não entregue**, com o motivo acima.
+**Status**: entregue — leitura, e a **escrita também**, destravada pela H73 no
+mesmo dia (ver continuação abaixo).
 **Testes**: `capabilities/contacts/commongroups_test.go` (secção `labels`,
 7 testes, três com controle acima) e o teste ao vivo.
 
@@ -5604,3 +5605,69 @@ distingue campos lidos sob condição que a sonda nunca alcança.
 **Status**: entregue.
 **Testes**: os controles acima são o teste do instrumento; a prova de que ele
 serve é a H69 fechada no mesmo dia.
+
+---
+
+## H72 (continuação) — a escrita de etiqueta, destravada pelo instrumento
+
+**Data**: 2026-08-21.
+
+A entrada original parou em: *"a forma do PRIMEIRO argumento não é legível do
+invólucro, e chutá-la é o erro que a H69 acabou de cobrar."* O instrumento da
+H73 respondeu — mas só depois de uma melhoria que vale por si.
+
+### O instrumento não via dentro de um callback, e isso era estrutural
+
+A primeira passada devolveu `arg0=[forEach]` e nada mais. A razão não é
+específica de etiquetas: **o registrador responde à própria iteração**, então o
+callback nunca roda e o elemento nunca é lido.
+
+O conserto foi uma **dica de forma por argumento**: com `"array"`, o instrumento
+passa um array REAL contendo um registrador. A iteração acontece de verdade, e o
+elemento denuncia o que o callback lê:
+
+```
+editLabelAssociation([{id, type}], [chatModel])
+    arg0=[[0].id [0].type]
+    arg1=[[0].id [0].id.toString]
+```
+
+Qualquer API que receba lista tinha o mesmo problema. A dica é geral.
+
+### O verbo é a única parte NÃO lida — e por isso a pós-condição existe
+
+`type` recebe `'add'` ou `'remove'`, inferido de a chamada-espelho do app se
+chamar `addOrRemoveLabelsMD`. Isso é inferência, não leitura, e está dito no
+código e no teste.
+
+**É exatamente por isso que a pós-condição lê `chat.labels`**: um verbo errado
+produz falha limpa em vez de no-op silencioso. Ele estava certo — e teria sido
+pego se não estivesse.
+
+### O espelho local não é opcional
+
+O app chama `editLabelAssociation` e logo depois
+`LabelCollection.addOrRemoveLabelsMD`. Sem o segundo, `chat.labels` não se move
+— e `chat.labels` é a única pós-condição disponível, então pular o espelho faria
+**toda** aplicação parecer fracassada. Há controle negativo.
+
+### Prova ao vivo
+
+```
+applied: contacts.LabelChange(before=0 after=1 noop=false waited=505ms)
+removed: contacts.LabelChange(before=1 after=0 noop=false waited=509ms)
+```
+
+Com leitura de volta pela capacidade de leitura, apply redundante como no-op, e
+etiqueta inexistente recusada.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| passar id nu em vez de `{id, type}` | `the mutation is not the measured {id, type} shape` |
+| pular o espelho local | `the local mirror is not updated, so chat.labels would never move` |
+| não checar se a etiqueta existe | `the known-label check is computed but does not guard a return` |
+| script confia no `await` | `the apply branch does not hand the settling decision to Go` |
+
+**Status**: entregue.

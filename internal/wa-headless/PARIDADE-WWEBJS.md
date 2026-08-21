@@ -800,7 +800,7 @@ O que existe é `msg.ack`, e é o que entregamos.
 |---|---|
 | listar etiquetas | **entregue** — `LabelCollection` |
 | etiquetas de uma conversa | **entregue** — `chat.labels`, ids normalizados a string |
-| aplicar/remover | **não entregue** — `editLabelAssociation(arg, chats)` com o primeiro argumento ilegível do invólucro |
+| aplicar/remover | **entregue** — `editLabelAssociation([{id,type}], [chatModel])`, medido pelo instrumento da H73 |
 
 **Divergências:** conjunto vazio e conversa sem etiqueta são **respostas**, não
 erros; nomes de etiqueta nunca são renderizados, só o comprimento.

@@ -161,3 +161,182 @@ func chatLabelsScript(chatJID string) string {
 		}
 	})())`
 }
+
+// Applying and removing a label on a chat.
+//
+// THE SHAPE CAME FROM THE ARGUMENT INSTRUMENT (H73). editLabelAssociation is an
+// opaque wrapper with no readable call shape, and a plain recorder answered only
+// ".forEach" — because a recorder answers the iteration itself and the callback
+// never runs. Handing it a real array holding one recorder produced the answer:
+//
+//	editLabelAssociation([{id, type}], [chatModel])
+//
+// THE TYPE VOCABULARY IS THE ONE THING NOT READ. The app's mirror call is named
+// addOrRemoveLabelsMD, so "add" and "remove" are the obvious strings — and this
+// package does not rely on that being right: the postcondition reads chat.labels
+// and fails if the label did not actually attach. A wrong verb produces a clean
+// failure here rather than a silent no-op.
+
+var (
+	// ErrLabelUnchanged is the postcondition: the call returned and the chat's
+	// labels are what they were.
+	ErrLabelUnchanged = fmt.Errorf("contacts: the page accepted the label change and the chat's labels did not move")
+	// ErrNoLabelGiven is a call with no label id.
+	ErrNoLabelGiven = fmt.Errorf("contacts: no label id given")
+)
+
+// LabelChange is what applying or removing a label did.
+type LabelChange struct {
+	// Before and After are how many labels the chat carried.
+	Before, After int
+	// NoOp is true when the chat already had, or already lacked, the label.
+	NoOp bool
+	// Waited is how long the page took to reflect it.
+	Waited time.Duration
+}
+
+func (c LabelChange) String() string {
+	return fmt.Sprintf("contacts.LabelChange(before=%d after=%d noop=%t waited=%s)",
+		c.Before, c.After, c.NoOp, c.Waited.Round(time.Millisecond))
+}
+
+const labelWriteStateKey = "__waHeadlessLabelWrite"
+
+// AddLabel applies a label to a chat.
+func (l *Lister) AddLabel(ctx context.Context, chatJID, labelID, label string) (LabelChange, error) {
+	return l.setLabel(ctx, chatJID, labelID, true, label)
+}
+
+// RemoveLabel takes it off.
+func (l *Lister) RemoveLabel(ctx context.Context, chatJID, labelID, label string) (LabelChange, error) {
+	return l.setLabel(ctx, chatJID, labelID, false, label)
+}
+
+func (l *Lister) setLabel(ctx context.Context, chatJID, labelID string, add bool, label string) (LabelChange, error) {
+	if strings.TrimSpace(chatJID) == "" {
+		return LabelChange{}, ErrNoSuchChatForLabels
+	}
+	if strings.TrimSpace(labelID) == "" {
+		return LabelChange{}, ErrNoLabelGiven
+	}
+	start := time.Now()
+
+	var kicked string
+	if err := l.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
+		return l.eval(ctx, labelWriteScript(chatJID, labelID, add), &kicked)
+	}); err != nil {
+		return LabelChange{}, fmt.Errorf("%w: %v", ErrLabels, err)
+	}
+
+	var out struct {
+		Stage   string `json:"stage"`
+		OK      bool   `json:"ok"`
+		Why     string `json:"why"`
+		Before  int    `json:"before"`
+		After   int    `json:"after"`
+		Already bool   `json:"already"`
+	}
+	deadline := time.Now().Add(commonBudget)
+	for {
+		var raw string
+		if err := l.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
+			return l.eval(ctx, labelWriteResultScript, &raw)
+		}); err != nil {
+			return LabelChange{}, fmt.Errorf("%w: %v", ErrLabels, err)
+		}
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return LabelChange{}, fmt.Errorf("contacts: unexpected label-write answer: %w", err)
+		}
+		if out.Stage != "pending" && out.Stage != "settling" {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			if out.Stage == "settling" {
+				return LabelChange{}, fmt.Errorf("%w within %s (before=%d after=%d)",
+					ErrLabelUnchanged, commonBudget, out.Before, out.After)
+			}
+			return LabelChange{}, fmt.Errorf("%w: the page never settled within %s", ErrLabels, commonBudget)
+		}
+		time.Sleep(commonTick)
+	}
+
+	switch {
+	case out.Why == "NO_CHAT":
+		return LabelChange{}, ErrNoSuchChatForLabels
+	case out.Why == "NO_LABEL":
+		return LabelChange{}, ErrNoLabelGiven
+	case !out.OK:
+		return LabelChange{}, fmt.Errorf("%w at %s (%s)", ErrLabels, out.Stage, out.Why)
+	}
+	return LabelChange{Before: out.Before, After: out.After,
+		NoOp: out.Already, Waited: time.Since(start)}, nil
+}
+
+func labelWriteScript(chatJID, labelID string, add bool) string {
+	return `JSON.stringify((() => {
+		window[` + strconv.Quote(labelWriteStateKey) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(labelWriteStateKey) + `] = v; };
+		(async () => {
+		let stage = 'find';
+		try {
+			const add = ` + strconv.FormatBool(add) + `;
+			const want = ` + strconv.Quote(labelID) + `;
+			const CC = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
+			const chat = CC.get(` + strconv.Quote(chatJID) + `);
+			if (!chat) { park({ stage, ok: false, why: 'NO_CHAT' }); return; }
+
+			const LC = window.require('` + string(spa.ModuleLabelCollection) + `').LabelCollection;
+			const known = (LC.getModelsArray ? LC.getModelsArray() : [])
+				.map(l => String(l.id));
+			// A LABEL THAT DOES NOT EXIST would otherwise be applied to nothing
+			// and reported as a change that did not take.
+			if (known.indexOf(want) === -1) { park({ stage, ok: false, why: 'NO_LABEL' }); return; }
+
+			const current = () => (chat.labels ? [].concat(chat.labels).map(String) : []);
+			const before = current();
+			const has = before.indexOf(want) !== -1;
+			if (has === add) {
+				park({ stage: 'done', ok: true, why: 'ALREADY', already: true,
+					before: before.length, after: before.length });
+				return;
+			}
+
+			stage = 'apply';
+			const B = window.require('` + string(spa.ModuleEditLabelAssociationBridge) + `');
+			// [{id, type}] and [chatModel] — measured with the argument
+			// instrument, because the wrapper shows nothing and a plain recorder
+			// answers forEach itself.
+			const mutations = [{ id: want, type: add ? 'add' : 'remove' }];
+			const chats = [chat];
+			await B.editLabelAssociation(mutations, chats);
+			// THE MIRROR, which the app calls right after on its own call site.
+			// Without it chat.labels does not move, and chat.labels is the only
+			// postcondition available.
+			if (LC.addOrRemoveLabelsMD) { LC.addOrRemoveLabelsMD(mutations, chats); }
+
+			stage = 'verify';
+			park({ stage: 'settling', ok: true, why: '', already: false,
+				before: before.length, want: want, add: add, chat: chat });
+		} catch (e) {
+			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 200) });
+		}
+		})();
+		return { started: true };
+	})())`
+}
+
+// labelWriteResultScript re-reads the parked chat's labels each round and never
+// serialises the model.
+const labelWriteResultScript = `JSON.stringify((() => {
+	const s = window[` + `"` + labelWriteStateKey + `"` + `];
+	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
+	if (s.stage === 'settling') {
+		const now = s.chat && s.chat.labels ? [].concat(s.chat.labels).map(String) : [];
+		if ((now.indexOf(s.want) !== -1) === s.add) {
+			return { stage: 'done', ok: true, why: '', already: false,
+				before: s.before, after: now.length };
+		}
+		return { stage: 'settling', ok: false, why: '', before: s.before, after: now.length };
+	}
+	return s;
+})())`

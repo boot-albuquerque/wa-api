@@ -1310,3 +1310,22 @@ antes de ser usado para valer.
 
 **O que ele não responde**: o que o app passaria. Ele diz o que a função procura.
 São perguntas diferentes, e trocá-las é o erro da H69 ao contrário.
+
+### O instrumento não vê dentro de um callback — dê-lhe uma lista de verdade
+
+**Medido em 2026-08-21 (H72).**
+
+A primeira pergunta ao `editLabelAssociation` devolveu `arg0=[forEach]` e parou.
+A razão é estrutural, não específica: **o registrador responde à própria
+iteração**, então o callback nunca roda e o elemento nunca é lido.
+
+Com a dica de forma `"array"`, o instrumento passa um array **real** contendo um
+registrador. A iteração acontece, e o elemento denuncia o que o callback lê:
+
+```
+arg0=[[0].id [0].type]      arg1=[[0].id [0].id.toString]
+```
+
+**Vale para qualquer API que receba lista**, e são muitas nesta SPA. O sintoma é
+sempre o mesmo: a resposta é um único método de iteração — `forEach`, `map`,
+`filter` — e nada além dele.

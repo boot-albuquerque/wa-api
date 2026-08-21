@@ -309,3 +309,99 @@ func TestRealSPAReadsTheBusinessLabels(t *testing.T) {
 		t.Fatalf("an unknown chat: got %v, want ErrNoSuchChatForLabels", err)
 	}
 }
+
+// TestRealSPAAppliesAndRemovesALabel applies one of the account's own labels to
+// the lab chat and takes it off again.
+//
+// The label vocabulary — "add" and "remove" — is the one part of the call that
+// was NOT read from the page; it is inferred from the mirror call being named
+// addOrRemoveLabelsMD. That is exactly why the postcondition reads chat.labels:
+// a wrong verb produces a clean failure here instead of a silent no-op.
+func TestRealSPAAppliesAndRemovesALabel(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_HEADLESS_LABEL_TEST") == "" {
+		t.Skip("set WA_HEADLESS_LABEL_TEST=1; this labels and unlabels the lab chat")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	l := contacts.New(runner, sess.Tab().Evaluate)
+	labels, err := l.ListLabels(ctx, "test/label-list")
+	if err != nil {
+		t.Fatalf("ListLabels: %v", err)
+	}
+	if len(labels.All) == 0 {
+		t.Skip("this account has no labels to apply")
+	}
+	labelID := labels.All[0].ID
+
+	chatJID := findLabChatJID(ctx, t, runner, sess.Tab().Evaluate, peer)
+	if chatJID == "" {
+		t.Skip("no loaded chat with the peer")
+	}
+
+	// Registered before the apply, so a failed assertion still takes the label
+	// off the lab chat.
+	defer func() {
+		back, err := l.RemoveLabel(context.Background(), chatJID, labelID, "test/label-remove")
+		if err != nil {
+			t.Errorf("REMOVE FAILED — the lab chat keeps a label it did not have: %v", err)
+			return
+		}
+		t.Logf("removed: %s", back)
+	}()
+
+	got, err := l.AddLabel(ctx, chatJID, labelID, "test/label-add")
+	if err != nil {
+		t.Fatalf("AddLabel: %v", err)
+	}
+	t.Logf("applied: %s", got)
+	if got.NoOp {
+		t.Fatal("the chat already carried this label, so this run proved nothing")
+	}
+	if got.After != got.Before+1 {
+		t.Fatalf("the label count did not grow by exactly one: %s", got)
+	}
+
+	ids, err := l.LabelsOfChat(ctx, chatJID, "test/label-read-back")
+	if err != nil {
+		t.Fatalf("LabelsOfChat: %v", err)
+	}
+	found := false
+	for _, id := range ids {
+		if id == labelID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the label was applied but does not read back on the chat (%d label(s) there)", len(ids))
+	}
+
+	again, err := l.AddLabel(ctx, chatJID, labelID, "test/label-add-again")
+	if err != nil {
+		t.Fatalf("applying a label the chat already has returned an error: %v", err)
+	}
+	if !again.NoOp {
+		t.Fatalf("a redundant apply was not reported as a no-op: %s", again)
+	}
+
+	if _, err := l.AddLabel(ctx, chatJID, "no-such-label-id", "test/label-unknown"); !errors.Is(err, contacts.ErrNoLabelGiven) {
+		t.Fatalf("an unknown label id: got %v, want ErrNoLabelGiven", err)
+	}
+}

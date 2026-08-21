@@ -294,3 +294,17 @@ const ModuleAck = Module("WAWebAck")
 // argument's shape is not readable from the wrapper. Guessing it is the mistake
 // H69 charges for, so the write waits for a module-qualified call site.
 const ModuleLabelCollection = Module("WAWebLabelCollection")
+
+// ModuleEditLabelAssociationBridge applies and removes labels. Its shape came
+// from spa.ArgumentProbeExpr with array hints (H73), because the wrapper is
+// opaque and a recorder answers forEach itself so the callback never runs:
+//
+//	editLabelAssociation([{id, type}], [chatModel])
+//
+// The app's own call site, module-qualified, then updates the local mirror:
+//
+//	LabelCollection.addOrRemoveLabelsMD(labels, chats)
+//
+// BOTH ARE NEEDED. The bridge is the wire; addOrRemoveLabelsMD is what makes
+// chat.labels reflect it, which is also the only postcondition available.
+const ModuleEditLabelAssociationBridge = Module("WAWebEditLabelAssociationBridge")

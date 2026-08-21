@@ -428,3 +428,180 @@ func TestCancelledContextReadsNoLabels(t *testing.T) {
 		t.Fatal("a cancelled context still read a chat's labels")
 	}
 }
+
+// --- label write -------------------------------------------------------
+
+type labelWriteDouble struct {
+	ok            bool
+	stage, why    string
+	before, after int
+	already       bool
+	settleReads   int
+
+	reads      int
+	kicks      int
+	lastScript string
+}
+
+func (p *labelWriteDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.Contains(expr, "const s = window[") {
+		p.reads++
+		switch {
+		case !p.ok:
+			stage := p.stage
+			if stage == "" {
+				stage = "apply"
+			}
+			*out = fmt.Sprintf(`{"stage":%q,"ok":false,"why":%q}`, stage, p.why)
+		case p.already:
+			*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"ALREADY","already":true,"before":%d,"after":%d}`,
+				p.before, p.before)
+		case p.reads <= p.settleReads:
+			*out = fmt.Sprintf(`{"stage":"settling","ok":false,"why":"","before":%d,"after":%d}`,
+				p.before, p.before)
+		default:
+			*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","already":false,"before":%d,"after":%d}`,
+				p.before, p.after)
+		}
+		return nil
+	}
+	p.kicks++
+	p.lastScript = expr
+	*out = `{"started":true}`
+	return nil
+}
+
+func labelWriter(p *labelWriteDouble) *Lister { return New(engine.NewRunner(), p.eval) }
+
+// TestTheMeasuredLabelCallShapeIsUsed. [{id, type}] and [chatModel] came from
+// the argument instrument with array hints — a plain recorder answered only
+// ".forEach", because it answers the iteration itself and the callback never
+// runs.
+func TestTheMeasuredLabelCallShapeIsUsed(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 0, after: 1}
+	if _, err := labelWriter(p).AddLabel(context.Background(), somePeer, "1", "t"); err != nil {
+		t.Fatalf("AddLabel: %v", err)
+	}
+	if !strings.Contains(p.lastScript, "[{ id: want, type: add ? 'add' : 'remove' }]") {
+		t.Fatal("the mutation is not the measured {id, type} shape")
+	}
+	if !strings.Contains(p.lastScript, "B.editLabelAssociation(mutations, chats)") {
+		t.Fatal("the bridge is not called with two lists")
+	}
+	if !strings.Contains(p.lastScript, "const chats = [chat];") {
+		t.Fatal("the chat is not passed as a MODEL inside a list")
+	}
+}
+
+// TestTheLocalMirrorIsCalledToo. The app calls addOrRemoveLabelsMD right after
+// the bridge, and without it chat.labels does not move — which is also the only
+// postcondition available, so skipping it would make every apply look failed.
+func TestTheLocalMirrorIsCalledToo(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 0, after: 1}
+	if _, err := labelWriter(p).AddLabel(context.Background(), somePeer, "1", "t"); err != nil {
+		t.Fatalf("AddLabel: %v", err)
+	}
+	if !strings.Contains(p.lastScript, "LC.addOrRemoveLabelsMD(mutations, chats)") {
+		t.Fatal("the local mirror is not updated, so chat.labels would never move")
+	}
+}
+
+// TestAnUnknownLabelIsRefusedBeforeApplying. Applying a label that does not
+// exist would attach nothing and read as a change that did not take.
+func TestAnUnknownLabelIsRefusedBeforeApplying(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: false, stage: "find", why: "NO_LABEL"}
+	if _, err := labelWriter(p).AddLabel(context.Background(), somePeer, "999", "t"); !errors.Is(err, ErrNoLabelGiven) {
+		t.Fatalf("got %v, want ErrNoLabelGiven", err)
+	}
+	if !strings.Contains(p.lastScript, "if (known.indexOf(want) === -1) { park(") {
+		t.Fatal("the known-label check is computed but does not guard a return")
+	}
+}
+
+// TestTheAwaitIsNotTheCompletionForLabels — carried from H61 rather than
+// rediscovered.
+func TestTheAwaitIsNotTheCompletionForLabels(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 0, after: 1, settleReads: 2}
+	got, err := labelWriter(p).AddLabel(context.Background(), somePeer, "1", "t")
+	if err != nil {
+		t.Fatalf("AddLabel: %v", err)
+	}
+	if got.After != 1 {
+		t.Fatalf("the settled value was not picked up: %s", got)
+	}
+	if p.reads < 3 {
+		t.Fatalf("only %d read(s): the first answer was accepted instead of waited on", p.reads)
+	}
+	if !strings.Contains(p.lastScript, "stage: 'settling'") {
+		t.Fatal("the apply branch does not hand the settling decision to Go")
+	}
+}
+
+func TestALabelThatNeverAttachesIsUnchangedNotATimeout(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 0, after: 1, settleReads: 1 << 30}
+	_, err := labelWriter(p).AddLabel(context.Background(), somePeer, "1", "t")
+	if !errors.Is(err, ErrLabelUnchanged) {
+		t.Fatalf("got %v, want ErrLabelUnchanged", err)
+	}
+	if strings.Contains(err.Error(), "never settled") {
+		t.Fatalf("a label that did not attach is reported as a hung page: %v", err)
+	}
+}
+
+func TestARedundantLabelApplyIsANoOp(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, already: true, before: 1}
+	got, err := labelWriter(p).AddLabel(context.Background(), somePeer, "1", "t")
+	if err != nil {
+		t.Fatalf("a redundant apply produced an error: %v", err)
+	}
+	if !got.NoOp {
+		t.Fatalf("not reported as a no-op: %s", got)
+	}
+}
+
+func TestLabelWriteRefusalsCostNoPageCall(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true}
+	if _, err := labelWriter(p).AddLabel(context.Background(), "  ", "1", "t"); !errors.Is(err, ErrNoSuchChatForLabels) {
+		t.Fatalf("got %v, want ErrNoSuchChatForLabels", err)
+	}
+	if _, err := labelWriter(p).RemoveLabel(context.Background(), somePeer, "  ", "t"); !errors.Is(err, ErrNoLabelGiven) {
+		t.Fatalf("got %v, want ErrNoLabelGiven", err)
+	}
+	if p.kicks != 0 {
+		t.Fatalf("the page was asked %d time(s)", p.kicks)
+	}
+}
+
+func TestRemoveSendsTheOtherVerb(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 1, after: 0}
+	if _, err := labelWriter(p).RemoveLabel(context.Background(), somePeer, "1", "t"); err != nil {
+		t.Fatalf("RemoveLabel: %v", err)
+	}
+	if !strings.Contains(p.lastScript, "const add = false;") {
+		t.Fatal("remove does not flip the verb")
+	}
+}
+
+func TestCancelledContextWritesNoLabel(t *testing.T) {
+	compressCommonClock(t)
+	p := &labelWriteDouble{ok: true, before: 0, after: 1}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := labelWriter(p).AddLabel(ctx, somePeer, "1", "t"); err == nil {
+		t.Fatal("a cancelled context labelled a chat")
+	}
+	if p.kicks != 0 {
+		t.Fatalf("asked the page %d time(s) for a caller that had given up", p.kicks)
+	}
+}

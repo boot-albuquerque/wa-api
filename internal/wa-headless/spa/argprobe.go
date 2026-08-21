@@ -35,9 +35,14 @@ package spa
 // recorder instead of undefined. Depth costs nothing but noise: a function that
 // walks a long chain reports the whole chain.
 //
-// It is a JavaScript function of (moduleName, fnName, arity, maxDepth)
+// SHAPES. Per-argument hints — "object" (default), "array", "string", "number".
+// "array" hands a REAL array holding one recorder, which is the only way to see
+// what an iterating function reads off an element: a recorder answers forEach
+// itself and the callback never runs.
+//
+// It is a JavaScript function of (moduleName, fnName, arity, maxDepth, shapes)
 // returning {ok, why, reads: [[path, ...], ...], threw}.
-const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth) {
+const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth, shapes) {
 	let mod, fn;
 	try {
 		mod = window.require(moduleName);
@@ -89,11 +94,31 @@ const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth)
 		}
 	});
 
+	// SHAPE HINTS. A function that iterates an argument — forEach, map — never
+	// hands the recorder to its callback, because the recorder answers the
+	// iteration itself and the callback is never called. Passing a REAL array
+	// holding one recorder fixes that: the iteration is real, and the element
+	// reports what the callback reads off it.
+	//
+	// This was not foresight. The label bridge answered ".forEach" and nothing
+	// more, and the reason was structural rather than specific to labels — any
+	// API taking a list has it.
 	const args = [];
 	for (let i = 0; i < arity; i++) {
 		const seen = [];
 		reads.push(seen);
-		args.push(recorder(seen, '', 1));
+		const hint = (shapes && shapes[i]) || 'object';
+		if (hint === 'array') {
+			args.push([recorder(seen, '[0]', 1)]);
+		} else if (hint === 'string') {
+			// Some functions take primitives and read nothing; handing them a
+			// proxy only produces a type error that says less than a real value.
+			args.push('wa-headless-probe');
+		} else if (hint === 'number') {
+			args.push(0);
+		} else {
+			args.push(recorder(seen, '', 1));
+		}
 	}
 
 	let threw = '';
