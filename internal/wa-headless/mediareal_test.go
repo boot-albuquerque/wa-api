@@ -3,6 +3,7 @@ package waheadless
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -136,4 +137,130 @@ func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 	t.Fatalf("the image was SENT and verified on the sender (id=%s), but no inbound event "+
 		"with that id arrived within 120s (%d replayed, %d unrelated fresh inbound)",
 		res.ID.ID, replayed, other)
+}
+
+// TestRealSPASendsADocumentAndTheKindIsObservable proves the AsDocument flag,
+// which the Media type advertises and nothing exercised.
+//
+// The SAME BYTES are sent twice — once as an image, once as a document — so the
+// assertion is about the flag and not about the payload. Anything else would
+// leave "asDocument did nothing" indistinguishable from "PNGs are documents".
+//
+// WHAT THIS TEST DELIBERATELY DOES NOT CHECK: the caption. Invariant 12 makes
+// this module metadata-only, and a caption is message CONTENT — so its delivery
+// is unverifiable here without breaking the invariant the module exists to
+// hold. The capability accepts a caption and passes it to the page; that it
+// arrives is not something this suite can claim. Stated rather than quietly
+// implied by a passing test (HOUSEKEEP H47).
+func TestRealSPASendsADocumentAndTheKindIsObservable(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
+		t.Skip("set WA_HEADLESS_SEND_TEST=1; this SENDS real messages between the lab accounts")
+	}
+	from := os.Getenv("WA_SEND_FROM_PROFILE")
+	toJID := os.Getenv("WA_SEND_TO_JID")
+	if from == "" || toJID == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: from, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), nCycleReadyDeadline)
+	defer cancelBoot()
+	sess, err := h.Session(bootCtx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+
+	data, err := base64.StdEncoding.DecodeString(onePixelPNG)
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+
+	send1 := func(asDocument bool, label string) string {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		m := send.Media{
+			Filename:   "wa-headless-probe.png",
+			MimeType:   "image/png",
+			Data:       data,
+			Caption:    "wa-headless",
+			AsDocument: asDocument,
+		}
+		res, err := send.SendMedia(ctx, runner, eval, toJID, m, label)
+		if err != nil {
+			t.Fatalf("SendMedia(asDocument=%t): %v", asDocument, err)
+		}
+		return res.ID.ID
+	}
+
+	inlineID := send1(false, "media/inline")
+	documentID := send1(true, "media/document")
+	if inlineID == documentID {
+		t.Fatal("both sends returned the same message id, so only one message exists")
+	}
+
+	// Read the two messages back and compare their TYPES. Types are metadata,
+	// which is what this module is allowed to see.
+	kinds := readOwnMessageKinds(t, runner, eval, []string{inlineID, documentID})
+	t.Logf("inline kind=%q  document kind=%q", kinds[inlineID], kinds[documentID])
+
+	if kinds[inlineID] == "" || kinds[documentID] == "" {
+		t.Fatalf("one of the two messages was not found in the collection: %v", kinds)
+	}
+	if kinds[inlineID] == kinds[documentID] {
+		t.Fatalf("the SAME bytes produced the same kind %q with and without "+
+			"AsDocument, so the flag did nothing", kinds[inlineID])
+	}
+	if kinds[documentID] != "document" {
+		t.Fatalf("AsDocument produced kind %q, want \"document\"", kinds[documentID])
+	}
+	if kinds[inlineID] != "image" {
+		t.Fatalf("without AsDocument a PNG produced kind %q, want \"image\"", kinds[inlineID])
+	}
+}
+
+// readOwnMessageKinds returns the TYPE of each message id, reading only
+// metadata: no body, no caption, no identity.
+func readOwnMessageKinds(t *testing.T, runner *engine.Runner, eval func(context.Context, string, *string) error, ids []string) map[string]string {
+	t.Helper()
+	want, _ := json.Marshal(ids)
+	script := `JSON.stringify((() => {
+		const coll = window.require('WAWebMsgCollection').MsgCollection;
+		const want = new Set(` + string(want) + `);
+		const out = {};
+		for (const m of coll.getModelsArray()) {
+			try {
+				const id = m.id && m.id.id;
+				if (id && want.has(id)) { out[id] = m.type || ''; }
+			} catch (e) {}
+		}
+		return out;
+	})())`
+
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		var raw string
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		err := runner.Do(ctx, engine.OpStateProbe, "media/kinds", func(c context.Context) error {
+			return eval(c, script, &raw)
+		})
+		cancel()
+		if err != nil {
+			t.Fatalf("reading kinds: %v", err)
+		}
+		got := map[string]string{}
+		if err := json.Unmarshal([]byte(raw), &got); err != nil {
+			t.Fatalf("decoding kinds: %v", err)
+		}
+		if len(got) == len(ids) || !time.Now().Before(deadline) {
+			return got
+		}
+		time.Sleep(2 * time.Second)
+	}
 }

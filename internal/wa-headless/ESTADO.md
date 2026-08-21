@@ -115,6 +115,18 @@ declarado do projeto: métodos principais de envio e chat.
 | capacidade | onde | prova real |
 |---|---|---|
 | `sendMedia` | `capabilities/send` (`media.go`) | conta A envia PNG, conta B recebe o **MESMO id** com `type=image` em 3 s |
+| `sendMedia` (documento) | idem, flag `AsDocument` | os MESMOS bytes dão `image` e `document` |
+| resolução de GRUPO | `capabilities/send` (`resolve.go`) | grupo resolve sem passar pela identidade de usuário — provado **sem enviar** |
+
+**Aberto e dito**: o ENVIO para grupo ainda não foi provado — só a resolução.
+Provar exigiria um grupo onde se possa mandar mensagem sem incomodar ninguém,
+isto é, um criado entre as duas contas de laboratório, o que depende de uma
+capacidade de criar grupo que ainda não existe (H48).
+
+**Não verificável aqui**: a entrega de LEGENDA. A invariante 12 torna o módulo
+metadata-only e uma legenda é conteúdo; provar exigiria ler o corpo. A
+capacidade aceita e repassa, e o teste ao vivo diz em voz alta que não verifica
+(H47).
 
 **Divergência consciente**: duas das quatro assinaturas contrariam o palpite
 óbvio — `sendToChat` recebe UM objeto `{chat, earlyUpload, options}`, e o módulo

@@ -3649,3 +3649,118 @@ correção cega desta camada.
 **Status**: entregue — quatro assinaturas lidas antes do desenho, resolução
 compartilhada em vez de duplicada, verificação por tipo, e laço fechado real
 entre as duas contas.
+
+## H47 — a LEGENDA é aceita e sua entrega é INVERIFICÁVEL aqui, por desenho
+
+**Data**: 2026-08-20 · **Contexto**: fechamento das duas promessas do
+`send.Media` — `AsDocument` e `Caption` — logo após a H46.
+
+### `AsDocument`: provado
+
+Os MESMOS bytes enviados duas vezes, uma com a flag e outra sem:
+
+```
+inline kind="image"   document kind="document"
+```
+
+A comparação usa o mesmo payload de propósito. Enviar arquivos diferentes
+deixaria "a flag não fez nada" indistinguível de "PNG é documento".
+
+**Controle negativo, EXECUTADO** — a flag deixa de ter efeito:
+
+```
+inline kind="image"  document kind="image"
+the SAME bytes produced the same kind "image" with and without AsDocument,
+so the flag did nothing
+```
+
+### `Caption`: NÃO provado, e não pode ser
+
+A invariante 12 torna este módulo **metadata-only**, e uma legenda é CONTEÚDO de
+mensagem. Verificá-la exigiria ler o corpo — exatamente o que a invariante
+existe para impedir.
+
+Então o estado honesto é:
+
+- a capacidade ACEITA `Caption` e a repassa à página;
+- que ela CHEGUE não é algo que esta suíte possa afirmar;
+- e um teste que passasse sem tocar no assunto insinuaria o contrário.
+
+Por isso a limitação está escrita no comentário do teste ao vivo, não só aqui.
+Um leitor que veja `TestRealSPASendsADocumentAndTheKindIsObservable` verde
+poderia concluir que a legenda foi verificada junto; o comentário nega isso em
+voz alta.
+
+**As três saídas, e por que a escolhida é a terceira:**
+
+1. Remover `Caption` da API — pior: a página aceita, é útil, e tirar não torna
+   nada mais verdadeiro.
+2. Verificar lendo o corpo — quebra a invariante 12, que é um dos pilares do
+   módulo, para provar um campo.
+3. Aceitar, repassar e **declarar o limite** onde alguém vá ler.
+
+**O que MUDARIA isto**: se algum dia existir prova de entrega de legenda que não
+exija ler o corpo — um contador, um flag da própria página, um evento — a
+invariante continua de pé e a verificação passa a ser possível. Não foi
+procurada nesta sessão.
+
+**Status**: parcialmente corrigido — `AsDocument` provado com controle negativo;
+`Caption` declarado inverificável sob a invariante 12, com a razão escrita no
+teste e a condição que reabriria o caso.
+
+## H48 — enviar para GRUPO estava quebrado, e falhava com o motivo errado
+
+**Data**: 2026-08-20 · **Contexto**: primeira pergunta ao abrir a área de grupos
+— *o envio que já existe funciona para grupo?*
+
+**Não funcionava.** E o modo de falhar era pior que a falha: `NOT_ON_WHATSAPP`,
+para um grupo presente na coleção de chats.
+
+**A medição, feita SEM enviar nada:**
+
+| passo | grupo |
+|---|---|
+| `createWid("…@g.us")` | **funciona**, e mantém `server === "g.us"` |
+| `queryWidExists(wid)` | **NULL** — é resolução de USUÁRIO |
+| `ChatCollection.get(wid)` | **funciona** direto |
+
+O `resolveChatExpr` mandava todo destinatário pela resolução de identidade, que
+existe por causa da H34 (este build é LID-first e o número sozinho não abre
+conversa). Um grupo não tem contraparte LID: **o jid do grupo JÁ É a
+identidade**, e não há o que resolver.
+
+**Correção**: grupos pulam a resolução inteira e vão direto à coleção. Duas
+linhas, mas só depois de medir os três passos acima — a tentação era mexer no
+`queryWidExists`.
+
+### Provar isso sem mandar mensagem para pessoas reais
+
+Um grupo tem membros. Uma prova que precisasse ENVIAR para verificar a
+RESOLUÇÃO seria uma prova que ninguém pode rodar.
+
+Daí `send.Resolve`: roda a etapa de identidade-e-chat e para exatamente onde o
+despacho começaria. Ela compartilha o `resolveChatExpr` com os remetentes de
+verdade — é isso que torna uma afirmação sobre `Resolve` uma afirmação sobre
+eles, em vez de sobre um caminho paralelo.
+
+**Prova ao vivo**: 1 grupo e 382 individuais na conta; o grupo resolve com
+`group=true`, o individual com `group=false`, e o jid do grupo NÃO é reescrito —
+porque não há lid para pôr no lugar.
+
+**Controle negativo, EXECUTADO** — removendo o ramo de grupo:
+
+```
+Resolve(group): send: the recipient did not resolve to a chat (NOT_ON_WHATSAPP)
+```
+
+O sintoma de produção, palavra por palavra.
+
+**O que fica em aberto, e é honesto dizer**: isto prova a RESOLUÇÃO, não o
+envio. Provar o envio para grupo exige um grupo em que se possa mandar mensagem
+sem incomodar ninguém — ou seja, um grupo criado entre as duas contas de
+laboratório. Isso depende da capacidade de CRIAR grupo, que ainda não existe, e
+é o próximo passo natural desta área.
+
+**Status**: corrigido — resolução de grupo consertada e provada ao vivo com
+controle negativo; o envio para grupo permanece NÃO provado, e a razão está
+escrita.

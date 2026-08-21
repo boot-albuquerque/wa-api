@@ -130,7 +130,18 @@ coverage-domain: ## Show domain + application coverage
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
 
 coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
-	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
+# O stdout vai para um ARQUIVO, nao para /dev/null, e so' e' impresso quando o
+# passo FALHA (F99).
+#
+# O silencio existia para nao poluir o caminho feliz — e apagava exatamente a
+# evidencia necessaria no caminho de falha. Custou duas investigacoes cegas em
+# 2026-08-20: o alvo reprovava e o log mostrava apenas
+# "make: *** [coverage-gate] Error 1", sem nome de pacote, sem linha de teste,
+# sem nada. Numa delas isso me levou a escrever num commit que o gate estava
+# verde tendo lido so' a AUSENCIA de linhas FAIL — ausencia que este redirect
+# garantia mesmo havendo falha.
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 \
+	  || { echo "FALHA no passo de cobertura; saida do go test:"; cat $(COVERAGE_OUT).log; exit 1; }
 	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
 	 if [ -z "$$pct" ]; then \
 	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \

@@ -3,6 +3,7 @@ package waheadless
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,39 +52,87 @@ func TestProbeContactShape(t *testing.T) {
 	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
 	// this pass counts which of them separate that row from the rest. Counters
 	// only; no identity leaves the page.
-	// THE TWO CALLS THAT ACTUALLY SEND, read rather than guessed.
+	// DOES THE EXISTING SEND PATH WORK FOR A GROUP?
 	//
-	// MediaPrep.prototype carries sendToChat and waitForPrep; prepRawMedia
-	// takes (file, opts) and its source branches on opts.isPtt and
-	// opts.asDocument. What sendToChat expects is the remaining unknown, and
-	// the text path already paid four rounds for guessing at this layer (H34).
-	const script = `JSON.stringify((() => {
-		const out = {};
-		try {
-			const MP = window.require('WAWebMediaPrep').MediaPrep;
-			out.sendToChat = { arity: MP.prototype.sendToChat.length,
-				src: String(MP.prototype.sendToChat).slice(0, 500) };
-			out.waitForPrep = { arity: MP.prototype.waitForPrep.length,
-				src: String(MP.prototype.waitForPrep).slice(0, 220) };
-		} catch (e) { out.mpErr = String((e && e.message) || e).slice(0, 160); }
-		try {
-			const P = window.require('WAWebPrepRawMedia');
-			out.prepRawMedia = { arity: P.prepRawMedia.length,
-				src: String(P.prepRawMedia).slice(0, 700) };
-		} catch (e) { out.prepErr = String((e && e.message) || e).slice(0, 160); }
-		try {
-			const O = window.require('WAWebMediaOpaqueData');
-			out.createFromData = { arity: O.createFromData.length,
-				src: String(O.createFromData).slice(0, 260) };
-		} catch (e) { out.opErr = String((e && e.message) || e).slice(0, 160); }
-		return out;
-	})())`
+	// resolveChatExpr goes through queryWidExists, which resolves USERS. A
+	// group jid may not survive it, and if it does not, the send capabilities
+	// silently only work for individuals — a gap nobody would notice until a
+	// message to a group failed in production.
+	//
+	// NOTHING IS SENT. The resolution is exercised up to the point of dispatch
+	// and stops there: a group is real people, and measuring must not message
+	// them. Only counts and shapes leave the page.
+	const script = `(() => {
+		window.__waHeadlessGroupProbe = { stage: 'pending' };
+		(async () => {
+			const out = { stage: 'done' };
+			try {
+				const Chats = window.require('WAWebChatCollection').ChatCollection;
+				const all = Chats.getModelsArray();
+				out.chats = all.length;
+				const groups = all.filter(c => {
+					try { return c.id && c.id.server === 'g.us'; } catch (e) { return false; }
+				});
+				out.groups = groups.length;
+				if (!groups.length) { out.why = 'NO_GROUP_CHAT'; window.__waHeadlessGroupProbe = out; return; }
+
+				const g = groups[0];
+				out.groupIdShape = {
+					server: g.id.server,
+					userLen: (g.id.user || '').length,
+					hasSerialized: typeof g.id._serialized === 'string'
+				};
+
+				// Step 1: does createWid survive a group jid?
+				const WF = window.require('WAWebWidFactory');
+				let local = null;
+				try { local = WF.createWid(g.id._serialized); } catch (e) { out.createWidErr = String((e && e.message) || e).slice(0, 120); }
+				out.createWidOk = !!local;
+				if (local) { out.createWidServer = local.server; }
+
+				// Step 2: does queryWidExists — the USER resolution — accept it?
+				if (local) {
+					try {
+						const Q = window.require('WAWebQueryExistsJob');
+						const ex = await Q.queryWidExists(local);
+						out.queryWidExists = ex ? { hasWid: !!ex.wid, server: ex.wid && ex.wid.server } : 'NULL';
+					} catch (e) {
+						out.queryWidExistsErr = String((e && e.message) || e).slice(0, 160);
+					}
+				}
+
+				// Step 3: can the chat be obtained directly, skipping resolution?
+				try {
+					const got = Chats.get(g.id);
+					out.chatCollectionGet = !!got;
+				} catch (e) { out.chatGetErr = String((e && e.message) || e).slice(0, 120); }
+			} catch (e) {
+				out.fatal = String((e && e.message) || e).slice(0, 180);
+			}
+			window.__waHeadlessGroupProbe = out;
+		})();
+		return 'kicked';
+	})()`
 
 	var raw string
-	if err := runner.Do(ctx, engine.OpStateProbe, "probe/media2", func(c context.Context) error {
+	if err := runner.Do(ctx, engine.OpStateProbe, "probe/group/kick", func(c context.Context) error {
 		return sess.Tab().Evaluate(c, script, &raw)
 	}); err != nil {
-		t.Fatalf("probe: %v", err)
+		t.Fatalf("probe kick: %v", err)
 	}
-	t.Logf("send signatures: %s", raw)
+	for i := 0; ; i++ {
+		if err := runner.Do(ctx, engine.OpStateProbe, "probe/group/poll", func(c context.Context) error {
+			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessGroupProbe || {stage:"missing"})`, &raw)
+		}); err != nil {
+			t.Fatalf("probe poll: %v", err)
+		}
+		if !strings.Contains(raw, `"stage":"pending"`) {
+			break
+		}
+		if i > 40 {
+			t.Fatal("the group probe never settled")
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Logf("group send path: %s", raw)
 }

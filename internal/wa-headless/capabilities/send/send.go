@@ -194,6 +194,23 @@ const resolveChatExpr = `(async function (jidString) {
 	const local = WidFactory.createWid(jidString);
 	if (!local) { return { ok: false, why: 'WID_NULL' }; }
 
+	// A GROUP IS NOT A PERSON, AND THE USER RESOLUTION REFUSES IT.
+	//
+	// Measured 2026-08-20 against a real group chat: createWid survives a
+	// "@g.us" jid and keeps server "g.us", ChatCollection.get returns the chat
+	// directly — and queryWidExists answers NULL. Sending to a group therefore
+	// died at the identity step with 'NOT_ON_WHATSAPP', which is not only wrong
+	// but misleading: the group plainly exists and is in the collection.
+	//
+	// So groups skip resolution entirely. There is nothing to resolve — a group
+	// jid IS the identity, and it has no lid counterpart.
+	if (local.server === 'g.us') {
+		const chat = ChatCollection.get(local);
+		if (!chat) { return { ok: false, why: 'GROUP_NOT_FOUND' }; }
+		const jid = (typeof local._serialized === 'string') ? local._serialized : jidString;
+		return { ok: true, why: '', wid: local, jid: jid, chat: chat };
+	}
+
 	// ASK THE SERVER WHO THIS IS. A locally-built wid carries the phone number,
 	// and this build wants the LID — opening a chat with the phone wid fails
 	// with "No LID for user" for anyone never spoken to. queryWidExists is the

@@ -3372,5 +3372,83 @@ outros alvos antes de aparecer de novo — a F97 e esta entrada são a mesma
 lição vista de dois lados, uma sobre prazo escolhido por conveniência e outra
 sobre silêncio escolhido por conveniência.
 
-**Status**: aberto — medido (falha sem diagnóstico, seguida de duas execuções
-verdes), correção escrita, não aplicada por ser fora do escopo da capacidade.
+### Corrigido (2026-08-20), e pagou-se na PRIMEIRA execução
+
+Aplicado sob a autorização de "hardening oportunista" da orquestração, depois de
+o silêncio me morder uma SEGUNDA vez: outra execução reprovou no `coverage-gate`
+mostrando apenas `make: *** [coverage-gate] Error 1`.
+
+O stdout passou a ir para `$(COVERAGE_OUT).log` e só é impresso quando o passo
+FALHA. Caminho feliz continua silencioso.
+
+**A primeira execução com o conserto revelou uma REGRESSÃO REAL** que as duas
+investigações cegas anteriores não tinham como ver:
+
+```
+coverage: 836 decimos de % (piso declarado 838) — atual 83.6%
+FALHA: a cobertura caiu (83.6% < piso declarado).
+```
+
+Eu havia acrescentado código de produção (`media.go`, `resolve.go`, o ramo de
+grupo) cujo `resolve.go` ficava **0%** no gate, porque só o teste AO VIVO o
+exercitava — e testes ao vivo não rodam ali. O gate estava certo e eu não sabia.
+
+**A correção foi cobrir, não baixar o piso**: oito testes novos para `Resolve`,
+`Resolution.String`, `Result.String` e `kindOf`, incluindo o caso que importa —
+`kindOf` recusando `notification_template`, `revoked` e `poll_creation`, para
+que uma mensagem de sistema nunca sirva de prova de que a conta enviou algo.
+Cobertura de volta a 838.
+
+**A lição, e ela é a razão de esta entrada existir**: um gate que descarta a
+própria saída não é só inconveniente — ele esconde regressão verdadeira e faz o
+leitor gastar as investigações em fantasmas. As duas cegas anteriores foram
+atribuídas a contenção (F100), e uma delas era; esta não era.
+
+**Status**: corrigido — saída preservada e impressa na falha, com uma regressão
+real de cobertura encontrada e consertada na primeira execução.
+
+## F100 — o gate é sensível à CARGA da máquina, e isso já produziu quatro falsas falhas num dia
+
+**Data**: 2026-08-20 · **Contexto**: quarta ocorrência em uma sessão.
+
+**O padrão**, todas as quatro medidas nos dois regimes (isolado × sob carga):
+
+| teste | isolado | sob carga |
+|---|---|---|
+| `TestBrowserChainVerifiesTheModuleInventory` | 2,08 s | **travou 18m28s** (H36) |
+| `TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers` | 0/6 falhas | **2/2 falhas** (F97) |
+| `TestStartSession_ConcurrentStartOnSameProfileEndToEnd` | 3/3 verdes | falhou |
+| `TestStartSession_NotReadyFailure_PreservesFinalSnapshot` | 3/3 verdes | falhou |
+
+**A causa comum**: esses testes sobem CHROME DE VERDADE. Sob carga, o navegador
+não responde no `/json/version` dentro do orçamento de boot de 30 s, e o teste
+reporta honestamente `launch failure` — que não é o estágio que ele queria
+exercitar.
+
+Medido no momento da falha: **load average 6,73 / 9,43 / 8,93**, sem nenhum
+Chrome vazado (`pgrep -f headless=new` = 0). Ou seja, não era vazamento — era a
+máquina ocupada, em boa parte pelos meus próprios `make check` sucessivos com
+`-race` somados aos testes contra a SPA real.
+
+**O que NÃO é**: não é defeito desses testes. Os dois últimos falham RÁPIDO e
+com diagnóstico — exatamente o comportamento que a H36 pediu. O `launch failure`
+é uma leitura correta do mundo naquele instante.
+
+**Prática de trabalho, que é a correção real**: rodar o `make check` numa
+máquina quieta, e não em paralelo com trabalho contra a SPA real. Uma execução
+concorrente mede a máquina, não o código — que é literalmente a lição do
+"Medir antes de projetar" no `CLAUDE.md`, item 2, aplicada ao próprio gate.
+
+**Correção sugerida no código, se a prática não bastar**: os testes que sobem
+navegador real poderiam declarar isso e ser puláveis por variável de ambiente
+num modo "gate sob carga", em vez de reprovar. Mas isso troca sinal por
+conveniência, e por isso NÃO está sendo proposta como padrão — só registrada
+como opção consciente.
+
+**Como distinguir na hora**: falha com `launch: browser never answered on
+/json/version` ou `Boot(...): deadline of 30s exceeded` é candidata a carga.
+Reexecute isolado ANTES de investigar o código; se passar 3/3, o alvo era a
+máquina.
+
+**Status**: aberto — padrão medido quatro vezes com os dois regimes, causa
+identificada, correção é de prática e não de código.
