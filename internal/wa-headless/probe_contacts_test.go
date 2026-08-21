@@ -3,7 +3,6 @@ package waheadless
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,65 +51,39 @@ func TestProbeContactShape(t *testing.T) {
 	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
 	// this pass counts which of them separate that row from the rest. Counters
 	// only; no identity leaves the page.
-	// DOES THE CANDIDATE MARK CHANGE ON ITS OWN?
+	// THE TWO CALLS THAT ACTUALLY SEND, read rather than guessed.
 	//
-	// Diffing all of localStorage across a sync showed exactly one interesting
-	// key moving: contact-sync-refresh-seconds. (WAWebTimeSpentSession also
-	// moves, but it moves constantly and means nothing here.)
-	//
-	// "It changed after I called the sync" is not attribution. This pass reads
-	// it three times — before an idle wait, after the idle wait, and after the
-	// sync — so a key that drifts on its own is caught before it becomes a
-	// detector. The idle wait is the CONTROL and it is the whole point of the
-	// experiment.
-	//
-	// The value is a refresh interval in seconds, not account data.
-	const script = `(() => {
-		window.__waHeadlessMark = { stage: 'pending' };
-		const read = () => {
-			try { return String(localStorage.getItem('contact-sync-refresh-seconds')); }
-			catch (e) { return 'THREW'; }
-		};
-		(async () => {
-			const r = { stage: 'done' };
-			try {
-				r.t0 = read();
-				// CONTROL: idle for longer than the sync takes, touching nothing.
-				await new Promise(res => setTimeout(res, 45000));
-				r.t1_afterIdle = read();
-				const start = Date.now();
-				await window.require('WAWebContactSyncBridge').doFullContactSync();
-				r.syncMs = Date.now() - start;
-				r.t2_afterSync = read();
-				r.movedWhileIdle = r.t0 !== r.t1_afterIdle;
-				r.movedBySync = r.t1_afterIdle !== r.t2_afterSync;
-			} catch (e) {
-				r.error = String((e && e.message) || e).slice(0, 180);
-			}
-			window.__waHeadlessMark = r;
-		})();
-		return 'kicked';
-	})()`
+	// MediaPrep.prototype carries sendToChat and waitForPrep; prepRawMedia
+	// takes (file, opts) and its source branches on opts.isPtt and
+	// opts.asDocument. What sendToChat expects is the remaining unknown, and
+	// the text path already paid four rounds for guessing at this layer (H34).
+	const script = `JSON.stringify((() => {
+		const out = {};
+		try {
+			const MP = window.require('WAWebMediaPrep').MediaPrep;
+			out.sendToChat = { arity: MP.prototype.sendToChat.length,
+				src: String(MP.prototype.sendToChat).slice(0, 500) };
+			out.waitForPrep = { arity: MP.prototype.waitForPrep.length,
+				src: String(MP.prototype.waitForPrep).slice(0, 220) };
+		} catch (e) { out.mpErr = String((e && e.message) || e).slice(0, 160); }
+		try {
+			const P = window.require('WAWebPrepRawMedia');
+			out.prepRawMedia = { arity: P.prepRawMedia.length,
+				src: String(P.prepRawMedia).slice(0, 700) };
+		} catch (e) { out.prepErr = String((e && e.message) || e).slice(0, 160); }
+		try {
+			const O = window.require('WAWebMediaOpaqueData');
+			out.createFromData = { arity: O.createFromData.length,
+				src: String(O.createFromData).slice(0, 260) };
+		} catch (e) { out.opErr = String((e && e.message) || e).slice(0, 160); }
+		return out;
+	})())`
 
 	var raw string
-	if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts/kick", func(c context.Context) error {
+	if err := runner.Do(ctx, engine.OpStateProbe, "probe/media2", func(c context.Context) error {
 		return sess.Tab().Evaluate(c, script, &raw)
 	}); err != nil {
-		t.Fatalf("probe kick: %v", err)
+		t.Fatalf("probe: %v", err)
 	}
-	for i := 0; ; i++ {
-		if err := runner.Do(ctx, engine.OpStateProbe, "probe/contacts/poll", func(c context.Context) error {
-			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessMark || {stage:"missing"})`, &raw)
-		}); err != nil {
-			t.Fatalf("probe poll: %v", err)
-		}
-		if !strings.Contains(raw, `"stage":"pending"`) {
-			break
-		}
-		if i > 90 {
-			t.Fatal("the sync never settled")
-		}
-		time.Sleep(2 * time.Second)
-	}
-	t.Logf("mark attribution: %s", raw)
+	t.Logf("send signatures: %s", raw)
 }

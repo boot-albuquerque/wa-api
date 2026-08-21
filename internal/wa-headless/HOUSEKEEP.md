@@ -3574,3 +3574,78 @@ roster legível depois (`521 pessoas / 944 linhas / 421 fundidas`).
 **Status**: entregue — nascida de medição sem referência, com a promessa do nome
 corrigida, o instrumento corrigido depois da prova ao vivo, uma pós-condição
 falsificável e cinco controles negativos (três de forma, dois de execução).
+
+## H46 — envio de MÍDIA: quatro assinaturas lidas, duas delas contra o palpite óbvio
+
+**Data**: 2026-08-20 · **Contexto**: primeira capacidade FORA das catorze,
+autorizada como expansão funcional. O objetivo declarado do projeto é "métodos
+principais de envio de mensagens e chat", e só havia texto.
+
+**Não houve tentativa e erro.** A H34 custou quatro correções medidas exatamente
+nesta camada, então desta vez as assinaturas foram LIDAS antes de existir código
+— e **duas** delas contrariam o palpite natural:
+
+| chamada | forma REAL | o palpite |
+|---|---|---|
+| `MediaPrep.prototype.sendToChat` | **um objeto**: `{chat, earlyUpload, options}` | `(chat, options)` |
+| opaque data | **`WAWebMediaOpaqueData`** | `WAWebOpaqueData` — que aqui é **NULL** |
+| `prepRawMedia(file, opts)` | ramifica em `isPtt`/`asDocument`/`asGif`/`isAudio`/`asSticker`/`asStickerPack` | — |
+| `createFromData(data, type)` | Promise; MANTÉM o objeto recebido quando o tipo bate | — |
+
+O nome do módulo de opaque data foi achado lendo a fonte do próprio
+`WAWebMediaPrep.getMediaPropsNew`, que o cita. É a H34 de novo: o nome que a
+referência usaria não existe aqui.
+
+A quarta linha decide um detalhe visível ao destinatário: como o
+`createFromData` preserva o objeto, passar um **`File`** (e não um `Blob`) é o
+que faz o NOME DO ARQUIVO chegar. Um Blob chegaria anônimo.
+
+### Reúso em vez de segunda cópia
+
+A resolução de identidade e a obtenção do chat — as quatro correções da H34 —
+foram extraídas para `resolveChatExpr`, compartilhado por texto e mídia. Uma
+segunda cópia seria um segundo lugar para reaprender aquelas quatro.
+
+O refator mexeu no caminho de PRODUÇÃO do envio de texto, então não bastou a
+suíte de dublê: o laço fechado real foi reexecutado e passou, com o mesmo id
+casando e 1 inbound alheia ignorada.
+
+### A verificação passou a distinguir o TIPO
+
+Texto e mídia caem na mesma coleção, então "apareceu uma mensagem de saída"
+deixa de ser evidência assim que dois tipos podem estar em voo — a mesma forma
+de falso positivo da H35, uma camada abaixo. `verify` recebe agora um `kind`, e
+`kindOf` mapeia o tipo da página: `chat` é texto; `image`, `document`, `video`,
+`audio`, `ptt` e `sticker` são mídia; qualquer outra coisa não serve como prova
+de nenhum dos dois.
+
+### Limites, medidos e não estimados
+
+`MaxMediaBytes` é 4 MiB. A página constrói Blob de 8 MB sem reclamar e faz
+round-trip de 3 MB por base64 (string de 4 MB), então o teto está ABAIXO do que
+foi medido de propósito: é o tamanho para o qual existe evidência, não o tamanho
+em que ainda não falhou.
+
+Vazio, sem mime e acima do teto são recusados ANTES de a página ser tocada — o
+erro do chamador não deve virar tentativa de upload.
+
+**Prova ao vivo**: conta A envia PNG 1x1 real (70 bytes), conta B recebe o
+**MESMO id** com `type=image`, 3 s depois, 0 inbound alheias. O teste recusa
+explicitamente um `type=chat` com o id certo: seria a página degradando o anexo
+para legenda, e um id-only check aceitaria.
+
+**Quatro controles negativos, EXECUTADOS:**
+
+```
+1. verificar mídia com kindAny          -> a text message was accepted as proof that an attachment was sent
+2. validar o payload DEPOIS do kick     -> the page was asked to send 1 time(s) with no bytes
+3. mandar Blob em vez de File           -> the payload is not built as a File, so the filename cannot survive
+4. sendToChat(chat, options)            -> sendToChat is not called with a single object
+```
+
+O quarto é o que mede a lição: sem a leitura da fonte, essa teria sido a quinta
+correção cega desta camada.
+
+**Status**: entregue — quatro assinaturas lidas antes do desenho, resolução
+compartilhada em vez de duplicada, verificação por tipo, e laço fechado real
+entre as duas contas.

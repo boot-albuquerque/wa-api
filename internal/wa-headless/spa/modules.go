@@ -174,6 +174,29 @@ const (
 	// capability built on it reports the before/after rather than claiming to
 	// have "primed" anything.
 	ModuleContactSyncBridge = Module("WAWebContactSyncBridge")
+	// ModuleMediaOpaqueData wraps bytes for sending.
+	//
+	// THE NAME THE REFERENCE WOULD USE IS NULL HERE. Measured 2026-08-20:
+	// WAWebOpaqueData and WAOpaqueData both resolve to null on this build; the
+	// module that exists is WAWebMediaOpaqueData, and it was found by reading
+	// WAWebMediaPrep.getMediaPropsNew, which names it in its own source.
+	//
+	// createFromData(data, type) returns a Promise and KEEPS the object it was
+	// given when the type matches — which is why a File survives it and carries
+	// its filename to the recipient, where a Blob would arrive nameless.
+	ModuleMediaOpaqueData = Module("WAWebMediaOpaqueData")
+	// ModulePrepRawMedia turns opaque data into a sendable MediaPrep.
+	//
+	// prepRawMedia(file, opts) branches on opts.isPtt, opts.asDocument,
+	// opts.asGif, opts.isAudio, opts.asSticker and opts.asStickerPack, falling
+	// through to UNKNOWN. The returned MediaPrep carries waitForPrep — where
+	// the encryption and upload happen — and sendToChat.
+	ModulePrepRawMedia = Module("WAWebPrepRawMedia")
+	// ModuleMediaPrep is the class module; the send is a method on the
+	// INSTANCE that prepRawMedia returns, and it takes ONE object:
+	// sendToChat({chat, earlyUpload, options}). Reading that signature is what
+	// avoided a fifth blind correction at this layer.
+	ModuleMediaPrep = Module("WAWebMediaPrep")
 )
 
 // RequiredAtStartup is verified before any capability runs.

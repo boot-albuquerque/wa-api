@@ -155,7 +155,7 @@ func Text(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 	if out.JID == "" {
 		return Result{}, fmt.Errorf("%w: the page reported success without a resolved identity", ErrDispatch)
 	}
-	res, err := verify(ctx, runner, eval, out.JID, sentAt, label)
+	res, err := verify(ctx, runner, eval, out.JID, sentAt, label, kindText)
 	if err != nil {
 		return Result{}, err
 	}
@@ -174,65 +174,76 @@ const dispatchResultScript = `JSON.stringify((() => {
 	return s;
 })())`
 
+// resolveChatExpr is the identity-and-chat half of a send, SHARED by every
+// kind of message rather than copied per kind.
+//
+// It exists because the text path paid four measured corrections to get this
+// sequence right (H34), and a second copy would be a second place for those
+// four to be re-learned. It is a JavaScript function of (jidString) returning
+// {ok, why, wid, jid, chat}.
+//
+// Nothing here is optional and nothing is decoration: each step exists because
+// a simpler one was measured failing.
+const resolveChatExpr = `(async function (jidString) {
+	const WidFactory = window.require('` + string(spa.ModuleWidFactory) + `');
+	const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
+	// createWid BUILDS a wid from text; asChatWid only VALIDATES one that
+	// already exists. Passing the string straight to asChatWid fails with
+	// "e.isUser is not a function" — the page saying it was handed a string
+	// where it expected an object.
+	const local = WidFactory.createWid(jidString);
+	if (!local) { return { ok: false, why: 'WID_NULL' }; }
+
+	// ASK THE SERVER WHO THIS IS. A locally-built wid carries the phone number,
+	// and this build wants the LID — opening a chat with the phone wid fails
+	// with "No LID for user" for anyone never spoken to. queryWidExists is the
+	// SPA's own resolution, and it answers with the identity the server knows:
+	// measured here as wid.server === "lid".
+	//
+	// This is the step whatsapp-web.js performs in getNumberId and NOT before
+	// sending, which is why its own issues (#3834, #5750) end at
+	// findOrCreateLatestChat -> toUserLidOrThrow with no fix. Doing it first is
+	// the difference.
+	const Query = window.require('` + string(spa.ModuleQueryExistsJob) + `');
+	const exists = await Query.queryWidExists(local);
+	if (!exists || !exists.wid) { return { ok: false, why: 'NOT_ON_WHATSAPP' }; }
+	const wid = exists.wid;
+
+	// The RESOLVED jid, because verification depends on it. Measured: of 399
+	// models in the collection, 397 carry server "lid". A verifier comparing
+	// against the phone jid matches nothing and reports a working send as
+	// unverified.
+	const jid = (typeof wid._serialized === 'string') ? wid._serialized : '';
+	if (!jid) { return { ok: false, why: 'WID_NOT_SERIALIZED' }; }
+
+	// A chat that does not exist yet is the ORDINARY case for a first message,
+	// so obtaining one cannot be a lookup. Measured: get() returns null for a
+	// correspondent never spoken to, and ChatCollection.find throws
+	// "this.findImpl is not a function". findOrCreateLatestChat works either
+	// way, and it is looked up by the SERVER'S wid, not the phone one.
+	let chat = ChatCollection.get(wid);
+	if (!chat) {
+		const Find = window.require('` + string(spa.ModuleFindChatAction) + `');
+		chat = await Find.findOrCreateLatestChat(wid);
+	}
+	if (!chat) { return { ok: false, why: 'CHAT_NOT_FOUND' }; }
+	return { ok: true, why: '', wid: wid, jid: jid, chat: chat };
+})`
+
 func dispatchScript(toJID, text string) string {
 	return `JSON.stringify((() => {
 		window[` + strconv.Quote(sendStateKey) + `] = { stage: 'pending', ok: false, why: '' };
 		const park = (v) => { window[` + strconv.Quote(sendStateKey) + `] = v; };
+		const resolveChat = ` + resolveChatExpr + `;
 		(async () => {
 		let stage = 'resolve';
 		try {
-			const WidFactory = window.require('` + string(spa.ModuleWidFactory) + `');
-			const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
-			// createWid BUILDS a wid from text; asChatWid only VALIDATES one
-			// that already exists. Passing the string straight to asChatWid
-			// fails with "e.isUser is not a function" — the page saying it was
-			// handed a string where it expected an object.
-			const local = WidFactory.createWid(` + strconv.Quote(toJID) + `);
-			if (!local) { park({ stage, ok: false, why: 'WID_NULL' }); return; }
+			const r = await resolveChat(` + strconv.Quote(toJID) + `);
+			if (!r.ok) { park({ stage, ok: false, why: r.why }); return; }
+			const jid = r.jid;
+			const chat = r.chat;
 
-			// ASK THE SERVER WHO THIS IS. A locally-built wid carries the phone
-			// number, and this build wants the LID — opening a chat with the
-			// phone wid fails with "No LID for user" for anyone never spoken
-			// to. queryWidExists is the SPA's own resolution, and it answers
-			// with the identity the server knows: measured here as
-			// wid.server === "lid".
-			//
-			// This is the step whatsapp-web.js performs in getNumberId and NOT
-			// before sending, which is why its own issues (#3834, #5750) end at
-			// findOrCreateLatestChat -> toUserLidOrThrow with no fix. Doing it
-			// first is the difference.
-			const Query = window.require('` + string(spa.ModuleQueryExistsJob) + `');
-			const exists = await Query.queryWidExists(local);
-			if (!exists || !exists.wid) {
-				park({ stage, ok: false, why: 'NOT_ON_WHATSAPP' });
-				return;
-			}
-			const wid = exists.wid;
-
-			// PARK THE RESOLVED JID, because verification depends on it.
-			// Measured on 2026-08-20 against conta-A: of 399 models in the
-			// collection, 397 carry server "lid", one "c.us" and one "g.us".
-			// A verifier comparing against the PHONE jid handed to this
-			// function therefore matches nothing, and reports ErrUnverified
-			// for a send that worked — which is what it did, for a message
-			// confirmed present, fromMe and six minutes old.
-			const jid = (typeof wid._serialized === 'string') ? wid._serialized : '';
-			if (!jid) { park({ stage, ok: false, why: 'WID_NOT_SERIALIZED' }); return; }
-
-			// A chat that does not exist yet is the ORDINARY case for a first
-			// message, so obtaining one cannot be a lookup. Measured: get()
-			// returns null for a correspondent never spoken to, and
-			// ChatCollection.find throws "this.findImpl is not a function".
-			// findOrCreateLatestChat is the call that works either way.
-			// The chat is looked up by the SERVER'S wid, not the phone one.
-			let chat = ChatCollection.get(wid);
-			if (!chat) {
-				const Find = window.require('` + string(spa.ModuleFindChatAction) + `');
-				chat = await Find.findOrCreateLatestChat(wid);
-			}
-			if (!chat) { park({ stage, ok: false, why: 'CHAT_NOT_FOUND' }); return; }
-
-			stage = 'dispatch';
+			stage = 'dispatch';			stage = 'dispatch';
 			const Send = window.require('` + string(spa.ModuleSendTextMsgChatAction) + `');
 			await Send.sendTextMsgToChat(chat, ` + strconv.Quote(text) + `);
 			park({ stage, ok: true, why: '', jid: jid });
@@ -255,8 +266,36 @@ func dispatchScript(toJID, text string) string {
 // identity the server returns, so verifying against what the caller typed
 // matches nothing. The parameter is named for the distinction because losing it
 // costs a false ErrUnverified on a send that succeeded.
+// kind narrows what a verification will accept.
+//
+// It exists because this package now sends more than one thing. Text and media
+// land in the same collection, and "an outgoing message appeared" stops being
+// evidence for a specific send the moment two kinds can be in flight.
+type kind int
+
+const (
+	kindAny kind = iota
+	kindText
+	kindMedia
+)
+
+// kindOf maps the page's message type to what this package distinguishes.
+//
+// Measured on this build: a text message carries type "chat"; media carries
+// "image", "document", "video", "audio", "ptt" or "sticker". Anything else is
+// neither, and is never accepted as proof of a send.
+func kindOf(t string) kind {
+	switch t {
+	case "chat":
+		return kindText
+	case "image", "document", "video", "audio", "ptt", "sticker":
+		return kindMedia
+	}
+	return kindAny
+}
+
 func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
-	resolvedJID string, sentAt time.Time, label string) (Result, error) {
+	resolvedJID string, sentAt time.Time, label string, want kind) (Result, error) {
 
 	start := time.Now()
 	deadline := start.Add(verifyBudget)
@@ -278,8 +317,17 @@ func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 			if m.Timestamp.Before(sentAt) {
 				continue
 			}
+			// KIND MATTERS when more than one kind can be in flight. A text
+			// send verified by "any outgoing message" would happily accept the
+			// media message a concurrent call just produced, and vice versa —
+			// the same class of false positive the closed-loop test hit when
+			// freshness alone was the discriminator (H35).
+			if want != kindAny && kindOf(m.Type) != want {
+				continue
+			}
 			return Result{ID: m.ID, Timestamp: m.Timestamp, Waited: time.Since(start)}, nil
 		}
+
 		time.Sleep(verifyTick)
 	}
 	return Result{}, fmt.Errorf("%w within %s (recipient not printed)", ErrUnverified, verifyBudget)

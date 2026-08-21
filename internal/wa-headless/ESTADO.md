@@ -107,6 +107,21 @@ protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
     A pós-condição é contra DANO (roster que encolhe), não contra ausência de
     melhora. Ver H45.
 
+### Além das catorze — expansão funcional
+
+A matriz de paridade está fechada. O que vem agora não é paridade, é o objetivo
+declarado do projeto: métodos principais de envio e chat.
+
+| capacidade | onde | prova real |
+|---|---|---|
+| `sendMedia` | `capabilities/send` (`media.go`) | conta A envia PNG, conta B recebe o **MESMO id** com `type=image` em 3 s |
+
+**Divergência consciente**: duas das quatro assinaturas contrariam o palpite
+óbvio — `sendToChat` recebe UM objeto `{chat, earlyUpload, options}`, e o módulo
+de opaque data é `WAWebMediaOpaqueData` porque `WAWebOpaqueData` é NULL aqui.
+Ambas foram LIDAS da fonte antes de existir código, o que evitou a quinta
+correção cega desta camada (H46).
+
 ## 3. Invariantes travadas em teste
 
 Além das do `HANDOFF §6`, três nasceram nesta semana:
