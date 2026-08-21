@@ -87,8 +87,8 @@ nem `PARTIAL` sem justificativa explícita.
 | `searchChannels` | — | `MISSING` | — | — | — | não atacado |
 | `deleteChannel` | — | `MISSING` | — | — | — | não atacado |
 | `getLabels` | contacts.ListLabels | `PROVEN` | sim | sim | sim | H72; só mensurável por a conta ser Business |
-| `getBroadcasts` | — | `MISSING` | — | — | — | família de listas de transmissão |
-| `getBroadcastById` | — | `MISSING` | — | — | — | idem |
+| `getBroadcasts` | status.List | `PARTIAL` | sim | sim | sim | **NÃO é lista de transmissão** — o upstream chama de Broadcast o STATUS (stories): `getBroadcasts` é `Status.getModelsArray`. Nossa nota descrevia a coisa errada, e três linhas iam ser feitas contra a ideia errada (H100). Caminho provado ao vivo, com **zero** feeds; provar um não-vazio exige POSTAR status, visível aos 944 contatos da conta |
+| `getBroadcastById` | status.ByContact | `PARTIAL` | sim | sim | sim | tenta as duas formas de identidade; feed ausente é erro próprio e não um feed de zeros, que um chamador leria como "essa pessoa não postou nada" (H100) |
 | `revokeStatusMessage` | — | `MISSING` | — | — | — | — |
 | `getLabelById` | contacts.ListLabels + filtro | `PARTIAL` | sim | sim | sim | — |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
@@ -118,7 +118,15 @@ nem `PARTIAL` sem justificativa explícita.
 
 ## Broadcast
 
-**Família inteira `MISSING`** — listas de transmissão — família inteira não atacada.
+**O nome do upstream engana, e o nosso ledger repetiu o engano.** "Broadcast"
+aqui é **STATUS** — as stories de 24 horas —, não lista de transmissão:
+`Client.getBroadcasts` é `getAllStatuses`, que é `Status.getModelsArray`, e a
+estrutura carrega `msgs`, `totalCount` e `unreadCount` por CONTATO (H100).
+
+`capabilities/status` só LÊ. Este build exporta `sendStatusTextMsgAction` e
+`sendStatusMediaMsgAction` — sabe postar, coisa que o upstream nem expõe — e
+isso **não está ligado**: um status é visível a toda a agenda, medida em 944
+contatos nesta conta.
 
 | upstream | estado |
 |---|---|
@@ -216,7 +224,7 @@ improviso dela. Travado por teste que casa `call-id`, `call-creator`, `to` e
 | `unblock` | capabilities/block | `PROVEN` | sim | sim | sim | — |
 | `getAbout` | contacts.AboutOf | `PARTIAL` | sim | parcial | sim | H70: o par tem recado VAZIO e em cache; a busca no servidor não foi exercitada |
 | `getCommonGroups` | — | `MISSING` | — | — | — | não atacado |
-| `getBroadcast` | — | `MISSING` | — | — | — | — |
+| `getBroadcast` | status.ByContact | `PARTIAL` | sim | sim | sim | idem `getBroadcastById` (H100) |
 
 ## GroupChat
 
@@ -367,8 +375,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 52 | 24% |
-| `PARTIAL` | 43 | 20% |
+| `PARTIAL` | 46 | 21% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 120 | 55% |
+| `MISSING` | 117 | 53% |
 | **total** | **220** | |

@@ -7905,3 +7905,68 @@ teto e a ausência de um.
 | idem no envio de enquete | `TestAPollThatNeverLeavesIsAnError` | `err = <nil>, want ErrPollNeverLeft` |
 
 **Status**: entregue.
+
+---
+
+## H100 — "broadcast" não é lista de transmissão, e o nosso ledger repetia o engano
+
+**Data**: 2026-08-21.
+**Contexto**: família broadcast, na ordem da orquestração.
+
+### O primeiro achado é o nome
+
+O nosso ledger descrevia as três linhas como **"família de listas de
+transmissão"**. Ler a referência antes de projetar — que é a regra — mostrou
+outra coisa:
+
+```
+Client.getBroadcasts  ->  window.WWebJS.getAllStatuses()
+                      ->  WAWebCollections.Status.getModelsArray()
+```
+
+E a estrutura `Broadcast` carrega `msgs`, `totalCount` e `unreadCount`,
+**indexada por um contato**. Isso é o **STATUS** — as stories de 24 horas.
+
+Três linhas iam ser implementadas contra a ideia errada. O custo de descobrir
+foi um `grep` na referência; o custo de não descobrir teria sido uma capacidade
+inteira com o nome de outra coisa.
+
+### O que foi entregue, e o que a conta não deixa provar
+
+`capabilities/status` lê feeds pela coleção certa, através dos **getters da
+própria página** — `getTotalCount`, `getUnreadCount`, `getReadCount`, `getT` —
+e não pelos campos `__x_`. Isso é a lição da H51 aplicada antes de custar:
+alcançar o campo por baixo do getter foi o que fez um leitor responder para 1
+registro em 384.
+
+Ao vivo: **zero feeds**, e o par sem feed reportado como `ErrNotFound` em vez de
+um feed de zeros — que um chamador renderizaria como *"essa pessoa não postou
+nada"*, uma afirmação que ninguém mediu.
+
+### O que NÃO foi ligado, e por que isso não é escopo
+
+Este build exporta `WAWebSendStatusMsgAction` com `sendStatusTextMsgAction` e
+`sendStatusMediaMsgAction`. **Ele sabe postar status**, coisa que o upstream nem
+expõe.
+
+Não está ligado, e a razão não é falta de tempo:
+
+> Um status é visível a **toda a agenda**. O roster desta conta foi medido em
+> **944 contatos** (H39). Todo efeito externo que esta suíte já produziu caiu
+> sobre um par conhecido ou sobre um grupo de laboratório. Novecentas pessoas
+> que nunca concordaram em participar de um teste é outra categoria de ato.
+
+Isso é **raio de alcance**, não decisão de escopo, e pertence a um humano. Há um
+teste que trava a decisão: `TestThisPackageDoesNotPost` falha se qualquer script
+deste pacote mencionar as funções de envio.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| feed ausente devolvido como feed vazio | `TestAnAbsentFeedIsItsOwnError` | pânico de ponteiro nulo — o feed simplesmente não existe para ser devolvido |
+| ler `__x_totalCount` em vez do getter | `TestTheReadGoesThroughTheGetters` | `the read does not use G.getTotalCount` e `the read reaches into the model's raw storage` |
+| falha de página virando lista vazia | `TestAPageFailureIsNotAnEmptyList` | `err = <nil>` |
+
+**Status**: parcialmente entregue — leitura provada ao vivo contra uma conta sem
+status; o não-vazio depende de um ato cujo alcance é a agenda inteira.
