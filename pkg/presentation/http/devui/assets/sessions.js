@@ -257,16 +257,41 @@ async function acao(s, qual) {
   if (qual === "logout") {
     // DESVINCULA o aparelho: some de "Aparelhos conectados" no telemóvel e a
     // próxima conexão exige QR novo. Irreversível sem o telefone à mão.
-    const ok = confirm(
-      `Logout de "${s.nome}"\n\n` +
-      `Isto DESVINCULA o aparelho: a sessão some de "Aparelhos conectados" no ` +
-      `telemóvel e passa a ser preciso parear por QR outra vez.\n\n` +
-      `Para apenas derrubar a conexão mantendo o pareamento, use Desconectar.`);
+    const ok = await confirmar({
+      titulo: `Logout de "${s.nome}"`,
+      texto: "Isto DESVINCULA o aparelho: a sessão sai de \"Aparelhos conectados\" no " +
+        "telemóvel e passa a ser preciso parear por QR outra vez, o que exige o telemóvel " +
+        "à mão. Para apenas derrubar a conexão mantendo o pareamento, use Desconectar.",
+      okTexto: "Desvincular",
+    });
     if (!ok) return;
     await API.sessao(s.token, "POST", "/session/logout");
     fecharWS(s.id); esconderQR(card);
     setTimeout(atualizar, 800);
   }
+}
+
+// confirmar substitui o confirm() nativo em TODO o painel.
+//
+// O nativo devolve `false` EM SILÊNCIO quando o navegador suprime diálogos — o
+// Chrome oferece "impedir que esta página crie mais diálogos" depois de alguns
+// seguidos, e a partir daí toda ação protegida por confirm() deixa de acontecer
+// sem dizer porquê. Num painel de diagnóstico isso é pior que noutro sítio
+// qualquer: o operador conclui que a API está partida.
+//
+// Foi o defeito reportado ("tentei remover todos e não deu certo") e existia em
+// três sítios — o lote, o logout e o apagar mensagem. Corrigir só o reportado
+// deixaria os outros dois à espera.
+function confirmar({ titulo, texto, okTexto = "Confirmar" }) {
+  return new Promise((resolve) => {
+    $("conf-titulo").textContent = titulo;
+    $("conf-texto").textContent = texto;
+    $("conf-ok").textContent = okTexto;
+    let decidido = false;
+    $("conf-ok").onclick = () => { decidido = true; $("dlg-confirma").close(); };
+    $("dlg-confirma").onclose = () => resolve(decidido);
+    $("dlg-confirma").showModal();
+  });
 }
 
 // ---- remover ----------------------------------------------------------------
@@ -335,25 +360,86 @@ async function remover(s, completo) {
 // É um botão em lote porque limpá-las uma a uma é o tipo de tarefa que ninguém
 // faz — e sessões que não se conseguem operar acumulam-se até a lista deixar de
 // ser útil.
-$("btn-limpar-orfas").onclick = async () => {
+$("btn-limpar-orfas").onclick = () => {
   const orfas = sessoes.filter((s) => !s.temToken);
   if (!orfas.length) return;
 
-  const ok = confirm(
-    `Remover ${orfas.length} sessão(ões) sem token neste navegador?\n\n` +
-    orfas.map((s) => `  • ${s.nome}${s.autenticado ? " (PAREADA)" : ""}`).join("\n") +
-    `\n\nAs pareadas são DESVINCULADAS primeiro, para não deixarem aparelho-fantasma ` +
-    `no telemóvel. Isto não tem retorno.`);
-  if (!ok) return;
+  const pareadas = orfas.filter((s) => s.autenticado);
+  const aviso = $("lote-aviso");
+  aviso.hidden = pareadas.length === 0;
+  aviso.textContent =
+    `${pareadas.length} destas está(ão) PAREADA(S) a um telemóvel. Removê-las desvincula o ` +
+    `aparelho, e voltar a usá-las exige ler um QR novo — o que precisa do telemóvel à mão. ` +
+    `Vêm DESMARCADAS por isso; marque só se for mesmo o que quer.`;
 
-  // As pareadas vão pelo caminho completo e as outras pelo simples: chamar
-  // /full numa sessão que nunca pareou é trabalho inútil, e chamar o simples
-  // numa pareada é exatamente o defeito que este painel expõe.
+  const lista = $("lote-lista");
+  lista.innerHTML = "";
   for (const s of orfas) {
-    await API.admin("DELETE", `/admin/users/${encodeURIComponent(s.id)}${s.autenticado ? "/full" : ""}`);
-    Tokens.esquecer(s.id);
+    const l = document.createElement("label");
+    l.className = "campo";
+    l.style.flexDirection = "row";
+    l.style.alignItems = "center";
+    l.style.gap = "8px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.width = "auto";
+    cb.dataset.id = s.id;
+    // PAREADA vem desmarcada. Foi assim que eu própria apaguei duas sessões
+    // vivas ao diagnosticar isto: a caixa vinha marcada por omissão e "remover
+    // as sem token" não avisava que "sem token" inclui sessões a funcionar.
+    cb.checked = !s.autenticado;
+    const span = document.createElement("span");
+    span.textContent = s.nome + (s.autenticado ? "  — PAREADA" : "");
+    span.style.color = s.autenticado ? "var(--warn)" : "";
+    l.append(cb, span);
+    lista.appendChild(l);
   }
+
+  const resp = $("lote-resposta");
+  resp.hidden = true; resp.className = "resposta";
+  $("dlg-lote").showModal();
+};
+
+// A execução vive no BOTÃO, e não atrás de um confirm().
+//
+// O confirm() nativo devolve `false` EM SILÊNCIO quando o navegador suprime
+// diálogos — o Chrome oferece "impedir que esta página crie mais diálogos"
+// depois de alguns seguidos, e a partir daí o botão parece não fazer nada.
+// Foi exatamente o sintoma reportado: "tentei remover todos e não deu certo".
+//
+// Um modal próprio não pode ser suprimido, mostra O QUE vai ser removido, e
+// deixa a resposta à vista quando algo falha.
+$("lote-executar").onclick = async () => {
+  const resp = $("lote-resposta");
+  const marcados = [...$("lote-lista").querySelectorAll("input:checked")].map((c) => c.dataset.id);
+
+  if (!marcados.length) {
+    return responder(resp, "err", "Nenhuma sessão marcada.");
+  }
+
+  const falhas = [];
+  for (const id of marcados) {
+    const s = sessoes.find((x) => x.id === id);
+    if (!s) continue;
+    // Cada uma pela rota CERTA: as pareadas por /full, para não deixarem
+    // aparelho-fantasma; as outras pela simples, que não gasta ida ao
+    // protocolo.
+    const r = await API.admin("DELETE", `/admin/users/${encodeURIComponent(id)}${s.autenticado ? "/full" : ""}`);
+    if (r.ok) {
+      fecharWS(id); pararTTL(id); Tokens.esquecer(id);
+    } else {
+      falhas.push(`${s.nome}: HTTP ${r.status}`);
+    }
+  }
+
   await atualizar();
+
+  // Uma falha no meio não pode passar despercebida só porque as outras
+  // correram bem: o diálogo fica aberto a dizer quais falharam.
+  if (falhas.length) {
+    return responder(resp, "err", `Removidas ${marcados.length - falhas.length} de ${marcados.length}.\n` + falhas.join("\n"));
+  }
+  $("dlg-lote").close();
 };
 
 // ---- modais de operação -----------------------------------------------------
@@ -419,7 +505,14 @@ async function executar(s, op, campos) {
   const metodo = op.metodo || "POST";
   const resp = $("op-resposta");
 
-  if (op.perigo && !confirm(`${op.rotulo}\n\nEsta operação é IRREVERSÍVEL. Confirmar?`)) return;
+  if (op.perigo) {
+    const ok = await confirmar({
+      titulo: op.rotulo,
+      texto: "Esta operação é IRREVERSÍVEL do lado de quem recebeu a mensagem.",
+      okTexto: op.rotulo,
+    });
+    if (!ok) return;
+  }
 
   let dados;
   try { dados = await recolher(campos); }

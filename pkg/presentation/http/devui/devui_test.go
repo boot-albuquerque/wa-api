@@ -318,7 +318,7 @@ func TestPainel_ApagarMensagemPedeConfirmacao(t *testing.T) {
 	if !strings.Contains(servido(t, "operacoes.js"), "perigo: true") {
 		t.Error("nenhuma operação está marcada como perigosa; apagar mensagem é IRREVERSÍVEL")
 	}
-	if !strings.Contains(servido(t, "sessions.js"), "op.perigo && !confirm(") {
+	if !strings.Contains(servido(t, "sessions.js"), "if (op.perigo) {") {
 		t.Error("a marca de perigo não produz confirmação antes de executar")
 	}
 }
@@ -531,5 +531,71 @@ func TestPainel_TokenLocalSoEsquecidoDepoisDaAPI(t *testing.T) {
 	if posEsquecer < posErro {
 		t.Error("o token local é esquecido ANTES de a API confirmar: uma remoção falhada " +
 			"deixaria a sessão na lista e sem credencial para a operar")
+	}
+}
+
+// TestPainel_NaoUsaConfirmNativo trava o defeito reportado em campo:
+// "tentei remover todos e não deu certo".
+//
+// O confirm() nativo devolve `false` EM SILÊNCIO quando o navegador suprime
+// diálogos — o Chrome oferece "impedir que esta página crie mais diálogos"
+// depois de alguns seguidos, e a partir daí TODA ação protegida por ele deixa
+// de acontecer sem dizer porquê. Num painel de diagnóstico isso é pior que
+// noutro sítio qualquer: o operador conclui que a API está partida.
+//
+// A verificação é pela CHAMADA `confirm(` precedida do que a distingue de uma
+// menção — o módulo fala sobre confirm() em três comentários, e procurar o nome
+// solto acusaria a própria explicação. É a HOUSEKEEP F189 outra vez, e é a
+// terceira vez hoje que ela aparece num teste meu.
+func TestPainel_NaoUsaConfirmNativo(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	for _, chamada := range []string{
+		"= confirm(", // const ok = confirm(...)
+		"!confirm(",  // if (!confirm(...))
+		"window.confirm(",
+	} {
+		if strings.Contains(js, chamada) {
+			t.Errorf("o painel voltou a usar confirm() nativo (%q): ele falha em SILÊNCIO "+
+				"quando o navegador suprime diálogos, e a ação parece simplesmente não acontecer", chamada)
+		}
+	}
+
+	// E o substituto tem de existir: sem ele, "não usa confirm" seria
+	// satisfeito por não confirmar nada, que é pior.
+	if !strings.Contains(js, "function confirmar({") {
+		t.Error("não há substituto para o confirm(): uma operação irreversível ficaria sem confirmação nenhuma")
+	}
+	if !strings.Contains(servido(t, "sessions.html"), `id="dlg-confirma"`) {
+		t.Error("o diálogo de confirmação não existe no HTML")
+	}
+}
+
+// TestPainel_LoteNaoMarcaPareadasPorOmissao é a trava do acidente que eu
+// própria tive ao diagnosticar o defeito acima.
+//
+// "Remover as sem token" inclui sessões PAREADAS e a funcionar, porque "sem
+// token" quer dizer "este navegador não tem a credencial" e não "está morta".
+// Com as caixas marcadas por omissão, um clique desvincula telemóveis que
+// estavam a trabalhar — foi o que fiz, e custou o pareamento de duas contas
+// reais.
+func TestPainel_LoteNaoMarcaPareadasPorOmissao(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	if !strings.Contains(js, "cb.checked = !s.autenticado;") {
+		t.Error("a lista em lote marca sessões pareadas por omissão: um clique desvincula " +
+			"telemóveis que estavam a funcionar")
+	}
+	if !strings.Contains(js, `id="lote-lista"`) && !strings.Contains(servido(t, "sessions.html"), `id="lote-lista"`) {
+		t.Error("o lote não mostra QUAIS sessões vão ser removidas antes de as remover")
+	}
+}
+
+// TestPainel_LoteRelataFalhasParciais: numa remoção de várias, uma falha no
+// meio não pode passar despercebida só porque as outras correram bem.
+func TestPainel_LoteRelataFalhasParciais(t *testing.T) {
+	js := servido(t, "sessions.js")
+	if !strings.Contains(js, "falhas.push(") || !strings.Contains(js, "Removidas ${marcados.length - falhas.length}") {
+		t.Error("o lote não relata falhas parciais: sessões que não foram removidas ficariam invisíveis")
 	}
 }

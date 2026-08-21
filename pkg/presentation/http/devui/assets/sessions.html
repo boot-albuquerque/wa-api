@@ -13,6 +13,7 @@
     <a href="sessions.html" aria-current="page">Sessões</a>
     <a href="eventos.html">Eventos</a>
     <button id="btn-limpar-orfas" class="danger" hidden>Remover as sem token</button>
+
     <button id="btn-nova" class="primary">+ Nova sessão</button>
   </nav>
 </header>
@@ -64,6 +65,35 @@
       <button value="cancel">Cancelar</button>
       <button type="button" class="danger" id="rem-simples">Remover só da API</button>
       <button type="button" class="danger" id="rem-completo">Desvincular e remover</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Confirmação genérica: substitui o confirm() nativo, que o navegador
+     suprime em silêncio depois de alguns diálogos seguidos -->
+<dialog id="dlg-confirma">
+  <form method="dialog" class="corpo">
+    <h2 id="conf-titulo">Confirmar</h2>
+    <p class="ajuda" id="conf-texto"></p>
+    <div class="rodape">
+      <button value="cancel">Cancelar</button>
+      <button type="button" class="danger" id="conf-ok">Confirmar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Remoção em lote -->
+<dialog id="dlg-lote">
+  <form method="dialog" class="corpo">
+    <h2>Remover várias sessões</h2>
+    <p class="ajuda">Sessões sem token neste navegador. Só podem ser removidas — não há
+      credencial para as operar.</p>
+    <div class="aviso" id="lote-aviso" hidden></div>
+    <div id="lote-lista"></div>
+    <div class="resposta" id="lote-resposta" hidden></div>
+    <div class="rodape">
+      <button value="cancel">Cancelar</button>
+      <button type="button" class="danger" id="lote-executar">Remover as selecionadas</button>
     </div>
   </form>
 </dialog>
