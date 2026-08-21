@@ -444,3 +444,92 @@ func TestDeLoopback(t *testing.T) {
 		}
 	}
 }
+
+// --- remoção de sessões ------------------------------------------------------
+
+// TestPainel_RemoverOfereceAsDuasRotas é a trava que mais importa deste bloco.
+//
+// A API tem DUAS remoções, e elas não são equivalentes:
+//
+//	DELETE /admin/users/{id}       apaga o utilizador; o TELEMÓVEL FICA PAREADO
+//	                               a uma sessão que já não existe
+//	DELETE /admin/users/{id}/full  faz logout antes, e o telemóvel liberta o
+//	                               aparelho
+//
+// Um painel que ofereça só a primeira deixa aparelhos-fantasma no telemóvel de
+// alguém, e "remover" é a palavra que faz esperar o contrário. Um que ofereça
+// só a segunda gasta uma ida ao protocolo para sessões que nunca parearam.
+//
+// Sem este teste, "simplificar para uma rota só" parece limpeza.
+func TestPainel_RemoverOfereceAsDuasRotas(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	if !strings.Contains(js, `${completo ? "/full" : ""}`) {
+		t.Error("a remoção não distingue as duas rotas: uma delas deixa o aparelho pareado a uma sessão inexistente")
+	}
+	if !strings.Contains(js, `API.admin("DELETE"`) {
+		t.Error("a remoção não usa o caminho de admin: sessões sem token local ficariam sem forma de ser removidas")
+	}
+
+	html := servido(t, "sessions.html")
+	for _, id := range []string{`id="rem-simples"`, `id="rem-completo"`} {
+		if !strings.Contains(html, id) {
+			t.Errorf("o diálogo de remoção não oferece %s", id)
+		}
+	}
+}
+
+// TestPainel_RemoverFuncionaSemTokenLocal trava o caso que motivou o pedido:
+// apagar uma sessão criada NOUTRO navegador.
+//
+// Todos os outros botões do card exigem o token da sessão. Este não pode
+// exigir, porque a credencial que ele usa é a de admin — e é justamente a
+// ausência do token local que torna a sessão impossível de gerir de outra
+// forma.
+func TestPainel_RemoverFuncionaSemTokenLocal(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	if !strings.Contains(js, `b.disabled = !s.temToken && b.dataset.a !== "remover"`) {
+		t.Error("o botão Remover é desativado junto com os outros quando não há token local; " +
+			"uma sessão criada noutro navegador ficaria sem forma de ser removida pelo painel")
+	}
+	if !strings.Contains(js, `if (!s.temToken && qual !== "remover") return;`) {
+		t.Error("a guarda de token bloqueia a remoção antes de ela chegar a acontecer")
+	}
+}
+
+// TestPainel_RemoverEmLoteEscolheARotaPorSessao: numa limpeza em lote, cada
+// sessão vai pelo caminho certo. Usar sempre o simples deixaria aparelhos
+// pareados a nada; usar sempre o completo gastaria uma ida ao protocolo por
+// sessão que nunca pareou.
+func TestPainel_RemoverEmLoteEscolheARotaPorSessao(t *testing.T) {
+	js := servido(t, "sessions.js")
+	if !strings.Contains(js, `${s.autenticado ? "/full" : ""}`) {
+		t.Error("a limpeza em lote não escolhe a rota por sessão")
+	}
+}
+
+// TestPainel_TokenLocalSoEsquecidoDepoisDaAPI: se a remoção falhar e o token
+// já tiver sido esquecido, a sessão fica na lista sem forma de ser operada —
+// trocando um problema por outro pior.
+func TestPainel_TokenLocalSoEsquecidoDepoisDaAPI(t *testing.T) {
+	js := servido(t, "sessions.js")
+	i := strings.Index(js, "async function remover(")
+	if i < 0 {
+		t.Fatal("função remover ausente")
+	}
+	corpo := js[i:]
+	fim := strings.Index(corpo, "\n}\n")
+	if fim > 0 {
+		corpo = corpo[:fim]
+	}
+	posErro := strings.Index(corpo, "if (!r.ok)")
+	posEsquecer := strings.Index(corpo, "Tokens.esquecer")
+	if posErro < 0 || posEsquecer < 0 {
+		t.Fatal("remover não trata o erro ou não esquece o token")
+	}
+	if posEsquecer < posErro {
+		t.Error("o token local é esquecido ANTES de a API confirmar: uma remoção falhada " +
+			"deixaria a sessão na lista e sem credencial para a operar")
+	}
+}

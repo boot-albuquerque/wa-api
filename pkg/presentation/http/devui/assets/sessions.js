@@ -70,6 +70,13 @@ function desenhar() {
   for (const c of [...g.querySelectorAll(".card")]) {
     if (!vistos.has(c.dataset.id)) c.remove();
   }
+
+  // O botão em lote só existe quando há o que limpar: um botão permanentemente
+  // inerte ensina a ignorá-lo.
+  const orfas = sessoes.filter((s) => !s.temToken).length;
+  const btn = $("btn-limpar-orfas");
+  btn.hidden = orfas === 0;
+  btn.textContent = `Remover ${orfas} sem token`;
 }
 
 function criarCard(s) {
@@ -94,6 +101,7 @@ function criarCard(s) {
       <button data-a="mensagens">Mensagens</button>
       <button data-a="chat">Chat</button>
       <button data-a="logout" class="danger">Logout</button>
+      <button data-a="remover" class="danger">Remover</button>
     </div>`;
   for (const b of card.querySelectorAll("[data-a]")) {
     b.onclick = () => acao(cardSessao(card.dataset.id), b.dataset.a);
@@ -116,7 +124,13 @@ function pintar(card, s) {
   card.querySelector(".jid").textContent = s.jid;
   card.querySelector(".sem-token").hidden = s.temToken;
   card.classList.toggle("ativa", s.autenticado);
-  for (const b of card.querySelectorAll("[data-a]")) b.disabled = !s.temToken;
+  for (const b of card.querySelectorAll("[data-a]")) {
+    // "Remover" continua ATIVO sem token local, e é o ponto: remover é
+    // operação de ADMIN, e o admin vem do servidor. É assim que se apaga uma
+    // sessão criada noutro navegador — o caso que antes não tinha saída
+    // nenhuma a não ser ir à API à mão.
+    b.disabled = !s.temToken && b.dataset.a !== "remover";
+  }
   if (s.autenticado) esconderQR(card);
 }
 
@@ -211,9 +225,11 @@ function marcarExpirado(s) {
 // ---- ações ------------------------------------------------------------------
 
 async function acao(s, qual) {
-  if (!s || !s.temToken) return;
+  if (!s) return;
+  if (!s.temToken && qual !== "remover") return;
   const card = cardDe(s.id);
 
+  if (qual === "remover") return abrirRemover(s);
   if (qual === "mensagens") return abrirMenu(s, "Enviar mensagem", ENVIO,
     "Cada operação é uma rota de POST /chat/send/*. O telefone vai só com dígitos.");
   if (qual === "chat") return abrirMenu(s, "Operações de chat", CHAT,
@@ -252,6 +268,93 @@ async function acao(s, qual) {
     setTimeout(atualizar, 800);
   }
 }
+
+// ---- remover ----------------------------------------------------------------
+
+// São DUAS rotas, e significam coisas diferentes:
+//
+//   DELETE /admin/users/{id}       apaga o utilizador da API. O TELEMÓVEL FICA
+//                                  PAREADO a uma sessão que já não existe — o
+//                                  aparelho continua em "Aparelhos conectados"
+//                                  e ninguém o tira de lá a não ser à mão.
+//   DELETE /admin/users/{id}/full  faz logout e desconecta ANTES de apagar, e
+//                                  por isso o telemóvel liberta o aparelho.
+//
+// O painel oferece as duas em vez de escolher por quem usa. Esconder a
+// diferença seria deixar dispositivos-fantasma no telemóvel de alguém sem que
+// essa pessoa soubesse porquê — e "remover" é a palavra que faz esperar o
+// contrário.
+//
+// Nenhuma delas precisa do token da sessão: são operações de ADMIN. É assim
+// que se apaga uma sessão criada noutro navegador.
+function abrirRemover(s) {
+  $("rem-titulo").textContent = `Remover "${s.nome}"`;
+  $("rem-ajuda").textContent = s.autenticado
+    ? "Esta sessão está pareada a um telemóvel."
+    : "Esta sessão não está pareada.";
+
+  const aviso = $("rem-aviso");
+  aviso.hidden = !s.autenticado;
+  aviso.textContent = "Remover SÓ DA API deixa o aparelho em \"Aparelhos conectados\" no " +
+    "telemóvel, ligado a uma sessão que deixou de existir. Desvincular e remover faz o " +
+    "logout primeiro.";
+
+  const resp = $("rem-resposta");
+  resp.hidden = true; resp.className = "resposta";
+
+  $("rem-simples").onclick = () => remover(s, false);
+  $("rem-completo").onclick = () => remover(s, true);
+  $("dlg-remover").showModal();
+}
+
+async function remover(s, completo) {
+  const resp = $("rem-resposta");
+  const caminho = `/admin/users/${encodeURIComponent(s.id)}${completo ? "/full" : ""}`;
+
+  const r = await API.admin("DELETE", caminho);
+  if (!r.ok) {
+    return responder(resp, "err", `HTTP ${r.status}\n${JSON.stringify(r.body, null, 2)}`);
+  }
+
+  // O token local só é esquecido DEPOIS de a API confirmar. Esquecer antes
+  // deixaria a sessão na lista sem forma de a operar se a remoção falhasse.
+  fecharWS(s.id);
+  pararTTL(s.id);
+  Tokens.esquecer(s.id);
+
+  $("dlg-remover").close();
+  await atualizar();
+}
+
+// ---- remover as órfãs -------------------------------------------------------
+
+// "Sem token" quer dizer: existe na API, e este navegador não tem a credencial
+// dela. Na prática são as sessões criadas noutro navegador, ou as que ficaram
+// para trás quando alguém limpou o armazenamento.
+//
+// É um botão em lote porque limpá-las uma a uma é o tipo de tarefa que ninguém
+// faz — e sessões que não se conseguem operar acumulam-se até a lista deixar de
+// ser útil.
+$("btn-limpar-orfas").onclick = async () => {
+  const orfas = sessoes.filter((s) => !s.temToken);
+  if (!orfas.length) return;
+
+  const ok = confirm(
+    `Remover ${orfas.length} sessão(ões) sem token neste navegador?\n\n` +
+    orfas.map((s) => `  • ${s.nome}${s.autenticado ? " (PAREADA)" : ""}`).join("\n") +
+    `\n\nAs pareadas são DESVINCULADAS primeiro, para não deixarem aparelho-fantasma ` +
+    `no telemóvel. Isto não tem retorno.`);
+  if (!ok) return;
+
+  // As pareadas vão pelo caminho completo e as outras pelo simples: chamar
+  // /full numa sessão que nunca pareou é trabalho inútil, e chamar o simples
+  // numa pareada é exatamente o defeito que este painel expõe.
+  for (const s of orfas) {
+    await API.admin("DELETE", `/admin/users/${encodeURIComponent(s.id)}${s.autenticado ? "/full" : ""}`);
+    Tokens.esquecer(s.id);
+  }
+  await atualizar();
+};
 
 // ---- modais de operação -----------------------------------------------------
 
