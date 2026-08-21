@@ -2,6 +2,8 @@ package contractsfake
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	port "wa-api/pkg/application/contracts"
@@ -44,6 +46,17 @@ func (f *JIDResolver) ResolveJID(ctx context.Context, raw string) (domain.JID, e
 	if f.ResolveJIDFunc != nil {
 		return f.ResolveJIDFunc(ctx, raw)
 	}
+	// IMITA A TRANSFORMAÇÃO real: JIDResolverAdapter.ResolveJID
+	// (mapping/jid/resolver.go:21) aplica o SERVIDOR POR OMISSÃO a um
+	// telefone cru — "5511999" sai como "5511999@s.whatsapp.net". O dublê
+	// devolvia o texto inalterado, e por isso toda asserção sobre o JID
+	// RESOLVIDO descrevia um valor que a produção nunca produz.
+	//
+	// Armadilha nº1 do ARMADILHAS.md: quando o objeto atravessa uma
+	// transformação no caminho real, o dublê tem de atravessá-la também.
+	if !strings.Contains(raw, "@") {
+		return domain.JID(raw + "@s.whatsapp.net"), nil
+	}
 	return domain.JID(raw), nil
 }
 
@@ -52,6 +65,22 @@ func (f *JIDResolver) ResolveQualifiedJID(ctx context.Context, raw string) (doma
 	f.ResolveQualifiedJIDCalls = append(f.ResolveQualifiedJIDCalls, JIDResolverResolveQualifiedJIDCall{Ctx: ctx, Raw: raw})
 	if f.ResolveQualifiedJIDFunc != nil {
 		return f.ResolveQualifiedJIDFunc(ctx, raw)
+	}
+	// IMITA A REGRA REAL, e não uma mais simples. O
+	// JIDResolverAdapter.ResolveQualifiedJID de
+	// pkg/infra/wa-noise/mapping/jid/resolver.go:42 RECUSA string sem
+	// servidor — "qualificado" no nome existe precisamente para isso, e o
+	// comentário de lá explica porquê: o adapter que reparseia usa um
+	// ParseJID leniente que aplicaria o servidor padrão, adivinhando a
+	// identidade em vez de a exigir.
+	//
+	// Até 2026-08-21 este dublê devolvia o texto cru e era MAIS PERMISSIVO
+	// que a produção. Não escondia um defeito: abençoava código morto. 37
+	// sub-testes afirmavam o comportamento de entradas que a produção rejeita
+	// com 400 — medido em campo, GET /user/lid/5516981818244 -> 400
+	// invalid_jid. Ver HOUSEKEEP F202.
+	if !strings.Contains(raw, "@") {
+		return "", fmt.Errorf("contractsfake: JID %q has no server (imita resolver.go:42)", raw)
 	}
 	return domain.JID(raw), nil
 }
@@ -301,6 +330,37 @@ type NewsletterReader struct {
 
 	ListSubscribedFunc  func(ctx context.Context, txtID string) (any, error)
 	ListSubscribedCalls []NewsletterReaderListSubscribedCall
+
+	// As onze abaixo entraram com o levantamento de paridade de 2026-08-20.
+	//
+	// Cada uma guarda o JID recebido, e não só a contagem de chamadas: o modo
+	// de falha mais provável destas rotas é passar o identificador errado — o
+	// código de convite onde ia o JID, ou o JID do canal onde ia o da
+	// conversa — e uma contagem não distingue isso de sucesso.
+	CreateNewsletterFunc func(ctx context.Context, txtID, name, description string, picture []byte) (any, error)
+	NewsletterInfoFunc   func(ctx context.Context, txtID string, jid domain.JID) (any, error)
+	NewsletterInviteFunc func(ctx context.Context, txtID, inviteKey string) (any, error)
+	FollowFunc           func(ctx context.Context, txtID string, jid domain.JID) error
+	UnfollowFunc         func(ctx context.Context, txtID string, jid domain.JID) error
+	MuteFunc             func(ctx context.Context, txtID string, jid domain.JID, mute bool) error
+	MessagesFunc         func(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error)
+	UpdatesFunc          func(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error)
+	MarkViewedFunc       func(ctx context.Context, txtID string, jid domain.JID, serverIDs []int) error
+	ReactFunc            func(ctx context.Context, txtID string, jid domain.JID, serverID int, reaction, messageID string) error
+	SubscribeLiveFunc    func(ctx context.Context, txtID string, jid domain.JID) (time.Duration, error)
+
+	// NewsletterCalls regista TODA chamada da família, com o método e o
+	// identificador. Uma lista só serve para asserir que a rota certa chamou o
+	// método certo com o argumento certo — que é o que os testes precisam.
+	NewsletterCalls []NewsletterCall
+}
+
+// NewsletterCall é uma chamada da família de newsletter.
+type NewsletterCall struct {
+	Method string
+	TxtID  string
+	JID    domain.JID
+	Extra  string
 }
 
 var _ port.NewsletterReader = (*NewsletterReader)(nil)
@@ -340,4 +400,113 @@ func (f *AppStateSyncer) SyncContactRoster(ctx context.Context, txtID string, mo
 		return f.SyncContactRosterFunc(ctx, txtID, mode)
 	}
 	return nil
+}
+
+// --- família de newsletter (paridade 2026-08-20) ------------------------------
+
+func (f *NewsletterReader) record(method, txtID string, jid domain.JID, extra string) {
+	f.NewsletterCalls = append(f.NewsletterCalls, NewsletterCall{Method: method, TxtID: txtID, JID: jid, Extra: extra})
+}
+
+// CreateNewsletter implementa port.NewsletterReader.
+func (f *NewsletterReader) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error) {
+	f.record("CreateNewsletter", txtID, "", name)
+	if f.CreateNewsletterFunc != nil {
+		return f.CreateNewsletterFunc(ctx, txtID, name, description, picture)
+	}
+	return nil, nil
+}
+
+// NewsletterInfo implementa port.NewsletterReader.
+func (f *NewsletterReader) NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (any, error) {
+	f.record("NewsletterInfo", txtID, jid, "")
+	if f.NewsletterInfoFunc != nil {
+		return f.NewsletterInfoFunc(ctx, txtID, jid)
+	}
+	return nil, nil
+}
+
+// NewsletterInfoWithInvite implementa port.NewsletterReader.
+func (f *NewsletterReader) NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (any, error) {
+	// O `inviteKey` vai em Extra e NÃO em JID de propósito: é um código de
+	// convite, não um identificador de conversa. Guardá-lo no campo de JID
+	// faria um teste de "passou o identificador certo" passar com os dois
+	// trocados.
+	f.record("NewsletterInfoWithInvite", txtID, "", inviteKey)
+	if f.NewsletterInviteFunc != nil {
+		return f.NewsletterInviteFunc(ctx, txtID, inviteKey)
+	}
+	return nil, nil
+}
+
+// FollowNewsletter implementa port.NewsletterReader.
+func (f *NewsletterReader) FollowNewsletter(ctx context.Context, txtID string, jid domain.JID) error {
+	f.record("FollowNewsletter", txtID, jid, "")
+	if f.FollowFunc != nil {
+		return f.FollowFunc(ctx, txtID, jid)
+	}
+	return nil
+}
+
+// UnfollowNewsletter implementa port.NewsletterReader.
+func (f *NewsletterReader) UnfollowNewsletter(ctx context.Context, txtID string, jid domain.JID) error {
+	f.record("UnfollowNewsletter", txtID, jid, "")
+	if f.UnfollowFunc != nil {
+		return f.UnfollowFunc(ctx, txtID, jid)
+	}
+	return nil
+}
+
+// ToggleNewsletterMute implementa port.NewsletterReader.
+func (f *NewsletterReader) ToggleNewsletterMute(ctx context.Context, txtID string, jid domain.JID, mute bool) error {
+	f.record("ToggleNewsletterMute", txtID, jid, fmt.Sprintf("%t", mute))
+	if f.MuteFunc != nil {
+		return f.MuteFunc(ctx, txtID, jid, mute)
+	}
+	return nil
+}
+
+// NewsletterMessages implementa port.NewsletterReader.
+func (f *NewsletterReader) NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error) {
+	f.record("NewsletterMessages", txtID, jid, before)
+	if f.MessagesFunc != nil {
+		return f.MessagesFunc(ctx, txtID, jid, count, before)
+	}
+	return nil, nil
+}
+
+// NewsletterMessageUpdates implementa port.NewsletterReader.
+func (f *NewsletterReader) NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error) {
+	f.record("NewsletterMessageUpdates", txtID, jid, after)
+	if f.UpdatesFunc != nil {
+		return f.UpdatesFunc(ctx, txtID, jid, count, since, after)
+	}
+	return nil, nil
+}
+
+// MarkNewsletterViewed implementa port.NewsletterReader.
+func (f *NewsletterReader) MarkNewsletterViewed(ctx context.Context, txtID string, jid domain.JID, serverIDs []int) error {
+	f.record("MarkNewsletterViewed", txtID, jid, fmt.Sprintf("%v", serverIDs))
+	if f.MarkViewedFunc != nil {
+		return f.MarkViewedFunc(ctx, txtID, jid, serverIDs)
+	}
+	return nil
+}
+
+// SendNewsletterReaction implementa port.NewsletterReader.
+func (f *NewsletterReader) SendNewsletterReaction(ctx context.Context, txtID string, jid domain.JID, serverID int, reaction, messageID string) error {
+	f.record("SendNewsletterReaction", txtID, jid, reaction)
+	if f.ReactFunc != nil {
+		return f.ReactFunc(ctx, txtID, jid, serverID, reaction, messageID)
+	}
+	return nil
+}
+
+// SubscribeNewsletterLiveUpdates implementa port.NewsletterReader.
+func (f *NewsletterReader) SubscribeNewsletterLiveUpdates(ctx context.Context, txtID string, jid domain.JID) (time.Duration, error) {
+	f.record("SubscribeNewsletterLiveUpdates", txtID, jid, "")
+	if f.SubscribeLiveFunc != nil {
+		return f.SubscribeLiveFunc(ctx, txtID, jid)
+	}
+	return 0, nil
 }

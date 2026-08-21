@@ -61,7 +61,22 @@ type Fake struct {
 	RejectCallFn                     func(ctx context.Context, callFrom types.JID, callID string) error
 	SendAppStateFn                   func(ctx context.Context, patch appstate.PatchInfo) error
 	FetchAppStateFn                  func(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
+	SetStatusMessageFn               func(ctx context.Context, msg string) error
+	BuildHistorySyncRequestFn        func(info *types.MessageInfo, count int) *waE2E.Message
+	SendPeerMessageFn                func(ctx context.Context, message *waE2E.Message) (wanoise.SendResponse, error)
 	GetSubscribedNewslettersFn       func(ctx context.Context) ([]*types.NewsletterMetadata, error)
+
+	CreateNewsletterFn               func(ctx context.Context, params wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoFn              func(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoWithInviteFn    func(ctx context.Context, key string) (*types.NewsletterMetadata, error)
+	FollowNewsletterFn               func(ctx context.Context, jid types.JID) error
+	UnfollowNewsletterFn             func(ctx context.Context, jid types.JID) error
+	NewsletterToggleMuteFn           func(ctx context.Context, jid types.JID, mute bool) error
+	GetNewsletterMessagesFn          func(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error)
+	GetNewsletterMessageUpdatesFn    func(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error)
+	NewsletterMarkViewedFn           func(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error
+	NewsletterSendReactionFn         func(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
+	NewsletterSubscribeLiveUpdatesFn func(ctx context.Context, jid types.JID) (time.Duration, error)
 	PairPhoneFn                      func(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
 	IsConnectedFn                    func() bool
 	IsLoggedInFn                     func() bool

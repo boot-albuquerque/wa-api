@@ -117,6 +117,14 @@ type Client interface {
 	UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 
 	// Família de privacidade
+	SetStatusMessage(ctx context.Context, msg string) error
+
+	// BuildHistorySyncRequest e SendPeerMessage entram em PAR e por isso
+	// ficam juntos: a própria docstring da biblioteca diz que a mensagem
+	// montada pelo primeiro "can be sent using Client.SendPeerMessage".
+	// Expor só um dos dois deixaria a capacidade montável e não enviável.
+	BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageInfo, count int) *waE2E.Message
+	SendPeerMessage(ctx context.Context, message *waE2E.Message) (wanoise.SendResponse, error)
 	TryFetchPrivacySettings(ctx context.Context, ignoreCache bool) (*types.PrivacySettings, error)
 	SetPrivacySetting(ctx context.Context, name types.PrivacySettingType, value types.PrivacySetting) (types.PrivacySettings, error)
 
@@ -128,7 +136,27 @@ type Client interface {
 	FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
 
 	// Família de newsletter
+	//
+	// A interface é ESTREITA por desenho (ADR-001): cada método entra aqui
+	// explicitamente, e é essa a razão de a lista crescer capability a
+	// capability em vez de embutir o Client inteiro.
+	//
+	// As onze abaixo entraram de uma vez no levantamento de paridade de
+	// 2026-08-20, e essa exceção à regra do "um de cada vez" é deliberada:
+	// medimos que a biblioteca expunha doze e nós expúnhamos UMA, e acrescentar
+	// uma por sessão faria a distância demorar doze sessões a fechar.
 	GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error)
+	CreateNewsletter(ctx context.Context, params wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error)
+	GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoWithInvite(ctx context.Context, key string) (*types.NewsletterMetadata, error)
+	FollowNewsletter(ctx context.Context, jid types.JID) error
+	UnfollowNewsletter(ctx context.Context, jid types.JID) error
+	NewsletterToggleMute(ctx context.Context, jid types.JID, mute bool) error
+	GetNewsletterMessages(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error)
+	GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error)
+	NewsletterMarkViewed(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error
+	NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
+	NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error)
 
 	// Família de sessão (controle)
 

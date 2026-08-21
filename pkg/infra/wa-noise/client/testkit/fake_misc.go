@@ -3,8 +3,10 @@ package testkit
 import (
 	"context"
 
+	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
+	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 )
 
@@ -25,6 +27,27 @@ func (f *Fake) SendAppState(ctx context.Context, patch appstate.PatchInfo) error
 func (f *Fake) FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	if f.FetchAppStateFn != nil {
 		return f.FetchAppStateFn(ctx, name, fullSync, onlyIfNotSynced)
+	}
+	return nil
+}
+
+func (f *Fake) BuildHistorySyncRequest(info *types.MessageInfo, count int) *waE2E.Message {
+	if f.BuildHistorySyncRequestFn != nil {
+		return f.BuildHistorySyncRequestFn(info, count)
+	}
+	return &waE2E.Message{}
+}
+
+func (f *Fake) SendPeerMessage(ctx context.Context, message *waE2E.Message) (wanoise.SendResponse, error) {
+	if f.SendPeerMessageFn != nil {
+		return f.SendPeerMessageFn(ctx, message)
+	}
+	return wanoise.SendResponse{}, nil
+}
+
+func (f *Fake) SetStatusMessage(ctx context.Context, msg string) error {
+	if f.SetStatusMessageFn != nil {
+		return f.SetStatusMessageFn(ctx, msg)
 	}
 	return nil
 }
