@@ -5259,3 +5259,68 @@ PASS.
 **Status**: entregue.
 **Testes**: `capabilities/contacts/commongroups_test.go` (7 testes, três com
 controle acima) e `commongroupsreal_test.go` (leitura ao vivo).
+
+---
+
+## H69 — enquete: não entregue, e o erro estava na minha leitura
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura.
+**Onde**: `internal/wa-headless/capabilities/send/poll.go`,
+`internal/wa-headless/pollreal_test.go`.
+
+### O que falhou
+
+Duas execuções ao vivo, **erro idêntico**:
+
+```
+Cannot read properties of undefined (reading 'name')
+```
+
+A primeira com `correctOptionKey: null`, a segunda com o campo **omitido**. Pela
+regra que a H58 pagou caro: **erro que não muda quando o argumento variado muda é
+evidência de que o argumento variado não é a causa.** Duas tentativas bastaram
+para saber disso — foi o que a H58 levou uma tarde para aprender.
+
+### O que a segunda falha revelou, e é a lição
+
+Eu li o chamador da UI:
+
+```js
+const r = b({correctOptionKey: P, filteredOptions: n, isPhotoPoll: ye,
+             isSingleOption: D, pollEndTime: w?O:null, pollType: R,
+             question: k, hideVoterNames: q});
+sendPollCreation({poll: r, chat: i, quotedMsg: …, isWamoSub: …});
+```
+
+e tomei a lista de argumentos de `b` como sendo a de
+`createPollCreationMsgData`. **Não é.** O dado de mensagem que a função da API
+produz carrega `correctOptionIndex`; o objeto que copiei diz `correctOptionKey`.
+Nomes diferentes são funções diferentes — `b` é um ajudante local da UI, e eu o
+confundi com a API.
+
+**A técnica "leia o chamador do app" continua certa**; o que faltou foi
+**confirmar que o chamador chama a função que eu ia chamar**. É um passo, e ele
+não estava escrito em lugar nenhum.
+
+### O que ficou medido e vale
+
+| fato | de onde |
+|---|---|
+| uma opção é `{name, localId}` | caminho de merge de opção adicionada, que constrói isso e indexa um `Set` por `option.name` |
+| a mensagem carrega `pollName`, `pollOptions`, `pollSelectableOptionsCount`, `pollContentType`, `pollType`, `correctOptionIndex` | construtor do dado de mensagem |
+| `sendPollCreation({poll, chat, quotedMsg, isWamoSub})` | chamador da UI — **este** é da API |
+
+**O que falta**: o que `createPollCreationMsgData` desestrutura. Exige a cabeça
+do corpo do gerador, que o grep do bundle truncou.
+
+### Por que o código fica
+
+Ele codifica as três medições acima e os testes as travam — inclusive
+`TestAnOptionIsAnObjectNotAString`, que impede a próxima pessoa de repetir o
+palpite óbvio (strings). Não está ligado a nada. O teste ao vivo fica
+**vermelho de propósito**, atrás do seu próprio interruptor, para que a próxima
+tentativa tenha um harness em vez de uma página em branco.
+
+**Status**: não entregue.
+**Testes**: `capabilities/send/poll_test.go` (7 testes cobrindo o medido).

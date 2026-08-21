@@ -734,3 +734,20 @@ downloadAndMaybeDecrypt({signal, downloadQpl, directPath, encFilehash,
    baixar, para não gastar a banda de quem enviou.
 3. **Reportamos a forma que a página devolveu**, em vez de assumir uma.
 4. **`MIME` é dito como alegação de quem enviou**, não tipo farejado.
+
+## §6.24 — grupos em comum (entregue) e enquete (não entregue)
+
+| `wwebjs` | estado |
+|---|---|
+| `Contact.getCommonGroups` | **entregue** (H68) — leitura, `count=1` esperado e conferido |
+| `Client.sendMessage(chat, poll)` | **não entregue** (H69) — medições preservadas |
+
+**Grupos em comum, divergências:** o `null` da página significa "sou eu",
+não "nenhum", e nós mantemos a distinção (`ErrIsSelf`); a renderização mostra
+contagem, porque a lista de grupos de alguém é um perfil dessa pessoa.
+
+**Enquete, o que ficou medido:** opção é `{name, localId}`, a mensagem carrega
+`pollName`/`pollOptions`/`pollSelectableOptionsCount`/`pollContentType`/
+`pollType`/`correctOptionIndex`, e `sendPollCreation({poll, chat, quotedMsg,
+isWamoSub})` é da API. O que falta é o que `createPollCreationMsgData`
+desestrutura.

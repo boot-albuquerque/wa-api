@@ -234,3 +234,16 @@ const ModuleStartMediaDownloadQpl = Module("WAWebStartMediaDownloadQpl")
 //   - it excludes parent (community) groups and locked ones, so the answer is
 //     "groups you could talk in together", not "every group object shared".
 const ModuleFindCommonGroupsContactAction = Module("WAWebFindCommonGroupsContactAction")
+
+// ModulePollsSendPollCreationMsgAction creates a poll. Both its exports are
+// async wrappers, so the shape came from the app's own call site:
+//
+//	const poll = createPollCreationMsgData({correctOptionKey, filteredOptions,
+//	    isPhotoPoll, isSingleOption, pollEndTime, pollType, question,
+//	    hideVoterNames});
+//	await sendPollCreation({poll, chat, quotedMsg, isWamoSub});
+//
+// AN OPTION IS AN OBJECT, not a string: {name, localId}. That came from the
+// merge path for added options, which builds exactly that shape and keys a Set
+// on option.name.
+const ModulePollsSendPollCreationMsgAction = Module("WAWebPollsSendPollCreationMsgAction")

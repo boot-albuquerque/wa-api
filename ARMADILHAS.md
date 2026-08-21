@@ -1191,3 +1191,30 @@ chamador desfazer, repetir, ou "consertar" o que já estava certo.
 sequência *mudar → desfazer* na mesma sessão vira *mudar → no-op*, e a
 restauração reporta sucesso sem restaurar. Passos que se desfazem precisam de
 sessões separadas.
+
+### E confirme que o chamador chama a função que VOCÊ vai chamar
+
+**Medido em 2026-08-21, na H69, ao custo de duas execuções ao vivo.**
+
+A técnica "leia o chamador do app" resolveu encaminhar, silenciar e favoritar.
+Na enquete ela falhou, e não por culpa dela:
+
+```js
+const r = b({correctOptionKey: P, filteredOptions: n, …});
+sendPollCreation({poll: r, chat: i, …});
+```
+
+Eu tomei a lista de argumentos de `b` como sendo a de
+`createPollCreationMsgData`. **`b` é um ajudante local da UI.** O dado de
+mensagem que a função da API produz carrega `correctOptionIndex`; o objeto que
+copiei diz `correctOptionKey`. Nomes diferentes são funções diferentes.
+
+**O passo que faltava**: ao ler um chamador, confirme que a chamada é para a
+função que você vai chamar — pelo nome do módulo no `o("...")`, não pela
+proximidade no código. Na mesma linha havia DUAS chamadas: uma para um helper
+local (`b`) e uma para a API (`sendPollCreation`). A segunda era boa; a primeira
+não era o que eu pensava.
+
+Sintoma típico: `reading '<campo>' of undefined` num campo que existe no objeto
+que você montou. Se o campo existe e mesmo assim está indefinido lá dentro, a
+função que recebeu não é a que você leu.
