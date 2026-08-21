@@ -53,7 +53,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
 | `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
 | `getMessageById` | varredura da MsgCollection nas capacidades | `PARTIAL` | sim | sim | sim | idem |
-| `getPinnedMessages` | — | `MISSING` | — | — | — | — |
+| `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `getInviteInfo` | — | `MISSING` | — | — | — | ler convite de terceiro; distinto de getInviteCode |
 | `acceptInvite` | — | `MISSING` | — | — | — | entrar em grupo por link |
 | `acceptChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
@@ -178,7 +178,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getContact` | — | `MISSING` | — | — | — | não atacado |
 | `getLabels` | — | `MISSING` | — | — | — | não atacado |
 | `changeLabels` | — | `MISSING` | — | — | — | não atacado |
-| `getPinnedMessages` | — | `MISSING` | — | — | — | — |
+| `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `syncHistory` | — | `MISSING` | — | — | — | não atacado |
 | `addOrEditCustomerNote` | — | `MISSING` | — | — | — | não atacado |
 | `getCustomerNote` | — | `MISSING` | — | — | — | não atacado |
@@ -342,9 +342,9 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 34 | 15% |
-| `PARTIAL` | 36 | 16% |
+| `PARTIAL` | 38 | 17% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 146 | 66% |
+| `MISSING` | 144 | 65% |
 | **total** | **220** | |
 
