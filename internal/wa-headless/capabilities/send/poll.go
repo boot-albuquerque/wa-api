@@ -204,18 +204,18 @@ func pollScript(toJID, question, optionsJSON string, multi bool) string {
 			// add-option path builds, and it keys a Set on option.name.
 			const filteredOptions = names.map((name, i) => ({ name: name, localId: i }));
 
-			// WHERE pollType LIVES WAS NEVER MEASURED HERE. Look in the
-			// plausible places and report which answered, rather than picking
-			// one and hoping.
-			let pollType = null, typeSource = 'none';
-			for (const [mod, key] of [['WAWebMsgType', 'PollType'],
-			                          ['WAWebMsgType', 'POLL_TYPE'],
-			                          ['WAWebPollsGatingUtils', 'PollType']]) {
+			// WHERE contentType LIVES WAS NEVER MEASURED. Look in the plausible
+			// places and report which answered; a number invented here would be a
+			// number nobody can check. Omitting it is the honest default.
+			let contentType, typeSource = 'omitted';
+			for (const [mod, key] of [['WAWebMsgType', 'PollContentType'],
+			                          ['WAWebMsgType', 'POLL_CONTENT_TYPE'],
+			                          ['WAWebPollsGatingUtils', 'PollContentType']]) {
 				try {
 					const m = window.require(mod);
 					const e = m && m[key];
 					if (e) {
-						pollType = e.POLL || e.Poll || e.DEFAULT || e[Object.keys(e)[0]];
+						contentType = e.TEXT || e.Text || e[Object.keys(e)[0]];
 						typeSource = mod + '.' + key;
 						break;
 					}
@@ -236,21 +236,12 @@ func pollScript(toJID, question, optionsJSON string, multi bool) string {
 
 			stage = 'apply';
 			const A = window.require('` + string(spa.ModulePollsSendPollCreationMsgAction) + `');
-			// correctOptionKey IS OMITTED, not nulled. Passing null threw
-			// "Cannot read properties of undefined (reading 'name')" — and
-			// 'name' lives on an OPTION, so the only thing that could have been
-			// undefined is filteredOptions[correctOptionKey]. A quiz poll names
-			// its right answer by key; an ordinary poll has none, and null is
-			// not the same as absent when the value is used as an index.
-			const poll = await A.createPollCreationMsgData({
-				filteredOptions: filteredOptions,
-				isPhotoPoll: false,
-				isSingleOption: ` + strconv.FormatBool(!multi) + `,
-				pollEndTime: null,
-				pollType: pollType,
-				question: ` + strconv.Quote(question) + `,
-				hideVoterNames: false
-			});
+			// EXACTLY THE THREE FIELDS THE FUNCTION READS, measured by asking it
+			// (spa.ArgumentProbeExpr): poll.name, poll.contentType, poll.options.
+			// Nothing resembling correctOptionKey or filteredOptions is read — those
+			// belong to the UI helper H69 mistook for this function.
+			const poll = { name: ` + strconv.Quote(question) + `, options: filteredOptions };
+			if (contentType !== undefined) { poll.contentType = contentType; }
 			await A.sendPollCreation({ poll: poll, chat: chat,
 				quotedMsg: null, isWamoSub: false });
 

@@ -5341,8 +5341,8 @@ palpite óbvio (strings). Não está ligado a nada. O teste ao vivo fica
 **vermelho de propósito**, atrás do seu próprio interruptor, para que a próxima
 tentativa tenha um harness em vez de uma página em branco.
 
-**Status**: não entregue.
-**Testes**: `capabilities/send/poll_test.go` (7 testes cobrindo o medido).
+**Status**: ~~não entregue~~ **entregue** — destravada pela H73, no mesmo dia.
+**Testes**: `capabilities/send/poll_test.go`.
 
 ---
 
@@ -5522,3 +5522,85 @@ H69 acabou de cobrar. Espera um chamador qualificado pelo módulo.
 **Status**: entregue (leitura); escrita **não entregue**, com o motivo acima.
 **Testes**: `capabilities/contacts/commongroups_test.go` (secção `labels`,
 7 testes, três com controle acima) e o teste ao vivo.
+
+---
+
+## H73 — o instrumento que pergunta à função o que ela lê
+
+**Data**: 2026-08-21
+**Contexto**: decisão da orquestração — parar de abrir capacidades e resolver
+**uma vez** a camada que vinha bloqueando várias.
+**Onde**: `internal/wa-headless/spa/argprobe.go`,
+`internal/wa-headless/probe_argshape_test.go`.
+
+### O problema era um instrumento faltando, não uma assinatura
+
+Três técnicas para descobrir a forma de uma chamada, e o `ARMADILHAS.md` registra
+onde cada uma para:
+
+| técnica | para quando |
+|---|---|
+| `String(fn)` | a função é `async` — devolve a casca |
+| chamador do app | não existe chamador no bundle, ou ele chama outra função (H69) |
+| camada do modelo | nenhum modelo expõe a operação |
+
+Enquete (H69), etiqueta (H72) e recado (H66) estavam bloqueadas pelas TRÊS ao
+mesmo tempo. Isso não é uma assinatura faltando; é um instrumento faltando.
+
+### Como ele funciona
+
+Uma função que desestrutura um objeto precisa **ler** as propriedades dele, e
+ler é observável: ela recebe um `Proxy` cujo `get` registra cada chave. Depois
+ela quase sempre lança — `undefined` raramente serve para alguma coisa — e a
+essa altura já disse o que queria.
+
+Com profundidade, o `get` responde com **outro** registrador, então o caminho
+sai inteiro: `poll.options.map` em vez de parar em `poll`.
+
+Dois detalhes que decidem se funciona:
+
+- **`then` precisa devolver `undefined`.** Um proxy aguardado cujo `then` é
+  chamável nunca assenta, e a sonda travaria em vez de responder.
+- **O alvo do proxy é uma FUNÇÃO.** Alguns caminhos testam o argumento com
+  `typeof` ou o chamam; um proxy sobre `{}` responde `'object'` e não é
+  chamável, encerrando a leitura cedo com um `TypeError` que não diz nada.
+
+### O controle veio antes das respostas
+
+As duas primeiras alvos foram assinaturas **já conhecidas**, lidas por outras
+técnicas. Um instrumento que não reproduz uma resposta medida não merece as não
+medidas:
+
+```
+blockContact           arg0=[bizOptOutArgs blockEntryPoint contact skipCtwa1pdNbfSignal]  ✓ bate
+forwardMessagesToChats arg0=[appendedText chats includeCaption msgs]                      ✓ bate
+```
+
+### O que ele destravou, numa execução
+
+```
+sendPollCreation({poll, chat, quotedMsg, isWamoSub})
+    poll.name         string (o .length é lido)
+    poll.contentType
+    poll.options      array  (o .map é lido)
+
+editLabelAssociation(arrayDeEtiquetas, arrayDeChats)   e NÃO lançou
+
+setMyTextStatus(a, b, c, d, e)   nenhum argumento é lido como objeto
+                                 -> são primitivos; ainda bloqueada, mas por
+                                    um motivo agora CONHECIDO
+```
+
+O payload da enquete não tem nada parecido com `correctOptionKey` ou
+`filteredOptions` — que é exatamente o que a H69 diagnosticou e não conseguiu
+provar. Duas execuções ao vivo custaram o que uma sonda respondeu.
+
+### O que ele NÃO responde
+
+Ele diz o que a função **procura**, nunca o que o app **passaria**. São perguntas
+diferentes, e confundi-las foi o erro da H69 na direção oposta. Também não
+distingue campos lidos sob condição que a sonda nunca alcança.
+
+**Status**: entregue.
+**Testes**: os controles acima são o teste do instrumento; a prova de que ele
+serve é a H69 fechada no mesmo dia.

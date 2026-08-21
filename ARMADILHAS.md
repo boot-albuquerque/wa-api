@@ -1274,3 +1274,39 @@ capturas que o portão reportou no dia — `"contacts.About(len=0)"` e ` ``` `.
 E o teste usa o **mesmo** `housekeepStatusLine` que o portão, não uma cópia:
 copiar o padrão faria um dublê incapaz de divergir do original por construção,
 que é a primeira armadilha deste arquivo.
+
+## Quando as três técnicas falham juntas, falta um INSTRUMENTO
+
+**Medido em 2026-08-21 (H73).**
+
+`String(fn)` para em função `async`. O chamador do app para quando não existe
+chamador — ou quando ele chama outra função (H69). A camada do modelo para
+quando nenhum modelo expõe a operação.
+
+Enquete, etiqueta e recado estavam bloqueados pelas **três ao mesmo tempo**. O
+sinal de que falta ferramenta, e não conhecimento, é esse: o mesmo limite
+aparecendo em famílias diferentes.
+
+**A quarta técnica**: pergunte à função. Uma função que desestrutura um objeto
+tem de **ler** as propriedades, e ler é observável — passe um `Proxy` que
+registra cada chave lida. Ela lança logo depois, e a essa altura já respondeu.
+
+```
+spa.ArgumentProbeExpr(módulo, função, aridade, profundidade)
+  -> {reads: [["poll", "poll.name", "poll.options", "poll.options.map"], …]}
+```
+
+**Dois detalhes decidem se funciona:**
+
+- `then` tem de devolver `undefined`, senão um proxy aguardado nunca assenta e a
+  sonda trava em vez de responder.
+- O alvo do proxy tem de ser uma **função**, não `{}`: alguns caminhos testam o
+  argumento com `typeof` ou o chamam, e um objeto encerra a leitura cedo.
+
+**Rode os controles primeiro.** As duas primeiras perguntas devem ser assinaturas
+que você JÁ conhece por outra técnica. Um instrumento que não reproduz uma
+resposta medida não merece as não medidas — e este reproduziu duas exatamente
+antes de ser usado para valer.
+
+**O que ele não responde**: o que o app passaria. Ele diz o que a função procura.
+São perguntas diferentes, e trocá-las é o erro da H69 ao contrário.

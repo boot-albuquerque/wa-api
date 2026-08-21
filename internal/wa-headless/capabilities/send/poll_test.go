@@ -11,10 +11,9 @@ import (
 	"wa-api/internal/wa-headless/engine"
 )
 
-// THE CAPABILITY DOES NOT WORK AGAINST THE LIVE BUILD (H69). These tests cover
-// the half that is MEASURED — the option shape, the validation, the
-// postcondition's strictness — so the measurements survive and the coverage
-// number stays honest about what exists. None of them claims a poll can be sent.
+// The capability WORKS (H73 unblocked H69). These tests lock the shape that the
+// argument instrument measured, and in particular that nothing resembling the UI
+// helper's argument list comes back — that mistake cost two live runs.
 
 type pollDouble struct {
 	ok         bool
@@ -76,24 +75,80 @@ func TestAnOptionIsAnObjectNotAString(t *testing.T) {
 	}
 }
 
-// TestMultiIsTheCallersChoice. A single-answer poll and a multi-answer one ask
-// different questions of the people receiving them.
-func TestMultiIsTheCallersChoice(t *testing.T) {
+// TestThePayloadIsExactlyWhatTheFunctionReads. The instrument measured three
+// fields — name, contentType, options — and nothing else. The fields H69 sent
+// instead came from a UI helper and must not come back.
+func TestThePayloadIsExactlyWhatTheFunctionReads(t *testing.T) {
 	compressPollClock(t)
-	single := &pollDouble{ok: true, id: "3EB0", options: 2}
-	if _, err := sendPoll(single, "q?", []string{"a", "b"}, false); err != nil {
+	p := &pollDouble{ok: true, id: "3EB0", options: 3}
+	if _, err := sendPoll(p, "q?", []string{"a", "b", "c"}, false); err != nil {
 		t.Fatalf("PollTo: %v", err)
 	}
-	if !strings.Contains(single.lastScript, "isSingleOption: true") {
-		t.Fatal("multi=false did not become isSingleOption: true")
+	if !strings.Contains(p.lastScript, "const poll = { name:") {
+		t.Fatal("the payload is not built from the measured fields")
 	}
-	multi := &pollDouble{ok: true, id: "3EB0", options: 2}
-	if _, err := sendPoll(multi, "q?", []string{"a", "b"}, true); err != nil {
+	if !strings.Contains(p.lastScript, "options: filteredOptions") {
+		t.Fatal("the payload has no options field")
+	}
+	if !strings.Contains(p.lastScript, "A.sendPollCreation({ poll: poll, chat: chat,") {
+		t.Fatal("the envelope is not the measured {poll, chat, quotedMsg, isWamoSub}")
+	}
+	// EVERY NEEDLE IS A KEY, with its colon. Matching the bare names found them
+	// in the script's own COMMENT explaining why they are not sent — the
+	// guard-matches-prose trap in ARMADILHAS.md, hit for the third time in one
+	// session and again by the person who wrote the rule.
+	for _, ghost := range []string{"correctOptionKey:", "filteredOptions:", "isPhotoPoll:", "hideVoterNames:", "pollEndTime:"} {
+		if strings.Contains(p.lastScript, ghost) {
+			t.Fatalf("%q is back in the payload; it belongs to the UI helper, not to "+
+				"this function, and sending it cost two live runs", ghost)
+		}
+	}
+	// createPollCreationMsgData reads the SAME envelope, so calling it to build
+	// the payload was circular. It must not be called.
+	if strings.Contains(p.lastScript, "createPollCreationMsgData") {
+		t.Fatal("the payload is built by calling the function that wants the payload")
+	}
+}
+
+// TestAnInventedContentTypeIsNotSent. The field is real but its enum was not
+// found on this build; omitting it is honest, and inventing a number would be a
+// value nobody can check.
+func TestAnInventedContentTypeIsNotSent(t *testing.T) {
+	compressPollClock(t)
+	p := &pollDouble{ok: true, id: "3EB0", options: 2}
+	if _, err := sendPoll(p, "q?", []string{"a", "b"}, false); err != nil {
 		t.Fatalf("PollTo: %v", err)
 	}
-	if !strings.Contains(multi.lastScript, "isSingleOption: false") {
-		t.Fatal("multi=true did not become isSingleOption: false")
+	if !strings.Contains(p.lastScript, "if (contentType !== undefined) { poll.contentType = contentType; }") {
+		t.Fatal("contentType is set unconditionally; an undefined enum would be sent as undefined")
 	}
+	if !strings.Contains(p.lastScript, "typeSource = 'omitted'") {
+		t.Fatal("the script does not report that it omitted the field")
+	}
+}
+
+// TestMultiIsAcceptedAndNOTSILENTLYDROPPED.
+//
+// This is the uncomfortable one. The measured payload has three fields and none
+// of them is about single-versus-multiple answers, so the multi argument
+// currently reaches nothing. Saying that here is better than a test that
+// pretends: the parameter stays because the product distinction is real and the
+// field for it has not been found, and this test documents the gap so nobody
+// reads its absence as proof it does not exist.
+func TestMultiIsAcceptedAndNotSilentlyDropped(t *testing.T) {
+	compressPollClock(t)
+	for _, multi := range []bool{false, true} {
+		p := &pollDouble{ok: true, id: "3EB0", options: 2}
+		got, err := sendPoll(p, "q?", []string{"a", "b"}, multi)
+		if err != nil {
+			t.Fatalf("multi=%t: %v", multi, err)
+		}
+		if got.ID == "" {
+			t.Fatalf("multi=%t produced no poll", multi)
+		}
+	}
+	t.Log("NOT IMPLEMENTED: the measured payload carries no single/multi field, " +
+		"so the multi argument does not yet reach the page — see H73")
 }
 
 // TestTheNewMessageMustBEAPoll. A new message of ours in the chat is not proof

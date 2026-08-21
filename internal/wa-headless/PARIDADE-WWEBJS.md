@@ -740,7 +740,7 @@ downloadAndMaybeDecrypt({signal, downloadQpl, directPath, encFilehash,
 | `wwebjs` | estado |
 |---|---|
 | `Contact.getCommonGroups` | **entregue** (H68) — leitura, `count=1` esperado e conferido |
-| `Client.sendMessage(chat, poll)` | **não entregue** (H69) — medições preservadas |
+| `Client.sendMessage(chat, poll)` | **entregue** (H69 fechada pela H73) |
 
 **Grupos em comum, divergências:** o `null` da página significa "sou eu",
 não "nenhum", e nós mantemos a distinção (`ErrIsSelf`); a renderização mostra
