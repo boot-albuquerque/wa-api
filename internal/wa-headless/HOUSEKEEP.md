@@ -8127,6 +8127,38 @@ reais — cometendo o defeito que ele próprio documenta no H29. Atualizado, com
 envelhecimento registrado em vez de apagado: um retrato que envelheceu é
 evidência de como ele envelhece.
 
+### 41=a tentado: o diretório de canais TRAVA, e nem o próprio relógio o solta
+
+A orquestração autorizou **seguir** um canal público (barato, reversível) em vez
+de criar um. Para seguir é preciso achar um, e inventar um link seria adivinhar o
+canal de outra pessoa — então o caminho certo era o discovery do próprio app.
+
+Ele existe, inteiro: `WAWebNewsletterDirectorySearchJob` exporta
+`getRecommendedNewsletters`, `getSimilarNewsletters`, `getNewsletterDirectoryList`,
+`getNewsletterDirectorySearchResults`, `getNewsletterDirectoryCategoriesPreview`.
+
+**E `getRecommendedNewsletters` não responde.** Quatro execuções, com e sem
+argumento, e com três formas de objeto de opções. O parque incremental diz qual
+chamada travou — é sempre a primeira.
+
+O detalhe que faz disto mais que "demorou": a chamada está dentro de um
+`Promise.race` com rejeição em 8 s, **e o timeout não dispara**. Um `await` que
+não volta nem quando o relógio corre ao lado dele não é lentidão — é a mesma
+classe do travamento de `createCallLink` (H92) e do convite (H57).
+
+> **Um defeito meu no caminho, e ele é o de sempre.** As três primeiras execuções
+> reportaram `PENDING` porque eu inseri o bloco DEPOIS de `out.finished = true`,
+> e o laço do Go sai justamente nessa bandeira. **A sonda não estava travando; o
+> leitor estava indo embora cedo.** Só depois de mover a bandeira para o fim é
+> que os 30 s inteiros foram gastos e o travamento virou fato medido em vez de
+> artefato do instrumento.
+
+**O que 41=a precisa e ninguém aqui produz**: um link de canal público real. O
+`queryNewsletterMetadataByInviteCode` existe e tem aridade 2 — com um código, a
+inscrição é um passo. Sem ele, e com o diretório travado, a forma do modelo de
+canal fica sem medição.
+
 **Status**: entregue — duas sondas medidas ao vivo por mim, um relato de worker
 corrigido, a pista do comércio resolvida até "falta uma conta com catálogo", e a
-forma do modelo de canal aguardando uma inscrição.
+forma do modelo de canal bloqueada por um travamento medido no diretório, não por
+falta de código.

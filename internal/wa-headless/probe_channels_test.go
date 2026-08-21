@@ -229,6 +229,77 @@ func TestProbeChannels(t *testing.T) {
 		}
 		park(out);
 
+		// THE DIRECTORY, so a channel can be found instead of invented.
+		//
+		// modelCount is 0 because this account follows nothing, so the model's
+		// field shape is unmeasurable — and inventing an invite link to follow
+		// would be guessing at somebody else's channel. The app has its own
+		// discovery: WAWebNewsletterDirectorySearchJob.getRecommendedNewsletters.
+		//
+		// READ ONLY. It lists; it does not subscribe. NAMES AND COUNTS ONLY: a
+		// channel name is public but it is still content, so what crosses here
+		// is how many came back, which fields a row carries, and the jid domain.
+		try {
+			const DirJob = window.require('WAWebNewsletterDirectorySearchJob');
+			out.directory = { keys: Object.keys(DirJob).slice(0, 10) };
+			if (typeof DirJob.getRecommendedNewsletters === 'function') {
+				out.directory.arity = DirJob.getRecommendedNewsletters.length;
+				out.directory.call = 'PENDING';
+				park(out);
+				// ARIDADE 1: chamar sem argumento TRAVOU — o park incremental
+				// disse qual chamada, que é exatamente para isso que ele existe.
+				// Três formas, cada uma parkeada antes de tentar.
+				const shapes = { empty: {}, limited: { limit: 5 }, withCountry: { limit: 5, countryCode: 'BR' } };
+				for (const [nm, arg] of Object.entries(shapes)) {
+					out.directory['try_' + nm] = 'PENDING';
+					park(out);
+					try {
+						const rr = await Promise.race([
+							DirJob.getRecommendedNewsletters(arg),
+							new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT_8s')), 8000)),
+						]);
+						const rws = Array.isArray(rr) ? rr : (rr && Array.isArray(rr.newsletters) ? rr.newsletters : null);
+						out.directory['try_' + nm] = 'resolved: ' + typeof rr +
+							' count=' + (rws ? rws.length : 'n/a') +
+							(rr && typeof rr === 'object' && !Array.isArray(rr)
+								? ' keys=[' + Object.keys(rr).slice(0, 10).join(',') + ']' : '');
+						if (rws && rws.length && !out.directory.rowFields) {
+							out.directory.rowFields = Object.keys(rws[0]).slice(0, 25);
+							const id0 = rws[0].id;
+							out.directory.idDomain = (id0 && id0.server) ? String(id0.server) :
+								(typeof id0 === 'string' && id0.indexOf('@') >= 0 ? id0.split('@')[1] : 'unknown');
+						}
+					} catch (e) { out.directory['try_' + nm] = 'threw: ' + safe(e); }
+					park(out);
+				}
+				try {
+					const r = await Promise.race([
+						Promise.resolve(null),
+						new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT_15s')), 15000)),
+					]);
+					const rows = Array.isArray(r) ? r : (r && Array.isArray(r.newsletters) ? r.newsletters : null);
+					out.directory.call = 'resolved: ' + typeof r +
+						(r && typeof r === 'object' && !Array.isArray(r)
+							? ' keys=[' + Object.keys(r).slice(0, 10).join(',') + ']' : '');
+					out.directory.count = rows ? rows.length : 'not a list';
+					if (rows && rows.length) {
+						out.directory.rowFields = Object.keys(rows[0]).slice(0, 25);
+						const id = rows[0].id;
+						out.directory.idDomain = (id && id.server) ? String(id.server) :
+							(typeof id === 'string' && id.indexOf('@') >= 0 ? id.split('@')[1] : 'unknown');
+					}
+				} catch (e) {
+					out.directory.call = 'threw: ' + safe(e);
+				}
+			}
+		} catch (e) { out.directory = 'module absent: ' + safe(e); }
+
+		// THE FLAG GOES LAST, and it used to be two hundred lines earlier.
+		//
+		// The Go loop breaks on "finished":true, so a flag set before the work
+		// makes the poll exit while the page is still awaiting — and every
+		// pending call reports PENDING forever. The probe was not hanging; the
+		// reader was leaving early.
 		out.finished = true;
 		park(out);
 		})();

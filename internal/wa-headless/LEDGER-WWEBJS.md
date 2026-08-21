@@ -156,7 +156,18 @@ improviso dela. Travado por teste que casa `call-id`, `call-creator`, `to` e
 
 ## Channel
 
-**Família inteira `MISSING`** — canais/newsletters — família inteira não atacada.
+**Superfície MEDIDA, família ainda não implementada** (H102). Vinte e quatro
+módulos presentes com aridade batendo com a referência; só
+`WAWebMexFetchNewsletterSubscribersJob` resolve `falsy`. Criação **habilitada**
+(`isNewsletterCreationEnabled` true, teto de 5000 assinantes) e a superfície de
+envio inteira existe (`sendNewsletterTextMsg`, `MediaMsg`, `PollCreationMsg`,
+`AlbumMsg`, `EditMsg`).
+
+O que trava a implementação não é código: `modelCount` é **0** porque a conta não
+segue canal nenhum, e o discovery do próprio app —
+`getRecommendedNewsletters` — **não responde nem ao seu próprio timeout de 8s**,
+medido em quatro execuções. Reabre com um link de canal público real:
+`queryNewsletterMetadataByInviteCode` tem aridade 2 e a inscrição é um passo.
 
 | upstream | estado |
 |---|---|
