@@ -6977,3 +6977,98 @@ hoje; `Count` continua sendo o caso stale de verdade, e juntar os dois é o erro
 original.
 
 **Status**: entregue (o achado do `PolicyOf` fica pendente).
+
+---
+
+## H90 — ADDRESS BOOK, e o único evento que tinha ouvinte e não tinha prova
+
+**Data**: 2026-08-21.
+**Contexto**: segunda família sob a regra de fechar métodos e eventos juntos.
+
+### Por que esta família fecha um evento
+
+`events.ContactChanged` estava instalado desde a H87 e **nunca provado**: o
+barramento tinha ouvinte e nenhuma forma de fazê-lo disparar, porque nada neste
+módulo movia um registro de contato — os únicos caminhos passavam por *outra*
+conta editar o próprio perfil, que este lado não causa.
+
+`saveContactAction` move o registro **nesta** sessão. Medido: nomear o par
+produziu **8** `contact.changed`. O tipo sai de promessa para capacidade.
+
+### Duas assimetrias que a referência esconde
+
+1. **O save quer dígitos crus; o delete quer wid.** O `wwebjs` passa o mesmo
+   valor aos dois. Aqui, `createWid("5541…")` sem sufixo morre com
+   `wid error: invalid wid` — que foi como o primeiro delete ao vivo falhou,
+   **depois** de o save ter dado certo, deixando um contato que a limpeza não
+   conseguia remover. Travado por `TestTheDeleteBuildsAWidAndTheSaveDoesNot`.
+
+2. **`getDeviceIds` tem aridade 2 aqui**, e a referência passa um argumento. O
+   par não tem registro de dispositivo nesta conta, e "sem registro" **não** foi
+   fundido no número 0: um usuário com quem nunca se trocou chave pareceria um
+   usuário sem telefone.
+
+### Eu quebrei a invariante 6, sabendo dela
+
+A primeira versão do save consultava o registro com `setTimeout` **dentro da
+página**. Funcionaria. Nada na suíte notaria.
+
+A regra não é frescura: uma página que conta o próprio tempo limite conta
+durante um reload, uma aba estrangulada e um renderizador travado, num lugar
+onde o Go não vê a decisão nem a cancela. Todo prazo deste módulo está do lado
+Go justamente para que o contexto de quem chama signifique alguma coisa.
+
+Isto virou **gate**: `gate_pageclock_test.go` varre os scripts de página de
+produção atrás de `setTimeout`, `setInterval`, `requestAnimationFrame` e
+`Date.now`. Duas exceções, **com motivo escrito**:
+
+| arquivo | motivo |
+|---|---|
+| `events/ingress.go` | `Date.now()` **carimba** um evento; `Event.At` documenta que é diagnóstico e nunca decide |
+| `capabilities/group/group.go` | **PRÉ-EXISTENTE, achado incidental** — ver abaixo |
+
+O gate também verifica que **a exceção ainda é verdadeira**: um arquivo isento
+que perdeu o construto é uma isenção que ninguém percebe ter vencido.
+
+### Achado incidental — NÃO corrigido
+
+**Onde**: `capabilities/group/group.go:274`
+
+```js
+if (!chat) { await new Promise(r => setTimeout(r, 250)); }
+```
+
+**Problema**: a espera pela criação do grupo dorme **na página**, violando a
+invariante 6 pelo mesmo motivo acima. Está fora do escopo desta tarefa e é
+pré-existente.
+
+**Correção sugerida**: parkear assim que a chamada é aceita e consultar o chat
+por um script síncrono, com o laço em Go sob o orçamento de quem chama — que é
+exatamente a forma que `addressbook.Save` acabou tendo.
+
+**Status**: não corrigido; nomeado na allowlist do gate para não passar
+despercebido.
+
+### E eu caí na H85, do outro lado
+
+O teste ao vivo falhou com "o `contact.changed` nunca disparou". Não era o
+barramento: o contato **já tinha o nome** — sobra de uma execução cujo delete
+havia falhado — então o save escreveu o valor que o registro já continha. **Um
+no-op não move leitor nenhum.**
+
+É a armadilha da H85 vista do outro lado: lá, um controle que não podia falhar
+CONFIRMOU uma hipótese falsa; aqui, um controle que não podia falhar ACUSOU um
+mecanismo correto.
+
+O conserto não foi esperar mais: o teste agora **apaga o nome primeiro** e
+afirma `HadName == false` antes de olhar para o barramento. Se o registro ainda
+carrega nome nessa linha, nada depois dela prova coisa alguma.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| `setTimeout` de volta no script do save | `TestNoClockInProductionPageScripts` | "invariant 6: a page script decides its own waiting at capabilities/addressbook/script.go:77" |
+| isentar um arquivo cujo relógio só existe em comentário | idem | "is allowlisted (…) and no longer contains a clock; remove the exception" |
+
+**Status**: entregue (o achado do `group.go:274` fica pendente).

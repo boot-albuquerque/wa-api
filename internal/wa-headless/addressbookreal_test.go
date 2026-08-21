@@ -1,0 +1,187 @@
+package waheadless
+
+import (
+	"context"
+	"errors"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"wa-api/internal/wa-headless/capabilities/addressbook"
+	"wa-api/internal/wa-headless/core"
+	"wa-api/internal/wa-headless/engine"
+	"wa-api/internal/wa-headless/events"
+	waruntime "wa-api/internal/wa-headless/runtime"
+)
+
+// labContactName is what the proof writes, and it is written to be recognised
+// by a human who finds it on the account: this is a test artifact, and it is
+// deleted at the end of the run that made it.
+const labContactName = "wa-headless-lab"
+
+// TestAddressbookSaveReal proves the address-book family AND the one event that
+// had a listener and no proof.
+//
+// events.ContactChanged was installed by the bus and never fired in a test,
+// because nothing in this module could make a contact record move: the only
+// paths ran through another account editing its own profile, which this side
+// cannot cause. A save moves the record HERE, which is the trigger the bus's
+// own rule demands before a type counts as delivered.
+//
+// syncToPhone is FALSE. True would write the contact into the address book of
+// the physical phone conta-A is paired with — a change outside this process
+// that no test can undo.
+func TestAddressbookSaveReal(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_REAL_ADDRBOOK") == "" {
+		t.Skip("set WA_REAL_ADDRBOOK=1; this writes and then deletes a contact on conta-A")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	ab := addressbook.New(runner, sess.Tab().Evaluate)
+
+	// THE CONTACT IS DELETED WHETHER OR NOT THE TEST PASSES, and by a defer
+	// rather than t.Cleanup: cleanups run after every defer, so a cleanup here
+	// would fire with the session already torn down. That exact mistake left
+	// the lab group armed in H89.
+	defer func() {
+		if err := ab.Delete(context.Background(), peer, "ab/cleanup"); err != nil {
+			t.Errorf("deleting the test contact: %v", err)
+		}
+	}()
+
+	hub := events.NewHub()
+	defer hub.Close()
+	var mu sync.Mutex
+	seen := map[events.Type]int{}
+	defer hub.Subscribe(func(e events.Event) {
+		if e.Replay {
+			return
+		}
+		mu.Lock()
+		seen[e.Type]++
+		mu.Unlock()
+	})()
+	pumpCtx, stopPump := context.WithCancel(ctx)
+	defer stopPump()
+	go func() { _ = events.NewPump(runner, sess.Tab().Evaluate, hub).Run(pumpCtx) }()
+	// Let the pump install and burn its replay window before the write.
+	time.Sleep(3 * time.Second)
+
+	countOf := func(ty events.Type) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return seen[ty]
+	}
+
+	// THE WRITE HAS TO BE A REAL CHANGE, AND THAT IS THE WHOLE LESSON OF H85.
+	//
+	// The first run of this test found the contact already named — a leftover
+	// from a run whose delete had failed — so saveContactAction wrote the value
+	// the record already held. A no-op moves nothing, no event fired, and the
+	// test accused the bus of not delivering an event that had never been
+	// caused. That is exactly the shape of the control that could not fail,
+	// which this repository has now met from both sides.
+	//
+	// So the name is removed first, and the save's own HadName is asserted
+	// false: if the record still carries a name at that point, nothing after
+	// this line proves anything.
+	if err := ab.Delete(ctx, peer, "ab/prepare"); err != nil {
+		t.Fatalf("clearing the contact before the proof: %v", err)
+	}
+	time.Sleep(5 * time.Second)
+	before := countOf(events.ContactChanged)
+
+	saved, err := ab.Save(ctx, peer, labContactName, "", false, "ab/save")
+	if err != nil {
+		t.Fatalf("Save: %v (%s)", err, saved)
+	}
+	t.Logf("saved: %s", saved)
+	if saved.HadName {
+		t.Fatal("the record already carried a name; this save was a no-op and " +
+			"nothing it does or does not fire means anything (H85)")
+	}
+	if !saved.HasName {
+		t.Fatal("the save reported no name on the record")
+	}
+	if saved.SyncedToPhone {
+		t.Fatal("the save synced to the phone; nothing here asked for that")
+	}
+
+	// THE EVENT. Give the pump several cycles past the write.
+	deadline := time.Now().Add(20 * time.Second)
+	for countOf(events.ContactChanged) == before && time.Now().Before(deadline) {
+		time.Sleep(time.Second)
+	}
+	got := countOf(events.ContactChanged)
+	mu.Lock()
+	all := map[events.Type]int{}
+	for k, v := range seen {
+		all[k] = v
+	}
+	mu.Unlock()
+	t.Logf("bus across the save: %v", all)
+	if got == before {
+		t.Fatalf("%s never fired; the type still has a listener and no proof", events.ContactChanged)
+	}
+
+	// A device read on a user this account really does exchange messages with.
+	if n, err := ab.DeviceCount(ctx, peer, "ab/devices"); err != nil {
+		t.Logf("device count unavailable: %v", err)
+	} else {
+		t.Logf("the peer has %d device(s)", n)
+	}
+}
+
+// TestAddressbookDeleteIsIdempotentReal: deleting a number this account does not
+// have saved must not be an error worth failing a cleanup over.
+//
+// It is checked against the REAL page rather than reasoned about, because the
+// deferred cleanup in the test above runs on every path — including the ones
+// where nothing was ever saved.
+func TestAddressbookDeleteIsIdempotentReal(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_REAL_ADDRBOOK") == "" {
+		t.Skip("set WA_REAL_ADDRBOOK=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	ab := addressbook.New(runner, sess.Tab().Evaluate)
+	first := ab.Delete(ctx, peer, "ab/del-1")
+	second := ab.Delete(ctx, peer, "ab/del-2")
+	t.Logf("first delete: %v; second delete: %v", first, second)
+	if second != nil && !errors.Is(second, addressbook.ErrDelete) {
+		t.Fatalf("the second delete failed with something unexpected: %v", second)
+	}
+}

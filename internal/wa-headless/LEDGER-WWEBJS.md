@@ -105,12 +105,12 @@ nem `PARTIAL` sem justificativa explícita.
 | `setAutoDownloadPhotos` | — | `MISSING` | — | — | — | idem |
 | `setAutoDownloadVideos` | — | `MISSING` | — | — | — | idem |
 | `setBackgroundSync` | — | `MISSING` | — | — | — | idem |
-| `getContactDeviceCount` | — | `MISSING` | — | — | — | — |
+| `getContactDeviceCount` | addressbook.DeviceCount | `PARTIAL` | sim | sim | sim | o caminho funciona e o par NÃO tem registro de dispositivo nesta conta; "sem registro" e "zero dispositivos" são respostas diferentes e não foram fundidas no número 0 (H90) |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
 | `createCallLink` | — | `MISSING` | — | — | — | — |
 | `sendResponseToScheduledEvent` | — | `MISSING` | — | — | — | — |
-| `saveOrEditAddressbookContact` | — | `MISSING` | — | — | — | — |
-| `deleteAddressbookContact` | — | `MISSING` | — | — | — | — |
+| `saveOrEditAddressbookContact` | addressbook.Save | `PROVEN` | sim | sim | sim | verifica lendo de volta, com o relógio no Go; `syncToAddressbook` é parâmetro sem padrão porque `true` escreve na agenda do TELEFONE pareado (H90) |
+| `deleteAddressbookContact` | addressbook.Delete | `PROVEN` | sim | sim | sim | idempotente, medido; exige **wid**, enquanto o save exige dígitos crus — assimetria que a referência esconde passando o mesmo valor aos dois (H90) |
 | `getContactLidAndPhone` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | build LID-first: 397 de 399 mensagens sob @lid |
 | `addOrEditCustomerNote` | — | `MISSING` | — | — | — | — |
 | `getCustomerNote` | — | `MISSING` | — | — | — | — |
@@ -327,7 +327,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | idem |
 | `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
 | `MEDIA_UPLOADED` | — | `MISSING` | `send.SendMedia` o dispararia, e `message.added` com `Kind` PODE já cobrir a semântica — mas isso não foi medido, e "provavelmente coberto" não é um estado deste vocabulário (H88) |
-| `CONTACT_CHANGED` | events.ContactChanged | `PARTIAL` | instalado; NÃO provado neste barramento — nada aqui faz outra conta mudar o perfil (H87) |
+| `CONTACT_CHANGED` | events.ContactChanged | `PROVEN` | disparado sob demanda por `addressbook.Save`, sem segunda conta: 8 eventos ao nomear o par. Era o único tipo instalado e nunca provado (H90) |
 | `GROUP_JOIN` | — | `MISSING` | **medido impossível neste barramento**: mudança de participante produz ZERO evento na sessão que a fez (H86) |
 | `GROUP_LEAVE` | — | `MISSING` | idem GROUP_JOIN (H86) |
 | `GROUP_ADMIN_CHANGED` | — | `MISSING` | idem GROUP_JOIN (H86) |
@@ -347,9 +347,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 46 | 21% |
+| `PROVEN` | 49 | 22% |
 | `PARTIAL` | 41 | 19% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 129 | 59% |
+| `MISSING` | 126 | 57% |
 | **total** | **220** | |
