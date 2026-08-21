@@ -10,15 +10,15 @@ import (
 
 // SetStatusMessageUseCase encapsula a validação de definição de status.
 type SetStatusMessageUseCase struct {
-	sessions appport.SessionGuard
-	logger   appport.Logger
+	status appport.StatusMessageSetter
+	logger appport.Logger
 }
 
 // NewSetStatusMessageUseCase cria uma nova instância do usecase.
-func NewSetStatusMessageUseCase(sg appport.SessionGuard, l appport.Logger) *SetStatusMessageUseCase {
+func NewSetStatusMessageUseCase(st appport.StatusMessageSetter, l appport.Logger) *SetStatusMessageUseCase {
 	return &SetStatusMessageUseCase{
-		sessions: sg,
-		logger:   l,
+		status: st,
+		logger: l,
 	}
 }
 
@@ -28,11 +28,20 @@ func (uc *SetStatusMessageUseCase) Execute(ctx context.Context, txtID string, re
 		return nil, apperr.New("missing_body", apperr.CategoryValidation, "missing Body in payload", false, nil)
 	}
 
-	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
+	if err := uc.status.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 
-	uc.logger.Info(ctx, "set status message validated", "txtID", txtID)
+	// F198: até 2026-08-21 o Execute PARAVA aqui, com um log a dizer
+	// "validated" — que era honesto sobre o que o código fazia e mentiroso
+	// sobre o que a rota promete. O estado do utilizador nunca mudava e o
+	// cliente recebia 200.
+	if err := uc.status.SetStatusMessage(ctx, txtID, req.Body); err != nil {
+		uc.logger.Error(ctx, "set status message failed", "txtID", txtID, "error", err)
+		return nil, err
+	}
+
+	uc.logger.Info(ctx, "status message set", "txtID", txtID)
 	return &domain.SetStatusMessageResult{}, nil
 }
