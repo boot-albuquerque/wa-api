@@ -5115,10 +5115,87 @@ passo extra em silêncio seria decidir pelo chamador. Há teste.
 ### Não entregue, e medido: recado (`about` / status de texto)
 
 `WAWebSetAboutJob.setAbout` e `WAWebSetTextStatusJob.setTextStatus` **não são
-funções** — são objetos cuja única chave é `"0"`, o que sugere array ou wrapper
-de job preguiçoso. Uma sonda a mais resolve; não foi feita nesta passada.
+funções**. Medidos duas vezes:
+
+```
+{type: "object", isArray: true, length: 1, zeroType: "object", ctor: "Array"}
+```
+
+São **arrays de um elemento**, e o elemento é um objeto, não uma função — um
+descritor de job de ligação preguiçosa. Chamar qualquer coisa ali às cegas é o
+chute que a H58 pagou.
+
+Parei na segunda sonda, de propósito: a regra é medir antes de projetar, e
+também não cavar. O que está medido basta para a próxima pessoa começar de onde
+isto parou, em vez de refazer as duas sondas.
 
 **Status**: entregue (limpar, apagar, nome de exibição — este sem prova ao vivo
 possível); recado **não entregue**, com a medição preservada acima.
 **Testes**: `capabilities/chats/lifecycle_test.go` (9 testes, três com controle
 negativo asserido) e `capabilities/profile/profile_test.go` (8 testes).
+
+---
+
+## H67 — baixar mídia, e a primeira pós-condição criptográfica do módulo
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura.
+**Onde**: `internal/wa-headless/capabilities/media/download.go`.
+
+### A pós-condição que nenhuma página consegue falsificar
+
+Em todo o resto deste módulo a pós-condição **pergunta à página** se algo
+aconteceu e precisa confiar na resposta. Aqui não: `filehash` no modelo da
+mensagem é o **SHA-256 do texto claro**, então bytes que decifram para outra
+coisa reprovam num teste que nenhum comportamento da página forja.
+
+E o teste ao vivo acrescenta a metade que a capacidade não pode fazer sozinha —
+ele **sabe** o que o texto claro deveria ser. Uma página que devolvesse um
+arquivo diferente cujo `filehash` batesse com o próprio conteúdo passaria na
+verificação da capacidade e reprovaria na do teste.
+
+```
+downloaded: media.Attachment(bytes=1024 mime=application/octet-stream sha256=6fd10114… shape=arraybuffer waited=504ms)
+MEASURED: on this build downloadAndMaybeDecrypt returns a arraybuffer
+refused a text message: media: that message carries no attachment
+```
+
+### O argumento que ninguém adivinharia: telemetria obrigatória
+
+Primeira tentativa ao vivo:
+
+```
+TypeError: Cannot read properties of undefined (reading 'addAnnotations')
+```
+
+`addAnnotations` vive num **QPL** — o objeto de log de performance. O
+`downloadQpl` é **obrigatório**, e todo chamador do app passa um. Encanamento de
+telemetria se apresentando como parâmetro obrigatório é a espécie menos
+adivinhável que existe.
+
+**A regra corrigida da H57 leu isto certo de primeira**: o nome do campo diz
+ONDE o objeto que falta mora. Uma leitura, uma correção, sem tentativas cegas.
+
+### O que veio de volta nunca tinha sido medido
+
+O script aceita `ArrayBuffer`, typed array e `Blob`, e **reporta qual recebeu**
+(`Attachment.PageShape`). Mediu `arraybuffer`. Uma capacidade que não sabe dizer
+o que recebeu não pode ser conferida.
+
+### Controles negativos EXECUTADOS — e dois falharam nos modos já catalogados
+
+| mutação | primeira execução | depois |
+|---|---|---|
+| não verificar o hash | **não compilou** (`want` não usado) | `got <nil>, want ErrHashMismatch` |
+| omitir `downloadQpl` | `the download omits downloadQpl` | — |
+| assumir uma única forma de retorno | `the script does not handle the typedarray shape` | — |
+| baixar antes de recusar por tamanho | **passou** — o teste asseria a ORDEM, e posição não é imposição | `the declared size is read but does not guard a refusal` |
+| renderizar os bytes | `the rendering carries the payload` | — |
+
+Os dois que falharam são os dois modos já no `ARMADILHAS.md` — controle que não
+compila, e agulha no predicado em vez do desvio. Ambos foram pegos porque os
+controles foram **executados**.
+
+**Status**: entregue.
+**Testes**: `capabilities/media/download_test.go` (11 testes, cinco com controle
+acima) e `downloadreal_test.go` (ida e volta byte a byte contra a página viva).

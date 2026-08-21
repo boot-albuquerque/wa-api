@@ -197,3 +197,25 @@ const (
 	// ModuleConnModel, which carries canSetMyPushname and the current
 	// pushname, is already declared in modules.go.
 )
+
+// ModuleDownloadManager fetches and decrypts a message's media:
+//
+//	downloadManager.downloadAndMaybeDecrypt({signal, directPath, encFilehash,
+//	                                         filehash, mediaKey,
+//	                                         mediaKeyTimestamp, type})
+//
+// The shape came from the app's own call sites (history sync and a CSV export
+// flow), which build it with WABase64-encoded hashes. Every field it needs is
+// already on the message model.
+//
+// THIS ONE ALLOWS A CRYPTOGRAPHIC POSTCONDITION, which is rare here: filehash
+// is the SHA-256 of the PLAINTEXT, so bytes that decrypt to something else fail
+// a check that no amount of page weirdness can fake.
+const ModuleDownloadManager = Module("WAWebDownloadManager")
+
+// ModuleStartMediaDownloadQpl builds the performance-logging handle that
+// downloadAndMaybeDecrypt REQUIRES. Omitting it throws
+// "Cannot read properties of undefined (reading 'addAnnotations')" — telemetry
+// plumbing presenting as a missing argument, which is the least guessable kind
+// of required parameter there is.
+const ModuleStartMediaDownloadQpl = Module("WAWebStartMediaDownloadQpl")

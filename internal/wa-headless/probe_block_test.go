@@ -52,6 +52,20 @@ func TestProbeBlockShape(t *testing.T) {
 		for (const m of ['WAWebSetAboutJob', 'WAWebSetTextStatusJob']) {
 			try {
 				const mod = window.require(m);
+				const o3 = mod && (mod.setAbout || mod.setTextStatus);
+				out[m + '_shape'] = {
+					type: typeof o3,
+					isArray: Array.isArray(o3),
+					length: o3 && o3.length,
+					zeroType: o3 && typeof o3[0],
+					zeroSrc: (o3 && typeof o3[0] === 'function') ? String(o3[0]).slice(0, 400) : null,
+					ctor: o3 && o3.constructor && o3.constructor.name
+				};
+			} catch (e) { out[m + '_shape'] = 'THREW:' + String(e).slice(0, 80); }
+		}
+		for (const m of []) {
+			try {
+				const mod = window.require(m);
 				const o2 = mod && (mod.setAbout || mod.setTextStatus);
 				out[m] = o2 ? Object.keys(o2).concat(
 					Object.getPrototypeOf(o2) ? Object.keys(Object.getPrototypeOf(o2)) : []) : 'NULL';

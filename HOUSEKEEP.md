@@ -3467,3 +3467,19 @@ real. A distância entre os dois é a máquina, não o código.
 O que esta ocorrência acrescenta às quatro anteriores: as outras foram medidas
 com o pacote alterado na mesma sessão, então "não é o código" era inferência.
 Aqui é observação — árvore limpa naquele diretório.
+
+**Sexta ocorrência — 2026-08-21**, mesmo padrão em outro pacote:
+
+```
+--- FAIL: TestStartSession_SuspectMarkerComposedPath_ClearedOnSuccess (30.00s)
+```
+
+`git status --porcelain internal/wa-headless/core/` vazio; isolado com
+`-count=3 -race`: **4,6 s, verde**. Duas ocorrências observadas (não inferidas)
+em pacotes diferentes no mesmo dia, ambas em testes com teto de 30 s. O padrão é
+o TETO, não o pacote: 30 s é generoso para o custo real e apertado para uma
+máquina carregada rodando o gate inteiro com `-race`.
+
+Isso muda a correção sugerida: em vez de investigar cada teste, **subir o teto
+dos testes que cronometram boot de navegador** — o que eles medem é
+comportamento, não latência, e latência é o que a máquina carregada altera.

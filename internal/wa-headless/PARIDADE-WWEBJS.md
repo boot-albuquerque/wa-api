@@ -713,3 +713,24 @@ real, e sair em silêncio seria decidir pelo chamador.
 
 **Falta**: recado (`about`/status). Os dois módulos existem e **não são
 funções** — objetos de chave `"0"`. Medido, registrado, não resolvido.
+
+## §6.23 — baixar mídia
+
+`wwebjs` expõe `Message.downloadMedia()`. A forma veio dos chamadores do app —
+o método é async e o `toString()` não mostra nada:
+
+```
+downloadAndMaybeDecrypt({signal, downloadQpl, directPath, encFilehash,
+                         filehash, mediaKey, mediaKeyTimestamp, type})
+```
+
+**Onde divergimos de propósito:**
+
+1. **Verificamos criptograficamente.** `filehash` é o SHA-256 do texto claro, e
+   nós o conferimos. É a única pós-condição do módulo que a página não consegue
+   falsificar.
+2. **Temos teto**, porque os bytes atravessam a fronteira CDP como base64 — um
+   terço a mais que o payload — e recusamos pelo tamanho DECLARADO antes de
+   baixar, para não gastar a banda de quem enviou.
+3. **Reportamos a forma que a página devolveu**, em vez de assumir uma.
+4. **`MIME` é dito como alegação de quem enviou**, não tipo farejado.
