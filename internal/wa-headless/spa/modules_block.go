@@ -125,3 +125,25 @@ const (
 	// and non-member groups before anything is attempted.
 	ModuleMuteUtils = Module("WAWebMuteUtils")
 )
+
+// The forwarding module, measured from a REAL CALL SITE in the bundle
+// (probe_forward_test.go plus a grep).
+const (
+	// ModuleForwardMessagesToChat is the layer the app's own forward flow
+	// drives, and its shape could not be read from toString() — both exported
+	// functions are async wrappers taking a single opaque `e`, and the chat
+	// model has NO forward method at all, which is what sent this search to the
+	// call sites:
+	//
+	//	forwardMessagesToChats({msgs, chats, includeCaption, appendedText})
+	//	// and the lower one, for a single chat:
+	//	forwardMessages({chat, msgs, multicast, includeCaption, appendedText})
+	//
+	// `chats` is an array of CHAT MODELS — the call site builds it from
+	// findOrCreateLatestChat, not from ids. `msgs` is an array of MESSAGE
+	// MODELS.
+	//
+	// It rejects with an error carrying `reasons`, which the app reads; this
+	// package surfaces it rather than flattening it to "failed".
+	ModuleForwardMessagesToChat = Module("WAWebForwardMessagesToChat")
+)

@@ -4776,3 +4776,81 @@ mesma palavra — "passou".
 **Status**: entregue.
 **Testes**: `capabilities/mute/mute_test.go` (12 testes, cinco com controle
 negativo registrado acima) e `mutereal_test.go` (prova ao vivo, reversível).
+
+---
+
+## H63 — encaminhar mensagem, e a assinatura que só o chamador tinha
+
+**Data**: 2026-08-21
+**Contexto**: última das quatro capacidades da superfície do whatsapp-web.js
+mapeadas pela sonda de enumeração.
+**Onde**: `internal/wa-headless/capabilities/forward/`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/probe_forward_test.go`.
+
+### As três técnicas foram necessárias, nesta ordem
+
+Esta capacidade é a que exercita o catálogo inteiro do `ARMADILHAS.md`:
+
+1. **`toString()` falhou.** As duas funções exportadas são invólucros async de um
+   argumento opaco — `function v(e){return S.apply(this,arguments)}`.
+2. **A camada do modelo não existia.** Estrelar e silenciar foram resolvidos
+   subindo para o modelo; aqui a sonda mediu `chatForwardMethods: []`. O modelo
+   do chat **não tem** método de encaminhar, então a saída das duas capacidades
+   anteriores estava fechada.
+3. **O chamador respondeu.** Grep no bundle por `forwardMessagesToChats(`
+   devolveu o objeto que o próprio app monta:
+
+```js
+forwardMessagesToChats({msgs, chats, includeCaption, appendedText})
+forwardMessages({chat, msgs, multicast, includeCaption, appendedText})
+```
+
+`chats` é array de **modelos de chat** — o chamador o constrói a partir de
+`findOrCreateLatestChat`, não de ids.
+
+### Onde divergimos do app de propósito
+
+O fluxo do app usa `findOrCreateLatestChat`; **nós não**. Abrir conversa com
+alguém para reenviar-lhe uma mensagem é ato maior do que encaminhar, e o
+chamador não pediu isso. Chat não carregado é `ErrNoChat`, e há teste.
+
+### A pós-condição é estrita porque já houve falso positivo
+
+Uma verificação de laço fechado neste módulo já aceitou mensagem de um
+desconhecido chegada **23 segundos ANTES** do envio. Por isso a cópia tem de
+satisfazer **três** condições: ser nossa (`fromMe`), estar no chat de destino, e
+ter id **ausente do conjunto** capturado antes da chamada. Comparação por
+timestamp está proibida em teste.
+
+### Prova ao vivo
+
+```
+sent:      send.Result(id=…5302 at=2026-08-21T06:22:15Z waited=2ms)
+forwarded: forward.Result(newID=…65BB bodyLen=45 waited=512ms)
+```
+
+O teste falha explicitamente se `newID == sourceID` — devolver a origem como
+cópia é o modo de falhar de qualquer verificação frouxa. A recusa de chat
+desconhecido foi exercitada ao vivo.
+
+Encaminha uma mensagem que ele mesmo acabou de enviar, de volta ao MESMO chat de
+laboratório: encaminhar conteúdo alheio a terceiros é a versão deste ato com
+custo real de privacidade, e o laboratório tem exatamente duas contas.
+
+### Controles negativos EXECUTADOS
+
+Todos com `assert` de que a mutação se aplica — a lição da H62.
+
+| mutação | falha observada |
+|---|---|
+| identificar a cópia por timestamp | `the copy check is missing the "s.seen.has(m.id.id)" condition` |
+| criar o chat inexistente | `the script creates a chat that did not exist` |
+| achatar o campo `reasons` | `the script does not read the reasons field off the error` |
+| script confia no `await` | `the apply branch does not hand the settling decision to Go` |
+| aceitar cópia vazia | `got <nil>, want ErrNotDelivered` |
+| não consultar `canForward` | `the script does not consult the message's own forwardability` |
+
+**Status**: entregue.
+**Testes**: `capabilities/forward/forward_test.go` (13 testes, seis com controle
+negativo acima) e `forwardreal_test.go` (prova ao vivo).

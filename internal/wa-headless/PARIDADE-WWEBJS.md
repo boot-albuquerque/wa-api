@@ -634,3 +634,24 @@ cuja chave é `$MuteImpl3`, artefato de minificação. Nós dirigimos o **modelo
 | `Chat.setSubject` | módulo não localizado |
 | participantes de grupo | **não entregue** (H58) — bloqueio nomeado, medição preservada |
 | link de convite de grupo | **parcialmente entregue** (H57) — `queryGroupInvite` trava |
+
+## §6.19 — encaminhar mensagem
+
+`wwebjs` expõe `Message.forward(chat)`. A assinatura **não estava legível em
+lugar nenhum** — invólucro async, e o modelo do chat não tem método de
+encaminhar. Veio do chamador, no bundle:
+
+```
+forwardMessagesToChats({msgs, chats, includeCaption, appendedText})
+```
+
+**Onde divergimos de propósito:**
+
+1. **Não criamos conversa.** O fluxo do app usa `findOrCreateLatestChat`; abrir
+   conversa com alguém para reenviar-lhe algo é ato maior do que encaminhar.
+2. **Verificamos a cópia por conjunto de ids**, não por instante — a comparação
+   por timestamp já produziu falso positivo neste módulo.
+3. **`includeCaption` é escolha do chamador**, não constante: encaminhar mídia
+   com e sem legenda são atos diferentes, e escolher por conta própria seria
+   escolher o que outras pessoas leem.
+4. **O campo `reasons` do erro sobrevive** até o chamador.
