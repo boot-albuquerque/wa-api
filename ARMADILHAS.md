@@ -921,3 +921,40 @@ existir — produziu a falha.
    estava respondendo a outra pergunta.
 2. **Controle negativo não-determinístico é controle nenhum.** Se a mutação pode
    passar por sorte, aperte-a até que a falha seja obrigatória.
+
+---
+
+## Funções irmãs do WhatsApp Web NÃO têm assinaturas simétricas
+
+**Medido duas vezes, em módulos diferentes, em 2026-08-21.**
+
+| par | forma |
+|---|---|
+| `addParticipantsJob` | `({group, participants, isOffline, reason})` — **um objeto** |
+| `removeParticipantsJob` | `(group, participants, timestamp, author, reason, groupMetadata, isOffline)` — **sete posicionais** |
+| `blockContact` | `({bizOptOutArgs, blockEntryPoint, contact, skipCtwa1pdNbfSignal})` — **um objeto** |
+| `unblockContact` | `(contact, blockEntryPoint)` — **dois posicionais** |
+
+Nos dois casos as duas funções são **exportadas do MESMO módulo**, fazem
+operações inversas do mesmo produto, e têm formas de chamada incompatíveis.
+
+**A armadilha é a inferência, não o código.** Ler uma e escrever a outra "por
+simetria" é o caminho natural, e falha. Na H58 falhou ao vivo, com uma mensagem
+(`reading 'toString'`) que não diz nada sobre assinatura.
+
+**Como evitar, e é barato:** `String(mod.fn)` no console dá o corpo da função
+minificada, e os nomes dos parâmetros desestruturados sobrevivem à minificação
+porque são propriedades. Uma sonda de 10 segundos
+(`internal/wa-headless/probe_block_test.go`) leu as duas assinaturas exatas e a
+lista de valores válidos de `BlockEntryPoint` de uma vez. É estritamente mais
+barato que uma execução ao vivo falhando.
+
+**Vale também para a leitura por regex no bundle**: o grep achou o `throw`
+("trying to block a pn contact without a chat") que virou pré-condição
+verificada, mas NÃO conseguiu recortar a assinatura do meio do minificado. As
+duas técnicas respondem perguntas diferentes — grep para o comportamento
+narrado, `toString()` para a forma da chamada.
+
+**Travado por**: `capabilities/block/block_test.go::TestTheTwoCallsHaveDifferentShapes`
+e `capabilities/group/participants_test.go::TestTheTwoSiblingsHaveDifferentShapes`
+— ambos falham se alguém "arrumar" uma das metades.

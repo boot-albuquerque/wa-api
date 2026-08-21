@@ -496,3 +496,50 @@ propósito**: o que ele tem de provar é a recusa quando o pid deixa de signific
 algo, e isso exige **matar o browser** — barato contra um perfil descartável,
 caro contra um perfil que custou um humano com telefone para parear.
 
+
+---
+
+## §6.13 — bloquear e desbloquear contato
+
+`wwebjs` expõe `Contact.block()` / `Contact.unblock()`, e chama
+`window.Store.BlockContact.blockContact` / `unblockContact`. **O nome do módulo
+conferiu; as assinaturas não** — lidas do `toString()` deste build:
+
+```
+blockContact({bizOptOutArgs, blockEntryPoint, contact, skipCtwa1pdNbfSignal})
+unblockContact(contact, blockEntryPoint)
+```
+
+**Onde divergimos de propósito**, e a divergência é registrada porque a regra do
+`CLAUDE.md` exige:
+
+1. **Nós verificamos.** O `wwebjs` devolve o retorno da chamada. Nós lemos a
+   `BlocklistCollection` antes e depois e recusamos com `ErrBlocklistUnchanged`
+   quando a lista não se moveu. Um chamador que acredita ter bloqueado alguém
+   **para de vigiar essa pessoa**; sucesso silencioso aqui custa mais que na
+   maioria das capacidades.
+2. **Nós checamos a pré-condição do próprio app.** O bundle carrega um `throw`
+   para "block a pn contact without a chat". O `wwebjs` deixa lançar; nós
+   devolvemos `ErrNoChatToBlockFrom`.
+3. **Redundância é no-op, não erro.** Bloquear quem já está bloqueado devolve
+   `AlreadyInState`, pela mesma razão da conversa já arquivada (H55).
+
+**Onde a referência não ajudou**: ela não trata a assimetria das duas
+assinaturas, porque em JavaScript passar o objeto errado para `unblockContact`
+falha em runtime e não na leitura. Foi a sonda que respondeu — e a lição virou
+entrada no `ARMADILHAS.md`.
+
+## §6.14 — a superfície ainda aberta, com módulo já localizado
+
+Uma sonda de enumeração devolveu ação **e** verificação para as quatro
+restantes, então nenhuma delas está bloqueada por desconhecimento:
+
+| `wwebjs` | ação neste build | verificação |
+|---|---|---|
+| `Message.forward` | `WAWebChatForwardMessage.forwardMessages` | id na conversa destino |
+| `Message.star` | `WAWebChatSendStarMsgsBridge.sendStarMsgs` | `WAWebStarredMsgCollection` |
+| `Chat.mute` | `WAWebChatMuteBridge.sendConversationMute` | `WAWebMuteGetters.getIsMuted` |
+| `Message.edit` | `WAWebSendMessageEditAction.sendMessageEdit` | `WAWebMessageEditUtils.msgTypeSupportsEditing` |
+
+Ler as assinaturas com `String(fn)` **antes** de escrever cada uma é o que a
+H58 comprou caro e a H59 comprou barato.

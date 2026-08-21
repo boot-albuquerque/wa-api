@@ -4472,3 +4472,74 @@ recusa por um argumento ainda não identificado.
 alguém "simetrizar" a remoção), `TestTheClockStaysOnTheGoSide`,
 `TestNoOpsAreSuccesses`, `TestACountThatDoesNotMoveIsAFailure`,
 `TestOnlyCountsAreReported`, e as recusas.
+
+---
+
+## H59 — bloquear e desbloquear contato
+
+**Data**: 2026-08-21
+**Contexto**: varredura da superfície restante do whatsapp-web.js.
+**Onde**: `internal/wa-headless/capabilities/block/`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/probe_block_test.go`.
+
+### A medição veio antes, e mudou o desenho duas vezes
+
+Uma sonda de enumeração (11,6 s, 65 bundles) destravou **cinco** capacidades de
+uma vez ao devolver o módulo de ação E o módulo de verificação de cada uma:
+
+| capacidade | ação | verificação |
+|---|---|---|
+| bloqueio | `WAWebBlockContactAction` | `WAWebBlocklistCollection` |
+| encaminhar | `WAWebChatForwardMessage` | id na conversa destino |
+| favoritar | `WAWebChatSendStarMsgsBridge` | `WAWebStarredMsgCollection` |
+| silenciar | `WAWebChatMuteBridge` | `WAWebMuteGetters.getIsMuted` |
+| editar | `WAWebSendMessageEditAction` | `WAWebMessageEditUtils` |
+
+Depois, `String(fn)` deu as assinaturas exatas — e **as duas discordam**:
+
+```
+blockContact({bizOptOutArgs, blockEntryPoint, contact, skipCtwa1pdNbfSignal})
+unblockContact(contact, blockEntryPoint)
+```
+
+Segunda ocorrência do padrão em dois dias (a primeira foi a H58). Virou entrada
+própria no `ARMADILHAS.md`, porque duas vezes em módulos diferentes é
+propriedade do código de lá, não coincidência.
+
+E o grep do bundle achou um `throw` que nenhuma assinatura mostraria:
+
+> `[blocklist] trying to block a pn contact (id: …) without a chat`
+
+Bloquear um contato de TELEFONE exige conversa existente. A capacidade checa
+isso ela mesma e devolve `ErrNoChatToBlockFrom`, porque "não há conversa com
+esta pessoa" é acionável e uma string lançada de dentro da telemetria alheia
+não é.
+
+### A prova ao vivo
+
+Linha de base medida ANTES: blocklist com **0** entradas.
+
+```
+blocked:  block.Result(before=0 after=1 already=false waited=1.021s)
+restored: block.Result(before=1 after=0 already=false waited=1.006s)
+```
+
+O bloqueio redundante foi exercitado no mesmo teste e devolveu no-op, não erro
+— mesma forma da conversa já arquivada (H55). O desbloqueio roda de um `defer`
+registrado ANTES do bloqueio, e o teste diz em voz alta que precisa de humano
+se a restauração falhar.
+
+Nada de identidade sai em log: `Result` carrega CONTAGENS.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| `unblockContact` "simetrizado" para objeto | `unblock is called with an object; its source takes two positional arguments` |
+| pós-condição da blocklist removida | `got <nil>, want ErrBlocklistUnchanged` |
+| deixar o app lançar em vez de checar o chat | `got block: the page refused at apply (NO_CHAT), want ErrNoChatToBlockFrom` |
+
+**Status**: entregue.
+**Testes**: `capabilities/block/block_test.go` (11 testes, três com controle
+negativo colado acima) e `blockreal_test.go` (prova ao vivo, reversível).
