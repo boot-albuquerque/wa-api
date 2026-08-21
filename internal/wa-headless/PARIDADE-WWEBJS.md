@@ -804,3 +804,21 @@ O que existe é `msg.ack`, e é o que entregamos.
 
 **Divergências:** conjunto vazio e conversa sem etiqueta são **respostas**, não
 erros; nomes de etiqueta nunca são renderizados, só o comprimento.
+
+## §6.28 — figurinha
+
+`wwebjs` expõe `sendMessage(chat, media, {sendMediaAsSticker: true})`.
+
+**O módulo com o nome certo é o caminho errado**: `sendStickerToChat(chat,
+{mediaData})` quer um **modelo** de figurinha que a conta já tem — reenvia uma
+existente, não carrega bytes. O caminho para bytes é `prepRawMedia` com
+`asSticker`, que é o mesmo do resto da mídia.
+
+**Onde divergimos de propósito:**
+
+1. **Recusamos figurinha+documento e figurinha+legenda**, em vez de deixar a
+   página escolher em silêncio ou descartar palavras que o chamador acha que
+   enviou.
+2. **Não convertemos nada.** O `wwebjs` converte para WebP; nós exigimos WebP e
+   dizemos isso. Enfiar um codificador no meio de um envio troca *"você mandou
+   os bytes errados"* por *"sua figurinha ficou estranha"*.

@@ -5732,3 +5732,82 @@ diferença.
 | código ausente indistinto de travamento | `got …never settled…, want ErrNoCode` |
 
 **Status**: entregue.
+
+---
+
+## H74 — figurinha, e a ação de figurinha que não serve para enviar uma
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, continuando a ordem que a orquestração deu.
+**Onde**: `internal/wa-headless/capabilities/send/media.go`,
+`internal/wa-headless/testdata/lab-sticker.webp`.
+
+### O módulo com o nome certo era o caminho errado
+
+A enumeração deu `WAWebSendStickerAction :: sendStickerToChat`, e o instrumento
+da H73 mediu o que ela quer:
+
+```
+sendStickerToChat(chat, {mediaData})
+    arg1=[mediaData mediaData.stickerPremiumStatus …]
+```
+
+`mediaData` é um **modelo de figurinha que a conta já tem** — favoritos, recentes,
+pacotes. A ação **reenvia** uma figurinha existente; ela não carrega bytes.
+
+Ir pelo nome teria custado uma implementação inteira antes de descobrir isso. O
+instrumento custou dez segundos.
+
+### O caminho para bytes já estava medido, e documentado, meses antes
+
+O comentário do `prepRawMedia` no `media.go` já dizia:
+
+```
+prepRawMedia(file, opts)   opts branches on isPtt / asDocument / asGif /
+                           isAudio / asSticker / asStickerPack
+```
+
+A capacidade foi **um campo** no `Media` que já existia. O trabalho foi descobrir
+que não era o outro caminho.
+
+### Duas recusas, e as duas são sobre o mesmo perigo
+
+- **Figurinha + documento** — a página ramifica em UM flag; mandar os dois deixa
+  o primeiro que ela testar decidir em silêncio.
+- **Figurinha + legenda** — figurinha não carrega legenda. Aceitar e descartar
+  deixaria o chamador acreditando que mandou palavras que ninguém verá.
+
+**Nenhuma conversão é tentada.** O WhatsApp espera WebP; enfiar um codificador no
+meio de um envio transformaria o modo de falha de *"você mandou os bytes
+errados"* em *"sua figurinha ficou estranha"*.
+
+### O fixture é versionado, não gerado
+
+512×512 em WebP dá **554 bytes**. Chamar `cwebp` ou `ffmpeg` no teste o faria
+falhar numa máquina sem eles, por motivo alheio ao código sob teste.
+
+### Prova ao vivo
+
+```
+sticker: send.Result(id=…74C6 at=2026-08-21T10:05:20Z waited=8ms)
+MEASURED: the message this build produced is type="sticker"
+```
+
+O verificador de envio prova que **uma mídia** saiu; só o tipo prova **qual**. E
+o ack confirma que saiu.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| o flag não chega ao `prepRawMedia` | `asSticker=true does not reach prepRawMedia` |
+| aceitar legenda em figurinha | `got <nil>, want ErrMediaStickerCaption` |
+| aceitar figurinha-documento | `got <nil>, want ErrMediaStickerConflict` |
+
+O primeiro **não se aplicou na primeira tentativa** — o `zsh` engoliu o padrão
+passado como argumento. Refeito por heredoc, com `assert`. É a terceira vez que
+um controle mente por não se aplicar, e as três foram pegas pelo mesmo `assert`.
+
+**Status**: entregue.
+**Testes**: `capabilities/send/sticker_test.go` (4 testes, três com controle
+acima) e `stickerreal_test.go`.

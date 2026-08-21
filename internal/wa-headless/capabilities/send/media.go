@@ -49,6 +49,10 @@ var (
 	// decide what KIND of message this is, so guessing it here would be
 	// choosing the recipient's experience by accident.
 	ErrMediaNoMimeType = fmt.Errorf("send: the media has no mime type")
+	// ErrMediaStickerConflict is asking for a sticker and a document at once.
+	ErrMediaStickerConflict = fmt.Errorf("send: a sticker cannot also be a document")
+	// ErrMediaStickerCaption is a caption on a sticker, which nobody would see.
+	ErrMediaStickerCaption = fmt.Errorf("send: a sticker carries no caption")
 )
 
 // Media is one attachment to send.
@@ -66,12 +70,25 @@ type Media struct {
 	// otherwise render inline. It is the difference between a photo in the
 	// conversation and a file to download.
 	AsDocument bool
+	// AsSticker sends the bytes as a sticker.
+	//
+	// IT IS NOT THE STICKER ACTION. WAWebSendStickerAction.sendStickerToChat
+	// exists, and the argument instrument measured what it wants:
+	// (chat, {mediaData}) — a sticker MODEL that is already in the account's
+	// collection. It re-sends a sticker somebody already has; it cannot carry
+	// bytes. The path for bytes is this one, through prepRawMedia's asSticker
+	// branch, which was already measured and documented above.
+	//
+	// WhatsApp expects WebP. Nothing here converts: a caller handing this PNG
+	// bytes gets whatever the page decides, and guessing an encoder into the
+	// middle of a send is not this package's job.
+	AsSticker bool
 }
 
 // String redacts. Bytes and filenames are content.
 func (m Media) String() string {
-	return fmt.Sprintf("send.Media(name=%t mime=%s bytes=%d caption=%t asDocument=%t)",
-		m.Filename != "", m.MimeType, len(m.Data), m.Caption != "", m.AsDocument)
+	return fmt.Sprintf("send.Media(name=%t mime=%s bytes=%d caption=%t asDocument=%t asSticker=%t)",
+		m.Filename != "", m.MimeType, len(m.Data), m.Caption != "", m.AsDocument, m.AsSticker)
 }
 
 // validate refuses what should never reach the page.
@@ -84,6 +101,16 @@ func (m Media) validate() error {
 	}
 	if strings.TrimSpace(m.MimeType) == "" {
 		return ErrMediaNoMimeType
+	}
+	// A STICKER IS NOT A DOCUMENT, and the page branches on one flag at a time.
+	// Sending both would let whichever the page checks first decide silently.
+	if m.AsSticker && m.AsDocument {
+		return ErrMediaStickerConflict
+	}
+	// A STICKER CARRIES NO CAPTION. Accepting one and dropping it would leave
+	// the caller believing words were sent that nobody will ever see.
+	if m.AsSticker && m.Caption != "" {
+		return ErrMediaStickerCaption
 	}
 	return nil
 }
@@ -196,7 +223,8 @@ func mediaScript(toJID string, m Media) string {
 
 			stage = 'prep';
 			const P = window.require('` + string(spa.ModulePrepRawMedia) + `');
-			const prep = P.prepRawMedia(opaque, { asDocument: ` + strconv.FormatBool(m.AsDocument) + ` });
+			const prep = P.prepRawMedia(opaque, { asDocument: ` + strconv.FormatBool(m.AsDocument) + `,
+				asSticker: ` + strconv.FormatBool(m.AsSticker) + ` });
 			if (!prep) { park({ stage, ok: false, why: 'PREP_NULL' }); return; }
 			// The upload and encryption happen here, and this is the slow part.
 			await prep.waitForPrep();
