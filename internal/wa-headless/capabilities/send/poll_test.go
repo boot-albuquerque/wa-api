@@ -20,6 +20,15 @@ type pollDouble struct {
 	stage, why string
 	id         string
 	options    int
+	// ackStuck makes the page answer ack 0 forever, which is what a poll that is
+	// created and never sent looks like.
+	//
+	// THE ZERO VALUE IS THE HEALTHY ONE on purpose. Every test written before the
+	// ack postcondition existed constructs this double without thinking about
+	// acks; if the default were "stuck" they would all fail for a reason that has
+	// nothing to do with what they assert — the double being less faithful than
+	// production, a trap this repository has met three times in one session.
+	ackStuck bool
 
 	kicks      int
 	lastScript string
@@ -28,6 +37,14 @@ type pollDouble struct {
 func (p *pollDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if strings.Contains(expr, "m.id.id ===") {
+		ack := 2
+		if p.ackStuck {
+			ack = 0
+		}
+		*out = fmt.Sprintf(`{"found":true,"ack":%d}`, ack)
+		return nil
 	}
 	if strings.Contains(expr, "const s = window[") {
 		if !p.ok {
@@ -299,5 +316,48 @@ func TestTheOptionsAreEncodedAsJSON(t *testing.T) {
 	}
 	if !strings.Contains(p.lastScript, `["a\"b","c\\d"]`) {
 		t.Fatalf("the options were not JSON-encoded into the script")
+	}
+}
+
+// A POLL THAT NEVER LEAVES IS NOT A SENT POLL.
+//
+// The capability's postcondition was "a poll message appeared in this session",
+// and it shipped that way. H98 looked at the recipient: the message is created
+// as poll_creation with its options intact, its ack sits at 0, and the peer never
+// receives it. Ack 0 is PENDING; anything that left has at least 1.
+//
+// This is the silent success invariant 14 forbids, and it survived because
+// nobody asked the other side.
+func TestAPollThatNeverLeavesIsAnError(t *testing.T) {
+	ob, ot := pollAckBudget, pollTick
+	pollAckBudget, pollTick = 60*time.Millisecond, 5*time.Millisecond
+	defer func() { pollAckBudget, pollTick = ob, ot }()
+
+	d := &pollDouble{ok: true, id: "3EB0", options: 2, ackStuck: true}
+	_, err := PollTo(context.Background(), engine.NewRunner(), d.eval,
+		"1@c.us", "q", []string{"a", "b"}, false, "t")
+	if !errors.Is(err, ErrPollNeverLeft) {
+		t.Fatalf("err = %v, want ErrPollNeverLeft", err)
+	}
+	if !strings.Contains(err.Error(), "ack=0") {
+		t.Errorf("the error does not report the ack it saw: %v", err)
+	}
+}
+
+// And a poll that DOES leave comes back with the ack it reached, because
+// "created" and "sent" are different facts.
+func TestAPollThatLeavesReportsItsAck(t *testing.T) {
+	ob, ot := pollAckBudget, pollTick
+	pollAckBudget, pollTick = 2*time.Second, 5*time.Millisecond
+	defer func() { pollAckBudget, pollTick = ob, ot }()
+
+	d := &pollDouble{ok: true, id: "3EB0", options: 2}
+	got, err := PollTo(context.Background(), engine.NewRunner(), d.eval,
+		"1@c.us", "q", []string{"a", "b"}, false, "t")
+	if err != nil {
+		t.Fatalf("PollTo: %v", err)
+	}
+	if got.Ack != 2 {
+		t.Fatalf("ack = %d, want 2", got.Ack)
 	}
 }

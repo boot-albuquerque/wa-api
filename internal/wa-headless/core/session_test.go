@@ -693,12 +693,22 @@ func TestStartSession_ImmediateReadyPage_DoesNotPayTheSettleBudget(t *testing.T)
 	if !via.Clean() {
 		t.Errorf("stopped_via=%s: a browser this test owns must go down through the protocol", via)
 	}
-	// Generous relative to spa.DefaultSettleBudget (60s): an already-ready
-	// page must settle on essentially the first probe, not after polling.
-	const wantUnder = 10 * time.Second
+	// THE BOUND IS A FRACTION OF THE SETTLE BUDGET, not a wall-clock constant.
+	//
+	// It was ten seconds flat, on the reasoning that ten is "generous relative
+	// to the 60s budget". That reasoning was right and the expression was not:
+	// ten seconds also has to cover launching Chrome, opening a tab and
+	// navigating, and under -race alongside every other package that alone took
+	// 10.07s — so the test failed while measuring nothing about settling.
+	//
+	// What the property needs is that the boot did not PAY the budget. Tying
+	// the bound to the budget says exactly that and stops encoding a machine's
+	// speed, which is the F100 family this repository keeps meeting.
+	wantUnder := spa.DefaultSettleBudget / 2
 	if elapsed >= wantUnder {
-		t.Errorf("elapsed=%s: an already-mounted page took long enough to suggest it "+
-			"polled instead of returning on its first look", elapsed)
+		t.Errorf("elapsed=%s of a %s settle budget: an already-mounted page took long "+
+			"enough to suggest it polled instead of returning on its first look",
+			elapsed, spa.DefaultSettleBudget)
 	}
 }
 

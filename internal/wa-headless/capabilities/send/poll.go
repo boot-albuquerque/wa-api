@@ -74,6 +74,21 @@ const (
 var (
 	// ErrPoll is the page refusing or throwing.
 	ErrPoll = fmt.Errorf("send: the page refused the poll")
+	// ErrPollNeverLeft is a poll that exists locally and never reached the
+	// server.
+	//
+	// IT IS THE DEFECT THIS CAPABILITY SHIPPED WITH, and the postcondition that
+	// now catches it. H69 proved the poll send by the message APPEARING in this
+	// session — which is a weaker claim than it reads as. The first round trip
+	// that looked at the OTHER side measured it (H98): the message is created
+	// as poll_creation with its options intact, and its ack sits at 0 for
+	// twenty seconds while the peer, with 1272 messages loaded, never receives
+	// it.
+	//
+	// Ack 0 is PENDING. Anything that ever left has at least 1. This is exactly
+	// the silent success invariant 14 forbids, and it survived because nobody
+	// asked the recipient.
+	ErrPollNeverLeft = fmt.Errorf("send: the poll was created locally and its ack never left PENDING")
 	// ErrPollQuestion is a missing or oversized question.
 	ErrPollQuestion = fmt.Errorf("send: a poll needs a question")
 	// ErrPollOptions is a bad option list.
@@ -89,6 +104,10 @@ type PollResult struct {
 	ID string
 	// Options is how many answers it offers. A count, not the text.
 	Options int
+	// Ack is the delivery state the poll reached before this call returned: 1
+	// server, 2 device, 3 read. It is reported because "created" and "sent" are
+	// different facts and this capability once conflated them (H98).
+	Ack int
 	// PollTypeSource says where the page's poll-type value was found, or
 	// "none". Reported because it was never measured on this build, and a
 	// capability that cannot say where it looked cannot be checked.
@@ -97,8 +116,8 @@ type PollResult struct {
 }
 
 func (p PollResult) String() string {
-	return fmt.Sprintf("send.PollResult(id=%s options=%d pollTypeFrom=%s waited=%s)",
-		p.ID, p.Options, p.PollTypeSource, p.Waited.Round(time.Millisecond))
+	return fmt.Sprintf("send.PollResult(id=%s options=%d ack=%d pollTypeFrom=%s waited=%s)",
+		p.ID, p.Options, p.Ack, p.PollTypeSource, p.Waited.Round(time.Millisecond))
 }
 
 const pollStateKey = "__waHeadlessPoll"
@@ -184,8 +203,67 @@ func PollTo(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 	if out.ID == "" {
 		return PollResult{}, ErrPollNotDelivered
 	}
-	return PollResult{ID: out.ID, Options: out.Options,
+
+	// AND DID IT LEAVE? Everything above proves the page CREATED a poll. That
+	// was the whole postcondition until H98 looked at the recipient and found
+	// none of it had ever arrived.
+	//
+	// The ack is the local evidence that a message reached the server: 0 is
+	// pending, 1 is server, 2 is device, 3 is read. The wait is bounded and the
+	// failure is its own error, because "created but never sent" and "the page
+	// refused" call for different work.
+	ackDeadline := time.Now().Add(pollAckBudget)
+	lastAck := -1
+	for {
+		var raw string
+		if err := runner.Do(ctx, engine.OpStateProbe, label+"/ack", func(ctx context.Context) error {
+			return eval(ctx, pollAckScript(out.ID), &raw)
+		}); err != nil {
+			return PollResult{}, fmt.Errorf("%w: %v", ErrPoll, err)
+		}
+		var ackOut struct {
+			Found bool `json:"found"`
+			Ack   int  `json:"ack"`
+		}
+		if err := json.Unmarshal([]byte(raw), &ackOut); err != nil {
+			return PollResult{}, fmt.Errorf("send: unexpected poll ack answer: %w", err)
+		}
+		if ackOut.Found {
+			lastAck = ackOut.Ack
+		}
+		if lastAck >= 1 {
+			break
+		}
+		if !time.Now().Before(ackDeadline) {
+			return PollResult{ID: out.ID, Options: out.Options, PollTypeSource: out.TypeSource,
+					Waited: time.Since(start), Ack: lastAck},
+				fmt.Errorf("%w within %s (ack=%d)", ErrPollNeverLeft, pollAckBudget, lastAck)
+		}
+		time.Sleep(pollTick)
+	}
+
+	return PollResult{ID: out.ID, Options: out.Options, Ack: lastAck,
 		PollTypeSource: out.TypeSource, Waited: time.Since(start)}, nil
+}
+
+// pollAckBudget bounds the wait for the poll to reach the server. Var so a test
+// can compress it.
+var pollAckBudget = 20 * time.Second
+
+// pollAckScript reads one message's ack. Synchronous: the clock is Go's.
+func pollAckScript(id string) string {
+	return `JSON.stringify((() => {
+		const MC = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
+		const all = typeof MC.getModelsArray === 'function' ? MC.getModelsArray() : [];
+		for (const m of all) {
+			try {
+				if (m.id && m.id.id === ` + strconv.Quote(id) + `) {
+					return { found: true, ack: typeof m.ack === 'number' ? m.ack : -1 };
+				}
+			} catch (e) {}
+		}
+		return { found: false, ack: -1 };
+	})())`
 }
 
 func pollScript(toJID, question, optionsJSON string, multi bool) string {

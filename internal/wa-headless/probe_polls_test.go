@@ -103,6 +103,48 @@ func TestProbePolls(t *testing.T) {
 			// FIELD NAMES of a poll option, never the option TEXT: a poll's
 			// options are content.
 			out.existing.optionFields = optionFields;
+
+			// THE TABLE'S OWN SHAPE, asked of the poll that is already here.
+			// A read against a poll nobody voted on proves the path and not the
+			// row shape, so the row FIELD NAMES matter more than the count.
+			try {
+				const Key = window.require('WAWebMsgKey');
+				const Votes = window.require('WAWebPollsVotesSchema');
+				let target = null;
+				for (const m of all) {
+					try { if (m.pollOptions && m.pollOptions.length) { target = m; break; } } catch (e) {}
+				}
+				if (target) {
+					// THE REFERENCE CONVERTS THROUGH A STRING THIS BUILD DOES NOT
+					// HAVE. MsgKey.fromString(msg.id._serialized) fails here with
+					// "str is null or not a string", because _serialized is null
+					// on this build — the same fact that shaped messagemeta.
+					//
+					// But m.id IS ALREADY A KEY. The conversion the reference
+					// needs is one we can skip, which is the H34 shape again:
+					// use what the page already holds instead of rebuilding it.
+					out.read = {
+						idKind: typeof target.id,
+						serializedIsNull: target.id._serialized === null,
+						hasToString: typeof target.id.toString === 'function',
+						keyStr: typeof target.id.toString === 'function'
+							? (target.id.toString() || '').slice(0, 4) + '...(' +
+								String(target.id.toString() || '').length + ' chars)'
+							: 'none',
+					};
+					try {
+						out.read.fromStringWorks = !!Key.fromString(target.id._serialized);
+					} catch (e) { out.read.fromStringWorks = 'threw: ' + safe(e); }
+					const k = target.id;
+					const rows = await Votes.getTable().equals(['parentMsgKey'], k.toString());
+					out.read.rows = Array.isArray(rows) ? rows.length : String(rows);
+					out.read.rowFields = (Array.isArray(rows) && rows.length)
+						? Object.keys(rows[0]) : [];
+					out.read.optionCount = target.pollOptions.length;
+				} else {
+					out.read = 'no poll with options in the store';
+				}
+			} catch (e) { out.read = 'threw: ' + safe(e); }
 		} catch (e) {
 			out.fatal = safe(e);
 		}

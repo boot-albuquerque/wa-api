@@ -7709,3 +7709,111 @@ crescer com segurança.
 velocidade de uma máquina.
 
 **Status**: entregue.
+
+---
+
+## H98 — POLLS/VOTES: a leitura entregue, e uma capacidade já entregue que não envia
+
+**Data**: 2026-08-21.
+**Contexto**: família polls/votes, na ordem da orquestração, depois do
+EVENT-REPLAY-FIX.
+
+### A leitura de votos: entregue e provada
+
+`poll.Votes` lê contra uma enquete **real** e devolve `options=map[0:0 1:0]` —
+as duas opções presentes, ambas com zero. Todo teste posterior de tally depende
+dessa linha de base.
+
+**Onde a referência não pode ser seguida.** O `whatsapp-web.js` monta a chave com
+`MsgKey.fromString(msg.id._serialized)`. Neste build isso lança
+`MsgKey.fromString error: str is null or not a string` — o mesmo fato de
+identificador nulo que moldou o `capabilities/messagemeta`.
+
+Mas **`m.id` JÁ É a chave**, e o `toString` dela dá a forma de 47 caracteres que
+a tabela indexa. A conversão de que a referência precisa é uma que este módulo
+pula. Mesma forma da H34: use o que a página já tem em vez de reconstruir a
+partir de uma string que não existe.
+
+### O achado que vale mais: a enquete não sai daqui
+
+O round trip é a primeira vez que alguém olhou o **outro lado**. A H69 provou o
+envio pela mensagem APARECER nesta sessão — que é uma afirmação mais fraca do
+que parece.
+
+```
+poll on conta-A: {"found":true,"ack":0,"kind":"poll_creation","options":2}   t+00s
+poll on conta-A: {"found":true,"ack":0,...}                                  t+18s
+
+conta-B: {"loaded":1272,"polls":3,"prefixes":["3EB064F7","3AB2ADBD","3AF73F6D"]}
+```
+
+Vinte segundos em **ack 0**, que é PENDENTE. Qualquer mensagem que tenha saído
+tem pelo menos 1. E o par, com 1272 mensagens carregadas e 3 enquetes antigas,
+nunca recebe esta.
+
+É exatamente o sucesso silencioso que a invariante 14 proíbe, e sobreviveu
+porque **ninguém perguntou ao destinatário**.
+
+**Suspeito principal, já registrado pela H69 e nunca medido**: o
+`pollTypeFrom=omitted` no resultado. A H69 anotou que o campo `pollType` nunca
+foi medido e é omitido; uma enquete sem o tipo pode ser aceita localmente e
+recusada no servidor sem erro.
+
+**Corrigido no que dá para corrigir agora**: `PollTo` ganhou pós-condição de
+`ack`, com erro próprio (`ErrPollNeverLeft`). "Criada" e "enviada" eram o mesmo
+fato e agora são dois. A falha passa a ser **alta** em vez de silenciosa.
+
+### Três descobertas de percurso, todas por medição
+
+1. **`PollTo` envia para um chat JÁ CARREGADO.** Passar o jid do par responde
+   "no such chat is loaded", e varrer a coleção pela parte de usuário do telefone
+   também não acha: este build arquiva sob LID, e as duas partes de usuário são
+   números diferentes. O caminho é mandar uma linha antes — `send.Text` resolve
+   e devolve o chat onde a mensagem caiu.
+2. **`MsgCollection` guarda o que a sessão OLHOU**, não o que a conta tem. Uma
+   sessão que subiu e nunca abriu a conversa não tem as mensagens dela.
+3. Por isso **carregar é responsabilidade de quem chama**, e `poll.ErrNotFound`
+   diz isso. A alternativa era um scan que carrega todo chat até a mensagem
+   aparecer — na conta de laboratório, novecentos carregamentos por consulta, e
+   uma heurística vestida de conveniência.
+
+### Dois dublês menos fiéis que a produção, no mesmo dia
+
+O dublê de enquete não respondia à leitura de `ack`, então toda prova existente
+teria começado a falhar por um motivo alheio ao que elas afirmam. Estendido com
+`ackStuck`, cujo **valor zero é o saudável** — de propósito, porque todo teste
+escrito antes da pós-condição constrói esse dublê sem pensar em ack.
+
+Terceira ocorrência da armadilha nesta sessão. As três se resolvem pela mesma
+pergunta: *o dublê responde tudo que a produção responde?*
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| aceitar voto parcialmente casado | `TestAPartiallyMatchedVoteIsRefused` | `err = <nil>, want ErrUnknownOption` |
+| ler pela chave reconstruída da referência | `TestTheVoteReadUsesTheMessagesOwnKey` | `the read rebuilds the key from a string; that throws on this build` |
+| tirar o preenchimento com zero das opções sem voto | `TestUnvotedOptionsArePresentWithZero` | `the page script does not pre-fill every option with zero` |
+| aceitar `ack >= 0` como saída | `TestAPollThatNeverLeavesIsAnError` | `err = <nil>, want ErrPollNeverLeft` |
+
+> O terceiro controle **não mordeu na primeira vez**, e isso é o achado: a
+> propriedade vive no script da página e o dublê a substituía. O teste afirmava
+> sobre a PARSAGEM e não sobre a PRODUÇÃO. Agora afirma sobre o script, onde ela
+> mora.
+
+### E mais um teste que media relógio de parede
+
+`TestStartSession_ImmediateReadyPage_DoesNotPayTheSettleBudget` afirmava
+`elapsed < 10s` para provar que o laço de settle retornou na primeira olhada.
+Sob `-race`, ao lado de todos os outros pacotes, subir o Chrome e abrir a aba
+sozinhos levaram **10,07 s** — e o teste falhou sem medir nada sobre settle.
+
+O raciocínio do comentário estava certo ("dez é generoso perto dos 60 s do
+orçamento") e a EXPRESSÃO estava errada: dez segundos também tinham de cobrir o
+boot inteiro. Agora o limite é uma fração do próprio orçamento de settle, que é
+o que a propriedade diz. Terceira vez nesta sessão que a mesma correção é
+aplicada em outra forma.
+
+**Status**: parcialmente entregue — leitura de votos provada ao vivo; voto
+implementado e travado por teste, sem prova ao vivo porque a enquete não chega
+ao par; e o envio de enquete rebaixado com a medição que o rebaixa.

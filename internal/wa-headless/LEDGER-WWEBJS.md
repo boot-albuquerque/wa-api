@@ -42,7 +42,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getWWebVersion` | — | `MISSING` | — | — | — | trivial, nunca feito |
 | `setDeviceName` | — | `MISSING` | — | — | — | — |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | duvidosa | sim | **rebaixada em 2026-08-21 (H82)**: a pós-condição afirma que `chat.unreadCount` moveu NA MESMA SESSÃO, e a H78 mediu esse contador como CROSS_SESSION. A H52 provou contra um chat em que ele moveu; se generaliza é pergunta em aberto |
-| `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento, figurinha e enquete OK; localização e vCard MISSING (H75) |
+| `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento e figurinha OK. **ENQUETE NÃO SAI**: criada localmente como `poll_creation` com as opções intactas, `ack` fica em **0** por 20s e o par nunca recebe — medido no primeiro round trip que olhou o OUTRO lado (H98). A H69 provou o envio pela aparição LOCAL. Localização e vCard MISSING (H75) |
 | `sendReaction` | capabilities/react | `PARTIAL` | sim | sim | sim | H53: adicionar provado; remover devolve Verified:false |
 | `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `searchMessages` | — | `MISSING` | — | — | — | — |
@@ -114,7 +114,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getContactLidAndPhone` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | build LID-first: 397 de 399 mensagens sob @lid |
 | `addOrEditCustomerNote` | — | `MISSING` | — | — | — | — |
 | `getCustomerNote` | — | `MISSING` | — | — | — | — |
-| `getPollVotes` | — | `MISSING` | — | — | — | enquete é enviável (H69), votos não são lidos |
+| `getPollVotes` | poll.Votes | `PROVEN` | sim | sim | sim | lido contra uma enquete REAL: as duas opções presentes com zero. Usa a chave que a mensagem já carrega — `MsgKey.fromString(_serialized)` da referência lança neste build (H98) |
 
 ## Broadcast
 
@@ -290,8 +290,8 @@ improviso dela. Travado por teste que casa `call-id`, `call-creator`, `to` e
 | `getReactions` | — | `MISSING` | — | — | — | — |
 | `edit` | capabilities/edit | `PROVEN` | sim | sim | sim | H60: janela de 1200s |
 | `editScheduledEvent` | — | `MISSING` | — | — | — | — |
-| `getPollVotes` | — | `MISSING` | — | — | — | — |
-| `vote` | — | `MISSING` | — | — | — | — |
+| `getPollVotes` | poll.Votes | `PROVEN` | sim | sim | sim | idem |
+| `vote` | poll.Vote | `PARTIAL` | sim | não | sim | implementado e travado por teste: nomes viram ids locais NA PÁGINA, e um nome que não casa é recusa e não omissão — o envio da página recebe um SET, e um nome perdido produziria um voto por menos coisas do que se pediu, reportado como sucesso. Não provado ao vivo porque a enquete não chega ao par (ver `sendMessage`, H98) |
 
 ## MessageMedia
 
@@ -366,9 +366,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 50 | 23% |
-| `PARTIAL` | 42 | 19% |
+| `PROVEN` | 52 | 24% |
+| `PARTIAL` | 43 | 20% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 123 | 56% |
+| `MISSING` | 120 | 55% |
 | **total** | **220** | |
