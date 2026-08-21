@@ -102,6 +102,33 @@ func TestProbeWriteConfirmationClass(t *testing.T) {
 			}`,
 		},
 		{
+			// THE PENDING HYPOTHESIS FROM H81, tested with the classifier
+			// instead of another whole capability: the bridge plus the local
+			// mirror, which is the pair H72 measured for labels. If the mirror
+			// is what was missing, this turns NOTHING into IMMEDIATE.
+			"pin WITH the local mirror (H81 hypothesis)", "IMMEDIATE",
+			`async () => {
+				const MC = window.require('WAWebMsgCollection').MsgCollection;
+				const m = MC.getModelsArray().find(x => x.id && x.id.fromMe && x.type === 'chat');
+				if (!m) { throw new Error('no own text message'); }
+				const K = window.require('WAWebPinMsgConstants');
+				const A = window.require('WAWebSendPinMessageAction');
+				const P = window.require('WAWebPinMessageAction');
+				const secs = Number(K.getPinExpiryDuration(K.DEFAULT_PIN_EXPIRY_DURATION_OPTION)) || 0;
+				await A.sendPinInChatMsg(m, K.PIN_STATE.PIN, secs);
+				// THE MIRROR. updatePinCollection measured as wanting something
+				// iterable, so it is handed the crafted message in a list.
+				try {
+					const crafted = await P.craftPinMessage(m, K.PIN_STATE.PIN, secs);
+					await P.updatePinCollection([crafted]);
+				} catch (e) { window.__pinMirrorErr = String((e && e.message) || e).slice(0, 160); }
+			}`,
+			`() => {
+				const P = window.require('WAWebPinInChatCollection').PinInChatCollection;
+				return P && P.getModelsArray ? P.getModelsArray().length : null;
+			}`,
+		},
+		{
 			"message pin (control: known NOTHING)", "not-here",
 			`async () => {
 				const MC = window.require('WAWebMsgCollection').MsgCollection;
@@ -117,6 +144,18 @@ func TestProbeWriteConfirmationClass(t *testing.T) {
 			}`,
 		},
 	}
+
+	// The mirror hypothesis records its own failure on the page; reading it
+	// afterwards says whether the mirror threw or ran and did nothing, which are
+	// different answers.
+	defer func() {
+		var e string
+		if err := runner.Do(ctx, engine.OpStateProbe, "probe/wc-mirror", func(x context.Context) error {
+			return sess.Tab().Evaluate(x, `window.__pinMirrorErr || "no error"`, &e)
+		}); err == nil {
+			t.Logf("MIRROR: %s", e)
+		}
+	}()
 
 	for _, c := range cases {
 		kick := `(() => { window.__wc = null;

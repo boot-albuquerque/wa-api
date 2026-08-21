@@ -6336,3 +6336,46 @@ ou "não move aqui"; separar `CROSS_SESSION` de `NOTHING` exige uma segunda
 sessão, que é **exatamente o passo que as quatro capacidades falhadas pularam**.
 
 **Status**: entregue.
+
+---
+
+## H81 (continuação) — a hipótese do espelho, testada em trinta segundos
+
+**Data**: 2026-08-21, logo após a H82.
+
+A H81 deixou escrita uma hipótese não testada: que faltava o par **ponte +
+espelho local** que a H72 mediu nas etiquetas. `WAWebPinMessageAction` exporta
+`craftPinMessage` e `updatePinCollection`, e o segundo nome descreve um espelho.
+
+**Testada com o classificador da H82, como quarto caso, ao lado dos três
+controles.** Resultado:
+
+```
+pin WITH the local mirror   before=0  after=0  -> not-here  (esperado IMMEDIATE)
+MIRROR: Got unexpected null or undefined
+```
+
+### O resultado exige precisão, e é fácil errar aqui
+
+A hipótese **não foi refutada**. Ela também **não foi confirmada**. O espelho
+lançou antes de fazer qualquer coisa — `craftPinMessage` devolveu nulo, ou
+`updatePinCollection` recebeu algo que não esperava — então o caminho
+ponte+espelho nunca chegou a ser exercitado.
+
+Dizer "a hipótese está errada" seria a conclusão confortável e não é o que a
+medição mostra. O que ela mostra é que **o espelho tem sua própria forma a
+descobrir**, e isso é trabalho, não resposta.
+
+### O que isto provou de verdade
+
+O classificador entregou o que prometia. Testar esta hipótese custou **um caso
+num teste que já existia** — trinta segundos — em vez de outra capacidade
+inteira implementada, provada ao vivo e desfeita. É a primeira vez nesta sessão
+que uma hipótese sobre escrita foi descartada sem pagar o ciclo completo.
+
+E os três controles rodaram junto e continuaram batendo, o que é o outro
+propósito deles: cada uso do instrumento reconfirma que ele ainda mede o que
+media.
+
+**Status**: continua não entregue; a hipótese do espelho passa de "não testada"
+para "testada e bloqueada na forma do próprio espelho".
