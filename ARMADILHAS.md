@@ -958,3 +958,38 @@ narrado, `toString()` para a forma da chamada.
 **Travado por**: `capabilities/block/block_test.go::TestTheTwoCallsHaveDifferentShapes`
 e `capabilities/group/participants_test.go::TestTheTwoSiblingsHaveDifferentShapes`
 — ambos falham se alguém "arrumar" uma das metades.
+
+### O limite do `toString()`: funções `async` mostram a casca
+
+Medido em 2026-08-21, na mesma sonda que leu as assinaturas acima.
+
+Função transpilada com `asyncToGenerator` devolve o invólucro, não o corpo:
+
+```js
+WAWebChatForwardMessage.forwardMessages    → function v(e){return S.apply(this,arguments)}
+WAWebChatMuteBridge.sendConversationMute   → function e(e){return s.apply(this,arguments)}
+```
+
+Um `e` só não diz se é objeto, id ou modelo — que é exatamente a informação
+pela qual a técnica foi adotada.
+
+**Onde ela FUNCIONA**: função síncrona, e aí é exata e barata —
+
+```js
+sendMessageEdit(msg, text, options)   // três posicionais, e o corpo mostra
+                                      // que recusa via canEditText/canEditCaption
+sendStarMsgs(e, t, n) → d(t, n)       // o PRIMEIRO argumento é ignorado
+calculateMuteExpiration(hours)        // horas; Infinity vira sentinela
+```
+
+O `sendStarMsgs` é o caso que justifica a leitura sozinho: passar três
+argumentos supondo que os três importam funcionaria por acidente, e passar dois
+falharia sem dizer por quê.
+
+**A regra composta, das três técnicas medidas:**
+
+| pergunta | técnica |
+|---|---|
+| a chamada tem que forma? | `String(fn)` — **só se for síncrona** |
+| o que o app narra sobre o comportamento? | grep no bundle pelo literal |
+| e quando é `async`? | grep pelo corpo do gerador interno; o `toString()` não serve |
