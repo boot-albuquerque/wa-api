@@ -554,6 +554,25 @@ var strikethrough = regexp.MustCompile(`(?s)~~.*?~~`)
 // begins with a word from the vocabulary the file already uses. It does not
 // try to be clever about entries carrying several statuses — those get listed
 // for a human to read, which is honest about what a tool can settle.
+// ANCHORED AT THE START OF A LINE, AND FORBIDDEN TO CROSS ONE. Both halves
+// were paid for: the earlier pattern matched the word "Status" wherever it
+// appeared — including inside receiveTextStatusEnabled and getTextStatus —
+// and its [^*:]* ran through newlines until some distant colon, so it
+// reported a fragment of test output three paragraphs away as an entry's
+// status. That happened twice in one day, and the workaround was to wrap
+// identifiers in emphasis so the "*" would stop the scan, which taxed
+// everyone who wrote "Status" in an entry.
+//
+//	^[ \t>*·-]*   a status line may be indented, quoted or bulleted
+//	\*{0,2}Status  and bolded, which is how every real one is written
+//	[^*:\n]*       but the label cannot run onto another line
+//
+// The separator class after the colon is consumed BEFORE capturing, not
+// trimmed after: stripping a struck-through status leaves "· " or "— "
+// behind, and a capture that stops at the next "*" would grab only the
+// separator and report it as the status.
+var housekeepStatusLine = regexp.MustCompile(`(?m)^[ \t>*·-]*\*{0,2}Status[^*:\n]*\*{0,2}:[\s*·—–-]*([^\n*]{3,60})`)
+
 func TestHousekeepEntriesAreMachineReadable(t *testing.T) {
 	body, err := os.ReadFile(housekeepPath)
 	if err != nil {
@@ -561,11 +580,7 @@ func TestHousekeepEntriesAreMachineReadable(t *testing.T) {
 	}
 
 	entryHeading := regexp.MustCompile(`(?m)^## (H\d+)\b`)
-	// The separator class after the colon is consumed BEFORE capturing, not
-	// trimmed after: stripping a struck-through status leaves "· " or "— "
-	// behind, and a capture that stops at the next "*" would grab only the
-	// separator and report it as the status.
-	statusLine := regexp.MustCompile(`\*{0,2}Status[^*:]*\*{0,2}:[\s*·—–-]*([^\n*]{3,60})`)
+	statusLine := housekeepStatusLine
 
 	src := string(body)
 	locs := entryHeading.FindAllStringSubmatchIndex(src, -1)

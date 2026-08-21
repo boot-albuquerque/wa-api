@@ -5131,8 +5131,7 @@ isto parou, em vez de refazer as duas sondas.
 
 **Terceira medição, 2026-08-21** — e ela achou a API certa e um bloqueio novo.
 O caminho real não é `WAWebSetAboutJob`: é
-**`WAWebTextStatusAction`**, que exporta **`getTextStatus`** e
-**`setMyTextStatus`**. A
+`WAWebTextStatusAction`, que exporta `getTextStatus` e `setMyTextStatus`. A
 LEITURA foi entregue na H70. A ESCRITA continua bloqueada, por um motivo
 diferente e mais duro:
 
@@ -5367,7 +5366,7 @@ que explica o que assumir custa, e desta vez a leitura veio antes.
 
 ### A guarda que separa duas respostas diferentes
 
-**`receiveTextStatusEnabled()`** é consultada ANTES. Um build com o recurso
+`receiveTextStatusEnabled()` é consultada ANTES. Um build com o recurso
 desligado seria indistinguível de um contato que não escreveu nada, e essas são
 respostas diferentes — `ErrAboutDisabled` de um lado, um recado vazio bem
 sucedido do outro.

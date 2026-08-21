@@ -1247,6 +1247,30 @@ mesmo commit em que ele acusa é como se perde a confiança nele.
 
 **Reapareceu no mesmo dia**, na H66, por `getTextStatus`/`setMyTextStatus` numa
 frase seguida de dois-pontos três linhas adiante. Duas ocorrências em horas
-mudam o cálculo: o conserto barato agora é um imposto recorrente sobre quem
-escrever "Status" numa entrada, e **isso** é motivo para consertar o padrão. Fica
-como pendência nomeada, para um commit em que o portão não esteja acusando.
+mudam o cálculo: o conserto barato virou imposto recorrente sobre quem escrever
+"Status" numa entrada.
+
+### CORRIGIDO em 2026-08-21, em commit isolado
+
+```
+(?m)^[ \t>*·-]*\*{0,2}Status[^*:\n]*\*{0,2}:[\s*·—–-]*([^\n*]{3,60})
+```
+
+Duas mudanças, e ambas foram pagas:
+
+- **`(?m)^…`** — a linha de status começa uma linha. A classe à frente aceita
+  indentação, citação e marcador de lista, que é como as linhas reais aparecem.
+- **`[^*:\n]*`** — o rótulo não pode correr para outra linha atrás do
+  dois-pontos. Era daí que vinha o absurdo.
+
+Os remendos de ênfase foram **removidos**, e há teste que falha se voltarem —
+senão o próximo leitor os copia como convenção.
+
+**Os negativos do teste são os casos MEDIDOS**, não inventados:
+`receiveTextStatusEnabled` e `getTextStatus` com dois-pontos a parágrafos de
+distância. O controle negativo que reverte a âncora reproduz exatamente as duas
+capturas que o portão reportou no dia — `"contacts.About(len=0)"` e ` ``` `.
+
+E o teste usa o **mesmo** `housekeepStatusLine` que o portão, não uma cópia:
+copiar o padrão faria um dublê incapaz de divergir do original por construção,
+que é a primeira armadilha deste arquivo.
