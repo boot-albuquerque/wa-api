@@ -8162,3 +8162,83 @@ canal fica sem medição.
 corrigido, a pista do comércio resolvida até "falta uma conta com catálogo", e a
 forma do modelo de canal bloqueada por um travamento medido no diretório, não por
 falta de código.
+
+---
+
+## H103 — o catálogo lido sem criar nada, e o vendedor que respondeu
+
+**Data**: 2026-08-21.
+**Contexto**: o humano perguntou o que precisava fazer para destravar. Eu ia
+pedir que criasse um produto no catálogo da conta — e retirei o pedido **antes de
+fazê-lo**, ao perceber que existia caminho sem criar nada.
+
+### A pergunta que dissolveu o pedido
+
+`queryCatalog` existe para um **cliente** abrir a vitrine de um **vendedor**.
+Pedir ao humano para criar um produto resolveria — e deixaria um item real,
+visível a quem abrisse aquele perfil comercial. A conta já conhece **58 perfis de
+negócio**; ler a vitrine de um deles exercita exatamente o mesmo caminho e não
+cria coisa alguma.
+
+### O que respondeu
+
+| vendedor | resposta |
+|---|---|
+| 1 | `ServerStatusCodeError` |
+| 2 | `ServerStatusCodeError` |
+| 3 | **1 produto**, com 19 campos |
+
+**O terceiro é o que torna os dois primeiros legíveis.** Sem ele,
+`ServerStatusCodeError` seria indistinguível de uma capacidade quebrada — a
+armadilha do leitor que só foi visto devolvendo zero, catalogada na H93. Com ele,
+a recusa é uma resposta *sobre aquele vendedor*, e `ErrNoCatalog` é um estado, não
+um erro.
+
+### Duas correções à referência
+
+**A forma não é a que ela sugere.** A resposta real é
+`{data, catalog_id, catalog_name, catalog_type, paging}` — os itens em `data`, e
+`products` era palpite herdado. Um leitor que olhasse `products` devolveria zero
+para sempre: terceira ocorrência dessa classe neste repositório.
+
+**A chamada é POSICIONAL.** A aridade declarada é 10 e a referência passa 2. O
+objeto de opções devolve `CatalogUnknownError`; a forma posicional **chega ao
+servidor**. A diferença entre os dois erros é o que decidiu a assinatura.
+
+### O que ficou vazio, e por que não virou asserção
+
+No vendedor observado, `catalog_id`, `catalog_name`, `catalog_type` e o preço
+vieram **vazios**. A primeira versão do teste reprovou em *"o catálogo não tem id
+próprio"* — e uma booleana não distingue leitor olhando no lugar errado de loja
+que deixou o campo em branco.
+
+Uma observação não separa "sempre vazio" de "esta loja". Então os campos são
+**reportados** e a pós-condição exige só o que um vendedor sustenta: produto com
+id, e preço nunca sem moeda. Um número de preço sem moeda é um número sobre o
+qual ninguém pode agir.
+
+### Preço não é convertido, e há teste que morde
+
+O preço cruza como o inteiro da página, na menor unidade da moeda. Dividir aqui
+pelo expoente errado é o defeito que ninguém percebe até alguém ser cobrado —
+`TestThePriceIsNotConverted` falha se aparecer `/ 100`, `* 0.01` ou `toFixed(`.
+
+E a paginação é **reportada, não seguida**: seguir em silêncio transforma uma
+leitura em um número indeterminado delas.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| ler itens de `products` em vez de `data` | `TestTheItemsAreReadFromTheMeasuredField` | `the script does not read the items from data` |
+| tratar vendedor sem vitrine como falha | `TestASellerWithNoShopIsItsOwnAnswer` | `err = <nil>, want ErrNoCatalog` |
+| dividir o preço por 100 | `TestThePriceIsNotConverted` | `the script converts the price with "/ 100"` |
+
+### E um erro meu que já é o segundo do dia
+
+Comentário com crase dentro de string crua de Go quebrou o build. Mesma coisa
+tinha acontecido horas antes em `presence.go`. O comentário agora diz isso no
+próprio lugar onde a tentação existe.
+
+**Status**: entregue — leitura de catálogo provada ao vivo contra vendedor real,
+sem criar nada, com a forma e a assinatura corrigidas contra a referência.

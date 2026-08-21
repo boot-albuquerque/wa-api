@@ -218,6 +218,64 @@ func TestProbeCommerce(t *testing.T) {
 						park(out);
 					}
 				} catch (e) { out.catalogCall = 'setup threw: ' + safe(e); }
+
+				// LER O CATÁLOGO DE OUTRO NEGÓCIO, que é para isso que a função
+				// existe.
+				//
+				// queryCatalog serve a um CLIENTE que abre a vitrine de um
+				// vendedor. Pedir ao humano para criar um produto no perfil dele
+				// resolveria também — e deixaria um item visível a quem abrisse
+				// aquele perfil comercial. Esta conta já conhece 58 perfis de
+				// negócio; ler um deles exercita o mesmo caminho e não cria nada.
+				//
+				// NOMES E FORMAS. O jid do vendedor nunca sai daqui.
+				try {
+					const BP = window.require('WAWebBusinessProfileCollection');
+					const holder = BP && (BP.BusinessProfileCollection || BP);
+					const profiles = (holder && typeof holder.getModelsArray === 'function')
+						? holder.getModelsArray() : [];
+					out.foreignCatalog = { profilesKnown: profiles.length, tried: 0 };
+					const Cat = window.require('` + string(spa.Module("WAWebBizProductCatalogBridge")) + `');
+					// ATÉ TRÊS, porque um único vendedor sem vitrine responderia
+					// "sem catálogo" e isso é indistinguível de "a chamada não
+					// funciona" — a armadilha do leitor que só foi visto
+					// devolvendo zero.
+					for (const prof of profiles.slice(0, 3)) {
+						let wid = null;
+						try { wid = prof.id || (prof.wid) || null; } catch (e) {}
+						if (!wid) { continue; }
+						out.foreignCatalog.tried++;
+						const key = 'seller' + out.foreignCatalog.tried;
+						out.foreignCatalog[key] = 'PENDING';
+						park(out);
+						try {
+							const r = await Promise.race([
+								Cat.queryCatalog(wid),
+								new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT_12s')), 12000)),
+							]);
+							// OS PRODUTOS VEM EM "data", e nao em "products".
+							// Medido: a resposta real e
+							// {data, catalog_id, catalog_name, catalog_type, paging}.
+							// "products" era o palpite vindo da referencia.
+							// (sem crase aqui: este comentario vive dentro de uma
+							// string crua de Go, e uma crase a encerraria — segunda
+							// vez que isto quebra o build no mesmo dia)
+							const items = Array.isArray(r) ? r
+								: (r && Array.isArray(r.data) ? r.data
+									: (r && Array.isArray(r.products) ? r.products : null));
+							out.foreignCatalog[key] = 'resolved: ' + typeof r +
+								' items=' + (items ? items.length : 'n/a') +
+								(r && typeof r === 'object' && !Array.isArray(r)
+									? ' keys=[' + Object.keys(r).slice(0, 12).join(',') + ']' : '');
+							if (items && items.length && !out.foreignCatalog.itemFields) {
+								out.foreignCatalog.itemFields = Object.keys(items[0]).slice(0, 25);
+							}
+						} catch (e) {
+							out.foreignCatalog[key] = 'threw: ' + safe(e);
+						}
+						park(out);
+					}
+				} catch (e) { out.foreignCatalog = 'setup threw: ' + safe(e); }
 			} catch (e) {
 				out.sellerWidPresent = 'threw: ' + safe(e);
 			}

@@ -304,8 +304,8 @@ medido em quatro execuções. Reabre com um link de canal público real:
 | `pin` | pin.Message | `MISSING` | sim | falha (H81) | sim | chamada aceita e nada é fixado; vocabulário, duração e forma do modelo medidos |
 | `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | idem |
 | `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
-| `getOrder` | — | `MISSING` | — | — | — | família de comércio |
-| `getPayment` | — | `MISSING` | — | — | — | idem |
+| `getOrder` | — | `MISSING` | — | — | — | `WAWebBizOrderBridge.queryOrder` existe (2 chaves) e **não foi exercitado**: a conta tem zero pedidos entre as mensagens varridas, então falta o dado, não o código. A aridade declarada é 1 contra os 5 argumentos que a referência passa (H102) |
+| `getPayment` | — | `MISSING` | — | — | — | idem `getOrder`: zero pagamentos na conta, caminho sem exercício (H102) |
 | `getReactions` | — | `MISSING` | — | — | — | — |
 | `edit` | capabilities/edit | `PROVEN` | sim | sim | sim | H60: janela de 1200s |
 | `editScheduledEvent` | — | `MISSING` | — | — | — | — |
@@ -323,11 +323,31 @@ medido em quatro execuções. Reabre com um link de canal público real:
 
 ## Product
 
-**Família inteira `MISSING`** — catálogo — família de comércio não atacada.
+`capabilities/catalog` lê a vitrine de um vendedor, **provado ao vivo sem criar
+nada** (H103). O caminho óbvio — acrescentar um produto ao perfil comercial desta
+conta — deixaria um item real visível a quem abrisse aquele perfil;
+`queryCatalog` existe para um CLIENTE abrir a loja de um vendedor, então a prova
+honesta lê uma vitrine que já existe.
+
+Medido: a conta conhece **58** perfis de negócio; dos 3 primeiros, dois
+responderam `ServerStatusCodeError` (sem vitrine) e o terceiro devolveu **1
+produto** com 19 campos. Sem esse terceiro, a recusa seria indistinguível de uma
+capacidade quebrada — a armadilha do leitor só visto devolvendo zero (H93).
+
+A forma da resposta **não** é a que a referência sugere: é
+`{data, catalog_id, catalog_name, catalog_type, paging}`, com os itens em `data`
+e não em `products`. E a chamada é POSICIONAL: o objeto de opções devolve
+`CatalogUnknownError` enquanto a forma posicional chega ao servidor.
+
+`getData` fica `PARTIAL` porque o DADO do produto é obtido — id, nome, preço,
+moeda, disponibilidade, contagem de imagens — mas por vitrine inteira, não por
+produto individual. No vendedor observado, `catalog_id`, `catalog_name` e o preço
+vieram **vazios**, e isso está reportado em vez de assumido: uma observação não
+separa "sempre vazio" de "esta loja".
 
 | upstream | estado |
 |---|---|
-| `getData` | `MISSING` |
+| `getData` | `PARTIAL` |
 
 ## Events
 
@@ -386,8 +406,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 52 | 24% |
-| `PARTIAL` | 46 | 21% |
+| `PARTIAL` | 47 | 21% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 117 | 53% |
+| `MISSING` | 116 | 53% |
 | **total** | **220** | |
