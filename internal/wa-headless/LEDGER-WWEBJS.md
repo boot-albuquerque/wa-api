@@ -54,8 +54,8 @@ nem `PARTIAL` sem justificativa explícita.
 | `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
 | `getMessageById` | varredura da MsgCollection nas capacidades | `PARTIAL` | sim | sim | sim | idem |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
-| `getInviteInfo` | — | `MISSING` | — | — | — | ler convite de terceiro; distinto de getInviteCode |
-| `acceptInvite` | — | `MISSING` | — | — | — | entrar em grupo por link |
+| `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
+| `acceptInvite` | group.JoinByInvite | `PARTIAL` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. O caminho de entrada direta (grupo sem aprovação) não foi exercitado (H89) |
 | `acceptChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `revokeChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `demoteChannelAdmin` | — | `MISSING` | — | — | — | não atacado |
@@ -97,9 +97,9 @@ nem `PARTIAL` sem justificativa explícita.
 | `setProfilePicture` | — | `MISSING` | — | — | — | — |
 | `deleteProfilePicture` | — | `MISSING` | — | — | — | — |
 | `addOrRemoveLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | H72; forma medida pelo instrumento da H73 |
-| `getGroupMembershipRequests` | — | `MISSING` | — | — | — | família inteira de pedidos de entrada |
-| `approveGroupMembershipRequests` | — | `MISSING` | — | — | — | idem |
-| `rejectGroupMembershipRequests` | — | `MISSING` | — | — | — | idem |
+| `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
+| `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
+| `rejectGroupMembershipRequests` | groupreq.Reject | `PARTIAL` | sim | não | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. NÃO exercitado ao vivo: rejeitar conta-B a expulsaria do grupo de laboratório (H89) |
 | `setAutoDownloadAudio` | — | `MISSING` | — | — | — | família de configurações |
 | `setAutoDownloadDocuments` | — | `MISSING` | — | — | — | idem |
 | `setAutoDownloadPhotos` | — | `MISSING` | — | — | — | idem |
@@ -226,9 +226,9 @@ nem `PARTIAL` sem justificativa explícita.
 | `setPicture` | — | `MISSING` | — | — | — | — |
 | `getInviteCode` | group.InviteCode | `PROVEN` | sim | sim | sim | H57: a chamada popula o MODELO; o retorno é undefined |
 | `revokeInvite` | group.RevokeInvite | `PROVEN` | sim | sim | sim | H57 |
-| `getGroupMembershipRequests` | — | `MISSING` | — | — | — | não atacado |
-| `approveGroupMembershipRequests` | — | `MISSING` | — | — | — | não atacado |
-| `rejectGroupMembershipRequests` | — | `MISSING` | — | — | — | não atacado |
+| `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
+| `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
+| `rejectGroupMembershipRequests` | groupreq.Reject | `PARTIAL` | sim | não | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. NÃO exercitado ao vivo: rejeitar conta-B a expulsaria do grupo de laboratório (H89) |
 | `leave` | group.Leave | `PARTIAL` | sim | NÃO (por desenho) | sim | H65: conta que sai de grupo que criou não volta sem convite |
 
 ## GroupNotification
@@ -331,7 +331,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `GROUP_JOIN` | — | `MISSING` | **medido impossível neste barramento**: mudança de participante produz ZERO evento na sessão que a fez (H86) |
 | `GROUP_LEAVE` | — | `MISSING` | idem GROUP_JOIN (H86) |
 | `GROUP_ADMIN_CHANGED` | — | `MISSING` | idem GROUP_JOIN (H86) |
-| `GROUP_MEMBERSHIP_REQUEST` | — | `MISSING` | sem equivalente |
+| `GROUP_MEMBERSHIP_REQUEST` | events.ChatChanged | `PARTIAL` | a chegada MOVE o modelo nesta sessão e o barramento a vê — medida isolada: a saída de conta-B sozinha deu 5 `chat.changed`, o pedido sozinho deu **9** mais 1 `message.added` (H89). Não há tipo dedicado, e `chat.changed` é grosso demais para ser um: quem quer o pedido tem de chamar `groupreq.List`. Contraste com a H86, onde a sessão que MUDA participantes vê zero — quem recebe enxerga, quem age não |
 | `GROUP_UPDATE` | — | `MISSING` | sem equivalente |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
 | `CODE_RECEIVED` | — | `MISSING` | **depende de uma família que não existe**: o pareamento por código não é uma fatia deste módulo (H88) |
@@ -347,9 +347,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 41 | 18% |
-| `PARTIAL` | 37 | 16% |
+| `PROVEN` | 46 | 21% |
+| `PARTIAL` | 41 | 19% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 138 | 63% |
+| `MISSING` | 129 | 59% |
 | **total** | **220** | |

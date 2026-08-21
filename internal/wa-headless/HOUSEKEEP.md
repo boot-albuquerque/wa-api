@@ -6857,3 +6857,123 @@ estado que muda sozinho. Trocado por `PROCESS_GONE`, que é estável porque
 curto-circuita antes de qualquer sonda de página.
 
 **Status**: entregue.
+
+---
+
+## H89 — GROUP-REQUESTS: a família inteira, e a rejeição que era a resposta
+
+**Data**: 2026-08-21.
+**Contexto**: primeira família aberta sob a regra nova da orquestração —
+métodos **e** eventos no mesmo bloco.
+
+### A referência acertou os nomes pela primeira vez
+
+Quatro módulos do `whatsapp-web.js` existem neste build **sem tradução**:
+`WAWebApiMembershipApprovalRequestStore`, `WASmaxGroupsMembershipRequestsActionRPC`,
+`WAWebWidToJid`, `WAWebGroupInviteJob`. Contra **quatro de quatro ausentes** no
+`sendText` (H34). Vale registrar exatamente porque o oposto tem sido a norma:
+copiar a lista às vezes funciona, e a única forma de saber é medir.
+
+### O refresh "específico" que NÃO foi usado, e por quê
+
+Este build exporta `WAWebGroupQueryJob.maybeQueryAndUpdateMembershipApprovalRequests`,
+que a referência não usa. Parecia a escolha óbvia — mais barata que refazer a
+metadata inteira. Medido:
+
+| argumento | resultado |
+|---|---|
+| wid | `resolved: undefined` |
+| `{id: "...@g.us"}` | `resolved: undefined` |
+| string crua | `resolved: undefined` |
+| objeto chat inteiro | `resolved: undefined` |
+
+**Aceita quatro formas incompatíveis e resolve `undefined` em todas.** Uma função
+que não consegue recusar um argumento errado não consegue confirmar um certo:
+não há como distingui-la de um no-op. Ficou o `queryAndUpdateGroupMetadataById`
+da referência.
+
+### A rejeição ERA a resposta
+
+`joinGroupViaInvite` num grupo que pede aprovação **não resolve**: ele **rejeita**,
+com um objeto chamado `UnexpectedJoinGroupViaInviteResponse` cujas chaves são
+`[message, taalOpcodes, name, gid, membershipApprovalMode]`.
+
+O `wwebjs` faz `res.gid._serialized` sobre o valor RESOLVIDO e quebraria aqui.
+Copiar a forma dele teria falhado; copiar o entendimento — "existe um módulo que
+entra por convite" — funcionou.
+
+Reconhecemos pelo **campo carregado** (`membershipApprovalMode`), não pelo nome:
+o nome é detalhe de build, o campo é o fato.
+
+**Isto só apareceu porque o primeiro relato de erro estava vazio.** O script
+reportava `String(e && e.message)` e este app rejeita com objetos simples tanto
+quanto com `Error`. Um motivo vazio é pior que um errado: parece falha silenciosa
+quando na verdade o diagnóstico foi jogado fora na fronteira. O relato agora
+carrega construtor, nome, status, code e **as chaves** do que foi lançado.
+
+### O que a prova ao vivo mediu que nada mais mediria
+
+Campos de um pedido real: `[id, t, addedBy, requestMethod, parentGroupId]`. Os
+dois últimos não estão em lugar nenhum da referência. `requestMethod` distingue
+"seguiu um link" de "alguém tentou adicionar" — que é a diferença sobre a qual um
+admin decide.
+
+E o solicitante chega como **`@lid`**, não batendo com o `@c.us` do peer. A
+primeira versão do teste comparava jids para provar proveniência e teria
+**reprovado uma execução correta**. A proveniência vem da linha de base — zero
+pendentes antes — que é a afirmação mais forte.
+
+### O evento, medido com a saída SUBTRAÍDA
+
+Primeira medição: 14 `chat.changed` durante "sair + pedir". Número que não diz
+nada, porque uma saída também mexe no chat. Isolado:
+
+| ação | barramento |
+|---|---|
+| saída de conta-B sozinha | `chat.changed:5`, `message.added:1` |
+| **pedido sozinho** | `chat.changed:9`, `message.added:1` |
+
+O pedido **é** observável nesta sessão. Não há tipo dedicado e `chat.changed` é
+grosso demais para ser um, então fica `PARTIAL` com a medida escrita.
+
+Contraste com a H86: a sessão que MUDA participantes vê **zero**. Quem recebe
+enxerga; quem age não.
+
+### Dois defeitos meus, no meu próprio teste
+
+1. **`t.Cleanup` roda DEPOIS de todo `defer`.** A restauração da política usava
+   `t.Cleanup` e falhou com `context canceled`, porque `defer hA.Stop` já tinha
+   derrubado a sessão. A medição tinha dado certo e o grupo ficou **armado**.
+   `defer` registrado depois do `Stop` roda antes dele (LIFO).
+
+2. **Uma restauração que falha envenena o "original" da execução seguinte.** A
+   corrida seguinte leu `approvalWas = true` e restaurou para `true`. A saída
+   não foi um cleanup mais esperto: foi `TestLabSetApprovalMode`, que diz o que
+   o grupo DEVE ser, independente do que ele está.
+
+Estado do laboratório ao fim: 2 participantes, aprovação **desligada**,
+zero pendentes — verificado por sonda depois de tudo.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| refresh DEPOIS da leitura | `TestTheListRefreshesFromTheServerFirst` | "the refresh runs AFTER the read; the read would answer with boot-time metadata" |
+| `rejectArgs` trocado por `approveArgs` | `TestApproveAndRejectSendDifferentKeys` | "Reject did not send rejectArgs" / "Reject also sent approveArgs" |
+| `if !out.OK` virado `if false` | `TestAPageFailureIsNotAnEmptyList` | `err = <nil>, want ErrRead` |
+
+### Achado incidental, NÃO corrigido
+
+`capabilities/group/policy.go:161`, doc de `PolicyOf`:
+
+> IT IS CORRECT AT SESSION START AND STALE AFTER A CHANGE THIS SESSION MADE,
+> the same as Count — which is what makes cross-session the only honest proof.
+
+Isso é **falso desde a H85**, que mediu políticas visíveis na mesma sessão em
+~1s, e foi contrariado de novo hoje: `TestLabSetApprovalMode` lê `true -> false`
+na mesma sessão que fez a mudança. É prosa sobrevivente da hipótese ampla demais
+da H58. Correção sugerida: reescrever o comentário citando a H85 e a medição de
+hoje; `Count` continua sendo o caso stale de verdade, e juntar os dois é o erro
+original.
+
+**Status**: entregue (o achado do `PolicyOf` fica pendente).
