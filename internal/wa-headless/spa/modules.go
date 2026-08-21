@@ -226,6 +226,29 @@ const (
 	// ModuleGroupMetadataCollection holds group metadata, including
 	// participants — the postcondition a creation must satisfy.
 	ModuleGroupMetadataCollection = Module("WAWebGroupMetadataCollection")
+	// ModulePresenceChatAction is the app's OWN entry point for typing state.
+	//
+	// It takes a CHAT, not a wid — its source reads getIsNewsletter(e) and
+	// e.id.isBot(), which are the app's guards against announcing typing where
+	// that makes no sense. The layer underneath (WAWebChatStateBridge) takes a
+	// wid and skips those checks; using it would mean deciding we know better
+	// than the app about where a typing indicator belongs.
+	//
+	// It also manages resend timers (presenceResendTimerId, pausedTimerId), so
+	// a composing state maintains itself the way a real client's does.
+	ModulePresenceChatAction = Module("WAWebPresenceChatAction")
+	// ModuleContactPresenceBridge carries the two halves presence needs that
+	// the chat action does not: going online/offline for the ACCOUNT, and
+	// subscribing to somebody else's presence.
+	//
+	// Measured 2026-08-20: of 384 presence models on the lab account, ZERO were
+	// subscribed. Another person's presence is not free — it has to be asked
+	// for, and a capability that read the collection without subscribing would
+	// report everyone as permanently silent.
+	ModuleContactPresenceBridge = Module("WAWebContactPresenceBridge")
+	// ModulePresenceCollection holds what is known about each presence:
+	// isOnline, isSubscribed, chatstate{type}, typingUserIds, recordingUserIds.
+	ModulePresenceCollection = Module("WAWebPresenceCollection")
 )
 
 // RequiredAtStartup is verified before any capability runs.

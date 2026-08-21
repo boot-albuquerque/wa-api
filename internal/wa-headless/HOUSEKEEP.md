@@ -3858,3 +3858,75 @@ ordem, não desenho, e é parte do motivo de a resolução vir antes.
 
 **Status**: entregue — criação idempotente por assunto, pós-condição de
 participantes, envio a grupo provado ao vivo, quatro controles negativos.
+
+## H50 — presença: o ANÚNCIO entregue, a OBSERVAÇÃO não provada, e três hipóteses derrubadas no caminho
+
+**Data**: 2026-08-20 · **Contexto**: terceira e última área que a orquestração
+autorizou (grupos, mídia, presença).
+
+### O que foi entregue
+
+`capabilities/presence`, com anúncio (`composing`/`paused`/`recording`,
+`available`/`unavailable`) e observação (`subscribeUserPresence` + leitura).
+Dez testes de dublê.
+
+**A camada escolhida é a do APP, não a crua.** `WAWebChatStateBridge` recebe um
+wid e manda o protocolo direto; `WAWebPresenceChatAction` recebe um CHAT e
+aplica as guardas do próprio aplicativo — `getIsNewsletter`, `id.isBot()`,
+`getIsBroadcast` — antes de fazer o mesmo, além de manter os timers de reenvio
+que um cliente real mantém. Usar a ponte seria decidir que sabemos melhor que o
+app onde um indicador de digitação cabe. Não sabemos.
+
+**Anunciar não cria conversa.** Dizer a alguém que você está digitando não é
+abrir um chat com essa pessoa, então a busca é `ChatCollection.get` e nunca
+`findOrCreateLatestChat`. Isso forçou uma fatoração melhor: o que `send` e
+`presence` compartilham é a RESOLUÇÃO DE IDENTIDADE, não a obtenção do chat.
+Ela virou `spa.ResolveIdentityExpr` — no pacote que existe para conhecimento de
+página — e os dois a usam para fins opostos sem que um herde o efeito colateral
+do outro.
+
+### O que NÃO foi provado
+
+**Anunciar não tem pós-condição local.** A página aceita `markComposing` e nada
+muda deste lado, então uma capacidade que "teve sucesso" é indistinguível de uma
+que não mandou nada. A evidência só pode vir da OUTRA conta.
+
+E a outra conta não confirmou: `isSubscribed` ficou `true` **uma vez** e `false`
+em todas as execuções seguintes, mesmo com 20 s de espera.
+
+**Três hipóteses minhas, todas derrubadas por medição:**
+
+| hipótese | como caiu |
+|---|---|
+| observar pelo PN | correto derrubá-la — o build arquiva sob LID (H34/H39), e trocar para LID fez a subscrição aparecer na primeira vez |
+| a conta não anunciou disponibilidade | `setPresenceAvailable` passou a ser chamado antes; não mudou |
+| a página do observador recarrega | **falsa**: marcador plantado sobreviveu 8 leituras em 24 s, contador subindo 1→8 |
+
+A quarta hipótese, que NÃO consegui testar daqui: privacidade. O WhatsApp permite
+restringir "visto por último e online" a contatos, e as duas contas de
+laboratório não se têm salvas na agenda — `getName` responde para 1 de 944. Se a
+subscrição é recusada por privacidade, nenhuma correção de código a faria valer,
+e a prova exigiria mudar uma configuração na conta.
+
+### Por que isto fica assim em vez de continuar
+
+Segui a mesma regra da legenda (H47): a capacidade aceita e repassa; o que não
+posso afirmar, não afirmo. O teste ao vivo **PULA com a razão escrita**, em vez
+de passar sem tocar no assunto — um verde silencioso ali insinuaria que a
+observação está provada.
+
+**O que reabriria o caso**: salvar uma conta na agenda da outra e reexecutar. É
+ação humana no aparelho, e por isso está registrada aqui em vez de tentada.
+
+> **Defeito real encontrado no caminho, e corrigido**: a primeira versão de
+> `Observe` subscrevia e lia na MESMA chamada de página. `subscribeUserPresence`
+> retorna antes de `isSubscribed` virar, então era corrida — passou uma vez e
+> falhou na seguinte, que é o pior tipo de correto. Agora a leitura é repetida
+> até a página concordar, com o relógio do lado Go (invariante 6), e há um
+> dublê que só vira depois de três leituras para que a espera seja carregada por
+> teste.
+
+**Status**: parcialmente entregue — anúncio implementado e travado por dez
+testes; observação implementada e NÃO PROVADA contra a conta par, com três
+hipóteses derrubadas, uma quarta registrada e a ação humana que a resolveria
+nomeada.

@@ -497,6 +497,12 @@ var (
 		// closed is exactly the reading that made H5 look finished when its
 		// item 3 was still a human decision.
 		"parcialmente corrigido", "parcialmente corrigida",
+		// PARCIALMENTE ENTREGUE conta como ABERTO pelo mesmo motivo, e entrou
+		// deliberadamente: uma capacidade cuja metade não pôde ser PROVADA não
+		// está fechada, mesmo que o código exista. Classificá-la como entregue
+		// faria uma varredura contar como pronto algo que ninguém verificou —
+		// que é precisamente a confusão que este gate impede.
+		"parcialmente entregue", "parcialmente entregues",
 		// ABANDONADO é um desfecho legítimo e conta como ABERTO: o achado não
 		// foi resolvido, foi deixado de lado com o motivo escrito. Classificá-lo
 		// como fechado apagaria a diferença entre "resolvido" e "decidi não

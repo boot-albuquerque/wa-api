@@ -119,6 +119,16 @@ declarado do projeto: métodos principais de envio e chat.
 | resolução de GRUPO | `capabilities/send` (`resolve.go`) | grupo resolve sem passar pela identidade de usuário — provado **sem enviar** |
 | `createGroup` | `capabilities/group` | criado com 2 participantes; segunda chamada **reutiliza** (`created=false`) |
 | envio a GRUPO | `capabilities/send` | texto enviado ao grupo de laboratório e **verificado** |
+| presença (anúncio) | `capabilities/presence` | implementado, 10 testes — **sem pós-condição local, por natureza** |
+| presença (observação) | `capabilities/presence` | implementada e **NÃO PROVADA**: `isSubscribed` não se mantém (H50) |
+
+**Fatoração que a presença forçou (H50)**: o que `send` e `presence` compartilham
+é a RESOLUÇÃO DE IDENTIDADE, não a obtenção do chat — porque enviar quer criar
+conversa quando não existe, e anunciar que se está digitando NUNCA pode criar
+uma. A parte comum virou `spa.ResolveIdentityExpr`, no pacote de conhecimento de
+página, e os dois a usam para fins opostos sem que um herde o efeito colateral do
+outro. Fatorar no lugar errado teria dado a `presence` um efeito que ela não pode
+ter.
 
 **A regra que três capacidades num dia ensinaram (H40, H46, H49)**: quando uma
 função da página morre lendo campo de `undefined` — `isNewsletter`, `isLid` — o

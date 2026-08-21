@@ -185,66 +185,26 @@ const dispatchResultScript = `JSON.stringify((() => {
 // Nothing here is optional and nothing is decoration: each step exists because
 // a simpler one was measured failing.
 const resolveChatExpr = `(async function (jidString) {
-	const WidFactory = window.require('` + string(spa.ModuleWidFactory) + `');
 	const ChatCollection = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
-	// createWid BUILDS a wid from text; asChatWid only VALIDATES one that
-	// already exists. Passing the string straight to asChatWid fails with
-	// "e.isUser is not a function" — the page saying it was handed a string
-	// where it expected an object.
-	const local = WidFactory.createWid(jidString);
-	if (!local) { return { ok: false, why: 'WID_NULL' }; }
-
-	// A GROUP IS NOT A PERSON, AND THE USER RESOLUTION REFUSES IT.
-	//
-	// Measured 2026-08-20 against a real group chat: createWid survives a
-	// "@g.us" jid and keeps server "g.us", ChatCollection.get returns the chat
-	// directly — and queryWidExists answers NULL. Sending to a group therefore
-	// died at the identity step with 'NOT_ON_WHATSAPP', which is not only wrong
-	// but misleading: the group plainly exists and is in the collection.
-	//
-	// So groups skip resolution entirely. There is nothing to resolve — a group
-	// jid IS the identity, and it has no lid counterpart.
-	if (local.server === 'g.us') {
-		const chat = ChatCollection.get(local);
-		if (!chat) { return { ok: false, why: 'GROUP_NOT_FOUND' }; }
-		const jid = (typeof local._serialized === 'string') ? local._serialized : jidString;
-		return { ok: true, why: '', wid: local, jid: jid, chat: chat };
-	}
-
-	// ASK THE SERVER WHO THIS IS. A locally-built wid carries the phone number,
-	// and this build wants the LID — opening a chat with the phone wid fails
-	// with "No LID for user" for anyone never spoken to. queryWidExists is the
-	// SPA's own resolution, and it answers with the identity the server knows:
-	// measured here as wid.server === "lid".
-	//
-	// This is the step whatsapp-web.js performs in getNumberId and NOT before
-	// sending, which is why its own issues (#3834, #5750) end at
-	// findOrCreateLatestChat -> toUserLidOrThrow with no fix. Doing it first is
-	// the difference.
-	const Query = window.require('` + string(spa.ModuleQueryExistsJob) + `');
-	const exists = await Query.queryWidExists(local);
-	if (!exists || !exists.wid) { return { ok: false, why: 'NOT_ON_WHATSAPP' }; }
-	const wid = exists.wid;
-
-	// The RESOLVED jid, because verification depends on it. Measured: of 399
-	// models in the collection, 397 carry server "lid". A verifier comparing
-	// against the phone jid matches nothing and reports a working send as
-	// unverified.
-	const jid = (typeof wid._serialized === 'string') ? wid._serialized : '';
-	if (!jid) { return { ok: false, why: 'WID_NOT_SERIALIZED' }; }
+	const resolveIdentity = ` + spa.ResolveIdentityExpr + `;
+	const r = await resolveIdentity(jidString);
+	if (!r.ok) { return r; }
 
 	// A chat that does not exist yet is the ORDINARY case for a first message,
 	// so obtaining one cannot be a lookup. Measured: get() returns null for a
 	// correspondent never spoken to, and ChatCollection.find throws
 	// "this.findImpl is not a function". findOrCreateLatestChat works either
 	// way, and it is looked up by the SERVER'S wid, not the phone one.
-	let chat = ChatCollection.get(wid);
+	//
+	// THIS IS THE HALF PRESENCE MUST NOT HAVE: announcing that you are typing
+	// may not bring a conversation into existence.
+	let chat = ChatCollection.get(r.wid);
 	if (!chat) {
 		const Find = window.require('` + string(spa.ModuleFindChatAction) + `');
-		chat = await Find.findOrCreateLatestChat(wid);
+		chat = await Find.findOrCreateLatestChat(r.wid);
 	}
 	if (!chat) { return { ok: false, why: 'CHAT_NOT_FOUND' }; }
-	return { ok: true, why: '', wid: wid, jid: jid, chat: chat };
+	return { ok: true, why: '', wid: r.wid, jid: r.jid, chat: chat };
 })`
 
 func dispatchScript(toJID, text string) string {
