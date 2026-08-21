@@ -49,6 +49,21 @@ func TestProbeBlockShape(t *testing.T) {
 				return typeof f === 'function' ? String(f).slice(0, 900) : ('NOT_A_FUNCTION:' + typeof f);
 			} catch (e) { return 'THREW:' + String((e && e.message) || e).slice(0, 120); }
 		};
+		for (const m of ['WAWebSetAboutJob', 'WAWebSetTextStatusJob']) {
+			try {
+				const mod = window.require(m);
+				const o2 = mod && (mod.setAbout || mod.setTextStatus);
+				out[m] = o2 ? Object.keys(o2).concat(
+					Object.getPrototypeOf(o2) ? Object.keys(Object.getPrototypeOf(o2)) : []) : 'NULL';
+				out[m + '_run'] = (o2 && typeof o2.run === 'function') ? String(o2.run).slice(0, 400) : null;
+				out[m + '_modKeys'] = Object.keys(mod);
+			} catch (e) { out[m] = 'THREW:' + String(e).slice(0, 90); }
+		}
+		try {
+			const C = window.require('WAWebConnModel').Conn;
+			out.canSetMyPushname = !!(C.canSetMyPushname && C.canSetMyPushname());
+			out.pushnameLen = (C.pushname || '').length;
+		} catch (e) { out.canSetMyPushname = 'THREW'; }
 		out.blockContact = src('WAWebBlockContactAction', 'blockContact');
 		out.unblockContact = src('WAWebBlockContactAction', 'unblockContact');
 		out.blockUnblockUser = src('WAWebBlockUserJob', 'blockUnblockUser');

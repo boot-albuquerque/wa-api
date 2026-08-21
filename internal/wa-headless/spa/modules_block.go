@@ -167,3 +167,33 @@ const ModuleSetSubjectGroupAction = Module("WAWebSetSubjectGroupAction")
 // tested, and deliberately never run against the lab group — recorded rather
 // than quietly skipped.
 const ModuleExitGroupAction = Module("WAWebExitGroupAction")
+
+// Emptying and removing a conversation, measured with TestProbeRemainingShapes
+// and confirmed at the app's own call sites.
+const (
+	// ModuleSendClearChatAction empties a conversation but keeps it in the
+	// list: sendClear(chat, keepStarred). The second argument's meaning comes
+	// from the UI that calls it — a checkbox beside the words "the conversation
+	// will be empty but will stay in your list".
+	ModuleSendClearChatAction = Module("WAWebSendClearChatAction")
+
+	// ModuleDeleteChatAction removes the conversation itself:
+	// sendDelete(chat, syncToDevices = true). The app's leave-group flow calls
+	// sendExitGroup and then sendDelete, which is the order this package's
+	// callers would need too — and is not something this package does on their
+	// behalf.
+	ModuleDeleteChatAction = Module("WAWebDeleteChatAction")
+
+	// ModuleSetPushnameConnAction sets the account's display name:
+	// setPushname(name, onDone). The second argument is a UI callback and is
+	// omitted here.
+	//
+	// IT IS GUARDED BY THE BUILD, not by us: Conn.canSetMyPushname() is
+	// !getIsSMB(this), and it measured FALSE on the lab account — which is
+	// therefore a WhatsApp Business account. That is worth knowing beyond this
+	// capability, because it may explain other behaviour measured on it.
+	ModuleSetPushnameConnAction = Module("WAWebSetPushnameConnAction")
+
+	// ModuleConnModel, which carries canSetMyPushname and the current
+	// pushname, is already declared in modules.go.
+)

@@ -42,6 +42,8 @@ func TestProbeRemainingShapes(t *testing.T) {
 	want := []struct{ mod, fn string }{
 		{"WAWebSetSubjectGroupAction", "setGroupSubject"},
 		{"WAWebExitGroupAction", "sendExitGroup"},
+		{"WAWebSetAboutJob", "setAbout"},
+		{"WAWebSetTextStatusJob", "setTextStatus"},
 		{"WAWebSendClearChatAction", "sendClear"},
 		{"WAWebDeleteChatAction", "sendDelete"},
 		{"WAWebSetPushnameConnAction", "setPushname"},

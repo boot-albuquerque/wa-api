@@ -5064,3 +5064,61 @@ vivo de grupo dependem.
 **Status**: entregue (sair do grupo: entregue sem prova ao vivo, por desenho).
 **Testes**: `capabilities/group/admin_test.go` (11 testes) e
 `adminreal_test.go` (promover/rebaixar, prova entre sessões, restaura).
+
+---
+
+## H66 — limpar e apagar conversa, e o nome de exibição que este build recusa
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura.
+**Onde**: `internal/wa-headless/capabilities/chats/lifecycle.go`,
+`internal/wa-headless/capabilities/profile/`.
+
+### O achado que vale além destas capacidades: a conta de laboratório é BUSINESS
+
+`Conn.canSetMyPushname()` é `!getIsSMB(this)` e mediu **false**. Ou seja, a
+conta-A é uma conta WhatsApp Business.
+
+Isto é propriedade do **fixture contra o qual todas as medições deste módulo
+foram tomadas**, e vale mais que a capacidade que o revelou. Comportamentos
+medidos aqui podem não valer para conta pessoal, e o contrário também.
+
+A capacidade existe, pergunta a guarda ANTES e devolve `ErrCannotSetDisplayName`
+com o motivo. **Não há prova ao vivo possível nesta conta** — não por escolha,
+por recusa do build.
+
+### Limpar e apagar: entregues, deliberadamente NÃO provadas ao vivo
+
+```
+sendClear(chat, keepStarred)
+sendDelete(chat, syncToDevices = true)
+```
+
+Ambas síncronas, ambas confirmadas no chamador do app. O segundo argumento do
+`sendClear` foi nomeado pela UI que o chama: um checkbox sob as palavras *"a
+conversa ficará vazia, mas continuará na sua lista"*.
+
+**Por que não são provadas ao vivo**: a conta de laboratório tem exatamente uma
+conversa com par, e todo o resto dos testes ao vivo lê ou escreve nela —
+`fetchmessages` conta o histórico, editar e encaminhar acham mensagens nela,
+silenciar e marcar-como-lida agem sobre ela. Limpar ou apagar uma vez custaria
+todos eles, e nenhum dos dois atos se desfaz.
+
+Uma capacidade que existe e **diz** que nunca foi provada ao vivo é mais honesta
+que uma provada às custas do fixture.
+
+**Divergência registrada**: o fluxo do app faz `sendExitGroup` e depois
+`sendDelete`. Nós **não** saímos do grupo ao apagar a conversa — apagar a
+conversa continuando no grupo é estado real que alguém pode querer, e fazer o
+passo extra em silêncio seria decidir pelo chamador. Há teste.
+
+### Não entregue, e medido: recado (`about` / status de texto)
+
+`WAWebSetAboutJob.setAbout` e `WAWebSetTextStatusJob.setTextStatus` **não são
+funções** — são objetos cuja única chave é `"0"`, o que sugere array ou wrapper
+de job preguiçoso. Uma sonda a mais resolve; não foi feita nesta passada.
+
+**Status**: entregue (limpar, apagar, nome de exibição — este sem prova ao vivo
+possível); recado **não entregue**, com a medição preservada acima.
+**Testes**: `capabilities/chats/lifecycle_test.go` (9 testes, três com controle
+negativo asserido) e `capabilities/profile/profile_test.go` (8 testes).

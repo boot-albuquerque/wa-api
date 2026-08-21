@@ -695,3 +695,21 @@ bloqueios nomeados: participantes (H58) e link de convite (H57).
 3. **Sair não tem prova ao vivo, por desenho** — e está escrito em três lugares.
    Conta que sai de grupo que criou não volta sem convite, e o laboratório tem
    duas contas.
+
+## §6.22 — limpar conversa, apagar conversa, nome de exibição
+
+| `wwebjs` | forma neste build | prova ao vivo |
+|---|---|---|
+| `Chat.clearMessages` | `sendClear(chat, keepStarred)` | **não**, por desenho — destruiria o fixture |
+| `Chat.delete` | `sendDelete(chat, syncToDevices=true)` | **não**, idem |
+| `Client.setDisplayName` | `setPushname(name, onDone)` | **impossível** — `canSetMyPushname()` é false nesta conta |
+
+**A conta de laboratório é BUSINESS**, medido por `canSetMyPushname` =
+`!getIsSMB(this)` = false. Propriedade do fixture, não desta capacidade.
+
+**Divergência**: o app faz `sendExitGroup` e depois `sendDelete` ao apagar um
+grupo. Nós apagamos só a conversa — continuar no grupo sem a conversa é estado
+real, e sair em silêncio seria decidir pelo chamador.
+
+**Falta**: recado (`about`/status). Os dois módulos existem e **não são
+funções** — objetos de chave `"0"`. Medido, registrado, não resolvido.
