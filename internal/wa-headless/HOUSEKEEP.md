@@ -5129,6 +5129,26 @@ Parei na segunda sonda, de propósito: a regra é medir antes de projetar, e
 também não cavar. O que está medido basta para a próxima pessoa começar de onde
 isto parou, em vez de refazer as duas sondas.
 
+**Terceira medição, 2026-08-21** — e ela achou a API certa e um bloqueio novo.
+O caminho real não é `WAWebSetAboutJob`: é
+**`WAWebTextStatusAction`**, que exporta **`getTextStatus`** e
+**`setMyTextStatus`**. A
+LEITURA foi entregue na H70. A ESCRITA continua bloqueada, por um motivo
+diferente e mais duro:
+
+```
+setMyTextStatus(e, t, n, r, o)      // cinco posicionais
+```
+
+e o grep no bundle **não acha nenhum chamador**. A função é exportada e nada no
+código embarcado a chama — ou o chamador vive num bundle carregado sob demanda
+que a sonda não busca. Sem chamador, as cinco posições são cinco chutes, e a H69
+acabou de registrar o que chutar assinatura custa.
+
+**Não delegável a mais uma sonda cega**: o próximo passo útil é abrir a tela de
+edição de recado na página real e capturar a chamada, o que exige interação de
+UI que este módulo não faz.
+
 **Status**: entregue (limpar, apagar, nome de exibição — este sem prova ao vivo
 possível); recado **não entregue**, com a medição preservada acima.
 **Testes**: `capabilities/chats/lifecycle_test.go` (9 testes, três com controle
@@ -5383,3 +5403,69 @@ recado cheio de acentos não é mais longo que um sem eles, e `len()` diria que 
 **Status**: entregue, com os limites da prova ao vivo registrados acima.
 **Testes**: `capabilities/contacts/commongroups_test.go` (secção `about`,
 7 testes, quatro com controle acima) e `commongroupsreal_test.go`.
+
+---
+
+## H71 — estado de entrega de mensagem, e o enum lido em vez de decorado
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura. Capacidade de **leitura**.
+**Onde**: `internal/wa-headless/capabilities/ack/`.
+
+### A medição mudou o escopo antes de existir código
+
+A intenção era o equivalente ao `Message.getInfo` do wwebjs — quem recebeu, quem
+leu. A sonda mediu:
+
+```
+{"infoCount":0,"fromMeCount":368,"newest":[{"ack":2,"hasInfo":false}, …]}
+```
+
+A `MsgInfoCollection` está **vazia**: zero modelos contra 368 mensagens enviadas,
+e `get()` não devolve nada para nenhuma recente. O detalhe por participante é
+preenchido quando o app abre a gaveta de informações — uma sessão headless que
+nunca a abre tem `msg.ack` e mais nada.
+
+**Então a capacidade entregue é o `ack`**, e o que NÃO foi entregue está dito:
+"quem leu" é outra capacidade, com outro custo.
+
+### O enum vem da página
+
+O script procura, **dentro** de `WAWebAck`, a entrada cujo VALOR é o ack desta
+mensagem, e reporta o NOME dela — além de dizer de onde veio:
+
+```
+ack: ack.Status(state=sent raw=1 fromMe=true enum=WAWebAck.ACK waited=0s)
+```
+
+`enum=WAWebAck.ACK` prova que a tabela de emergência **não** foi usada. Uma
+constante copiada de um blog é uma constante que ninguém pode conferir; um build
+que renumerar seus estados muda `Raw` e nada mais, porque o mapeamento é por
+NOME.
+
+`Unknown` é o valor zero de propósito: um ack que ninguém soube nomear não pode
+virar "pendente", que é uma afirmação.
+
+### Um dublê mais permissivo que a produção, pego pelo próprio teste
+
+`TestCancelledContextReadsNothing` falhou na primeira execução — o dublê deste
+pacote não honrava o contexto, e o avaliador real honra (o chromedp recusa
+contexto cancelado). O dublê foi corrigido para imitar a produção, com o motivo
+escrito nele.
+
+É a primeira armadilha do `ARMADILHAS.md` — dublê mais permissivo esconde o
+defeito — aparecendo ao contrário: aqui ele deixou o teste FALHAR corretamente
+em vez de esconder algo, porque a asserção era sobre não tocar a página.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| mapear por número em vez de por nome | `name "READ" with raw 99 mapped to unknown, want read` |
+| não ler o enum da página | `the script does not look the ack up in the page's enum` |
+| ack sem nome virar "pendente" | `an unnamed ack became pending` |
+
+**Status**: entregue (o `ack`); "quem leu" **não entregue**, com a medição que
+explica por quê acima.
+**Testes**: `capabilities/ack/ack_test.go` (7 testes, três com controle acima) e
+o teste ao vivo em `commongroupsreal_test.go`.

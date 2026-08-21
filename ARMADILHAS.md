@@ -1244,3 +1244,9 @@ casamento antes do dois-pontos distante.
 **O conserto certo**, se reaparecer: prender o padrão ao início de linha e
 proibir quebra de linha no meio. Não foi feito agora porque mexer no portão no
 mesmo commit em que ele acusa é como se perde a confiança nele.
+
+**Reapareceu no mesmo dia**, na H66, por `getTextStatus`/`setMyTextStatus` numa
+frase seguida de dois-pontos três linhas adiante. Duas ocorrências em horas
+mudam o cálculo: o conserto barato agora é um imposto recorrente sobre quem
+escrever "Status" numa entrada, e **isso** é motivo para consertar o padrão. Fica
+como pendência nomeada, para um commit em que o portão não esteja acusando.

@@ -771,3 +771,22 @@ toma o **modelo**. Não há regra — há leitura.
 2. **O texto nunca é renderizado**, só o comprimento — em RUNAS.
 3. **Dizemos o que a prova ao vivo não provou**: o par tem recado vazio e já em
    cache, então a busca no servidor não foi exercitada.
+
+## §6.26 — estado de entrega (`ack`)
+
+`wwebjs` expõe `Message.getInfo()` — quem recebeu, quem leu. **Neste build isso
+não está disponível para uma sessão headless**, e a medição diz por quê: a
+`MsgInfoCollection` tem zero modelos contra 368 mensagens enviadas, porque o
+detalhe por participante só é buscado quando o app abre a gaveta de informações.
+
+O que existe é `msg.ack`, e é o que entregamos.
+
+**Onde divergimos de propósito:**
+
+1. **O enum vem da página.** Procuramos dentro de `WAWebAck` a entrada cujo valor
+   é este ack e usamos o NOME dela — e reportamos de onde veio. Um build que
+   renumerar seus estados muda só o campo `Raw`.
+2. **`Unknown` é o valor zero.** Um ack que ninguém soube nomear não vira
+   "pendente", que seria uma afirmação.
+3. **`FromMe` é carregado**, porque o ack de uma mensagem recebida é sobre o que
+   ESTA conta reconheceu — pergunta diferente de "eles leram a minha".

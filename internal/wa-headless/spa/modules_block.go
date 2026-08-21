@@ -268,3 +268,15 @@ const (
 	// otherwise look like a contact with no about text.
 	ModuleTextStatusGatingUtils = Module("WAWebTextStatusGatingUtils")
 )
+
+// ModuleAck names the delivery states. The numbers are read FROM IT rather than
+// written down here, because a constant copied from a blog post is a constant
+// nobody can check.
+//
+// WHAT IS NOT AVAILABLE, measured: WAWebMsgInfoCollection is EMPTY in a fresh
+// session (0 models against 368 sent messages), and MsgInfoCollection.get(id)
+// returns nothing for every recent one. Per-participant delivery detail is
+// populated when the app opens its message-info drawer, not before — so "who
+// read it" is a different capability with a different cost, and msg.ack is what
+// a session actually knows.
+const ModuleAck = Module("WAWebAck")

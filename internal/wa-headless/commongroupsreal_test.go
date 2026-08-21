@@ -3,11 +3,14 @@ package waheadless
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	"wa-api/internal/wa-headless/capabilities/ack"
 	"wa-api/internal/wa-headless/capabilities/contacts"
+	"wa-api/internal/wa-headless/capabilities/send"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	waruntime "wa-api/internal/wa-headless/runtime"
@@ -176,5 +179,66 @@ func TestRealSPAReadsThePeersAbout(t *testing.T) {
 	}
 	if again.Text != got.Text {
 		t.Error("two reads of the same about returned different text")
+	}
+}
+
+// TestRealSPAReadsTheAckOfAMessageItJustSent closes a loop: a message this
+// session sent has an ack, and it is at least "sent".
+//
+// It asserts a FLOOR rather than an exact value on purpose. Whether the peer's
+// device has acknowledged by the time this runs is a race with somebody else's
+// phone, and a test that demanded "delivered" would be red for a reason that has
+// nothing to do with this code.
+func TestRealSPAReadsTheAckOfAMessageItJustSent(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
+		t.Skip("set WA_HEADLESS_READ_TEST=1; this sends one short message")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
+		fmt.Sprintf("wa-headless ack probe %d", time.Now().UnixNano()), "test/ack-send")
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	r := ack.New(runner, sess.Tab().Evaluate)
+	got, err := r.Of(ctx, sent.ID.ID, "test/ack")
+	if err != nil {
+		t.Fatalf("Of: %v", err)
+	}
+	t.Logf("ack: %s", got)
+	t.Logf("MEASURED: the state name came from %s", got.EnumSource)
+
+	if !got.FromMe {
+		t.Fatalf("a message this session sent is not marked fromMe: %s", got)
+	}
+	if got.State < ack.Sent {
+		t.Fatalf("a message that send verified as delivered reads as %s: %s", got.State, got)
+	}
+	if got.State == ack.Unknown {
+		t.Fatalf("the page's ack could not be named at all: %s", got)
+	}
+
+	// An id that is not loaded is its own answer.
+	if _, err := r.Of(ctx, "3EBFFFFFFFFFFFFFFFFFFF", "test/ack-missing"); !errors.Is(err, ack.ErrNoMessage) {
+		t.Fatalf("an unknown id: got %v, want ErrNoMessage", err)
 	}
 }

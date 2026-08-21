@@ -46,6 +46,8 @@ func TestProbeRemainingShapes(t *testing.T) {
 		{"WAWebPollsSendPollCreationMsgAction", "createPollCreationMsgData"},
 		{"WAWebFindCommonGroupsContactAction", "findCommonGroups"},
 		{"WAWebMsgInfoAction", "updateMsgInfo"},
+		{"WAWebMsgInfoAction", "updateMsgInfo"},
+		{"WAWebMsgInfoGetters", "getMsgInfo"},
 		{"WAWebTextStatusAction", "getTextStatus"},
 		{"WAWebTextStatusAction", "setMyTextStatus"},
 		{"WAWebContactTextStatusBridge", "getTextStatus"},
