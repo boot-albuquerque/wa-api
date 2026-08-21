@@ -89,8 +89,8 @@ func TestProbeArgumentShapes(t *testing.T) {
 		// hang is an answer too: the probe reporting "never settled" says the
 		// call is waiting on something, while a thrown TypeError would say the
 		// argument was wrong.
-		{"WAWebSetPropertyGroupAction", "setGroupProperty", 3, nil, "políticas do grupo"},
-		{"WAWebSetDescriptionGroupAction", "setGroupDescription", 2, nil, "descrição do grupo"},
+		{"WAWebProfilePicThumbAction", "setProfilePic", 3, nil, "foto: conta E grupo"},
+		{"WAWebProfilePicThumbAction", "deleteProfilePic", 2, nil, "apagar foto"},
 	}
 
 	for _, tg := range targets {

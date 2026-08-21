@@ -6120,3 +6120,63 @@ MÉTODO — a lição que a H57 pagou com quatro tentativas cegas.
 **Status**: entregue — três linhas do ledger (`setMessagesAdminsOnly`,
 `setInfoAdminsOnly`, `setAddMembersAdminsOnly`) saem de `MISSING` para `PARTIAL`,
 parciais apenas porque este build não confirma na mesma sessão.
+
+---
+
+## H80 — descrição e foto de grupo: medidas, não entregues
+
+**Data**: 2026-08-21
+**Contexto**: `COMPLETE-FAMILIES`, continuação da família Group.
+
+Nenhuma das duas foi implementada. As medições ficam aqui porque custaram
+enumerações e sondas, e sem elas a próxima tentativa recomeça do zero.
+
+### Descrição do grupo
+
+O módulo é `WAWebGroupModifyInfoJob`, achado enumerando **todos** os módulos com
+"Group" e filtrando a SAÍDA pelo nome da função. Ele exporta os quatro juntos:
+
+```
+setGroupSubject, setGroupDescription, setGroupProperty, setEphemeralGroupProperty
+```
+
+`WAWebSetPropertyGroupAction.setGroupProperty`, que a H79 usa, é a AÇÃO que
+embrulha o job homônimo daqui. Para a descrição **não foi encontrada ação
+equivalente** — `WAWebSetDescriptionGroupAction` não existe.
+
+A forma, pelo instrumento:
+
+```
+setGroupDescription({desc, groupWid, newDescId, prevDescId})
+```
+
+**O que falta é `newDescId`/`prevDescId`.** São identificadores que o app gera, e
+inventá-los é o chute que a H69 cobrou. O caminho provável é ler `prevDescId` da
+metadata e gerar o novo do mesmo jeito que o app gera id de mensagem.
+
+### Foto — de grupo E da conta, quatro linhas do ledger de uma vez
+
+```
+WAWebProfilePicThumbAction :: setProfilePic, deleteProfilePic
+    setProfilePic(thumb, …)      lê thumb.id e thumb.canSet
+    deleteProfilePic(thumb, …)   lê thumb.id e thumb.canDelete
+```
+
+O primeiro argumento é um **modelo de miniatura** — o mesmo tipo que a capacidade
+`avatar` já lê da `ProfilePicThumbCollection`. As duas fecham
+`Client.setProfilePicture`, `Client.deleteProfilePicture`, `GroupChat.setPicture`
+e `GroupChat.deletePicture`.
+
+Ambas lançaram `Could not perform action.` com um registrador no lugar do modelo,
+que é o `ActionError` da H55 — a guarda recusando, não um argumento errado.
+
+**O que falta**: o modelo real da coleção e a forma da imagem no segundo
+argumento.
+
+### Por que parei aqui e não continuei
+
+Cada uma é outro ciclo de medição, e o valor de registrar agora é maior que o de
+entregar mais uma nesta sessão: quem retomar tem módulo, assinatura e o nome do
+que falta em cada caso, em vez de quatro enumerações para refazer.
+
+**Status**: não entregue — medições preservadas acima.
