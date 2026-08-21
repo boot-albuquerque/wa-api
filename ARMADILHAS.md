@@ -1530,3 +1530,18 @@ esperando, do lado Go. Nesta mesma sonda a restauração chamava a página sem
 aguardar a promessa (`Evaluate` não aguarda), o grupo ficou com a política
 trocada, e só apareceu porque a execução seguinte leu um valor que não batia.
 **Pedir uma restauração não é restaurar.**
+
+### E o barramento de eventos vê MODELO, não fio
+
+**Medido em 2026-08-21 (H86).**
+
+O barramento escuta `MsgCollection` e `ChatCollection`. Ele vê o **modelo** mudar
+— não vê a mensagem que chega do servidor.
+
+Então "zero eventos sobre o grupo" **não** prova que nada chegou; prova que nada
+se moveu no modelo. As duas afirmações parecem a mesma até você precisar
+consertar uma delas, e exigem instrumentos diferentes: para saber o que chega no
+fio é preciso escutar abaixo do modelo.
+
+**A regra**: ao usar um observador, escreva o que ele NÃO observa junto com o que
+observa. Um silêncio só é evidência se você souber que o instrumento falaria.

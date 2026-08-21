@@ -6598,3 +6598,53 @@ Reposto, e a sonda agora **espera do lado Go** e falha alto se a restauração n
 assentar. Pedir uma restauração não é restaurar.
 
 **Status**: corrigido.
+
+---
+
+## H86 — participantes e políticas, mesmo objeto, comportamentos opostos
+
+**Data**: 2026-08-21
+**Contexto**: a H85 mostrou que a classificação das políticas estava errada, o
+que pôs a H58 sob suspeita. Reexecutada com o barramento a observar.
+
+### H58 fica de pé, e o par de casos é o achado
+
+```
+política  (announcement)  ->  8 eventos sobre o grupo, visível em ~1s
+participante (remover)    ->  0 eventos sobre o grupo, invisível em 90s
+```
+
+As duas mudanças escrevem **o mesmo objeto de metadata do mesmo grupo**. Uma é
+`IMMEDIATE`, a outra é `CROSS_SESSION`. Então a história "metadata de grupo é
+obsoleta" nunca foi sobre o objeto — a H85 mostrou que ela era larga demais, e
+isto mostra o quanto.
+
+O que separa os dois é o que a H82 já tinha proposto: `setGroupProperty` é uma
+**ação** que escreve o modelo localmente; `removeParticipantsJob` é um **job**
+que só envia, e a atualização local depende de uma notificação de entrada que
+esta sessão não aplica. Agora a correlação tem um par controlado — mesmo objeto,
+mesma sessão, mesmo minuto — em vez de casos espalhados.
+
+### E o barramento tem um limite que precisa estar escrito
+
+Os 8 eventos da política **não** provam que uma notificação do servidor chegou.
+O barramento escuta `MsgCollection` e `ChatCollection` — ou seja, **eventos de
+MODELO**. Ele vê o modelo mudar; não vê a mensagem que chega no fio.
+
+Então a pergunta original da orquestração — *"a sessão recebe o evento e não o
+aplica, ou o evento não chega?"* — **continua sem resposta** para participantes.
+O que está provado é mais estreito e ainda assim útil:
+
+> nada no modelo se move, e esta sessão não tem como saber por quê.
+
+Responder a pergunta inteira exigiria escutar **abaixo** do modelo — o socket ou
+o decodificador — que é outro instrumento e não existe aqui. Dizer isso é melhor
+que deixar "0 eventos" parecer prova de que nada chegou.
+
+### O estado do laboratório
+
+O par foi removido e reposto, cada passo em sessão própria, e a confirmação entre
+sessões viu 1 e depois 2. Nada ficou para trás.
+
+**Status**: corrigido — a H58 continua válida, com o escopo agora estreito e
+medido em vez de generalizado.
