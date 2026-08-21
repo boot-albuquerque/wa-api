@@ -1092,3 +1092,33 @@ ramos diferentes; nenhum teste cobria o ramo mutado.
 
 Nas duas vezes o buraco só apareceu porque o controle foi executado. Um controle
 negativo escrito e não rodado teria deixado ambos passar.
+
+### E o controle negativo tem de APLICAR
+
+**Medido em 2026-08-21**, no quinto controle da capacidade de silenciar.
+
+A mutação procurava, no fonte Go, o texto do script como ele aparece **na
+página**:
+
+```
+hours === -1 ? Number.POSITIVE_INFINITY : hours
+```
+
+No fonte Go aquilo é concatenação — `hours === ` + strconv.Itoa(Always) + ` ? …`
+— então a busca não achou nada, o `replace` não trocou nada, e o teste passou
+contra o código **intacto**. O relatório teria dito "controle negativo: passou",
+que é exatamente a frase que faz um teste fraco parecer forte.
+
+**A regra**: toda mutação de controle negativo tem de **falhar ruidosamente se
+não se aplicar**. Em Python, `assert s.count(old) == 1` antes do `replace`; em
+`sed`, confira o diff. Uma mutação silenciosamente vazia é indistinguível de um
+teste que não morde, e as duas se relatam com a mesma palavra.
+
+Isto fecha o trio de modos de o controle negativo mentir, todos medidos no mesmo
+dia:
+
+| modo | sintoma | conserto |
+|---|---|---|
+| mutou a camada errada | passa | asserir a camada onde o defeito vive |
+| apontou para o teste do ramo vizinho | passa | rodar o teste do ramo mutado |
+| **não se aplicou** | passa | asserir que a mutação existe antes de mutar |

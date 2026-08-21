@@ -607,3 +607,30 @@ Cmd.sendUnstarMsgs(chat, [msg], true)
 
 **Onde a referência não podia ajudar**: a assimetria não é dela — é uma
 propriedade deste build, e só um experimento contra a página viva a mostra.
+
+## §6.17 — silenciar conversa
+
+`wwebjs` expõe `Chat.mute(unmuteDate)` / `unmute()`. **A camada que a nossa
+enumeração nomeou primeiro era a errada**: `WAWebChatMuteBridge` recebe um objeto
+cuja chave é `$MuteImpl3`, artefato de minificação. Nós dirigimos o **modelo**
+`Mute`, cujos métodos são síncronos e legíveis.
+
+**Onde divergimos de propósito:**
+
+1. **Nós passamos `sendDevice: true` e testamos que passamos.** É o argumento que
+   faz o efeito sair do dispositivo; sem ele o silenciamento é local e toda
+   pós-condição continua verde. É a divergência mais importante desta seção.
+2. **Nós usamos o conversor da própria página** (`calculateMuteExpiration`),
+   inclusive a sentinela de "para sempre", e **reportamos o número escolhido** em
+   vez de escondê-lo.
+3. **Nós esperamos o modelo virar**, pela mesma razão da §6.16.
+4. **`canMute` é consultado antes**, então a recusa nomeia a causa.
+
+## §6.18 — o que resta
+
+| `wwebjs` | estado |
+|---|---|
+| `Message.forward` | módulo localizado (`WAWebChatForwardMessage`), assinatura async — precisa de experimento |
+| `Chat.setSubject` | módulo não localizado |
+| participantes de grupo | **não entregue** (H58) — bloqueio nomeado, medição preservada |
+| link de convite de grupo | **parcialmente entregue** (H57) — `queryGroupInvite` trava |

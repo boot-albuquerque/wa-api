@@ -4699,3 +4699,80 @@ dizendo "está coberto".
 **Status**: entregue.
 **Testes**: `capabilities/star/star_test.go` (12 testes, quatro com controle
 negativo registrado acima) e `starreal_test.go` (prova ao vivo, reversível).
+
+---
+
+## H62 — silenciar conversa, e o argumento que decide se o efeito é real
+
+**Data**: 2026-08-21
+**Contexto**: continuação da superfície do whatsapp-web.js.
+**Onde**: `internal/wa-headless/capabilities/mute/`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/probe_mute_test.go`.
+
+### A camada nomeada pela enumeração era a errada
+
+A sonda de enumeração deu `WAWebChatMuteBridge`, e o grep mostrou a ponte sendo
+chamada com um objeto cuja chave é `$MuteImpl3`. A lista de chaves do MODELO
+resolve o enigma: `$MuteImpl$p_4`, `$MuteImpl$p_5`, `$MuteImpl$p_6` são artefatos
+de minificação de métodos privados. **Passar artefato como contrato** é o chute
+que a H58 pagou.
+
+O modelo `Mute` fica acima da ponte, e seus métodos são **síncronos** — logo
+integralmente legíveis:
+
+```
+mute({expiration, fromMultiselect, isAutoMuted, sendDevice, showToast, toastId})
+unmute({fromMultiselect, sendDevice, showToast, toastId})
+```
+
+### O achado que decide se a capacidade faz alguma coisa
+
+No corpo do modelo:
+
+```js
+if (sendDevice === true) { …alcança a ponte… }
+```
+
+**Sem `sendDevice: true` o silenciamento é LOCAL** — e o modelo local ainda
+atualiza, então a expiração ainda se move, então **toda** pós-condição continua
+passando enquanto as notificações continuam chegando no telefone. É um
+meio-sucesso silencioso embutido na API, e nada além de uma asserção explícita
+sobre o argumento o pega. `TestSendDeviceIsTrue` é essa asserção.
+
+Segundo fato do mesmo corpo: `expiration` tem de ser número, senão a chamada
+rejeita com `ActionError`, e o app registra "wrong units?" acima de 2e9 — que é
+como ele diz **segundos de época**.
+
+### Prova ao vivo
+
+```
+muted:       before=0          after=1787321477 muted=true  waited=507ms
+second mute: before=1787321477 after=1787321478 muted=true  waited=511ms
+restored:    before=1787321478 after=0          muted=false waited=506ms
+```
+
+O segundo mute movendo **um segundo** é confirmação de que a expiração é
+recalculada do relógio a cada chamada — informação que só a repetição dá.
+
+A lição do `await` (H61) foi aplicada aqui **antes** de custar uma segunda
+falha ao vivo: o modelo é estacionado e o Go relê.
+
+### Controles negativos EXECUTADOS — e um MENTIU
+
+| mutação | falha observada |
+|---|---|
+| `sendDevice` omitido | `mute does not pass sendDevice: true; the change would be local only` |
+| script confia no `await` | `the apply branch does not hand the settling decision to Go` |
+| `canMute` computado sem desviar | `canMute is computed but does not guard a return` |
+| pós-condição do ramo `done` removida | `got <nil>, want ErrExpirationUnchanged` |
+| `Always` sem a sentinela | **passou** → a mutação não se APLICOU (texto concatenado no fonte Go) → refeita com `assert` → `Always does not reach the page's sentinel path` |
+
+O quinto virou entrada no `ARMADILHAS.md` e fecha o trio de modos de um controle
+negativo mentir, os três medidos neste mesmo dia: mutar a camada errada, apontar
+para o teste do ramo vizinho, e **não se aplicar**. Os três se relatam com a
+mesma palavra — "passou".
+
+**Status**: entregue.
+**Testes**: `capabilities/mute/mute_test.go` (12 testes, cinco com controle
+negativo registrado acima) e `mutereal_test.go` (prova ao vivo, reversível).

@@ -87,3 +87,41 @@ const (
 	// rediscovering that a plausible-sounding collection is the wrong question.
 	ModuleStarredMsgCollection = Module("WAWebStarredMsgCollection")
 )
+
+// The muting modules, measured with TestProbeMuteShape.
+const (
+	// ModuleMuteCollection holds the Mute MODEL, and the model is the layer to
+	// drive — not WAWebChatMuteBridge, which the enumeration nominated first.
+	//
+	// The bundle showed the bridge being called with an object carrying a key
+	// named `$MuteImpl3`, and the model's own key list confirms what that is:
+	// `$MuteImpl$p_4`, `$MuteImpl$p_5`, `$MuteImpl$p_6` are minifier artefacts
+	// of private methods. Passing an artefact as a contract is the guess H58
+	// paid for.
+	//
+	// The model's methods are SYNCHRONOUS, so their shape is fully legible:
+	//
+	//	mute({expiration, fromMultiselect, isAutoMuted, sendDevice, showToast, toastId})
+	//	unmute({fromMultiselect, sendDevice, showToast, toastId})
+	//
+	// TWO THINGS IN THAT BODY DECIDE WHETHER THIS WORKS AT ALL:
+	//
+	//	sendDevice === true   is what makes it reach the bridge. Without it the
+	//	                      change is LOCAL, and every postcondition still
+	//	                      passes — a silent half-success by construction.
+	//	expiration            must be a number or the call rejects with
+	//	                      ActionError, and the app logs "wrong units?" above
+	//	                      2e9, which is how it says EPOCH SECONDS.
+	ModuleMuteCollection = Module("WAWebMuteCollection")
+
+	// ModuleMuteExpirations converts hours to that epoch value, including the
+	// sentinel for "always". Reimplementing it in Go would mean reimplementing
+	// the sentinel, so the page's own function is used and its RESULT is
+	// reported — the number is visible to the caller rather than hidden in a
+	// decision the page made alone.
+	ModuleMuteExpirations = Module("WAWebMuteExpirations")
+
+	// ModuleMuteUtils carries canMute, which refuses this account's own chat
+	// and non-member groups before anything is attempted.
+	ModuleMuteUtils = Module("WAWebMuteUtils")
+)
