@@ -15471,3 +15471,29 @@ e agora quase todos os que o protocolo define também.
 | manipulação de chat | 5/5 |
 | tipos com ramo de classificação | 25 dos 26 enumerados |
 | classificadores | **1**, era 2 |
+
+---
+
+## F191 — não consumimos os eventos de label que a biblioteca já emite
+
+**Data**: 2026-08-20. **Contexto**: levantamento de paridade.
+
+A biblioteca emite `LabelEdit`, `LabelAssociationChat` e
+`LabelAssociationMessage` quando outro dispositivo mexe em etiquetas. Medido no
+nosso código: **zero acertos** para qualquer um dos três. Não os tratamos, não
+os gravamos, não os despachamos por webhook.
+
+A parte que é da biblioteca — não saber CRIAR labels — está registada em
+`internal/wa-noise/HOUSEKEEP.md`, entrada LIB-01. **Esta é a metade que é
+nossa**: os eventos chegam e são deitados fora.
+
+É a mesma forma da [[F184]], noutra família: capacidade que existe a montante e
+que nós não recolhemos. E, como lá, o custo só aparece quando alguém pergunta
+"porque é que a etiqueta que eu pus no telemóvel não aparece na API".
+
+**Correção sugerida**: tratar os três eventos e persistir o estado, o que dá
+listagem de labels e a associação label↔conversa por leitura. A escrita depende
+da LIB-01.
+
+**Status**: não corrigido, achado de levantamento. Escopo pendente de decisão do
+canal.

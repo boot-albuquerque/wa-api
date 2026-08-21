@@ -3017,3 +3017,66 @@ fallback engolido silenciosamente foi encontrado nos 17 pontos investigados;
 o achado mais próximo disso (F77) já dispara um evento para a aplicação antes
 de retornar, então não é engolido — é uma dúvida protocolar não confirmada.
 
+
+---
+
+## LIB-01 — a biblioteca RECEBE mutações de label mas não sabe criá-las; catálogo não existe de todo
+
+**Data**: 2026-08-20. **Contexto**: levantamento de paridade com whatsmeow,
+Baileys e Evolution API. O canal decidiu incluir "o que a Evolution tem de
+WhatsApp (labels, catálogos), **se a biblioteca suportar**" — e esta entrada é a
+resposta medida a essa condicional.
+
+**Vive aqui, e não no HOUSEKEEP da raiz**, porque a falta é da biblioteca
+vendorizada: acompanha o upstream, e é candidata a patch ou a desaparecer num
+rebase.
+
+### Labels — meia capacidade
+
+O que **existe**:
+
+- os tipos de mutação estão no proto: `LabelEditAction`, `LabelAssociationAction`,
+  `LabelReorderingAction`;
+- o `appstatesync` sabe **decodificar** os três índices
+  (`constants.go:92-105`);
+- e há eventos emitidos para a aplicação: `LabelEdit`,
+  `LabelAssociationChat`, `LabelAssociationMessage`
+  (`protocol/types/events/appstate.go:142-157`).
+
+O que **não existe**:
+
+- **nenhum método de `Client` para criar, editar ou associar label.** Medido com
+  `grep -E 'func \(cli \*Client\) [A-Za-z]*Label'` — zero acertos;
+- **nenhuma persistência do estado.** O `store` não tem tabela de labels.
+
+Ou seja: a biblioteca **observa** o que outro dispositivo faz com labels e não
+sabe fazê-lo. Uma sessão que só exista aqui nunca terá label nenhuma.
+
+### Catálogo e coleções — nada
+
+`ProductMessage`, `Collection` e `CollectionName` existem como tipos de
+**mensagem recebida**. Não há método de `Client` que consulte catálogo nem
+coleções — medido, zero acertos.
+
+A Evolution expõe `/chat/fetchCatalogs` e `/chat/fetchCollections`, o que
+significa que o Baileys tem uma consulta que o whatsmeow não expõe. Chegar lá
+exige **estender a biblioteca vendorizada**, não fiar uma rota sobre um método
+que já existe — é trabalho de outra ordem de grandeza.
+
+### O que isto significa para a decisão
+
+A condicional do canal era "se a biblioteca suportar". A resposta honesta:
+
+| | possível hoje |
+|---|---|
+| observar labels feitas noutro dispositivo | **sim** — falta consumirmos os eventos |
+| criar / editar / associar label | **não**, sem estender a biblioteca |
+| catálogo e coleções | **não**, sem estender a biblioteca |
+
+**Correção sugerida**, se o canal quiser labels: consumir os três eventos e
+persistir o estado do NOSSO lado, o que dá listagem e associação de leitura.
+A escrita fica de fora até alguém decidir se vale estender o vendor — e essa é
+decisão consciente a registar, não omissão.
+
+**Status**: não corrigido; é levantamento. Referência cruzada em `HOUSEKEEP.md`
+da raiz, porque quem consome (ou deixa de consumir) os eventos somos nós.
