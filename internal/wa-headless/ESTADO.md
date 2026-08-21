@@ -128,6 +128,7 @@ declarado do projeto: métodos principais de envio e chat.
 | `reply` | `capabilities/send` (`reply.go`) | provado ao vivo; pós-condição de citação com **controle negativo AO VIVO** (H54) |
 | `archive`/`pin` | `capabilities/chatstate` | **ciclo completo provado ao vivo**; o app recusa pedido REDUNDANTE, e a guarda evita (H55) |
 | `revoke` | `capabilities/revoke` | primeira capacidade DESTRUTIVA; direito consultado na página, `as=sender` provado (H56) |
+| link de convite | `capabilities/group` (`invite.go`) | **NÃO ENTREGUE** — `iAmAdmin` não é populado; teste ao vivo vermelho (H57) |
 
 ### O que este módulo consegue e não consegue provar
 

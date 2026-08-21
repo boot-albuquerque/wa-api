@@ -321,6 +321,17 @@ const (
 	// is not politeness: an account that revokes as Sender when it is only an
 	// Admin, or the reverse, is asking for something it is not entitled to.
 	ModuleMsgActionCapability = Module("WAWebMsgActionCapability")
+	// ModuleGroupInviteAction reads and revokes a group's invite code.
+	//
+	// queryGroupInviteCode takes the CHAT, and it reads iAmAdmin off the
+	// group's metadata — which is NOT populated by default. Measured: the
+	// metadata row exists in its collection and carries no iAmAdmin, so the
+	// call throws "Cannot read properties of undefined (reading 'iAmAdmin')",
+	// the FIFTH appearance of that shape in two days.
+	ModuleGroupInviteAction = Module("WAWebGroupInviteAction")
+	// ModuleGroupQueryJob fills in what the metadata is missing:
+	// queryAndUpdateGroupMetadataById is what makes iAmAdmin exist.
+	ModuleGroupQueryJob = Module("WAWebGroupQueryJob")
 )
 
 // RequiredAtStartup is verified before any capability runs.

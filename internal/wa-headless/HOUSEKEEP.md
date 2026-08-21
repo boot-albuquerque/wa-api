@@ -4302,3 +4302,52 @@ do chamador sobre `clearMedia`.
 **Status**: entregue — forma lida da fonte, direito consultado na página,
 pós-condição verificada, alvo restrito ao que o próprio teste criou, e quatro
 controles negativos.
+
+## H57 — link de convite de grupo: NÃO ENTREGUE, e o que foi aprendido no caminho
+
+**Data**: 2026-08-21 · **Contexto**: fila de capacidades após a H56.
+
+**Não funciona, e não vou embarcar como se funcionasse.** O código existe em
+`capabilities/group/invite.go`, com o cuidado que a coisa merece — um código de
+convite é CREDENCIAL, e quem o tem entra no grupo — mas a chamada não passa.
+
+### O que foi medido, e é progresso real
+
+`queryGroupInviteCode` lê `iAmAdmin` da METADATA do grupo, e a metadata não vem
+pronta:
+
+| tentativa | resultado |
+|---|---|
+| `queryGroupInviteCode(wid)` | `reading 'iAmAdmin'` de `undefined` |
+| `queryGroupInviteCode(chat)` | idem |
+| `queryAndUpdateGroupMetadataById(wid)` antes | `reading 'toString'` de `undefined` |
+| `queryAndUpdateGroupMetadataById(chat.id)` antes | **passa**, e o erro volta a ser `iAmAdmin` |
+
+Ou seja: a etapa de metadata **avança** (o estágio saiu de `metadata` para
+`query`), e ainda assim o `iAmAdmin` não está onde a função procura.
+
+**Medições auxiliares**: `chat.iAmAdmin` existe; `chat.groupMetadata` existe mas
+**não tem** `iAmAdmin`; a coleção de metadata tem 2 linhas e a do grupo de
+laboratório está lá.
+
+### Quinta ocorrência do padrão, e a primeira em que ele NÃO explica tudo
+
+`reading '<campo>' of undefined` já apareceu em avatar, mídia, grupo, pin e
+agora aqui. Nas quatro primeiras a resposta foi trocar o argumento. **Nesta não
+é** — trocar não resolveu, e o que falta é um passo de PREPARAÇÃO que ainda não
+identifiquei. A regra do dia continua útil e deixou de ser suficiente.
+
+### Por que parei
+
+Três formas tentadas sem leitura que as sustentasse. Continuar seria a quinta
+tentativa cega na mesma camada, que é exatamente o que a H34 registrou como o
+modo caro de trabalhar. O próximo passo honesto é LER o caminho que o app usa
+para abrir o painel de convite — ele necessariamente popula o que falta — em vez
+de tentar mais uma assinatura.
+
+**O teste ao vivo permanece VERMELHO de propósito.** Pular esconderia que a
+capacidade não funciona; e o valor do que já foi medido está aqui, para que a
+próxima tentativa comece de onde esta parou em vez de do zero.
+
+**Status**: não corrigido — não entregue, com quatro medições registradas, a
+hipótese seguinte nomeada e o teste ao vivo deixado vermelho.

@@ -40,59 +40,53 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// WHO THROWS "Could not perform action."?
+	// THE GROUP METADATA IS NOT LOADED, and that is why the invite code could
+	// not be read: queryGroupInviteCode reads iAmAdmin off the metadata, and
+	// the chat carries the flag while chat.groupMetadata is undefined.
 	//
-	// It is WAWebMiscErrors.ActionError's default message, so something in the
-	// archive path threw it. Grepping the bundles for every ActionError would
-	// find dozens; the STACK names the one that fired.
-	//
-	// This performs a real archive on the peer LAB conversation and undoes it
-	// immediately, so the account is left as found.
+	// So the question is how the app loads it. Codes are CREDENTIALS — anyone
+	// holding one can join — so nothing here prints a code, only lengths.
 	const script = `(() => {
 		window.__waHeadlessArch = { stage: 'pending' };
 		(async () => {
 			const out = { stage: 'done' };
 			try {
 				const Chats = window.require('WAWebChatCollection').ChatCollection;
-				const Find = window.require('WAWebFindChatAction');
-				const WF = window.require('WAWebWidFactory');
-				const Q = window.require('WAWebQueryExistsJob');
+				let lab = null;
+				for (const c of Chats.getModelsArray()) {
+					try {
+						if (c.id && c.id.server === 'g.us' &&
+							typeof c.formattedTitle === 'string' &&
+							c.formattedTitle.indexOf('wa-headless-lab') === 0) { lab = c; break; }
+					} catch (e) {}
+				}
+				if (!lab) { out.why = 'NO_LAB_GROUP'; window.__waHeadlessArch = out; return; }
+				out.metadataBefore = !!lab.groupMetadata;
 
-				const local = WF.createWid(PEER_PLACEHOLDER);
-				const ex = await Q.queryWidExists(local);
-				if (!ex || !ex.wid) { out.why = 'NOT_ON_WHATSAPP'; window.__waHeadlessArch = out; return; }
-				let chat = Chats.get(ex.wid);
-				if (!chat) { chat = await Find.findExistingChat(ex.wid); }
-				if (!chat) { out.why = 'NO_CHAT'; window.__waHeadlessArch = out; return; }
-				out.foundChat = true;
-				out.wasArchived = !!chat.archive;
+				// Is the metadata in its own collection, keyed by the group id?
+				try {
+					const GM = window.require('WAWebGroupMetadataCollection');
+					const coll = GM.GroupMetadataCollection || GM.default || GM;
+					out.metaCollKeys = Object.keys(GM).slice(0, 8).join(',');
+					if (coll && typeof coll.get === 'function') {
+						const md = coll.get(lab.id);
+						out.inCollection = !!md;
+						if (md) { out.mdHasIAmAdmin = md.iAmAdmin !== undefined; }
+					}
+					if (coll && typeof coll.getModelsArray === 'function') {
+						out.metaRows = coll.getModelsArray().length;
+					}
+					// A find/fetch entry point?
+					for (const n of ['find', 'findQuery', 'fetch', 'update']) {
+						out['coll_' + n] = typeof (coll && coll[n]);
+					}
+				} catch (e) { out.gmErr = String((e && e.message) || e).slice(0, 140); }
 
-				const A = window.require('WAWebSetArchiveChatAction');
-				out.arity = A.setArchive.length;
-				const describe = (e) => ({ name: e && e.name,
-					msg: String((e && e.message) || e).slice(0, 90) });
-
-				// THE HYPOTHESIS: setArchive refuses when the requested state is
-				// already the current one. The first probe asked to archive a
-				// conversation that was ALREADY archived and got ActionError, so
-				// this asks for the OPPOSITE and compares.
-				const current = !!chat.archive;
-
-				try { await A.setArchive(chat, !current); out.opposite = 'ACCEPTED'; }
-				catch (e) { out.opposite = describe(e); }
-				out.afterOpposite = !!chat.archive;
-
-				// And then the SAME value it now holds, which should be the
-				// refused case if the hypothesis holds.
-				const now = !!chat.archive;
-				try { await A.setArchive(chat, now); out.same = 'ACCEPTED'; }
-				catch (e) { out.same = describe(e); }
-				out.afterSame = !!chat.archive;
-
-				// Leave the conversation as it was found.
-				try { if (!!chat.archive !== current) { await A.setArchive(chat, current); } } catch (e) {}
-				out.restoredTo = !!chat.archive;
-				out.startedAt = current;
+				// Modules whose names suggest they load it.
+				for (const n of ['WAWebQueryGroupJob', 'WAWebGroupQueryJob', 'WAWebGroupMetadataUpdateJob', 'WAWebFetchGroupMetadataJob']) {
+					try { const m = window.require(n); out[n] = m ? Object.keys(m).slice(0, 8).join(',') : 'NULL'; }
+					catch (e) { out[n] = 'ABSENT'; }
+				}
 			} catch (e) {
 				out.fatal = String((e && e.message) || e).slice(0, 200);
 			}
@@ -101,7 +95,9 @@ func TestProbeContactShape(t *testing.T) {
 		return 'kicked';
 	})()`
 
-	kick := strings.Replace(script, "PEER_PLACEHOLDER", strconv.Quote(peer), 1)
+	kick := script
+	_ = peer
+	_ = strconv.Quote
 
 	var raw string
 	if err := runner.Do(ctx, engine.OpStateProbe, "probe/arch/kick", func(c context.Context) error {
@@ -123,5 +119,5 @@ func TestProbeContactShape(t *testing.T) {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	t.Logf("archive refusal: %s", raw)
+	t.Logf("group metadata loading: %s", raw)
 }
