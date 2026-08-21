@@ -126,6 +126,7 @@ declarado do projeto: métodos principais de envio e chat.
 | `react` (add) | `capabilities/react` | **provado**: `hasReaction` false→true em 0,5 s |
 | `react` (remove) | `capabilities/react` | funciona; **não verificável na sessão** — `Result.Verified` diz isso (H53) |
 | `reply` | `capabilities/send` (`reply.go`) | provado ao vivo; pós-condição de citação com **controle negativo AO VIVO** (H54) |
+| `archive`/`pin` | `capabilities/chatstate` | 12 testes, 4 controles; **ao vivo o app RECUSA** com "Could not perform action." (H55) |
 
 ### O que este módulo consegue e não consegue provar
 

@@ -290,6 +290,22 @@ const (
 	// ModuleQuotedMsgModelUtils builds the quoted-message object a reply
 	// carries. createQuotedMsgObj(msgModel) — the MODEL again, not the id.
 	ModuleQuotedMsgModelUtils = Module("WAWebQuotedMsgModelUtils")
+	// ModuleSetArchiveChatAction archives a conversation: setArchive(chat, bool, ?).
+	// The ACTION layer, not WAWebChatArchiveBridge — the same choice groups and
+	// presence made, because the action carries the app's own guards.
+	ModuleSetArchiveChatAction = Module("WAWebSetArchiveChatAction")
+	// ModuleSetPinChatAction pins a conversation: setPin(chat, bool).
+	ModuleSetPinChatAction = Module("WAWebSetPinChatAction")
+	// ModuleChatPinBridge answers how many pins are allowed and used.
+	//
+	// PINNING HAS A LIMIT, and both getPinLimit and getNumConversationsPinned
+	// take a WID — measured by calling them with none and getting "Cannot read
+	// properties of undefined (reading 'isNewsletter')", the FOURTH time that
+	// exact shape appeared in one day.
+	//
+	// A capability that ignored the limit would fail at the page for a reason
+	// the caller could have been told up front.
+	ModuleChatPinBridge = Module("WAWebChatPinBridge")
 )
 
 // RequiredAtStartup is verified before any capability runs.

@@ -4156,3 +4156,55 @@ inferência arriscava.
 
 **Status**: entregue — inferência declarada como tal, leitura errada corrigida e
 registrada, pós-condição verificada e controle negativo executado AO VIVO.
+
+## H55 — arquivar/fixar: implementado e travado por teste; a APLICAÇÃO ao vivo é recusada pelo app
+
+**Data**: 2026-08-20 · **Contexto**: lote de estado de conversa.
+
+**O que funciona e está provado por dublê**: `capabilities/chatstate` com
+`SetArchived` e `SetPinned`, 12 testes e 4 controles negativos, pós-condição
+POLLED (não lida uma vez — a lição da H53), limite de fixados consultado antes
+de pedir, e nada que crie conversa.
+
+**O que NÃO funciona**: contra a conta real, `setArchive` responde
+**"Could not perform action."** — mensagem do PRÓPRIO app, não uma exceção
+nossa. Duas formas tentadas (`setArchive(chat, want)` e
+`setArchive(chat, want, true)`, já que a aridade é 3) e ambas recusadas.
+
+Causa **não determinada**. Não vou inventar uma: a mensagem é a recusa
+deliberada do aplicativo, e descobrir por quê exige ler o caminho que a produz,
+que não foi feito.
+
+### Dois achados de caminho, esses sim resolvidos
+
+**`ChatCollection.get` NÃO basta.** Ele devolve `null` para conversas que
+existem — é por isso que o caminho de envio cai no `findOrCreateLatestChat`, e
+foi por isso que a primeira versão desta busca reportou `NO_CHAT` para a conta
+par que os testes mensageiam todo dia. `findExistingChat` é a metade do par que
+NÃO cria, e criar é exatamente o que mudar estado de conversa não pode fazer.
+
+**Quarta ocorrência de "reading 'isNewsletter'"**, desta vez por eu chamar
+`getPinLimit()` sem argumento: ele quer um WID. O padrão do dia continua valendo.
+
+### Terceira vez que uma guarda minha casou PROSA
+
+O teste "nunca cria conversa" procurava a string `findOrCreateLatestChat` — e
+falhou no COMENTÁRIO do script, que explica por que o caminho de envio a usa.
+Trocado para a CHAMADA.
+
+As três, todas hoje:
+
+| guarda | casou |
+|---|---|
+| listagem de chats: `getName` | o comentário que explica por que não usá-lo |
+| marcar lida: `queryWidExists` | a definição do `ResolveIdentityExpr` |
+| estado de chat: `findOrCreateLatestChat` | o comentário que explica o fallback |
+
+**A regra, agora com três evidências**: uma guarda que procura uma STRING num
+script encontra também os comentários e as definições. Procure a CHAMADA —
+`nome(` — ou não procure.
+
+**Status**: parcialmente entregue — código e testes completos, aplicação ao vivo
+RECUSADA pelo app com mensagem própria, causa não determinada e não inventada.
+O teste ao vivo permanece VERMELHO de propósito: pular esconderia que a
+capacidade não funciona contra a conta real.

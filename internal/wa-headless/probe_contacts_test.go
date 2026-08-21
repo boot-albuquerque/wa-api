@@ -37,53 +37,45 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// THE REACTION ROW, read instead of guessed.
+	// CHAT STATE: archive, pin, mute — signatures read before design.
 	//
-	// hasReaction is sticky within a session; getReactionEmojisAndSum did not
-	// return the {sum} I assumed. Two guesses is one too many, so this reads the
-	// actual state: the account holds a message that was reacted to and then
-	// un-reacted, which is exactly the case that needs distinguishing.
+	// The action layer is preferred over the bridges, the same choice groups and
+	// presence made: the actions carry the app's own guards, and reaching past
+	// them is deciding we know better than the app.
 	//
-	// No emoji and no identity leave the page — only lengths and flags.
+	// Pin has a LIMIT, which the bridge exposes. A capability that ignored it
+	// would fail at the page for a reason the caller could have been told.
 	const script = `JSON.stringify((() => {
 		const out = {};
-		const coll = window.require('WAWebMsgCollection').MsgCollection;
-		const RC = window.require('WAWebReactionsCollection').ReactionsCollection;
-		const U = window.require('WAWebReactionsUtils');
-
-		out.reactionRows = RC.getModelsArray().length;
-		const rows = RC.getModelsArray().slice(0, 3).map(r => {
-			const o = { keys: Object.keys(r).filter(k => k.indexOf('__x_') === 0).slice(0, 20).join(',') };
-			try {
-				const s = r.senders && typeof r.senders.getModelsArray === 'function'
-					? r.senders.getModelsArray() : [];
-				o.senders = s.map(x => ({
-					emojiLen: (x.reactionText || '').length,
-					hasEmoji: !!(x.reactionText && x.reactionText.length),
-					ack: (typeof x.ack === 'number') ? x.ack : null
-				}));
-			} catch (e) { o.sendersErr = String((e && e.message) || e).slice(0, 100); }
-			try { o.aggCount = r.aggregateEmoji ? r.aggregateEmoji.length : -1; } catch (e) {}
-			return o;
-		});
-		out.rows = rows;
-
-		// What do the display helpers actually RETURN? Shape, not content.
-		for (const m of coll.getModelsArray()) {
-			try {
-				if (!m.hasReaction) { continue; }
-				out.sample = { sticky: true };
-				for (const fn of ['getReactionEmojisAndSum', 'getReactionAggregates', 'getReactionForDisplay']) {
-					try {
-						const v = U[fn] && U[fn](m);
-						out.sample[fn] = (v === undefined) ? 'undefined'
-							: (v === null ? 'null'
-							: (Array.isArray(v) ? 'array/' + v.length
-							: (typeof v === 'object' ? Object.keys(v).join(',') : typeof v + ':' + String(v).slice(0, 20))));
-					} catch (e) { out.sample[fn] = 'THREW: ' + String((e && e.message) || e).slice(0, 60); }
-				}
-				break;
-			} catch (e) {}
+		const read = (mod) => {
+			let m = null;
+			try { m = window.require(mod); } catch (e) { out[mod] = 'ABSENT'; return; }
+			if (!m) { out[mod] = 'NULL'; return; }
+			const bag = {};
+			for (const n of Object.keys(m)) {
+				try {
+					const f = m[n];
+					bag[n] = (typeof f === 'function')
+						? { arity: f.length, src: String(f).slice(0, 260) } : { kind: typeof f };
+				} catch (e) { bag[n] = 'THREW'; }
+			}
+			out[mod] = bag;
+		};
+		read('WAWebSetArchiveChatAction');
+		read('WAWebSetPinChatAction');
+		read('WAWebChatMuteBridge');
+		read('WAWebChatPinBridge');
+		// The pin limit and how many are used, which decides whether a refusal
+		// can be explained before the page refuses.
+		try {
+			const B = window.require('WAWebChatPinBridge');
+			out.pinLimit = B.getPinLimit ? B.getPinLimit() : 'n/a';
+			out.pinnedNow = B.getNumConversationsPinned ? B.getNumConversationsPinned() : 'n/a';
+		} catch (e) { out.pinErr = String((e && e.message) || e).slice(0, 120); }
+		// Is there a mute ACTION, or only the bridge?
+		for (const n of ['WAWebSetMuteChatAction', 'WAWebMuteChatAction', 'WAWebSendChatMuteAction']) {
+			try { const m = window.require(n); out[n] = m ? Object.keys(m).join(',') : 'NULL'; }
+			catch (e) { out[n] = 'ABSENT'; }
 		}
 		return out;
 	})())`
@@ -94,5 +86,5 @@ func TestProbeContactShape(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	t.Logf("reaction rows: %s", raw)
+	t.Logf("chat state surface: %s", raw)
 }
