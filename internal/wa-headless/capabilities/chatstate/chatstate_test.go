@@ -35,10 +35,18 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// EXPLICIT, UNIQUE MARKERS. Four scripts run here and three of them share
+	// substrings — the set kick embeds ResolveIdentityExpr, which contains
+	// createWid(, and both read scripts carry the read key. Routing on anything
+	// less than a marker unique to one script has now broken this double twice,
+	// each time failing an assertion for a reason unrelated to the code.
 	switch {
-	case strings.Contains(expr, `found: false`):
+	case strings.Contains(expr, readKey+`"] = null`):
 		p.verifies++
 		p.lastVerify = expr
+		*out = `"reading"`
+		return nil
+	case strings.Contains(expr, `JSON.stringify(window["`+readKey+`"])`):
 		*out = fmt.Sprintf(`{"found":true,"value":%t}`, p.value)
 		return nil
 	case strings.Contains(expr, "const s = window["):
@@ -51,7 +59,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 				stage, p.why, p.was, p.pinned, p.pinLimit)
 			return nil
 		}
-		*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","was":%t,"jid":%q}`, p.was, p.jid)
+		// `after` is what the WRITE script reports, read from the chat object it
+		// just changed. It is separate from `was` so a double can express the
+		// case this package exists to catch: the page accepted the call and the
+		// conversation did not move.
+		*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","was":%t,"after":%t,"jid":%q}`,
+			p.was, p.value, p.jid)
 		return nil
 	default:
 		p.kicks++
@@ -117,26 +130,33 @@ func TestSettingAFlagThatIsAlreadySetIsSuccess(t *testing.T) {
 	}
 }
 
-// TestTheVerifyUsesTheRESOLVEDIdentity is the regression for a bug I wrote in
-// this very file: the set path resolved the jid and the verify path did not, so
-// a caller passing a phone number would set the flag and then fail to see it —
-// this build files chats under the identity the server assigns (H34, H39). The
-// same split that broke group sending (H48).
-func TestTheVerifyUsesTheResolvedIdentity(t *testing.T) {
+// TestTheIdentityIsResolvedBeforeAnythingIsTouched.
+//
+// This test used to assert that the VERIFY read used the resolved identity,
+// because the verify was a separate lookup. It is not any more: the write
+// script reports what the conversation became, read from the object it just
+// changed, so there is nothing to look up twice.
+//
+// The concern the old test protected is still real and now lives in one place:
+// this build files chats under the identity the server assigns, so a script
+// that took the caller's phone number at face value would find nothing (H34,
+// H39) — the same split that broke group sending (H48).
+func TestTheIdentityIsResolvedBeforeAnythingIsTouched(t *testing.T) {
 	compressClock(t)
 	p := &pageDouble{ok: true, was: false, jid: lidJID, value: true}
 	if _, err := setter(p).SetArchived(context.Background(), phoneJID, true, "t/arch"); err != nil {
 		t.Fatalf("SetArchived: %v", err)
 	}
-	if p.verifies == 0 {
-		t.Fatal("the flag was never re-read")
+	resolveAt := strings.Index(p.lastScript, "await resolveIdentity(")
+	applyAt := strings.Index(p.lastScript, "setArchive(")
+	if resolveAt < 0 {
+		t.Fatal("the script never CALLS the identity resolution")
 	}
-	if !strings.Contains(p.lastVerify, lidJID) {
-		t.Fatalf("the verify looked up %q instead of the resolved identity; a caller "+
-			"passing a phone number would set the flag and never see it", phoneJID)
+	if applyAt < 0 {
+		t.Fatal("the archive call is not in the script")
 	}
-	if strings.Contains(p.lastVerify, phoneJID) {
-		t.Fatal("the verify still carries the caller's jid")
+	if resolveAt > applyAt {
+		t.Fatal("the conversation is changed BEFORE the identity is resolved")
 	}
 }
 
@@ -254,5 +274,29 @@ func TestChangeRendersItsFields(t *testing.T) {
 	idle := Change{Was: true, After: true}
 	if !strings.Contains(idle.String(), "changed=false") {
 		t.Fatalf("an unchanged conversation must be distinguishable: %s", idle)
+	}
+}
+
+// TestARedundantRequestNeverReachesTheApp is the fix for H55, and it is
+// measured rather than defensive.
+//
+// One controlled run against the live account: asking for the OPPOSITE of a
+// conversation's current state was accepted; asking for the state it already
+// had threw ActionError("Could not perform action."). So the app refuses a
+// redundant request, and asking anyway means being told off for doing nothing.
+func TestARedundantRequestNeverReachesTheApp(t *testing.T) {
+	compressClock(t)
+	p := &pageDouble{ok: true, was: true, jid: lidJID, value: true}
+	got, err := setter(p).SetArchived(context.Background(), phoneJID, true, "t/arch")
+	if err != nil {
+		t.Fatalf("asking for a state the conversation already has produced an error: %v", err)
+	}
+	if got.Changed() {
+		t.Fatalf("Changed()=true for a no-op: %s", got)
+	}
+	// The guard lives in the page script, so that is where it is checked.
+	if !strings.Contains(p.lastScript, "was === want") {
+		t.Fatal("the script has no early exit for a request that changes nothing; " +
+			"the app answers ActionError to those")
 	}
 }

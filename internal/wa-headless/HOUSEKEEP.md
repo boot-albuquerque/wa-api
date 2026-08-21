@@ -4204,7 +4204,55 @@ As três, todas hoje:
 script encontra também os comentários e as definições. Procure a CHAMADA —
 `nome(` — ou não procure.
 
-**Status**: parcialmente entregue — código e testes completos, aplicação ao vivo
-RECUSADA pelo app com mensagem própria, causa não determinada e não inventada.
-O teste ao vivo permanece VERMELHO de propósito: pular esconderia que a
-capacidade não funciona contra a conta real.
+### RESOLVIDO (2026-08-21) — a causa era pedido REDUNDANTE
+
+A orquestração mandou atacar a dívida antes de abrir capacidade nova, e a causa
+saiu de um A/B controlado numa única execução contra a conta real:
+
+| pedido | resultado |
+|---|---|
+| o estado OPOSTO ao atual | **ACCEPTED**, e o flag virou |
+| o mesmo estado que já tem | **ActionError: "Could not perform action."** |
+
+`setArchive` **recusa um pedido redundante**. Nunca foi argumento faltando — a
+primeira teoria, de que a aridade 3 exigia um terceiro parâmetro, estava errada
+e foi descartada pela medição. E a execução ao vivo anterior falhou porque a
+conversa ficara arquivada de uma tentativa anterior, então eu pedia exatamente o
+que ela já era.
+
+**A correção é a mesma forma do "nada a reconhecer" da H52**: quando o estado
+pedido é o atual, não se chama o app. Nada a mudar é um no-op bem-sucedido.
+
+### Três defeitos de encanamento no caminho, todos meus
+
+A releitura separada do flag brigou comigo em três frentes antes de eu perceber
+que ela não era necessária:
+
+1. `Chats.get` devolve `null` para conversas que existem — precisa de
+   `findExistingChat`;
+2. `findExistingChat` é assíncrona, então a resposta teve de ser estacionada;
+3. e o laço **re-disparava a leitura a cada volta**, zerando a resposta
+   estacionada antes de ela chegar — de modo que o valor nunca aparecia.
+
+**A saída foi apagar as três**: a sonda já mostrara que o flag está atualizado
+quando o `setArchive` resolve, então o script de escrita reporta o depois lendo
+o objeto que ele mesmo acabou de mudar. Três defeitos em encanamento para um
+valor que já estava na mão.
+
+> **E o dublê quebrou DUAS vezes por roteamento**, ambas falhando asserções por
+> motivo alheio ao código: quatro scripts rodam neste pacote e três compartilham
+> substrings — o de escrita embute o `ResolveIdentityExpr`, que contém
+> `createWid(`, e os dois de leitura carregam a mesma chave. Roteamento passou a
+> usar marcador ÚNICO de cada script.
+
+**Prova ao vivo, ciclo completo**: arquivar (no-op, já arquivada), desarquivar
+(`changed=true`), fixar (`changed=true`), desfixar (`changed=true`). O teste
+restaura tudo ao estado inicial.
+
+**Um teste foi REESCRITO em vez de remendado**: o que assegurava que a releitura
+usava a identidade resolvida perdeu o objeto, porque a releitura deixou de
+existir. A preocupação continua real e agora vive num lugar só — o script
+resolve antes de tocar em qualquer coisa — e é isso que ele assere.
+
+**Status**: corrigido — causa medida por A/B, guarda de pedido redundante,
+encanamento desnecessário removido, e ciclo completo provado ao vivo.

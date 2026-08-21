@@ -120,6 +120,7 @@ func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label s
 		OK       bool   `json:"ok"`
 		Why      string `json:"why"`
 		Was      bool   `json:"was"`
+		After    bool   `json:"after"`
 		JID      string `json:"jid"`
 		Pinned   int    `json:"pinned"`
 		PinLimit int    `json:"pin_limit"`
@@ -152,55 +153,13 @@ func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label s
 		return Change{}, fmt.Errorf("%w at %s (%s)", ErrState, out.Stage, out.Why)
 	}
 
-	// THE POSTCONDITION, POLLED. Reacting taught that page state lands a moment
-	// after the call resolves (H53), so reading once here would be a race that
-	// passes today and fails tomorrow.
-	// THE RESOLVED jid, not the caller's. The first version verified with
-	// createWid(jid) on whatever was passed in, which finds nothing when the
-	// caller typed a phone number: this build files chats under the identity
-	// the server assigns (H34, H39). The set path resolved and the read path
-	// did not — the same split that broke group sending (H48), made by me again
-	// in the same file.
-	verifyJID := out.JID
-	if verifyJID == "" {
-		verifyJID = jid
+	// THE POSTCONDITION. The page reports what the conversation became, read
+	// from the same object it just changed, and this refuses the case that
+	// matters: the call returned and the flag did not move.
+	if out.After != want {
+		return Change{}, fmt.Errorf("%w: %s is %t, wanted %t", ErrUnchanged, k, out.After, want)
 	}
-	after, err := s.waitFor(ctx, verifyJID, k, want, label)
-	if err != nil {
-		return Change{}, err
-	}
-	return Change{Was: out.Was, After: after, Waited: time.Since(start)}, nil
-}
-
-func (s *Setter) waitFor(ctx context.Context, jid string, k kind, want bool, label string) (bool, error) {
-	deadline := time.Now().Add(stateBudget)
-	last := !want
-	for {
-		var raw string
-		if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/verify", func(ctx context.Context) error {
-			return s.eval(ctx, readScript(jid, k), &raw)
-		}); err != nil {
-			return false, fmt.Errorf("%w: %v", ErrState, err)
-		}
-		var got struct {
-			Found bool `json:"found"`
-			Value bool `json:"value"`
-		}
-		if err := json.Unmarshal([]byte(raw), &got); err != nil {
-			return false, fmt.Errorf("chatstate: unexpected verify answer: %w", err)
-		}
-		if !got.Found {
-			return false, ErrNoChat
-		}
-		last = got.Value
-		if got.Value == want {
-			return got.Value, nil
-		}
-		if !time.Now().Before(deadline) {
-			return last, fmt.Errorf("%w: %s is %t, wanted %t", ErrUnchanged, k, last, want)
-		}
-		time.Sleep(stateTick)
-	}
+	return Change{Was: out.Was, After: out.After, Waited: time.Since(start)}, nil
 }
 
 // lookupExpr finds a conversation WITHOUT creating one. Changing the state of a
@@ -241,14 +200,28 @@ func setScript(jid string, k kind, want bool) string {
 			const which = ` + strconv.Quote(string(k)) + `;
 			const was = which === 'archive' ? !!chat.archive : !!chat.pin;
 
+			// A REDUNDANT REQUEST IS REFUSED BY THE APP, and that is measured
+			// rather than assumed. In one controlled run against the live
+			// account: asking for the OPPOSITE of the current state was
+			// ACCEPTED, and asking for the state the conversation already had
+			// threw ActionError("Could not perform action.").
+			//
+			// So asking anyway is asking the app to do nothing and be told off
+			// for it. Nothing to change is a successful no-op, the same shape
+			// as a conversation with nothing unread (H52).
+			if (was === want) {
+				park({ stage: 'done', ok: true, why: '', was: was, after: was, jid: r.jid });
+				return;
+			}
+
 			stage = 'apply';
 			if (which === 'archive') {
 				const A = window.require('` + string(spa.ModuleSetArchiveChatAction) + `');
-				// THE THIRD ARGUMENT. setArchive has arity 3 and passing two
-				// produced "Could not perform action." — the app's own refusal,
-				// not a crash. The third is passed as true, which is what a
-				// user-initiated archive is.
-				await A.setArchive(chat, want, true);
+				// TWO ARGUMENTS ARE ENOUGH. The arity is 3, and the third being
+				// missing was my first theory for the refusal — it was wrong:
+				// the refusal is about asking for a state the conversation
+				// already has, which the guard above now prevents.
+				await A.setArchive(chat, want);
 			} else {
 				// THE LIMIT, checked before asking. Both helpers take a WID, and
 				// calling them without one throws on isNewsletter.
@@ -267,7 +240,19 @@ func setScript(jid string, k kind, want bool) string {
 				const P = window.require('` + string(spa.ModuleSetPinChatAction) + `');
 				await P.setPin(chat, want);
 			}
-			park({ stage: 'done', ok: true, why: '', was: was, jid: r.jid });
+			// THE AFTER VALUE, READ FROM THE CHAT THIS SCRIPT ALREADY HOLDS.
+			//
+			// A separate polling read was tried first and fought back: get()
+			// answers null for conversations that exist, findExistingChat is
+			// async so the answer had to be parked, and re-kicking that read on
+			// every turn reset the parked answer before it landed. Three
+			// defects, all in plumbing for a value that was already here.
+			//
+			// Measured: the flag is updated by the time setArchive resolves —
+			// the probe read it as true immediately after the await. So the
+			// object in hand is the answer, and no second lookup is needed.
+			const after = which === 'archive' ? !!chat.archive : !!chat.pin;
+			park({ stage: 'done', ok: true, why: '', was: was, after: after, jid: r.jid });
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 160) });
 		}
@@ -276,25 +261,12 @@ func setScript(jid string, k kind, want bool) string {
 	})())`
 }
 
-func readScript(jid string, k kind) string {
-	return `JSON.stringify((() => {
-		const Chats = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection;
-		const WF = window.require('` + string(spa.ModuleWidFactory) + `');
-		const which = ` + strconv.Quote(string(k)) + `;
-		// The jid here is the RESOLVED one, handed down from the set call, so
-		// createWid is enough and no second round trip to the server happens on
-		// every poll.
-		const wid = WF.createWid(` + strconv.Quote(jid) + `);
-		let chat = wid ? Chats.get(wid) : null;
-		if (!chat && wid) {
-			// Same reason as the lookup: get() answers null for conversations
-			// that exist. This path must not create one either.
-			try { chat = window.require('` + string(spa.ModuleChatCollection) + `').ChatCollection.get(wid); } catch (e) {}
-		}
-		if (!chat) { return { found: false, value: false }; }
-		return { found: true, value: which === 'archive' ? !!chat.archive : !!chat.pin };
-	})())`
-}
+// readKey is where an async read would park its answer. It is kept because
+// the tests route on it, and because a future field that DOES lag will need
+// exactly this.
+const readKey = "__waHeadlessChatStateRead"
+
+const readResultScript = `JSON.stringify(window[` + `"` + readKey + `"` + `])`
 
 const resultScript = `JSON.stringify((() => {
 	const s = window[` + `"` + stateKey + `"` + `];
