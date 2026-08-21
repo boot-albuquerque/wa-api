@@ -128,7 +128,7 @@ declarado do projeto: métodos principais de envio e chat.
 | `reply` | `capabilities/send` (`reply.go`) | provado ao vivo; pós-condição de citação com **controle negativo AO VIVO** (H54) |
 | `archive`/`pin` | `capabilities/chatstate` | **ciclo completo provado ao vivo**; o app recusa pedido REDUNDANTE, e a guarda evita (H55) |
 | `revoke` | `capabilities/revoke` | primeira capacidade DESTRUTIVA; direito consultado na página, `as=sender` provado (H56) |
-| link de convite | `capabilities/group` (`invite.go`) | **NÃO ENTREGUE** — `iAmAdmin` não é populado; teste ao vivo vermelho (H57) |
+| link de convite | `capabilities/group` (`invite.go`) | assinatura RESOLVIDA (a metadata é o argumento); falta a busca do código, que **trava** (H57) |
 
 ### O que este módulo consegue e não consegue provar
 
@@ -153,11 +153,15 @@ página, e os dois a usam para fins opostos sem que um herde o efeito colateral 
 outro. Fatorar no lugar errado teria dado a `presence` um efeito que ela não pode
 ter.
 
-**A regra que três capacidades num dia ensinaram (H40, H46, H49)**: quando uma
-função da página morre lendo campo de `undefined` — `isNewsletter`, `isLid` — o
-argumento é quase sempre um MODELO, e não a identidade dentro dele. Vale mais que
-qualquer nome de módulo: os nomes mudam por build, esta forma se repetiu três
-vezes no mesmo dia.
+**A regra, corrigida depois da H57.** Quatro capacidades ensinaram que
+`reading '<campo>' of undefined` significava "passei o id, queriam o modelo"
+(H40, H46, H49). A quinta ocorrência tinha a mesma FORMA e outra causa: eu havia
+passado o DONO quando queriam a PARTE — `iAmAdmin` é método em
+`groupMetadata.participants`, então quem faltava era `participants`, não o campo.
+
+A regra que sobrevive às duas: **o erro diz QUAL OBJETO falta, e o nome do campo
+diz ONDE procurá-lo.** Não é "sempre passe o modelo" — é ler onde aquele campo
+mora. JavaScript não distingue os dois casos, e por isso a forma engana.
 
 ~~**Aberto e dito**: o ENVIO para grupo ainda não foi provado — só a resolução.
 Provar exigiria um grupo onde se possa mandar mensagem sem incomodar ninguém,

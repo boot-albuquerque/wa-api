@@ -40,16 +40,38 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// THE GROUP METADATA IS NOT LOADED, and that is why the invite code could
-	// not be read: queryGroupInviteCode reads iAmAdmin off the metadata, and
-	// the chat carries the flag while chat.groupMetadata is undefined.
+	// THE ANSWER TO THE WHOLE CLASS: iAmAdmin is a METHOD on the participants
+	// collection, not a field on the metadata.
 	//
-	// So the question is how the app loads it. Codes are CREDENTIALS — anyone
-	// holding one can join — so nothing here prints a code, only lengths.
+	//	chat.iAmAdmin = function(){ return this.groupMetadata
+	//	    ? this.groupMetadata.participants.iAmAdmin() : false }
+	//
+	// So "Cannot read properties of undefined (reading 'iAmAdmin')" does not
+	// mean the field is missing — it means groupMetadata.PARTICIPANTS is
+	// undefined. This measures exactly that, before and after the metadata
+	// query, and tries the chat's own method too.
 	const script = `(() => {
 		window.__waHeadlessArch = { stage: 'pending' };
 		(async () => {
 			const out = { stage: 'done' };
+			const shape = (chat) => {
+				const md = chat.groupMetadata;
+				const o = { hasMetadata: !!md };
+				if (md) {
+					o.hasParticipants = md.participants !== undefined && md.participants !== null;
+					o.participantsType = typeof md.participants;
+					if (md.participants) {
+						o.participantsIsCollection = typeof md.participants.getModelsArray === 'function';
+						o.participantsHasIAmAdmin = typeof md.participants.iAmAdmin === 'function';
+						try { o.count = md.participants.getModelsArray().length; } catch (e) {}
+						try { o.iAmAdmin = md.participants.iAmAdmin(); } catch (e) { o.iAmAdminErr = String((e && e.message) || e).slice(0, 70); }
+					}
+				}
+				try { o.chatIAmAdminIsFn = typeof chat.iAmAdmin === 'function'; } catch (e) {}
+				try { o.chatIAmAdmin = (typeof chat.iAmAdmin === 'function') ? chat.iAmAdmin() : chat.iAmAdmin; }
+				catch (e) { o.chatIAmAdminErr = String((e && e.message) || e).slice(0, 70); }
+				return o;
+			};
 			try {
 				const Chats = window.require('WAWebChatCollection').ChatCollection;
 				let lab = null;
@@ -61,32 +83,43 @@ func TestProbeContactShape(t *testing.T) {
 					} catch (e) {}
 				}
 				if (!lab) { out.why = 'NO_LAB_GROUP'; window.__waHeadlessArch = out; return; }
-				out.metadataBefore = !!lab.groupMetadata;
 
-				// Is the metadata in its own collection, keyed by the group id?
+				out.before = shape(lab);
 				try {
-					const GM = window.require('WAWebGroupMetadataCollection');
-					const coll = GM.GroupMetadataCollection || GM.default || GM;
-					out.metaCollKeys = Object.keys(GM).slice(0, 8).join(',');
-					if (coll && typeof coll.get === 'function') {
-						const md = coll.get(lab.id);
-						out.inCollection = !!md;
-						if (md) { out.mdHasIAmAdmin = md.iAmAdmin !== undefined; }
-					}
-					if (coll && typeof coll.getModelsArray === 'function') {
-						out.metaRows = coll.getModelsArray().length;
-					}
-					// A find/fetch entry point?
-					for (const n of ['find', 'findQuery', 'fetch', 'update']) {
-						out['coll_' + n] = typeof (coll && coll[n]);
-					}
-				} catch (e) { out.gmErr = String((e && e.message) || e).slice(0, 140); }
+					const Job = window.require('WAWebGroupQueryJob');
+					await Job.queryAndUpdateGroupMetadataById(lab.id);
+					out.queried = true;
+				} catch (e) { out.queryErr = String((e && e.message) || e).slice(0, 140); }
+				out.after = shape(lab);
 
-				// Modules whose names suggest they load it.
-				for (const n of ['WAWebQueryGroupJob', 'WAWebGroupQueryJob', 'WAWebGroupMetadataUpdateJob', 'WAWebFetchGroupMetadataJob']) {
-					try { const m = window.require(n); out[n] = m ? Object.keys(m).slice(0, 8).join(',') : 'NULL'; }
-					catch (e) { out[n] = 'ABSENT'; }
+				// THE PARTICIPANTS ARE PRESENT AND iAmAdmin() RETURNS TRUE, and
+				// the call still fails on the chat — so it does not read from a
+				// chat. If its body is e.participants.iAmAdmin(), the argument
+				// is the METADATA itself. That candidate was tried once before
+				// and its result was lost to a truncated log line.
+				// THE METADATA IS THE RIGHT ARGUMENT — it does not throw — and it
+				// returns undefined, which means the code is not CACHED. So the
+				// missing step is a fetch, and WAWebGroupQueryJob exports
+				// queryGroupInvite for exactly that.
+				const A = window.require('WAWebGroupInviteAction');
+				const Job = window.require('WAWebGroupQueryJob');
+				out.invite = {};
+				out.invite.cachedBefore = (await A.queryGroupInviteCode(lab.groupMetadata)) === undefined
+					? 'undefined' : 'present';
+
+				for (const [name, arg] of [['metadata', lab.groupMetadata], ['wid', lab.id], ['chat', lab]]) {
+					try {
+						const r = await Job.queryGroupInvite(arg);
+						out.invite['fetch_' + name] = (typeof r === 'string')
+							? { len: r.length }
+							: (r && typeof r === 'object' ? { keys: Object.keys(r).join(',') } : { type: typeof r });
+						break;
+					} catch (e) { out.invite['fetch_' + name] = 'THREW: ' + String((e && e.message) || e).slice(0, 60); }
 				}
+				try {
+					const after = await A.queryGroupInviteCode(lab.groupMetadata);
+					out.invite.cachedAfter = (typeof after === 'string') ? { len: after.length } : { type: typeof after };
+				} catch (e) { out.invite.afterErr = String((e && e.message) || e).slice(0, 80); }
 			} catch (e) {
 				out.fatal = String((e && e.message) || e).slice(0, 200);
 			}
@@ -119,5 +152,5 @@ func TestProbeContactShape(t *testing.T) {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	t.Logf("group metadata loading: %s", raw)
+	t.Logf("participants layer: %s", raw)
 }

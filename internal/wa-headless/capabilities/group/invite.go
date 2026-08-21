@@ -129,7 +129,16 @@ func (m *Manager) invite(ctx context.Context, groupJID string, revoke bool, labe
 		return Invite{}, fmt.Errorf("%w at %s (%s)", ErrInvite, out.Stage, out.Why)
 	}
 	if out.Code == "" {
-		return Invite{}, fmt.Errorf("%w: the page reported success with no code", ErrInvite)
+		// MEASURED, NOT SPECULATED. With the metadata the call does not throw
+		// and returns undefined, which means the group has no CACHED code. The
+		// fetch that would populate it — WAWebGroupQueryJob.queryGroupInvite —
+		// does not return on this build: a probe calling it never settled in 90
+		// seconds.
+		//
+		// So the error says where the next attempt starts rather than blaming
+		// the caller for asking.
+		return Invite{}, fmt.Errorf("%w: the group has no cached invite code, and the "+
+			"fetch that would populate it does not return on this build (H57)", ErrInvite)
 	}
 	return Invite{Code: out.Code, Revoked: revoke}, nil
 }
@@ -149,35 +158,41 @@ func inviteScript(groupJID string, revoke bool) string {
 			if (!chat) { park({ stage, ok: false, why: 'NO_GROUP' }); return; }
 
 			stage = 'metadata';
-			// WITHOUT THIS THE NEXT CALL THROWS. queryGroupInviteCode reads
-			// iAmAdmin off the group's metadata, and the metadata row exists
-			// without it until this job fills it in.
-			try {
-				const Job = window.require('` + string(spa.ModuleGroupQueryJob) + `');
-				// "ById": the argument is the id, and passing the WID threw
-				// "Cannot read properties of undefined (reading 'toString')" —
-				// something inside reaches for a field the wid does not carry.
-				// Both shapes are tried because the name says id and the sibling
-				// calls in this file take chats.
-				try { await Job.queryAndUpdateGroupMetadataById(chat.id); }
-				catch (e1) { await Job.queryAndUpdateGroupMetadataById(chat); }
-			} catch (e) {
-				park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 120) });
-				return;
-			}
-
-			// Only an admin may see or change the invite. Asking anyway is
-			// asking for a refusal the page can already predict.
+			// THE METADATA IS THE ARGUMENT, not the chat and not the wid.
+			//
+			// Measured across four attempts: chat and wid both throw "Cannot
+			// read properties of undefined (reading 'iAmAdmin')" — and that
+			// error does NOT mean a missing field. iAmAdmin is a METHOD on the
+			// participants collection:
+			//
+			//	chat.iAmAdmin = function(){ return this.groupMetadata
+			//	    ? this.groupMetadata.participants.iAmAdmin() : false }
+			//
+			// so the invite call's body is participants.iAmAdmin(), and handing
+			// it a chat makes it look for participants on a chat. With the
+			// metadata it does not throw.
+			//
+			// The metadata query job is NOT called here: measured, it throws on
+			// its own argument, and the participants were already present and
+			// iAmAdmin() already answered true without it.
 			const md = chat.groupMetadata;
-			if (md && md.iAmAdmin === false) { park({ stage, ok: false, why: 'NOT_ADMIN' }); return; }
+			if (!md) { park({ stage, ok: false, why: 'NO_METADATA' }); return; }
+
+			// ADMIN IS A METHOD. Asking it correctly turns a refusal the page
+			// would produce anyway into an answer about who this account is.
+			try {
+				if (md.participants && typeof md.participants.iAmAdmin === 'function'
+					&& md.participants.iAmAdmin() === false) {
+					park({ stage, ok: false, why: 'NOT_ADMIN' });
+					return;
+				}
+			} catch (e) { /* the page still decides */ }
 
 			stage = ` + strconv.Quote(map[bool]string{true: "revoke", false: "query"}[revoke]) + `;
 			const A = window.require('` + string(spa.ModuleGroupInviteAction) + `');
-			// THE CHAT, not the wid — it is the chat whose metadata carries
-			// iAmAdmin.
 			const code = ` + map[bool]string{
-		true:  "await A.revokeGroupInvite(chat)",
-		false: "await A.queryGroupInviteCode(chat)",
+		true:  "await A.revokeGroupInvite(md)",
+		false: "await A.queryGroupInviteCode(md)",
 	}[revoke] + `;
 			const asString = (typeof code === 'string') ? code
 				: (code && typeof code.code === 'string' ? code.code : '');

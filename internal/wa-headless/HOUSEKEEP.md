@@ -4349,5 +4349,56 @@ de tentar mais uma assinatura.
 capacidade não funciona; e o valor do que já foi medido está aqui, para que a
 próxima tentativa comece de onde esta parou em vez de do zero.
 
-**Status**: não corrigido — não entregue, com quatro medições registradas, a
-hipótese seguinte nomeada e o teste ao vivo deixado vermelho.
+### A camada, lida de uma vez (2026-08-21)
+
+A orquestração mandou parar de abrir capacidades e entender a preparação de
+estado da página, porque três das quatro capacidades anteriores tinham
+tropeçado nela. Entendida, e a resposta corrige a leitura de todas:
+
+**`iAmAdmin` NÃO É UM CAMPO. É um MÉTODO na coleção de participantes.**
+
+```js
+chat.iAmAdmin = function(){ return this.groupMetadata
+    ? this.groupMetadata.participants.iAmAdmin() : false }
+```
+
+Então `"Cannot read properties of undefined (reading 'iAmAdmin')"` **nunca quis
+dizer** "falta o campo". Quis dizer: a função faz `X.participants.iAmAdmin()` e
+recebeu um X que não tem `participants` — ou seja, **o argumento é a METADATA**,
+não o chat e não o wid.
+
+Medido lado a lado, com os participantes comprovadamente presentes
+(`count: 2`, `iAmAdmin() === true`, `chat.iAmAdmin() === true`):
+
+| argumento | resultado |
+|---|---|
+| `chat` | lança `reading 'iAmAdmin'` |
+| `wid` | lança `reading 'iAmAdmin'` |
+| **`chat.groupMetadata`** | **não lança** — devolve `undefined` |
+
+E a etapa de metadata que eu havia acrescentado era **desnecessária**: os
+participantes já estavam lá, e o próprio job lança no seu argumento. Foi
+removida.
+
+> **A quinta ocorrência não era uma quinta ocorrência.** As quatro anteriores
+> foram "passei o id, queriam o modelo". Esta é "passei o dono, queriam a parte"
+> — e o erro tem a mesma FORMA porque JavaScript não distingue os dois casos.
+> A regra corrigida: `reading '<x>' of undefined` diz **qual objeto falta**, e o
+> nome do campo diz **onde procurá-lo** — aqui, `iAmAdmin` vive em
+> `participants`, então quem faltava era `participants`.
+
+### O que ainda bloqueia, e é outra coisa
+
+Com a metadata, a chamada passa e devolve `undefined`: o grupo **não tem código
+em cache**. Quem o buscaria é `WAWebGroupQueryJob.queryGroupInvite`, e ela **não
+retorna** — uma sonda que a chamou não assentou em 90 segundos.
+
+Isso é um bloqueio DIFERENTE do que a entrada começou investigando, e está
+nomeado para que a próxima tentativa não recomece pela assinatura.
+
+**A mensagem de erro da capacidade diz isso**, em vez de culpar o chamador por
+perguntar.
+
+**Status**: parcialmente entregue — a camada de preparação foi entendida e a
+assinatura correta está medida e aplicada; falta a busca do código, que trava
+neste build.

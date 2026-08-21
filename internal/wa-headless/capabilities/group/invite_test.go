@@ -150,21 +150,27 @@ func TestReadingAndRevokingAreDifferentCalls(t *testing.T) {
 	}
 }
 
-// TestTheMetadataIsQueriedFirst is the finding H57 records: the invite call
-// reads iAmAdmin off a metadata that is not populated by default.
-func TestTheMetadataIsQueriedFirst(t *testing.T) {
+// TestTheMetadataIsTheArgument is the finding H57 ended up with, after four
+// measured attempts at the argument shape.
+func TestTheMetadataIsTheArgument(t *testing.T) {
 	compressInviteClock(t)
 	p := &inviteDouble{ok: true, code: "AAA"}
 	if _, err := inviter(p).InviteCode(context.Background(), "120363@g.us", "t/inv"); err != nil {
 		t.Fatalf("InviteCode: %v", err)
 	}
-	meta := strings.Index(p.lastScript, "queryAndUpdateGroupMetadataById")
-	query := strings.Index(p.lastScript, "queryGroupInviteCode(")
-	if meta < 0 {
-		t.Fatal("the metadata is never queried; the invite call reads iAmAdmin off it")
+	// THE METADATA IS THE ARGUMENT. Measured: chat and wid both throw
+	// "reading 'iAmAdmin'", and that error does not mean a missing field —
+	// iAmAdmin is a METHOD on groupMetadata.participants, so handing the call a
+	// chat makes it look for participants on a chat.
+	if !strings.Contains(p.lastScript, "queryGroupInviteCode(md)") {
+		t.Fatal("the invite is not asked for with the group METADATA")
 	}
-	if query < 0 || meta > query {
-		t.Fatal("the invite is asked for BEFORE the metadata it depends on")
+	if strings.Contains(p.lastScript, "queryGroupInviteCode(chat)") {
+		t.Fatal("the invite is asked for with the chat, which throws on this build")
+	}
+	// And admin is asked as a METHOD, not read as a field.
+	if !strings.Contains(p.lastScript, "participants.iAmAdmin()") {
+		t.Fatal("iAmAdmin is read as a field; it is a method on the participants collection")
 	}
 }
 
