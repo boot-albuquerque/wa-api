@@ -5009,3 +5009,58 @@ diz isso em voz alta.
 `TestTheScriptDoesNotWaitOnSomethingThatNeverMoves`) e
 `participantsreal_test.go` (prova entre sessões, com restauração em sessão
 própria).
+
+---
+
+## H65 — promover, rebaixar e sair de grupo
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura de funcionalidades do whatsapp-web.js.
+**Onde**: `internal/wa-headless/capabilities/group/admin.go`.
+
+### Uma TERCEIRA forma no mesmo módulo
+
+```
+addParticipantsJob({group, participants, isOffline, reason})              // 1 objeto
+removeParticipantsJob(group, participants, timestamp, author, reason,
+                      groupMetadata, isOffline)                           // 7 posicionais
+promoteParticipantsJob(group, participants, groupMetadata, isOffline)     // 4 posicionais
+```
+
+Três assinaturas para quatro operações irmãs, exportadas lado a lado. O corpo do
+promote é **síncrono** e mostra o objeto que ele monta, então esta veio de
+graça. `TestAThirdShapeInTheSameModule` falha se alguém uniformizar.
+
+As lições da H58 foram **carregadas, não redescobertas**: participante é
+registro (`[found]`, o modelo da metadata), e `Verified` é false para mudança
+real.
+
+### A prova ao vivo é um único booleano, e ele não pode ser satisfeito por engano
+
+A sessão dois lê metadata fresca. Se a promoção pegou, o par é admin lá, então o
+rebaixamento é mudança real e `NoOp` é **false**. Se a promoção não fez nada, o
+par continua membro comum, o rebaixamento acha o papel que quer já no lugar, e
+`NoOp` é true.
+
+```
+promoted: group.AdminChange(promoted=true  noop=false verified=false waited=1.014s)
+demoted:  group.AdminChange(promoted=false noop=false verified=false waited=1.012s)
+```
+
+É exatamente a forma de verificação que faltou à H58 por uma tarde.
+
+### Sair do grupo: entregue, e deliberadamente NÃO provado ao vivo
+
+`sendExitGroup(chat)` — um argumento, modelo. Implementado, com recusa quando a
+conta não é membro (um no-op silencioso ali deixaria o chamador acreditando ter
+saído de algo em que nunca entrou).
+
+**Não há prova ao vivo, e a omissão está escrita em três lugares** (comentário do
+módulo, comentário da função, comentário do teste): uma conta que sai de um grupo
+que criou não consegue voltar sem convite de quem ficou dentro, e o laboratório
+tem duas contas. Rodar uma vez custaria o grupo de que todos os outros testes ao
+vivo de grupo dependem.
+
+**Status**: entregue (sair do grupo: entregue sem prova ao vivo, por desenho).
+**Testes**: `capabilities/group/admin_test.go` (11 testes) e
+`adminreal_test.go` (promover/rebaixar, prova entre sessões, restaura).

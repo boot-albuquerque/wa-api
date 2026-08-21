@@ -157,3 +157,13 @@ const (
 // it wants a MODEL. The default of "" is the app's, not ours: this package
 // refuses an empty subject rather than silently clearing a group's name.
 const ModuleSetSubjectGroupAction = Module("WAWebSetSubjectGroupAction")
+
+// ModuleExitGroupAction leaves a group: sendExitGroup(chat), one argument,
+// unproxied inside, so a MODEL. Measured with TestProbeRemainingShapes.
+//
+// IT IS THE ONE CAPABILITY IN THIS MODULE WITH NO REVERSIBLE LIVE PROOF. An
+// account that leaves a group it created cannot rejoin without an invite from
+// somebody still inside, and the lab has two accounts. So it is built, unit
+// tested, and deliberately never run against the lab group — recorded rather
+// than quietly skipped.
+const ModuleExitGroupAction = Module("WAWebExitGroupAction")

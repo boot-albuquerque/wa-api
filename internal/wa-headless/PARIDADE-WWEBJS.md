@@ -677,3 +677,21 @@ setGroupSubject(chat, subject = "")
 
 Com isto, a superfície do whatsapp-web.js está fechada exceto pelos dois
 bloqueios nomeados: participantes (H58) e link de convite (H57).
+
+## §6.21 — promover, rebaixar e sair de grupo
+
+`wwebjs` expõe `GroupChat.promoteParticipants` / `demoteParticipants` / `leave`.
+
+| operação | forma neste build |
+|---|---|
+| promover / rebaixar | `promoteParticipantsJob(group, participants, groupMetadata, isOffline)` — **quatro posicionais**, terceira forma do mesmo módulo |
+| sair | `sendExitGroup(chat)` — um argumento, **modelo** |
+
+**Onde divergimos de propósito:**
+
+1. **`Verified` é false para mudança real**, pela razão medida na H58.
+2. **Recusamos sair de grupo em que a conta não está.** Um no-op silencioso ali
+   deixaria o chamador acreditando ter saído de algo em que nunca entrou.
+3. **Sair não tem prova ao vivo, por desenho** — e está escrito em três lugares.
+   Conta que sai de grupo que criou não volta sem convite, e o laboratório tem
+   duas contas.
