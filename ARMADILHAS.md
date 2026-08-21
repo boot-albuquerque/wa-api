@@ -1382,3 +1382,29 @@ listado a superfície do `Cmd` filtrando por `/^send/`, porque tudo que eu havia
 dirigido ali se chamava `sendAlgumaCoisa`. O filtro codificou uma suposição sobre
 nomes e escondeu `markChatUnread`. **Levantamento estreitado por um palpite é um
 palpite.**
+
+## Enumere nomes válidos pelo oráculo do próprio app — passando o valor ATUAL
+
+**Medido em 2026-08-21 (H79).**
+
+`setGroupProperty(chat, nome, valor)` recusa nome desconhecido **antes de enviar
+qualquer coisa**. Isso é um enumerador gratuito: passe candidatos e veja quais
+não são recusados.
+
+**O detalhe que torna isso seguro, e sem o qual é destrutivo**: passe o valor
+**ATUAL** do objeto, de modo que um nome VÁLIDO seja um no-op. Enumerar com um
+valor arbitrário mudaria a configuração real uma candidata por vez, em silêncio.
+
+**Por que valeu**: as palavras que parecem certas são as erradas.
+
+```
+aceitos:   announcement, restrict, membership_approval_mode
+recusados: locked, announce, description, subject
+```
+
+`locked` e `announce` são exatamente o que alguém escreveria para "só admin
+edita" e "só admin fala". Nenhuma sonda de assinatura acharia isso — só perguntar
+ao app um nome por vez.
+
+**E confira o par escrita/leitura**: escreve-se `announcement`, lê-se `announce`
+na metadata. Supor que são a mesma string dá um leitor que nunca vê a mudança.

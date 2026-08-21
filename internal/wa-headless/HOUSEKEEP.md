@@ -6050,3 +6050,73 @@ que falta é uma quinta ideia — provavelmente a mesma instrumentação de UI q
 orquestração já autorizou como medição para localização e vCard.
 
 **Status**: não entregue.
+
+---
+
+## H79 — políticas de grupo, e o oráculo que o próprio app oferece
+
+**Data**: 2026-08-21
+**Contexto**: `COMPLETE-FAMILIES`, família Group.
+**Onde**: `internal/wa-headless/capabilities/group/policy.go`.
+
+### Quatro caminhos errados antes do certo, todos medidos
+
+| tentativa | o que aconteceu |
+|---|---|
+| `mexUpdateGroupPropertyJob` com aridade 1 | `Bad Request` — a assinatura tem DOIS argumentos |
+| o mesmo com aridade 2 e id como string | `Bad Request` de novo; o objeto é repassado opaco ao GraphQL |
+| `sendSetPropertyRPC` (o RPC cru) | devolveu o vocabulário de flags, e travou por faltar o resto da stanza |
+| `WAWebSetDescriptionGroupAction` | não existe |
+
+O certo é `WAWebSetPropertyGroupAction.setGroupProperty(chat, nome, 1|0)`, achado
+enumerando **todos** os módulos com "Group" e filtrando a SAÍDA pelo nome da
+função — o filtro por nome de MÓDULO nunca o acharia.
+
+### O oráculo, e por que ele foi seguro de usar
+
+O switch do app recusa nome desconhecido **antes de enviar qualquer coisa**.
+Isso o torna um enumerador gratuito de nomes válidos.
+
+O detalhe que o tornou seguro: cada candidato recebeu o valor **ATUAL** do
+grupo, então um nome válido era no-op. Sem isso, enumerar os nomes teria virado
+as políticas do grupo de laboratório uma candidata por vez.
+
+```
+aceitos:  announcement, restrict, membership_approval_mode,
+          no_frequently_forwarded, ephemeral
+recusados: locked, announce, description, subject,
+          allow_admin_reports, group_history
+```
+
+**As palavras que parecem certas são as que não funcionam.** `locked` e
+`announce` são exatamente o que alguém escreveria para "só admin edita" e "só
+admin fala", e a página recusa as duas.
+
+### E há uma assimetria a mais, que o teste trava
+
+O nome que se **escreve** é `announcement`; o campo que se **lê** na metadata é
+`announce`. Escrever e ler a mesma política usa strings diferentes.
+
+### Prova ao vivo, entre sessões
+
+```
+MEASURED: the lab group's announcement is true
+flipped:  group.PolicyChange(policy=announcement wanted=false noop=false verified=false)
+CROSS-SESSION: announcement was true before the flip and reads false after
+restored: group.PolicyChange(policy=announcement wanted=true noop=false verified=false)
+```
+
+`Verified` é false pela razão da H58, e `canSetGroupProperty` é consultado como
+MÉTODO — a lição que a H57 pagou com quatro tentativas cegas.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| aceitar os nomes que parecem certos | `"locked": got <nil>, want ErrUnknownPolicy` |
+| mandar booleano em vez de 1/0 | `on did not become 1` |
+| ler o campo com o nome de escrita | `the read field equals the write name; measured, they differ` |
+
+**Status**: entregue — três linhas do ledger (`setMessagesAdminsOnly`,
+`setInfoAdminsOnly`, `setAddMembersAdminsOnly`) saem de `MISSING` para `PARTIAL`,
+parciais apenas porque este build não confirma na mesma sessão.

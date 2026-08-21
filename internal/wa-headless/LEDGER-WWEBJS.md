@@ -219,9 +219,9 @@ nem `PARTIAL` sem justificativa explícita.
 | `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `setSubject` | group.SetSubject | `PROVEN` | sim | sim | sim | H64: o assunto vive em chat.formattedTitle |
 | `setDescription` | — | `MISSING` | — | — | — | — |
-| `setAddMembersAdminsOnly` | — | `MISSING` | — | — | — | família de configurações de grupo |
-| `setMessagesAdminsOnly` | — | `MISSING` | — | — | — | idem |
-| `setInfoAdminsOnly` | — | `MISSING` | — | — | — | idem |
+| `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
+| `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
+| `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PARTIAL` | sim | entre sessões | sim | H79: nome enumerado pelo oráculo do próprio app; `locked`/`announce` são recusados |
 | `deletePicture` | — | `MISSING` | — | — | — | — |
 | `setPicture` | — | `MISSING` | — | — | — | — |
 | `getInviteCode` | group.InviteCode | `PROVEN` | sim | sim | sim | H57: a chamada popula o MODELO; o retorno é undefined |
@@ -342,9 +342,9 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 35 | 15% |
-| `PARTIAL` | 32 | 14% |
+| `PARTIAL` | 35 | 15% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 149 | 67% |
+| `MISSING` | 146 | 66% |
 | **total** | **220** | |
 

@@ -308,3 +308,23 @@ const ModuleLabelCollection = Module("WAWebLabelCollection")
 // BOTH ARE NEEDED. The bridge is the wire; addOrRemoveLabelsMD is what makes
 // chat.labels reflect it, which is also the only postcondition available.
 const ModuleEditLabelAssociationBridge = Module("WAWebEditLabelAssociationBridge")
+
+// ModuleSetPropertyGroupAction changes a group's policies:
+//
+//	setGroupProperty(chat, property, value)   // chat MODEL, name, 1 or 0
+//
+// THE VALID NAMES WERE ENUMERATED USING THE APP'S OWN REFUSAL. An unknown name
+// reaches a switch that maps it to an object with .on/.off and throws
+// "Cannot read properties of undefined" before anything is sent, so asking is
+// free. Each candidate was passed the group's CURRENT value, which makes a valid
+// call a no-op — without that, enumerating the names would have changed the lab
+// group's policies one candidate at a time.
+//
+//	accepted:  announcement, restrict, membership_approval_mode,
+//	           no_frequently_forwarded, ephemeral
+//	refused:   locked, announce, description, subject, allow_admin_reports,
+//	           group_history
+//
+// description and subject are NOT properties — they have their own setters. The
+// obvious guesses (locked, announce) are the ones that do not work.
+const ModuleSetPropertyGroupAction = Module("WAWebSetPropertyGroupAction")

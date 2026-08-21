@@ -40,6 +40,11 @@ package spa
 // what an iterating function reads off an element: a recorder answers forEach
 // itself and the callback never runs.
 //
+// A read of `<spread>` means the argument was consumed WHOLE — spread into
+// another object or passed to Object.assign — and this instrument cannot name
+// its fields. That is a different answer from an empty list, which means the
+// function never looked at the argument at all.
+//
 // It is a JavaScript function of (moduleName, fnName, arity, maxDepth, shapes)
 // returning {ok, why, reads: [[path, ...], ...], threw}.
 const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth, shapes) {
@@ -85,10 +90,19 @@ const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth,
 			return level < depth ? recorder(seen, full, level + 1) : undefined;
 		},
 		apply() { return level < depth ? recorder(seen, path + '()', level + 1) : undefined; },
-		// A destructuring assignment with defaults consults ownKeys on some
-		// engines; answering with what has been asked for so far keeps the
-		// proxy from looking empty and short-circuiting the read.
-		ownKeys() { return []; },
+		// SPREAD IS INVISIBLE TO A get TRAP. {...arg} and Object.assign go
+		// through ownKeys, never through get, so a function that spreads its
+		// argument into a payload reports NOTHING — which reads exactly like a
+		// function that ignores its argument, and those are opposite facts.
+		//
+		// Recording the ownKeys call turns that silence into an answer: the
+		// caller learns the argument is CONSUMED WHOLE and that this instrument
+		// cannot name its fields, instead of concluding there are none.
+		ownKeys() {
+			const mark = (path ? path + '.' : '') + '<spread>';
+			if (seen.indexOf(mark) === -1) { seen.push(mark); }
+			return [];
+		},
 		getOwnPropertyDescriptor() {
 			return { configurable: true, enumerable: true, value: undefined };
 		}
