@@ -1,0 +1,8 @@
+{
+  "status": 401,
+  "body": {
+    "code": 401,
+    "error": "unauthorized",
+    "success": false
+  }
+}
