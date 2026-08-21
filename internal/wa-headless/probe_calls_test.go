@@ -262,6 +262,38 @@ func TestProbeCalls(t *testing.T) {
 				out.containers = 'module absent';
 			}
 
+			// THE APP'S OWN DECISION POINT — the last bounded hypothesis.
+			//
+			// WAWebVoipCallBlockedModals exports showCallBlockedModalIfNeeded,
+			// showCouldNotPlaceCallModal and showVoipInitUnavailableModal. If
+			// the dial is being refused internally, that refusal has a name and
+			// this is where it is spoken. Reading the predicate is cheap; five
+			// hypotheses have already died and this is the last one before the
+			// family is marked blocked with the eliminations written down.
+			try {
+				const M = window.require('WAWebVoipCallBlockedModals');
+				out.blocked = { keys: Object.keys(M) };
+				for (const f of Object.keys(M)) {
+					try { out.blocked['arity_' + f] = typeof M[f] === 'function' ? M[f].length : typeof M[f]; }
+					catch (e) { out.blocked['arity_' + f] = 'threw'; }
+				}
+				// The PREDICATE, called with the peer's wid the way a dial would.
+				if (typeof M.showCallBlockedModalIfNeeded === 'function') {
+					try {
+						const W = window.require('WAWebWidFactory');
+						const ex = await window.require('WAWebQueryExistsJob')
+							.queryWidExists(W.createWid(PEER_PLACEHOLDER));
+						const r = await M.showCallBlockedModalIfNeeded(ex && ex.wid);
+						out.blocked.verdict = 'resolved: ' + typeof r + ' value=' + String(r);
+					} catch (e) {
+						out.blocked.verdict = 'threw: ' + String((e && e.message) || e)
+							.replace(/\d{4,}/g, '<redacted>').slice(0, 150);
+					}
+				}
+			} catch (e) {
+				out.blocked = 'module absent: ' + String(e && e.message);
+			}
+
 			// Alternatives the reference does not use, in case this build has a
 			// first-class path where it had to improvise.
 			for (const name of [
@@ -288,6 +320,7 @@ func TestProbeCalls(t *testing.T) {
 	// rule that does not bend is that the page does not read its own clock.
 	kick := strings.ReplaceAll(callsProbeScript, "START_TS_PLACEHOLDER",
 		strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
+	kick = strings.ReplaceAll(kick, "PEER_PLACEHOLDER", strconv.Quote(os.Getenv("WA_SEND_TO_JID")))
 
 	var started string
 	if err := runner.Do(ctx, engine.OpStateProbe, "probe/calls-kick", func(c context.Context) error {

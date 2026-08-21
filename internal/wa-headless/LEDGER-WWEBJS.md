@@ -317,6 +317,12 @@ com **duas** origens: a página (uma instalação, um buffer, uma sequência) e 
 processo (fatos de ciclo de vida, que a página não tem como conhecer). As duas
 não compartilham relógio nem sequência, e o `Origin` do evento diz qual é qual.
 
+**Frescor tem TRÊS estados** desde a H96: `REPLAY`, `LIVE` e `UNKNOWN`. O
+terceiro não é dúvida — é a resposta exata para um tipo sem discriminador
+causal, e nunca é promovido a `LIVE` por tempo ou por taxa. Só `message.added`
+alcança `LIVE`, pelo carimbo da própria mensagem. Medido: um boot entrega ~3578
+eventos de hidratação, **zero** deles vivos.
+
 O ciclo de vida chega ao barramento por uma **porta**, não por dependência:
 `core` declara um callback e não conhece `events`; `events` expõe uma segunda
 porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lados
@@ -352,7 +358,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
 | `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
 | `BATTERY_CHANGED` | — | `MISSING` | sem equivalente |
-| `INCOMING_CALL` | events.CallIncoming | `PARTIAL` | ouvinte instalado por `CallCollection.on('add')` — a referência não achou ouvinte e patcheia um `Map` interno; aqui a porta limpa existe. **NUNCA visto disparar**, e agora com causa isolada: `startWAWebVoipCall` resolve `undefined` e **nada se move em lugar nenhum** — cada contêiner da coleção observado por nome, `pendingOutgoingCall` fica `null`. Classe NOTHING (H82), terceira ocorrência. Cinco hipóteses eliminadas (ambiente, pilha VOIP, ordem, aba de chamadas, leitor) em H93 e H95 |
+| `INCOMING_CALL` | events.CallIncoming | `BLOCKED` | ouvinte instalado por `CallCollection.on('add')` — a referência não achou ouvinte e patcheia um `Map` interno; aqui a porta limpa existe. **NUNCA visto disparar**, e agora com causa isolada: `startWAWebVoipCall` resolve `undefined` e **nada se move em lugar nenhum** — cada contêiner da coleção observado por nome, `pendingOutgoingCall` fica `null`. Classe NOTHING (H82), terceira ocorrência. SEIS hipóteses eliminadas (ambiente, pilha VOIP, ordem, aba de chamadas, leitor, e o próprio veredito do app: `showCallBlockedModalIfNeeded()` devolve **false**) em H93 e H95. Reabre com EVIDÊNCIA nova, não hipótese: qualquer coisa que faça `pendingOutgoingCall` deixar de ser `null` |
 | `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
 | `VOTE_UPDATE` | — | `MISSING` | sem equivalente |
 
@@ -361,8 +367,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 50 | 23% |
-| `PARTIAL` | 43 | 20% |
-| `BLOCKED` | 2 | 0% |
+| `PARTIAL` | 42 | 19% |
+| `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
 | `MISSING` | 123 | 56% |
 | **total** | **220** | |

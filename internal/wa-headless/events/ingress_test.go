@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -82,9 +83,30 @@ func (f *fakePage) eval(ctx context.Context, expr string, out *string) error {
 	}
 }
 
+// pageNowMillis is the "at" the fake page stamps. The message timestamps below
+// are expressed relative to it, in seconds, exactly as the real page reports
+// them (`m.t` in seconds, `Date.now()` in milliseconds).
+const pageNowMillis = 1787000000000
+
+// row is a message row from the fake page, FRESH: the message's own timestamp
+// is the same second the page announced it.
+//
+// IT CARRIES msgT BECAUSE THE REAL PAGE DOES. The first version of this helper
+// omitted it, and the freshness classifier — which has no other evidence —
+// correctly answered UNKNOWN for every row. Two tests then failed and accused
+// the classifier of a defect it did not have: the double was less faithful than
+// production, which is the mirror of the permissive-double trap this repository
+// already catalogued.
 func row(typ string, seq int64, msg string) string {
-	return fmt.Sprintf(`{"type":%q,"seq":%d,"at":1787000000000,"chat":"1@c.us","msg":%q,"fromMe":true,"kind":"chat","ack":1,"bodyLen":7}`,
-		typ, seq, msg)
+	return rowAged(typ, seq, msg, 0)
+}
+
+// rowAged is the same row for a message created ageSeconds BEFORE the page
+// announced it, which is what hydration looks like.
+func rowAged(typ string, seq int64, msg string, ageSeconds int64) string {
+	return fmt.Sprintf(`{"type":%q,"seq":%d,"at":%d,"chat":"1@c.us","msg":%q,"fromMe":true,`+
+		`"kind":"chat","ack":1,"bodyLen":7,"msgT":%d}`,
+		typ, seq, pageNowMillis, msg, pageNowMillis/1000-ageSeconds)
 }
 
 func runPump(t *testing.T, f *fakePage, h *Hub, cycles int) {
@@ -286,5 +308,205 @@ func TestAQuietStartDoesNotMarkTheFirstRealEventAsReplay(t *testing.T) {
 	}
 	if len(live) != 1 || live[0] != "REAL" {
 		t.Fatalf("the real event was not delivered live: %v", live)
+	}
+}
+
+// TestTheHydrationBurstIsNotDeliveredAsLive is the defect this whole mechanism
+// exists for, reproduced at the size it really has.
+//
+// Measured on a real boot (H93): ~1170 messages and ~2000 chat changes pour
+// through in the first eight seconds, all of them hydration, and the old replay
+// window closed after the FIRST drain. Everything after it was announced as
+// news, so a consumer counting arrivals would have counted eleven hundred
+// historical messages on every boot.
+//
+// The burst here is deliberately spread across MANY drains, because one drain is
+// the only case the old window ever handled.
+func TestTheHydrationBurstIsNotDeliveredAsLive(t *testing.T) {
+	const drains, perDrain = 12, 40
+	batches := make([][]string, 0, drains+1)
+	seq := int64(0)
+	for d := 0; d < drains; d++ {
+		batch := make([]string, 0, perDrain)
+		for i := 0; i < perDrain; i++ {
+			seq++
+			// Hydration: each message is DAYS old, whatever the clock says about
+			// when the page got round to announcing it.
+			batch = append(batch, rowAged("message.added", seq, "OLD", 86400*2))
+		}
+		batches = append(batches, batch)
+	}
+	// And then something genuinely happens.
+	seq++
+	batches = append(batches, []string{row("message.added", seq, "REAL")})
+
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: batches}
+	h := NewHub()
+	var live, replay, unknown []string
+	h.Subscribe(func(e Event) {
+		switch e.Fresh {
+		case FreshnessLive:
+			live = append(live, e.MessageID)
+		case FreshnessReplay:
+			replay = append(replay, e.MessageID)
+		default:
+			unknown = append(unknown, e.MessageID)
+		}
+	})
+	runPump(t, f, h, len(batches))
+
+	if len(live) != 1 || live[0] != "REAL" {
+		t.Fatalf("live = %v; the hydration burst must not contain a single live event, "+
+			"and the one real message must be in there", live)
+	}
+	if len(replay) != drains*perDrain {
+		t.Fatalf("%d of %d hydration events were classified as replay", len(replay), drains*perDrain)
+	}
+	if len(unknown) != 0 {
+		t.Errorf("%d message.added events came back UNKNOWN; they all carry a timestamp "+
+			"and are therefore classifiable", len(unknown))
+	}
+}
+
+// A TYPE WITH NO CAUSAL DISCRIMINATOR SAYS SO. chat.changed carries nothing
+// separating hydration from news, so it is UNKNOWN — never live, and never
+// promoted to live because time passed or the burst subsided.
+func TestATypeWithNoDiscriminatorStaysUnknown(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{
+		{row("chat.changed", 1, "")},
+		{row("chat.changed", 2, ""), row("chat.changed", 3, "")},
+	}}
+	h := NewHub()
+	var got []Freshness
+	h.Subscribe(func(e Event) { got = append(got, e.Fresh) })
+	runPump(t, f, h, 2)
+
+	if len(got) != 3 {
+		t.Fatalf("delivered %d events, want 3", len(got))
+	}
+	if got[0] != FreshnessReplay {
+		t.Errorf("the first drain is %s, want %s", got[0], FreshnessReplay)
+	}
+	for _, f := range got[1:] {
+		if f != FreshnessUnknown {
+			t.Errorf("a chat.changed after the first drain is %s; there is nothing about it "+
+				"that proves it is news", f)
+		}
+	}
+}
+
+// UNKNOWN READS AS REPLAY FOR EVERY OLD CONSUMER, and that direction is the one
+// that cannot hurt: skipping something that was new costs a missed event, while
+// counting eleven hundred historical messages as arrivals corrupts a total.
+func TestUnknownIsConservativeForTheOldBoolean(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{
+		{},
+		{row("chat.changed", 1, ""), row("message.added", 2, "REAL"),
+			rowAged("message.added", 3, "OLD", 86400)},
+	}}
+	h := NewHub()
+	seen := map[string]Event{}
+	h.Subscribe(func(e Event) { seen[string(e.Fresh)] = e })
+	runPump(t, f, h, 2)
+
+	for _, want := range []Freshness{FreshnessUnknown, FreshnessLive, FreshnessReplay} {
+		e, ok := seen[string(want)]
+		if !ok {
+			t.Fatalf("no %s event was delivered; the three states are not all reachable", want)
+		}
+		if wantReplay := want != FreshnessLive; e.Replay != wantReplay {
+			t.Errorf("%s carries Replay=%t, want %t", want, e.Replay, wantReplay)
+		}
+	}
+}
+
+// A MESSAGE ANNOUNCED IN THE SAME SECOND IT WAS CREATED IS THE FRESHEST CASE
+// THERE IS, and the first classifier called it UNKNOWN.
+//
+// It guarded on AgeSeconds > 0, which conflates "no timestamp" with "zero
+// seconds old". A send and its own echo land in the same second routinely.
+func TestAZeroSecondOldMessageIsLive(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{
+		{},
+		{rowAged("message.added", 1, "INSTANT", 0)},
+	}}
+	h := NewHub()
+	var got Freshness
+	h.Subscribe(func(e Event) { got = e.Fresh })
+	runPump(t, f, h, 2)
+	if got != FreshnessLive {
+		t.Fatalf("a message announced in the second it was created is %s, want %s", got, FreshnessLive)
+	}
+}
+
+// THE WINDOW IS NOT A CLOCK. Nothing about the classifier's answer depends on
+// when the pump ran, only on what the message says about itself — which is what
+// separates this from the rate heuristic it replaces.
+func TestFreshnessDoesNotDependOnWhenThePumpRan(t *testing.T) {
+	if strings.Contains(classifierSource(t), "time.Now()") {
+		t.Fatal("classify reads the clock; freshness would then depend on when the pump " +
+			"happened to poll, which is the defect this replaces")
+	}
+}
+
+// classifierSource returns the body of classify, so a test can assert about what
+// it is allowed to consult.
+func classifierSource(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile("ingress.go")
+	if err != nil {
+		t.Fatalf("read ingress.go: %v", err)
+	}
+	src := string(body)
+	i := strings.Index(src, "func classify(")
+	if i < 0 {
+		t.Fatal("classify is gone")
+	}
+	return src[i:]
+}
+
+// A RELOAD REPEATS THE CYCLE. The page's buffer and handlers are gone, the pump
+// reinstalls, and the collections refill from history — so the first drain after
+// a reinstall is replay again, exactly as it is after the first install.
+//
+// Without this, a session that reloads mid-life would announce its entire
+// history a second time, and the freshness rule would have fixed the boot case
+// only.
+func TestAReloadRestartsTheReplayWindow(t *testing.T) {
+	f := &fakePage{
+		// Fresh installs at cycle 1 and again at cycle 3: a reload in between.
+		freshAt: map[int]bool{1: true, 3: true},
+		rows: [][]string{
+			{rowAged("message.added", 1, "HIST1", 86400)},
+			{row("message.added", 2, "REAL")},
+			{rowAged("message.added", 3, "HIST2", 86400), row("message.added", 4, "REAL2")},
+		},
+	}
+	h := NewHub()
+	var got []Freshness
+	var ids []string
+	h.Subscribe(func(e Event) {
+		got = append(got, e.Fresh)
+		ids = append(ids, e.MessageID)
+	})
+	runPump(t, f, h, 3)
+
+	if len(got) != 4 {
+		t.Fatalf("delivered %v (%d events), want 4", ids, len(got))
+	}
+	// Drain 1 (first install), drain 3 (first after reinstall): replay.
+	if got[0] != FreshnessReplay {
+		t.Errorf("the first drain is %s, want %s", got[0], FreshnessReplay)
+	}
+	if got[1] != FreshnessLive {
+		t.Errorf("the event between the installs is %s, want %s", got[1], FreshnessLive)
+	}
+	// THE WHOLE DRAIN AFTER A REINSTALL IS REPLAY, including the message that
+	// would otherwise read as fresh — because after a reload the page cannot
+	// distinguish what it is refilling from what just happened, and neither can
+	// this bus.
+	if got[2] != FreshnessReplay || got[3] != FreshnessReplay {
+		t.Errorf("the drain after the reinstall is %s/%s, want both %s",
+			got[2], got[3], FreshnessReplay)
 	}
 }

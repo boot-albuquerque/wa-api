@@ -93,6 +93,39 @@ const (
 	SessionStateChanged Type = "session.state_changed"
 )
 
+// Freshness says whether an event is NEWS.
+//
+// WHY THREE STATES AND NOT A BOOLEAN. A boolean forces every event into either
+// "history" or "live", and this bus cannot honestly make that call for most of
+// them. Measured (H93): a freshly booted session pushes ~1170 messages and ~2000
+// chat changes through in the first eight seconds, all of them hydration, and
+// the replay window that was supposed to cover it closes after the FIRST drain.
+//
+// The explicit signal was looked for and does not exist for this purpose (H96):
+// WAWebHistorySyncProgressGetters answers inProgress=false and progress=100
+// from the first second, because it tracks the SERVER's history sync for the
+// account, not this session's local hydration. getInitialHistorySyncComplete is
+// a persisted account flag and reads true before anything has loaded.
+//
+// So the third state is the honest one, and the rule that comes with it is
+// absolute: UNKNOWN IS NEVER PROMOTED TO LIVE BY TIME OR BY RATE. "The events
+// stopped arriving so the rest must be live" is precisely the heuristic that
+// would make this bus lie again, more quietly.
+type Freshness string
+
+const (
+	// FreshnessReplay is history: the page had it before this pump existed.
+	FreshnessReplay Freshness = "replay"
+	// FreshnessLive is news, PROVEN so by something causal about the event
+	// itself — not by when it arrived.
+	FreshnessLive Freshness = "live"
+	// FreshnessUnknown is an event this bus cannot classify. It is not a
+	// failure and it is not a maybe-live: it is the accurate answer for a type
+	// with no causal discriminator, and a consumer that must not double-count
+	// has to treat it as history.
+	FreshnessUnknown Freshness = "unknown"
+)
+
 // Source says where an event came from, because the two origins do not share a
 // clock or a sequence and a subscriber that sorts by Seq needs to know which
 // events are even comparable.
@@ -167,9 +200,18 @@ type Event struct {
 	// diagnosis and never used to decide anything — invariant 6 keeps decisions
 	// on this side.
 	At time.Time
-	// Replay marks an event the page had buffered before this subscriber
-	// existed. A consumer that treats a replayed "message arrived" as new will
-	// double-count, and this is the only warning it gets.
+	// Fresh says whether this event is news; see Freshness for why it has three
+	// values rather than two.
+	Fresh Freshness
+	// Replay is the conservative reading of Fresh, kept as a field so that every
+	// consumer written before Freshness existed keeps working — and keeps
+	// working SAFELY.
+	//
+	// It is true for anything not PROVEN live, which means an UNKNOWN event
+	// reads as replay. That is deliberate and it is the direction that cannot
+	// hurt: a consumer skipping replay may now skip something that was in fact
+	// new, and one that trusted the old boolean would otherwise have counted
+	// eleven hundred historical messages as arrivals on every boot.
 	Replay bool
 
 	// ChatJID is which conversation it happened in. Empty when not applicable.
@@ -185,6 +227,21 @@ type Event struct {
 	// BodyLen is the message body's length in UTF-16 units — the page's own
 	// measure — never the body.
 	BodyLen int
+	// Aged says the message carried its own timestamp, which is what makes
+	// AgeSeconds meaningful.
+	//
+	// IT EXISTS BECAUSE ZERO IS AMBIGUOUS, and the first version of the
+	// classifier was wrong about exactly that: it guarded on AgeSeconds > 0,
+	// treating "no timestamp" and "created in the same second it was announced"
+	// as the same thing — and the second is the FRESHEST case there is. A
+	// message sent and delivered within one second read as UNKNOWN.
+	Aged bool
+	// AgeSeconds is how old the MESSAGE ITSELF was when the page announced it,
+	// from the message's own timestamp. It is the causal discriminator behind
+	// FreshnessLive for message.added: a message created two days ago and
+	// announced now is hydration, whatever the clock says about the
+	// announcement. Zero when the type carries no message.
+	AgeSeconds int64
 
 	// CallID and CallerJID identify a call, for the call events. A caller is a
 	// phone number, carried for routing and never rendered.
@@ -204,8 +261,8 @@ type Event struct {
 }
 
 func (e Event) String() string {
-	return fmt.Sprintf("events.Event(type=%s origin=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d call=%t caller=%t video=%t outgoingCall=%t state=%s reason=%s)",
-		e.Type, e.Origin, e.Seq, e.Replay, e.ChatJID != "", e.MessageID != "", e.FromMe, e.Kind, e.Ack, e.BodyLen,
+	return fmt.Sprintf("events.Event(type=%s origin=%s fresh=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d call=%t caller=%t video=%t outgoingCall=%t state=%s reason=%s)",
+		e.Type, e.Origin, e.Fresh, e.Seq, e.Replay, e.ChatJID != "", e.MessageID != "", e.FromMe, e.Kind, e.Ack, e.BodyLen,
 		e.CallID != "", e.CallerJID != "", e.Video, e.OutgoingCall, e.State, e.Reason)
 }
 
@@ -362,7 +419,11 @@ func (h *Hub) deliver(e Event) {
 // Seq stays zero: see SourceLocal.
 func (h *Hub) PublishSessionState(t Type, state, reason string) {
 	h.deliver(Event{
-		Type:   t,
+		Type: t,
+		// A LIFECYCLE FACT IS ALWAYS NEWS. This process observed it happening,
+		// in this process, just now — which is the strongest causal evidence
+		// anything on this bus has.
+		Fresh:  FreshnessLive,
 		Origin: SourceLocal,
 		At:     time.Now(),
 		State:  state,

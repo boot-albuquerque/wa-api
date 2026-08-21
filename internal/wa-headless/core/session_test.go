@@ -750,10 +750,24 @@ func TestStartSession_NotReadyFailure_PreservesFinalSnapshot(t *testing.T) {
 	blankPage := `<html><body>nothing here, ever</body></html>`
 	cfg := baseConfig(t, pageServer(t, "/blank-snapshot", blankPage))
 
-	// A short external ctx keeps this test fast: it stays sovereign over
-	// spa.DefaultSettleBudget (60s), so the boot fails once THIS deadline
-	// runs out rather than the full internal budget.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// THE CALLER'S CONTEXT STAYS SOVEREIGN OVER THE SETTLE BUDGET — that is the
+	// property. How it is expressed had to change.
+	//
+	// It used to be three seconds for the WHOLE boot, on the reasoning that a
+	// short ctx keeps the test fast. That silently assumed a machine on which
+	// launching Chrome and opening a tab fit inside three seconds. Under -race,
+	// alongside every other package, it does not: this failed at stage launch,
+	// open_tab and navigate on three consecutive runs, never reaching the settle
+	// loop it exists to test. Same family as F100 — a fixed short deadline that
+	// encodes a machine's speed.
+	//
+	// The property is preserved by making the two budgets far apart instead of
+	// making the ctx small: the settle budget is minutes, the ctx is a fraction
+	// of it, so a failure at StageNotReady can only mean the CONTEXT cut the
+	// settle short. The generous half of the pair is the one that is safe to
+	// grow.
+	cfg.SettleBudget = 5 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	sess, err := StartSession(ctx, cfg)

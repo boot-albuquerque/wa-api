@@ -91,7 +91,10 @@ func (p *Pump) Run(ctx context.Context) error {
 			return err
 		}
 		for _, e := range batch {
-			e.Replay = firstAfterInstall
+			e.Fresh = classify(e, firstAfterInstall)
+			// CONSERVATIVE BY CONSTRUCTION: anything not PROVEN live reads as
+			// replay for every consumer written before Freshness existed.
+			e.Replay = e.Fresh != FreshnessLive
 			p.hub.deliver(e)
 		}
 		// THE WINDOW CLOSES AFTER THE FIRST DRAIN, EMPTY OR NOT. It used to
@@ -162,6 +165,8 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Ack     int    `json:"ack"`
 			BodyLen int    `json:"bodyLen"`
 
+			MsgT     int64  `json:"msgT"`
+
 			Call     string `json:"call"`
 			Peer     string `json:"peer"`
 			Video    bool   `json:"video"`
@@ -209,7 +214,9 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Type: t, Origin: SourcePage, Seq: r.Seq, At: time.UnixMilli(r.At),
 			ChatJID: r.Chat, MessageID: r.Msg, FromMe: r.FromMe,
 			Kind: r.Kind, Ack: r.Ack, BodyLen: r.BodyLen,
-			CallID: r.Call, CallerJID: r.Peer, Video: r.Video,
+			Aged:       r.MsgT > 0,
+			AgeSeconds: ageSeconds(r.MsgT, r.At),
+			CallID:     r.Call, CallerJID: r.Peer, Video: r.Video,
 			// A call the account PLACED is not an incoming call, and the two
 			// arrive through the same collection. FromMe carries the difference
 			// so a subscriber does not have to know that.
@@ -271,7 +278,14 @@ func installScript() string {
 				fromMe: !!(id && id.fromMe),
 				kind: (typeof m.type === 'string') ? m.type : '',
 				ack: (typeof m.ack === 'number') ? m.ack : 0,
-				bodyLen: (m && typeof m.body === 'string') ? m.body.length : 0
+				bodyLen: (m && typeof m.body === 'string') ? m.body.length : 0,
+				// THE MESSAGE'S OWN TIMESTAMP, which is the only causal
+				// discriminator this bus has. A message created two days ago and
+				// announced now is hydration; one created a second ago is news.
+				// It is the message's field, not a clock read for a decision —
+				// invariant 6 is about DECIDING in the page, and this only
+				// reports.
+				msgT: (m && typeof m.t === 'number') ? m.t : 0
 			};
 		};
 
@@ -407,3 +421,52 @@ const uninstallScript = `JSON.stringify((() => {
 	window[KEY] = undefined;
 	return { removed: true };
 })())`
+
+// LiveWindow is how recent a message's OWN timestamp must be for its arrival to
+// count as news.
+//
+// It is not a rate heuristic and the difference matters: a rate heuristic asks
+// "have events slowed down?", which the hydration burst would answer wrong. This
+// asks "was this message created at essentially the moment it was announced?",
+// which is a property of the message and is false for every historical one,
+// however fast or slow they arrive.
+//
+// Sixty seconds is generous on purpose. The cost of being too generous is that a
+// message delivered after a minute of queueing reads as live, which is what it
+// is; the cost of being too tight would be calling real arrivals history.
+var LiveWindow int64 = 60
+
+// ageSeconds is how old the message was when the page announced it. It can be
+// NEGATIVE when the sender's clock runs ahead, which is why the window is
+// applied in both directions rather than as a floor.
+func ageSeconds(msgT, atMillis int64) int64 {
+	if msgT <= 0 || atMillis <= 0 {
+		return 0
+	}
+	return atMillis/1000 - msgT
+}
+
+// classify decides an event's freshness.
+//
+// THE ONLY WAY TO REACH LIVE IS THROUGH EVIDENCE ABOUT THE EVENT ITSELF. There
+// is deliberately no branch here that reads a clock, a counter or a rate: the
+// whole defect this replaces was a window that closed on a schedule the page did
+// not keep to.
+func classify(e Event, firstDrain bool) Freshness {
+	if firstDrain {
+		// The page had these before this pump existed. Whatever they are, this
+		// subscriber did not cause them and cannot have been waiting for them.
+		return FreshnessReplay
+	}
+	if e.Type == MessageAdded && e.Aged {
+		if e.AgeSeconds <= LiveWindow && e.AgeSeconds >= -LiveWindow {
+			return FreshnessLive
+		}
+		return FreshnessReplay
+	}
+	// NO CAUSAL DISCRIMINATOR, NO CLAIM. chat.changed, message.ack and the rest
+	// carry nothing that separates hydration from news, so they say so. This is
+	// the branch the instruction was about: they stay UNKNOWN until there is
+	// evidence, not until enough time has passed.
+	return FreshnessUnknown
+}

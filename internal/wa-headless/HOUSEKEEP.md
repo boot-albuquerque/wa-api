@@ -7566,6 +7566,32 @@ investigação muito mais barata.
 **o doc dele agora diz que não funciona** e lista as cinco eliminações. Uma
 capacidade que não faz nada e não diz isso é pior que uma ausente.
 
+### Sexta eliminação, e o fim da investigação por ordem da orquestração
+
+A hipótese (b) foi executada como investigação **limitada**: o app tem um ponto
+de decisão explícito para "não deu para ligar", e se a recusa fosse interna a
+razão estaria lá.
+
+```
+WAWebVoipCallBlockedModals.showCallBlockedModalIfNeeded()  ->  false
+```
+
+**A própria SPA diz que a chamada NÃO está bloqueada.** As quatro funções do
+módulo têm aridade zero, então nem sequer há um alvo por quem a recusa pudesse
+ser específica.
+
+Seis eliminações, nenhuma causa acionável. A ordem foi explícita: não entrar em
+(a) — instanciar componente React —, marcar a família e seguir. *"Reabra apenas
+com evidência nova; não continue enumerando hipóteses."*
+
+`INCOMING_CALL` fica **`BLOCKED`**, que é o estado do vocabulário para "atacado,
+medido, e impedido por algo fora do nosso alcance". Depois de seis medições,
+incluindo o veredito do próprio aplicativo, essa é a leitura honesta: o
+impedimento está no caminho VOIP da SPA, que nós dirigimos e não inspecionamos.
+
+**Condição de reabertura**: evidência nova — não hipótese nova. Concretamente,
+qualquer coisa que faça `pendingOutgoingCall` deixar de ser `null`.
+
 ### O que sobra para tentar, quando houver ideia nova
 
 - O app pode exigir um COMPONENTE montado, não só a aba navegada — a H78 mostrou
@@ -7578,3 +7604,108 @@ capacidade que não faz nada e não diz isso é pior que uma ausente.
 **Status**: não entregue — cinco hipóteses eliminadas, causa isolada até o ponto
 de "a função devolve `undefined` e nada reage", e o campo que mudaria nomeado
 para quem continuar.
+
+---
+
+## H96 — EVENT-REPLAY-FIX: o sinal explícito existe e mede outra coisa
+
+**Data**: 2026-08-21.
+**Contexto**: a orquestração pôs isto na frente de polls/votes, com a razão
+escrita: *"deixar ~2400 eventos históricos por boot classificados como live é
+mais grave do que adicionar nova superfície."*
+
+### A ordem era procurar um barrier explícito. Procurei, e ele não serve
+
+A instrução foi específica: opção (i), um sinal da própria SPA de fim de
+sincronização — **e nada de heurística por queda de taxa**. A varredura de
+módulos achou dois candidatos de nome perfeito:
+
+| candidato | o que respondeu |
+|---|---|
+| `WAWebUserPrefsHistorySync.getInitialHistorySyncComplete()` | **`true` em t+0**, antes de qualquer coisa carregar — é flag PERSISTIDA da conta, não desta sessão |
+| `WAWebHistorySyncProgressGetters.getInProgress(model)` | **`false` em t+0**, e `getProgress` devolve `100` a partir de t+1 |
+
+E enquanto os dois diziam "acabou", a coleção de mensagens ia de **133 para
+1170 em oito segundos**.
+
+> Os getters rastreiam a sincronização de histórico do SERVIDOR para a conta, que
+> de fato já terminou há muito. Não rastreiam a **hidratação local desta
+> sessão**, que é o que inunda o barramento. O nome é o mesmo e a coisa é outra.
+
+Registro também o meu erro de instrumento: a primeira leitura chamou os getters
+sem argumento e recebeu três `threw`. Getter que lança não é sinal ausente — é
+sinal perguntado errado. Com o modelo (`getHistorySyncProgressModel()`) eles
+respondem, e a resposta é que derruba a opção (i).
+
+### Então: três estados, como mandado
+
+`REPLAY | LIVE | UNKNOWN`, com a regra que veio junto e é absoluta:
+**UNKNOWN nunca vira LIVE por tempo nem por taxa.**
+
+O único caminho para LIVE é evidência **causal sobre o próprio evento**. Para
+`message.added` isso existe: o carimbo da mensagem. Uma mensagem criada há dois
+dias e anunciada agora é hidratação, por mais devagar que os eventos cheguem —
+que é exatamente o que uma heurística de taxa erraria.
+
+Para `chat.changed` e os demais não existe discriminador, e eles dizem isso.
+
+**`Replay` continua existindo e ficou CONSERVADOR**: é `true` para tudo que não
+foi PROVADO vivo. Todo consumidor escrito antes disto continua funcionando, e
+funcionando do lado que não machuca — pular algo que era novo custa um evento
+perdido; contar mil e cem mensagens antigas como chegadas corrompe um total.
+
+### Prova ao vivo, contra a explosão de verdade
+
+```
+hidratação: {replay:714, unknown:2864}  total 3578   LIVE: 0
+            um consumidor antigo contou 0 como novidade
+
+depois do envio A->B: {live:1, replay:764, unknown:3389}
+            um consumidor antigo contou 1
+```
+
+As quatro propriedades exigidas: a explosão não contém nenhum live; uma ação
+depois dela produz exatamente um; a recarga reinicia a janela (unitário); e
+nenhum consumidor antigo recebe histórico como novo.
+
+### Um defeito meu, e ele é instrutivo
+
+O primeiro classificador guardava em `AgeSeconds > 0`, usando o zero como "não
+tem carimbo". **Zero é a idade mais fresca que existe** — um envio e o eco dele
+caem no mesmo segundo rotineiramente —, então a mensagem mais nova possível era
+classificada `UNKNOWN`. Separado num campo `Aged`, e travado por teste.
+
+E o dublê da suíte não emitia `msgT`, então dois testes existentes falharam
+acusando o classificador de um defeito que ele não tinha. **Dublê menos fiel que
+a produção** — o espelho da armadilha do dublê permissivo, segunda vez nesta
+sessão.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| `UNKNOWN` virando `LIVE` | `TestATypeWithNoDiscriminatorStaysUnknown` | `a chat.changed after the first drain is live` |
+| voltar ao guarda `AgeSeconds > 0` | `TestAZeroSecondOldMessageIsLive` | `is unknown, want live` |
+| remover a janela do primeiro drain | `TestTheFirstBatchAfterAnInstallIsReplay` | `the first batch was not marked replay: []` |
+
+### E mais uma F100, em forma nova
+
+O gate ficou vermelho em `TestStartSession_NotReadyFailure_PreservesFinalSnapshot`,
+falhando em `launch`, `open_tab` e `navigate` em três execuções seguidas — nunca
+chegando ao laço de settle que ele existe para testar.
+
+O teste dava **três segundos para o boot inteiro**, com o comentário dizendo que
+um ctx curto "mantém o teste rápido". Isso assumia em silêncio uma máquina onde
+subir o Chrome e abrir uma aba cabem em três segundos. Sob `-race`, ao lado de
+todos os outros pacotes, não cabem.
+
+A propriedade — *o contexto de quem chama é soberano sobre o orçamento de
+settle* — foi preservada mudando a EXPRESSÃO dela: o orçamento de settle vai a
+minutos e o ctx a uma fração disso. Uma falha em `StageNotReady` só pode
+significar que o contexto cortou o settle. Metade generosa é a que se pode
+crescer com segurança.
+
+É a mesma família da F100 sob outra roupa: um prazo curto fixo que codifica a
+velocidade de uma máquina.
+
+**Status**: entregue.
