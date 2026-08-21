@@ -132,6 +132,10 @@ func baseConfig(t *testing.T, navigateURL string) StartConfig {
 		ProfileDir:    t.TempDir(),
 		DebuggingPort: freePortT(t),
 		NavigateURL:   navigateURL,
+		// THE HARNESS BOOT BUDGET, not the product one. See
+		// harnessbudget_test.go: F100 recorded seven gate failures that were
+		// the machine being busy rather than the code being wrong.
+		Runner: harnessRunner(),
 	}
 }
 

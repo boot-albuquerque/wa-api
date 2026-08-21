@@ -77,12 +77,21 @@ func pageServer(t *testing.T, body string) string {
 // testing the Holder.
 func holderConfig(t *testing.T, profileDir string) core.StartConfig {
 	t.Helper()
+	r := engine.NewRunner()
+	// THE HARNESS BOOT BUDGET, not the product one. engine.DefaultDeadlines.Boot
+	// stays at 30s because that is a product decision backed by a measurement;
+	// these tests boot dozens of browsers under -race while the rest of the gate
+	// runs, and F100 recorded seven failures that were the machine being busy.
+	// core/harnessbudget_test.go carries the reasoning and the control that
+	// keeps a raised ceiling from becoming no ceiling.
+	r.Policy.Boot = 90 * time.Second
 	return core.StartConfig{
 		BinaryPath:      findChrome(t),
 		ProfileDir:      profileDir,
 		DebuggingPort:   freePort(t),
 		NavigateURL:     pageServer(t, readyPage),
 		RequiredModules: []spa.Module{},
+		Runner:          r,
 	}
 }
 

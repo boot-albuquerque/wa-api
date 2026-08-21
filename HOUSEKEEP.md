@@ -3497,3 +3497,33 @@ ruído já é maior que o defeito.
 e a regra do `CLAUDE.md` manda registrar e PERGUNTAR em vez de consertar de
 graça. A correção sugerida é uma linha por teste — subir o teto de 30 s para 90 s
 nos que cronometram boot de navegador — e está esperando decisão.
+
+---
+
+### CORRIGIDO em 2026-08-21, com a distinção que a decisão exigiu
+
+A orquestração autorizou subir para 90 s **somente nos testes de integração que
+cronometram boot**, e foi explícita: *"registre 90 s como orçamento de harness,
+não SLA do produto"*.
+
+Isso mudou o conserto. O caminho óbvio era subir `engine.DefaultDeadlines.Boot`
+— e teria sido **errado**: 30 s ali é decisão de produto apoiada numa medição
+(SPA utilizável pré-login em 6,1–8,5 s, 30 s de folga para cache frio). Subir
+esse número para calar o gate teria mudado o que o produto promete, como efeito
+colateral de conveniência de teste.
+
+O conserto real usa `StartConfig.Runner`, que já existia: os helpers de teste
+(`core.baseConfig`, `runtime.holderConfig`) injetam um Runner com
+`Policy.Boot = 90s` e tudo o mais em produção.
+
+**Travado por dois testes**, e o segundo foi exigência explícita da decisão:
+
+| teste | o que impede |
+|---|---|
+| `TestTheHarnessBudgetIsNotTheProductBudget` | alguém subir o deadline de PRODUTO para calar o gate; falha se `DefaultDeadlines.Boot` sair de 30 s, ou se o runner do harness mexer em qualquer outro deadline |
+| `TestAHungBootStillTerminatesBounded` | o teto virar ausência de teto — dá um orçamento minúsculo a um boot que nunca fica pronto e prova que ele **desiste dentro do orçamento** |
+
+O segundo usa orçamento pequeno de propósito: a propriedade é "o deadline limita
+a espera", e prová-la com 90 s custaria 90 s para aprender o mesmo.
+
+**Status**: corrigido.
