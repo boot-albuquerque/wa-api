@@ -5989,3 +5989,64 @@ não como prova.
    Isso é limitação real e está dita aqui em vez de descoberta de novo.
 
 **Status**: corrigido.
+
+---
+
+## H78 — marcar conversa como não lida: não entregue, e o que o `Cmd` é de verdade
+
+**Data**: 2026-08-21
+**Contexto**: primeira onda do `COMPLETE-FAMILIES`.
+**Onde**: `internal/wa-headless/capabilities/chats/markunread.go`.
+
+### Duas primitivas medidas, nenhuma marca a conversa
+
+| tentativa | resultado entre sessões |
+|---|---|
+| `sendConversationSeen({chat, key, unreadDelta: -1})` | 0 -> 0 |
+| `Cmd.markChatUnread(chat, true)` | 0 -> 0 |
+
+A primeira veio de supor que marcar não-lida fosse marcar-lida com o número
+invertido. A segunda veio do chamador do próprio app, encontrado por grep.
+
+### O achado estrutural, que vale muito além deste item
+
+```js
+i.markChatUnread = function(t, n) { this.trigger("mark_chat_unread", …) }
+```
+
+**O `Cmd` é barramento de EVENTOS.** Um verbo dele só faz algo se houver ouvinte
+ligado àquele nome. Isso explica o que até aqui parecia arbitrário:
+`Cmd.sendStarMsgs` funciona (ouvinte no núcleo sempre carregado) e
+`Cmd.markChatUnread` não (ouvinte num pedaço de UI que sessão headless não
+carrega).
+
+**Para toda chamada futura ao `Cmd`**: "não lança e não faz nada" significa
+ouvinte ausente, não argumento errado. Está no `ARMADILHAS.md`.
+
+### Um erro meu de método, que escondeu a resposta por uma hora
+
+Levantei a superfície do `Cmd` filtrando por `/^send/`, porque tudo que eu tinha
+dirigido ali se chamava `sendAlgumaCoisa`. O filtro codificou uma suposição sobre
+nomes e escondeu `markChatUnread` do meu próprio levantamento. Levantamento
+estreitado por um palpite é um palpite.
+
+### O que a verificação entre sessões evitou
+
+A primeira versão do teste afirmava **na mesma sessão** e reportou o chat com 22
+não-lidas antes e depois. Uma sessão nova leu o mesmo chat como **0**. Sem a
+verificação entre sessões eu teria concluído "a marcação falhou porque o contador
+não moveu", quando o contador não move de qualquer jeito.
+
+**Consequência registrada e não escondida**: a pós-condição do `MarkRead` afirma
+que o contador moveu NA MESMA SESSÃO — exatamente a leitura que esta medição
+mostrou não confiável. A H52 provou o `MarkRead` contra um chat em que o contador
+moveu; se isso generaliza é pergunta em aberto.
+
+### O que a próxima tentativa herda
+
+As duas primitivas descartadas com evidência, o fato de o `Cmd` precisar de
+ouvinte, e o campo certo (`chat.markedUnread`, indefinido até alguém marcar). O
+que falta é uma quinta ideia — provavelmente a mesma instrumentação de UI que a
+orquestração já autorizou como medição para localização e vCard.
+
+**Status**: não entregue.

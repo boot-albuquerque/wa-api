@@ -1356,3 +1356,29 @@ explicação elegante para os dois sintomas contraditórios desta entrada: uma m
 envenenada por tentativa anterior. A sonda mediu `memoBefore: ["neither"]` — não
 existe memo. A hipótese caiu, está registrada como caída, e o travamento original
 segue **sem explicação** em vez de receber uma causa inventada.
+
+## `Cmd` é barramento de EVENTOS, não superfície de ações
+
+**Medido em 2026-08-21 (H78), depois de duas tentativas entre sessões.**
+
+```js
+i.markChatUnread = function(t, n) { this.trigger("mark_chat_unread", unproxy(t), n) }
+```
+
+Um verbo do `Cmd` **dispara um evento**. Ele só faz alguma coisa quando existe um
+ouvinte ligado àquele nome.
+
+Isso explica um comportamento que até aqui parecia arbitrário: `Cmd.sendStarMsgs`
+funciona e `Cmd.markChatUnread` não faz nada. O ouvinte do favoritar está no
+núcleo sempre carregado; o do marcar-não-lida vive num pedaço de UI que uma
+sessão headless nunca carrega.
+
+**Consequência para toda chamada futura ao `Cmd`**: uma que "não lança e não faz
+nada" não é um argumento errado — é um ouvinte ausente. Não gaste tentativas
+variando argumentos.
+
+**E um erro meu de método, que escondeu a resposta por uma hora**: eu tinha
+listado a superfície do `Cmd` filtrando por `/^send/`, porque tudo que eu havia
+dirigido ali se chamava `sendAlgumaCoisa`. O filtro codificou uma suposição sobre
+nomes e escondeu `markChatUnread`. **Levantamento estreitado por um palpite é um
+palpite.**
