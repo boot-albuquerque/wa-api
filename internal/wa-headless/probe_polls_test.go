@@ -66,6 +66,25 @@ func TestProbePolls(t *testing.T) {
 			const Votes = load('WAWebPollsVotesSchema');
 			const Send = load('WAWebPollsSendVoteMsgAction');
 			load('WAWebPollsVoteStore');
+			// THE ENUM LIVES IN THE SINGULAR MODULE, and that is why H69 never
+			// found it: everything else in this family is WAWebPolls*, and the
+			// creation utilities are WAWebPoll*CreationUtils. One letter.
+			try {
+				const CU = window.require('WAWebPollCreationUtils');
+				out.creationUtils = { keys: Object.keys(CU) };
+				for (const k of Object.keys(CU)) {
+					try {
+						const v = CU[k];
+						if (v && typeof v === 'object') {
+							out.creationUtils['enum_' + k] = JSON.stringify(v).slice(0, 200);
+						} else if (typeof v === 'function') {
+							out.creationUtils['fn_' + k] = 'arity ' + v.length;
+						} else {
+							out.creationUtils['val_' + k] = String(v);
+						}
+					} catch (e) {}
+				}
+			} catch (e) { out.creationUtils = 'ABSENT: ' + safe(e); }
 			if (Send && Send.sendVote) out.arity.sendVote = Send.sendVote.length;
 			if (Votes && Votes.getTable) {
 				out.arity.getTable = Votes.getTable.length;

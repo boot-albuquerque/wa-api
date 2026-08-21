@@ -283,23 +283,32 @@ func pollScript(toJID, question, optionsJSON string, multi bool) string {
 			// add-option path builds, and it keys a Set on option.name.
 			const filteredOptions = names.map((name, i) => ({ name: name, localId: i }));
 
-			// WHERE contentType LIVES WAS NEVER MEASURED. Look in the plausible
-			// places and report which answered; a number invented here would be a
-			// number nobody can check. Omitting it is the honest default.
-			let contentType, typeSource = 'omitted';
-			for (const [mod, key] of [['WAWebMsgType', 'PollContentType'],
-			                          ['WAWebMsgType', 'POLL_CONTENT_TYPE'],
-			                          ['WAWebPollsGatingUtils', 'PollContentType']]) {
-				try {
-					const m = window.require(mod);
-					const e = m && m[key];
-					if (e) {
-						contentType = e.TEXT || e.Text || e[Object.keys(e)[0]];
-						typeSource = mod + '.' + key;
-						break;
-					}
-				} catch (err) {}
-			}
+			// THE TYPE AND THE CONTENT TYPE, FROM THE PAGE'S OWN ENUMS.
+			//
+			// H69 looked for the content type in three plausible places and found
+			// none, and omitted both fields — which was the honest default at the
+			// time and, measured much later, the reason nothing ever left: the
+			// poll was created locally and sat at ack 0 forever (H98).
+			//
+			// They live in WAWebPollCreationUtils — SINGULAR "Poll", while every
+			// other module in this family is "Polls". One letter is why three
+			// searches missed it (H101):
+			//
+			//	PollType        { POLL, QUIZ }
+			//	PollContentType { TEXT, IMAGE }
+			//
+			// Read from the page rather than written here, so a build that
+			// renames them fails loudly instead of sending a string that means
+			// nothing.
+			let contentType, pollType, typeSource = 'omitted';
+			try {
+				const CU = window.require('WAWebPollCreationUtils');
+				if (CU && CU.PollType && CU.PollContentType) {
+					pollType = CU.PollType.POLL;
+					contentType = CU.PollContentType.TEXT;
+					typeSource = 'WAWebPollCreationUtils';
+				}
+			} catch (err) {}
 
 			// EVERY ID ALREADY IN THIS CHAT, so the created poll is identified
 			// by absence-from-a-set rather than by time — the check that
@@ -321,6 +330,7 @@ func pollScript(toJID, question, optionsJSON string, multi bool) string {
 			// belong to the UI helper H69 mistook for this function.
 			const poll = { name: ` + strconv.Quote(question) + `, options: filteredOptions };
 			if (contentType !== undefined) { poll.contentType = contentType; }
+			if (pollType !== undefined) { poll.type = pollType; }
 			await A.sendPollCreation({ poll: poll, chat: chat,
 				quotedMsg: null, isWamoSub: false });
 

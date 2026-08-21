@@ -75,6 +75,11 @@ func TestProbeModuleRegistry(t *testing.T) {
 		window.__waHeadlessModProbe = { stage: 'pending' };
 		const pattern = new RegExp(PATTERN_PLACEHOLDER);
 		const GREP = GREP_PLACEHOLDER;
+		// HOW MUCH CONTEXT AROUND A HIT. Fixed at 260 until H101, where the
+		// answer sat in the HEAD of a minified function and 260 characters showed
+		// only its tail — which is precisely the truncation H69 recorded as "the
+		// bundle grep cut it off" and then stopped at.
+		const WINDOW = WINDOW_PLACEHOLDER;
 		const hits = [];
 		(async () => {
 			try {
@@ -97,7 +102,7 @@ func TestProbeModuleRegistry(t *testing.T) {
 						if (GREP) {
 							let at = -1;
 							while ((at = txt.indexOf(GREP, at + 1)) !== -1 && hits.length < 6) {
-								hits.push(txt.slice(Math.max(0, at - 260), at + 260));
+								hits.push(txt.slice(Math.max(0, at - WINDOW), at + WINDOW));
 							}
 						}
 					} catch (e) { failed++; }
@@ -135,6 +140,13 @@ func TestProbeModuleRegistry(t *testing.T) {
 	}
 	kick := strings.Replace(script, "PATTERN_PLACEHOLDER", strconv.Quote(pattern), 1)
 	kick = strings.Replace(kick, "GREP_PLACEHOLDER", strconv.Quote(os.Getenv("WA_PROBE_MODMAP_GREP")), 1)
+	window := 260
+	if raw := os.Getenv("WA_PROBE_MODMAP_WINDOW"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			window = n
+		}
+	}
+	kick = strings.Replace(kick, "WINDOW_PLACEHOLDER", strconv.Itoa(window), 1)
 	t.Logf("pattern: %s", pattern)
 
 	var raw string

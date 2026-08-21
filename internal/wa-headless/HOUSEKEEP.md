@@ -7970,3 +7970,63 @@ deste pacote mencionar as funções de envio.
 
 **Status**: parcialmente entregue — leitura provada ao vivo contra uma conta sem
 status; o não-vazio depende de um ato cujo alcance é a agenda inteira.
+
+---
+
+## H101 — o `pollType` era mesmo o suspeito nomeado, e não era a causa
+
+**Data**: 2026-08-21.
+**Contexto**: investigação LIMITADA autorizada pela orquestração — *"uma medição
+da chamada real da SPA/UI para descobrir o valor exato, aplicar e exigir ack>=1;
+se isso não resolver, registre e não abra uma sequência de hipóteses cegas."*
+
+### A medição encontrou o que a H69 disse que faltava
+
+A H69 fechou com: *"O que falta: o que `createPollCreationMsgData` desestrutura.
+Exige a cabeça do corpo do gerador, que o grep do bundle truncou."*
+
+O grep truncava porque a janela era de **260 caracteres fixos**, e a resposta
+estava na CABEÇA de uma função minificada cujo corpo tem mais de mil. Parametrizei
+a janela e a função apareceu inteira:
+
+```js
+createPollCreationMsgData({chat, isWamoSub, poll, quotedMsg})
+  s = yield d(poll)            // um validador/normalizador
+  y = s.pollType               // <- daqui sai o pollType
+```
+
+E o enum estava em **`WAWebPollCreationUtils`** — **singular**. Todo o resto da
+família é `WAWebPolls*`. **Uma letra** é a razão de três buscas o terem perdido,
+inclusive a da H69.
+
+```
+PollType         { POLL, QUIZ }
+PollContentType  { TEXT, IMAGE }
+```
+
+### Aplicado, lido da própria página — e não resolveu
+
+O objeto agora carrega `type: PollType.POLL` e `contentType: PollContentType.TEXT`,
+lidos do módulo em vez de escritos aqui, para que um build que os renomeie falhe
+alto em vez de mandar uma string sem sentido.
+
+**O ack continua 0.** O `pollType` era o suspeito nomeado e **não é a causa**.
+
+### Por que isto para aqui
+
+A instrução foi explícita, e ela está certa: uma hipótese nomeada merece uma
+medição; a próxima seria a primeira de uma sequência cega. O que ficou é melhor
+do que era — a omissão conhecida sumiu, o `typeSource` reporta o módulo real em
+vez de `omitted`, e a próxima pessoa não gasta a busca que eu gastei.
+
+**O que ainda não foi olhado**, escrito para quem continuar: `d` é um
+**validador**, e `WAWebPollsProtoUtils` exporta `validatePollCreationMessage` e
+`validatePhotoPollCreationMessage`. Se a validação recusar em silêncio, a razão
+está lá. Não é hipótese cega — é o único ponto do caminho que ainda não foi lido.
+
+**Ganho de instrumento**: `WA_PROBE_MODMAP_WINDOW` torna a janela do grep
+ajustável. A H69 registrou "o grep truncou" e parou; a mesma limitação teria
+truncado de novo hoje.
+
+**Status**: não entregue quanto ao envio — suspeito nomeado perseguido, medido e
+DESCARTADO, com o próximo ponto de leitura nomeado.
