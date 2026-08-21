@@ -413,7 +413,7 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 		}
 		call := f.life.CreateGroupCalls[0]
 		if call.Name != "meu grupo" || len(call.Participants) != 2 ||
-			call.Participants[0] != domain.JID("55A") || call.Participants[1] != domain.JID("55B") {
+			call.Participants[0] != domain.JID("55A@s.whatsapp.net") || call.Participants[1] != domain.JID("55B@s.whatsapp.net") {
 			t.Errorf("chamada = %+v", call)
 		}
 		assertNoLevel(t, f.log, contractsfake.LevelError)

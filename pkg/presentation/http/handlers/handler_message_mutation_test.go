@@ -240,7 +240,7 @@ func TestMessageMutation_BothDeleteRoutesBehaveIdentically(t *testing.T) {
 	for _, path := range deleteRoutePaths {
 		cm := &contractsfake.ChatMessenger{
 			RevokeMessageFunc: func(_ context.Context, _ string, target domain.JID, messageID string) (domain.MessageSendResult, error) {
-				if target != domain.JID("5511999999999") {
+				if target != domain.JID("5511999999999@s.whatsapp.net") {
 					t.Errorf("%s: target: got %q", path, target)
 				}
 				if messageID != "3EB0ABC123" {
@@ -295,7 +295,7 @@ func TestMessageMutation_RevokeTargetsOwnMessage(t *testing.T) {
 				t.Fatalf("RevokeMessage chamado %d vez(es), quero 1", n)
 			}
 			call := cm.RevokeMessageCalls[0]
-			if call.Target != domain.JID("5511999999999") {
+			if call.Target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("Target: got %q, want %q", call.Target, "5511999999999")
 			}
 			if call.MessageID != "3EB0ABC123" {

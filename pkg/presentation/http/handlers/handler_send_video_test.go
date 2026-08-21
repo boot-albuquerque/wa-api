@@ -77,7 +77,7 @@ func TestSendVideo_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	mm := &contractsfake.MediaMessenger{
 		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if string(payload.Bytes) != string(sendVideoMP4Bytes) {
@@ -175,7 +175,7 @@ func TestSendVideo_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500120)
 	mm := &contractsfake.MediaMessenger{
 		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			return domain.MessageSendResult{ID: "wire-id-video-datauri-999", Timestamp: time.Unix(sentAt, 0)}, nil

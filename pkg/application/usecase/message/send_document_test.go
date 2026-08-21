@@ -351,7 +351,7 @@ func TestSendDocument_CausalSuccess(t *testing.T) {
 		t.Fatalf("SendDocument chamado %d vez(es), quero exatamente 1", n)
 	}
 	call := mm.SendDocumentCalls[0]
-	if call.Target != domain.JID("5511987654321") {
+	if call.Target != domain.JID("5511987654321@s.whatsapp.net") {
 		t.Errorf("destinatario: got %q, want %q", call.Target, "5511987654321")
 	}
 	if string(call.Payload.Bytes) != string(pdfBytes) {

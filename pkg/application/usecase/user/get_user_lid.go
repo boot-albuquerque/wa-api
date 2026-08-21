@@ -42,6 +42,20 @@ func (uc *GetUserLIDUseCase) Execute(ctx context.Context, userID string, req dom
 			"invalid jid format", false, err)
 	}
 
+	// F182: o TIPO do JID é validação, não falha de infraestrutura. Antes
+	// disto, passar um LID a esta rota chegava ao store, que recusava com
+	// "invalid GetLIDForPN call with non-PN JID", e o cliente recebia 500 —
+	// "erro interno" para um erro DELE, determinístico, que repetir não
+	// resolve. O 500 abaixo continua certo para o que ele cobre: falha do
+	// store. Os dois caminhos é que estavam fundidos num só.
+	if !jid.IsPN() {
+		uc.logger.Warn(ctx, "LID lookup refused: jid is not a phone number",
+			"user_id", userID, "jid", req.JID)
+		return nil, apperr.New("jid_not_pn", apperr.CategoryValidation,
+			"this route resolves the LID OF a phone number: pass a "+domain.ServerPN+" jid, not "+domain.ServerLID,
+			false, nil)
+	}
+
 	// Get LID from store
 	lid, err := uc.contacts.GetLIDForPN(ctx, userID, jid)
 	if err != nil {

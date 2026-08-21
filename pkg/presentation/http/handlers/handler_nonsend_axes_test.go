@@ -245,7 +245,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 			// passa la' porque o teste chama o handler cru.
 			nome:        "RejectCall",
 			rota:        "/call/reject",
-			validBody:   `{"call_from":"5511999999999","call_id":"CALL1"}`,
+			validBody:   `{"call_from":"5511999999999@s.whatsapp.net","call_id":"CALL1"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				ops := &contractsfake.ChatOperations{}
@@ -262,7 +262,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 			// Idem: a rota real e' "/chat/request-unavailable-message".
 			nome:        "RequestUnavailableMessage",
 			rota:        "/chat/request-unavailable-message",
-			validBody:   `{"chat":"5511999999999","sender":"5511888888888","id":"MSG1"}`,
+			validBody:   `{"chat":"5511999999999@s.whatsapp.net","sender":"5511888888888@s.whatsapp.net","id":"MSG1"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				ops := &contractsfake.ChatOperations{}
@@ -279,7 +279,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "ArchiveChat",
 			rota:        "/chat/archive",
-			validBody:   `{"jid":"5511999999999","archive":true}`,
+			validBody:   `{"jid":"5511999999999@s.whatsapp.net","archive":true}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				ops := &contractsfake.ChatOperations{}

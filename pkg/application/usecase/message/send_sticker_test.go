@@ -346,7 +346,7 @@ func TestSendSticker_CausalSuccess(t *testing.T) {
 
 	mm := &contractsfake.MediaMessenger{
 		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				return domain.MessageSendResult{}, errors.New("target inesperado")
 			}
 			if string(payload.Bytes) != string(processedBytes) {
@@ -363,7 +363,7 @@ func TestSendSticker_CausalSuccess(t *testing.T) {
 			if phone != "5511999999999" {
 				t.Errorf("phone passado ao resolver: got %q", phone)
 			}
-			return domain.JID("5511999999999"), nil
+			return domain.JID("5511999999999@s.whatsapp.net"), nil
 		},
 	}
 	mf := &contractsfake.MediaFetcher{}

@@ -107,7 +107,7 @@ func TestChatPresence_Success(t *testing.T) {
 		t.Fatalf("SendChatPresence chamado %d vez(es), esperava 1", n)
 	}
 	call := pc.SendChatPresenceCalls[0]
-	if call.TxtID != userID || call.Chat != domain.JID("5511987654321") ||
+	if call.TxtID != userID || call.Chat != domain.JID("5511987654321@s.whatsapp.net") ||
 		call.State != "composing" || call.Media != "audio" {
 		t.Errorf("argumentos repassados errados: %+v", call)
 	}
@@ -270,11 +270,11 @@ func TestSubscribePresence_Success(t *testing.T) {
 	if n := len(pc.SubscribePresenceCalls); n != 1 {
 		t.Fatalf("SubscribePresence chamado %d vez(es), esperava 1", n)
 	}
-	if got := pc.SubscribePresenceCalls[0].Target; got != domain.JID("5511987654321") {
+	if got := pc.SubscribePresenceCalls[0].Target; got != domain.JID("5511987654321@s.whatsapp.net") {
 		t.Errorf("alvo do subscribe: got %q", got)
 	}
 	rec := requireLog(t, logger, contractsfake.LevelInfo, "Subscribed to presence")
-	if got, ok := rec.Keyval("jid"); !ok || got != "5511987654321" {
+	if got, ok := rec.Keyval("jid"); !ok || got != "5511987654321@s.whatsapp.net" {
 		t.Errorf("log de sucesso nao carrega o jid: %v", rec.Keyvals)
 	}
 }

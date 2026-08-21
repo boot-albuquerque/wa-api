@@ -105,7 +105,7 @@ func TestSendMessage_CausalSuccess(t *testing.T) {
 		t.Fatalf("SendText chamado %d vez(es), quero exatamente 1", n)
 	}
 	call := tm.SendTextCalls[0]
-	if call.Target != domain.JID("5511987654321") {
+	if call.Target != domain.JID("5511987654321@s.whatsapp.net") {
 		t.Errorf("destinatario: got %q, want %q", call.Target, "5511987654321")
 	}
 	if call.Text != "Ola mundo" {

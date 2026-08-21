@@ -9,6 +9,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // errNoSession é o erro que o guarda de sessão devolve nos testes; o contrato
@@ -458,5 +459,74 @@ func TestGetUserLIDUseCase_Execute(t *testing.T) {
 				t.Errorf("resultado = %+v", got)
 			}
 		})
+	}
+}
+
+// --- F182: tipo de JID errado é 400, não 500 --------------------------------
+
+// TestGetUserLID_LIDRecusadoCom400 trava a CAUSA da F182: passar um LID a uma
+// rota que resolve "o LID DE um telefone" é erro do CLIENTE, determinístico —
+// repetir não adianta. Antes disto o pedido chegava ao store, que recusava, e
+// o cliente recebia 500 com "internal server error": a mensagem útil ficava no
+// log do servidor e ele não tinha como descobrir que passou o tipo errado.
+func TestGetUserLID_LIDRecusadoCom400(t *testing.T) {
+	t.Parallel()
+
+	chamou := false
+	cd := &contractsfake.ContactDirectory{
+		GetLIDForPNFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			chamou = true
+			return "", nil
+		},
+	}
+	uc := user.NewGetUserLIDUseCase(cd, &contractsfake.JIDResolver{}, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1",
+		domain.GetUserLIDRequest{JID: "182699419517150@lid"})
+	if err == nil {
+		t.Fatal("LID devia ser recusado por esta rota")
+	}
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro não é apperr: %v", err)
+	}
+	// A CATEGORIA é o que decide o status HTTP (response.go:52). Asserir só a
+	// existência do erro deixaria o 500 passar.
+	if appErr.Category != apperr.CategoryValidation {
+		t.Fatalf("categoria = %q, quero %q — categoria errada devolve 500 para um erro do cliente",
+			appErr.Category, apperr.CategoryValidation)
+	}
+	// E a porta NÃO pode ser tocada: gastar uma consulta ao store por um
+	// pedido que nunca poderia ter sucesso é o defeito com mais passos.
+	if chamou {
+		t.Fatal("o store foi consultado com um JID que a rota não aceita")
+	}
+}
+
+// TestGetUserLID_FalhaDoStoreContinua500 é o outro lado, e é o que impede a
+// correção de virar excesso: o comentário do código defende o 500 para falha
+// de infraestrutura, porque o cliente não pode concluir "não existe" de uma
+// falha transitória. Essa parte não muda.
+func TestGetUserLID_FalhaDoStoreContinua500(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("store fora do ar")
+	cd := &contractsfake.ContactDirectory{
+		GetLIDForPNFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			return "", boom
+		},
+	}
+	uc := user.NewGetUserLIDUseCase(cd, &contractsfake.JIDResolver{}, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1",
+		domain.GetUserLIDRequest{JID: "5511999999999@s.whatsapp.net"})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, quero envolver %v", err, boom)
+	}
+
+	var appErr *apperr.AppError
+	if errors.As(err, &appErr) && appErr.Category == apperr.CategoryValidation {
+		t.Fatal("falha de store virou validação: o cliente concluiria que o número não tem LID")
 	}
 }

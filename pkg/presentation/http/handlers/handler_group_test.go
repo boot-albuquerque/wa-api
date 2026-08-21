@@ -92,7 +92,7 @@ func grpReadCases() []grpReadCase {
 			name:      "UpdateGroupRequestParticipants",
 			method:    http.MethodPost,
 			path:      "/group/requests/update",
-			body:      `{"groupJID":"120363@g.us","Phone":["5511999999999"],"Action":"approve"}`,
+			body:      `{"groupJID":"120363@g.us","Phone":["5511999999999@s.whatsapp.net"],"Action":"approve"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewUpdateGroupRequestParticipantsHandler(group.NewGroupRequestUseCase(f.requests, f.jids, f.logger))

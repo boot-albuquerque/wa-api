@@ -142,7 +142,7 @@ func TestMarkRead_Success(t *testing.T) {
 		t.Fatalf("MarkRead chamado %d vez(es), esperava 1", n)
 	}
 	call := cm.MarkReadCalls[0]
-	if call.Chat != domain.JID("5511987654321") || call.Sender != domain.JID("5511900000000") {
+	if call.Chat != domain.JID("5511987654321@s.whatsapp.net") || call.Sender != domain.JID("5511900000000@s.whatsapp.net") {
 		t.Errorf("JIDs repassados errados: %+v", call)
 	}
 	if len(call.IDs) != 2 {
@@ -242,7 +242,7 @@ func TestReact_ReactionShape(t *testing.T) {
 			jr:              &contractsfake.JIDResolver{},
 			wantTargetID:    "A",
 			wantText:        "👍",
-			wantParticipant: domain.JID("5511900000000"),
+			wantParticipant: domain.JID("5511900000000@s.whatsapp.net"),
 		},
 		{
 			// Comportamento preservado do upstream: um Participant que não

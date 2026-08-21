@@ -151,7 +151,7 @@ func TestGroupRequest_ExecuteUpdateGroupRequestParticipants(t *testing.T) {
 	boom := errors.New("upstream down")
 	base := domain.UpdateGroupRequestParticipantsRequest{
 		GroupJID: "g@g.us",
-		Phone:    []string{"55A"},
+		Phone:    []string{"55A@s.whatsapp.net"},
 		Action:   "approve",
 	}
 
@@ -297,7 +297,7 @@ func TestGroupRequest_UpdateTraduzAction(t *testing.T) {
 			_, err := f.uc.ExecuteUpdateGroupRequestParticipants(context.Background(), "u1",
 				domain.UpdateGroupRequestParticipantsRequest{
 					GroupJID: "g@g.us",
-					Phone:    []string{"55A", "55B"},
+					Phone:    []string{"55A@s.whatsapp.net", "55B@s.whatsapp.net"},
 					Action:   tt.action,
 				})
 			if err != nil {
@@ -307,7 +307,7 @@ func TestGroupRequest_UpdateTraduzAction(t *testing.T) {
 			if call.Action != tt.want {
 				t.Errorf("Action = %q, quero %q", call.Action, tt.want)
 			}
-			if len(call.Participants) != 2 || call.Participants[1] != domain.JID("55B") {
+			if len(call.Participants) != 2 || call.Participants[1] != domain.JID("55B@s.whatsapp.net") {
 				t.Errorf("participantes = %v", call.Participants)
 			}
 			if call.Group != domain.JID("g@g.us") {

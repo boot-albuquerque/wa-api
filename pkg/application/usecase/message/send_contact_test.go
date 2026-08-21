@@ -124,7 +124,7 @@ func TestSendContact_CausalSuccess(t *testing.T) {
 		t.Fatalf("SendContact chamado %d vez(es), quero exatamente 1", n)
 	}
 	call := sm.SendContactCalls[0]
-	if call.Target != domain.JID("5511987654321") {
+	if call.Target != domain.JID("5511987654321@s.whatsapp.net") {
 		t.Errorf("destinatario: got %q, want %q", call.Target, "5511987654321")
 	}
 	if call.Payload.Name != "Ana" {

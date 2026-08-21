@@ -312,7 +312,7 @@ func TestSendImage_CausalSuccess(t *testing.T) {
 		t.Fatalf("SendImage chamado %d vez(es), quero exatamente 1", n)
 	}
 	call := mm.SendImageCalls[0]
-	if call.Target != domain.JID("5511987654321") {
+	if call.Target != domain.JID("5511987654321@s.whatsapp.net") {
 		t.Errorf("destinatario: got %q, want %q", call.Target, "5511987654321")
 	}
 	if string(call.Payload.Bytes) != string(pngBytes) {

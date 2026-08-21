@@ -27,7 +27,7 @@ import (
 
 const sendListSentinelToken = "send-list-sentinel-cause-7f31be"
 
-const sendListPhone = "5511999999999"
+const sendListPhone = "5511999999999@s.whatsapp.net"
 
 // sendListBody é o menor corpo VÁLIDO da rota: uma seção com uma linha já
 // basta.

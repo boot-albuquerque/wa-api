@@ -77,7 +77,7 @@ func TestSendContact_Success_ViaRegisteredRoute(t *testing.T) {
 	vcard := "BEGIN:VCARD\\nVERSION:3.0\\nFN:Alice\\nEND:VCARD"
 	sm := &contractsfake.SimpleMessenger{
 		SendContactFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if payload.Name != "Alice" {

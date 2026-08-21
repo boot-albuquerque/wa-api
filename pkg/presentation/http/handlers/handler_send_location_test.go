@@ -77,7 +77,7 @@ func TestSendLocation_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	sm := &contractsfake.SimpleMessenger{
 		SendLocationFunc: func(_ context.Context, _ string, target domain.JID, payload domain.LocationPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if payload.Latitude != -23.5505 {

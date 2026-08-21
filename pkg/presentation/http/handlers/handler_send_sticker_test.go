@@ -89,7 +89,7 @@ type sendStickerResultBody struct {
 func TestSendSticker_Success_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
 		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if string(payload.Bytes) != string(sendStickerProcessedBytes) {
@@ -195,7 +195,7 @@ func TestSendSticker_RejectMissingRequiredField(t *testing.T) {
 func TestSendSticker_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
 		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			return domain.MessageSendResult{ID: "wire-id-sticker-datauri-999"}, nil

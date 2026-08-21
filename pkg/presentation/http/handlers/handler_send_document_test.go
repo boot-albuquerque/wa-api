@@ -79,7 +79,7 @@ func TestSendDocument_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500060)
 	mm := &contractsfake.MediaMessenger{
 		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if string(payload.Bytes) != string(sendDocumentPDFBytes) {
@@ -194,7 +194,7 @@ func TestSendDocument_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500070)
 	mm := &contractsfake.MediaMessenger{
 		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
-			if target != domain.JID("5511999999999") {
+			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
 			if payload.MimeType != "application/pdf" {

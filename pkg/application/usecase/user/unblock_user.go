@@ -47,7 +47,13 @@ func (uc *UnblockUserUseCase) Execute(ctx context.Context, userID string, req do
 		return nil, apperr.New("missing_phone_or_jid", apperr.CategoryValidation, "missing Phone or JID", false, nil)
 	}
 
-	jid, err := uc.jids.ResolveQualifiedJID(ctx, target)
+	// F203, decisão 35=a do canal: resolução LENIENTE, que aplica o servidor
+	// por omissão. Antes disto o campo chamava-se `Phone` e recusava um
+	// telefone — medido em campo, {"Phone":"5511000000001"} devolvia 400
+	// invalid_phone_or_jid, enquanto /chat/send/text aceitava o mesmo formato.
+	// Um campo com esse nome que exige @s.whatsapp.net é contrato
+	// surpreendente, e a mensagem de erro nem dizia o que faltava.
+	jid, err := uc.jids.ResolveJID(ctx, target)
 	if err != nil {
 		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "target", target)
 		return nil, apperr.New("invalid_phone_or_jid", apperr.CategoryValidation,

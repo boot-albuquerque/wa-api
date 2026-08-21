@@ -31,7 +31,7 @@ import (
 
 const sendTemplateSentinelToken = "send-template-sentinel-cause-7c31d5"
 
-const sendTemplatePhone = "5511999999999"
+const sendTemplatePhone = "5511999999999@s.whatsapp.net"
 
 // sendTemplateBody é o menor corpo VÁLIDO da rota: um botão já basta.
 const sendTemplateBody = `{"Phone":"` + sendTemplatePhone + `","Content":"Escolha","Footer":"Equipe",` +

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	appport "wa-api/pkg/application/contracts"
@@ -309,6 +310,12 @@ func TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada(t *testing.T) {
 		if raw == "invalido" {
 			return "", errors.New("bad jid")
 		}
+		// Aplica o servidor por omissão como a produção faz
+		// (mapping/jid/resolver.go:21). O stub devolvia o texto cru, e a
+		// asserção descrevia um JID que a produção nunca produz.
+		if !strings.Contains(raw, "@") {
+			return domain.JID(raw + "@s.whatsapp.net"), nil
+		}
 		return domain.JID(raw), nil
 	}
 
@@ -321,7 +328,7 @@ func TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada(t *testing.T) {
 	if n := len(f.contacts.GetUserInfoCalls); n != 1 {
 		t.Fatalf("GetUserInfo chamado %d vez(es), quero 1", n)
 	}
-	if jids := f.contacts.GetUserInfoCalls[0].JIDs; len(jids) != 1 || jids[0] != domain.JID("5511999") {
+	if jids := f.contacts.GetUserInfoCalls[0].JIDs; len(jids) != 1 || jids[0] != domain.JID("5511999@s.whatsapp.net") {
 		t.Fatalf("o telefone invalido nao foi pulado: %v", jids)
 	}
 	logassert.NoSecrets(t, capture.Records(t))
