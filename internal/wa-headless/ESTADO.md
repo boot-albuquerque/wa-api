@@ -4,25 +4,47 @@ Consolidação de 2026-08-19, pedida pela orquestração depois de a matriz de
 paridade fechar. É um retrato: o que existe, o que está PROVADO, o que está
 aberto e por quê, e o que depende de decisão humana.
 
-Números vieram do repositório, não de memória. **Atualizados em 2026-08-20**,
-porque um documento de estado que envelhece em silêncio vira citação errada — que
-é o defeito registrado no H29:
+Números vieram do repositório, não de memória. **Atualizados em 2026-08-21 (fim
+do dia)**, porque um documento de estado que envelhece em silêncio vira citação
+errada — que é o defeito registrado no H29.
 
-| | escrito 19/08 | 20/08 (manhã) | **agora** |
+> **E este documento cometeu o próprio defeito que documenta.** Entre 20/08 e
+> 21/08 ele ficou parado dizendo 263 testes e 12 pacotes enquanto o repositório
+> ia para 843 e 35. Foi descoberto na reinicialização do protocolo ORCA de 21/08,
+> que compara estado documentado com estado real — e ficou três ciclos em
+> triagem, porque corrigir de lado é como se expande escopo em silêncio. Está
+> registrado aqui em vez de apagado: um retrato que envelheceu é evidência de
+> como ele envelhece.
+
+| | 19/08 | 20/08 | **21/08 (agora)** |
 |---|---:|---:|---:|
-| testes | 254 | 261 | **263** |
-| pacotes | 12 | 12 | **12** |
-| commits (nada empurrado) | 45 | 56 | **61** |
-| achados fechados | 20 | 22 | **23** |
-| achados abertos | 9 | 10 | **10** |
+| testes | 254 | 263 | **843** |
+| pacotes | 12 | 12 | **35** |
+| capacidades | 6 | 6 | **28** |
+| achados no HOUSEKEEP | 29 | 33 | **105** |
+| commits tocando o módulo | — | — | **202** (61 só em 21/08) |
 
-A contagem de abertos aplica a leitura humana que o próprio instrumento pede:
-o scanner marca **H5** e **H14** como abertos porque têm vários status, e ambos
-estão fechados. Os abertos novos desde 19/08 são o **H32** (`abandonado`) e o
-**H33** (`medido`) — os dois estados que o vocabulário do gate ganhou hoje, e
-ambos contam como abertos de propósito: *abandonado* é achado deixado de lado com
-o motivo escrito, *medido* é medição feita cuja consequência pode não ter sido
-aplicada.
+O salto não é inflação de contagem: entre 20/08 e 21/08 a iniciativa mudou de
+alvo. Deixou de ser "as seis capacidades do piso" e passou a ser o **contrato de
+220 itens** do `LEDGER-WWEBJS.md`, com barramento de eventos, ciclo de vida de
+sessão e famílias inteiras novas (pedidos de grupo, agenda, chamadas, enquetes,
+status, canais, comércio).
+
+## Placar de paridade — a métrica que vale hoje
+
+Fonte: `LEDGER-WWEBJS.md`, travado por quatro gates em `gate_ledger_test.go`.
+
+| estado | itens | fração |
+|---|---:|---:|
+| `PROVEN` | 52 | 24% |
+| `PARTIAL` | 46 | 21% |
+| `BLOCKED` | 3 | 1% |
+| `INTENTIONAL_DIFFERENCE` | 2 | 0% |
+| `MISSING` | 117 | 53% |
+| **total** | **220** | |
+
+A Fase 1 fecha em **0 MISSING e 0 PARTIAL**. `INTENTIONAL_DIFFERENCE` não pode
+ser usado para encolher escopo.
 
 ---
 

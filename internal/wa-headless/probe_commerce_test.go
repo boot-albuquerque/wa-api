@@ -135,7 +135,89 @@ func TestProbeCommerce(t *testing.T) {
 			// exposes as one (it reads Conn.wid internally). Reported only as
 			// PRESENT/ABSENT, never the value.
 			try {
-				out.sellerWidPresent = !!(Conn && Conn.Conn && Conn.Conn.wid);
+				// THE SELLER IDENTITY, ASKED IN MORE THAN ONE PLACE.
+				//
+				// The first pass read Conn.Conn.wid and got false, and said so
+				// while flagging its own path as suspect — which was the right
+				// call: "the field is empty" and "I looked in the wrong place"
+				// produce the same false, and only asking elsewhere separates
+				// them. The account's own identity has a dedicated module in
+				// this build (WAWebUserPrefsMeUser), used by every other
+				// capability here.
+				out.sellerWid = {};
+				try {
+					out.sellerWid.connWid = !!(Conn && Conn.Conn && Conn.Conn.wid);
+					out.sellerWid.connKeys = (Conn && Conn.Conn)
+						? Object.keys(Conn.Conn).filter(k => k.indexOf('wid') >= 0 ||
+							k.indexOf('Wid') >= 0 || k.indexOf('me') === 0).slice(0, 12)
+						: 'no Conn.Conn';
+				} catch (e) { out.sellerWid.connWid = 'threw: ' + safe(e); }
+				try {
+					const Me = window.require('WAWebUserPrefsMeUser');
+					// Presence and DOMAIN only — never the identifier itself.
+					const pn = Me.getMaybeMePnUser && Me.getMaybeMePnUser();
+					const lid = Me.getMaybeMeLidUser && Me.getMaybeMeLidUser();
+					out.sellerWid.mePn = pn ? String(pn.server || 'no server') : 'absent';
+					out.sellerWid.meLid = lid ? String(lid.server || 'no server') : 'absent';
+				} catch (e) { out.sellerWid.meUser = 'threw: ' + safe(e); }
+				try {
+					// Is this account a BUSINESS at all? A catalog belongs to a
+					// seller, and the whole family is meaningless without one.
+					const BP = window.require('WAWebBusinessProfileCollection');
+					const holder = BP && (BP.BusinessProfileCollection || BP);
+					out.sellerWid.bizProfiles = (holder && typeof holder.getModelsArray === 'function')
+						? holder.getModelsArray().length : 'no collection';
+				} catch (e) { out.sellerWid.bizProfiles = 'module absent'; }
+				try {
+					const C = window.require('WAWebCollections');
+					out.sellerWid.collectionsCatalog = !!(C && C.Catalog);
+					out.sellerWid.collectionsOrder = !!(C && C.Order);
+					const cat = C && C.Catalog;
+					out.sellerWid.catalogCount = (cat && typeof cat.getModelsArray === 'function')
+						? cat.getModelsArray().length : 'no getModelsArray';
+				} catch (e) { out.sellerWid.collections = 'threw: ' + safe(e); }
+				out.sellerWidPresent = out.sellerWid.connWid;
+
+				// AND NOW THE CALL, with an identity that actually exists.
+				//
+				// queryCatalog was never invoked because the probe believed the
+				// account had no wid — a belief produced by reading the wrong
+				// module. With WAWebUserPrefsMeUser the seller identity is right
+				// there, so the call can finally be tried. It is a READ; the
+				// account's catalog is its own.
+				//
+				// The arity is the open question: declared 9 against the 2 the
+				// reference passes, which smells of an options object. Both
+				// shapes are tried and whichever answers is the measurement.
+				try {
+					const Me = window.require('WAWebUserPrefsMeUser');
+					const meWid = (Me.getMaybeMePnUser && Me.getMaybeMePnUser()) ||
+						(Me.getMaybeMeLidUser && Me.getMaybeMeLidUser());
+					const Cat = window.require('` + string(spa.Module("WAWebBizProductCatalogBridge")) + `');
+					out.catalogCall = { arity: Cat.queryCatalog ? Cat.queryCatalog.length : 'absent' };
+					const shapes = {
+						positional: [meWid],
+						optionsObject: [{ catalogWid: meWid, limit: 10 }],
+					};
+					for (const [name, args] of Object.entries(shapes)) {
+						out.catalogCall[name] = 'PENDING';
+						park(out);
+						try {
+							const r = await Promise.race([
+								Cat.queryCatalog.apply(null, args),
+								new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT_10s')), 10000)),
+							]);
+							// SHAPE ONLY. A catalog holds product names, prices
+							// and image urls; none of that crosses this boundary.
+							out.catalogCall[name] = 'resolved: ' + typeof r +
+								(r && typeof r === 'object'
+									? ' keys=[' + Object.keys(r).slice(0, 12).join(',') + ']' : '');
+						} catch (e) {
+							out.catalogCall[name] = 'threw: ' + safe(e);
+						}
+						park(out);
+					}
+				} catch (e) { out.catalogCall = 'setup threw: ' + safe(e); }
 			} catch (e) {
 				out.sellerWidPresent = 'threw: ' + safe(e);
 			}

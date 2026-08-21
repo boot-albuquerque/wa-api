@@ -8030,3 +8030,103 @@ truncado de novo hoje.
 
 **Status**: não entregue quanto ao envio — suspeito nomeado perseguido, medido e
 DESCARTADO, com o próximo ponto de leitura nomeado.
+
+---
+
+## H102 — a primeira wave por substrato ORCA, e o que ela mediu em canais e comércio
+
+**Data**: 2026-08-21.
+**Contexto**: o humano mandou inicializar o protocolo ORCA e paralelizar por
+`orca` CLI, não por subagente nativo do provider. Duas sondas read-only,
+write sets disjuntos, dois workers `claude-sonnet-5` effort `medium`.
+
+### O substrato mordeu na primeira tentativa
+
+`worker-start` injetou o packet e **não submeteu**. Os dois workers ficaram com o
+prompt parado no composer, cursor congelado em 22 por noventa segundos, zero
+arquivos — o silêncio idêntico ao de quem está trabalhando.
+
+Recuperado com `orca terminal send --enter`, e os dois começaram no mesmo
+segundo. É a falha que o protocolo já catalogou duas vezes (`GC-006`, `GC-012`) e
+que o próprio humano lembrou antes de eu tropeçar nela: **`--enter` é opt-in, e
+sem ele o comando é malformado**, não um lapso.
+
+### Validar não é ler o relato — e isso pegou um exagero
+
+Rodei as duas sondas eu mesmo. O worker de comércio afirmou, no `worker_done`,
+que existem *"coleções de primeira classe `WAWebCatalogCollection`,
+`WAWebProductCollection`, `WAWebOrderCollection` que o `whatsapp-web.js` não tem
+equivalente"*.
+
+A sonda dele tenta **dez** nomes de coleção. O dicionário de módulos volta com
+**quatro** entradas, e nenhuma é essas. As coleções existem — dentro de
+`WAWebCollections` (`Catalog`, `Order`, ambos confirmados `true`) — mas o caminho
+de módulo afirmado não foi medido por nada.
+
+> Ausência de erro na execução de um worker não é prova de que o relato dele
+> confere. O relato foi corrigido no commit; nunca entrou em documento de estado.
+
+### CANAIS: a superfície está toda aqui
+
+Vinte e quatro módulos presentes, aridade batendo com a referência. **Um** falta:
+`WAWebMexFetchNewsletterSubscribersJob` resolve `falsy`.
+
+Dois fatos que mudam o que a família significa:
+
+| fato | valor |
+|---|---|
+| `isNewsletterCreationEnabled` | **true** |
+| `getMaxSubscriberNumber` | **5000** |
+| superfície de envio | `sendNewsletterTextMsg`, `MediaMsg`, `PollCreationMsg`, `AlbumMsg`, `EditMsg` |
+| `modelCount` | **0** — a conta não segue canal nenhum |
+
+Este build **cria e publica** em canal. A forma do modelo ficou sem resposta pelo
+zero: não há canal para inspecionar.
+
+### COMÉRCIO: a pista era o instrumento, de novo
+
+`sellerWidPresent` vinha `false` por `WAWebConnModel.Conn.wid`, e o worker marcou
+a própria sonda como suspeita — corretamente. Perguntei em mais lugares:
+
+```
+connWid    false        connKeys   []          <- o campo NAO EXISTE ali
+mePn       "c.us"       meLid      "lid"       <- a identidade esta em WAWebUserPrefsMeUser
+bizProfiles 58          catalogCount 0
+collectionsCatalog true  collectionsOrder true
+```
+
+`connKeys` **vazio** é a prova: não era campo ausente, era módulo errado. Todo o
+resto deste repositório já lê identidade por `WAWebUserPrefsMeUser`.
+
+### E com a identidade certa, a chamada finalmente foi feita
+
+`queryCatalog` nunca tinha sido invocado porque a sonda acreditava que a conta
+não tinha wid — crença produzida por ler o módulo errado. Com o wid real, duas
+formas de argumento, **duas respostas diferentes**:
+
+| forma | resposta |
+|---|---|
+| posicional `(meWid)` | `ServerStatusCodeError` |
+| objeto de opções `({catalogWid, limit})` | `CatalogUnknownError` |
+
+Nenhuma das duas é silêncio, e a diferença é informação:
+`ServerStatusCodeError` diz que a chamada **chegou ao servidor** e ele recusou
+com um código; `CatalogUnknownError` é erro de domínio, de um argumento
+mal-formado o bastante para o catálogo não ser identificado.
+
+A leitura mais provável é que **a forma posicional está certa** e a recusa é
+"esta conta não tem catálogo" — coerente com `catalogCount: 0`. A aridade
+declarada é **10**, não 9 como o relato dizia.
+
+**O que falta para a família de comércio**: uma conta COM catálogo. Não é código.
+
+### E o `ESTADO.md` saiu da triagem
+
+Ficou três ciclos parado dizendo 263 testes e 12 pacotes contra **843 e 35**
+reais — cometendo o defeito que ele próprio documenta no H29. Atualizado, com o
+envelhecimento registrado em vez de apagado: um retrato que envelheceu é
+evidência de como ele envelhece.
+
+**Status**: entregue — duas sondas medidas ao vivo por mim, um relato de worker
+corrigido, a pista do comércio resolvida até "falta uma conta com catálogo", e a
+forma do modelo de canal aguardando uma inscrição.
