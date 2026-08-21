@@ -17183,6 +17183,72 @@ escopo desta entrega já está em 115 ficheiros.
 
 ---
 
+### MEDIÇÃO (2026-08-21): a hipótese enfraqueceu — decisão 39=c do canal
+
+Fui medir antes de corrigir, e a medição contraria o diagnóstico. Registo isto
+com o mesmo peso da entrada original: um achado com diagnóstico errado é pior
+que nenhum, porque parece resolvido.
+
+**1. O Baileys faz exatamente o mesmo.** `processSyncAction`, em
+`Utils/chat-utils.ts`, trata `labelEditAction` e `labelAssociationAction`
+emitindo o evento, **sem comparação de timestamp**. A única lógica temporal do
+processador é `messageRange`, em archive/unarchive, e não se aplica a
+etiquetas. Não estamos a divergir da referência — estamos a fazer o que ela
+faz.
+
+**2. A biblioteca já descarta snapshot mais velho.**
+`internal/wa-noise/capabilities/appstatesync/recovery.go:47`:
+
+```go
+} else if currentVersion >= version {
+    t.Log().Infof("Ignoring app state recovery response for %s as current "+
+        "version %d is newer than or equal to recovery version %d", ...)
+```
+
+**3. Os patches têm versão monotónica e LTHash verificado.**
+`protocol/appstate/decode.go` compara o `snapshotMAC` e aborta com
+`ErrMismatchingLTHash` quando não bate. Aplicar fora de ordem não passa em
+silêncio: falha.
+
+**4. O timestamp É do servidor**, não do relógio local —
+`mutation.Action.GetTimestamp()` (`appstatesync/mutation.go:47`). Comparar
+seria tecnicamente viável, se houvesse necessidade demonstrada.
+
+### O que NÃO foi medido, e por isso a entrada continua ABERTA
+
+Não se reproduziu um FullSync tardio contra o servidor real: provocar
+reordenação de patches não está ao alcance da API, e há uma conta de teste. A
+hipótese está **enfraquecida, não refutada** — ausência de prova não é prova de
+ausência.
+
+### Decisão aplicada: (c), meio-termo
+
+Não mudar a escrita, e **travar o comportamento CONHECIDO** para que ninguém o
+redescubra como surpresa: `TestLabelRepository_UltimaEscritaVenceIndependenteDoTimestamp`.
+
+As duas alternativas foram recusadas com razão escrita:
+
+- **corrigir mesmo assim** divergiria do Baileys sem necessidade demonstrada, e
+  criaria um caminho de **descarte silencioso** — que é o defeito da [[F184]]
+  noutra família;
+- **fechar como refutada** fecharia demais, porque não consegui reproduzir o
+  caso.
+
+Controlo negativo executado — passar a comparar timestamp:
+
+```
+--- FAIL: TestLabelRepository_UltimaEscritaVenceIndependenteDoTimestamp
+    label_repository_test.go:151: nome = "Recente", quero "Antigo".
+```
+
+A mensagem de falha do teste NÃO se limita a acusar: instrui quem mudar a
+atualizar esta entrada e a garantir que o descarte deixa registo.
+
+**Status**: ABERTA, com diagnóstico corrigido pela medição e comportamento
+travado por teste. Não é defeito confirmado nem hipótese descartada — é
+comportamento conhecido, alinhado com a referência, com a lacuna de prova
+declarada.
+
 ## F206 — `PUT /admin/users/{id}` com `token:""` devolve 500
 
 **Data**: 2026-08-21. **Contexto**: achado por avaliação independente
