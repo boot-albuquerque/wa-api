@@ -7169,3 +7169,77 @@ na outra, com os nomes `wa-headless-lab A` e `wa-headless-lab B`. É configuraç
 `WA_LAB_MUTUAL=forget go test -run TestLabMutualAddressbookSave`.
 
 **Status**: entregue.
+
+---
+
+## H92 — CALLS: o link entregue, a recusa pronta, e o gatilho que toca um telefone
+
+**Data**: 2026-08-21.
+**Contexto**: terceira família sob a regra de métodos e eventos juntos.
+
+### A varredura de módulos rendeu mais que a referência inteira
+
+Enumerar todo módulo carregável cujo nome contém `Call` — 228 nomes, 155
+carregáveis — encontrou uma superfície VOIP que o `whatsapp-web.js` **não tem
+equivalente para**:
+
+| módulo | o que faz |
+|---|---|
+| `WAWebVoipStartCall` | **origina** chamada (`startWAWebVoipCall`, aridade 5) |
+| `WAWebVoipCancelOutgoingCall` | cancela a que está saindo |
+| `WAWebVoipCreateCallLink` | link de chamada próprio deste build |
+| `WAWebVoipCallStateUtils` | `isCallIncoming`, `isCallRinging`, `isCallTerminal` |
+| `WAWebCallCollectionUtils` | `buildCallPropsFromOffer`, `createCallModel` |
+
+Isto é o método da H78/H79/H80 finalmente pagando: **enumerar largo e filtrar a
+SAÍDA por nome de função**, em vez de adivinhar o nome do módulo.
+
+### Duas funções com nome parecido, e a errada trava
+
+`WAWebVoipCreateCallLink.createCallLink` parecia a escolha óbvia — é deste build
+e tem o nome exato da linha do ledger. **Travou.** `createCallLink('video')` não
+resolveu em 40 s, mesma classe de resposta que o travamento de convite da H57:
+quer uma pilha VOIP que a sessão headless não sobe.
+
+A `Client.createCallLink` do `whatsapp-web.js` **não chama essa**. Chama
+`WAWebGenerateEventCallLink.createEventCallLink`, que pertence a eventos
+agendados. Essa resolve, com string de 54 caracteres, para `voice` e `video`.
+
+> **Defeito meu no instrumento, e a correção vale mais que a medição.** A
+> primeira sonda parkeava o resultado **uma vez, no fim** — então o travamento
+> fez ela reportar "never settled" e **jogar fora as quatro respostas que já
+> tinha**. Agora parkeia depois de cada tentativa e marca `PENDING` antes: o
+> travamento continua sendo resposta, e agora diz QUAL chamada travou.
+
+### A estranha à mão não é improviso da referência
+
+Este build **não exporta ação de recusa nenhuma**: `WAWebRejectCallAction`,
+`WAWebEndCallAction`, `WAWebCallActions` e `WAWebOfferCallAction` todos ausentes
+(medido). A estranha `call`/`reject` montada à mão e lançada por
+`WADeprecatedSendIq` é o único caminho — o que muda a leitura de "a referência
+gambiarrou" para "é assim que se faz".
+
+`Reject` não tem pós-condição local que dê para checar: a evidência de quem
+chama é o telefone parar de tocar. Está dito no doc em vez de disfarçado com uma
+leitura que sempre passaria.
+
+### O que NÃO foi feito, e por quê — decisão humana, não de escopo
+
+`INCOMING_CALL` e a prova ao vivo de `reject` exigem uma chamada entrante. O
+gatilho existe e está nomeado. **Não disparei.**
+
+Toda outra ação externa desta suíte aterrissa dentro de um aplicativo. Esta faz
+**hardware fazer barulho** no bolso de alguém. O teste
+`TestIncomingCallReal` existe, pula por padrão, e diz isso no motivo do skip —
+em vez de ficar ligado numa execução que alguém começa de madrugada.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| aceitar link vazio como sucesso | `TestAnEmptyLinkIsAnError` | `answer {"ok":true,"link":""} gave <nil>, want ErrNoLink` |
+| tirar `call-creator` da estranha | `TestTheRejectStanzaIsShapedLikeTheProtocolWantsIt` | `the stanza is missing "call-creator"` |
+| remover a validação de `Kind` | `TestOnlyVoiceAndVideoAreAccepted` | `CreateLink("") = <nil>` e `"" reached the page` |
+
+**Status**: entregue parcialmente — link provado ao vivo; recusa implementada e
+travada por teste, aguardando autorização humana para a chamada que a provaria.

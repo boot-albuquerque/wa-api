@@ -107,7 +107,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `setBackgroundSync` | — | `MISSING` | — | — | — | idem |
 | `getContactDeviceCount` | addressbook.DeviceCount | `PARTIAL` | sim | sim | sim | o caminho funciona e o par NÃO tem registro de dispositivo nesta conta; "sem registro" e "zero dispositivos" são respostas diferentes e não foram fundidas no número 0 (H90) |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
-| `createCallLink` | — | `MISSING` | — | — | — | — |
+| `createCallLink` | call.CreateLink | `PROVEN` | sim | sim | sim | provado ao vivo para `voice` e `video`; o link é credencial e nunca é renderizado. Usa `WAWebGenerateEventCallLink` como a referência — o `WAWebVoipCreateCallLink` deste build **TRAVA** na primeira chamada, medido em 40s (H92) |
 | `sendResponseToScheduledEvent` | — | `MISSING` | — | — | — | — |
 | `saveOrEditAddressbookContact` | addressbook.Save | `PROVEN` | sim | sim | sim | verifica lendo de volta, com o relógio no Go; `syncToAddressbook` é parâmetro sem padrão porque `true` escreve na agenda do TELEFONE pareado (H90) |
 | `deleteAddressbookContact` | addressbook.Delete | `PROVEN` | sim | sim | sim | idempotente, medido; exige **wid**, enquanto o save exige dígitos crus — assimetria que a referência esconde passando o mesmo valor aos dois (H90) |
@@ -127,11 +127,24 @@ nem `PARTIAL` sem justificativa explícita.
 
 ## Call
 
-**Família inteira `MISSING`** — chamadas — família inteira não atacada.
+`capabilities/call` entrega o link (provado) e a recusa (implementada, não
+disparada). O que falta é **um gatilho que toca telefone**, não código.
+
+Achado que a referência não tem: este build expõe uma superfície VOIP inteira —
+`WAWebVoipStartCall` origina chamada, `WAWebVoipCancelOutgoingCall` cancela,
+`WAWebVoipCreateCallLink` cria link próprio (e trava). O `whatsapp-web.js` não
+tem equivalente para nenhum dos três.
 
 | upstream | estado |
 |---|---|
-| `reject` | `MISSING` |
+| `reject` | `PARTIAL` |
+
+`reject` está implementado com a estranha exata que o protocolo pede — este
+build **não exporta ação de recusa nenhuma** (`WAWebRejectCallAction`,
+`WAWebEndCallAction`, `WAWebCallActions`, `WAWebOfferCallAction` todos ausentes,
+medido), então a estranha à mão da referência é o único caminho, e não
+improviso dela. Travado por teste que casa `call-id`, `call-creator`, `to` e
+`count`. Não provado ao vivo: exige chamada entrante.
 
 ## Channel
 
@@ -339,7 +352,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
 | `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
 | `BATTERY_CHANGED` | — | `MISSING` | sem equivalente |
-| `INCOMING_CALL` | — | `MISSING` | sem equivalente |
+| `INCOMING_CALL` | — | `MISSING` | o gatilho EXISTE e foi encontrado (`WAWebVoipStartCall.startWAWebVoipCall`, aridade 5) — a referência não tem equivalente. Não disparado porque uma chamada toca um APARELHO FÍSICO, e isso é decisão humana, não de escopo (H92) |
 | `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
 | `VOTE_UPDATE` | — | `MISSING` | sem equivalente |
 
@@ -347,9 +360,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 49 | 22% |
-| `PARTIAL` | 41 | 19% |
+| `PROVEN` | 50 | 23% |
+| `PARTIAL` | 42 | 19% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 126 | 57% |
+| `MISSING` | 124 | 56% |
 | **total** | **220** | |
