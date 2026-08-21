@@ -179,3 +179,48 @@ func TestCancelledContextSendsNoReceipt(t *testing.T) {
 		t.Fatalf("sent %d receipt(s) for a caller that had given up", p.kicks)
 	}
 }
+
+// TestMarkResultRendersItsCounts. An untested rendering is how a reporting
+// surface silently loses the number a caller reads.
+func TestMarkResultRendersItsCounts(t *testing.T) {
+	r := MarkResult{Before: 7, After: 0, Waited: 2 * time.Second}
+	s := r.String()
+	if !strings.Contains(s, "before=7") || !strings.Contains(s, "after=0") {
+		t.Fatalf("the counts are missing: %s", s)
+	}
+	if !strings.Contains(s, "changed=true") {
+		t.Fatalf("an acknowledgement that cleared something must say so: %s", s)
+	}
+	idle := MarkResult{}
+	if !strings.Contains(idle.String(), "changed=false") {
+		t.Fatalf("an idle conversation must be distinguishable: %s", idle)
+	}
+}
+
+// TestAStalledPageIsNotAnAcknowledgement: accepting the kick and never settling
+// must not be reported as a conversation marked read.
+func TestAStalledPageIsNotAnAcknowledgement(t *testing.T) {
+	compressMarkClock(t)
+	p := &stallingMarkDouble{}
+	_, err := New(engine.NewRunner(), p.eval).MarkRead(context.Background(), "1@lid", "t/mark")
+	if !errors.Is(err, ErrMarkRead) {
+		t.Fatalf("got %v, want ErrMarkRead", err)
+	}
+	if !strings.Contains(err.Error(), "never settled") {
+		t.Fatalf("a stall must be distinguishable from a refusal: %v", err)
+	}
+}
+
+type stallingMarkDouble struct{}
+
+func (p *stallingMarkDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.Contains(expr, "const s = window[") {
+		*out = `{"stage":"pending","ok":false,"why":""}`
+		return nil
+	}
+	*out = `{"started":true}`
+	return nil
+}

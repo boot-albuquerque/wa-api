@@ -194,3 +194,51 @@ func TestCancelledContextReactsToNothing(t *testing.T) {
 		t.Fatalf("reacted %d time(s) for a caller that had given up", p.kicks)
 	}
 }
+
+// TestResultRendersTheAsymmetry. String() is a redaction and reporting surface,
+// and an untested one is how a leak or a missing field ships. Here the field
+// that matters is Verified: a rendering that hid it would let "removed" read
+// as strongly as "added".
+func TestResultRendersTheAsymmetry(t *testing.T) {
+	added := Result{Had: false, Has: true, Verified: true, Waited: time.Second}
+	if !strings.Contains(added.String(), "verified=true") {
+		t.Fatalf("an added reaction must show that it was checked: %s", added)
+	}
+	removed := Result{Had: true, Has: false, Verified: false}
+	if !strings.Contains(removed.String(), "verified=false") {
+		t.Fatalf("a removed reaction must show that it was NOT checked: %s", removed)
+	}
+	if strings.Contains(removed.String(), "verified=true") {
+		t.Fatalf("the rendering contradicts itself: %s", removed)
+	}
+}
+
+// TestAStalledPageIsItsOwnFailure: the page accepting the kick and then never
+// settling is not the same as refusing, and a caller that could not tell them
+// apart would retry the wrong one.
+func TestAStalledPageIsItsOwnFailure(t *testing.T) {
+	compressClock(t)
+	p := &stallingDouble{}
+	_, err := New(engine.NewRunner(), p.eval).Add(context.Background(), "MSG1", "\U0001F44D", "t/add")
+	if !errors.Is(err, ErrReact) {
+		t.Fatalf("got %v, want ErrReact", err)
+	}
+	if !strings.Contains(err.Error(), "never settled") {
+		t.Fatalf("the message must distinguish a stall from a refusal: %v", err)
+	}
+}
+
+// stallingDouble accepts the kick and then answers "pending" forever.
+type stallingDouble struct{}
+
+func (p *stallingDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.Contains(expr, "const s = window[") {
+		*out = `{"stage":"pending","ok":false,"why":""}`
+		return nil
+	}
+	*out = `{"started":true}`
+	return nil
+}

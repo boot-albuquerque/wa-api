@@ -287,6 +287,9 @@ const (
 	// reacting could not be copied from an existing case; it had to be
 	// discovered by creating one.
 	ModuleReactionsCollection = Module("WAWebReactionsCollection")
+	// ModuleQuotedMsgModelUtils builds the quoted-message object a reply
+	// carries. createQuotedMsgObj(msgModel) — the MODEL again, not the id.
+	ModuleQuotedMsgModelUtils = Module("WAWebQuotedMsgModelUtils")
 )
 
 // RequiredAtStartup is verified before any capability runs.

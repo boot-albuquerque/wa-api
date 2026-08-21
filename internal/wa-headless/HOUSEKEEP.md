@@ -4101,3 +4101,58 @@ seria pedir ao app que quebre a própria guarda.
 **Status**: entregue — adicionar provado com pós-condição descoberta, remover
 implementado e declarado NÃO VERIFICÁVEL na sessão, com a evidência de que
 funciona e quatro controles negativos.
+
+## H54 — responder citando: a ÚNICA inferência do pacote, e uma leitura errada no caminho
+
+**Data**: 2026-08-20 · **Contexto**: lote de operações de mensagem.
+
+**Todo o resto deste pacote teve a forma LIDA do código do app.** Esta não teve:
+os bundles nunca mostram o app chamando `sendTextMsgToChat` COM uma citação,
+porque a interface de resposta passa pelo compositor. O que foi lido:
+
+```
+createTextMsgData(chat, text, options)   monta o dado da mensagem
+quotedMsg                                é o campo que uma resposta carrega
+sendTextMsgToChat(chat, text, options)   repassa options a createTextMsgData
+```
+
+Passar `{quotedMsg}` pelas opções é **inferência a partir de dois fatos
+medidos**, não um fato medido. Por isso a prova ao vivo aqui CARREGA PESO em vez
+de confirmar, e o teste diz isso na mensagem de falha, para que a próxima pessoa
+não procure no lugar errado.
+
+### A leitura errada, e como ela apareceu
+
+`createQuotedMsgObj` PARECIA a forma de construir a citação. Não é: a fonte
+exige `e.quotedStanzaID` e devolve `null` sem ele, porque converte uma mensagem
+que **JÁ É** resposta no objeto citado — é da via de renderização.
+
+Passar a mensagem alvo devolveu `null`, e a execução ao vivo falhou com
+`QUOTE_NULL`. O valor que `quotedMsg` quer é **a própria mensagem sendo
+respondida**.
+
+### A pós-condição, e por que ela é a coisa toda
+
+O texto chega das duas formas. **Só a citação distingue** uma resposta de uma
+mensagem comum — e o remetente não vê a diferença sem perguntar. Então `Reply`
+verifica que o que saiu carrega citação.
+
+**Controle negativo AO VIVO, EXECUTADO** — produção enviando sem a opção:
+
+```
+Reply: send: the message was sent but carries no quote
+```
+
+A mensagem SAIU e a pós-condição a recusou. É o controle mais forte que este
+pacote tem, porque prova que a verificação distingue exatamente o que a
+inferência arriscava.
+
+> **Duas execuções perdidas para o meu próprio dublê, e a lição é de roteamento.**
+> TRÊS dos quatro scripts percorrem a coleção de mensagens, então
+> `getModelsArray` não os distingue: o kick estava sendo roteado para o ramo de
+> verificação, `lastScript` nunca era gravado, e uma asserção sobre o kick
+> falhava por motivo que nada tinha a ver com o código sob teste. Cada ramo passou
+> a chavear em algo que SÓ aquele script contém.
+
+**Status**: entregue — inferência declarada como tal, leitura errada corrigida e
+registrada, pós-condição verificada e controle negativo executado AO VIVO.
