@@ -112,6 +112,13 @@ func TestTheAppsOwnPreconditionIsCheckedHere(t *testing.T) {
 	if !errors.Is(err, ErrNoChatToBlockFrom) {
 		t.Fatalf("got %v, want ErrNoChatToBlockFrom", err)
 	}
+	// THE NEEDLE IS THE BRANCH. Asserting only that the lookup APPEARS lets a
+	// mutation that computes the chat and ignores it pass — the same hole that
+	// a negative control found in the edit capability's gate test on the same
+	// day. The needle names the guarded return instead.
+	if !strings.Contains(p.lastScript, "if (!chat && contact.id") {
+		t.Fatal("the chat is looked up but does not guard a return")
+	}
 	if !strings.Contains(p.lastScript, "ChatCollection.get(contact.id)") {
 		t.Fatal("the script does not check for the chat the app requires")
 	}

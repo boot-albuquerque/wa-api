@@ -36,3 +36,26 @@ const (
 	// The name is the app's, misspelling included ("Contants").
 	ModuleBlockConstants = Module("WAWebBlockContants")
 )
+
+// The editing modules, measured with TestProbeEditShape.
+const (
+	// ModuleSendMessageEditAction holds sendMessageEdit, and this one IS
+	// readable from toString() because it is synchronous:
+	//
+	//	sendMessageEdit(msg, text, options)
+	//
+	// Its first act is to refuse: it rejects unless canEditText or
+	// canEditCaption says yes. Consulting the same predicate before calling is
+	// not politeness — it turns a rejected promise into an answer that names
+	// the reason.
+	ModuleSendMessageEditAction = Module("WAWebSendMessageEditAction")
+
+	// ModuleMessageEditUtils carries the WINDOW, and the measured value is
+	// 1200 seconds. That number is why the live proof has to SEND before it
+	// edits: every message already in the collection was hours or days old and
+	// canEditText was false for all of them.
+	//
+	// isParentWithinEditProcessingWindow lives here too and THREW when given a
+	// message, so it is not the predicate it sounds like. canEditText is.
+	ModuleMessageEditUtils = Module("WAWebMessageEditUtils")
+)

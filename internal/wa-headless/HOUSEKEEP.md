@@ -4543,3 +4543,73 @@ Nada de identidade sai em log: `Result` carrega CONTAGENS.
 **Status**: entregue.
 **Testes**: `capabilities/block/block_test.go` (11 testes, três com controle
 negativo colado acima) e `blockreal_test.go` (prova ao vivo, reversível).
+
+---
+
+## H60 — editar mensagem, e o teste que passava sem morder
+
+**Data**: 2026-08-21
+**Contexto**: continuação da superfície do whatsapp-web.js, escolhida por ser a
+única das quatro restantes com assinatura completamente legível.
+**Onde**: `internal/wa-headless/capabilities/edit/`,
+`internal/wa-headless/spa/modules_block.go`,
+`internal/wa-headless/probe_edit_test.go`.
+
+### A sonda respondeu três coisas antes de qualquer código
+
+1. **A janela é 1200 s.** `canEditText` deu `false` para as **cinco** mensagens
+   `fromMe` mais recentes da coleção — todas de dias atrás. Consequência de
+   desenho, não curiosidade: o teste ao vivo tem de **enviar** antes de editar.
+   Um teste que reusasse mensagem antiga falharia por motivo alheio ao código.
+2. **`isParentWithinEditProcessingWindow` LANÇA** quando recebe a mensagem. Não é
+   o portão que o nome sugere. `canEditText` é — e é o que a própria
+   `sendMessageEdit` consulta.
+3. **`latestEditMsgKey` já existe** em mensagens nunca editadas. Presença do
+   campo não prova nada; só o **valor** deixando de ser nulo prova. Um script
+   testando `!== undefined` reportaria toda mensagem como editada.
+
+A assinatura veio do `toString()` porque `sendMessageEdit` é **síncrona** —
+`sendMessageEdit(msg, text, options)`, três posicionais, e o corpo mostra que ela
+abre recusando por `canEditText`/`canEditCaption` com a mensagem inútil
+`"Cannot edit message"`.
+
+### A prova ao vivo
+
+```
+sent:   send.Result(id=…902 at=2026-08-21T05:39:02Z waited=1ms)
+edited: edit.Result(fromLen=42 toLen=51 recorded=true waited=509ms)
+```
+
+Dois textos de comprimentos DIFERENTES, para que a pós-condição não possa passar
+comparando um corpo consigo mesmo. A recusa de editar mensagem alheia foi
+exercitada ao vivo no mesmo teste, contra uma mensagem real de entrada.
+
+### O achado que vale mais que a capacidade: um controle negativo que PASSOU
+
+O CN1 desativou a guarda (`if (!allowed)` → `if (false)`) e o teste **passou**.
+A asserção olhava a presença de `Cap.canEditText(msg)` no script; o predicado
+continuava calculado e não controlava mais nada.
+
+Corrigido nos dois lugares — a agulha agora nomeia o desvio, não a condição — e
+o padrão virou entrada no `ARMADILHAS.md`. O mesmo buraco estava no teste de
+pré-condição da H59, escrito no mesmo dia: **buraco achado num teste é buraco nos
+irmãos escritos junto.**
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| guarda do app desativada (`if (false)`) | *passou* → teste corrigido → `the gate is computed but does not guard a return` |
+| `latestEditMsgKey !== undefined` no lugar do valor | `the script tests for the field rather than its value` |
+| pós-condição do corpo removida | `got <nil>, want ErrUnchanged` |
+| texto vazio liberado | `got <nil>, want ErrEmptyText` |
+| (H59, releitura) guarda do chat desativada | `the chat is looked up but does not guard a return` |
+
+Um sexto detalhe, de graça: a primeira versão do teste de ORDEM da guarda
+reportou a ordem invertida porque `strings.Index` achou `sendMessageEdit` num
+**comentário** do script. É a armadilha "guarda casa com a prosa" já catalogada,
+e ela pegou o autor da regra. A agulha virou `A.sendMessageEdit(`.
+
+**Status**: entregue.
+**Testes**: `capabilities/edit/edit_test.go` (13 testes) e
+`editreal_test.go` (prova ao vivo, com envio próprio e recusa de mensagem alheia).

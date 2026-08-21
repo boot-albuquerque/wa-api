@@ -993,3 +993,35 @@ falharia sem dizer por quê.
 | a chamada tem que forma? | `String(fn)` — **só se for síncrona** |
 | o que o app narra sobre o comportamento? | grep no bundle pelo literal |
 | e quando é `async`? | grep pelo corpo do gerador interno; o `toString()` não serve |
+
+## Asserção sobre o PREDICADO não trava a GUARDA
+
+**Medido em 2026-08-21, por um controle negativo que PASSOU.**
+
+A capacidade de edição consulta a guarda do próprio app antes de chamar:
+
+```js
+const allowed = Cap.canEditText(msg) || Cap.canEditCaption(msg);
+if (!allowed) { park({ ok: false, why: 'NOT_EDITABLE' }); return; }
+```
+
+O teste afirmava que o script **continha** `Cap.canEditText(msg)`. O controle
+negativo trocou `if (!allowed)` por `if (false)` — e o teste **passou**. O
+predicado continuava calculado, continuava no texto, e não controlava mais nada.
+
+**Consultar uma guarda e ignorá-la é exatamente o defeito** que o teste existe
+para pegar, e é um defeito plausível: nasce de um `return` removido num refactor,
+não de má-fé.
+
+**A regra**: quando o que importa é que uma condição **desvie**, a agulha tem de
+nomear o desvio (`if (!allowed) { park(`), não a condição. Isto é parente da
+armadilha "guarda que casa com a prosa" — nos dois casos a busca acha algo
+verdadeiro sobre o texto e falso sobre o comportamento.
+
+**Encontrado uma vez, corrigido em dois lugares**: o mesmo padrão estava no
+teste de pré-condição do bloqueio, escrito no mesmo dia. Buraco achado num teste
+é buraco nos irmãos escritos junto — vale reler os do dia.
+
+**Travado por**: `capabilities/edit/edit_test.go::TestTheAppsOwnGateIsAskedFirst`
+e `capabilities/block/block_test.go::TestTheAppsOwnPreconditionIsCheckedHere`,
+ambos com o controle negativo executado registrado no HOUSEKEEP.

@@ -3452,3 +3452,18 @@ máquina.
 
 **Status**: aberto — padrão medido quatro vezes com os dois regimes, causa
 identificada, correção é de prática e não de código.
+
+**Quinta ocorrência — 2026-08-21**, e é a mais limpa como evidência:
+
+```
+--- FAIL: TestHolder_StoppedHolderRefusesToBootAgain (30.00s)
+```
+
+`git status --porcelain internal/wa-headless/runtime/` estava **vazio** — o
+pacote não foi tocado na sessão. Reexecutado isolado com `-count=3 -race`:
+**4,5 s, verde nas três**. Trinta segundos é o teto do teste; 4,5 s é o custo
+real. A distância entre os dois é a máquina, não o código.
+
+O que esta ocorrência acrescenta às quatro anteriores: as outras foram medidas
+com o pacote alterado na mesma sessão, então "não é o código" era inferência.
+Aqui é observação — árvore limpa naquele diretório.

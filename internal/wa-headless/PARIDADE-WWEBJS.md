@@ -543,3 +543,26 @@ restantes, então nenhuma delas está bloqueada por desconhecimento:
 
 Ler as assinaturas com `String(fn)` **antes** de escrever cada uma é o que a
 H58 comprou caro e a H59 comprou barato.
+
+## §6.15 — editar mensagem
+
+`wwebjs` expõe `Message.edit(content, options)` sobre
+`window.Store.EditMessage.sendMessageEdit(msg, content, options)`. **A assinatura
+conferiu** — é a primeira das cinco últimas em que conferiu — porque a função é
+síncrona e o `toString()` a mostra inteira.
+
+**Onde divergimos de propósito:**
+
+1. **Nós perguntamos a guarda antes.** A `sendMessageEdit` rejeita por
+   `canEditText`/`canEditCaption` com `"Cannot edit message"`, que não diz se o
+   problema é o tipo, a autoria ou a janela. Nós consultamos o mesmo predicado
+   primeiro e devolvemos `ErrNotEditable` **com o número da janela** (1200 s).
+2. **Nós verificamos as duas metades.** Corpo mudou E `latestEditMsgKey` deixou
+   de ser nulo. O `wwebjs` devolve o retorno da chamada. Aplicado-sem-registrar é
+   estado real, e `Result.Recorded` o distingue de sucesso.
+3. **Texto vazio é recusado.** Esvaziar mensagem é `revoke`, não `edit`, e fazer
+   isso por engano através desta capacidade é surpresa destrutiva.
+
+**O que a referência não podia dar**: que `latestEditMsgKey` está DEFINIDO em
+mensagens nunca editadas. Isso é fato deste build, medido, e é o que separa uma
+pós-condição real de uma que aprova tudo.
