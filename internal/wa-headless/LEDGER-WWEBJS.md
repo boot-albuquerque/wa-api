@@ -170,7 +170,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `unpin` | — | `MISSING` | — | — | — | não atacado |
 | `mute` | — | `MISSING` | — | — | — | não atacado |
 | `unmute` | — | `MISSING` | — | — | — | não atacado |
-| `markUnread` | — | `MISSING` | — | — | — | — |
+| `markUnread` | chats.MarkUnread | `MISSING` | sim | falha (H78) | sim | duas primitivas medidas e nenhuma marca: `sendConversationSeen` com delta negativo e `Cmd.markChatUnread`. O `Cmd` é barramento de EVENTOS, e o ouvinte deste verbo vive num pedaço de UI que sessão headless não carrega |
 | `fetchMessages` | capabilities/fetchmessages | `PROVEN` | sim | sim | sim | — |
 | `sendStateTyping` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
 | `sendStateRecording` | presence.StateRecording | `PARTIAL` | sim | bloqueada (H50) | sim | **linha corrigida**: eu a marquei MISSING de memória e ela JÁ EXISTIA, mapeada para `markRecording`. A prova ao vivo esbarra no mesmo bloqueio da observação de presença |
