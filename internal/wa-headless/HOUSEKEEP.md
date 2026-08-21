@@ -6242,3 +6242,97 @@ mensagem (medido); `updatePinCollection` recebe algo iterável (medido: lançou
 **Testes**: `capabilities/pin/pin_test.go` travam o vocabulário, a duração, o
 modelo e o contrato honesto; `pinreal_test.go` fica vermelho atrás do próprio
 interruptor.
+
+---
+
+## H82 — como esta SPA confirma uma escrita, e o classificador que responde em trinta segundos
+
+**Data**: 2026-08-21
+**Contexto**: decisão da orquestração — investigar o mecanismo de confirmação
+antes de abrir mais capacidade.
+**Onde**: `internal/wa-headless/spa/confirmation.go`,
+`internal/wa-headless/probe_writeclass_test.go`.
+
+### O que motivou
+
+Das últimas cinco tentativas, **uma entregou e quatro viraram registro**, e as
+quatro falharam do mesmo jeito: *a página aceita, não lança, e nada acontece*.
+Cada capacidade nova vinha pagando o mesmo pedágio, uma execução ao vivo por vez.
+
+### As três classes, com as evidências que já tínhamos
+
+| classe | o que acontece | onde foi medido |
+|---|---|---|
+| `IMMEDIATE` | o modelo move nesta sessão, em menos de um segundo | favoritar, bloquear, editar, silenciar, arquivar/fixar conversa, encaminhar, enviar, reagir, apagar, etiquetas, assunto de grupo, código de convite |
+| `CROSS_SESSION` | chega ao servidor e esta sessão nunca vê | participantes (H58), políticas (H79), contador de não-lidas (H78) |
+| `NOTHING` | aceito e nada acontece em lugar nenhum | verbo do `Cmd` sem ouvinte (H78), fixar mensagem (H81) |
+
+### A hipótese óbvia está ERRADA, e vale dizer qual é
+
+**A camada do módulo não prediz a classe.** `WAWebSetSubjectGroupAction` é
+`IMMEDIATE` e `WAWebSetPropertyGroupAction` é `CROSS_SESSION` — mesmo sufixo,
+mesma família, respostas diferentes. `Cmd.sendStarMsgs` é `IMMEDIATE` e
+`Cmd.markChatUnread` é `NOTHING`.
+
+**O que correlaciona em todos os casos medidos:**
+
+```
+o app escreve o modelo ele mesmo, otimisticamente   -> IMMEDIATE
+o modelo é atualizado por evento vindo do servidor  -> CROSS_SESSION
+nada está ligado à chamada                          -> NOTHING
+```
+
+Favoritar escreve `msg.star` localmente; arquivar escreve `chat.archive`; as
+etiquetas só se moveram quando o espelho local foi chamado explicitamente (H72) —
+o mesmo fato visto do outro lado. Não-lidas são limpas por um recibo de leitura,
+participantes por notificação de grupo, políticas por notificação de propriedade:
+tudo de entrada, e esta sessão não aplica.
+
+**É hipótese com evidência, não lei**, e está escrita para que a próxima
+capacidade comece de uma previsão testável em trinta segundos em vez de uma
+surpresa descoberta numa execução ao vivo perdida.
+
+### O classificador, e os dois defeitos MEUS que os controles pegaram
+
+`spa.ClassifyWriteExpr` + `ClassifyReadExpr`: recebem uma escrita e um leitor,
+medem antes, escrevem, e o **Go** consulta o leitor até ele mover ou o orçamento
+acabar.
+
+Os controles foram três casos com resposta **já registrada**, e eles pegaram
+duas falhas antes de qualquer caso novo ser classificado:
+
+1. **A primeira versão lia uma vez, logo após o `await`** — e reportou o controle
+   do favoritar, medido `IMMEDIATE` a 696 ms, como "não moveu". *O instrumento
+   construído para detectar o defeito da H61 tinha o defeito da H61.*
+2. **A função externa era `async`**, então o `Evaluate` recebia uma promessa e os
+   três controles vieram como `cannot unmarshal object into string`.
+
+E um terceiro, no laço em Go: ele parava em qualquer estágio que não fosse
+`settling`, e `pending` — escrita ainda em curso — também é "continue
+esperando". Dois controles vieram como recusa.
+
+Resultado final, os três batendo:
+
+```
+star          before=false after=true  -> IMMEDIATE  (esperado IMMEDIATE)
+group policy  before=true  after=true  -> not-here   (esperado not-here)
+message pin   before=0     after=0     -> not-here   (esperado not-here)
+```
+
+### O que a investigação custou a uma linha PROVEN
+
+`Client.sendSeen` (`chats.MarkRead`) foi **rebaixada para `PARTIAL`**. A
+pós-condição dela afirma que `chat.unreadCount` moveu na mesma sessão, e a H78
+mediu esse contador como `CROSS_SESSION`. A H52 provou contra um chat em que ele
+moveu; se generaliza é pergunta em aberto, e manter `PROVEN` seria confiar numa
+prova que a medição posterior põe em dúvida.
+
+Placar: `PROVEN` 34, `PARTIAL` 36.
+
+### A regra prática, para as 146 restantes
+
+Antes de escrever pós-condição, rode o classificador. Ele responde `IMMEDIATE`
+ou "não move aqui"; separar `CROSS_SESSION` de `NOTHING` exige uma segunda
+sessão, que é **exatamente o passo que as quatro capacidades falhadas pularam**.
+
+**Status**: entregue.

@@ -1426,3 +1426,33 @@ conclusão foi errada.
 **A regra**: quando uma sonda encontra "a coisa errada que você fazia", confira
 se corrigi-la muda alguma coisa **antes** de gastar uma execução ao vivo. Nomes
 diferentes não implicam valores diferentes.
+
+## Antes de escrever pós-condição, descubra se a escrita é visível daqui
+
+**Medido em 2026-08-21 (H82), depois de quatro capacidades falharem igual.**
+
+Esta SPA tem **três** comportamentos de confirmação, e tratá-los como um só custa
+uma execução ao vivo por capacidade:
+
+```
+IMMEDIATE      o modelo move nesta sessão
+CROSS_SESSION  chega ao servidor e esta sessão nunca vê
+NOTHING        aceito, e nada acontece em lugar nenhum
+```
+
+**A camada do módulo NÃO prediz a classe** — `SetSubjectGroupAction` é IMMEDIATE
+e `SetPropertyGroupAction` é CROSS_SESSION; `Cmd.sendStarMsgs` é IMMEDIATE e
+`Cmd.markChatUnread` é NOTHING.
+
+**O que correlaciona**: escrita otimista do próprio app é IMMEDIATE; modelo
+atualizado por evento de entrada é CROSS_SESSION; chamada sem nada ligado é
+NOTHING.
+
+**A ferramenta**: `spa.ClassifyWriteExpr`. Trinta segundos, e responde IMMEDIATE
+ou "não move aqui". Separar CROSS_SESSION de NOTHING exige **uma segunda
+sessão** — o passo que todas as quatro falhas pularam.
+
+**E rode os controles primeiro.** Os três casos de resposta conhecida pegaram
+DOIS defeitos no próprio classificador antes que ele classificasse qualquer coisa
+nova — incluindo o de ler logo após o `await`, que é o defeito que ele existe
+para detectar.

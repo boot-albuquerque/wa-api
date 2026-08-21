@@ -41,7 +41,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `logout` | — | `MISSING` | — | — | — | apagar credenciais da sessão nunca foi atacado |
 | `getWWebVersion` | — | `MISSING` | — | — | — | trivial, nunca feito |
 | `setDeviceName` | — | `MISSING` | — | — | — | — |
-| `sendSeen` | chats.MarkRead | `PROVEN` | sim | sim | sim | H52 |
+| `sendSeen` | chats.MarkRead | `PARTIAL` | sim | duvidosa | sim | **rebaixada em 2026-08-21 (H82)**: a pós-condição afirma que `chat.unreadCount` moveu NA MESMA SESSÃO, e a H78 mediu esse contador como CROSS_SESSION. A H52 provou contra um chat em que ele moveu; se generaliza é pergunta em aberto |
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento, figurinha e enquete OK; localização e vCard MISSING (H75) |
 | `sendReaction` | capabilities/react | `PARTIAL` | sim | sim | sim | H53: adicionar provado; remover devolve Verified:false |
 | `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
@@ -341,8 +341,8 @@ divergência estrutural, e está aqui como tal em vez de espalhada por linhas.
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 35 | 15% |
-| `PARTIAL` | 35 | 15% |
+| `PROVEN` | 34 | 15% |
+| `PARTIAL` | 36 | 16% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
 | `MISSING` | 146 | 66% |
