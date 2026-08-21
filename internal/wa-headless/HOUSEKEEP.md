@@ -7817,3 +7817,91 @@ aplicada em outra forma.
 **Status**: parcialmente entregue — leitura de votos provada ao vivo; voto
 implementado e travado por teste, sem prova ao vivo porque a enquete não chega
 ao par; e o envio de enquete rebaixado com a medição que o rebaixa.
+
+---
+
+## H99 — "enviada" passa a significar "saiu", em todo o pacote send
+
+**Data**: 2026-08-21.
+**Contexto**: consequência direta da H98. A enquete era reportada como enviada
+por APARECER nesta sessão, e o mesmo método verifica texto, mídia, figurinha,
+documento e resposta.
+
+### A pergunta que a H98 obriga
+
+Quantas outras linhas "enviável" foram provadas só pela aparição local?
+
+`send.verify` procura uma mensagem de saída do tipo certo na `MsgCollection`,
+mais recente que o instante do envio. **Nunca olhou o `ack`.** O texto de fato
+chega — todo teste entre contas desta suíte prova isso pelo destinatário — mas a
+VERIFICAÇÃO não distinguia as duas coisas. Ela acertava por sorte.
+
+### Medi antes de apertar
+
+| fato | tempo |
+|---|---|
+| verificação local (aparição) | **2 ms** |
+| `ack >= 1` — chegou ao servidor | **508 ms** |
+| `ack >= 2` — chegou ao aparelho | **1,01 s** |
+
+Meio segundo é o preço de provar que a mensagem saiu, contra um orçamento de
+verificação de vários segundos. Barato o bastante para não ser decisão de
+produto disfarçada de detalhe.
+
+`send.Result` ganhou `Ack`, e `ErrNeverLeft` é erro próprio — separado de
+`ErrUnverified`, porque os consertos diferem: **nada aparecer** é um despacho que
+não aconteceu; **aparecer em ack 0** é um despacho que o aplicativo aceitou e o
+socket não carregou. O segundo é o que a enquete faz aqui, toda vez.
+
+Confirmado ao vivo: `send.Result(... ack=2 waited=2ms)`.
+
+### O dublê, pela quarta vez, e agora com nome
+
+Os cinco dublês do pacote respondiam o mesmo JSON a qualquer script, então a
+leitura de ack recebia o payload de verificação e o envio falhava numa forma de
+JSON.
+
+A primeira correção casou por `"m.id && m.id.id ==="` — **que o script de
+RESPOSTA também contém**. O dublê passou a engolir o despacho e devolver ack, e
+uma asserção sobre o despacho falhou por um motivo alheio ao que ela afirma.
+
+Conserto: o script carrega o **próprio nome** (`ackReadMarker`). *Um script que
+precisa ser reconhecido deve dizer como se chama.* É a mesma família das oito
+vezes em que um guarda casou com a própria prosa: casar por conteúdo acidental
+em vez de por identidade.
+
+Em todos eles o valor ZERO é o saudável — `ackStuck` — para que todo teste
+escrito antes da pós-condição continue afirmando o que queria afirmar.
+
+### Um instrumento a mais, num teste que falhou e depois passou
+
+`TestRealSPASendsMediaBetweenAccounts` falhou uma vez com "500 replayed, 0
+unrelated fresh inbound" e passou na repetição. Não consertei por palpite:
+acrescentei o que faltava para a PRÓXIMA falha ser informativa — a contagem de
+eventos **descartados pela página**.
+
+Buffer limitado mais sessão recém-iniciada é exatamente a forma que a H93 mediu
+(~1200 mensagens de hidratação nos primeiros segundos), e uma assinatura que
+transborda joga fora chegadas reais junto com o histórico. "Nunca chegou" e
+"chegou e foi descartada" são falhas diferentes, e o teste as reportava
+igualmente.
+
+### E o gate ficou vermelho por causa da MÁQUINA, não do código
+
+Dois boots falharam nos 150 s inteiros do teto do harness. A tentação era subir
+o teto de novo. Medi antes: **load average 11**, subindo para 23 — a máquina do
+usuário, com Chrome, Slack e as próprias execuções ao vivo. Só dois browsers
+órfãos de execuções minhas interrompidas.
+
+Matei os dois órfãos, repeti, e ficou verde **sem tocar em nenhum teto**. Subir
+um limite porque a máquina está ocupada é como se apaga a diferença entre um
+teto e a ausência de um.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| aceitar `ack >= 0` como saída | `TestAMessageThatNeverLeavesIsAnError` | `err = <nil>, want ErrNeverLeft` |
+| idem no envio de enquete | `TestAPollThatNeverLeavesIsAnError` | `err = <nil>, want ErrPollNeverLeft` |
+
+**Status**: entregue.

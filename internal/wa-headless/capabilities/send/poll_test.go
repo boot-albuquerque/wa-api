@@ -38,7 +38,7 @@ func (p *pollDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.Contains(expr, "m.id.id ===") {
+	if strings.Contains(expr, "wa-headless/poll-ack") {
 		ack := 2
 		if p.ackStuck {
 			ack = 0

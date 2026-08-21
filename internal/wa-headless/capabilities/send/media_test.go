@@ -34,6 +34,22 @@ func (p *mediaDouble) eval(ctx context.Context, expr string, out *string) error 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// THE ACK READ, answered like the page answers it.
+	//
+	// Without this branch the double hands the verification payload to the ack
+	// reader and the send fails on a JSON shape — the double being less
+	// faithful than production, which is the fourth time in one session. It
+	// answers 2 (delivered) so that every test written before the ack
+	// postcondition keeps asserting what it meant to assert.
+	//
+	// Keyed on the script's own MARKER. The first attempt matched an expression
+	// the reply dispatch also contains, so the double answered an ack payload to
+	// a dispatch and swallowed it.
+	if strings.Contains(expr, ackReadMarker) {
+		*out = `{"found":true,"ack":2}`
+		return nil
+	}
+
 	switch {
 	case strings.Contains(expr, "getModelsArray"):
 		want := between(expr, `const want = "`, `"`)

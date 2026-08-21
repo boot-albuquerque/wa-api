@@ -253,6 +253,7 @@ var pollAckBudget = 20 * time.Second
 // pollAckScript reads one message's ack. Synchronous: the clock is Go's.
 func pollAckScript(id string) string {
 	return `JSON.stringify((() => {
+		const marker = "wa-headless/poll-ack";
 		const MC = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
 		const all = typeof MC.getModelsArray === 'function' ? MC.getModelsArray() : [];
 		for (const m of all) {

@@ -57,6 +57,14 @@ var (
 	// error and NO outgoing message appeared. The page said yes and nothing
 	// happened, which is precisely the silent success invariant 14 forbids.
 	ErrUnverified = fmt.Errorf("send: dispatched but no outgoing message appeared")
+	// ErrNeverLeft is a message that appeared in this session and never reached
+	// the server.
+	//
+	// It is distinct from ErrUnverified because the repairs differ: nothing
+	// appearing is a dispatch that did not happen, and something appearing at
+	// ack 0 is a dispatch the application accepted and the socket did not
+	// carry. The second is what a poll does on this build, every time (H98).
+	ErrNeverLeft = fmt.Errorf("send: the message appeared locally and never reached the server")
 )
 
 // Result is a message this session sent, identified the same way every other
@@ -64,6 +72,10 @@ var (
 type Result struct {
 	ID        messagemeta.MessageID
 	Timestamp time.Time
+	// Ack is the delivery state reached before this call returned: 1 server,
+	// 2 device, 3 read. It is never 0 on a successful return — a message still
+	// pending is reported as ErrNeverLeft rather than as a send.
+	Ack int
 	// Waited is how long verification took. A number worth having: it is the
 	// difference between "the send is confirmed" and "the send is confirmed
 	// eventually", and only measurement tells them apart.
@@ -72,8 +84,8 @@ type Result struct {
 
 // String redacts, like every other rendering in this module.
 func (r Result) String() string {
-	return fmt.Sprintf("send.Result(id=%s at=%s waited=%s)",
-		r.ID.ID, r.Timestamp.UTC().Format(time.RFC3339), r.Waited.Round(time.Millisecond))
+	return fmt.Sprintf("send.Result(id=%s at=%s ack=%d waited=%s)",
+		r.ID.ID, r.Timestamp.UTC().Format(time.RFC3339), r.Ack, r.Waited.Round(time.Millisecond))
 }
 
 // Text sends text to a chat and returns only after proving it was sent.
@@ -302,7 +314,25 @@ func verify(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 			if want != kindAny && kindOf(m.Type) != want {
 				continue
 			}
-			return Result{ID: m.ID, Timestamp: m.Timestamp, Waited: time.Since(start)}, nil
+			// FOUND — BUT "IT IS IN THE COLLECTION" IS NOT "IT WAS SENT".
+			//
+			// That was the whole postcondition until H98, and it is exactly
+			// what let a poll be reported as sent while sitting at ack 0
+			// forever, with the recipient never receiving it. Appearing here
+			// and leaving here are different facts and this used to conflate
+			// them.
+			//
+			// The ack is the local evidence that the server has it: 0 pending,
+			// 1 server, 2 device, 3 read. Measured on this account (H99):
+			// appearance is instant (2ms), ack>=1 lands at ~508ms and ack>=2 at
+			// ~1.01s. Half a second is what proving the send costs, against a
+			// verification budget of many seconds.
+			ack, err := waitForAck(ctx, runner, eval, m.ID.ID, deadline, label)
+			if err != nil {
+				return Result{}, err
+			}
+			return Result{ID: m.ID, Timestamp: m.Timestamp, Ack: ack,
+				Waited: time.Since(start)}, nil
 		}
 
 		time.Sleep(verifyTick)
@@ -327,5 +357,69 @@ func verifyScript(resolvedJID string) string {
 			out.push(m);
 		}
 		return out;
+	})())`
+}
+
+// waitForAck bounds the wait for a message to reach the server.
+//
+// IT SHARES THE VERIFICATION DEADLINE rather than adding one of its own. A send
+// that has already spent most of its budget finding the message should not then
+// be granted a fresh budget to prove it left; the caller asked for one bounded
+// operation.
+func waitForAck(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
+	id string, deadline time.Time, label string) (int, error) {
+
+	last := 0
+	for {
+		var raw string
+		if err := runner.Do(ctx, engine.OpStateProbe, label+"/ack", func(ctx context.Context) error {
+			return eval(ctx, ackScript(id), &raw)
+		}); err != nil {
+			return 0, fmt.Errorf("send: reading the ack: %w", err)
+		}
+		var out struct {
+			Found bool `json:"found"`
+			Ack   int  `json:"ack"`
+		}
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return 0, fmt.Errorf("send: unexpected ack answer: %w", err)
+		}
+		if out.Found {
+			last = out.Ack
+		}
+		if last >= 1 {
+			return last, nil
+		}
+		if !time.Now().Before(deadline) {
+			return last, fmt.Errorf("%w (ack=%d)", ErrNeverLeft, last)
+		}
+		time.Sleep(verifyTick)
+	}
+}
+
+// ackScript reads one message's ack. Synchronous: the clock stays on the Go
+// side, as it does for every other wait in this module.
+// ackReadMarker is how a test double recognises this script.
+//
+// IT EXISTS BECAUSE THE OBVIOUS MARKER WAS NOT UNIQUE. The doubles first keyed
+// off "m.id && m.id.id ===", which the REPLY dispatch script also contains — so
+// the double answered the ack payload to a dispatch and swallowed it, and an
+// assertion about the dispatch failed for a reason unrelated to the code under
+// test. A script that needs to be recognised should say its own name.
+const ackReadMarker = "wa-headless/ack-read"
+
+func ackScript(id string) string {
+	return `JSON.stringify((() => {
+		const marker = ` + strconv.Quote(ackReadMarker) + `;
+		const coll = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
+		const all = (coll && typeof coll.getModelsArray === 'function') ? coll.getModelsArray() : [];
+		for (const m of all) {
+			try {
+				if (m.id && m.id.id === ` + strconv.Quote(id) + `) {
+					return { found: true, ack: typeof m.ack === 'number' ? m.ack : -1 };
+				}
+			} catch (e) {}
+		}
+		return { found: false, ack: 0 };
 	})())`
 }

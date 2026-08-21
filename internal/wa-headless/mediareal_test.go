@@ -95,11 +95,20 @@ func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 
 	deadline := time.Now().Add(120 * time.Second)
 	replayed, other := 0, 0
+	// DROPS ARE PART OF THE ANSWER, not noise. A bounded page buffer plus a
+	// freshly booted session is exactly the shape H93 measured — ~1200 messages
+	// of hydration in the first seconds — and a subscription that overflows
+	// throws away real arrivals along with the history. "It never arrived" and
+	// "it arrived and was dropped" are different failures and this test used to
+	// report them identically.
+	dropped, seen := 0, 0
 	for time.Now().Before(deadline) {
 		d, err := sub.Drain(context.Background(), "media/drain")
 		if err != nil {
 			t.Fatalf("drain: %v", err)
 		}
+		dropped += d.Dropped
+		seen += d.Seen
 		if d.Reinstalled {
 			t.Fatal("the receiver's subscription was lost mid-test; the arrival could not " +
 				"have been observed and this run cannot answer the question")
@@ -135,8 +144,9 @@ func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	}
 	t.Fatalf("the image was SENT and verified on the sender (id=%s), but no inbound event "+
-		"with that id arrived within 120s (%d replayed, %d unrelated fresh inbound)",
-		res.ID.ID, replayed, other)
+		"with that id arrived within 120s (%d replayed, %d unrelated fresh inbound, "+
+		"%d DROPPED by the page of %d seen)",
+		res.ID.ID, replayed, other, dropped, seen)
 }
 
 // TestRealSPASendsADocumentAndTheKindIsObservable proves the AsDocument flag,

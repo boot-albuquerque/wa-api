@@ -23,6 +23,12 @@ import (
 // than the world, and would let the exact defect this suite exists to catch
 // pass green (ARMADILHAS §1, HOUSEKEEP H34).
 type pageDouble struct {
+	// ackStuck makes the page answer ack 0 forever, which is what a message that
+	// is created and never sent looks like. THE ZERO VALUE IS THE HEALTHY ONE,
+	// so every test written before the ack postcondition keeps asserting what it
+	// meant to.
+	ackStuck bool
+
 	// resolvedJID is what queryWidExists hands back: the server's identity.
 	resolvedJID string
 	// omitJID reproduces a page that reports success without an identity.
@@ -50,6 +56,16 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 		return err
 	}
 	switch {
+	// THE ACK READ COMES FIRST, and the order is the point: three of these
+	// scripts walk the message collection, so "getModelsArray" cannot tell them
+	// apart. The ack script carries its own marker for exactly this reason.
+	case strings.Contains(expr, ackReadMarker):
+		ack := 2
+		if p.ackStuck {
+			ack = 0
+		}
+		*out = fmt.Sprintf(`{"found":true,"ack":%d}`, ack)
+		return nil
 	case strings.Contains(expr, "getModelsArray"):
 		want := between(expr, `const want = "`, `"`)
 		p.verifyWants = append(p.verifyWants, want)
@@ -228,5 +244,40 @@ func TestAlreadyCancelledContextNeverDispatches(t *testing.T) {
 	}
 	if p.dispatched != 0 {
 		t.Fatalf("dispatched %d time(s) for a caller that had already given up", p.dispatched)
+	}
+}
+
+// A MESSAGE THAT APPEARS AND NEVER LEAVES IS NOT A SENT MESSAGE.
+//
+// Verification was "an outgoing message of the right kind appeared in this
+// session", and that shipped. H98 measured what it misses: a poll is created as
+// poll_creation with its options intact, sits at ack 0 for twenty seconds, and
+// the recipient never receives it — reported as a successful send.
+//
+// The cost of proving it left was measured before it was imposed (H99): local
+// appearance is instant, ack>=1 lands at ~508ms.
+func TestAMessageThatNeverLeavesIsAnError(t *testing.T) {
+	compressClock(t)
+	p := &pageDouble{resolvedJID: lidJID, storedUnder: lidJID, storedAt: time.Now(), ackStuck: true}
+	_, err := Text(context.Background(), engine.NewRunner(), p.eval, phoneJID, "hi", "t")
+	if !errors.Is(err, ErrNeverLeft) {
+		t.Fatalf("err = %v, want ErrNeverLeft", err)
+	}
+	if !strings.Contains(err.Error(), "ack=0") {
+		t.Errorf("the error does not report the ack it saw: %v", err)
+	}
+}
+
+// And a successful send carries the ack it reached, because "appeared" and
+// "sent" are now two facts rather than one.
+func TestASuccessfulSendReportsItsAck(t *testing.T) {
+	compressClock(t)
+	p := &pageDouble{resolvedJID: lidJID, storedUnder: lidJID, storedAt: time.Now()}
+	got, err := Text(context.Background(), engine.NewRunner(), p.eval, phoneJID, "hi", "t")
+	if err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if got.Ack < 1 {
+		t.Fatalf("ack = %d; a successful send must have left", got.Ack)
 	}
 }
