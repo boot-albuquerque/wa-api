@@ -29,6 +29,10 @@ import (
 var (
 	// ErrInvite is the page refusing or throwing.
 	ErrInvite = fmt.Errorf("group: the page refused the invite operation")
+	// ErrNoCode is the call settling with no code on the model. It is distinct
+	// from ErrInvite because the repairs differ: a page that hung is a page
+	// problem, and a code that never landed is a group or permission one.
+	ErrNoCode = fmt.Errorf("group: the invite query settled and no code landed on the group")
 	// ErrNotGroup is a jid that is not a group.
 	ErrNotGroup = fmt.Errorf("group: not a group")
 	// ErrNotAdmin is this account lacking the right to see or change the
@@ -112,10 +116,16 @@ func (m *Manager) invite(ctx context.Context, groupJID string, revoke bool, labe
 		if err := json.Unmarshal([]byte(raw), &out); err != nil {
 			return Invite{}, fmt.Errorf("group: unexpected invite answer: %w", err)
 		}
-		if out.Stage != "pending" {
+		if out.Stage != "pending" && out.Stage != "settling" {
 			break
 		}
 		if !time.Now().Before(deadline) {
+			// A settling stage that ran out of budget is a code that never
+			// landed on the model, not a page that hung — and this entry has
+			// already spent a day on the difference.
+			if out.Stage == "settling" {
+				return Invite{}, fmt.Errorf("%w within %s", ErrNoCode, createBudget)
+			}
 			return Invite{}, fmt.Errorf("%w: the page never settled within %s", ErrInvite, createBudget)
 		}
 		time.Sleep(createTick)
@@ -190,13 +200,37 @@ func inviteScript(groupJID string, revoke bool) string {
 
 			stage = ` + strconv.Quote(map[bool]string{true: "revoke", false: "query"}[revoke]) + `;
 			const A = window.require('` + string(spa.ModuleGroupInviteAction) + `');
-			const code = ` + map[bool]string{
-		true:  "await A.revokeGroupInvite(md)",
-		false: "await A.queryGroupInviteCode(md)",
-	}[revoke] + `;
-			const asString = (typeof code === 'string') ? code
-				: (code && typeof code.code === 'string' ? code.code : '');
-			park({ stage: 'done', ok: true, why: '', code: asString });
+			// THE RETURN VALUE IS NOT THE CODE. Measured: the call settles and
+			// resolves to undefined, and the code lands on the MODEL. Reading
+			// the return is what made this look like it never produced anything
+			// — and, before that, like it hung.
+			` + map[bool]string{
+		true:  "await A.revokeGroupInvite(md);",
+		false: "await A.queryGroupInviteCode(md);",
+	}[revoke] + `
+
+			stage = 'read';
+			// WHERE THE CODE LANDS was measured on both the metadata and the
+			// chat, because it was never established which owns it; the first
+			// string wins and both are tried on every read.
+			const readCode = () => {
+				for (const obj of [md, chat]) {
+					try {
+						const v = obj && obj.inviteCode;
+						if (typeof v === 'string' && v.length) { return v; }
+					} catch (e) {}
+				}
+				return '';
+			};
+			const code = readCode();
+			if (code) {
+				park({ stage: 'done', ok: true, why: '', code: code });
+			} else {
+				// THE MODEL IS PARKED and Go polls it: the await settles before
+				// the field lands, which is the same lesson as H61 and the third
+				// capability in this module to need it.
+				park({ stage: 'settling', ok: true, why: '', gjid: ` + strconv.Quote(groupJID) + ` });
+			}
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 160) });
 		}
@@ -205,8 +239,24 @@ func inviteScript(groupJID string, revoke bool) string {
 	})())`
 }
 
+// inviteResultScript re-reads the code off the live models each round rather
+// than holding a value the kick captured too early.
 const inviteResultScript = `JSON.stringify((() => {
 	const s = window[` + `"` + inviteStateKey + `"` + `];
 	if (!s) { return { stage: 'query', ok: false, why: 'STATE_MISSING' }; }
+	if (s.stage === 'settling') {
+		try {
+			const W = window.require('WAWebWidFactory');
+			const C = window.require('WAWebChatCollection').ChatCollection;
+			const chat = C.get(W.createWid(s.gjid));
+			for (const obj of [chat && chat.groupMetadata, chat]) {
+				const v = obj && obj.inviteCode;
+				if (typeof v === 'string' && v.length) {
+					return { stage: 'done', ok: true, why: '', code: v };
+				}
+			}
+		} catch (e) {}
+		return { stage: 'settling', ok: false, why: '' };
+	}
 	return s;
 })())`

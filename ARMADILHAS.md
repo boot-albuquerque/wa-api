@@ -1329,3 +1329,30 @@ arg0=[[0].id [0].type]      arg1=[[0].id [0].id.toString]
 **Vale para qualquer API que receba lista**, e são muitas nesta SPA. O sintoma é
 sempre o mesmo: a resposta é um único método de iteração — `forEach`, `map`,
 `filter` — e nada além dele.
+
+## O retorno da chamada não é o resultado — às vezes ela POPULA o modelo
+
+**Medido em 2026-08-21 (H57).**
+
+```js
+const code = await A.queryGroupInviteCode(md);   // undefined, sempre
+```
+
+A chamada assenta e resolve para `undefined`. O código de convite aterrissa em
+`md.inviteCode`. Ler o retorno faz toda consulta bem-sucedida parecer vazia — e
+foi isso que manteve a H57 aberta por um dia, com um diagnóstico ("trava") que a
+medição depois não confirmou.
+
+**É parente do "`await` não é a conclusão", e pior**: lá o valor certo chega
+atrasado; aqui ele **nunca** passa pelo retorno.
+
+**O teste**: quando uma chamada resolve para `undefined` mas o efeito
+evidentemente aconteceu, procure o valor no MODELO antes de concluir que ela
+falhou. E consulte mais de um dono possível — qual objeto guarda o campo
+raramente está escrito em algum lugar.
+
+**Uma nota sobre hipóteses bonitas.** O instrumento da H73 produziu uma
+explicação elegante para os dois sintomas contraditórios desta entrada: uma memo
+envenenada por tentativa anterior. A sonda mediu `memoBefore: ["neither"]` — não
+existe memo. A hipótese caiu, está registrada como caída, e o travamento original
+segue **sem explicação** em vez de receber uma causa inventada.

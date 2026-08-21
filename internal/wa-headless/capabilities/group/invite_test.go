@@ -11,14 +11,10 @@ import (
 	"wa-api/internal/wa-headless/engine"
 )
 
-// THE CAPABILITY DOES NOT WORK AGAINST THE LIVE PAGE (H57): queryGroupInviteCode
-// reads iAmAdmin off a metadata that is not populated, and three argument
-// shapes did not fix it.
-//
-// These tests cover the half that IS correct — the Go-side refusals, the
-// credential handling and the link — so that the measured work is preserved and
-// the coverage number stays honest about what exists. None of them claims the
-// capability works.
+// The capability WORKS (H57 closed by H73's instrument). What blocked it was
+// never the argument: queryGroupInviteCode SETTLES, resolves to undefined, and
+// puts the code on the MODEL. Reading the return value is what made it look like
+// it produced nothing.
 
 type inviteDouble struct {
 	ok    bool
@@ -219,4 +215,54 @@ func (p *stallingInviteDouble) eval(ctx context.Context, expr string, out *strin
 	}
 	*out = `{"started":true}`
 	return nil
+}
+
+// TestTheCodeIsReadOffTheModelNotTheReturn is the finding H57 cost a day to
+// reach. queryGroupInviteCode resolves to undefined; the code lands on the
+// group's metadata. A capability that trusts the return value reports every
+// successful query as empty.
+func TestTheCodeIsReadOffTheModelNotTheReturn(t *testing.T) {
+	script := inviteScript("120363000000000000@g.us", false)
+	if !strings.Contains(script, "await A.queryGroupInviteCode(md);") {
+		t.Fatal("the call is not made as a statement; its return value is not the code")
+	}
+	if strings.Contains(script, "const code = await A.queryGroupInviteCode") {
+		t.Fatal("the return value is being taken as the code, which is what failed")
+	}
+	if !strings.Contains(script, "const v = obj && obj.inviteCode;") {
+		t.Fatal("the script does not read inviteCode off the model")
+	}
+	// BOTH owners are tried: which one holds it was never established, and
+	// picking one would work until it did not.
+	if !strings.Contains(script, "for (const obj of [md, chat])") {
+		t.Fatal("only one owner is consulted for the code")
+	}
+	if !strings.Contains(inviteResultScript, "chat.groupMetadata, chat") {
+		t.Fatal("the settling read does not consult both owners")
+	}
+}
+
+// TestACodeThatNeverLandsIsNotAHungPage. The two have different repairs, and
+// this entry spent a day on the difference.
+func TestACodeThatNeverLandsIsNotAHungPage(t *testing.T) {
+	settling := func(_ context.Context, expr string, out *string) error {
+		if strings.Contains(expr, "const s = window[") {
+			*out = `{"stage":"settling","ok":false,"why":""}`
+			return nil
+		}
+		*out = `{"started":true}`
+		return nil
+	}
+	ob, ot := createBudget, createTick
+	createBudget, createTick = 120*time.Millisecond, 5*time.Millisecond
+	defer func() { createBudget, createTick = ob, ot }()
+
+	_, err := New(engine.NewRunner(), settling).
+		InviteCode(context.Background(), "120363000000000000@g.us", "t")
+	if !errors.Is(err, ErrNoCode) {
+		t.Fatalf("got %v, want ErrNoCode", err)
+	}
+	if strings.Contains(err.Error(), "never settled") {
+		t.Fatalf("a code that never landed is reported as a hung page: %v", err)
+	}
 }

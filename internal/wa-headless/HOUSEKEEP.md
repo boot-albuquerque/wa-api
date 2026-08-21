@@ -4399,9 +4399,8 @@ nomeado para que a próxima tentativa não recomece pela assinatura.
 **A mensagem de erro da capacidade diz isso**, em vez de culpar o chamador por
 perguntar.
 
-**Status**: parcialmente entregue — a camada de preparação foi entendida e a
-assinatura correta está medida e aplicada; falta a busca do código, que trava
-neste build.
+**Status**: ~~parcialmente entregue~~ **entregue** — fechada no mesmo dia pela
+H73 (ver continuação abaixo).
 
 ---
 
@@ -5669,5 +5668,67 @@ etiqueta inexistente recusada.
 | pular o espelho local | `the local mirror is not updated, so chat.labels would never move` |
 | não checar se a etiqueta existe | `the known-label check is computed but does not guard a return` |
 | script confia no `await` | `the apply branch does not hand the settling decision to Go` |
+
+**Status**: entregue.
+
+---
+
+## H57 (continuação) — o convite: a chamada nunca travou, o retorno é que não era o código
+
+**Data**: 2026-08-21.
+
+### A hipótese que o instrumento produziu, e que CAIU
+
+O instrumento da H73 mostrou que `queryGroupInviteCode` lê
+`$ProxyState$state.groupInviteCodePromise` e **retorna sem lançar**. Isso
+explicava elegantemente os dois sintomas irreconciliáveis da entrada original —
+"lança `reading iAmAdmin`" e "trava para sempre" — como uma função com duas
+saídas, memo e caminho fresco, sendo a memo envenenada por uma tentativa
+anterior.
+
+**A medição derrubou a hipótese.** A sonda leu `memoBefore: ["neither"]`: não
+existe campo de memo em lugar nenhum, nem no chat nem na metadata. A explicação
+bonita estava errada, e está registrada como errada porque um achado com
+diagnóstico errado é pior que nenhum.
+
+### O que a mesma sonda mediu, e é a resposta
+
+```
+afterClear: {ok: true, v: "undefined"}
+inviteCodeAfter: "present"
+```
+
+A chamada **assenta** — não trava. Ela resolve para `undefined` e **popula o
+modelo**. O código antigo lia o valor de retorno, achava vazio, e o que parecia
+"nunca produz nada" era isso.
+
+O travamento de 90 s da medição original continua sem explicação, e fica dito
+assim em vez de recebendo uma causa inventada. O que mudou entre as duas
+execuções não foi medido.
+
+### Prova ao vivo
+
+```
+read:    group.Invite(code=true len=22 revoked=false)
+revoked: group.Invite(code=true len=22 revoked=true)
+```
+
+O código nunca aparece em log — só o comprimento e o fato de existir. Um link de
+convite é credencial.
+
+### Terceira capacidade a precisar da lição do `await`
+
+O `await` assenta antes de o campo aterrissar, então o modelo é estacionado e o
+Go relê. E orçamento esgotado devolve `ErrNoCode`, não "página travada": os
+consertos são diferentes, e esta entrada gastou um dia exatamente nessa
+diferença.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| voltar a ler o retorno como código | `the return value is being taken as the code, which is what failed` |
+| consultar um único dono do campo | `only one owner is consulted for the code` |
+| código ausente indistinto de travamento | `got …never settled…, want ErrNoCode` |
 
 **Status**: entregue.

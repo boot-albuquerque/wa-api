@@ -85,6 +85,13 @@ func TestProbeArgumentShapes(t *testing.T) {
 			[]string{"array", "array"}, "H72 — both arguments are lists"},
 		{"WAWebTextStatusAction", "setMyTextStatus", 5,
 			[]string{"string", "string", "string", "string", "string"}, "H66 — primitives"},
+		// H57: the invite link. The blocker here is a HANG, not a shape — and a
+		// hang is an answer too: the probe reporting "never settled" says the
+		// call is waiting on something, while a thrown TypeError would say the
+		// argument was wrong.
+		{"WAWebGroupQueryJob", "queryGroupInvite", 1, nil, "H57 — hangs"},
+		{"WAWebGroupInviteAction", "queryGroupInviteCode", 1, nil, "H57"},
+		{"WAWebGroupInviteAction", "revokeGroupInviteCode", 1, nil, "H57"},
 	}
 
 	for _, tg := range targets {
