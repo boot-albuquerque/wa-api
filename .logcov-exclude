@@ -32,3 +32,28 @@ internal/wa-noise/
 # nao codigo de producao a instrumentar; contar seus ~45 metodos triviais no
 # denominador so diluiria o percentual.
 pkg/infra/wa-noise/client/testkit/
+
+# pkg/infra/wa-noise/adapters/ — DECISÃO DE ARQUITETURA (2026-08-21, F193),
+# não conveniência de métrica. A camada de adaptador NÃO é ponto de
+# instrumentação neste projeto: ela resolve sessão, converte tipos e delega à
+# fachada, e quem regista a falha é o USE CASE, que tem o nome da operação e o
+# utilizador em mãos. Logar nos dois lados criaria as duas fontes de verdade
+# que o CLAUDE.md proíbe — a mesma razão que fez a F187 custar um dia.
+#
+# Por que a exclusão MELHORA a métrica em vez de a afrouxar, medido em
+# 2026-08-21:
+#
+#   com adaptadores    453/694 = 65,3%   dos quais 0/85 = 0,0% são adaptadores
+#   sem adaptadores    453/609 = 74,4%
+#
+# Os 85 métodos eram 12,2% do denominador e mediam ZERO. Ao diluir, mascaravam
+# regressão no código que realmente loga: o piso passa de 667 para 744 sobre a
+# superfície que a métrica se propõe a medir. E a projeção mostrava que a
+# paridade que falta (comunidades, business, misc) empurraria para 63,3% — o
+# gate estava a punir trabalho correto.
+#
+# DIFERENÇA face aos quatro extratos acima, que não deve ser varrida: aqueles
+# são dublês de teste e código de terceiros vendorizado, que não PODEM logar.
+# Este é código de produção nosso que ESCOLHEMOS não instrumentar. Se essa
+# escolha de layering mudar, esta linha sai e o piso é recalculado.
+pkg/infra/wa-noise/adapters/

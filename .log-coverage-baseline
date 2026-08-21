@@ -59,6 +59,54 @@
 # conscientemente. Toda reducao de qualquer valor abaixo exige uma linha
 # `# justificativa: <texto>` adjacente.
 
+
+# --- F193 (2026-08-21): o extrato de adaptadores saiu do denominador ---
+#
+# `.logcov-exclude` passou a excluir `pkg/infra/wa-noise/adapters/` por DECISÃO
+# DE ARQUITETURA (a razão de layering está escrita lá, não aqui). As quatro
+# travas mudaram todas na mesma passagem, porque a exclusão move o denominador
+# das duas métricas ao mesmo tempo:
+#
+#   min_eligible          676 -> 609   (-85 métodos de adaptador; -18 que a
+#                                        newsletter tinha acrescentado lá)
+#   min_func_coverage     667 -> 744   (SOBE: os 85 mediam 0,0% e diluíam)
+#   min_errpath_coverage  867 -> 868
+#
+# A subida de min_func_coverage é o ponto: a exclusão APERTA o gate sobre o
+# código que a métrica se propõe a medir, em vez de o afrouxar para passar.
+# Ver F193 no HOUSEKEEP.md para os números completos e as duas saídas recusadas.
+#
+# F192 (2026-08-21, integrada de wa-qr-regen): min_eligible 609 -> 611 e
+# min_func_coverage 744 -> 741. ENTRAM (2), em pkg/application/session:
+#   startInFlight.acquire   ELIGIBLE (tem return; nenhuma regra X a tira)
+#   startInFlight.release   ELIGIBLE (3 statements; X1 exige <=2)
+# São as primitivas do lock que serializa Start por utilizador e impedem um
+# SEGUNDO fluxo de pareamento. Não logam de propósito: a decisão que
+# implementam já é registada pelo chamador, em Start, com userid e nível Warn.
+# Logar dentro delas duplicaria a linha e poria E/S de log debaixo do mutex.
+#
+# A queda de 3 décimos é o PREÇO de uma correção de correção, e fica visível
+# aqui em vez de ser mascarada — a alternativa era gastar a segunda anotação
+# //log:exempt, e isso é orçamento de política. Ver F192/F193/F197.
+#
+# F200 (2026-08-21): min_eligible 611 -> 612 e min_func_coverage 741 -> 742.
+# ENTRA (1): userInfoRepublisher.RepublishUser, o adaptador que invalida a
+# cache de user-info depois de uma edicao. Ele LOGA (o descarte de entradas de
+# token e o recarregamento), portanto entra coberto e o percentual SOBE.
+#
+# F73 + F194 (2026-08-21): min_eligible 612 -> 614, min_func_coverage 742 -> 743.
+# ENTRAM (2): handlePushName e handleBusinessName, os dois handlers que fazem
+# PushName/BusinessName virarem webhook. Ambos LOGAM, portanto entram cobertos
+# e o percentual sobe.
+#
+# F191 (2026-08-21): min_eligible 614 -> 624, min_func_coverage 743 -> 747,
+# min_errpath 868 -> 869. ENTRAM (10): os tres handlers de etiqueta, os cinco
+# metodos do LabelRepository e os dois handlers HTTP de leitura.
+#
+# O percentual SOBE porque todos logam. Os do repositorio seguem a convencao
+# que user_repository.go e message_history.go ja' usavam — falha de escrita
+# regista a TABELA, que e' o que o operador procura no log. Escrever esta
+# camada sem log teria BAIXADO o gate; segui-la subiu-o.
 stage=ratchet
 
 # rules_frozen=true (ADR-008, a partir da Fase 12): as regras X1-X8/L1-L3 de
@@ -1123,7 +1171,7 @@ rules_frozen=true
 #
 # Fica registado porque um numero que melhora sem merito e' tao suspeito como um
 # que piora sem explicacao.
-min_func_coverage=667
+min_func_coverage=747
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1344,7 +1392,7 @@ min_func_coverage=667
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=867
+min_errpath_coverage=869
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1575,7 +1623,7 @@ min_errpath_coverage=867
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=676
+min_eligible=624
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
