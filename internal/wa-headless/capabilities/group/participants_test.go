@@ -85,7 +85,7 @@ func TestTheTwoSiblingsHaveDifferentShapes(t *testing.T) {
 	if strings.Contains(rem.lastScript, "removeParticipantsJob({") {
 		t.Fatal("remove is called with an object; its source takes seven positional arguments")
 	}
-	if !strings.Contains(rem.lastScript, "removeParticipantsJob(gwid, [r.wid]") {
+	if !strings.Contains(rem.lastScript, "removeParticipantsJob(gwid, [part(r.wid)]") {
 		t.Fatal("remove does not use the positional shape read from its source")
 	}
 }
@@ -128,30 +128,99 @@ func TestNoOpsAreSuccesses(t *testing.T) {
 	}
 }
 
-// TestACountThatDoesNotMoveIsAFailure is the postcondition: removing somebody
-// who is still there, or adding somebody who never arrives, is what a caller
-// cannot see.
-func TestACountThatDoesNotMoveIsAFailure(t *testing.T) {
+// TestARealChangeIsReportedUNVERIFIED is the honest contract, and it is the
+// measured one: this build shows the session that made a participant change
+// nothing at all — not the metadata, not a system message. A version of this
+// code that claimed otherwise reported "unchanged" for three changes that had
+// all reached the server, and left the lab group with one member.
+func TestARealChangeIsReportedUnverified(t *testing.T) {
 	compressPartClock(t)
-	p := &partDouble{ok: true, before: 3, after: 3}
-	_, err := parts(p).RemoveParticipant(context.Background(), testGroupJID, "1@c.us", "t/rem")
-	if !errors.Is(err, ErrMembershipUnchanged) {
-		t.Fatalf("got %v, want ErrMembershipUnchanged", err)
+	p := &partDouble{ok: true, before: 3}
+	got, err := parts(p).RemoveParticipant(context.Background(), testGroupJID, "1@c.us", "t/rem")
+	if err != nil {
+		t.Fatalf("RemoveParticipant: %v", err)
 	}
-	if !strings.Contains(err.Error(), "wanted 2") {
-		t.Fatalf("the error must say what was expected: %v", err)
+	if got.Verified {
+		t.Fatalf("a real change claims to be verified: %s", got)
+	}
+	if got.WantedAfter != 2 {
+		t.Fatalf("the requested count is not carried: %s", got)
+	}
+	if !strings.Contains(got.String(), "verified=false") {
+		t.Fatalf("the rendering hides that nothing was confirmed: %s", got)
+	}
+}
+
+// TestANoOpIsTheOneThingThisBuildCanConfirm.
+func TestANoOpIsTheOneThingThisBuildCanConfirm(t *testing.T) {
+	compressPartClock(t)
+	p := &partDouble{ok: true, why: "NOT_A_MEMBER", before: 2}
+	got, err := parts(p).RemoveParticipant(context.Background(), testGroupJID, "1@c.us", "t/rem")
+	if err != nil {
+		t.Fatalf("RemoveParticipant: %v", err)
+	}
+	if !got.NoOp || !got.Verified {
+		t.Fatalf("a no-op is not reported as confirmed: %s", got)
+	}
+}
+
+// TestTheScriptDoesNotWaitOnSomethingThatNeverMoves. Three runs waited 90
+// seconds on the metadata for changes that had already worked.
+func TestTheScriptDoesNotWaitOnSomethingThatNeverMoves(t *testing.T) {
+	compressPartClock(t)
+	p := &partDouble{ok: true, before: 3}
+	if _, err := parts(p).RemoveParticipant(context.Background(), testGroupJID, "1@c.us", "t/rem"); err != nil {
+		t.Fatalf("RemoveParticipant: %v", err)
+	}
+	if strings.Contains(p.lastScript, "stage: 'settling'") {
+		t.Fatal("the script still waits on a signal this build never sends")
+	}
+	if strings.Contains(participantsResultScript, "settling") {
+		t.Fatal("the result script still has a settling branch")
+	}
+}
+
+// TestParticipantsArePassedAsRecords is the fix that unblocked H58, and it is
+// invisible in both signatures: the app's call site carries entries with .id.
+func TestParticipantsArePassedAsRecords(t *testing.T) {
+	compressPartClock(t)
+	for _, tc := range []struct {
+		name string
+		run  func(*Manager) error
+	}{
+		{"add", func(m *Manager) error {
+			_, err := m.AddParticipant(context.Background(), testGroupJID, "1@c.us", "t")
+			return err
+		}},
+		{"remove", func(m *Manager) error {
+			_, err := m.RemoveParticipant(context.Background(), testGroupJID, "1@c.us", "t")
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &partDouble{ok: true, before: 3}
+			if err := tc.run(parts(p)); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if !strings.Contains(p.lastScript, "part(r.wid)") {
+				t.Fatal("a bare wid is passed where a participant record is wanted")
+			}
+			if strings.Contains(p.lastScript, "[r.wid]") {
+				t.Fatal("the bare-wid shape that threw is still in the script")
+			}
+		})
 	}
 }
 
 // TestOnlyCountsAreReported. A group's membership is a list of people, and the
 // error and the rendering carry numbers rather than names.
 func TestOnlyCountsAreReported(t *testing.T) {
-	m := Membership{Before: 2, After: 3}
+	m := Membership{Before: 2, WantedAfter: 3}
 	s := m.String()
 	if strings.Contains(s, "@") {
 		t.Fatalf("the rendering carries something jid-shaped: %s", s)
 	}
-	if !strings.Contains(s, "before=2") || !strings.Contains(s, "after=3") {
+	if !strings.Contains(s, "before=2") || !strings.Contains(s, "wantedAfter=3") {
 		t.Fatalf("the counts are missing: %s", s)
 	}
 }
@@ -189,4 +258,73 @@ func TestCancelledContextTouchesNoMembership(t *testing.T) {
 	if p.kicks != 0 {
 		t.Fatalf("changed membership %d time(s) for a caller that had given up", p.kicks)
 	}
+}
+
+// TestCountIsHonestAboutWhatItReads. Count exists because cross-session is the
+// only proof this build allows, and it has to fail loudly when the metadata is
+// not loaded rather than reporting an empty group.
+func TestCountIsHonestAboutWhatItReads(t *testing.T) {
+	t.Run("counts", func(t *testing.T) {
+		var script string
+		m := New(engine.NewRunner(), func(_ context.Context, expr string, out *string) error {
+			script = expr
+			*out = "7"
+			return nil
+		})
+		n, err := m.Count(context.Background(), testGroupJID, "t")
+		if err != nil {
+			t.Fatalf("Count: %v", err)
+		}
+		if n != 7 {
+			t.Fatalf("got %d, want 7", n)
+		}
+		if !strings.Contains(script, "String(") {
+			t.Fatal("the script does not return a string; a bare number is a type error at the boundary")
+		}
+	})
+
+	t.Run("metadata not loaded", func(t *testing.T) {
+		m := New(engine.NewRunner(), func(_ context.Context, _ string, out *string) error {
+			*out = "-1"
+			return nil
+		})
+		_, err := m.Count(context.Background(), testGroupJID, "t")
+		if !errors.Is(err, ErrNotGroup) {
+			t.Fatalf("got %v, want ErrNotGroup", err)
+		}
+	})
+
+	t.Run("not a group", func(t *testing.T) {
+		called := false
+		m := New(engine.NewRunner(), func(_ context.Context, _ string, out *string) error {
+			called = true
+			*out = "2"
+			return nil
+		})
+		if _, err := m.Count(context.Background(), "1@c.us", "t"); !errors.Is(err, ErrNotGroup) {
+			t.Fatalf("got %v, want ErrNotGroup", err)
+		}
+		if called {
+			t.Fatal("the page was asked to count a non-group's participants")
+		}
+	})
+
+	t.Run("garbage", func(t *testing.T) {
+		m := New(engine.NewRunner(), func(_ context.Context, _ string, out *string) error {
+			*out = "not a number"
+			return nil
+		})
+		if _, err := m.Count(context.Background(), testGroupJID, "t"); err == nil {
+			t.Fatal("a non-numeric answer was accepted as a count")
+		}
+	})
+
+	t.Run("evaluator error", func(t *testing.T) {
+		m := New(engine.NewRunner(), func(_ context.Context, _ string, _ *string) error {
+			return errors.New("boom")
+		})
+		if _, err := m.Count(context.Background(), testGroupJID, "t"); !errors.Is(err, ErrParticipants) {
+			t.Fatalf("got %v, want ErrParticipants", err)
+		}
+	})
 }

@@ -4465,8 +4465,7 @@ Sonda que chama `removeParticipantsJob` variando um argumento por vez contra o
 fonte de `WAWebGroupsParticipantsApi.removeParticipants`, para descobrir de quem
 o `.toString()` é lido. Sem isso, qualquer valor novo é chute.
 
-**Status**: não entregue — a assinatura está medida e registrada; a chamada
-recusa por um argumento ainda não identificado.
+**Status**: ~~não entregue~~ **entregue** (2026-08-21, ver a continuação abaixo).
 **Testes que travam o medido**: `participants_test.go` —
 `TestTheTwoSiblingsHaveDifferentShapes` (trava as DUAS formas, e falha se
 alguém "simetrizar" a remoção), `TestTheClockStaysOnTheGoSide`,
@@ -4936,3 +4935,77 @@ Todos com `assert` de aplicação.
 **Testes**: `capabilities/group/subject_test.go` (10 testes, cinco com controle
 acima), `subjectreal_test.go` (prova ao vivo, restaura) e
 `utf16len_test.go::TestUTF16LenMatchesJavaScript`.
+
+---
+
+## H58 (continuação) — resolvida, e por duas causas que nada tinham a ver com a assinatura
+
+**Data**: 2026-08-21, mesmo dia.
+
+O bloqueio tinha DUAS causas empilhadas, e nenhuma era o `author` que as duas
+tentativas cegas atacaram.
+
+### Causa 1 — participantes são REGISTROS, não wids
+
+Achada pela técnica que resolveu o encaminhar: **procurar o chamador do app**.
+
+```js
+removeParticipantsJob(n, a.participants, x, t.author, a.reason, r, i)
+```
+
+e a linha imediatamente acima, na mesma função, faz
+`a.participants.some(e => e.id)`. Cada entrada carrega `.id`. Eu passava
+`[wid]`, e algo lá dentro fazia `.toString()` no `.id` inexistente.
+
+**O erro idêntico nas duas tentativas era a evidência**, e ela estava na entrada
+original desde o começo: variar só o `author` e obter a MESMA mensagem significa
+que o `author` não é lido ali. Registrei isso e depois não agi conforme —
+a informação estava escrita e a próxima ação não a usou.
+
+### Causa 2 — este build não confirma mudança de participante na mesma sessão
+
+Esta custou mais que a primeira, porque produziu **três diagnósticos errados
+seguidos** e deixou o grupo de laboratório com um membro por uma tarde.
+
+Medido, com sessão nova servindo de fonte da verdade:
+
+| sinal | o que reportou durante 90 s | verdade (sessão nova) |
+|---|---|---|
+| `chat.groupMetadata.participants` | contagem antiga | mudada |
+| `GroupMetadataCollection.get()` | idem — **é o mesmo objeto** | idem |
+| `MsgCollection` (`gp2/add`, `gp2/remove`) | **nenhuma** notificação | — |
+
+O `gp2/subject` de um rename CHEGOU na mesma coleção, então o canal funciona e é
+esta notificação específica que não é entregue aqui.
+
+**Três mudanças reais foram para o servidor** enquanto os testes diziam
+"membership did not change". A pós-condição estava mentindo na direção pior:
+dizendo que nada aconteceu quando tudo tinha acontecido.
+
+### O contrato passou a dizer a verdade
+
+`Membership.Verified` é **false** para toda mudança real, e true só para no-op —
+o contrato assimétrico que a H53 já usava para remoção de reação. E
+`Manager.Count` existe para a única prova honesta disponível: **mudar numa sessão
+e contar na seguinte**.
+
+```
+removed:       group.Membership(before=2 wantedAfter=1 noop=false verified=false waited=1.024s)
+CROSS-SESSION: 2 participants before the removal, 1 after
+restored:      group.Membership(before=1 wantedAfter=2 noop=false verified=false waited=1.011s)
+```
+
+### A versão de sessão única não era só mais fraca — era INSEGURA
+
+Remover e readicionar na mesma sessão faz a segunda chamada ler a metadata
+obsoleta, concluir `ALREADY_MEMBER` e **não fazer nada**. Foi assim que o grupo
+ficou com um membro: o `defer` de restauração reportou sucesso sem restaurar. Por
+isso cada passo do teste tem sessão de navegador própria, e o comentário do teste
+diz isso em voz alta.
+
+**Status**: entregue.
+**Testes**: `capabilities/group/participants_test.go` (incluindo
+`TestParticipantsArePassedAsRecords`, `TestARealChangeIsReportedUnverified`,
+`TestTheScriptDoesNotWaitOnSomethingThatNeverMoves`) e
+`participantsreal_test.go` (prova entre sessões, com restauração em sessão
+própria).

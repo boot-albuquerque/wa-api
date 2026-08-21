@@ -632,7 +632,7 @@ cuja chave é `$MuteImpl3`, artefato de minificação. Nós dirigimos o **modelo
 |---|---|
 | `Message.forward` | módulo localizado (`WAWebChatForwardMessage`), assinatura async — precisa de experimento |
 | `Chat.setSubject` | **entregue** (H64) — `WAWebSetSubjectGroupAction.setGroupSubject` |
-| participantes de grupo | **não entregue** (H58) — bloqueio nomeado, medição preservada |
+| participantes de grupo | **entregue** (H58) — prova ENTRE sessões; este build não confirma na mesma |
 | link de convite de grupo | **parcialmente entregue** (H57) — `queryGroupInvite` trava |
 
 ## §6.19 — encaminhar mensagem

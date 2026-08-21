@@ -1156,3 +1156,38 @@ sinônimo de `len()` num refactor.
 
 **Vale para toda fronteira com JavaScript**, não só esta: índices de `slice`,
 posições de menção, limites de truncamento.
+
+## Nem toda mudança é observável pela sessão que a fez
+
+**Medido em 2026-08-21, ao custo de três diagnósticos errados e de um grupo de
+laboratório quebrado por uma tarde.**
+
+Mudança de participante de grupo **chega ao servidor** e é invisível para a
+sessão que a fez:
+
+| sinal | durante 90 s | verdade (sessão nova) |
+|---|---|---|
+| `chat.groupMetadata.participants` | contagem antiga | mudada |
+| `GroupMetadataCollection.get()` | idem — **mesmo objeto** | idem |
+| `MsgCollection` (`gp2/add`, `gp2/remove`) | **nada** | — |
+
+Um `gp2/subject` de rename chega na mesma coleção, então o canal funciona: é
+esta notificação que não é entregue aqui.
+
+**A pós-condição mentiu na direção pior** — disse "nada mudou" quando tudo tinha
+mudado. Uma pós-condição que erra assim é mais perigosa que nenhuma: ela faz o
+chamador desfazer, repetir, ou "consertar" o que já estava certo.
+
+**Duas regras:**
+
+1. **Antes de escrever pós-condição, prove que o sinal MEXE.** Uma leitura que
+   devolve o mesmo valor antes e depois pode significar "não aconteceu" ou "não
+   dá para ver daqui", e as duas exigem código diferente. O teste é barato:
+   provoque a mudança, reinicie a sessão, compare.
+2. **Quando não dá para ver daqui, diga isso no TIPO.** `Verified: false` é
+   informação; um erro genérico é ruído; um sucesso silencioso é dano.
+
+**E o corolário perigoso**: se a pré-condição lê o mesmo sinal obsoleto, uma
+sequência *mudar → desfazer* na mesma sessão vira *mudar → no-op*, e a
+restauração reporta sucesso sem restaurar. Passos que se desfazem precisam de
+sessões separadas.
