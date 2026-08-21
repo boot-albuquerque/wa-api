@@ -7000,7 +7000,7 @@ da H58. Correção sugerida: reescrever o comentário citando a H85 e a mediçã
 hoje; `Count` continua sendo o caso stale de verdade, e juntar os dois é o erro
 original.
 
-**Status**: entregue (o achado do `PolicyOf` fica pendente).
+**Status**: entregue. ~~O achado do `PolicyOf` fica pendente~~ — **corrigido na H91**, no mesmo dia, junto com um terceiro caso da mesma frase herdada em `pin.go`.
 
 ---
 
@@ -7095,7 +7095,7 @@ carrega nome nessa linha, nada depois dela prova coisa alguma.
 | `setTimeout` de volta no script do save | `TestNoClockInProductionPageScripts` | "invariant 6: a page script decides its own waiting at capabilities/addressbook/script.go:77" |
 | isentar um arquivo cujo relógio só existe em comentário | idem | "is allowlisted (…) and no longer contains a clock; remove the exception" |
 
-**Status**: entregue (o achado do `group.go:274` fica pendente).
+**Status**: entregue. ~~O achado do `group.go:274` fica pendente~~ — **corrigido na H91**, no mesmo dia, por decisão explícita da orquestração: uma violação conhecida não mora numa allowlist.
 
 ---
 
