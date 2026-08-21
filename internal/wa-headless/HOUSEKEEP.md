@@ -6377,5 +6377,7 @@ E os três controles rodaram junto e continuaram batendo, o que é o outro
 propósito deles: cada uso do instrumento reconfirma que ele ainda mede o que
 media.
 
-**Status**: continua não entregue; a hipótese do espelho passa de "não testada"
-para "testada e bloqueada na forma do próprio espelho".
+A hipótese do espelho passa de "não testada" para "testada e bloqueada na forma
+do próprio espelho".
+
+**Status**: não entregue.
