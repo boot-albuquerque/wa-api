@@ -1480,3 +1480,25 @@ que é.
 melhor roda. Se ele não roda, o fallback É o comportamento, e o comentário tem de
 dizer isso. Um `catch` vazio em volta de uma tentativa é uma afirmação de que a
 tentativa é opcional — e isso quase nunca é o que se quis dizer.
+
+### Dublê MENOS fiel que a produção inventa defeito
+
+**Medido em 2026-08-21 (H84).**
+
+A primeira armadilha deste arquivo é o dublê **mais permissivo** que a produção,
+que esconde defeito. Este é o espelho dela.
+
+O dublê da página, depois dos ciclos roteirizados, respondia contadores **zero**.
+A página real nunca faz isso: os contadores dela são **monotônicos** dentro de
+uma encarnação, e só voltam a zero quando a página recarrega — que é um evento
+distinto e já modelado.
+
+O último dreno somava `base + 0`, a estatística "voltava", e o teste acusou o
+acumulador de estar errado. Gastei duas rodadas consertando código correto.
+
+**A regra**: quando o dublê imita um CONTADOR, ele tem de imitar também como o
+contador se comporta fora do roteiro. Repetir o último valor é o padrão certo
+para monotônico; zero é o padrão certo só para "reiniciou".
+
+Nas duas direções o remédio é o mesmo: o comentário do dublê diz de onde a regra
+vem, e a regra é a da produção.

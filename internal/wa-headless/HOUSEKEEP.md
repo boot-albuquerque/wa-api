@@ -6452,3 +6452,85 @@ mensagens menciona alguém, e criar uma exigiria enviar com menção, que é out
 capacidade.
 
 **Status**: não entregue.
+
+---
+
+## H84 — EVENT-BUS FOUNDATION: um ingresso, um Hub, sete propriedades provadas
+
+**Data**: 2026-08-21
+**Contexto**: ordem congelada da orquestração, depois do `COMPLETE-FAMILIES`.
+Ela foi específica: *"não implemente 23 subscriptions independentes; desenhe um
+barramento único"*, com arquitetura
+`SPA → EventIngress → Hub → eventos tipados → consumidores`.
+**Onde**: `internal/wa-headless/events/`.
+
+### Por que um mecanismo único, e não 23
+
+O módulo tinha DUAS assinaturas — `messagemeta` e `contacts.onContact` — cada uma
+escrita do zero, cada uma com o próprio buffer e a própria ideia do que é um
+descarte. Acrescentar as outras 23 assim seriam 23 instalações disputando a
+mesma página, 23 tetos sem relação entre si, e nenhuma forma de dizer em que
+ordem as coisas aconteceram.
+
+Há **um** instalador, **um** buffer e **um** contador de sequência. A ordem entre
+tipos diferentes sobrevive à fronteira porque a página a carimba, e um descarte
+significa a mesma coisa para todo assinante.
+
+### A recarga é tratada por CURA, não por detecção
+
+Uma recarga apaga os handlers e o buffer. Detectar recarga exige um sinal que
+este módulo não tem — então a bomba **reinstala a cada ciclo**. A instalação é
+idempotente e responde "já" no caso comum, então o custo é uma chamada barata
+por sondagem e a recuperação não precisa de detecção nenhuma.
+
+O risco óbvio dessa escolha — instalar duas vezes e receber tudo em dobro — é
+exatamente o que a propriedade 5 mede.
+
+### As sete propriedades, todas numa execução
+
+Numa execução só de propósito: várias delas são sobre como interagem — "reinstala
+sem duplicar" só significa algo se a entrega funcionava antes E depois — e
+testes separados começariam de uma página limpa e provariam a metade fácil.
+
+```
+MEASURED: delivered=16  droppedInPage=0 seenInPage=27  gaps=0 reinstalls=1
+MEASURED: delivered=765 droppedInPage=0 seenInPage=776 gaps=0 reinstalls=2
+```
+
+| propriedade | como foi provada |
+|---|---|
+| instalação única | `reinstalls=1` antes de qualquer recarga |
+| entrega VIVA | mensagem enviada depois da bomba chegou com `Replay=false` |
+| unsubscribe | zero eventos após soltar, com envio real no meio |
+| recarga reinstala | `reinstalls` foi a 2 sozinho |
+| **sem duplicação** | a mensagem pós-recarga chegou **uma** vez |
+| overflow contado | `seenInPage` acumulado atravessa a recarga |
+| teardown | `Close` zera assinantes; `Uninstall` solta os handlers |
+
+### Dois achados que a execução ao vivo entregou
+
+**1. O ingresso instala ANTES de a página poder enviar.** As coleções existem —
+que é tudo de que o ingresso precisa — enquanto o `comms` ainda está subindo, e
+um envio nessa janela morre com `[comms] sendIq called before startComms`.
+
+Prontidão para **observar** e prontidão para **enviar** são coisas diferentes, e
+o teste espera as duas separadamente. Confundi-las faria o barramento parecer
+quebrado porque outra coisa não estava pronta.
+
+**2. Os contadores da página VOLTAM A ZERO na recarga.** Eu os sobrescrevia a
+cada dreno, então depois de uma recarga a estatística andava para trás — e uma
+estatística que anda para trás é pior que nenhuma, porque o número que as pessoas
+citam é o de depois da última recarga. Agora são acumulados, com a base somada no
+momento da reinstalação.
+
+### O que os números dizem
+
+`delivered=765` contra `seenInPage=776`: a diferença são os eventos que chegaram
+durante a janela sem assinante — `delivered` só conta quando alguém escuta. E os
+749 eventos do segundo lote são a **história sendo recarregada**: é para isso que
+`Replay` existe, e um consumidor que contasse aquilo como novo contaria a
+conversa inteira de novo.
+
+**Status**: entregue.
+**Testes**: `events/events_test.go` (11 testes, incluindo `-race` com assinantes
+entrando e saindo durante a entrega) e `eventbusreal_test.go` (as sete).
