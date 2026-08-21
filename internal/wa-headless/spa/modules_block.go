@@ -219,3 +219,18 @@ const ModuleDownloadManager = Module("WAWebDownloadManager")
 // plumbing presenting as a missing argument, which is the least guessable kind
 // of required parameter there is.
 const ModuleStartMediaDownloadQpl = Module("WAWebStartMediaDownloadQpl")
+
+// ModuleFindCommonGroupsContactAction answers "which groups do this account and
+// that contact both belong to". Its wrapper is SYNCHRONOUS and legible:
+//
+//	findCommonGroups(contact)   // the CONTACT MODEL
+//
+// Three things the body says that a caller would otherwise learn by accident:
+//
+//   - it returns null for THIS ACCOUNT's own contact, rather than an empty list
+//     or a throw;
+//   - it caches on the contact and reuses a pending promise, so asking twice is
+//     cheap and asking a stale cache silently refilters it;
+//   - it excludes parent (community) groups and locked ones, so the answer is
+//     "groups you could talk in together", not "every group object shared".
+const ModuleFindCommonGroupsContactAction = Module("WAWebFindCommonGroupsContactAction")

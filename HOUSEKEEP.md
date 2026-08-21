@@ -3483,3 +3483,17 @@ máquina carregada rodando o gate inteiro com `-race`.
 Isso muda a correção sugerida: em vez de investigar cada teste, **subir o teto
 dos testes que cronometram boot de navegador** — o que eles medem é
 comportamento, não latência, e latência é o que a máquina carregada altera.
+
+**Sétima ocorrência, 2026-08-21**, terceira no mesmo dia:
+`TestStartSession_SettleLoopRespectsTheBudgetItWasGiven` estourou 30 s no gate e
+passou 3× isolado (16,5 s no total). Três testes diferentes, dois pacotes, o
+MESMO teto.
+
+**Custo medido**: três execuções de `make check` perdidas nesta sessão. Cada uma
+custa minutos e, pior, cada vermelho exige decidir se é real antes de seguir. O
+ruído já é maior que o defeito.
+
+**Não corrigido de propósito**: é defeito pré-existente fora do escopo da tarefa,
+e a regra do `CLAUDE.md` manda registrar e PERGUNTAR em vez de consertar de
+graça. A correção sugerida é uma linha por teste — subir o teto de 30 s para 90 s
+nos que cronometram boot de navegador — e está esperando decisão.

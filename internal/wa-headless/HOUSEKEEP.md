@@ -5199,3 +5199,63 @@ controles foram **executados**.
 **Status**: entregue.
 **Testes**: `capabilities/media/download_test.go` (11 testes, cinco com controle
 acima) e `downloadreal_test.go` (ida e volta byte a byte contra a página viva).
+
+---
+
+## H68 — grupos em comum, e o `null` que significa outra coisa
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura. Capacidade de **leitura** — nada é enviado.
+**Onde**: `internal/wa-headless/capabilities/contacts/commongroups.go`.
+
+### O corpo diz três coisas que só se aprenderiam por acidente
+
+`findCommonGroups(contact)` tem invólucro síncrono, então o corpo é legível
+inteiro:
+
+1. **Devolve `null` para o contato DESTA CONTA** — `Promise.resolve(null)` sob
+   `getIsMe(contact)`. Isso não é resposta vazia, é **recusa**. Achatar as duas
+   faria o chamador ler *"você não compartilha grupos consigo mesmo"* como fato,
+   quando é erro de categoria. `ErrIsSelf` mantém a distinção, e há controle
+   negativo.
+2. **Exclui grupos-pai (comunidade) e travados.** A resposta é "grupos onde
+   vocês dois poderiam conversar", que é quase sempre o que se quer — mas a
+   diferença fica **dita**, em vez de invisível.
+3. **Guarda em cache no contato e reaproveita promessa pendente.** Perguntar
+   duas vezes é barato; perguntar depois de mudança de participação pode não ser
+   fresco — o que importa neste build, já medido como não atualizando metadata
+   de grupo na mesma sessão (H58).
+
+### Prova ao vivo
+
+```
+with the peer: contacts.CommonGroups(count=1 waited=510ms)
+asking about this account was refused, as the page's null requires
+```
+
+`count=1` é o número **esperado**, não meramente plausível: a conta e o par
+compartilham exatamente o grupo de laboratório, e o teste confere que o jid
+retornado é ele, achado por assunto na mesma sessão.
+
+### Um detalhe do teste que virou correção
+
+A primeira execução **pulou** a asserção do "eu mesmo" porque a leitura do jid
+próprio tentava só `getMaybeMeUser` e `getMeUser`, e este build não expõe o
+segundo. Um `t.Skip` silencioso é uma asserção que não roda — corrigido com a
+lista de fallback que uma sonda anterior já tinha medido.
+
+**A lição pequena**: quando um teste tem caminho de `Skip`, ele pode silenciar a
+própria verificação. Vale conferir o que o `Skip` engoliu antes de aceitar o
+PASS.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| achatar `null` em lista vazia | `the script does not treat null as its own answer` |
+| passar o wid em vez do modelo | `the call does not pass the contact model` |
+| renderizar a lista de grupos | `the rendering lists the groups: …@g.us…` |
+
+**Status**: entregue.
+**Testes**: `capabilities/contacts/commongroups_test.go` (7 testes, três com
+controle acima) e `commongroupsreal_test.go` (leitura ao vivo).
