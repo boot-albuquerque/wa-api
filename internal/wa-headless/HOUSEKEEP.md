@@ -3983,3 +3983,71 @@ devolvida.
 
 **Status**: entregue — campo certo escolhido por medição, ordenação e limite
 decididos deste lado, denominadores honestos, e quatro controles negativos.
+
+## H52 — marcar como lida: implementado e provado por dublê; o caminho REAL não foi exercitado
+
+**Data**: 2026-08-20 · **Contexto**: lote de operações de mensagem, seguindo o
+pedido de cobrir a superfície do `whatsapp-web.js`.
+
+**A forma da chamada, lida do próprio app:**
+
+```js
+sendConversationSeen({ chat, key, threadId, unreadDelta })
+```
+
+Um OBJETO, e a `key` é o `lastReceivedKey` do chat — a mensagem que está sendo
+reconhecida. Reconhecer sem nomear o que se leu não é algo que o protocolo
+ofereça, então uma chamada que omitisse a chave pediria algo inexistente.
+
+**Pós-condição real**, o que é mais raro aqui do que parece: `unreadCount` tem de
+chegar a zero. A maioria das operações de saída deste módulo só pode ser
+verificada pela outra conta; esta muda algo observável deste lado.
+
+**Nove testes e quatro controles negativos, todos mordendo** — inclusive um que
+me pegou:
+
+> A asserção "a conversa é resolvida antes da busca" procurava `queryWidExists`,
+> que aparece dentro do `spa.ResolveIdentityExpr` e portanto está presente mesmo
+> quando a resolução NUNCA é invocada. O controle que removia a chamada passou —
+> foi assim que descobri. Trocada para procurar a CHAMADA
+> (`await resolveIdentity(`). **Segunda vez no mesmo dia** que uma guarda casou
+> prosa em vez de comportamento (a outra foi o `getName` da listagem de chats).
+
+### O que a prova ao vivo NÃO conseguiu
+
+Duas tentativas, e a segunda é a honesta:
+
+1. A primeira passou com `before=0` — a conversa já estava lida, então só o ramo
+   "nada a fazer" foi exercitado. **Verde pelo motivo errado**, exatamente o
+   falso positivo que este módulo vive encontrando.
+2. Corrigido para SEMEAR o não lido: a conta par envia uma mensagem, e o teste
+   espera ela aparecer como não lida antes de reconhecer. **Não apareceu em 90
+   s.**
+
+Hipótese não confirmada: a SPA pode marcar como lida sozinha quando a conversa
+está ativa na sessão, e uma sessão headless pode ter a conversa aberta. Não
+medi isso, e por isso está escrito como hipótese e não como causa.
+
+O teste **PULA com a razão escrita** em vez de passar sem exercitar o caminho.
+
+**Cuidado de escopo mantido**: marcar como lida envia RECIBO DE LEITURA a
+terceiros. A conta de laboratório tem 122 conversas não lidas com pessoas reais,
+e reconhecer qualquer uma delas mudaria o que um estranho vê para fazer um teste
+passar. O alvo é só a conta par — a mesma regra que impediu a prova de grupo de
+mandar mensagem para um grupo real (H48).
+
+### O padrão que já são TRÊS
+
+| item | por que não foi provado |
+|---|---|
+| legenda de mídia (H47) | é conteúdo; provar quebraria a invariante 12 |
+| observação de presença (H50) | `isSubscribed` não se mantém; hipótese restante é privacidade |
+| reconhecimento de leitura (H52) | o não lido semeado não apareceu |
+
+São todos EFEITOS DE SAÍDA cuja evidência mora fora deste processo. Vale dizer
+em voz alta: um módulo que dirige uma SPA consegue provar o que ele mesmo lê, e
+depende de terceiros para o que ele mesmo escreve.
+
+**Status**: parcialmente entregue — chamada correta lida da fonte, pós-condição
+implementada, nove testes e quatro controles negativos; caminho real não
+exercitado ao vivo, com as duas tentativas e a hipótese registradas.

@@ -122,6 +122,22 @@ declarado do projeto: métodos principais de envio e chat.
 | presença (anúncio) | `capabilities/presence` | implementado, 10 testes — **sem pós-condição local, por natureza** |
 | presença (observação) | `capabilities/presence` | implementada e **NÃO PROVADA**: `isSubscribed` não se mantém (H50) |
 | `listChats` | `capabilities/chats` | **384 conversas, 384 com título**, 2 grupos, 122 com não-lidas |
+| `markRead` | `capabilities/chats` (`markread.go`) | 9 testes, 4 controles; caminho real **não exercitado ao vivo** (H52) |
+
+### O que este módulo consegue e não consegue provar
+
+Três itens ficaram implementados e NÃO PROVADOS ao vivo, e não é coincidência:
+
+| item | por quê |
+|---|---|
+| legenda de mídia (H47) | é conteúdo; provar quebraria a invariante 12 |
+| observação de presença (H50) | `isSubscribed` não se mantém; resta privacidade |
+| reconhecimento de leitura (H52) | o não lido semeado não apareceu em 90 s |
+
+São todos EFEITOS DE SAÍDA cuja evidência mora fora deste processo. A regra que
+sai daí: **um módulo que dirige uma SPA prova bem o que ele LÊ e depende de
+terceiros para o que ele ESCREVE.** Onde a prova não existe, o teste PULA com a
+razão escrita — nunca passa em silêncio.
 
 **Fatoração que a presença forçou (H50)**: o que `send` e `presence` compartilham
 é a RESOLUÇÃO DE IDENTIDADE, não a obtenção do chat — porque enviar quer criar

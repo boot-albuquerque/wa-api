@@ -37,42 +37,33 @@ func TestProbeContactShape(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	// CAN A CHAT LIST SHOW A NAME AT ALL?
+	// THE NEXT BATCH OF MESSAGE OPERATIONS, read before design.
 	//
-	// WAWebChatGetters exports getName, and the obvious move is to promise it.
-	// But getName on CONTACTS answered for 1 of 944 on this profile (H39), so
-	// assuming chats are different is exactly the guess this project keeps
-	// paying for. Counted, never printed.
+	// Three capabilities behave differently and each has been guessed wrong by
+	// somebody: sendConversationSeen, sendReactionToMsg and the quoted-message
+	// helper. The last four capabilities all cost a correction at exactly this
+	// step when the argument shape was assumed (H40, H46, H49) — so this reads.
 	const script = `JSON.stringify((() => {
 		const out = {};
-		const Chats = window.require('WAWebChatCollection').ChatCollection;
-		const G = window.require('WAWebChatGetters');
-		const all = Chats.getModelsArray();
-		out.total = all.length;
-		let name = 0, formatted = 0, both = 0, neither = 0, groupNamed = 0, groups = 0;
-		for (const c of all) {
-			let n = '', f = '';
-			try { n = (G.getName && G.getName(c)) || ''; } catch (e) {}
-			try { f = (typeof c.formattedTitle === 'string') ? c.formattedTitle : ''; } catch (e) {}
-			if (n) { name++; }
-			if (f) { formatted++; }
-			if (n && f) { both++; }
-			if (!n && !f) { neither++; }
-			try {
-				if (c.id && c.id.server === 'g.us') { groups++; if (n || f) { groupNamed++; } }
-			} catch (e) {}
-		}
-		out.withGetName = name; out.withFormattedTitle = formatted;
-		out.withBoth = both; out.withNeither = neither;
-		out.groups = groups; out.groupsNamed = groupNamed;
-		// Is the collection already ordered by recency, or must we sort?
-		const ts = all.map(c => (typeof c.t === 'number' ? c.t : 0));
-		let desc = true, asc = true;
-		for (let i = 1; i < ts.length; i++) {
-			if (ts[i] > ts[i-1]) { desc = false; }
-			if (ts[i] < ts[i-1]) { asc = false; }
-		}
-		out.collectionOrder = desc ? 'newest-first' : (asc ? 'oldest-first' : 'unordered');
+		const read = (mod, names) => {
+			let m = null;
+			try { m = window.require(mod); } catch (e) { out[mod] = 'REQUIRE_FAILED'; return; }
+			if (!m) { out[mod] = 'NULL'; return; }
+			const bag = {};
+			for (const n of (names || Object.keys(m))) {
+				try {
+					const f = m[n];
+					bag[n] = (typeof f === 'function')
+						? { arity: f.length, src: String(f).slice(0, 330) }
+						: { kind: typeof f };
+				} catch (e) { bag[n] = 'THREW'; }
+			}
+			out[mod] = bag;
+		};
+		read('WAWebChatSendConversationSeen', ['sendConversationSeen']);
+		read('WAWebSendReactionMsgAction', ['sendReactionToMsg']);
+		read('WAWebQuotedMsgModelUtils', ['createQuotedMsgObj']);
+		read('WAWebSendTextMsgChatAction', ['sendTextMsgToChat']);
 		return out;
 	})())`
 
@@ -82,5 +73,5 @@ func TestProbeContactShape(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	t.Logf("chat naming: %s", raw)
+	t.Logf("op signatures: %s", raw)
 }

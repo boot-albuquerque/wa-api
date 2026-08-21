@@ -261,6 +261,16 @@ const (
 	// 944 (H39). On a companion device the address book lives on the phone;
 	// formattedTitle is what the app itself renders.
 	ModuleChatGetters = Module("WAWebChatGetters")
+	// ModuleSendConversationSeen marks a conversation read.
+	//
+	// It takes ONE OBJECT, read from the app's own call:
+	//
+	//	sendConversationSeen({chat, key, threadId, unreadDelta})
+	//
+	// where key is the chat's lastReceivedKey — the message being acknowledged.
+	// Marking read without naming what was read is not something the protocol
+	// offers, which is why the key is looked up rather than omitted.
+	ModuleSendConversationSeen = Module("WAWebChatSendConversationSeen")
 )
 
 // RequiredAtStartup is verified before any capability runs.
