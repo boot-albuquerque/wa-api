@@ -3,7 +3,6 @@ package waheadless
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,87 +51,46 @@ func TestProbeContactShape(t *testing.T) {
 	// predicates on a wid (isUser, isServer, isPSA, isGroup, isNewsletter), so
 	// this pass counts which of them separate that row from the rest. Counters
 	// only; no identity leaves the page.
-	// DOES THE EXISTING SEND PATH WORK FOR A GROUP?
+	// CONFIRMING THE SHAPE: the helper wants a CONTACT MODEL, not a wid.
 	//
-	// resolveChatExpr goes through queryWidExists, which resolves USERS. A
-	// group jid may not survive it, and if it does not, the send capabilities
-	// silently only work for individuals — a gap nobody would notice until a
-	// message to a group failed in production.
-	//
-	// NOTHING IS SENT. The resolution is exercised up to the point of dispatch
-	// and stops there: a group is real people, and measuring must not message
-	// them. Only counts and shapes leave the page.
-	const script = `(() => {
-		window.__waHeadlessGroupProbe = { stage: 'pending' };
-		(async () => {
-			const out = { stage: 'done' };
-			try {
-				const Chats = window.require('WAWebChatCollection').ChatCollection;
-				const all = Chats.getModelsArray();
-				out.chats = all.length;
-				const groups = all.filter(c => {
-					try { return c.id && c.id.server === 'g.us'; } catch (e) { return false; }
-				});
-				out.groups = groups.length;
-				if (!groups.length) { out.why = 'NO_GROUP_CHAT'; window.__waHeadlessGroupProbe = out; return; }
-
-				const g = groups[0];
-				out.groupIdShape = {
-					server: g.id.server,
-					userLen: (g.id.user || '').length,
-					hasSerialized: typeof g.id._serialized === 'string'
-				};
-
-				// Step 1: does createWid survive a group jid?
-				const WF = window.require('WAWebWidFactory');
-				let local = null;
-				try { local = WF.createWid(g.id._serialized); } catch (e) { out.createWidErr = String((e && e.message) || e).slice(0, 120); }
-				out.createWidOk = !!local;
-				if (local) { out.createWidServer = local.server; }
-
-				// Step 2: does queryWidExists — the USER resolution — accept it?
-				if (local) {
-					try {
-						const Q = window.require('WAWebQueryExistsJob');
-						const ex = await Q.queryWidExists(local);
-						out.queryWidExists = ex ? { hasWid: !!ex.wid, server: ex.wid && ex.wid.server } : 'NULL';
-					} catch (e) {
-						out.queryWidExistsErr = String((e && e.message) || e).slice(0, 160);
-					}
-				}
-
-				// Step 3: can the chat be obtained directly, skipping resolution?
-				try {
-					const got = Chats.get(g.id);
-					out.chatCollectionGet = !!got;
-				} catch (e) { out.chatGetErr = String((e && e.message) || e).slice(0, 120); }
-			} catch (e) {
-				out.fatal = String((e && e.message) || e).slice(0, 180);
-			}
-			window.__waHeadlessGroupProbe = out;
-		})();
-		return 'kicked';
-	})()`
+	// Its source destructures t.id.isLid(), t.phoneNumber and t.username — all
+	// fields of a contact, none of a wid. This is the THIRD time today the same
+	// mistake shape appeared: the avatar bridge died on 'isNewsletter' and this
+	// on 'isLid', both because an argument that CARRIES an id was handed the id.
+	const script = `JSON.stringify((() => {
+		const out = {};
+		const PU = window.require('WAWebGroupMutationParticipantUtils');
+		const CC = window.require('WAWebContactCollection').ContactCollection;
+		let contact = null;
+		for (const c of CC.getModelsArray()) {
+			try { if (c.id && c.id.server === 'lid' && c.phoneNumber) { contact = c; break; } } catch (e) {}
+		}
+		out.foundContact = !!contact;
+		if (!contact) { return out; }
+		// The wid — what was passed before, and what failed.
+		try {
+			PU.getGroupMutationParticipant(contact.id, true, 'createGroup');
+			out.withWid = 'ACCEPTED';
+		} catch (e) { out.withWid = String((e && e.message) || e).slice(0, 90); }
+		// The contact MODEL — what the source asks for.
+		try {
+			const p = PU.getGroupMutationParticipant(contact, true, 'createGroup');
+			out.withContact = p && typeof p === 'object' ? Object.keys(p).join(',') : String(p);
+		} catch (e) { out.withContact = 'THREW: ' + String((e && e.message) || e).slice(0, 120); }
+		// Can a contact be reached from a resolved wid? That is the step the
+		// capability will need.
+		try {
+			const got = CC.get(contact.id);
+			out.contactFromWid = !!got;
+		} catch (e) { out.getErr = String((e && e.message) || e).slice(0, 100); }
+		return out;
+	})())`
 
 	var raw string
-	if err := runner.Do(ctx, engine.OpStateProbe, "probe/group/kick", func(c context.Context) error {
+	if err := runner.Do(ctx, engine.OpStateProbe, "probe/groupcreate", func(c context.Context) error {
 		return sess.Tab().Evaluate(c, script, &raw)
 	}); err != nil {
-		t.Fatalf("probe kick: %v", err)
+		t.Fatalf("probe: %v", err)
 	}
-	for i := 0; ; i++ {
-		if err := runner.Do(ctx, engine.OpStateProbe, "probe/group/poll", func(c context.Context) error {
-			return sess.Tab().Evaluate(c, `JSON.stringify(window.__waHeadlessGroupProbe || {stage:"missing"})`, &raw)
-		}); err != nil {
-			t.Fatalf("probe poll: %v", err)
-		}
-		if !strings.Contains(raw, `"stage":"pending"`) {
-			break
-		}
-		if i > 40 {
-			t.Fatal("the group probe never settled")
-		}
-		time.Sleep(2 * time.Second)
-	}
-	t.Logf("group send path: %s", raw)
+	t.Logf("participant shape: %s", raw)
 }

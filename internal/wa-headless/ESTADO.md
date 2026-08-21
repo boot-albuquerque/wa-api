@@ -117,11 +117,21 @@ declarado do projeto: métodos principais de envio e chat.
 | `sendMedia` | `capabilities/send` (`media.go`) | conta A envia PNG, conta B recebe o **MESMO id** com `type=image` em 3 s |
 | `sendMedia` (documento) | idem, flag `AsDocument` | os MESMOS bytes dão `image` e `document` |
 | resolução de GRUPO | `capabilities/send` (`resolve.go`) | grupo resolve sem passar pela identidade de usuário — provado **sem enviar** |
+| `createGroup` | `capabilities/group` | criado com 2 participantes; segunda chamada **reutiliza** (`created=false`) |
+| envio a GRUPO | `capabilities/send` | texto enviado ao grupo de laboratório e **verificado** |
 
-**Aberto e dito**: o ENVIO para grupo ainda não foi provado — só a resolução.
+**A regra que três capacidades num dia ensinaram (H40, H46, H49)**: quando uma
+função da página morre lendo campo de `undefined` — `isNewsletter`, `isLid` — o
+argumento é quase sempre um MODELO, e não a identidade dentro dele. Vale mais que
+qualquer nome de módulo: os nomes mudam por build, esta forma se repetiu três
+vezes no mesmo dia.
+
+~~**Aberto e dito**: o ENVIO para grupo ainda não foi provado — só a resolução.
 Provar exigiria um grupo onde se possa mandar mensagem sem incomodar ninguém,
 isto é, um criado entre as duas contas de laboratório, o que depende de uma
-capacidade de criar grupo que ainda não existe (H48).
+capacidade de criar grupo que ainda não existe (H48).~~ **Fechado** pela H49: o
+grupo de laboratório existe, o envio foi provado, e `Ensure` é idempotente por
+assunto para que nenhuma execução deixe outro grupo para trás.
 
 **Não verificável aqui**: a entrega de LEGENDA. A invariante 12 torna o módulo
 metadata-only e uma legenda é conteúdo; provar exigiria ler o corpo. A

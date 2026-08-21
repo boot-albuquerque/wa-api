@@ -74,6 +74,8 @@ func TestProbeModuleRegistry(t *testing.T) {
 	const script = `(() => {
 		window.__waHeadlessModProbe = { stage: 'pending' };
 		const pattern = new RegExp(PATTERN_PLACEHOLDER);
+		const GREP = GREP_PLACEHOLDER;
+		const hits = [];
 		(async () => {
 			try {
 				const urls = performance.getEntriesByType('resource')
@@ -86,15 +88,25 @@ func TestProbeModuleRegistry(t *testing.T) {
 						if (!r.ok) { failed++; continue; }
 						const txt = await r.text();
 						bytes += txt.length; fetched++;
-						const m = txt.match(/\bWA[A-Z][A-Za-z0-9_]{3,60}\b/g);
+							const m = txt.match(/\bWA[A-Z][A-Za-z0-9_]{3,60}\b/g);
 						if (m) { for (const n of m) seen.add(n); }
+						// GREP MODE: when a literal is given, return the text
+						// AROUND each hit. Module names answer "what exists";
+						// this answers "how is it called", which is the other
+						// half and which no name list can give.
+						if (GREP) {
+							let at = -1;
+							while ((at = txt.indexOf(GREP, at + 1)) !== -1 && hits.length < 6) {
+								hits.push(txt.slice(Math.max(0, at - 260), at + 260));
+							}
+						}
 					} catch (e) { failed++; }
 				}
 				const all = Array.from(seen).sort();
-				const hits = all.filter(n => pattern.test(n));
+				const matchedNames = all.filter(n => pattern.test(n));
 				// Resolvability, which is the part a bundle scan cannot answer.
 				const resolved = [];
-				for (const n of hits) {
+				for (const n of matchedNames) {
 					let mod = null;
 					try { mod = window.require(n); } catch (e) { continue; }
 					if (!mod) { continue; }
@@ -105,7 +117,8 @@ func TestProbeModuleRegistry(t *testing.T) {
 				window.__waHeadlessModProbe = {
 					stage: 'done', urls: urls.length, fetched: fetched, failed: failed,
 					bytes: bytes, distinct: all.length,
-					matched: hits.length, loadable: resolved.length, modules: resolved
+					matched: matchedNames.length, loadable: resolved.length,
+					modules: resolved, grepHits: hits
 				};
 			} catch (e) {
 				window.__waHeadlessModProbe = { stage: 'error', why: String((e && e.message) || e) };
@@ -121,6 +134,7 @@ func TestProbeModuleRegistry(t *testing.T) {
 		pattern = "^WAWeb(Contact|ProfilePic|Presence)"
 	}
 	kick := strings.Replace(script, "PATTERN_PLACEHOLDER", strconv.Quote(pattern), 1)
+	kick = strings.Replace(kick, "GREP_PLACEHOLDER", strconv.Quote(os.Getenv("WA_PROBE_MODMAP_GREP")), 1)
 	t.Logf("pattern: %s", pattern)
 
 	var raw string

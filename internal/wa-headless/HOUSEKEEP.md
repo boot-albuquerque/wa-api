@@ -3764,3 +3764,97 @@ laboratório. Isso depende da capacidade de CRIAR grupo, que ainda não existe, 
 **Status**: corrigido — resolução de grupo consertada e provada ao vivo com
 controle negativo; o envio para grupo permanece NÃO provado, e a razão está
 escrita.
+
+## H49 — criar grupo, e a TERCEIRA vez que "o argumento carrega um id, não É um id"
+
+**Data**: 2026-08-20 · **Contexto**: a H48 provou a RESOLUÇÃO de grupo e deixou o
+ENVIO por provar, porque o único grupo da conta é real e tem gente de verdade.
+Esta capacidade existe para tornar aquela prova possível.
+
+### O padrão que já custou três vezes num dia
+
+| capacidade | erro | causa |
+|---|---|---|
+| avatar (H40) | `Cannot read properties of undefined (reading 'isNewsletter')` | passei o wid; queria `{id: wid}` |
+| mídia (H46) | — (evitado por leitura) | `sendToChat` recebe UM objeto, não posicionais |
+| grupo | `Cannot read properties of undefined (reading 'isLid')` | passei o wid; queria o **modelo de contato** |
+
+A fonte do `getGroupMutationParticipant` decide sozinha:
+
+```js
+function c(t, n, r) { var a = t.id.isLid() ? t.phoneNumber : t.id; ... t.username ... }
+```
+
+`t.id`, `t.phoneNumber`, `t.username` são campos de CONTATO — nenhum deles existe
+num wid. Confirmado nos dois sentidos: com wid lança; com o contato devolve
+`{lid, phoneNumber}`. E `ContactCollection.get(wid)` dá a ponte.
+
+**A regra que isto vira**: quando uma função da página morre lendo campo de
+`undefined`, o argumento é quase sempre um MODELO, e não a identidade dentro
+dele. Vale mais que qualquer nome de módulo — os nomes mudam por build, esta
+forma se repetiu três vezes no mesmo dia.
+
+### Duas portas, e a óbvia é a errada
+
+`WAWebCreateGroupAction` é a camada de INTERFACE: a fonte abre um toast pelo
+`WAWebToastManager` e monta elementos React. Um driver headless chamando aquilo
+estaria dirigindo a UI para alcançar a operação — e quebraria assim que a UI
+mudasse. `WAWebGroupCreateJob` é o que aquela ação chama por baixo.
+
+A forma da chamada foi lida do código do PRÓPRIO app, procurando nos bundles
+como ele mesmo cria grupo:
+
+```js
+const args = {title, thumb: null, full: null, restrict: false, announce: false,
+              membershipApprovalMode: false, memberAddMode: false,
+              memberShareGroupHistoryMode: false};
+const res = await GroupCreateJob.createGroup(args, participants, outContacts);
+const gid = WidFactory.asGroupWidOrThrow(res.wid);
+```
+
+> **Ferramenta nova, e ela se pagou aqui**: a sonda de módulos da H37 ganhou modo
+> GREP — devolve o TEXTO ao redor de um literal nos bundles, não só nomes. Nome
+> de módulo responde "o que existe"; isto responde "como se chama", que é a outra
+> metade e que nenhuma lista de nomes dá.
+
+### Idempotência não é otimização aqui
+
+Um grupo é ARTEFATO PERSISTENTE na conta de alguém. Sem idempotência, cada
+execução de um teste que precisa de grupo deixaria mais um, e quem é dono da
+conta acharia uma pilha de grupos quase idênticos que ninguém distingue.
+
+`Ensure` procura por ASSUNTO e só cria se não achar. Provado na mesma execução:
+a segunda chamada devolve `created=false` e o mesmo jid.
+
+**Nada aqui apaga grupo.** Remover é ação humana no aplicativo; fazer isso daqui
+seria operação destrutiva que ninguém pediu. O nome escolhido diz isso a quem
+encontrar: `wa-headless-lab — teste automatizado, pode apagar`.
+
+### A pós-condição
+
+Participante pedido que não aparece no grupo é a falha que o chamador NÃO
+consegue ver — ele usaria o grupo acreditando que as pessoas certas estão lá. O
+erro diz QUANTOS faltam de quantos foram pedidos, e nunca QUAIS: isso seria
+identidade em log.
+
+Os participantes são resolvidos ANTES de criar, e a ordem é contrato: um grupo
+criado com membro irresolúvel teria de ser limpo por uma pessoa.
+
+**Prova ao vivo**: grupo criado com 2 participantes; segunda chamada reutiliza;
+texto enviado ao grupo e VERIFICADO — que é o que a H48 não podia provar.
+
+**Quatro controles negativos, EXECUTADOS:**
+
+```
+1. remover a pós-condição de participante -> got <nil>, want ErrParticipantMissing
+2. reportar Created sempre               -> an existing group was reported as newly created
+3. criar ANTES de resolver               -> the group is created BEFORE the participants are resolved
+4. usar a camada de UI                   -> the script calls the UI action layer
+```
+
+**Nota de processo**: a primeira tentativa ao vivo falhou no estágio `create`, e
+por isso NENHUM grupo foi criado — o erro veio antes do efeito. Foi sorte da
+ordem, não desenho, e é parte do motivo de a resolução vir antes.
+
+**Status**: entregue — criação idempotente por assunto, pós-condição de
+participantes, envio a grupo provado ao vivo, quatro controles negativos.

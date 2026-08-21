@@ -197,6 +197,35 @@ const (
 	// sendToChat({chat, earlyUpload, options}). Reading that signature is what
 	// avoided a fifth blind correction at this layer.
 	ModuleMediaPrep = Module("WAWebMediaPrep")
+	// ModuleGroupCreateJob creates a group, WITHOUT the interface.
+	//
+	// There are two doors, and the obvious one is wrong for us:
+	// WAWebCreateGroupAction is the UI layer — its source opens a
+	// WAWebToastManager toast and builds React elements, which a headless
+	// driver has no business triggering. The JOB below is what that action
+	// calls underneath.
+	//
+	// The call shape was read from the app's OWN code, not guessed:
+	//
+	//	const args = {title, thumb: null, full: null, restrict: false,
+	//	              announce: false, membershipApprovalMode: false,
+	//	              memberAddMode: false, memberShareGroupHistoryMode: false};
+	//	const res = await GroupCreateJob.createGroup(args, participants, outContacts);
+	//	const gid = WidFactory.asGroupWidOrThrow(res.wid);
+	//
+	// It also exports GroupAlreadyExistsError, which is the page's own notion
+	// of "this one is already there".
+	ModuleGroupCreateJob = Module("WAWebGroupCreateJob")
+	// ModuleGroupMutationParticipantUtils turns a wid into the participant
+	// shape createGroup expects. Read from the same source:
+	// getGroupMutationParticipant(wid, true, "createGroup").
+	ModuleGroupMutationParticipantUtils = Module("WAWebGroupMutationParticipantUtils")
+	// ModuleGroupMetadataGetters reads a group's subject, which is how a
+	// created group is recognised again without keeping state on this side.
+	ModuleGroupMetadataGetters = Module("WAWebGroupMetadataGetters")
+	// ModuleGroupMetadataCollection holds group metadata, including
+	// participants — the postcondition a creation must satisfy.
+	ModuleGroupMetadataCollection = Module("WAWebGroupMetadataCollection")
 )
 
 // RequiredAtStartup is verified before any capability runs.
