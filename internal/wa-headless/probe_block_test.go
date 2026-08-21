@@ -85,6 +85,23 @@ func TestProbeBlockShape(t *testing.T) {
 			out.cmdSendKeys = keys.filter(k => /^send/i.test(k)).sort();
 			out.cmdLocationish = keys.filter(k => /location|vcard|contactcard/i.test(k));
 		} catch (e) { out.cmdSendKeys = 'THREW:' + String(e).slice(0, 80); }
+		try {
+			const E = window.require('WAWebProtobufsE2E.pb');
+			const T = E['Message$PinInChatMessage$Type'];
+			if (!T) { out.pinWireType = 'absent'; }
+			else {
+				const names = Object.getOwnPropertyNames(T).filter(n => n !== 'length' && n !== 'name' && n !== 'prototype');
+				const vals = {};
+				for (const n of names) { try { vals[n] = String(T[n]); } catch (e) {} }
+				out.pinWireType = { names: names.slice(0, 20), vals: vals, type: typeof T };
+			}
+		} catch (e) { out.pinWireType = 'THREW:' + String(e).slice(0, 90); }
+		try {
+			const C = window.require('WAWebPinMsgConstants');
+			out.pinState = C.PIN_STATE ? C.PIN_STATE : 'absent';
+			out.pinExpiry = C.PinExpiryDurationOption ? Object.keys(C.PinExpiryDurationOption) : 'absent';
+			out.pinDefault = C.DEFAULT_PIN_EXPIRY_DURATION_OPTION === undefined ? 'absent' : String(C.DEFAULT_PIN_EXPIRY_DURATION_OPTION);
+		} catch (e) { out.pinState = 'THREW:' + String(e).slice(0, 80); }
 		out.blockContact = src('WAWebBlockContactAction', 'blockContact');
 		out.unblockContact = src('WAWebBlockContactAction', 'unblockContact');
 		out.blockUnblockUser = src('WAWebBlockUserJob', 'blockUnblockUser');

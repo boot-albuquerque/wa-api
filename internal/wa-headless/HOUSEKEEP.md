@@ -6180,3 +6180,65 @@ entregar mais uma nesta sessão: quem retomar tem módulo, assinatura e o nome d
 que falta em cada caso, em vez de quatro enumerações para refazer.
 
 **Status**: não entregue — medições preservadas acima.
+
+---
+
+## H81 — fixar mensagem: não entregue, e o achado que parecia decisivo e não era
+
+**Data**: 2026-08-21
+**Contexto**: `COMPLETE-FAMILIES`, família Message.
+**Onde**: `internal/wa-headless/capabilities/pin/`.
+
+### O que está medido, e é bastante
+
+```
+WAWebSendPinMessageAction.sendPinInChatMsg(msg, estado, segundos)
+    msg lê: id, id.toString, revisionNumber, to, from, id.fromMe,
+            id.remote, id.remote._serialized
+
+PIN_STATE                     = {INVALID: 0, PIN: 1, UNPIN: 2}         (UI)
+Message$PinInChatMessage$Type = {UNKNOWN_TYPE: 0, PIN_FOR_ALL: 1,
+                                 UNPIN_FOR_ALL: 2}                     (fio)
+
+DEFAULT_PIN_EXPIRY_DURATION_OPTION = "SevenDays" -> 604800 segundos
+```
+
+### O achado que parecia decisivo e não era
+
+O chamador do próprio app usa o enum de **protobuf**, não o de UI:
+
+```js
+sendPinInChatMsg(t, Message$PinInChatMessage$Type.UNPIN_FOR_ALL)
+```
+
+Encontrar isso pareceu a resposta — eu estava mandando o enum errado. **E os
+dois carregam os MESMOS números.** Trocar não mudou nada.
+
+Vale registrar exatamente por isso: um achado pode ser verdadeiro, específico,
+vindo da técnica certa, **e ainda assim não ser a causa**. O sinal de que era
+esse o caso estava disponível antes de eu testar — bastava comparar os valores.
+
+### O que a chamada faz: nada
+
+A chamada é aceita e não lança. Uma sessão nova lê `PinInChatCollection` com
+**zero** modelos e nenhuma mensagem com marca de fixada.
+
+**Nada ficou fixado**, e isso foi verificado — não é suposição. Uma mensagem
+fixada por engano ficaria uma semana no topo da conversa do par.
+
+### Duas tentativas, e então parei
+
+A H58 registrou que o caro neste módulo é a sequência de tentativas cegas na
+mesma camada. As duas aqui foram medidas; a terceira seria chute.
+
+**A hipótese mais provável para quem retomar**, não testada: o par
+ponte + espelho local que a H72 mediu nas etiquetas.
+`WAWebPinMessageAction` exporta `craftPinMessage` e `updatePinCollection`, e o
+segundo nome descreve exatamente um espelho. `craftPinMessage` recebe o modelo da
+mensagem (medido); `updatePinCollection` recebe algo iterável (medido: lançou
+`e is not iterable`).
+
+**Status**: não entregue — medições preservadas.
+**Testes**: `capabilities/pin/pin_test.go` travam o vocabulário, a duração, o
+modelo e o contrato honesto; `pinreal_test.go` fica vermelho atrás do próprio
+interruptor.

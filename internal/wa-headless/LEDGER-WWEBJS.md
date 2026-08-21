@@ -269,8 +269,8 @@ nem `PARTIAL` sem justificativa explícita.
 | `delete` | capabilities/revoke | `PROVEN` | sim | sim | sim | direito consultado na página |
 | `star` | capabilities/star | `PROVEN` | sim | sim | sim | H61: o await não é a conclusão — 696ms |
 | `unstar` | capabilities/star | `PROVEN` | sim | sim | sim | — |
-| `pin` | — | `MISSING` | — | — | — | fixar MENSAGEM, distinto de fixar conversa |
-| `unpin` | — | `MISSING` | — | — | — | idem |
+| `pin` | pin.Message | `MISSING` | sim | falha (H81) | sim | chamada aceita e nada é fixado; vocabulário, duração e forma do modelo medidos |
+| `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | idem |
 | `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
 | `getOrder` | — | `MISSING` | — | — | — | família de comércio |
 | `getPayment` | — | `MISSING` | — | — | — | idem |

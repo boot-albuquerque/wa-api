@@ -1408,3 +1408,21 @@ ao app um nome por vez.
 
 **E confira o par escrita/leitura**: escreve-se `announcement`, lê-se `announce`
 na metadata. Supor que são a mesma string dá um leitor que nunca vê a mudança.
+
+### Um achado pode ser verdadeiro e não ser a causa
+
+**Medido em 2026-08-21 (H81).**
+
+Eu mandava `PIN_STATE.PIN` para `sendPinInChatMsg`. O chamador do próprio app
+manda `Message$PinInChatMessage$Type.PIN_FOR_ALL`, de outro módulo. Achar isso
+pareceu a resposta: enum errado, causa encontrada.
+
+**Os dois enums carregam os mesmos números.** A troca não mudou nada.
+
+O sinal estava disponível **antes** do teste — bastava comparar os valores em vez
+de comparar os nomes. A técnica estava certa, o achado era verdadeiro, e a
+conclusão foi errada.
+
+**A regra**: quando uma sonda encontra "a coisa errada que você fazia", confira
+se corrigi-la muda alguma coisa **antes** de gastar uma execução ao vivo. Nomes
+diferentes não implicam valores diferentes.

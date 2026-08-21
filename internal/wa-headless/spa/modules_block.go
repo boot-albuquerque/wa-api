@@ -328,3 +328,24 @@ const ModuleEditLabelAssociationBridge = Module("WAWebEditLabelAssociationBridge
 // description and subject are NOT properties — they have their own setters. The
 // obvious guesses (locked, announce) are the ones that do not work.
 const ModuleSetPropertyGroupAction = Module("WAWebSetPropertyGroupAction")
+
+// Pinning a MESSAGE — distinct from pinning a conversation, which is
+// ModuleSetPinChatAction and a different act entirely.
+const (
+	// ModuleSendPinMessageAction pins and unpins:
+	//
+	//	sendPinInChatMsg(msg, state, seconds)
+	//
+	// The message MODEL is the first argument — measured: it reads id, to, from,
+	// revisionNumber and id.remote._serialized off it.
+	ModuleSendPinMessageAction = Module("WAWebSendPinMessageAction")
+
+	// ModulePinMsgConstants carries the vocabulary, read rather than written
+	// down: PIN_STATE {INVALID: 0, PIN: 1, UNPIN: 2} and the expiry options,
+	// whose default measured as "SevenDays".
+	ModulePinMsgConstants = Module("WAWebPinMsgConstants")
+
+	// ModulePinInChatCollection is where pinned messages land, and the only
+	// way to read them back.
+	ModulePinInChatCollection = Module("WAWebPinInChatCollection")
+)
