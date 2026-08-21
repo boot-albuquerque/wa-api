@@ -5469,3 +5469,57 @@ em vez de esconder algo, porque a asserção era sobre não tocar a página.
 explica por quê acima.
 **Testes**: `capabilities/ack/ack_test.go` (7 testes, três com controle acima) e
 o teste ao vivo em `commongroupsreal_test.go`.
+
+---
+
+## H72 — etiquetas de negócio (leitura)
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura. Capacidade de **leitura**.
+**Onde**: `internal/wa-headless/capabilities/contacts/labels.go`.
+
+### Só foi possível medir porque a conta é Business
+
+Etiquetas são recurso do WhatsApp Business, e a H66 mediu esta conta como sendo
+uma. É o caso raro em que uma propriedade inconveniente do fixture — descoberta
+ao tentar mudar o nome de exibição e ser recusado — **destravou** outra coisa.
+
+```
+labels: contacts.Labels(count=3 waited=1ms)
+  contacts.Label(id=1 nameLen=10 color=0 count=0)
+  contacts.Label(id=2 nameLen=10 color=0 count=0)
+  contacts.Label(id=3 nameLen=7 color=0 count=0)
+the lab chat carries 0 label(s)
+```
+
+Três etiquetas padrão, nenhuma aplicada. O teste ao vivo assere **forma**, não
+aquelas etiquetas: o dono da conta pode renomeá-las, e um teste que fixasse os
+nomes quebraria por motivo alheio ao código.
+
+### Duas respostas vazias que são respostas
+
+- **Conjunto vazio de etiquetas** é sucesso. Conta pessoal não tem etiquetas, e
+  este pacote não consegue distinguir isso de conta Business que não criou
+  nenhuma — então reporta o que vê em vez de afirmar qual dos dois é.
+- **Conversa sem etiqueta** devolve slice **vazio**, nunca `nil`. "Esta conversa
+  não está etiquetada" é uma resposta, e `nil` convida o chamador a tratá-la como
+  falha.
+
+### O que NÃO foi entregue, e por quê
+
+Escrever. `editLabelAssociation(arg, chats)` recebe um array de **modelos de
+chat** como segundo argumento — isso está lido, ele faz `chat.id.toString()`. A
+forma do PRIMEIRO argumento não é legível do invólucro, e chutá-la é o erro que a
+H69 acabou de cobrar. Espera um chamador qualificado pelo módulo.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| renderizar o nome da etiqueta | `the rendering carries the name: …name=Cliente novo…` |
+| devolver `nil` para conversa sem etiqueta | `an unlabelled chat returned nil` |
+| não normalizar os ids para string | `the script does not normalise label ids to strings` |
+
+**Status**: entregue (leitura); escrita **não entregue**, com o motivo acima.
+**Testes**: `capabilities/contacts/commongroups_test.go` (secção `labels`,
+7 testes, três com controle acima) e o teste ao vivo.

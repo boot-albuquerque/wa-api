@@ -304,3 +304,127 @@ func TestCancelledContextReadsNoAbout(t *testing.T) {
 		t.Fatalf("asked the page %d time(s) for a caller that had given up", p.kicks)
 	}
 }
+
+// --- labels ------------------------------------------------------------
+
+func labelEval(answer string) func(context.Context, string, *string) error {
+	return func(ctx context.Context, _ string, out *string) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		*out = answer
+		return nil
+	}
+}
+
+// TestAnEmptyLabelSetIsAnAnswer. A personal account has no labels, and this
+// package cannot tell that apart from a business account that made none — so it
+// reports what it sees rather than guessing which.
+func TestAnEmptyLabelSetIsAnAnswer(t *testing.T) {
+	l := New(engine.NewRunner(), labelEval(`{"ok":true,"why":"","rows":[]}`))
+	got, err := l.ListLabels(context.Background(), "t")
+	if err != nil {
+		t.Fatalf("an empty label set produced an error: %v", err)
+	}
+	if len(got.All) != 0 {
+		t.Fatalf("expected an empty set: %s", got)
+	}
+}
+
+// TestALabelsNameIsNeverRendered. It is something the account's owner wrote.
+func TestALabelsNameIsNeverRendered(t *testing.T) {
+	s := Label{ID: "1", Name: "Cliente novo", ColorIndex: 2, Count: 5}.String()
+	if strings.Contains(s, "Cliente") {
+		t.Fatalf("the rendering carries the name: %s", s)
+	}
+	if !strings.Contains(s, "id=1") || !strings.Contains(s, "nameLen=12") {
+		t.Fatalf("the id or the rune length is wrong: %s", s)
+	}
+	if !strings.Contains(s, "count=5") {
+		t.Fatalf("the count is missing: %s", s)
+	}
+}
+
+// TestTheLabelSetRenderingIsACount.
+func TestTheLabelSetRenderingIsACount(t *testing.T) {
+	s := Labels{All: []Label{{ID: "1", Name: "x"}, {ID: "2", Name: "y"}}}.String()
+	if !strings.Contains(s, "count=2") {
+		t.Fatalf("the count is missing: %s", s)
+	}
+	if strings.Contains(s, "id=") {
+		t.Fatalf("the set rendering lists its members: %s", s)
+	}
+}
+
+// TestAnUnlabelledChatReturnsAnEmptySliceNotNil. "This chat is not labelled" is
+// an answer, and a nil slice invites a caller to treat it as a failure.
+func TestAnUnlabelledChatReturnsAnEmptySliceNotNil(t *testing.T) {
+	l := New(engine.NewRunner(), labelEval(`{"ok":true,"why":"","ids":null}`))
+	ids, err := l.LabelsOfChat(context.Background(), somePeer, "t")
+	if err != nil {
+		t.Fatalf("LabelsOfChat: %v", err)
+	}
+	if ids == nil {
+		t.Fatal("an unlabelled chat returned nil")
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected no ids, got %d", len(ids))
+	}
+}
+
+// TestChatLabelIdsAreStrings. A build that stored numbers there would otherwise
+// produce a silently different type.
+func TestChatLabelIdsAreStrings(t *testing.T) {
+	if !strings.Contains(chatLabelsScript(somePeer), "ls.map(String)") {
+		t.Fatal("the script does not normalise label ids to strings")
+	}
+	l := New(engine.NewRunner(), labelEval(`{"ok":true,"why":"","ids":["1","3"]}`))
+	ids, err := l.LabelsOfChat(context.Background(), somePeer, "t")
+	if err != nil {
+		t.Fatalf("LabelsOfChat: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "1" || ids[1] != "3" {
+		t.Fatalf("the ids did not survive: %v", ids)
+	}
+}
+
+func TestLabelFailuresAreNamed(t *testing.T) {
+	l := New(engine.NewRunner(), labelEval(`{"ok":false,"why":"boom","rows":[]}`))
+	if _, err := l.ListLabels(context.Background(), "t"); !errors.Is(err, ErrLabels) {
+		t.Fatalf("got %v, want ErrLabels", err)
+	}
+	nc := New(engine.NewRunner(), labelEval(`{"ok":false,"why":"NO_CHAT","ids":[]}`))
+	if _, err := nc.LabelsOfChat(context.Background(), somePeer, "t"); !errors.Is(err, ErrNoSuchChatForLabels) {
+		t.Fatalf("got %v, want ErrNoSuchChatForLabels", err)
+	}
+	called := false
+	empty := New(engine.NewRunner(), func(context.Context, string, *string) error {
+		called = true
+		return nil
+	})
+	if _, err := empty.LabelsOfChat(context.Background(), "  ", "t"); !errors.Is(err, ErrNoSuchChatForLabels) {
+		t.Fatalf("got %v, want ErrNoSuchChatForLabels", err)
+	}
+	if called {
+		t.Fatal("the page was asked about an empty jid")
+	}
+	bad := New(engine.NewRunner(), labelEval(`not json`))
+	if _, err := bad.ListLabels(context.Background(), "t"); err == nil {
+		t.Fatal("a non-JSON answer was accepted")
+	}
+	if _, err := bad.LabelsOfChat(context.Background(), somePeer, "t"); err == nil {
+		t.Fatal("a non-JSON answer was accepted")
+	}
+}
+
+func TestCancelledContextReadsNoLabels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	l := New(engine.NewRunner(), labelEval(`{"ok":true,"why":"","rows":[]}`))
+	if _, err := l.ListLabels(ctx, "t"); err == nil {
+		t.Fatal("a cancelled context still read the labels")
+	}
+	if _, err := l.LabelsOfChat(ctx, somePeer, "t"); err == nil {
+		t.Fatal("a cancelled context still read a chat's labels")
+	}
+}

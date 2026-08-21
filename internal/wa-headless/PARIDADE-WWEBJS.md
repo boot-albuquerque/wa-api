@@ -790,3 +790,17 @@ O que existe é `msg.ack`, e é o que entregamos.
    "pendente", que seria uma afirmação.
 3. **`FromMe` é carregado**, porque o ack de uma mensagem recebida é sobre o que
    ESTA conta reconheceu — pergunta diferente de "eles leram a minha".
+
+## §6.27 — etiquetas de negócio
+
+`wwebjs` expõe `Client.getLabels()`, `Chat.getLabels()` e
+`Client.addOrRemoveLabels()`.
+
+| operação | estado |
+|---|---|
+| listar etiquetas | **entregue** — `LabelCollection` |
+| etiquetas de uma conversa | **entregue** — `chat.labels`, ids normalizados a string |
+| aplicar/remover | **não entregue** — `editLabelAssociation(arg, chats)` com o primeiro argumento ilegível do invólucro |
+
+**Divergências:** conjunto vazio e conversa sem etiqueta são **respostas**, não
+erros; nomes de etiqueta nunca são renderizados, só o comprimento.

@@ -242,3 +242,70 @@ func TestRealSPAReadsTheAckOfAMessageItJustSent(t *testing.T) {
 		t.Fatalf("an unknown id: got %v, want ErrNoMessage", err)
 	}
 }
+
+// TestRealSPAReadsTheBusinessLabels reads only.
+//
+// The lab account is a business account (H66, measured), which is why it has
+// labels at all — three defaults, none applied to any chat. The assertions are
+// about SHAPE rather than about those particular labels, because the account's
+// owner may add or rename them and a test that pinned the names would break for
+// a reason that has nothing to do with this code.
+func TestRealSPAReadsTheBusinessLabels(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
+		t.Skip("set WA_HEADLESS_READ_TEST=1; this only reads")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	l := contacts.New(runner, sess.Tab().Evaluate)
+	got, err := l.ListLabels(ctx, "test/labels")
+	if err != nil {
+		t.Fatalf("ListLabels: %v", err)
+	}
+	t.Logf("labels: %s", got)
+	for _, lab := range got.All {
+		t.Logf("  %s", lab)
+		if lab.ID == "" {
+			t.Error("a label has no id")
+		}
+	}
+	if len(got.All) == 0 {
+		t.Log("NOT PROVEN by this run: reading a non-empty label set (this account has none)")
+	}
+
+	chatJID := findLabChatJID(ctx, t, runner, sess.Tab().Evaluate, peer)
+	if chatJID == "" {
+		t.Skip("no loaded chat with the peer")
+	}
+	ids, err := l.LabelsOfChat(ctx, chatJID, "test/chat-labels")
+	if err != nil {
+		t.Fatalf("LabelsOfChat: %v", err)
+	}
+	// An UNLABELLED chat must come back as an empty slice, not an error and not
+	// nil — "this chat is not labelled" is an answer.
+	if ids == nil {
+		t.Fatal("an unlabelled chat returned nil instead of an empty slice")
+	}
+	t.Logf("the lab chat carries %d label(s)", len(ids))
+
+	if _, err := l.LabelsOfChat(ctx, "15550009999@c.us", "test/chat-labels-missing"); !errors.Is(err, contacts.ErrNoSuchChatForLabels) {
+		t.Fatalf("an unknown chat: got %v, want ErrNoSuchChatForLabels", err)
+	}
+}

@@ -280,3 +280,17 @@ const (
 // read it" is a different capability with a different cost, and msg.ack is what
 // a session actually knows.
 const ModuleAck = Module("WAWebAck")
+
+// ModuleLabelCollection holds the account's labels. Labels are a WhatsApp
+// Business feature, and the lab account measured as a business account (H66),
+// which is the only reason this could be measured here at all.
+//
+// MEASURED: three labels exist with ids "1", "2" and "3" — the defaults — each
+// with count 0, and no chat carries any. A chat's labels live on chat.labels as
+// an array of id strings.
+//
+// WRITING IS NOT DONE HERE. editLabelAssociation(arg, chats) takes an array of
+// CHAT MODELS as its second argument (it maps chat.id.toString()), and its first
+// argument's shape is not readable from the wrapper. Guessing it is the mistake
+// H69 charges for, so the write waits for a module-qualified call site.
+const ModuleLabelCollection = Module("WAWebLabelCollection")
