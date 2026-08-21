@@ -247,3 +247,24 @@ const ModuleFindCommonGroupsContactAction = Module("WAWebFindCommonGroupsContact
 // merge path for added options, which builds exactly that shape and keys a Set
 // on option.name.
 const ModulePollsSendPollCreationMsgAction = Module("WAWebPollsSendPollCreationMsgAction")
+
+// The "about" text — what this build calls a text status.
+const (
+	// ModuleTextStatusAction fetches one from the server. Its call sites are
+	// MODULE-QUALIFIED, which is the check H69 cost two live runs for:
+	//
+	//	o("WAWebTextStatusAction").getTextStatus(contact.id)
+	//
+	// It takes the WID, not the model — unlike findCommonGroups next door,
+	// which takes the model. There is no rule; there is only reading.
+	ModuleTextStatusAction = Module("WAWebTextStatusAction")
+
+	// ModuleTextStatusCollection is where the fetched value lands, found by
+	// wid: TextStatusCollection.find(wid).
+	ModuleTextStatusCollection = Module("WAWebTextStatusCollection")
+
+	// ModuleTextStatusGatingUtils carries receiveTextStatusEnabled, which the
+	// app checks before fetching at all. A build with the feature off would
+	// otherwise look like a contact with no about text.
+	ModuleTextStatusGatingUtils = Module("WAWebTextStatusGatingUtils")
+)

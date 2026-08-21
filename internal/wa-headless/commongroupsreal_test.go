@@ -114,3 +114,67 @@ func ownJID(ctx context.Context, t *testing.T, runner *engine.Runner,
 	}
 	return jid
 }
+
+// TestRealSPAReadsThePeersAbout reads only. The about text is never logged —
+// only its length — because it is something a person wrote about themselves.
+func TestRealSPAReadsThePeersAbout(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
+		t.Skip("set WA_HEADLESS_READ_TEST=1; this only reads")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	peer := os.Getenv("WA_SEND_TO_JID")
+	if profile == "" || peer == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE and WA_SEND_TO_JID are required")
+	}
+
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+
+	l := contacts.New(runner, sess.Tab().Evaluate)
+	got, err := l.AboutOf(ctx, peer, "test/about")
+	if err != nil {
+		if errors.Is(err, contacts.ErrAboutDisabled) {
+			t.Skip("this build has text status receiving disabled; the read path was not exercised")
+		}
+		t.Fatalf("AboutOf: %v", err)
+	}
+	t.Logf("peer about: %s", got)
+	// WHAT THIS RUN DID AND DID NOT PROVE, said out loud so the PASS is not
+	// read as more than it is. The peer's about came back EMPTY and already in
+	// the collection, so what is proven is the cached-read path and the gate.
+	// The FETCH path — going to the server — is not exercised by this, and
+	// exercising it would mean querying a third party's about, which the lab
+	// rules do not allow.
+	if !got.Fetched {
+		t.Log("NOT PROVEN by this run: the server-fetch path (the value was already cached)")
+	}
+	if len(got.Text) == 0 {
+		t.Log("NOT PROVEN by this run: carrying a non-empty about (the peer has none)")
+	}
+
+	// ASKING TWICE MUST NOT REFETCH. The second call finds it in the
+	// collection, which is what Fetched distinguishes — and a capability that
+	// refetched every time would be a network call per read.
+	again, err := l.AboutOf(ctx, peer, "test/about-again")
+	if err != nil {
+		t.Fatalf("second AboutOf: %v", err)
+	}
+	t.Logf("second read: %s", again)
+	if again.Fetched && got.Fetched {
+		t.Error("the second read went to the server again; the collection is not being consulted")
+	}
+	if again.Text != got.Text {
+		t.Error("two reads of the same about returned different text")
+	}
+}

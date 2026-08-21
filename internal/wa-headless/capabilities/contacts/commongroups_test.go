@@ -160,3 +160,147 @@ func TestAHungPageIsATimeoutForCommonGroups(t *testing.T) {
 		t.Fatalf("got %v, want ErrCommonGroups", err)
 	}
 }
+
+// --- about -------------------------------------------------------------
+
+type aboutDouble struct {
+	ok         bool
+	stage, why string
+	text       string
+	fetched    bool
+
+	kicks      int
+	lastScript string
+}
+
+func (p *aboutDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.Contains(expr, "const s = window[") {
+		if !p.ok {
+			stage := p.stage
+			if stage == "" {
+				stage = "read"
+			}
+			*out = fmt.Sprintf(`{"stage":%q,"ok":false,"why":%q}`, stage, p.why)
+			return nil
+		}
+		*out = fmt.Sprintf(`{"stage":"done","ok":true,"why":"","text":%q,"fetched":%t}`,
+			p.text, p.fetched)
+		return nil
+	}
+	p.kicks++
+	p.lastScript = expr
+	*out = `{"started":true}`
+	return nil
+}
+
+func aboutLister(p *aboutDouble) *Lister { return New(engine.NewRunner(), p.eval) }
+
+// TestDisabledIsNotEmpty is the distinction the gate exists for. A build with
+// text status receiving off would otherwise be indistinguishable from a contact
+// who wrote nothing, and those are different answers.
+func TestDisabledIsNotEmpty(t *testing.T) {
+	compressCommonClock(t)
+	off := &aboutDouble{ok: false, stage: "gate", why: "DISABLED"}
+	if _, err := aboutLister(off).AboutOf(context.Background(), somePeer, "t"); !errors.Is(err, ErrAboutDisabled) {
+		t.Fatalf("got %v, want ErrAboutDisabled", err)
+	}
+	// The needle is the BRANCH, not the predicate.
+	if !strings.Contains(off.lastScript, "if (G.receiveTextStatusEnabled && !G.receiveTextStatusEnabled()) {") {
+		t.Fatal("the gate is computed but does not guard a return")
+	}
+
+	empty := &aboutDouble{ok: true, text: ""}
+	got, err := aboutLister(empty).AboutOf(context.Background(), somePeer, "t")
+	if err != nil {
+		t.Fatalf("an empty about produced an error: %v", err)
+	}
+	if got.Text != "" {
+		t.Fatalf("expected an empty about: %s", got)
+	}
+}
+
+// TestTheWidIsPassedNotTheModel. getTextStatus takes a wid; its neighbour
+// findCommonGroups takes a model. There is no rule — only reading.
+func TestTheWidIsPassedNotTheModel(t *testing.T) {
+	compressCommonClock(t)
+	p := &aboutDouble{ok: true, text: "hello"}
+	if _, err := aboutLister(p).AboutOf(context.Background(), somePeer, "t"); err != nil {
+		t.Fatalf("AboutOf: %v", err)
+	}
+	if !strings.Contains(p.lastScript, "A.getTextStatus(r.wid)") {
+		t.Fatal("the call does not pass the wid")
+	}
+	if strings.Contains(p.lastScript, "getTextStatus(contact)") {
+		t.Fatal("a model is passed where a wid is wanted")
+	}
+}
+
+// TestTheAboutTextIsNeverRendered. It is something a person wrote about
+// themselves.
+func TestTheAboutTextIsNeverRendered(t *testing.T) {
+	s := About{Text: "disponível para conversar", Fetched: true}.String()
+	if strings.Contains(s, "disponível") {
+		t.Fatalf("the rendering carries the text: %s", s)
+	}
+	// The length is in RUNES, because an about full of accents is not longer
+	// than one without them — Go's len would say otherwise.
+	if !strings.Contains(s, "len=25") {
+		t.Fatalf("the rune length is wrong or missing: %s", s)
+	}
+}
+
+func TestAboutRefusalsCostNoPageCall(t *testing.T) {
+	compressCommonClock(t)
+	p := &aboutDouble{ok: true}
+	if _, err := aboutLister(p).AboutOf(context.Background(), "  ", "t"); !errors.Is(err, ErrNoContact) {
+		t.Fatalf("got %v, want ErrNoContact", err)
+	}
+	if p.kicks != 0 {
+		t.Fatalf("the page was asked %d time(s)", p.kicks)
+	}
+	for _, why := range []string{"NOT_ON_WHATSAPP", "WID_NULL"} {
+		q := &aboutDouble{ok: false, stage: "resolve", why: why}
+		if _, err := aboutLister(q).AboutOf(context.Background(), somePeer, "t"); !errors.Is(err, ErrNoContact) {
+			t.Fatalf("%s: got %v, want ErrNoContact", why, err)
+		}
+	}
+}
+
+func TestAboutTriesEveryKnownFieldName(t *testing.T) {
+	for _, f := range []string{"'status'", "'text'", "'textStatus'"} {
+		if !strings.Contains(aboutScript(somePeer), f) {
+			t.Fatalf("the script does not try the %s field", f)
+		}
+	}
+}
+
+func TestAHungPageIsATimeoutForAbout(t *testing.T) {
+	compressCommonClock(t)
+	stuck := func(_ context.Context, expr string, out *string) error {
+		if strings.Contains(expr, "const s = window[") {
+			*out = `{"stage":"pending","ok":false,"why":""}`
+			return nil
+		}
+		*out = `{"started":true}`
+		return nil
+	}
+	if _, err := New(engine.NewRunner(), stuck).AboutOf(context.Background(), somePeer, "t"); !errors.Is(err, ErrAbout) {
+		t.Fatalf("got %v, want ErrAbout", err)
+	}
+}
+
+func TestCancelledContextReadsNoAbout(t *testing.T) {
+	compressCommonClock(t)
+	p := &aboutDouble{ok: true, text: "x"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := aboutLister(p).AboutOf(ctx, somePeer, "t"); err == nil {
+		t.Fatal("a cancelled context still read an about")
+	}
+	if p.kicks != 0 {
+		t.Fatalf("asked the page %d time(s) for a caller that had given up", p.kicks)
+	}
+}

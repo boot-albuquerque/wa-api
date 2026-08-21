@@ -1218,3 +1218,29 @@ não era o que eu pensava.
 Sintoma típico: `reading '<campo>' of undefined` num campo que existe no objeto
 que você montou. Se o campo existe e mesmo assim está indefinido lá dentro, a
 função que recebeu não é a que você leu.
+
+## O portão do HOUSEKEEP casa `Status` no meio de um identificador
+
+**Medido em 2026-08-21, na H70.**
+
+`TestHousekeepEntriesAreMachineReadable` procura linhas de status com
+
+```
+\*{0,2}Status[^*:]*\*{0,2}:[\s*·—–-]*([^\n*]{3,60})
+```
+
+A palavra `Status` aparece dentro de `receiveTextStatusEnabled`, e `[^*:]*`
+**atravessa quebras de linha** — então o casamento correu prosa abaixo até o
+primeiro `:` (dentro de um bloco de código, três parágrafos adiante) e reportou
+como "status" um trecho de saída de teste.
+
+**O sintoma** é o portão reclamando de um "status" que você não escreveu, citando
+texto que não é status nenhum.
+
+**O conserto barato**: envolver o identificador em ênfase — `**`identificador`**`
+— porque o `*` de fechamento cai dentro do alcance de `[^*:]*` e interrompe o
+casamento antes do dois-pontos distante.
+
+**O conserto certo**, se reaparecer: prender o padrão ao início de linha e
+proibir quebra de linha no meio. Não foi feito agora porque mexer no portão no
+mesmo commit em que ele acusa é como se perde a confiança nele.

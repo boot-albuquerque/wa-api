@@ -751,3 +751,23 @@ contagem, porque a lista de grupos de alguém é um perfil dessa pessoa.
 `pollType`/`correctOptionIndex`, e `sendPollCreation({poll, chat, quotedMsg,
 isWamoSub})` é da API. O que falta é o que `createPollCreationMsgData`
 desestrutura.
+
+## §6.25 — recado do contato (leitura)
+
+`wwebjs` expõe `Contact.getAbout()`. Neste build o recado é um *text status*:
+
+```
+o("WAWebTextStatusAction").getTextStatus(wid)     // o WID
+WAWebTextStatusCollection.TextStatusCollection.find(wid)
+```
+
+`getTextStatus` toma o **wid**; seu vizinho `findCommonGroups`, no mesmo pacote,
+toma o **modelo**. Não há regra — há leitura.
+
+**Onde divergimos de propósito:**
+
+1. **Consultamos a guarda de recebimento antes.** Recurso desligado e contato sem
+   recado são respostas diferentes, e o `wwebjs` devolve a mesma coisa nas duas.
+2. **O texto nunca é renderizado**, só o comprimento — em RUNAS.
+3. **Dizemos o que a prova ao vivo não provou**: o par tem recado vazio e já em
+   cache, então a busca no servidor não foi exercitada.

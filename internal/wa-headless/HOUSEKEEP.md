@@ -5324,3 +5324,62 @@ tentativa tenha um harness em vez de uma página em branco.
 
 **Status**: não entregue.
 **Testes**: `capabilities/send/poll_test.go` (7 testes cobrindo o medido).
+
+---
+
+## H70 — ler o recado de um contato, e um PASS que não prova o que parece
+
+**Data**: 2026-08-21
+**Contexto**: Fase 1, cobertura. Capacidade de **leitura**.
+**Onde**: `internal/wa-headless/capabilities/contacts/about.go`.
+
+### A regra nova da H69 foi aplicada e funcionou
+
+O chamador foi procurado **qualificado pelo módulo**:
+
+```js
+o("WAWebTextStatusAction").getTextStatus(contact.id)
+```
+
+`getTextStatus` toma o **WID**. Seu vizinho `findCommonGroups`, no mesmo pacote
+de capacidade, toma o **MODELO**. Não há regra — há leitura. A H69 é a entrada
+que explica o que assumir custa, e desta vez a leitura veio antes.
+
+### A guarda que separa duas respostas diferentes
+
+**`receiveTextStatusEnabled()`** é consultada ANTES. Um build com o recurso
+desligado seria indistinguível de um contato que não escreveu nada, e essas são
+respostas diferentes — `ErrAboutDisabled` de um lado, um recado vazio bem
+sucedido do outro.
+
+### O PASS ao vivo, e o que ele NÃO prova
+
+```
+peer about:  contacts.About(len=0 fetched=false waited=509ms)
+second read: contacts.About(len=0 fetched=false waited=509ms)
+```
+
+Verde, e **fraco**. O recado do par voltou VAZIO e já em cache, então o que está
+provado é o caminho de leitura em cache e a guarda. **Não** está provado: a busca
+no servidor, nem carregar um recado não vazio.
+
+Isso está dito **dentro do teste**, com `t.Log("NOT PROVEN by this run: …")`,
+porque um PASS que não anuncia seus limites é a forma mais barata de um teste
+mentir. Exercitar a busca exigiria consultar o recado de terceiros, o que as
+regras do laboratório não permitem.
+
+### Controles negativos EXECUTADOS
+
+| mutação | falha observada |
+|---|---|
+| guarda computada que não desvia | `the gate is computed but does not guard a return` |
+| passar o modelo em vez do wid | `the call does not pass the wid` |
+| renderizar o texto do recado | `the rendering carries the text: …disponível para conversar…` |
+| medir o comprimento em bytes | `the rune length is wrong or missing: len=26` |
+
+O quarto é a armadilha UTF-16/bytes da H64 reaparecendo de outro ângulo: um
+recado cheio de acentos não é mais longo que um sem eles, e `len()` diria que é.
+
+**Status**: entregue, com os limites da prova ao vivo registrados acima.
+**Testes**: `capabilities/contacts/commongroups_test.go` (secção `about`,
+7 testes, quatro com controle acima) e `commongroupsreal_test.go`.
