@@ -4256,3 +4256,49 @@ resolve antes de tocar em qualquer coisa — e é isso que ele assere.
 
 **Status**: corrigido — causa medida por A/B, guarda de pedido redundante,
 encanamento desnecessário removido, e ciclo completo provado ao vivo.
+
+## H56 — apagar para todos: a primeira capacidade DESTRUTIVA, e ela pergunta antes
+
+**Data**: 2026-08-21 · **Contexto**: fila de capacidades depois de a dívida da
+H55 ser fechada.
+
+**É a primeira coisa neste módulo que não tem desfazer.** Tudo o mais acrescenta
+ou muda algo recuperável; esta remove uma mensagem do telefone de outras
+pessoas. Por isso ela recusa mais facilmente que as outras.
+
+**A forma veio do código do app, e o primeiro argumento é um REGISTRO:**
+
+```js
+sendRevoke({type: 'message', data: msg}, revokeType, clearMedia)
+```
+
+`revokeType` é `WAWebCmd.Revoke.Sender` ou `.Admin`, e o app escolhe com
+`WAWebMsgActionCapability.canSenderRevokeMsg`. **Consultar isso não é
+delicadeza**: revogar como Sender quando a conta é só Admin — ou o inverso — é
+pedir algo a que ela não tem direito. Se nenhum dos dois vale, a capacidade
+recusa com erro PRÓPRIO (`ErrNotRevocable`), porque o chamador pode agir sobre
+isso: apagar localmente em vez disso.
+
+> Note a direção: aqui o argumento é um REGISTRO que ENVOLVE a mensagem, ao
+> contrário das H40/H46/H49, onde o erro era passar o id quando queriam o modelo.
+> A regra não é "sempre passe o modelo" — é **leia a chamada**.
+
+**`clearMedia` é escolha do chamador**, não constante. Destruir também a cópia
+local é outra intenção, e assumir a mais destrutiva não é um padrão que este
+pacote adota em nome de alguém.
+
+**A pós-condição importa mais aqui do que em qualquer outro lugar do módulo**:
+sem ela, o chamador acreditaria que uma mensagem sumiu dos telefones alheios
+quando não sumiu, e não haveria como descobrir depois.
+
+**Prova ao vivo**: mensagem enviada pelo próprio teste segundos antes, para a
+conta par de laboratório, apagada com `as=sender`. Nada que existisse antes do
+teste foi tocado.
+
+**Quatro controles negativos, EXECUTADOS**: remover a pós-condição; escolher o
+direito sem perguntar; passar a mensagem em vez do registro; e ignorar a escolha
+do chamador sobre `clearMedia`.
+
+**Status**: entregue — forma lida da fonte, direito consultado na página,
+pós-condição verificada, alvo restrito ao que o próprio teste criou, e quatro
+controles negativos.

@@ -306,6 +306,21 @@ const (
 	// A capability that ignored the limit would fail at the page for a reason
 	// the caller could have been told up front.
 	ModuleChatPinBridge = Module("WAWebChatPinBridge")
+	// ModuleRevokeMsgAction deletes a message for everyone.
+	//
+	// The call shape came from the app's own code, and the first argument is a
+	// RECORD rather than the message:
+	//
+	//	sendRevoke({type: 'message', data: msg}, revokeType, clearMedia)
+	//
+	// revokeType is WAWebCmd.Revoke.Sender or .Admin, chosen by
+	// WAWebMsgActionCapability.canSenderRevokeMsg — the app asks who is entitled
+	// before deciding, and so does this.
+	ModuleRevokeMsgAction = Module("WAWebRevokeMsgAction")
+	// ModuleMsgActionCapability answers who may revoke a message. Consulting it
+	// is not politeness: an account that revokes as Sender when it is only an
+	// Admin, or the reverse, is asking for something it is not entitled to.
+	ModuleMsgActionCapability = Module("WAWebMsgActionCapability")
 )
 
 // RequiredAtStartup is verified before any capability runs.
