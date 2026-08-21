@@ -450,7 +450,21 @@ func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		return fail(stage, cause)
 	}
 
-	tab, err := engine.OpenTab(sessionCtx, browser)
+	// THE INJECTED POLICY HAS TO GOVERN THE WHOLE BOOT, and this line used to be
+	// the hole in that.
+	//
+	// engine.OpenTab hard-codes DefaultDeadlines.For(OpBoot), so a caller that
+	// raised Runner.Policy.Boot — which is exactly what the test harness does,
+	// and what harnessbudget_test.go documents — had every step of the boot
+	// honour it EXCEPT the tab priming. Under host contention that step is
+	// precisely the one that runs long: F100 recorded eight gate failures, and
+	// the ninth named the cause, failing with "Boot(open_tab/prime): deadline of
+	// 30s exceeded" on a session configured for ninety.
+	//
+	// OpenTabWithin is the same function with the bound passed in rather than
+	// assumed. Production behaviour is unchanged: engine.NewRunner starts from
+	// DefaultDeadlines, so a caller that sets nothing gets the same 30s.
+	tab, err := engine.OpenTabWithin(sessionCtx, browser, runner.Policy.For(engine.OpBoot))
 	if err != nil {
 		cancelSession()
 		return fail(StageOpenTab, fmt.Errorf("core: opening tab: %w", err))

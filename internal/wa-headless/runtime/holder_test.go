@@ -84,7 +84,12 @@ func holderConfig(t *testing.T, profileDir string) core.StartConfig {
 	// runs, and F100 recorded seven failures that were the machine being busy.
 	// core/harnessbudget_test.go carries the reasoning and the control that
 	// keeps a raised ceiling from becoming no ceiling.
-	r.Policy.Boot = 90 * time.Second
+	// 150s, matching core/harnessbudget_test.go. It is a duplicated literal and
+	// that is deliberate: the two packages cannot share an unexported test
+	// constant, and exporting one would put a harness concern into production
+	// code. What keeps them from drifting is that they fail the same way, in the
+	// same run, on the same contention.
+	r.Policy.Boot = 150 * time.Second
 	return core.StartConfig{
 		BinaryPath:      findChrome(t),
 		ProfileDir:      profileDir,

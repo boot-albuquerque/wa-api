@@ -161,6 +161,12 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Kind    string `json:"kind"`
 			Ack     int    `json:"ack"`
 			BodyLen int    `json:"bodyLen"`
+
+			Call     string `json:"call"`
+			Peer     string `json:"peer"`
+			Video    bool   `json:"video"`
+			Outgoing bool   `json:"outgoing"`
+			Group    bool   `json:"group"`
 		} `json:"rows"`
 	}
 	if e := json.Unmarshal([]byte(raw), &out); e != nil {
@@ -203,6 +209,11 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Type: t, Origin: SourcePage, Seq: r.Seq, At: time.UnixMilli(r.At),
 			ChatJID: r.Chat, MessageID: r.Msg, FromMe: r.FromMe,
 			Kind: r.Kind, Ack: r.Ack, BodyLen: r.BodyLen,
+			CallID: r.Call, CallerJID: r.Peer, Video: r.Video,
+			// A call the account PLACED is not an incoming call, and the two
+			// arrive through the same collection. FromMe carries the difference
+			// so a subscriber does not have to know that.
+			OutgoingCall: r.Outgoing, GroupCall: r.Group,
 		})
 	}
 	return evs, nil
@@ -315,6 +326,18 @@ func installScript() string {
 		// and, on the same session, may not fire again when it is taken back.
 		// That asymmetry belongs in the type's doc, not in a silent gap.
 		MC.on('change:hasReaction', onReaction);
+		const onCall = (c) => {
+			if (!c) { return; }
+			push({
+				type: 'call.incoming',
+				call: (c.id && c.id._serialized) || (typeof c.id === 'string' ? c.id : ''),
+				peer: (c.peerJid && c.peerJid._serialized) ||
+					(typeof c.peerJid === 'string' ? c.peerJid : ''),
+				video: !!c.isVideo,
+				outgoing: !!c.outgoing,
+				group: !!c.isGroup,
+			});
+		};
 		CC.on('change', onChat);
 		s.handlers = [[MC, 'add', onAdd], [MC, 'change:ack', onAck],
 			[MC, 'change:isRevokedMsg', onRevoke], [MC, 'change:revokeSender', onRevoke],
@@ -329,6 +352,30 @@ func installScript() string {
 			if (CT && typeof CT.on === 'function') {
 				CT.on('change', onContact);
 				s.handlers.push([CT, 'change', onContact]);
+			}
+		} catch (e) {}
+
+		// THE CALL COLLECTION, and the listener is tried BEFORE the reference's
+		// technique is considered.
+		//
+		// whatsapp-web.js observes incoming calls by finding the property of
+		// WAWebCallCollection that IS a Map and wrapping its set method — a
+		// patch to the running application. It presumably found no listener.
+		// This build's collection DOES expose .on (measured), so the clean door
+		// is tried first and, if it never fires, that is a measurement rather
+		// than a reason to start patching somebody else's object.
+		//
+		// A CALL CARRIES THE CALLER'S NUMBER, so the row keeps the peer jid for
+		// routing — the same treatment every other event's identity gets — and
+		// never the participants, the display name, or anything a log would
+		// render.
+		try {
+			const RAW = window.require('` + string(spa.ModuleCallCollection) + `');
+			const CL = RAW && (RAW.CallCollection || RAW.default || RAW);
+			if (CL && typeof CL.on === 'function') {
+				CL.on('add', onCall);
+				CL.on('change:isRinging', onCall);
+				s.handlers.push([CL, 'add', onCall], [CL, 'change:isRinging', onCall]);
 			}
 		} catch (e) {}
 		s.installed = true;

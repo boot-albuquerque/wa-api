@@ -7243,3 +7243,124 @@ em vez de ficar ligado numa execução que alguém começa de madrugada.
 
 **Status**: entregue parcialmente — link provado ao vivo; recusa implementada e
 travada por teste, aguardando autorização humana para a chamada que a provaria.
+
+---
+
+## H93 — a chamada autorizada: três hipóteses derrubadas, e um leitor que nunca contou nada
+
+**Data**: 2026-08-21.
+**Contexto**: continuação da H92, com autorização humana explícita para originar
+uma chamada real entre as contas de laboratório.
+
+### O que foi medido, em ordem
+
+| passo | resultado |
+|---|---|
+| `startWAWebVoipCall(wid, false)` | resolve, sem erro |
+| **o telefone tocou?** | **não** — confirmado pelo humano, que é o único instrumento que responde isso |
+| `isCallingEnabled` | `true` |
+| `isUnsupportedBrowserForWebCalling` | `false` |
+| `getUnsupportedBrowserReason` | `null` |
+| `crossOriginIsolated` / `SharedArrayBuffer` / `WebAssembly` | todos presentes |
+| `ensureVoipInitialized()` | **resolve**, nos dois lados |
+| depois do init nos dois lados, `Pending` da conta-A | **0** |
+| barramento da conta-B | zero `call.incoming` |
+
+### Três hipóteses minhas, todas derrubadas por medição
+
+1. **"O ambiente headless não suporta chamada."** Falsa: o gating da própria
+   página diz que chamada está habilitada e o navegador é suportado, com
+   isolamento cross-origin e WASM presentes.
+2. **"A pilha VOIP nunca sobe."** Falsa: `ensureVoipInitialized()` resolve.
+3. **"Falta inicializar antes de discar."** Plausível e implementada — o
+   `Place` agora inicializa antes, o que tem a forma exata da lição da H34
+   (chamar antes a resolução que a página já tem). **Não bastou.**
+
+### O que este resultado NÃO prova, e por que isso importa
+
+`Pending` da conta-A leu **0** depois de discar. A leitura tentadora é "o
+disparo não fez nada". Ela não é válida:
+
+> **Este leitor nunca foi observado contando uma chamada.** Todas as execuções
+> dele, em todo o histórico, devolveram zero.
+
+É exatamente a armadilha número 2 do `ARMADILHAS.md` — *teste o caminho de
+SUCESSO, não só a recusa*. Um contador que só foi visto devolvendo zero não
+distingue "não há nada para contar" de "não sei contar". Separar "o disparo não
+fez nada" de "o leitor não conta nada" exige uma chamada que se saiba existir, e
+essa é justamente a coisa que falta.
+
+Por isso a linha do ledger é `PARTIAL` com a história escrita, e não uma
+conclusão sobre o `startWAWebVoipCall`.
+
+### O achado que vale mais que o resultado das chamadas
+
+**Uma sessão recém-iniciada INUNDA o barramento.** Medido em três execuções
+consecutivas, na conta-B, com o bus instalado logo após o boot:
+
+| execução | `chat.changed` | `message.added` | `contact.changed` |
+|---|---|---|---|
+| 1 | 2220 | 530 | 30 |
+| 2 | 2099 | 441 | 25 |
+| 3 | 1898 | 327 | 485 |
+
+Nada disso é atividade: é a **sincronização de histórico** que a SPA faz ao
+subir. E tudo chega marcado como **live**, porque a janela de replay fecha
+depois do PRIMEIRO drain (H87) — e a sincronização continua por minutos depois
+dele.
+
+A H87 corrigiu o caso oposto (numa página quieta, o primeiro evento REAL era
+marcado como histórico) e a correção está certa para aquele caso. O que ela não
+viu é que a mesma janela é curta demais para um boot: um consumidor que conte
+`message.added` contaria **centenas de mensagens antigas como novas** na primeira
+execução depois de cada boot.
+
+**Correção sugerida, NÃO aplicada** (é decisão de projeto, não conserto óbvio):
+fechar a janela por um sinal da própria SPA — o fim da sincronização inicial —
+em vez de pelo primeiro drain. Se esse sinal não existir, a alternativa é o
+consumidor receber `Replay` até que a taxa caia, o que troca uma regra clara por
+uma heurística e merece decisão explícita.
+
+### E a F100 finalmente ganhou uma CAUSA, na nona ocorrência
+
+O `make check` ficou vermelho com
+`Boot(open_tab/prime): deadline of 30s exceeded` — numa sessão configurada para
+**noventa** segundos. O orçamento injetado não estava chegando ao lugar que
+importa:
+
+```go
+tab, err := engine.OpenTab(sessionCtx, browser)   // DefaultDeadlines.For(OpBoot)
+```
+
+`engine.OpenTab` fixa o prazo padrão. Um chamador que subiu
+`Runner.Policy.Boot` — que é exatamente o que o harness faz, e o que o
+`harnessbudget_test.go` documenta — tinha **todo** passo do boot honrando isso
+**menos a preparação da aba**. E essa é justamente a que demora sob contenção,
+então o orçamento maior ajudava onde não era preciso.
+
+Trocado por `engine.OpenTabWithin(sessionCtx, browser, runner.Policy.For(engine.OpBoot))`.
+Comportamento de produção inalterado: `engine.NewRunner` parte dos padrões.
+
+A asserção é sobre o **código-fonte**, não sobre tempo — tempo é o que tornou
+essas oito falhas ilegíveis: um teste que espera um boot lento falha em máquina
+rápida e passa em código quebrado.
+
+**Depois disso o gate caiu de novo**, agora esperando os noventa segundos
+inteiros. Isso não era mais defeito: eram **quatro boots de browser a mais** que
+a H88 acrescentou a um pacote que já sobe dezenas, sob `-race`. Duas medidas,
+nesta ordem:
+
+1. **Apaguei um teste meu** — o de observador nulo — porque **toda** outra prova
+   deste pacote já o afirma, deixando `OnLifecycle` nulo. Um teste cuja
+   propriedade a suíte já carrega não é grátis: é pago em relógio a cada
+   execução, e a conta chega como uma intermitência que parece defeito.
+2. **Subi o teto do harness de 90s para 150s.** Subir teto é o movimento que
+   este repositório mais desconfia, então veio com as duas coisas que o tornam
+   honesto: continua estritamente maior que o de PRODUÇÃO, e um boot travado
+   continua terminando dentro dele — as duas travadas por teste que já existiam.
+
+**Status**: parcialmente entregue — `Place`, `Cancel` e `EnsureReady`
+implementados e travados por teste; `INCOMING_CALL` e a prova ao vivo de
+`reject` continuam sem disparo, com o caminho todo medido. O achado da inundação
+do barramento fica pendente de decisão. A F100 fica **corrigida na causa** e o
+teto do harness registrado.

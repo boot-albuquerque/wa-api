@@ -58,6 +58,10 @@ var (
 	ErrReject = fmt.Errorf("call: the page refused to reject the call")
 	// ErrNoCall is a rejection with no call to reject.
 	ErrNoCall = fmt.Errorf("call: a rejection needs both a caller and a call id")
+	// ErrPlace is the page refusing or failing to place or cancel a call.
+	ErrPlace = fmt.Errorf("call: the page refused to place the call")
+	// ErrNotOnWhatsApp is a peer the server does not know.
+	ErrNotOnWhatsApp = fmt.Errorf("call: that number is not on WhatsApp")
 )
 
 // Budgets. Var so a test can compress them.
@@ -159,6 +163,96 @@ func (m *Manager) Reject(ctx context.Context, callerJID, callID, label string) e
 	}
 	if !out.OK {
 		return fmt.Errorf("%w (%s)", ErrReject, out.Why)
+	}
+	return nil
+}
+
+// Place ORIGINATES a call, and it is the one method in this module that makes
+// hardware in somebody's pocket make noise.
+//
+// IT IS NOT IN THE UPSTREAM. whatsapp-web.js has no way to place a call at all;
+// this build does, and the module scan found it (WAWebVoipStartCall). So this
+// exists for two reasons and both are stated rather than assumed: it is a real
+// capability of the platform that a product may want, and it is the ONLY way to
+// prove Call.reject and the incoming-call event, which otherwise wait forever
+// for somebody to dial.
+//
+// THE IDENTITY IS RESOLVED FIRST, exactly as the app's own call sites do:
+// queryWidExists, then the wid it returns. This build files under LID (397 of
+// 399 messages), and calling the phone number would be calling something the
+// server does not route.
+//
+// A SELF-CALL IS REFUSED BY THE APP, not by this — the page redirects a call to
+// your own account to a chat, silently. The refusal is reported rather than
+// dressed up as a placed call.
+func (m *Manager) Place(ctx context.Context, peerJID string, video bool, label string) error {
+	if strings.TrimSpace(peerJID) == "" {
+		return ErrNoCall
+	}
+	raw, err := m.parked(ctx, placeScript(peerJID, video), label+"/place")
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrPlace, err)
+	}
+	var out struct {
+		OK  bool   `json:"ok"`
+		Why string `json:"why"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return fmt.Errorf("call: unexpected place answer: %w", e)
+	}
+	if !out.OK {
+		return fmt.Errorf("%w (%s)", ErrPlace, out.Why)
+	}
+	return nil
+}
+
+// Cancel takes back a call this account placed and that is still ringing.
+//
+// It takes no arguments because the page's own function takes none: it acts on
+// whatever outgoing call is pending, which means it is safe to call when there
+// is none and impossible to aim at a specific one.
+func (m *Manager) Cancel(ctx context.Context, label string) error {
+	raw, err := m.parked(ctx, cancelScript, label+"/cancel")
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrPlace, err)
+	}
+	var out struct {
+		OK  bool   `json:"ok"`
+		Why string `json:"why"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return fmt.Errorf("call: unexpected cancel answer: %w", e)
+	}
+	if !out.OK {
+		return fmt.Errorf("%w (%s)", ErrPlace, out.Why)
+	}
+	return nil
+}
+
+// EnsureReady brings up this session's VOIP stack.
+//
+// A SESSION THAT HAS NOT DONE THIS IS NOT A CALL ENDPOINT. The application runs
+// it from the UI path that precedes any call button; a headless driver has none,
+// so it has to say it out loud — the same shape as presence, where a session
+// that never announced availability is not one whose typing anybody is told
+// about (H50).
+//
+// It is exported rather than folded into Place because RECEIVING needs it too,
+// and the receiving side never calls Place.
+func (m *Manager) EnsureReady(ctx context.Context, label string) error {
+	raw, err := m.parked(ctx, ensureVoipScript, label+"/voip-init")
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrPlace, err)
+	}
+	var out struct {
+		OK  bool   `json:"ok"`
+		Why string `json:"why"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return fmt.Errorf("call: unexpected voip-init answer: %w", e)
+	}
+	if !out.OK {
+		return fmt.Errorf("%w (%s)", ErrPlace, out.Why)
 	}
 	return nil
 }

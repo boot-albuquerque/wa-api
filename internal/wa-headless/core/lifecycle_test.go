@@ -169,16 +169,15 @@ func TestLifecycle_ObserverMayCallBackIntoTheSession(t *testing.T) {
 	}
 }
 
-// A nil observer is the ordinary case and must cost nothing: most callers of
-// this package do not want a bus at all.
-func TestLifecycle_NilObserverIsTheOrdinaryCase(t *testing.T) {
-	cfg := baseConfig(t, requirePage(t, spa.RequiredAtStartup))
-	cfg.OnLifecycle = nil
-	sess, err := StartSession(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("StartSession with no observer: %v", err)
-	}
-	if via := sess.Stop(context.Background()); !via.Clean() {
-		t.Fatalf("stopped_via=%s", via)
-	}
-}
+// NOTE: a TestLifecycle_NilObserverIsTheOrdinaryCase was removed here on
+// 2026-08-21, and the removal is the point rather than a tidy-up.
+//
+// It booted a real browser to assert that a nil observer costs nothing — which
+// EVERY OTHER TEST IN THIS PACKAGE already asserts, because every one of them
+// leaves OnLifecycle nil and expects a clean boot. It bought no coverage and
+// cost one more browser in a package that boots dozens under -race, and this
+// package's gate was failing on exactly that contention.
+//
+// A test whose property is already carried by the rest of the suite is not free:
+// it is paid for in wall clock on every run, and the bill arrives as a flake
+// that looks like a defect.

@@ -352,7 +352,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
 | `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
 | `BATTERY_CHANGED` | — | `MISSING` | sem equivalente |
-| `INCOMING_CALL` | — | `MISSING` | o gatilho EXISTE e foi encontrado (`WAWebVoipStartCall.startWAWebVoipCall`, aridade 5) — a referência não tem equivalente. Não disparado porque uma chamada toca um APARELHO FÍSICO, e isso é decisão humana, não de escopo (H92) |
+| `INCOMING_CALL` | events.CallIncoming | `PARTIAL` | ouvinte instalado por `CallCollection.on('add')` — a referência não achou ouvinte e patcheia um `Map` interno; aqui a porta limpa existe. **NUNCA visto disparar**: a chamada foi originada com autorização humana, o `startWAWebVoipCall` resolve, o gating está todo verde e o `ensureVoipInitialized` resolve dos dois lados, e nenhum aparelho tocou (confirmado por humano). Ver H93 para o que isso NÃO prova |
 | `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
 | `VOTE_UPDATE` | — | `MISSING` | sem equivalente |
 
@@ -361,8 +361,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | estado | itens | fração |
 |---|---|---|
 | `PROVEN` | 50 | 23% |
-| `PARTIAL` | 42 | 19% |
+| `PARTIAL` | 43 | 20% |
 | `BLOCKED` | 2 | 0% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 124 | 56% |
+| `MISSING` | 123 | 56% |
 | **total** | **220** | |

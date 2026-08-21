@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +30,18 @@ import (
 // minute and a half, something is actually wrong", which is the only claim the
 // tests need. TestAHungBootStillTerminatesBounded keeps it from becoming a
 // licence to hang.
-const harnessBootBudget = 90 * time.Second
+// RAISED FROM 90s TO 150s ON 2026-08-21, and the reason is arithmetic rather
+// than superstition: this package gained more real browser boots with the
+// lifecycle facts (H88), and `make check` runs it under -race alongside every
+// other package. The ninth F100 failure waited the full ninety seconds and
+// still had not primed a tab.
+//
+// Raising a ceiling is the move this repository distrusts most, so it comes
+// with the two things that make it honest: the budget is still strictly greater
+// than the PRODUCT's (TestTheHarnessBudgetIsNotTheProductBudget) and a hung boot
+// still terminates within it (TestAHungBootStillTerminatesBounded). A raised
+// ceiling that is still a ceiling is a different thing from no ceiling.
+const harnessBootBudget = 150 * time.Second
 
 // harnessRunner builds a Runner with the harness boot budget and production
 // values everywhere else.
@@ -97,5 +110,31 @@ func TestAHungBootStillTerminatesBounded(t *testing.T) {
 		t.Fatalf("a boot given %s took %s — the budget is not bounding the wait, "+
 			"which is exactly what raising it to %s would otherwise hide",
 			tiny, elapsed, harnessBootBudget)
+	}
+}
+
+// TestTheInjectedBudgetGovernsTheTabPrimingToo closes the hole that made F100
+// look like eight unrelated flakes.
+//
+// A caller that raises Runner.Policy.Boot is saying "this boot may take longer";
+// every step honoured that except OpenTab, which hard-coded the default. The
+// step it skipped is the one that actually runs long under contention, so the
+// raised budget helped exactly where it was not needed.
+//
+// The assertion is on the SOURCE rather than on a timing, because timing is what
+// made these failures unreadable in the first place: a test that waits for a
+// slow boot is a test that fails on a fast machine or passes on a broken one.
+func TestTheInjectedBudgetGovernsTheTabPrimingToo(t *testing.T) {
+	body, err := os.ReadFile("session.go")
+	if err != nil {
+		t.Fatalf("read session.go: %v", err)
+	}
+	src := string(body)
+	if strings.Contains(src, "engine.OpenTab(sessionCtx") {
+		t.Fatal("the boot opens the tab with engine.OpenTab, which hard-codes " +
+			"DefaultDeadlines.For(OpBoot) and ignores the runner it was given")
+	}
+	if !strings.Contains(src, "engine.OpenTabWithin(sessionCtx, browser, runner.Policy.For(engine.OpBoot))") {
+		t.Fatal("the boot does not pass the runner's own boot budget to the tab priming")
 	}
 }

@@ -121,6 +121,10 @@ const (
 	// 489 "lid" / 1 "g.us". That split is nothing like the message collection's
 	// 397-of-399 lid, and the reason is duplication — see ModuleContactGetters.
 	ModuleContactCollection = Module("WAWebContactCollection")
+	// ModuleCallCollection holds the calls this session knows about. It is NOT
+	// in RequiredAtStartup: a build without it should give a bus with one fewer
+	// type, not a boot failure.
+	ModuleCallCollection = Module("WAWebCallCollection")
 	// ModuleContactGetters reads a contact model's fields.
 	//
 	// Measured 2026-08-20 over all 944 models, and the numbers decide what a

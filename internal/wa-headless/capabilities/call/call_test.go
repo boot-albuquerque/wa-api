@@ -230,3 +230,132 @@ func itoa(n int64) string {
 	}
 	return string(b)
 }
+
+// PLACING A CALL RESOLVES THE IDENTITY FIRST, and the ORDER is the assertion.
+//
+// The app's own call sites do queryWidExists(...).then(e =>
+// startWAWebVoipCall(e.wid, ...)), and this build files under LID: calling the
+// phone number is calling something the server does not route. Reversing the
+// two would pass every other test here and dial nothing.
+func TestPlacingACallResolvesTheIdentityFirst(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if err := mgr(d).Place(context.Background(), "5541999999999@c.us", false, "t"); err != nil {
+		t.Fatalf("Place: %v", err)
+	}
+	// COMMENTS STRIPPED, and this test is the one that PROVED the helper was
+	// needed rather than merely tidy.
+	//
+	// Its first version searched the raw script, and the negative control that
+	// deleted the resolution PASSED — because the comment above the deleted line
+	// still said "queryWidExists(...)". A control that cannot fail is the trap
+	// this repository keeps meeting, and here it was hiding inside the very
+	// assertion written to prevent a different one.
+	code := withoutComments(d.lastScript)
+	resolve := strings.Index(code, "queryWidExists(")
+	dial := strings.Index(code, "startWAWebVoipCall(")
+	if resolve < 0 {
+		t.Fatal("the call never resolves the peer")
+	}
+	if dial < 0 {
+		t.Fatal("the call never dials")
+	}
+	if resolve > dial {
+		t.Fatal("the dial runs BEFORE the resolution; it would dial the phone number, " +
+			"which this build does not route on")
+	}
+	// And it dials the RESOLVED wid, not the argument it was handed.
+	if !strings.Contains(code, "startWAWebVoipCall(ex.wid,") {
+		t.Error("the dial does not use the resolved wid")
+	}
+}
+
+// A peer the server does not know is reported as such, not as a placed call.
+func TestAnUnknownPeerIsNotAPlacedCall(t *testing.T) {
+	d := &double{answer: `{"ok":false,"why":"NOT_ON_WHATSAPP"}`}
+	err := mgr(d).Place(context.Background(), "5541999999999@c.us", false, "t")
+	if !errors.Is(err, ErrPlace) || !strings.Contains(err.Error(), "NOT_ON_WHATSAPP") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// An empty peer never reaches the page: dialling nothing is a caller mistake.
+func TestPlacingACallNeedsAPeer(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if err := mgr(d).Place(context.Background(), "   ", false, "t"); !errors.Is(err, ErrNoCall) {
+		t.Errorf("err = %v, want ErrNoCall", err)
+	}
+	if d.kicks != 0 {
+		t.Error("an empty peer reached the page")
+	}
+}
+
+// THE TELEMETRY ARGUMENTS ARE NOT INVENTED. The app's longer call sites pass a
+// CALL_FROM_UI source and a lobby entry point; both are analytics, and passing a
+// made-up value would put this module's fingerprints into somebody's dashboard
+// under a label that means something else.
+func TestNoInventedTelemetryIsSent(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if err := mgr(d).Place(context.Background(), "5541999999999@c.us", true, "t"); err != nil {
+		t.Fatalf("Place: %v", err)
+	}
+	// COMMENTS STRIPPED FIRST, and that is the point of the helper.
+	//
+	// This repository has now written a guard that matched its own prose six
+	// separate times: the script explains why it does NOT send CALL_FROM_UI, and
+	// a plain Contains found the explanation. Matching the call instead of the
+	// word works, but it has to be remembered every time. Removing the comments
+	// removes the whole class.
+	code := withoutComments(d.lastScript)
+	for _, banned := range []string{"CALL_FROM_UI", "LOBBY_ENTRY_POINT_TYPE", "WAWebWamEnum"} {
+		if strings.Contains(code, banned) {
+			t.Errorf("the dial sends %q, which this module has no honest value for", banned)
+		}
+	}
+	if !strings.Contains(d.lastScript, "startWAWebVoipCall(ex.wid, true)") {
+		t.Error("the video flag did not travel")
+	}
+}
+
+// withoutComments removes // line comments from a page script, so an assertion
+// about what the script DOES cannot be satisfied — or defeated — by what the
+// script SAYS.
+//
+// It is deliberately naive: it does not understand strings containing "//",
+// which is exactly the case that would matter for a URL. No script in this
+// package contains one, and a helper that tried to be a JavaScript parser would
+// be a worse thing to trust than a rule about what it handles.
+func withoutComments(script string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(script, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// THE VOIP STACK IS INITIALISED BEFORE THE DIAL, and the ORDER is the point.
+//
+// Dialling without it resolves, reports nothing wrong, and rings no phone —
+// measured, with a human confirming the silence. An init that ran after the dial
+// would pass every other assertion in this file and place no call at all.
+func TestTheVoipStackIsInitialisedBeforeDialling(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if err := mgr(d).Place(context.Background(), "5541999999999@c.us", false, "t"); err != nil {
+		t.Fatalf("Place: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	initAt := strings.Index(code, "ensureVoipInitialized(")
+	dialAt := strings.Index(code, "startWAWebVoipCall(")
+	if initAt < 0 {
+		t.Fatal("the call never initialises the VOIP stack; it would ring nothing")
+	}
+	if dialAt < 0 {
+		t.Fatal("the call never dials")
+	}
+	if initAt > dialAt {
+		t.Fatal("the init runs AFTER the dial")
+	}
+}

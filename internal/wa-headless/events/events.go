@@ -60,6 +60,20 @@ const (
 	// worth delivering anyway, because "go look" is more than silence, and is
 	// stated here rather than discovered.
 	MessageReaction Type = "message.reaction"
+	// CallIncoming is a call appearing in this session's call collection.
+	//
+	// IT IS THE ONE TYPE HERE THAT HAS NEVER BEEN SEEN FIRING, and saying so is
+	// the rule rather than an exception to it. ContactChanged sat in exactly
+	// this position until H90 gave it a trigger; this one is waiting for the
+	// same thing. The listener is installed because it costs nothing and is the
+	// door that a solution would come through — but nobody should read its
+	// presence as a delivered capability (H93).
+	//
+	// IT COVERS BOTH DIRECTIONS and says which. A call this account PLACED
+	// arrives through the same collection as one it received, and a subscriber
+	// that treated every row as somebody calling would answer its own calls.
+	// OutgoingCall carries the difference.
+	CallIncoming Type = "call.incoming"
 
 	// SessionReady is a session reaching a VERIFIED ready: the page classified
 	// APP_READY and the module inventory passed on that same boot. It is not
@@ -101,6 +115,7 @@ const (
 var PageTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
 	MessageRevoked, MessageEdited, ContactChanged, MessageReaction,
+	CallIncoming,
 }
 
 // LocalTypes is every type published from Go rather than from the page.
@@ -171,6 +186,13 @@ type Event struct {
 	// measure — never the body.
 	BodyLen int
 
+	// CallID and CallerJID identify a call, for the call events. A caller is a
+	// phone number, carried for routing and never rendered.
+	CallID, CallerJID string
+	// Video says the call is a video call; OutgoingCall says this account
+	// placed it; GroupCall says it has more than two people.
+	Video, OutgoingCall, GroupCall bool
+
 	// State is the lifecycle state for the session.* events: the liveness
 	// signal for SessionStateChanged, empty otherwise.
 	State string
@@ -182,9 +204,9 @@ type Event struct {
 }
 
 func (e Event) String() string {
-	return fmt.Sprintf("events.Event(type=%s origin=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d state=%s reason=%s)",
+	return fmt.Sprintf("events.Event(type=%s origin=%s seq=%d replay=%t chat=%t msg=%t fromMe=%t kind=%s ack=%d bodyLen=%d call=%t caller=%t video=%t outgoingCall=%t state=%s reason=%s)",
 		e.Type, e.Origin, e.Seq, e.Replay, e.ChatJID != "", e.MessageID != "", e.FromMe, e.Kind, e.Ack, e.BodyLen,
-		e.State, e.Reason)
+		e.CallID != "", e.CallerJID != "", e.Video, e.OutgoingCall, e.State, e.Reason)
 }
 
 // Handler receives one event. It runs on the Hub's delivery goroutine, so a

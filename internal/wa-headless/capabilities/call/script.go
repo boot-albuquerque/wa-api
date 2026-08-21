@@ -10,6 +10,11 @@ const (
 	modSendIq        = "WADeprecatedSendIq"
 	modMeUser        = "WAWebUserPrefsMeUser"
 	modCallColl      = "WAWebCallCollection"
+	modQueryExists   = "WAWebQueryExistsJob"
+	modWidFactory    = "WAWebWidFactory"
+	modStartCall     = "WAWebVoipStartCall"
+	modCancelCall    = "WAWebVoipCancelOutgoingCall"
+	modEnsureVoip    = "WAWebEnsureVoipInited"
 )
 
 const prelude = `
@@ -96,5 +101,72 @@ const pendingScript = `(() => {` + prelude + `
 	} catch (e) {
 		park({ ok: false, why: describe(e) });
 	}
+	return "kicked";
+	})()`
+
+func placeScript(peerJID string, video bool) string {
+	return `(() => {` + prelude + `
+	(async () => {
+		try {
+			// RESOLVE FIRST, then call — which is what the app's own call sites
+			// do (queryWidExists(...).then(e => startWAWebVoipCall(e.wid, ...)))
+			// and what H34 cost this repository to learn. This build files under
+			// LID; the phone number is not what the server routes on.
+			const ex = await window.require("` + modQueryExists + `")
+				.queryWidExists(window.require("` + modWidFactory + `").createWid(` + strconv.Quote(peerJID) + `));
+			if (!ex || !ex.wid) { park({ ok: false, why: "NOT_ON_WHATSAPP" }); return; }
+			// INITIALISE THE VOIP STACK FIRST, and this line is the whole
+			// difference between a call and silence.
+			//
+			// The first live attempt dialled without it: startWAWebVoipCall
+			// resolved, reported nothing wrong, and NO HANDSET RANG — confirmed
+			// by the only instrument that could confirm it, a human saying the
+			// phone stayed quiet. That is the NOTHING class (H82) for the third
+			// time in this repository.
+			//
+			// The environment was not the cause and that was measured, not
+			// assumed: isCallingEnabled true, browser supported, crossOriginIsolated
+			// true, SharedArrayBuffer and WebAssembly both present. What the app
+			// has that a headless driver does not is the UI path that runs
+			// ensureVoipInitialized before any call button works — the same shape
+			// as H34, where the fix was to call the resolution the page already
+			// has, BEFORE acting.
+			await window.require("` + modEnsureVoip + `").ensureVoipInitialized();
+
+			// Two arguments, which is the SHORTEST form the app itself uses.
+			// The other call sites add a CALL_FROM_UI source and a lobby entry
+			// point; both are telemetry, and passing an invented value would put
+			// this module's fingerprints into somebody's analytics.
+			await window.require("` + modStartCall + `").startWAWebVoipCall(ex.wid, ` + strconv.FormatBool(video) + `);
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: describe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}
+
+const cancelScript = `(() => {` + prelude + `
+	(async () => {
+		try {
+			await window.require("` + modCancelCall + `").cancelPendingOutgoingCall();
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: describe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+
+const ensureVoipScript = `(() => {` + prelude + `
+	(async () => {
+		try {
+			await window.require("` + modEnsureVoip + `").ensureVoipInitialized();
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: describe(e) });
+		}
+	})();
 	return "kicked";
 	})()`

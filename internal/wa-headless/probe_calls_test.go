@@ -174,6 +174,62 @@ func TestProbeCalls(t *testing.T) {
 				out.link = 'module absent: ' + String(e && e.message);
 			}
 
+			// WHY A PLACED CALL RANG NOTHING.
+			//
+			// startWAWebVoipCall resolved and no handset rang — the NOTHING class
+			// (H82), confirmed by the only instrument that could confirm it: a
+			// human saying the phone stayed quiet. These readers are the page's
+			// OWN answer to "can this browser do calls at all", and they are pure
+			// predicates: nothing here dials, initialises or allocates.
+			try {
+				const G = window.require('WAWebVoipGatingUtils');
+				out.gating = {};
+				for (const f of ['isCallingEnabled', 'isUnsupportedBrowserForWebCalling',
+					'getUnsupportedBrowserReason', 'getCrossOriginIsolatedState', 'isWebKitBrowser']) {
+					try {
+						out.gating[f] = typeof G[f] === 'function' ? String(G[f]()) : 'absent';
+					} catch (e) {
+						out.gating[f] = 'threw: ' + String((e && e.message) || e).slice(0, 100);
+					}
+				}
+			} catch (e) {
+				out.gating = 'module absent';
+			}
+			// The browser's own view, which is what the gating reads.
+			out.env = {
+				crossOriginIsolated: typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'undefined',
+				hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+				hasWasm: typeof WebAssembly !== 'undefined',
+			};
+
+			// THE INIT, which nothing has ever run in this session.
+			//
+			// The gating says calling is enabled and the browser is fine, so the
+			// environment hypothesis is dead. What remains is that the VOIP
+			// stack is initialised on DEMAND — the app has an explicit
+			// ensureVoipInitialized and a previewCallLinkWithVoipInit — and a
+			// headless driver that calls startWAWebVoipCall has never been
+			// through the UI path that would have run it.
+			//
+			// This ALLOCATES a WASM stack, which is heavier than everything else
+			// in this probe. It rings nobody.
+			try {
+				const EV = window.require('WAWebEnsureVoipInited');
+				out.init = { pending: true };
+				park(out);
+				try {
+					const r = await EV.ensureVoipInitialized();
+					out.init = { resolved: true, kind: typeof r,
+						keys: (r && typeof r === 'object') ? Object.keys(r).slice(0, 20) : [] };
+				} catch (e) {
+					out.init = { resolved: false, why: String((e && e.message) || e).slice(0, 200),
+						name: (e && e.constructor && e.constructor.name) || typeof e };
+				}
+				park(out);
+			} catch (e) {
+				out.init = 'module absent: ' + String(e && e.message);
+			}
+
 			// Alternatives the reference does not use, in case this build has a
 			// first-class path where it had to improvise.
 			for (const name of [
