@@ -503,6 +503,13 @@ var (
 		// faria uma varredura contar como pronto algo que ninguém verificou —
 		// que é precisamente a confusão que este gate impede.
 		"parcialmente entregue", "parcialmente entregues",
+		// NÃO ENTREGUE conta como ABERTO, e é distinta de "parcialmente
+		// entregue" de propósito: aquela diz que metade foi PROVADA, esta diz
+		// que a capacidade não funciona de ponta a ponta, mesmo que exista
+		// código e testes cobrindo o que foi medido. Colapsar as duas faria uma
+		// varredura ler "tem código" como "tem função" — que é a distinção que
+		// custou a H57 e a H58. Entrou deliberadamente.
+		"não entregue", "nao entregue", "não entregues", "nao entregues",
 		// ABANDONADO é um desfecho legítimo e conta como ABERTO: o achado não
 		// foi resolvido, foi deixado de lado com o motivo escrito. Classificá-lo
 		// como fechado apagaria a diferença entre "resolvido" e "decidi não

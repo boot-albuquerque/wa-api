@@ -332,6 +332,18 @@ const (
 	// ModuleGroupQueryJob fills in what the metadata is missing:
 	// queryAndUpdateGroupMetadataById is what makes iAmAdmin exist.
 	ModuleGroupQueryJob = Module("WAWebGroupQueryJob")
+	// ModuleGroupParticipantsJob adds and removes group members.
+	//
+	// THE TWO SIBLINGS HAVE DIFFERENT SHAPES, read from their sources:
+	//
+	//	addParticipantsJob({group, participants, isOffline, reason})
+	//	removeParticipantsJob(group, participants, timestamp, author, reason,
+	//	                      groupMetadata, isOffline)
+	//
+	// One object and seven positional arguments, side by side in the same
+	// module. Assuming the second matched the first would have been a fifth
+	// blind correction at this layer.
+	ModuleGroupParticipantsJob = Module("WAWebGroupParticipantsJob")
 )
 
 // RequiredAtStartup is verified before any capability runs.

@@ -4402,3 +4402,73 @@ perguntar.
 **Status**: parcialmente entregue — a camada de preparação foi entendida e a
 assinatura correta está medida e aplicada; falta a busca do código, que trava
 neste build.
+
+---
+
+## H58 — participantes: as duas irmãs têm assinaturas diferentes, e a remoção continua fechada
+
+**Data**: 2026-08-21
+**Contexto**: aposta da orquestração de que entender a camada de metadata do
+grupo (a mesma que destravou a H57) destravaria participantes e assunto.
+**Onde**: `internal/wa-headless/capabilities/group/participants.go`,
+`internal/wa-headless/spa/modules.go` (`ModuleGroupParticipantsJob`).
+
+### O que foi medido, e vale mesmo com o bloqueio
+
+Lidas as duas funções no fonte do bundle, lado a lado no MESMO módulo:
+
+```
+addParticipantsJob({group, participants, isOffline, reason})   // UM objeto
+removeParticipantsJob(group, participants, timestamp, author,
+                      reason, groupMetadata, isOffline)        // SETE posicionais
+```
+
+**Este é o achado.** Duas operações simétricas em produto, vizinhas no arquivo,
+com formas de chamada incompatíveis. Assumir que a segunda seguia a primeira —
+que é o que a simetria sugere — teria sido a sexta correção cega nesta camada.
+A regra da H57 vale ao contrário também: **a forma do irmão não prediz a sua.**
+
+O `timestamp` vem do Go, não de `Date.now()` na página (invariante 6).
+
+### O que ainda bloqueia
+
+`removeParticipantsJob` lança, com a assinatura correta:
+
+```
+Cannot read properties of undefined (reading 'toString')
+```
+
+Duas execuções ao vivo, idênticas, variando só o quarto argumento:
+
+| `author` | resultado |
+|---|---|
+| `null` | `reading 'toString'` |
+| `Me.getMeUserMatchingAddressingModeOrThrow(gwid)` | `reading 'toString'` |
+
+Que o erro NÃO mude entre os dois é a informação: o `.toString()` provavelmente
+não é lido do `author`. Qual dos sete argumentos ele lê está por medir — e a
+medição é uma sonda que varia UM argumento por vez, não um terceiro palpite.
+
+**Parei antes do terceiro palpite**, que é a disciplina que a H34 registrou e a
+H57 aplicou. O caro neste módulo nunca foi o bloqueio; foi a sequência de
+tentativas cegas na mesma camada.
+
+### O que a prova ao vivo garantiu mesmo falhando
+
+O `defer` de restauração do teste devolveu o par ao grupo nas duas execuções —
+`before=2 after=2 changed=false`. O grupo de laboratório nunca ficou com um só
+membro. Efeito externo que falha tem de falhar reversível.
+
+### Correção sugerida
+
+Sonda que chama `removeParticipantsJob` variando um argumento por vez contra o
+fonte de `WAWebGroupsParticipantsApi.removeParticipants`, para descobrir de quem
+o `.toString()` é lido. Sem isso, qualquer valor novo é chute.
+
+**Status**: não entregue — a assinatura está medida e registrada; a chamada
+recusa por um argumento ainda não identificado.
+**Testes que travam o medido**: `participants_test.go` —
+`TestTheTwoSiblingsHaveDifferentShapes` (trava as DUAS formas, e falha se
+alguém "simetrizar" a remoção), `TestTheClockStaysOnTheGoSide`,
+`TestNoOpsAreSuccesses`, `TestACountThatDoesNotMoveIsAFailure`,
+`TestOnlyCountsAreReported`, e as recusas.
