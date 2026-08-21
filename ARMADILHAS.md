@@ -736,3 +736,37 @@ A forma geral: **um teste que mede DEPOIS do efeito não mede o efeito.** Vale
 para tempo, para contador e para estado — e é irmão do erro de ler
 `users.connected` antes do logout (F93), onde a medição estava certa e o
 INSTANTE estava errado.
+
+## 13. Teste verde prova que o código está certo, não que está A CORRER
+
+Em 2026-08-21 a correção do QR (F192) esteve horas com o rótulo "corrigida,
+oito controlos negativos executados, `make check` verde" enquanto o utilizador
+via o defeito intacto. Nada estava errado no diagnóstico nem no código: o
+processo que servia o `:8099` tinha arrancado **12 horas antes** do conserto.
+
+```
+processo a servir :8099   arrancado  Aug 20 21:32
+orchestrator.go (o fix)   modificado Aug 21 09:51
+```
+
+O worker verificou em campo — e a verificação era verdadeira —, mas numa
+instância que ele próprio levantou. Entre "os testes passam" e "o utilizador
+vê funcionar" existe um passo, compilar e reiniciar, que **não tem gate neste
+repositório**.
+
+Duas regras que saem daqui:
+
+1. **Antes de dizer que um comportamento observável está corrigido, confirme
+   qual binário está a servir.** `ps -o lstart= -p $(lsof -ti:PORTA)` responde
+   em um comando. Se a hora de arranque for anterior à do ficheiro que
+   corrigiu, você está a olhar para código antigo.
+
+2. **"Verificado em campo" sem dizer EM QUE INSTÂNCIA não é verificação.**
+   Registe porta, hora de arranque do binário e o commit. A F192 registou as
+   medições do defeito com hora e porta, mas a prova do conserto ficou só no
+   transcript do worker e desapareceu com o worktree — restou uma afirmação sem
+   evidência recuperável.
+
+Corolário para quem despacha workers: o worker corrige e valida no worktree
+DELE. Implantar no ambiente partilhado é trabalho de quem integra, e tem de
+estar dito no packet ou feito na integração — senão não é feito por ninguém.

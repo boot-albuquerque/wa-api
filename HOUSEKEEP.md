@@ -1256,6 +1256,54 @@ ignorar", que é a informação que ele deveria carregar.
 **Status**: **não corrigido**. Depende de decisão sobre o contrato de webhook,
 como a F68.
 
+### CORRIGIDA (2026-08-21), decisão 38=a do canal
+
+Encontrei o achado **parcialmente resolvido**, e na outra direção: existia um
+`case *events.PushName, *events.BusinessName: return` com um comentário longo a
+justificar o descarte explícito — que era a opção (b) da correção sugerida. O
+próprio comentário terminava com *"se um dia esses eventos virarem webhook, é
+aqui que entram"*.
+
+Entraram. O canal escolheu (a).
+
+- `pkg/domain/constants.go` — `"PushName"` e `"BusinessName"` acrescentados a
+  `SupportedEventTypes`;
+- `pkg/bootstrap/eventhandler.go` — o `case` de descarte deu lugar a dois
+  ramos com handler próprio;
+- `pkg/bootstrap/eventhandler_contact.go` — `handlePushName` e
+  `handleBusinessName`, no molde do `handlePicture`.
+
+**O payload leva o nome ANTIGO além do novo**, e isso é decisão, não
+completude: quem mantém cache local precisa de saber qual entrada substituir.
+Um webhook que diz "algo mudou" sem dizer o quê obriga o integrador a
+re-sincronizar tudo.
+
+**Testes**: `TestHandlePushName_GeraWebhookComOsDoisNomes`,
+`TestHandleBusinessName_GeraWebhookComOsDoisNomes`,
+`TestF73_EventosSaoAssinaveis`.
+
+O terceiro é o que impede meia correção: sem ele, o handler despacharia um
+evento que nenhum utilizador pode subscrever — webhook que nunca sai. Foi
+exatamente essa a forma da falha no CN-3.
+
+**Controlos negativos executados**:
+
+```
+CN-1 (volta ao descarte silencioso):
+    dowebhook = 0, quero 1 — o evento não gera notificação (F73)
+CN-2 (payload perde o nome ANTIGO):
+    postmap["old_push_name"] = <nil>, quero Antigo
+CN-3 (despachar sem tornar assinável):
+    "PushName" não está em SupportedEventTypes: o handler despacha e ninguém
+    pode subscrever
+```
+
+**Não verificado em campo**: exige que um contacto real mude de nome, o que
+não se provoca a pedido. Os testes cobrem a forma do payload e a assinabilidade;
+o despacho em si é o mesmo caminho de todos os outros eventos, já exercitado.
+
+**Status**: **CORRIGIDA**, com três testes e três controlos negativos.
+
 ## F74 — o fan-out WebSocket é serial: N conexões obsoletas custam N × 5s
 
 **Data**: 2026-08-07. **Contexto**: observação de log; o painel de sessões
@@ -1550,6 +1598,42 @@ substituir.
 **Status**: **não corrigido, e não verificado experimentalmente.** Antes de
 mexer, vale um teste controlado numa sessão descartável: chamar
 `/session/connect` duas vezes e observar se aparece `StreamReplaced`.
+
+### Revisitada (2026-08-21): a [[F192]] NÃO a fecha, e o experimento passou a ser possível
+
+Fui verificar se a guarda `startInFlight` da F192 tinha fechado esta entrada de
+lado. **Não fechou, e a distinção importa**:
+
+- a guarda da F192 recusa um segundo `Start` enquanto o primeiro está EM CURSO
+  — resolve o pareamento concorrente;
+- a F78 é sobre `Start` numa sessão JÁ CONECTADA, com o start anterior há muito
+  terminado e a chave libertada. Esse caminho continua sem guarda: `Start`
+  segue direto para `claimOwnership` e daí para criar sessão nova.
+
+Lido hoje em `orchestrator.go:322-360`: entre a guarda de in-flight e a
+reivindicação de posse não há nenhuma consulta a "já está conectado".
+
+**O que mudou**: a entrada dizia que a evidência era leitura de código e não
+experimento, "justamente porque o experimento consistiria em fazer isso com a
+sessão pareada de um usuário real". Existem agora DUAS sessões pareadas de
+teste, portanto o experimento é possível.
+
+**Não o corri, e a razão é o custo do erro**: se a hipótese estiver certa,
+ficam dois sockets para a mesma conta, que é a condição clássica de
+`StreamReplaced` / conflito 440 — e um 440 derruba o pareamento. Repô-lo exige
+que o humano leia outro QR. Medir isto sem autorização explícita seria gastar
+o tempo dele para confirmar uma suspeita minha.
+
+**Como medir, quando houver autorização**: com uma sessão de teste
+DESCARTÁVEL, pareada só para isto — nunca com as duas que estão em uso.
+Chamar `/session/connect` numa sessão conectada, observar se o log regista
+`StreamReplaced` ou 440, e confirmar no registry se o cliente anterior ficou
+órfão. O sinal de que a hipótese está errada é igualmente informativo.
+
+**Status**: não corrigido. Evidência continua a ser leitura de código —
+reconfirmada hoje contra o código ATUAL, que é mais do que a entrada tinha.
+O experimento está desenhado e à espera de autorização humana, porque arrisca
+o pareamento.
 
 ## F79 — `/session/disconnect` e `/session/logout` devolviam 200 sem encerrar nada
 
@@ -13575,6 +13659,33 @@ Registrado para decisão.
 
 ---
 
+### RESOLUÇÃO (2026-08-21): fechada pela correção da [[F200]]
+
+A F200 é este mesmo defeito visto por outro campo — ali era `history`, aqui é
+`events`, e a causa é uma só: `EditUserUseCase` escrevia no banco e não tocava
+na cache, que é escrita sob `NoExpiration` e nunca expira.
+
+A correção da F200 acrescentou `appport.UserInfoRepublisher` e fez a edição
+invalidar a entrada INTEIRA do utilizador — de propósito, e não campo a campo,
+precisamente para que campos como este `events` não ficassem de fora.
+
+Verificado em campo, sem reiniciar o processo:
+
+```
+events no banco       : All
+PUT /admin/users/{id} {"events":"Message"}   -> 200
+envio de mensagem     -> 200
+log do despacho       -> subscribedEvents=["Message"]
+```
+
+Antes da correção este log diria `["All"]` até o processo morrer.
+
+**Status**: **CORRIGIDA** pela F200. Travada pelos mesmos três testes
+(`TestEditUser_RepublicaAposEscritaBemSucedida`,
+`TestEditUser_NaoRepublicaQuandoAEscritaFalha`,
+`TestEditUser_RepublicaDEPOISDaEscritaENaoAntes`) — a invalidação é da entrada
+toda, portanto cobre `events` sem precisar de um teste por campo.
+
 ## F180 — o aviso de "mídia de tipo não tratado" dispara em TODA mensagem de TEXTO: 25 de 30 no teste de campo
 
 **Data**: 2026-08-20. **Contexto**: verificação de ponta a ponta com DUAS contas
@@ -13643,6 +13754,43 @@ ponta a ponta, que é provar o ENVIO — e o envio funcionou. Registrado para
 decisão.
 
 ---
+
+### CORRIGIDA (2026-08-21)
+
+O aviso passou a exigir que o SERVIDOR tenha anunciado mídia:
+`if !tratou && evt.Info.Type == messageWireTypeMedia`. O valor virou constante
+nomeada porque decide se um aviso é ruído ou diagnóstico.
+
+**O par de testes é o ponto**, e nenhum dos dois sozinho serve:
+
+- `TestProcessMedia_TextoNaoDisparaAvisoDeMidia` — o defeito medido;
+- `TestProcessMedia_MidiaAnunciadaENaoTratadaAindaAvisa` — a F102, que tem de
+  continuar a valer.
+
+Só o primeiro deixaria passar a correção preguiçosa (apagar o aviso); só o
+segundo deixaria passar o defeito original.
+
+Controlos negativos executados:
+
+```
+CN-1 (guarda removida — a F180 de volta):
+    mensagem de TEXTO disparou o aviso de mídia não tratada (F180):
+    {"level":"warn","type":"text","media_type":"", ...}
+CN-2 (aviso apagado de vez — a correção preguiçosa):
+    mídia anunciada e não tratada deixou de avisar:
+```
+
+O CN-2 falhou à primeira por erro de build (`declared and not used: tratou`),
+que pela armadilha nº4 não vale como controlo. Refeito com `!tratou && false`,
+que compila e falha. E o script que o correu imprimia "compila: sim" mesmo com
+o build partido — `go build | head` faz o `&&` ver o código do FILTRO, não o do
+comando. Capturar o estado antes de filtrar é a única forma.
+
+**Por que o aviso importava**: um alerta que dispara no caso normal não avisa
+de nada. Treina quem lê o log a ignorá-lo, e aí deixa de servir para o caso em
+que morde de verdade.
+
+**Status**: **CORRIGIDA**, com dois testes e dois controlos negativos.
 
 ## F181 — `/chat/list` devolve 96% das conversas SEM NOME, e os LIDs que ela devolve não existem no roster
 
@@ -13773,6 +13921,55 @@ de chamar o adapter, para que a regra fique num lugar só.
 onde hoje devolve 500 —, item 3.1. Levado ao canal e ao humano.
 
 ---
+
+### CORRIGIDA (2026-08-21)
+
+A separação foi feita onde a entrada sugeria: no use case, ANTES de tocar no
+adaptador, para a regra ficar num lugar só.
+
+`domain.JID` ganhou `IsPN()` e `IsLID()`, com `ServerPN`/`ServerLID` como
+constantes. O motivo de serem constantes é a armadilha nº6 do `ARMADILHAS.md`:
+LID e PN são o MESMO tipo Go, e o único sinal que os separa é o sufixo — um
+literal divergente faria a distinção falhar em silêncio. `IsPN` NÃO é a negação
+de `IsLID`: há grupos, newsletters e broadcast, e tratar "não é LID" como "é
+telefone" mandaria um JID de grupo para o caminho de resolução de contacto.
+
+Verificado em campo, contra o servidor real:
+
+```
+GET /user/lid/182699419517150@lid
+  -> 400 {"code":"jid_not_pn",
+          "message":"this route resolves the LID OF a phone number:
+                     pass a @s.whatsapp.net jid, not @lid"}
+
+GET /user/lid/5516981818244@s.whatsapp.net
+  -> 200 {"jid":"5516981818244@s.whatsapp.net","lid":"29343770251463@lid"}
+```
+
+**Testes**: `TestGetUserLID_LIDRecusadoCom400` e
+`TestGetUserLID_FalhaDoStoreContinua500`. O segundo é o que impede a correção
+de virar excesso: o 500 para falha de infraestrutura continua certo, pelo
+motivo que o comentário do código já defendia — o cliente não pode concluir
+"não existe" de uma falha transitória.
+
+**Controlos negativos executados**:
+
+```
+CN-1 (guarda removida):
+    categoria = "not_found", quero "validation" — categoria errada devolve 500
+    para um erro do cliente
+CN-2 (categoria Internal em vez de Validation):
+    categoria = "internal", quero "validation"
+CN-3 (guarda movida para DEPOIS do store):
+    o store foi consultado com um JID que a rota não aceita
+```
+
+O CN-3 é o que um teste de status sozinho não pegaria: com a guarda depois da
+consulta, a resposta continuaria 400 e o pedido gastaria uma ida ao store por
+algo que nunca poderia ter sucesso. O teste assere a ORDEM, não só o código.
+
+**Status**: **CORRIGIDA**, com três controlos negativos executados e
+verificação em campo.
 
 ## F183 — a MESMA conversa fica gravada sob DOIS `chat_jid`, e o fluxo natural do cliente devolve 200 VAZIO
 
@@ -14030,6 +14227,51 @@ de classificação.
 
 ---
 
+### RESOLUÇÃO (2026-08-21): já estava corrigida, e o registo não o dizia
+
+Fui reproduzir a F184 com as duas contas pareadas e ela **não reproduziu**. Os
+ramos em falta — pontos 1 e 2 da correção sugerida — tinham sido acrescentados
+na unificação da [[F187]], em `pkg/bootstrap/message_classify.go`, e ninguém
+voltou aqui para o dizer. O ponto 3 (registo do descarte) tinha sido a
+[[F186]].
+
+Medido em campo, servidor real, contas `lucas` -> `filarapida`:
+
+```
+POST /chat/send/poll     -> 200  {"message_id":"3EB064F72605DEFA336C93"}
+message_history          -> message_type=poll     text_content="enquete F184-141820"
+
+POST /chat/send/buttons  -> 200  {"message_id":"3EB0A593562ECCC7DE0C9E"}
+message_history          -> message_type=buttons  text_content="botoes btn-141913"
+```
+
+**O que faltava mesmo era o teste.** Existiam testes da classificação
+(`message_classify_test.go`) e do DESCARTE (`TestHistorico_DescarteDeixaRastro`),
+mas nenhum da GRAVAÇÃO. Isso é a armadilha nº2 do `ARMADILHAS.md` na sua forma
+mais perigosa: com só o teste de descarte, apagar os ramos faria a F184 voltar
+INTEIRA e a suíte continuaria verde — o descarte voltaria a acontecer e a
+deixar rastro, que é o que aquele teste pede.
+
+Acrescentado `TestHistorico_EnqueteEBotoesSaoGravadas`, que assere tipo E
+texto: gravar a linha com o tipo certo e o conteúdo perdido deixaria o
+histórico legível para uma máquina e inútil para uma pessoa.
+
+Controlo negativo executado — ramos de enquete e de botões removidos de
+`message_classify.go`, compila e falha:
+
+```
+--- FAIL: TestHistorico_EnqueteEBotoesSaoGravadas/enquete
+    enquete NÃO foi gravada no histórico (F184): sql: no rows in result set
+--- FAIL: TestHistorico_EnqueteEBotoesSaoGravadas/botoes
+    botoes NÃO foi gravada no histórico (F184): sql: no rows in result set
+```
+
+**Status**: **CORRIGIDA** (na F187) e agora **TRAVADA** por
+`TestHistorico_EnqueteEBotoesSaoGravadas`, com verificação em campo. A lição de
+processo fica: uma correção que fecha o achado de OUTRA entrada tem de voltar
+para fechar esta, senão o registo passa a mentir na direção pessimista — e
+alguém (eu) gasta uma sessão a reproduzir um defeito que já não existe.
+
 ## F185 — três botões pedidos, dois enviados, `200` sem dizer que um sumiu (confirmação em campo da F148)
 
 **Data**: 2026-08-20. **Contexto**: mesma varredura da [[F184]]. Não é achado
@@ -14080,6 +14322,60 @@ depende de decisão. Ver [[F184]], ponto 3: é o mesmo defeito de fundo — desc
 sem registo — em duas camadas diferentes.
 
 ---
+
+### RESOLUÇÃO (2026-08-21): os dois pontos acionáveis já estavam feitos
+
+**Ponto 1** — `Warn` por botão descartado: implementado em
+`send_buttons.go:105-106`, com `normalizeInteractiveButtons` a devolver
+`[]droppedButton` para o chamador registar (a função fica pura e o descarte
+fica assertável sem dublê de log). Travado por
+`TestSendButtons_DroppedButtonIsRecorded`, que assere os quatro campos
+exigidos pelo canal.
+
+**Ponto 2** — a mensagem enumerar os tipos válidos: feito. Medido em campo hoje,
+enviando `"type":"quickreply"`:
+
+```
+{"code":400,"error":{"code":"no_valid_buttons",
+ "message":"no valid buttons parsed, accepted types: reply, cta_url, cta_call, copy"}}
+```
+
+**Verificação em campo do caso pior**, o que motivou a entrada — três botões,
+o do meio com tipo inválido, contra o servidor real:
+
+```
+POST /chat/send/buttons -> 200 {"message_id":"3EB0831C3E70C05DF1EC66","status":"sent"}
+
+WRN buttons button dropped: unknown type
+    receivedType=quickreply  acceptedTypes="reply, cta_url, cta_call, copy"
+    reason=unknown_button_type  title=Sumido  txtID=68f33141...
+```
+
+O comportamento continua o mesmo — dois botões enviados, `200` — e era isso que
+a decisão pedia. O que mudou é que **o descarte deixou de ser indiagnosticável**:
+o operador vê qual botão sumiu, com que tipo veio e quais seriam aceites.
+
+Continua ABERTO só o que a própria entrada dizia não propor: mudar o `default`
+para cair em `reply` é mudança de contrato público e precisa de decisão do
+canal.
+
+**Status**: **CORRIGIDO** no que era acionável (pontos 1 e 2), travado por
+`TestSendButtons_DroppedButtonIsRecorded` e verificado em campo. A mudança de
+contrato do `default` permanece uma decisão em aberto, não um defeito por
+corrigir.
+
+### Nota de processo: é a TERCEIRA entrada desta sessão corrigida sem o registo saber
+
+[[F184]], [[F179]] e agora esta. Todas diziam "não corrigido" e todas estavam
+feitas — a F184 pela unificação da [[F187]], a F179 pela correção da [[F200]],
+esta por trabalho anterior que não voltou aqui.
+
+O custo não é teórico: gastei tempo a montar campo para reproduzir defeitos que
+já não existiam. A regra que sai daqui, e que vale mais do que qualquer uma
+destas correções: **antes de reproduzir um achado, verificar no CÓDIGO se ele
+ainda existe** — e, do outro lado, **quem corrige o achado de uma entrada tem de
+voltar a fechar as outras que a mesma correção resolve**. Um registo que mente
+na direção pessimista custa sessões inteiras.
 
 ## F186 — o registo do descarte, implementado: decisão (c) do canal
 
@@ -15497,3 +15793,1432 @@ da LIB-01.
 
 **Status**: não corrigido, achado de levantamento. Escopo pendente de decisão do
 canal.
+
+### CORRIGIDA (2026-08-21), decisão 37=a do canal — a metade que é nossa
+
+Os três eventos passaram a ser tratados, persistidos e despachados.
+
+**Migração 18** (`add_labels`), três tabelas e não uma: a etiqueta tem nome e
+cor; a associação a uma CONVERSA e a uma MENSAGEM são coisas diferentes, com
+chaves diferentes, e o WhatsApp emite um evento distinto para cada. Uma tabela
+só obrigaria a colunas nulas que valem para metade das linhas.
+
+`labeled` é BOOLEAN e não "a linha existe": o evento de desetiquetar chega como
+`labeled=false`, e apagar a linha perderia o instante em que isso aconteceu —
+que é o que distingue "nunca teve" de "tinha e tiraram". A listagem filtra;
+o registo fica.
+
+**`FromFullSync` NÃO é filtrado**, e é decisão: a sincronização completa é
+justamente como se recupera o estado que existia antes de a sessão parear.
+Filtrá-la deixaria a tabela vazia até alguém mexer numa etiqueta.
+
+**Rotas, só de LEITURA**: `GET /labels` e `GET /labels/{id}/chats`. Não
+acrescentei escrita de propósito — a biblioteca não sabe criar etiquetas
+(LIB-01), portanto uma rota de escrita responderia 200 sem fazer nada, que é
+exatamente o defeito da [[F198]] que acabei de corrigir. O `{id}` vem de
+`mux.Vars` e não de `r.PathValue`, pela armadilha nº9.
+
+Lista vazia sai como `[]` e não como `null`: um cliente que faça
+`for (const l of resp.data)` rebenta com `null` e não com `[]`.
+
+**Verificado em campo**:
+
+```
+tabelas criadas: wa_labels, wa_label_chats, wa_label_messages
+GET /labels            -> 200 {"data":[]}
+GET /labels/L1/chats   -> 200 {"data":[]}
+```
+
+**Testes**: `TestLabelEdit_GravaEDespacha`, `_ApagadaSaiDaListagem`,
+`TestLabelAssociationChat_GravaEDesmarca`, `TestLabel_FromFullSyncTambemGrava`.
+
+**Controlos negativos executados** — cada um mata uma metade diferente:
+
+```
+CN-1 (só webhook, sem persistir):
+    etiquetas gravadas = 0, quero 1 — o evento não foi persistido (F191)
+CN-2 (só persistir, sem webhook):
+    dowebhook = 0, quero 1 — o evento não notifica ninguém (F191)
+CN-3 (filtrar FromFullSync):
+    etiqueta de fullSync foi descartada: []
+```
+
+O par CN-1/CN-2 é o ponto: webhook sem persistência obriga o cliente a manter
+o estado; persistência sem webhook não avisa ninguém. Meia capacidade passa em
+qualquer teste que só olhe para uma delas.
+
+**O que NÃO está verificado, e como se verificaria**: as tabelas respondem
+vazias porque nenhum evento de etiqueta chegou ainda — é preciso alguém criar
+ou aplicar uma etiqueta no TELEMÓVEL para o WhatsApp emitir. É pedido humano,
+não algo que eu provoque pela API. Os testes cobrem a persistência e a
+listagem; o que falta medir é o trânsito real do evento.
+
+**Continua ABERTO na biblioteca**: LIB-01, a incapacidade de CRIAR etiquetas.
+Esta entrada fecha só a metade que era nossa, como o próprio título dizia.
+
+**Status**: **CORRIGIDA** na parte nossa, com quatro testes e três controlos
+negativos. Trânsito real do evento pendente de ação humana no telemóvel.
+
+## F192 — "Gerar novo QR" no painel: o WebSocket é canal com perda e o `connect` não era idempotente
+
+**Data**: 2026-08-20. **Contexto**: relato de que gerar novo QR em
+`/devui/sessions.html` não funciona.
+
+A hipótese com que a tarefa chegou — "`connect` numa sessão `connecting`
+devolve 200 e é NO-OP, nenhum QR novo é emitido" — foi **REFUTADA por
+medição**. Fica registada porque um achado com diagnóstico errado é pior que
+nenhum: parece resolvido.
+
+### O que a medição mostrou, contra o servidor real (sessão `qr-teste`)
+
+Ciclo de vida completo, sondando `GET /session/qr` de 2 em 2 segundos:
+
+```
+23:19:33 connect#1 -> 200 {"status":"connecting"}
+23:19:35 qrlen=1842      <- 1o codigo
+23:19:56 qrlen=1850      <- 2o ... seis codigos, 20s cada
+23:21:36 qrlen=0         <- timeout do SDK: qrcode limpo (6 x 20s = 120s)
+23:22:21 connect#2 (APOS timeout) -> 200 {"status":"connecting"}
+23:22:23 qrlen=1846      <- QR NOVO em ~2s
+```
+
+E o caminho do utilizador, no navegador, com o WebSocket intercetado:
+
+```
+03:24:39.722 NEW ws://localhost:8099/session/ws   <- clique "Conectar"
+03:24:40.583 MSG type=QR qrlen=1830
+03:26:40.589 MSG type=QRTimeout                    <- overlay "Gerar novo QR"
+03:27:21.383 NEW ws://...                          <- clique "Gerar novo QR"
+03:27:21.396 OPEN
+03:27:22.320 MSG type=QR qrlen=1854                <- QR NOVO, renderizado
+```
+
+Ou seja: **`connect` depois do timeout sempre funcionou.** O `onPairingTimeout`
+faz `Unregister` + `Detach` + devolve a posse, e o SDK faz `cli.Disconnect()`
+ao esgotar os códigos, portanto o `connect` seguinte encontra tudo limpo.
+
+Os defeitos verdadeiros são outros dois, e ambos foram medidos.
+
+### Defeito 1 — o QR despachado antes de o socket registar desaparece
+
+`pkg/presentation/http/devui/assets/sessions.js:238` (`acao(s,"conectar")`)
+abria o socket e disparava `GET /session/connect` no MESMO tick. O registo do
+socket do lado do servidor (`AddWSConn`, `handler_session_ws.go:57`) só
+acontece depois do upgrade concluir; o QR despachado nessa janela é entregue a
+zero conexões e some. Medido, com o socket a entrar 3s depois:
+
+```
+0.433s HTTP connect(sem-ws)  -> 200 {"status":"connecting"}
+3.461s HTTP qr(depois-de-3s) -> len=1870   <- o QR EXISTE no banco
+3.481s WS(tardio) OPEN
+21.366s WS(tardio) MSG type=QR             <- 17,9s de silencio
+```
+
+O QR emitido a ~1,4s nunca chegou ao socket. E o painel **não tinha mais
+nenhuma entrada**: sem evento, ficava em "Pedindo QR à API…" sem prazo e sem
+erro — indistinguível de painel partido. Localmente a janela é de ~900ms e
+quase sempre ganha-se a corrida; é sorte de `localhost`, não desenho.
+
+### Defeito 2 — `connect` durante pareamento ativo abre um SEGUNDO fluxo
+
+Não é no-op: é o contrário. Medido, com um socket a ouvir o tempo todo:
+
+```
+1.080s HTTP connect(1)                     -> 200 connecting
+1.838s WS MSG type=QR qrlen=1850
+6.092s HTTP connect(2, durante pareamento) -> 200 connecting
+6.736s WS MSG type=QR qrlen=1846   <- fluxo 2
+19.681s WS MSG type=QR qrlen=1874  <- fluxo 1
+21.904s WS MSG type=QR qrlen=1850  <- fluxo 2
+26.772s WS MSG type=QR qrlen=1838  <- fluxo 1
+```
+
+Dois clientes vivos, dois emissores de QR, ambos a escrever `users.qrcode`. Do
+lado de quem olha, o painel pisca entre códigos de fluxos diferentes e só um é
+escaneável a cada instante — o que É "gerar novo QR não funciona".
+
+### O que as implementações de referência fazem
+
+`evolution-api`, `src/api/controllers/instance.controller.ts::connectToWhatsapp`:
+
+```ts
+if (state == 'connecting') { return instance.qrCode; }
+if (state == 'open')       { return await this.connectionState({ instanceName }); }
+if (state == 'close')      { await instance.connectToWhatsapp(number);
+                             await delay(2000);
+                             return instance.qrCode; }
+```
+
+Duas lições, uma para cada defeito: **nunca criar um segundo socket enquanto
+está a conectar**, e **ler o QR GUARDADO em vez de confiar só no evento** — a
+Evolution até dorme 2s para o deixar materializar. As issues #2380 e #2385 do
+projeto deles são exatamente "não consigo obter o QR de forma fiável".
+
+**Divergência consciente**: eles devolvem o QR no corpo do `connect`; nós
+mantemos `{"status":"connecting"}` (é contrato com clientes que não o painel) e
+quem lê o QR que já existe é o `GET /session/qr`, que já era a rota
+autoritativa. Mesmo fundo, outra forma, sem quebrar contrato.
+
+### Correção aplicada
+
+- `pkg/application/session/orchestrator.go` — `startInFlight`, guarda que
+  serializa `Start` POR UTILIZADOR, com inventário de detentores escrito no
+  comentário do tipo (Regra 1 do CLAUDE.md) e teto `startInFlightTTL` de 3min
+  para a entrada estagnada (Regra 4: sem teto, a guarda trocaria "dois fluxos"
+  por "utilizador que nunca mais conecta", estritamente pior). A guarda corre
+  ANTES da reivindicação de posse, e a ordem está travada em teste.
+- `pkg/presentation/http/devui/assets/sessions.js` — `abrirWS` passa a resolver
+  só no `open` do socket e `acao` espera-o antes do `connect`; `aguardarQR`
+  sonda `GET /session/qr` durante 12s como rede de segurança do canal com
+  perda; `falhouQR` troca a espera perpétua por erro accionável.
+
+### Testes que travam o achado
+
+Backend, `pkg/application/session/orchestrator_test.go`:
+
+| teste | o que morde | controlo negativo executado |
+|---|---|---|
+| `TestStartRecusaSegundoFluxoEnquantoOPrimeiroPareia` | a CAUSA: um segundo `Pair` para o mesmo utilizador | CN-A |
+| `TestStartRecusaAntesDeReivindicarPosse` | a ORDEM guarda→posse | CN-B |
+| `TestStartDeOutroUtilizadorNaoEBloqueado` | a chave é por utilizador, não global | CN-C |
+| `TestStartLibertaAChaveAoTerminar` | Regra 4: a chave volta | CN-D |
+| `TestStartCedeChaveEstagnada` | o teto de estagnação | CN-E |
+
+Frontend, `pkg/presentation/http/devui/devui_test.go`:
+
+| teste | o que morde | controlo negativo executado |
+|---|---|---|
+| `TestPainel_ConectarEsperaOSocketAntesDePedirQR` | a ORDEM socket→connect | CN-F |
+| `TestPainel_ConectarSondaARotaDeQR` | a sondagem REST existe e é disparada | CN-G |
+| `TestPainel_FalhaDeQRNaoFicaEmEspera` | a janela fecha com erro accionável | CN-H |
+
+Saída real dos oito controlos:
+
+```
+CN-A (guarda removida de Start):
+--- FAIL: TestStartRecusaSegundoFluxoEnquantoOPrimeiroPareia (0.00s)
+    orchestrator_test.go:915: o segundo Start devolveu nil: um segundo fluxo de
+    pareamento foi iniciado para o mesmo utilizador
+
+CN-B (guarda movida para DEPOIS da posse):
+--- FAIL: TestStartRecusaAntesDeReivindicarPosse (0.00s)
+    orchestrator_test.go:943: o Start recusado reivindicou posse 1 vez(es): a
+    guarda está DEPOIS da reivindicação
+
+CN-C (chave global em vez de por utilizador):
+--- FAIL: TestStartDeOutroUtilizadorNaoEBloqueado (0.00s)
+    orchestrator_test.go:961: Start de outro utilizador foi bloqueado: a session
+    start is already in flight for this user; read the current QR from GET /session/qr
+
+CN-D (chave nunca libertada):
+--- FAIL: TestStartLibertaAChaveAoTerminar (0.00s)
+    orchestrator_test.go:980: Start depois de o anterior terminar foi recusado: a
+    session start is already in flight for this user; read the current QR from GET /session/qr
+
+CN-E (TTL ignorado):
+--- FAIL: TestStartCedeChaveEstagnada (0.00s)
+    orchestrator_test.go:1003: chave estagnada não foi cedida depois de 3m0s: a
+    session start is already in flight for this user; read the current QR from GET /session/qr
+
+CN-F (connect antes do socket):
+--- FAIL: TestPainel_ConectarEsperaOSocketAntesDePedirQR (0.00s)
+    devui_test.go:642: o `connect` (offset 14666) sai ANTES de o socket abrir
+    (offset 14718): o QR despachado nessa janela é entregue a zero conexões e perde-se
+
+CN-G (sondagem REST removida):
+--- FAIL: TestPainel_ConectarSondaARotaDeQR (0.00s)
+    devui_test.go:670: o painel nunca busca o QR pela rota REST: um evento perdido
+    no WebSocket deixa o cartão preso em "Pedindo QR à API…" sem prazo
+
+CN-H (janela fecha em silêncio):
+--- FAIL: TestPainel_FalhaDeQRNaoFicaEmEspera (0.00s)
+    devui_test.go:686: a janela de espera do QR fecha sem chamar falhouQR: o cartão
+    fica em "Pedindo QR à API…" indefinidamente, que é o sintoma original
+```
+
+Uma armadilha nova, que custou uma volta: o primeiro CN-A falhou por
+**TRAVAMENTO** e não por asserção — o dublê de `Pair` devolvia ao segundo
+`Start` o mesmo canal aberto do primeiro, e ele bloqueava a consumi-lo. Um
+controlo que trava não diz o que quebrou. O dublê passou a devolver um canal
+já fechado a partir do segundo `Pair`, e aí a asserção é que decide. Está
+comentado no `startEmCurso`.
+
+**Custo no gate de log**: as duas primitivas do lock entram no denominador do
+`logcov` e não logam, o que baixa `min_func_coverage` de 667 para 665 décimos.
+Isso NÃO foi mascarado — ver [[F197]], que traz os números e as três saídas
+recusadas.
+
+**Status**: corrigido nesta sessão, com os oito controlos acima executados.
+
+---
+
+## F193 — `min_func_coverage` é um rácio global, então acrescentar método de adaptador BAIXA o gate mesmo quando o código está certo
+
+**Data**: 2026-08-20. **Contexto**: paridade de newsletter (as onze operações que
+faltavam face à biblioteca). O trabalho acrescentou 18 funções elegíveis; o
+`make check` reprovou no `log-coverage-gate`.
+
+**Onde**: `.log-coverage-baseline` (`stage=ratchet`, `min_func_coverage=667`),
+medido por `cmd/logcov`.
+
+**Problema**, com os números medidos nesta sessão:
+
+```
+min_eligible         = 676 no baseline, medido 694   (+18 funções minhas)
+min_func_coverage    = 667 no baseline, medido 653
+min_errpath_coverage = 867 no baseline, medido 859 -> 868 depois das correções
+```
+
+`func_coverage` é `cobertas/elegíveis` sobre o repositório INTEIRO. Onze dos 18
+acréscimos são métodos de adaptador, e os oito pacotes de adaptador estão TODOS
+a 0,0% de cobertura de função:
+
+```
+pkg/infra/wa-noise/adapters/chat        22 elegíveis   0 cobertas   0.0%
+pkg/infra/wa-noise/adapters/group       18            0            0.0%
+pkg/infra/wa-noise/adapters/misc        19            0            0.0%
+pkg/infra/wa-noise/adapters/user        16            0            0.0%
+pairing / presence / profile / sessioncount    idem   0            0.0%
+```
+
+Ou seja: **qualquer** trabalho de paridade que acrescente método de porta faz o
+rácio cair, por melhor que o método esteja escrito, porque entra num extrato
+que historicamente não loga. O gate é `ratchet` (não pode descer), logo o
+trabalho de paridade fica bloqueado por uma propriedade da métrica e não por um
+defeito do código. É a mesma classe do BURACO CONHECIDO já documentado no topo
+do próprio `.log-coverage-baseline` (percentual de pacote a cair por mudança
+honesta), mas na outra métrica.
+
+O que NÃO resolve, e porquê:
+- **Logar nos onze métodos do adaptador**: duplicaria o log que o use case já
+  emite (`newsletter operation failed`, com a operação), criando as duas fontes
+  de verdade que o CLAUDE.md proíbe — e contrariaria o que os outros 85 métodos
+  de adaptador do repo fazem.
+- **X7 (delegação pura)**: não se aplica. Os métodos resolvem sessão e
+  convertem tipos antes de delegar, portanto não são "exatamente uma chamada e
+  um return com os mesmos argumentos".
+- **X8 (`//log:exempt`)**: `max_exempt_annotations=1`, e a única anotação já
+  está gasta no `pkg/bootstrap/message_classify.go`.
+
+**O que ficou corrigido nesta sessão** (e é melhoria real, não contorno):
+- `errpath_coverage` 859 → 868, acima do baseline 867. Duas causas medidas:
+  1. Chamada em cauda (`return client.X(...)`) conta como caminho de saída
+     DESCOBERTO; atribuir-e-verificar, como o `ChatMessengerAdapter.EditMessage`
+     já fazia, cobre-o. Convertidos cinco métodos do `MiscAdapter` e cinco ramos
+     do `dispatch`.
+  2. `validateNewsletter` tinha oito saídas (um `switch` com um `return` por
+     ramo). Passou a **tabela de requisitos** (`newsletterRequirements`) com
+     três saídas — o que varia entre as onze operações é qual campo é
+     obrigatório, isto é, dado, e estava escrito como fluxo de controlo.
+
+**Correção sugerida** para o que ficou: é decisão de política, não de código.
+Ou (a) `min_func_coverage` passa a excluir o extrato de adaptadores do rácio
+(medir o que se pretende que logue), ou (b) o baseline desce para 653 com a
+justificação registada, ou (c) o extrato de adaptadores passa a logar e o
+`min_func_coverage` sobe com ele — trabalho de uma fase inteira, não desta
+tarefa.
+
+### As três saídas, agora MEDIDAS (2026-08-21)
+
+O canal pediu decisão sem números; aqui estão, para que ela seja barata.
+
+```
+HOJE                     453/694 = 65,3%   (baseline exige 66,7%)
+adaptadores hoje           0/85  =  0,0%   -> 12,2% do denominador é peso morto
+SE excluir adaptadores   453/609 = 74,4%   -> piso possível 744, não 667
+PROJEÇÃO após a paridade 453/716 = 63,3%   <- +22 métodos de adaptador que
+                                              faltam (comunidades 4, business 4,
+                                              misc ~14). Assume que nenhum loga,
+                                              como os 85 atuais.
+```
+
+**(a) excluir o extrato de adaptadores do denominador.** O mecanismo JÁ existe e
+JÁ foi usado três vezes: regra X5, ficheiro `.logcov-exclude`, que hoje exclui
+`cmd/`, `contractsfake/`, `internal/wa-noise/` e `client/testkit/` — o
+argumento escrito lá é literalmente "não logam por definição, e contar seus ~N
+métodos no denominador só dilui o percentual sem significar nada sobre o
+repositório real". Custo: uma linha. Efeito: o gate passa a exigir 74,4% em vez
+de 66,7%, ou seja **fica mais apertado sobre o código que deve mesmo logar**.
+
+  Mas há uma diferença que NÃO deve ser varrida: os quatro extratos já
+  excluídos são dublês de teste e código de terceiros vendorizado — não podem
+  logar. Os adaptadores são **código de produção nosso**. Excluí-los é decidir
+  que a camada não é para ser instrumentada, e isso é uma decisão de
+  arquitetura declarada, não um ajuste de métrica. Se for tomada, tem de ficar
+  escrita como tal no `.logcov-exclude`, com a razão de layering (quem loga é o
+  use case), e não como conveniência.
+
+**(b) baixar o piso para 653.** É uma esteira: a projeção acima mostra que a
+paridade que falta empurra para 63,3%, e o piso teria de descer outra vez. Cada
+descida é ratchet-DOWN num gate cuja razão de existir é subir.
+
+**(c) pôr os 85 métodos de adaptador a logar.** Resolve de vez e é o único
+caminho em que o número passa a significar alguma coisa nessa camada. É uma
+fase inteira, e colide com a decisão de layering atual (o use case já loga a
+falha com a operação; logar nos dois cria as duas fontes de verdade).
+
+**Recomendação**, se o canal quiser uma: **(a)**, escrita como decisão de
+arquitetura. O que a torna defensável não é passar o gate — é que 12,2% do
+denominador não mede nada hoje e, ao diluir, MASCARA regressão no código que
+realmente loga. O `min_eligible` a cair de 694 para 609 fará o gate falhar de
+propósito, que é exatamente o desenho: a exclusão tem de ser vista, não
+silenciosa.
+
+### Resolução (2026-08-21): saída (a), aprovada e aplicada
+
+O canal aprovou (a) e o Lucas confirmou-a diretamente. Aplicado:
+
+```
+.logcov-exclude   + pkg/infra/wa-noise/adapters/   (razão de layering escrita lá)
+baseline          min_eligible          676 -> 609
+                  min_func_coverage     667 -> 744   <- SOBE
+                  min_errpath_coverage  867 -> 868
+golden            regenerado
+```
+
+Medição depois: `453/609 = 74,4%`.
+
+**Uma previsão minha que estava errada, registada porque custaria tempo a
+quem viesse a seguir**: eu disse — aqui e ao canal — que aplicar a exclusão
+faria o gate "falhar uma vez de propósito", porque `min_eligible` cairia. Não
+falha. As quatro travas são comparação de IGUALDADE EXATA contra o medido
+(`cmd/logcov/main_test.go:88`, `if base[k] != want`), e não pisos, apesar do
+prefixo `min_`. Atualizadas as quatro na mesma passagem, o gate passa direto.
+O desenho continua a tornar a exclusão visível — o diff do baseline e do golden
+mostra-a —, mas por revisão de código, não por falha de teste.
+
+**Auditoria do golden**: o diff removeu 85 entradas de adaptador e acrescentou
+as da newsletter. Duas linhas de `pkg/bootstrap` aparecem como removidas no
+diff (`buildRouter.func1`, `reportPanic`) — verificado nominalmente que
+continuam ELIGIBLE no ficheiro novo; o que mudou foi o número de linha
+(`router.go:267 -> 268`), deslocado pela linha que a newsletter acrescentou ao
+`router.go`. Não houve perda de elegibilidade fora do extrato excluído.
+
+### O gate seguinte, que a exclusão destapou (2026-08-21)
+
+Com o `log-coverage-gate` verde, o `coverage-gate` (cobertura de TESTE,
+`.coverage-baseline`, piso 867) passou a reprovar: **86,0%**. Causa: os onze
+métodos novos do `MiscAdapter` não tinham teste nenhum — o pacote
+`adapters/misc` estava a **42,1%**.
+
+Isto é a armadilha nº2 do `ARMADILHAS.md` a acontecer outra vez comigo. A
+primeira leva de testes cobria a RECUSA das onze (sem sessão) e o sucesso de
+apenas cinco; subiu para 86,5%, ainda abaixo do piso. Só depois de acrescentar
+o **caminho de sucesso das onze**, com asserção de que o SDK foi mesmo
+chamado, é que fechou:
+
+```
+adapters/misc   42,1% -> 81,0% -> 92,1%
+global           86,0% -> 86,5% -> 86,7%   (piso 867)  make check EXIT=0
+```
+
+Testes: `pkg/infra/wa-noise/adapters/misc/adapter_newsletter_test.go`
+(`SemSessaoRecusaAntesDoSDK`, `JIDChegaConvertidoAoSDK`,
+`ConviteNaoPassaPorToJID`, `PropagaFalhaDoSDK`, `CreatePassaOsCamposDeCriacao`,
+`ServerIDDeTextoInvalidoVaiZero`, `CaminhoDeSucessoDasOnze`,
+`SubscribeDevolveADuracao`).
+
+Controlos negativos executados, com a saída real:
+
+```
+CN-1 (convite passa a ser convertido por ToJID):
+    convite no SDK = "AbCd1234@newsletter", quero "AbCd1234" — foi transformado pelo caminho
+CN-2 (guarda de sessão removida do FollowNewsletter):
+    Follow: code = "", quero no_session
+CN-3 (serverIDFromText devolve 1 no ilegível):
+    Before = 1, quero 0 — texto ilegível tem de virar 0
+CN-4 (MarkNewsletterViewed deixa de chamar o SDK):
+    SDK chamado = "", quero "markviewed" — a operação não alcançou o cliente
+```
+
+CN-3 e CN-4 falharam à PRIMEIRA por erro de build (`declared and not used`),
+que pela armadilha nº3 não vale como controlo. Refeitos até compilarem E
+falharem com mensagem de asserção; as saídas acima são as das versões que
+compilam.
+
+**Nota informativa, não trava**: a contagem de issues do lint subiu 341 -> 342.
+Fica por atualizar `count` no `.golangci-baseline` quando isto for a PR.
+
+**Status**: CORRIGIDO. `errpath` travado por
+`pkg/presentation/http/handlers/handler_newsletter_test.go`; a exclusão do
+extrato de adaptadores está travada pelo par baseline+golden, que falha se
+alguém a acrescentar ou remover sem atualizar as quatro medidas.
+
+---
+
+## F194 — o PRIMEIRO código de QR é despachado DUAS vezes, sempre
+
+**Data**: 2026-08-20. **Contexto**: interceção do WebSocket do painel durante
+a F192.
+
+Em todos os ciclos medidos, o primeiro código chega duplicado ao cliente, e só
+o primeiro:
+
+```
+03:24:40.583 MSG type=QR qrlen=1830
+03:24:40.589 MSG type=QR qrlen=1830   <- 6ms depois, identico
+03:25:00.585 MSG type=QR qrlen=1846   <- dai em diante, um de cada vez
+```
+
+**Causa**, confirmada no código: há DOIS caminhos que despacham `QR` para o
+mesmo código.
+
+1. `pkg/infra/wa-noise/runtime/session/events.go:54` traduz o `*events.QR` cru
+   do SDK — que carrega a lista INTEIRA de códigos — para
+   `SessionEventKindQR` com `Codes[0]`, e `orchestrator.go:666`
+   (`translateStatusEvent`) despacha-o como `"QR"`.
+2. `runPairing` recebe o mesmo código #1 pelo canal de pareamento e
+   `onPairingQR` despacha-o outra vez.
+
+Os códigos seguintes só existem no canal de pareamento, por isso não duplicam.
+
+A cópia do caminho (1) vai sem `Timeout`, logo **sem `expiresAt`** — um cliente
+que se guiasse por ela ficava sem a validade e sem barra de progresso.
+
+**Correção sugerida**: escolher um único escritor deste evento. O caminho do
+canal de pareamento é o completo (tem validade), então o natural é o
+`translateStatusEvent` deixar de despachar `SessionEventKindQR` e passar a só
+alimentar sinal interno — é a mesma forma da F68, que unificou o CONSTRUTOR do
+payload mas deixou os dois DESPACHOS de pé.
+
+**Status**: não corrigido — fora do âmbito da tarefa de QR. Hoje é inofensivo
+porque `mostrarQR` é idempotente (compara `img.src` antes de escrever), mas
+duplica escrita em `users.qrcode` e entrega ao webhook e ao RabbitMQ um evento
+a mais por pareamento.
+
+---
+
+### CORRIGIDA (2026-08-21), decisão 36=a do canal
+
+`translateStatusEvent` deixou de traduzir `SessionEventKindQR` — devolve
+`("", nil)`, e o vazio está documentado no `case` com a razão inteira. O canal
+de pareamento (`onPairingQR`) fica o ÚNICO escritor.
+
+**Antes de mexer, a pergunta que o CLAUDE.md manda fazer**: qual entrada faz
+esta correção virar problema? Resposta medida — nenhuma. QR só existe durante o
+pareamento, e o pareamento só corre quando a sessão NÃO tem credenciais
+(`orchestrator.go:411`), que é exatamente quando `runPairing` está de pé para o
+receber. Não há caminho em que o QR chegue com o canal fechado.
+
+**Código morto removido**: `qrPayload` ficou sem chamador de produção e saiu.
+Era um invólucro de `buildQRPayload`, que continua a ser o construtor único.
+
+**Verificação em campo**, WebSocket cru, sessão nova, três janelas:
+
+```
+t= 0.9s  eventos QR acumulados: 1
+t=20.9s  eventos QR acumulados: 2
+t=40.9s  eventos QR acumulados: 3
+```
+
+Um por janela de 20s. Antes, o primeiro chegava DUAS vezes a 6ms de intervalo.
+
+**Um susto que valeu a pena**: a primeira medição deu ZERO eventos, e isso
+parecia dizer que eu tinha partido a entrega. Fui ver em vez de repetir com
+outro parser, e o log respondeu: `subscribedEvents=[]` — eu tinha criado a
+sessão de teste sem `events`, portanto nada era entregue. O despacho tinha
+acontecido (`type=QR` no aviso de webhook saltado). O instrumento é que estava
+mal montado, não o código.
+
+**Testes**: `TestTranslate_QRNaoEhDespachadoPorEsteCaminho` trava a unicidade.
+
+`TestQRPayload_OsDoisFluxosProduzemOMesmoSchema`, que era da [[F68]] e comparava
+os schemas dos DOIS fluxos, perdeu a premissa — já não há dois. Reescrevi-o em
+vez de o apagar: continua a exigir que o payload traga `code`, `qrCodeBase64` e
+`expiresAt`, que é a parte que ainda protege alguém.
+
+E o QR saiu da tabela de `TestTranslateStatusEvent_TodosOsKinds` com um
+comentário a dizer porquê e a apontar para o teste da unicidade — remover uma
+linha de tabela sem deixar quem a substitua é como estes achados voltam.
+
+**Controlo negativo executado**:
+
+```
+CN-1 (religar o segundo escritor):
+    translateStatusEvent despachou "QR" para o QR: há dois escritores outra vez (F194)
+```
+
+**Status**: **CORRIGIDA**, com teste, controlo negativo e verificação em campo.
+
+## F195 — comentários afirmam 60s para o primeiro QR; são 20s, medidos
+
+**Data**: 2026-08-20. **Contexto**: idem.
+
+`pkg/application/session/orchestrator.go:605` diz "São 60s para o PRIMEIRO
+código e 20s para os demais", e
+`pkg/presentation/http/devui/assets/sessions.js` repete-o em `iniciarTTL` ("o
+primeiro código vale 60s, e assumir 20 mostraria expirado o que ainda é
+válido").
+
+Ambos estão **errados hoje**. `internal/wa-noise/core/pair_constants.go:23`
+tem `qrCodeFirstTimeout = qrCodeTimeout`, ou seja 20s, com comentário a dizer
+que a igualdade é intencional. E a medição confirma: os seis códigos chegaram
+em intervalos de 20s, incluindo o primeiro — 03:24:40, 03:25:00, 03:25:20,
+03:25:40, 03:26:00, 03:26:20.
+
+O comentário do `orchestrator.go` cita a F69, que corrigiu a afirmação
+ANTERIOR; a constante mudou depois e os comentários não acompanharam.
+
+**Correção sugerida**: alinhar os dois comentários com `pair_constants.go`.
+Nenhum código depende do número — `expiresAt` vem do `Timeout` real do evento,
+que é o desenho certo. É dívida de documentação, e é a que mais engana: quem
+programar um cliente pelo texto erra a barra do primeiro QR por 40 segundos.
+
+**Status**: não corrigido, fora do âmbito.
+
+---
+
+### CORRIGIDA (2026-08-21)
+
+Os dois comentários passaram a dizer o que a constante diz: 20s para TODOS os
+códigos, o primeiro inclusive. Ambos guardam a história — já estiveram errados
+nas duas direções — porque saber que o número mudou é o que impede a terceira.
+
+**A trava**: `TestQRPrimeiroCodigoTemAMesmaJanelaQueOsDemais`, em
+`internal/wa-noise/core/pair_constants_test.go`. Não defende um VALOR, defende
+a IGUALDADE `qrCodeFirstTimeout == qrCodeTimeout`, que é o que os comentários
+afirmam. Se alguém voltar a dar janela própria ao primeiro código, o teste
+falha e a mensagem NOMEIA os dois ficheiros a atualizar — que é exatamente o
+passo que faltou da última vez.
+
+Controlo negativo executado:
+
+```
+--- FAIL: TestQRPrimeiroCodigoTemAMesmaJanelaQueOsDemais
+    qrCodeFirstTimeout = 1m0s, qrCodeTimeout = 20s.
+```
+
+Um comentário não falha em teste — foi por isso que este sobreviveu meses. A
+saída é travar o FACTO que ele descreve, não o texto.
+
+**Status**: **CORRIGIDA**, com controlo negativo executado.
+
+## F196 — `GET /session/status` recusa com `no_session` a sessão que `GET /session/connect` aceita
+
+**Data**: 2026-08-20. **Contexto**: anomalia observada ao medir a F192.
+
+Com o MESMO token, ao mesmo tempo, sessão desconectada:
+
+```
+GET /session/status  -> 400 {"code":"no_session","message":"no session"}
+GET /session/connect -> 200 {"code":200,"data":{"status":"connecting"}}
+```
+
+**Causa**: `pkg/infra/wa-noise/runtime/session/guard.go:20` — `EnsureSession`
+exige um cliente VIVO no registry, e uma sessão desconectada não tem nenhum.
+`connect` não passa pela guarda, por ser justamente quem cria o cliente.
+
+Não é o mesmo defeito da F192, e por isso fica em entrada própria: nada nele
+impede o QR de ser gerado.
+
+É defensável como desenho — "status" no sentido de "estado do transporte vivo"
+— mas é a resposta mais inútil possível no único momento em que alguém
+pergunta o estado: quando a sessão NÃO está de pé. O painel contorna-o sem
+saber, porque lê o estado do `GET /admin/users`.
+
+**Correção sugerida**: `status` devolver 200 com `connected:false` para sessão
+conhecida e desconectada, reservando `no_session` para token que não
+corresponde a utilizador nenhum. Muda contrato de rota pública, portanto exige
+decisão antes de ser feito.
+
+**Status**: não corrigido — achado incidental, fora do âmbito, e mexe em
+contrato. Precisa de decisão do canal.
+
+---
+
+### CORRIGIDA (2026-08-21), decisão 34=a do canal
+
+`GetStatusUseCase` deixou de chamar `EnsureSession`. A ausência É o conserto, e
+está escrita como tal no código para que ninguém a religue por engano — o
+construtor deixou de receber `SessionGuard`, porque aceitá-la sem a usar
+convidaria exatamente isso.
+
+Quem decide se a sessão EXISTE passou a ser o registo no banco, que é a
+pergunta certa. `SessionStatus` já devolvia `(false, false)` sem cliente
+(`runtime/session/guard.go:74`), portanto "desconectada" sempre teve
+representação — faltava deixá-la sair.
+
+Verificado em campo, com a conta pareada, antes e depois de um `disconnect`
+real:
+
+```
+ligada       -> 200 {connected: True,  loggedIn: True,  jid: 554192421234:39@s.whatsapp.net}
+POST /session/disconnect -> 200
+desconectada -> 200 {connected: False, loggedIn: True,  jid: 554192421234:39@s.whatsapp.net}
+```
+
+Antes, a segunda linha era `400 {"code":"no_session"}`. Repare que `loggedIn`
+continua `true`: o pareamento não se perdeu, só o transporte caiu — e é
+precisamente essa distinção que o 400 tornava invisível.
+
+**Testes**: `TestGetStatus_DesconectadaDevolveEstado`,
+`_ConectadaContinuaAReportar`, `_SessaoInexistenteContinuaARecusar`,
+`_FalhaDeBancoNaoViraEstadoVazio`. Os dois últimos são os limites: a correção
+não pode ter transformado qualquer token num 200, nem uma falha de banco num
+"existe e está desligada".
+
+**Controlos negativos executados**:
+
+```
+CN-1 (guarda religada):
+    sessão desconectada foi RECUSADA em vez de reportada (F196): no session
+CN-2 (aceitar sessão inexistente):
+    TestGetStatus_SessaoInexistenteContinuaARecusar falhou
+```
+
+**Três testes existentes afirmavam o contrato antigo e foram corrigidos, não
+apagados**:
+
+- `TestUseCases_SemSessao_PropagamACausa` — GetStatus saiu da tabela, com o
+  motivo escrito na lacuna;
+- `TestSessionHandlers_NoSessionAppErrReachesClient` — GetStatus é saltado, e o
+  comentário aponta para o teste que assere o novo comportamento;
+- `TestSessionHandlers_InternalFailure_500_LogsError` — o erro injetado
+  MUDOU-SE para `ListUsers`, que é onde GetStatus ainda pode falhar. Removê-lo
+  teria deixado de testar o 500; mantê-lo como estava testaria um caminho que
+  já não existe.
+
+O mesmo se aplicou ao `boundary_log_test.go`, cujo dublê tinha um comentário a
+dizer que `SessionStatus` e `ListUsers` "never actually called" — deixou de ser
+verdade no instante em que a guarda saiu, e o teste de fronteira passaria a
+observar um caminho de sucesso em vez do que se propõe a medir.
+
+**Status**: **CORRIGIDA**, com quatro testes novos, dois controlos negativos e
+verificação em campo.
+
+## F197 — a correção da F192 baixa `min_func_coverage` de 667 para 665, e isso NÃO foi mascarado
+
+**Data**: 2026-08-20. **Contexto**: gate de log ao fechar a F192.
+
+A guarda da F192 acrescenta duas funções ao denominador do `logcov`:
+`startInFlight.acquire` e `startInFlight.release`, em
+`pkg/application/session/orchestrator.go`. Nenhuma das duas loga, e não devia:
+a decisão que elas implementam já é registada pelo CHAMADOR, em `Start`, com
+`userid` e nível `Warn` ("start already in flight for this user").
+
+**Medido**, `go run ./cmd/logcov ./pkg`:
+
+```
+                    baseline   medido
+min_func_coverage      667       665      <- VERMELHO
+min_eligible           676       678      <- atualizado (ratchet-UP honesto)
+min_errpath_coverage   867       867
+max_exempt_annotations   1         1
+```
+
+`.log-coverage-baseline` foi atualizado **só** no `min_eligible`.
+`min_func_coverage` continua em 667, portanto `make check` fica **vermelho
+nessa trava** — de propósito.
+
+### Por que nenhuma das três saídas foi tomada
+
+1. **`//log:exempt` (X8)** — funcionaria, e foi MEDIDO a funcionar: com as duas
+   anotações o `eligible` volta a 676 e o `func_coverage` a 667. Mas
+   `max_exempt_annotations` é declarado *ratchet-DOWN* e só tem uma anotação
+   gasta (F187/F184). Gastar orçamento de isenção é decisão de **política**, do
+   dono do gate, não de quem fecha uma correção.
+2. **Inlinar as duas em `Start`** — não resolve, e vale registar porque parece
+   que resolve: **X6** torna elegível o `FuncLit` que é operando de
+   `DeferStmt`, então o `release` volta a entrar como `Start.funcN`; e o
+   `acquire` tem `return`, logo nenhuma regra X1..X7 o tira do denominador.
+   Trocar-se-iam duas funções novas por uma, sem mudar o sinal.
+3. **Inventar um log** — destrói o próprio log. É a lição literal da isenção
+   anterior, registada em `.log-coverage-baseline` na entrada da F187/F184.
+
+### Decisão pendente
+
+Duas opções, ambas legítimas, nenhuma minha:
+
+- **aceitar 665** como novo piso de `min_func_coverage`, reconhecendo que o
+  denominador cresceu com duas funções que corretamente não logam; ou
+- **gastar a 2ª e a 3ª anotação** de `//log:exempt` nas duas primitivas,
+  subindo `max_exempt_annotations` de 1 para 3 contra a direção declarada do
+  ratchet.
+
+**Status**: não corrigido por decisão explícita — o gate fica vermelho e
+visível em vez de verde e mascarado. Ver [[F192]] para a correção que o
+motivou.
+
+> **Nota de reconciliação (2026-08-21)**: a F197 acima ficou SUPERADA pela
+> resolução da [[F193]]. Ela descreve o gate a exigir 667 e a medir 665 com as
+> duas primitivas do lock. Depois de o extrato de adaptadores sair do
+> denominador, o piso passou a 744 e os números da F197 deixaram de ser os
+> vigentes — a decisão que ela deixava em aberto ("aceitar 665 ou gastar
+> isenções") foi respondida por uma terceira saída que ela não considerava.
+> Fica no registo porque o RACIOCÍNIO continua válido e porque a recusa de
+> mascarar com `//log:exempt` é o precedente que interessa; só os números é que
+> não são os atuais.
+>
+> **Os números vigentes, medidos depois da integração**: as duas primitivas do
+> lock entram no denominador já reduzido, e o efeito é o MESMO que a F197
+> descreve, apenas noutro patamar:
+>
+> ```
+> min_eligible          609 -> 611   (+2: startInFlight.acquire e .release)
+> min_func_coverage     744 -> 741   (-3 décimos)
+> min_errpath_coverage  868          (inalterado)
+> ```
+>
+> A queda de 3 décimos foi aceite e escrita no `.log-coverage-baseline`, não
+> mascarada. Continua a valer a razão dele: logar dentro das primitivas
+> duplicaria a linha que `Start` já emite e poria E/S de log debaixo do mutex,
+> num caminho que corre em cada tentativa de conexão.
+
+---
+
+## F198 — duas rotas registadas respondem 200 sem fazer nada: `/status/set/text` e `/user/history/sync`
+
+**Data**: 2026-08-21. **Contexto**: CAP-PARITY-00, o censo de capacidades. O
+método `SetStatusMessage` aparecia como ausente da fachada, mas nós temos a
+rota `/status/set/text` — a contradição é que revelou o defeito.
+
+**Onde**:
+- `pkg/application/usecase/session/set_status_message.go:26`
+- `pkg/application/usecase/session/request_history_sync.go:25`
+- rotas em `pkg/bootstrap/wiring_routes.go:220` e `:59`
+
+**Problema**: os dois use cases validam o payload, confirmam a sessão, logam
+`"... validated"` e devolvem um resultado VAZIO. Nenhum dos dois toca no SDK.
+
+```go
+// set_status_message.go — o Execute inteiro, depois das guardas
+uc.logger.Info(ctx, "set status message validated", "txtID", txtID)
+return &domain.SetStatusMessageResult{}, nil
+```
+
+Prova de que não há caminho até ao SDK, e não apenas de que não o vi:
+
+1. Os dois structs só têm `appport.SessionGuard` e `appport.Logger` — nenhuma
+   outra porta. Varri `pkg/application/usecase/` inteiro à procura de use cases
+   com essa assinatura e são EXATAMENTE estes dois.
+2. `SetStatusMessage` não existe em `pkg/infra/wa-noise/client/client.go` (a
+   fachada), nem em nenhum adaptador. `grep -rn SetStatusMessage
+   pkg/application/contracts pkg/infra` devolve zero fora do próprio use case.
+3. `DownloadHistorySync` e `RequestHistorySync` não são referidos em `pkg/`.
+
+Portanto: `POST /status/set/text` responde `200` e o status do utilizador
+**não muda**; `POST /user/history/sync` responde `200` e **nenhum histórico é
+pedido**. O cliente não tem como distinguir isto de sucesso.
+
+A palavra `validated` nos dois logs é a pista que faltava: o log diz o que o
+código faz — validar — e não o que a rota promete. Quem escreveu foi honesto no
+log e a rota é que ficou a mentir.
+
+**Correção sugerida**: acrescentar `SetStatusMessage(ctx, msg string) error` e
+`BuildHistorySyncRequest` + envio à fachada (ADR-001), ligar por adaptador e
+chamar a partir dos use cases. Enquanto não for feito, a alternativa honesta é
+as rotas responderem `501 Not Implemented` em vez de `200` — mentir menos custa
+menos que a funcionalidade.
+
+**Não corrigido nesta sessão**: é bug pré-existente fora do âmbito da tarefa
+atual e a política do CLAUDE.md manda perguntar antes de corrigir de graça.
+Não foi possível medir contra o servidor porque não há sessão pareada neste
+momento; a evidência acima é de leitura de código e é conclusiva quanto à
+ausência de caminho até ao SDK.
+
+**Status**: não corrigido, pendente de decisão. Relacionado com [[F191]] (outra
+capacidade que a biblioteca já dá e nós não consumimos).
+
+---
+
+### CORRIGIDA (2026-08-21), decisão 31=a do canal
+
+Reproduzida primeiro em campo, com sessão real:
+
+```
+POST /status/set/text     -> 200 {"details":""}
+POST /user/history/sync   -> 200 {"details":"","count":0,"chat_jid":"", ...}
+```
+
+**Havia uma TERCEIRA camada que a entrada original não viu.** Além do use case
+não chamar o SDK, o `RequestHistorySyncHandler` passava
+`domain.RequestHistorySyncRequest{}` — um pedido VAZIO. Os cinco campos que o
+DTO documenta desde sempre (`count`, `chat_jid`, `oldest_msg_id`,
+`oldest_msg_from_me`, `oldest_msg_timestamp`) **nunca eram lidos**: o corpo do
+cliente ia para o lixo antes de chegar ao use case. O contrato HTTP estava
+certo; faltava o caminho inteiro, da fronteira ao SDK.
+
+**Este é o TERCEIRO caso deste padrão no repositório.** A [[F79]] corrigiu
+`Disconnect` e `Logout` pela mesma razão — "só validavam a sessão e devolviam
+200 sem encerrar nada", diz o comentário em `handler_boundary_test.go:43`. O
+padrão é: use case com apenas `SessionGuard` e `Logger` nas dependências. A
+varredura por essa assinatura encontrou EXATAMENTE estes dois, e agora nenhum.
+
+**O que foi acrescentado**:
+
+| camada | `/status/set/text` | `/user/history/sync` |
+|---|---|---|
+| fachada | `SetStatusMessage` | `BuildHistorySyncRequest` + `SendPeerMessage` |
+| porta | `StatusMessageSetter` | `HistorySyncRequester` + `HistoryAnchor` |
+| adaptador | `MiscAdapter.SetStatusMessage` | `MiscAdapter.RequestHistorySync` |
+| handler | já decodificava | passou a decodificar |
+
+`BuildHistorySyncRequest` e `SendPeerMessage` entram em PAR porque a docstring
+da biblioteca diz que a mensagem montada "can be sent using
+Client.SendPeerMessage" — expor só um deixaria a capacidade montável e não
+enviável. Ambos estavam na lista de gaps do CAP-PARITY-00; saem dela.
+
+**MUDANÇA DE CONTRATO, deliberada**: `/user/history/sync` com corpo vazio
+passa de `200` a `400`. O protocolo pede "as N mensagens ANTES desta", e sem
+âncora não há pedido a fazer — aceitar seria a F198 outra vez, com mais passos.
+`count` omitido usa 50, que é o que a biblioteca recomenda
+(`message_builders.go:63`).
+
+O resultado devolve o id do PEDIDO em `Details`, e não uma contagem de
+mensagens: a resposta chega depois, como evento `HistorySync` do tipo
+`ON_DEMAND`. Preencher `Count` com o que foi pedido diria ao cliente que já
+recebeu.
+
+**Testes**: `TestSetStatusMessage_ChamaOSDKComOTexto`,
+`_FalhaDoSDKNaoViraSucesso`, `_NaoChamaOSDKSemCorpo`,
+`TestRequestHistorySync_PedeComAAncoraDoCliente`,
+`_CountOmitidoUsaORecomendado`, `_SemAncoraRecusa` (3 sub-casos),
+`_FalhaDoEnvioNaoViraSucesso`.
+
+**Controlos negativos executados**:
+
+```
+CN-1 (status volta ao stub):
+    SetStatusMessage chamado 0 vez(es), quero 1 — a rota responde 200 sem fazer nada (F198)
+CN-2 (status chamado com texto fixo):
+    msg = "fixo", quero "disponivel"
+CN-3 (history sync volta ao stub):
+    porta chamada 0 vez(es), quero 1 — a rota responde 200 sem pedir nada (F198)
+CN-4 (handler volta a descartar o corpo):
+    status 400, quero 200 (corpo {"code":400,"error":{"code":"missing_chat_jid"...
+```
+
+O CN-4 falhou à primeira por âncora ambígua no `sed` — a mutação não chegou a
+aplicar-se e o teste passou. Um controlo que não muta não prova nada; refeito
+com âncora única, e a saída acima é a da versão que mutou de facto.
+
+**Verificação em campo pendente, e por quê**: `SetStatusMessage` altera o
+perfil REAL da conta pareada. O humano determinou "não devemos apagar a conta
+ou mudar nome ou avatar nesse momento", e o estado é adjacente a isso — não o
+exercito contra a conta dele sem pedir. `RequestHistorySync` é inofensivo e
+pode ser verificado assim que houver uma âncora real à mão.
+
+**Status**: **CORRIGIDA** nas duas rotas, com testes e quatro controlos
+negativos executados. Verificação em campo do status pendente de autorização.
+
+## F199 — a correção da F192 esteve 2h "pronta e verificada" sem NUNCA ter sido implantada no servidor onde se testa
+
+**Data**: 2026-08-21. **Contexto**: o utilizador reportou que o painel continuava
+preso em "Pedindo QR à API…" depois de a F192 estar dada como corrigida,
+testada, com oito controlos negativos e `make check` verde.
+
+**Problema**: nada disso estava errado. O código estava certo e o servidor
+estava a correr **outro binário**.
+
+Medido:
+
+```
+processo a servir :8099   ->  arrancado Thu Aug 20 21:32:37
+orchestrator.go (o fix)   ->  modificado Aug 21 09:51
+binário ./wa-api          ->  compilado  Aug 21 09:53
+```
+
+O processo era **12 horas mais velho que a correção**. O utilizador esteve a
+testar código anterior ao conserto, e todo o sinal de qualidade que tínhamos —
+testes, controlos negativos, gate verde — era verdadeiro e **irrelevante para o
+que ele via**.
+
+### Por que ninguém deu por isso
+
+1. O worker corrigiu no SEU worktree e verificou numa instância que ele próprio
+   levantou. A verificação foi real ("o QR renderizou; nenhum `MSG type=QR`
+   chegou pelo WebSocket, veio pela sondagem REST"), mas **noutro processo**.
+2. Eu integrei o código, corri `make check`, vi verde e dei por concluído. Nunca
+   perguntei que binário estava a servir o :8099.
+3. A entrada F192 cita `ws://localhost:8099/...` nas medições do DEFEITO, o que
+   dá a impressão de que a verificação do CONSERTO também foi nessa instância.
+   Não foi, e a entrada não diz em qual foi.
+
+### O que isto ensina, e que vale para além deste caso
+
+**Teste verde prova que o código está certo. Não prova que o código está a
+correr.** Entre os dois há um passo — compilar e reiniciar o processo — que não
+tem gate nenhum neste repositório e que ninguém verificou.
+
+E **"verificado em campo" sem dizer EM QUE INSTÂNCIA não é verificação
+reproduzível**. A F192 tem os números do defeito com hora e porta, mas a prova
+do conserto ficou só no transcript do worker, que desapareceu com o worktree.
+
+### Correção sugerida
+
+- Toda entrada que diga "verificado em campo" tem de registar **o processo**:
+  porta, hora de arranque do binário e o commit/hash do que está a correr.
+  Sem isso, a verificação não é repetível nem auditável.
+- Expor a versão do binário numa rota (`/health` a devolver build time e commit)
+  torna a pergunta "o que está a correr?" respondível em um comando, em vez de
+  depender de `ps -o lstart`.
+- Quando a tarefa for de correção de comportamento observável pelo utilizador,
+  **reiniciar o servidor partilhado faz parte da tarefa**, ou tem de ficar
+  escrito que não foi feito.
+
+**Status**: o defeito de implantação foi resolvido nesta sessão (binário
+recompilado e :8099 reiniciado; QR obtido em 2s pela sondagem REST, exatamente
+o caminho que a F192 acrescentou). A lacuna de PROCESSO — nada garante que o
+que corre é o que foi testado — continua **não corrigida**.
+
+Relacionado: [[F192]].
+
+---
+
+## F200 — `PUT /admin/users/{id}` responde `success: true` e a alteração fica INERTE durante toda a vida do processo
+
+**Data**: 2026-08-21. **Contexto**: preparar campo para reproduzir a F184
+(enquetes e botões recebidos e nunca gravados). Liguei a gravação de histórico
+nas duas sessões pareadas e ela não ligou.
+
+**Onde**:
+- `pkg/bootstrap/publish_userinfo.go:36` — `appCtx.UserInfoCache.Set(userID, values, cache.NoExpiration)`
+- `pkg/bootstrap/eventhandler_message.go:262` — `saveMessageHistory` lê o limite
+  da CACHE, nunca do banco
+- `pkg/application/usecase/user/edit_user.go:33` — `Execute` escreve no banco e
+  **não toca em cache nenhuma**
+
+**Problema**: a entrada do `UserInfoCache` é escrita com `cache.NoExpiration` e
+**nada a invalida** — `grep -rn "UserInfoCache.Delete" pkg/` não devolve nada. O
+TTL de 5 minutos do `cache.New` (`context.go:45`) é irrelevante para estas
+entradas. Logo, tudo o que o `EditUserUseCase` grava fica invisível ao processo
+até ele reiniciar.
+
+Medido contra o servidor real, com as duas sessões pareadas:
+
+```
+PUT /admin/users/{id}  {"history":30}   -> 200 {"success":true}
+banco                  history=30       -> confirmado por SELECT
+7 sondas de envio ao longo de 413s      -> 0 gravadas em message_history
+--- reinício do servidor, MESMO history=30 no banco ---
+1 sonda                                 -> 1 gravada, imediata
+```
+
+A minha primeira hipótese — "é o TTL de 5 minutos, basta esperar" — foi
+**REFUTADA pela medição**: 413 segundos é mais que 300, e continuava a zero. Só
+ao ler `publish_userinfo.go` é que apareceu o `NoExpiration`. Fica registado
+porque o diagnóstico plausível e errado teria levado a "espere 5 minutos", que
+nunca funcionaria.
+
+**A costura para corrigir JÁ EXISTE e o admin passa ao lado dela.** O
+`publishUserInfo` está documentado no próprio ficheiro como "the SINGLE POINT
+through which all user-info mutations flow" (F164), e existe até uma porta
+dedicada, `appport.UserInfoHistoryCache`, usada por
+`pkg/application/usecase/storage/set_history.go`. Ou seja: mudar `history` pela
+rota de sessão FUNCIONA; mudar pelo admin não. São duas fontes de verdade para
+a mesma mutação, e a do admin é a que está errada.
+
+**Correção sugerida**: `EditUserUseCase` passa a receber uma porta que
+republica a entrada do utilizador depois de `UpdateUser` ter sucesso —
+republicar a entrada INTEIRA, e não campo a campo, porque o edit toca em nome,
+token, webhook, expiração, eventos, proxy, S3 e history de uma vez. A ordem
+importa e tem de ser travada em teste: republicar ANTES de a escrita ter
+sucesso publicaria um valor que o banco não tem.
+
+**Correção aplicada**: nova porta `appport.UserInfoRepublisher`
+(`user_republish_port.go`) e adaptador `userInfoRepublisher`
+(`pkg/bootstrap/user_republish_adapter.go`). O adaptador **invalida** em vez de
+remendar: a edição pode mudar oito campos de uma vez, e um campo esquecido no
+remendo seria um valor obsoleto que nunca expira — que é o próprio defeito. O
+`EditUserUseCase` chama-o DEPOIS de `UpdateUser` ter sucesso.
+
+Testes: `TestEditUser_RepublicaAposEscritaBemSucedida`,
+`TestEditUser_NaoRepublicaQuandoAEscritaFalha`,
+`TestEditUser_RepublicaDEPOISDaEscritaENaoAntes`.
+
+Controlos negativos executados:
+
+```
+CN-1 (republicação removida):
+    edit_user_test.go:363: RepublishUser chamado 0 vez(es), quero 1 — a edição
+    entra no banco e o processo nunca a vê
+
+CN-2 (republicar ANTES da escrita) — morde em DOIS testes:
+    edit_user_test.go:388: republicou 1 vez(es) depois de a escrita falhar — a
+    cache passaria a ter um valor que o banco não tem
+    edit_user_test.go:414: republicou com 0 escritas feitas, quero 1 — a
+    republicação está ANTES da escrita
+```
+
+O CN-2 é o que interessa: inverter a ordem passa em todos os outros testes do
+ficheiro, porque ambos os caminhos continuam a chamar as duas coisas uma vez.
+O que distingue é QUANDO.
+
+**Verificação em campo, contra o servidor real com as duas sessões pareadas**:
+
+```
+PUT /admin/users/{id} {"history":1}  -> 200
+envio                                -> 200
+gravou                               -> 1   (antes: 0 em 7 sondas / 413s)
+```
+
+**Status**: **CORRIGIDO**, com teste, controlos negativos executados e
+verificação em campo.
+
+---
+
+## F201 — token revogado pelo admin CONTINUA a autenticar
+
+**Data**: 2026-08-21. **Contexto**: consequência da F200, medida a seguir.
+
+**Onde**: `pkg/bootstrap/publish_userinfo.go` (cache por token, TTL de 10 min,
+`tokenCacheTTL`) e `pkg/application/usecase/user/edit_user.go`, que troca o
+token sem invalidar a entrada do token ANTIGO.
+
+**Problema**: trocar o token de um utilizador pelo admin não revoga o anterior.
+Medido, com a sessão `filarapida` pareada:
+
+```
+antes  : token ANTIGO -> HTTP 200
+PUT /admin/users/{id} {"token":"<novo>"}  -> HTTP 200
+depois : token ANTIGO -> HTTP 200   <<< devia ser 401
+         token NOVO   -> HTTP 200
+```
+
+Os dois autenticam ao mesmo tempo. O comentário em `publish_userinfo.go:26`
+diz que o TTL é "the safety net that bounds how long a revoked token keeps
+authenticating (sec/F11)" — ou seja, o teto é reconhecido por desenho, mas o
+caminho do admin não faz a revogação, deixa-a para o relógio.
+
+Para quem opera, isto significa que **rodar um token comprometido não o
+desativa**: continua válido por até `tokenCacheTTL`. E não há sinal nenhum —
+a resposta é `200` e o token velho segue a funcionar.
+
+**Correção sugerida**: no mesmo ponto da F200, quando o token muda, apagar a
+entrada do token ANTIGO da cache por token além de republicar a nova. Exige que
+o use case conheça o token anterior — hoje o `EditUserRequest` só traz o novo,
+portanto o adaptador tem de o ler antes da escrita.
+
+**A janela real, MEDIDA** (sonda de 20 em 20 segundos contra o servidor):
+
+```
+t=81s   ainda HTTP 200
+t=181s  ainda HTTP 200
+t=281s  ainda HTTP 200
+        REVOGADO de facto aos 301s (HTTP 401)
+```
+
+São **301 segundos**, ou seja ~5 minutos — e NÃO os 10 que `tokenCacheTTL`
+sugere. A entrada nasce com a expiração por omissão de `userinfocache`
+(`config.go:59`, `cache.New(5*time.Minute, ...)`), não com `tokenCacheTTL`, que
+só se aplica a entradas novas escritas por `publishUserInfo`. É mais um caso da
+armadilha nº3 do `ARMADILHAS.md`: o comentário afirma um comportamento que a
+medição não confirma.
+
+**Correção aplicada**: a mesma da F200. O adaptador varre a cache por token e
+apaga TODAS as entradas cujo id de utilizador coincide, em vez de receber o
+token anterior — quem chama teria de o ler antes da escrita, e qualquer token
+que falhasse passar continuaria a autenticar. A varredura apanha também tokens
+deixados por edições anteriores.
+
+**Verificação em campo**:
+
+```
+PUT /admin/users/{id} {"token":"<novo>"}  -> 200
+token ANTIGO -> HTTP 401   (antes: 200 durante 301s)
+token NOVO   -> HTTP 200
+```
+
+**Status**: **CORRIGIDO**, verificado em campo. Travado pelos mesmos três
+testes da F200 — a varredura por id é o que apaga a entrada do token antigo.
+
+---
+
+## F202 — o dublê de `JIDResolver` é MAIS PERMISSIVO que a produção, e 37 casos de teste exercitam um caminho que devolve 400
+
+**Data**: 2026-08-21. **Contexto**: achado incidental ao corrigir a [[F182]].
+Acrescentar a guarda de tipo de JID fez falharem testes de handler que passavam
+`"5511999"` — um número **sem servidor**.
+
+**Onde**:
+- `pkg/application/contracts/contractsfake/chat.go:52` — `ResolveQualifiedJID`
+  do dublê devolve `domain.JID(raw)`, sem validar nada;
+- `pkg/infra/wa-noise/mapping/jid/resolver.go:42` — a produção RECUSA:
+  `if jid.User == "" { return "", fmt.Errorf("wanoise: JID %q has no server", raw) }`.
+
+O comentário da produção diz, com todas as letras, por que a recusa existe:
+
+> *"types.ParseJID não falha para uma string sem "@" (…) o adapter que o
+> reparseia com o ParseJID leniente aplicaria o servidor padrão — exatamente o
+> que "qualificado" existe para impedir."*
+
+**Medido em campo**, servidor real, sessão pareada:
+
+```
+GET /user/lid/5516981818244                    -> 400 {"code":"invalid_jid"}
+GET /user/lid/5516981818244@s.whatsapp.net     -> 200 {"lid":"29343770251463@lid"}
+```
+
+**Alcance medido**: fazer o dublê imitar a regra real derruba **37 sub-testes**,
+em `usecase/group`, `usecase/user` e `presentation/http/handlers` — entre eles
+os caminhos de SUCESSO de `BlockUser`, `UnblockUser`,
+`UpdateGroupRequestParticipants`, `RejectCall` e `RequestUnavailableMessage`.
+
+Ou seja: **37 casos afirmam o comportamento de entradas que a produção rejeita
+com 400**. Não é que estejam errados sobre o que testam — é que testam um
+caminho que nenhum cliente alcança.
+
+É a armadilha nº1 do `ARMADILHAS.md` na sua forma menos óbvia: o dublê não é
+divergente por ser mais PERMISSIVO no sentido de esconder um defeito; ele
+ABENÇOA CÓDIGO MORTO. Todas as asserções sobre o que acontece depois da
+resolução, nesses 37 casos, descrevem um universo que não existe.
+
+**Correção sugerida**: o dublê passa a recusar string sem `@`, citando
+`resolver.go:42` como origem da regra, e os 37 casos passam a usar JID
+qualificado. É mecânico, mas toca em três pacotes de teste e muda o que 37
+casos afirmam — não é mudança para fazer de passagem no meio de outra tarefa.
+
+**Não corrigido nesta sessão, por escopo.** A alteração do dublê foi feita,
+medida (para obter o número de 37) e **revertida**. Corrigi apenas o fixture de
+`GetUserLID` em `handler_user_test.go:315`, que era o que a F182 tinha
+partido, e deixei lá a referência a esta entrada.
+
+**Status**: não corrigido, pendente de decisão sobre escopo. O número 37 é
+medido, não estimado.
+
+---
+
+### CORRIGIDA (2026-08-21), decisão 33=a do canal
+
+O dublê passou a recusar string sem `@`, com o comentário a citar
+`resolver.go:42` como origem da regra — que é o que a armadilha nº1 exige de um
+dublê que imita uma REGRA.
+
+Os casos afetados passaram a usar JID qualificado. **Não foi substituição em
+massa, e isso importa**: há 164 ocorrências de `"5511999999999"` nos testes e
+só 35 sub-testes falhavam. A maioria das rotas usa a resolução LENIENTE, que
+aceita telefone cru legitimamente — trocar todos teria mudado o que dezenas de
+testes afirmam sobre um caminho que está certo. Corrigi só os que a medição
+apontou, ficheiro a ficheiro:
+
+```
+usecase/user/blocklist_test.go            phone/wantTargetJ
+usecase/group/group_request_test.go       Phone[] e a asserção do participante
+handlers/handler_group_test.go            "Phone":[...]
+handlers/handler_misc_test.go             call_from, chat/sender, jid
+handlers/handler_nonsend_axes_test.go     call_from, chat/sender, jid
+handlers/handler_user_test.go             "Phone" de block/unblock
+```
+
+**O que a correção pagou de imediato**: destapou a [[F203]] — `/user/block`
+recusa um telefone num campo chamado `Phone`, enquanto `/chat/send/text` e
+`/chat/send/buttons` aceitam o mesmo formato. Era exatamente isso que o dublê
+permissivo escondia. Um dublê que abençoa código morto não esconde só o
+caminho morto: esconde a inconsistência que o tornou morto.
+
+**Status**: **CORRIGIDA**. Suíte inteira verde com o dublê a imitar a
+produção.
+
+## F203 — `/user/block` recusa um telefone num campo chamado `Phone`, e as rotas irmãs aceitam
+
+**Data**: 2026-08-21. **Contexto**: destapado ao corrigir a [[F202]] — foi
+exatamente isto que o dublê permissivo escondia.
+
+**Medido em campo**, servidor real, mesma sessão, mesmo número:
+
+```
+POST /user/info        {"Phone":["5516981818244"]}   -> 200
+POST /chat/send/text   {"Phone":"5516981818244"}     -> 200
+POST /chat/send/buttons{"Phone":"5516981818244"}     -> 200
+POST /user/block       {"Phone":"5511000000001"}     -> 400 invalid_phone_or_jid
+```
+
+**Causa**: `pkg/application/usecase/user/block_user.go:50` resolve o campo
+`Phone` com `ResolveQualifiedJID`, que EXIGE servidor
+(`mapping/jid/resolver.go:42`). As rotas de envio usam a resolução leniente,
+que aplica o servidor por omissão. O mesmo vale para `unblock_user.go`.
+
+O repositório está dividido em dois campos, e a divisão não é declarada em
+lado nenhum:
+
+- **exigem sufixo**: block, unblock, get_user, get_user_profile, get_user_lid,
+  send_poll, send_buttons, send_list, send_template, reject_call,
+  archive_chat, request_unavailable_message, group_request
+- **aceitam telefone cru**: send_message, send_sticker, react,
+  send_edit_message, chat_presence, group_management, get_group_info
+
+CUIDADO ao ler essa lista: ela vem de `grep` e a medição NÃO a confirma
+inteira — `/user/info` e `/chat/send/buttons` estão na coluna "exigem" e
+responderam 200 com telefone cru. Portanto há normalização antes da chamada
+nalguns caminhos, e a lista por grep é uma PISTA, não o mapa. O que está
+medido é o que está na tabela acima.
+
+**Por que importa**: um campo chamado `Phone` que recusa um telefone é a
+definição de contrato surpreendente. E o cliente não tem como descobrir a
+regra: a mensagem diz "could not parse Phone or JID", sem dizer que faltava
+`@s.whatsapp.net`.
+
+**Correção sugerida**: uma de duas, e é decisão de contrato.
+1. `block`/`unblock` passam a aceitar telefone cru, como as rotas de envio —
+   coerente com o nome do campo, e é o que qualquer cliente espera;
+2. mantém-se a exigência e a mensagem passa a dizer o que falta.
+
+A (1) é mudança de comportamento público; a (2) é aditiva.
+
+**Status**: não corrigido, pendente de decisão do canal. Descoberto porque o
+dublê da F202 deixou de abençoar a entrada que a produção recusa — é o exemplo
+concreto do custo que a F202 descreve em abstrato.
+
+### CORRIGIDA (2026-08-21), decisão 35=a do canal
+
+`block_user.go` e `unblock_user.go` passaram a usar `ResolveJID` — a variante
+LENIENTE, que já existia na porta e aplica o servidor por omissão.
+
+Verificado em campo. A prova está no log, não na resposta:
+
+```
+POST /user/block {"Phone":"5511000000001"}
+ERR Failed to unblock user  jid=5511000000001@s.whatsapp.net
+```
+
+O `jid=` qualificado é o conserto: o telefone cru atravessou a resolução e
+chegou ao SDK com servidor. Antes, a requisição morria em
+`400 invalid_phone_or_jid` sem nunca lá chegar.
+
+### O que a correção obrigou a arrumar, e que valia por si
+
+O dublê de `ResolveJID` devolvia o texto INALTERADO, enquanto a produção
+APLICA o servidor por omissão (`mapping/jid/resolver.go:21`). São dois tipos
+diferentes de divergência, e este é o segundo:
+
+- a [[F202]] era o dublê ser mais PERMISSIVO — aceitava o que a produção
+  recusa;
+- este é o dublê não TRANSFORMAR — devolve o que a produção converte.
+
+O segundo é mais traiçoeiro, porque não há erro nenhum: as asserções passam,
+descrevendo um valor que a produção nunca produz. Ao fazer o dublê imitar a
+transformação, **38 sub-testes falharam** e 30 asserções sobre JID resolvido
+tiveram de ser corrigidas, em 20 ficheiros.
+
+A armadilha nº1 já dizia isto com todas as letras — *"quando o objeto atravessa
+uma transformação no caminho real, o dublê tem de atravessá-la também"* — e
+mesmo assim havia 30 sítios a violá-la. O catálogo não basta se ninguém puser
+o dublê à prova contra a produção.
+
+Também religuei a injeção de falha em `blocklist_test.go`: o `resolveErr` ia
+para `ResolveQualifiedJIDFunc`, que estas rotas deixaram de chamar. Mantido
+onde estava, o caso "alvo que não parseia" passaria a exercitar um stub que
+ninguém invoca.
+
+**Status**: **CORRIGIDA**, verificada em campo. O 500 que aparece na resposta
+NÃO é este defeito — é a [[F204]], registada a seguir.
+
+---
+
+## F204 — recusa do servidor do WhatsApp (`400 bad-request`) chega ao cliente como `500 internal server error`
+
+**Data**: 2026-08-21. **Contexto**: verificação em campo da [[F203]].
+
+**Medido**:
+
+```
+POST /user/block {"Phone":"5511000000001"}   (número que não existe no WhatsApp)
+  -> 500 {"error":"internal server error"}
+
+log: ERR Failed to unblock user
+     error="info query returned status 400: bad-request"
+     jid=5511000000001@s.whatsapp.net
+```
+
+O servidor do WhatsApp respondeu **400**, dizendo que o pedido era inválido —
+tipicamente porque o número não tem conta. Nós traduzimos isso em **500**, que
+diz ao cliente "avaria nossa, tente outra vez". Ele vai tentar outra vez, para
+sempre, com o mesmo resultado.
+
+**É a mesma classe da [[F182]]**, que acabei de corrigir para `/user/lid`: erro
+determinístico do cliente reportado como falha do servidor. A diferença é a
+origem — ali a recusa era nossa, aqui vem de montante — e é por isso que
+corrigir a F182 não corrigiu esta.
+
+**Onde**: o erro sobe do adaptador como `error` cru e o handler cai no ramo
+`500`. Não há nada que classifique um `info query returned status 400` como
+erro de cliente.
+
+**Correção sugerida**: traduzir a recusa de montante. O status vem no texto do
+erro da biblioteca, o que é frágil de casar; a alternativa é a fachada devolver
+um erro tipado para esta família. Precisa de decisão, porque muda o contrato de
+`/user/block`, `/user/unblock` e provavelmente de toda a rota que consulte
+`info query`.
+
+**Não verificado ainda**: quais outras rotas exibem o mesmo. A medição cobre
+block e unblock.
+
+**Status**: não corrigido, pendente de decisão do canal.
+
+---
+
+## F205 — as três escritas de etiqueta sobrepõem por ORDEM DE CHEGADA, não por `updated_at`
+
+**Data**: 2026-08-21. **Contexto**: achado por avaliação INDEPENDENTE
+(`evaluator_labels`, dispatch `ctx_daf049f5ca09`) da [[F191]]. Não foi visto por
+quem implementou — eu.
+
+**Onde**: `pkg/infra/db/label_repository.go` — `UpsertLabel`, `SetChatLabel`,
+`SetMessageLabel`. Os três fazem `ON CONFLICT ... DO UPDATE SET` incondicional.
+
+**Problema**: o `updated_at` é GRAVADO mas nunca COMPARADO. Quem chega por
+último vence, independentemente de ser mais novo.
+
+Isto é consequência direta de uma decisão minha na F191: **não filtrar
+`FromFullSync`**. Justifiquei a vantagem — a sincronização completa é como se
+recupera o estado anterior ao pareamento — e parei aí. A pergunta seguinte,
+*"e se o FullSync chegar ATRASADO?"*, não me ocorreu.
+
+Um replay tardio de sincronização pode sobrepor uma edição mais nova com dado
+mais velho, e o registo fica silenciosamente errado: a etiqueta volta ao nome
+antigo, ou uma conversa volta a aparecer marcada depois de o utilizador a ter
+desmarcado.
+
+**Não medido**: com que frequência o WhatsApp emite FullSync fora de ordem, e
+se a biblioteca já garante ordenação a montante. Sem isso, não sei se o defeito
+é teórico ou observável — e é a primeira coisa a apurar.
+
+**Correção sugerida**: acrescentar `WHERE wa_labels.updated_at < excluded.updated_at`
+ao `DO UPDATE`. Custo: uma escrita fora de ordem passa a ser descartada em
+silêncio, o que exige registo próprio para não trocar um defeito invisível por
+outro.
+
+**Status**: não corrigido — triagem. Achado incidental durante a avaliação, e o
+escopo desta entrega já está em 115 ficheiros.
+
+---
+
+## F206 — `PUT /admin/users/{id}` com `token:""` devolve 500
+
+**Data**: 2026-08-21. **Contexto**: achado por avaliação independente
+(`evaluator_cache`, dispatch `ctx_2ff963f64501`).
+
+**Onde**: `pkg/application/usecase/user/edit_user.go` — o `Execute` trata `""`
+como "campo não informado", nenhum campo entra em `UserUpdate`, e a escrita cai
+em `domain.ErrNoFieldsToUpdate`, que sobe sem taxonomia e vira 500.
+
+**Problema**: é erro do CLIENTE devolvido como falha do servidor — a mesma
+família da [[F182]] e da [[F204]]. Ou o pedido é inválido (400), ou é um no-op
+idempotente (200); 500 diz "avaria nossa, tente outra vez" para algo
+determinístico.
+
+**Correção sugerida**: decidir entre 400 e 200 idempotente — é escolha de
+contrato — e dar taxonomia ao `ErrNoFieldsToUpdate`.
+
+**Status**: não corrigido — triagem, pendente de decisão de contrato.
+
+---
+
+## F207 — `pkg/infra/auth.NewTokenCache` é código morto
+
+**Data**: 2026-08-21. **Contexto**: achado por `evaluator_cache` ao verificar,
+para a [[F201]], se existia uma segunda cache por token que a varredura do
+republicador estivesse a ignorar.
+
+**Onde**: `pkg/infra/auth` — `NewTokenCache` só é citado em teste. A cache por
+token em uso é instância única, `userinfocache` em `bootstrap/config.go`.
+
+**Por que importa mais do que "código não usado"**: a existência de um segundo
+construtor de cache de token sugere, a quem lê, que há duas caches a manter
+coerentes. Foi exatamente essa a dúvida que o avaliador teve de resolver para
+validar a F201. Código morto que imita um mecanismo real custa tempo de quem
+audita.
+
+**Correção sugerida**: remover, ou documentar por que existe.
+
+**Status**: não corrigido — triagem.
