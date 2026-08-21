@@ -1456,3 +1456,27 @@ sessão** — o passo que todas as quatro falhas pularam.
 DOIS defeitos no próprio classificador antes que ele classificasse qualquer coisa
 nova — incluindo o de ler logo após o `await`, que é o defeito que ele existe
 para detectar.
+
+## `try/catch` com fallback silencioso esconde um caminho que nunca funciona
+
+**Medido em 2026-08-21 (H83).**
+
+```js
+let sum = -1;
+try { sum = U.getReactionEmojisAndSum(m).sum; } catch (e) {}
+return { has: (sum >= 0) ? sum > 0 : !!m.hasReaction };
+```
+
+A chamada lançava **sempre** — a função recebe uma lista de registros, não uma
+mensagem — e o `catch` vazio engolia. `sum` ficava em -1, o fallback decidia
+tudo, e nada nunca falhou de forma visível.
+
+O comentário acima do bloco dizia que o agregado era "a verdade de exibição ... e
+é o que isto reporta". **Descrevia código que nunca executou** — pior que nenhum
+comentário, porque disse ao próximo leitor que a verificação era mais forte do
+que é.
+
+**A regra**: se um caminho "melhor" tem fallback silencioso, prove que o caminho
+melhor roda. Se ele não roda, o fallback É o comportamento, e o comentário tem de
+dizer isso. Um `catch` vazio em volta de uma tentativa é uma afirmação de que a
+tentativa é opcional — e isso quase nunca é o que se quis dizer.

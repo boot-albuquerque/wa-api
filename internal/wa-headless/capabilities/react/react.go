@@ -230,19 +230,23 @@ func readScript(msgID string) string {
 				// hasReaction is STICKY within a session: it stays true after a
 				// reaction is removed, and a fresh session shows the message
 				// clean. So it answers "has ever had one", which is the wrong
-				// question for a removal.
+				// question for a removal — and it is, nevertheless, the only
+				// signal this build offers.
 				//
-				// The aggregate is the display-level truth — what the bubble
-				// would show — and it is what this reports.
-				let sum = -1;
-				try {
-					const U = window.require('WAWebReactionsUtils');
-					const agg = U.getReactionEmojisAndSum && U.getReactionEmojisAndSum(m);
-					if (agg && typeof agg.sum === 'number') { sum = agg.sum; }
-					else if (typeof agg === 'number') { sum = agg; }
-				} catch (e) {}
-				return { found: true, sticky: !!m.hasReaction, sum: sum,
-					has: (sum >= 0) ? sum > 0 : !!m.hasReaction };
+				// THERE WAS AN AGGREGATE BRANCH HERE AND IT NEVER RAN (H83).
+				// It called getReactionEmojisAndSum(m) inside a try/catch, and
+				// that function takes a LIST of records carrying .reactions —
+				// not a message. Every call threw, the catch swallowed it, sum
+				// stayed -1, and the fallback to the sticky flag decided every
+				// answer.
+				//
+				// The comment above it claimed the aggregate was "the
+				// display-level truth ... and it is what this reports". That
+				// described code that never executed, which is worse than no
+				// comment: it told the next reader the verification was stronger
+				// than it was. The branch is gone and the honest signal is named.
+				return { found: true, sticky: !!m.hasReaction, sum: -1,
+					has: !!m.hasReaction };
 			} catch (e) {}
 		}
 		return { found: false, has: false, sticky: false, sum: -1 };

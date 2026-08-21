@@ -6381,3 +6381,74 @@ A hipótese do espelho passa de "não testada" para "testada e bloqueada na form
 do próprio espelho".
 
 **Status**: não entregue.
+
+---
+
+## H83 — ler reações: bloqueado, e um ramo de código que nunca rodou
+
+**Data**: 2026-08-21
+**Contexto**: `COMPLETE-FAMILIES`, família Message — as três que faltavam são
+LEITURAS, que não têm o problema de confirmação da H82.
+**Onde**: `internal/wa-headless/capabilities/react/react.go`.
+
+### O fixture não tem o dado, e isso foi medido antes de qualquer código
+
+```
+385 mensagens, campos presentes em todas:
+    hasReaction, mentionedJidList, groupMentions, nonJidMentions
+mensagens COM menção:  0
+mensagens COM reação:  0
+ReactionsCollection:   0 modelos
+```
+
+Reação eu posso **criar** — a H53 provou o `Add` — então o laço fechado era
+possível: reagir, ler, remover. Foi o que tentei.
+
+### Duas tentativas, e então o instrumento
+
+| tentativa | erro |
+|---|---|
+| `getReactionEmojisAndSum(msg)` | `e.forEach is not a function` |
+| `getReactionEmojisAndSum([msg])` | `Cannot read properties of undefined (reading 'slice')` |
+
+Parei e perguntei ao instrumento da H73:
+
+```
+arg0=[[0].reactions [0].reactions.slice [0].reactions.slice().map]
+```
+
+A função recebe uma **lista de registros que carregam `.reactions`** — não
+mensagens. E `msg.reactions` **não existe** neste build; a `ReactionsCollection`
+que seria a fonte está vazia. Não há de onde tirar a entrada.
+
+### O achado que vale mais que a capacidade
+
+O `react.go` **já chamava** `getReactionEmojisAndSum(m)` no caminho de
+verificação, dentro de um `try/catch`. Ou seja: **toda chamada lançava, o catch
+engolia, `sum` ficava em -1, e o fallback para a flag pegajosa decidia todas as
+respostas.** O ramo do agregado nunca rodou.
+
+E o comentário acima dele dizia:
+
+> *"O agregado é a verdade de nível de exibição — o que a bolha mostraria — e é
+> o que isto reporta."*
+
+**Descrevia código que nunca executou.** Isso é pior que nenhum comentário: ele
+disse ao próximo leitor que a verificação era mais forte do que é. A H53 registrou
+que a remoção não era verificável e atribuiu isso à flag pegajosa; a razão real é
+que o único sinal disponível SEMPRE foi a flag.
+
+O ramo morto foi removido e o sinal honesto está nomeado.
+
+**A regra**: `try/catch` em volta de um caminho "melhor" com fallback silencioso
+esconde que o caminho melhor nunca funciona. Se o fallback é aceitável, ele é o
+comportamento — e o comentário tem de dizer isso.
+
+### O que fica
+
+Ler reações: **não entregue**, sem fonte de entrada neste build.
+Ler menções: implementável, e **improvável neste fixture** — nenhuma das 385
+mensagens menciona alguém, e criar uma exigiria enviar com menção, que é outra
+capacidade.
+
+**Status**: não entregue.
