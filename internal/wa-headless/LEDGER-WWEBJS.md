@@ -314,19 +314,19 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `AUTHENTICATED` | — | `MISSING` | **sem observável neste build**: o boot ou chega a APP_READY verificado ou falha; não há um degrau "credenciais aceitas, app ainda montando" que este módulo consiga distinguir (H88) |
 | `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PARTIAL` | o evento carrega o ESTÁGIO do boot; um boot que morre em `not_ready` contra uma tela de QR é o caso do upstream, mas o MOTIVO (a classe da página) não viaja no evento — `BootFailure` o guarda na mensagem de erro, e mensagem de erro não entra no barramento (H88) |
 | `READY` | events.SessionReady | `PROVEN` | no barramento desde a H88, e distingue um ready ORDINÁRIO de um que recuperou um perfil suspeito — a quitação da invariante 2 fica contada em vez de inferida |
-| `CHAT_REMOVED` | — | `MISSING` | sem equivalente |
+| `CHAT_REMOVED` | — | `MISSING` | o método correspondente não existe (não apagamos conversa), e provar o evento exigiria destruir a fixture — a regra do barramento é que um tipo entra quando um teste o dispara SOB DEMANDA (H88) |
 | `CHAT_ARCHIVED` | events.ChatChanged | `PARTIAL` | o nosso evento é grosso: diz que a conversa mudou, não QUAL campo (H87) |
 | `MESSAGE_RECEIVED` | events.MessageAdded | `PROVEN` | disparado ao vivo por um envio (H87) |
-| `MESSAGE_CIPHERTEXT` | — | `MISSING` | sem equivalente |
-| `MESSAGE_CIPHERTEXT_FAILED` | — | `MISSING` | sem equivalente |
+| `MESSAGE_CIPHERTEXT` | — | `MISSING` | **vive abaixo do modelo**: é a mensagem antes de decifrar, e este barramento escuta COLEÇÕES, não o fio. É a linha concreta que autorizaria descer ao decodificador de stanzas, quando for atacada (H88) |
+| `MESSAGE_CIPHERTEXT_FAILED` | — | `MISSING` | idem `MESSAGE_CIPHERTEXT` (H88) |
 | `MESSAGE_CREATE` | events.MessageAdded | `PARTIAL` | o mesmo evento cobre os dois; o upstream distingue criada de recebida e nós não (H87) |
 | `MESSAGE_REVOKED_EVERYONE` | events.MessageRevoked | `PROVEN` | disparado ao vivo; reconhecido pelo predicado de TRÊS sinais que a capacidade de apagar mede (H87) |
-| `MESSAGE_REVOKED_ME` | — | `MISSING` | sem equivalente |
+| `MESSAGE_REVOKED_ME` | — | `MISSING` | não temos "apagar para mim"; `revoke.ForEveryone` é o único caminho implementado. É falta de MÉTODO antes de ser falta de evento (H88) |
 | `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
 | `MESSAGE_EDIT` | events.MessageEdited | `PROVEN` | disparado ao vivo por uma edição (H87) |
 | `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | idem |
 | `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
-| `MEDIA_UPLOADED` | — | `MISSING` | sem equivalente |
+| `MEDIA_UPLOADED` | — | `MISSING` | `send.SendMedia` o dispararia, e `message.added` com `Kind` PODE já cobrir a semântica — mas isso não foi medido, e "provavelmente coberto" não é um estado deste vocabulário (H88) |
 | `CONTACT_CHANGED` | events.ContactChanged | `PARTIAL` | instalado; NÃO provado neste barramento — nada aqui faz outra conta mudar o perfil (H87) |
 | `GROUP_JOIN` | — | `MISSING` | **medido impossível neste barramento**: mudança de participante produz ZERO evento na sessão que a fez (H86) |
 | `GROUP_LEAVE` | — | `MISSING` | idem GROUP_JOIN (H86) |
