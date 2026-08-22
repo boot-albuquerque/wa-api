@@ -1392,7 +1392,7 @@ min_func_coverage=747
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=869
+min_errpath_coverage=870
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1623,7 +1623,7 @@ min_errpath_coverage=869
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=624
+min_eligible=625
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.

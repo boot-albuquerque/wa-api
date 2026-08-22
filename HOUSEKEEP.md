@@ -17415,8 +17415,81 @@ mudam o contrato:
    categoria errada. `429` importa: é o único destes que o cliente DEVE repetir,
    e mais tarde.
 
-**Status**: não corrigido. Conjunto enumerado e reproduzido; pendente das duas
-decisões acima.
+**Decisão do canal (2026-08-21)**: `43=c` — categoria nova, 422; `44=a` —
+acrescentar `CategoryForbidden` (403) e `CategoryRateLimited` (429).
+
+**Status**: **PARCIALMENTE CORRIGIDO** — a tradução existe e está ligada ao
+caminho medido; falta ligá-la ao resto do conjunto.
+
+**Feito**:
+
+- `apperr`: três categorias novas — `CategoryUpstreamRejected` (422),
+  `CategoryForbidden` (403), `CategoryRateLimited` (429), com o porquê de cada
+  uma escrito onde ela é declarada.
+- `internal/wa-noise/main.go`: as catorze sentinelas de info query e o tipo
+  `IQError` reexportados pela fachada do fork. É a forma sancionada — nenhum
+  consumidor passa a importar `core/`, e o `waclient-facade-check` continua
+  verde.
+- `pkg/infra/wa-noise/client/iqerror.go`: `ClassifyIQ(err)`. Vive aqui porque é
+  o único sítio que a ADR-001 autoriza a ver as sentinelas.
+- Ligado em `adapters/user/blocklist.go`, nos três pontos que fazem info query.
+
+**Verificado em campo** (mesma medição que abriu a entrada):
+
+```
+antes:  POST /user/block {"Phone":"5511000000001"} -> 500 {"error":"internal server error"}
+depois: POST /user/block {"Phone":"5511000000001"} -> 422 {"error":{"code":"upstream_rejected",
+                                                     "message":"WhatsApp refused this request;
+                                                      repeating it unchanged will not help"}}
+```
+
+E o erro de montante continua no log, alcançável por `errors.Is`:
+
+```
+ERR Failed to block user error="WhatsApp refused this request; repeating it
+    unchanged will not help: info query returned status 400: bad-request"
+```
+
+**Testes**: `TestClassifyIQ_ORecusadoMedidoDeixaDeSer500` (o caso de campo, com
+os valores observados), `TestClassifyIQ_CadaRecusaTemOSeuStatus` (as catorze
+sentinelas mais um código que o servidor invente) e
+`TestClassifyIQ_NaoTocaNoQueNaoEhRecusa` (o limite).
+
+**Controlos negativos, os quatro mordendo à primeira**:
+
+```
+CN-A 400 volta a CategoryInternal -> FAIL "status = 500, quero 422"
+CN-B 429 deixa de ser retentável  -> FAIL TestClassifyIQ_CadaRecusaTemOSeuStatus
+CN-C tradutor embrulha TUDO       -> FAIL "erro alheio foi trocado" + "o timeout foi
+                                     classificado como recusa"
+CN-D mensagem leva texto interno  -> FAIL "a mensagem ao cliente contém \"info query\""
+```
+
+O CN-C é o que interessa mais: um tradutor que embrulhasse tudo transformaria
+falha de transporte e bug NOSSO em recusa de montante — a mesma classe de
+mentira, na direção oposta. E separa recusa de silêncio: `ErrIQTimedOut` **não**
+é recusa, porque o servidor não disse nada. Isso é a F209, não esta.
+
+**O QUE FALTA, e é a maior parte**: o `ClassifyIQ` está ligado a **3** dos ~66
+pontos de info query. Os outros continuam a devolver 500 para recusas de
+montante. Não foi feito porque não há ponto único: os adaptadores devolvem o
+erro cru do SDK e a fachada é uma interface com as assinaturas exatas dele, cujo
+`RealClient` promove os métodos em vez de os escrever — não há sítio por onde
+embrulhar todos de uma vez sem escrever ~50 wrappers.
+
+As alternativas, para quem pegar nisto:
+
+1. **Wrappers explícitos no `RealClient`** — fiel à decisão 42=b, mecânico,
+   ~50 métodos num ficheiro. Torna o `Client` menos "assinatura exata do SDK",
+   que é uma propriedade que o comentário de `client.go:21` defende.
+2. **`ClassifyIQ` em cada adaptador**, como aqui. Simples e local, mas são ~66
+   sítios e nada impede o próximo de esquecer.
+3. **Classificar no `RespondJSON`** — ponto verdadeiramente único, mas obrigaria
+   a presentation a conhecer o vocabulário do fork, ou a receber o
+   classificador injetado no bootstrap.
+
+Nenhuma é obviamente certa; a 1 é a que a decisão 42=b implica. **Não avancei
+para não escolher sozinho uma mudança estrutural de 50 métodos.**
 
 ---
 

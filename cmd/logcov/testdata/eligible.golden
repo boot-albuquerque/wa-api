@@ -2754,9 +2754,12 @@ pkg/infra/wa-noise/adapters/user.getCachedPNForLID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.normalizeBlocklistJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.resolveBlocklistPNJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.toDomainBlocklist	EXCLUDED	X5
+pkg/infra/wa-noise/client.ClassifyIQ	ELIGIBLE	covered
 pkg/infra/wa-noise/client.ClientForGetter	EXCLUDED	X1
 pkg/infra/wa-noise/client.ClientForGetter.func1	EXCLUDED	X6
 pkg/infra/wa-noise/client.RealClient.Store	EXCLUDED	X1
+pkg/infra/wa-noise/client.classifyIQCode	EXCLUDED	X1
+pkg/infra/wa-noise/client.iqMessage	EXCLUDED	X1
 pkg/infra/wa-noise/client/testkit.AppErrCode	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ContactStore.GetAllContacts	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.ContactStore.GetContact	EXCLUDED	X5

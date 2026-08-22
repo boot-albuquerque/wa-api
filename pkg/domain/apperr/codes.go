@@ -68,6 +68,45 @@ const (
 	// we did not.
 	CategoryNotImplemented Category = "not_implemented"
 
+	// CategoryForbidden covers a request whose credentials are valid but whose
+	// TARGET refuses it — the upstream WhatsApp server answering 403 forbidden.
+	//
+	// It is not CategoryUnauthorized (401): 401 tells the caller "authenticate,
+	// or present better credentials", and there are no better credentials to
+	// present. The session is authenticated; the operation is not permitted on
+	// that target. Squashing the two makes a caller retry a login that was
+	// never the problem (F204).
+	CategoryForbidden Category = "forbidden"
+
+	// CategoryRateLimited covers upstream throttling — WhatsApp answering 429
+	// rate-overlimit.
+	//
+	// It is the ONLY category here that the caller should retry unchanged, and
+	// the only reason it is worth its own entry: under CategoryInternal (500)
+	// it is indistinguishable from "we broke", and under CategoryValidation
+	// (400) the caller would edit a payload that is already correct. Both send
+	// the caller to the wrong remedy (F204).
+	CategoryRateLimited Category = "rate_limited"
+
+	// CategoryUpstreamRejected covers a well formed, authorized request that
+	// the WhatsApp server REFUSED — most often 400 bad-request for a number
+	// with no WhatsApp account.
+	//
+	// It exists because every other category lies about this case, and the
+	// measurement that produced F204 shows all three lies:
+	//
+	//   - CategoryInternal (500), what we did before, says "we broke, retry".
+	//     The caller retries forever; the answer never changes.
+	//   - CategoryValidation (400) says "fix your payload". The payload is a
+	//     well formed phone number. There is nothing to fix.
+	//   - CategoryNotFound (404) reads truthfully for the measured case, but it
+	//     is US reinterpreting: the server said 400, not 404, and the same 400
+	//     covers refusals that are not "absent".
+	//
+	// 422 says what actually happened: the request was understood and refused
+	// by the party upstream, and repeating it unchanged will not help.
+	CategoryUpstreamRejected Category = "upstream_rejected"
+
 	// CategoryInternal covers everything the caller cannot fix by changing
 	// their request: downstream failures, bugs, unexpected state.
 	CategoryInternal Category = "internal"
@@ -96,6 +135,12 @@ func (c Category) HTTPStatus() int {
 		return http.StatusNotFound
 	case CategoryNotImplemented:
 		return http.StatusNotImplemented
+	case CategoryForbidden:
+		return http.StatusForbidden
+	case CategoryRateLimited:
+		return http.StatusTooManyRequests
+	case CategoryUpstreamRejected:
+		return http.StatusUnprocessableEntity
 	case CategoryInternal:
 		return http.StatusInternalServerError
 	default:
