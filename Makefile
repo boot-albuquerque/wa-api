@@ -216,7 +216,33 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 ##@ Quality
 
 lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
+	@# F220: a cache do golangci-lint retem resultados de OUTRAS worktrees e
+	@# continua a reporta-los depois de elas serem apagadas. Medido em
+	@# 2026-08-22: 749 linhas de issue apontavam para uma worktree removida
+	@# minutos antes, e a contagem dava 374 contra a baseline de 356. Com a
+	@# cache limpa: 0 estrangeiras e 356, exato.
+	@#
+	@# A contaminacao RECONSTROI-SE: basta uma worktree nascer e morrer. Nao
+	@# e' um estado antigo que se limpa uma vez.
+	@#
+	@# Custo medido: 5s (quente) -> 87s (limpa), +82s. Aceitavel num `make
+	@# check` de mais de quinze minutos, e o que se compra e' a unica TRAVA
+	@# do gate (max_complexity) passar a medir codigo que esta' sob teste.
+	@$(LINT) cache clean >/dev/null 2>&1 || true
 	@$(LINT) run --issues-exit-code 0 $(LINT_TARGETS) 2>&1 | tee .lint.out
+	@# Guarda da F220: `cache clean` sozinho seria "limpamos e esperamos".
+	@# Isto VERIFICA. Os alvos sao todos ./..., portanto qualquer issue com
+	@# caminho relativo para fora do modulo veio da cache, nao do codigo sob
+	@# teste. FALHA FECHADO: contaminacao silenciosa e' pior que gate ruidoso.
+	@alheias=$$(grep -cE '^\.\./' .lint.out || true); \
+	 if [ "$$alheias" -gt 0 ]; then \
+	   echo "FALHA: $$alheias issue(s) apontam para fora do modulo (F220)."; \
+	   echo "       A cache do golangci-lint esta' a reportar outra worktree."; \
+	   echo "       Exemplos:"; \
+	   grep -E '^\.\./' .lint.out | head -3 | sed 's/^/         /'; \
+	   echo "       Corra: $(LINT) cache clean"; \
+	   exit 1; \
+	 fi
 	@found=$$(grep -oE '^[0-9]+ issues' .lint.out | grep -oE '^[0-9]+' | tail -1); \
 	 if [ -z "$$found" ]; then \
 	   echo "FALHA: nao consegui extrair a contagem de issues de .lint.out."; \

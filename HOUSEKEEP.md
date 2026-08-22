@@ -20354,7 +20354,52 @@ do alvo `lint` do `Makefile`. Custo declarado: +82 s.
 
 **Status**: não corrigido — mas já não falta medição, falta decisão.
 
-<!-- f-status: aberto -->
+
+### CORRIGIDO 2026-08-22 — e o que NÃO consegui provar
+
+Duas mudanças no alvo `lint` do `Makefile`:
+
+1. `golangci-lint cache clean` antes da execução (+82 s medidos).
+2. **Uma guarda que VERIFICA**, porque `cache clean` sozinho seria "limpamos e
+   esperamos que chegue": se alguma issue tiver caminho relativo para fora do
+   módulo (`^../`), o gate FALHA com a lista e a instrução. Os alvos são todos
+   `./...`, portanto qualquer `../` veio da cache, não do código sob teste.
+
+Falha FECHADO de propósito: uma medição errada em silêncio é pior que um gate
+ruidoso — foi por isso que eu próprio afirmei "o máximo local é 26" quando era
+50.
+
+**Controlo negativo — o que consegui e o que NÃO consegui:**
+
+CONSEGUI, sobre a lógica da guarda: injetei uma linha
+`../../../../../orca/workspaces/wa-api/fantasma/pkg/x.go:1:1: ...` no
+`.lint.out` e a condição disparou, com a mensagem e os exemplos corretos.
+
+**NÃO CONSEGUI reproduzir a contaminação real.** Criei uma worktree
+(`/tmp/wt-fantasma`), corri lint lá dentro, removi-a, retirei o `cache clean`
+do Makefile e corri `make lint`: **zero caminhos estrangeiros, gate verde**. O
+controlo negativo passou VERDE — e, pela regra deste repositório, um controlo
+negativo verde significa que ou a asserção não morde, ou a condição não foi
+reproduzida. Aqui é a segunda: não havia contaminação para apanhar.
+
+Nota sobre a minha própria verificação: ao confirmar que tinha removido o
+`cache clean`, corri `grep -c "cache clean" Makefile` e obtive `1`, e quase
+concluí que a remoção falhara. O `1` era o COMENTÁRIO que eu tinha acabado de
+escrever, que também contém a expressão. Só uma âncora ao início da linha
+executável (`^\t@\$(LINT) cache clean`) deu a resposta certa.
+
+**O que isto significa para a confiança nesta correção**: o fenómeno foi medido
+DUAS vezes (749 e 322 linhas estrangeiras) e `cache clean` levou-o a zero das
+duas. Mas não sei INVOCÁ-LO, e portanto não posso provar que o `cache clean`
+previne o caso geral. **A guarda não depende disso**: ela apanha a contaminação
+venha de onde vier, incluindo de um mecanismo que eu ainda não entendi.
+
+**Diferença ainda por explicar**: as contaminações reais vieram de worktrees
+sob `orca/workspaces/` e de um `/tmp/wa-lintbase` (que já não existe e não é
+referenciado por nenhum ficheiro do repo). A minha worktree de teste, em
+`/tmp/`, não contaminou. Não sei por quê, e não invento explicação.
+
+<!-- f-status: corrigido -->
 
 ## F221 — `ALBUM_IMAGE` não é um enum de carrossel: o álbum é outro mecanismo
 
