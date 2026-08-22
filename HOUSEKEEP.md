@@ -9664,7 +9664,15 @@ escopo** (reply-to não implementado; mesma dívida da F134), com a separação 
 validação do destinatário resolvida — ver F148. **Status real: CORRIGIDO**
 (decisão tomada e implementada no CAP-21).
 
-<!-- f-status: aberto -->
+**Registo do descarte (W11, 2026-08-22)**: o descarte silencioso do ponto 1
+já deixa rastro em log desde a [[F186]] (decisão 54=a do canal): cada botão
+descartado emite Warn com `receivedType`, `reason`, `clientMsgID`, `title`
+e `acceptedTypes`. Travado por `TestSendButtons_DroppedButtonIsRecorded` e
+`TestSendButtons_ValidTypesProduceNoDropRecord`. O ponto 2
+(`ContextInfo`/`QuotedMessage`) continua fora de escopo — é recurso em
+falta, não defeito.
+
+<!-- f-status: corrigido -->
 
 ## F148
 
@@ -10023,7 +10031,27 @@ morde em `TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`
 compilaram e reverteram por edição localizada, `git diff` vazio depois.
 **Status real: CORRIGIDO** (CAP-22).
 
-<!-- f-status: aberto -->
+**Registo do descarte (W11, 2026-08-22)**: os três descartes silenciosos
+passaram a deixar rastro em log, na mesma forma da [[F186]] (decisão 54=a
+do canal). `normalizeRows` e `normalizeListSections` devolvem o que
+descartaram; o `Execute` regista cada linha descartada (razão `empty_title`,
+com `sectionIndex` e `rowIndex`) e cada seção descartada (razão
+`no_surviving_rows`, com `sectionIndex` e `sectionTitle`). O comportamento
+não muda — 200 com menos itens continua a ser 200 — e agora o operador sabe
+QUAL item sumiu e PORQUE.
+
+Travado por `TestSendList_DroppedRowIsRecorded`,
+`TestSendList_DroppedSectionIsRecorded` e
+`TestSendList_ValidPayloadProducesNoDropRecord` (controle positivo que
+impede Warn em todo envio). Três controlos negativos executados:
+
+| # | mutação | teste | resultado |
+|---|---|---|---|
+| CN-1 | remove o loop de Warn de linha descartada | `DroppedRowIsRecorded` | FAIL — `nenhum Warn de linha descartada` |
+| CN-2 | remove o loop de Warn de seção descartada | `DroppedSectionIsRecorded` | FAIL — `nenhum Warn de secao descartada` |
+| CN-3 | emite Warn spurious em todo envio | `ValidPayloadProducesNoDropRecord` | FAIL — `aviso de descarte emitido sem descarte` |
+
+<!-- f-status: corrigido -->
 
 ## F150
 

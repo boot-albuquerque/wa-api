@@ -472,3 +472,148 @@ func TestSendList_MessageIDIsTheOneActuallySent(t *testing.T) {
 		t.Errorf("MessageID: got %q, want %q", result.MessageID, "id-que-o-sdk-usou")
 	}
 }
+
+// --- Discard logging (F149, same form as F186 / send_buttons) ---
+
+// TestSendList_DroppedRowIsRecorded trava o registo do PRIMEIRO descarte:
+// linha sem título some E deixa rastro. O comportamento continua idêntico
+// (duas linhas enviadas, não três), e agora o log diz QUAL foi e PORQUE.
+func TestSendList_DroppedRowIsRecorded(t *testing.T) {
+	sm := &contractsfake.SimpleMessenger{}
+	logger := &contractsfake.Logger{}
+
+	req := validListRequest()
+	req.ID = "lista-abc"
+	req.Sections = []domain.ListSection{{
+		Title: "Cardapio",
+		Rows: []domain.ListRow{
+			{Title: "Feijoada"},
+			{Title: "   "},
+			{Title: "Moqueca"},
+		},
+	}}
+
+	result, err := newSendList(sm, listJIDResolver(), logger).Execute(context.Background(), userID, req)
+	if err != nil {
+		t.Fatalf("envio recusado: %v (o descarte é parcial, o resto tem de ir)", err)
+	}
+	if result == nil {
+		t.Fatal("sem resultado")
+	}
+
+	if n := len(sm.SendListCalls); n != 1 {
+		t.Fatalf("SendList chamado %d vez(es), quero 1", n)
+	}
+	if got := len(sm.SendListCalls[0].Payload.Sections[0].Rows); got != 2 {
+		t.Fatalf("linhas enviadas = %d, quero 2 (o registro não pode alterar o descarte)", got)
+	}
+
+	var rec *contractsfake.LogRecord
+	for i, r := range logger.Records() {
+		if r.Level == contractsfake.LevelWarn && strings.Contains(r.Msg, "row dropped") {
+			rec = &logger.Records()[i]
+			break
+		}
+	}
+	if rec == nil {
+		t.Fatalf("nenhum Warn de linha descartada; registros = %+v", logger.Records())
+	}
+
+	for _, tc := range []struct {
+		key  string
+		want any
+	}{
+		{"clientMsgID", "lista-abc"},
+		{"reason", "empty_title"},
+		{"sectionIndex", 0},
+		{"rowIndex", 1},
+	} {
+		got, ok := rec.Keyval(tc.key)
+		if !ok {
+			t.Errorf("campo %q ausente do registro de descarte", tc.key)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("campo %q = %v, quero %v", tc.key, got, tc.want)
+		}
+	}
+}
+
+// TestSendList_DroppedSectionIsRecorded trava o registo do SEGUNDO descarte:
+// seção que ficou sem linhas some E deixa rastro.
+func TestSendList_DroppedSectionIsRecorded(t *testing.T) {
+	sm := &contractsfake.SimpleMessenger{}
+	logger := &contractsfake.Logger{}
+
+	req := validListRequest()
+	req.ID = "lista-sec"
+	req.Sections = []domain.ListSection{
+		{Title: "Vazia", Rows: []domain.ListRow{{Title: "  "}, {}}},
+		{Title: "Sobrevive", Rows: []domain.ListRow{{Title: "Item"}}},
+	}
+
+	result, err := newSendList(sm, listJIDResolver(), logger).Execute(context.Background(), userID, req)
+	if err != nil {
+		t.Fatalf("envio recusado: %v", err)
+	}
+	if result == nil {
+		t.Fatal("sem resultado")
+	}
+
+	sections := sm.SendListCalls[0].Payload.Sections
+	if len(sections) != 1 {
+		t.Fatalf("secoes enviadas = %d, quero 1", len(sections))
+	}
+
+	var secRec *contractsfake.LogRecord
+	for i, r := range logger.Records() {
+		if r.Level == contractsfake.LevelWarn && strings.Contains(r.Msg, "section dropped") {
+			secRec = &logger.Records()[i]
+			break
+		}
+	}
+	if secRec == nil {
+		t.Fatalf("nenhum Warn de secao descartada; registros = %+v", logger.Records())
+	}
+
+	for _, tc := range []struct {
+		key  string
+		want any
+	}{
+		{"clientMsgID", "lista-sec"},
+		{"reason", "no_surviving_rows"},
+		{"sectionIndex", 0},
+		{"sectionTitle", "Vazia"},
+	} {
+		got, ok := secRec.Keyval(tc.key)
+		if !ok {
+			t.Errorf("campo %q ausente do registro de descarte de secao", tc.key)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("campo %q = %v, quero %v", tc.key, got, tc.want)
+		}
+	}
+}
+
+// TestSendList_ValidPayloadProducesNoDropRecord é o controle POSITIVO: um
+// envio sem descarte nenhum não emite Warn de descarte. Sem este par, um
+// Warn emitido em TODO envio passaria nas asserções acima e ninguém notaria
+// até o log encher (mesma lição de ValidTypesProduceNoDropRecord em
+// send_buttons_test.go).
+func TestSendList_ValidPayloadProducesNoDropRecord(t *testing.T) {
+	sm := &contractsfake.SimpleMessenger{}
+	logger := &contractsfake.Logger{}
+
+	req := validListRequest()
+
+	if _, err := newSendList(sm, listJIDResolver(), logger).Execute(context.Background(), userID, req); err != nil {
+		t.Fatalf("envio valido recusado: %v", err)
+	}
+
+	for _, r := range logger.Records() {
+		if strings.Contains(r.Msg, "dropped") {
+			t.Fatalf("aviso de descarte emitido sem descarte: %+v", r)
+		}
+	}
+}

@@ -87,7 +87,23 @@ func (uc *SendListUseCase) Execute(ctx context.Context, txtID string, req domain
 		return nil, apperr.New("missing_sections", apperr.CategoryValidation, "missing Sections (or List) in payload", false, nil)
 	}
 
-	sections := normalizeListSections(req.Sections, req.List, req.TopText)
+	sections, droppedRows, droppedSecs := normalizeListSections(req.Sections, req.List, req.TopText)
+	for _, d := range droppedRows {
+		uc.logger.Warn(ctx, "list row dropped: empty title",
+			"txtID", txtID,
+			"clientMsgID", req.ID,
+			"sectionIndex", d.SectionIndex,
+			"rowIndex", d.RowIndex,
+			"reason", d.Reason)
+	}
+	for _, d := range droppedSecs {
+		uc.logger.Warn(ctx, "list section dropped: no surviving rows",
+			"txtID", txtID,
+			"clientMsgID", req.ID,
+			"sectionIndex", d.SectionIndex,
+			"sectionTitle", d.Title,
+			"reason", d.Reason)
+	}
 	if len(sections) == 0 {
 		return nil, apperr.New("no_valid_sections", apperr.CategoryValidation, "no valid sections/rows found in payload", false, nil)
 	}
@@ -150,11 +166,20 @@ func resolveRowID(row domain.ListRow, trimmedTitle string) string {
 // (HOUSEKEEP F149, mesma disciplina de F121/F135/F147/F148). Mandar uma
 // seção com três linhas, duas sem título, faz DUAS sumirem sem aviso;
 // travado por TestSendList_RowWithoutTitleIsSilentlyDiscarded.
-func normalizeRows(in []domain.ListRow) []domain.ListRow {
+//
+// A função devolve o que descartou para que o chamador registe (mesma forma
+// de normalizeInteractiveButtons em send_buttons.go / F186).
+func normalizeRows(in []domain.ListRow, sectionIndex int) ([]domain.ListRow, []droppedRow) {
 	out := make([]domain.ListRow, 0, len(in))
-	for _, row := range in {
+	var dropped []droppedRow
+	for i, row := range in {
 		title := strings.TrimSpace(row.Title)
 		if title == "" {
+			dropped = append(dropped, droppedRow{
+				SectionIndex: sectionIndex,
+				RowIndex:     i,
+				Reason:       rowDropReasonEmptyTitle,
+			})
 			continue
 		}
 		out = append(out, domain.ListRow{
@@ -163,7 +188,7 @@ func normalizeRows(in []domain.ListRow) []domain.ListRow {
 			RowId:       resolveRowID(row, title),
 		})
 	}
-	return out
+	return out, dropped
 }
 
 // normalizeListSections resolve as DUAS formas de entrada do contrato
@@ -183,27 +208,61 @@ func normalizeRows(in []domain.ListRow) []domain.ListRow {
 // `Sections` é a forma PREFERIDA (multi-seção); na ausência dela, `List`
 // (legado) é embrulhado numa seção única cujo título vem de topText,
 // caindo em defaultLegacySectionTitle quando topText vem vazio.
-func normalizeListSections(sections []domain.ListSection, legacy []domain.ListRow, topText string) []domain.ListSection {
+//
+// Devolve os descartes de linha e de seção para que o chamador registe
+// (mesma forma de normalizeInteractiveButtons / F186).
+func normalizeListSections(sections []domain.ListSection, legacy []domain.ListRow, topText string) ([]domain.ListSection, []droppedRow, []droppedSection) {
+	var allDroppedRows []droppedRow
+	var droppedSections []droppedSection
+
 	if len(sections) > 0 {
 		out := make([]domain.ListSection, 0, len(sections))
-		for _, sec := range sections {
-			rows := normalizeRows(sec.Rows)
+		for i, sec := range sections {
+			rows, dr := normalizeRows(sec.Rows, i)
+			allDroppedRows = append(allDroppedRows, dr...)
 			if len(rows) == 0 {
+				droppedSections = append(droppedSections, droppedSection{
+					SectionIndex: i,
+					Title:        strings.TrimSpace(sec.Title),
+					Reason:       sectionDropReasonNoRows,
+				})
 				continue
 			}
 			out = append(out, domain.ListSection{Title: strings.TrimSpace(sec.Title), Rows: rows})
 		}
-		return out
+		return out, allDroppedRows, droppedSections
 	}
 
-	rows := normalizeRows(legacy)
+	rows, dr := normalizeRows(legacy, 0)
+	allDroppedRows = append(allDroppedRows, dr...)
 	if len(rows) == 0 {
-		return nil
+		return nil, allDroppedRows, nil
 	}
 
 	sectionTitle := strings.TrimSpace(topText)
 	if sectionTitle == "" {
 		sectionTitle = defaultLegacySectionTitle
 	}
-	return []domain.ListSection{{Title: sectionTitle, Rows: rows}}
+	return []domain.ListSection{{Title: sectionTitle, Rows: rows}}, allDroppedRows, nil
 }
+
+// droppedRow is one list row that normalizeRows refused, kept so the caller
+// can say WHICH row went and WHY — same pattern as droppedButton (F186).
+type droppedRow struct {
+	SectionIndex int
+	RowIndex     int
+	Reason       string
+}
+
+// droppedSection is one section that normalizeListSections refused because
+// all of its rows were discarded.
+type droppedSection struct {
+	SectionIndex int
+	Title        string
+	Reason       string
+}
+
+const (
+	rowDropReasonEmptyTitle = "empty_title"
+	sectionDropReasonNoRows = "no_surviving_rows"
+)
