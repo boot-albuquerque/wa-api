@@ -67,7 +67,7 @@ max_complexity=50
 # continua em 50. A NOTA do Makefile foi corrigida: agora so' dispara quando count
 # SOBE (catraca direcional), em vez de disparar em qualquer diferenca — o modo
 # anterior fazia o aviso aparecer em toda execucao, tornando-o ruido (F155).
-count=359
+count=350
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
@@ -76,3 +76,8 @@ count=359
 # contra os 56 do repo, entao o gate aguenta sem afrouxar nada. `go vet` no
 # modulo ja' saia limpo. Cobertura continua de fora, de proposito: incluir o
 # modulo obrigaria a BAIXAR min_coverage.
+
+# 359 -> 350 (2026-08-22). A catraca direcional da F155 pediu a descida na
+# primeira utilizacao real: as issues que o W9 contou vinham de ficheiros que
+# outras ondas ainda nao tinham fundido. Descida e' melhoria e a catraca
+# mandou registar em vez de a deixar passar em silencio — que era o ponto dela.
