@@ -1989,7 +1989,7 @@ pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIB
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:45);uncovered:L2(S-ret,send_edit_message.go:48);uncovered:L2(S-ret,send_edit_message.go:63)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
-pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:92)
+pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:108)
 pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:42);uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
