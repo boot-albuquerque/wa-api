@@ -5440,3 +5440,77 @@ duas remedições — e as duas justificativas podres eram podres **por causa do
 trabalho de hoje**, o que significa que um dia produtivo envelhece as próprias
 notas mais depressa do que se atualiza. Toda linha que herda veredito de outra
 ("idem X") é dívida esperando o X mudar.
+
+---
+
+## H174 — Fase 2 abre com a linha de base de teardown, e o instrumento falhou primeiro
+
+**Data**: 2026-08-22
+**Contexto**: primeira medição da Fase 2 (decisão 65). O enunciado pede provar
+"sem leaks/orphans/races", e a regra do projeto manda medir ANTES de projetar.
+
+**Onde**: `internal/wa-headless/probe_teardown_test.go` (novo).
+
+**A lacuna que abriu esta entrada**: `NumGoroutine` aparece em **zero** testes
+deste módulo. A suíte de shutdown prova o CAMINHO do protocolo — que `CleanStop`
+sinaliza, espera e rotula uma recusa — e não diz nada sobre **o que sobra depois**.
+
+**Medição**, três ciclos de boot/stop contra o SPA real:
+
+```
+BASELINE:  goroutines=2   chromes(perfil)=0
+ciclo 1    LIVE 13 / 9     AFTER 2 / 0    (stop via browser.close)
+ciclo 2    LIVE 13 / 9     AFTER 2 / 0
+ciclo 3    LIVE 13 / 9     AFTER 2 / 0
+```
+
+**Sem vazamento e sem órfão.** As 13 goroutines vivas voltam a 2 — o valor da
+linha de base — e os 9 processos de Chrome do perfil são todos ceifados. Três
+ciclos idênticos separam vazamento de aquecimento de runtime, que uma medição
+única não distingue.
+
+**Duas decisões de instrumento que valeram:**
+
+1. **Contar Chrome só DESTE PERFIL.** Contar todo Chrome da máquina mediria o
+   navegador do usuário — erro que quase cometi hoje ao investigar carga, e que
+   só não virou dano porque conferi antes de matar processo.
+2. **Deixar o runtime assentar antes de contar.** Ler `NumGoroutine` logo após um
+   `Stop` conta as que ainda estão morrendo, e isso produz um "vazamento" que
+   some sozinho.
+
+**E o instrumento falhou antes de acertar, pela armadilha que este repositório já
+tem catalogada.** A primeira versão contava com `grep -c`, que **sai com código 1
+quando conta zero** — e zero é justamente a resposta que o teste precisa poder
+ler. Todo teardown devolveu `-1`, e eu quase li isso como "não deu para medir"
+quando era o resultado certo com o instrumento errado. Trocado por `grep -F | wc -l`.
+
+**Status**: linha de base estabelecida. Nenhum defeito encontrado — o que é
+resultado, não ausência dele: agora existe número contra o qual comparar quando
+reconexão, multi-sessão e carga entrarem.
+
+**Lição**: *a primeira medição de uma fase mede o instrumento tanto quanto o
+sistema.* Duas das três decisões acima existem porque a versão ingênua teria
+mentido, e a terceira porque ela mentiu.
+
+---
+
+## Decisões 66 e 67 da orquestração — 2026-08-22
+
+Pedidas como primeira parada da Fase 2 (as dívidas internas acionáveis), ambas
+mudanças de CONTRATO e por isso não decididas aqui.
+
+> **66: Escolha b; identidade não resolvida deve falhar explicitamente, sem rede
+> oculta nem regras duplicadas.**
+
+Ou seja: leitores que recebem `@c.us` num build LID-first **recusam** com erro
+próprio, em vez de (a) resolver internamente — que esconderia ida à rede dentro
+de um leitor — ou (c) aceitar as duas formas — que duplicaria a regra de
+identidade em cada leitor. Aplica-se a `addressbook.DeviceCount`, `chats.ByJID` e
+`chats.MarkUnread` (H148, H151).
+
+> **67: Escolha a; Clear deve provar redução e falhar quando a pós-condição não
+> ocorrer.**
+
+`chats.Clear` ganha `MessagesAfter` e recusa quando não diminuir — com a
+notificação de sistema (`e2e_notification`) tratada como sobrevivente legítima,
+senão a nova pós-condição falharia sempre (H166).
