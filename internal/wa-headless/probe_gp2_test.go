@@ -1107,3 +1107,84 @@ func TestProbeRemainingModules(t *testing.T) {
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("remaining modules:\n%s", out)
 }
+
+// TestProbeEnumerateModules lists what each module ACTUALLY exports, with
+// arities, instead of asking whether a guessed name exists.
+//
+// H137 cost three live runs to learn this: reading the name from the reference
+// is the first step and not the last, because the reference calls names this
+// build does not have. Enumeration answers in one run what guessing answers in
+// three, and it answers correctly.
+//
+// It is deliberately applied to the modules whose rows were classified from a
+// FUNCTION-LEVEL check, since those are the ones a wrong guess could have
+// mis-verdicted.
+func TestProbeEnumerateModules(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_ENUM") == "" {
+		t.Skip("set WA_PROBE_ENUM=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__en = null;
+	const out = {};
+	const names = [
+		"WAWebNewsletterUpdateUserSettingJob","WAWebNoteAction","WAWebRevokeStatusAction",
+		"WAWebChangeNewsletterOwnerAction","WAWebMexAcceptNewsletterAdminInviteJob",
+		"WAWebMexRevokeNewsletterAdminInviteJob","WAWebBizOrderBridge",
+		"WAWebGroupInviteV4Job","WAWebGroupModifyInfoJob","WAWebNewsletterSubscribeAction",
+	];
+	for (const n of names) {
+		try {
+			const m = window.require(n);
+			if (!m) { out[n] = "falsy"; continue; }
+			const fns = {};
+			for (const k of Object.keys(m)) { if (typeof m[k] === "function") { fns[k] = m[k].length; } }
+			out[n] = fns;
+		} catch (e) { out[n] = "absent"; }
+	}
+	window.__en = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__en", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("module exports:\n%s", out)
+}

@@ -10721,3 +10721,63 @@ coisa acontecer**, e este módulo não assina a diferença.
 
 **Status**: parcialmente entregue — forma resolvida e registrada, prova
 impossível por falta de oráculo.
+
+## H138 — a coleção que não busca: uma causa por baixo de cinco linhas
+
+**Data**: 2026-08-22. **Contexto**: aplicar a lição da H137 — enumerar em vez de
+adivinhar — aos módulos cujas linhas eu tinha classificado a partir de uma
+verificação por NOME de função.
+
+**Onde**: `internal/wa-headless/probe_gp2_test.go`
+(`TestProbeEnumerateModules`), `probe_follow_test.go`.
+
+### A enumeração achou uma função que a referência não chama
+
+`WAWebNewsletterSubscribeAction` exporta **duas**:
+
+```
+subscribeToNewsletterAction     arity 3   <- a que a referência chama
+subscribeToNewsletterWidAction  arity 2   <- ninguém tinha olhado
+```
+
+A H123 concluiu "assinar é impossível" olhando só a primeira, que quer um modelo
+memoizado que a busca quebrada não produz. A segunda aceita um **Wid**, que é
+exatamente o que quem tem um código de convite consegue construir.
+
+### E ela falhou de um jeito mais informativo
+
+```
+subscribeToNewsletterWidAction(wid, {eventSurface:3})
+  -> t.markFetchStart is not a function
+```
+
+Erro NOVO. A função aceitou o argumento e morreu **dentro**, num método da
+coleção que não existe.
+
+Somando com o que já sabíamos:
+
+```
+NewsletterCollection.find  -> findImpl ausente        (H123)
+Chat.find                  -> findImpl ausente        (H136)
+subscribe by wid           -> markFetchStart ausente  (H138)
+```
+
+**A conclusão da H123 fica de pé e a CAUSA fica nomeada**: não é a assinatura que
+falta, é a coleção que **não busca**. Este build entrega as coleções sem a
+maquinaria de fetch, e tudo que exige "traga um canal que eu não tenho" morre no
+mesmo buraco — assinar, silenciar, buscar mensagens.
+
+Isso vale mais que as duas linhas que atualiza. Diz à próxima pessoa o que
+verificar num build futuro: **um único** método de coleção voltando destrava
+cinco linhas de uma vez, e testar cada uma separadamente seria cinco descobertas
+do mesmo fato.
+
+### Confirmação de passagem
+
+A enumeração também confirmou a H125 pelo caminho certo: `WAWebGroupInviteV4Job`
+exporta **apenas** `revokeGroupInviteV4`. Não há aceitação de convite v4 neste
+build — antes eu sabia que os dois nomes que procurei não existiam, agora sei que
+não existe nenhum.
+
+**Status**: entregue — causa isolada, duas linhas com veredito mais preciso, e
+uma confirmação que antes era ausência de evidência.

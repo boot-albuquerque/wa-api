@@ -234,3 +234,110 @@ func TestProbeSubscribeShapes(t *testing.T) {
 }
 
 func strconvQuote(s string) string { return "\"" + s + "\"" }
+
+// TestProbeSubscribeByWid revisits H123 with the instrument H137 taught.
+//
+// H123 concluded that subscribing is impossible on this build: the function the
+// REFERENCE calls, subscribeToNewsletterAction, has arity 3 here and wants a
+// memoised collection model that the broken find cannot produce.
+//
+// Enumerating the module (H137's lesson) found a SECOND function the reference
+// never calls: subscribeToNewsletterWidAction, arity 2, taking a Wid — which is
+// exactly what a caller holding an invite code can build.
+//
+// AUTHORISED: the user authorised subscribing to this channel. The unsubscribe
+// is registered before the attempt.
+func TestProbeSubscribeByWid(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_SUBWID") == "" {
+		t.Skip("set WA_PROBE_SUBWID=1 (this may SUBSCRIBE to a channel)")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	code := strings.TrimSpace(os.Getenv("WA_CHANNEL_CODE"))
+	if profile == "" || code == "" {
+		t.Skip("WA_SEND_FROM_PROFILE and WA_CHANNEL_CODE are required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	m := channel.NewManager(runner, eval)
+
+	// WHATEVER GETS FOLLOWED, UNFOLLOW IT — registered before the attempt.
+	defer func() {
+		list, err := m.Followed(ctx, "probe/subwid-undo")
+		if err != nil {
+			t.Errorf("Followed (undo): %v", err)
+			return
+		}
+		for _, e := range list {
+			if _, err := m.Unfollow(ctx, e.JID, "probe/subwid-undo"); err != nil {
+				t.Errorf("UNFOLLOW FAILED for one channel: %v", err)
+			}
+		}
+		t.Logf("undo: %d channel(s) unfollowed", len(list))
+	}()
+
+	var ignored string
+	if err := eval(ctx, "window.__code = "+quoteJSString(code)+"; \"set\"", &ignored); err != nil {
+		t.Fatalf("set code: %v", err)
+	}
+	script := `(() => {
+	window.__sw = null;
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g,'<r>').slice(0,150);
+	(async () => {
+	try {
+		const out = {};
+		const Q = window.require("WAWebNewsletterMetadataQueryJob");
+		const W = window.require("WAWebWidFactory");
+		const S = window.require("WAWebNewsletterSubscribeAction");
+		const NC = window.require("WAWebCollections").WAWebNewsletterCollection;
+
+		const md = await Q.queryNewsletterMetadataByInviteCode(window.__code);
+		const idJid = md && (md.idJid || md.id);
+		const jid = (idJid && idJid._serialized) ? idJid._serialized : String(idJid || "");
+		out.jidLen = jid.length;
+		out.before = NC.getModelsArray().length;
+
+		const wid = W.createWid(jid);
+		try {
+			await S.subscribeToNewsletterWidAction(wid, {eventSurface: 3});
+			out.subscribed = true;
+		} catch (e) { out.subscribed = false; out.why = safe(e); }
+		out.after = NC.getModelsArray().length;
+		window.__sw = JSON.stringify(out);
+	} catch (e) { window.__sw = JSON.stringify({err: safe(e)}); }
+	})();
+	return 'kicked';
+})()
+`
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(45 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__sw", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	t.Logf("subscribe by wid: %s", raw)
+}
+
+func quoteJSString(s string) string { return "\"" + s + "\"" }
