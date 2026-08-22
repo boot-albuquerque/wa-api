@@ -39,6 +39,25 @@ func (d *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 
 func res(d *pageDouble) *Resolver { return New(engine.NewRunner(), d.eval) }
 
+// withoutComments strips // comments before a script is asserted against.
+//
+// IT EXISTS BECAUSE A GUARD MATCHED ITS OWN COMMENT, which is the tenth time
+// this repository has hit that: the assertion "the script does not call
+// getCurrentLid" failed against a comment EXPLAINING why it does not call
+// getCurrentLid. A test that reads prose as code passes and fails for reasons
+// unrelated to behaviour.
+func withoutComments(script string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(script, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 // THE RESOLUTION IS REPORTED, NOT HIDDEN. A caller that asked about a phone jid
 // and got a LID back needs to know the two differ — that is the entire point of
 // asking.
@@ -164,5 +183,124 @@ func TestTheParkedLoopIsBounded(t *testing.T) {
 	_, err := res(d).NumberID(context.Background(), "1@c.us", "t")
 	if err == nil || !strings.Contains(err.Error(), "never settled") {
 		t.Fatalf("err = %v, want a settle timeout", err)
+	}
+}
+
+// A LID INPUT DOES NOT QUERY. The identity that was handed in is already one
+// half of the answer, and asking the server for something already in hand would
+// spend a round trip per contact on a roster walk.
+func TestALidInputIsNotResolvedAgain(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"lid":"1@lid","pn":"","queried":false}`}
+	got, err := res(d).LidAndPhone(context.Background(), "1@lid", "t")
+	if err != nil {
+		t.Fatalf("LidAndPhone: %v", err)
+	}
+	if got.Queried {
+		t.Fatal("a lid input reported a server query")
+	}
+	// A REGRA E' ESTRUTURAL E TEM DE SER AFIRMADA SOBRE O SCRIPT. O duble
+	// devolve `queried` a partir do seu proprio campo, entao um script que
+	// consultasse assim mesmo passaria — foi o que um primeiro controle
+	// negativo mostrou ao nao morder.
+	code := withoutComments(d.lastScript)
+	iReturn := strings.Index(code, "queried: false })")
+	iResolve := strings.Index(code, "await resolve(")
+	if iReturn < 0 || iResolve < 0 {
+		t.Fatalf("script shape changed (return=%d resolve=%d)", iReturn, iResolve)
+	}
+	if iResolve < iReturn {
+		t.Fatal("the resolution is reached before the lid branch returns, so a lid " +
+			"input would still cost a server round trip per contact")
+	}
+	if got.LID != "1@lid" {
+		t.Fatalf("the lid that was handed in did not come back: %#v", got)
+	}
+	if got.Complete() {
+		t.Fatal("Complete() claimed both halves when the phone side is empty")
+	}
+}
+
+// AN ABSENT HALF STAYS ABSENT. The whole point of this type is to keep "the page
+// did not produce it" distinct from "there is none", and a version that filled
+// the gap by echoing the input would report a phone number it invented.
+func TestAnAbsentHalfIsNotFilledIn(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"lid":"1@lid","pn":"","queried":false}`}
+	got, err := res(d).LidAndPhone(context.Background(), "1@lid", "t")
+	if err != nil {
+		t.Fatalf("LidAndPhone: %v", err)
+	}
+	if got.PN != "" {
+		t.Fatalf("the missing phone side was filled in with %q", got.PN)
+	}
+}
+
+// THE SCRIPT BRANCHES ON isLid BEFORE ASKING FOR THE PHONE NUMBER. Calling
+// getPhoneNumber with a phone jid throws "WaWebLidPnCache - Invalid get call
+// (not lid)" — measured by making that exact mistake.
+func TestThePairScriptGuardsGetPhoneNumber(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"lid":"1@lid","pn":"","queried":false}`}
+	if _, err := res(d).LidAndPhone(context.Background(), "1@lid", "t"); err != nil {
+		t.Fatalf("LidAndPhone: %v", err)
+	}
+	code := d.lastScript
+	iGuard := strings.Index(code, `asked.server === "lid"`)
+	iCall := strings.Index(code, "getPhoneNumber")
+	if iGuard < 0 || iCall < 0 {
+		t.Fatalf("script missing the guard or the call (guard=%d call=%d)", iGuard, iCall)
+	}
+	if iGuard > iCall {
+		t.Fatal("getPhoneNumber is reached before the isLid guard, so a phone jid " +
+			"would throw inside the page")
+	}
+}
+
+// THE PHONE SIDE DOES NOT COME FROM getCurrentLid, and this is the divergence
+// from the reference. Its helper calls queryWidExists and then getCurrentLid
+// again; measured here, that second call still comes back empty for a peer this
+// module resolves every day, so the helper would answer {} about somebody
+// perfectly reachable. The lid comes from the resolution's own result.
+func TestThePairScriptTakesTheLidFromTheResolution(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"lid":"1@lid","pn":"55@c.us","queried":true}`}
+	if _, err := res(d).LidAndPhone(context.Background(), "55@c.us", "t"); err != nil {
+		t.Fatalf("LidAndPhone: %v", err)
+	}
+	if strings.Contains(withoutComments(d.lastScript), "getCurrentLid") {
+		t.Fatal("the script asks getCurrentLid, which was measured empty even after " +
+			"the query on this build; the lid is in the resolution result")
+	}
+	if !strings.Contains(d.lastScript, spa.ResolveIdentityExpr) {
+		t.Fatal("the script does not embed the shared resolution, so this package " +
+			"now holds a second opinion competing with the one send uses")
+	}
+}
+
+func TestAPairForSomebodyNotOnWhatsAppIsItsOwnError(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":false,"why":"` + whyNotOnWhatsApp + `"}`}
+	if _, err := res(d).LidAndPhone(context.Background(), "55@c.us", "t"); !errors.Is(err, ErrNotOnWhatsApp) {
+		t.Fatalf("want ErrNotOnWhatsApp, got %v", err)
+	}
+}
+
+func TestAnEmptyJIDNeverReachesThePageForAPair(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true}`}
+	if _, err := res(d).LidAndPhone(context.Background(), "  ", "t"); !errors.Is(err, ErrNoJID) {
+		t.Fatalf("want ErrNoJID, got %v", err)
+	}
+	if d.kicks != 0 {
+		t.Fatalf("an empty jid reached the page %d times", d.kicks)
+	}
+}
+
+// The rendering carries shape, never an identity.
+func TestThePairRenderingIsQuiet(t *testing.T) {
+	p := Pair{LID: "1234567890@lid", PN: "5516999999999@c.us", Queried: true}
+	s := p.String()
+	for _, leak := range []string{"1234567890", "5516", "999999999"} {
+		if strings.Contains(s, leak) {
+			t.Fatalf("the rendering leaks %q: %s", leak, s)
+		}
+	}
+	if !strings.Contains(s, "lid=true") || !strings.Contains(s, "pn=true") {
+		t.Fatalf("the rendering lost the shape: %s", s)
 	}
 }

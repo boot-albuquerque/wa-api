@@ -136,7 +136,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `sendResponseToScheduledEvent` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebScheduledEventResponseAction` ausente, coerente com a H125 |
 | `saveOrEditAddressbookContact` | addressbook.Save | `PROVEN` | sim | sim | sim | verifica lendo de volta, com o relógio no Go; `syncToAddressbook` é parâmetro sem padrão porque `true` escreve na agenda do TELEFONE pareado (H90) |
 | `deleteAddressbookContact` | addressbook.Delete | `PROVEN` | sim | sim | sim | idempotente, medido; exige **wid**, enquanto o save exige dígitos crus — assimetria que a referência esconde passando o mesmo valor aos dois (H90) |
-| `getContactLidAndPhone` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | build LID-first: 397 de 399 mensagens sob @lid |
+| `getContactLidAndPhone` | lookup.LidAndPhone | `PROVEN` | sim | sim | sim | H157: **o helper da referência não funciona neste build, e agora sabemos por quê.** Ele ramifica por `isLid`, pega a metade que falta em `getCurrentLid`/`getPhoneNumber` e, na falha, chama `queryWidExists` e pergunta `getCurrentLid` DE NOVO. Medido: a segunda chamada continua VAZIA — a consulta rodou (`queried=true`) e nada veio —, então o helper devolveria `{}` sobre um par que este módulo resolve todo dia. O LID está no RESULTADO da consulta, que é de onde o `ResolveIdentityExpr` já o tira. A guarda `isLid` foi mantida e não é estilo: chamar `getPhoneNumber` com um pn lança `WaWebLidPnCache - Invalid get call (not lid)` — medido cometendo o erro. Provado nas duas direções: do telefone, `lid=true pn=true queried=true`; do LID, `lid=true pn=true queried=false` |
 | `addOrEditCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 | `getCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 | `getPollVotes` | poll.Votes | `PROVEN` | sim | sim | sim | lido contra uma enquete REAL: as duas opções presentes com zero. Usa a chave que a mensagem já carrega — `MsgKey.fromString(_serialized)` da referência lança neste build (H98) |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 120 | 55% |
-| `PARTIAL` | 46 | 21% |
+| `PROVEN` | 121 | 55% |
+| `PARTIAL` | 45 | 20% |
 | `BLOCKED` | 48 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

@@ -4478,3 +4478,81 @@ acertado por sorte.
 anotação é útil porque diz onde NÃO procurar lógica; ela não diz que a entrada
 daquele ponto de chamada já foi exercitada. Toda linha de delegação restante
 merece a mesma pergunta: **que jid, exatamente, esse ponto de chamada passa?**
+
+---
+
+## H157 — `getContactLidAndPhone`: o helper da referência não funciona aqui, e isso é a resposta
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Esta linha foi escolhida porque toca
+diretamente a pergunta que a H151 deixou aberta — *quem resolve identidade neste
+módulo* — e uma primitiva que devolva AS DUAS identidades é o que qualquer das
+três respostas precisaria.
+
+**Onde**: `internal/wa-headless/capabilities/lookup/pair.go` (novo, `LidAndPhone`,
+`Pair`), `internal/wa-headless/probe_lidpn_test.go` (novo).
+
+**O que a referência faz** (`wwebjs_util.js:1694-1716`): ramifica por `isLid`,
+pega a metade que falta em `WAWebApiContact.getCurrentLid` ou `getPhoneNumber`, e
+quando isso falha chama `queryWidExists` e pergunta **`getCurrentLid` de novo**.
+
+**O que foi medido aqui**: a segunda chamada continua vazia.
+
+```
+fromPhone: {ok:true, hasLid:false, hasPn:true, pnServer:"c.us",
+            queried:true, askedServer:"c.us"}
+```
+
+A consulta rodou — `queried: true` — e `getCurrentLid` não produziu nada, sobre o
+par de laboratório que este módulo resolve com sucesso todos os dias. **O helper
+da referência devolveria `{}` para alguém perfeitamente alcançável.**
+
+O LID está no RESULTADO da consulta, que é exatamente de onde o
+`spa.ResolveIdentityExpr` já o tira. É o mesmo padrão do `sendText` registrado no
+`CLAUDE.md`: copiar o caminho da referência teria falhado, e o que serve é copiar
+o ENTENDIMENTO — aqui, "resolver identidade é perguntar ao servidor", não "chamar
+`getCurrentLid`".
+
+**A guarda `isLid` foi mantida, e não é estilo.** Chamar `getPhoneNumber` com um
+jid de telefone lança `WaWebLidPnCache - Invalid get call (not lid)` — medido
+porque a primeira sonda cometeu exatamente esse erro, e a mensagem de erro é que
+explicou por que a referência ramifica.
+
+**Correção aplicada**: `Resolver.LidAndPhone`, devolvendo `Pair{LID, PN, Queried}`.
+Três decisões:
+1. **Metade ausente fica ausente.** Vazio significa "a página não produziu",
+   nunca "não existe" — preencher com a entrada reportaria um número inventado.
+2. **`Queried` é reportado** porque quem varre um roster quer saber que acabou de
+   fazer N idas à rede.
+3. **Entrada LID não consulta.** A identidade entregue já é metade da resposta.
+
+**Status**: corrigido, linha para `PROVEN`. Travado por quatro controles
+negativos, todos compilando e falhando:
+- `TestAnAbsentHalfIsNotFilledIn` — CN: preencher `PN` vazio com a entrada.
+- `TestThePairScriptGuardsGetPhoneNumber` — CN: chamar `getPhoneNumber` antes da
+  guarda (teste de ORDEM).
+- `TestThePairScriptTakesTheLidFromTheResolution` — CN: tirar o LID de
+  `getCurrentLid`, como a referência faz.
+- `TestALidInputIsNotResolvedAgain` — CN: resolver antes do ramo `isLid`.
+
+Prova em SPA real nas duas direções: do telefone, `lid=true pn=true queried=true`;
+do LID devolvido, `lid=true pn=true queried=false` — o telefone vem do cache de
+mapeamento sem custar consulta.
+
+**Duas armadilhas do catálogo apareceram de novo nesta entrada, e as duas já
+tinham aparecido hoje:**
+
+1. **A guarda casou com o próprio comentário** — décima ocorrência. A asserção
+   *"o script não chama `getCurrentLid`"* falhou contra um comentário
+   EXPLICANDO por que ele não chama. Corrigido com `withoutComments`, que este
+   pacote não tinha e agora tem.
+2. **A asserção media o parser.** O CN de "entrada LID não consulta" não mordeu,
+   porque o dublê devolve `queried` do próprio campo. Refeito como asserção
+   ESTRUTURAL sobre o script — a posição do `await resolve(` contra o retorno do
+   ramo `isLid` —, e aí mordeu.
+
+**Lição**: *quando a referência tem um helper para exatamente o seu problema, a
+primeira coisa a medir é se ele funciona aqui.* Ele não funcionava, e descobrir
+isso levou uma sonda; assumir que funcionava teria produzido um leitor que
+devolve vazio para todo mundo e parece correto, porque `{}` é uma resposta
+plausível para "não achei".
