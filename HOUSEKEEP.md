@@ -5667,11 +5667,27 @@ por sessão.
 `opengraph.Fetcher`, parametrizado por `txtID` (o `userID` que
 `media_utils.go` já usava). Isso resolveria F112 e F113 juntas.
 
-**Status**: **NÃO CORRIGIDO** — CAP-01.1 é escopo fechado (fechar o campo
-ignorado, não construir rate limiting novo); registrado para decisão do
-usuário sobre quando endurecer.
+**Status**: **CORRIGIDO** em 2026-08-22. `Fetcher` ganhou três proteções:
 
-<!-- f-status: aberto -->
+1. **`singleflight.Group`** — deduplica buscas concorrentes para a mesma URL.
+   Teste: `TestFetcher_Singleflight_DeduplicatesConcurrentFetches` (5 goroutines,
+   1 hit no servidor). CN: sem singleflight, servidor recebe 5 hits → "got 5".
+
+2. **Cache TTL de 5 minutos** — evita re-fetch de URLs recentemente resolvidas.
+   Teste: `TestFetcher_Cache_ServesFromCacheOnSecondCall` (duas chamadas, 1 hit).
+   CN: sem cache, servidor recebe 2 hits → "server was called 2 times".
+
+3. **Semáforo global de concorrência** (`MaxConcurrency=5`) — limita o número
+   de buscas OG em voo. A interface `LinkPreviewFetcher` não recebe `txtID`,
+   então o teto é global em vez de por sessão (como era no `UserSemaphoreManager`
+   do wuzapi). Com o `FetchTimeout` de 5 s (F175), o pior caso de ocupação é
+   5 s por slot — dentro da invariante do projeto.
+   Teste: `TestFetcher_Semaphore_BoundsConcurrency` (15 goroutines paralelas,
+   pico de concorrência ≤ 5). CN: sem semáforo, pico = 15 → "max concurrent = 15".
+
+A F174 (duplicata desta) já estava marcada como corrigida.
+
+<!-- f-status: corrigido -->
 
 ## F114 — o preview enviado é só a thumbnail inline; o card grande do WhatsApp não é montado
 
@@ -5724,12 +5740,36 @@ carregar também a imagem HQ e suas dimensões.
 primitiva que Send Media URL vai precisar. Se CAP-02 a expuser, esta entrada
 fica barata de fechar depois — vale reavaliar F114 logo após CAP-02.
 
-**Status**: **NÃO CORRIGIDO** — fora do escopo fechado de CAP-01.1
-(religar o campo ignorado, não reconstruir a fidelidade completa do card).
-Registrado como REQUIRED_FIX doc-only do GATE 0, que quanto ao resto deu
-PASS.
+**Status**: **CORRIGIDO** em 2026-08-22. Três mudanças coordenadas:
 
-<!-- f-status: aberto -->
+1. **`domain.LinkPreviewData`** ganhou `HQImageData []byte`, `HQWidth uint32`,
+   `HQHeight uint32` — a informação que `opengraph.Result` já produzia mas
+   que o domínio não carregava.
+
+2. **`opengraph.Fetcher.FetchLinkPreview`** agora propaga `Result.HQImageData`,
+   `HQWidth` e `HQHeight` para os novos campos do domínio.
+   Teste: `TestFetcher_FetchLinkPreview_PropagatesHQImageData`.
+
+3. **`ChatMessengerAdapter.SendText`**, quando `preview.HQImageData` não é vazio,
+   sobe a imagem HQ via `client.Upload(ctx, data, MediaLinkThumbnail)` e
+   preenche os sete campos no `ExtendedTextMessage`:
+   `ThumbnailDirectPath`, `ThumbnailSHA256`, `ThumbnailEncSHA256`, `MediaKey`,
+   `MediaKeyTimestamp`, `ThumbnailWidth`, `ThumbnailHeight`.
+   Falha de upload degrada para a thumbnail inline com log `Warn` — nunca
+   falha o envio.
+
+   `MediaLinkThumbnail` foi exposto na fachada do wa-noise
+   (`internal/wa-noise/main.go`); `Upload` já estava na interface estreita
+   desde CAP-02.
+
+   Testes:
+   - `TestChatMessengerAdapter_SendText_WithPreview_UploadsHQThumbnail` —
+     7 campos preenchidos, tipo de upload = `MediaLinkThumbnail`.
+     CN: sem upload, tipo vazio → "Upload type = , want MediaLinkThumbnail".
+   - `TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades` —
+     upload falha → envio sucede, 0 campos de upload, thumbnail inline preservada.
+
+<!-- f-status: corrigido -->
 
 ## F115 — `SendImage` (CAP-02) envia sem `JPEGThumbnail`, divergindo do
 `handlers.go` histórico

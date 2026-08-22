@@ -17,6 +17,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 
+	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -146,15 +147,29 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 		Conversation: proto.String(text),
 	}
 	if preview != nil {
-		msg = &waE2E.Message{
-			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-				Text:          proto.String(text),
-				MatchedText:   proto.String(preview.MatchedURL),
-				Title:         proto.String(preview.Title),
-				Description:   proto.String(preview.Description),
-				JPEGThumbnail: preview.ThumbnailJPEG,
-			},
+		etm := &waE2E.ExtendedTextMessage{
+			Text:          proto.String(text),
+			MatchedText:   proto.String(preview.MatchedURL),
+			Title:         proto.String(preview.Title),
+			Description:   proto.String(preview.Description),
+			JPEGThumbnail: preview.ThumbnailJPEG,
 		}
+		if len(preview.HQImageData) > 0 {
+			uploaded, upErr := client.Upload(ctx, preview.HQImageData, wanoise.MediaLinkThumbnail)
+			if upErr != nil {
+				log.Warn().Err(upErr).Str("txtID", txtID).
+					Msg("link preview HQ thumbnail upload failed, sending inline thumbnail only")
+			} else {
+				etm.ThumbnailDirectPath = proto.String(uploaded.DirectPath)
+				etm.ThumbnailSHA256 = uploaded.FileSHA256
+				etm.ThumbnailEncSHA256 = uploaded.FileEncSHA256
+				etm.MediaKey = uploaded.MediaKey
+				etm.MediaKeyTimestamp = proto.Int64(time.Now().Unix())
+				etm.ThumbnailWidth = proto.Uint32(preview.HQWidth)
+				etm.ThumbnailHeight = proto.Uint32(preview.HQHeight)
+			}
+		}
+		msg = &waE2E.Message{ExtendedTextMessage: etm}
 	}
 
 	var extra []wanoise.SendRequestExtra

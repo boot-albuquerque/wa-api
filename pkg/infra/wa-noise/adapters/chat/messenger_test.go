@@ -292,6 +292,133 @@ func TestChatMessengerAdapter_SendText_WithPreview_BuildsExtendedTextMessage(t *
 	}
 }
 
+// TestChatMessengerAdapter_SendText_WithPreview_UploadsHQThumbnail (F114):
+// when HQImageData is present, SendText uploads it as MediaLinkThumbnail
+// and fills the seven fields on ExtendedTextMessage that make WhatsApp
+// render the large preview card.
+func TestChatMessengerAdapter_SendText_WithPreview_UploadsHQThumbnail(t *testing.T) {
+	var gotMsg *waE2E.Message
+	var uploadedType wanoise.MediaType
+	var uploadedData []byte
+
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			uploadedType = appInfo
+			uploadedData = plaintext
+			return wanoise.UploadResponse{
+				DirectPath:    "/preview/path",
+				MediaKey:      []byte{0xAA, 0xBB},
+				FileSHA256:    []byte{0xCC},
+				FileEncSHA256: []byte{0xDD},
+			}, nil
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotMsg = m
+			return wanoise.SendResponse{ID: types.MessageID("wire-hq")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	hqData := []byte{0x01, 0x02, 0x03}
+	preview := &domain.LinkPreviewData{
+		MatchedURL:    "https://exemplo.com",
+		Title:         "HQ",
+		ThumbnailJPEG: []byte{0xFF, 0xD8},
+		HQImageData:   hqData,
+		HQWidth:       600,
+		HQHeight:      400,
+	}
+
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+
+	if uploadedType != wanoise.MediaLinkThumbnail {
+		t.Fatalf("Upload type = %v, want MediaLinkThumbnail", uploadedType)
+	}
+	if string(uploadedData) != string(hqData) {
+		t.Fatalf("Upload data mismatch")
+	}
+
+	etm := gotMsg.GetExtendedTextMessage()
+	if etm == nil {
+		t.Fatal("ExtendedTextMessage nil")
+	}
+	if etm.GetThumbnailDirectPath() != "/preview/path" {
+		t.Errorf("ThumbnailDirectPath = %q", etm.GetThumbnailDirectPath())
+	}
+	if string(etm.GetThumbnailSHA256()) != string([]byte{0xCC}) {
+		t.Errorf("ThumbnailSHA256 mismatch")
+	}
+	if string(etm.GetThumbnailEncSHA256()) != string([]byte{0xDD}) {
+		t.Errorf("ThumbnailEncSHA256 mismatch")
+	}
+	if string(etm.GetMediaKey()) != string([]byte{0xAA, 0xBB}) {
+		t.Errorf("MediaKey mismatch")
+	}
+	if etm.GetMediaKeyTimestamp() == 0 {
+		t.Error("MediaKeyTimestamp should be set")
+	}
+	if etm.GetThumbnailWidth() != 600 {
+		t.Errorf("ThumbnailWidth = %d, want 600", etm.GetThumbnailWidth())
+	}
+	if etm.GetThumbnailHeight() != 400 {
+		t.Errorf("ThumbnailHeight = %d, want 400", etm.GetThumbnailHeight())
+	}
+	if string(etm.GetJPEGThumbnail()) != string([]byte{0xFF, 0xD8}) {
+		t.Error("inline thumbnail should still be set")
+	}
+}
+
+// TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades (F114):
+// when HQ upload fails, the message is still sent with the inline
+// thumbnail only — no upload fields are set, and the send does NOT fail.
+func TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{
+		UploadFn: func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+			return wanoise.UploadResponse{}, errors.New("upload infra down")
+		},
+		SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			gotMsg = m
+			return wanoise.SendResponse{ID: types.MessageID("wire-degraded")}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	preview := &domain.LinkPreviewData{
+		MatchedURL:    "https://exemplo.com",
+		Title:         "Degrade",
+		ThumbnailJPEG: []byte{0xFF, 0xD8},
+		HQImageData:   []byte{0x01, 0x02},
+		HQWidth:       600,
+		HQHeight:      400,
+	}
+
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, "")
+	if err != nil {
+		t.Fatalf("SendText should succeed even when upload fails: %v", err)
+	}
+	if res.ID != "wire-degraded" {
+		t.Errorf("ID = %q", res.ID)
+	}
+
+	etm := gotMsg.GetExtendedTextMessage()
+	if etm == nil {
+		t.Fatal("ExtendedTextMessage nil")
+	}
+	if etm.GetThumbnailDirectPath() != "" {
+		t.Errorf("ThumbnailDirectPath should be empty on upload failure, got %q", etm.GetThumbnailDirectPath())
+	}
+	if len(etm.GetMediaKey()) != 0 {
+		t.Error("MediaKey should be empty on upload failure")
+	}
+	if string(etm.GetJPEGThumbnail()) != string([]byte{0xFF, 0xD8}) {
+		t.Error("inline thumbnail must survive upload failure")
+	}
+}
+
 // --- ChatMessengerAdapter.SendImage (CAP-02) ----------------------------
 
 // TestChatMessengerAdapter_SendImage_NoSession.

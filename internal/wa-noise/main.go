@@ -105,10 +105,11 @@ type (
 )
 
 const (
-	MediaImage    = core.MediaImage
-	MediaVideo    = core.MediaVideo
-	MediaAudio    = core.MediaAudio
-	MediaDocument = core.MediaDocument
+	MediaImage          = core.MediaImage
+	MediaVideo          = core.MediaVideo
+	MediaAudio          = core.MediaAudio
+	MediaDocument       = core.MediaDocument
+	MediaLinkThumbnail  = core.MediaLinkThumbnail
 )
 
 // Erros nomeados pelos consumidores. Sao as *mesmas* variaveis de core, entao

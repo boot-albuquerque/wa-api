@@ -35,6 +35,9 @@ type LinkPreviewData struct {
 	Title         string
 	Description   string
 	ThumbnailJPEG []byte
+	HQImageData   []byte
+	HQWidth       uint32
+	HQHeight      uint32
 }
 
 // StatusSent é o valor de SendMessageResult.Status para uma mensagem de
