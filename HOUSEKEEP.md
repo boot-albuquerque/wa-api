@@ -2554,11 +2554,67 @@ plausibilidade:
 3. **Suspensão da máquina**, que a entrada já menciona de passagem.
 
 **Próximo passo correto**: reproduzir com um separador em segundo plano antes
-de escrever qualquer código. Se confirmar, a decisão passa a ser sobre o lado
-do servidor (item 3, backpressure) — e aí valem as regras do inventário de
-detentores. Se não confirmar, é preciso um instrumento que produza paragens em
-rajada em vez de lentidão uniforme; o atual **mede lentidão distribuída e é
-por isso que nunca falha**.
+de escrever qualquer código.
+
+### Segunda medição (2026-08-21): o separador em segundo plano TAMBÉM cai
+
+Feita sem QR, porque a pergunta não exigia um: um servidor WS real serve uma
+página que faz o MESMO trabalho por mensagem que `eventos.js` faz — `stringify`
+da carga inteira, criar a linha com quatro `<span>`, ler `scrollHeight` (que
+força layout síncrono, e é o passo caro com 2000 linhas) e podar ao teto — e
+mede a MAIOR PAUSA entre duas mensagens processadas.
+
+```
+separador VISÍVEL    15.700 entregues, 10,0s, maior pausa   113 ms, sem queda
+separador ESCONDIDO  15.700 entregues, 10,7s, maior pausa  45,7 ms, sem queda
+```
+
+**Com prova de que esteve escondido**, e não com a minha palavra:
+`escondidoAoLigar=true`, e sete amostras de `document.hidden` ao longo da
+rajada (n=2000, 4000 … 14000) todas `true`, com `trocas=2`. O Chrome **não
+estrangula o processamento de mensagens WebSocket** ao ponto de importar.
+
+**Duas falhas do instrumento, corrigidas antes de a medição valer**:
+
+1. A visibilidade só era lida no FIM — quando eu já tinha voltado ao separador
+   para ler o resultado, e portanto lia sempre `false`. Inútil como prova.
+2. O registo de pausas não tinha a mesma guarda que o máximo, e por isso os
+   5.141 ms do meu próprio atraso de ligação apareciam na lista como se fossem
+   uma paragem real. A primeira leitura mostrou `maiorPausa: 23,6ms` ao lado de
+   `pausas: [5141]` — contradição que denunciou o defeito.
+
+### Onde a F85 fica: DUAS hipóteses refutadas, e uma terceira que a linha do tempo sustenta melhor
+
+Refutadas por medição: (a) o painel é lento por mensagem; (b) o separador em
+segundo plano estrangula o consumo.
+
+O que a linha do tempo de campo mostra, e que nenhuma das duas explica:
+
+```
+00:12:24  Saved HistorySync ... savedCount=922
+00:12:34  savedCount=4959
+00:12:42  savedCount=4949
+00:12:48  savedCount=4917
+00:13:01  websocket broadcast write failed; context deadline exceeded
+```
+
+A queda vem **13 segundos depois do último lote grande**, e os quatro lotes
+são ~15.700 linhas escritas em SQLite pelo NOSSO processo. A hipótese que fica:
+**a escrita do HistorySync esfomeia as goroutines de broadcast** — não é o
+navegador que não consome, é o servidor que não chega a escrever dentro dos 5s
+porque está ocupado a gravar. O `context deadline exceeded` seria nosso, não
+dele.
+
+Isto é hipótese, não medição — mas explica o que as outras duas não explicam, e
+é **testável sem QR**: medir a latência da escrita de broadcast com o mesmo
+volume de escrita concorrente em SQLite.
+
+**Consequência imediata para o plano**: se se confirmar, nem 1b, nem 2, nem
+sequer o item 3 (backpressure no broadcast) atacam a causa — todos tratam o
+consumidor, e o problema estaria no produtor. O item 3 é o mais perigoso dos
+três, porque converte recurso ilimitado em limitado e o `CLAUDE.md` exige
+inventário de detentores para isso; fazê-lo contra uma causa errada é a F86
+outra vez.
 
 **Correção da entrada**: onde acima se lê que o painel "não consome nessa
 velocidade" e por isso a escrita bloqueia, leia-se que a velocidade média NÃO é
