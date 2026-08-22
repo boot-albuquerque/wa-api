@@ -407,6 +407,8 @@ consumidor nenhum, e o compilador prova isso.
 **Status**: **CORRIGIDO** (2026-08-07). A interface foi removida; o compilador prova que ninguem a referenciava.
 mover código, não apagá-lo. Registrado para decisão.
 
+<!-- f-status: corrigido -->
+
 ## F60 — comentário em `client/testkit/helpers.go` cita um método com nome corrompido
 
 **Data**: 2026-08-07.
@@ -435,6 +437,8 @@ corrigir os casos, todos em comentário.
 
 **Status**: **CORRIGIDO** (2026-08-07), e o alcance era MAIOR que esta entrada estimava: 12 identificadores CamelCase corrompidos (`Getwa-noiseClient`, `Iteratewa-noiseClients`) mais 49 referencias `*wa-noise.X`, que deveriam ser `*wanoise.X` — 44 arquivos ao todo. Todas em comentario: o codigo compila, entao nenhuma era identificador real.
 com a F59 numa passada só.
+
+<!-- f-status: corrigido -->
 
 ## F61 — `PATCHES.md` e `HOUSEKEEP.md` citam caminhos de `pkg/infra/wa-noise/` que não existem mais
 
@@ -478,6 +482,8 @@ não resolve.
 
 **Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
 escolha é sobre o que esses documentos são, não sobre o texto deles.
+
+<!-- f-status: aberto -->
 
 ## F64 — inventário dos 38 `// TODO` restantes, item a item
 
@@ -665,6 +671,8 @@ varredura de 2026-08-20 encontrou mal classificada, junto com a [[F111]] (dívid
 já paga) e a [[F174]] (duplicata que eu criei). Três tipos diferentes de ruído,
 um só efeito: quem lê o inventário não sabe se um número é problema real.
 
+<!-- f-status: corrigido -->
+
 ## F65 — `GetManyLIDsForPNs` devolve o mapa INVERTIDO em produção; o dublê de teste esconde
 
 **Data**: 2026-08-07.
@@ -754,6 +762,8 @@ lados invertidos combinavam e o teste ficava verde sobre codigo quebrado.
 `3ac8073`. Não há regressão em relação ao que já estava em `develop`; o que há
 é uma feature que nunca chegou a funcionar.
 
+<!-- f-status: corrigido -->
+
 ## F66 — payload incompleto devolve HTTP 500; 67 validações de use case não têm categoria
 
 **Data**: 2026-08-07.
@@ -842,6 +852,8 @@ mudaram — os outros 4 são erro de repositório e de escrita, e seguem 500.
 > (`GetProfileUseCase.Execute` devolve `apperr.New(..., CategoryValidation, ...)`
 > e `RespondJSON` faz o resto); as demais rotas seguem abertas.
 
+<!-- f-status: corrigido -->
+
 ## F67 — o `.env` que o `run.sh` gera tem chave AES de tamanho inválido
 
 **Data**: 2026-08-07. **Contexto**: subir o ambiente para o smoke HTTP.
@@ -892,6 +904,8 @@ Verificado: com chave de 34 bytes o processo emite `"level":"fatal"` com mensage
 
 **item 2 ABERTO**: engolir falha de inicializacao de material criptografico continua la'. Com a chave certa o sintoma some, mas o comportamento nao.
 política de inicialização.
+
+<!-- f-status: corrigido -->
 
 ## F68 — o mesmo evento `QR` é despachado com dois formatos de payload
 
@@ -957,6 +971,8 @@ de ser o mesmo. O controle negativo devolve a divergência exata que existia:
 O contorno no `devui` foi simplificado — o `if` continua, mas agora porque
 `qrCodeBase64` é **opcional por contrato**, e não porque existem dois schemas.
 
+<!-- f-status: corrigido -->
+
 ## F70 — webhook nunca dispara para usuário integrado depois da subida do servidor
 
 **Data**: 2026-08-07.
@@ -1020,6 +1036,8 @@ correção, o que é mais robusto.
 **Status**: **CORRIGIDO** (2026-08-07) — ver o commit da correcao.
 com teste de integração cobrindo "usuário criado após a subida recebe
 webhook".
+
+<!-- f-status: corrigido -->
 
 ## F71 — sync automático de histórico após pareamento nunca executa: coluna inexistente
 
@@ -1169,6 +1187,8 @@ Antes de fazê-la, é preciso confirmar que nada consome o formato do
 `Subscribe` hoje — o que é pergunta para quem opera os webhooks, não para o
 código.
 
+<!-- f-status: corrigido -->
+
 ## F72 — `no session` é logado em nível `error` para um estado esperado
 
 **Data**: 2026-08-07. **Contexto**: observação de log com o painel de sessões
@@ -1224,6 +1244,8 @@ entao a alternativa nem estava disponivel sem mexer na interface.
 Cinco testes travavam o nivel (um helper compartilhado `assertNoSessionLog`,
 tabelas em group/chat, e um com string literal `"error"`). Todos ajustados,
 com o porque registrado no helper.
+
+<!-- f-status: corrigido -->
 
 ## F73 — `PushName` e `BusinessName` não geram webhook
 
@@ -1304,6 +1326,8 @@ o despacho em si é o mesmo caminho de todos os outros eventos, já exercitado.
 
 **Status**: **CORRIGIDA**, com três testes e três controlos negativos.
 
+<!-- f-status: corrigido -->
+
 ## F74 — o fan-out WebSocket é serial: N conexões obsoletas custam N × 5s
 
 **Data**: 2026-08-07. **Contexto**: observação de log; o painel de sessões
@@ -1376,6 +1400,8 @@ confianca na suite mais do que o teste agregaria.
 
 A ressalva sobre o texto do erro ("failed to marshal JSON" para uma falha de
 ESCRITA) continua valendo e nao foi tocada.
+
+<!-- f-status: corrigido -->
 
 ## F75 — remover o token da query string vai quebrar todo cliente WebSocket de navegador
 
@@ -1454,6 +1480,8 @@ em todo cliente WebSocket, e por isso não cabe na mesma release (ADR-0006).
 > apontando para esta entrada. O código do painel estava certo antes do
 > servidor — e foi ele que documentou o formato da saída.
 
+<!-- f-status: corrigido -->
+
 ## F76 — o log grava os códigos de pareamento em texto puro
 
 **Data / contexto**: 2026-08-07, teste E2E do `devui` no Chrome, pareando a
@@ -1528,6 +1556,8 @@ Varredura dos demais tipos que ainda caem no `default`, feita na mesma
 sessão: `CATRefreshError` (só um `error`), `ManualLoginReconnect` e
 `QRScannedWithoutMultidevice` (ambos `struct{}`). Nenhum carrega credencial —
 `QR` era o único caso sensível.
+
+<!-- f-status: corrigido -->
 
 ## F77 — o WebSocket só pode ser aberto disparando `/session/connect`
 
@@ -1684,6 +1714,8 @@ outros campos do cartão ("pareada e conectada") continuaram congelados a
 afirmar coisas falsas. O indicador de socket foi corrigido; **o resto do cartão
 ainda mente quando o poll morre**. Ver F208.
 
+<!-- f-status: corrigido -->
+
 ## F78 — `/session/connect` não é idempotente numa sessão já conectada
 
 **Data / contexto**: 2026-08-08, mesma sessão de teste. Foi o motivo de eu
@@ -1800,6 +1832,8 @@ reconfirmada hoje contra o código ATUAL, que é mais do que a entrada tinha.
 O experimento está desenhado e à espera de autorização humana, porque arrisca
 o pareamento.
 
+<!-- f-status: aberto -->
+
 ## F79 — `/session/disconnect` e `/session/logout` devolviam 200 sem encerrar nada
 
 **Data / contexto**: 2026-08-08, teste manual de desconexão pela API para
@@ -1862,6 +1896,8 @@ já nascem logando.
 
 **Status**: **corrigido**, `make check` verde. Falta validar no aparelho:
 exige reiniciar o servidor, que ainda roda o binário antigo.
+
+<!-- f-status: corrigido -->
 
 ## F80 — depois de um logout bem-sucedido, `/session/status` ainda diz `loggedIn=true`
 
@@ -1945,6 +1981,8 @@ O `Received kill signal` imediatamente após o `logged out` é a assinatura da
 correção: é o kill-channel sendo acionado pelo caminho da API, que antes só
 o telefone acionava. Com o defeito, esta mesma chamada deixava
 `loggedIn=true`.
+
+<!-- f-status: corrigido -->
 
 ## F81 — `GET /user/lid/{jid}` ignora o parâmetro da URL e exige corpo JSON
 
@@ -2037,6 +2075,8 @@ GET mesmo caminho + corpo {"JID":"5599999999999@s.whatsapp.net"}
 **500**, não 400 — `invalid jid format` é erro de cliente. É a F66 (23/25
 endpoints devolvendo 500) aparecendo aqui, e não uma regressão desta correção.
 
+<!-- f-status: corrigido -->
+
 ## F82 — sessão pareada por QR não sobrevive a um restart
 
 **Data / contexto**: 2026-08-08, ao reiniciar o servidor para validar o
@@ -2106,6 +2146,8 @@ Verificado ao vivo: restart às 08:47 produziu `Connect to Whatsapp on
 startup` e `/session/status` respondeu `connected=true loggedIn=true` sem
 nenhuma intervenção.
 
+<!-- f-status: corrigido -->
+
 ## F83 — os erros de `/session/profile` escapam do envelope
 
 **Data / contexto**: 2026-08-08, mesma sessão.
@@ -2172,6 +2214,8 @@ HTTP/1.1 400 Bad Request
 Content-Type: application/json
 {"code":400,"error":{"code":"no_session","message":"no session"},"success":false}
 ```
+
+<!-- f-status: corrigido -->
 
 ## F84 — descartamos o pushName que o WhatsApp manda em cada mensagem
 
@@ -2390,6 +2434,8 @@ quanto o pushName já resolve.
 **Nota operacional**: um laço de 6 chamadas a `/user/profile` disparou
 `429: rate-overlimit` do usync do WhatsApp. Aquela rota faz chamadas de rede
 por consulta e NÃO deve ser usada em laço sobre uma lista.
+
+<!-- f-status: corrigido -->
 
 ## F85 — a rajada de HistorySync mata o WebSocket do painel, que fica cego no momento em que mais serve
 
@@ -2813,6 +2859,8 @@ outra vez.
 velocidade" e por isso a escrita bloqueia, leia-se que a velocidade média NÃO é
 suficiente para explicar a queda. A causa continua por identificar.
 
+<!-- f-status: aberto -->
+
 ## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
 
 **Data / contexto**: 2026-08-08, ao investigar as quedas de WebSocket da F85.
@@ -3066,6 +3114,8 @@ medida. **Medir com webhook ligado antes de implementar qualquer uma.**
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F87 — o handler de nós já trava 5,7s em produção, e a fila de nós da sessão é SEQUENCIAL
 
 **Data**: 2026-08-08
@@ -3294,6 +3344,8 @@ caminho, laço livre) ou sai `Node handling took` (fila fora do caminho).
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F88 — a espera do backoff de webhook dormia dentro de um worker do pool
 
 **Data**: 2026-08-08
@@ -3398,6 +3450,8 @@ restart coincidindo com destino fora do ar. Não reabra por intuição de que
 "durável é melhor" — ver a regra "Medir antes de projetar" em CLAUDE.md.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F89 — não existe dono de sessão: o segundo processo derruba o primeiro
 
@@ -3552,6 +3606,8 @@ não se deve subir mais de uma réplica.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F90 — desconexão do cliente é logada como `error`, e parece falha de banco
 
 **Data**: 2026-08-08
@@ -3597,6 +3653,8 @@ error: %w", context.Canceled)`), que é a forma como ele de fato aparecia no
 log. Registrado para decisão.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F91 — o ramo `default` do handler despeja a struct inteira no log
 
@@ -3668,6 +3726,8 @@ contem o VALOR do campo Codes — e' credencial de pareamento"*.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F92 — 71% dos arquivos Go têm comentário em português, contra a política de idioma
 
 **Data**: 2026-08-08
@@ -3711,6 +3771,8 @@ mesmos números de gate.
 de conversão pura. O restante aguarda decisão sobre mutirão.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F93 — logout de sessão desconectada devolve 500 e deixa `users.connected=1` preso
 
@@ -3937,6 +3999,8 @@ tentativa (import órfão) — ARMADILHAS 4 — e foi refeito. Os demais:
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F94 — `/devui` sem barra final devolve 404, sem redirecionar
 
 **Data**: 2026-08-08
@@ -3994,6 +4058,8 @@ de controle NÃO COMPILOU (variável órfã), e controle que não compila não p
 nada — ver ARMADILHAS.md 4.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F95 — a taxonomia de `apperr` não tem categoria para conflito (409)
 
@@ -4053,6 +4119,8 @@ para 409 é alteração de contrato OBSERVÁVEL e precisa ser decidida como tal,
 não aplicada de passagem.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F96 — sessão que nunca subiu detém lease renovado para sempre
 
@@ -4126,6 +4194,8 @@ abandonado continua vazando posse, e virou a **F98**, com a medição completa.
 > momento de escrever, não só no momento de revisar.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F97 — o token de API é guardado em texto claro, e o caminho de autenticação ainda o aceita
 
@@ -4217,6 +4287,8 @@ credencial, e isso foi **medido**, não suposto), etapa 2 com a migração 16.
 segredo já saiu do disco.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F98 — a posse da sessão vaza quando o QR expira: renovada para sempre numa sessão que nunca subiu
 
@@ -4327,6 +4399,8 @@ está subindo perde a posse.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F99 — o stdio chama `/session/connect` e `/session/disconnect` com POST; o HTTP as registra como GET
 
 **Data**: 2026-08-08
@@ -4421,6 +4495,8 @@ Controle negativo: reintroduzir o POST em `session.connect` faz o teste apontar
 o método exato e a divergência.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F100 — a etapa 1 da F97, feita como está escrita, abre acesso sem token
 
@@ -4537,6 +4613,8 @@ Antes da guarda, a linha do meio era 400 — requisição anônima autenticando.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F101 — `user not found` responde 500, e a taxonomia não tem categoria para 404
 
 **Data**: 2026-08-09
@@ -4602,6 +4680,8 @@ da correção dela. O que o pegou foi um teste de falha de porta que existia
 antes, não revisão.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F102 — mensagem `type: media` que o handler não conhece é ignorada em silêncio, sem log
 
@@ -4697,6 +4777,8 @@ diz nada sobre o teste. Refeito com `tratou = true` antes da checagem, que
 compila e desliga o aviso de verdade.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F103 — mensagem reenviada pelo WhatsApp é processada duas vezes: dois downloads, dois webhooks
 
@@ -4824,6 +4906,8 @@ controle acusou.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F104 — o D1 só protege quem declarou `multi`; escalar réplicas sem declarar nada não é detectado
 
 **Data**: 2026-08-10
@@ -4903,6 +4987,8 @@ podem entrar sem decisão; a (3) muda comportamento de arranque e é decisão do
 dono do repositório.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F105 — produção está 5 migrações atrás, e o próximo deploy roda a irreversível
 
@@ -5003,6 +5089,8 @@ O ensaio está feito e passou; o deploy em si é sua decisão.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F106 — uma linha de payload ilegível trava o outbox de cabeça de fila, para sempre
 
 **Data**: 2026-08-10
@@ -5091,6 +5179,8 @@ decisão de contrato, não de implementação.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F107 — a expiração do lease PERMITE o failover, mas nada o dispara: sessão órfã fica órfã
 
 **Data**: 2026-08-10
@@ -5157,6 +5247,8 @@ implementação. Precisa de decisão antes de código.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F108 — `/session/connect` responde 200 "connecting" mesmo com a posse NEGADA
 
 **Data**: 2026-08-10
@@ -5191,6 +5283,8 @@ resolve junto com a decisão 2 do ADR-0007, não separado.
 corrigir antes seria decidir o roteamento por acidente.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F109 — retomada de lease EXPIRADO é indistinguível de renovação normal, e não deixa rastro
 
@@ -5271,6 +5365,8 @@ a mutação passaria despercebida e o registro viraria lixo — que é uma forma
 mais lenta de perder a mesma informação.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F110 — `TestOutboxWiring_VarreduraRetomaOVencido` é instável sob carga
 
@@ -5356,6 +5452,8 @@ combinação que transforma "rodar de novo" em hábito.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F111 — `TestLease_RetomadaAposExpirarDeixaRastro` corre com a goroutine de outro teste sob `-race`
 
 **Data**: 2026-08-18
@@ -5440,6 +5538,8 @@ fechou a si mesma e deixou a F111 aberta, descrevendo o mesmo defeito com outro
 nome.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F112 — `pkg/infra/media/media_utils.go` duplica a infra de Open Graph que CAP-01.1 conectou
 
@@ -5533,6 +5633,8 @@ justificadas por escrito nos respectivos baselines.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F113 — `opengraph.Fetcher` sem cache nem limite de concorrência por sessão
 
 **Data**: 2026-08-18
@@ -5568,6 +5670,8 @@ por sessão.
 **Status**: **NÃO CORRIGIDO** — CAP-01.1 é escopo fechado (fechar o campo
 ignorado, não construir rate limiting novo); registrado para decisão do
 usuário sobre quando endurecer.
+
+<!-- f-status: aberto -->
 
 ## F114 — o preview enviado é só a thumbnail inline; o card grande do WhatsApp não é montado
 
@@ -5625,6 +5729,8 @@ fica barata de fechar depois — vale reavaliar F114 logo após CAP-02.
 Registrado como REQUIRED_FIX doc-only do GATE 0, que quanto ao resto deu
 PASS.
 
+<!-- f-status: aberto -->
+
 ## F115 — `SendImage` (CAP-02) envia sem `JPEGThumbnail`, divergindo do
 `handlers.go` histórico
 
@@ -5656,6 +5762,8 @@ upload da thumbnail HQ do link preview.
 ramo URL ponta a ponta com upload+envio reais; ACCEPTANCE_CRITERIA da task
 não menciona thumbnail). Decisão consciente: registrada aqui em vez de
 implementada sem pedir, por ser scope creep sobre uma task já grande.
+
+<!-- f-status: aberto -->
 
 ## F116 — `SendAudioRequest.Caption` é aceito pela API e não tem representação no protocolo
 
@@ -5693,6 +5801,8 @@ texto para outro campo. Seria fabricar semântica que o protocolo não tem.
 
 **Status**: **NÃO CORRIGIDO** — registrado como dívida de contrato por decisão
 do ciclo. Não bloqueia nenhuma capability.
+
+<!-- f-status: aberto -->
 
 ## F117 — `Waveform` sumiu da superfície pública de áudio, mas o histórico a enviava
 
@@ -5734,6 +5844,8 @@ CAP-05 é escopo, não dificuldade.
 
 **Status**: **NÃO CORRIGIDO** — CAP-05 tinha escopo fechado (ligar o envio real
 e recuperar PTT/MIME), e ampliar a superfície pública não era parte dele.
+
+<!-- f-status: aberto -->
 
 ## F118 — `SendVideoRequest` perdeu `MimeType` e `JPEGThumbnail` do contrato histórico
 
@@ -5793,6 +5905,8 @@ esse pass foi consciente, para ganhar largura de capabilities primeiro.
 **Status**: **NÃO CORRIGIDO** — dívida de contrato registrada, não trabalho
 pendente deste ciclo.
 
+<!-- f-status: aberto -->
+
 ## F119 — `SendStickerRequest` perdeu cinco campos, e a infra que os consome está inteira
 
 **Data / contexto**: 2026-08-18, durante CAP-07 (ligar o envio real de sticker).
@@ -5851,6 +5965,8 @@ implementações não. Somam **doze campos públicos** perdidos.
 **Status**: **NÃO CORRIGIDO** — dívida de contrato. O pass de fidelidade que
 trata a família inteira foi adiado conscientemente para ganhar largura de
 capabilities primeiro.
+
+<!-- f-status: aberto -->
 
 ## F120 — `SendMessageHandler` (texto) loga `user_id` (o Id de sessão) nos
 ramos de erro; os cinco handlers de mídia não logam nada equivalente
@@ -5949,6 +6065,7 @@ do campo diretamente, em vez de reusar o helper de segredos.
 **Gate**: `make check` EXIT 0. Diff de 2 remoções em produção e 58 linhas de
 teste — a proporção certa quando a correção é pequena e a trava é o que dura.
 
+<!-- f-status: corrigido -->
 
 ## F121 — `SendLocationRequest.Latitude`/`Longitude` == 0 é indistinguível de
 "campo ausente"; um ponto sobre o equador ou o meridiano de Greenwich é
@@ -6004,6 +6121,8 @@ propósito (fora do escopo autorizado do CAP-08A: corrigir contrato público
 não é decisão do executor). Pendente de decisão do usuário.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F122 — a guarda `missing session id` de `SendContactHandler`/
 `SendLocationHandler` ficou sem NENHUM teste depois da migração CAP-08A/08B;
@@ -6198,6 +6317,8 @@ de um conjunto, escrito sem enumerar o conjunto. As duas passaram por testes
 verdes e por `make check`. O que as pegou foi contar item a item; o que as
 produziu foi descrever em vez de contar.
 
+<!-- f-status: corrigido -->
+
 ## F123
 
 **Data**: 2026-08-18. **Contexto**: CURRENT_STATE do CAP-09A (Chat Read
@@ -6287,6 +6408,8 @@ adapter de persistência mapeia campo a campo. `domain.HistoryMessage` continua
 órfão e continua candidato a cleanup explícito — apagá-lo é decisão do
 Orchestrator, não trabalho de graça do CAP-09A.
 
+<!-- f-status: corrigido -->
+
 ## F124
 
 **Data**: 2026-08-18. **Contexto**: mesmo CURRENT_STATE.
@@ -6339,6 +6462,8 @@ precisam ganhar o grupo `ChatHistory`; sem isso `registerCustomRoutes`
 desreferencia nil e `TestBoundaryLog`, `TestStdioRoutesMatchRegisteredHTTPRoutes`
 e `go run ./cmd/listroutes` morrem com SIGSEGV. **Grupo de handler novo exige
 atualizar os DOIS conjuntos vazios junto com a rota.**
+
+<!-- f-status: corrigido -->
 
 ## F125
 
@@ -6435,6 +6560,8 @@ controle negativo que não compila não prova nada (ARMADILHA 3). Foi ajustada
 até compilar E falhar. Reversão por edição localizada; árvore restaurada
 conferida por `shasum -a 256` idêntico ao de antes da mutação.
 
+<!-- f-status: corrigido -->
+
 ## F126 — download com zero byte e erro nil: o histórico respondia 200 com Data URL vazia
 
 **Data**: 2026-08-18
@@ -6488,6 +6615,8 @@ HTTP do wa-api — o SDK vendorizado não foi tocado.
 Controle negativo executado no mesmo par de testes está registrado na entrada
 F127 abaixo, junto do controle da Data URL.
 
+<!-- f-status: corrigido -->
+
 ## F127 — `/chat/download*` recusa payload que traga só `DirectPath`, embora a primitive o aceite
 
 **Data**: 2026-08-18
@@ -6534,6 +6663,8 @@ contrato observável da rota e merece decisão explícita.
 (`TestDownload_RejectMissingRequiredField` e
 `TestDownloadUseCases_MissingURL_NoPortCall`, nas cinco capabilities), de modo
 que a mudança, quando vier, será deliberada e não acidental.
+
+<!-- f-status: aberto -->
 
 ## F128 — a invalidação do cache de userinfo do gate de History NÃO foi preservada
 
@@ -6603,6 +6734,8 @@ conserto precisou tocar os dois.
 
 Os três estados do gate que importam para o contrato continuam travados em
 `TestChatHistoryRoute_GateState*` (`pkg/bootstrap/chat_history_route_test.go`).
+
+<!-- f-status: corrigido -->
 
 ## F129 — chave duplicada no baseline DESATIVOU o piso de `func_coverage` do `log-coverage-gate`
 
@@ -6856,6 +6989,8 @@ distribuídos por cinco pacotes, com `errpaths_covered` subindo +15, mais que o
 total, porque 10 caminhos (5 cobertos, 5 descobertos) **saíram** junto.
 `make check` fecha agora em **`EXIT:0`**.
 
+<!-- f-status: corrigido -->
+
 ## F130
 
 **Data**: 2026-08-18, **diagnostico REESCRITO em 2026-08-19** depois de medir.
@@ -6992,6 +7127,8 @@ Travou, como o comentario diz que travaria. Revertido.
 —, travado por `TestLease_HeartbeatNaoSobreviveAoTeste` com os dois controles
 acima. O `make check` vermelho NAO era isto: ver **F132**.
 
+<!-- f-status: corrigido -->
+
 ## F131
 
 **Data**: 2026-08-19. **Contexto**: CURRENT_STATE do CAP-10 (Delete/Update
@@ -7054,6 +7191,8 @@ capability nova: `TestSendWireContract_FieldNames`
 (`Details`/`Timestamp`/`Id`) explicitamente descartada no comentário de
 topo do arquivo. **Status real: CORRIGIDO** — decisão tomada e travada em
 teste; nenhuma capability nova pode divergir da forma sem derrubar o teste.
+
+<!-- f-status: aberto -->
 
 ## F132
 
@@ -7305,6 +7444,8 @@ DATA RACE (linha de base: 5, 22, 8). As rodadas 2 e 3 ainda saem EXIT:1, por um
 defeito DIFERENTE e pre-existente, registrado como **F136** — presente na
 propria linha de base (rodadas 1 e 3), em HEAD, sem nenhuma modificacao minha.
 
+<!-- f-status: corrigido -->
+
 ## F133
 
 **Data**: 2026-08-19. **Contexto**: verificacao final do FIX-F130 (`gofmt -l`
@@ -7399,6 +7540,8 @@ passa despercebido, como o CLAUDE.md já diz sobre conversão em massa de idioma
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F134 — `SendEditMessage` perdeu o `ContextInfo` que o payload histórico aceitava
 
 **Data**: 2026-08-19. **Contexto**: CAP-10, recuperação de Delete + Edit
@@ -7445,6 +7588,8 @@ perguntar. Registrado em comentário no código, em
 `pkg/application/usecase/message/send_edit_message.go` (doc de `Execute`) e em
 `pkg/infra/wa-noise/adapters/chat/messenger.go` (doc de `EditMessage`).
 
+<!-- f-status: aberto -->
+
 ## F135 — `Id` de mensagem inexistente ou inválido em delete/edit vira 200 silencioso
 
 **Data**: 2026-08-19. **Contexto**: CAP-10 — o packet pedia explicitamente
@@ -7485,6 +7630,8 @@ enviados), não um conserto.
 pelo teste citado acima, para que ninguém o redescubra em produção. Documentado
 na entrada porque um "sucesso" que não distingue do fracasso é exatamente o
 tipo de coisa que vira diagnóstico errado seis meses depois.
+
+<!-- f-status: aberto -->
 
 ## F136
 
@@ -7857,6 +8004,8 @@ travada** (controle negativo 1: 20/20/20). A invariante escrita:
 **nenhum teste deixa timer de retry capaz de vencer durante a corrida**.
 Referencia cruzada: **F132**, **F129**.
 
+<!-- f-status: corrigido -->
+
 ## F137
 
 **Data**: 2026-08-19. **Contexto**: CURRENT_STATE do bloco de trava de wire
@@ -7954,6 +8103,8 @@ FAIL	wa-api/pkg/presentation/http/handlers	0.227s
 2973 linhas antes, 2973 depois; nenhuma função entrou ou saiu do conjunto
 elegível. Golden regenerado com `go run ./cmd/logcov -golden`, como a própria
 mensagem de falha de `TestGoldenBate` instrui.
+
+<!-- f-status: corrigido -->
 
 ## F138 — `/chat/send/poll` aceitava, validava e devolvia 200 sem criar enquete nenhuma
 
@@ -8202,6 +8353,8 @@ conta real (REAL WHATSAPP EVIDENCE: NOT EXECUTED). Os testes provam a
 montagem, a ordem e o casamento hash->texto; não provam que o servidor do
 WhatsApp aceita a mensagem — isso continua pendente de medição em campo.
 
+<!-- f-status: corrigido -->
+
 ## F139
 
 **Data**: 2026-08-19. **Contexto**: auditoria da matriz de capabilities antes
@@ -8262,6 +8415,8 @@ capability se faz pelas chamadas de porta de ação, não por texto do resultado
 
 **Status**: corrigido no levantamento e comunicado ao canal de decisão, que
 havia escolhido um bloco inexistente com base no erro.
+
+<!-- f-status: corrigido -->
 
 ## F140
 
@@ -8356,6 +8511,8 @@ Mutação revertida por edição localizada; suíte do pacote verde de novo.
 **Status**: corrigido nesta sessão (o defeito nunca chegou a existir no
 nosso código), travado pelos quatro testes acima.
 
+<!-- f-status: corrigido -->
+
 ## F141
 
 **Data**: 2026-08-19. **Contexto**: CAP-15, ao escrever a asserção de causa
@@ -8396,6 +8553,8 @@ cliente é afetado — mas ela toca `handler_interactive.go`, que serve
 **Status**: NÃO corrigido. Fora do escopo do CAP-15, e o arquivo que
 precisaria mudar (`handler_interactive.go`) é o dos dois stubs que ainda
 faltam recuperar — corrigir aqui criaria conflito com esse bloco.
+
+<!-- f-status: aberto -->
 
 ## F142
 
@@ -8502,6 +8661,8 @@ capability, cada uma nos dois pontos. Verificação: `go test ./pkg/... -race
 -count=1` EXIT:0; `make check` EXIT:0; `go run ./cmd/listroutes | sort | wc -l`
 = 107. Produção NÃO foi tocada — as nove mutações foram revertidas por cópia
 do arquivo original, e `git status --short` só mostra o arquivo de teste novo.
+
+<!-- f-status: corrigido -->
 
 ## F143 — a asserção "caminho feliz não loga saída" existia em duas formas, e a mais usada não mordia
 
@@ -8617,6 +8778,8 @@ que não está travada em código compartilhado volta.
 por meio dele os dez pontos de chamada listados acima. Produção NÃO foi
 tocada: as quatro mutações foram revertidas por edição localizada e `git diff
 --name-only` de `handler_interactive.go` e `handler_misc.go` sai vazio.
+
+<!-- f-status: corrigido -->
 
 ## F144 — os quatro eixos de fronteira faltavam INTEIROS em seis das dez capabilities de envio
 
@@ -8765,6 +8928,8 @@ não havia defeito de produção. Testes que o travam, todos em
 `TestSendCapabilities_SuccessEmitsNoOutcomeLog`, cada um com os seis subtestes
 `text`, `image`, `audio`, `video`, `document`, `sticker`. Produção NÃO foi
 tocada: `git status --short` acusa apenas o arquivo de teste novo.
+
+<!-- f-status: corrigido -->
 
 ## F145
 
@@ -8949,6 +9114,8 @@ rota errado da F146 é de observabilidade, não de comportamento.)
 `handler_nonsend_axes_test.go`, os 9 de `chat_history_axes_test.go`, e o
 eixo 5 acrescentado a `TestMessageMutation_Success_ViaRegisteredRoute`.
 
+<!-- f-status: corrigido -->
+
 ## F146
 
 **Data**: 2026-08-19. **Contexto**: CAP-19, ao montar a tabela de eixos pela
@@ -9132,6 +9299,8 @@ wiring, fora do escopo do CAP-20. O gate torna a divergência impossível de
 passar despercebida, que era o ponto; a deduplicação do literal continua
 pendente como dívida de ADR-0004.
 
+<!-- f-status: corrigido -->
+
 ## F147
 
 **Data**: 2026-08-19. **Contexto**: CURRENT_STATE do `send_buttons`, antes de
@@ -9204,6 +9373,8 @@ a porta, quero 2`). Ponto 2 (`ContextInfo`/`QuotedMessage`): decisão **fora de
 escopo** (reply-to não implementado; mesma dívida da F134), com a separação da
 validação do destinatário resolvida — ver F148. **Status real: CORRIGIDO**
 (decisão tomada e implementada no CAP-21).
+
+<!-- f-status: aberto -->
 
 ## F148
 
@@ -9493,6 +9664,8 @@ sem ter medido o ANTES seria exatamente o número sem lastro que a regra de
 medição deste projeto proíbe. Fica como dívida explícita, com o valor medido
 registrado aqui.
 
+<!-- f-status: corrigido -->
+
 ## F149
 
 **Data**: 2026-08-19. **Contexto**: CURRENT_STATE do `send_list`, o último
@@ -9559,6 +9732,8 @@ morde em `TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`
 ("AdditionalNodes nil: o no' BIZ nao foi enviado"). As duas mutações
 compilaram e reverteram por edição localizada, `git diff` vazio depois.
 **Status real: CORRIGIDO** (CAP-22).
+
+<!-- f-status: aberto -->
 
 ## F150
 
@@ -9659,6 +9834,8 @@ primeiras são campo público perdido na migração, e a quinta é divergência
 deliberada. Todas seguem **não corrigidas**, por decisão, e nenhuma tem teste
 que a trave — o que é coerente, porque travar dívida ABERTA não faz sentido:
 o que se trava é decisão fechada.
+
+<!-- f-status: corrigido -->
 
 ## F151
 
@@ -9787,6 +9964,7 @@ acrescentou estão todas ligadas. O contrato da última é NOVO — o histórico
 nunca teve leitura de configuração aqui —, e essa decisão, com as duas opções
 recusadas, está na [[F157]]. Os testes estão lá também.
 
+<!-- f-status: corrigido -->
 
 ## F152
 
@@ -10042,6 +10220,8 @@ o mesmo desenho de `send_wire_contract_test.go`. `count=263` continua parado
 onde a **F155** o descreve; o CAP-26 **não** o atualizou, porque mexer em
 baseline fora do escopo é o movimento que mascara regressão.
 
+<!-- f-status: corrigido -->
+
 ## F153
 
 **Data**: 2026-08-19. **Contexto**: CAP-25, achado em campo com conta real —
@@ -10233,6 +10413,8 @@ bloqueou este achado, que segue como apêndice puro ao final do arquivo.
 **Status**: **corrigido nesta sessão**, guardado pelos quatro testes acima e
 pelos dois controles negativos executados e colados.
 
+<!-- f-status: corrigido -->
+
 ## F154
 
 **Data**: 2026-08-19. **Contexto**: CAP-25. O gate `TestGoldenBate` falhou
@@ -10344,6 +10526,8 @@ tem 3068 linhas e ZERO nomes repetidos (`cut -f1 ... | sort | uniq -d` vazio),
 então o defeito não é alcançável hoje. Fica registrado porque deixa de ser
 inalcançável no dia em que o gerador emitir nome repetido.
 
+<!-- f-status: corrigido -->
+
 ## F155
 
 **Data**: 2026-08-19. **Contexto**: CAP-25, ao verificar se o salto de lint
@@ -10382,6 +10566,8 @@ projeto proíbe "corrigir de graça" achado pré-existente sem perguntar.
 vêm dos arquivos novos do bloco de HMAC (porta, adapter de banco, adapters de
 bootstrap); `max_complexity` continua em **56**, sem se mover — a trava real
 não foi tocada. `count` segue como está, pelo motivo do Status acima.
+
+<!-- f-status: aberto -->
 
 ## F156
 
@@ -10514,6 +10700,8 @@ gerador não-criptográfico, ambos travados por teste. **Não corrigido**: o
 fail-closed, pendente de decisão no canal, agora com a observação acima em
 mãos. Ver [[F169]] para a MESMA classe de vazamento em `admin_token` e
 `global_encryption_key`, que este bloco deliberadamente não tocou.
+
+<!-- f-status: aberto -->
 
 ## F157
 
@@ -11503,6 +11691,8 @@ acrescenta dois.
 
 **`make check` — EXIT 0.**
 
+<!-- f-status: corrigido -->
+
 ## F158
 
 **Data**: 2026-08-19. **Contexto**: CAP-27, ligando a escrita da chave HMAC
@@ -11651,6 +11841,8 @@ migração automática ou script de operação; não implementado aqui.
 
 Ver [[F157]] para o bloco corrigido no CAP-27, e [[F156]] para a chave HMAC
 GLOBAL, que é outro bloco.
+
+<!-- f-status: corrigido -->
 
 ## F159
 
@@ -11833,6 +12025,8 @@ feita (`grep -niE "this will |for now|placeholder|TODO|not implemented|stub"
 pkg/application/usecase/user/*.go`) e não achou nenhum: com a [[F158]] e a
 F159 fechadas, o pacote não tem mais stub prometendo implementação futura.
 
+<!-- f-status: corrigido -->
+
 ## F160
 
 **Data**: 2026-08-19. **Contexto**: revisão do CAP-27. Não é defeito de código
@@ -11914,6 +12108,8 @@ que você SABE que existe antes de virar número num documento de decisão.
 
 **Status**: não corrigido. É decisão do humano sobre a própria regra dele;
 não altero `CLAUDE.md` por conta própria.
+
+<!-- f-status: aberto -->
 
 ## F161
 
@@ -12048,6 +12244,8 @@ diferente da produção. Como esse verde foi o critério para aceitar e recusar
 blocos o dia inteiro, corrigir a ferramenta de medição vale mais que o defeito
 que ela media.
 
+<!-- f-status: corrigido -->
+
 ## F162
 
 **Data**: 2026-08-19. **Contexto**: ao instalar o ADR do S3 decidido pelo
@@ -12122,6 +12320,8 @@ pior que nenhum:
    o comportamento treina quem lê a duvidar da mensagem em vez do código.
 
 Os dois ficam como dívida CONHECIDA, escrita, em vez de surpresa.
+
+<!-- f-status: corrigido -->
 
 ## F163
 
@@ -12256,6 +12456,8 @@ banco continuam lá. Enquanto a migração não for autorizada e executada, esse
 usuários continuam com o comportamento diferido descrito acima — S3 funciona até
 o próximo restart.
 
+<!-- f-status: corrigido -->
+
 ## F164 — existem DOIS caches de userinfo, com leitores distintos, e nada os reconcilia
 
 **Data**: 2026-08-19. **Contexto**: CAP-30, ligando a escrita de
@@ -12363,6 +12565,8 @@ Entradas novas recebem `tokenCacheTTL` (10 min, mesmo valor que
 - CN-C: `TestPublishUserInfoCNC_OrderMatters` verifica que os dois caches
   concordam mesmo partindo de vazio.
 
+<!-- f-status: corrigido -->
+
 ## F165 — `WebhookHistoryResult.History` tem `omitempty`, então o desligamento não ecoa o valor
 
 **Data**: 2026-08-19. **Contexto**: CAP-30, ao escrever o contrato de resposta
@@ -12431,6 +12635,8 @@ pelo struct decodificado não serviria, porque `json.Unmarshal` entrega 0 tanto
 para `"History":0` quanto para o campo ausente. Controle negativo (b) da
 [[F157]], EXECUTADO: reintroduzir o `omitempty` faz esse teste, e só ele,
 falhar.
+
+<!-- f-status: corrigido -->
 
 ## F166
 
@@ -12507,6 +12713,8 @@ executado nas duas). O comentário dele foi reescrito para dizer que a âncora
 mudou, e por quê — a formulação proposta acima (*um teste não pode usar como
 ponto fixo um valor que só existe porque a implementação é stub*) está no
 comentário do teste, não só aqui.
+
+<!-- f-status: corrigido -->
 
 ## F167 — a rota de proxy passou a existir, e por isso a recusa de endereço reservado voltou (só quando o WEBHOOK sai pelo proxy)
 
@@ -12720,6 +12928,8 @@ saída a registrar.
 **Status**: corrigido nesta sessão, travado pelos testes listados acima e pelos
 quatro controles negativos executados.
 
+<!-- f-status: corrigido -->
+
 ## F168
 
 **Data**: 2026-08-19. **Contexto**: verificação da [[F159]] por leitura, para
@@ -12833,6 +13043,8 @@ comentário prometendo a implementação futura. A F158 foi achada sozinha; a F1
 só apareceu porque o executor continuou lendo depois de encontrar a primeira.
 Regra que fica: **ao encontrar um placeholder, procure os irmãos dele no mesmo
 arquivo antes de fechar o levantamento.**
+
+<!-- f-status: corrigido -->
 
 ## F169
 
@@ -13109,6 +13321,7 @@ do projeto proíbe corrigir de graça. A correção é de uma linha (trocar por 
 placeholder de 32 bytes) e o trava-teste é estender `chavesDoRunSh` para varrer
 também o `.env.sample`.
 
+<!-- f-status: corrigido -->
 
 ## F170
 
@@ -13262,6 +13475,8 @@ duplicidade sem enumerar os leitores. Enumerar mudou a proposta de correção.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F171 — a catraca de cobertura está destravada: o gate PEDE para subir o piso e ninguém subiu
 
 **Data**: 2026-08-19. **Contexto**: CAP-37 (F168). Achado ao rodar `make check`
@@ -13338,6 +13553,8 @@ fez a minha primeira tentativa de substituição casar em dois lugares.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F172 — a MESMA catraca destravada, agora no teto de complexidade
 
 **Data**: 2026-08-19. **Contexto**: CAP-39 (F171). Apareceu ao ler a saída do
@@ -13411,6 +13628,8 @@ nada; deixá-la desatualizada também não custa nada. Registrado aqui só para 
 a divergência não seja lida como esquecimento.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F173 — o teste de paridade stdio×HTTP só olha para UM lado, e 28 rotas caíram no lado cego
 
@@ -13573,6 +13792,8 @@ decisão.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F174 — o caminho VIVO de link preview perdeu o cache e o limite de concorrência que o código morto tinha
 
 **Data**: 2026-08-20. **Contexto**: F127. Achado ao auditar o que os testes do
@@ -13639,6 +13860,8 @@ isso à constante morta nem ao orçamento de escrita. Essa ligação foi o que a
 medição produziu, e foi ela que se corrigiu no CAP-41.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F175 — `FetchTimeout` é declarado e nunca aplicado, e o preview de link consome TODO o orçamento de escrita do servidor
 
@@ -13811,6 +14034,8 @@ muito a janela; não a fecha.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F176 — o IRMÃO do defeito de fiação da enquete: se `WithStartSession` sumir, `/session/connect` responde 200 "connecting" e nada conecta
 
 **Data**: 2026-08-20. **Contexto**: levantamento do caminho de envio. Fui
@@ -13946,6 +14171,8 @@ vermelho, a rota continua a mentir.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F177 — a string de pragmas de produção está DUPLICADA, sem constante que as una
 
 **Data**: 2026-08-20. **Contexto**: [[F161]], ao medir a divergência entre
@@ -13997,6 +14224,8 @@ montava — `"file:"` + `ToSlash` num, concatenação direta no outro.
 Conferido byte a byte contra o histórico: o valor final montado não mudou.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F178 — `internal/wa-noise/protocol/argo/` tem cinco testes que NUNCA correram
 
@@ -14055,6 +14284,8 @@ medição encontrado no mesmo dia, e a razão de registrar os três juntos é es
 inteira. Três vezes ele mediu menos do que eu supunha.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F179 — `PUT /admin/users/{id}` grava `events` no banco e NÃO atualiza o cache: a edição não tem efeito enquanto o processo viver
 
@@ -14162,6 +14393,8 @@ Antes da correção este log diria `["All"]` até o processo morrer.
 `TestEditUser_RepublicaDEPOISDaEscritaENaoAntes`) — a invalidação é da entrada
 toda, portanto cobre `events` sem precisar de um teste por campo.
 
+<!-- f-status: corrigido -->
+
 ## F180 — o aviso de "mídia de tipo não tratado" dispara em TODA mensagem de TEXTO: 25 de 30 no teste de campo
 
 **Data**: 2026-08-20. **Contexto**: verificação de ponta a ponta com DUAS contas
@@ -14267,6 +14500,8 @@ de nada. Treina quem lê o log a ignorá-lo, e aí deixa de servir para o caso e
 que morde de verdade.
 
 **Status**: **CORRIGIDA**, com dois testes e dois controlos negativos.
+
+<!-- f-status: corrigido -->
 
 ## F181 — `/chat/list` devolve 96% das conversas SEM NOME, e os LIDs que ela devolve não existem no roster
 
@@ -14446,6 +14681,8 @@ algo que nunca poderia ter sucesso. O teste assere a ORDEM, não só o código.
 
 **Status**: **CORRIGIDA**, com três controlos negativos executados e
 verificação em campo.
+
+<!-- f-status: corrigido -->
 
 ## F183 — a MESMA conversa fica gravada sob DOIS `chat_jid`, e o fluxo natural do cliente devolve 200 VAZIO
 
@@ -14748,6 +14985,8 @@ processo fica: uma correção que fecha o achado de OUTRA entrada tem de voltar
 para fechar esta, senão o registo passa a mentir na direção pessimista — e
 alguém (eu) gasta uma sessão a reproduzir um defeito que já não existe.
 
+<!-- f-status: corrigido -->
+
 ## F185 — três botões pedidos, dois enviados, `200` sem dizer que um sumiu (confirmação em campo da F148)
 
 **Data**: 2026-08-20. **Contexto**: mesma varredura da [[F184]]. Não é achado
@@ -14852,6 +15091,8 @@ destas correções: **antes de reproduzir um achado, verificar no CÓDIGO se ele
 ainda existe** — e, do outro lado, **quem corrige o achado de uma entrada tem de
 voltar a fechar as outras que a mesma correção resolve**. Um registo que mente
 na direção pessimista custa sessões inteiras.
+
+<!-- f-status: corrigido -->
 
 ## F186 — o registo do descarte, implementado: decisão (c) do canal
 
@@ -14968,6 +15209,8 @@ A [[F184]] e a [[F185]] **continuam abertas**: o que se corrigiu foi a
 invisibilidade, não o descarte. Os ramos em falta são a etapa (b) do canal.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F187 — DOIS classificadores de mensagem, divergentes, e o de tempo real é o PIOR dos dois
 
@@ -15364,6 +15607,8 @@ que a etapa (b) da DECISÃO 21 vai tratar, com a causa certa desta vez.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F189 — o orçamento de isenções do logcov conta MENÇÕES, não anotações
 
 **Data**: 2026-08-20. **Contexto**: o `make check` falhou com
@@ -15570,6 +15815,8 @@ A incoerência que abriu esta frente — capability que envia e não recebe — 
 existir para tudo o que este projeto envia.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F183 — TERCEIRA versão do diagnóstico, agora medida no fluxo do cliente
 
@@ -15789,6 +16036,8 @@ perder o LID, que é o único identificador sempre verdadeiro.
 verificada contra o WhatsApp real com a medição antes/depois acima.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F181 — medida de novo, com instrumento melhor: NÃO é junção partida, é ausência. E há um conserto óbvio que não é o nome.
 
@@ -16052,6 +16301,8 @@ estado.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F190 — `/chat/react` devolve a forma HISTÓRICA de resposta, e três rotas de mensagem ficam fora da trava de contrato
 
 **Data**: 2026-08-20. **Contexto**: varredura (c). Não é a [[F131]] — é o que
@@ -16167,6 +16418,8 @@ apanhasse.
 
 ---
 
+<!-- f-status: aberto -->
+
 ## F187 — verificação em produção: os MESMOS envios, uma hora depois
 
 **Data**: 2026-08-20.
@@ -16245,6 +16498,8 @@ e agora quase todos os que o protocolo define também.
 | classificadores | **1**, era 2 |
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F191 — não consumimos os eventos de label que a biblioteca já emite
 
@@ -16334,6 +16589,8 @@ Esta entrada fecha só a metade que era nossa, como o próprio título dizia.
 
 **Status**: **CORRIGIDA** na parte nossa, com quatro testes e três controlos
 negativos. Trânsito real do evento pendente de ação humana no telemóvel.
+
+<!-- f-status: corrigido -->
 
 ## F192 — "Gerar novo QR" no painel: o WebSocket é canal com perda e o `connect` não era idempotente
 
@@ -16527,6 +16784,8 @@ recusadas.
 **Status**: corrigido nesta sessão, com os oito controlos acima executados.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F193 — `min_func_coverage` é um rácio global, então acrescentar método de adaptador BAIXA o gate mesmo quando o código está certo
 
@@ -16722,6 +16981,8 @@ alguém a acrescentar ou remover sem atualizar as quatro medidas.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F194 — o PRIMEIRO código de QR é despachado DUAS vezes, sempre
 
 **Data**: 2026-08-20. **Contexto**: interceção do WebSocket do painel durante
@@ -16816,6 +17077,8 @@ CN-1 (religar o segundo escritor):
 
 **Status**: **CORRIGIDA**, com teste, controlo negativo e verificação em campo.
 
+<!-- f-status: corrigido -->
+
 ## F195 — comentários afirmam 60s para o primeiro QR; são 20s, medidos
 
 **Data**: 2026-08-20. **Contexto**: idem.
@@ -16868,6 +17131,8 @@ Um comentário não falha em teste — foi por isso que este sobreviveu meses. A
 saída é travar o FACTO que ele descreve, não o texto.
 
 **Status**: **CORRIGIDA**, com controlo negativo executado.
+
+<!-- f-status: corrigido -->
 
 ## F196 — `GET /session/status` recusa com `no_session` a sessão que `GET /session/connect` aceita
 
@@ -16962,6 +17227,8 @@ observar um caminho de sucesso em vez do que se propõe a medir.
 **Status**: **CORRIGIDA**, com quatro testes novos, dois controlos negativos e
 verificação em campo.
 
+<!-- f-status: corrigido -->
+
 ## F197 — a correção da F192 baixa `min_func_coverage` de 667 para 665, e isso NÃO foi mascarado
 
 **Data**: 2026-08-20. **Contexto**: gate de log ao fechar a F192.
@@ -17041,6 +17308,8 @@ motivou.
 > num caminho que corre em cada tentativa de conexão.
 
 ---
+
+<!-- f-status: aberto -->
 
 ## F198 — duas rotas registadas respondem 200 sem fazer nada: `/status/set/text` e `/user/history/sync`
 
@@ -17177,6 +17446,8 @@ pode ser verificado assim que houver uma âncora real à mão.
 **Status**: **CORRIGIDA** nas duas rotas, com testes e quatro controlos
 negativos executados. Verificação em campo do status pendente de autorização.
 
+<!-- f-status: corrigido -->
+
 ## F199 — a correção da F192 esteve 2h "pronta e verificada" sem NUNCA ter sido implantada no servidor onde se testa
 
 **Data**: 2026-08-21. **Contexto**: o utilizador reportou que o painel continuava
@@ -17240,6 +17511,8 @@ que corre é o que foi testado — continua **não corrigida**.
 Relacionado: [[F192]].
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F200 — `PUT /admin/users/{id}` responde `success: true` e a alteração fica INERTE durante toda a vida do processo
 
@@ -17333,6 +17606,8 @@ verificação em campo.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F201 — token revogado pelo admin CONTINUA a autenticar
 
 **Data**: 2026-08-21. **Contexto**: consequência da F200, medida a seguir.
@@ -17399,6 +17674,8 @@ token NOVO   -> HTTP 200
 testes da F200 — a varredura por id é o que apaga a entrada do token antigo.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F202 — o dublê de `JIDResolver` é MAIS PERMISSIVO que a produção, e 37 casos de teste exercitam um caminho que devolve 400
 
@@ -17484,6 +17761,8 @@ caminho morto: esconde a inconsistência que o tornou morto.
 
 **Status**: **CORRIGIDA**. Suíte inteira verde com o dublê a imitar a
 produção.
+
+<!-- f-status: corrigido -->
 
 ## F203 — `/user/block` recusa um telefone num campo chamado `Phone`, e as rotas irmãs aceitam
 
@@ -17581,6 +17860,8 @@ NÃO é este defeito — é a [[F204]], registada a seguir.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F204 — recusa do servidor do WhatsApp (`400 bad-request`) chega ao cliente como `500 internal server error`
 
 **Data**: 2026-08-21. **Contexto**: verificação em campo da [[F203]].
@@ -17667,8 +17948,14 @@ mudam o contrato:
 **Decisão do canal (2026-08-21)**: `43=c` — categoria nova, 422; `44=a` —
 acrescentar `CategoryForbidden` (403) e `CategoryRateLimited` (429).
 
-**Status**: **PARCIALMENTE CORRIGIDO** — a tradução existe e está ligada ao
-caminho medido; falta ligá-la ao resto do conjunto.
+**Status**: **CORRIGIDO** — a tradução cobre os ~66 pontos de info query, pela
+decisão 46=a do canal (ver "Cobertura completa" abaixo).
+
+Esta linha esteve um dia a dizer o contrário, e a triagem da [[F211]] apanhou-a.
+Nota sobre a redação: a versão anterior desta linha explicava, em prosa, o que
+o estado *era antes* — e a palavra que usava fez o classificador voltar a
+marcá-la como aberta. **A marca `f-status` é a autoridade; a prosa é para
+humanos.** Não vale a pena tentar tornar a prosa classificável.
 
 **Feito**:
 
@@ -17779,6 +18066,8 @@ caminho de sucesso; as duas sessões pareadas continuam vivas.
 
 ---
 
+<!-- f-status: corrigido -->
+
 ## F205 — as três escritas de etiqueta sobrepõem por ORDEM DE CHEGADA, não por `updated_at`
 
 **Data**: 2026-08-21. **Contexto**: achado por avaliação INDEPENDENTE
@@ -17881,6 +18170,8 @@ travado por teste. Não é defeito confirmado nem hipótese descartada — é
 comportamento conhecido, alinhado com a referência, com a lacuna de prova
 declarada.
 
+<!-- f-status: corrigido -->
+
 ## F206 — `PUT /admin/users/{id}` com `token:""` devolve 500
 
 **Data**: 2026-08-21. **Contexto**: achado por avaliação independente
@@ -17927,10 +18218,18 @@ Isso muda a pergunta de contrato. Não é só "400 ou 200 para o caso vazio": é
 com "põe o campo a vazio", e as duas leituras dão respostas opostas — uma diz
 que o pedido é inválido, a outra que ele deveria limpar o token.
 
-**Status**: não corrigido — reproduzido em campo, pendente de decisão de
-contrato no canal.
+**Status**: **CORRIGIDO** (decisão 48=a do canal). `{"token":""}` e `{}`
+passaram de 500 para 400 `no_fields_to_update`, verificado em campo.
+
+Esta linha ficou a dizer "pendente de decisão" **depois de a decisão ter
+chegado e o código estar commitado** (`c9da079`). Foi a triagem da [[F211]] que
+a apanhou — o segundo caso no mesmo dia, com a [[F204]]. Duas em cento e
+cinquenta é pouco; duas que eu próprio deixei para trás no mesmo dia é o
+argumento inteiro a favor da marca canónica.
 
 ---
+
+<!-- f-status: corrigido -->
 
 ## F207 — `pkg/infra/auth.NewTokenCache` é código morto
 
@@ -17950,6 +18249,8 @@ audita.
 **Correção sugerida**: remover, ou documentar por que existe.
 
 **Status**: não corrigido — triagem.
+
+<!-- f-status: aberto -->
 
 ## F208 — com o poll REST em falha, o cartão contradiz o aviso que está ao lado dele
 
@@ -18032,6 +18333,8 @@ ficheiro inteiro não serve: recortar o ramo do `if (!r.ok)`.
 aviso funciona, então o operador tem sinal. Fora do escopo da F77, que era o
 socket. Referência cruzada em F85: o sintoma que aquela entrada chama "o painel
 mente em silêncio" já não é silêncio, é contradição.
+
+<!-- f-status: aberto -->
 
 ## F209 — telefone com lixo vira JID e o pedido pendura 75 segundos antes de devolver 500
 
@@ -18177,6 +18480,8 @@ sempre um JID já qualificado — logo a guarda não o afeta. As rotas que passa
 telefone nu vão todas por `ResolveJID`, e portanto ficam cobertas. **Isto é
 leitura de código, não medição**: só `/user/block` foi medido em campo.
 
+<!-- f-status: corrigido -->
+
 ## F210 — o PUT LÊ `s3Config` e a resposta DEVOLVE `s3_config`: o ciclo óbvio do cliente é ignorado em silêncio
 
 **Data / contexto**: 2026-08-22, ao medir a [[F206]].
@@ -18303,6 +18608,8 @@ fazem ambos `_ = storage.GetS3Manager().InitializeS3Client(...)`. Uma
 configuração que não inicializa devolve 200/201 e o cliente acredita que ficou
 boa. **Não corrigido**, e é independente da escolha de contrato acima.
 
+<!-- f-status: corrigido -->
+
 ## F211 — o próprio HOUSEKEEP deixou de ser consultável: não há forma mecânica de saber o que está aberto
 
 **Data / contexto**: 2026-08-22, ao tentar escolher o próximo achado a atacar
@@ -18341,9 +18648,15 @@ sessão futura que confie em qualquer um deles ataca a lista errada.
 **Correção sugerida**, barata e verificável:
 
 1. **Uma marca canónica por achado**, uma só, e sempre a última linha da última
-   entrada daquele número. Por exemplo `<!-- f-status: aberto -->` ou
-   `<!-- f-status: corrigido -->`. Comentário HTML não aparece no render e é
-   trivial de ler por máquina.
+   entrada daquele número: um comentário HTML com a chave `f-status` e o valor
+   `aberto` ou `corrigido`. Não aparece no render e é trivial de ler por
+   máquina.
+
+   **A prosa desta entrada NÃO escreve a marca literal de propósito.** A
+   primeira versão escrevia, como exemplo, e o contador passou a ver 151 marcas
+   para 150 achados — a segunda fonte de verdade a nascer no mesmo commit que a
+   corrige. O teste conta ocorrências; um exemplo literal é indistinguível de
+   uma marca a sério.
 2. **Um teste que a exija**: cada número `F<n>` tem exatamente uma marca; a
    marca é a última coisa do bloco. É o mesmo padrão que já protege o
    `.logcov-exclude` em `cmd/logcov/rules_test.go` — a lista está fixada num
@@ -18361,5 +18674,50 @@ isso tem valor. O problema não é haver várias entradas; é não haver um vere
 uma entrada sem marca e confirme que o teste reprova. Sem esse controlo, um
 teste que apenas conte marcas passaria com um ficheiro inteiro sem nenhuma.
 
-**Status**: **não corrigido** — é mudança de convenção do repositório e afeta
-todo o registo histórico; não é decisão minha. Precisa de aprovação.
+### CORRIGIDA (2026-08-22), com autorização do humano
+
+Cada número `F<n>` tem agora **exatamente uma** marca `f-status`, como última
+coisa da sua ÚLTIMA entrada, com valor `aberto` ou `corrigido`. O estado do
+ficheiro passou a ser: **150 achados, 111 corrigidos, 40 abertos** — um número
+que se lê, em vez de três que se adivinham.
+
+**A classificação foi mecânica onde dava, e lida à mão onde não dava.** E a
+primeira tentativa mentiu de forma exemplar: o padrão de fecho casava
+`CORRIGIDO` **dentro de** "NÃO CORRIGIDO", e por isso 41 entradas caíram em
+"ambíguo". Testar a NEGAÇÃO primeiro baixou-as para 12.
+
+Dos 12 que sobraram, lidos um a um:
+
+- `parcialmente corrigido` / `corrigido em parte` (F89, F95, F156, F190) →
+  **aberto**. Parcial ainda é trabalho.
+- Sem linha `**Status**` nenhuma (F173, F176) → **aberto**. Um achado
+  registado sem veredito não está fechado; tratar o desconhecido como aberto
+  faz reexaminar em vez de saltar.
+- `DUPLICATA da F113` (F174) e `REFERÊNCIA, não trabalho pendente` (F64) →
+  **corrigido**, no sentido de "não é trabalho".
+
+**Regra que fica**: fecha-se só com veredito explícito. Tudo o resto é
+`aberto`, porque o erro de marcar aberto o que está fechado custa uma leitura;
+o inverso custa um defeito esquecido.
+
+**O que a própria triagem apanhou, e sozinho já paga o trabalho**: a [[F204]]
+tinha `**PARCIALMENTE CORRIGIDO**` como último `Status` **um dia depois** de a
+decisão 46=a a ter fechado. A secção nova entrou DEPOIS da linha de estado e
+ninguém a atualizou. Sem marca canónica, uma sessão futura leria "parcial" e
+refaria trabalho feito.
+
+**Teste**: `TestHousekeepTemUmaMarcaPorAchado` em `cmd/logcov` — mesmo sítio
+onde o `.logcov-exclude` já está fixado, e pela mesma razão.
+
+**Uma armadilha encontrada ao escrever isto**: a primeira versão desta entrada
+escrevia a marca LITERAL na prosa, como exemplo. O contador passou a ver 151
+marcas para 150 achados — a segunda fonte de verdade a nascer no mesmo commit
+que a corrige. O teste conta ocorrências, e um exemplo literal é
+indistinguível de uma marca a sério.
+
+**Não feito, de propósito**: renumerar ou fundir as entradas repetidas. A F183
+ter sido rediagnosticada três vezes é histórico legítimo.
+
+**Status**: **CORRIGIDA**.
+
+<!-- f-status: corrigido -->
