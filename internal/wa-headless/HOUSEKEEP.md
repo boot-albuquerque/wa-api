@@ -8457,3 +8457,61 @@ harness de sonda, corrigida na hora.
 **Status**: corrigido/entregue nesta sessão. Linhas `getChat` e `getContact` da
 família `Message` passam a `PROVEN`; `getMentions`/`getGroupMentions` seguem
 `MISSING` com a medição registrada.
+
+## H107 — `rawData`: a forma pode sair, os valores não
+
+**Data**: 2026-08-21. **Contexto**: `Message.rawData` do LEDGER-WWEBJS, logo
+depois da H106.
+
+**Onde**: `internal/wa-headless/capabilities/message/script.go` (`shapeScript`),
+`message.go` (`Reader.ShapeOf`), `probe_msgorigin_test.go`.
+
+### O conflito, dito antes de resolvido
+
+`Message.rawData` na referência devolve o objeto cru inteiro. Para uma mensagem
+de texto, o objeto cru **é** o corpo. Este módulo mantém corpos fora
+estruturalmente — invariante 12, travada em
+`capabilities/messagemeta/messagemeta_test.go:TestNoBodyFieldExistsAnywhere`,
+que proíbe `body`, `__x_body`, `caption`, `media` e `text` por nome. Embarcar
+`rawData` como é não seria entregar funcionalidade: seria derrubar uma guarda.
+
+### A medição que resolveu a discussão
+
+Contra a conta-A, sobre uma mensagem de grupo carregada:
+
+```
+shape: 598 field names; sample of the harmless ones: [id t type ack from to]
+the page DOES carry a "body" field (name only; no value was read)
+the page DOES carry a "caption" field (name only; no value was read)
+```
+
+**598 nomes de campo, e `body` e `caption` estão entre eles.** Não era hipótese.
+
+### O que foi entregue
+
+`ShapeOf` devolve os NOMES, ordenados, e nunca um valor. O que `rawData` serve
+de fato — ver o que a página tem sobre uma mensagem quando uma capacidade não se
+comporta — continua servido; o que ele carregaria de PII, não.
+
+Estado no ledger: `INTENTIONAL_DIFFERENCE`, que é o vocabulário exato para
+"resolvemos de outro jeito, de propósito e registrado".
+
+### Controles negativos EXECUTADOS
+
+1. Ler o lado do valor, mesmo só para decidir se o campo existe
+   (`seen[k] = (m[k] !== undefined)`):
+   ```
+   --- FAIL: TestTheShapeReaderNeverReadsAValue
+       message_test.go:190: the shape script contains "m[k]", which reads the value side
+   ```
+   Este é o controle que importa: uma versão que lê `m[k]` **já tem o corpo em
+   mãos**, e um `JSON.stringify` depois ele estaria em Go. A guarda é sobre o
+   SCRIPT, não sobre o tipo de retorno, porque é no script que a decisão vive.
+
+2. Remover o `.sort()`:
+   ```
+   --- FAIL: TestTheShapeIsNamesAndIsSorted
+       message_test.go:209: the script does not sort, so two reads of one message will not compare
+   ```
+
+**Status**: entregue nesta sessão.

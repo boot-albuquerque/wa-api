@@ -76,6 +76,24 @@ func TestProbeMessageOrigin(t *testing.T) {
 			"not distinguishing getContact from getChat")
 	}
 
+	// THE SHAPE, on the same messages. Key names only; the values are never read,
+	// which is what makes this a deliberate divergence from rawData rather than a
+	// thin version of it.
+	if len(ids.group) > 0 {
+		keys, err := r.ShapeOf(ctx, ids.group[0], "probe/msgorigin")
+		if err != nil {
+			t.Errorf("ShapeOf: %v", err)
+		} else {
+			t.Logf("shape: %d field names; sample of the harmless ones: %v",
+				len(keys), intersect(keys, []string{"id", "t", "type", "ack", "from", "to"}))
+			for _, forbidden := range []string{"body", "caption", "text"} {
+				if hasName(keys, forbidden) {
+					t.Logf("the page DOES carry a %q field (name only; no value was read)", forbidden)
+				}
+			}
+		}
+	}
+
 	// A raw id that was never loaded must be its own error, not a read failure.
 	if _, err := r.OriginOf(ctx, "0000000000000000000000000000000000", "probe/msgorigin"); err == nil {
 		t.Error("an id that cannot exist read back successfully")
@@ -143,4 +161,23 @@ func parseLoadedIDs(t *testing.T, raw string) loadedIDs {
 		t.Fatalf("collection: %s", v.Err)
 	}
 	return loadedIDs{group: v.Group, direct: v.DirectCount}
+}
+
+func hasName(hay []string, needle string) bool {
+	for _, h := range hay {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func intersect(hay, want []string) []string {
+	var out []string
+	for _, w := range want {
+		if hasName(hay, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }

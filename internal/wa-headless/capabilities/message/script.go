@@ -58,3 +58,49 @@ func originScript(messageID string) string {
 	return "kicked";
 	})()`
 }
+
+// shapeScript reports the FIELD NAMES of a message's raw model, never a value.
+//
+// THIS IS THE DELIBERATE DIVERGENCE. Message.rawData in the reference hands back
+// the whole raw object, which for a chat message IS the body. This module keeps
+// bodies out structurally (invariant 12, enforced in capabilities/messagemeta by
+// TestNoBodyFieldExistsAnywhere), so returning rawData as-is would defeat a
+// guard rather than deliver a feature.
+//
+// What rawData is actually FOR — seeing what the page has on a message when a
+// capability does not behave — is served by the shape, and the shape carries no
+// identity: key names only, sorted, with the value side never read.
+func shapeScript(messageID string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
+	try {
+		const MC = window.require("` + modMsgCollection + `").MsgCollection;
+		let m = null;
+		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
+		if (!m) {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				try { if (c.id && c.id.id === ` + strconv.Quote(messageID) + `) { m = c; break; } } catch (e) {}
+			}
+		}
+		if (!m) { park({ ok: true, notFound: true }); return "kicked"; }
+
+		// SO AS CHAVES. Nao ha leitura de m[k] em lugar nenhum deste script, e e
+		// isso que o mantem honesto: uma versao que lesse valores para "decidir
+		// se e vazio" ja teria o corpo em maos.
+		const seen = {};
+		const push = o => {
+			if (!o) { return; }
+			for (const k of Object.keys(o)) { seen[k] = true; }
+		};
+		push(m);
+		push(m.attributes);
+		park({ ok: true, notFound: false, keys: Object.keys(seen).sort() });
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
+	return "kicked";
+	})()`
+}

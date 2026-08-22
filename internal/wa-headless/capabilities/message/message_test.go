@@ -172,3 +172,57 @@ func TestTheParkedLoopIsBounded(t *testing.T) {
 		t.Fatalf("err = %v, want a settle timeout", err)
 	}
 }
+
+// THE SHAPE READER MUST NOT BE ABLE TO CARRY A BODY.
+//
+// This is the guard that makes the divergence honest rather than a rename. A
+// version that read m[k] — even only to decide whether a field is empty — would
+// already have the body in hand, and one JSON.stringify later it would be in
+// Go. So the check is on the SCRIPT: the value side is never touched.
+func TestTheShapeReaderNeverReadsAValue(t *testing.T) {
+	d := &double{answer: `{"ok":true,"keys":["id","t","type"]}`}
+	if _, err := rd(d).ShapeOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("ShapeOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	for _, forbidden := range []string{"m[k]", "o[k]", "Object.values", "Object.entries", "JSON.stringify(m"} {
+		if strings.Contains(code, forbidden) {
+			t.Errorf("the shape script contains %q, which reads the value side", forbidden)
+		}
+	}
+	if !strings.Contains(code, "Object.keys") {
+		t.Error("the shape script does not read keys at all")
+	}
+}
+
+// And the returned type has nowhere to put one: []string of names.
+func TestTheShapeIsNamesAndIsSorted(t *testing.T) {
+	d := &double{answer: `{"ok":true,"keys":["a","b","c"]}`}
+	got, err := rd(d).ShapeOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("ShapeOf: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("keys = %d, want 3", len(got))
+	}
+	if !strings.Contains(withoutComments(d.lastScript), ".sort()") {
+		t.Error("the script does not sort, so two reads of one message will not compare")
+	}
+}
+
+func TestTheShapeOfAnUnloadedMessageIsItsOwnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":true}`}
+	if _, err := rd(d).ShapeOf(context.Background(), "3EB0", "t"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForAShape(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).ShapeOf(context.Background(), " ", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("err = %v, want ErrNoMessage", err)
+	}
+	if d.kicks != 0 {
+		t.Error("an empty id reached the page")
+	}
+}

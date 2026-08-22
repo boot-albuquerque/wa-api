@@ -157,3 +157,34 @@ func (r *Reader) parked(ctx context.Context, kick, label string) (string, error)
 		}
 	}
 }
+
+// ShapeOf reports the FIELD NAMES the page has on one message, and never a
+// value. See shapeScript for why this is a deliberate divergence from the
+// reference's Message.rawData rather than a thin version of it.
+//
+// Sorted, so two reads of the same message compare.
+func (r *Reader) ShapeOf(ctx context.Context, messageID, label string) ([]string, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return nil, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, shapeScript(messageID), label+"/shape")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK       bool     `json:"ok"`
+		Why      string   `json:"why"`
+		NotFound bool     `json:"notFound"`
+		Keys     []string `json:"keys"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return nil, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return nil, ErrNotFound
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	return out.Keys, nil
+}

@@ -296,7 +296,7 @@ sem link.
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `reload` | — | `MISSING` | — | — | — | — |
-| `rawData` | — | `MISSING` | — | — | — | não atacado |
+| `rawData` | message.ShapeOf | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | H107: devolvemos os NOMES dos campos, nunca os valores — a medição achou 598 nomes no modelo cru, entre eles `body` e `caption`; devolver rawData como é derrubaria a invariante 12 em vez de entregar funcionalidade |
 | `getChat` | message.OriginOf (.ChatJID) | `PROVEN` | sim | sim | sim | H106 |
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
 | `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
@@ -417,6 +417,6 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `PROVEN` | 58 | 26% |
 | `PARTIAL` | 48 | 22% |
 | `BLOCKED` | 3 | 1% |
-| `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 109 | 50% |
+| `INTENTIONAL_DIFFERENCE` | 3 | 1% |
+| `MISSING` | 108 | 49% |
 | **total** | **220** | |
