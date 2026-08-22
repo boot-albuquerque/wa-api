@@ -480,10 +480,13 @@ não resolve.
    e não como referência viva — mas `PATCHES.md` **é** consultado ao decidir
    sobre divergências do fork, então não é o caso.
 
-**Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
-escolha é sobre o que esses documentos são, não sobre o texto deles.
+**Status**: **corrigido** (opção 1). Nota de época acrescentada ao topo de
+`internal/wa-noise/PATCHES.md` com tabela de mapeamento dos quatro caminhos
+reorganizados em `ca34600`. O corpo do arquivo ficou intacto, preservando o
+registro histórico. O `HOUSEKEEP.md` da raiz já tinha anotações "(hoje ...)"
+nas referências afetadas (entrada de 2026-08-06 sobre data race).
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F64 — inventário dos 38 `// TODO` restantes, item a item
 
@@ -4103,24 +4106,27 @@ que clientes já recebem. Para a posse de sessão isso é seguro (código novo,
 sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
-**Status**: **parcialmente corrigido**. `CategoryConflict` existe e mapeia para
-409 (`codes.go`), e a recusa por posse de sessão migrou para ela.
+**Status**: **corrigido**. `CategoryConflict` existe e mapeia para
+409 (`codes.go`), e os dois sites migrados:
 
-Dois testes travam o comportamento em níveis diferentes: o MAPEAMENTO
-(`TestCategory_HTTPStatus`, com o caso novo acrescentado à tabela — ela passava
-sem conhecer a categoria) e o USO (`TestStart_OwnershipRefusalIsClassified`,
-que agora exige 409 e não apenas "não-5xx"). Controle negativo executado nos
-dois: `HTTPStatus() = 400, want 409`.
+1. Recusa por posse de sessão (`orchestrator.go:326,341`).
+2. Logout de sessão desconectada — F93 (`guard.go:110`), migrado com o teste
+   correspondente (`encerramento_test.go:238`, `guard_test.go:227`).
 
-**Falta migrar a F93** (logout de sessão desconectada), que é o outro site
-listado acima. Não foi feito aqui porque, ao contrário da posse — código novo,
-sem cliente algum —, aquele endpoint já responde 500 em produção hoje: mudar
-para 409 é alteração de contrato OBSERVÁVEL e precisa ser decidida como tal,
-não aplicada de passagem.
+Três testes travam o comportamento: o MAPEAMENTO (`TestCategory_HTTPStatus`),
+o USO na posse (`TestStart_OwnershipRefusalIsClassified`), e o USO no logout
+(`TestLogoutUseCase_SemTransporteAlinhaOEstadoLocal`, que espera
+`CategoryConflict`).
+
+> **Nota (2026-08-22)**: a entrada acima dizia "falta migrar a F93" — estava
+> desatualizada. O `guard.go` (commit que trouxe a guarda de sessão para o
+> wa-noise) já usava `CategoryConflict` para `CodeSessionNotConnected`, e o
+> teste de encerramento já o esperava. A migração aconteceu, a entrada é que
+> não foi atualizada.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F96 — sessão que nunca subiu detém lease renovado para sempre
 
@@ -17331,9 +17337,10 @@ Duas opções, ambas legítimas, nenhuma minha:
   subindo `max_exempt_annotations` de 1 para 3 contra a direção declarada do
   ratchet.
 
-**Status**: não corrigido por decisão explícita — o gate fica vermelho e
-visível em vez de verde e mascarado. Ver [[F192]] para a correção que o
-motivou.
+**Status**: **corrigido** — superado pela resolução da [[F193]], que removeu os
+adaptadores do denominador. A queda de cobertura descrita acima foi absorvida
+num patamar diferente (744→741) e aceite no `.log-coverage-baseline` sem
+mascaramento. Ver a nota de reconciliação abaixo.
 
 > **Nota de reconciliação (2026-08-21)**: a F197 acima ficou SUPERADA pela
 > resolução da [[F193]]. Ela descreve o gate a exigir 667 e a medir 665 com as
@@ -17362,7 +17369,7 @@ motivou.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F198 — duas rotas registadas respondem 200 sem fazer nada: `/status/set/text` e `/user/history/sync`
 
@@ -18301,9 +18308,22 @@ audita.
 
 **Correção sugerida**: remover, ou documentar por que existe.
 
-**Status**: não corrigido — triagem.
+**Status**: **corrigido**. `cache.go` e `cache_test.go` removidos. A produção
+usa `cache.New(5*time.Minute, 10*time.Minute)` diretamente em
+`bootstrap/config.go:59` e `bootstrap/context.go:45` — `NewTokenCache` nunca
+era chamado fora de testes.
 
-<!-- f-status: aberto -->
+Teste anti-regressão: `TestAuth_NoCacheConstructor` (`dead_code_test.go`)
+varre os ficheiros não-teste do pacote `auth` e falha se encontrar
+`func NewTokenCache(`. Controlo negativo executado (stub reintroduzido → teste
+falha):
+
+```
+--- FAIL: TestAuth_NoCacheConstructor (0.00s)
+    dead_code_test.go:33: F207: cache_stub.go still exports NewTokenCache — this was dead code (only called from tests)...
+```
+
+<!-- f-status: corrigido -->
 
 ## F208 — com o poll REST em falha, o cartão contradiz o aviso que está ao lado dele
 
@@ -18382,12 +18402,30 @@ granularidade errado**, aqui a apontar para um elemento que não existe.
 e não só chama `mostrarAviso`. Como a F77 mostrou, uma asserção sobre o
 ficheiro inteiro não serve: recortar o ramo do `if (!r.ok)`.
 
-**Status**: **não corrigido, e gravidade BAIXA** depois da correção acima — o
-aviso funciona, então o operador tem sinal. Fora do escopo da F77, que era o
-socket. Referência cruzada em F85: o sintoma que aquela entrada chama "o painel
-mente em silêncio" já não é silêncio, é contradição.
+**Status**: **corrigido**. Quando `atualizar()` recebe `!r.ok`, chama
+`marcarCartoesSobreviventes()` que adiciona a classe `stale` a todos os
+cartões e uma badge com a idade dos dados ("dados de há Xs"). Na repintura
+seguinte bem-sucedida, `desmarcarCartoesSobreviventes()` remove a classe e a
+badge. CSS: `.card.stale { opacity:.45; border-style:dashed; }`.
 
-<!-- f-status: aberto -->
+Três testes anti-regressão em `devui_test.go`:
+- `TestPainel_PollFalhoMarcaCartoesSobreviventes` — o ramo de falha chama a marcação.
+- `TestPainel_CartaoStaleTemEstilo` — CSS para `.card.stale` e `.stale-badge` existe.
+- `TestPainel_PollBoaLimpaStale` — a limpeza corre antes de `desenhar()`.
+
+Controlo negativo executado (remoção de `marcarCartoesSobreviventes()` do ramo
+de falha → teste falha):
+
+```
+--- FAIL: TestPainel_PollFalhoMarcaCartoesSobreviventes (0.00s)
+    devui_test.go:873: o ramo de falha de `atualizar` não marca os cartões como obsoletos: eles continuam a afirmar estado velho ao lado de um aviso que diz o contrário (F208)
+```
+
+Referência cruzada em F85: o sintoma que aquela entrada chama "o painel
+mente em silêncio" agora é contradição resolvida — cartão opaco + badge diz
+que os dados são velhos.
+
+<!-- f-status: corrigido -->
 
 ## F209 — telefone com lixo vira JID e o pedido pendura 75 segundos antes de devolver 500
 
