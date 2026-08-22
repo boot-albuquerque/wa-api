@@ -165,7 +165,7 @@ func TestMessageMutation_Success_ViaRegisteredRoute(t *testing.T) {
 					RevokeMessageFunc: func(_ context.Context, _ string, _ domain.JID, _ string) (domain.MessageSendResult, error) {
 						return domain.MessageSendResult{ID: "id-da-revogacao", Timestamp: time.Unix(sentAt, 0)}, nil
 					},
-					EditMessageFunc: func(_ context.Context, _ string, _ domain.JID, _, _ string) (domain.MessageSendResult, error) {
+					EditMessageFunc: func(_ context.Context, _ string, _ domain.JID, _, _ string, _ *domain.EditContextInfo) (domain.MessageSendResult, error) {
 						return domain.MessageSendResult{ID: "id-da-edicao", Timestamp: time.Unix(sentAt, 0)}, nil
 					},
 				}
@@ -517,7 +517,7 @@ func TestMessageMutation_DownstreamFailureNeverReturns200(t *testing.T) {
 					RevokeMessageFunc: func(context.Context, string, domain.JID, string) (domain.MessageSendResult, error) {
 						return domain.MessageSendResult{}, errMutationSentinel
 					},
-					EditMessageFunc: func(context.Context, string, domain.JID, string, string) (domain.MessageSendResult, error) {
+					EditMessageFunc: func(context.Context, string, domain.JID, string, string, *domain.EditContextInfo) (domain.MessageSendResult, error) {
 						return domain.MessageSendResult{}, errMutationSentinel
 					},
 				}

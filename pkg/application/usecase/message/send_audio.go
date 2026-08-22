@@ -139,7 +139,7 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 
 	mimeType := resolveAudioMimeType(req.MimeType, detectedMime, data, ptt)
 
-	payload := domain.AudioPayload{Bytes: data, MimeType: mimeType, PTT: ptt, Seconds: req.Seconds}
+	payload := domain.AudioPayload{Bytes: data, MimeType: mimeType, PTT: ptt, Seconds: req.Seconds, Waveform: req.Waveform}
 
 	sent, err := uc.media.SendAudio(ctx, txtID, recipient, payload, req.ID)
 	if err != nil {

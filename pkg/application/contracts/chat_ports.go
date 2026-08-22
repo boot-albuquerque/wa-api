@@ -81,9 +81,9 @@ type ChatMessenger interface {
 	RevokeMessage(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error)
 
 	// EditMessage substitui o texto da mensagem messageID na conversa
-	// target por newText. Mesma disciplina de RevokeMessage quanto ao
-	// resultado devolvido. A montagem (FutureProofMessage/
-	// ProtocolMessage MESSAGE_EDIT sobre um ExtendedTextMessage) é
-	// responsabilidade do adapter.
-	EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error)
+	// target por newText. ctxInfo, quando não nil, monta ContextInfo no
+	// ExtendedTextMessage (citação e menções — F134). A montagem
+	// (FutureProofMessage/ProtocolMessage MESSAGE_EDIT) é responsabilidade
+	// do adapter.
+	EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error)
 }

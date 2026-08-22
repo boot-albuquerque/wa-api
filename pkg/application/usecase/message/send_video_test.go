@@ -592,6 +592,40 @@ func TestSendVideo_RealFetchIntegration(t *testing.T) {
 }
 
 // TestSendVideo_SSRF_LoopbackBlocked prova que Video passa pela MESMA seam
+// TestSendVideo_MimeTypeAndThumbnailFlowToPayload (F118) proves two things:
+//  1. SendVideoRequest.MimeType reaches resolveMimeType as level-1 precedence
+//     (the reconstructed route hardcoded "" there, dropping client-supplied MIME).
+//  2. SendVideoRequest.JPEGThumbnail reaches MediaPayload.JPEGThumbnail.
+func TestSendVideo_MimeTypeAndThumbnailFlowToPayload(t *testing.T) {
+	thumb := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}
+
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{}
+	logger := &contractsfake.Logger{}
+
+	uri := videoDataURI("video/mp4", mp4Bytes)
+	_, err := message.NewSendVideoUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendVideoRequest{
+			Phone: "5511987654321", Video: uri,
+			MimeType:      "video/mp4",
+			JPEGThumbnail: thumb,
+		})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if n := len(mm.SendVideoCalls); n != 1 {
+		t.Fatalf("SendVideo chamado %d vez(es), quero 1", n)
+	}
+	call := mm.SendVideoCalls[0]
+	if call.Payload.MimeType != "video/mp4" {
+		t.Errorf("MimeType: got %q, want %q — req.MimeType nao teve precedencia (nivel 1)", call.Payload.MimeType, "video/mp4")
+	}
+	if string(call.Payload.JPEGThumbnail) != string(thumb) {
+		t.Errorf("JPEGThumbnail: got %v, want %v — o campo nao fluiu do request ate' a porta", call.Payload.JPEGThumbnail, thumb)
+	}
+}
+
 // SSRF-safe já provada em CAP-02 — não um caminho de fetch paralelo.
 func TestSendVideo_SSRF_LoopbackBlocked(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{}

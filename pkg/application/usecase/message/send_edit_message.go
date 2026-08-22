@@ -38,11 +38,6 @@ func NewSendEditMessageUseCase(cm appport.ChatMessenger, jr appport.JIDResolver,
 // causa devolvida é a do parse ("could not parse Phone"), e não a do Id —,
 // por isso tem teste próprio (TestSendEditMessage_PhoneParseRejectedBeforeMissingID).
 //
-// O ContextInfo que o payload histórico aceitava (StanzaID/Participant/
-// MentionedJID, para transformar a edição numa resposta citada) NÃO existe
-// em domain.SendEditMessageRequest e não é reintroduzido aqui — achado
-// registrado no HOUSEKEEP (F134), não corrigido de graça.
-//
 // MessageID no resultado é o ID da mensagem EDITADA (req.ID), pela mesma
 // razão de DeleteMessageUseCase.
 func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req domain.SendEditMessageRequest) (*domain.SendEditMessageResult, error) {
@@ -68,7 +63,18 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 		return nil, apperr.New("missing_id", apperr.CategoryValidation, "missing Id in payload", false, nil)
 	}
 
-	sent, err := uc.chats.EditMessage(ctx, txtID, recipient, req.ID, req.Body)
+	var ctxInfo *domain.EditContextInfo
+	if req.StanzaID != nil || req.Participant != nil || len(req.MentionedJID) > 0 {
+		ctxInfo = &domain.EditContextInfo{MentionedJID: req.MentionedJID}
+		if req.StanzaID != nil {
+			ctxInfo.StanzaID = *req.StanzaID
+		}
+		if req.Participant != nil {
+			ctxInfo.Participant = *req.Participant
+		}
+	}
+
+	sent, err := uc.chats.EditMessage(ctx, txtID, recipient, req.ID, req.Body, ctxInfo)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to edit message", "txtID", txtID, "error", err)
 		return nil, err

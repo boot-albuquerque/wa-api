@@ -32,13 +32,6 @@ const dataStickerPrefix = "data"
 // resultado CONVERTIDO e envia a mensagem pelo wa-noise. Só devolve
 // domain.StatusSent depois que o envio (não o upload, não a conversão)
 // retorna sucesso — mesma disciplina de SendImageUseCase/SendVideoUseCase.
-//
-// FORA DE ESCOPO, explicitamente: os quatro campos de metadata de pacote
-// (PackId/PackName/PackPublisher/Emojis) e PngThumbnail, que o
-// stickerStruct histórico tinha e domain.SendStickerRequest não tem —
-// achado CAP-07, reportado, não implementado por conta própria (decisão de
-// contrato não é do executor). Este usecase sempre passa vazio/nil para
-// eles no chamado a ProcessSticker.
 type SendStickerUseCase struct {
 	media     appport.MediaMessenger
 	jids      appport.JIDResolver
@@ -137,11 +130,11 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 	// ProcessSticker é o ÚNICO ponto de conversão: decodifica stickerData,
 	// converte para WebP (imagem via libwebp lossless, vídeo/gif via
 	// ffmpeg 512x512@15fps) e embute EXIF de pacote quando packID/packName/
-	// packPublisher/emojis não são todos vazios (aqui, sempre são — achado
-	// CAP-07). O MIME final é o QUE O PIPELINE devolve, não req.MimeType
-	// (que entra só como mimeOverride, parâmetro 2) nem sniffing feito por
-	// este usecase — a precedência vive dentro do pacote sticker.
-	processed, detectedMimeType, err := uc.processor.ProcessSticker(ctx, stickerData, req.MimeType, "", "", "", nil)
+	// packPublisher/emojis não são todos vazios. O MIME final é o QUE O
+	// PIPELINE devolve, não req.MimeType (que entra só como mimeOverride,
+	// parâmetro 2) nem sniffing feito por este usecase — a precedência vive
+	// dentro do pacote sticker.
+	processed, detectedMimeType, err := uc.processor.ProcessSticker(ctx, stickerData, req.MimeType, req.PackID, req.PackName, req.PackPublisher, req.Emojis)
 	if err != nil {
 		uc.logger.Warn(ctx, "failed to process sticker", "txtID", txtID, "error", err)
 		// Mapeamento de categoria embutido aqui (não numa função à parte):
@@ -165,7 +158,7 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 		return nil, apperr.New("sticker_processing_failed", apperr.CategoryValidation, "failed to process sticker payload", false, err)
 	}
 
-	payload := domain.MediaPayload{Bytes: processed, MimeType: detectedMimeType}
+	payload := domain.MediaPayload{Bytes: processed, MimeType: detectedMimeType, PngThumbnail: req.PngThumbnail}
 
 	sent, err := uc.media.SendSticker(ctx, txtID, recipient, payload, req.ID)
 	if err != nil {

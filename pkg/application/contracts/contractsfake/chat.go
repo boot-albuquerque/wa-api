@@ -212,6 +212,7 @@ type ChatMessengerEditMessageCall struct {
 	Target    domain.JID
 	MessageID string
 	NewText   string
+	CtxInfo   *domain.EditContextInfo
 }
 
 // ChatMessenger é o fake de port.ChatMessenger.
@@ -227,7 +228,7 @@ type ChatMessenger struct {
 	RevokeMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error)
 	RevokeMessageCalls []ChatMessengerRevokeMessageCall
 
-	EditMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error)
+	EditMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error)
 	EditMessageCalls []ChatMessengerEditMessageCall
 }
 
@@ -261,10 +262,10 @@ func (f *ChatMessenger) RevokeMessage(ctx context.Context, txtID string, target 
 }
 
 // EditMessage implementa port.ChatMessenger.
-func (f *ChatMessenger) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error) {
-	f.EditMessageCalls = append(f.EditMessageCalls, ChatMessengerEditMessageCall{Ctx: ctx, TxtID: txtID, Target: target, MessageID: messageID, NewText: newText})
+func (f *ChatMessenger) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error) {
+	f.EditMessageCalls = append(f.EditMessageCalls, ChatMessengerEditMessageCall{Ctx: ctx, TxtID: txtID, Target: target, MessageID: messageID, NewText: newText, CtxInfo: ctxInfo})
 	if f.EditMessageFunc != nil {
-		return f.EditMessageFunc(ctx, txtID, target, messageID, newText)
+		return f.EditMessageFunc(ctx, txtID, target, messageID, newText, ctxInfo)
 	}
 	return domain.MessageSendResult{}, nil
 }

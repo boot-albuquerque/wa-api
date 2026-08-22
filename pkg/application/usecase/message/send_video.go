@@ -110,15 +110,8 @@ func (uc *SendVideoUseCase) Execute(ctx context.Context, txtID string, req domai
 	case isHTTPVideoURL(req.Video):
 		var err error
 		// contentType (segundo valor de retorno) é intencionalmente
-		// descartado: o histórico calcula um mimeType local com fallback
-		// "video/mpeg" a partir dele, mas esse valor só alimenta um
-		// round-trip dataurl (no-op sobre os bytes) e é DESCARTADO antes
-		// de chegar em VideoMessage.Mimetype (`git show
-		// 41bc8e2^:handlers.go`, em torno da linha 1583-1620). Dar
-		// precedência ao Content-Type remoto aqui seria inventar
-		// comportamento que o histórico nunca teve — o nível 1 real é
-		// SendVideoRequest.MimeType (ausente do DTO atual, achado
-		// reportado), e o nível 2 é sempre sniffing dos bytes.
+		// descartado: o nível 1 real é SendVideoRequest.MimeType, e o
+		// nível 2 é sniffing dos bytes (resolveMimeType).
 		data, _, err = uc.fetcher.FetchBytes(ctx, req.Video, fetchVideoMaxBytes)
 		if err != nil {
 			uc.logger.Warn(ctx, "failed to fetch video url", "txtID", txtID, "error", err)
@@ -134,17 +127,9 @@ func (uc *SendVideoUseCase) Execute(ctx context.Context, txtID string, req domai
 		return nil, apperr.New("empty_video_body", apperr.CategoryValidation, "video body is empty", false, nil)
 	}
 
-	// resolveMimeType (send_image.go): reqMimeType (aqui sempre "" — o
-	// DTO atual não tem MimeType, ver o comentário de
-	// domain.SendVideoRequest) tem precedência quando não vazio, senão
-	// sniffing dos bytes. Reaproveitada tal e qual porque a precedência
-	// histórica de Video é a MESMA de Image — não uma coincidência de
-	// nome, é o mesmo contrato (`git show 41bc8e2^:handlers.go`, campo
-	// Mimetype de imageStruct.MimeType usado por Image e por Video da
-	// mesma forma).
-	mimeType := resolveMimeType("", data)
+	mimeType := resolveMimeType(req.MimeType, data)
 
-	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption}
+	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption, JPEGThumbnail: req.JPEGThumbnail}
 
 	sent, err := uc.media.SendVideo(ctx, txtID, recipient, payload, req.ID)
 	if err != nil {

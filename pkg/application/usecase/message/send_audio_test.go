@@ -781,6 +781,35 @@ func TestSendAudio_RealFetchIntegration(t *testing.T) {
 	}
 }
 
+// TestSendAudio_WaveformFlowsToPayload (F117) proves that
+// SendAudioRequest.Waveform reaches AudioPayload.Waveform and from there
+// arrives at the MediaMessenger port. The historical handler wired
+// req.Waveform into AudioMessage.Waveform; the reconstructed route lost it.
+func TestSendAudio_WaveformFlowsToPayload(t *testing.T) {
+	waveform := []byte{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
+
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{}
+	logger := &contractsfake.Logger{}
+
+	uri := audioDataURI("audio/ogg", oggBytes)
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendAudioRequest{
+			Phone: "5511987654321", Audio: uri, Waveform: waveform,
+		})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if n := len(mm.SendAudioCalls); n != 1 {
+		t.Fatalf("SendAudio chamado %d vez(es), quero 1", n)
+	}
+	got := mm.SendAudioCalls[0].Payload.Waveform
+	if string(got) != string(waveform) {
+		t.Errorf("Waveform: got %v, want %v — o campo nao fluiu do request ate' a porta", got, waveform)
+	}
+}
+
 // TestSendAudio_SSRF_LoopbackBlocked prova que Audio passa pela MESMA seam
 // SSRF-safe já provada em CAP-02 — não um caminho de fetch paralelo.
 func TestSendAudio_SSRF_LoopbackBlocked(t *testing.T) {

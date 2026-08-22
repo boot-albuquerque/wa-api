@@ -5804,12 +5804,23 @@ MUST degradar para envio sem miniatura com log em `Warn` — nunca falhar o
 envio por causa disso, mesmo princípio que a F114 já registrou para o
 upload da thumbnail HQ do link preview.
 
-**Status**: **NÃO CORRIGIDO** — fora do escopo fechado de CAP-02 (entregar o
-ramo URL ponta a ponta com upload+envio reais; ACCEPTANCE_CRITERIA da task
-não menciona thumbnail). Decisão consciente: registrada aqui em vez de
-implementada sem pedir, por ser scope creep sobre uma task já grande.
+**Status**: **CORRIGIDO** — 2026-08-22.
 
-<!-- f-status: aberto -->
+Corrigido em três camadas:
+1. `pkg/domain/message.go`: campo `JPEGThumbnail []byte` adicionado a
+   `SendImageRequest` e `MediaPayload`.
+2. `pkg/application/usecase/message/send_image.go`: payload recebe
+   `req.JPEGThumbnail`.
+3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `ImageMessage` recebe
+   `payload.JPEGThumbnail`.
+
+**Testes**: `TestSendImage_JPEGThumbnailFlowsToPayload`
+(`send_image_test.go`).
+
+**Controlo negativo**: remover `JPEGThumbnail` do payload → teste falha com
+`JPEGThumbnail: got [], want [255 216 255 224 0 16]`.
+
+<!-- f-status: corrigido -->
 
 ## F116 — `SendAudioRequest.Caption` é aceito pela API e não tem representação no protocolo
 
@@ -5888,10 +5899,23 @@ repassá-lo ao `AudioPayload` até o adapter. É acréscimo de campo opcional,
 portanto compatível para trás. Custo baixo; o motivo de não ter sido feito em
 CAP-05 é escopo, não dificuldade.
 
-**Status**: **NÃO CORRIGIDO** — CAP-05 tinha escopo fechado (ligar o envio real
-e recuperar PTT/MIME), e ampliar a superfície pública não era parte dele.
+**Status**: **CORRIGIDO** — 2026-08-22.
 
-<!-- f-status: aberto -->
+Corrigido em três camadas:
+1. `pkg/domain/message.go`: campo `Waveform []byte` adicionado a
+   `SendAudioRequest` e `AudioPayload`.
+2. `pkg/application/usecase/message/send_audio.go`: payload recebe
+   `req.Waveform`.
+3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `AudioMessage` recebe
+   `payload.Waveform`.
+
+**Testes**: `TestSendAudio_WaveformFlowsToPayload`
+(`send_audio_test.go`).
+
+**Controlo negativo**: remover `Waveform` do payload → teste falha com
+`Waveform: got [], want [0 10 20 30 40 50 60 70 80 90 100]`.
+
+<!-- f-status: corrigido -->
 
 ## F118 — `SendVideoRequest` perdeu `MimeType` e `JPEGThumbnail` do contrato histórico
 
@@ -5948,10 +5972,25 @@ F118 nasceram todas do mesmo evento: a deleção do `handlers.go` de 232KB em
 tratá-las num único pass de fidelidade, e não uma a uma — a decisão de adiar
 esse pass foi consciente, para ganhar largura de capabilities primeiro.
 
-**Status**: **NÃO CORRIGIDO** — dívida de contrato registrada, não trabalho
-pendente deste ciclo.
+**Status**: **CORRIGIDO** — 2026-08-22.
 
-<!-- f-status: aberto -->
+Corrigido em três camadas:
+1. `pkg/domain/message.go`: campos `MimeType string` e
+   `JPEGThumbnail []byte` adicionados a `SendVideoRequest`.
+2. `pkg/application/usecase/message/send_video.go`: `resolveMimeType`
+   recebe `req.MimeType` (era `""`), payload recebe `req.JPEGThumbnail`.
+3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `VideoMessage` recebe
+   `payload.JPEGThumbnail`.
+
+**Testes**: `TestSendVideo_MimeTypeAndThumbnailFlowToPayload`
+(`send_video_test.go`).
+
+**Controlo negativo**: reverter para `resolveMimeType("", data)` e remover
+`JPEGThumbnail` → teste falha com ambos:
+`MimeType: got "application/octet-stream", want "video/mp4"` e
+`JPEGThumbnail: got [], want [255 216 255 224 0 16]`.
+
+<!-- f-status: corrigido -->
 
 ## F119 — `SendStickerRequest` perdeu cinco campos, e a infra que os consome está inteira
 
@@ -6008,11 +6047,24 @@ preview), F115 (`JPEGThumbnail` de imagem), F117 (`Waveform` de áudio) e F118
 `handlers.go` de 232KB em `41bc8e2`, quando os DTOs foram reconstruídos e as
 implementações não. Somam **doze campos públicos** perdidos.
 
-**Status**: **NÃO CORRIGIDO** — dívida de contrato. O pass de fidelidade que
-trata a família inteira foi adiado conscientemente para ganhar largura de
-capabilities primeiro.
+**Status**: **CORRIGIDO** — 2026-08-22.
 
-<!-- f-status: aberto -->
+Corrigido em duas camadas:
+1. `pkg/domain/message.go`: campos `PngThumbnail []byte`, `PackID string`,
+   `PackName string`, `PackPublisher string`, `Emojis []string` adicionados
+   a `SendStickerRequest`.
+2. `pkg/application/usecase/message/send_sticker.go`: `ProcessSticker`
+   recebe `req.PackID, req.PackName, req.PackPublisher, req.Emojis` (era
+   `"", "", "", nil`), e payload recebe `req.PngThumbnail`.
+
+**Testes**: `TestSendSticker_PackMetadataAndThumbnailFlow`
+(`send_sticker_test.go`).
+
+**Controlo negativo**: reverter para `"", "", "", nil` → teste falha com
+`packID: got "", want "pack-42"`, `packName: got "", want "Gatos"`,
+`packPublisher: got "", want "Lucas"`, `emojis: got [], want [😺]`.
+
+<!-- f-status: corrigido -->
 
 ## F120 — `SendMessageHandler` (texto) loga `user_id` (o Id de sessão) nos
 ramos de erro; os cinco handlers de mídia não logam nada equivalente
@@ -7641,13 +7693,34 @@ com `!= nil`), propagá-los pelo use case até
 `ExtendedTextMessage` lá. É mudança de contrato de ENTRADA (aditiva), então
 merece decisão explícita.
 
-**Status**: não corrigido. Fora do escopo do CAP-10, que era fazer a rota
-mutar de verdade; pela política do `CLAUDE.md`, não corrijo de graça sem
-perguntar. Registrado em comentário no código, em
-`pkg/application/usecase/message/send_edit_message.go` (doc de `Execute`) e em
-`pkg/infra/wa-noise/adapters/chat/messenger.go` (doc de `EditMessage`).
+**Status**: **CORRIGIDO** — 2026-08-22.
 
-<!-- f-status: aberto -->
+Corrigido em quatro camadas:
+1. `pkg/domain/message.go`: campos `StanzaID *string`,
+   `Participant *string`, `MentionedJID []string` adicionados a
+   `SendEditMessageRequest`. Novo tipo `EditContextInfo`.
+2. `pkg/application/usecase/message/send_edit_message.go`: constrói
+   `EditContextInfo` quando pelo menos um dos três campos está presente.
+3. `pkg/application/contracts/chat_ports.go`: assinatura de `EditMessage`
+   ganha `ctxInfo *domain.EditContextInfo`.
+4. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `EditMessage` monta
+   `waE2E.ContextInfo` no `ExtendedTextMessage` quando `ctxInfo != nil`.
+
+**Testes**:
+- `TestSendEditMessage_ContextInfoFlowsToPort` e
+  `TestSendEditMessage_NoContextInfoWhenFieldsAbsent`
+  (`send_edit_message_test.go`) — use case → porta.
+- `TestChatMessengerAdapter_EditMessage_ContextInfoWireShape`
+  (`messenger_mutation_test.go`) — adapter → protobuf wire.
+
+**Controlo negativo** (use case): substituir `ctxInfo` por `nil` na chamada
+a `EditMessage` → teste falha com
+`CtxInfo e' nil — StanzaID/Participant/MentionedJID nao chegaram a' porta`.
+
+**Controlo negativo** (adapter): remover bloco `if ctxInfo != nil` →
+teste falha com `ContextInfo e' nil — F134 nao foi aplicado no wire`.
+
+<!-- f-status: corrigido -->
 
 ## F135 — `Id` de mensagem inexistente ou inválido em delete/edit vira 200 silencioso
 

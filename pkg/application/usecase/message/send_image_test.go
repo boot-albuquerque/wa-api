@@ -679,3 +679,33 @@ func TestSendImage_URLBranch_NotCapturedByDataURIDiscrimination(t *testing.T) {
 		t.Errorf("Status: got %q, want %q", result.Status, domain.StatusSent)
 	}
 }
+
+// TestSendImage_JPEGThumbnailFlowsToPayload (F115) proves that
+// SendImageRequest.JPEGThumbnail reaches MediaPayload.JPEGThumbnail and
+// from there arrives at the MediaMessenger port. The historical handler
+// wired req.JPEGThumbnail into ImageMessage.JpegThumbnail; the
+// reconstructed route lost it.
+func TestSendImage_JPEGThumbnailFlowsToPayload(t *testing.T) {
+	thumb := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}
+
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{}
+	logger := &contractsfake.Logger{}
+
+	uri := dataImageURI("image/png", pngBytes)
+	_, err := message.NewSendImageUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendImageRequest{
+			Phone: "5511987654321", Image: uri, JPEGThumbnail: thumb,
+		})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if n := len(mm.SendImageCalls); n != 1 {
+		t.Fatalf("SendImage chamado %d vez(es), quero 1", n)
+	}
+	got := mm.SendImageCalls[0].Payload.JPEGThumbnail
+	if string(got) != string(thumb) {
+		t.Errorf("JPEGThumbnail: got %v, want %v — o campo nao fluiu do request ate' a porta", got, thumb)
+	}
+}

@@ -134,7 +134,7 @@ func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domai
 		return nil, apperr.New("invalid_image_mime_type", apperr.CategoryValidation, "resolved MIME type is not an image type", false, nil)
 	}
 
-	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption}
+	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption, JPEGThumbnail: req.JPEGThumbnail}
 
 	sent, err := uc.media.SendImage(ctx, txtID, recipient, payload, req.ID)
 	if err != nil {

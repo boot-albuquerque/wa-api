@@ -128,7 +128,7 @@ func TestChatMessengerAdapter_EditMessage_WireShape(t *testing.T) {
 	}
 	a := NewChatMessengerAdapter(mutationGetter(f))
 
-	res, err := a.EditMessage(context.Background(), "u1", domain.JID(mutationChatJID), "3EB0ABC123", "texto corrigido")
+	res, err := a.EditMessage(context.Background(), "u1", domain.JID(mutationChatJID), "3EB0ABC123", "texto corrigido", nil)
 	if err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
@@ -157,6 +157,52 @@ func TestChatMessengerAdapter_EditMessage_WireShape(t *testing.T) {
 	}
 }
 
+// TestChatMessengerAdapter_EditMessage_ContextInfoWireShape (F134) proves
+// that StanzaID/Participant/MentionedJID in EditContextInfo reach
+// ExtendedTextMessage.ContextInfo in the protobuf.
+func TestChatMessengerAdapter_EditMessage_ContextInfoWireShape(t *testing.T) {
+	var sent *waE2E.Message
+	f := &testkit.Fake{
+		SendMessageFn: func(_ context.Context, _ types.JID, msg *waE2E.Message, _ ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+			sent = msg
+			return wanoise.SendResponse{ID: "edit-ctx-id", Timestamp: time.Unix(1755500112, 0)}, nil
+		},
+	}
+	a := NewChatMessengerAdapter(mutationGetter(f))
+
+	ctxInfo := &domain.EditContextInfo{
+		StanzaID:     "STANZA-99",
+		Participant:  "5511888888888@s.whatsapp.net",
+		MentionedJID: []string{"5511777777777@s.whatsapp.net"},
+	}
+	_, err := a.EditMessage(context.Background(), "u1", domain.JID(mutationChatJID), "3EB0ABC123", "com citacao", ctxInfo)
+	if err != nil {
+		t.Fatalf("EditMessage: %v", err)
+	}
+
+	inner := sent.GetEditedMessage().GetMessage().GetProtocolMessage()
+	if inner == nil {
+		t.Fatalf("mensagem enviada nao e' um EditedMessage/ProtocolMessage: %v", sent)
+	}
+	ext := inner.GetEditedMessage().GetExtendedTextMessage()
+	if ext == nil {
+		t.Fatal("ExtendedTextMessage e' nil")
+	}
+	ci := ext.GetContextInfo()
+	if ci == nil {
+		t.Fatal("ContextInfo e' nil — F134 nao foi aplicado no wire")
+	}
+	if ci.GetStanzaID() != "STANZA-99" {
+		t.Errorf("StanzaID: got %q, want %q", ci.GetStanzaID(), "STANZA-99")
+	}
+	if ci.GetParticipant() != "5511888888888@s.whatsapp.net" {
+		t.Errorf("Participant: got %q, want %q", ci.GetParticipant(), "5511888888888@s.whatsapp.net")
+	}
+	if len(ci.GetMentionedJID()) != 1 || ci.GetMentionedJID()[0] != "5511777777777@s.whatsapp.net" {
+		t.Errorf("MentionedJID: got %v, want [5511777777777@s.whatsapp.net]", ci.GetMentionedJID())
+	}
+}
+
 // TestChatMessengerAdapter_Mutation_SendFailurePropagates: falha do envio
 // não vira resultado válido em NENHUMA das duas — é o defeito que o CAP-10
 // consertou, travado também na camada mais baixa.
@@ -179,7 +225,7 @@ func TestChatMessengerAdapter_Mutation_SendFailurePropagates(t *testing.T) {
 		}
 	})
 	t.Run("EditMessage", func(t *testing.T) {
-		res, err := a.EditMessage(context.Background(), "u1", domain.JID(mutationChatJID), "3EB0ABC123", "corrigido")
+		res, err := a.EditMessage(context.Background(), "u1", domain.JID(mutationChatJID), "3EB0ABC123", "corrigido", nil)
 		if !errors.Is(err, sentinel) {
 			t.Fatalf("erro do envio nao propagou: got %#v", err)
 		}
@@ -197,7 +243,7 @@ func TestChatMessengerAdapter_Mutation_NoSession(t *testing.T) {
 	if _, err := a.RevokeMessage(context.Background(), "desconhecido", domain.JID(mutationChatJID), "3EB0ABC123"); err == nil {
 		t.Error("RevokeMessage sem sessao devolveu nil")
 	}
-	if _, err := a.EditMessage(context.Background(), "desconhecido", domain.JID(mutationChatJID), "3EB0ABC123", "x"); err == nil {
+	if _, err := a.EditMessage(context.Background(), "desconhecido", domain.JID(mutationChatJID), "3EB0ABC123", "x", nil); err == nil {
 		t.Error("EditMessage sem sessao devolveu nil")
 	}
 }
@@ -218,7 +264,7 @@ func TestChatMessengerAdapter_Mutation_InvalidJID(t *testing.T) {
 	if _, err := a.RevokeMessage(context.Background(), "u1", invalid, "3EB0ABC123"); err == nil {
 		t.Error("RevokeMessage com JID invalido devolveu nil")
 	}
-	if _, err := a.EditMessage(context.Background(), "u1", invalid, "3EB0ABC123", "x"); err == nil {
+	if _, err := a.EditMessage(context.Background(), "u1", invalid, "3EB0ABC123", "x", nil); err == nil {
 		t.Error("EditMessage com JID invalido devolveu nil")
 	}
 	if calls != 0 {

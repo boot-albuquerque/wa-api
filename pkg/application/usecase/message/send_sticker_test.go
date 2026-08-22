@@ -373,7 +373,7 @@ func TestSendSticker_CausalSuccess(t *testing.T) {
 				t.Errorf("mimeOverride: got %q, want %q (req.MimeType)", mimeOverride, "image/png")
 			}
 			if packID != "" || packName != "" || packPublisher != "" || emojis != nil {
-				t.Errorf("achado CAP-07: campos de pacote deveriam ser vazio/nil, got %q/%q/%q/%v", packID, packName, packPublisher, emojis)
+				t.Errorf("request sem metadata de pacote, got %q/%q/%q/%v", packID, packName, packPublisher, emojis)
 			}
 			return processedBytes, processedMime, nil
 		},
@@ -397,6 +397,60 @@ func TestSendSticker_CausalSuccess(t *testing.T) {
 	}
 	if n := len(mm.SendStickerCalls); n != 1 {
 		t.Fatalf("SendSticker chamado %d vez(es), quero 1", n)
+	}
+}
+
+// TestSendSticker_PackMetadataAndThumbnailFlow (F119) proves that:
+//  1. req.PackID/PackName/PackPublisher/Emojis reach ProcessSticker
+//     (the reconstructed route passed empty strings and nil).
+//  2. req.PngThumbnail reaches MediaPayload.PngThumbnail at SendSticker.
+func TestSendSticker_PackMetadataAndThumbnailFlow(t *testing.T) {
+	pngThumb := []byte{0x89, 0x50, 0x4E, 0x47}
+	processedBytes := []byte{0xDE, 0xAD}
+	const processedMime = "image/webp"
+
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{}
+	sp := &contractsfake.StickerProcessor{
+		ProcessStickerFunc: func(_ context.Context, _, _ string, packID, packName, packPublisher string, emojis []string) ([]byte, string, error) {
+			if packID != "pack-42" {
+				t.Errorf("packID: got %q, want %q", packID, "pack-42")
+			}
+			if packName != "Gatos" {
+				t.Errorf("packName: got %q, want %q", packName, "Gatos")
+			}
+			if packPublisher != "Lucas" {
+				t.Errorf("packPublisher: got %q, want %q", packPublisher, "Lucas")
+			}
+			if len(emojis) != 1 || emojis[0] != "😺" {
+				t.Errorf("emojis: got %v, want [😺]", emojis)
+			}
+			return processedBytes, processedMime, nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	raw := stickerDataURI("image/png", webpBytes)
+	_, err := message.NewSendStickerUseCase(mm, &contractsfake.JIDResolver{}, mf, sp, logger).
+		Execute(context.Background(), userID, domain.SendStickerRequest{
+			Phone:         "5511987654321",
+			Sticker:       raw,
+			PngThumbnail:  pngThumb,
+			PackID:        "pack-42",
+			PackName:      "Gatos",
+			PackPublisher: "Lucas",
+			Emojis:        []string{"😺"},
+		})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if n := len(mm.SendStickerCalls); n != 1 {
+		t.Fatalf("SendSticker chamado %d vez(es), quero 1", n)
+	}
+	call := mm.SendStickerCalls[0]
+	if string(call.Payload.PngThumbnail) != string(pngThumb) {
+		t.Errorf("PngThumbnail: got %v, want %v — o campo nao fluiu do request ate' a porta", call.Payload.PngThumbnail, pngThumb)
 	}
 }
 

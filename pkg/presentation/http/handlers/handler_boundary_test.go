@@ -106,7 +106,7 @@ func (s *spyPort) RevokeMessage(context.Context, string, domain.JID, string) (do
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, string) (domain.MessageSendResult, error) {
+func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, string, *domain.EditContextInfo) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }

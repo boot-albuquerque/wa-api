@@ -63,11 +63,12 @@ const StatusDeleted = "deleted"
 // dois casos, herdado de handlers.go pré-refactor (ver
 // `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
-	Phone    string `json:"Phone"`
-	Image    string `json:"Image"`
-	Caption  string `json:"Caption,omitempty"`
-	ID       string `json:"Id,omitempty"`
-	MimeType string `json:"MimeType,omitempty"`
+	Phone         string `json:"Phone"`
+	Image         string `json:"Image"`
+	Caption       string `json:"Caption,omitempty"`
+	ID            string `json:"Id,omitempty"`
+	MimeType      string `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
 }
 
 // SendImageResult representa o resultado do envio de imagem.
@@ -86,10 +87,12 @@ type SendImageResult struct {
 // É metadata pura — nunca vira operação de sistema de arquivos em nenhum
 // consumidor deste tipo.
 type MediaPayload struct {
-	Bytes    []byte
-	MimeType string
-	Caption  string
-	FileName string
+	Bytes         []byte
+	MimeType      string
+	Caption       string
+	FileName      string
+	JPEGThumbnail []byte
+	PngThumbnail  []byte
 }
 
 // SendDocumentRequest representa o payload de envio de documento. Document é
@@ -141,6 +144,7 @@ type SendAudioRequest struct {
 	PTT      *bool  `json:"ptt,omitempty"`
 	MimeType string `json:"mimetype,omitempty"`
 	Seconds  uint32 `json:"Seconds,omitempty"`
+	Waveform []byte `json:"Waveform,omitempty"`
 }
 
 // SendAudioResult representa o resultado do envio de áudio.
@@ -159,14 +163,20 @@ type AudioPayload struct {
 	MimeType string
 	PTT      bool
 	Seconds  uint32
+	Waveform []byte
 }
 
 // SendStickerRequest representa o payload de envio de sticker.
 type SendStickerRequest struct {
-	Phone    string `json:"Phone"`
-	Sticker  string `json:"Sticker"`
-	ID       string `json:"Id,omitempty"`
-	MimeType string `json:"MimeType,omitempty"`
+	Phone         string   `json:"Phone"`
+	Sticker       string   `json:"Sticker"`
+	ID            string   `json:"Id,omitempty"`
+	MimeType      string   `json:"MimeType,omitempty"`
+	PngThumbnail  []byte   `json:"PngThumbnail,omitempty"`
+	PackID        string   `json:"PackId,omitempty"`
+	PackName      string   `json:"PackName,omitempty"`
+	PackPublisher string   `json:"PackPublisher,omitempty"`
+	Emojis        []string `json:"Emojis,omitempty"`
 }
 
 // SendStickerResult representa o resultado do envio de sticker.
@@ -183,15 +193,13 @@ type SendStickerResult struct {
 // ser "data" (sem os dois-pontos), não "data:video/" (estreito como Audio)
 // nem "data:" (como Document) — ver `git show 41bc8e2^:handlers.go`, em
 // torno da linha 1583, e isDataVideo em send_video.go.
-//
-// MimeType e JPEGThumbnail existiam no DTO histórico (imageStruct de
-// SendVideo) e NÃO estão aqui — achado do CAP-06, reportado, não
-// implementado por conta própria (decisão de contrato não é do executor).
 type SendVideoRequest struct {
-	Phone   string `json:"Phone"`
-	Video   string `json:"Video"`
-	Caption string `json:"Caption,omitempty"`
-	ID      string `json:"Id,omitempty"`
+	Phone         string `json:"Phone"`
+	Video         string `json:"Video"`
+	Caption       string `json:"Caption,omitempty"`
+	ID            string `json:"Id,omitempty"`
+	MimeType      string `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
 }
 
 // SendVideoResult representa o resultado do envio de vídeo.
@@ -506,9 +514,20 @@ type DeleteMessageResult struct {
 
 // SendEditMessageRequest representa o payload de edição de mensagem.
 type SendEditMessageRequest struct {
-	Phone string `json:"Phone"`
-	Body  string `json:"Body"`
-	ID    string `json:"Id"`
+	Phone        string   `json:"Phone"`
+	Body         string   `json:"Body"`
+	ID           string   `json:"Id"`
+	StanzaID     *string  `json:"StanzaId,omitempty"`
+	Participant  *string  `json:"Participant,omitempty"`
+	MentionedJID []string `json:"MentionedJid,omitempty"`
+}
+
+// EditContextInfo carries the optional ContextInfo fields for EditMessage,
+// restoring the contract the historical handlers.go accepted (F134).
+type EditContextInfo struct {
+	StanzaID     string
+	Participant  string
+	MentionedJID []string
 }
 
 // SendEditMessageResult representa o resultado da edição de mensagem.

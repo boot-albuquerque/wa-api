@@ -80,7 +80,7 @@ func messageOpWireCases() []messageOpWireCase {
 			alheias:   append(append([]string{}, formaHistorica...), vocabularioF123...),
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				cm := &contractsfake.ChatMessenger{
-					EditMessageFunc: func(context.Context, string, domain.JID, string, string) (domain.MessageSendResult, error) {
+					EditMessageFunc: func(context.Context, string, domain.JID, string, string, *domain.EditContextInfo) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-edit-1"), nil
 					},
 				}

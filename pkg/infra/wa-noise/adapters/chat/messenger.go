@@ -215,6 +215,7 @@ func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, targ
 			FileEncSHA256: uploaded.FileEncSHA256,
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+			JPEGThumbnail: payload.JPEGThumbnail,
 		},
 	}
 
@@ -310,6 +311,7 @@ func (a *ChatMessengerAdapter) SendAudio(ctx context.Context, txtID string, targ
 			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
 			PTT:           proto.Bool(ptt),
 			Seconds:       proto.Uint32(payload.Seconds),
+			Waveform:      payload.Waveform,
 		},
 	}
 
@@ -358,6 +360,7 @@ func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, targ
 			FileEncSHA256: uploaded.FileEncSHA256,
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+			JPEGThumbnail: payload.JPEGThumbnail,
 		},
 	}
 
@@ -409,6 +412,7 @@ func (a *ChatMessengerAdapter) SendSticker(ctx context.Context, txtID string, ta
 			FileEncSHA256: uploaded.FileEncSHA256,
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(payload.Bytes))),
+			PngThumbnail:  payload.PngThumbnail,
 		},
 	}
 
@@ -698,12 +702,9 @@ func (a *ChatMessengerAdapter) RevokeMessage(ctx context.Context, txtID string, 
 }
 
 // EditMessage substitui o texto da mensagem messageID na conversa target
-// (CAP-10). O conteúdo novo é um ExtendedTextMessage só com Text, como no
-// histórico (`git show 41bc8e2^:handlers.go`, na SendEditMessage) — o
-// ContextInfo que aquele handler aceitava não existe em
-// domain.SendEditMessageRequest e NÃO é reintroduzido aqui (achado
-// reportado, ver HOUSEKEEP.md F134).
-func (a *ChatMessengerAdapter) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string) (domain.MessageSendResult, error) {
+// (CAP-10). ctxInfo, quando não nil, monta ContextInfo no
+// ExtendedTextMessage (citação e menções — F134).
+func (a *ChatMessengerAdapter) EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -714,11 +715,24 @@ func (a *ChatMessengerAdapter) EditMessage(ctx context.Context, txtID string, ta
 		return domain.MessageSendResult{}, err
 	}
 
-	newContent := &waE2E.Message{
-		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(newText),
-		},
+	ext := &waE2E.ExtendedTextMessage{
+		Text: proto.String(newText),
 	}
+	if ctxInfo != nil {
+		ci := &waE2E.ContextInfo{}
+		if ctxInfo.StanzaID != "" {
+			ci.StanzaID = proto.String(ctxInfo.StanzaID)
+		}
+		if ctxInfo.Participant != "" {
+			ci.Participant = proto.String(ctxInfo.Participant)
+		}
+		if len(ctxInfo.MentionedJID) > 0 {
+			ci.MentionedJID = ctxInfo.MentionedJID
+		}
+		ext.ContextInfo = ci
+	}
+
+	newContent := &waE2E.Message{ExtendedTextMessage: ext}
 
 	msg := client.BuildEdit(recipient, types.MessageID(messageID), newContent)
 
