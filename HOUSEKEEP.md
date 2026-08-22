@@ -6193,3 +6193,58 @@ para que o verde signifique algo.
 uma regra de leitura decidida ANTES de olhar.* Terços e árvore de processos foram
 escolhidos antes da primeira amostra. Escolhidos depois, seriam a mesma coisa que
 escolher a conclusão.
+
+---
+
+## H186 — CPU: ociosa custa 6% de um núcleo, e a carga é limitada pela conexão, não pelo processador
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "limites de CPU". Último item mensurável do enunciado.
+
+**Onde**: `internal/wa-headless/probe_cpu_test.go` (novo).
+
+**A suspeita por trás do item**, que é o que o tornava vale a pena: toda
+capacidade usa estacionar-e-consultar — a página estaciona a resposta e o Go
+CONSULTA, porque `Evaluate` não aguarda promessa (invariante 6). Consultar é um
+laço, e muitas chamadas concorrentes são muitos laços. Se o custo por chamada
+crescesse com a concorrência, apareceria aqui.
+
+**Medição**, duas janelas de 30 s do mesmo tamanho:
+
+```
+ocioso   1.69s de CPU em 30.2s de relógio    (6% de um núcleo)
+carga   52.75s de CPU em 30.1s de relógio   (176% de um núcleo)
+razão   31.3x
+```
+
+**O número que decide capacidade é o OCIOSO.** Uma sessão parada custa 6% de um
+núcleo — cerca de dezesseis sessões ociosas por núcleo. É ele que multiplica por
+sessão numa máquina, não o pico; e por isso é ele que o teste afere, com teto em
+25%.
+
+**E o pico é SUB-LINEAR, o que é a informação interessante.** Doze trabalhadores
+em laço contínuo produziram 1,76 núcleo, não doze. O gargalo não é o processador:
+é a **conexão CDP única**, que serializa. Isso explica também a latência da carga
+da H183 (p95 de 233 ms com 40 trabalhadores) — a fila é da conexão. Quem quiser
+mais vazão por máquina precisa de mais SESSÕES, não de mais concorrência dentro
+de uma.
+
+**Duas decisões de instrumento:**
+
+1. **CPU como DELTA de tempo acumulado, não `%cpu`.** A coluna `%cpu` do `ps` é
+   média desde que o processo NASCEU; numa sessão de minutos ela achataria
+   exatamente a rajada que este teste quer ver.
+2. **A janela ociosa tem o mesmo tamanho da janela de carga.** Comparar 5 s de
+   ocioso com 30 s de carga compararia janelas, não estados.
+
+**Uma ressalva dita, não escondida**: a carga aqui é SATURANTE — doze
+trabalhadores em laço sem pausa. É o teto, não um perfil de produção. O número
+serve para dimensionar o pior caso, e chamá-lo de "uso típico" seria mentir sobre
+o que foi medido.
+
+**Status**: item medido, nenhum defeito.
+
+**Lição**: *quando um número cresce menos do que devia, a explicação é tão útil
+quanto o número.* 1,76 núcleo para doze trabalhadores parece bom até se perguntar
+por quê — e a resposta (uma conexão serializa) muda a recomendação de capacidade
+de "adicione concorrência" para "adicione sessões".
