@@ -4903,3 +4903,67 @@ poderosa; aplicá-la sem testar teria convertido três linhas `BLOCKED` bem medi
 em falsos positivos. O mesmo par apareceu hoje com as identidades — H148 achou o
 caso, H149 testou a generalização e a descartou. **A regra é: gere a hipótese
 pela analogia, decida pela medição.**
+
+---
+
+## H164 — `acceptInvite`: o fixture foi construído em vez de emprestado
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A linha tinha uma metade provada ao vivo
+(o caminho de APROVAÇÃO, H89) e a outra intocada.
+
+**Onde**: `internal/wa-headless/probe_directjoin_test.go` (novo), linha
+`acceptInvite`.
+
+**Por que a metade faltante nunca tinha sido feita**: o grupo de laboratório
+exige aprovação de entrada. Desligar isso num fixture de que todo outro teste
+depende não é mudança para fazer por causa de uma linha. Então o fixture foi
+**construído**: conta-A cria um grupo descartável, conta-B sai dele, e volta a
+entrar pelo CÓDIGO de convite. As duas saem no fim, em `defer`.
+
+**Medição**:
+
+```
+created: participants=2 created=true   approval_mode=false
+invite:  code=true len=22 revoked=false
+conta-B JoinByInvite: pending=false
+conta-B conta 2 participantes
+```
+
+`pending=false` é o que distingue este caminho do da H89, em que a página recusa
+com `UnexpectedJoinGroupViaInviteResponse` e a recusa É o pedido sendo criado.
+
+**Três tropeços, e cada um ensinou algo utilizável:**
+
+1. **`Ensure` recusa criar um grupo vazio** — *"a group needs at least one
+   participant"*. É a página falando, não escolha nossa, então o grupo nasce com
+   conta-B e ela SAI antes de entrar por convite. Assim o que fica sob teste
+   continua sendo a entrada por código, não a adição por participante.
+
+2. **A propagação tem de ser esperada, não presumida.** A criação volta com 2
+   participantes do lado de quem criou, e conta-B ainda não tem o grupo: pedir a
+   saída nesse instante responde `NO_CHAT` — verdade sobre a SESSÃO, não sobre o
+   grupo. É a mesma família de erro da H162, em miniatura.
+
+3. **`Ensure` é idempotente POR ASSUNTO**, e isso envenenou uma rodada inteira.
+   Com nome fixo, a segunda execução reusou o grupo abandonado pela primeira — do
+   qual conta-A já tinha saído —, e o sintoma foi `this account is not an admin
+   of that group` sobre um grupo recém-"criado". **A resposta já dizia**:
+   `created=false`. Corrigido com assunto único por execução E com uma asserção
+   sobre `Created`, para que a próxima vez falhe alto em vez de confundir.
+
+**Status**: corrigido, linha para `PROVEN`.
+
+**Achado incidental, NÃO corrigido**: as duas tentativas frustradas deixaram
+grupos descartáveis abandonados no servidor — ninguém é membro deles, então este
+módulo não tem como apagá-los. Não afetam nenhum teste (o assunto agora é único),
+mas ficam registrados em vez de silenciados. **Correção sugerida**: quando um
+probe criar fixture no servidor, o nome deve ser único E o `defer` deve rodar
+antes de qualquer `Fatal` que o preceda — foi por um `Fatal` antes do `defer` que
+o primeiro grupo ficou órfão.
+
+**Lição**: *um helper idempotente é uma armadilha em teste de fixture.* `Ensure`
+faz exatamente o que promete, e é o certo em produção; num probe que precisa de
+um grupo NOVO, "achei um igual" e "criei" são fatos diferentes e a diferença
+estava no valor de retorno o tempo todo. Ler o que a chamada devolve custa menos
+que depurar o efeito dela.

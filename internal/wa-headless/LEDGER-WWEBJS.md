@@ -80,7 +80,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getMessageById` | capabilities/message | `PROVEN` | sim | sim | sim | H127: deixou de ser varredura interna — `message.OriginOf`, `CurrentOf` e `ShapeOf` recebem o id cru e foram provados ao vivo (H106, H107, H108) |
 | `getPinnedMessages` | pin.PinnedIn | `PROVEN` | sim | sim | sim | **H162: provado NÃO-VAZIO.** A premissa da nota antiga — "provar não-vazio exigiria fixar, que está bloqueado" — caiu junto com o bloqueio: fixar funciona, só não é visível a quem fixa. conta-A fixou no grupo de laboratório e o leitor, rodando em conta-B, devolveu a lista com o item (0 → 1). O leitor não depende de sessão dupla; a sessão dupla foi o que produziu o DADO |
 | `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
-| `acceptInvite` | group.JoinByInvite | `PARTIAL` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. O caminho de entrada direta (grupo sem aprovação) não foi exercitado (H89) |
+| `acceptInvite` | group.JoinByInvite | `PROVEN` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. **H164: o caminho de entrada direta foi exercitado e o par fecha.** O grupo de laboratório exige aprovação, e desligar isso num fixture de que todo teste depende não é mudança para fazer por uma linha — então o fixture foi CONSTRUÍDO: conta-A cria um grupo descartável, conta-B sai dele e volta a entrar pelo CÓDIGO. `pending=false`, e conta-B lê 2 participantes. As duas contas saem no fim |
 | `acceptChannelAdminInvite` | channel (admin) | `PROVEN` | sim | sim | sim | H136: provado com sessão dupla. conta-B aceita e o canal vai de **0 para 1 assinante** — pós-condição independente da chamada não ter lançado |
 | `revokeChannelAdminInvite` | channel (admin) | `PROVEN` | sim | sim | sim | H136: provado pela ORDEM CERTA. Testado depois do aceite, o servidor responde `Not Allowed`, que é a resposta correta para convite já consumido e medição errada da capacidade. Revogando ANTES: o aceite seguinte falha com `Not Found` e os assinantes ficam em **0** — a revogação é provada pelo aceite FALHAR, não pela chamada não lançar |
 | `demoteChannelAdmin` | — | `BLOCKED` | — | medido | — | H137: **a forma foi resolvida** — `demoteNewsletterAdminAction(modeloDoCanal, modeloDoContato)`, aridade 2, e a chamada responde ok. Três tentativas antes falharam por nome ou forma inferidos; só ENUMERAR o módulo resolveu. Fica `BLOCKED` e não `PROVEN` porque a pós-condição NÃO EXISTE: verificar exigiria ler a lista de admins, e `WAWebMexFetchNewsletterSubscribersJob` não existe neste build (H113). A chamada funcionar não é a coisa acontecer |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 123 | 56% |
-| `PARTIAL` | 44 | 20% |
+| `PROVEN` | 124 | 56% |
+| `PARTIAL` | 43 | 20% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
