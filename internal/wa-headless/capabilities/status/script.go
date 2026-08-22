@@ -17,9 +17,15 @@ const (
 // and reaching past the getter is how a reader ends up answering for 1 record in
 // 384. WAWebStatusGetters exports getId, getT, getUnreadCount, getTotalCount,
 // getReadCount and getIsLoading — every field this package reports.
-const prelude = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// prelude parks on the key THIS call was given.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177): a const bakes ONE page global
+// into every script here, which is exactly the shared state two concurrent calls
+// overwrite.
+func prelude(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 130);
 	const G = window.require("` + modStatusGetters + `");
 	const num = (fn, s) => { try { const v = fn(s); return typeof v === "number" ? v : 0; } catch (e) { return 0; } };
@@ -45,8 +51,10 @@ const prelude = `
 		return S;
 	};
 `
+}
 
-const listScript = `(() => {` + prelude + `
+func listScript(key string) string {
+	return `(() => {` + prelude(key) + `
 	try {
 		const S = statuses();
 		if (!S) { park({ ok: false, why: "NO_STATUS_COLLECTION" }); return "kicked"; }
@@ -60,9 +68,10 @@ const listScript = `(() => {` + prelude + `
 	}
 	return "kicked";
 	})()`
+}
 
-func byContactScript(contactJID string) string {
-	return `(() => {` + prelude + `
+func byContactScript(contactJID string, key string) string {
+	return `(() => {` + prelude(key) + `
 	try {
 		const S = statuses();
 		if (!S) { park({ ok: false, why: "NO_STATUS_COLLECTION" }); return "kicked"; }

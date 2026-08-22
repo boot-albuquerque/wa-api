@@ -21,7 +21,13 @@ func (d *double) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
+	// A LIBERACAO NAO E' LEITURA (H177): ela roda DEPOIS de a resposta ser
+	// tomada, e conta-la faz um teste de numero de voltas medir uma volta que
+	// nao existe.
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) {
+		return nil
+	}
+	if strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}

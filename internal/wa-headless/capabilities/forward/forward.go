@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -76,7 +77,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Forwarder {
 	return &Forwarder{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessForward"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessForward"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // To forwards a message to a chat that is already loaded.
 //
@@ -92,9 +104,11 @@ func (f *Forwarder) To(ctx context.Context, msgID, toChatJID string, includeCapt
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := f.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return f.eval(ctx, forwardScript(msgID, toChatJID, includeCaption), &kicked)
+		return f.eval(ctx, forwardScript(msgID, toChatJID, includeCaption, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrForward, err)
 	}
@@ -110,7 +124,7 @@ func (f *Forwarder) To(ctx context.Context, msgID, toChatJID string, includeCapt
 	for {
 		var raw string
 		if err := f.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return f.eval(ctx, resultScript, &raw)
+			return f.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrForward, err)
 		}
@@ -145,10 +159,10 @@ func (f *Forwarder) To(ctx context.Context, msgID, toChatJID string, includeCapt
 	return Result{NewID: out.NewID, BodyLen: out.BodyLen, Waited: time.Since(start)}, nil
 }
 
-func forwardScript(msgID, toChatJID string, includeCaption bool) string {
+func forwardScript(msgID, toChatJID string, includeCaption bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -213,10 +227,11 @@ func forwardScript(msgID, toChatJID string, includeCaption bool) string {
 	})())`
 }
 
-// resultScript does the comparison in the page because the id set lives there,
+// resultScript(key) does the comparison in the page because the id set lives there,
 // and returns only an id and a length.
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	if (s.stage === 'settling') {
 		const MC = window.require('WAWebMsgCollection').MsgCollection;
@@ -233,3 +248,4 @@ const resultScript = `JSON.stringify((() => {
 	}
 	return s;
 })())`
+}

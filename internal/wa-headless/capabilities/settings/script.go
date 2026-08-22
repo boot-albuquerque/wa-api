@@ -29,19 +29,26 @@ var accessors = map[Kind][2]string{
 	KindVideos:    {"getAutoDownloadVideos", "setAutoDownloadVideos"},
 }
 
-const preamble = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// preamble parks on the key THIS call was given.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177): a const bakes ONE page global
+// into every script here, which is exactly the shared state two concurrent calls
+// overwrite.
+func preamble(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 `
+}
 
-func readScript() string {
+func readScript(key string) string {
 	var reads strings.Builder
 	for _, k := range Kinds {
 		reads.WriteString(`		auto[` + strconv.Quote(string(k)) + `] = !!G.` + accessors[k][0] + `();
 `)
 	}
-	return `(() => {` + preamble + `
+	return `(() => {` + preamble(key) + `
 	try {
 		const G = window.require("` + modGeneral + `");
 		const N = window.require("` + modNotifications + `");
@@ -54,13 +61,13 @@ func readScript() string {
 	})()`
 }
 
-func autoDownloadScript(kind Kind, on bool) string {
+func autoDownloadScript(kind Kind, on bool, key string) string {
 	get, set := accessors[kind][0], accessors[kind][1]
-	return writeScript(modGeneral, get, set, on)
+	return writeScript(modGeneral, get, set, on, key)
 }
 
-func backgroundSyncScript(on bool) string {
-	return writeScript(modNotifications, fnSyncGet, fnSyncSet, on)
+func backgroundSyncScript(on bool, key string) string {
+	return writeScript(modNotifications, fnSyncGet, fnSyncSet, on, key)
 }
 
 // writeScript reads, writes only when needed, and READS BACK.
@@ -69,9 +76,9 @@ func backgroundSyncScript(on bool) string {
 // `return flag`, which reports the caller's own request as if it were the
 // page's answer — a silent success. Here `after` comes from the getter, so a
 // page that ignored the write says so.
-func writeScript(mod, get, set string, on bool) string {
+func writeScript(mod, get, set string, on bool, key string) string {
 	want := strconv.FormatBool(on)
-	return `(() => {` + preamble + `
+	return `(() => {` + preamble(key) + `
 	(async () => {
 	try {
 		const M = window.require("` + mod + `");

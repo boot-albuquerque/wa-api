@@ -32,6 +32,12 @@ type pageDouble struct {
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	// THE DOUBLE HONOURS ctx, because the production Evaluate does (H30).
 	if err := ctx.Err(); err != nil {
 		return err

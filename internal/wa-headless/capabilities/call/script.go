@@ -17,9 +17,16 @@ const (
 	modEnsureVoip    = "WAWebEnsureVoipInited"
 )
 
-const prelude = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// prelude parks on the key THIS call was given.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177/H178). A const bakes ONE page
+// global into every script in this file, which is exactly the shared state two
+// concurrent calls overwrite — and it is why the mechanical sweep could not
+// convert this package: a const takes no parameter.
+func prelude(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const describe = e => {
 		if (e === null || e === undefined) return "threw " + String(e);
 		if (typeof e === "string") return "string: " + e;
@@ -32,9 +39,10 @@ const prelude = `
 		return parts.join(" ");
 	};
 `
+}
 
-func linkScript(startUnix int64, kind Kind) string {
-	return `(() => {` + prelude + `
+func linkScript(startUnix int64, kind Kind, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			// THE START TIME ARRIVES AS UNIX SECONDS FROM GO. The page is never
@@ -51,8 +59,8 @@ func linkScript(startUnix int64, kind Kind) string {
 	})()`
 }
 
-func rejectScript(callerJID, callID string) string {
-	return `(() => {` + prelude + `
+func rejectScript(callerJID, callID string, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			const Wap = window.require("` + modWap + `");
@@ -83,7 +91,8 @@ func rejectScript(callerJID, callID string) string {
 	})()`
 }
 
-const pendingScript = `(() => {` + prelude + `
+func pendingScript(key string) string {
+	return `(() => {` + prelude(key) + `
 	try {
 		const C = window.require("` + modCallColl + `");
 		const holder = C.CallCollection || C.default || C;
@@ -103,9 +112,10 @@ const pendingScript = `(() => {` + prelude + `
 	}
 	return "kicked";
 	})()`
+}
 
-func placeScript(peerJID string, video bool) string {
-	return `(() => {` + prelude + `
+func placeScript(peerJID string, video bool, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			// RESOLVE FIRST, then call — which is what the app's own call sites
@@ -147,7 +157,8 @@ func placeScript(peerJID string, video bool) string {
 	})()`
 }
 
-const cancelScript = `(() => {` + prelude + `
+func cancelScript(key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			await window.require("` + modCancelCall + `").cancelPendingOutgoingCall();
@@ -158,8 +169,10 @@ const cancelScript = `(() => {` + prelude + `
 	})();
 	return "kicked";
 	})()`
+}
 
-const ensureVoipScript = `(() => {` + prelude + `
+func ensureVoipScript(key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			await window.require("` + modEnsureVoip + `").ensureVoipInitialized();
@@ -170,3 +183,4 @@ const ensureVoipScript = `(() => {` + prelude + `
 	})();
 	return "kicked";
 	})()`
+}

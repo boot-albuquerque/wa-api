@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -59,7 +61,18 @@ var (
 	Tick   = 200 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessSettings"
+const stateKeyPrefix = "__waHeadlessSettings"
+
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer. The nonce comes from Go: a
+// page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // State is every preference this package owns, read at one instant.
 type State struct {
@@ -104,7 +117,8 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Manager {
 // ONE ROUND TRIP ON PURPOSE: five separate reads would be five moments, and a
 // caller comparing them would be comparing a state that never existed.
 func (m *Manager) Read(ctx context.Context, label string) (State, error) {
-	raw, err := m.parked(ctx, readScript(), label+"/read")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, readScript(key), key, label+"/read")
 	if err != nil {
 		return State{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -134,7 +148,7 @@ func (m *Manager) SetAutoDownload(ctx context.Context, kind Kind, on bool, label
 	if !knownKind(kind) {
 		return Outcome{}, fmt.Errorf("%w: %q", ErrUnknownKind, kind)
 	}
-	return m.write(ctx, autoDownloadScript(kind, on), on, label+"/auto")
+	return m.write(ctx, func(key string) string { return autoDownloadScript(kind, on, key) }, on, label+"/auto")
 }
 
 // SetBackgroundSync moves the global offline-notification preference and PROVES
@@ -145,11 +159,18 @@ func (m *Manager) SetAutoDownload(ctx context.Context, kind Kind, on bool, label
 // immediately, and that is what the postcondition checks. Nothing here claims
 // the running session changed behaviour.
 func (m *Manager) SetBackgroundSync(ctx context.Context, on bool, label string) (Outcome, error) {
-	return m.write(ctx, backgroundSyncScript(on), on, label+"/sync")
+	return m.write(ctx, func(key string) string { return backgroundSyncScript(on, key) }, on, label+"/sync")
 }
 
-func (m *Manager) write(ctx context.Context, script string, want bool, label string) (Outcome, error) {
-	raw, err := m.parked(ctx, script, label)
+// write takes a script BUILDER, not a script.
+//
+// A CHAVE SO' EXISTE AQUI DENTRO (H177): cada chamada estaciona a resposta na sua
+// propria global, e quem monta o script precisa dela. Receber a string pronta
+// obrigaria o chamador a gerar a chave e a passa-la duas vezes, o que e' um
+// convite a passar chaves diferentes.
+func (m *Manager) write(ctx context.Context, build func(key string) string, want bool, label string) (Outcome, error) {
+	key := nextStateKey()
+	raw, err := m.parked(ctx, build(key), key, label)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -184,7 +205,7 @@ func knownKind(k Kind) bool {
 	return false
 }
 
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -195,11 +216,16 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/poll", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177).
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

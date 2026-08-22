@@ -25,6 +25,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		if !p.ok {
 			stage := p.stage

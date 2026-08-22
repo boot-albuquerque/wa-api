@@ -27,6 +27,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		p.reads++
 		switch {
@@ -117,11 +123,11 @@ func TestTheCopyIsIdentifiedByAnIdSetNotATimestamp(t *testing.T) {
 	}
 	// And the result script has to use all three conditions.
 	for _, cond := range []string{"m.id.fromMe", "s.chatKey", "s.seen.has(m.id.id)"} {
-		if !strings.Contains(resultScript, cond) {
+		if !strings.Contains(resultScript("k"), cond) {
 			t.Fatalf("the copy check is missing the %q condition", cond)
 		}
 	}
-	if strings.Contains(resultScript, "m.t >") || strings.Contains(resultScript, "m.t >=") {
+	if strings.Contains(resultScript("k"), "m.t >") || strings.Contains(resultScript("k"), "m.t >=") {
 		t.Fatal("the copy is identified by timestamp, which is the check that produced a false positive")
 	}
 }
@@ -177,7 +183,7 @@ func TestTheReasonsFieldSurvives(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "BLOCKED") {
 		t.Fatalf("the reasons were flattened away: %v", err)
 	}
-	if !strings.Contains(forwardScript(srcID, chatJID, true), "e.reasons") {
+	if !strings.Contains(forwardScript(srcID, chatJID, true, "k"), "e.reasons") {
 		t.Fatal("the script does not read the reasons field off the error")
 	}
 }

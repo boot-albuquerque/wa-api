@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -91,7 +92,18 @@ type Muter struct {
 // New builds a Muter.
 func New(runner *engine.Runner, eval spa.Evaluator) *Muter { return &Muter{runner: runner, eval: eval} }
 
-const stateKey = "__waHeadlessMute"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessMute"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // For silences a chat for the given number of hours, or forever with Always.
 func (m *Muter) For(ctx context.Context, chatJID string, hours int, label string) (Result, error) {
@@ -112,9 +124,11 @@ func (m *Muter) set(ctx context.Context, chatJID string, hours int, label string
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return m.eval(ctx, muteScript(chatJID, hours), &kicked)
+		return m.eval(ctx, muteScript(chatJID, hours, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrMute, err)
 	}
@@ -131,7 +145,7 @@ func (m *Muter) set(ctx context.Context, chatJID string, hours int, label string
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return m.eval(ctx, resultScript, &raw)
+			return m.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrMute, err)
 		}
@@ -171,10 +185,10 @@ func (m *Muter) set(ctx context.Context, chatJID string, hours int, label string
 	return res, nil
 }
 
-func muteScript(chatJID string, hours int) string {
+func muteScript(chatJID string, hours int, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -230,9 +244,10 @@ func muteScript(chatJID string, hours int) string {
 	})())`
 }
 
-// resultScript reads one number off the parked model rather than serialising it.
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+// resultScript(key) reads one number off the parked model rather than serialising it.
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	if (s.stage === 'settling') {
 		const now = Number((s.model && s.model.expiration) || 0);
@@ -244,3 +259,4 @@ const resultScript = `JSON.stringify((() => {
 	}
 	return s;
 })())`
+}

@@ -28,7 +28,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -59,9 +61,20 @@ var (
 )
 
 const (
-	stateKey       = "__waHeadlessGroupReq"
+	stateKeyPrefix = "__waHeadlessGroupReq"
 	groupJIDSuffix = "@g.us"
 )
+
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer. The nonce comes from Go: a
+// page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Request is one pending request to join.
 //
@@ -148,7 +161,8 @@ func (m *Manager) List(ctx context.Context, groupJID, label string) (List, error
 	if !isGroup(groupJID) {
 		return List{}, ErrNotGroup
 	}
-	raw, err := m.parked(ctx, listScript(groupJID), label+"/list")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, listScript(groupJID, key), key, label+"/list")
 	if err != nil {
 		return List{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -203,7 +217,8 @@ func (m *Manager) act(ctx context.Context, groupJID string, requesters []string,
 	if len(clean) == 0 {
 		return nil, ErrNoRequesters
 	}
-	raw, err := m.parked(ctx, actionScript(groupJID, clean, approve), label+"/action")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, actionScript(groupJID, clean, approve, key), key, label+"/action")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAction, err)
 	}
@@ -233,7 +248,7 @@ func (m *Manager) act(ctx context.Context, groupJID string, requesters []string,
 // parked kicks a page script that stores its answer on a global and polls for
 // it, which is this module's one way of awaiting a promise: engine.Evaluate
 // does not await, and invariant 6 keeps the clock on this side.
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -244,11 +259,16 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/read", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177).
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

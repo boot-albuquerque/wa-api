@@ -5771,3 +5771,63 @@ motivos diferentes. O transform economizou tempo nos cinco e o teria custado com
 juros se eu tivesse confiado nele sem construir depois de cada um — que é a mesma
 regra que este repositório aplica a dublês e a controles negativos, agora aplicada
 à ferramenta que escreve o código.
+
+---
+
+## H179 — 16 de 24 corrigidas, e o molde parou de servir duas vezes
+
+**Data**: 2026-08-22
+**Contexto**: propagar a chave por chamada (H177) ao resto do módulo.
+
+**Corrigidas e travadas: 16 de 24.** `message`, `lookup`, `catalog`, `phone`,
+`search`, `call`, `settings`, `status`, `groupreq`, `block`, `avatar`, `edit`,
+`forward`, `chatstate`, `mute`, `profile`. Cada uma com uma guarda
+(`conckey_test.go`) que falha se duas chamadas voltarem a compartilhar chave.
+
+**Restam 8**: `addressbook`, `channel`, `media`, `messagemeta`, `pin`, `poll`,
+`presence`, `react`, `revoke`, `star`.
+
+### As formas que o molde não cobriu
+
+Duas conversões diferentes tiveram de ser escritas, e nenhuma serviu ao resto:
+
+**Forma B** (`window.` + stateKey): resolvida para nove pacotes. Três deles —
+`call`, `status`, `groupreq` — tinham um `const prelude` embutindo a chave; um
+`const` não aceita parâmetro, então virou função, e com ele todos os
+`const xxxScript` que o usavam.
+
+**`settings` foi o caso mais instrutivo**: ele montava o script ANTES de a chave
+existir. Inverti para o `write` receber um CONSTRUTOR `func(key string) string`.
+A alternativa — o chamador gerar a chave e passá-la duas vezes — é convite a
+passar chaves diferentes, o que reintroduziria o defeito de forma mais difícil de
+ver que a original.
+
+**Forma A** (`window[strconv.Quote(stateKey)]` + um `resultScript` const):
+resolvida para seis. Aplicada a doze de uma vez, **nove quebraram o build** —
+`avatar` chama o seu de `pollScript`, e os outros têm variações próprias.
+
+**Revertidos os nove, mantidos os dois verdes**, pela regra que a H178 já custou:
+meia-correção espalhada é pior que nenhuma, porque o build quebrado é visível e
+um pacote parcialmente convertido que COMPILA não é.
+
+### Um erro meu que sete pacotes esconderam
+
+Ao ensinar os dublês sobre a chave nova, pus a liberação **no mesmo ramo da
+leitura**. Ela passou a contar como leitura, e o `groupreq` — o único com teste
+que afere o NÚMERO DE VOLTAS do laço — falhou com "4 reads".
+
+Os outros seis estavam verdes **pelo motivo errado**. Na forma A o erro era pior:
+sem ramo próprio, a liberação caía no `default` e virava `lastScript`, de modo que
+todo teste que afirma sobre o script passava a inspecionar o script de limpeza.
+
+**É a armadilha do dublê permissivo do `ARMADILHAS.md`**, cometida por mim,
+minutos depois de escrever a correção que ela deveria proteger. Sete dublês
+corrigidos com ramo próprio, e um comentário em cada dizendo por quê.
+
+**Status**: `make check` verde sobre as 16; 35 pacotes de capacidade passam.
+**As 8 restantes continuam com o defeito da H177** — achado acionável de
+severidade alta em aberto, e a decisão 65 exige zero.
+
+**Lição**: *um transform é uma hipótese sobre a forma, e como toda hipótese ele
+precisa de controle.* O controle aqui é o build depois de CADA pacote, não
+depois do lote — foi o que separou 16 corrigidas de 24 quebradas, duas vezes.

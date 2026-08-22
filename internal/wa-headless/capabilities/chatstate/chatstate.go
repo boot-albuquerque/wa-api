@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -100,7 +101,18 @@ func (s *Setter) SetPinned(ctx context.Context, jid string, pinned bool, label s
 	return s.set(ctx, jid, kindPin, pinned, label)
 }
 
-const stateKey = "__waHeadlessChatState"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessChatState"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label string) (Change, error) {
 	if strings.TrimSpace(jid) == "" {
@@ -108,9 +120,11 @@ func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label s
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return s.eval(ctx, setScript(jid, k, want), &kicked)
+		return s.eval(ctx, setScript(jid, k, want, key), &kicked)
 	}); err != nil {
 		return Change{}, fmt.Errorf("%w: %v", ErrState, err)
 	}
@@ -129,7 +143,7 @@ func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label s
 	for {
 		var raw string
 		if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return s.eval(ctx, resultScript, &raw)
+			return s.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Change{}, fmt.Errorf("%w: %v", ErrState, err)
 		}
@@ -137,6 +151,12 @@ func (s *Setter) set(ctx context.Context, jid string, k kind, want bool, label s
 			return Change{}, fmt.Errorf("chatstate: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = s.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return s.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -185,10 +205,10 @@ const lookupExpr = `(async function (jidString) {
 	return { ok: true, wid: r.wid, chat: chat };
 })`
 
-func setScript(jid string, k kind, want bool) string {
+func setScript(jid string, k kind, want bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		const lookup = ` + lookupExpr + `;
 		(async () => {
 		let stage = 'find';
@@ -261,8 +281,10 @@ func setScript(jid string, k kind, want bool) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}

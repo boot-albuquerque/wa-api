@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -94,7 +95,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Editor {
 	return &Editor{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessEdit"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessEdit"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Text replaces the text of a message this account sent.
 func (e *Editor) Text(ctx context.Context, msgID, newText, label string) (Result, error) {
@@ -109,9 +121,11 @@ func (e *Editor) Text(ctx context.Context, msgID, newText, label string) (Result
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := e.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return e.eval(ctx, editScript(msgID, newText), &kicked)
+		return e.eval(ctx, editScript(msgID, newText, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrEdit, err)
 	}
@@ -129,7 +143,7 @@ func (e *Editor) Text(ctx context.Context, msgID, newText, label string) (Result
 	for {
 		var raw string
 		if err := e.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return e.eval(ctx, resultScript, &raw)
+			return e.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrEdit, err)
 		}
@@ -137,6 +151,12 @@ func (e *Editor) Text(ctx context.Context, msgID, newText, label string) (Result
 			return Result{}, fmt.Errorf("edit: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = e.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return e.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -165,10 +185,10 @@ func (e *Editor) Text(ctx context.Context, msgID, newText, label string) (Result
 		Recorded: out.Recorded, Waited: time.Since(start)}, nil
 }
 
-func editScript(msgID, newText string) string {
+func editScript(msgID, newText string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -217,8 +237,10 @@ func editScript(msgID, newText string) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}

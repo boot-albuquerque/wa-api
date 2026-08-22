@@ -20,15 +20,23 @@ const (
 )
 
 // prelude parks the result holder and defines the helpers both scripts use.
-const prelude = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// prelude parks the result holder on the key THIS call was given, and defines
+// the helpers both scripts use.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177): a const bakes ONE page global
+// into both scripts, which is exactly the shared state two concurrent calls
+// overwrite.
+func prelude(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const W = window.require(` + `"` + modWidFactory + `"` + `);
 	const W2J = window.require(` + `"` + modWidToJid + `"` + `);
 `
+}
 
-func listScript(groupJID string) string {
-	return `(() => {` + prelude + `
+func listScript(groupJID string, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			const gwid = W.createWid(` + strconv.Quote(groupJID) + `);
@@ -68,7 +76,7 @@ func listScript(groupJID string) string {
 	})()`
 }
 
-func actionScript(groupJID string, requesters []string, approve bool) string {
+func actionScript(groupJID string, requesters []string, approve bool, key string) string {
 	list := "["
 	for i, r := range requesters {
 		if i > 0 {
@@ -87,7 +95,7 @@ func actionScript(groupJID string, requesters []string, approve bool) string {
 		valueKey = "membershipRequestsActionApprove"
 		mixinsKey = "membershipRequestsActionAcceptParticipantMixins"
 	}
-	return `(() => {` + prelude + `
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		const results = [];
 		try {

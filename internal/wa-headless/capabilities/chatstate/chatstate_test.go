@@ -33,6 +33,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	// EXPLICIT, UNIQUE MARKERS. The scripts that run here share substrings — the
 	// set kick embeds ResolveIdentityExpr, which contains createWid( — so routing
 	// on anything less than a marker unique to one script has broken this double

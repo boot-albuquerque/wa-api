@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -93,7 +94,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Fetcher {
 
 // stateKey is where the page parks the outcome. Evaluate does not await
 // promises, so an async call has to be started and then drained.
-const stateKey = "__waHeadlessAvatarResult"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessAvatarResult"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 type wire struct {
 	Stage      string `json:"stage"`
@@ -107,10 +119,10 @@ type wire struct {
 	Stale      bool   `json:"stale"`
 }
 
-func kickScript(jid string) string {
+func kickScript(jid string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 			let stage = 'resolve';
 			try {
@@ -146,11 +158,13 @@ func kickScript(jid string) string {
 	})())`
 }
 
-const pollScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func pollScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'request', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}
 
 // Fetch asks the server for jid's picture.
 //
@@ -160,9 +174,11 @@ func (f *Fetcher) Fetch(ctx context.Context, jid, label string) (Avatar, error) 
 	if strings.TrimSpace(jid) == "" {
 		return Avatar{}, ErrBadJID
 	}
+	key := nextStateKey()
+
 	var kicked string
 	if err := f.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return f.eval(ctx, kickScript(jid), &kicked)
+		return f.eval(ctx, kickScript(jid, key), &kicked)
 	}); err != nil {
 		return Avatar{}, fmt.Errorf("%w: %v", ErrRequest, err)
 	}
@@ -172,7 +188,7 @@ func (f *Fetcher) Fetch(ctx context.Context, jid, label string) (Avatar, error) 
 	for {
 		var raw string
 		if err := f.runner.Do(ctx, engine.OpStateProbe, label+"/poll", func(ctx context.Context) error {
-			return f.eval(ctx, pollScript, &raw)
+			return f.eval(ctx, pollScript(key), &raw)
 		}); err != nil {
 			return Avatar{}, fmt.Errorf("%w: %v", ErrRequest, err)
 		}

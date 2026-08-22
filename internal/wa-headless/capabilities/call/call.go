@@ -22,7 +22,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -70,7 +72,20 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessCall"
+// stateKeyPrefix names the page global a call parks its answer on.
+//
+// IT IS A PREFIX, NOT A KEY (H177). One shared global meant two concurrent calls
+// on the same session overwrote each other and each polled until non-empty, so
+// one could take the other's answer — measured in capabilities/message at 12
+// crossings in 12 rounds. The nonce comes from Go: a page-side Math.random or
+// Date.now would put a decision and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessCall"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Link is a joinable call link.
 //
@@ -117,7 +132,8 @@ func (m *Manager) CreateLink(ctx context.Context, startAt time.Time, kind Kind, 
 	if !startAt.After(time.Now()) {
 		return Link{}, fmt.Errorf("%w: %s", ErrPastStart, startAt.Format(time.RFC3339))
 	}
-	raw, err := m.parked(ctx, linkScript(startAt.Unix(), kind), label+"/link")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, linkScript(startAt.Unix(), kind, key), key, label+"/link")
 	if err != nil {
 		return Link{}, fmt.Errorf("%w: %v", ErrLink, err)
 	}
@@ -150,7 +166,8 @@ func (m *Manager) Reject(ctx context.Context, callerJID, callID, label string) e
 	if strings.TrimSpace(callerJID) == "" || strings.TrimSpace(callID) == "" {
 		return ErrNoCall
 	}
-	raw, err := m.parked(ctx, rejectScript(callerJID, callID), label+"/reject")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, rejectScript(callerJID, callID, key), key, label+"/reject")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrReject, err)
 	}
@@ -210,7 +227,8 @@ func (m *Manager) Place(ctx context.Context, peerJID string, video bool, label s
 	if strings.TrimSpace(peerJID) == "" {
 		return ErrNoCall
 	}
-	raw, err := m.parked(ctx, placeScript(peerJID, video), label+"/place")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, placeScript(peerJID, video, key), key, label+"/place")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPlace, err)
 	}
@@ -233,7 +251,8 @@ func (m *Manager) Place(ctx context.Context, peerJID string, video bool, label s
 // whatever outgoing call is pending, which means it is safe to call when there
 // is none and impossible to aim at a specific one.
 func (m *Manager) Cancel(ctx context.Context, label string) error {
-	raw, err := m.parked(ctx, cancelScript, label+"/cancel")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, cancelScript(key), key, label+"/cancel")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPlace, err)
 	}
@@ -261,7 +280,8 @@ func (m *Manager) Cancel(ctx context.Context, label string) error {
 // It is exported rather than folded into Place because RECEIVING needs it too,
 // and the receiving side never calls Place.
 func (m *Manager) EnsureReady(ctx context.Context, label string) error {
-	raw, err := m.parked(ctx, ensureVoipScript, label+"/voip-init")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, ensureVoipScript(key), key, label+"/voip-init")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPlace, err)
 	}
@@ -284,7 +304,8 @@ func (m *Manager) EnsureReady(ctx context.Context, label string) error {
 // It exists because Reject needs a caller and a call id, and until a call
 // arrives there is no way to see whether the collection holds anything at all.
 func (m *Manager) Pending(ctx context.Context, label string) (int, error) {
-	raw, err := m.parked(ctx, pendingScript, label+"/pending")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, pendingScript(key), key, label+"/pending")
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrReject, err)
 	}
@@ -302,7 +323,7 @@ func (m *Manager) Pending(ctx context.Context, label string) (int, error) {
 	return out.Count, nil
 }
 
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -313,11 +334,17 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/read", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177): sem isso a correcao troca
+			// uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {
