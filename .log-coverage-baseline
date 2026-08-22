@@ -1171,7 +1171,7 @@ rules_frozen=true
 #
 # Fica registado porque um numero que melhora sem merito e' tao suspeito como um
 # que piora sem explicacao.
-min_func_coverage=747
+min_func_coverage=749
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o

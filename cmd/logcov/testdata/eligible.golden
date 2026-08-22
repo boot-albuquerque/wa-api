@@ -2927,7 +2927,7 @@ pkg/infra/wa-noise/registry.ClientManager.Unregister	EXCLUDED	X1
 pkg/infra/wa-noise/registry.NewClientManager	EXCLUDED	X1
 pkg/infra/wa-noise/registry/broadcast.New	EXCLUDED	X1
 pkg/infra/wa-noise/registry/broadcast.Registry.Add	ELIGIBLE	covered
-pkg/infra/wa-noise/registry/broadcast.Registry.Broadcast	ELIGIBLE	uncovered:L1
+pkg/infra/wa-noise/registry/broadcast.Registry.Broadcast	ELIGIBLE	covered
 pkg/infra/wa-noise/registry/broadcast.Registry.Broadcast.func1	ELIGIBLE	covered
 pkg/infra/wa-noise/registry/broadcast.Registry.Remove	ELIGIBLE	covered
 pkg/infra/wa-noise/registry/clients.New	EXCLUDED	X1

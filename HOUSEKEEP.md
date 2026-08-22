@@ -2675,6 +2675,58 @@ Fazer o item 3 agora seria converter recurso ilimitado em limitado contra um
 mecanismo que três medições não encontraram — a F86 outra vez, e desta vez com
 aviso prévio.
 
+### Instrumentação aplicada (decisão 47=a do canal, 2026-08-22)
+
+`broadcast.go` passou a registar a escrita **lenta que não falha** — o único
+sinal que faltava. Limiar em `writeTimeout / 5` (1s): abaixo disso o registo
+fica ruidoso numa rajada de HistorySync, que produz milhares de escritas
+legítimas; acima de dois segundos perde-se a DEGRADAÇÃO antes da queda, que é
+o que se quer ver. Se o registo se mostrar ruidoso em campo, é este número que
+sobe — nunca o `writeTimeout`.
+
+A linha leva os três números sem os quais o diagnóstico não anda:
+`writeDuration`, `payloadBytes` e `conns`. Só "foi lento" não distinguiria
+carga grande de consumidor parado de fan-out largo — e foi precisamente por não
+saber distingui-los que esta entrada gerou três hipóteses erradas.
+
+**Melhoria que veio junto**: o `json.Marshal` passou a acontecer **uma vez**,
+antes do fan-out, em vez de uma vez por conexão dentro de cada goroutine. Antes,
+N goroutines serializavam o MESMO valor em paralelo. Além do trabalho duplicado,
+não havia como saber o tamanho do que se escrevia — e é o tamanho que faltava.
+Um payload que não serializa agora falha uma vez, não N vezes.
+
+**Testes**: `TestBroadcast_EscritaLentaDeixaRasto` (com os quatro campos),
+`TestBroadcast_EscritaRapidaNaoRegista` (o limite — uma rajada não pode virar
+uma linha por evento) e `TestBroadcast_PayloadInvalidoFalhaUmaVezSo`.
+
+A lentidão do teste é **real**: um servidor que aceita o WebSocket e não lê,
+enchendo a janela TCP. Não um `Sleep` dentro do Registry — foi assim que o
+primeiro harness da F86 mediu a coisa errada, porque `Sleep` não aloca nem
+bloqueia como o original.
+
+**Controlos negativos, os quatro mordendo**:
+
+```
+CN-1 remover o registo de lentidão   -> FAIL "a escrita lenta não deixou rasto"
+CN-2 limiar acima do writeTimeout    -> FAIL (nunca dispara)
+CN-3 limiar a zero                   -> FAIL "escrita rápida registada como lenta"
+CN-4 Marshal de volta na goroutine   -> FAIL "3 linhas com 3 conexões, quero 1"
+```
+
+O CN-4 quebrou o build à primeira (variável não usada) e **não valeu** —
+armadilha nº3, segunda vez nesta sessão. Refeito movendo o `Marshal` inteiro
+para dentro, que é a mutação fiel.
+
+**O gate reprovou por MELHORIA**, e vale registar porque é o argumento a favor
+de ele ser igualdade exata em vez de piso: o conjunto de elegíveis ficou
+idêntico (3.208 entradas, mesmos estados, só posições de linha diferentes) e a
+cobertura de log SUBIU de 747 para 749, porque o caminho de erro novo regista.
+`min_func_coverage` foi para 749.
+
+**O que isto NÃO faz**: não corrige a F85. A causa continua por identificar, e
+a entrada fica aberta. O que muda é que a próxima ocorrência traz a sua própria
+prova em vez de gerar a quarta hipótese.
+
 **Consequência imediata para o plano**: se se confirmar, nem 1b, nem 2, nem
 sequer o item 3 (backpressure no broadcast) atacam a causa — todos tratam o
 consumidor, e o problema estaria no produtor. O item 3 é o mais perigoso dos
