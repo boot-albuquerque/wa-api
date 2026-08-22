@@ -4013,3 +4013,116 @@ tentação imediata é reler todo `PARTIAL` como se fosse o mesmo erro. Testar e
 registrar o descarte é o que impede a próxima varredura de pagar de novo pela
 mesma suspeita — do mesmo jeito que a regra do `ARMADILHAS.md` sobre dublês
 permissivos existe porque a lição sem o contra-exemplo vira superstição.
+
+---
+
+## H150 — `chat.changed` refinado por campo: tentado, medido, e a página não sustenta
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. `CHAT_ARCHIVED` e `UNREAD_COUNT` estavam
+`PARTIAL` pela MESMA causa — *"o nosso evento é grosso: diz que a conversa mudou,
+não QUAL campo"* (H87) —, o que fazia delas o item de maior alcance da varredura:
+uma medição, duas linhas.
+
+**Onde**: `internal/wa-headless/probe_chatfields_test.go` (novo), linhas
+`CHAT_ARCHIVED` e `UNREAD_COUNT` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a referência emite um evento por campo. Se a coleção entregasse os
+atributos alterados ao ouvinte, a classificação iria para o Go — exatamente o
+padrão dos subtipos `gp2` da H119, que respeita a invariante 6: a página carrega
+a palavra, o Go decide o que ela significa.
+
+**Primeira medição, e a primeira armadilha**: `model.changed`, que é o nome
+Backbone, é **nulo em 40 de 40** eventos. Ler o nome que a referência usaria
+daria zero para sempre. Mas o modelo expõe `__fired` e `__changes`, contabilidade
+própria do build, e `__fired` vinha populado — o que parecia a saída:
+
+```
+40 eventos de UM envio: msgsChanged:24, msgsLength:8, lastReceivedKey:8
+```
+
+**Segunda medição, com os atos SEPARADOS, e é ela que decide.** A primeira
+juntava tudo numa contagem só, e uma lista de nomes sem dono não responde à
+pergunta — que é justamente de quem é cada nome. Rotulando cada ato:
+
+```
+send:      typing, msgsChanged, msgsLength, createdLocally,
+           markedUnread, ftsCache, lastReceivedKey
+archive:   showUnreadInTitle ×2
+unarchive: showUnreadInTitle ×2
+unread:    pendingAction ×2
+```
+
+**Três fatos que matam o desenho:**
+
+1. **Arquivar e desarquivar são INDISTINGUÍVEIS** — os dois disparam
+   `showUnreadInTitle` e nada mais. Não existe `archive` em `__fired`.
+2. **Marcar não-lida dispara `pendingAction`**, não `markedUnread`.
+3. **`markedUnread` dispara durante um ENVIO** — ou seja, o nome existe e é
+   emitido pelo ato errado.
+
+`__fired` carrega campos derivados de UI, não o campo semântico. Um classificador
+construído sobre ele diria "arquivada" para um desarquivamento.
+
+**Status**: não corrigido, por medição. As duas linhas continuam `PARTIAL` e
+agora dizem POR QUÊ, em vez de descrever o sintoma.
+
+**Lição**: *quando um instrumento junta várias causas numa contagem, ele mede a
+soma e não a correspondência.* A primeira rodada teria sustentado a hipótese —
+`markedUnread` estava lá, afinal. Separar os atos mostrou que ele veio do envio.
+É a mesma disciplina da regra "meça onde deveria PIORAR": aqui, meça onde o nome
+deveria APARECER, e veja se aparece pelo motivo certo.
+
+---
+
+## H151 — identidade crua na superfície: três capacidades, três respostas enganosas diferentes
+
+**Data**: 2026-08-22
+**Contexto**: consolidação de um padrão que apareceu três vezes hoje em lugares
+independentes.
+
+**Onde**: `capabilities/addressbook.DeviceCount`, `capabilities/chats.ByJID`,
+`capabilities/chats.MarkUnread`. Sonda em
+`internal/wa-headless/probe_unreadid_test.go`.
+
+**O padrão**: este build arquiva sob LID. Um chamador que tenha o jid de telefone
+— que é o que um humano digita e o que a maior parte das APIs recebe — recebe
+resposta **bem formada e errada**, e cada capacidade erra de um jeito diferente:
+
+| capacidade | com jid de telefone | com identidade resolvida |
+|---|---|---|
+| `addressbook.DeviceCount` | erro "sem registro de dispositivo" | **5** dispositivos |
+| `chats.ByJID` | `ErrNoChat` ("no conversation for that jid (384 in this session)") | encontrado |
+| `chats.MarkUnread` | `ErrNoChat` ("no such conversation") | executa (`before=21`) |
+
+**Hipótese testada e DESCARTADA**: suspeitei que `chats` se contradissesse
+internamente — `ByJID` documentado como casando PN ou LID e `MarkUnread` não.
+Não é o caso: os dois são exatos e concordam. A promessa de casar PN **ou** LID é
+do `contacts.ByJID`, que é outro pacote. Registro o descarte para ninguém
+reexaminar.
+
+**O defeito real não é de implementação, é de SUPERFÍCIE**: o erro é honesto
+sobre a COLEÇÃO e enganoso sobre o MUNDO. *"Não há conversa para esse jid"* é
+verdade sobre o que está indexado e falso sobre a pessoa, e o chamador não tem
+como saber a diferença.
+
+**Correção sugerida, NÃO aplicada** — e é decisão de superfície, não conserto
+pontual, então vale para todo leitor do módulo que aceite jid cru:
+
+- **(a)** resolver internamente via `capabilities/lookup`. Esconde uma ida à rede
+  dentro de um leitor, e um leitor que faz E/S surpreende quem o chama em laço.
+- **(b)** recusar `@c.us` com erro próprio (`ErrUnresolvedIdentity`) dizendo
+  "resolva primeiro". Honesto e quebra chamadores existentes.
+- **(c)** aceitar as duas formas na busca, como `contacts.ByJID` já faz. Consistente
+  com um precedente do próprio módulo, e o mais barato — mas espalha a regra de
+  identidade por cada leitor em vez de centralizá-la.
+
+**Status**: não corrigido. Escalado como pergunta de desenho — a regra do projeto
+proíbe consertar de graça fora do escopo, e as três opções têm custos
+diferentes o bastante para que a escolha não seja minha.
+
+**Lição**: *o mesmo erro cometido em três lugares não é três bugs, é uma decisão
+que ninguém tomou.* Cada um sozinho pareceria um conserto de uma linha; juntos
+mostram que o módulo nunca decidiu quem resolve identidade — o chamador ou a
+capacidade — e a ausência dessa decisão é o que produz três comportamentos
+diferentes para a mesma pergunta.
