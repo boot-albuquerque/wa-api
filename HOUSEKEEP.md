@@ -5579,3 +5579,67 @@ tinha DUAS hipóteses sobre o caso difícil — "chat só com sistema não reduz
 "limpar duas vezes não reduz" — e a medição derrubou a primeira e confirmou a
 segunda. Encodar qualquer uma delas sem medir teria produzido uma pós-condição
 que falha em uso normal, que é pior que não ter pós-condição nenhuma.
+
+---
+
+## H176 — decisão 66 aplicada, e o quarto leitor foi POUPADO por medição
+
+**Data**: 2026-08-22
+**Contexto**: segunda dívida interna da Fase 2 (*"66: Escolha b; identidade não
+resolvida deve falhar explicitamente, sem rede oculta nem regras duplicadas"*).
+
+**Onde**: `internal/wa-headless/spa/jid.go` (novo, `IsUnresolvedIdentity`),
+`capabilities/chats/chats.go` e `markunread.go`,
+`capabilities/addressbook/addressbook.go`, `probe_identity66_test.go` e
+`probe_markread66_test.go` (novos).
+
+**A regra mora em UM lugar**, que é metade da decisão: `spa.IsUnresolvedIdentity`.
+Três cópias de uma função de três linhas seriam exatamente as "regras
+duplicadas" que a 66 proíbe — e a primeira a divergir seria a que ninguém releu.
+
+**O erro é próprio e distinguível**, que é a outra metade. `ErrUnresolvedIdentity`
+NÃO é `ErrNoChat` nem `ErrDevices`: responder *"no conversation for that jid (384
+in this session)"* sobre alguém com quem a sessão fala todo dia é honesto sobre a
+COLEÇÃO e falso sobre o MUNDO, e a mensagem antiga não dizia qual dos dois.
+
+**E a recusa vem ANTES do trabalho.** O `ByJID` lê as 384 conversas para
+responder sobre uma; gastar isso para devolver uma resposta que ele não sabe dar
+é desperdício em cima de resposta errada. Um controle negativo trava a ordem.
+
+### O quarto leitor: medido, e POUPADO
+
+`chats.MarkRead` tem a MESMA FORMA dos três — procura a conversa na coleção — e
+**não foi alterado**, porque inferir por forma é precisamente o que produziu esta
+dívida.
+
+A primeira medição foi **inconclusiva** e quase me convenceu: as duas formas
+devolveram `before=0`, porque a conversa não tinha não-lidas. *Sem não-lida,
+no-op e falha silenciosa são indistinguíveis.* (E o meu comparador ainda incluía
+`waited`, que difere por 1 ms — bug meu, não do sistema.)
+
+Com a não-lida PRODUZIDA por conta-B, e o telefone testado **primeiro** para que
+a ordem fosse o experimento:
+
+```
+MarkRead(phone) = before=1 after=0 changed=true
+MarkRead(lid)   = before=0 after=0 changed=false   (já não havia o que fazer)
+```
+
+**O jid de telefone FUNCIONA.** `MarkRead` resolve por um caminho que os outros
+três não usam. Estendê-lo a recusa teria quebrado uma capacidade que funciona.
+
+**Status**: corrigido. Quatro controles negativos, todos compilando e falhando —
+incluindo o de ORDEM e o que faz grupos serem recusados (que morde em dois
+pacotes).
+
+**Quebra de chamador, aceita pela decisão**: seis testes quebraram porque usavam
+`@c.us` como fixture INCIDENTAL — mediam outra coisa e o jid era enfeite. Trocados
+para `@lid`, o que eles medem continua medido. Um deles, o
+`TestAnUnknownUserIsNotZeroDevices`, é justamente o que separa "sem registro" de
+"zero dispositivos" — a distinção que tornou a H148 diagnosticável.
+
+**Lição**: *a regra certa não é "todo leitor recusa", é "responda se puder, recuse
+explicitamente se não puder, nunca responda errado".* Essas duas formulações
+parecem a mesma até você medir o quarto caso. A primeira teria custado uma
+capacidade funcional; a segunda é uma regra só, e os leitores diferem apenas em
+qual metade dela se aplica.

@@ -32,7 +32,16 @@ import (
 
 var (
 	// ErrNoNumber is an empty phone number.
-	ErrNoNumber = fmt.Errorf("addressbook: no phone number given")
+	// ErrUnresolvedIdentity is a phone jid handed to DeviceCount, which cannot
+	// answer about one.
+	//
+	// IT IS NOT ErrDevices (decisão 66). Measured side by side on the same peer:
+	// under the lid, 5 devices; under the phone jid, "the page has no device
+	// record for that user" — an answer that reads as a fact about the PERSON and
+	// is a fact about the ARGUMENT. Both are well formed, which is what made the
+	// error invisible for months (H148).
+	ErrUnresolvedIdentity = fmt.Errorf("addressbook: that jid is a phone number and this build indexes people by lid; resolve it first")
+	ErrNoNumber           = fmt.Errorf("addressbook: no phone number given")
 	// ErrNoName is a save with neither a first nor a last name. The page would
 	// accept it and store a nameless contact, which is indistinguishable from
 	// not having saved at all — and is therefore refused here rather than
@@ -215,12 +224,21 @@ func (m *Manager) Delete(ctx context.Context, phone, label string) error {
 // problem: the phone-jid answer looks like a fact about the user and is a fact
 // about the identity that was passed.
 //
-// Callers resolve first, with capabilities/lookup. This method deliberately does
-// NOT resolve on its own — see the HOUSEKEEP entry for H148 for why that is a
-// registered question rather than a silent change of behaviour here.
+// Callers resolve first, with capabilities/lookup, and this method now REFUSES
+// instead of trusting them to: a phone jid returns ErrUnresolvedIdentity.
+//
+// It still does not resolve on its own, and that half is the decision (66): a
+// hidden network call inside a reader surprises whoever calls it in a loop. The
+// registered question of H148 was answered by the orchestration rather than
+// settled here.
 func (m *Manager) DeviceCount(ctx context.Context, userJID, label string) (int, error) {
 	if strings.TrimSpace(userJID) == "" {
 		return 0, ErrNoNumber
+	}
+	// A RECUSA E' EXPLICITA (decisão 66), e substitui o aviso que este doc dava:
+	// dizer "resolva antes" num comentário não impede ninguém de não resolver.
+	if spa.IsUnresolvedIdentity(userJID) {
+		return 0, ErrUnresolvedIdentity
 	}
 	raw, err := m.parked(ctx, devicesScript(userJID), label+"/devices")
 	if err != nil {

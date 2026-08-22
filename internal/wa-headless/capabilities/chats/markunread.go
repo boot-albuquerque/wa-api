@@ -132,6 +132,12 @@ const unreadStateKey = "__waHeadlessMarkUnread"
 
 // MarkUnread leaves a conversation deliberately unread.
 func (l *Lister) MarkUnread(ctx context.Context, jid, label string) (UnreadMark, error) {
+	// IDEM ByJID (decisão 66): recusa explícita antes de agir. Medido, esta
+	// função respondia "no such conversation" para o jid de telefone do par de
+	// laboratório e EXECUTAVA para o mesmo par sob o lid.
+	if spa.IsUnresolvedIdentity(jid) {
+		return UnreadMark{}, ErrUnresolvedIdentity
+	}
 	if strings.TrimSpace(jid) == "" {
 		return UnreadMark{}, ErrNoSuchChat
 	}

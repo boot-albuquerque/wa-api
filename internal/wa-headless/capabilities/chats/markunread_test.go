@@ -56,7 +56,7 @@ func unreader(p *unreadDouble) *Lister { return New(engine.NewRunner(), p.eval) 
 // inverted, and that supposition must not return.
 func TestTheDiscardedPrimitiveIsNotBack(t *testing.T) {
 	p := &unreadDouble{ok: true}
-	if _, err := unreader(p).MarkUnread(context.Background(), "1@c.us", "t"); err != nil {
+	if _, err := unreader(p).MarkUnread(context.Background(), "1@lid", "t"); err != nil {
 		t.Fatalf("MarkUnread: %v", err)
 	}
 	if strings.Contains(p.lastScript, "sendConversationSeen") {
@@ -75,13 +75,13 @@ func TestTheDiscardedPrimitiveIsNotBack(t *testing.T) {
 // first version did.
 func TestTheFieldIsMarkedUnreadNotTheCount(t *testing.T) {
 	p := &unreadDouble{ok: true}
-	if _, err := unreader(p).MarkUnread(context.Background(), "1@c.us", "t"); err != nil {
+	if _, err := unreader(p).MarkUnread(context.Background(), "1@lid", "t"); err != nil {
 		t.Fatalf("MarkUnread: %v", err)
 	}
 	if !strings.Contains(p.lastScript, "chat.markedUnread === true") {
 		t.Fatal("the no-op check does not consult the flag")
 	}
-	if !strings.Contains(unreadCountScript("1@c.us"), "chat.markedUnread === true") {
+	if !strings.Contains(unreadCountScript("1@lid"), "chat.markedUnread === true") {
 		t.Fatal("the count does not distinguish a deliberate mark")
 	}
 }
@@ -90,7 +90,7 @@ func TestTheFieldIsMarkedUnreadNotTheCount(t *testing.T) {
 // respect to its own writes — measured: 22 in-session against 0 in a fresh one.
 func TestARealChangeIsNeverClaimedVerified(t *testing.T) {
 	p := &unreadDouble{ok: true, before: 0, after: 0}
-	got, err := unreader(p).MarkUnread(context.Background(), "1@c.us", "t")
+	got, err := unreader(p).MarkUnread(context.Background(), "1@lid", "t")
 	if err != nil {
 		t.Fatalf("MarkUnread: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestARealChangeIsNeverClaimedVerified(t *testing.T) {
 	}
 	// A no-op IS confirmable: nothing had to move.
 	q := &unreadDouble{ok: true, already: true, before: -1, after: -1}
-	noop, err := unreader(q).MarkUnread(context.Background(), "1@c.us", "t")
+	noop, err := unreader(q).MarkUnread(context.Background(), "1@lid", "t")
 	if err != nil {
 		t.Fatalf("MarkUnread: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestARealChangeIsNeverClaimedVerified(t *testing.T) {
 // TestTheScriptDoesNotWaitOnSomethingThatNeverMoves.
 func TestTheScriptDoesNotWaitOnSomethingThatNeverMoves(t *testing.T) {
 	p := &unreadDouble{ok: true}
-	if _, err := unreader(p).MarkUnread(context.Background(), "1@c.us", "t"); err != nil {
+	if _, err := unreader(p).MarkUnread(context.Background(), "1@lid", "t"); err != nil {
 		t.Fatalf("MarkUnread: %v", err)
 	}
 	if strings.Contains(p.lastScript, "stage: 'settling'") {
@@ -131,7 +131,7 @@ func TestUnreadCountReadsAndRefuses(t *testing.T) {
 			*out = "7"
 			return nil
 		})
-		n, err := l.UnreadCount(context.Background(), "1@c.us", "t")
+		n, err := l.UnreadCount(context.Background(), "1@lid", "t")
 		if err != nil || n != 7 {
 			t.Fatalf("got (%d, %v), want (7, nil)", n, err)
 		}
@@ -141,7 +141,7 @@ func TestUnreadCountReadsAndRefuses(t *testing.T) {
 			*out = "NO_CHAT"
 			return nil
 		})
-		if _, err := l.UnreadCount(context.Background(), "1@c.us", "t"); !errors.Is(err, ErrNoSuchChat) {
+		if _, err := l.UnreadCount(context.Background(), "1@lid", "t"); !errors.Is(err, ErrNoSuchChat) {
 			t.Fatalf("got %v, want ErrNoSuchChat", err)
 		}
 	})
@@ -150,7 +150,7 @@ func TestUnreadCountReadsAndRefuses(t *testing.T) {
 			*out = "sete"
 			return nil
 		})
-		if _, err := l.UnreadCount(context.Background(), "1@c.us", "t"); err == nil {
+		if _, err := l.UnreadCount(context.Background(), "1@lid", "t"); err == nil {
 			t.Fatal("a non-numeric answer was accepted as a count")
 		}
 	})
@@ -178,11 +178,11 @@ func TestMarkUnreadRefusalsAndFailures(t *testing.T) {
 		t.Fatalf("the page was asked %d time(s)", empty.kicks)
 	}
 	nc := &unreadDouble{ok: false, stage: "find", why: "NO_CHAT"}
-	if _, err := unreader(nc).MarkUnread(context.Background(), "1@c.us", "t"); !errors.Is(err, ErrNoSuchChat) {
+	if _, err := unreader(nc).MarkUnread(context.Background(), "1@lid", "t"); !errors.Is(err, ErrNoSuchChat) {
 		t.Fatalf("got %v, want ErrNoSuchChat", err)
 	}
 	boom := &unreadDouble{ok: false, stage: "apply", why: "boom"}
-	if _, err := unreader(boom).MarkUnread(context.Background(), "1@c.us", "t"); !errors.Is(err, ErrLifecycle) {
+	if _, err := unreader(boom).MarkUnread(context.Background(), "1@lid", "t"); !errors.Is(err, ErrLifecycle) {
 		t.Fatalf("got %v, want ErrLifecycle", err)
 	}
 }
@@ -191,7 +191,7 @@ func TestCancelledContextMarksNothing(t *testing.T) {
 	p := &unreadDouble{ok: true}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := unreader(p).MarkUnread(ctx, "1@c.us", "t"); err == nil {
+	if _, err := unreader(p).MarkUnread(ctx, "1@lid", "t"); err == nil {
 		t.Fatal("a cancelled context marked a chat unread")
 	}
 	if p.kicks != 0 {

@@ -216,6 +216,17 @@ func (l *Lister) List(ctx context.Context, limit int, label string) (List, error
 // were the same value until H108 separated them.
 var ErrNoChat = fmt.Errorf("chats: no conversation for that jid")
 
+// ErrUnresolvedIdentity is a phone jid handed to a reader that cannot answer
+// about one.
+//
+// IT IS DELIBERATELY NOT ErrNoChat (decisão 66). Answering "no conversation for
+// that jid" about a person this session talks to every day is the exact
+// confusion that produced this error: honest about the COLLECTION and false
+// about the world, with nothing in the message to tell the caller which. The
+// caller resolves with capabilities/lookup and asks again.
+var ErrUnresolvedIdentity = fmt.Errorf(
+	"chats: that jid is a phone number and this build indexes people by lid; resolve it first")
+
 // ByJID is the reference's getChatById.
 //
 // IT READS THE SAME COLLECTION List READS, through the same projection, and
@@ -229,6 +240,13 @@ var ErrNoChat = fmt.Errorf("chats: no conversation for that jid")
 func (l *Lister) ByJID(ctx context.Context, jid, label string) (Chat, error) {
 	if strings.TrimSpace(jid) == "" {
 		return Chat{}, ErrNoChat
+	}
+	// A RECUSA VEM ANTES DA BUSCA, e a ordem é o ponto: buscar primeiro custa uma
+	// varredura de 384 conversas para devolver "não achei" sobre uma pergunta que
+	// esta função não sabe responder — e o "não achei" é indistinguível do
+	// verdadeiro.
+	if spa.IsUnresolvedIdentity(jid) {
+		return Chat{}, ErrUnresolvedIdentity
 	}
 	// NO LIMIT. List truncates by design, and a truncated list would answer "no
 	// such chat" for a conversation that merely sorted late — the worst possible

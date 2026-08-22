@@ -14,9 +14,14 @@ type pageDouble struct {
 	answer     string
 	err        error
 	lastScript string
+	// kicks conta quantas vezes a pagina foi consultada. Existe desde a decisao
+	// 66: uma recusa que ainda paga a varredura de 384 conversas nao e' recusa,
+	// e sem contar nao ha' como afirmar isso.
+	kicks int
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
+	p.kicks++
 	// THE DOUBLE HONOURS ctx, because the production Evaluate does (H30).
 	if err := ctx.Err(); err != nil {
 		return err
@@ -323,5 +328,47 @@ func TestTheSelfGuardMatchesEitherIdentity(t *testing.T) {
 	// And somebody else still resolves normally.
 	if _, err := lister(p).OfContact(context.Background(), "other@lid", []string{"me@c.us"}, "t"); err != nil {
 		t.Fatalf("a normal contact was refused: %v", err)
+	}
+}
+
+// AN UNRESOLVED IDENTITY IS REFUSED, AND THE REFUSAL IS DISTINGUISHABLE.
+//
+// This is the whole content of decision 66. Before it, ByJID answered "no
+// conversation for that jid (384 in this session)" about a peer this session
+// talks to daily — honest about the collection, false about the world, and with
+// nothing in the message to tell the caller which.
+func TestByJIDRefusesAPhoneJIDDistinctly(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"chats":[]}`}
+	_, err := lister(p).ByJID(context.Background(), "5541999998888@c.us", "t")
+	if !errors.Is(err, ErrUnresolvedIdentity) {
+		t.Fatalf("want ErrUnresolvedIdentity, got %v", err)
+	}
+	if errors.Is(err, ErrNoChat) {
+		t.Fatal("the refusal is indistinguishable from 'no such conversation', " +
+			"which is the confusion this error exists to end")
+	}
+}
+
+// THE REFUSAL COMES BEFORE THE WORK. ByJID reads every chat to answer about one
+// — 384 on this account — and spending that to return an answer it cannot give
+// is waste on top of a wrong answer.
+func TestByJIDRefusesBeforeReadingTheCollection(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"chats":[]}`}
+	if _, err := lister(p).ByJID(context.Background(), "5541999998888@c.us", "t"); err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if p.kicks != 0 {
+		t.Fatalf("the page was asked %d time(s) for a question this function "+
+			"already knew it could not answer", p.kicks)
+	}
+}
+
+// A GROUP IS NOT REFUSED. Groups live under @g.us and are not people; refusing
+// them would break every group read for a rule about person identity.
+func TestByJIDDoesNotRefuseAGroup(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"chats":[]}`}
+	_, err := lister(p).ByJID(context.Background(), "120363000000000000@g.us", "t")
+	if errors.Is(err, ErrUnresolvedIdentity) {
+		t.Fatal("a group jid was refused as an unresolved person")
 	}
 }

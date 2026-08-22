@@ -69,7 +69,7 @@ func fast(t *testing.T) {
 // would report success.
 func TestTheNumberIsNormalizedBeforeItReachesThePage(t *testing.T) {
 	for _, in := range []string{
-		"5541999999999@c.us", "5541999999999@lid", "+55 41 99999-9999", "5541999999999",
+		"5541999999999@lid", "5541999999999@lid", "+55 41 99999-9999", "5541999999999",
 	} {
 		if got := normalizeNumber(in); got != "5541999999999" {
 			t.Errorf("normalizeNumber(%q) = %q", in, got)
@@ -77,7 +77,7 @@ func TestTheNumberIsNormalizedBeforeItReachesThePage(t *testing.T) {
 	}
 	fast(t)
 	d := &double{saveAnswer: `{"ok":true,"had":false,"has":true}`}
-	if _, err := mgr(d).Save(context.Background(), "5541999999999@c.us", "Lab", "", false, "t"); err != nil {
+	if _, err := mgr(d).Save(context.Background(), "5541999999999@lid", "Lab", "", false, "t"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	// MATCH THE ARGUMENT, NOT THE WORD. The first version of this assertion
@@ -203,7 +203,7 @@ func TestThePageDoesNotWait(t *testing.T) {
 // with no phone.
 func TestAnUnknownUserIsNotZeroDevices(t *testing.T) {
 	d := &double{saveAnswer: `{"ok":true,"known":false,"count":0}`}
-	_, err := mgr(d).DeviceCount(context.Background(), "5541999999999@c.us", "t")
+	_, err := mgr(d).DeviceCount(context.Background(), "5541999999999@lid", "t")
 	if !errors.Is(err, ErrDevices) {
 		t.Fatalf("err = %v, want ErrDevices", err)
 	}
@@ -212,7 +212,7 @@ func TestAnUnknownUserIsNotZeroDevices(t *testing.T) {
 	}
 
 	d2 := &double{saveAnswer: `{"ok":true,"known":true,"count":3}`}
-	n, err := mgr(d2).DeviceCount(context.Background(), "5541999999999@c.us", "t")
+	n, err := mgr(d2).DeviceCount(context.Background(), "5541999999999@lid", "t")
 	if err != nil || n != 3 {
 		t.Fatalf("DeviceCount = %d, %v", n, err)
 	}
@@ -227,7 +227,7 @@ func TestAnUnknownUserIsNotZeroDevices(t *testing.T) {
 // not remove.
 func TestTheDeleteBuildsAWidAndTheSaveDoesNot(t *testing.T) {
 	d := &double{saveAnswer: `{"ok":true}`}
-	if err := mgr(d).Delete(context.Background(), "5541999999999@c.us", "t"); err != nil {
+	if err := mgr(d).Delete(context.Background(), "5541999999999@lid", "t"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if !strings.Contains(d.lastScript, `createWid("5541999999999" + "@c.us")`) {
@@ -236,7 +236,7 @@ func TestTheDeleteBuildsAWidAndTheSaveDoesNot(t *testing.T) {
 
 	fast(t)
 	d2 := &double{saveAnswer: `{"ok":true,"had":false,"has":true}`}
-	if _, err := mgr(d2).Save(context.Background(), "5541999999999@c.us", "Lab", "", false, "t"); err != nil {
+	if _, err := mgr(d2).Save(context.Background(), "5541999999999@lid", "Lab", "", false, "t"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	if !strings.Contains(d2.lastScript, `phoneNumber: "5541999999999"`) {
@@ -265,5 +265,36 @@ func TestTheResultRendersNoIdentity(t *testing.T) {
 	out := s.String()
 	if strings.Contains(out, "5541") || strings.Contains(out, "@") {
 		t.Errorf("Saved.String carries identity: %s", out)
+	}
+}
+
+// THE REFUSAL REPLACES A WELL-FORMED WRONG ANSWER (decisão 66).
+//
+// Measured side by side on the same peer: under the lid, 5 devices; under the
+// phone jid, "the page has no device record for that user". Both are well
+// formed, which is what made the error invisible for months — the second reads
+// as a fact about the PERSON and is a fact about the ARGUMENT.
+func TestDeviceCountRefusesAPhoneJIDDistinctly(t *testing.T) {
+	d := &double{saveAnswer: `{"ok":true,"known":true,"count":5}`}
+	_, err := mgr(d).DeviceCount(context.Background(), "5541999999999@c.us", "t")
+	if !errors.Is(err, ErrUnresolvedIdentity) {
+		t.Fatalf("want ErrUnresolvedIdentity, got %v", err)
+	}
+	if errors.Is(err, ErrDevices) {
+		t.Fatal("the refusal is indistinguishable from 'no device record', which " +
+			"is the exact confusion measured in H148")
+	}
+}
+
+// AND IT REFUSES WITHOUT ASKING THE PAGE — no hidden resolution, which is the
+// half of decision 66 that rejected option (a).
+func TestDeviceCountRefusesWithoutTouchingThePage(t *testing.T) {
+	d := &double{saveAnswer: `{"ok":true,"known":true,"count":5}`}
+	if _, err := mgr(d).DeviceCount(context.Background(), "5541999999999@c.us", "t"); err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if d.kicks != 0 {
+		t.Fatalf("the page was asked %d time(s); a reader must not resolve on its "+
+			"own, and a caller in a loop would pay for it without seeing it", d.kicks)
 	}
 }
