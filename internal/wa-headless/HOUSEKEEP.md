@@ -10463,3 +10463,68 @@ mundo.
 
 **Status**: parcialmente entregue — código escrito e provado em unidade,
 `BLOCKED` ao vivo por falta de oráculo num canal que este agente consegue criar.
+
+## H134 — vinte e duas linhas classificadas, e duas conclusões minhas que eram falsas
+
+**Data**: 2026-08-22. **Contexto**: fechar a classificação do que resta, para que
+o critério da Fase 1 tenha resposta em cada linha.
+
+**Onde**: `LEDGER-WWEBJS.md`, `probe_gp2_test.go`
+(`TestProbeRemainingModules`).
+
+### Uma sonda para vinte linhas
+
+A distinção que a H125 estabeleceu — módulo AUSENTE contra módulo presente sem
+dado ou sem segundo participante — merece uma medição, não vinte suposições. Uma
+sonda mediu a existência de todos os módulos que as vinte linhas restantes
+precisariam.
+
+### Duas conclusões minhas que a segunda passagem derrubou
+
+**1. `Channel.mute` NÃO está bloqueado por módulo ausente.** Testei
+`WAWebMuteChatAction`, vi `false`, e quase escrevi "módulo não existe". A
+referência usa `WAWebNewsletterUpdateUserSettingJob.updateNewsletterUserSetting`
+— que **existe**. Eu tinha testado um nome que inventei a partir do nome da
+função, não o que a referência chama.
+
+**2. As notas de cliente NÃO estão bloqueadas por módulo ausente.** Procurei
+`addOrEditNote` e `getNote` em `WAWebNoteAction`, ambos `false`. Os nomes reais
+são `noteAddAction` e `retrieveOnlyNoteForChatJid` — **exatamente os que a
+referência chama**, e ambos existem.
+
+**A regra que sai daqui**: ao medir existência de função, use o nome que a
+REFERÊNCIA chama, lido do código dela. Nomes inferidos do nome do método público
+produzem falsos negativos que viram vereditos — e um veredito falso de
+"impossível" é pior que um `MISSING`, porque encerra a investigação.
+
+O que de fato falta para as notas de cliente é outra coisa, e é mais precisa:
+`WAWebBizGatingUtils` (o portão `smbNotesV1Enabled`) **não existe**. Dá para
+chamar a ação e não dá para saber se o recurso deveria estar ligado.
+
+### As classificações
+
+- **5 verbos de admin de canal** (×2 famílias): módulos TODOS presentes; o
+  bloqueio é de SEGUNDO PARTICIPANTE — exige a conta-B pareada em sessão
+  simultânea.
+- **`revokeStatusMessage`**: `WAWebRevokeStatusAction` existe; falta status
+  postado, e postar é decisão humana (H100).
+- **fotos de perfil e de grupo** (4 linhas): `WAWebSetPicture` e
+  `WAWebProfilePicThumbBridge` ausentes.
+- **`sendResponseToScheduledEvent`**: módulo ausente, coerente com a H125.
+- **`Channel.mute`/`unmute`**: módulo presente; bloqueio é de ASSINATURA, que a
+  H123 mediu impossível.
+- **`Channel.fetchMessages`**: exige canal COM mensagens; um novo não tem, um
+  alheio exigiria assinatura.
+
+### O estado do ledger
+
+```
+MISSING + PARTIAL: 78 | sem veredito registrado: 0
+```
+
+Toda linha aberta diz agora POR QUE está aberta. As últimas seis referências
+frágeis (`idem`, e notas que eram só `H53`/`H65`) foram expandidas para serem
+autocontidas, pelo mesmo motivo da H130: uma referência que hoje aponta certo é
+um defeito que ainda não aconteceu.
+
+**Status**: entregue. Nenhum código de produção mudou.

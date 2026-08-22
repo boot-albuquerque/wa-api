@@ -70,7 +70,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | duvidosa | sim | **rebaixada em 2026-08-21 (H82)**: a pós-condição afirma que `chat.unreadCount` moveu NA MESMA SESSÃO, e a H78 mediu esse contador como CROSS_SESSION. A H52 provou contra um chat em que ele moveu; se generaliza é pergunta em aberto |
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento e figurinha OK. **ENQUETE NÃO SAI**: criada localmente como `poll_creation` com as opções intactas, `ack` fica em **0** e o par nunca recebe — medido no primeiro round trip que olhou o OUTRO lado (H98). A H69 provou o envio pela aparição LOCAL. O suspeito nomeado (`pollType` omitido) foi **perseguido e descartado**: o enum foi achado em `WAWebPollCreationUtils` (singular — uma letra é por que três buscas o perderam), `PollType.POLL` e `PollContentType.TEXT` foram aplicados de dentro da própria página, e o ack continua 0 (H101). Localização e vCard MISSING (H75) |
 | `sendReaction` | capabilities/react | `PARTIAL` | sim | sim | sim | H53: adicionar provado; remover devolve Verified:false |
-| `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
+| `sendChannelAdminInvite` | — | `BLOCKED` | — | medido | — | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
 | `searchMessages` | search.Messages | `PROVEN` | sim | sim | sim | H114: o resultado é ENDEREÇO, nunca corpo — a projeção acontece na página. Sem escopo por conversa: passar o jid como quarto argumento (o que a referência faz com `options.chatId`) mediu 0 resultados com `eof`, contra 20 sem escopo |
 | `getChats` | chats.List | `PROVEN` | sim | sim | sim | — |
 | `getChannels` | channel.Followed | `PROVEN` | sim | sim | sim | H123: leitor provado NÃO-VAZIO — `Followed` devolveu 1 entrada com `membership=owner` logo após criar um canal, e 0 depois de apagá-lo. Assinar canal alheio para provar é impossível neste build (ver `subscribeToChannel`), então a prova veio de um canal PRÓPRIO, que vive na mesma coleção |
@@ -82,9 +82,9 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
 | `acceptInvite` | group.JoinByInvite | `PARTIAL` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. O caminho de entrada direta (grupo sem aprovação) não foi exercitado (H89) |
-| `acceptChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
-| `revokeChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
-| `demoteChannelAdmin` | — | `MISSING` | — | — | — | não atacado |
+| `acceptChannelAdminInvite` | — | `BLOCKED` | — | medido | — | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `revokeChannelAdminInvite` | — | `BLOCKED` | — | medido | — | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `demoteChannelAdmin` | — | `BLOCKED` | — | medido | — | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
 | `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
 | `setStatus` | capabilities/profile (parcial) | `BLOCKED` | — | — | — | H66: setMyTextStatus tem 5 primitivos e ZERO chamadores no bundle |
 | `setDisplayName` | profile.SetDisplayName | `BLOCKED` | sim | impossível | sim | H66: canSetMyPushname()=false — a conta é Business |
@@ -109,19 +109,19 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `createChannel` | channel.Create | `PROVEN` | sim | sim | sim | H113: canal real criado e apagado na conta de laboratório, com autorização explícita. Verificado relendo pelo código de convite, não pelo eco da própria chamada; gate desabilitado é erro PRÓPRIO (a referência devolve a mensagem como STRING) |
 | `subscribeToChannel` | — | `BLOCKED` | — | medido | — | H123: **medido impossível neste build**. `subscribeToNewsletterAction` existe mas tem aridade **3** (a referência chama com 2), e as três formas de argumento — modelo de metadados, Wid e jid — falham com `Data passed to getter must include an id property`. A ação exige um modelo que a coleção MEMOIZE, e o `find` da coleção está quebrado: `this.findImpl is not a function`. A referência esconde essa resolução no helper que ela injeta e nós não injetamos |
 | `unsubscribeFromChannel` | — | `BLOCKED` | — | medido | — | H123: mesmo caminho e mesmo bloqueio do `subscribeToChannel` — e sem conseguir assinar não há o que desassinar |
-| `transferChannelOwnership` | — | `MISSING` | — | — | — | não atacado |
+| `transferChannelOwnership` | — | `BLOCKED` | — | medido | — | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
 | `searchChannels` | channel.Search | `PROVEN` | sim | sim | sim | H112: o diretório RESPONDE (50 resultados) — ao contrário de `getRecommendedNewsletters`, que trava. Sem assinatura. Tipo próprio `DirectoryEntry`: um resultado de diretório é um MODELO com campos `__x_`, não o saco de mixins da consulta de metadados, e `__x_state` não existe. Sem opção `limit`: a referência a implementa remendando uma função da página que não existe neste build |
 | `deleteChannel` | channel.Delete | `PROVEN` | sim | sim | sim | H113: pós-condição é o canal deixar de ser legível; apagar sem código de convite devolve erro dizendo que NÃO deu para verificar, em vez de sucesso |
 | `getLabels` | contacts.ListLabels | `PROVEN` | sim | sim | sim | H72; só mensurável por a conta ser Business |
 | `getBroadcasts` | status.List | `PARTIAL` | sim | sim | sim | **NÃO é lista de transmissão** — o upstream chama de Broadcast o STATUS (stories): `getBroadcasts` é `Status.getModelsArray`. Nossa nota descrevia a coisa errada, e três linhas iam ser feitas contra a ideia errada (H100). Caminho provado ao vivo, com **zero** feeds; provar um não-vazio exige POSTAR status, visível aos 944 contatos da conta |
 | `getBroadcastById` | status.ByContact | `PARTIAL` | sim | sim | sim | tenta as duas formas de identidade; feed ausente é erro próprio e não um feed de zeros, que um chamador leria como "essa pessoa não postou nada" (H100) |
-| `revokeStatusMessage` | — | `MISSING` | — | — | — | — |
+| `revokeStatusMessage` | — | `BLOCKED` | — | medido | — | H134: `WAWebRevokeStatusAction` **existe**. O bloqueio é de DADO e de decisão humana: não há status postado para revogar, e postar um é visível a 944 contatos — decisão que a H100 deixou para o humano |
 | `getLabelById` | contacts.LabelByID | `PROVEN` | sim | sim | sim | H128: filtra a lista provada (H72) em vez de consultar a página de novo. Rótulo com contagem ZERO continua sendo rótulo — os 3 desta conta têm zero itens (H114), e tratar zero como ausente encontraria nenhum |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
 | `getChatsByLabelId` | — | `BLOCKED` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
 | `getBlockedContacts` | capabilities/block | `PARTIAL` | sim | sim | sim | bloquear/desbloquear provados; LISTAR os bloqueados não é exposto |
-| `setProfilePicture` | — | `MISSING` | — | — | — | — |
-| `deleteProfilePicture` | — | `MISSING` | — | — | — | — |
+| `setProfilePicture` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebSetPicture` e `WAWebProfilePicThumbBridge` ausentes |
+| `deleteProfilePicture` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — idem `setProfilePicture` |
 | `addOrRemoveLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | H72; forma medida pelo instrumento da H73 |
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
 | `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
@@ -134,12 +134,12 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getContactDeviceCount` | addressbook.DeviceCount | `PARTIAL` | sim | sim | sim | o caminho funciona e o par NÃO tem registro de dispositivo nesta conta; "sem registro" e "zero dispositivos" são respostas diferentes e não foram fundidas no número 0 (H90) |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
 | `createCallLink` | call.CreateLink | `PROVEN` | sim | sim | sim | provado ao vivo para `voice` e `video`; o link é credencial e nunca é renderizado. Usa `WAWebGenerateEventCallLink` como a referência — o `WAWebVoipCreateCallLink` deste build **TRAVA** na primeira chamada, medido em 40s (H92) |
-| `sendResponseToScheduledEvent` | — | `MISSING` | — | — | — | — |
+| `sendResponseToScheduledEvent` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebScheduledEventResponseAction` ausente, coerente com a H125 |
 | `saveOrEditAddressbookContact` | addressbook.Save | `PROVEN` | sim | sim | sim | verifica lendo de volta, com o relógio no Go; `syncToAddressbook` é parâmetro sem padrão porque `true` escreve na agenda do TELEFONE pareado (H90) |
 | `deleteAddressbookContact` | addressbook.Delete | `PROVEN` | sim | sim | sim | idempotente, medido; exige **wid**, enquanto o save exige dígitos crus — assimetria que a referência esconde passando o mesmo valor aos dois (H90) |
 | `getContactLidAndPhone` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | build LID-first: 397 de 399 mensagens sob @lid |
-| `addOrEditCustomerNote` | — | `MISSING` | — | — | — | — |
-| `getCustomerNote` | — | `MISSING` | — | — | — | — |
+| `addOrEditCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
+| `getCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 | `getPollVotes` | poll.Votes | `PROVEN` | sim | sim | sim | lido contra uma enquete REAL: as duas opções presentes com zero. Usa a chave que a mensagem já carrega — `MsgKey.fromString(_serialized)` da referência lança neste build (H98) |
 
 ## Broadcast
@@ -221,18 +221,18 @@ de laboratório sob autorização explícita:
 | `getSubscribers` | `MISSING` | H113: `WAWebMexFetchNewsletterSubscribersJob`, o módulo que a referência usa, NÃO existe neste build |
 | `setSubject` | `PROVEN` | H113: renomear pega e é relido do servidor |
 | `setDescription` | `MISSING` | H113: a página aceita e o servidor NUNCA reporta a descrição nova, nem após 20s. Não é latência — mesmo padrão do grupo (H126) |
-| `setProfilePicture` | `MISSING` | — |
+| `setProfilePicture` | `BLOCKED` | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebSetPicture` e `WAWebProfilePicThumbBridge` ausentes |
 | `setReactionSetting` | `BLOCKED` | H133: `channel.SetReactionPolicy` escrito e provado em unidade; ao vivo é **INVERIFICÁVEL**, não falho. A metadata de um canal recém-criado NÃO carrega o mixin de reação — ele existe num canal estabelecido e não num novo —, então a pós-condição não tem o que ler. A escrita pode ter chegado; ninguém pode dizer, e chamar isso de falha seria afirmar conhecimento que não existe |
-| `mute` | `MISSING` | — |
-| `unmute` | `MISSING` | — |
+| `mute` | `BLOCKED` | H134: **corrigi uma medição minha**. Testei `WAWebMuteChatAction` (ausente) e quase concluí bloqueio; a referência usa `WAWebNewsletterUpdateUserSettingJob.updateNewsletterUserSetting`, que **EXISTE**. O bloqueio real é de assinatura: silenciar canal exige segui-lo, e seguir é impossível (H123) |
+| `unmute` | `BLOCKED` | H134: idem `mute` — módulo presente, bloqueio de assinatura (H123) |
 | `sendMessage` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (Channel.js:240) |
 | `sendSeen` | `PARTIAL` | H118: delegação literal para `Client.sendSeen` (Channel.js:248) |
-| `sendChannelAdminInvite` | `MISSING` | — |
-| `acceptChannelAdminInvite` | `MISSING` | — |
-| `revokeChannelAdminInvite` | `MISSING` | — |
-| `demoteChannelAdmin` | `MISSING` | — |
-| `transferChannelOwnership` | `MISSING` | — |
-| `fetchMessages` | `MISSING` | — |
+| `sendChannelAdminInvite` | `BLOCKED` | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `acceptChannelAdminInvite` | `BLOCKED` | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `revokeChannelAdminInvite` | `BLOCKED` | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `demoteChannelAdmin` | `BLOCKED` | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `transferChannelOwnership` | `BLOCKED` | H134: **módulo PRESENTE**, bloqueio é de SEGUNDO PARTICIPANTE. `WAWebMexAcceptNewsletterAdminInviteJob`, `WAWebMexRevokeNewsletterAdminInviteJob`, `WAWebDemoteNewsletterAdminAction`, `WAWebChangeNewsletterOwnerAction` e `WAWebNewsletterSendMsgAction.sendNewsletterAdminInviteMessage` todos existem (medido). Exercitar exige a conta-B pareada numa sessão simultânea para receber, aceitar ou ser promovida |
+| `fetchMessages` | `BLOCKED` | H134: exige um canal COM mensagens. Um canal recém-criado não tem nenhuma, e um alheio exigiria assinatura, medida impossível (H123) |
 | `deleteChannel` | `PROVEN` | H113: pós-condição é o canal deixar de ser legível |
 
 ## Chat
@@ -273,8 +273,8 @@ nossa é fresca — não há campo velho para consertar.
 | `changeLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | delegação literal para `Client.addOrRemoveLabels` (Chat.js:301); H72 |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | delegação literal para `Client.syncHistory` (Chat.js:317); herda a linha dele — buscamos histórico de uma conversa, sincronizar não |
-| `addOrEditCustomerNote` | — | `MISSING` | — | — | — | não atacado |
-| `getCustomerNote` | — | `MISSING` | — | — | — | não atacado |
+| `addOrEditCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
+| `getCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 
 ## ClientInfo
 
@@ -308,15 +308,15 @@ nossa é fresca — não há campo velho para consertar.
 | `participants` | group.Metadata | `PROVEN` | sim | sim | sim | lista com `admin`, `superAdmin` e `joinedAt`; identidades chegam como **LID**. Exatamente um super admin, travado por teste (H105) |
 | `addParticipants` | group.AddParticipant | `PARTIAL` | sim | entre sessões | sim | H58: este build não confirma na MESMA sessão |
 | `removeParticipants` | group.RemoveParticipant | `PARTIAL` | sim | entre sessões | sim | H58: este build não confirma na MESMA sessão — a mudança chega ao servidor e a sessão que agiu não a vê. *(era `idem`, expandido na H130)* |
-| `promoteParticipants` | group.Promote | `PARTIAL` | sim | entre sessões | sim | H65 |
-| `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65 |
+| `promoteParticipants` | group.Promote | `PARTIAL` | sim | entre sessões | sim | H65: mesmo limite do `addParticipants` (H58) — a mudança chega ao servidor e a sessão que AGIU não a confirma. *(era só a referência `H65`, expandido na H134)* |
+| `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65: idem `promoteParticipants` — confirmação só entre sessões. *(expandido na H134)* |
 | `setSubject` | group.SetSubject | `PROVEN` | sim | sim | sim | H64: o assunto vive em chat.formattedTitle |
 | `setDescription` | group.SetDescription | `BLOCKED` | sim | medido | sim | H126: implementado e medido. A chamada é ACEITA e o servidor nunca armazena — 0 bytes depois de 20s de espera. É o MESMO comportamento que a descrição de CANAL mostrou na H113: duas superfícies independentes, escrita de descrição que não persiste neste build. O código fica no lugar porque a diferença é da PÁGINA |
 | `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
-| `deletePicture` | — | `MISSING` | — | — | — | — |
-| `setPicture` | — | `MISSING` | — | — | — | — |
+| `deletePicture` | — | `MISSING` | — | medido | — | H134: idem `setPicture` — módulos de foto ausentes |
+| `setPicture` | — | `MISSING` | — | medido | — | H134: `WAWebSetPicture` e `WAWebProfilePicThumbBridge`, os módulos que a referência usa, **não existem neste build** (medido) |
 | `getInviteCode` | group.InviteCode | `PROVEN` | sim | sim | sim | H57: a chamada popula o MODELO; o retorno é undefined |
 | `revokeInvite` | group.RevokeInvite | `PROVEN` | sim | sim | sim | H57 |
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
@@ -355,10 +355,10 @@ código — é falta de dado.
 | `getChat` | message.OriginOf (.ChatJID) | `PROVEN` | sim | sim | sim | H106 |
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
 | `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
-| `getGroupMentions` | — | `MISSING` | — | medido | — | idem |
+| `getGroupMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos — a mesma medição do `getMentions`. Embarcar leitor nunca visto devolvendo algo é a armadilha H93. *(era `idem`, expandido na H134)* |
 | `getQuotedMessage` | message.QuotedOf | `PROVEN` | sim | sim | sim | H131: PRODUZI a citação para poder prová-la — 336 mensagens carregadas e ZERO com id citado, então esperar era a armadilha H93. Mensagem comum diz `quotes=false`, resposta diz `quotes=true` apontando para a mensagem certa, e o id devolvido é usável por `OriginOf`. Lê `quotedStanzaID`, o mesmo campo que o `send` usa para provar a citação — os campos `__x_*QuotedMsg*` existem em TODA mensagem e guardam sentinela preguiçosa, não dado |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
-| `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53 |
+| `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53: as duas metades NÃO são iguais — `Add` verifica a pós-condição e `Remove` não, e o `Result` diz qual foi qual em vez de fingir simetria. *(era só a referência `H53`, expandido na H134)* |
 | `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
 | `forward` | capabilities/forward | `PROVEN` | sim | sim | sim | H63: cópia identificada por conjunto de ids, não por instante |
 | `downloadMedia` | capabilities/media | `PROVEN` | sim | sim | sim | H67: pós-condição CRIPTOGRÁFICA — SHA-256 do texto claro |
@@ -366,7 +366,7 @@ código — é falta de dado.
 | `star` | capabilities/star | `PROVEN` | sim | sim | sim | H61: o await não é a conclusão — 696ms |
 | `unstar` | capabilities/star | `PROVEN` | sim | sim | sim | — |
 | `pin` | pin.Message | `MISSING` | sim | falha (H81) | sim | chamada aceita e nada é fixado; vocabulário, duração e forma do modelo medidos |
-| `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | idem |
+| `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | H81: idem `pin` — chamada aceita e nada é desfixado; vocabulário, duração e forma do modelo medidos |
 | `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
 | `getOrder` | — | `BLOCKED` | — | medido | — | H125: `WAWebBizOrderBridge.queryOrder` EXISTE. O bloqueio é de DADO: a conta tem **zero** mensagens de pedido. Exercitar exigiria atividade comercial real, que não é produzível por agente |
 | `getPayment` | — | `BLOCKED` | — | medido | — | H125: idem `getOrder` — módulo presente, **zero** pagamentos na conta |
@@ -471,7 +471,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 |---|---|---|
 | `PROVEN` | 96 | 44% |
 | `PARTIAL` | 58 | 26% |
-| `BLOCKED` | 20 | 9% |
+| `BLOCKED` | 42 | 19% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
-| `MISSING` | 42 | 19% |
+| `MISSING` | 20 | 9% |
 | **total** | **220** | |

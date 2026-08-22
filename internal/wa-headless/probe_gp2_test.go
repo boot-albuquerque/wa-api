@@ -1032,3 +1032,78 @@ func TestProbeChannelReactionSetting(t *testing.T) {
 	}
 	t.Logf("reaction setting surface: %s", raw)
 }
+
+// TestProbeRemainingModules measures, in one pass, whether the modules the last
+// twenty MISSING rows need exist on this build.
+//
+// The point is the distinction H125 established: a module that is ABSENT is a
+// different verdict from one that exists and lacks data or a second participant.
+// Twenty rows deserve one measurement, not twenty guesses.
+func TestProbeRemainingModules(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_REST") == "" {
+		t.Skip("set WA_PROBE_REST=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__rs2 = null;
+	const out = {modules:{}, funcs:{}};
+	const look = (name, fns) => {
+		try {
+			const m = window.require(name);
+			out.modules[name] = !!m;
+			if (m) {
+				out[name+":keys"] = Object.keys(m).slice(0, 10);
+				for (const f of (fns||[])) { out.funcs[name+"."+f] = (typeof m[f] === "function"); }
+			}
+		} catch (e) { out.modules[name] = false; }
+	};
+	look("WAWebNewsletterUpdateUserSettingJob", []);
+	look("WAWebNewsletterModelUtils", []);
+	look("WAJids", []);
+	look("WAWebNoteAction", []);
+	window.__rs2 = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__rs2", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("remaining modules:\n%s", out)
+}
