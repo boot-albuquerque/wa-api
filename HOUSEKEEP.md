@@ -19436,8 +19436,38 @@ carrossel.
 muda a ação — o carrossel sem embrulho funciona nos dois, e a decisão é não
 embrulhar de qualquer modo.
 
-**Status**: `HSCROLL_CARDS` **sem embrulho** está provado nos dois lados e é o
-que vai para a rota. `ALBUM_IMAGE` fica fora da superfície pública: não é
+### Terceira ronda — matriz de 6 direções entre 3 contas
+
+Hipótese do utilizador: a assimetria seria de TIPO DE APP — pessoal a enviar
+para business renderizaria diferente de business para pessoal.
+
+Seis envios no MESMO instante, mesma imagem, mesma estrutura, variando só quem
+envia e quem recebe. `lucas` é pessoal (iPhone); `aulapratica` e `filarapida`
+são business (Android e iPhone).
+
+| # | direção | remetente | destinatário |
+|---|---|---|---|
+| M1 | lucas -> aulapratica | renderiza | renderiza |
+| M2 | lucas -> filarapida | renderiza | renderiza |
+| M3 | aulapratica -> lucas | renderiza | renderiza |
+| M4 | aulapratica -> filarapida | renderiza | renderiza |
+| M5 | filarapida -> lucas | renderiza | renderiza |
+| M6 | filarapida -> aulapratica | renderiza | renderiza |
+
+**Doze observações, doze a renderizar.** A hipótese do tipo de app está
+**REFUTADA**: não há assimetria de direção nenhuma. Também cai o confundidor
+Android/iOS que eu tinha declarado na ronda anterior — as duas plataformas
+aparecem como remetente E como destinatário, e desenham o carrossel nas
+quatro combinações.
+
+Nota que fecha a F215: M5 e M6 produziram os erros `no session found for` no
+nosso log e **renderizaram na mesma**. Confirma que aquele erro é do nosso
+próprio eco e não afeta a entrega.
+
+**Status**: `HSCROLL_CARDS` **sem embrulho** está provado em SEIS direções e nos
+dois lados de cada uma, em iOS e Android, com conta pessoal e business. É o que
+vai para a rota (integrado em 30531ae). Ver [F217] para a diferença de
+`Title` entre plataformas, descoberta nesta ronda. `ALBUM_IMAGE` fica fora da superfície pública: não é
 suportado como enum de carrossel, e o caminho real (`MessageAssociation`) é
 outra tarefa.
 
@@ -19674,5 +19704,48 @@ de a tratar como mensagem indecifrável. Não silenciar a categoria inteira: um
 subir.
 
 **Status**: não corrigido — fora do escopo. Depende de decisão junto com a F214.
+
+<!-- f-status: aberto -->
+
+## F217 — iOS NÃO desenha o `Header.Title` do cartão de carrossel; Android desenha
+
+**Data**: 2026-08-22
+**Contexto**: achado de lado, ao fotografar a matriz de 6 direções da F216. Não
+era o que a matriz procurava.
+
+**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`,
+`buildCarouselCard` — o ramo `if card.Title != ""` que preenche
+`waE2E.InteractiveMessage_Header.Title`. Exposto na rota como o campo `Title`
+de cada cartão (`domain.CarouselCard.Title`).
+
+**Evidência medida**: as MESMAS mensagens (mesmos ids, mesmo envio), vistas em
+aparelhos diferentes.
+
+| aparelho | o que o cartão mostra |
+|---|---|
+| **Android** | `Cartao 1` / `MATRIZ M1 — lucas para aulapratica — cartao 1` / `rodape do cartao` / botão |
+| **iOS** | `MATRIZ M1 — lucas para aulapratica — cartao 1` / `rodape do cartao` / botão |
+
+A linha do título simplesmente NÃO aparece no iOS. Corpo, rodapé, imagem e
+botão aparecem nos dois. Não é ordenação nem truncagem: o texto do título não
+está em lado nenhum do cartão no iOS.
+
+Confirmado em todas as seis direções da matriz e nas duas contas business,
+portanto não é conta nem direção — é o cliente.
+
+**Problema**: a rota `/chat/send/carousel` aceita `Title` por cartão e nada diz
+sobre isto. Quem puser informação necessária no título perde-a para metade dos
+destinatários, e o `200` não avisa. É a mesma classe da F213 e da armadilha
+#26: o servidor aceita, o cliente decide, e o código de estado não distingue.
+
+**Correção sugerida**: documentar no handler e no devui que `Title` é
+**decorativo e só visível no Android**, e que informação necessária vai no
+`Body`. Não remover o campo: no Android ele funciona e dá hierarquia visual.
+Alternativa a considerar, se o canal preferir: recusar `Title` sem `Body`, para
+que nunca exista cartão cuja única informação esteja no campo que o iOS ignora.
+
+**Status**: não corrigido — descoberto depois de a rota estar integrada
+(30531ae). Pergunta pendente: documentar apenas, ou também recusar cartão com
+`Title` e sem `Body`?
 
 <!-- f-status: aberto -->
