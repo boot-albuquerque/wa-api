@@ -1,7 +1,10 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ListUsersRequest é o request para listar usuários
 type ListUsersRequest struct {
@@ -32,6 +35,72 @@ type EditUserRequest struct {
 	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
 	S3Config    *S3Config    `json:"s3Config,omitempty"`
 	History     int          `json:"history,omitempty"`
+}
+
+// --- Aliases snake_case na LEITURA (F210, decisão 49=a do canal) ------------
+//
+// A API lia estes dois campos em camelCase (`s3Config`, `proxyConfig`) e
+// devolvia-os em snake_case (`s3_config`, `proxy_config`, ver
+// session.go:66-67). O ciclo mais natural que existe — ler o utilizador, mudar
+// um campo, reenviar — chegava com o nome da RESPOSTA, o binding não o
+// reconhecia, e o pedido era ignorado em SILÊNCIO com 200.
+//
+// Medido em campo a 2026-08-22:
+//
+//	PUT {"name":"lucas","s3_config":{"bucket":"snake-case"}} -> 200, bucket=""
+//	PUT {"name":"lucas","s3Config":{"bucket":"camel-case"}}  -> 200, bucket="camel-case"
+//
+// A escolha foi aceitar OS DOIS na leitura e manter snake_case na resposta.
+// Alinhar tudo em snake_case seria mais limpo, mas o README documenta
+// camelCase como formato de pedido (README.md:289-311) e não documenta a forma
+// da resposta — alinhar em snake partiria o contrato escrito.
+//
+// O camelCase VENCE quando ambos vêm no mesmo corpo: é o documentado, e quem
+// envia os dois de propósito está a pedir ambiguidade, não a exprimir intenção.
+
+// aliasesDeConfig são os nomes alternativos aceites na desserialização.
+type aliasesDeConfig struct {
+	ProxyConfigSnake *ProxyConfig `json:"proxy_config,omitempty"`
+	S3ConfigSnake    *S3Config    `json:"s3_config,omitempty"`
+}
+
+// UnmarshalJSON aceita `s3_config`/`proxy_config` além de `s3Config`/`proxyConfig`.
+func (r *EditUserRequest) UnmarshalJSON(data []byte) error {
+	type semMetodo EditUserRequest // evita recursão infinita
+	aux := struct {
+		*semMetodo
+		aliasesDeConfig
+	}{semMetodo: (*semMetodo)(r)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if r.ProxyConfig == nil {
+		r.ProxyConfig = aux.ProxyConfigSnake
+	}
+	if r.S3Config == nil {
+		r.S3Config = aux.S3ConfigSnake
+	}
+	return nil
+}
+
+// UnmarshalJSON: o mesmo para a criação. Aplicar só à edição criaria uma
+// assimetria nova — PUT a aceitar dois nomes e POST a aceitar um.
+func (r *AddUserRequest) UnmarshalJSON(data []byte) error {
+	type semMetodo AddUserRequest
+	aux := struct {
+		*semMetodo
+		aliasesDeConfig
+	}{semMetodo: (*semMetodo)(r)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if r.ProxyConfig == nil {
+		r.ProxyConfig = aux.ProxyConfigSnake
+	}
+	if r.S3Config == nil {
+		r.S3Config = aux.S3ConfigSnake
+	}
+	return nil
 }
 
 // DeleteUserRequest é o request para deletar um usuário

@@ -2429,8 +2429,10 @@ pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,clus
 pkg/bootstrap.withField	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeAdminTokenFile	ELIGIBLE	covered
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
+pkg/domain.AddUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
+pkg/domain.EditUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsSupportedProxyScheme	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1

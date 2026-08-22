@@ -18246,8 +18246,55 @@ cada lado em separado passam com os dois nomes divergentes.
 **Verificar antes de escolher**: o que o painel `devui` envia hoje. Se envia
 camelCase, a opção 2 parte-o.
 
-**Status**: **não corrigido** — diagnóstico refeito e medido; a correção é
-decisão de contrato, pendente do canal.
+### CORRIGIDA (2026-08-22), decisão 49=a do canal
+
+`EditUserRequest` e `AddUserRequest` ganharam `UnmarshalJSON` que aceita
+**ambos** os nomes; a resposta continua em snake_case.
+
+**A verificação que fiz antes de o canal responder, e que reforça a escolha**:
+a opção "alinhar tudo em snake_case" era a mais limpa, e eu tinha avisado que
+podia partir o painel. Não parte — o painel `devui` **não faz `PUT
+/admin/users`** de todo. Mas partiria coisa pior: o **README documenta
+camelCase** (`README.md:289-311`, `proxyConfig`/`s3Config`) e **não documenta a
+forma da resposta**. Alinhar em snake quebraria o contrato escrito.
+
+Aplicado aos DOIS pedidos, criação e edição. Aceitar em só um criaria a
+assimetria seguinte — PUT com dois nomes, POST com um.
+
+O **camelCase vence** quando ambos vêm no mesmo corpo: é o documentado, e quem
+envia os dois está a pedir ambiguidade, não a exprimir intenção.
+
+**Verificado em campo, nos dois sentidos**:
+
+```
+antes:  PUT {"s3_config":{"bucket":"snake-case"}}     -> 200, bucket=''   (ignorado)
+depois: PUT {"s3_config":{"bucket":"agora-funciona"}} -> 200, bucket='agora-funciona'
+        PUT {"s3Config":{"bucket":"camel-ainda-ok"}}  -> 200, bucket='camel-ainda-ok'
+        (o mesmo para proxy_config / proxyConfig)
+```
+
+**Testes**: cinco, e o que interessa é `TestEditUserRequest_RoundTrip` — ler a
+forma que a API DEVOLVE e reenviá-la sem lhe tocar. É o único formato que
+apanha assimetria de nome; asserções sobre cada lado em separado passam com os
+dois nomes divergentes, e foi por isso que o defeito sobreviveu.
+
+**Controlos negativos, os três mordendo com o build limpo**:
+
+```
+CN-1 sem o alias                  -> FAIL "S3Config chegou nil"
+CN-2 o alias SOBREPÕE o camelCase -> FAIL TestEditUserRequest_CamelVenceQuandoAmbosVem
+CN-3 o alias inventa config vazia -> FAIL TestEditUserRequest_SemConfigContinuaNil
+```
+
+O CN-3 é o que impede a correção de virar outro defeito: um corpo que não traz
+os campos não pode passar a trazê-los vazios, senão **apaga** a configuração de
+quem só queria mudar o nome.
+
+**Nota do gate**: as duas `UnmarshalJSON` entram no golden como EXCLUDED pela
+regra X4 de `METRIC.md` — isenção por assinatura, porque registar dentro de um
+desserializador é recursão infinita via zerolog. Conjunto muda, números não.
+
+**Status**: **CORRIGIDA**. O irmão do `InitializeS3Client` continua aberto.
 
 ### O irmão que continua verdadeiro: o erro de `InitializeS3Client` é descartado
 
