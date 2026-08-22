@@ -19697,11 +19697,32 @@ despachados**, que num ambiente com webhook configurado chegariam ao consumidor
 como mensagens ilegíveis inexistentes. Neste datadir o log diz "No webhook set
 for user", por isso não se propagou.
 
-**Correção sugerida**: reconhecer a cópia auto-endereçada (remetente == o nosso
-próprio dispositivo) antes de tentar decifrar, e descartá-la em silêncio em vez
-de a tratar como mensagem indecifrável. Não silenciar a categoria inteira: um
-`UndecryptableMessage` de um TERCEIRO é sinal legítimo e tem de continuar a
-subir.
+**Correção candidata**: `events.UndecryptableMessage.Info` é um
+`types.MessageInfo`, logo tem `IsFromMe`. Filtrar em
+`pkg/bootstrap/eventhandler_message.go:582` (`handleUndecryptableMessage`),
+ANTES de `st.dowebhook = 1`, preservando o evento quando vem de terceiros —
+um `UndecryptableMessage` de um TERCEIRO é sinal legítimo e tem de subir.
+
+**MAS a correção NÃO se aplica ainda: não consegui reproduzir.** Tentativa de
+2026-08-22, com o campo `IsFromMe` instrumentado no log:
+
+| envio | conta | resultado |
+|---|---|---|
+| 3× `/chat/send/text` | filarapida (a que produziu 4 das 5 falhas) | **0 erros** |
+| 2× `/chat/send/carousel` | filarapida, para lucas e para aulapratica | **0 erros** |
+
+Cinco envios, nenhuma ocorrência. A hipótese de que os ecos falhados têm
+`IsFromMe = true` continua **por confirmar**, e aplicar o filtro sem isso
+produziria um teste verde que não morde — o defeito exato que este repositório
+já apanhou quatro vezes nesta série (ARMADILHAS #25).
+
+Também cai a sub-hipótese "acontece no primeiro envio de cada sessão após
+arranque": o servidor foi reiniciado antes desta medição e os primeiros envios
+da filarapida não falharam.
+
+**Próximo passo**: manter a instrumentação de `IsFromMe` num binário de
+diagnóstico e capturar a próxima ocorrência espontânea, em vez de forçar. Sem
+essa captura, não há como distinguir a correção certa de uma que só silencia.
 
 **Status**: não corrigido — fora do escopo. Depende de decisão junto com a F214.
 
