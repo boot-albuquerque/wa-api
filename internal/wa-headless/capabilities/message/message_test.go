@@ -489,3 +489,114 @@ func TestAnEmptyIDNeverReachesThePageForMentions(t *testing.T) {
 		t.Fatalf("an empty id reached the page %d times", d.kicks)
 	}
 }
+
+// SOMEBODY ELSE'S MESSAGE IS ITS OWN ANSWER. Folding it into ErrRead would tell
+// a caller the page refused, when in fact the question has no meaning.
+func TestInfoAboutSomebodyElsesMessageIsItsOwnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false,"notMine":true}`}
+	if _, err := rd(d).InfoOf(context.Background(), "3EB0", "t"); !errors.Is(err, ErrNotMine) {
+		t.Fatalf("want ErrNotMine, got %v", err)
+	}
+}
+
+// THE SCRIPT REFUSES BEFORE ASKING, like the reference does. Asking the store
+// about a message this account did not send is a question the server has no
+// answer for, and the guard has to be in the page because that is where the
+// message model is.
+func TestTheInfoScriptChecksOwnershipBeforeQuerying(t *testing.T) {
+	d := &double{answer: `{"ok":true,"answered":false}`}
+	if _, err := rd(d).InfoOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("InfoOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	iGuard := strings.Index(code, "fromMe")
+	iQuery := strings.Index(code, "queryMsgInfo")
+	if iGuard < 0 || iQuery < 0 {
+		t.Fatalf("script is missing the guard or the query (guard=%d query=%d)", iGuard, iQuery)
+	}
+	if iGuard > iQuery {
+		t.Fatal("the ownership guard runs AFTER the query, so a message this " +
+			"account did not send would still be asked about")
+	}
+}
+
+// THE COLLECTION IS NOT THE SOURCE. H71 measured WAWebMsgInfoCollection empty
+// and concluded the build has no read receipts; it is still empty and it is not
+// where the answer lives.
+func TestTheInfoScriptDoesNotReadTheEmptyCollection(t *testing.T) {
+	d := &double{answer: `{"ok":true,"answered":false}`}
+	if _, err := rd(d).InfoOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("InfoOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if !strings.Contains(code, "queryMsgInfo") {
+		t.Fatal("the script does not call queryMsgInfo, which is the only thing " +
+			"that produces message info on this build")
+	}
+	if strings.Contains(code, "MsgInfoCollection") {
+		t.Fatal("the script reads MsgInfoCollection, which is populated BY the " +
+			"query and reads empty until somebody makes it")
+	}
+}
+
+// AN UNANSWERED QUERY IS NOT "NOBODY GOT IT". A message too young for the server
+// to report on would otherwise come back as three empty lists, which a caller
+// reads as delivery failure.
+func TestAnUnansweredInfoIsNotThreeEmptyLists(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false,"notMine":false,"answered":false}`}
+	got, err := rd(d).InfoOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("InfoOf: %v", err)
+	}
+	if got.Answered {
+		t.Fatal("an unanswered query reported itself as answered")
+	}
+	if !strings.Contains(got.String(), "answered=false") {
+		t.Fatalf("the rendering hides that nothing was answered: %s", got)
+	}
+}
+
+// THE REMAINING COUNTS ARE THE PAGE'S, NOT DERIVED. Deriving them would need the
+// participant count at send time, which is not the group's size today.
+func TestTheRemainingCountsComeFromThePage(t *testing.T) {
+	d := &double{answer: `{"ok":true,"answered":true,"delivered":["1@lid"],` +
+		`"read":[],"played":[],"deliveredRemaining":4,"readRemaining":5,"playedRemaining":-1}`}
+	got, err := rd(d).InfoOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("InfoOf: %v", err)
+	}
+	if got.DeliveredRemaining != 4 || got.ReadRemaining != 5 {
+		t.Fatalf("the remaining counts were not carried through: %#v", got)
+	}
+	if got.PlayedRemaining != -1 {
+		t.Fatal("an absent count was turned into zero; -1 is how this type says " +
+			"the page reported nothing, and zero would mean everybody played it")
+	}
+	if len(got.Delivered) != 1 || got.Delivered[0] != "1@lid" {
+		t.Fatalf("the delivered list did not come back whole: %#v", got.Delivered)
+	}
+}
+
+// The rendering carries counts, never an identity.
+func TestTheInfoRenderingIsQuiet(t *testing.T) {
+	i := Info{Answered: true, Delivered: []string{"5516999999999@lid"}, ReadRemaining: 3}
+	s := i.String()
+	for _, leak := range []string{"5516", "999999999"} {
+		if strings.Contains(s, leak) {
+			t.Fatalf("the rendering leaks %q: %s", leak, s)
+		}
+	}
+	if !strings.Contains(s, "delivered=1") {
+		t.Fatalf("the rendering lost the counts: %s", s)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForInfo(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).InfoOf(context.Background(), " ", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("want ErrNoMessage, got %v", err)
+	}
+	if d.kicks != 0 {
+		t.Fatalf("an empty id reached the page %d times", d.kicks)
+	}
+}

@@ -4187,3 +4187,83 @@ foi escrito para testar OUTRA coisa, e o `true` era uma escolha inocente de
 conveniência — que depois virou a razão de uma linha do ledger ficar `PARTIAL`
 por meses. Vale a pergunta em toda suíte: **que campo dos meus fixtures nunca
 mudou de valor?** Esse é o campo que ninguém está testando.
+
+---
+
+## H153 — `getInfo`: a medição da H71 estava certa e a conclusão dela, errada
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go` (`InfoOf`,
+`Info`, `ErrNotMine`), `.../script.go` (`infoScript`),
+`internal/wa-headless/probe_msginfo_test.go` (novo), linha `getInfo`.
+
+**Problema**: a linha dizia *"MsgInfoCollection VAZIA (0 de 368); temos ack, não
+'quem leu'"* (H71). A contagem estava correta — a coleção lê **0 ainda hoje** —
+e a conclusão tirada dela não: a referência **nunca lê essa coleção**. Ela chama
+`WAWebApiMessageInfoStore.queryMsgInfo(msg.id)` (`wwebjs_message.js:758-781`), e
+a coleção é populada **pela** consulta, não em vez dela.
+
+**É a armadilha da H142 com outra roupa**: medir um cache antes de alguém
+enchê-lo. Lá o zero era ausência de dado produzível; aqui é ausência de dado
+*solicitável*. Nos dois casos a leitura correta do zero era "ninguém pediu", não
+"não existe".
+
+**Enumeração antes da chamada** (regra da H143):
+
+```
+WAWebApiMessageInfoStore: [RetryEligibilityResult, createOrMergeReceiptRecords,
+                           isRetryEligible, queryMsgInfo, queryMsgInfos,
+                           getHighestMsgAcks]
+WAWebMsgInfoCollection:   [MsgInfoCollection]      msgInfoSize: 0
+```
+
+**Medição da forma**, numa mensagem própria enviada ao grupo de laboratório:
+
+```
+delivery: array[1]   deliveryRemaining: number
+read:     array[0]   readRemaining:     number
+played:   array[0]   playedRemaining:   number
+```
+
+**Correção aplicada**: `Reader.InfoOf`, devolvendo `Info` com as três LISTAS e os
+três contadores de restantes. Três decisões que o tipo carrega:
+
+1. **Listas, não contagens.** Em um-para-um o `ack` já diz tudo; em grupo,
+   *"dois de cinco leram"* é fato diferente de *"estes dois leram"*, e só o
+   segundo permite agir.
+2. **Os "restantes" vêm da página, não de subtração.** Derivá-los exigiria o
+   número de participantes NO MOMENTO DO ENVIO, que não é o tamanho do grupo
+   hoje — erraria calado assim que alguém saísse. `-1` distingue "a página não
+   disse" de zero, distinção que este módulo já pagou duas vezes (H90, H108).
+3. **`Answered` separa "ninguém recebeu" de "ninguém perguntou".** Sem ele, uma
+   mensagem jovem demais voltaria como três listas vazias, que se lê como falha
+   de entrega.
+
+**A guarda de posse fica ANTES da consulta**, como na referência
+(`if (!msg.id.fromMe) return null`). Não é cortesia: o servidor responde sobre
+entrega do que ESTA conta mandou, e perguntar sobre mensagem alheia é pergunta
+sem sentido, não erro de permissão — daí `ErrNotMine` e não `ErrRead`.
+
+**Status**: corrigido, linha para `PROVEN`. Travado por cinco controles negativos,
+todos EXECUTADOS e todos falhando:
+- `TestTheInfoScriptChecksOwnershipBeforeQuerying` — CN: mover a guarda para
+  depois da consulta. Falha (é teste de ORDEM, que passa em todos os outros).
+- `TestTheInfoScriptDoesNotReadTheEmptyCollection` — CN: trocar `queryMsgInfo`
+  por leitura da `MsgInfoCollection`. Falha.
+- `TestTheRemainingCountsComeFromThePage` — CN: derivar os restantes de
+  `len(lista)`. Falha.
+- `TestAnUnansweredInfoIsNotThreeEmptyLists` — CN: fixar `Answered: true`. Falha.
+- `TestInfoAboutSomebodyElsesMessageIsItsOwnError` — CN: remover o ramo
+  `NotMine`. Falha.
+
+Prova em SPA real: `answered=true delivered=1 read=0 played=0 remaining=0/1/1`
+numa mensagem própria de grupo, **e a recusa** com `ErrNotMine` sobre mensagem
+alheia — porque uma capacidade só vista aceitando não está provada (H147, aplicada
+no mesmo dia em que foi escrita).
+
+**Lição**: *uma medição correta pode sustentar uma conclusão errada, e o jeito de
+descobrir é perguntar como a REFERÊNCIA obtém o dado, não se ele está onde
+procuramos.* A H71 procurou no lugar plausível e o encontrou vazio; dez linhas do
+upstream diziam que o lugar plausível não é o lugar.

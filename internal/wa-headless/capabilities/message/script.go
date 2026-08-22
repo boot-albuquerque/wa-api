@@ -274,3 +274,73 @@ func mentionsScript(messageID string) string {
 	return "kicked";
 	})()`
 }
+
+const modMessageInfoStore = "WAWebApiMessageInfoStore"
+
+// infoScript asks WHO received, read and played a message this account sent.
+//
+// THE COLLECTION WAS THE WRONG INSTRUMENT, and that is why this arrives late.
+// H71 measured WAWebMsgInfoCollection empty — 0 of 368 — and concluded this
+// build gives ack and not "who read it". The collection is still 0 today, and it
+// is not where the answer lives: the reference never reads it. It calls
+// WAWebApiMessageInfoStore.queryMsgInfo(msg.id), and the collection is populated
+// BY that query rather than instead of it. Measuring a cache before anyone has
+// filled it is the same mistake H142 made about mentions, in a different dress.
+//
+// IT IS ONLY ABOUT OWN MESSAGES, and the reference enforces that before asking
+// (`if (!msg || !msg.id.fromMe) return null`). That is not a courtesy: the server
+// answers about delivery of things this account sent, and asking about somebody
+// else's message is a question with no meaning rather than a permission error.
+//
+// The reference sleeps INSIDE the page for messages younger than 1250ms. That
+// wait belongs to the caller here — invariant 6 keeps the clock on the Go side —
+// so this script asks once and reports what it got.
+func infoScript(messageID string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
+	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
+	// SO' ARRAY CONTA, pela mesma razao do mentionsScript: um valor que nao e'
+	// lista e' sentinela, e conta-la como gente inventa leitores.
+	const people = v => {
+		if (!Array.isArray(v)) { return []; }
+		const out = [];
+		for (const e of v) {
+			// A entrada e' um recibo, nao um wid: a identidade esta em .id.
+			const s = jid(e && e.id) || jid(e);
+			if (s) { out.push(s); }
+		}
+		return out;
+	};
+	const num = v => (typeof v === "number") ? v : -1;
+	(async () => {
+	try {
+		const MC = window.require("` + modMsgCollection + `").MsgCollection;
+		let m = null;
+		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
+		if (!m) {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				try { if (c.id && c.id.id === ` + strconv.Quote(messageID) + `) { m = c; break; } } catch (e) {}
+			}
+		}
+		if (!m) { park({ ok: true, notFound: true }); return; }
+		if (!(m.id && m.id.fromMe)) { park({ ok: true, notFound: false, notMine: true }); return; }
+
+		const info = await window.require("` + modMessageInfoStore + `").queryMsgInfo(m.id);
+		if (!info) { park({ ok: true, notFound: false, notMine: false, answered: false }); return; }
+		park({
+			ok: true, notFound: false, notMine: false, answered: true,
+			delivered: people(info.delivery), read: people(info.read), played: people(info.played),
+			deliveredRemaining: num(info.deliveryRemaining),
+			readRemaining: num(info.readRemaining),
+			playedRemaining: num(info.playedRemaining),
+		});
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
+	})();
+	return "kicked";
+	})()`
+}

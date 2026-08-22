@@ -391,3 +391,95 @@ func (r *Reader) MentionsOf(ctx context.Context, messageID, label string) (Menti
 	}
 	return m, nil
 }
+
+// ErrNotMine is a message this account did not send.
+//
+// IT IS NOT A PERMISSION ERROR. Message info is the server reporting on delivery
+// of things THIS account sent; asking it about somebody else's message is a
+// question with no meaning, and the reference refuses it before asking too.
+var ErrNotMine = fmt.Errorf("message: message info is only about this account's own messages")
+
+// Info is who received, read and played a message this account sent.
+type Info struct {
+	// Delivered, Read and Played are the identities that reached each state.
+	//
+	// THEY ARE LISTS, NOT COUNTS, and that is the entire difference between this
+	// and ack. In a one-to-one, ack already says everything; in a group, "two of
+	// five read it" is a different fact from "these two read it", and only the
+	// second lets a caller act.
+	Delivered, Read, Played []string
+	// DeliveredRemaining, ReadRemaining and PlayedRemaining are how many
+	// participants have NOT reached each state, as the page reports them.
+	//
+	// THEY ARE NOT len(list) SUBTRACTED FROM ANYTHING. The page carries them
+	// separately, and deriving them here would require knowing the participant
+	// count at the time of sending — which is not the same as the group's size
+	// today, and would go quietly wrong the moment somebody leaves.
+	//
+	// -1 means the page did not report the number, which is distinguishable from
+	// zero for the reason that distinction has been earned twice in this module
+	// already (H90, H108).
+	DeliveredRemaining, ReadRemaining, PlayedRemaining int
+	// Answered says the store returned a record at all. A message too young, or
+	// one the server has nothing to say about yet, comes back with Answered
+	// false rather than as three empty lists — which would read as "nobody got
+	// it" about a message nobody has been asked about.
+	Answered bool
+}
+
+func (i Info) String() string {
+	return fmt.Sprintf("message.Info(answered=%t delivered=%d read=%d played=%d remaining=%d/%d/%d)",
+		i.Answered, len(i.Delivered), len(i.Read), len(i.Played),
+		i.DeliveredRemaining, i.ReadRemaining, i.PlayedRemaining)
+}
+
+// InfoOf reports who received, read and played one of this account's messages.
+//
+// It is the reference's Message.getInfo, and it exists now because H71's
+// conclusion was wrong about the cause: it measured WAWebMsgInfoCollection empty
+// and read that as "this build gives ack, not who read it". The collection is
+// still empty; the reference never reads it. See infoScript.
+//
+// A MESSAGE TOO YOUNG ANSWERS Answered=false RATHER THAN NOTHING. The reference
+// handles that by sleeping inside the page for messages under 1250ms old; the
+// wait belongs to the caller here, and this reports honestly instead of guessing
+// how long to hold the page.
+func (r *Reader) InfoOf(ctx context.Context, messageID, label string) (Info, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return Info{}, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, infoScript(messageID), label+"/info")
+	if err != nil {
+		return Info{}, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK        bool     `json:"ok"`
+		Why       string   `json:"why"`
+		NotFound  bool     `json:"notFound"`
+		NotMine   bool     `json:"notMine"`
+		Answered  bool     `json:"answered"`
+		Delivered []string `json:"delivered"`
+		Read      []string `json:"read"`
+		Played    []string `json:"played"`
+		DelRem    int      `json:"deliveredRemaining"`
+		ReadRem   int      `json:"readRemaining"`
+		PlayRem   int      `json:"playedRemaining"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return Info{}, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return Info{}, ErrNotFound
+	}
+	if out.NotMine {
+		return Info{}, ErrNotMine
+	}
+	if !out.OK {
+		return Info{}, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	return Info{
+		Delivered: out.Delivered, Read: out.Read, Played: out.Played,
+		DeliveredRemaining: out.DelRem, ReadRemaining: out.ReadRem,
+		PlayedRemaining: out.PlayRem, Answered: out.Answered,
+	}, nil
+}

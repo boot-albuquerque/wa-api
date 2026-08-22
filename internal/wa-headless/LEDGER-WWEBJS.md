@@ -366,7 +366,7 @@ código — é falta de dado.
 | `unstar` | capabilities/star | `PROVEN` | sim | sim | sim | — |
 | `pin` | pin.Message | `BLOCKED` | sim | falha (H81) | sim | H140: reclassificado (decisão 60) — a H81 mediu chamada aceita e nada fixado, com vocabulário, duração e forma do modelo medidos. É comportamento da página |
 | `unpin` | pin.Unpin | `BLOCKED` | sim | falha (H81) | sim | H140: idem `pin` — chamada aceita, nada desfixado (H81) |
-| `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
+| `getInfo` | message.InfoOf | `PROVEN` | sim | sim | sim | H153: **a conclusão da H71 estava errada, e a medição dela estava certa.** A coleção continua vazia hoje — e a referência NUNCA a lê: ela chama `WAWebApiMessageInfoStore.queryMsgInfo(msg.id)` (`wwebjs_message.js:758-781`), e a coleção é populada PELA consulta, não em vez dela. Medir um cache antes de alguém enchê-lo é a mesma armadilha da H142 com outra roupa. Provado ao vivo numa mensagem própria de grupo: `answered=true delivered=1 read=0 played=0 remaining=0/1/1`, e recusa com `ErrNotMine` sobre mensagem alheia |
 | `getOrder` | — | `BLOCKED` | — | medido | — | H125: `WAWebBizOrderBridge.queryOrder` EXISTE. O bloqueio é de DADO: a conta tem **zero** mensagens de pedido. Exercitar exigiria atividade comercial real, que não é produzível por agente |
 | `getPayment` | — | `BLOCKED` | — | medido | — | H125: idem `getOrder` — módulo presente, **zero** pagamentos na conta |
 | `getReactions` | — | `BLOCKED` | — | medido | — | H124: a H83 tinha concluído que não há fonte para QUAL reação. Remedido com instrumento melhor: `WAWebCollections.Reactions` EXISTE com `on`/`getModelsArray`, e fica em **0 mesmo depois de uma reação que a capacidade verificou**. Não é falta de coleção — a coleção não enche. A `RecentReactions` (1 item) é a lista do seletor de emoji, não reações em mensagens |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 113 | 51% |
-| `PARTIAL` | 52 | 24% |
+| `PROVEN` | 114 | 52% |
+| `PARTIAL` | 51 | 23% |
 | `BLOCKED` | 49 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
