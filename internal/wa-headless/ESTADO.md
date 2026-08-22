@@ -956,3 +956,46 @@ sessão. O mais informativo é o quarto: trocar o relógio injetado por
 `time.Now()` faz o teste do prazo falhar, o que prova que ele mede a REGRA e não
 o relógio da máquina. Um teste de expiração que dorme prova apenas que dormir
 funciona.
+
+## O mapa da Fase 3, medido — e a contagem estava errada
+
+A decisão 71 diz "as 35 capabilities alcançáveis pela fronteira correta". Ao
+fazer a primeira, fui medir o conjunto todo em vez de o descobrir uma a uma, e a
+contagem não fecha assim.
+
+São 35 ports e 35 capabilities, mas **não são a mesma coisa**. Medindo pelo que
+distingue um port de transporte — a presença de `txtID string`, que é o
+endereçamento de sessão:
+
+| | quantidade |
+| --- | --- |
+| ports declarados | 35 |
+| **ports de TRANSPORTE** (com `txtID`) | **18** |
+| ports de infraestrutura (`Session*`, `Storage`, `UserRepository`, `Logger`, …) | 17 |
+| capabilities headless | 35 |
+
+Os 18 de transporte:
+
+```
+AppStateSyncer      BlocklistManager    CallRejecter        ChatArchiver
+ChatMessenger       ContactDirectory    GroupDirectory      GroupLifecycle
+GroupRequests       GroupSettings       MessageComposer     NewsletterReader
+PresenceController  PrivacyManager      ProfileAccessProvider
+SessionController   SessionGuard        UnavailableMessageRequester
+```
+
+Deles, hoje: **`ChatArchiver` satisfeito**, `SessionGuard` embutido em todos, e
+`UnavailableMessageRequester` **recusado por natureza** — pedir reenvio de
+mensagem indecifrável não existe para quem dirige a página.
+
+### Por que a contagem importa
+
+Um port cobre várias capabilities (`GroupSettings` toca `group` e `groupreq`), e
+há capabilities sem port nenhum (`liveness`, `messagemeta`, `owner` servem o
+próprio stack, não a aplicação). Medir progresso por "capabilities alcançáveis"
+conta a coisa errada nas duas direções.
+
+O critério mensurável é: **cada port de transporte satisfeito, ou recusado com
+motivo escrito.** É verificável pelo compilador — a asserção
+`var _ appport.X = (*Adapter)(nil)` — e a recusa fica travada em teste, como a
+da decisão 80.
