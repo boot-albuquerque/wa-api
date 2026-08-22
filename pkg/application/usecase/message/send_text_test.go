@@ -89,7 +89,7 @@ func TestSendMessage_InvalidPhoneNeverReachesSendText(t *testing.T) {
 func TestSendMessage_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 10, 30, 0, 0, time.UTC)
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-123"}, nil
 		},
 	}
@@ -127,7 +127,7 @@ func TestSendMessage_CausalSuccess(t *testing.T) {
 // diverge do id de entrada — nunca o id do request usado "às cegas".
 func TestSendMessage_MessageIDIsTheOneActuallySent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}
@@ -151,7 +151,7 @@ func TestSendMessage_MessageIDIsTheOneActuallySent(t *testing.T) {
 // pode virar Status=StatusSent nem resultado não-nil.
 func TestSendMessage_DownstreamFailureNeverProducesSent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -274,7 +274,7 @@ func TestSendMessage_LinkPreviewRequested_NoURLFound_FallsBackToPlainText(t *tes
 func TestSendMessage_LinkPreviewRequested_SenderRealContinuaObrigatorio(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-preview", Timestamp: sentAt}, nil
 		},
 	}
@@ -314,7 +314,7 @@ func TestSendMessage_LinkPreviewRequested_SenderRealContinuaObrigatorio(t *testi
 // CAP-01 contra falso-sucesso, agora no caminho com preview.
 func TestSendMessage_LinkPreviewRequested_DownstreamFailureNeverProducesSent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -338,5 +338,69 @@ func TestSendMessage_LinkPreviewRequested_DownstreamFailureNeverProducesSent(t *
 	}
 	if result != nil {
 		t.Errorf("resultado nao-nil devolvido junto com erro: %+v", result)
+	}
+}
+
+// --- CAP-46A: domain.SendMessageRequest.ReplyTo -------------------------
+
+// TestSendMessage_ReplyTo_ForwardedToPort: ReplyTo on the request is
+// forwarded as-is to SendText — the use case does not interpret it.
+func TestSendMessage_ReplyTo_ForwardedToPort(t *testing.T) {
+	wantReply := &domain.ReplyContext{
+		StanzaID:    "quoted-abc",
+		Participant: "5511888888888@s.whatsapp.net",
+		QuotedText:  "original text",
+	}
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+			return domain.MessageSendResult{ID: "wire-reply"}, nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendMessageUseCase(tm, &contractsfake.JIDResolver{}, &contractsfake.LinkPreviewFetcher{}, logger).
+		Execute(context.Background(), userID, domain.SendMessageRequest{
+			Phone: "5511987654321", Body: "my reply", ReplyTo: wantReply,
+		})
+
+	if err != nil {
+		t.Fatalf("happy path failed: %v", err)
+	}
+	if n := len(tm.SendTextCalls); n != 1 {
+		t.Fatalf("SendText called %d time(s), want 1", n)
+	}
+	got := tm.SendTextCalls[0].ReplyTo
+	if got == nil {
+		t.Fatal("ReplyTo not forwarded to SendText")
+	}
+	if got.StanzaID != wantReply.StanzaID {
+		t.Errorf("StanzaID = %q, want %q", got.StanzaID, wantReply.StanzaID)
+	}
+	if got.Participant != wantReply.Participant {
+		t.Errorf("Participant = %q, want %q", got.Participant, wantReply.Participant)
+	}
+	if got.QuotedText != wantReply.QuotedText {
+		t.Errorf("QuotedText = %q, want %q", got.QuotedText, wantReply.QuotedText)
+	}
+}
+
+// TestSendMessage_WithoutReplyTo_SendTextReceivesNil: without ReplyTo,
+// SendText receives nil — the anti-regression test ensuring the feature
+// does not break the fourteen existing flows.
+func TestSendMessage_WithoutReplyTo_SendTextReceivesNil(t *testing.T) {
+	tm := &contractsfake.TextMessenger{}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendMessageUseCase(tm, &contractsfake.JIDResolver{}, &contractsfake.LinkPreviewFetcher{}, logger).
+		Execute(context.Background(), userID, domain.SendMessageRequest{Phone: "5511987654321", Body: "plain"})
+
+	if err != nil {
+		t.Fatalf("happy path failed: %v", err)
+	}
+	if n := len(tm.SendTextCalls); n != 1 {
+		t.Fatalf("SendText called %d time(s), want 1", n)
+	}
+	if tm.SendTextCalls[0].ReplyTo != nil {
+		t.Errorf("ReplyTo = %+v, want nil (no ReplyTo in request)", tm.SendTextCalls[0].ReplyTo)
 	}
 }

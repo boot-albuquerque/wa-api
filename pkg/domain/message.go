@@ -1,13 +1,31 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
+// ReplyContext carries the fields needed to quote (reply-to) an existing
+// message. Separate from EditContextInfo on purpose: edit carries
+// MentionedJID, which is orthogonal to quoting; and reply-to carries
+// QuotedText, which edit does not need. Collapsing them into one type would
+// force every consumer to carry fields it never uses, and the name would be
+// wrong for at least one of the two callers.
+//
+// QuotedText is the text preview of the quoted message. Baileys always
+// embeds the full message content in ContextInfo.QuotedMessage; without it,
+// WhatsApp mobile does NOT render the quote preview bubble (WhatsApp Web
+// does, from local cache). See mautrix/whatsapp#904.
+type ReplyContext struct {
+	StanzaID    string `json:"StanzaId"`
+	Participant string `json:"Participant"`
+	QuotedText  string `json:"QuotedText,omitempty"`
+}
+
 // SendMessageRequest representa o payload de envio de mensagem de texto.
 // Corresponde ao struct textStruct em handlers.go:SendMessage().
 type SendMessageRequest struct {
-	Phone       string `json:"Phone"`
-	Body        string `json:"Body"`
-	LinkPreview bool   `json:"LinkPreview,omitempty"`
-	ID          string `json:"Id,omitempty"`
+	Phone       string        `json:"Phone"`
+	Body        string        `json:"Body"`
+	LinkPreview bool          `json:"LinkPreview,omitempty"`
+	ID          string        `json:"Id,omitempty"`
+	ReplyTo     *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendMessageResult representa o resultado do envio de mensagem.

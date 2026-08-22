@@ -20,7 +20,9 @@ const ficheiro = (nome, rotulo) => ({ nome, rotulo, tipo: "file", req: true });
 
 export const ENVIO = [
   { id: "text", rotulo: "Texto", rota: "/chat/send/text",
-    campos: [telefone, { nome: "Body", rotulo: "mensagem", tipo: "textarea", req: true }] },
+    campos: [telefone, { nome: "Body", rotulo: "mensagem", tipo: "textarea", req: true },
+             { nome: "ReplyTo", rotulo: "reply-to (JSON, opcional)", tipo: "textarea",
+               pre: (v) => { const s = String(v || "").trim(); return s ? JSON.parse(s) : undefined; } }] },
 
   { id: "image", rotulo: "Imagem", rota: "/chat/send/image",
     campos: [telefone, ficheiro("Image", "imagem"), legenda] },

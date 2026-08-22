@@ -149,7 +149,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/text",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				tm := &contractsfake.TextMessenger{
-					SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+					SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-text-1"), nil
 					},
 				}

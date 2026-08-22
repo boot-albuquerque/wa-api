@@ -27,5 +27,10 @@ type TextMessenger interface {
 	// com a metadata de link preview em vez do Conversation simples
 	// (CAP-01.1). nil preserva o caminho provado no CAP-01 sem nenhuma
 	// mudança.
-	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, id string) (domain.MessageSendResult, error)
+	//
+	// replyTo, quando não-nil, faz o adapter montar ContextInfo com
+	// StanzaID, Participant e QuotedMessage no ExtendedTextMessage
+	// (CAP-46A). Tanto preview quanto replyTo forçam ExtendedTextMessage;
+	// sem nenhum dos dois, monta Conversation simples.
+	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 }

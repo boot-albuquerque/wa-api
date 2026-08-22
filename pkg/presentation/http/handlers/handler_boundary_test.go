@@ -111,7 +111,7 @@ func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, strin
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }

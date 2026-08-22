@@ -20,6 +20,7 @@ type TextMessengerSendTextCall struct {
 	Target  domain.JID
 	Text    string
 	Preview *domain.LinkPreviewData
+	ReplyTo *domain.ReplyContext
 	ID      string
 }
 
@@ -27,17 +28,17 @@ type TextMessengerSendTextCall struct {
 type TextMessenger struct {
 	SessionGuard
 
-	SendTextFunc  func(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, id string) (domain.MessageSendResult, error)
+	SendTextFunc  func(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 	SendTextCalls []TextMessengerSendTextCall
 }
 
 var _ port.TextMessenger = (*TextMessenger)(nil)
 
 // SendText implementa port.TextMessenger.
-func (f *TextMessenger) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
-	f.SendTextCalls = append(f.SendTextCalls, TextMessengerSendTextCall{Ctx: ctx, TxtID: txtID, Target: target, Text: text, Preview: preview, ID: id})
+func (f *TextMessenger) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+	f.SendTextCalls = append(f.SendTextCalls, TextMessengerSendTextCall{Ctx: ctx, TxtID: txtID, Target: target, Text: text, Preview: preview, ReplyTo: replyTo, ID: id})
 	if f.SendTextFunc != nil {
-		return f.SendTextFunc(ctx, txtID, target, text, preview, id)
+		return f.SendTextFunc(ctx, txtID, target, text, preview, replyTo, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentMessageID}, nil
 }

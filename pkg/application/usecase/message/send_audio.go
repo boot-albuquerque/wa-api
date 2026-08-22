@@ -179,7 +179,7 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 	if req.Caption == "" {
 		return result, nil
 	}
-	legenda, cerr := uc.texts.SendText(ctx, txtID, recipient, req.Caption, nil, "")
+	legenda, cerr := uc.texts.SendText(ctx, txtID, recipient, req.Caption, nil, nil, "")
 	if cerr != nil {
 		uc.logger.Error(ctx, "audio sent but caption failed",
 			"txtID", txtID, "audioMsgID", result.MessageID, "error", cerr)

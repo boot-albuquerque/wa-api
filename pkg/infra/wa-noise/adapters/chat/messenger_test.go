@@ -147,7 +147,7 @@ func TestChatMessengerAdapter_SendReaction_OK(t *testing.T) {
 // TestChatMessengerAdapter_SendText_NoSession.
 func TestChatMessengerAdapter_SendText_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, "")
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendText code = %q", testkit.AppErrCode(err))
 	}
@@ -162,7 +162,7 @@ func TestChatMessengerAdapter_SendText_InvalidJID(t *testing.T) {
 		return wanoise.SendResponse{}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	_, err := a.SendText(context.Background(), "u1", domain.JID(string([]byte{0x00})), "ola", nil, "")
+	_, err := a.SendText(context.Background(), "u1", domain.JID(string([]byte{0x00})), "ola", nil, nil, "")
 	if err == nil {
 		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
@@ -179,7 +179,7 @@ func TestChatMessengerAdapter_SendText_PropagatesError(t *testing.T) {
 		return wanoise.SendResponse{}, sdkErr
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, "")
 	if err == nil {
 		t.Fatal("SendText não propagou erro")
 	}
@@ -201,7 +201,7 @@ func TestChatMessengerAdapter_SendText_OK(t *testing.T) {
 		return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id")}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola mundo", nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola mundo", nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestChatMessengerAdapter_SendText_WithCallerID(t *testing.T) {
 		return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, "caller-id")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, "caller-id")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -261,7 +261,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_BuildsExtendedTextMessage(t *
 		Description:   "Descrição",
 		ThumbnailJPEG: []byte{0xFF, 0xD8, 0xFF},
 	}
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "olha https://exemplo.com/pagina", preview, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "olha https://exemplo.com/pagina", preview, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -329,7 +329,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_UploadsHQThumbnail(t *testing
 		HQHeight:      400,
 	}
 
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -396,7 +396,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades(t *testin
 		HQHeight:      400,
 	}
 
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, "")
 	if err != nil {
 		t.Fatalf("SendText should succeed even when upload fails: %v", err)
 	}
@@ -416,6 +416,158 @@ func TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades(t *testin
 	}
 	if string(etm.GetJPEGThumbnail()) != string([]byte{0xFF, 0xD8}) {
 		t.Error("inline thumbnail must survive upload failure")
+	}
+}
+
+// --- ChatMessengerAdapter.SendText with ReplyTo (CAP-46A) ----------------
+
+// TestChatMessengerAdapter_SendText_WithReplyTo_BuildsContextInfo: with
+// replyTo non-nil, SendText mounts ExtendedTextMessage (not Conversation)
+// with ContextInfo carrying StanzaID, Participant and QuotedMessage.
+func TestChatMessengerAdapter_SendText_WithReplyTo_BuildsContextInfo(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{ID: types.MessageID("wire-reply-1")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	reply := &domain.ReplyContext{
+		StanzaID:    "quoted-msg-id-abc",
+		Participant: "5511888888888@s.whatsapp.net",
+		QuotedText:  "the original message",
+	}
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "my reply", nil, reply, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	if res.ID != "wire-reply-1" {
+		t.Errorf("ID = %q, want %q", res.ID, "wire-reply-1")
+	}
+	if gotMsg.GetConversation() != "" {
+		t.Errorf("Conversation should be empty when replyTo is present, got %q", gotMsg.GetConversation())
+	}
+	etm := gotMsg.GetExtendedTextMessage()
+	if etm == nil {
+		t.Fatal("replyTo present but ExtendedTextMessage not built")
+	}
+	if etm.GetText() != "my reply" {
+		t.Errorf("Text = %q, want %q", etm.GetText(), "my reply")
+	}
+	ci := etm.GetContextInfo()
+	if ci == nil {
+		t.Fatal("ContextInfo nil with replyTo present")
+	}
+	if ci.GetStanzaID() != reply.StanzaID {
+		t.Errorf("StanzaID = %q, want %q", ci.GetStanzaID(), reply.StanzaID)
+	}
+	if ci.GetParticipant() != reply.Participant {
+		t.Errorf("Participant = %q, want %q", ci.GetParticipant(), reply.Participant)
+	}
+	qm := ci.GetQuotedMessage()
+	if qm == nil {
+		t.Fatal("QuotedMessage nil — mobile will not render quote bubble (mautrix/whatsapp#904)")
+	}
+	if qm.GetConversation() != reply.QuotedText {
+		t.Errorf("QuotedMessage.Conversation = %q, want %q", qm.GetConversation(), reply.QuotedText)
+	}
+}
+
+// TestChatMessengerAdapter_SendText_WithReplyTo_NoQuotedText: QuotedText
+// empty means no QuotedMessage in ContextInfo — the quote link still works
+// (scrolls to original) but mobile won't render the preview bubble. This is
+// the caller's choice, not a bug.
+func TestChatMessengerAdapter_SendText_WithReplyTo_NoQuotedText(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{ID: types.MessageID("wire-reply-nq")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	reply := &domain.ReplyContext{
+		StanzaID:    "quoted-msg-id-xyz",
+		Participant: "5511777777777@s.whatsapp.net",
+	}
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply without quoted text", nil, reply, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	ci := gotMsg.GetExtendedTextMessage().GetContextInfo()
+	if ci == nil {
+		t.Fatal("ContextInfo nil")
+	}
+	if ci.GetStanzaID() != reply.StanzaID {
+		t.Errorf("StanzaID = %q, want %q", ci.GetStanzaID(), reply.StanzaID)
+	}
+	if ci.GetQuotedMessage() != nil {
+		t.Errorf("QuotedMessage should be nil when QuotedText is empty, got %v", ci.GetQuotedMessage())
+	}
+}
+
+// TestChatMessengerAdapter_SendText_WithReplyToAndPreview: both preview and
+// replyTo can coexist on the same ExtendedTextMessage.
+func TestChatMessengerAdapter_SendText_WithReplyToAndPreview(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{ID: types.MessageID("wire-both")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	preview := &domain.LinkPreviewData{
+		MatchedURL: "https://exemplo.com",
+		Title:      "T",
+	}
+	reply := &domain.ReplyContext{
+		StanzaID:    "quoted-both",
+		Participant: "5511666666666@s.whatsapp.net",
+		QuotedText:  "original with link",
+	}
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply with link https://exemplo.com", preview, reply, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	etm := gotMsg.GetExtendedTextMessage()
+	if etm == nil {
+		t.Fatal("ExtendedTextMessage nil")
+	}
+	if etm.GetMatchedText() != preview.MatchedURL {
+		t.Errorf("MatchedText = %q, want %q", etm.GetMatchedText(), preview.MatchedURL)
+	}
+	ci := etm.GetContextInfo()
+	if ci == nil {
+		t.Fatal("ContextInfo nil")
+	}
+	if ci.GetStanzaID() != reply.StanzaID {
+		t.Errorf("StanzaID = %q, want %q", ci.GetStanzaID(), reply.StanzaID)
+	}
+	if ci.GetQuotedMessage().GetConversation() != reply.QuotedText {
+		t.Errorf("QuotedMessage = %q, want %q", ci.GetQuotedMessage().GetConversation(), reply.QuotedText)
+	}
+}
+
+// TestChatMessengerAdapter_SendText_WithoutReplyTo_NoContextInfo: when
+// replyTo is nil, no ContextInfo is set — the message stays as plain
+// Conversation. This is the anti-regression test: the feature must not
+// break the fourteen existing flows.
+func TestChatMessengerAdapter_SendText_WithoutReplyTo_NoContextInfo(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{ID: types.MessageID("wire-plain")}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain text", nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	if gotMsg.GetConversation() != "plain text" {
+		t.Errorf("Conversation = %q, want %q", gotMsg.GetConversation(), "plain text")
+	}
+	if gotMsg.GetExtendedTextMessage() != nil {
+		t.Error("ExtendedTextMessage should be nil without preview or replyTo")
 	}
 }
 

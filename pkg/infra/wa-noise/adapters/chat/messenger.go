@@ -123,16 +123,16 @@ func (a *ChatMessengerAdapter) SendReaction(ctx context.Context, txtID string, t
 	return domain.MessageSendResult{Timestamp: resp.Timestamp}, nil
 }
 
-// SendText monta uma mensagem de texto e a envia. Sem preview (nil), monta
-// Conversation — a forma canônica do protocolo para texto sem link preview
-// nem contexto, ver ARMADILHAS.md sobre não introduzir ExtendedTextMessage
-// sem necessidade. Com preview (CAP-01.1), monta ExtendedTextMessage com a
-// metadata de Open Graph que o chamador resolveu. Quando id não é vazio, é
-// repassado como RequestExtra.ID para que o SDK use exatamente esse
-// identificador; o ID devolvido em domain.MessageSendResult.ID vem sempre
-// de resp.ID — o identificador que o SDK REALMENTE usou — nunca do id de
-// entrada por construção própria.
-func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, id string) (domain.MessageSendResult, error) {
+// SendText monta uma mensagem de texto e a envia. Sem preview (nil) nem
+// replyTo (nil), monta Conversation — a forma canônica do protocolo para
+// texto sem link preview nem contexto, ver ARMADILHAS.md sobre não
+// introduzir ExtendedTextMessage sem necessidade. Com preview (CAP-01.1)
+// ou replyTo (CAP-46A), monta ExtendedTextMessage; os dois podem coexistir.
+// Quando id não é vazio, é repassado como RequestExtra.ID para que o SDK
+// use exatamente esse identificador; o ID devolvido em
+// domain.MessageSendResult.ID vem sempre de resp.ID — o identificador que
+// o SDK REALMENTE usou — nunca do id de entrada por construção própria.
+func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -143,31 +143,50 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 		return domain.MessageSendResult{}, err
 	}
 
+	needsExtended := preview != nil || replyTo != nil
+
 	msg := &waE2E.Message{
 		Conversation: proto.String(text),
 	}
-	if preview != nil {
+	if needsExtended {
 		etm := &waE2E.ExtendedTextMessage{
-			Text:          proto.String(text),
-			MatchedText:   proto.String(preview.MatchedURL),
-			Title:         proto.String(preview.Title),
-			Description:   proto.String(preview.Description),
-			JPEGThumbnail: preview.ThumbnailJPEG,
+			Text: proto.String(text),
 		}
-		if len(preview.HQImageData) > 0 {
-			uploaded, upErr := client.Upload(ctx, preview.HQImageData, wanoise.MediaLinkThumbnail)
-			if upErr != nil {
-				log.Warn().Err(upErr).Str("txtID", txtID).
-					Msg("link preview HQ thumbnail upload failed, sending inline thumbnail only")
-			} else {
-				etm.ThumbnailDirectPath = proto.String(uploaded.DirectPath)
-				etm.ThumbnailSHA256 = uploaded.FileSHA256
-				etm.ThumbnailEncSHA256 = uploaded.FileEncSHA256
-				etm.MediaKey = uploaded.MediaKey
-				etm.MediaKeyTimestamp = proto.Int64(time.Now().Unix())
-				etm.ThumbnailWidth = proto.Uint32(preview.HQWidth)
-				etm.ThumbnailHeight = proto.Uint32(preview.HQHeight)
+		if preview != nil {
+			etm.MatchedText = proto.String(preview.MatchedURL)
+			etm.Title = proto.String(preview.Title)
+			etm.Description = proto.String(preview.Description)
+			etm.JPEGThumbnail = preview.ThumbnailJPEG
+			if len(preview.HQImageData) > 0 {
+				uploaded, upErr := client.Upload(ctx, preview.HQImageData, wanoise.MediaLinkThumbnail)
+				if upErr != nil {
+					log.Warn().Err(upErr).Str("txtID", txtID).
+						Msg("link preview HQ thumbnail upload failed, sending inline thumbnail only")
+				} else {
+					etm.ThumbnailDirectPath = proto.String(uploaded.DirectPath)
+					etm.ThumbnailSHA256 = uploaded.FileSHA256
+					etm.ThumbnailEncSHA256 = uploaded.FileEncSHA256
+					etm.MediaKey = uploaded.MediaKey
+					etm.MediaKeyTimestamp = proto.Int64(time.Now().Unix())
+					etm.ThumbnailWidth = proto.Uint32(preview.HQWidth)
+					etm.ThumbnailHeight = proto.Uint32(preview.HQHeight)
+				}
 			}
+		}
+		if replyTo != nil {
+			ci := &waE2E.ContextInfo{}
+			if replyTo.StanzaID != "" {
+				ci.StanzaID = proto.String(replyTo.StanzaID)
+			}
+			if replyTo.Participant != "" {
+				ci.Participant = proto.String(replyTo.Participant)
+			}
+			if replyTo.QuotedText != "" {
+				ci.QuotedMessage = &waE2E.Message{
+					Conversation: proto.String(replyTo.QuotedText),
+				}
+			}
+			etm.ContextInfo = ci
 		}
 		msg = &waE2E.Message{ExtendedTextMessage: etm}
 	}
