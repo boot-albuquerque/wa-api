@@ -5318,3 +5318,52 @@ Nada se moveu. O `type:""` é coerente com a H94, que já tinha medido
 diagnóstico.* Custou uma sonda descobrir que a herança estava certa — e teria
 custado o mesmo descobrir que estava errada, que foi o que aconteceu com o `pin`
 na H162. A diferença entre as duas é só a medição.
+
+---
+
+## H171 — `attachEventListeners` é um agregado, e dizer isso encerra a varredura dos `PARTIAL`
+
+**Data**: 2026-08-22
+**Contexto**: última linha `PARTIAL` sem causa registrada.
+
+**Onde**: linha `attachEventListeners` do `LEDGER-WWEBJS.md`.
+
+**A nota — "dois fluxos de 31 eventos" — descrevia o que temos e não o que
+falta**, que é a única coisa que uma varredura precisa saber.
+
+Lendo a referência: `attachEventListeners` é uma função que instala **25**
+ouvintes via `exposeFunctionIfAbsent`, um por evento. Não é uma capacidade: é o
+ato de ligar as outras. O nosso equivalente é o ingresso mais os ouvintes de
+capacidade.
+
+**Não há aqui nada próprio a provar.** O estado desta linha é a conjunção das
+linhas de evento, e ela fecha quando elas fecharem. Registrar isso vale porque
+impede a próxima varredura de gastar uma sonda procurando o que medir — que foi
+exatamente o que eu ia fazer.
+
+**Status**: não corrigido, e agora com o motivo certo escrito.
+
+### O estado da varredura, para quem vier depois
+
+Com esta entrada, **todas as 34 linhas `PARTIAL` têm causa registrada**. A
+distribuição:
+
+| categoria | o que significa |
+|---|---|
+| **dependência humana** | presença e estado de conversa (agenda no telefone, H144/H170); foto de perfil e status (visíveis a 944 contatos, decisão 61) |
+| **sombra de linha `BLOCKED`** | `description` (H145/H163) |
+| **mundo vazio** | broadcasts/status — coleção sincronizada e ninguém postou (H158) |
+| **limite do build** | confirmação só entre sessões: participantes (H58/H65) e `pin` (H162) |
+| **agregado** | `attachEventListeners` (esta entrada) |
+| **herança** | delegações que herdam pares abertos — a enquete que não sai (H98) e o recibo não observado (H159) |
+| **vocabulário deliberado** | `DISCONNECTED`, `STATE_CHANGED` — o nosso é transição de liveness com classe anexada, não o vocabulário do upstream |
+
+**O que sobra de genuinamente acionável por este módulo, sozinho, é zero.** Isso
+não é o mesmo que dizer que a Fase 1 fechou: as linhas de *vocabulário
+deliberado* são candidatas a `INTENTIONAL_DIFFERENCE` em vez de `PARTIAL`, e essa
+reclassificação muda o placar — é decisão de critério, não medição, e o critério
+é da orquestração (decisões 52/60/62). **A decisão 64 foi pedida e não voltou.**
+
+**Lição**: *uma varredura termina quando toda linha sabe por que está onde está,
+não quando não há mais linhas.* O valor do dia não foi só as linhas fechadas —
+foi que nenhuma das restantes precisa ser reinvestigada do zero.
