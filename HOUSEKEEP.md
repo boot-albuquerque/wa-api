@@ -19572,6 +19572,26 @@ Ficheiros modificados:
 **Status**: corrigido — testes acima travam o defeito e os controlos negativos
 confirmam que mordem.
 
+### Verificação em campo 2026-08-22 (integrado em 1dbc8a8)
+
+Servidor reiniciado com o binário corrigido, sessão `lucas` com `history=3`:
+
+```
+conversa 202315172675834@lid, apos 2 mensagens recebidas:  3 linhas
+apos mais 3 mensagens:                                      3 linhas  (preso no limite)
+segredos dessa conversa:                       5 -> 5  (nao cresceu)
+"failed to trim message secrets" no log:                    0 ocorrencias
+```
+
+Antes da correção havia um ERROR por mensagem recebida e o histórico crescia
+sem limite. Agora o limite é respeitado e o log está limpo.
+
+**Custo desta verificação, dito por inteiro**: pus `history=3` na sessão real do
+`lucas` para medir, e isso aparou 13 linhas de histórico verdadeiro na conversa
+de teste (23.319 -> 23.306) antes de eu repor. Não previ esse efeito ao
+desenhar a verificação; deveria ter usado uma conversa descartável ou uma
+sessão de teste.
+
 <!-- f-status: corrigido -->
 
 ## F213 — PIX via `payment_info` + `pix_static_code` NÃO renderiza em conta pessoal
@@ -19901,3 +19921,83 @@ Não há teste a acrescentar: a mudança é só comentário e string de interfac
 sem comportamento novo a travar.
 
 <!-- f-status: corrigido -->
+
+## F218 — `history` não pode voltar a 0 pela API: `omitempty` torna a desativação impossível
+
+**Data**: 2026-08-22
+**Contexto**: achado de lado, ao repor a definição que eu tinha mudado para
+verificar a F212 em campo. Não é escopo dessa tarefa.
+
+**Onde**: `pkg/domain/user.go:37`
+
+```go
+History     int          `json:"history,omitempty"`
+```
+
+**Problema**: com `omitempty` num `int`, o valor `0` é serializado como
+AUSENTE. O binding não distingue "o cliente quer desligar o limite" de "o
+cliente não mencionou o campo". Resultado: o limite de histórico é uma **porta
+de sentido único** — dá para o pôr a 3, a 30, a 1000, e **nunca mais o
+desligar** pela API.
+
+**Evidência medida**:
+
+```
+$ curl -X PUT /admin/users/<id> -d '{"history":0}'
+{"code":400,"error":{"code":"no_fields_to_update",
+ "message":"request has no field to update"}}
+
+$ sqlite3 users.db "SELECT name, history FROM users WHERE name='lucas'"
+lucas|3          <- continuou a 3; tive de o repor por UPDATE direto no banco
+```
+
+Isto tem consequência real e imediata: enquanto ficou a 3, cada mensagem
+recebida aparava a conversa para três linhas. Apagou 13 linhas de histórico
+verdadeiro antes de eu dar por isso.
+
+É a mesma classe da **F210** (o PUT lia `s3Config` e a resposta devolvia
+`s3_config`, e o pedido era ignorado em silêncio com 200): um campo que a API
+aceita escrever mas não aceita reverter, sem dizer nada a quem chama.
+
+**Correção sugerida**: `*int` em vez de `int` (nil = não mencionado, 0 =
+desligar explicitamente), como já se fez em `SendLocationRequest` para
+distinguir "latitude zero" de "latitude não informada" (F121). Alternativa
+pior: um sentinela como `-1`, que exige documentação e é adivinhável errado.
+
+**Status**: não corrigido — fora do escopo. Pergunta pendente ao utilizador.
+
+<!-- f-status: aberto -->
+
+## F219 — `/session/status` devolveu `history: 0` enquanto o banco tinha 3
+
+**Data**: 2026-08-22
+**Contexto**: observado na mesma reposição da F218.
+
+**Onde**: a rota `/session/status` e a origem do campo `history` na resposta de
+sessão.
+
+**Evidência**, no mesmo instante:
+
+```
+$ curl /session/status -H "token: <lucas>"     ->  "history": "0"
+$ sqlite3 users.db "SELECT history FROM users WHERE name='lucas'"  ->  3
+```
+
+E o comportamento observado seguia o **3**, não o 0: o trim estava a acontecer.
+Portanto a resposta é que estava errada, não o banco.
+
+**Hipótese, NÃO isolada**: a resposta de sessão lê de uma cache em memória que
+não foi invalidada pelo PUT, enquanto o trim lê do banco. Não confirmei, e não
+tentei reproduzir — foi observação única durante outra tarefa.
+
+**Por que fica registado mesmo assim**: um campo de configuração que a API
+devolve com valor diferente do efetivo faz qualquer diagnóstico partir do sítio
+errado. Se for cache não invalidada, é provável que atinja mais campos do que
+este.
+
+**Próximo passo**: reproduzir deliberadamente — PUT num campo, ler
+`/session/status` a seguir, comparar com o banco — antes de propor correção.
+
+**Status**: não corrigido, e o diagnóstico é HIPÓTESE, não facto.
+
+<!-- f-status: aberto -->
