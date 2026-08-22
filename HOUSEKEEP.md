@@ -19398,3 +19398,71 @@ cada variante fotografada nos dois lados. Sem foto não há resultado.
 
 **Status**: não corrigido. `HSCROLL_CARDS` está provado e é o que vai para a
 rota; `ALBUM_IMAGE` fica fora da superfície pública até renderizar.
+
+---
+
+## F212 — o trim de histórico é INERTE: consulta duas bases de dados diferentes
+
+<!-- f-status: aberto -->
+
+**Data**: 2026-08-22
+**Contexto**: achado de lado, ao ler o log do servidor vivo durante as sondas
+de carrossel/PIX da F211. Não faz parte do escopo dessa tarefa.
+
+**Onde**: `pkg/infra/db/message_history.go:188-203` (`TrimMessageHistory`,
+`querySecrets`), chamado em `pkg/bootstrap/eventhandler_message.go:347`:
+
+```go
+err = trimMessageHistory(evh.DB, evh.UserID, evt.Info.Chat.String(), historyLimit)
+```
+
+**Problema**: `querySecrets` faz `DELETE FROM wanoise_message_secrets` com
+subconsulta em `message_history`. As duas tabelas vivem em bases de dados
+DIFERENTES: `message_history` é da aplicação, e `wanoise_message_secrets` é do
+store da biblioteca vendorizada. `evh.DB` só alcança a primeira.
+
+**Evidência medida** (servidor vivo, datadir `/tmp/wa-live-2VRX`):
+
+```
+ERROR failed to trim message secrets
+  error="SQL logic error: no such table: wanoise_message_secrets (1)"
+  table=wanoise_message_secrets chat_jid=202315172675834@lid limit=1
+ERROR Failed to trim message history
+  error="failed to trim message secrets: no such table: wanoise_message_secrets"
+```
+
+E a tabela EXISTE — só que noutro ficheiro:
+
+```
+$ sqlite3 'file:/tmp/wa-live-2VRX/dbdata/main.db?mode=ro' \
+    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'wanoise%';"
+...
+wanoise_message_secrets      <- está aqui
+```
+
+**A consequência é maior que o erro no log**: o `DELETE` dos segredos corre
+PRIMEIRO e a função **retorna no erro**, antes de chegar ao `DELETE` do
+`message_history` (linha 206). Ou seja, o limite de histórico por sessão
+**nunca apara nada** — nem os segredos, nem o histórico. A funcionalidade está
+inteiramente inerte, e o único sintoma visível é um ERROR por mensagem
+recebida.
+
+Isto é a "ordem e efeito colateral" da política anti-regressão do `CLAUDE.md`:
+o defeito não é só a tabela errada, é a ORDEM que faz a falha da primeira
+operação matar a segunda.
+
+**Correção sugerida**: apontar o `DELETE` dos segredos ao handle do store da
+wa-noise (ou removê-lo daqui e deixar o trim de segredos para quem é dono
+daquela base). Em qualquer dos casos, o trim de `message_history` **não pode**
+depender do sucesso do trim de segredos — são bases distintas e falhas
+independentes.
+
+**Teste que o travaria** (ainda não escrito): o teste atual
+`pkg/infra/db/message_history_test.go:29` **CRIA** `wanoise_message_secrets` na
+mesma base do teste. É um dublê MAIS SIMPLES que a produção — a armadilha #1 do
+`ARMADILHAS.md` — e por isso abençoa exatamente o código que falha em campo. O
+teste tem de usar DUAS bases, como a produção usa.
+
+**Status**: não corrigido — fora do escopo da tarefa atual (carrossel/PIX), e
+o `CLAUDE.md` proíbe corrigir de graça sem perguntar. Pergunta pendente ao
+utilizador: corrigir agora ou fica para depois?
