@@ -4784,3 +4784,66 @@ estava `BLOCKED` com duas primitivas; agora está `BLOCKED` com três, incluindo
 da referência e a da família que consertou a vizinha no mesmo dia. Isso não muda
 o estado e muda o que a próxima pessoa precisa tentar — que é o único jeito de um
 `BLOCKED` não virar dívida permanente.
+
+---
+
+## H162 — `pin` não estava bloqueado: a H81 mediu do único lado que não podia ver
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, começando por `getPinnedMessages`, que
+parecia ser mais um caso de "sombra de escrita `BLOCKED`" como o `description` da
+H145.
+
+**Onde**: `internal/wa-headless/probe_pinned_test.go` e
+`probe_pindual_test.go` (novos). Linhas `pin` (era `BLOCKED`) e
+`getPinnedMessages` (duas).
+
+**O que eu ia registrar, e por que teria sido errado.** A primeira sonda mandou
+uma mensagem, tentou fixá-la e leu a lista: 0 antes, 0 depois. A conclusão pronta
+— "a escrita continua bloqueada, o leitor não tem produtor, linha não acionável"
+— estava a uma frase de ser escrita.
+
+**O que impediu foi ler o doc do tipo que eu mesmo estava usando:**
+
+> `Verified` is false for a real change: this build does not show the session its
+> own pin.
+
+Ou seja: dentro da sessão que age, *"funcionou e eu não vejo"* e *"não fez nada"*
+produzem **a mesma leitura**. A H81 mediu do lado que não podia responder, e
+qualquer remedição do mesmo lado reproduziria a ambiguidade em vez de resolvê-la.
+
+**É a forma da H86/H135**, com outro verbo: um zero que era sobre a sessão ATORA,
+não sobre o mundo. Lá foram eventos de participante; aqui é o pin.
+
+**Medição, com o observador decidindo:**
+
+```
+BEFORE (visto por conta-B): 0 fixados
+conta-A pin.Message:        verified=false   ← honesto, não falho
+AFTER  (visto por conta-B): 1 fixado
+```
+
+**conta-B VÊ o pin.** A escrita funciona. A linha `BLOCKED` estava errada não por
+falta de rigor, mas por um ponto cego que só a sessão dupla abre.
+
+**Correção aplicada** (só no ledger; o código estava certo o tempo todo):
+- `pin` sai de `BLOCKED` para `PARTIAL`, **não** para `PROVEN` — pela convenção
+  que o `addParticipants` (H58) já estabeleceu para exatamente esta situação:
+  confirmação só entre sessões. Promover além disso seria inventar um critério
+  novo para uma linha só.
+- `getPinnedMessages` (duas) vão para `PROVEN`: o leitor foi exercitado
+  **não-vazio**, rodando em conta-B, e ele não depende de sessão dupla — a sessão
+  dupla foi o que produziu o DADO, como nas menções (H142).
+
+**Status**: corrigido. Placar: `PROVEN 123`, `PARTIAL 44`, `BLOCKED 47`.
+
+**A linha de base veio do OBSERVADOR, não do ator**, e isso foi deliberado: é a
+leitura de conta-B que decide, então é dela que o "antes" tem de vir. Um "antes"
+lido em conta-A compararia coisas diferentes.
+
+**Lição, e é a mais cara desta varredura**: *quando uma capacidade documenta que
+não consegue se verificar, toda medição feita por ela é inconclusiva — inclusive
+a que a declarou impossível.* O aviso estava escrito no campo `Verified`, no
+mesmo arquivo, e sobreviveu a uma reclassificação para `BLOCKED` (H140, decisão
+60) sem ninguém cruzar as duas coisas. **Vale reler todo `BLOCKED` cujo veredito
+venha de uma pós-condição que o próprio tipo diz não conseguir observar.**

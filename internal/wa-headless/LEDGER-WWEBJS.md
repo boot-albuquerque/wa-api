@@ -78,7 +78,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
 | `getContactById` | contacts.ByJID | `PROVEN` | sim | sim | sim | H129: fecha o padrão da H127. Casa em QUALQUER das duas identidades, porque o roster mescla linha de telefone e de lid numa só — casar por um campo só perderia a pessoa sob o outro nome, que é a classe de defeito da H34. Ao vivo: 521 contatos de 945 linhas, 421 mesclados, e um mesclado alcançável pelas duas identidades; 255 sem nome, todos encontráveis |
 | `getMessageById` | capabilities/message | `PROVEN` | sim | sim | sim | H127: deixou de ser varredura interna — `message.OriginOf`, `CurrentOf` e `ShapeOf` recebem o id cru e foram provados ao vivo (H106, H107, H108) |
-| `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
+| `getPinnedMessages` | pin.PinnedIn | `PROVEN` | sim | sim | sim | **H162: provado NÃO-VAZIO.** A premissa da nota antiga — "provar não-vazio exigiria fixar, que está bloqueado" — caiu junto com o bloqueio: fixar funciona, só não é visível a quem fixa. conta-A fixou no grupo de laboratório e o leitor, rodando em conta-B, devolveu a lista com o item (0 → 1). O leitor não depende de sessão dupla; a sessão dupla foi o que produziu o DADO |
 | `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
 | `acceptInvite` | group.JoinByInvite | `PARTIAL` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. O caminho de entrada direta (grupo sem aprovação) não foi exercitado (H89) |
 | `acceptChannelAdminInvite` | channel (admin) | `PROVEN` | sim | sim | sim | H136: provado com sessão dupla. conta-B aceita e o canal vai de **0 para 1 assinante** — pós-condição independente da chamada não ter lançado |
@@ -270,7 +270,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getContact` | resolução interna | `PROVEN` | sim | sim | sim | delegação literal para `Client.getContactById` (Chat.js:284); herda a linha dele **H156: provado no PONTO DE CHAMADA, não por herança.** O par `getContactById` está `PROVEN`, mas "a capacidade funciona" e "funciona neste jid" já se separaram três vezes neste build (H136, H148, H151). Exercitado com a contraparte real de uma conversa um-para-um: resolve |
 | `getLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | delegação literal para `Client.getChatLabels` (Chat.js:292); H72 |
 | `changeLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | delegação literal para `Client.addOrRemoveLabels` (Chat.js:301); H72 |
-| `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
+| `getPinnedMessages` | pin.PinnedIn | `PROVEN` | sim | sim | sim | **H162: provado NÃO-VAZIO.** A premissa da nota antiga — "provar não-vazio exigiria fixar, que está bloqueado" — caiu junto com o bloqueio: fixar funciona, só não é visível a quem fixa. conta-A fixou no grupo de laboratório e o leitor, rodando em conta-B, devolveu a lista com o item (0 → 1). O leitor não depende de sessão dupla; a sessão dupla foi o que produziu o DADO |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | delegação literal para `Client.syncHistory` (Chat.js:317); herda a linha dele — buscamos histórico de uma conversa, sincronizar não |
 | `addOrEditCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 | `getCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
@@ -364,7 +364,7 @@ código — é falta de dado.
 | `delete` | capabilities/revoke | `PROVEN` | sim | sim | sim | direito consultado na página |
 | `star` | capabilities/star | `PROVEN` | sim | sim | sim | H61: o await não é a conclusão — 696ms |
 | `unstar` | capabilities/star | `PROVEN` | sim | sim | sim | — |
-| `pin` | pin.Message | `BLOCKED` | sim | falha (H81) | sim | H140: reclassificado (decisão 60) — a H81 mediu chamada aceita e nada fixado, com vocabulário, duração e forma do modelo medidos. É comportamento da página |
+| `pin` | pin.Message | `PARTIAL` | sim | entre sessões | sim | **H162: NÃO está bloqueado — a H81 mediu do lado que não podia ver.** O próprio doc do `Pinned.Verified` já dizia que ele é falso PARA UMA MUDANÇA REAL, porque este build não mostra à sessão o próprio pin; dentro do ator, "funcionou e não vejo" e "não fez nada" dão a mesma leitura. Com a sessão dupla, conta-A fixa no grupo e **conta-B vê: 0 → 1**. Fica `PARTIAL` e não `PROVEN` pela mesma convenção do `addParticipants` (H58): confirmação só entre sessões |
 | `unpin` | pin.Unpin | `BLOCKED` | sim | falha (H81) | sim | H140: idem `pin` — chamada aceita, nada desfixado (H81) |
 | `getInfo` | message.InfoOf | `PROVEN` | sim | sim | sim | H153: **a conclusão da H71 estava errada, e a medição dela estava certa.** A coleção continua vazia hoje — e a referência NUNCA a lê: ela chama `WAWebApiMessageInfoStore.queryMsgInfo(msg.id)` (`wwebjs_message.js:758-781`), e a coleção é populada PELA consulta, não em vez dela. Medir um cache antes de alguém enchê-lo é a mesma armadilha da H142 com outra roupa. Provado ao vivo numa mensagem própria de grupo: `answered=true delivered=1 read=0 played=0 remaining=0/1/1`, e recusa com `ErrNotMine` sobre mensagem alheia |
 | `getOrder` | — | `BLOCKED` | — | medido | — | H125: `WAWebBizOrderBridge.queryOrder` EXISTE. O bloqueio é de DADO: a conta tem **zero** mensagens de pedido. Exercitar exigiria atividade comercial real, que não é produzível por agente |
@@ -468,9 +468,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 121 | 55% |
-| `PARTIAL` | 45 | 20% |
-| `BLOCKED` | 48 | 22% |
+| `PROVEN` | 123 | 56% |
+| `PARTIAL` | 44 | 20% |
+| `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
 | **total** | **220** | |
