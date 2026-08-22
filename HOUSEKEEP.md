@@ -6001,3 +6001,78 @@ contrato aberta.
 encontrado.* Este teste falha se a chamada pendurar, se voltar dizendo sucesso, se
 deixar goroutine, ou se a sessão seguinte rebootar em silêncio — quatro modos, e
 por isso o verde significa alguma coisa.
+
+---
+
+## H183 — decisões 68 e 69 aplicadas, e a sonda de vida deadlockou duas vezes antes de acertar
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2. A orquestração respondeu as duas perguntas que a H182
+deixou abertas.
+
+> **68: Escolha b e registre a recuperação ponta a ponta como bloqueada por
+> exigir risco humano no fixture pareado.**
+>
+> **69: Escolha b; classifique alvo desaparecido estruturalmente pelo estado do
+> processo, nunca pela mensagem do driver.**
+
+**Onde**: `engine/runner.go` (`TargetGoneError`, `Runner.TargetAlive`),
+`engine/browser.go` (`Browser.Exited`), `runtime/holder.go` (`browserGone`,
+`targetGoneGrace`), `runtime/inflight_test.go`.
+
+### Carga, antes das decisões
+
+1000 chamadas concorrentes numa sessão: **1,553 s, p50 40 ms, p95 233 ms, pior
+451 ms, zero erros**, com os globais `__waHeadless*` em **0 antes e 0 depois** e
+goroutines 12 → 12. A liberação de chave da H177 aguenta volume — e a primeira
+medição, 72 chamadas em 110 ms, era amostra e não carga; foi refeita por isso.
+
+### A sonda de vida: dois deadlocks e uma corrida
+
+A 69 pede o estado do PROCESSO, nunca a mensagem. Chegar lá custou três versões:
+
+1. **Pegava `h.mu`.** `Session()` segura esse lock durante TODO o boot, e o boot
+   usa o Runner — a sonda travaria a si mesma.
+2. **Chamava `sess.ProcessAlive`**, que pega o lock da SESSÃO. Quando o navegador
+   morre alguém já o está segurando: **o teste pendurou por 3 minutos**.
+3. **Consultava o SO com `ProcessAlive(pid)`** e dizia "vivo": um processo morto
+   há um instante é **ZUMBI** até o pai ceifá-lo, e **sinal 0 a um zumbi
+   SUCEDE**.
+
+**A regra que sobra vale além daqui: uma sonda de vida não pode compartilhar lock
+com aquilo cuja vida ela reporta.**
+
+O sinal autoritativo é o canal que o reaper fecha, exposto como `Browser.Exited`
+— sem lock, e muda exatamente uma vez. Mas mesmo ele perdia a corrida: a chamada
+volta **2,015 s** depois de um kill agendado para 2 s, ou seja no instante exato,
+e o reaper ainda não rodou. Daí `targetGoneGrace`, uma janela de 500 ms que vive
+**só no caminho de erro** — o Runner consulta a sonda apenas quando a operação já
+falhou e nenhum dos dois prazos explica. Chamada saudável não paga nada.
+
+**Resultado**: `engine: the browser is gone (StateProbe inflight/kill)`, em 2,017 s,
+sem vazamento, e a `Session()` seguinte continua dando `ErrSessionDied`.
+
+### Quatro controles negativos, e TRÊS não morderam de primeira
+
+- **Classificar pela mensagem**: o teste usava um erro qualquer, que a redação
+  nunca acusaria. Refeito com `context.Canceled` — a entrada que a mensagem
+  ACUSARIA —, e aí mordeu.
+- **Acusar sem sonda**: o teste usava `errors.Is`, e `TargetGoneError` desembrulha
+  para a causa, então passava. A asserção tem de ser sobre o TIPO.
+- **Reclassificar antes do prazo**: a ordem está protegida em DOIS lugares — a
+  posição do bloco e o `!timedOut` na condição. Quebrar um só não muda nada;
+  quebrando os dois, o teste falha.
+
+**Os três eram testes fracos meus, não controles ruins** — que é exatamente o que
+a H168 já tinha registrado sobre controles que não mordem.
+
+### 68: registrado como bloqueado
+
+Recuperação de perfil sujo ponta a ponta (marcador suspeito → verificação →
+ready) **fica sem medição**, por decisão: produzi-la exige matar o navegador num
+perfil PAREADO, e o pior caso é repareamento por um humano com o telefone. O que
+foi medido usa perfil temporário e mede o mecanismo, não o caminho completo.
+
+**Lição**: *o instante em que uma coisa morre não é o instante em que o sistema
+sabe disso.* Três camadas discordaram por centenas de milissegundos — o driver, o
+sistema operacional e o reaper —, e a correta é a que muda uma vez só.

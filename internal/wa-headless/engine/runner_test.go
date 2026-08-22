@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -280,5 +281,89 @@ func TestDoReportsSuccessWithoutBlamingAnyone(t *testing.T) {
 	recs := r.Log.Records()
 	if len(recs) != 1 || recs[0].Result != observability.ResultOK {
 		t.Fatalf("records=%v, want a single ok", recs)
+	}
+}
+
+// THE TARGET GOING AWAY IS ITS OWN VERDICT (decisão 69).
+//
+// Measured in H182: a call in flight when the browser is SIGKILLed returns
+// `context canceled` — the vocabulary of a cancellation the CALLER asked for —
+// on a context nobody cancelled. A caller cannot act on that, and the module
+// already carries TimeoutError precisely so "no answer" is not confused with
+// "an answer that is an error".
+func TestATargetThatWentAwayIsNamed(t *testing.T) {
+	r := NewRunner()
+	r.TargetAlive = func() bool { return false }
+	err := r.Do(context.Background(), OpStateProbe, "t", func(context.Context) error {
+		return context.Canceled
+	})
+	var gone *TargetGoneError
+	if !errors.As(err, &gone) {
+		t.Fatalf("err = %v, want TargetGoneError", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal("the original cause was dropped; a caller that wants it cannot reach it")
+	}
+}
+
+// A LIVE TARGET IS NOT ACCUSED. The probe only reclassifies when the process is
+// actually absent — otherwise every application error would become "the browser
+// is gone".
+func TestALiveTargetKeepsTheDriversError(t *testing.T) {
+	r := NewRunner()
+	r.TargetAlive = func() bool { return true }
+	// O ERRO E' JUSTAMENTE O QUE A MENSAGEM ACUSARIA. Um primeiro controle
+	// negativo trocou a sonda de processo por `errors.Is(err, context.Canceled)`
+	// e este teste PASSOU, porque usava um erro qualquer — media a sonda com uma
+	// entrada que a redacao nunca reclamaria. Com context.Canceled, classificar
+	// pela mensagem falha aqui, que e' o ponto da decisao 69.
+	want := fmt.Errorf("driver said: %w", context.Canceled)
+	err := r.Do(context.Background(), OpStateProbe, "t", func(context.Context) error {
+		return want
+	})
+	var gone *TargetGoneError
+	if errors.As(err, &gone) {
+		t.Fatal("a live browser was reported as gone")
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("the driver's error was replaced: %v", err)
+	}
+}
+
+// A TIMEOUT STAYS A TIMEOUT even if the browser died right after. The order of
+// the checks is the rule: our own deadline explains the failure first, and a
+// process that went away afterwards does not rewrite what happened.
+func TestATimeoutIsNotRelabelledWhenTheTargetAlsoDied(t *testing.T) {
+	r := NewRunner()
+	r.Policy.StateProbe = 20 * time.Millisecond
+	r.TargetAlive = func() bool { return false }
+	err := r.Do(context.Background(), OpStateProbe, "t", func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	var to *TimeoutError
+	if !errors.As(err, &to) {
+		t.Fatalf("err = %v, want TimeoutError", err)
+	}
+}
+
+// WITHOUT A PROBE, NOTHING IS CLAIMED. A Runner with no way to check the process
+// passes the driver's error through rather than guessing.
+func TestWithoutAProbeTheErrorIsUntouched(t *testing.T) {
+	r := NewRunner()
+	want := errors.New("boom")
+	err := r.Do(context.Background(), OpStateProbe, "t", func(context.Context) error {
+		return want
+	})
+	// O errors.Is SOZINHO NAO BASTA: TargetGoneError desembrulha para a causa,
+	// entao um Runner que acusasse sem sonda ainda passaria por ele. A asserção
+	// tem de ser sobre o TIPO — foi assim que um controle negativo que nao mordeu
+	// revelou este teste fraco.
+	var gone *TargetGoneError
+	if errors.As(err, &gone) {
+		t.Fatal("a Runner with no way to check the process claimed the browser was gone")
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("the error changed with no probe to justify it: %v", err)
 	}
 }

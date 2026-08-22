@@ -60,6 +60,29 @@ func newBrowser(cmd *exec.Cmd, wsURL, profileDir string) *Browser {
 	return b
 }
 
+// Exited reports whether this browser's process has been REAPED, without
+// blocking and without taking a lock.
+//
+// IT IS NOT ProcessAlive INVERTED, and the difference is what makes it usable as
+// a liveness probe. ProcessAlive asks the operating system with signal 0, and a
+// process killed a moment ago is a ZOMBIE until its parent reaps it — signal 0 to
+// a zombie SUCCEEDS. Measured: a call in flight when the browser is SIGKILLed
+// returned before the reaper had run, so the OS still said "alive" and the
+// classification never fired (H183).
+//
+// This reads the channel the reaper closes, which is the only signal that
+// changes exactly once and at the right moment. It takes no lock, deliberately:
+// a liveness probe must not share a lock with the thing whose liveness it
+// reports, and both earlier attempts deadlocked for exactly that reason.
+func (b *Browser) Exited() bool {
+	select {
+	case <-b.exited:
+		return true
+	default:
+		return false
+	}
+}
+
 func (b *Browser) reap() {
 	b.waitOnce.Do(func() {
 		err := b.cmd.Wait()

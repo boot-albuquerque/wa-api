@@ -81,7 +81,36 @@ func (e *CallerGaveUpError) Unwrap() error { return e.Cause }
 type Runner struct {
 	Policy DeadlinePolicy
 	Log    *observability.OpLog
+	// TargetAlive reports whether the browser this Runner talks to is still
+	// running. Optional: nil means "no way to tell", and the classification
+	// below simply does not happen.
+	//
+	// IT IS A PROBE, NOT A MESSAGE (decisão 69). Measured: a call in flight when
+	// the browser is SIGKILLed returns `context canceled` — the vocabulary of a
+	// cancellation the CALLER asked for — on a context nobody cancelled (H182).
+	// Reading that from the driver's wording would be exactly what the comment
+	// in Do refuses to do; reading it from the process is structural, and it is
+	// the only source that cannot lie about its own absence.
+	TargetAlive func() bool
 }
+
+// TargetGoneError is "the browser is not there any more".
+//
+// IT IS NOT A TIMEOUT AND NOT A CALLER GIVING UP. Those two already had names
+// here because confusing them sent investigations in the wrong direction; this
+// is the third way an operation ends without an answer, and until decision 69 it
+// wore the caller's clothes.
+type TargetGoneError struct {
+	Op    OpKind
+	Label string
+	Cause error
+}
+
+func (e *TargetGoneError) Error() string {
+	return "engine: the browser is gone (" + string(e.Op) + " " + e.Label + ")"
+}
+
+func (e *TargetGoneError) Unwrap() error { return e.Cause }
 
 // NewRunner builds a Runner on the measured defaults, with tracing on.
 func NewRunner() *Runner {
@@ -153,6 +182,12 @@ func (r *Runner) Do(parent context.Context, k OpKind, label string, f func(conte
 
 	if timedOut {
 		return &TimeoutError{Op: k, Label: label, Deadline: deadline}
+	}
+	// O ALVO SUMIU E' CONSULTADO NO PROCESSO, e so' quando nem o nosso prazo nem
+	// o do chamador explicam a falha — ordem que importa: um timeout continua
+	// sendo timeout mesmo que o navegador tenha morrido logo depois.
+	if err != nil && !timedOut && !callerGaveUp && r.TargetAlive != nil && !r.TargetAlive() {
+		return &TargetGoneError{Op: k, Label: label, Cause: err}
 	}
 	if callerGaveUp {
 		// Name the caller, not the target. The message is the whole point of

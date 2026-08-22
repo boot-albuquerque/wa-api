@@ -71,11 +71,16 @@ func TestAnInFlightCallSurvivesTheBrowserDying(t *testing.T) {
 			t.Fatal("the call reported SUCCESS after the browser was killed under " +
 				"it; a caller would act on an answer that never came")
 		}
-		// O QUE IMPORTA E' TER VOLTADO CLASSIFICADO, nao qual classe. Um erro de
-		// transporte e um estouro de prazo sao ambos respostas honestas; o que
-		// nao pode e' pendurar.
-		var to *engine.TimeoutError
-		t.Logf("classificado como timeout: %t", errors.As(got.err, &to))
+		// E A CLASSE AGORA IMPORTA (decisão 69). Antes desta, a chamada voltava
+		// com `context canceled` — vocabulario de cancelamento pedido pelo
+		// CHAMADOR — num contexto que ninguem cancelou. O Runner consulta o
+		// PROCESSO, nunca a mensagem do driver.
+		var gone *engine.TargetGoneError
+		if !errors.As(got.err, &gone) {
+			t.Fatalf("err = %v; want TargetGoneError. Sem ela, quem chama nao tem "+
+				"na mensagem nada que diga que o navegador morreu", got.err)
+		}
+		t.Logf("classificado estruturalmente: %v", got.err)
 	case <-time.After(90 * time.Second):
 		t.Fatal("the in-flight call never returned after the browser died; a dead " +
 			"browser must not be able to hold a caller forever")

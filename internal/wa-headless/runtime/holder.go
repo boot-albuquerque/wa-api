@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
@@ -122,6 +123,30 @@ func (h *Holder) Session(ctx context.Context) (*core.Session, error) {
 		return nil, err
 	}
 	h.session = sess
+	// A SONDA DE PROCESSO E' LIGADA AO RUNNER (decisão 69), e so' agora, porque
+	// so' agora existe processo para consultar.
+	//
+	// Ela responde a uma pergunta que o Runner nao tinha como fazer: uma chamada
+	// em voo quando o navegador morre volta com `context canceled` — vocabulario
+	// de cancelamento pedido pelo CHAMADOR — num contexto que ninguem cancelou
+	// (H182). Consultar o PROCESSO e' estrutural; ler a mensagem do driver seria
+	// exatamente o que o comentario do Runner recusa.
+	//
+	// A SONDA NAO PEGA LOCK NENHUM, e chegar a isso custou dois deadlocks.
+	//
+	// A primeira versao pedia `h.mu`: `Session()` o segura durante TODO o boot e
+	// o boot usa o Runner, então a sonda travaria a si mesma. A segunda chamava
+	// `sess.ProcessAlive`, que pega o lock da SESSAO — e quando o navegador
+	// morre alguem ja' o esta segurando, o que pendurou o teste por 3 minutos.
+	//
+	// A regra que sobra vale além daqui: **uma sonda de vida nao pode
+	// compartilhar lock com aquilo cuja vida ela reporta.** O PID e' capturado
+	// uma vez, no boot, e a pergunta seguinte e' ao SISTEMA OPERACIONAL, que nao
+	// tem lock nosso para segurar.
+	if h.cfg.Runner != nil {
+		br := sess.Browser()
+		h.cfg.Runner.TargetAlive = func() bool { return !browserGone(br) }
+	}
 	return sess, nil
 }
 
@@ -175,4 +200,32 @@ func (h *Holder) Stop(ctx context.Context) engine.StopVia {
 	via := h.session.Stop(ctx)
 	h.session = nil
 	return via
+}
+
+// targetGoneGrace is how long the probe waits for the reaper before saying the
+// browser is still there.
+//
+// IT EXISTS BECAUSE THE INSTANT IS RACY, and the number is measured rather than
+// picked. A call in flight returns the moment the CDP connection drops — 2.015s
+// after a kill scheduled at 2s — and at that instant neither the operating
+// system nor the reaper has caught up: signal 0 still succeeds against the
+// zombie, and `exited` is not closed yet (H183).
+//
+// The wait is bounded and lives ONLY on the error path: Runner consults the probe
+// after an operation already failed and neither deadline explains it. A healthy
+// call never pays it.
+const targetGoneGrace = 500 * time.Millisecond
+
+// browserGone answers "is this process finished" without sharing a lock with the
+// session, which is the constraint two earlier attempts violated.
+func browserGone(br *engine.Browser) bool {
+	if br == nil {
+		return true
+	}
+	if br.Exited() {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), targetGoneGrace)
+	defer cancel()
+	return br.WaitExit(ctx) == nil
 }
