@@ -19350,9 +19350,8 @@ ter sido rediagnosticada três vezes é histórico legítimo.
 
 <!-- f-status: corrigido -->
 
----
 
-## F211 — carrossel: HSCROLL_CARDS renderiza, ALBUM_IMAGE não, e o remetente não vê o próprio
+## F216 — carrossel: HSCROLL_CARDS renderiza, ALBUM_IMAGE não, e o remetente não vê o próprio
 
 **Data**: 2026-08-22
 **Contexto**: implementação da superfície de mensagem interativa que faltava
@@ -19442,15 +19441,13 @@ que vai para a rota. `ALBUM_IMAGE` fica fora da superfície pública: não é
 suportado como enum de carrossel, e o caminho real (`MessageAssociation`) é
 outra tarefa.
 
----
+<!-- f-status: aberto -->
 
 ## F212 — o trim de histórico é INERTE: consulta duas bases de dados diferentes
 
-<!-- f-status: aberto -->
-
 **Data**: 2026-08-22
 **Contexto**: achado de lado, ao ler o log do servidor vivo durante as sondas
-de carrossel/PIX da F211. Não faz parte do escopo dessa tarefa.
+de carrossel/PIX da F216. Não faz parte do escopo dessa tarefa.
 
 **Onde**: `pkg/infra/db/message_history.go:188-203` (`TrimMessageHistory`,
 `querySecrets`), chamado em `pkg/bootstrap/eventhandler_message.go:347`:
@@ -19510,11 +19507,9 @@ teste tem de usar DUAS bases, como a produção usa.
 o `CLAUDE.md` proíbe corrigir de graça sem perguntar. Pergunta pendente ao
 utilizador: corrigir agora ou fica para depois?
 
----
+<!-- f-status: aberto -->
 
 ## F213 — PIX via `payment_info` + `pix_static_code` NÃO renderiza em conta pessoal
-
-<!-- f-status: nao-se-faz -->
 
 **Data**: 2026-08-22
 **Contexto**: pedido de completar a superfície de mensagem ("PIXCARD"). A
@@ -19561,15 +19556,13 @@ Payments API, ou (b) capturarmos um `buttonParamsJSON` REAL de um cliente que
 consiga enviar PIX — o esquema dos forks já está refutado por medição, e não
 vale a pena adivinhar variantes dele.
 
----
+<!-- f-status: nao-se-faz -->
 
 ## F214 — retry receipt não pode ser honrado: a cache de reenvio é só RAM e nunca é ligada a durável
 
-<!-- f-status: aberto -->
-
 **Data**: 2026-08-22
 **Contexto**: achado de lado, ao investigar as mensagens "no session found for"
-durante a matriz de sondas de carrossel (F211). Não é escopo dessa tarefa.
+durante a matriz de sondas de carrossel (F216). Não é escopo dessa tarefa.
 
 **Onde**: `internal/wa-noise/capabilities/retry/handle.go:112` (erro),
 `recent.go:103` (`GetForRetry`), `constants.go:51`
@@ -19626,11 +19619,9 @@ manda inventariar quem passa a disputar um recurso limitado antes de o limitar
 **Status**: não corrigido — fora do escopo da tarefa atual. Pergunta pendente
 ao utilizador.
 
----
+<!-- f-status: aberto -->
 
 ## F215 — o nosso próprio eco não decifra e dispara `UndecryptableMessage` para o webhook
-
-<!-- f-status: aberto -->
 
 **Data**: 2026-08-22
 **Contexto**: mesma investigação da F214.
@@ -19683,3 +19674,5 @@ de a tratar como mensagem indecifrável. Não silenciar a categoria inteira: um
 subir.
 
 **Status**: não corrigido — fora do escopo. Depende de decisão junto com a F214.
+
+<!-- f-status: aberto -->
