@@ -20017,6 +20017,29 @@ defeito (`edit_user.go:78`: `if req.Expiration != 0`). Zero de expiração
 pode significar "sem expiração" ou "nunca mencionou" — depende do significado de
 negócio. Não alargado: requer decisão do utilizador.
 
+
+### Verificação em campo 2026-08-22 (integrado em ecd1238)
+
+Os testes afirmam a distinção; isto afirma que ela chega ao utilizador.
+Servidor reiniciado com o binário do ramo integrado, sessão `aulapratica`:
+
+```
+history inicial:                                        0
+PUT {"history":500}   -> 200    banco: 500
+PUT {"history":0}     -> 200    banco: 0     <- ANTES: 400 no_fields_to_update
+PUT {"history":42}    -> 200    banco: 42
+PUT {"events":"All"}  -> 200    banco: 42    <- nao mencionar nao toca
+```
+
+As três propriedades da correção, medidas pela API real: **pôr um valor**,
+**voltar a zero**, e **um pedido que não menciona o campo não o altera**. A
+terceira é a que torna a correção honesta — sem ela, `*int` teria trocado um
+defeito por outro, zerando o campo em qualquer edição parcial.
+
+Simetria que vale registar: a reposição desta verificação foi feita pela
+PRÓPRIA API. Na F212 tive de o fazer por `UPDATE` direto no banco, porque este
+defeito o impedia.
+
 <!-- f-status: corrigido -->
 
 ## F219 — `/session/status` devolveu `history: 0` enquanto o banco tinha 3
