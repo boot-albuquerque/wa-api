@@ -297,10 +297,10 @@ sem link.
 |---|---|---|---|---|---|---|
 | `reload` | — | `MISSING` | — | — | — | — |
 | `rawData` | — | `MISSING` | — | — | — | não atacado |
-| `getChat` | — | `MISSING` | — | — | — | não atacado |
-| `getContact` | — | `MISSING` | — | — | — | não atacado |
-| `getMentions` | — | `MISSING` | — | — | — | — |
-| `getGroupMentions` | — | `MISSING` | — | — | — | — |
+| `getChat` | message.OriginOf (.ChatJID) | `PROVEN` | sim | sim | sim | H106 |
+| `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
+| `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
+| `getGroupMentions` | — | `MISSING` | — | medido | — | idem |
 | `getQuotedMessage` | metadados em messagemeta | `PARTIAL` | sim | sim | sim | — |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
 | `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53 |
@@ -414,9 +414,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 56 | 25% |
+| `PROVEN` | 58 | 26% |
 | `PARTIAL` | 48 | 22% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 111 | 50% |
+| `MISSING` | 109 | 50% |
 | **total** | **220** | |

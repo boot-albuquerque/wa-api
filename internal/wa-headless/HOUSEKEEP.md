@@ -8368,3 +8368,92 @@ leitor de duas coisas vira um leitor de uma.
 
 **Status**: entregue — três linhas `PROVEN` e uma `PARTIAL` cuja parcialidade é a
 única leitura honesta com um grupo só.
+
+## H106 — a origem de uma mensagem: o remetente não é o chat, e o grupo se pergunta
+
+**Data**: 2026-08-21. **Contexto**: fechar `Message.getChat` / `Message.getContact`
+do LEDGER-WWEBJS (família `Message`, 13 `MISSING`).
+
+**Onde**: `internal/wa-headless/capabilities/message/` (novo: `message.go`,
+`script.go`, `message_test.go`), `internal/wa-headless/probe_msgorigin_test.go`.
+
+### O que foi medido ANTES de projetar
+
+`getMentions` era o vizinho óbvio e foi medido primeiro
+(`probe_mentions_test.go`, contra a conta pareada):
+
+```json
+{"scanned": 395, "withMentions": 0, "withGroupMentions": 0,
+ "candidates": {"mentionedIds":0,"mentionedJids":0,"groupMentions":0,
+                "mentions":0,"quotedParticipant":0}}
+```
+
+**395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo
+candidatos.** Embarcar um leitor que nunca foi visto devolvendo algo é
+exatamente a armadilha catalogada na H93, então ele NÃO foi embarcado: a medição
+ficou escrita e as duas linhas seguem `MISSING` com a nota `medido`. A medição é
+o entregável aqui — sem ela, "não atacado" e "não existe neste build" são
+indistinguíveis.
+
+Pivotei dentro da mesma família para `getChat`/`getContact`, que são
+observáveis agora.
+
+### O problema que o tipo existe para resolver
+
+`Origin` tem `ChatJID` e `SenderJID` separados porque **numa conversa de grupo
+eles são diferentes**: o participante é quem falou, o chat é o grupo. Fundi-los
+atribuiria a fala ao grupo. Em um-para-um coincidem legitimamente, e isso é
+REGISTRADO em `SenderIsChat` em vez de o chamador ter de comparar.
+
+**Grupo é PERGUNTADO à página** (`WAWebChatGetters.getIsGroup`), não inferido do
+sufixo `@g.us`. Este build já trocou de espaço de identidade uma vez (LID), e
+inferir do sufixo fica errado à distância de uma mudança de build.
+
+### Prova ao vivo (2026-08-21, conta-A)
+
+```
+loaded: group=2 direct=393
+group messages read=2 senderDiffersFromChat=2
+absent id -> message: this session has not loaded that message
+```
+
+2 de 2 mensagens de grupo com remetente ≠ chat. A sonda **falha** se todas
+lerem com remetente = chat, porque nesse caso o leitor seria um leitor de chat
+com dois nomes.
+
+### Controles negativos EXECUTADOS
+
+1. `isGroup = chat.indexOf("@g.us") >= 0` (inferir do sufixo em vez de
+   perguntar):
+   ```
+   --- FAIL: TestTheGroupFlagIsAskedOfThePage
+       message_test.go:113: the script does not ask the page whether the chat is a group
+   ```
+
+2. Trocar toda a derivação do remetente por `sender = chat`:
+   **NÃO MORDEU na primeira tentativa.** O teste `TestTheGroupSenderIsNotTheChat`
+   afirmava sobre a PARSAGEM, e o dublê entrega `sender` pronto — a propriedade
+   vive na PRODUÇÃO (o script), que o dublê não exercita. Terceira vez nesta
+   sessão que um controle revela essa distância. Corrigido acrescentando ao
+   mesmo teste a asserção sobre o script; com ela:
+   ```
+   --- FAIL: TestTheGroupSenderIsNotTheChat
+       message_test.go:99: the script does not read the participant; in a group
+       the sender would collapse into the chat
+   ```
+
+**Regra que sai daqui**: quando o dublê FORNECE o valor que a asserção examina,
+o teste mede a parsagem, não a regra. Ou o dublê deriva como a página deriva, ou
+o teste tem de afirmar sobre o script — e afirmar sobre o script é o que se faz
+quando a regra mora na página.
+
+### Achado incidental da sonda
+
+O primeiro `kick` da sonda devolveu `encountered an undefined value`: uma IIFE
+sem `return` não dá valor ao `Evaluate`. As outras sondas terminam com
+`return 'kicked';` e essa não terminava. Não é defeito de produção — é forma do
+harness de sonda, corrigida na hora.
+
+**Status**: corrigido/entregue nesta sessão. Linhas `getChat` e `getContact` da
+família `Message` passam a `PROVEN`; `getMentions`/`getGroupMentions` seguem
+`MISSING` com a medição registrada.
