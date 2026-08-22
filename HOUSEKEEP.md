@@ -6137,3 +6137,59 @@ recuse ignorar o campo.
 você já sabe — um de cada lado.* Eu tinha os dois de graça, do trabalho da própria
 Fase 1, e sem eles teria publicado 35 falsos positivos ou confiado num verde que
 não medi.
+
+---
+
+## H185 — long-running e memória: nove minutos, e a memória DESCE
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, itens "long-running" e "limites de CPU/RAM".
+
+**Onde**: `internal/wa-headless/probe_longrun_test.go` (novo).
+
+**A pergunta que a linha de base de teardown NÃO responde**: a H174 mediu que uma
+sessão que ACABA não deixa nada. Se uma sessão que FICA cresce enquanto fica é
+outra coisa, e o enunciado pede as duas.
+
+**Medição**, uma sessão sob trabalho constante por nove minutos, amostrando a cada
+10 s:
+
+```
+RSS médio (terço inicial → terço final):  727088KB → 638168KB   (-12%)
+goroutines:                                10 → 10, constante
+globais __waHeadless*:                     0 em todas as amostras
+latência:                                  6ms a 60ms, quase toda abaixo de 20ms
+```
+
+**A memória DESCE.** O RSS oscila entre ~590MB e ~675MB e termina 12% abaixo de
+onde começou — a queda é a hidratação inicial sendo devolvida, não um efeito da
+carga. Goroutines não se movem. Globais ficam em zero, o que confirma sob duração
+o que a carga já confirmara sob volume (H183): a liberação de chave da H177
+aguenta.
+
+**Número para capacidade, que é o item de RAM**: uma sessão custa da ordem de
+**600–700MB de RSS** somando toda a árvore de processos do Chrome. Quem
+dimensionar quantas sessões cabem numa máquina precisa desse número, e ele não
+existia escrito em lugar nenhum.
+
+**Duas decisões de instrumento, e as duas mudam a resposta:**
+
+1. **O RSS soma a ÁRVORE, não o processo pai.** O Chrome é multiprocesso; medir
+   só o pai reportaria estabilidade enquanto um renderer cresce — exatamente o
+   vazamento que este teste existe para pegar.
+2. **A comparação é entre TERÇOS, não entre extremos.** O primeiro minuto ainda
+   tem aquecimento e uma amostra final isolada é ruído. Vazamento é tendência, e
+   tendência não se lê em dois pontos.
+
+**E a medição rodou sozinha.** Nada pesado em paralelo, de propósito: contenção
+falsearia o número, que é o erro que a própria Fase 2 já cometeu hoje quando 72
+chamadas em 110 ms se passaram por carga.
+
+**Status**: os dois itens medidos, nenhum defeito. O teste falha se as goroutines
+crescerem, se o RSS subir mais de 50%, ou se sobrar qualquer global — três modos,
+para que o verde signifique algo.
+
+**Lição**: *uma métrica que só sobe é fácil de julgar; uma que oscila precisa de
+uma regra de leitura decidida ANTES de olhar.* Terços e árvore de processos foram
+escolhidos antes da primeira amostra. Escolhidos depois, seriam a mesma coisa que
+escolher a conclusão.
