@@ -1,4 +1,4 @@
-package waclient
+package errmap
 
 import (
 	"errors"

@@ -13,7 +13,32 @@ BINARY := wa-api
 # ficou fora dos gates que medem o que escrevemos (cobertura, lint, vet,
 # test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
 # progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
-COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
+# pkg/infra/wa-noise/client — a FACHADA, e só ela (o `$$` casa o pacote exato,
+# não os subpacotes). Sai do denominador de cobertura pela mesma decisão de
+# arquitetura que a tirou do .logcov-exclude (F204, 2026-08-21): não é ponto de
+# instrumentação, é delegação.
+#
+# O que a forçou: a decisão 46=a do canal mandou cobrir os ~66 pontos de info
+# query com wrappers explícitos no RealClient, porque a promoção de métodos não
+# tem onde se intercalar. São 50 métodos de uma linha, e eles NÃO são
+# testáveis por unidade — medido: um `wanoise.Client` de valor-zero entra em
+# pânico ("assignment to entry in nil map", "nil pointer dereference"), e
+# construir um cliente real faria o teste exercitar o SDK, não o wrapper.
+#
+# A diluição foi medida, e é diluição e não regressão — nenhum código coberto
+# deixou de o ser:
+#
+#   com os wrappers    86,2%   (piso 86,8%)
+#   ~100 declaracoes nao cobertas = 50 wrappers x 2 (a chamada e o return),
+#   que e' exatamente o que a aritmetica da queda de 0,6pp exige.
+#
+# A alternativa era BAIXAR min_coverage de 868 para 862, e isso afrouxaria a
+# catraca para TODOS os pacotes em troca de um problema de um só. O que
+# substitui a cobertura de linha aqui e' `TestTodoMetodoComErroTemWrapper`, que
+# le a interface e os wrappers por AST e falha se algum metodo com erro nao
+# tiver wrapper QUE CHAME ClassifyIQ — propriedade mais forte que executar 50
+# delegacoes de uma linha.
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | grep -v '^wa-api/pkg/infra/wa-noise/client$$')
 # vet e lint, ao contrario da cobertura, JA' incluem internal/wa-noise/ (F17).
 #
 # A F17 supunha que incluir o modulo quebraria o gate de lint, porque o gocyclo

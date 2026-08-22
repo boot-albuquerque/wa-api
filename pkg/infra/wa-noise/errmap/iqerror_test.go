@@ -1,4 +1,4 @@
-package waclient_test
+package errmap_test
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 
 	wanoise "wa-api/internal/wa-noise"
 	"wa-api/pkg/domain/apperr"
-	waclient "wa-api/pkg/infra/wa-noise/client"
+	"wa-api/pkg/infra/wa-noise/errmap"
 )
 
 // O caso MEDIDO: POST /user/block com um número bem formado que não tem conta
@@ -24,7 +24,7 @@ import (
 func TestClassifyIQ_ORecusadoMedidoDeixaDeSer500(t *testing.T) {
 	medido := &wanoise.IQError{Code: 400, Text: "bad-request"}
 
-	got := waclient.ClassifyIQ(fmt.Errorf("failed to block user: %w", medido))
+	got := errmap.ClassifyIQ(fmt.Errorf("failed to block user: %w", medido))
 
 	var app *apperr.AppError
 	if !errors.As(got, &app) {
@@ -34,8 +34,8 @@ func TestClassifyIQ_ORecusadoMedidoDeixaDeSer500(t *testing.T) {
 		t.Errorf("status = %d, quero 422: um 400 de montante não é avaria nossa (500) "+
 			"nem payload errado (400) — o número está bem formado", s)
 	}
-	if app.Code != waclient.CodeUpstreamRejected {
-		t.Errorf("code = %q, quero %q", app.Code, waclient.CodeUpstreamRejected)
+	if app.Code != errmap.CodeUpstreamRejected {
+		t.Errorf("code = %q, quero %q", app.Code, errmap.CodeUpstreamRejected)
 	}
 	// A mensagem vai para o CLIENTE: não pode levar o JID recusado nem o texto
 	// interno da biblioteca.
@@ -77,7 +77,7 @@ func TestClassifyIQ_CadaRecusaTemOSeuStatus(t *testing.T) {
 	}
 	for _, c := range casos {
 		t.Run(fmt.Sprintf("%d_%s", c.code, c.text), func(t *testing.T) {
-			got := waclient.ClassifyIQ(&wanoise.IQError{Code: c.code, Text: c.text})
+			got := errmap.ClassifyIQ(&wanoise.IQError{Code: c.code, Text: c.text})
 			var app *apperr.AppError
 			if !errors.As(got, &app) {
 				t.Fatalf("não virou AppError: %T", got)
@@ -98,16 +98,16 @@ func TestClassifyIQ_CadaRecusaTemOSeuStatus(t *testing.T) {
 // embrulhasse tudo transformaria falha de transporte e bug NOSSO em recusa de
 // montante — a mesma classe de mentira, na direção oposta.
 func TestClassifyIQ_NaoTocaNoQueNaoEhRecusa(t *testing.T) {
-	if got := waclient.ClassifyIQ(nil); got != nil {
+	if got := errmap.ClassifyIQ(nil); got != nil {
 		t.Errorf("nil virou %v", got)
 	}
 	outro := errors.New("dial tcp: connection refused")
-	if got := waclient.ClassifyIQ(outro); got != outro {
+	if got := errmap.ClassifyIQ(outro); got != outro {
 		t.Errorf("erro alheio foi trocado: %v", got)
 	}
 	// Timeout de info query NÃO é recusa: o servidor não disse nada. É a F209.
 	semResposta := wanoise.ErrIQTimedOut
-	got := waclient.ClassifyIQ(semResposta)
+	got := errmap.ClassifyIQ(semResposta)
 	var app *apperr.AppError
 	if errors.As(got, &app) {
 		t.Errorf("o timeout foi classificado como recusa (%s): o servidor não "+

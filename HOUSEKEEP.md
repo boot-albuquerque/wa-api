@@ -17470,26 +17470,63 @@ falha de transporte e bug NOSSO em recusa de montante — a mesma classe de
 mentira, na direção oposta. E separa recusa de silêncio: `ErrIQTimedOut` **não**
 é recusa, porque o servidor não disse nada. Isso é a F209, não esta.
 
-**O QUE FALTA, e é a maior parte**: o `ClassifyIQ` está ligado a **3** dos ~66
-pontos de info query. Os outros continuam a devolver 500 para recusas de
-montante. Não foi feito porque não há ponto único: os adaptadores devolvem o
-erro cru do SDK e a fachada é uma interface com as assinaturas exatas dele, cujo
-`RealClient` promove os métodos em vez de os escrever — não há sítio por onde
-embrulhar todos de uma vez sem escrever ~50 wrappers.
+**Cobertura completa (decisão 46=a do canal)**: wrappers explícitos no
+`RealClient`, em `pkg/infra/wa-noise/client/realclient_wrappers.go`. São os 50
+métodos da interface `Client` que devolvem erro, gerados a partir dela, cada um
+`return errmap.ClassifyIQ(r.Client.X(...))`.
 
-As alternativas, para quem pegar nisto:
+Foi preciso porque `RealClient` **promovia** os métodos de `*wanoise.Client` em
+vez de os escrever, e promoção não tem onde se intercalar. As alternativas
+descartadas pelo canal: chamar `ClassifyIQ` em cada adaptador (~63 sítios, e o
+próximo adaptador nasce sem a chamada) e classificar no `RespondJSON` (ponto
+único, mas obriga a presentation a conhecer o vocabulário do fork).
 
-1. **Wrappers explícitos no `RealClient`** — fiel à decisão 42=b, mecânico,
-   ~50 métodos num ficheiro. Torna o `Client` menos "assinatura exata do SDK",
-   que é uma propriedade que o comentário de `client.go:21` defende.
-2. **`ClassifyIQ` em cada adaptador**, como aqui. Simples e local, mas são ~66
-   sítios e nada impede o próximo de esquecer.
-3. **Classificar no `RespondJSON`** — ponto verdadeiramente único, mas obrigaria
-   a presentation a conhecer o vocabulário do fork, ou a receber o
-   classificador injetado no bootstrap.
+**O custo, escrito porque não se paga sozinho**: o comentário de
+`client.go:21` defende que cada método da interface tenha "a assinatura exata
+de um método público do SDK", e que o compilador acuse um método em falta. Isso
+continua verdade, mas agora um método NOVO precisa também de um wrapper, e
+ninguém o vai lembrar. Por isso o gate abaixo.
 
-Nenhuma é obviamente certa; a 1 é a que a decisão 42=b implica. **Não avancei
-para não escolher sozinho uma mudança estrutural de 50 métodos.**
+**`TestTodoMetodoComErroTemWrapper`** lê a interface e os wrappers por AST e
+falha se algum método com erro não tiver wrapper **que chame `ClassifyIQ`**. É
+o gate que a alternativa (b) não teria.
+
+**Controlos negativos**, e os dois primeiros não valeram:
+
+- CN-E, remover o wrapper de `UpdateBlocklist`: **quebrou o build** (import por
+  usar), não produziu falha de teste. Armadilha nº3 — controlo que não compila
+  não prova nada. Refeito com `LeaveGroup`, cujos tipos são usados por outros:
+  compila E falha, nomeando `LeaveGroup`.
+- CN-F, wrapper que delega **sem traduzir** (`return v0, err`): **passou verde à
+  primeira**. O teste verificava que o wrapper EXISTE, não que ele FAZ a coisa —
+  quarta vez nesta sessão com o mesmo mecanismo, asserção mais grossa que a
+  propriedade. Com `chamaClassifyIQ` a inspecionar o corpo, morde e nomeia
+  `UpdateBlocklist`.
+
+**O gate de log-coverage, e por que a exclusão MELHORA a métrica.** Os 50
+wrappers entram como funções elegíveis que não logam — e não devem logar, são
+delegação pura. Medido antes de decidir:
+
+```
+com os wrappers    eligible 675, func_coverage 69,2%   (era 74,7%)
+sem os wrappers    eligible 625, func_coverage 74,7%
+```
+
+5,5 pontos percentuais de **diluição**, não de regressão: nenhum código que
+registava deixou de o fazer. Mantê-los no denominador faria o gate punir esta
+própria correção. `pkg/infra/wa-noise/client/` entrou no `.logcov-exclude` com
+a mesma justificação de arquitetura que os adaptadores já tinham — a fachada
+não é ponto de instrumentação.
+
+**E `ClassifyIQ` mudou-se para `pkg/infra/wa-noise/errmap/` para CONTINUAR
+medida.** A exclusão é por pacote e não distingue ficheiros; deixá-la em
+`client/` tirá-la-ia do denominador junto com a delegação. Ela tem lógica —
+decide categoria e regista a decisão — e é o oposto de delegação. A separação
+teve de ser feita no layout, não na configuração.
+
+**Verificado em campo depois dos wrappers**: `/user/block` com número sem conta
+continua 422; `/user/info` (rota que os wrappers passam a cobrir) devolve 200 no
+caminho de sucesso; as duas sessões pareadas continuam vivas.
 
 ---
 
