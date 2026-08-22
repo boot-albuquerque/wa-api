@@ -12,6 +12,20 @@ Este arquivo é o mecanismo de reconciliação manual contra futuras versões
 upstream — cada entrada precisa dizer **quais arquivos**, **o que mudou**,
 **por quê** e **se o comportamento mudou**.
 
+### Nota de época — caminhos de `pkg/infra/wa-noise/` (F61)
+
+As entradas anteriores a 2026-08-07 citam subdiretórios de
+`pkg/infra/wa-noise/` na estrutura plana que existia até o commit `ca34600`
+(reorganização por responsabilidade). Os caminhos NÃO foram reescritos
+porque são registro histórico datado; a tabela abaixo resolve a indireção.
+
+| caminho citado nas entradas | caminho atual |
+|---|---|
+| `pkg/infra/wa-noise/walog/` | `pkg/infra/wa-noise/observability/walog/` |
+| `pkg/infra/wa-noise/group/` | `pkg/infra/wa-noise/adapters/group/` |
+| `pkg/infra/wa-noise/user/` | `pkg/infra/wa-noise/adapters/user/` |
+| `pkg/infra/wa-noise/safego/` | `pkg/infra/wa-noise/runtime/safego/` |
+
 ---
 
 ## Fase A — raiz do pacote (`internal/wa-noise/*.go`), 2026-08-06
