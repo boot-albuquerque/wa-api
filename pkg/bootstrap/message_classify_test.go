@@ -308,14 +308,30 @@ func TestUnwrapFutureProof_ConcordaComUnwrapRaw(t *testing.T) {
 	inner := &waE2E.Message{Conversation: proto("concordancia")}
 
 	wrappers := map[string]func(*waE2E.Message) *waE2E.Message{
-		"ephemeral":           func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{Message: m}} },
-		"viewOnce":            func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{Message: m}} },
-		"viewOnceV2":          func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessageV2: &waE2E.FutureProofMessage{Message: m}} },
-		"viewOnceV2Ext":       func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessageV2Extension: &waE2E.FutureProofMessage{Message: m}} },
-		"docWithCaption":      func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{DocumentWithCaptionMessage: &waE2E.FutureProofMessage{Message: m}} },
-		"lottieSticker":       func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{LottieStickerMessage: &waE2E.FutureProofMessage{Message: m}} },
-		"botInvoke":           func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{BotInvokeMessage: &waE2E.FutureProofMessage{Message: m}} },
-		"edited":              func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"ephemeral": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"viewOnce": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"viewOnceV2": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{ViewOnceMessageV2: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"viewOnceV2Ext": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{ViewOnceMessageV2Extension: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"docWithCaption": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{DocumentWithCaptionMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"lottieSticker": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{LottieStickerMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"botInvoke": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{BotInvokeMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
+		"edited": func(m *waE2E.Message) *waE2E.Message {
+			return &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{Message: m}}
+		},
 	}
 
 	for name, wrap := range wrappers {

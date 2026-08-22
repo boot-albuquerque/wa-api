@@ -755,10 +755,10 @@ func boolProto(b bool) *bool { return &b }
 // This is the test that would have caught the F188 loss if it had existed.
 func TestSync_InvolucroDesembrulhadoGrava(t *testing.T) {
 	cases := []struct {
-		name      string
-		raw       *waE2E.Message
-		wantType  string
-		wantText  string
+		name     string
+		raw      *waE2E.Message
+		wantType string
+		wantText string
 	}{
 		{
 			"ephemeral text",
