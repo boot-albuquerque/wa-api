@@ -259,8 +259,9 @@ func TestDownload_RejectMalformedBody(t *testing.T) {
 	}
 }
 
-// TestDownload_RejectMissingRequiredField: Url ausente é 400 (erro do cliente,
-// não 500), e a porta não é consultada.
+// TestDownload_RejectMissingRequiredField: Url E DirectPath ambos ausentes é
+// 400 (erro do cliente, não 500), e a porta não é consultada. Antes da F127
+// bastava Url ausente; a primitive aceita DirectPath sozinho.
 func TestDownload_RejectMissingRequiredField(t *testing.T) {
 	for _, c := range downloadRouteCases() {
 		t.Run(c.capability, func(t *testing.T) {
@@ -276,6 +277,46 @@ func TestDownload_RejectMissingRequiredField(t *testing.T) {
 				t.Errorf("payload invalido alcancou Download %d vez(es)", n)
 			}
 			logassert.OutcomeLogged(t, recs)
+		})
+	}
+}
+
+// TestDownload_DirectPathOnly_Accepted: payload com DirectPath e sem Url é
+// aceito pela rota registrada. A primitive do SDK baixa por DirectPath
+// sozinho (download.go:82), então a rota não pode recusar.
+func TestDownload_DirectPathOnly_Accepted(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0xff, 0xfe}
+
+	for _, c := range downloadRouteCases() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{
+				DownloadFunc: func(_ context.Context, _ string, _ domain.MediaDescriptor) ([]byte, error) {
+					return payload, nil
+				},
+			}
+
+			body := `{"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
+				`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+				`"Mimetype":"` + c.mime + `",` +
+				`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+				`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+				`"FileLength":4242}`
+
+			rec := c.serve(md, body, msgAuthed)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s: status %d (corpo: %s)", c.route, rec.Code, rec.Body.String())
+			}
+			if n := len(md.DownloadCalls); n != 1 {
+				t.Fatalf("Download chamado %d vez(es) pela rota registrada, quero 1", n)
+			}
+			got := md.DownloadCalls[0].Descriptor
+			if got.DirectPath != "/v/t62.7118-24/12345_678_90.enc" {
+				t.Errorf("DirectPath: got %q", got.DirectPath)
+			}
+			if got.URL != "" {
+				t.Errorf("URL devia ser vazio, got %q", got.URL)
+			}
 		})
 	}
 }

@@ -172,11 +172,14 @@ func TestDownloadUseCases_DataURLCarriesBytesAndAgreesWithMimetype(t *testing.T)
 	}
 }
 
-// TestDownloadUseCases_MissingURL_NoPortCall: campo obrigatório ausente é
-// recusa de CLIENTE e precede qualquer conversa com a porta — nem
-// EnsureSession nem Download podem acontecer. Eixo herdado da tabela de
-// session_guard_test.go, realocado nome por nome.
-func TestDownloadUseCases_MissingURL_NoPortCall(t *testing.T) {
+// TestDownloadUseCases_MissingURLAndDirectPath_NoPortCall: AMBOS Url e
+// DirectPath ausentes é recusa de CLIENTE e precede qualquer conversa com a
+// porta — nem EnsureSession nem Download podem acontecer. Eixo herdado da
+// tabela de session_guard_test.go, realocado nome por nome.
+//
+// Antes da F127, a guarda exigia só Url; a primitive do SDK aceita
+// DirectPath sozinho (download.go:82), e essa recusa era falsa.
+func TestDownloadUseCases_MissingURLAndDirectPath_NoPortCall(t *testing.T) {
 	for _, c := range downloadCapabilities() {
 		t.Run(c.capability, func(t *testing.T) {
 			md := &contractsfake.MediaDownloader{}
@@ -186,7 +189,7 @@ func TestDownloadUseCases_MissingURL_NoPortCall(t *testing.T) {
 			_, err := exec(context.Background(), txtID, domain.DownloadRequest{Mimetype: "image/jpeg"})
 
 			if err == nil {
-				t.Fatal("request sem Url foi aceito")
+				t.Fatal("request sem Url E sem DirectPath foi aceito")
 			}
 			if n := len(md.EnsureSessionCalls); n != 0 {
 				t.Errorf("validacao falhou mas EnsureSession foi consultado %d vez(es)", n)
@@ -196,6 +199,41 @@ func TestDownloadUseCases_MissingURL_NoPortCall(t *testing.T) {
 			}
 			if n := logger.Len(); n != 0 {
 				t.Errorf("erro de validacao gerou %d registro(s) de log: %v", n, logger.Messages())
+			}
+		})
+	}
+}
+
+// TestDownloadUseCases_DirectPathOnly_Succeeds: payload com DirectPath e sem
+// Url é aceito — a primitive do SDK baixa por DirectPath sozinho
+// (download.go:82, ramo DownloadWithPath). Antes da F127 isso era recusado
+// com 400, embora fosse um payload válido.
+func TestDownloadUseCases_DirectPathOnly_Succeeds(t *testing.T) {
+	for _, c := range downloadCapabilities() {
+		t.Run(c.capability, func(t *testing.T) {
+			md := &contractsfake.MediaDownloader{}
+			exec := c.newUC(md, &contractsfake.Logger{})
+
+			req := domain.DownloadRequest{
+				DirectPath:    "/v/t62.7118-24/12345_678_90.enc",
+				MediaKey:      []byte{0x01, 0x02, 0x03, 0x04},
+				Mimetype:      "image/jpeg",
+				FileEncSHA256: []byte{0xaa, 0xbb},
+				FileSHA256:    []byte{0xcc, 0xdd},
+				FileLength:    4242,
+			}
+			if _, err := exec(context.Background(), txtID, req); err != nil {
+				t.Fatalf("DirectPath sozinho foi recusado: %v", err)
+			}
+			if n := len(md.DownloadCalls); n != 1 {
+				t.Fatalf("Download chamado %d vez(es), quero 1", n)
+			}
+			got := md.DownloadCalls[0].Descriptor
+			if got.DirectPath != req.DirectPath {
+				t.Errorf("DirectPath: got %q, want %q", got.DirectPath, req.DirectPath)
+			}
+			if got.URL != "" {
+				t.Errorf("URL devia ser vazio, got %q", got.URL)
 			}
 		})
 	}

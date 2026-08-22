@@ -6659,12 +6659,25 @@ tenha vindo junto.
 (nenhum payload hoje aceito passaria a ser recusado), mas ainda assim muda o
 contrato observável da rota e merece decisão explícita.
 
-**Status**: **não corrigido**. O comportamento atual está travado por teste
-(`TestDownload_RejectMissingRequiredField` e
-`TestDownloadUseCases_MissingURL_NoPortCall`, nas cinco capabilities), de modo
-que a mudança, quando vier, será deliberada e não acidental.
+**Status**: **CORRIGIDO (2026-08-22)**. A guarda em `download_media.go:39` foi
+relaxada de `req.URL == ""` para `req.URL == "" && req.DirectPath == ""`,
+alinhando o use case com a primitive do SDK. É relaxamento puro: nenhum payload
+antes aceito passa a ser recusado.
 
-<!-- f-status: aberto -->
+**Qual teste a trava**:
+- `TestDownloadUseCases_DirectPathOnly_Succeeds` — prova que DirectPath sozinho
+  chega à porta, para as cinco capabilities.
+- `TestDownload_DirectPathOnly_Accepted` — idem, pela rota registrada
+  gorilla/mux.
+- `TestDownloadUseCases_MissingURLAndDirectPath_NoPortCall` — AMBOS ausentes
+  continua 400 (guarda de payload não desapareceu).
+- `TestDownload_RejectMissingRequiredField` — idem, pela rota registrada.
+
+**Controlo negativo executado**: reintroduzir `if req.URL == ""` faz os dois
+testes `DirectPathOnly` falharem com "DirectPath sozinho foi recusado: missing
+Url in payload" (use case) e "status 400" (handler), nas cinco capabilities.
+
+<!-- f-status: corrigido -->
 
 ## F128 — a invalidação do cache de userinfo do gate de History NÃO foi preservada
 

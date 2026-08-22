@@ -36,8 +36,8 @@ type mediaDownloadFlow struct {
 // Data URL vem do MESMO valor, por construção (dataurl.New), então
 // `Mimetype` e o prefixo de `Data` não podem divergir.
 func (f mediaDownloadFlow) execute(ctx context.Context, txtID string, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-	if req.URL == "" {
-		return nil, apperr.New("missing_url", apperr.CategoryValidation, "missing Url in payload", false, nil)
+	if req.URL == "" && req.DirectPath == "" {
+		return nil, apperr.New("missing_url_or_direct_path", apperr.CategoryValidation, "missing Url and DirectPath in payload", false, nil)
 	}
 
 	if err := f.downloader.EnsureSession(ctx, txtID); err != nil {
