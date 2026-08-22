@@ -4967,3 +4967,60 @@ faz exatamente o que promete, e é o certo em produção; num probe que precisa 
 um grupo NOVO, "achei um igual" e "criei" são fatos diferentes e a diferença
 estava no valor de retorno o tempo todo. Ler o que a chamada devolve custa menos
 que depurar o efeito dela.
+
+---
+
+## H165 — `rejectGroupMembershipRequests`: o motivo de nunca ter sido testado deixou de valer
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, aplicando a técnica que a H164 produziu.
+
+**Onde**: `internal/wa-headless/probe_reject_test.go` (novo), linhas
+`rejectGroupMembershipRequests` (duas).
+
+**Por que estava `PARTIAL`**: implementado e travado por teste unitário, mas
+**nunca exercitado ao vivo**, por uma razão concreta e boa — rejeitar conta-B a
+expulsaria do grupo de laboratório, que é o fixture de que todo o resto depende.
+`Approve` foi exercitado; `Reject` não, e *"mesma RPC, chave diferente"* é
+argumento, não medição.
+
+**O que mudou não foi o risco, foi a alternativa.** A H164 estabeleceu:
+**não empreste o fixture, construa um**. Um grupo descartável com aprovação
+ligada dá a conta-B o que pedir e a conta-A o que rejeitar, sem tocar em nada.
+
+**Medição**:
+
+```
+conta-B JoinByInvite: pending=true kind=UnexpectedJoinGroupViaInviteResponse
+conta-A vê:           1 pedido pendente
+Reject:               ok=true code=0
+depois:               0 pendentes, grupo ainda com 1 participante
+```
+
+**A segunda metade da última linha é o que faz disto uma prova.** "0 pendentes"
+sozinho é igual para rejeição e para aprovação — o pedido some nos dois casos. É
+o grupo **não crescer** que distingue os dois, e o teste falha explicitamente se
+crescer: *"that is an APPROVAL, not a rejection"*.
+
+O achado da H89 — a recusa da página com `UnexpectedJoinGroupViaInviteResponse`
+**é** o pedido sendo criado — foi reusado aqui como PRÉ-CONDIÇÃO em vez de
+conclusão, que é o melhor destino de um achado antigo.
+
+**Um erro meu, e é o mesmo da H162 num disfarce menor.** A primeira versão
+esperava `Count` responder do lado de conta-B e seguia; `Count` respondeu e o
+`Leave` seguinte disse *"this account is not a member of that group"*. **Ler o
+grupo e pertencer a ele são fatos diferentes.** A espera passou a ser pela
+PRÓPRIA operação — tenta sair até conseguir —, que é a única condição que
+significa o que o teste precisa.
+
+**E a correção sugerida na H164 foi aplicada aqui**: o `defer` de limpeza é
+registrado ANTES de qualquer `Fatal` que o siga. Foi por registrá-lo tarde que a
+H164 deixou dois grupos órfãos; este não deixou nenhum.
+
+**Status**: corrigido, duas linhas para `PROVEN`.
+
+**Lição**: *"não dá para testar sem estragar o fixture" é uma afirmação sobre o
+fixture, não sobre a capacidade.* Ela era verdadeira e passou meses parecendo
+definitiva. O que a derrubou não foi coragem nem um risco aceito — foi perceber
+que o fixture podia ser construído. Vale reler toda linha cujo impedimento seja
+**custo colateral** e não impossibilidade.

@@ -124,7 +124,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `addOrRemoveLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | H72; forma medida pelo instrumento da H73 |
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
 | `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
-| `rejectGroupMembershipRequests` | groupreq.Reject | `PARTIAL` | sim | não | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. NÃO exercitado ao vivo: rejeitar conta-B a expulsaria do grupo de laboratório (H89) |
+| `rejectGroupMembershipRequests` | groupreq.Reject | `PROVEN` | sim | sim | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. **H165: exercitado ao vivo.** O motivo de nunca ter sido — rejeitar conta-B a expulsaria do grupo de laboratório — deixou de valer quando a H164 mostrou como CONSTRUIR fixture em vez de emprestar: grupo descartável com aprovação ligada, conta-B pede, conta-A rejeita. `ok=true`, **0 pendentes depois e o grupo ainda com 1** — a segunda metade é o que distingue recusa de aprovação. Grupo desfeito no fim |
 | `setAutoDownloadAudio` | settings.SetAutoDownload(KindAudio) | `PROVEN` | sim | sim | sim | H110: a referência devolve o flag pedido sem olhar; nós relemos e falhamos com `ErrNotTaken` se a página não moveu. Escrita redundante é evitada (H55) e DITA em `Changed` |
 | `setAutoDownloadDocuments` | settings.SetAutoDownload(KindDocuments) | `PROVEN` | sim | sim | sim | H110; as quatro categorias viradas ao vivo e o baseline restaurado e verificado |
 | `setAutoDownloadPhotos` | settings.SetAutoDownload(KindPhotos) | `PROVEN` | sim | sim | sim | H110 |
@@ -320,7 +320,7 @@ nossa é fresca — não há campo velho para consertar.
 | `revokeInvite` | group.RevokeInvite | `PROVEN` | sim | sim | sim | H57 |
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
 | `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
-| `rejectGroupMembershipRequests` | groupreq.Reject | `PARTIAL` | sim | não | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. NÃO exercitado ao vivo: rejeitar conta-B a expulsaria do grupo de laboratório (H89) |
+| `rejectGroupMembershipRequests` | groupreq.Reject | `PROVEN` | sim | sim | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. **H165: exercitado ao vivo.** O motivo de nunca ter sido — rejeitar conta-B a expulsaria do grupo de laboratório — deixou de valer quando a H164 mostrou como CONSTRUIR fixture em vez de emprestar: grupo descartável com aprovação ligada, conta-B pede, conta-A rejeita. `ok=true`, **0 pendentes depois e o grupo ainda com 1** — a segunda metade é o que distingue recusa de aprovação. Grupo desfeito no fim |
 | `leave` | group.Leave | `PARTIAL` | sim | NÃO (por desenho) | sim | H65: conta que sai de grupo que criou não volta sem convite |
 
 ## GroupNotification
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 124 | 56% |
-| `PARTIAL` | 43 | 20% |
+| `PROVEN` | 126 | 57% |
+| `PARTIAL` | 41 | 19% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
