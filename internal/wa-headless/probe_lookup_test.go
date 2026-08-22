@@ -173,4 +173,60 @@ func TestProbeByIdLookups(t *testing.T) {
 	if _, err := co.LabelByID(ctx, "no-such-label", "probe/byid"); err == nil {
 		t.Error("an impossible label id returned a label")
 	}
+
+	// CONTACTS BY JID, over the real roster. The property that matters is the one
+	// the unit test models: a MERGED person must be findable under BOTH
+	// identities, because this build files people under a lid and callers often
+	// hold a phone jid.
+	roster, err := co.List(ctx, "probe/byid")
+	if err != nil {
+		t.Fatalf("contacts List: %v", err)
+	}
+	t.Logf("roster: %d contacts from %d rows (%d merged)",
+		len(roster.Contacts), roster.Rows, roster.Merged)
+
+	var merged, nameless int
+	var sample contacts.Contact
+	for _, c := range roster.Contacts {
+		if c.Merged {
+			merged++
+			if sample.PN == "" && c.PN != "" && c.LID != "" {
+				sample = c
+			}
+		}
+		if c.Pushname == "" {
+			nameless++
+		}
+	}
+	t.Logf("merged=%d nameless=%d", merged, nameless)
+
+	if sample.PN == "" || sample.LID == "" {
+		t.Log("no contact carries both identities; the both-ways leg cannot run")
+	} else {
+		byPN, e1 := co.ByJID(ctx, sample.PN, "probe/byid")
+		byLID, e2 := co.ByJID(ctx, sample.LID, "probe/byid")
+		if e1 != nil || e2 != nil {
+			t.Fatalf("a merged contact was not findable under both identities: %v / %v", e1, e2)
+		}
+		if byPN.LID != byLID.LID || byPN.PN != byLID.PN {
+			t.Error("the two identities returned different contacts")
+		}
+		t.Logf("merged contact reachable under both identities: %t", true)
+	}
+
+	// A NAMELESS contact must be findable — it is the majority case here.
+	for _, c := range roster.Contacts {
+		if c.Pushname == "" && c.PN != "" {
+			if _, err := co.ByJID(ctx, c.PN, "probe/byid"); err != nil {
+				t.Errorf("a contact with no name read as absent: %v", err)
+			} else {
+				t.Log("a nameless contact is findable, as it must be")
+			}
+			break
+		}
+	}
+
+	if _, err := co.ByJID(ctx, "000000000000000@c.us", "probe/byid"); err == nil {
+		t.Error("an impossible jid returned a contact")
+	}
 }

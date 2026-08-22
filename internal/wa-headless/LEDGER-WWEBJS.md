@@ -77,7 +77,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getChatById` | chats.ByJID | `PROVEN` | sim | sim | sim | H128: deixou de ser passo interno. Reusa a projeção provada de `chats.List` em vez de escrever uma segunda consulta — duas projeções divergiriam justo nos campos que ninguém reconfere (arquivado, mudo, somente-leitura). Ao vivo: a lista trunca em 100 de 384 e o `ByJID` acha a que ordena por ÚLTIMO, e reporta as 384 varridas |
 | `getChannelByInviteCode` | channel.ByInviteCode | `PROVEN` | sim | sim | sim | provado contra canal público real: jid `@newsletter`, nome, **45.460 assinantes**, `state=active`, `verification=verified`, e `following=false` — **nada foi seguido**. Aceita o link inteiro, não só o código (H104) |
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
-| `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
+| `getContactById` | contacts.ByJID | `PROVEN` | sim | sim | sim | H129: fecha o padrão da H127. Casa em QUALQUER das duas identidades, porque o roster mescla linha de telefone e de lid numa só — casar por um campo só perderia a pessoa sob o outro nome, que é a classe de defeito da H34. Ao vivo: 521 contatos de 945 linhas, 421 mesclados, e um mesclado alcançável pelas duas identidades; 255 sem nome, todos encontráveis |
 | `getMessageById` | capabilities/message | `PROVEN` | sim | sim | sim | H127: deixou de ser varredura interna — `message.OriginOf`, `CurrentOf` e `ShapeOf` recebem o id cru e foram provados ao vivo (H106, H107, H108) |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
@@ -469,8 +469,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 92 | 42% |
-| `PARTIAL` | 60 | 27% |
+| `PROVEN` | 93 | 42% |
+| `PARTIAL` | 59 | 27% |
 | `BLOCKED` | 19 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
 | `MISSING` | 45 | 20% |

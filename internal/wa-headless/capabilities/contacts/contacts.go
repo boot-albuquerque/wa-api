@@ -349,3 +349,39 @@ func fillIn(c *Contact, r row) {
 		c.IsBusiness = true
 	}
 }
+
+// ByJID is the reference's getContactById.
+//
+// IT MATCHES ON EITHER IDENTITY, and that is the whole difficulty. This build is
+// LID-first: a person can be known by a phone jid, by a lid, or by both, and the
+// roster deduplicates the two into ONE row (Merged). A lookup that compared only
+// one field would miss the person under their other name — which is the same
+// class of defect H34 caught in send, where verification used the caller's jid
+// instead of the server's.
+//
+// Like chats.ByJID and contacts.LabelByID, it filters the PROVEN listing rather
+// than asking the page again: a second projection would drift exactly on the
+// merge, which is the part nobody re-checks.
+//
+// IT REUSES ErrNoContact rather than declaring its own. That error already meant
+// "an identity that is not in the roster" for CommonGroupsWith, and a second one
+// with the same meaning is how two call sites start disagreeing about what
+// absence is. Returning a zero Contact was never an option either: on this build
+// a contact with every name field empty is the COMMON case — 488 of 944 rows
+// measured with no pushname — so a caller comparing against the zero value would
+// report half the roster as missing.
+func (l *Lister) ByJID(ctx context.Context, jid, label string) (Contact, error) {
+	if strings.TrimSpace(jid) == "" {
+		return Contact{}, ErrNoContact
+	}
+	roster, err := l.List(ctx, label+"/by-jid")
+	if err != nil {
+		return Contact{}, err
+	}
+	for _, c := range roster.Contacts {
+		if c.PN == jid || c.LID == jid {
+			return c, nil
+		}
+	}
+	return Contact{}, fmt.Errorf("%w (%d in the roster)", ErrNoContact, len(roster.Contacts))
+}

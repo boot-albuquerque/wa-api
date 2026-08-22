@@ -10164,3 +10164,57 @@ impossibilidade — que é exatamente a distinção que o critério da Fase 1 ex
 que o ledger saiba fazer.
 
 **Status**: entregue — 4 das 5 linhas do padrão fechadas.
+
+## H129 — `getContactById`: a pessoa tem dois nomes, e o leitor precisa dos dois
+
+**Data**: 2026-08-22. **Contexto**: a última das cinco linhas do padrão que a
+H127 identificou. Fecha o conjunto.
+
+**Onde**: `capabilities/contacts/contacts.go` (`ByJID`), `contacts_test.go`,
+`probe_lookup_test.go`.
+
+### A dificuldade real, que não é a busca
+
+Buscar numa lista é trivial. O que não é: neste build LID-first, **a mesma
+pessoa chega em duas linhas** — uma sob jid de telefone, outra sob lid — e o
+roster as funde numa só. Quem chama pode ter qualquer uma das duas.
+
+Um leitor que comparasse só um campo acharia a pessoa sob um nome e a declararia
+inexistente sob o outro. É a mesma classe de defeito que a H34 pegou no envio,
+onde a verificação usava o jid de QUEM CHAMOU em vez do que o servidor devolveu.
+
+### Medida ao vivo, sobre o roster de verdade
+
+```
+roster: 521 contatos de 945 linhas (421 merged)
+merged=413 nameless=255
+merged contact reachable under both identities: true
+a nameless contact is findable, as it must be
+```
+
+**255 dos 521 contatos não têm nome nenhum.** Isso decide outra coisa: devolver
+um `Contact` zerado para "não achei" seria indistinguível de metade do roster.
+Por isso a ausência é erro, e o erro **reusa** o `ErrNoContact` que já existia
+para `CommonGroupsWith` — declarar um segundo com o mesmo significado é como dois
+pontos de chamada começam a discordar sobre o que é ausência.
+
+### Controles negativos EXECUTADOS
+
+1. Casar só pelo `PN`:
+   `ByJID(lid): no such contact — the person is unreachable under the identity this build actually files them by`
+2. Devolver `Contact` zerado em vez de erro: falha.
+3. Tratar contato sem nome como ausente: falha — e este é o controle que mais
+   importa, porque o caso é a MAIORIA aqui, não a exceção.
+
+### O padrão da H127, fechado
+
+Cinco linhas diziam "existe como passo interno, não como capacidade exposta".
+Todas as cinco agora são `PROVEN`: `getNumberId` e `getMessageById` (H127),
+`getChatById` e `getLabelById` (H128), `getContactById` (esta).
+
+O que as quatro últimas têm em comum é a decisão de **reusar a leitura provada**
+em vez de escrever uma segunda consulta. Não é preguiça: duas projeções da mesma
+coisa divergem sempre nos campos que ninguém reconfere — a mescla, o arquivado,
+o mudo — e a divergência só aparece quando alguém confia nela.
+
+**Status**: entregue e provado. O padrão está fechado.

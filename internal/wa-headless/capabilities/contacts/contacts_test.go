@@ -319,3 +319,73 @@ func TestAPSAOnTheLIDSideIsAlsoDropped(t *testing.T) {
 		t.Fatalf("a PSA row on the lid side survived: %v", got.Contacts)
 	}
 }
+
+// A PERSON MUST BE FINDABLE UNDER EITHER IDENTITY.
+//
+// This is the whole difficulty of the lookup on a LID-first build: the roster
+// merges a phone row and a lid row into ONE contact, and a caller may hold
+// either jid. Matching on one field only would miss the person under their other
+// name — the same class of defect H34 caught in send, where verification used
+// the caller's jid instead of the server's.
+func TestAMergedContactIsFoundUnderBothIdentities(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON(
+		phoneRow("111", "Ana"),
+		lidRow("999", "111", ""),
+	)}
+	l := lister(p)
+	byPhone, err := l.ByJID(context.Background(), "111@c.us", "t")
+	if err != nil {
+		t.Fatalf("ByJID(phone): %v", err)
+	}
+	byLid, err := l.ByJID(context.Background(), "999@lid", "t")
+	if err != nil {
+		t.Fatalf("ByJID(lid): %v — the person is unreachable under the identity "+
+			"this build actually files them by", err)
+	}
+	if byPhone.PN != byLid.PN || byPhone.LID != byLid.LID {
+		t.Fatalf("the two identities returned different contacts: %+v vs %+v", byPhone, byLid)
+	}
+	if !byPhone.Merged {
+		t.Error("the merge flag was dropped by the single-contact path")
+	}
+	if byPhone.Pushname == "" {
+		t.Error("the name was dropped by the single-contact path")
+	}
+}
+
+// A JID NOBODY HAS IS ITS OWN ERROR, not a zero Contact.
+//
+// The zero value is indistinguishable from a real contact with no names, and on
+// this build that is the COMMON case — 488 of 944 rows measured with no
+// pushname. A caller comparing against the zero value would call half the roster
+// missing.
+func TestAnAbsentContactIsAnErrorAndNotAZeroValue(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON(phoneRow("111", "Ana"))}
+	_, err := lister(p).ByJID(context.Background(), "222@c.us", "t")
+	if !errors.Is(err, ErrNoContact) {
+		t.Fatalf("err = %v, want ErrNoContact", err)
+	}
+	if !strings.Contains(err.Error(), "roster") {
+		t.Errorf("the error does not say what was searched: %v", err)
+	}
+}
+
+// A CONTACT WITH NO NAME IS STILL A CONTACT, and it must come back rather than
+// read as absent — it is the majority case on this account.
+func TestANamelessContactIsFound(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON(phoneRow("111", ""))}
+	got, err := lister(p).ByJID(context.Background(), "111@c.us", "t")
+	if err != nil {
+		t.Fatalf("a contact with no pushname read as absent: %v", err)
+	}
+	if got.PN != "111@c.us" {
+		t.Fatalf("the wrong contact came back: %+v", got)
+	}
+}
+
+func TestAnEmptyJidNeverReachesThePageForAContactLookup(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON()}
+	if _, err := lister(p).ByJID(context.Background(), "  ", "t"); !errors.Is(err, ErrNoContact) {
+		t.Fatalf("err = %v, want ErrNoContact", err)
+	}
+}
