@@ -208,6 +208,9 @@ const (
 	modDelete = "WAWebNewsletterDeleteAction"   // deleteNewsletterAction, arity 1
 	modEdit   = "WAWebEditNewsletterMetadataAction"
 	modGating = "WAWebNewsletterGatingUtils"
+	// modWidFactory turns a jid string into the Wid object the collections
+	// expect. Measured necessary for NC.find (H123).
+	modWidFactory = "WAWebWidFactory"
 	// modCollections is where the newsletter collection LIVES. It is not its own
 	// module: WAWebNewsletterCollection is a member of WAWebCollections, and
 	// requiring it by name returns undefined. Measured 2026-08-22 the hard way —
@@ -338,6 +341,114 @@ func deleteScript(jid string) string {
 			park({ ok: false, why: safe(e) });
 		}
 	})();
+	return "kicked";
+	})()`
+}
+
+// Subscribing, unsubscribing, and listing what this account follows.
+const (
+	modSubscribe   = "WAWebNewsletterSubscribeAction"
+	modUnsubscribe = "WAWebNewsletterUnsubscribeAction"
+
+	// eventSurface is what the reference passes and does not explain. It is
+	// carried verbatim rather than guessed at: changing a magic number nobody
+	// measured is how a call starts failing for a reason the code cannot state.
+	eventSurface = 3
+)
+
+// followScript subscribes or unsubscribes, and reads the membership back.
+//
+// THE CHANNEL IS FETCHED, NOT ASSUMED PRESENT. A channel this account does not
+// follow is NOT in the newsletter collection — measured empty (H123) — so `get`
+// alone returns nothing and the action would have nothing to act on. The
+// collection's own `find` fetches it, which is the clean equivalent of the
+// helper the reference injects.
+//
+// OWNERSHIP IS REFUSED BEFORE THE CALL, like the reference does: subscribing to
+// a channel this account owns is meaningless, and the page answers it in a way
+// that looks like failure.
+func followScript(jid string, subscribe bool) string {
+	action, mod := "unsubscribeFromNewsletterAction", modUnsubscribe
+	if subscribe {
+		action, mod = "subscribeToNewsletterAction", modSubscribe
+	}
+	return `(() => {` + `
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+	(async () => {
+		try {
+			const NC = window.require("` + modCollections + `").` + collNewsletters + `;
+			const JID = ` + strconv.Quote(jid) + `;
+			let ch = null;
+			let why = "";
+			try { ch = NC.get(JID); } catch (e) {}
+			// FIND RECEBE UM WID, NAO UMA STRING. Passar o jid cru devolveu
+			// "channel not reachable" contra um canal que a consulta de metadados
+			// lia sem problema — medido (H123). A referencia esconde isso dentro
+			// do seu proprio helper injetado.
+			if (!ch && typeof NC.find === "function") {
+				try {
+					const { createWid } = window.require("` + modWidFactory + `");
+					ch = await NC.find(createWid(JID));
+				} catch (e) { why = safe(e); }
+			}
+			if (!ch) { park({ ok: false, why: "channel not reachable" + (why ? ": " + why : "") }); return; }
+
+			const md = ch.` + fieldNewsletterMetadata + ` || ch;
+			const membership = String((md && md.` + fieldMembership + `) || "");
+			if (membership === "owner") {
+				park({ ok: false, owner: true });
+				return;
+			}
+			await window.require("` + mod + `").` + action + `(ch, {
+				eventSurface: ` + strconv.Itoa(eventSurface) + `,
+				deleteLocalModels: false,
+			});
+			// LIDO DE VOLTA. A referencia devolve true por a chamada nao ter
+			// lancado, que e' sucesso silencioso.
+			const after = ch.` + fieldNewsletterMetadata + ` || ch;
+			park({
+				ok: true,
+				membership: String((after && after.` + fieldMembership + `) || ""),
+			});
+		} catch (e) {
+			park({ ok: false, why: safe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}
+
+// followedScript lists the channels this account follows.
+func followedScript() string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+	const str = v => (typeof v === "string" ? v : "");
+	const num = v => (typeof v === "number" ? v : 0);
+	try {
+		const NC = window.require("` + modCollections + `").` + collNewsletters + `;
+		const all = (typeof NC.getModelsArray === "function") ? NC.getModelsArray() : [];
+		const out = [];
+		for (const n of all) {
+			const md = n.` + fieldNewsletterMetadata + ` || n;
+			const id = (md && (md.id || md.idJid)) || n.id;
+			out.push({
+				jid: (id && id._serialized) ? id._serialized : str(id),
+				name: str(md && md.` + fieldName + `) || str(n.name),
+				description: str(md && md.` + fieldDescription + `),
+				subscribers: num(md && md.` + fieldSize + `),
+				verified: !!(md && md.` + fieldVerified + `),
+				membership: str(md && md.` + fieldMembership + `),
+				createdAt: num(md && md.` + fieldCreationTime + `),
+			});
+		}
+		park({ ok: true, results: out });
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
 	return "kicked";
 	})()`
 }

@@ -225,3 +225,122 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 		}
 	}
 }
+
+var (
+	// ErrOwnChannel is subscribing to a channel this account owns.
+	//
+	// ITS OWN ERROR because it is a caller mistake with a different repair, and
+	// because the page's refusal for it is indistinguishable from a real failure.
+	ErrOwnChannel = fmt.Errorf("channel: this account owns that channel")
+	// ErrNotReachable is a channel the page could not fetch.
+	ErrNotReachable = fmt.Errorf("channel: the page could not reach that channel")
+)
+
+// membershipGuest is what the page calls a non-member. Measured on directory
+// results (H112) and used here as the postcondition for unfollowing.
+const membershipGuest = "guest"
+
+// Follow subscribes this account to a channel and PROVES the membership moved.
+//
+// The reference returns a bare boolean, and returns it after merely not
+// throwing. Here the membership is read back: a page that accepted the call and
+// left the account a guest is a failure, not a success (invariant 14).
+func (m *Manager) Follow(ctx context.Context, jid, label string) (string, error) {
+	return m.follow(ctx, jid, true, label)
+}
+
+// Unfollow reverses it, with the same postcondition in the other direction.
+func (m *Manager) Unfollow(ctx context.Context, jid, label string) (string, error) {
+	return m.follow(ctx, jid, false, label)
+}
+
+func (m *Manager) follow(ctx context.Context, jid string, subscribe bool, label string) (string, error) {
+	if strings.TrimSpace(jid) == "" {
+		return "", ErrNoJID
+	}
+	verb := "unfollow"
+	if subscribe {
+		verb = "follow"
+	}
+	raw, err := m.parked(ctx, followScript(jid, subscribe), label+"/"+verb)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrWrite, err)
+	}
+	var out struct {
+		OK         bool   `json:"ok"`
+		Why        string `json:"why"`
+		Owner      bool   `json:"owner"`
+		Membership string `json:"membership"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return "", fmt.Errorf("channel: unexpected answer: %w", e)
+	}
+	if out.Owner {
+		return "", ErrOwnChannel
+	}
+	if !out.OK {
+		if strings.Contains(out.Why, "not reachable") {
+			// THE PAGE'S OWN REASON TRAVELS. Swallowing it cost a run: the first
+			// version returned a bare ErrNotReachable and the probe could not tell
+			// "no such channel" from "find rejected the argument shape".
+			return "", fmt.Errorf("%w (%s)", ErrNotReachable, out.Why)
+		}
+		return "", fmt.Errorf("%w (%s)", ErrWrite, out.Why)
+	}
+	// THE POSTCONDITION. Following must leave a membership that is NOT guest;
+	// unfollowing must leave one that IS.
+	isGuest := out.Membership == membershipGuest || out.Membership == ""
+	if subscribe && isGuest {
+		return out.Membership, fmt.Errorf("%w: the page accepted the subscription and "+
+			"the account is still a guest", ErrNotTaken)
+	}
+	if !subscribe && !isGuest {
+		return out.Membership, fmt.Errorf("%w: the page accepted the unsubscription and "+
+			"the membership is still %q", ErrNotTaken, out.Membership)
+	}
+	return out.Membership, nil
+}
+
+// Followed lists the channels this account follows.
+//
+// AN EMPTY LIST IS A LEGITIMATE ANSWER, and it is the answer this account gave
+// for the whole of Phase 1 until something was followed — which is exactly why
+// the ledger row for it sat open rather than being filled with a reader nobody
+// had seen return anything (H93).
+func (m *Manager) Followed(ctx context.Context, label string) ([]DirectoryEntry, error) {
+	raw, err := m.parked(ctx, followedScript(), label+"/followed")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK      bool   `json:"ok"`
+		Why     string `json:"why"`
+		Results []struct {
+			JID        string `json:"jid"`
+			Name       string `json:"name"`
+			Desc       string `json:"description"`
+			Subs       int    `json:"subscribers"`
+			Verified   bool   `json:"verified"`
+			Membership string `json:"membership"`
+			CreatedAt  int64  `json:"createdAt"`
+		} `json:"results"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return nil, fmt.Errorf("channel: unexpected answer: %w", e)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	found := make([]DirectoryEntry, 0, len(out.Results))
+	for _, r := range out.Results {
+		e := DirectoryEntry{
+			JID: r.JID, Name: r.Name, Description: r.Desc, Subscribers: r.Subs,
+			Verified: r.Verified, Membership: r.Membership,
+		}
+		if r.CreatedAt > 0 {
+			e.CreatedAt = time.Unix(r.CreatedAt, 0)
+		}
+		found = append(found, e)
+	}
+	return found, nil
+}

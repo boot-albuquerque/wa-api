@@ -9652,3 +9652,173 @@ escrito ao lado — uma guarda que casa com a própria documentação não pode 
 escrita honestamente.
 
 **Status**: entregue e provado ao vivo.
+
+## H122 — pareamento e `logout`: separar "falta máquina" de "falta estado"
+
+**Data**: 2026-08-22. **Contexto**: família `Client`, a maior concentração
+restante. Quatro linhas que estavam `MISSING` por nunca terem sido atacadas.
+
+**Onde**: `internal/wa-headless/probe_gp2_test.go`
+(`TestProbePairingSurface`), `LEDGER-WWEBJS.md`.
+
+### A pergunta que a medição responde
+
+`MISSING` significa "não atacado", e é um estado honesto enquanto ninguém
+olhou. Depois de olhar, ele vira mentira: esconde a diferença entre *não existe
+nada para construir em cima* e *existe tudo, e falta um estado que só um humano
+produz*. As quatro linhas abaixo eram do segundo tipo e estavam contadas como o
+primeiro.
+
+### O que foi medido
+
+```
+WAWebAltDeviceLinkingApi          -> existe
+  .setPairingType                 -> função
+  .initializeAltDeviceLinking     -> função
+  .startAltLinkingFlow            -> função
+WAWebPairingCodeLinkUtils         -> NÃO existe (módulo)
+WAWebLaunchSocketUtils.refreshQR  -> função
+WAWebMiscBrowserUtils             -> existe, mas .info NÃO é função
+Socket.logout                     -> função
+window.AuthStore (injeção do wwebjs) -> ausente, como esperado
+socket                            -> CONNECTED
+```
+
+### As quatro conclusões
+
+**`requestPairingCode` → `BLOCKED`.** A máquina existe inteira, e — detalhe que
+importa — é alcançável **sem** o `AuthStore` que a referência injeta. A
+referência chega lá por `window.AuthStore.PairingCodeLinkUtils`; aqui as mesmas
+três funções vivem em `WAWebAltDeviceLinkingApi`. O bloqueio é de ESTADO: o
+próprio laço da referência para quando o socket sai de `UNPAIRED`/
+`UNPAIRED_IDLE`, e o nosso lê `CONNECTED`. Desemparelhar para provar exige um
+humano com o telefone.
+
+**`cancelPairingCode` → `BLOCKED`.** Mesmo gate. Não há código ativo para
+cancelar numa sessão pareada.
+
+**`logout` → `BLOCKED`.** `Socket.logout` existe. O bloqueio aqui não é
+técnico, é de política: a chamada desemparelha a conta e a restauração exige um
+humano com o telefone. Um agente não deve exercitar isso.
+
+**`setDeviceName` → `INTENTIONAL_DIFFERENCE`.** Três razões independentes, e
+qualquer uma bastaria: (1) a referência REMENDA `WAWebMiscBrowserUtils.info`, e
+`info` **não é função** neste build — o remendo falharia; (2) remendar um global
+da página é o que a H112 recusou, com motivo que não mudou; (3) o nome só
+aparece no PAREAMENTO, que uma sessão já pareada não exercita.
+
+`WAWebPairingCodeLinkUtils` é o **sétimo** nome da lista do wwebjs que não
+existe neste build, e `WAWebMiscBrowserUtils.info` é o oitavo desencontro. O
+padrão já não é anedota: copiar a lista da referência falha por volta de uma vez
+a cada duas.
+
+### O que isto NÃO é
+
+Não é implementação. Nenhuma linha de código de produção foi escrita, e o placar
+não ganhou nenhum `PROVEN`. O que mudou é que quatro linhas deixaram de dizer
+"não atacado" e passaram a dizer **por que** não são atacáveis, com a evidência
+ao lado — que é a diferença entre um ledger que orienta trabalho e um que só
+conta itens.
+
+**Status**: decidido e registrado, sem código novo.
+
+## H123 — assinar canal: autorizado, tentado, e medido IMPOSSÍVEL neste build
+
+**Data**: 2026-08-22. **Contexto**: o usuário autorizou explicitamente assinar
+um canal, o que destravaria `subscribeToChannel`, `unsubscribeFromChannel` e
+`getChannels` em cadeia.
+
+**Onde**: `internal/wa-headless/capabilities/channel/` (`Follow`, `Unfollow`,
+`Followed`, `followScript`, `followedScript`),
+`internal/wa-headless/probe_follow_test.go` (novo).
+
+### O que foi construído
+
+`Follow`/`Unfollow` com pós-condição de verdade: a referência devolve um
+booleano **por a chamada não ter lançado**, e aqui a membership é RELIDA — uma
+página que aceitou a chamada e deixou a conta como `guest` é falha, não
+sucesso. `Followed` lista o que a conta segue.
+
+### O que a medição encontrou, em três passos
+
+**Passo 1 — `find` recebe Wid, não string.** Passar o jid cru devolveu "channel
+not reachable" contra um canal que a consulta de metadados lia sem problema.
+Erro meu de suposição, corrigido.
+
+**Passo 2 — o `find` da coleção está QUEBRADO.** Com o Wid correto:
+
+```
+this.findImpl is not a function
+```
+
+**Passo 3 — a ação não aceita nenhuma forma disponível.** Testadas três, todas
+falham igual:
+
+```
+subArity: 3            (a referência chama com 2 argumentos)
+metadata-object -> Data passed to getter must include an id property
+wid             -> idem
+jid-string      -> idem
+```
+
+A mensagem diz o que falta: a ação exige um **modelo que a coleção memoize por
+id**. O modelo só existiria se a coleção conseguisse buscá-lo, e o `find` dela
+não funciona. A referência esconde essa resolução dentro do helper
+`WWebJS.getChat` que ela INJETA e nós não injetamos — o que é decisão registrada
+como `INTENTIONAL_DIFFERENCE` desde o início.
+
+`subscribeToChannel` e `unsubscribeFromChannel` viram `BLOCKED` com esta
+evidência. **Não é falta de tentativa nem de autorização**: a autorização foi
+dada, o código foi escrito e as três formas foram exercitadas contra a página
+real.
+
+### `getChannels` fechou por outro caminho
+
+O leitor respondia 0 porque a conta não segue nada, e embarcar leitor nunca
+visto devolvendo algo é a armadilha da H93. Como assinar canal alheio é
+impossível, provei com um canal **próprio** — que vive na mesma coleção:
+
+```
+created: channel.Created(jid=true code=true at=true)
+Followed returned 1
+  channel.DirectoryEntry(... membership=owner)
+deleted and confirmed gone
+```
+
+### Erro meu de desenho, corrigido no meio
+
+A primeira versão devolvia `ErrNotReachable` pelado, engolindo a razão da
+página. Custou uma execução: eu não conseguia distinguir "canal não existe" de
+"o `find` rejeitou a forma do argumento". A razão passou a viajar dentro do
+erro, e foi ela que revelou o `findImpl`.
+
+**Regra**: quando um erro traduz uma falha da página para um erro nosso, a
+mensagem original tem de viajar junto. O nome do erro classifica; o texto da
+página é o que permite depurar.
+
+### Contagem que já não é anedota
+
+`subscribeToNewsletterAction` com aridade 3 contra 2 é o **nono** desencontro
+entre a lista do wwebjs e este build. Sete nomes ausentes, duas assinaturas
+diferentes.
+
+### Segundo erro meu, pego pelo portão
+
+Mudei a produção de `NC.find(JID)` para `NC.find(createWid(JID))` e **não
+atualizei a asserção**, que continuava exigindo a forma antiga. O `make check`
+falhou em 0,00s — falha real, não de carga — e a distinção foi feita pelo tempo
+antes de qualquer suposição.
+
+A correção não foi só realinhar a string: a asserção passou a travar o **Wid**,
+que é o requisito MEDIDO. Sem isso, alguém voltaria à string crua e o teste
+passaria, porque a forma errada só falha em RUNTIME, contra a página real, onde
+teste de unidade nenhum olha. Controle negativo executado:
+
+```
+--- FAIL: TestTheFollowScriptFetchesAChannelItDoesNotHave
+    owner_test.go:404: the script passes the raw jid to find; this build needs a Wid
+```
+
+**Status**: parcialmente entregue — `getChannels` provado, assinatura bloqueada
+com evidência, e o código de `Follow`/`Unfollow` fica no lugar porque a
+diferença é da PÁGINA e pode voltar num build futuro.

@@ -33,21 +33,21 @@ nem `PARTIAL` sem justificativa explícita.
 |---|---|---|---|---|---|---|
 | `inject` | spa.VerifyInventory | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | não injetamos ExposeStore; verificamos o inventário de módulos no boot |
 | `initialize` | core.StartSession + runtime.Holder | `PROVEN` | sim | sim | sim | — |
-| `requestPairingCode` | — | `MISSING` | — | — | — | pareamos por QR; código por telefone nunca atacado |
-| `cancelPairingCode` | — | `MISSING` | — | — | — | idem |
+| `requestPairingCode` | — | `BLOCKED` | — | medido | — | H122: NÃO é falta de máquina — `WAWebAltDeviceLinkingApi` existe com `setPairingType`, `initializeAltDeviceLinking` e `startAltLinkingFlow`, e é alcançável SEM o `AuthStore` que a referência injeta (medido `hasWwebjsAuthStore:false`). O bloqueio é de ESTADO: o fluxo só roda com o socket em `UNPAIRED`/`UNPAIRED_IDLE`, e o nosso lê `CONNECTED`. Desemparelhar exige humano |
+| `cancelPairingCode` | — | `BLOCKED` | — | medido | — | H122: `WAWebLaunchSocketUtils.refreshQR` existe; mesmo bloqueio de estado do `requestPairingCode` — não há código de pareamento ativo para cancelar numa sessão pareada |
 | `attachEventListeners` | capabilities/messagemeta + contacts.onContact | `PARTIAL` | sim | sim | sim | dois fluxos de 31 eventos |
 | `initWebVersionCache` | — | `INTENTIONAL_DIFFERENCE` | — | — | — | não fixamos versão da web; o inventário de módulos é a nossa guarda |
 | `destroy` | core.Session.Stop | `PROVEN` | sim | sim | sim | stopped_via medido |
-| `logout` | — | `MISSING` | — | — | — | apagar credenciais da sessão nunca foi atacado |
+| `logout` | — | `BLOCKED` | — | medido | — | H122: `Socket.logout` EXISTE neste build. O bloqueio é de política, não técnico: desemparelha a conta e exige um humano com o telefone para restaurar. Não é exercitável por agente |
 | `getWWebVersion` | spa.WebVersion | `PROVEN` | sim | sim | sim | H111: lido ao vivo (`2.3000.1045798079`); página sem versão é `ErrNoWebVersion`, não string vazia |
-| `setDeviceName` | — | `MISSING` | — | — | — | — |
+| `setDeviceName` | — | `INTENTIONAL_DIFFERENCE` | — | medido | — | H122: a referência REMENDA `WAWebMiscBrowserUtils.info`. Medido: o módulo existe e `info` NÃO é função — o remendo falharia. E remendar global de página é o que a H112 recusou. Além disso o nome só aparece no PAREAMENTO, que uma sessão já pareada não exercita. Não implementado de propósito |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | duvidosa | sim | **rebaixada em 2026-08-21 (H82)**: a pós-condição afirma que `chat.unreadCount` moveu NA MESMA SESSÃO, e a H78 mediu esse contador como CROSS_SESSION. A H52 provou contra um chat em que ele moveu; se generaliza é pergunta em aberto |
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento e figurinha OK. **ENQUETE NÃO SAI**: criada localmente como `poll_creation` com as opções intactas, `ack` fica em **0** e o par nunca recebe — medido no primeiro round trip que olhou o OUTRO lado (H98). A H69 provou o envio pela aparição LOCAL. O suspeito nomeado (`pollType` omitido) foi **perseguido e descartado**: o enum foi achado em `WAWebPollCreationUtils` (singular — uma letra é por que três buscas o perderam), `PollType.POLL` e `PollContentType.TEXT` foram aplicados de dentro da própria página, e o ack continua 0 (H101). Localização e vCard MISSING (H75) |
 | `sendReaction` | capabilities/react | `PARTIAL` | sim | sim | sim | H53: adicionar provado; remover devolve Verified:false |
 | `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `searchMessages` | search.Messages | `PROVEN` | sim | sim | sim | H114: o resultado é ENDEREÇO, nunca corpo — a projeção acontece na página. Sem escopo por conversa: passar o jid como quarto argumento (o que a referência faz com `options.chatId`) mediu 0 resultados com `eof`, contra 20 sem escopo |
 | `getChats` | chats.List | `PROVEN` | sim | sim | sim | — |
-| `getChannels` | — | `MISSING` | — | — | — | lista os canais SEGUIDOS, e esta conta não segue nenhum (`modelCount` 0). Não é falta de código: falta uma inscrição (H104) |
+| `getChannels` | channel.Followed | `PROVEN` | sim | sim | sim | H123: leitor provado NÃO-VAZIO — `Followed` devolveu 1 entrada com `membership=owner` logo após criar um canal, e 0 depois de apagá-lo. Assinar canal alheio para provar é impossível neste build (ver `subscribeToChannel`), então a prova veio de um canal PRÓPRIO, que vive na mesma coleção |
 | `getChatById` | resolução interna às capacidades | `PARTIAL` | sim | sim | sim | existe como passo interno, não como capacidade exposta |
 | `getChannelByInviteCode` | channel.ByInviteCode | `PROVEN` | sim | sim | sim | provado contra canal público real: jid `@newsletter`, nome, **45.460 assinantes**, `state=active`, `verification=verified`, e `following=false` — **nada foi seguido**. Aceita o link inteiro, não só o código (H104) |
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
@@ -81,8 +81,8 @@ nem `PARTIAL` sem justificativa explícita.
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `createGroup` | group.Ensure | `PROVEN` | sim | sim | sim | idempotência é do fixture, não da capacidade |
 | `createChannel` | channel.Create | `PROVEN` | sim | sim | sim | H113: canal real criado e apagado na conta de laboratório, com autorização explícita. Verificado relendo pelo código de convite, não pelo eco da própria chamada; gate desabilitado é erro PRÓPRIO (a referência devolve a mensagem como STRING) |
-| `subscribeToChannel` | — | `MISSING` | — | — | — | não atacado |
-| `unsubscribeFromChannel` | — | `MISSING` | — | — | — | não atacado |
+| `subscribeToChannel` | — | `BLOCKED` | — | medido | — | H123: **medido impossível neste build**. `subscribeToNewsletterAction` existe mas tem aridade **3** (a referência chama com 2), e as três formas de argumento — modelo de metadados, Wid e jid — falham com `Data passed to getter must include an id property`. A ação exige um modelo que a coleção MEMOIZE, e o `find` da coleção está quebrado: `this.findImpl is not a function`. A referência esconde essa resolução no helper que ela injeta e nós não injetamos |
+| `unsubscribeFromChannel` | — | `BLOCKED` | — | medido | — | H123: mesmo caminho e mesmo bloqueio do `subscribeToChannel` — e sem conseguir assinar não há o que desassinar |
 | `transferChannelOwnership` | — | `MISSING` | — | — | — | não atacado |
 | `searchChannels` | channel.Search | `PROVEN` | sim | sim | sim | H112: o diretório RESPONDE (50 resultados) — ao contrário de `getRecommendedNewsletters`, que trava. Sem assinatura. Tipo próprio `DirectoryEntry`: um resultado de diretório é um MODELO com campos `__x_`, não o saco de mixins da consulta de metadados, e `__x_state` não existe. Sem opção `limit`: a referência a implementa remendando uma função da página que não existe neste build |
 | `deleteChannel` | channel.Delete | `PROVEN` | sim | sim | sim | H113: pós-condição é o canal deixar de ser legível; apagar sem código de convite devolve erro dizendo que NÃO deu para verificar, em vez de sucesso |
@@ -440,9 +440,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 87 | 40% |
+| `PROVEN` | 88 | 40% |
 | `PARTIAL` | 64 | 29% |
-| `BLOCKED` | 4 | 2% |
-| `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 62 | 28% |
+| `BLOCKED` | 9 | 4% |
+| `INTENTIONAL_DIFFERENCE` | 4 | 2% |
+| `MISSING` | 55 | 25% |
 | **total** | **220** | |

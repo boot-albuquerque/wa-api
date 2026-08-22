@@ -82,6 +82,28 @@ func TestProbeChannelOwnership(t *testing.T) {
 		t.Error("the create reported no creation time")
 	}
 
+	// AND THE FOLLOW LIST MUST NOW HOLD IT. `Followed` is this module's
+	// getChannels, and it answered 0 for the whole of Phase 1 because the account
+	// follows nothing — a reader never seen returning anything is the H93 trap.
+	// A channel this account OWNS is in the same collection, so creating one is
+	// the honest way to prove the reader non-empty without subscribing to a
+	// stranger's channel (which measured unreachable, H123).
+	listed, err := m.Followed(ctx, "probe/chanowner")
+	if err != nil {
+		t.Errorf("Followed: %v", err)
+	} else {
+		t.Logf("Followed returned %d", len(listed))
+		if len(listed) == 0 {
+			t.Error("the channel collection is empty right after creating a channel")
+		}
+		for _, e := range listed {
+			t.Logf("  %s", e)
+			if e.Membership == "" {
+				t.Error("an entry carries no membership")
+			}
+		}
+	}
+
 	// RENAME, verified against the server rather than against the echo.
 	renamed := name + " (renamed)"
 	if err := m.SetName(ctx, made.JID, made.InviteCode, renamed, "probe/chanowner"); err != nil {

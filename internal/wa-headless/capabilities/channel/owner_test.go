@@ -268,3 +268,165 @@ func TestTheLookupDoesNotUseTheInjectedHelper(t *testing.T) {
 		t.Fatal("no edit script was recorded")
 	}
 }
+
+// followDouble answers the follow/unfollow scripts and keeps the membership as
+// its OWN state, so a test can make the page accept the call and leave the
+// membership where it was — which is the failure the reference cannot report,
+// because it returns true for merely not throwing.
+type followDouble struct {
+	membership string
+	// takes says whether the page actually moves the membership.
+	takes bool
+	// unreachable reproduces a channel the collection cannot fetch.
+	unreachable bool
+
+	answer  string
+	scripts []string
+}
+
+func (d *followDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.HasPrefix(expr, "window."+stateKey) {
+		*out = d.answer
+		return nil
+	}
+	d.scripts = append(d.scripts, expr)
+	switch {
+	case strings.Contains(expr, "subscribeToNewsletterAction"),
+		strings.Contains(expr, "unsubscribeFromNewsletterAction"):
+		if d.unreachable {
+			d.answer = `{"ok":false,"why":"channel not reachable"}`
+			break
+		}
+		if d.membership == "owner" {
+			d.answer = `{"ok":false,"owner":true}`
+			break
+		}
+		if d.takes {
+			if strings.Contains(expr, "subscribeToNewsletterAction") {
+				d.membership = "subscriber"
+			} else {
+				d.membership = membershipGuest
+			}
+		}
+		d.answer = `{"ok":true,"membership":"` + d.membership + `"}`
+	default:
+		d.answer = `{"ok":true,"results":[]}`
+	}
+	*out = "kicked"
+	return nil
+}
+
+func follower(d *followDouble) *Manager { return NewManager(engine.NewRunner(), d.eval) }
+
+// A SUBSCRIPTION THE PAGE IGNORED IS NOT A SUCCESS.
+func TestAFollowThatLeftTheAccountAGuestIsAnError(t *testing.T) {
+	d := &followDouble{membership: membershipGuest, takes: false}
+	_, err := follower(d).Follow(context.Background(), "1@newsletter", "t")
+	if !errors.Is(err, ErrNotTaken) {
+		t.Fatalf("err = %v, want ErrNotTaken", err)
+	}
+	if !strings.Contains(err.Error(), "still a guest") {
+		t.Errorf("the error does not say what happened: %v", err)
+	}
+}
+
+func TestAFollowThatTakesReportsTheNewMembership(t *testing.T) {
+	d := &followDouble{membership: membershipGuest, takes: true}
+	got, err := follower(d).Follow(context.Background(), "1@newsletter", "t")
+	if err != nil {
+		t.Fatalf("Follow: %v", err)
+	}
+	if got == membershipGuest || got == "" {
+		t.Fatalf("membership = %q; a successful follow must leave a real one", got)
+	}
+}
+
+// AND THE POSTCONDITION RUNS IN THE OTHER DIRECTION TOO. An unfollow that left
+// a real membership is just as much a silent success.
+func TestAnUnfollowThatDidNotUnfollowIsAnError(t *testing.T) {
+	d := &followDouble{membership: "subscriber", takes: false}
+	_, err := follower(d).Unfollow(context.Background(), "1@newsletter", "t")
+	if !errors.Is(err, ErrNotTaken) {
+		t.Fatalf("err = %v, want ErrNotTaken", err)
+	}
+	d2 := &followDouble{membership: "subscriber", takes: true}
+	if _, err := follower(d2).Unfollow(context.Background(), "1@newsletter", "t"); err != nil {
+		t.Fatalf("Unfollow: %v", err)
+	}
+}
+
+// OWNING IS ITS OWN ERROR, not a generic refusal: the repair is different and
+// the page's answer for it looks like failure.
+func TestSubscribingToOwnChannelIsItsOwnError(t *testing.T) {
+	d := &followDouble{membership: "owner"}
+	_, err := follower(d).Follow(context.Background(), "1@newsletter", "t")
+	if !errors.Is(err, ErrOwnChannel) {
+		t.Fatalf("err = %v, want ErrOwnChannel", err)
+	}
+	if errors.Is(err, ErrWrite) || errors.Is(err, ErrNotTaken) {
+		t.Error("owning a channel is being reported as a page failure")
+	}
+}
+
+func TestAnUnreachableChannelIsItsOwnError(t *testing.T) {
+	d := &followDouble{membership: membershipGuest, unreachable: true}
+	if _, err := follower(d).Follow(context.Background(), "1@newsletter", "t"); !errors.Is(err, ErrNotReachable) {
+		t.Fatalf("err = %v, want ErrNotReachable", err)
+	}
+}
+
+// THE SCRIPT MUST FETCH, NOT ONLY LOOK UP. A channel this account does not
+// follow is NOT in the collection — measured empty — so `get` alone finds
+// nothing and the action would have nothing to act on.
+func TestTheFollowScriptFetchesAChannelItDoesNotHave(t *testing.T) {
+	d := &followDouble{membership: membershipGuest, takes: true}
+	if _, err := follower(d).Follow(context.Background(), "1@newsletter", "t"); err != nil {
+		t.Fatalf("Follow: %v", err)
+	}
+	var script string
+	for _, s := range d.scripts {
+		if strings.Contains(s, "subscribeToNewsletterAction") {
+			script = s
+		}
+	}
+	if !strings.Contains(script, "NC.find(") {
+		t.Fatal("the script never fetches the channel; a channel this account does " +
+			"not follow is absent from the collection and get() alone finds nothing")
+	}
+	// AND IT MUST PASS A WID, NOT THE JID STRING. Measured (H123): the bare jid
+	// gave "channel not reachable" against a channel the metadata query read
+	// without trouble. This assertion is what stops that regressing silently —
+	// the string form fails at RUNTIME, where no unit test would see it.
+	if !strings.Contains(script, "createWid(JID)") {
+		t.Error("the script passes the raw jid to find; this build needs a Wid")
+	}
+	if strings.Contains(script, "WWebJS") {
+		t.Error("the script uses the reference's injected helper, which this stack " +
+			"never injects")
+	}
+}
+
+// An empty follow list is an answer, not an error.
+func TestAnEmptyFollowListIsNotAnError(t *testing.T) {
+	d := &followDouble{}
+	got, err := follower(d).Followed(context.Background(), "t")
+	if err != nil {
+		t.Fatalf("Followed: %v", err)
+	}
+	if got == nil {
+		t.Error("an empty list came back nil rather than empty")
+	}
+}
+
+func TestAnEmptyJIDNeverReachesThePageForAFollow(t *testing.T) {
+	d := &followDouble{}
+	if _, err := follower(d).Follow(context.Background(), " ", "t"); !errors.Is(err, ErrNoJID) {
+		t.Fatalf("err = %v, want ErrNoJID", err)
+	}
+	if len(d.scripts) != 0 {
+		t.Error("an empty jid reached the page")
+	}
+}

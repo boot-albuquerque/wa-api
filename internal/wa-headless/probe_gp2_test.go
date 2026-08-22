@@ -429,3 +429,163 @@ func TestProbeVoteEventLive(t *testing.T) {
 		t.Logf("the vote listener FIRED: %d %s", counts[events.VoteUpdated], events.VoteUpdated)
 	}
 }
+
+// TestProbePairingSurface separates "we cannot because the module is absent"
+// from "we cannot because this session is PAIRED".
+//
+// requestPairingCode only runs while the socket is UNPAIRED or UNPAIRED_IDLE —
+// the reference's own loop stops otherwise. A paired lab session can therefore
+// never exercise it, and the distinction decides whether the ledger rows are
+// MISSING (nothing to build on) or BLOCKED (built on something real, gated by a
+// state only a human can produce).
+func TestProbePairingSurface(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_PAIR") == "" {
+		t.Skip("set WA_PROBE_PAIR=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__pr = null;
+	const out = {modules:{}, funcs:{}, socket:""};
+	const look = (name, fns) => {
+		try {
+			const m = window.require(name);
+			out.modules[name] = !!m;
+			for (const f of (fns||[])) { out.funcs[name+"."+f] = !!(m && typeof m[f] === "function"); }
+			return m;
+		} catch (e) { out.modules[name] = false; return null; }
+	};
+	look("WAWebAltDeviceLinkingApi", ["setPairingType","initializeAltDeviceLinking","startAltLinkingFlow"]);
+	look("WAWebPairingCodeLinkUtils", ["setPairingType","startAltLinkingFlow"]);
+	look("WAWebLaunchSocketUtils", ["refreshQR"]);
+	look("WAWebMiscBrowserUtils", ["info"]);
+	const S = look("WAWebSocketModel", []);
+	try {
+		const sk = S && (S.Socket || S.default || S);
+		out.socket = (sk && typeof sk.__x_state === "string") ? sk.__x_state : "";
+		out.hasLogout = !!(sk && typeof sk.logout === "function");
+		out.hasReconnect = !!(sk && typeof sk.reconnect === "function");
+	} catch (e) {}
+	// A referencia usa window.AuthStore, que e' injecao DELA.
+	out.hasWwebjsAuthStore = !!window.AuthStore;
+	window.__pr = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__pr", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("pairing surface:\n%s", out)
+}
+
+// TestProbeSubscribeSurface measures what a channel subscription needs.
+func TestProbeSubscribeSurface(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_SUB") == "" {
+		t.Skip("set WA_PROBE_SUB=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__sb = null;
+	const safe = e => String((e && e.message) || e).slice(0, 140);
+	const out = {modules:{}, funcs:{}};
+	const look = (name, fns) => {
+		try {
+			const m = window.require(name);
+			out.modules[name] = !!m;
+			for (const f of (fns||[])) { out.funcs[name+"."+f] = !!(m && typeof m[f] === "function"); }
+			return m;
+		} catch (e) { out.modules[name] = false; return null; }
+	};
+	look("WAWebNewsletterSubscribeAction", ["subscribeToNewsletterAction"]);
+	look("WAWebNewsletterUnsubscribeAction", ["unsubscribeFromNewsletterAction"]);
+	look("WAWebNewsletterMetadataQueryJob", ["queryNewsletterMetadataByInviteCode"]);
+	try {
+		const C = window.require("WAWebCollections");
+		const NC = C.WAWebNewsletterCollection;
+		out.newsletterCollection = !!NC;
+		out.ncCount = (NC && typeof NC.getModelsArray === "function") ? NC.getModelsArray().length : -1;
+		out.ncHasFind = !!(NC && typeof NC.find === "function");
+		out.ncHasGet = !!(NC && typeof NC.get === "function");
+	} catch (e) { out.collErr = safe(e); }
+	window.__sb = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__sb", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("subscribe surface:\n%s", out)
+}
