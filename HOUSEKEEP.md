@@ -19986,9 +19986,61 @@ $ sqlite3 users.db "SELECT history FROM users WHERE name='lucas'"  ->  3
 E o comportamento observado seguia o **3**, não o 0: o trim estava a acontecer.
 Portanto a resposta é que estava errada, não o banco.
 
-**Hipótese, NÃO isolada**: a resposta de sessão lê de uma cache em memória que
-não foi invalidada pelo PUT, enquanto o trim lê do banco. Não confirmei, e não
-tentei reproduzir — foi observação única durante outra tarefa.
+### CAUSA ESTABELECIDA 2026-08-22 — deixou de ser hipótese
+
+Reproduzido deliberadamente. Primeiro com um campo INOFENSIVO, para não repetir
+a perda de histórico da F212:
+
+```
+PUT {"webhook":"https://exemplo.invalido/f219"}  -> 200
+banco:            https://exemplo.invalido/f219
+/session/status:  https://exemplo.invalido/f219   (propaga bem)
+```
+
+Depois com o campo do achado, e com valor alto que não apara nada:
+
+```
+PUT {"history":9999}  -> 200 ok
+banco:            9999
+/session/status:  0        <- MENTE
+/admin/users:     nem devolve o campo
+```
+
+**Causa**: `pkg/bootstrap/user_info_cache.go:56`
+
+```go
+func ensureUserInfoCached(db *sqlx.DB, userID string) error {
+	if _, found := appCtx.UserInfoCache.Get(userID); found {
+		return nil          // <- popula-se SE FALTAR, nunca refresca
+	}
+```
+
+É uma cache *populate-if-missing*, e o `EditUser`
+(`pkg/application/usecase/user/edit_user.go`) **nunca a invalida** — confirmado
+por ausência: não há uma única referência a `UserInfoCache` nesse ficheiro. O
+trim lê o limite de lá (`eventhandler_message.go:282`).
+
+**Isto resolve uma contradição aparente da F212**: naquela verificação o trim
+USOU o `history=3`, o que parecia negar a cache. Usou porque eu tinha
+reiniciado o servidor entre o PUT e os envios, e o arranque repovoa a cache do
+banco. Sem reinício, a mudança não pega.
+
+**O alcance é maior que o `history`.** `userInfoColumns`
+(`user_info_cache.go:28-30`) guarda `id, name, token, jid, webhook, events,
+proxy_url, s3_enabled, media_delivery, history, hmac_key`. Qualquer um pode
+ficar obsoleto até um reinício ou reattach — incluindo o **token**, que tem
+implicação de acesso.
+
+**Correção sugerida**: invalidar a entrada no `EditUser`
+(`appCtx.UserInfoCache.Delete(userID)`). Pequena, mas o teste tem de travar a
+ORDEM: invalidar só DEPOIS de a escrita ter sucesso. Invalidar antes faz uma
+escrita falhada despejar a cache e o próximo acesso reler o valor antigo do
+banco — parecendo correto e escondendo a falha. É a "ordem e efeito colateral"
+do CLAUDE.md.
+
+**Anda junta com a F218**: a F218 impede desligar o limite, a F219 faz com que
+mesmo uma mudança aceite não pegue. Corrigir uma sem a outra deixa de pé
+metade do problema, e é a metade silenciosa.
 
 **Por que fica registado mesmo assim**: um campo de configuração que a API
 devolve com valor diferente do efetivo faz qualquer diagnóstico partir do sítio
@@ -19998,6 +20050,69 @@ este.
 **Próximo passo**: reproduzir deliberadamente — PUT num campo, ler
 `/session/status` a seguir, comparar com o banco — antes de propor correção.
 
-**Status**: não corrigido, e o diagnóstico é HIPÓTESE, não facto.
+**Status**: não corrigido. O diagnóstico deixou de ser hipótese: está
+reproduzido e a causa localizada em ficheiro e linha.
+
+<!-- f-status: aberto -->
+
+## F220 — a cache do golangci-lint faz o gate reportar ficheiros de worktrees APAGADAS
+
+**Data**: 2026-08-22
+**Contexto**: achado de lado, ao correr o `make check` completo sobre o ramo com
+F212+F214+F217 integradas. Não é escopo de nenhuma delas.
+
+**Onde**: alvo `lint` do `Makefile:218-219`, e a cache do `golangci-lint`
+(`~/Library/Caches/golangci-lint`).
+
+**Evidência medida**. Na execução com a cache quente, **322 das 374** linhas de
+issue apontavam para caminhos de worktrees do orca — incluindo
+`wa-f212-trim`, que **já não existia no disco**:
+
+```
+$ ls -d /Users/albuquerque/orca/workspaces/wa-api/wa-f212-trim
+No such file or directory
+
+$ grep -c "orca/workspaces|wa-lintbase" make-check.log
+645
+```
+
+O `golangci-lint` chegou a avisar que não conseguia ler os ficheiros que ele
+próprio estava a reportar:
+
+```
+level=warning msg="[runner] Can't process results ...
+  failed to parse file: open .../wa-f212-trim/.../send_list.go:
+  no such file or directory"
+```
+
+**Correção, MEDIDA**: `golangci-lint cache clean` e reexecutar.
+
+| | com cache suja | após limpar |
+|---|---|---|
+| issues de worktree estrangeira | 322 | **0** |
+| total reportado | 374 | 356 |
+| complexidade máxima | 50 | 50 |
+
+**A gravidade é MENOR do que pareceu à primeira leitura, e vale registar
+porquê.** Eu concluí, e disse ao utilizador, que "o máximo local é 26 e o 50
+veio de um diretório apagado". **Estava errado.** O meu `grep` excluía as
+linhas com caminho estrangeiro, e os ficheiros LOCAIS estavam a ser reportados
+sob esses caminhos obsoletos — ao filtrar o estrangeiro, filtrei os locais
+junto. Com a cache limpa, o máximo local é 50 (`pkg/bootstrap/main.go` e
+`eventhandler.go`), igual à baseline. O gate estava certo.
+
+**O risco que PERMANECE**: a worktree apagada era cópia do mesmo ramo, por isso
+o número coincidiu. Uma worktree genuinamente divergente — outro ramo, outra
+feature — contaminaria a medida com código que não está sob teste, e a trava
+`max_complexity` passaria ou falharia por razão alheia ao ramo.
+
+**Correção sugerida**: limpar a cache no início do alvo `lint`, ou passar
+`--allow-parallel-runners=false` e verificar se o alvo pode ser fixado ao
+diretório do módulo. Antes de mexer, medir o custo: a cache existe porque a
+análise completa é lenta, e limpá-la a cada execução pode tornar o `make check`
+proibitivo — o que faria as pessoas deixarem de o correr, que é pior.
+
+**Status**: não corrigido — fora do escopo, e a correção tem custo de tempo que
+precisa de ser medido antes de ser escolhida.
 
 <!-- f-status: aberto -->
