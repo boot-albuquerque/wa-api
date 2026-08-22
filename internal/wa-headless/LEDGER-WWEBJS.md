@@ -100,11 +100,11 @@ nem `PARTIAL` sem justificativa explícita.
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
 | `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
 | `rejectGroupMembershipRequests` | groupreq.Reject | `PARTIAL` | sim | não | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. NÃO exercitado ao vivo: rejeitar conta-B a expulsaria do grupo de laboratório (H89) |
-| `setAutoDownloadAudio` | — | `MISSING` | — | — | — | família de configurações |
-| `setAutoDownloadDocuments` | — | `MISSING` | — | — | — | idem |
-| `setAutoDownloadPhotos` | — | `MISSING` | — | — | — | idem |
-| `setAutoDownloadVideos` | — | `MISSING` | — | — | — | idem |
-| `setBackgroundSync` | — | `MISSING` | — | — | — | idem |
+| `setAutoDownloadAudio` | settings.SetAutoDownload(KindAudio) | `PROVEN` | sim | sim | sim | H110: a referência devolve o flag pedido sem olhar; nós relemos e falhamos com `ErrNotTaken` se a página não moveu. Escrita redundante é evitada (H55) e DITA em `Changed` |
+| `setAutoDownloadDocuments` | settings.SetAutoDownload(KindDocuments) | `PROVEN` | sim | sim | sim | H110; as quatro categorias viradas ao vivo e o baseline restaurado e verificado |
+| `setAutoDownloadPhotos` | settings.SetAutoDownload(KindPhotos) | `PROVEN` | sim | sim | sim | H110 |
+| `setAutoDownloadVideos` | settings.SetAutoDownload(KindVideos) | `PROVEN` | sim | sim | sim | H110 |
+| `setBackgroundSync` | settings.SetBackgroundSync | `PROVEN` | sim | sim | sim | H110: o valor guardado é lido de volta na hora; a referência avisa que o EFEITO só vale após reiniciar, e nada aqui afirma que a sessão viva mudou |
 | `getContactDeviceCount` | addressbook.DeviceCount | `PARTIAL` | sim | sim | sim | o caminho funciona e o par NÃO tem registro de dispositivo nesta conta; "sem registro" e "zero dispositivos" são respostas diferentes e não foram fundidas no número 0 (H90) |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
 | `createCallLink` | call.CreateLink | `PROVEN` | sim | sim | sim | provado ao vivo para `voice` e `video`; o link é credencial e nunca é renderizado. Usa `WAWebGenerateEventCallLink` como a referência — o `WAWebVoipCreateCallLink` deste build **TRAVA** na primeira chamada, medido em 40s (H92) |
@@ -428,9 +428,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 67 | 30% |
+| `PROVEN` | 72 | 33% |
 | `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 95 | 43% |
+| `MISSING` | 90 | 41% |
 | **total** | **220** | |

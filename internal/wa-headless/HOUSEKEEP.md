@@ -8650,3 +8650,90 @@ CONVERSA e está provado. A H81, que falha, é fixar MENSAGEM. Os dois verbos t�
 o mesmo nome e resultados opostos; a nota da linha diz isso.
 
 **Status**: decidido e registrado. Sem código novo.
+
+## H110 — `capabilities/settings`: a referência devolve o pedido, nós relemos
+
+**Data**: 2026-08-22. **Contexto**: cinco linhas `MISSING` da família `Client`
+(`setAutoDownload{Audio,Documents,Photos,Videos}`, `setBackgroundSync`).
+
+**Onde**: `internal/wa-headless/capabilities/settings/` (novo),
+`internal/wa-headless/probe_settings_test.go` (novo).
+
+### Medição de módulo ANTES de projetar
+
+A regra existe porque copiar a lista de módulos do wwebjs já falhou quatro em
+quatro (H34). Desta vez a resposta foi outra: **todos existem** neste build —
+`WAWebUserPrefsGeneral`, `WAWebUserPrefsNotifications`, `WAWebPhoneUtils`,
+`WAPhoneFindCC`, e `window.Debug.VERSION` presente. As nove funções nomeadas
+também. A medição negativa e a positiva custam o mesmo; só uma delas é
+adivinhável.
+
+E os valores vieram **mistos**: `audio=true, documents=false, photos=true,
+videos=false, backgroundSync=false`. Isso não é curiosidade — é o que torna um
+leitor por categoria PROVÁVEL. Se a conta tivesse os quatro iguais, um leitor
+que ignorasse a categoria passaria em tudo.
+
+### O defeito que a referência tem e nós não
+
+Todo setter do `Client.js` termina em `return flag`: devolve o valor PEDIDO,
+sem olhar se a página aceitou. É sucesso silencioso, que a invariante 14
+proíbe. Aqui cada escrita relê e falha com `ErrNotTaken` quando a página não
+moveu.
+
+A escrita redundante é evitada — a H55 mediu um pedido redundante sendo a CAUSA
+de uma falha — mas "não precisou" e "escreveu" são respostas diferentes, e
+`Outcome.Changed` as separa. A referência não consegue distingui-las.
+
+### Prova ao vivo (2026-08-22, conta-A)
+
+```
+baseline: map[audio:true documents:false photos:true videos:false] sync=false
+audio:     true  -> Outcome(now=false changed=true)
+documents: false -> Outcome(now=true  changed=true)
+photos:    true  -> Outcome(now=false changed=true)
+videos:    false -> Outcome(now=true  changed=true)
+redundant write:  Outcome(now=false changed=false)
+backgroundSync: false -> Outcome(now=true changed=true)
+restored: map[audio:true documents:false photos:true videos:false] sync=false
+```
+
+As quatro categorias são viradas, não uma — um setter ligado à categoria errada
+apareceria como valor que se moveu no lugar errado, e não como teste verde. A
+restauração é registrada com `defer` e não com `t.Cleanup` (que roda DEPOIS de
+todo `defer`, inclusive o que para a sessão), e ela própria é verificada: uma
+restauração não verificada é a falha que envenena a PRÓXIMA execução.
+
+### Controles negativos EXECUTADOS
+
+1. Devolver o pedido em vez de reler (o defeito da referência, copiado de
+   propósito):
+   ```
+   --- FAIL: TestTheWriteScriptReadsTheValueBack
+       settings_test.go:158: the script calls getAutoDownloadVideos() fewer than twice: it cannot be comparing before against after, so the postcondition is decorative
+   ```
+2. Ler sempre o getter de `audio`, ignorando a categoria pedida — **não mordeu
+   na primeira tentativa**.
+3. Escrever mesmo quando redundante — **também não mordeu na primeira
+   tentativa**.
+
+### A regra que sai daqui, agora pela QUARTA vez
+
+Os controles 2 e 3 não morderam pelo mesmo motivo que o da H106: **o dublê
+responde do próprio modelo, não do que o script diz.** Sempre que o dublê
+FORNECE o valor que a asserção examina, o teste mede a parsagem e a regra vive
+na produção. Corrigido com asserção sobre o script nos dois; depois disso:
+
+```
+--- FAIL: TestTheFourCategoriesAreReadSeparately
+    settings_test.go:143: the read script never calls getAutoDownloadDocuments(): that category is not being read at all
+    (idem Photos, Videos)
+--- FAIL: TestARedundantWriteIsSkippedAndSaidSo
+    settings_test.go:213: the script has no guard against a redundant write; H55 measured a redundant request being the CAUSE of a failure
+```
+
+Quatro ocorrências em uma sessão deixaram de ser coincidência. Vale como
+armadilha catalogável: **num módulo que dirige a página, a asserção sobre o
+resultado só mede o parser. Se a regra mora no script, o teste tem de olhar
+para o script.**
+
+**Status**: entregue e provado.
