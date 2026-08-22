@@ -8829,3 +8829,110 @@ que controle que não compila não prova nada. Refeito devolvendo
 `strings.TrimSpace(out.Version)` direto, que compila e falha nas três respostas.
 
 **Status**: entregue e provado.
+
+## H112 — o diretório de canais responde, e devolve MODELOS, não mixins
+
+**Data**: 2026-08-22. **Contexto**: `Client.searchChannels`, primeira das 16
+linhas da família `Channel`.
+
+**Onde**: `internal/wa-headless/capabilities/channel/` (`searchScript`,
+`DirectoryEntry`, `Reader.Search`), `internal/wa-headless/probe_chansearch_test.go`.
+
+### Primeiro achado: ele responde
+
+`getRecommendedNewsletters` está `BLOCKED` neste ledger por TRAVAR, ignorando o
+próprio timeout de 8s. A suspeita razoável era que `fetchNewsletterDirectories`
+sentasse na mesma máquina. **Não senta**: respondeu 50 resultados, sem
+assinatura nenhuma. A sonda foi escrita com prazo e reportando o travamento como
+RESULTADO, justamente porque a hipótese era a outra.
+
+### Segundo achado: `getNewsletterDirectoryPageSize` não existe
+
+A referência implementa a opção `limit` **remendando** essa função da página e
+restaurando-a depois. Ela mediu `false` neste build — quinta vez que um nome
+vindo da lista do wwebjs não existe aqui. Nossa `SearchOptions` **não tem
+`limit`**, e a ausência está documentada como decisão: além de o remendo não
+funcionar aqui, remendar um global da página significa que uma restauração
+falha deixa a página alterada para todo chamador seguinte.
+
+### Terceiro achado, e o que custou uma volta
+
+A primeira versão do leitor procurou os **mixins** — `newsletterNameMetadataMixin`
+e companhia, o vocabulário que a consulta de metadados usa (H104). Resultado ao
+vivo:
+
+```
+directory: 50 results; jid=50 name=50 subscribers>0=0 state=0 following=0
+```
+
+Nome e jid vinham do topo do modelo; todo o resto voltou vazio. **Isso não parece
+um bug: parece um diretório magro.** Foi só a asserção "nenhum resultado trouxe
+contagem" que transformou a leitura silenciosamente vazia em falha.
+
+A medição seguinte disse onde os valores moram num resultado de diretório, sobre
+os 50:
+
+```
+__x_size           number  50/50   (a contagem; primeiro resultado: 5.114.818)
+__x_verified       boolean 50/50
+__x_membershipType string  50/50   ("guest")
+__x_creationTime   number  50/50
+__x_description    string  50/50
+__x_state          UNDEFINED 50/50
+subscribers        object  50/50   (uma coleção, não um número)
+```
+
+Um resultado de diretório é um **modelo vivo** com campos `__x_`; a consulta de
+metadados devolve um saco de mixins. Os dois se sobrepõem e não coincidem.
+
+### Por que um tipo NOVO em vez de reusar `Channel`
+
+`DirectoryEntry` existe porque `Channel` teria `State` e `Verification`
+permanentemente vazios — e um struct com campo vazio diz "este canal não tem
+estado", não "esta forma não carrega estado". Além disso `verified` aqui é
+BOOLEANO e lá é STRING; mapear um no outro inventaria um valor que este pacote
+nunca viu, o que o próprio `Channel` já proíbe em comentário.
+
+### Prova ao vivo (2026-08-22, conta-A)
+
+```
+directory: 50 results; jid=50 name=50 desc=43 subscribers>0=50 verified=50 created=50
+query search: 50 results, first result identical to unfiltered = false
+```
+
+43 de 50 com descrição é legítimo — nem todo canal tem uma. E a busca com termo
+ESTREITA, o que prova que `searchText` chega à página: sem isso, os dois
+resultados seriam idênticos.
+
+### Controles negativos EXECUTADOS
+
+1. Voltar a ler os mixins (a versão que devolveu 50 vazios):
+   ```
+   --- FAIL: TestTheSearchScriptReadsTheMeasuredFields
+       channel_test.go:265: the search script does not read __x_size
+       channel_test.go:272: the search script reads newsletterSubscribersMetadataMixin, which is the metadata query's vocabulary and is absent from a directory result
+   ```
+2. Remendar a página como a referência faz:
+   ```
+   --- FAIL: TestTheSearchScriptDoesNotPatchThePage
+       channel_test.go:290: the search script contains "getNewsletterDirectoryPageSize", which alters the page
+   ```
+3. Tratar diretório vazio como erro: `TestAnEmptyDirectoryIsNotAnError` falha.
+
+### Dívida paga de passagem
+
+Os nomes dos mixins eram literais em linha dentro de `byInviteScript`. Ao
+precisar do mesmo vocabulário num segundo script, viraram constantes (ADR-0004):
+duas cópias de `newsletterNameMetadataMixin` divergiriam em silêncio, porque
+mixin ausente lê como campo vazio, não como erro.
+
+### Erro de processo desta sessão
+
+Rodei `git checkout capabilities/channel/channel.go` para desfazer uma mutação
+de controle negativo, e o arquivo continha o `Search` ainda **não commitado** —
+o método foi descartado e teve de ser reescrito. A mutação estava em
+`script.go`; o `checkout` no arquivo errado não tinha por que existir. Fica
+registrado porque a política do projeto proíbe justamente essa classe de comando
+e eu a usei por reflexo.
+
+**Status**: entregue e provado.

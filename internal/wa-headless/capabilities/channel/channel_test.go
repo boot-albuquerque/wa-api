@@ -201,3 +201,137 @@ func TestTheParkedLoopIsBounded(t *testing.T) {
 		t.Fatalf("err = %v, want a settle timeout", err)
 	}
 }
+
+// A DIRECTORY RESULT IS A MODEL, NOT THE MIXIN BAG, and this double imitates
+// that REAL rule rather than the convenient one. Measured 2026-08-22 over 50
+// live results: the values live in __x_-prefixed fields of
+// __x_newsletterMetadata (__x_size number 50/50, __x_verified boolean 50/50,
+// __x_membershipType string 50/50), and __x_state is UNDEFINED on all 50.
+//
+// The first version of this reader looked for the mixin names — the vocabulary
+// the metadata query uses — and came back with 50 results carrying a name and a
+// jid and NOTHING else. That failure looks like a thin directory rather than
+// like a bug, which is why the shape is measured and not assumed.
+const oneDirectoryResult = `{"ok":true,"returned":2,"results":[
+ {"jid":"111@newsletter","name":"n1","description":"d1","subscribers":5114818,
+  "verified":true,"membership":"guest","createdAt":1700000000},
+ {"jid":"222@newsletter","name":"n2","description":"","subscribers":0,
+  "verified":false,"membership":"guest","createdAt":0}]}`
+
+func TestSearchReadsEveryResult(t *testing.T) {
+	d := &double{answer: oneDirectoryResult}
+	got, err := rd(d).Search(context.Background(), SearchOptions{}, "t")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d results, want 2", len(got))
+	}
+	if got[0].Subscribers != 5114818 {
+		t.Errorf("subscribers = %d; seven digits must survive", got[0].Subscribers)
+	}
+	// ZERO SUBSCRIBERS IS A LEGITIMATE ANSWER, not an absent one.
+	if got[1].JID == "" {
+		t.Error("a channel with zero subscribers lost its identity")
+	}
+	if !got[0].Verified || got[1].Verified {
+		t.Error("verification was not carried per result")
+	}
+	if got[0].CreatedAt.IsZero() {
+		t.Error("a creation time was dropped")
+	}
+	if !got[1].CreatedAt.IsZero() {
+		t.Error("an absent creation time became a real instant")
+	}
+	if s := got[0].String(); strings.Contains(s, "n1") || strings.Contains(s, "d1") {
+		t.Errorf("DirectoryEntry.String carries content: %s", s)
+	}
+}
+
+// THE SCRIPT MUST READ THE FIELDS THAT EXIST, which the check above cannot see:
+// the double supplies the parsed results. Sixth time this session that a rule
+// living in the script needed its own assertion.
+func TestTheSearchScriptReadsTheMeasuredFields(t *testing.T) {
+	d := &double{answer: oneDirectoryResult}
+	if _, err := rd(d).Search(context.Background(), SearchOptions{}, "t"); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if !strings.Contains(code, fieldNewsletterMetadata) {
+		t.Fatal("the search script does not read " + fieldNewsletterMetadata)
+	}
+	for _, f := range []string{fieldSize, fieldVerified, fieldMembership, fieldName} {
+		if !strings.Contains(code, f) {
+			t.Errorf("the search script does not read %s", f)
+		}
+	}
+	// AND IT MUST NOT READ THE MIXIN NAMES HERE. Those belong to the metadata
+	// query; reading them on a directory result returns empty for every channel.
+	for _, m := range []string{mixSubscribers, mixVerify, mixName} {
+		if strings.Contains(code, m) {
+			t.Errorf("the search script reads %s, which is the metadata query's "+
+				"vocabulary and is absent from a directory result", m)
+		}
+	}
+}
+
+// THE PAGE IS NOT PATCHED. The reference changes the directory page size by
+// overwriting a page function and putting it back afterwards. That function does
+// not exist on this build (measured: pageSizeFn=false), and patching a global
+// means a failed restore leaves the page altered for every later caller.
+func TestTheSearchScriptDoesNotPatchThePage(t *testing.T) {
+	d := &double{answer: oneDirectoryResult}
+	if _, err := rd(d).Search(context.Background(), SearchOptions{}, "t"); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	for _, patch := range []string{"getNewsletterDirectoryPageSize", "= () =>", "= function"} {
+		if strings.Contains(code, patch) {
+			t.Errorf("the search script contains %q, which alters the page", patch)
+		}
+	}
+}
+
+// AN EMPTY DIRECTORY IS NOT AN ERROR. A search for a term nobody used returns
+// nothing, and turning that into a failure makes a caller retry forever.
+func TestAnEmptyDirectoryIsNotAnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"returned":0,"results":[]}`}
+	got, err := rd(d).Search(context.Background(), SearchOptions{Query: "zzz"}, "t")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got == nil {
+		t.Error("an empty search returned nil rather than an empty list; a caller " +
+			"ranging over it should not have to nil-check")
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d results for an empty answer", len(got))
+	}
+}
+
+func TestASearchRefusalIsErrRead(t *testing.T) {
+	d := &double{answer: `{"ok":false,"why":"boom"}`}
+	if _, err := rd(d).Search(context.Background(), SearchOptions{}, "t"); !errors.Is(err, ErrRead) {
+		t.Fatalf("err = %v, want ErrRead", err)
+	}
+}
+
+// The query and the region reach the page as data, never concatenated raw.
+func TestTheQueryReachesThePageQuoted(t *testing.T) {
+	d := &double{answer: oneDirectoryResult}
+	if _, err := rd(d).Search(context.Background(),
+		SearchOptions{Query: `he"llo`, Region: "BR", SkipSubscribed: true}, "t"); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	code := d.lastScript
+	if !strings.Contains(code, `"he\"llo"`) {
+		t.Error("the query was not quoted into the script; a quote in a search term " +
+			"would end the string and change what runs")
+	}
+	if !strings.Contains(code, `"BR"`) {
+		t.Error("the region did not reach the page")
+	}
+	if !strings.Contains(code, "skipSubscribedNewsletters: true") {
+		t.Error("SkipSubscribed did not reach the page")
+	}
+}

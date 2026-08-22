@@ -84,7 +84,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `subscribeToChannel` | — | `MISSING` | — | — | — | não atacado |
 | `unsubscribeFromChannel` | — | `MISSING` | — | — | — | não atacado |
 | `transferChannelOwnership` | — | `MISSING` | — | — | — | não atacado |
-| `searchChannels` | — | `MISSING` | — | — | — | não atacado |
+| `searchChannels` | channel.Search | `PROVEN` | sim | sim | sim | H112: o diretório RESPONDE (50 resultados) — ao contrário de `getRecommendedNewsletters`, que trava. Sem assinatura. Tipo próprio `DirectoryEntry`: um resultado de diretório é um MODELO com campos `__x_`, não o saco de mixins da consulta de metadados, e `__x_state` não existe. Sem opção `limit`: a referência a implementa remendando uma função da página que não existe neste build |
 | `deleteChannel` | — | `MISSING` | — | — | — | não atacado |
 | `getLabels` | contacts.ListLabels | `PROVEN` | sim | sim | sim | H72; só mensurável por a conta ser Business |
 | `getBroadcasts` | status.List | `PARTIAL` | sim | sim | sim | **NÃO é lista de transmissão** — o upstream chama de Broadcast o STATUS (stories): `getBroadcasts` é `Status.getModelsArray`. Nossa nota descrevia a coisa errada, e três linhas iam ser feitas contra a ideia errada (H100). Caminho provado ao vivo, com **zero** feeds; provar um não-vazio exige POSTAR status, visível aos 944 contatos da conta |
@@ -428,9 +428,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 77 | 35% |
+| `PROVEN` | 78 | 35% |
 | `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 85 | 39% |
+| `MISSING` | 84 | 38% |
 | **total** | **220** | |

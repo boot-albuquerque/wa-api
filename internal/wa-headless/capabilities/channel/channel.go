@@ -187,3 +187,102 @@ func (r *Reader) parked(ctx context.Context, kick, label string) (string, error)
 		}
 	}
 }
+
+// DirectoryEntry is one result from the channel directory.
+//
+// IT IS A SEPARATE TYPE FROM Channel, and that is the honest shape rather than a
+// convenience. A directory result is a live model carrying __x_-prefixed fields;
+// a metadata query answers with mixins. They overlap but do not coincide —
+// notably there is NO state on a directory result (__x_state measured undefined
+// on 50 of 50), and verification is a BOOLEAN here against a string there.
+// Reusing Channel would mean handing back a struct whose State and Verification
+// are permanently empty, which reads as "this channel has no state" rather than
+// as "this shape does not carry one".
+type DirectoryEntry struct {
+	// JID identifies the channel; its domain is "newsletter".
+	JID string
+	// Name and Description are public and still content: String renders neither.
+	Name        string
+	Description string
+	// Subscribers is the follower count. Measured up to seven digits, so it is an
+	// int and not something narrower.
+	Subscribers int
+	// Verified is the page's boolean. It is NOT mapped onto Channel.Verification's
+	// vocabulary, because a value this package has not seen must not become one
+	// it has.
+	Verified bool
+	// Membership is the page's own word for this account's relationship, e.g.
+	// "guest". Carried verbatim.
+	Membership string
+	// CreatedAt is when the channel was made. Zero when absent.
+	CreatedAt time.Time
+}
+
+func (d DirectoryEntry) String() string {
+	return fmt.Sprintf("channel.DirectoryEntry(jid=%t name=%t desc=%t subscribers=%d verified=%t membership=%s)",
+		d.JID != "", d.Name != "", d.Description != "", d.Subscribers, d.Verified, d.Membership)
+}
+
+// SearchOptions narrows a directory search.
+//
+// THERE IS NO LIMIT FIELD, and its absence is a decision rather than an
+// omission: the reference implements one by monkey-patching a page function that
+// does not exist on this build. See searchScript for the measurement.
+type SearchOptions struct {
+	// Query is the text to search for. Empty asks for the directory's own
+	// recommendations, which is what the reference's default does.
+	Query string
+	// Region is an ISO country code. Empty lets the page use its own, which is
+	// what a caller almost always wants and what the reference defaults to.
+	Region string
+	// SkipSubscribed leaves out channels this account already follows.
+	SkipSubscribed bool
+}
+
+// Search asks the channel directory.
+//
+// IT NEEDS NO SUBSCRIPTION, which is what makes it provable here at all: this
+// account follows nothing, and the neighbouring getRecommendedNewsletters is
+// BLOCKED because it hangs. This one answered 50 results when measured.
+//
+// The count returned is the PAGE's, not a number this package chose.
+func (r *Reader) Search(ctx context.Context, opts SearchOptions, label string) ([]DirectoryEntry, error) {
+	raw, err := r.parked(ctx, searchScript(opts.Query, opts.Region, opts.SkipSubscribed), label+"/search")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK      bool   `json:"ok"`
+		Why     string `json:"why"`
+		Results []struct {
+			JID        string `json:"jid"`
+			Name       string `json:"name"`
+			Desc       string `json:"description"`
+			Subs       int    `json:"subscribers"`
+			Verified   bool   `json:"verified"`
+			Membership string `json:"membership"`
+			CreatedAt  int64  `json:"createdAt"`
+		} `json:"results"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return nil, fmt.Errorf("channel: unexpected answer: %w", e)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	// AN EMPTY DIRECTORY IS A LEGITIMATE ANSWER and is NOT an error: a search for
+	// a term nobody used returns nothing, and turning that into a failure would
+	// make the caller retry something that will never succeed.
+	found := make([]DirectoryEntry, 0, len(out.Results))
+	for _, res := range out.Results {
+		entry := DirectoryEntry{
+			JID: res.JID, Name: res.Name, Description: res.Desc,
+			Subscribers: res.Subs, Verified: res.Verified, Membership: res.Membership,
+		}
+		if res.CreatedAt > 0 {
+			entry.CreatedAt = time.Unix(res.CreatedAt, 0)
+		}
+		found = append(found, entry)
+	}
+	return found, nil
+}
