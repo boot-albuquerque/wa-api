@@ -4556,3 +4556,51 @@ primeira coisa a medir é se ele funciona aqui.* Ele não funcionava, e descobri
 isso levou uma sonda; assumir que funcionava teria produzido um leitor que
 devolve vazio para todo mundo e parece correto, porque `{}` é uma resposta
 plausível para "não achei".
+
+---
+
+## H158 — `getBroadcasts`: o zero foi interrogado e desta vez é o mundo
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Três linhas caíram hoje porque um zero
+significava *"ninguém pediu"* e não *"não existe"* — mensões (H142), informação de
+mensagem (H153) e reações (H154). Interrogar este zero era obrigatório.
+
+**Onde**: `internal/wa-headless/probe_status2_test.go` (novo), linhas
+`getBroadcasts` e `getBroadcastById`.
+
+**Por que a suspeita era razoável**: os feeds de status são de OUTRAS pessoas.
+Se qualquer um dos 947 contatos tivesse status ativo, uma coleção hidratada
+mostraria — e um zero passaria a significar que falta buscar, não que o mundo
+está vazio. A superfície reforçava a suspeita: a `Status` tem `sync`, `hasSynced`,
+`find`, `_serverQuery` e até um `findImpl` (que o `Chat` deste build **não** tem),
+mais um `WAWebApiStatus.getAllStatuses` independente.
+
+**Medição**:
+
+```
+sizeBefore: 0        hasSyncedBefore: true
+syncOk: true         hasSyncedAfter:  true
+sizeAfterSync: 0     getAllStatuses:  array[0]
+sizeFinal: 0         contatos:        947
+```
+
+**`hasSynced` já era `true` ANTES**, o `sync()` rodou sem erro e nada mudou, e o
+caminho **independente** da coleção devolveu lista vazia. Dois instrumentos que
+não compartilham cache concordando é o que transforma este zero em fato.
+
+**Status**: não corrigido, e não há o que corrigir. A linha continua `PARTIAL`
+com a causa agora MEDIDA: a coleção está hidratada e o mundo está vazio. Provar
+um feed não-vazio exige postar um status desta conta — visível a 944 contatos, já
+escalado ao humano e confirmado legítimo pela decisão 61.
+
+`getBroadcastById` herda a mesma medição por um motivo que não é herança: sem
+feed de NINGUÉM, não há entrada para buscar por contato.
+
+**Lição, e é o contrapeso da H142**: *interrogar um zero é obrigatório; concluir
+que todo zero é do instrumento é o excesso.* A H149 já tinha registrado esse
+excesso uma vez hoje, com a identidade. Uma generalização recém-aprendida vale
+pelo teste que ela sobrevive, e esta sobreviveu ao contrário: a suspeita era boa,
+a evidência disse não, e o custo de descobrir foi uma sonda. **O que torna o
+resultado utilizável é ter medido com DOIS caminhos independentes** — se só a
+coleção tivesse respondido, o zero continuaria ambíguo.
