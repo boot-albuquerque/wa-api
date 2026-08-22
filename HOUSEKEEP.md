@@ -17562,7 +17562,7 @@ audita.
 
 **Status**: não corrigido — triagem.
 
-## F208 — com o poll REST em falha, o cartão inteiro congela a afirmar coisas falsas
+## F208 — com o poll REST em falha, o cartão contradiz o aviso que está ao lado dele
 
 **Data / contexto**: 2026-08-21, ao verificar a F77 em campo. Achado incidental:
 apareceu ao derrubar o servidor de propósito para testar OUTRA coisa.
@@ -17596,11 +17596,33 @@ corpo: "lucas / token local / sem eventos / pareada e conectada / 554192421234:3
 aviso no DOM: (nenhum)
 ```
 
-**E o aviso não apareceu.** `mostrarAviso(...)` foi chamado — o ramo é o de
-`r.ok === false` — mas nenhum elemento `.aviso`/`#aviso` estava no DOM na
-leitura. Ou o seletor da medição está errado, ou o aviso não está a ser
-renderizado; **não foi investigado**, e é a primeira coisa a verificar, porque
-se o aviso funcionasse o defeito seria bem menos grave.
+**Correção, medida logo a seguir: o aviso APARECE.** A primeira leitura disse
+"aviso: (nenhum)" porque o **seletor da medição estava errado** — procurei
+`.aviso`/`#aviso` e o elemento é `#aviso-admin` (`sessions.js:72`). Repetida a
+medição com o seletor certo, o aviso está visível e com o texto certo:
+
+```
+aviso_hidden: false
+aviso_texto: "Sem acesso à listagem. O token de admin vem do servidor em
+              /devui/config — se isto persistir, o painel foi servido por uma
+              instância sem WA_API_DEV_UI"
+```
+
+Isto **baixa muito a gravidade** desta entrada: o operador não fica sem sinal.
+O que sobra é menor e continua verdadeiro — os cartões, ao lado do aviso,
+continuam a afirmar "pareada e conectada" e o JID, e essas afirmações são
+falsas. É contradição no ecrã, não silêncio.
+
+Fica também uma imprecisão secundária: o texto do aviso atribui a falha ao
+token de admin ou a `WA_API_DEV_UI`, e na medição a causa era o servidor estar
+em baixo. Para o operador, "o painel foi servido por uma instância sem
+WA_API_DEV_UI" manda investigar a coisa errada.
+
+**Nota de método**: esta entrada nasceu com uma afirmação falsa por um seletor
+mal escrito, e a afirmação falsa era a que a fazia parecer grave. Vale a regra
+do `CLAUDE.md` — quando a medição contraria o registo, corrige-se o registo. É
+o mesmo mecanismo das asserções da F77: **o instrumento a um nível de
+granularidade errado**, aqui a apontar para um elemento que não existe.
 
 **Correção sugerida**, na ordem em que resolve mais:
 
@@ -17617,10 +17639,10 @@ se o aviso funcionasse o defeito seria bem menos grave.
 e não só chama `mostrarAviso`. Como a F77 mostrou, uma asserção sobre o
 ficheiro inteiro não serve: recortar o ramo do `if (!r.ok)`.
 
-**Status**: **não corrigido** — fora do escopo da F77, que era o socket.
-Registado por CLAUDE.md ("não corrija de graça o que está fora do escopo").
-Referência cruzada em F85, que descreve o mesmo sintoma ("o painel mente em
-silêncio") por outra causa.
+**Status**: **não corrigido, e gravidade BAIXA** depois da correção acima — o
+aviso funciona, então o operador tem sinal. Fora do escopo da F77, que era o
+socket. Referência cruzada em F85: o sintoma que aquela entrada chama "o painel
+mente em silêncio" já não é silêncio, é contradição.
 
 ## F209 — telefone com lixo vira JID e o pedido pendura 75 segundos antes de devolver 500
 
