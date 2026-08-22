@@ -5643,3 +5643,75 @@ explicitamente se não puder, nunca responda errado".* Essas duas formulações
 parecem a mesma até você medir o quarto caso. A primeira teria custado uma
 capacidade funcional; a segunda é uma regra só, e os leitores diferem apenas em
 qual metade dela se aplica.
+
+---
+
+## H177 — SEVERIDADE ALTA: duas leituras concorrentes trocavam de resposta
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "concorrência/multi-sessão". Primeiro defeito real da
+fase, e o mais grave achado neste módulo desde que o ledger existe.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go`
+(`stateKeyPrefix`, `nextStateKey`, `parked`), `script.go` (os sete scripts),
+`probe_concurrency_test.go` (novo).
+
+**O defeito**: todo leitor de `capabilities/message` estacionava a resposta no
+MESMO global de página — `__waHeadlessMessage`. Duas chamadas concorrentes na
+mesma sessão escreviam a mesma variável, e cada uma consultava até ela ficar
+não-vazia. Quem consultasse primeiro levava a resposta da OUTRA.
+
+**Medição**, contra o build real, com duas mensagens de CONVERSAS DIFERENTES —
+o chat de cada uma é a etiqueta que denuncia a troca:
+
+```
+12 rodadas concorrentes: 12 respostas TROCADAS de 24, 0 erros
+```
+
+**Cinquenta por cento, e todas as rodadas.** Não é uma corrida rara: é o
+comportamento normal de duas leituras simultâneas.
+
+**E a resposta errada era BEM FORMADA**, que é por que nada pegou. Um `OriginOf`
+devolvia um chat, um remetente e um timestamp perfeitamente válidos — de outra
+mensagem. Nenhum teste podia notar, porque todos chamavam uma capacidade por vez.
+
+**Por que isto é da Fase 2 e não da Fase 1**: toda prova de paridade chamou uma
+capacidade de cada vez, que é o cenário em que o mecanismo PAGA. A regra do
+projeto escrita depois do pool da F86 manda medir onde ele COBRA — e para um
+global compartilhado, cobrar são dois chamadores.
+
+**Correção**: a chave vira PREFIXO, e cada leitura recebe a sua, de um contador
+atômico. O nonce vem do Go e não da página: `Math.random` ou `Date.now` lá dentro
+poriam uma decisão — e um relógio — onde a invariante 6 proíbe.
+
+**A chave é LIBERADA assim que a resposta é tomada**, e isso não é zelo: sem
+isso, a correção trocaria uma resposta cruzada por um global de página POR
+LEITURA, que uma sessão longa acumula. Trocar um defeito por outro é o que a
+Regra 4 do `CLAUDE.md` manda verificar, e um teste trava a liberação.
+
+**Status**: corrigido em `capabilities/message`. Três controles negativos, todos
+compilando e falhando: voltar a chave única, o script ignorar a chave e escrever
+o global, e não liberar. Prova em SPA real: **80 leituras concorrentes, 0
+trocas**, onde antes eram 12 de 12.
+
+### O que NÃO está corrigido, e é o mesmo defeito
+
+**Vinte e três capacidades declaram um `stateKey` único**, com o mesmo padrão
+estacionar-e-consultar: `addressbook`, `avatar`, `block`, `catalog`, `channel`,
+`call`, `chatstate`, `edit`, `forward`, `lookup`, `pin`, entre outras. A troca
+não foi MEDIDA nelas, mas a estrutura é idêntica e a de `message` foi medida em
+50% — presumir que as outras estão a salvo seria a inferência por forma que este
+mesmo dia já derrubou duas vezes.
+
+`lookup` merece nota: ele é chamado DE DENTRO de outras capacidades, então uma
+resolução de identidade concorrente com uma leitura é o padrão de produção mais
+provável de todos.
+
+**Isto é achado acionável de severidade alta em aberto**, e o critério de
+encerramento da Fase 2 (decisão 65) exige zero deles.
+
+**Lição**: *um teste que só chama uma coisa por vez não testa um recurso
+compartilhado — testa a ausência de concorrência.* O padrão estacionar-e-consultar
+foi escrito para respeitar a invariante 6 (o relógio fica no Go) e resolveu esse
+problema bem; ninguém perguntou o que ele faz quando há dois. A pergunta da Fase
+2 — *qual entrada faz esta proteção virar o problema?* — respondeu em uma sonda.

@@ -25,7 +25,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -51,7 +53,28 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessMessage"
+// stateKeyPrefix names the page global each read parks its answer on.
+//
+// IT IS A PREFIX, NOT A KEY, AND THAT IS A FIX (H177). Every reader here used
+// ONE global. Two concurrent calls on the same session therefore wrote the same
+// variable and each polled it until non-empty, so whichever polled first could
+// take the OTHER call's answer — measured at 12 crossings in 12 concurrent
+// rounds, every round, with a well-formed wrong answer that nothing detected.
+//
+// The nonce comes from Go, not from the page: a page-side Math.random or
+// Date.now would put a decision — and a clock — where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessMessage"
+
+// nextStateKey hands out a key nobody else is using.
+//
+// The counter is monotonic per process, which is enough: the key only has to be
+// unique among the reads ALIVE at one moment on one page, and it is cleared as
+// soon as its answer is taken.
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Origin is where a message came from: which conversation, and from whom.
 type Origin struct {
@@ -102,7 +125,8 @@ func (r *Reader) OriginOf(ctx context.Context, messageID, label string) (Origin,
 	if strings.TrimSpace(messageID) == "" {
 		return Origin{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, originScript(messageID), label+"/origin")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, originScript(messageID, key), key, label+"/origin")
 	if err != nil {
 		return Origin{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -135,7 +159,7 @@ func (r *Reader) OriginOf(ctx context.Context, messageID, label string) (Origin,
 	return o, nil
 }
 
-func (r *Reader) parked(ctx context.Context, kick, label string) (string, error) {
+func (r *Reader) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return r.eval(c, kick, &started)
@@ -146,11 +170,18 @@ func (r *Reader) parked(ctx context.Context, kick, label string) (string, error)
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/read", func(c context.Context) error {
-			return r.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return r.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ASSIM QUE A RESPOSTA E' TOMADA. Sem isto, uma
+			// sessao longa acumula um global por leitura — o vazamento que a
+			// propria correcao criaria.
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {
@@ -173,7 +204,8 @@ func (r *Reader) ShapeOf(ctx context.Context, messageID, label string) ([]string
 	if strings.TrimSpace(messageID) == "" {
 		return nil, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, shapeScript(messageID), label+"/shape")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, shapeScript(messageID, key), key, label+"/shape")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -227,7 +259,8 @@ func (r *Reader) CurrentOf(ctx context.Context, messageID, label string) (Curren
 	if strings.TrimSpace(messageID) == "" {
 		return Current{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, currentScript(messageID), label+"/current")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, currentScript(messageID, key), key, label+"/current")
 	if err != nil {
 		return Current{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -286,7 +319,8 @@ func (r *Reader) QuotedOf(ctx context.Context, messageID, label string) (Quoted,
 	if strings.TrimSpace(messageID) == "" {
 		return Quoted{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, quotedScript(messageID), label+"/quoted")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, quotedScript(messageID, key), key, label+"/quoted")
 	if err != nil {
 		return Quoted{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -362,7 +396,8 @@ func (r *Reader) MentionsOf(ctx context.Context, messageID, label string) (Menti
 	if strings.TrimSpace(messageID) == "" {
 		return Mentions{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, mentionsScript(messageID), label+"/mentions")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, mentionsScript(messageID, key), key, label+"/mentions")
 	if err != nil {
 		return Mentions{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -448,7 +483,8 @@ func (r *Reader) InfoOf(ctx context.Context, messageID, label string) (Info, err
 	if strings.TrimSpace(messageID) == "" {
 		return Info{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, infoScript(messageID), label+"/info")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, infoScript(messageID, key), key, label+"/info")
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -541,7 +577,8 @@ func (r *Reader) ReactionsOf(ctx context.Context, messageID, label string) (Reac
 	if strings.TrimSpace(messageID) == "" {
 		return Reactions{}, ErrNoMessage
 	}
-	raw, err := r.parked(ctx, reactionsScript(messageID), label+"/reactions")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, reactionsScript(messageID, key), key, label+"/reactions")
 	if err != nil {
 		return Reactions{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}

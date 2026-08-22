@@ -8,10 +8,10 @@ import (
 
 const modMsgCollection = "WAWebMsgCollection"
 
-func originScript(messageID string) string {
+func originScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
 	try {
@@ -74,10 +74,10 @@ func originScript(messageID string) string {
 // What rawData is actually FOR — seeing what the page has on a message when a
 // capability does not behave — is served by the shape, and the shape carries no
 // identity: key names only, sorted, with the value side never read.
-func shapeScript(messageID string) string {
+func shapeScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	try {
 		const MC = window.require("` + modMsgCollection + `").MsgCollection;
@@ -123,10 +123,10 @@ func shapeScript(messageID string) string {
 // type === 'revoked', revokeSender — is owned by capabilities/revoke, and a
 // second copy here would be two lists free to drift. The type is reported raw,
 // so a caller sees 'revoked' when the page says it.
-func currentScript(messageID string) string {
+func currentScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	try {
 		const MC = window.require("` + modMsgCollection + `").MsgCollection;
@@ -170,10 +170,10 @@ func currentScript(messageID string) string {
 // field is deliberate: two ways of asking "does this quote something" would
 // drift, and the drift would show as a reply that verified and then could not be
 // read back.
-func quotedScript(messageID string) string {
+func quotedScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
 	try {
@@ -235,10 +235,10 @@ func quotedScript(messageID string) string {
 // anything in. It is not an array; it is a lazy sentinel, and counting it as
 // data would have shipped a reader that says every message mentions somebody.
 // So this script asks for the SHAPE and takes only arrays.
-func mentionsScript(messageID string) string {
+func mentionsScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
 	// SO' ARRAY CONTA. Um valor que nao e' lista e' sentinela, nao mencao.
@@ -299,10 +299,10 @@ const modMessageInfoStore = "WAWebApiMessageInfoStore"
 // The reference sleeps INSIDE the page for messages younger than 1250ms. That
 // wait belongs to the caller here — invariant 6 keeps the clock on the Go side —
 // so this script asks once and reports what it got.
-func infoScript(messageID string) string {
+func infoScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
 	// SO' ARRAY CONTA, pela mesma razao do mentionsScript: um valor que nao e'
@@ -366,10 +366,10 @@ const modCollections = "WAWebCollections"
 // reason capabilities/lookup embeds spa.ResolveIdentityExpr: capabilities/react
 // verifies its removals against the same fact, and a second copy here would let
 // the two drift into a removal that verifies and then reads back as present.
-func reactionsScript(messageID string) string {
+func reactionsScript(messageID, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const readReactions = ` + spa.ReactionsForMessageExpr + `;
 	(async () => {

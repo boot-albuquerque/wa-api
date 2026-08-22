@@ -18,13 +18,22 @@ type double struct {
 	reads      int
 	kicks      int
 	lastScript string
+	releases   int
 }
 
 func (d *double) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	// A LIBERACAO DA CHAVE NAO E' UMA LEITURA. Ela roda depois de a resposta ser
+	// tomada e nao deve contar em d.reads, senao o teste do laco de espera passa
+	// a medir uma volta que nao existe.
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) {
+		d.releases++
+		*out = "ok"
+		return nil
+	}
+	if strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		d.reads++
 		if d.reads <= d.pendingReads {
 			*out = ""
@@ -708,5 +717,53 @@ func TestTheReactionsScriptEmbedsTheSharedExpression(t *testing.T) {
 	if !strings.Contains(d.lastScript, spa.ReactionsForMessageExpr) {
 		t.Fatal("the script no longer embeds spa.ReactionsForMessageExpr, so this " +
 			"package and capabilities/react now hold two copies of the same query")
+	}
+}
+
+// TWO READS MUST NOT SHARE A PAGE GLOBAL (H177).
+//
+// Every reader here used one key. Two concurrent calls on one session wrote the
+// same variable and each polled it until non-empty, so whichever polled first
+// could take the OTHER call's answer — measured at 12 crossings in 12 rounds
+// against the real build, every round, with a well-formed wrong answer.
+func TestTwoReadsDoNotShareAKey(t *testing.T) {
+	a, b := nextStateKey(), nextStateKey()
+	if a == b {
+		t.Fatalf("two reads got the same key %q; concurrent callers would overwrite "+
+			"each other's answers", a)
+	}
+	if !strings.HasPrefix(a, stateKeyPrefix) || !strings.HasPrefix(b, stateKeyPrefix) {
+		t.Fatalf("the keys left the module's namespace: %q %q", a, b)
+	}
+}
+
+// THE SCRIPT PARKS ON THE KEY IT WAS GIVEN. Asserted on the script because the
+// double answers whatever is asked — a script that ignored the key and kept
+// writing the old global would pass every result-level test.
+func TestTheScriptParksOnTheGivenKey(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false}`}
+	if _, err := rd(d).OriginOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("OriginOf: %v", err)
+	}
+	code := d.lastScript
+	if strings.Contains(code, "window."+stateKeyPrefix+" =") {
+		t.Fatal("the script writes the shared global directly, so two concurrent " +
+			"reads would overwrite each other again")
+	}
+	if !strings.Contains(code, stateKeyPrefix+"_") {
+		t.Fatal("the script does not park on a per-call key")
+	}
+}
+
+// THE KEY IS RELEASED once its answer is taken. Without this, the fix trades a
+// crossed answer for a page global per read, which a long session accumulates.
+func TestTheKeyIsReleasedAfterTheAnswerIsTaken(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false}`}
+	if _, err := rd(d).OriginOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("OriginOf: %v", err)
+	}
+	if d.releases == 0 {
+		t.Fatal("the per-call key was never released; a long-running session would " +
+			"grow one page global per read")
 	}
 }
