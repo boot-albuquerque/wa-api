@@ -19887,6 +19887,44 @@ essa captura, não há como distinguir a correção certa de uma que só silenci
 
 **Status**: não corrigido — fora do escopo. Depende de decisão junto com a F214.
 
+
+### Vigilância 2026-08-22 — o sintoma NÃO voltou, mas apareceu o seu oposto útil
+
+Servidor reiniciado com o binário do ramo integrado e deixado a correr. Duas
+ocorrências de `UndecryptableMessage` no período — e **nenhuma é este achado**:
+
+```
+WARN Error decrypting message ACD307C432D27135610099F61CDF63F3
+  from 96465066184854@lid in status@broadcast:
+  failed to decrypt group message: no sender key state for key ID 918586257
+WARN Undecryptable message received info="96465066184854@lid in status@broadcast"
+```
+
+Três coisas a distinguem do achado:
+
+1. O remetente é um **TERCEIRO** (`96465066184854@lid`), não uma LID nossa.
+2. A mensagem **não foi enviada por nós** — zero `msgID=` correspondente no log.
+3. O erro é `failed to decrypt GROUP message: no sender key state`, não
+   `failed to decrypt normal message: no session found`. É outro caminho de
+   código (`DecryptGroupMsg`, não `DecryptDM`).
+
+**Por que isto importa para a correção proposta**: é exatamente o caso que o
+filtro NÃO pode silenciar. Uma difusão de estado de terceiro que não decifra é
+sinal legítimo, e tem de continuar a chegar ao webhook. Confirma que o filtro
+tem de ser estreito (`Info.IsFromMe`) e nunca por categoria de evento.
+
+Também mostra que a categoria `UndecryptableMessage` é genuinamente usada em
+produção para eventos de terceiros — silenciá-la em bloco cegaria o consumidor.
+
+**O achado continua sem reprodução.** Contagem de ecos auto-endereçados desde
+o reinício: **zero**.
+
+**Nota operacional**: o binário em produção NÃO tem a instrumentação de
+`IsFromMe` — retirei-a para o servidor vivo não divergir do ramo. Quando o
+sintoma voltar, o log dará o `from <LID>:<dispositivo>`, que é suficiente para
+comparar com os nossos dispositivos e decidir; a instrumentação só seria
+precisa se essa comparação ficasse ambígua.
+
 <!-- f-status: aberto -->
 
 ## F217 — iOS NÃO desenha o `Header.Title` do cartão de carrossel; Android desenha
