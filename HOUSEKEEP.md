@@ -19626,7 +19626,12 @@ internal/wa-noise/capabilities/retry/constants.go:31:  // comentário
 ```
 
 **Só comentários. O campo nunca é atribuído `true` em lado nenhum.** Confirmado
-no banco: `SELECT COUNT(*) FROM wanoise_event_buffer` devolve `0`.
+no banco: `SELECT COUNT(*) FROM wanoise_retry_buffer` devolve `0`.
+(CORREÇÃO 2026-08-22: eu tinha citado `wanoise_event_buffer`, que é OUTRA
+tabela. A conclusão aguentou — as duas estavam a zero e o campo nunca era
+atribuído — mas a evidência apontava para o sítio errado. A tabela do store
+de retry é `wanoise_retry_buffer`, escrita por `addOutgoingEventQuery` em
+`sqlstore/store_eventbuffer.go:72`.)
 
 **Consequência**: qualquer reinício perde a capacidade de reenvio de TODAS as
 mensagens anteriores; e mesmo sem reinício, só as últimas 256 sobrevivem, em
@@ -19703,6 +19708,34 @@ falham:
 ```
 
 **Status**: corrigido.
+
+### Verificação em campo 2026-08-22 (depois de integrado em 15aa928)
+
+O teste da correção afirma o campo booleano; isto afirma o COMPORTAMENTO.
+Servidor reiniciado com o binário corrigido, mesmo datadir:
+
+```
+ANTES de enviar:  SELECT COUNT(*) FROM wanoise_retry_buffer  ->  0
+3× POST /chat/send/text
+DEPOIS:                                                      ->  3
+
+message_id              | format | LENGTH(plaintext)
+3EB020CA2817F22249EE49  | wa     | 29
+3EB0243EBB09D05E4E2D95  | wa     | 29
+3EB0966746970B91BC94D7  | wa     | 29
+```
+
+Os três ids são exatamente os devolvidos pelos três envios. O store durável
+passou a ser escrito.
+
+**Ressalva de cobertura, dita por inteiro**: os dois testes desta correção
+verificam que `UseRetryMessageStore` fica `true` nos dois caminhos de
+construção — provam a FIAÇÃO, não o comportamento durável. O comportamento em
+si já tem teste do lado da biblioteca
+(`internal/wa-noise/capabilities/retry/recent_test.go:309`, o caminho terminal
+com `UseMessageStore`). A divisão é defensável, mas ninguém deve ler os dois
+testes daqui como prova de que o reenvio sobrevive a um reinício — quem prova
+isso é a verificação em campo acima, e ela não é um teste que corra sozinho.
 
 <!-- f-status: corrigido -->
 
