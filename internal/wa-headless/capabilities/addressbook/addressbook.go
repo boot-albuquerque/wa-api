@@ -207,6 +207,17 @@ func (m *Manager) Delete(ctx context.Context, phone, label string) error {
 // has no devices". The distinction is kept in the error rather than folded into
 // the number: an unknown user returns ErrDevices, and a known one returns a
 // count that may legitimately be small.
+//
+// THE IDENTITY MUST BE THE RESOLVED ONE, and getting that wrong is invisible:
+// this build files under LID, and the SAME peer answers "no device record" under
+// its phone jid and a count of 5 under its LID — measured side by side in the
+// same session (H148). Both answers are well-formed, which is exactly the
+// problem: the phone-jid answer looks like a fact about the user and is a fact
+// about the identity that was passed.
+//
+// Callers resolve first, with capabilities/lookup. This method deliberately does
+// NOT resolve on its own — see the HOUSEKEEP entry for H148 for why that is a
+// registered question rather than a silent change of behaviour here.
 func (m *Manager) DeviceCount(ctx context.Context, userJID, label string) (int, error) {
 	if strings.TrimSpace(userJID) == "" {
 		return 0, ErrNoNumber

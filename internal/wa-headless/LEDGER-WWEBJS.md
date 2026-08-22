@@ -130,7 +130,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `setAutoDownloadPhotos` | settings.SetAutoDownload(KindPhotos) | `PROVEN` | sim | sim | sim | H110 |
 | `setAutoDownloadVideos` | settings.SetAutoDownload(KindVideos) | `PROVEN` | sim | sim | sim | H110 |
 | `setBackgroundSync` | settings.SetBackgroundSync | `PROVEN` | sim | sim | sim | H110: o valor guardado é lido de volta na hora; a referência avisa que o EFEITO só vale após reiniciar, e nada aqui afirma que a sessão viva mudou |
-| `getContactDeviceCount` | addressbook.DeviceCount | `PARTIAL` | sim | sim | sim | o caminho funciona e o par NÃO tem registro de dispositivo nesta conta; "sem registro" e "zero dispositivos" são respostas diferentes e não foram fundidas no número 0 (H90) |
+| `getContactDeviceCount` | addressbook.DeviceCount | `PROVEN` | sim | sim | sim | H148: o registro SEMPRE esteve lá — sob a identidade RESOLVIDA. Medidos os dois jids lado a lado na mesma sessão: pelo LID, **5 dispositivos**; pelo jid de telefone, "sem registro". A H90 mediu contra o telefone num build LID-first, antes de a H136 nomear essa armadilha. A decisão de manter "sem registro" fora do número 0 continua certa e agora tem os dois lados observados |
 | `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
 | `createCallLink` | call.CreateLink | `PROVEN` | sim | sim | sim | provado ao vivo para `voice` e `video`; o link é credencial e nunca é renderizado. Usa `WAWebGenerateEventCallLink` como a referência — o `WAWebVoipCreateCallLink` deste build **TRAVA** na primeira chamada, medido em 40s (H92) |
 | `sendResponseToScheduledEvent` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebScheduledEventResponseAction` ausente, coerente com a H125 |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 111 | 50% |
-| `PARTIAL` | 54 | 25% |
+| `PROVEN` | 112 | 51% |
+| `PARTIAL` | 53 | 24% |
 | `BLOCKED` | 49 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

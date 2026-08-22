@@ -3919,3 +3919,62 @@ pessoa real é implicada pela pergunta.
 Vale para toda linha que devolve booleano ou erro-como-resposta, e esta varredura
 deveria procurar outras: uma guarda só exercitada pelo caminho de recusa foi a
 armadilha nº 2 do `ARMADILHAS.md`; esta é a mesma armadilha com o sinal trocado.
+
+---
+
+## H148 — `getContactDeviceCount`: o registro sempre esteve lá, sob a outra identidade
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, seguindo a lição da H147 (procurar linhas
+provadas por metade).
+
+**Onde**: `internal/wa-headless/probe_devcount_test.go` (novo),
+`internal/wa-headless/capabilities/addressbook/addressbook.go` (doc de
+`DeviceCount`), linha `getContactDeviceCount` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a linha dizia *"o caminho funciona e o par NÃO tem registro de
+dispositivo nesta conta"* (H90). A hipótese desta rodada era que o registro
+apareceria com o par ACORDADO e depois de tráfego real — daí a sessão dupla e uma
+mensagem.
+
+**A hipótese era irrelevante.** O registro já existia antes da mensagem, e a
+sessão dupla não teve nada a ver com isso. Medidos os dois jids lado a lado, na
+mesma sessão:
+
+```
+BEFORE (resolved):  count=5   err=<nil>
+BEFORE (asked-for): count=0   err=... the page has no device record for that user
+AFTER  (resolved):  count=5   err=<nil>
+AFTER  (asked-for): count=0   err=... the page has no device record for that user
+```
+
+A H90 mediu contra o jid de TELEFONE num build LID-first — a mesma armadilha que
+a H136 nomearia meses depois, cometida antes de ela existir. O caminho estava
+provado e a linha ficou `PARTIAL` por causa da identidade usada na medição, não
+por causa da capacidade.
+
+**A decisão original continua certa**: não fundir "sem registro" no número 0 foi
+o que tornou este diagnóstico possível. Se a implementação tivesse devolvido 0
+para o jid de telefone, as duas leituras teriam sido `0` e `5`, e a diferença
+pareceria variação de dado em vez de erro de identidade.
+
+**Correção aplicada**: doc de `DeviceCount` passa a dizer que a identidade tem de
+ser a resolvida, com os dois números medidos, porque **as duas respostas são bem
+formadas** — e é isso que torna o erro invisível: a resposta do jid de telefone
+parece um fato sobre a pessoa e é um fato sobre o argumento.
+
+**Status**: corrigido (linha para `PROVEN`).
+
+**Achado incidental, NÃO corrigido**: `DeviceCount` aceita jid não resolvido e
+responde "sem registro", indistinguível de um usuário genuinamente desconhecido.
+**Correção sugerida**: ou resolver internamente via `capabilities/lookup`, ou
+recusar um jid `@c.us` com erro próprio (`ErrUnresolvedIdentity`) em vez de
+responder sobre ele. A primeira esconde uma chamada de rede dentro de um leitor;
+a segunda quebra chamadores existentes. **Não aplicado sem perguntar**, conforme
+a regra do projeto — e a pergunta vale para TODO leitor deste módulo que aceite
+jid cru, não só para este. É decisão de superfície, não conserto pontual.
+
+**Lição**: *quando duas identidades nomeiam a mesma pessoa, toda medição precisa
+dizer com qual foi feita.* A H136 aprendeu isso num envio; esta linha mostra que
+o mesmo erro contamina MEDIÇÕES antigas que ninguém suspeita — e que o custo é
+uma linha parada por meses com diagnóstico errado.
