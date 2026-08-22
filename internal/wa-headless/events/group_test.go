@@ -30,6 +30,29 @@ func decodeForTest(t *testing.T, rows string) []Event {
 
 func installScriptForTest() string { return installScript() }
 
+// installCodeForTest is the install script WITHOUT its comments.
+//
+// The distinction is not pedantry: the first version of
+// TestTheVoteListenerDoesNotPatchThePage failed because the script's own comment
+// EXPLAINS that the reference patches bulkUpsert, and the guard matched that
+// prose. A guard that matches its own documentation is a guard that cannot be
+// written honestly — this repository has paid for that eight times.
+func installCodeForTest() string {
+	var b strings.Builder
+	for _, line := range strings.Split(installScript(), "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "//") {
+			continue
+		}
+		if i := strings.Index(line, "// "); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 // THE RECLASSIFICATION ONLY APPLIES TO GROUP SYSTEM MESSAGES.
 //
 // An ordinary chat message that happened to carry a subtype must NOT become a
@@ -100,5 +123,58 @@ func TestTheInstallScriptProjectsTheSubtype(t *testing.T) {
 	}
 	if !strings.Contains(code, "subtype:") {
 		t.Error("the projected row has no subtype field")
+	}
+}
+
+// THE VOTE LISTENER USES A CLEAN DOOR, NOT A PATCH.
+//
+// The reference monkey-patches pollVoteTableMode.bulkUpsert because it found no
+// listener. This build exposes WAWebCollections.PollVote with .on (measured), so
+// the install must use it — and must NOT contain the patching shape, which H112
+// established as a thing this module does not do to somebody else's object.
+func TestTheVoteListenerDoesNotPatchThePage(t *testing.T) {
+	code := installScriptForTest()
+	if !strings.Contains(code, "PollVote") {
+		t.Fatal("the install never reaches the PollVote collection")
+	}
+	if !strings.Contains(code, "PV.on('add', onVote)") {
+		t.Error("the vote listener is not installed through the collection's own on()")
+	}
+	bare := installCodeForTest()
+	for _, patch := range []string{"bulkUpsert", "injectToFunction", "origFunction"} {
+		if strings.Contains(bare, patch) {
+			t.Errorf("the install contains %q, which is the reference's patching "+
+				"technique and alters the running page", patch)
+		}
+	}
+}
+
+// A VOTE CARRIES CONTENT, AND THE CONTENT MUST NOT CROSS. The option a person
+// selected is text the poll author wrote; routing needs the poll and the voter,
+// nothing else.
+func TestTheVoteRowCarriesNoOptionText(t *testing.T) {
+	code := installCodeForTest()
+	i := strings.Index(code, "const onVote")
+	if i < 0 {
+		t.Fatal("no vote handler in the install script")
+	}
+	seg := code[i:]
+	if j := strings.Index(seg, "PV.on("); j > 0 {
+		seg = seg[:j]
+	}
+	for _, forbidden := range []string{"selectedOptions", "options", "optionText", "name"} {
+		if strings.Contains(seg, forbidden) {
+			t.Errorf("the vote row projects %q, which is poll content", forbidden)
+		}
+	}
+}
+
+// AND THE LISTENER IS REMOVED ON UNINSTALL, like every other one — a handler
+// left behind outlives the session that installed it.
+func TestTheVoteListenerIsRegisteredForRemoval(t *testing.T) {
+	code := installScriptForTest()
+	if !strings.Contains(code, "s.handlers.push([PV, 'add', onVote]") {
+		t.Fatal("the vote handlers are not registered in s.handlers, so uninstall " +
+			"cannot take them off")
 	}
 }

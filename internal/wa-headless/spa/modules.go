@@ -125,6 +125,17 @@ const (
 	// in RequiredAtStartup: a build without it should give a bus with one fewer
 	// type, not a boot failure.
 	ModuleCallCollection = Module("WAWebCallCollection")
+	// ModuleCollections is the umbrella that holds several collections as
+	// members rather than as modules of their own — PollVote among them.
+	//
+	// IT IS NOT A MODULE PER COLLECTION, and that cost a run to learn: requiring
+	// "WAWebPollVoteCollection" by name answers falsy (measured 2026-08-22),
+	// while WAWebCollections.PollVote is a real collection with on/off. The same
+	// shape holds the newsletter collection (H113).
+	//
+	// Also NOT in RequiredAtStartup, for the same reason as the call collection:
+	// a build without it should give a bus with one fewer type, not a dead boot.
+	ModuleCollections = Module("WAWebCollections")
 	// ModuleContactGetters reads a contact model's fields.
 	//
 	// Measured 2026-08-20 over all 944 models, and the numbers decide what a

@@ -9511,3 +9511,144 @@ vez de ganhar exceção.
 **Status**: parcialmente entregue — `GROUP_UPDATE` provado ao vivo,
 `BATTERY_CHANGED` bloqueado com evidência, e os outros três com classificador
 provado em unidade e ao vivo pendente de uma sessão observadora.
+
+## H120 — `MEDIA_UPLOADED`: a H88 disse "não medido", e agora está medido
+
+**Data**: 2026-08-22. **Contexto**: continuação da decisão 40=a (família
+`Events`), atacando a única linha que o próprio ledger marcava como **não
+medida** em vez de impossível.
+
+**Onde**: `internal/wa-headless/probe_mediaevent_test.go` (novo),
+`LEDGER-WWEBJS.md`.
+
+### Por que esta linha e não outra
+
+Das sete `Events` restantes, seis já tinham veredito medido na H88:
+`AUTHENTICATED` sem observável, `CHAT_REMOVED` exigiria destruir a fixture,
+`MESSAGE_CIPHERTEXT`/`_FAILED` vivem abaixo do modelo (o barramento escuta
+COLEÇÕES, não o fio), `MESSAGE_REVOKED_ME` falta o método antes do evento,
+`REMOTE_SESSION_SAVED` depende de família inexistente.
+
+`MEDIA_UPLOADED` era a exceção, e a nota dizia isso em voz alta: *"`message.added`
+com `Kind` PODE já cobrir a semântica — mas isso não foi medido, e
+'provavelmente coberto' não é um estado deste vocabulário"*. Era dívida de
+medição, não de implementação.
+
+### A medição
+
+Barramento ligado, hidratação drenada por 8s para a amostra ser atribuível, e
+então um PNG de 1×1 enviado ao par de laboratório:
+
+```
+sent: ack=1
+after the send: 12 events
+  types = map[chat.changed:9 message.ack:2 message.added:1]
+  kinds = map[image:3]
+```
+
+**A mensagem de mídia chega ao barramento** e progride pelos acks. O `Kind`
+viaja em 3 dos 12 eventos.
+
+### O que a medição NÃO autoriza dizer
+
+Não há **momento distinto de upload concluído**. `MEDIA_UPLOADED` na referência
+dispara quando a mídia termina de subir, que é um instante diferente de a
+mensagem existir. Aqui os dois são indistinguíveis: temos "a mensagem apareceu"
+e "o ack andou", e nada entre eles.
+
+Por isso a linha fica `PARTIAL` e não `PROVEN`. Um assinante que precise de "o
+upload terminou" tem uma aproximação — o ack — e não o fato. Dizer `PROVEN`
+seria vender a aproximação como o original, que é exatamente o que o
+vocabulário deste ledger existe para impedir.
+
+### Nota de método
+
+O PNG de 1×1 é escolha deliberada: mídia real o bastante para o caminho de
+upload ser genuíno, pequena o bastante para não empurrar bytes ao par. E a
+amostra só conta eventos POSTERIORES ao marco de hidratação — sem isso, os
+eventos de boot entrariam na conta e o número não significaria nada.
+
+**Status**: entregue — a dívida de medição da H88 está paga, com o resultado
+contrariando parcialmente a expectativa: `Kind` cobre a mídia, mas não cobre o
+upload.
+
+## H121 — `VOTE_UPDATE`: a porta limpa existe, e desta vez ela DISPAROU
+
+**Data**: 2026-08-22. **Contexto**: última linha da família `Events` sem
+veredito medido, seguindo a decisão 40=a.
+
+**Onde**: `internal/wa-headless/events/group.go` (tipo `VoteUpdated`),
+`events/ingress.go` (ouvinte), `spa/modules.go` (`ModuleCollections`),
+`events/group_test.go`, `probe_gp2_test.go`.
+
+### A referência remenda; nós não precisamos
+
+`Client.js:1195–1235` do upstream fixado **não instala ouvinte nenhum** para
+votos: usa `WWebJS.injectToFunction` sobre
+`WAWebAddonPollVoteTableMode.pollVoteTableMode.bulkUpsert` e lê os argumentos de
+passagem. É a mesma situação do `INCOMING_CALL`, onde a referência patcheia um
+`Map` interno.
+
+A H112 estabeleceu por que este módulo não faz isso: remendar um global da
+página significa que uma restauração falha deixa a página alterada para todo
+chamador seguinte.
+
+### O que a medição achou
+
+```
+WAWebPollVoteCollection          -> falsy  (não é módulo próprio)
+WAWebCollections.PollVote        -> objeto com on:true, off:true,
+                                    getModelsArray:true, count 0
+pollVoteTableMode.bulkUpsert     -> existe, mas .on NÃO existe
+```
+
+**A coleção limpa existe**, escondida como MEMBRO de `WAWebCollections` em vez
+de módulo próprio — a mesma forma que guardava a coleção de newsletters e que
+custou uma execução na H113. Registrei isso na constante `ModuleCollections`
+para a próxima pessoa não repetir.
+
+### E desta vez disparou
+
+A coleção media **vazia**, o que colocaria o ouvinte na posição do
+`CallIncoming`: instalado, nunca visto disparar. A saída dessa posição é fazer
+a coisa acontecer — foi assim que o `GROUP_UPDATE` fechou na H119.
+
+Votei numa enquete que já estava no store desta conta:
+
+```
+poll search: {"found":true,"options":2,"optLen":16,"fromMe":true}
+Vote returned: <nil>
+types seen: map[chat.changed:207 contact.changed:1 message.added:34 poll.vote:1]
+the vote listener FIRED: 1 poll.vote
+```
+
+Deliberadamente **não** criei uma enquete para votar nela: a H98 mediu que
+enquete criada não sai deste build, então construir a prova sobre isso seria
+construir sobre areia.
+
+### O que NÃO cruza
+
+Um voto carrega **quem votou e em quê**. A opção escolhida é texto que o autor
+da enquete escreveu, e não atravessa: a linha leva o id da mensagem da enquete
+e o jid do votante, para roteamento, e nada mais. Há teste que falha se
+`selectedOptions` ou `options` aparecerem na projeção.
+
+### Controles negativos EXECUTADOS
+
+1. Trocar a porta limpa pelo remendo da referência:
+   `group_test.go:146: the install contains "bulkUpsert", which is the reference's patching technique`
+2. Projetar o texto da opção:
+   `group_test.go:167: the vote row projects "selectedOptions", which is poll content`
+3. Não registrar o handler para remoção:
+   `group_test.go:177: the vote handlers are not registered in s.handlers, so uninstall cannot take them off`
+
+### Armadilha repetida, e agora com defesa
+
+A primeira versão do controle 1 falhou **contra o código correto**: a guarda
+casou com o próprio COMENTÁRIO do script, que explica que a referência remenda
+`bulkUpsert`. É a nona ocorrência desta classe neste repositório. Acrescentei
+`installCodeForTest`, que remove comentários antes de verificar, com o motivo
+escrito ao lado — uma guarda que casa com a própria documentação não pode ser
+escrita honestamente.
+
+**Status**: entregue e provado ao vivo.

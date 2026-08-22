@@ -148,7 +148,7 @@ const (
 var PageTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
 	MessageRevoked, MessageEdited, ContactChanged, MessageReaction,
-	CallIncoming,
+	CallIncoming, VoteUpdated,
 }
 
 // GroupPageTypes is the four group events. They are SEPARATE from PageTypes

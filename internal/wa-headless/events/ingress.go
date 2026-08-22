@@ -416,6 +416,38 @@ func installScript() string {
 				s.handlers.push([CL, 'add', onCall], [CL, 'change:isRinging', onCall]);
 			}
 		} catch (e) {}
+		// THE POLL VOTE COLLECTION, found the same way and for the same reason.
+		//
+		// The reference has no listener for votes either: it patches
+		// pollVoteTableMode.bulkUpsert and reads the arguments in flight. This
+		// build exposes WAWebCollections.PollVote with on/off/getModelsArray
+		// (measured 2026-08-22), so the clean door is used and the page is left
+		// alone — H112's rule, unchanged.
+		//
+		// A VOTE CARRIES WHO VOTED AND FOR WHAT. Neither crosses: the row keeps
+		// the poll's message id and the voter jid for routing, and never the
+		// option text, which is content the poll author wrote.
+		try {
+			const CO = window.require('` + string(spa.ModuleCollections) + `');
+			const PV = CO && CO.PollVote;
+			if (PV && typeof PV.on === 'function') {
+				const onVote = (v) => {
+					try {
+						const pk = v && (v.parentMsgKey || v.msgKey);
+						push({
+							type: '` + string(VoteUpdated) + `',
+							chat: (pk && pk.remote && pk.remote._serialized) || '',
+							msg: (pk && pk.id) || '',
+							peer: (v && v.sender && v.sender._serialized) || '',
+							fromMe: !!(pk && pk.fromMe)
+						});
+					} catch (e) { s.dropped++; }
+				};
+				PV.on('add', onVote);
+				PV.on('change', onVote);
+				s.handlers.push([PV, 'add', onVote], [PV, 'change', onVote]);
+			}
+		} catch (e) {}
 		s.installed = true;
 		window[KEY] = s;
 		return { installed: true, already: false };

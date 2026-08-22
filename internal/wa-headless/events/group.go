@@ -82,3 +82,23 @@ func GroupTypeFor(subtype string) (Type, bool) {
 
 // GroupTypes is the four, in a fixed order.
 var GroupTypes = []Type{GroupJoined, GroupLeft, GroupAdminChanged, GroupUpdated}
+
+// VoteUpdated is somebody selecting or clearing an option on a poll.
+//
+// THE CLEAN DOOR EXISTS HERE, and finding it is the whole story (H121). The
+// reference has no listener for votes at all: it MONKEY-PATCHES
+// WAWebAddonPollVoteTableMode.pollVoteTableMode.bulkUpsert and reads the
+// arguments on the way through. This repository refused page patching in H112
+// for a reason that applies unchanged — a failed restore leaves the page altered
+// for every later caller.
+//
+// Measured 2026-08-22: WAWebCollections.PollVote is a real collection with on,
+// off and getModelsArray. That is the same shape CallCollection has, and it is
+// the second time this build turned out to have a clean listener where the
+// reference had to patch (INCOMING_CALL was the first).
+//
+// AND IT HAS NEVER HELD ANYTHING: the collection measured EMPTY. The listener is
+// installed because it costs nothing and is the door a solution comes through,
+// but its presence is not a delivered capability — the same sentence this
+// package already writes about CallIncoming, for the same reason (H93).
+const VoteUpdated Type = "poll.vote"
