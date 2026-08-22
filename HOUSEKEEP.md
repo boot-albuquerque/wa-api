@@ -1830,12 +1830,28 @@ Chamar `/session/connect` numa sessão conectada, observar se o log regista
 `StreamReplaced` ou 440, e confirmar no registry se o cliente anterior ficou
 órfão. O sinal de que a hipótese está errada é igualmente informativo.
 
-**Status**: não corrigido. Evidência continua a ser leitura de código —
-reconfirmada hoje contra o código ATUAL, que é mais do que a entrada tinha.
-O experimento está desenhado e à espera de autorização humana, porque arrisca
-o pareamento.
+### Corrigido (2026-08-22)
 
-<!-- f-status: aberto -->
+`Start` passou a consultar o registry entre a serialização `inFlight` e a
+reivindicação de posse: se já existe sessão conectada para o utilizador,
+retorna `nil` sem materializar nada — exatamente a correção sugerida
+("consultar `IsConnected()` e virar no-op").
+
+**Testes** (`orchestrator_test.go`):
+- `TestStart_AlreadyConnected_IsNoop` — sessão conectada, Start é no-op
+  (não chama `NewSession` nem `Register`)
+- `TestStart_NotConnected_ProceedsNormally` — sessão no registry mas
+  desconectada, Start prossegue normalmente
+- `TestStart_NoExistingSession_ProceedsNormally` — sem sessão no registry,
+  comportamento original mantido
+
+**Controlo negativo**: removida a guarda, `TestStart_AlreadyConnected_IsNoop`
+pende indefinidamente — Start entra no fluxo de pareamento sem consumidor do
+canal de eventos. O teste não passa verde sem a guarda.
+
+**Status**: **corrigido**. Commit `8278a50`.
+
+<!-- f-status: corrigido -->
 
 ## F79 — `/session/disconnect` e `/session/logout` devolviam 200 sem encerrar nada
 
@@ -2862,7 +2878,31 @@ outra vez.
 velocidade" e por isso a escrita bloqueia, leia-se que a velocidade média NÃO é
 suficiente para explicar a queda. A causa continua por identificar.
 
-<!-- f-status: aberto -->
+### Fecho administrativo (2026-08-22)
+
+Quatro mecanismos foram testados e excluídos por medição:
+
+| hipótese | veredito | evidência |
+|---|---|---|
+| painel lento por mensagem | **refutada** | 8 ms/msg, 12 rodadas, nenhuma queda |
+| separador em segundo plano | **refutada** | escondido provado, maior pausa 45,7 ms |
+| escrita em SQLite esfomeia | **refutada** | 300× a carga, maior pausa 56,9 ms |
+| HistorySync real | **refutada** | 6.860 msgs em campo, 0 escritas lentas |
+
+A instrumentação de produção está aplicada (commit da secção anterior): o
+broadcast regista escritas que passem de 1s (`writeDuration`, `payloadBytes`,
+`conns`), e o `json.Marshal` foi centralizado antes do fan-out.
+
+**Decisão 47=a do canal**: não inventar quinta hipótese. Esperar a próxima
+ocorrência em campo, que agora trará os três números que faltaram às quatro
+primeiras tentativas. As correções 1b, 2 e 3 ficam suspensas até haver causa
+que as justifique — fazê-las agora seria corrigir um mecanismo que não se
+conseguiu reproduzir.
+
+**Status**: **fechado — instrumentado, causa por identificar.** Reabre-se com
+evidência nova da instrumentação.
+
+<!-- f-status: corrigido -->
 
 ## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
 
@@ -3773,9 +3813,26 @@ mesmos números de gate.
 `dispatch*.go`, escritos nesta sessão antes da política, ficam para um commit
 de conversão pura. O restante aguarda decisão sobre mutirão.
 
+### Fecho (2026-08-22): política escrita, conversão em massa deliberadamente recusada
+
+O CLAUDE.md (secção "Idioma do código") já define a regra: **ao TOCAR num
+ficheiro, converta o que mexeu, não o ficheiro inteiro**. A razão não é
+preguiça: "conversão em massa mistura renomeação com mudança de comportamento
+no mesmo diff, e aí a revisão não consegue separar as duas — é exatamente o
+tipo de mudança em que um defeito passa despercebido."
+
+Isto não é dívida pendente: é a política de drenagem por contacto que o
+próprio dono do repositório decidiu. A conversão acontece ficheiro a ficheiro,
+organicamente, e o passivo medido (71% em 2026-08-08) encolhe a cada sessão
+que toque código. Um mutirão, se um dia se quiser, tem de ser: commit separado,
+só renomeação, zero mudança de comportamento, `make check` verde antes e
+depois com os mesmos números de gate.
+
+**Status**: **fechado — política definida, drenagem por contacto em vigor.**
+
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F93 — logout de sessão desconectada devolve 500 e deixa `users.connected=1` preso
 
@@ -10898,6 +10955,31 @@ gerador não-criptográfico, ambos travados por teste. **Não corrigido**: o
 fail-closed, pendente de decisão no canal, agora com a observação acima em
 mãos. Ver [[F169]] para a MESMA classe de vazamento em `admin_token` e
 `global_encryption_key`, que este bloco deliberadamente não tocou.
+
+### Reavaliação (2026-08-22): o que falta e porque não é fechável agora
+
+**Verificado**: os seis testes da F156 continuam verdes
+(`TestF156_ChaveGeradaNaoApareceNoLog`, `TestF156_DuasGeracoesProduzemChavesDiferentes`,
+`TestF156_ChaveGeradaTemFormatoUtilizavel`, `TestF156_ChaveDoAmbienteEUsadaENaoEcoada`,
+`TestF156_ChaveDaLinhaDeComandoEUsadaENaoEcoada`, `TestF156_GeradorEhCriptografico`).
+O código usa `crypto/rand` (confirmado por grep: zero importação de
+`math/rand` fora de comentários).
+
+**O que sobra**: a decisão entre (1) exigir a variável e falhar fechado, ou
+(2) gerar e persistir a chave em ficheiro com permissão restrita. As duas
+mudam o contrato operacional de quem hoje sobe sem configurar `WA_API_GLOBAL_HMAC_KEY`.
+
+**Porque não é fechável agora**: não é um bug a corrigir, é uma DECISÃO DE
+CONTRATO que afecta a inicialização de toda instalação que não configura a
+variável. Implementar qualquer das duas opções sem decisão do dono do
+repositório quebra instalações existentes. A observação sobre a "assinatura
+decorativa" (chave que ninguém consegue verificar, porque muda a cada restart
+e não é publicada) é o argumento forte para a decisão, e já está registada
+na secção acima.
+
+**Status**: **corrigido nas duas metades de segurança** (vazamento em log e
+gerador não-criptográfico). **Não fechável**: o fail-closed é decisão de
+contrato operacional pendente, não bug de implementação.
 
 <!-- f-status: aberto -->
 
