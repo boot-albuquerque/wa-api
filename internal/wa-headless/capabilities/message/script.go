@@ -349,8 +349,6 @@ func infoScript(messageID, key string) string {
 	})()`
 }
 
-const modCollections = "WAWebCollections"
-
 // reactionsScript reads WHICH reactions a message carries.
 //
 // TWO MEASUREMENTS SAID THIS WAS IMPOSSIBLE, and both were right about what they
