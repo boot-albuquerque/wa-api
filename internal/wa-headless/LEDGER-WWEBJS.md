@@ -92,7 +92,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `revokeStatusMessage` | — | `MISSING` | — | — | — | — |
 | `getLabelById` | contacts.ListLabels + filtro | `PARTIAL` | sim | sim | sim | — |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
-| `getChatsByLabelId` | — | `MISSING` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
+| `getChatsByLabelId` | — | `BLOCKED` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
 | `getBlockedContacts` | capabilities/block | `PARTIAL` | sim | sim | sim | bloquear/desbloquear provados; LISTAR os bloqueados não é exposto |
 | `setProfilePicture` | — | `MISSING` | — | — | — | — |
 | `deleteProfilePicture` | — | `MISSING` | — | — | — | — |
@@ -256,7 +256,7 @@ nossa é fresca — não há campo velho para consertar.
 
 | upstream | estado |
 |---|---|
-| `getBatteryStatus` | `MISSING` |
+| `getBatteryStatus` | `BLOCKED` |
 
 ## Contact
 
@@ -285,7 +285,7 @@ nossa é fresca — não há campo velho para consertar.
 | `promoteParticipants` | group.Promote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `setSubject` | group.SetSubject | `PROVEN` | sim | sim | sim | H64: o assunto vive em chat.formattedTitle |
-| `setDescription` | — | `MISSING` | — | — | — | — |
+| `setDescription` | group.SetDescription | `BLOCKED` | sim | medido | sim | H126: implementado e medido. A chamada é ACEITA e o servidor nunca armazena — 0 bytes depois de 20s de espera. É o MESMO comportamento que a descrição de CANAL mostrou na H113: duas superfícies independentes, escrita de descrição que não persiste neste build. O código fica no lugar porque a diferença é da PÁGINA |
 | `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
@@ -311,11 +311,14 @@ nossa é fresca — não há campo velho para consertar.
 
 ## Label
 
-**Família inteira `MISSING`** — Label.getChats — não atacado.
+**Família inteira `BLOCKED`** (H126) — `Label.getChats` tem a mesma medição do
+`Client.getChatsByLabelId`: os 3 rótulos desta conta têm ZERO itens, então um
+leitor nunca seria visto devolvendo nada (armadilha H93). Não é falta de
+código — é falta de dado.
 
 | upstream | estado |
 |---|---|
-| `getChats` | `MISSING` |
+| `getChats` | `BLOCKED` |
 
 ## Message
 
@@ -442,7 +445,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 |---|---|---|
 | `PROVEN` | 88 | 40% |
 | `PARTIAL` | 64 | 29% |
-| `BLOCKED` | 15 | 7% |
+| `BLOCKED` | 19 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
-| `MISSING` | 49 | 23% |
+| `MISSING` | 45 | 20% |
 | **total** | **220** | |

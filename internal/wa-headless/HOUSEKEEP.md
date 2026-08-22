@@ -9945,3 +9945,85 @@ ocorrência justamente para não virar impressão.
 **Status**: decidido e registrado, sem código novo. Sobram em `Message`:
 `getMentions`/`getGroupMentions` (medidos zero na H106) e `pin`/`unpin`
 (medidos falhando na H81).
+
+## H126 — descrição de grupo: aridade 1 contra 4, e o servidor que aceita e não guarda
+
+**Data**: 2026-08-22. **Contexto**: `GroupChat.setDescription`, o alvo mais
+promissor do que restava — este módulo já prova `SetSubject` contra o grupo de
+laboratório, então a forma era familiar e a fixture existia.
+
+**Onde**: `internal/wa-headless/capabilities/group/description.go` e
+`descriptionscript.go` (novos), `probe_gdesc_test.go` (novo).
+
+### Duas descobertas, e a segunda anula a primeira
+
+**Primeira: a assinatura é outra.** A referência chama
+`setGroupDescription(wid, texto, newId, descId)` — quatro posicionais. Neste
+build a função tem **aridade 1** e recebe um objeto. A forma posicional morre
+com:
+
+```
+Cannot read properties of undefined (reading 'toJid')
+```
+
+Erro que não diz nada sobre aridade e custou uma execução ao vivo para decodificar.
+Medindo as formas, `{groupWid, description, newId, prevDescId}` passa. Décimo
+primeiro desencontro com a lista do wwebjs.
+
+Também medi que os módulos *Action* que este build usa para o assunto
+(`WAWebSetGroupSubjectAction`) **não têm equivalente** para descrição: só existe
+o *Job*, com `setGroupSubject` (aridade 2), `setGroupDescription` (1),
+`setGroupProperty` (3) e `setEphemeralGroupProperty` (1).
+
+**Segunda: com a assinatura certa, o servidor ainda não guarda.**
+
+```
+baseline description present=false source=none
+SetDescription immediate verdict: asked for 35 bytes and the server reports 0
+MEASURED: a descrição nunca apareceu em 20s
+```
+
+A chamada é aceita, não lança, e a descrição não existe depois. Medi a espera
+em vez de supor, exatamente como na H113.
+
+### O padrão que emerge, e que vale mais que a linha
+
+Este é o **mesmo comportamento** que a descrição de CANAL mostrou na H113: aceita
+e não persistida. Duas superfícies independentes — grupo e canal — com a mesma
+falha. Não é acidente de uma delas: **escrita de descrição não persiste neste
+build**.
+
+Isso muda o que a próxima pessoa deve fazer: não vale reimplementar a de canal
+achando que o problema era a de canal, nem vice-versa. É um só fato.
+
+### Por que o código fica
+
+`SetDescription` fica no lugar, com a pós-condição que o pegou, seguindo o
+precedente que a orquestração fixou na decisão 51=a para `Follow`/`Unfollow`: a
+diferença é da PÁGINA, não nossa, e um build futuro pode devolvê-la. O que muda
+é que a linha diz `BLOCKED` com a medição, em vez de fingir sucesso — que é
+exatamente o que a referência faria, já que ela devolve booleano calculado da
+ausência de exceção.
+
+### Controles negativos EXECUTADOS
+
+1. Confiar na chamada sem reler: `TestADescriptionTheServerIgnoredIsAnError` falha.
+2. Inventar o `descId` em vez de lê-lo da metadata: falha.
+3. Fundir recusa da página com "não pegou": falha, porque os reparos diferem.
+4. Voltar à forma posicional da referência:
+   ```
+   description_test.go:125: the call does not pass a groupWid field; this build takes one object
+   description_test.go:131: the call still uses the reference's positional form
+   ```
+
+### Lote classificado com evidência já existente
+
+- `ClientInfo.getBatteryStatus` → `BLOCKED`: `WAWebBatteryStore` não existe
+  (medido na H119).
+- `Label.getChats` e `Client.getChatsByLabelId` → `BLOCKED`: os 3 rótulos da
+  conta têm ZERO itens (medido na H114). Não é falta de código, é falta de dado.
+
+A prosa da família `Label` dizia "não atacado" e estava velha; foi corrigida.
+
+**Status**: parcialmente entregue — código escrito, provado em unidade, e
+bloqueado ao vivo por comportamento medido da página.

@@ -766,3 +766,93 @@ func TestProbeMessageFamilyModules(t *testing.T) {
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("message family modules:\n%s", out)
 }
+
+// TestProbeGroupDescriptionSurface measures what GroupChat.setDescription needs.
+//
+// It is the most promising remaining row: this module already proves SetSubject
+// against the lab group, so the shape is familiar and the fixture exists.
+func TestProbeGroupDescriptionSurface(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_GDESC") == "" {
+		t.Skip("set WA_PROBE_GDESC=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__gd = null;
+	const out = {modules:{}, funcs:{}, arity:{}};
+	const look = (name, fns) => {
+		try {
+			const m = window.require(name);
+			out.modules[name] = !!m;
+			for (const f of (fns||[])) {
+				const v = m && m[f];
+				out.funcs[name+"."+f] = (typeof v === "function");
+				if (typeof v === "function") { out.arity[name+"."+f] = v.length; }
+			}
+		} catch (e) { out.modules[name] = false; }
+	};
+	look("WAWebGroupModifyInfoJob", ["setGroupDescription","setGroupSubject"]);
+	look("WAWebMsgKey", ["newId"]);
+	look("WAWebWidFactory", ["createWid"]);
+	// O grupo de laboratorio tem descId?
+	try {
+		const CC = window.require("WAWebChatCollection").ChatCollection;
+		let g = null;
+		for (const c of CC.getModelsArray()) {
+			const s = (c.id && c.id._serialized) ? c.id._serialized : "";
+			if (s.indexOf("@g.us") >= 0) { g = c; break; }
+		}
+		out.foundGroup = !!g;
+		if (g) {
+			const md = g.groupMetadata || g.__x_groupMetadata;
+			out.hasMetadata = !!md;
+			out.descIdType = md ? typeof (md.descId || md.__x_descId) : "n/a";
+			out.hasDesc = md ? !!(md.desc || md.__x_desc) : false;
+			out.mdKeys = md ? Object.keys(md).filter(k=>/desc/i.test(k)).slice(0,8) : [];
+		}
+	} catch (e) { out.groupErr = String(e).slice(0,110); }
+	window.__gd = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__gd", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("group description surface:\n%s", out)
+}
