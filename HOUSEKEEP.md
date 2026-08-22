@@ -5024,3 +5024,62 @@ fixture, não sobre a capacidade.* Ela era verdadeira e passou meses parecendo
 definitiva. O que a derrubou não foi coragem nem um risco aceito — foi perceber
 que o fixture podia ser construído. Vale reler toda linha cujo impedimento seja
 **custo colateral** e não impossibilidade.
+
+---
+
+## H166 — a auditoria do "custo colateral": três linhas caem, e uma medição salva um falso defeito
+
+**Data**: 2026-08-22
+**Contexto**: a H165 terminou pedindo uma auditoria — *"vale reler toda linha
+cujo impedimento seja CUSTO COLATERAL e não impossibilidade"*. Esta é ela.
+
+**Onde**: `internal/wa-headless/probe_lifecycle_test.go` (novo), linhas
+`clearMessages`, `delete` e `leave`.
+
+**A varredura** achou cinco linhas cujo impedimento é custo, não impossibilidade:
+
+| linha | impedimento | destino |
+|---|---|---|
+| `clearMessages` | "destruiria o fixture de todos os outros testes" (H66) | **fechada** |
+| `delete` | idem, "recusa DELIBERADA" (H66) | **fechada** |
+| `leave` | "quem sai de grupo que criou não volta sem convite" (H65) | **fechada** |
+| `revokeStatusMessage` | postar status é visível a 944 contatos | continua — decisão humana |
+| `getData` (catálogo) | exigiria acrescentar produto real ao perfil comercial | continua |
+
+As três primeiras caem com a mesma resposta da H164/H165: **um grupo descartável**,
+criado, enchido, esvaziado, abandonado e apagado. As duas últimas **não** caem, e
+a diferença é real: um status e um produto são artefatos que saem para o mundo
+além do par de laboratório.
+
+**A medição que importa é a do `clearMessages`, porque ela quase virou defeito.**
+A primeira asserção exigiu zero mensagens depois do `Clear` e o chat parou em
+**1**. "Clear deixou uma" é compatível com falha da capacidade E com comportamento
+correto do app — diagnósticos opostos, e a diferença está no TIPO do que sobrou.
+Medido:
+
+```
+antes: 4    depois: 1
+sobrevivente: {"type":"e2e_notification","subtype":"encrypt","fromMe":false}
+```
+
+Notificação de sistema, não mensagem de conversa. O `Clear` fez o que devia.
+Exigir zero teria registrado um defeito que não existe — e é exatamente o erro
+que a H150 evitou de outra forma, separando os atos antes de acusar.
+
+**Achado incidental, NÃO corrigido**: `chats.Clear` **não verifica a própria
+pós-condição**. O `Emptied` carrega `MessagesBefore`, `KeptStarred` e `Waited` —
+nenhum "depois". Um `Clear` que não apagasse nada devolveria exatamente o mesmo
+valor de sucesso. Foi por ler de volta na sonda que os números apareceram.
+**Correção sugerida**: acrescentar `MessagesAfter` e recusar quando não diminuir
+— com o cuidado de tratar a notificação de sistema como sobrevivente legítima,
+senão a nova pós-condição falharia sempre. Não aplicado: mudar uma capacidade de
+"nunca falha" para "pode falhar" é mudança de contrato, e a regra do projeto manda
+perguntar.
+
+**Status**: corrigido — três linhas para `PROVEN`. `PROVEN 129`, `PARTIAL 38`.
+
+**Lição**: *uma recusa deliberada envelhece.* As três eram decisões corretas
+quando foram tomadas, e continuaram escritas como se fossem propriedades da
+capacidade. O que mudou não foi o julgamento sobre o risco — foi a existência de
+uma alternativa que ninguém tinha procurado. **Toda linha cujo motivo comece com
+"não dá para" merece a pergunta: não dá para QUEM, e sob quais condições?**

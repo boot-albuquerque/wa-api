@@ -254,8 +254,8 @@ nossa é fresca — não há campo velho para consertar.
 |---|---|---|---|---|---|---|
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendMessage` (Chat.js:102); herda a linha dele, ENQUETE INCLUSA no que não sai |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendSeen` (Chat.js:110); herda a linha dele — que na H160 deixou de ser "pós-condição duvidosa" e passou a ser "reconhecimento local provado, recibo ao remetente não observado" |
-| `clearMessages` | chats.Clear | `PARTIAL` | sim | NÃO (por desenho) | sim | H66: destruiria o fixture de todos os outros testes |
-| `delete` | chats.Delete | `PARTIAL` | sim | NÃO (por desenho) | sim | H66: provar destruiria o fixture de todos os outros testes. É recusa DELIBERADA, não pendência. *(era `idem`, expandido na H130)* |
+| `clearMessages` | chats.Clear | `PROVEN` | sim | sim | sim | **H166: a recusa da H66 era sobre o FIXTURE, não sobre a capacidade** — e a H164 mostrou como construir um. Num grupo descartável: **4 mensagens antes, 1 depois**, e a sobrevivente foi MEDIDA antes de ser chamada de defeito — `type=e2e_notification subtype=encrypt`, notificação de sistema e não mensagem de conversa. Registrado de lado: o `Emptied` carrega só `MessagesBefore` e a capacidade **não verifica** a própria pós-condição; foi por ler de volta que este número apareceu |
+| `delete` | chats.Delete | `PROVEN` | sim | sim | sim | **H166: provado no grupo descartável** — depois do `Delete`, `chats.ByJID` responde `no conversation for that jid`. A recusa da H66 era deliberada e correta sobre o fixture de então; deixou de valer quando o fixture passou a ser construído. *(era `idem`, expandido na H130)* |
 | `archive` | chats (arquivar) | `PROVEN` | sim | sim | sim | delegação literal para `Client.archiveChat` (Chat.js:137); H55 |
 | `unarchive` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.unarchiveChat` (Chat.js:144) |
 | `pin` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.pinChat` (Chat.js:152). NÃO confundir com a H81, que é fixar MENSAGEM e continua falhando |
@@ -321,7 +321,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
 | `approveGroupMembershipRequests` | groupreq.Approve | `PROVEN` | sim | sim | sim | uma chamada RPC por solicitante, resultado por solicitante; provado ao vivo do pedido ao desaparecimento (H89) |
 | `rejectGroupMembershipRequests` | groupreq.Reject | `PROVEN` | sim | sim | sim | mesma RPC do approve, diferindo só na chave enviada — travado por teste unitário que casa `rejectArgs:` com os dois pontos. **H165: exercitado ao vivo.** O motivo de nunca ter sido — rejeitar conta-B a expulsaria do grupo de laboratório — deixou de valer quando a H164 mostrou como CONSTRUIR fixture em vez de emprestar: grupo descartável com aprovação ligada, conta-B pede, conta-A rejeita. `ok=true`, **0 pendentes depois e o grupo ainda com 1** — a segunda metade é o que distingue recusa de aprovação. Grupo desfeito no fim |
-| `leave` | group.Leave | `PARTIAL` | sim | NÃO (por desenho) | sim | H65: conta que sai de grupo que criou não volta sem convite |
+| `leave` | group.Leave | `PROVEN` | sim | sim | sim | **H166: já vinha sendo exercitado sem crédito.** A objeção da H65 — quem sai de um grupo que criou não volta sem convite — vale para o grupo de laboratório e some num descartável. `Leave` roda na limpeza das sondas H164, H165 e H166, e ali é a operação sob teste e não um efeito colateral |
 
 ## GroupNotification
 
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 126 | 57% |
-| `PARTIAL` | 41 | 19% |
+| `PROVEN` | 129 | 59% |
+| `PARTIAL` | 38 | 17% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
