@@ -48,6 +48,7 @@ const QR_SONDA_MS = 1000;
 const WS_ABERTURA_MS = 5000;
 
 let sessoes = [];
+let ultimaAtualizacaoBoa = 0;
 
 // ---- listagem ---------------------------------------------------------------
 
@@ -62,15 +63,59 @@ async function atualizar() {
       ? "Sem acesso à listagem. O token de admin vem do servidor em /devui/config — " +
         "se isto persistir, o painel foi servido por uma instância sem WA_API_DEV_UI."
       : `Não consegui listar as sessões (HTTP ${r.status}).`);
+    // F208: when the poll fails, the cards stay frozen showing old state — and
+    // that state contradicts the warning. Mark every card as stale so the
+    // operator sees the data is old, not current.
+    marcarCartoesSobreviventes();
     return;
   }
   esconderAviso();
+  ultimaAtualizacaoBoa = Date.now();
+  desmarcarCartoesSobreviventes();
   sessoes = r.sessoes;
   desenhar();
 }
 
 function mostrarAviso(txt) { const a = $("aviso-admin"); a.textContent = txt; a.hidden = false; }
 function esconderAviso() { $("aviso-admin").hidden = true; }
+
+// F208: mark/unmark cards as stale when the REST poll fails. Without this, the
+// cards keep showing "pareada e conectada" right next to the warning that says
+// the server is unreachable — a contradiction on the same screen.
+function marcarCartoesSobreviventes() {
+  const g = $("grid");
+  if (!g) return;
+  for (const card of g.querySelectorAll(".card")) {
+    card.classList.add("stale");
+    let badge = card.querySelector(".stale-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "stale-badge";
+      card.appendChild(badge);
+    }
+    atualizarIdadeBadge(badge);
+  }
+}
+
+function desmarcarCartoesSobreviventes() {
+  const g = $("grid");
+  if (!g) return;
+  for (const card of g.querySelectorAll(".card.stale")) {
+    card.classList.remove("stale");
+    card.querySelector(".stale-badge")?.remove();
+  }
+}
+
+function atualizarIdadeBadge(badge) {
+  if (!ultimaAtualizacaoBoa) {
+    badge.textContent = "dados possivelmente desatualizados";
+    return;
+  }
+  const segs = Math.round((Date.now() - ultimaAtualizacaoBoa) / 1000);
+  badge.textContent = segs < 60
+    ? `dados de há ${segs}s`
+    : `dados de há ${Math.round(segs / 60)}min`;
+}
 
 function desenhar() {
   const g = $("grid");

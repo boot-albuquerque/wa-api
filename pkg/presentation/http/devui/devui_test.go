@@ -852,3 +852,55 @@ func TestPainel_IndicadorNaoDependeDaRepintura(t *testing.T) {
 			"desconectar ou de logout o cartão continua a dizer 'eventos ligados'")
 	}
 }
+
+// --- F208: cartão que contradiz o aviso quando o poll falha ------------------
+//
+// Quando a listagem falha, `atualizar()` desiste sem repintar. Os cartões já
+// desenhados ficam congelados a dizer "pareada e conectada" COM O SERVIDOR
+// MORTO, ao lado do aviso que diz que a comunicação caiu. É contradição
+// visível, não silêncio — o aviso funciona (confirmado pela medição da F208),
+// mas o cartão mente.
+
+// TestPainel_PollFalhoMarcaCartoesSobreviventes: quando a listagem falha, os
+// cartões existentes têm de ficar marcados como obsoletos. Sem isso, o
+// operador vê "pareada e conectada" ao lado do aviso de que o servidor não
+// responde.
+func TestPainel_PollFalhoMarcaCartoesSobreviventes(t *testing.T) {
+	js := servido(t, "sessions.js")
+
+	atualizar := blocoDoIf(t, js, "if (!r.ok)")
+	if !strings.Contains(atualizar, "marcarCartoesSobreviventes()") {
+		t.Error("o ramo de falha de `atualizar` não marca os cartões como obsoletos: " +
+			"eles continuam a afirmar estado velho ao lado de um aviso que diz o contrário (F208)")
+	}
+}
+
+// TestPainel_CartaoStalTemEstilo: um cartão obsoleto tem de ser VISUALMENTE
+// distinto do normal. Sem CSS, `.stale` é uma classe sem efeito e o operador
+// não distingue dado fresco de dado velho.
+func TestPainel_CartaoStaleTemEstilo(t *testing.T) {
+	css := servido(t, "devui.css")
+	if !strings.Contains(css, ".card.stale") {
+		t.Error("a classe .card.stale não tem estilo: cartão obsoleto fica idêntico ao normal")
+	}
+	if !strings.Contains(css, ".stale-badge") {
+		t.Error("a badge de dados obsoletos não tem estilo")
+	}
+}
+
+// TestPainel_PollBoaLimpaStale: quando a listagem volta a funcionar, os
+// cartões têm de sair do estado obsoleto. Sem isso, um cartão que foi stale
+// uma vez fica stale para sempre.
+func TestPainel_PollBoaLimpaStale(t *testing.T) {
+	js := servido(t, "sessions.js")
+	// A limpeza está no caminho de sucesso de atualizar(), antes de desenhar().
+	i := strings.Index(js, "desmarcarCartoesSobreviventes()")
+	if i < 0 {
+		t.Fatal("não há limpeza de cartões obsoletos: depois de um poll bom o stale ficaria para sempre")
+	}
+	// Tem de estar ANTES de desenhar(), senão os cartões novos nascem stale.
+	iDesenhar := strings.Index(js[i:], "desenhar();")
+	if iDesenhar < 0 {
+		t.Error("desmarcarCartoesSobreviventes não é seguido de desenhar()")
+	}
+}
