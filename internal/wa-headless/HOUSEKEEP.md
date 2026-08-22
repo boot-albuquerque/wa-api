@@ -10528,3 +10528,83 @@ autocontidas, pelo mesmo motivo da H130: uma referência que hoje aponta certo �
 um defeito que ainda não aconteceu.
 
 **Status**: entregue. Nenhum código de produção mudou.
+
+## H135 — a sessão dupla: a H86 estava certa sobre o ator, e errada como regra geral
+
+**Data**: 2026-08-22. **Contexto**: montar duas contas pareadas e acordadas AO
+MESMO TEMPO, para responder o que nenhuma sessão sozinha podia.
+
+**Onde**: `internal/wa-headless/dualsession_test.go` (novo),
+`probe_dualgroup_test.go` (novo).
+
+### Por que precisou existir
+
+Todo teste de duas contas deste pacote roda em SEQUÊNCIA — um Holder, uma
+sessão, fechada antes da próxima abrir. Isso basta para "o servidor terminou
+neste estado" e é inútil para **"o que a OUTRA sessão viu enquanto esta agia"**.
+
+A H86 mediu ZERO evento na sessão que fez a mudança de participante. A H119
+provou que o portador `gp2` CHEGA a este barramento. Entre os dois fatos havia
+uma pergunta que só duas sessões simultâneas respondem.
+
+### O que a sessão dupla mediu
+
+Com conta-A observando e conta-B saindo e voltando ao grupo de laboratório:
+
+```
+after conta-B left:     map[chat.changed:8 group.left:1]   subtypes: map[leave:1]
+after conta-B rejoined: map[... group.joined:1 group.left:1] subtypes: map[invite:1 leave:1]
+```
+
+**O observador recebe.** A H86 estava certa sobre o ATOR e não valia como regra
+geral — e a diferença entre as duas leituras é a diferença entre "este build não
+emite" e "este build não emite para quem agiu".
+
+`GROUP_JOIN` e `GROUP_LEAVE` passam a `PROVEN`.
+
+### E a terceira NÃO chega
+
+Invertendo os lados — barramento em conta-B, conta-A promovendo e rebaixando —
+**zero** `group.admin_changed`, na mesma montagem que acabara de entregar leave e
+join. A diferença é do SUBTIPO, não do barramento, e isso agora está medido em
+vez de presumido.
+
+### O achado que eu não estava procurando
+
+O observador viu subtipos `gp2` que **não estão na tabela da referência**:
+
+```
+biz_account_type_changed_to_hosted, biz_privacy_mode_to_fb, block_contact,
+change_number, disappearing_mode, encrypt_now, ephemeral_setting, modify,
+sender, url
+```
+
+A referência lista `add`, `invite`, `linked_group_join`, `remove`, `leave`,
+`promote`, `demote` e joga todo o resto num `else` que vira `GROUP_UPDATE`.
+Este build emite pelo menos dez subtipos que ela não nomeia.
+
+**Foi a decisão da H119 que os tornou visíveis.** Lá eu recusei o `else` que
+engole desconhecido, escrevendo que "um subtipo que a Meta acrescente amanhã
+chegaria rotulado errado, em silêncio". Não era hipótese: são dez, hoje, e eles
+aparecem porque ficaram como `MessageAdded` com o `subtype` intacto em vez de
+serem rebatizados de `GROUP_UPDATE`.
+
+`modify` é candidato natural a ser a mudança de admin deste build — mas apareceu
+UMA vez para DUAS ações (promover e rebaixar), então é hipótese e está escrita
+como tal, não como veredito.
+
+### Cuidados que a montagem exige, e por que estão no código
+
+- **Perfis e portas diferentes**, verificados: perfil repetido é uma conta, não
+  duas, e o harness falha alto em vez de dirigir a mesma sessão duas vezes.
+- **Fechar o que já subiu antes de falhar**: uma sessão dupla meio aberta vaza um
+  Chrome que sobrevive ao binário de teste, e este pacote já pagou por Chromes
+  órfãos a sessão inteira.
+- **O código de convite vem do lado ADMIN.** Custou uma execução: conta-B é
+  membro comum e ler convite exige admin. O observador é o admin aqui.
+- **Desfazer registrado ANTES de agir**: o rejoin antes do leave, o demote antes
+  do promote. Uma execução que morra no meio não pode deixar conta-B fora do
+  grupo nem admin.
+
+**Status**: entregue — duas linhas provadas, uma medida como não observável, e o
+harness fica para as próximas.

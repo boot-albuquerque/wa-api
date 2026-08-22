@@ -450,9 +450,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
 | `MEDIA_UPLOADED` | events.MessageAdded (`Kind`) | `PARTIAL` | **agora MEDIDO** (H120), fechando o que a H88 deixou aberto: um envio de mídia real produziu 12 eventos — `chat.changed:9`, `message.ack:2`, `message.added:1` — com `kind=image` em 3 deles. A mensagem de mídia CHEGA ao barramento e progride pelos acks. O que NÃO existe é um momento distinto de "upload concluído": não dá para separar "subiu" de "mensagem criada", e por isso é PARTIAL e não PROVEN |
 | `CONTACT_CHANGED` | events.ContactChanged | `PROVEN` | disparado sob demanda por `addressbook.Save`, sem segunda conta: 8 eventos ao nomear o par. Era o único tipo instalado e nunca provado (H90) |
-| `GROUP_JOIN` | events.GroupJoined | `PARTIAL` | classificador embarcado e provado em unidade (H119). A H86 continua valendo e fica MAIS PRECISA: o portador `gp2` chega ao barramento (provado via `subject`), então o zero da H86 é dos subtipos de PARTICIPANTE na sessão que agiu — uma sessão OBSERVADORA nunca foi testada |
-| `GROUP_LEAVE` | events.GroupLeft | `PARTIAL` | idem GROUP_JOIN (H86 + H119) |
-| `GROUP_ADMIN_CHANGED` | events.GroupAdminChanged | `PARTIAL` | idem GROUP_JOIN (H86 + H119) |
+| `GROUP_JOIN` | events.GroupJoined | `PROVEN` | H135: **provado com SESSÃO DUPLA**. A H86 mediu zero na sessão que AGE; com conta-A observando e conta-B saindo/voltando, o observador recebeu `group.joined:1` (subtipo `invite`). O zero da H86 era do ATOR, não do barramento |
+| `GROUP_LEAVE` | events.GroupLeft | `PROVEN` | H135: idem `GROUP_JOIN` — o observador recebeu `group.left:1` (subtipo `leave`) enquanto conta-B saía |
+| `GROUP_ADMIN_CHANGED` | events.GroupAdminChanged | `PARTIAL` | H135: **NÃO chega ao observador**, e agora isso é medido e não presumido. Com o barramento em conta-B e conta-A promovendo/rebaixando, zero `group.admin_changed` — enquanto sair e entrar chegaram na mesma montagem. A diferença é do SUBTIPO, não do barramento |
 | `GROUP_MEMBERSHIP_REQUEST` | events.ChatChanged | `PARTIAL` | a chegada MOVE o modelo nesta sessão e o barramento a vê — medida isolada: a saída de conta-B sozinha deu 5 `chat.changed`, o pedido sozinho deu **9** mais 1 `message.added` (H89). Não há tipo dedicado, e `chat.changed` é grosso demais para ser um: quem quer o pedido tem de chamar `groupreq.List`. Contraste com a H86, onde a sessão que MUDA participantes vê zero — quem recebe enxerga, quem age não |
 | `GROUP_UPDATE` | events.GroupUpdated | `PROVEN` | H119: o portador `gp2` É reclassificado neste barramento — assunto do grupo trocado de propósito, `group.updated:1` com subtipo `subject`, e o assunto restaurado |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
@@ -469,8 +469,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 96 | 44% |
-| `PARTIAL` | 58 | 26% |
+| `PROVEN` | 98 | 45% |
+| `PARTIAL` | 56 | 25% |
 | `BLOCKED` | 42 | 19% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
 | `MISSING` | 20 | 9% |
