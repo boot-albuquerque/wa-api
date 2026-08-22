@@ -788,3 +788,54 @@ O antigo teste do "ws vazio" foi substituído pela corrida REAL — o leitor que
 chega no meio da escrita e vê só a linha da porta. E o dublê passou a PUBLICAR o
 endpoint no perfil, no formato medido contra o Chrome real; um dublê com outra
 forma provaria apenas que o parser lê o que o dublê escreve.
+
+## Decisão 76 — o registry nasce COM teto, e o valor sai da medição
+
+O `runtime.Holder` documenta que adiou de propósito "teto de capacidade,
+política de reciclagem, pool de qualquer espécie", citando a Regra 1 do
+`CLAUDE.md`. O registry `txtID → sessão` é esse pool — e aqui um detentor não é
+uma goroutine: é **um Chrome inteiro**.
+
+A orquestração decidiu (**76**): nasce com teto, mas o valor só depois de medir
+custo ocioso e arranque simultâneo, incluindo fila, timeout e liberação de slot.
+
+### O que foi medido
+
+Chrome 151.0.7922.170, macOS 15.6, conjunto canônico completo de flags, perfis
+**temporários** descartados a cada rodada. RSS somado de todos os processos do
+browser (o RSS conta memória compartilhada mais de uma vez, então é teto, não
+piso).
+
+| cenário | por browser | arranque até o endpoint |
+| --- | --- | --- |
+| `about:blank`, N=1 | ~620 MB | 0,3 s |
+| `about:blank`, N=4 | ~520 MB | 0,65 s |
+| `about:blank`, N=8 | ~490 MB | 0,96 s |
+| SPA real (página de QR), N=1 | ~675 MB | — |
+| SPA real, N=2 | ~650 MB | — |
+| SPA real, N=4 | ~653 MB | — |
+
+Três leituras, e duas eu não teria adivinhado:
+
+1. **A SPA custa pouco acima do `about:blank`** — ~55 MB. O caro é o processo
+   de browser em si, não o bundle. Um teto calculado sobre "quanto pesa a
+   aplicação" erraria a conta inteira.
+2. **O custo por browser CAI com N** (620 → 490 MB de 1 para 8), porque o RSS
+   conta as páginas compartilhadas em cada processo. Medir um só browser e
+   multiplicar superestima.
+3. **O arranque até o endpoint é sub-segundo mesmo com 8 simultâneos** e não
+   degrada. Ou seja, o detentor de slot NÃO é o arranque do processo — é a
+   montagem da SPA, exatamente onde o comentário do `Holder` já apontava.
+
+### O que NÃO foi medido, e por quê
+
+**A sessão PAREADA.** O número acima é de uma página de QR, não de uma sessão
+com 384 conversas e 399 mensagens carregadas, que é estritamente mais pesada.
+O perfil pareado chega às sondas por `WA_SEND_FROM_PROFILE`, que não está
+definida nesta sessão — e procurar um perfil pareado no disco é procurar
+material de credencial, que não se faz por conta própria.
+
+**Fila, timeout e liberação de slot** são propriedades do mecanismo que ainda
+não existe. Medi-las agora seria medir a hipótese, não o mecanismo — elas vêm
+depois de o registry existir, e a medição tem de ser a do cenário onde o teto
+COBRA o preço (Regra 2), não a daquele onde ele ajuda.
