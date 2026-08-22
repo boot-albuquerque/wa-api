@@ -19511,3 +19511,54 @@ teste tem de usar DUAS bases, como a produção usa.
 **Status**: não corrigido — fora do escopo da tarefa atual (carrossel/PIX), e
 o `CLAUDE.md` proíbe corrigir de graça sem perguntar. Pergunta pendente ao
 utilizador: corrigir agora ou fica para depois?
+
+---
+
+## F213 — PIX via `payment_info` + `pix_static_code` NÃO renderiza em conta pessoal
+
+<!-- f-status: nao-se-faz -->
+
+**Data**: 2026-08-22
+**Contexto**: pedido de completar a superfície de mensagem ("PIXCARD"). A
+investigação está em `docs/research/pix-payment-message.md`.
+
+**O que se sabia antes de medir**: há duas vias para PIX.
+
+- **Via Cloud API** (`review_and_pay` / `order_details`): exige WABA com
+  Payments API. **Descartada** — não temos.
+- **Via Web** (`NativeFlowButton` de nome `payment_info` com
+  `buttonParamsJSON` contendo `pix_static_code`): usa o MESMO mecanismo dos
+  nossos botões atuais, logo era testável hoje. O JSON veio de 4+ forks do
+  Baileys e da Evolution API; **nenhuma fonte confirmava** que funcionasse em
+  conta pessoal.
+
+**Medição em campo**. Botão `payment_info` enviado de `aulapratica` para
+554192421234, com o JSON dos forks:
+
+```json
+{"payment_settings":[{"type":"pix_static_code",
+ "pix_static_code":{"merchant_name":"Loja Teste",
+                    "key":"...@gmail.com","key_type":"EMAIL"}}]}
+```
+
+| id | enviado | resultado no destinatário |
+|---|---|---|
+| `3EB0CEC61952328597E4DC` | 11:15:15 | **"Você recebeu uma mensagem, mas o conteúdo não é compatível com sua versão do WhatsApp"** (bolha das 11:15, fotografada) |
+
+O servidor ACEITOU (`200`, `status: sent`, e o log registou `Message
+delivered`). Quem recusa é o cliente — outra vez o padrão da armadilha #26: o
+200 não distingue.
+
+**Conclusão**: o esquema publicado nos forks não produz cartão PIX numa conta
+pessoal. Não é defeito nosso: a montagem seguiu exatamente o mesmo caminho de
+`SendButtons`, que renderiza (provado na mesma ronda, sonda 1).
+
+**Consequência de produto, que decide o assunto**: mesmo que renderizasse,
+`pix_static_code` **não processa pagamento** — mostra os dados do recebedor e a
+pessoa paga à mão no app do banco. Pagamento com confirmação automática só
+existe na via Cloud API, que exige WABA.
+
+**Status**: não se faz. Reabrir apenas se (a) obtivermos conta business com
+Payments API, ou (b) capturarmos um `buttonParamsJSON` REAL de um cliente que
+consiga enviar PIX — o esquema dos forks já está refutado por medição, e não
+vale a pena adivinhar variantes dele.
