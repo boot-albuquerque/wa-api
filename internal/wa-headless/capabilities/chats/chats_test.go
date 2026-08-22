@@ -201,3 +201,91 @@ func TestCancelledContextIsNotAnEmptyList(t *testing.T) {
 		t.Fatal("a cancelled context produced a chat list")
 	}
 }
+
+// A JID WITH NO CONVERSATION IS ITS OWN ERROR, not a zero Chat.
+//
+// A caller that got an empty struct could not tell "no such conversation" from
+// "a conversation with nothing in it". This module has paid for that confusion
+// once already: an absent ack and an ack of zero were the same value until H108
+// separated them.
+func TestAJidWithNoChatIsItsOwnError(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"total":2,"with_unread":0,"chats":[
+	 {"jid":"1@lid","title":"a","t":1700000000},
+	 {"jid":"2@g.us","title":"b","t":1700000001,"is_group":true}]}`}
+	_, err := lister(p).ByJID(context.Background(), "3@lid", "t")
+	if !errors.Is(err, ErrNoChat) {
+		t.Fatalf("err = %v, want ErrNoChat", err)
+	}
+	if !strings.Contains(err.Error(), "in this session") {
+		t.Errorf("the error does not say how many were searched: %v", err)
+	}
+}
+
+// AND A JID THAT HAS ONE COMES BACK WITH THE SAME PROJECTION List USES.
+//
+// The fields that matter here are the ones nobody re-checks — archived, muted,
+// read-only — because a second projection written for the single-chat path would
+// drift exactly there.
+func TestByJIDCarriesTheSameFieldsAsTheListing(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"total":1,"with_unread":1,"chats":[
+	 {"jid":"1@g.us","title":"a","t":1700000000,"unread":3,"is_group":true,
+	  "archived":true,"pinned":true,"muted":true,"read_only":true}]}`}
+	got, err := lister(p).ByJID(context.Background(), "1@g.us", "t")
+	if err != nil {
+		t.Fatalf("ByJID: %v", err)
+	}
+	for name, ok := range map[string]bool{
+		"archived": got.Archived, "pinned": got.Pinned,
+		"muted": got.Muted, "readOnly": got.ReadOnly, "isGroup": got.IsGroup,
+	} {
+		if !ok {
+			t.Errorf("%s was dropped by the single-chat path", name)
+		}
+	}
+	if got.Unread != 3 {
+		t.Errorf("unread = %d, want 3", got.Unread)
+	}
+	if got.Timestamp.IsZero() {
+		t.Error("the timestamp was dropped")
+	}
+}
+
+// THE LOOKUP MUST NOT BE TRUNCATED. List truncates by design, and a truncated
+// list answers "no such chat" for a conversation that merely sorted late — the
+// worst possible wrong answer, because it looks like a fact.
+//
+// THE FIRST VERSION OF THIS TEST COMPARED CONSTANTS (allChats > DefaultLimit)
+// and therefore passed with the call pointed at the truncating limit — a
+// negative control that did not bite, because the assertion never touched the
+// behaviour. It now builds a page with MORE chats than the default limit and
+// asks for the one that sorts last.
+func TestByJIDDoesNotSearchATruncatedList(t *testing.T) {
+	var rows []string
+	for i := 0; i < DefaultLimit+5; i++ {
+		// Descending timestamps, so the target sorts LAST and a truncated search
+		// cannot reach it.
+		rows = append(rows, fmt.Sprintf(
+			`{"jid":"%d@lid","title":"c","t":%d}`, i, 1700000000-i))
+	}
+	target := fmt.Sprintf("%d@lid", DefaultLimit+4)
+	p := &pageDouble{answer: fmt.Sprintf(
+		`{"ok":true,"total":%d,"with_unread":0,"chats":[%s]}`,
+		len(rows), strings.Join(rows, ","))}
+	got, err := lister(p).ByJID(context.Background(), target, "t")
+	if err != nil {
+		t.Fatalf("ByJID could not find the conversation that sorts last: %v", err)
+	}
+	if got.JID != target {
+		t.Fatalf("found %q, want the last-sorting conversation", got.JID)
+	}
+}
+
+func TestAnEmptyJidNeverReachesThePageForALookup(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"chats":[]}`}
+	if _, err := lister(p).ByJID(context.Background(), "  ", "t"); !errors.Is(err, ErrNoChat) {
+		t.Fatalf("err = %v, want ErrNoChat", err)
+	}
+	if p.lastScript != "" {
+		t.Error("an empty jid reached the page")
+	}
+}

@@ -340,3 +340,34 @@ const labelWriteResultScript = `JSON.stringify((() => {
 	}
 	return s;
 })())`
+
+// ErrNoLabel is a label id this account does not have.
+//
+// IT IS NOT AN EMPTY Label. A caller that got a zero value could not tell "no
+// such label" from "a label with no name", and this build's labels are short
+// strings where a typo is easy — "1" against "l" is not a distinction anyone
+// notices by reading.
+var ErrNoLabel = fmt.Errorf("contacts: no label with that id")
+
+// LabelByID is the reference's getLabelById.
+//
+// IT FILTERS THE LIST RATHER THAN ASKING THE PAGE AGAIN, and that is deliberate:
+// ListLabels is the proven read (H72), and a second page query written here
+// would be a competing source for the same fact. The cost is reading all of them
+// to answer about one, which for a set this account measured at THREE is not a
+// cost worth a second implementation.
+func (l *Lister) LabelByID(ctx context.Context, id, label string) (Label, error) {
+	if strings.TrimSpace(id) == "" {
+		return Label{}, ErrNoLabel
+	}
+	all, err := l.ListLabels(ctx, label+"/by-id")
+	if err != nil {
+		return Label{}, err
+	}
+	for _, candidate := range all.All {
+		if candidate.ID == id {
+			return candidate, nil
+		}
+	}
+	return Label{}, fmt.Errorf("%w (%d known)", ErrNoLabel, len(all.All))
+}

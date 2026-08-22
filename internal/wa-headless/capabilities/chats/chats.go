@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -206,3 +207,45 @@ func (l *Lister) List(ctx context.Context, limit int, label string) (List, error
 	out.Chats = all
 	return out, nil
 }
+
+// ErrNoChat is a jid this session has no conversation for.
+//
+// IT IS NOT A ZERO Chat. A caller that got an empty struct could not tell "no
+// such conversation" from "a conversation with nothing in it", and this module
+// has already paid for that confusion once: an absent ack and an ack of zero
+// were the same value until H108 separated them.
+var ErrNoChat = fmt.Errorf("chats: no conversation for that jid")
+
+// ByJID is the reference's getChatById.
+//
+// IT READS THE SAME COLLECTION List READS, through the same projection, and
+// filters here. Writing a second page query for one chat would create a second
+// source for the same fact — and the two would drift exactly where it hurts, on
+// the fields List already got right (archived, muted, read-only), because those
+// are the ones nobody re-checks.
+//
+// The cost is reading every chat to answer about one. That is real — this
+// account measured 384 — and it buys a single projection instead of two.
+func (l *Lister) ByJID(ctx context.Context, jid, label string) (Chat, error) {
+	if strings.TrimSpace(jid) == "" {
+		return Chat{}, ErrNoChat
+	}
+	// NO LIMIT. List truncates by design, and a truncated list would answer "no
+	// such chat" for a conversation that merely sorted late — the worst possible
+	// wrong answer, because it looks like a fact.
+	all, err := l.List(ctx, allChats, label+"/by-jid")
+	if err != nil {
+		return Chat{}, err
+	}
+	for _, c := range all.Chats {
+		if c.JID == jid {
+			return c, nil
+		}
+	}
+	return Chat{}, fmt.Errorf("%w (%d in this session)", ErrNoChat, all.Total)
+}
+
+// allChats is a limit high enough that List does not truncate. It is not
+// "unlimited": a number keeps the ceiling visible, and Truncated() still reports
+// if this build ever exceeds it.
+const allChats = 100000

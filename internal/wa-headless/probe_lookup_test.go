@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"wa-api/internal/wa-headless/capabilities/chats"
+	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
@@ -86,4 +88,89 @@ func TestProbeNumberID(t *testing.T) {
 		t.Error("a group jid did not come back flagged as a group")
 	}
 	t.Logf("group -> %s", g)
+}
+
+// TestProbeByIdLookups proves chats.ByJID and contacts.LabelByID against the
+// live session, closing the last two rows of the "internal step, not exposed"
+// pattern.
+//
+// Identity-free: counts and booleans only, never a jid or a label name.
+func TestProbeByIdLookups(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_BYID") == "" {
+		t.Skip("set WA_PROBE_BYID=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+
+	cl := chats.New(runner, eval)
+	all, err := cl.List(ctx, 0, "probe/byid")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	t.Logf("chats listed: %d (total %d)", len(all.Chats), all.Total)
+	if len(all.Chats) == 0 {
+		t.Skip("no chats in this session")
+	}
+
+	// THE ONE THAT SORTS LAST, not the first: a truncating lookup finds the
+	// first and misses this one, which is exactly the failure the unit test
+	// models and the live run must not reproduce.
+	last := all.Chats[len(all.Chats)-1]
+	got, err := cl.ByJID(ctx, last.JID, "probe/byid")
+	if err != nil {
+		t.Fatalf("ByJID(last-sorting chat): %v", err)
+	}
+	if got.JID != last.JID {
+		t.Error("ByJID returned a different conversation")
+	}
+	t.Logf("by-jid on the last-sorting chat: group=%t archived=%t muted=%t unread=%d",
+		got.IsGroup, got.Archived, got.Muted, got.Unread)
+
+	// A jid that cannot exist must be a definite no.
+	if _, err := cl.ByJID(ctx, "000000000000000@lid", "probe/byid"); err == nil {
+		t.Error("an impossible jid returned a conversation")
+	} else {
+		t.Logf("absent jid -> %v", err)
+	}
+
+	// Labels: this account measured THREE, all with zero items (H114).
+	co := contacts.New(runner, eval)
+	labels, err := co.ListLabels(ctx, "probe/byid")
+	if err != nil {
+		t.Logf("ListLabels: %v (a personal account has none)", err)
+		return
+	}
+	t.Logf("labels: %d", len(labels.All))
+	if len(labels.All) == 0 {
+		t.Log("no labels on this account; the by-id leg cannot be exercised")
+		return
+	}
+	one := labels.All[0]
+	back, err := co.LabelByID(ctx, one.ID, "probe/byid")
+	if err != nil {
+		t.Fatalf("LabelByID: %v", err)
+	}
+	if back.ID != one.ID {
+		t.Error("LabelByID returned a different label")
+	}
+	t.Logf("label by id: count=%d (a zero count is still a label)", back.Count)
+	if _, err := co.LabelByID(ctx, "no-such-label", "probe/byid"); err == nil {
+		t.Error("an impossible label id returned a label")
+	}
 }

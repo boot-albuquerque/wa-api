@@ -74,7 +74,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `searchMessages` | search.Messages | `PROVEN` | sim | sim | sim | H114: o resultado é ENDEREÇO, nunca corpo — a projeção acontece na página. Sem escopo por conversa: passar o jid como quarto argumento (o que a referência faz com `options.chatId`) mediu 0 resultados com `eof`, contra 20 sem escopo |
 | `getChats` | chats.List | `PROVEN` | sim | sim | sim | — |
 | `getChannels` | channel.Followed | `PROVEN` | sim | sim | sim | H123: leitor provado NÃO-VAZIO — `Followed` devolveu 1 entrada com `membership=owner` logo após criar um canal, e 0 depois de apagá-lo. Assinar canal alheio para provar é impossível neste build (ver `subscribeToChannel`), então a prova veio de um canal PRÓPRIO, que vive na mesma coleção |
-| `getChatById` | resolução interna às capacidades | `PARTIAL` | sim | sim | sim | existe como passo interno, não como capacidade exposta |
+| `getChatById` | chats.ByJID | `PROVEN` | sim | sim | sim | H128: deixou de ser passo interno. Reusa a projeção provada de `chats.List` em vez de escrever uma segunda consulta — duas projeções divergiriam justo nos campos que ninguém reconfere (arquivado, mudo, somente-leitura). Ao vivo: a lista trunca em 100 de 384 e o `ByJID` acha a que ordena por ÚLTIMO, e reporta as 384 varridas |
 | `getChannelByInviteCode` | channel.ByInviteCode | `PROVEN` | sim | sim | sim | provado contra canal público real: jid `@newsletter`, nome, **45.460 assinantes**, `state=active`, `verification=verified`, e `following=false` — **nada foi seguido**. Aceita o link inteiro, não só o código (H104) |
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
 | `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
@@ -116,7 +116,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getBroadcasts` | status.List | `PARTIAL` | sim | sim | sim | **NÃO é lista de transmissão** — o upstream chama de Broadcast o STATUS (stories): `getBroadcasts` é `Status.getModelsArray`. Nossa nota descrevia a coisa errada, e três linhas iam ser feitas contra a ideia errada (H100). Caminho provado ao vivo, com **zero** feeds; provar um não-vazio exige POSTAR status, visível aos 944 contatos da conta |
 | `getBroadcastById` | status.ByContact | `PARTIAL` | sim | sim | sim | tenta as duas formas de identidade; feed ausente é erro próprio e não um feed de zeros, que um chamador leria como "essa pessoa não postou nada" (H100) |
 | `revokeStatusMessage` | — | `MISSING` | — | — | — | — |
-| `getLabelById` | contacts.ListLabels + filtro | `PARTIAL` | sim | sim | sim | — |
+| `getLabelById` | contacts.LabelByID | `PROVEN` | sim | sim | sim | H128: filtra a lista provada (H72) em vez de consultar a página de novo. Rótulo com contagem ZERO continua sendo rótulo — os 3 desta conta têm zero itens (H114), e tratar zero como ausente encontraria nenhum |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
 | `getChatsByLabelId` | — | `BLOCKED` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
 | `getBlockedContacts` | capabilities/block | `PARTIAL` | sim | sim | sim | bloquear/desbloquear provados; LISTAR os bloqueados não é exposto |
@@ -469,8 +469,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 90 | 41% |
-| `PARTIAL` | 62 | 28% |
+| `PROVEN` | 92 | 42% |
+| `PARTIAL` | 60 | 27% |
 | `BLOCKED` | 19 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
 | `MISSING` | 45 | 20% |

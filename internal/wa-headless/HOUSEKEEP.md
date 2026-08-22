@@ -10100,3 +10100,67 @@ um grupo real seria reportado como inexistente.
 **Status**: parcialmente entregue — 2 das 5 linhas do padrão fechadas;
 `getChatById`, `getContactById` e `getLabelById` seguem `PARTIAL` acionáveis,
 com o caminho agora óbvio.
+
+## H128 — os dois últimos "passo interno", e dois testes meus que não mordiam
+
+**Data**: 2026-08-22. **Contexto**: fechar o padrão que a H127 identificou —
+linhas `PARTIAL` cuja nota era "existe como passo interno, não como capacidade
+exposta". Eram cinco; a H127 fechou duas.
+
+**Onde**: `capabilities/chats/chats.go` (`ByJID`),
+`capabilities/contacts/labels.go` (`LabelByID`), `probe_lookup_test.go`.
+
+### A decisão de desenho, repetida de propósito
+
+Ambas **reusam a leitura já provada** em vez de escrever uma segunda consulta à
+página. `ByJID` filtra a projeção de `chats.List`; `LabelByID` filtra
+`ListLabels` (H72).
+
+O custo é ler tudo para responder sobre um. É real — esta conta tem 384
+conversas — e compra a coisa certa: **uma projeção em vez de duas**. Duas
+divergiriam exatamente onde dói, nos campos que ninguém reconfere depois
+(arquivado, mudo, somente-leitura), porque quem escreve o caminho de um item
+olha para o id e o nome.
+
+### O detalhe que quase virou defeito
+
+`ByJID` **não pode** buscar na lista truncada. `List` trunca por desenho, e uma
+busca truncada responde "não existe essa conversa" para uma que apenas ordenou
+tarde — a pior resposta errada possível, porque tem cara de fato.
+
+Ao vivo isso ficou visível: a lista devolve **100 de 384**, e o `ByJID` acha a
+que ordena por ÚLTIMO e reporta "384 in this session" para um jid ausente.
+
+### Dois testes meus que NÃO mordiam
+
+Os controles negativos pegaram dois testes que eu tinha escrito errado:
+
+1. `TestByJIDDoesNotSearchATruncatedList` comparava **constantes**
+   (`allChats > DefaultLimit`) em vez de comportamento. Apontar a chamada para o
+   limite truncante não o fazia falhar — a asserção nunca tocava o código. Foi
+   reescrito para montar uma página com mais conversas que o limite e pedir a que
+   ordena por último.
+2. `TestALabelIdThatExistsComesBackWhole` dizia no comentário que testava
+   contagem ZERO, e o fixture não tinha nenhum rótulo com zero. O comentário
+   descrevia um teste que não existia.
+
+Depois da correção, os dois mordem:
+
+```
+chats_test.go:276: ByJID could not find the conversation that sorts last (105 in this session)
+labels_test.go:46: LabelByID(count 0): contacts: no label with that id (2 known)
+```
+
+**A lição não é "escrevi dois testes ruins".** É que ambos passavam, pareciam
+cobrir a regra, e só o controle negativo revelou que não cobriam. Um teste que
+passa e não morde é pior que nenhum — ele desencoraja quem viria escrever o
+certo.
+
+### O que fica aberto
+
+`getContactById` é a última das cinco. Fica `PARTIAL` acionável: o caminho é o
+mesmo dos outros dois, e não foi feito por escolha de escopo, não por
+impossibilidade — que é exatamente a distinção que o critério da Fase 1 exige
+que o ledger saiba fazer.
+
+**Status**: entregue — 4 das 5 linhas do padrão fechadas.
