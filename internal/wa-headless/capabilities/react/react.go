@@ -180,8 +180,9 @@ func (r *Reactor) set(ctx context.Context, msgID, emoji string, want bool, label
 // waitFor polls the message's reaction state until it matches want.
 func (r *Reactor) waitFor(ctx context.Context, msgID string, want bool, label string) (bool, error) {
 	deadline := time.Now().Add(reactBudget)
-	last := !want
-	lastSticky, lastSum := false, -1
+	var last bool
+	var lastSticky bool
+	var lastSum int
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/verify", func(ctx context.Context) error {

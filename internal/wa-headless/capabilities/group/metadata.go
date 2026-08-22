@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 )
 
 // Reading a group's own facts: who owns it, when it was made, who is in it.

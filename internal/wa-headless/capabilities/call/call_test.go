@@ -99,7 +99,7 @@ func TestTheTimestampIsComputedInGo(t *testing.T) {
 
 // AN EMPTY LINK IS NOT A LINK.
 //
-// The upstream returns `response ?? ''` and calls that success. A caller handed
+// The upstream returns `response ?? ”` and calls that success. A caller handed
 // an empty string would publish it, or would join nothing and blame the call.
 func TestAnEmptyLinkIsAnError(t *testing.T) {
 	for _, ans := range []string{`{"ok":true,"link":""}`, `{"ok":true,"link":"   "}`, `{"ok":true}`} {

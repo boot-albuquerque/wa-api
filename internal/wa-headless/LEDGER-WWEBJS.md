@@ -74,7 +74,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `markChatUnread` | — | `MISSING` | — | — | — | temos marcar-como-LIDA, não o inverso |
 | `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H41 |
 | `getCommonGroups` | contacts.CommonGroupsWith | `PROVEN` | sim | sim | sim | H68: null significa "sou eu", não "nenhum" |
-| `resetState` | — | `MISSING` | — | — | — | — |
+| `resetState` | liveness.Reset | `PARTIAL` | sim | sim | sim | H116: a chamada é feita e o socket é provado SAUDÁVEL depois; provar que ela FEZ algo não passa pelo Go — a transição dura ~450ms e cada leitura é um ida-e-volta do chromedp (0 de 3 ao vivo, contra 9 de 100 amostrando DENTRO da página). A referência não devolve nada, nem erro |
 | `isRegisteredUser` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | é passo interno de todo envio; não exposto |
 | `getNumberId` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | idem |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
@@ -130,8 +130,8 @@ contatos nesta conta.
 
 | upstream | estado |
 |---|---|
-| `getChat` | `MISSING` |
-| `getContact` | `MISSING` |
+| `getChat` | `PARTIAL` |
+| `getContact` | `PARTIAL` |
 
 ## Call
 
@@ -199,15 +199,15 @@ de laboratório sob autorização explícita:
 | `setReactionSetting` | `MISSING` |
 | `mute` | `MISSING` |
 | `unmute` | `MISSING` |
-| `sendMessage` | `MISSING` |
-| `sendSeen` | `MISSING` |
+| `sendMessage` | `PARTIAL` |
+| `sendSeen` | `PARTIAL` |
 | `sendChannelAdminInvite` | `MISSING` |
 | `acceptChannelAdminInvite` | `MISSING` |
 | `revokeChannelAdminInvite` | `MISSING` |
 | `demoteChannelAdmin` | `MISSING` |
 | `transferChannelOwnership` | `MISSING` |
 | `fetchMessages` | `MISSING` |
-| `deleteChannel` | `MISSING` |
+| `deleteChannel` | `PROVEN` |
 
 ## Chat
 
@@ -262,14 +262,14 @@ nossa é fresca — não há campo velho para consertar.
 
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
-| `getProfilePicUrl` | — | `MISSING` | — | — | — | não atacado |
+| `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H118: delegação literal para `Client.getProfilePicUrl` (Contact.js:119) |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getChat` | — | `MISSING` | — | — | — | não atacado |
 | `block` | capabilities/block | `PROVEN` | sim | sim | sim | H59: blocklist 0->1->0 |
 | `unblock` | capabilities/block | `PROVEN` | sim | sim | sim | — |
 | `getAbout` | contacts.AboutOf | `PARTIAL` | sim | parcial | sim | H70: o par tem recado VAZIO e em cache; a busca no servidor não foi exercitada |
-| `getCommonGroups` | — | `MISSING` | — | — | — | não atacado |
+| `getCommonGroups` | contacts.CommonGroups | `PROVEN` | sim | sim | sim | H118: delegação literal para `Client.getCommonGroups` (Contact.js:223) |
 | `getBroadcast` | status.ByContact | `PARTIAL` | sim | sim | sim | idem `getBroadcastById` (H100) |
 
 ## GroupChat
@@ -304,10 +304,10 @@ nossa é fresca — não há campo velho para consertar.
 
 | upstream | estado |
 |---|---|
-| `getChat` | `MISSING` |
-| `getContact` | `MISSING` |
+| `getChat` | `PARTIAL` |
+| `getContact` | `PARTIAL` |
 | `getRecipients` | `MISSING` |
-| `reply` | `MISSING` |
+| `reply` | `PARTIAL` |
 
 ## Label
 
@@ -440,9 +440,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 82 | 37% |
-| `PARTIAL` | 52 | 24% |
+| `PROVEN` | 85 | 39% |
+| `PARTIAL` | 60 | 27% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 80 | 36% |
+| `MISSING` | 69 | 31% |
 | **total** | **220** | |

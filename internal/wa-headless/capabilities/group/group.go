@@ -379,5 +379,3 @@ const ensureVerifyScript = `JSON.stringify((() => {
 		return { stage: 'verify', ok: false, why: String((e && e.message) || e).slice(0, 180) };
 	}
 })())`
-
-

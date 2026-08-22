@@ -188,14 +188,7 @@ type wireSnapshot struct {
 }
 
 func (w wireSnapshot) toSnapshot() Snapshot {
-	return Snapshot{
-		Total:            w.Total,
-		WithPushname:     w.WithPushname,
-		WithName:         w.WithName,
-		WithVerifiedName: w.WithVerifiedName,
-		LidWithPhone:     w.LidWithPhone,
-		SyncPending:      w.SyncPending,
-	}
+	return Snapshot(w)
 }
 
 type wirePrime struct {

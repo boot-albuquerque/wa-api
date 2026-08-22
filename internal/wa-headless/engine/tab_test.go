@@ -32,7 +32,7 @@ func TestOpenTabStopsWaitingWhenPrimingNeverAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	accepted := make(chan struct{}, 4)
 	go func() {
@@ -47,7 +47,7 @@ func TestOpenTabStopsWaitingWhenPrimingNeverAnswers(t *testing.T) {
 			case accepted <- struct{}{}:
 			default:
 			}
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 		}
 	}()
 

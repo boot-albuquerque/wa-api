@@ -266,8 +266,6 @@ func setScript(jid string, k kind, want bool) string {
 // exactly this.
 const readKey = "__waHeadlessChatStateRead"
 
-const readResultScript = `JSON.stringify(window[` + `"` + readKey + `"` + `])`
-
 const resultScript = `JSON.stringify((() => {
 	const s = window[` + `"` + stateKey + `"` + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }

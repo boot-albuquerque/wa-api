@@ -116,7 +116,7 @@ func TestAnUnnamedAckIsUnknownNotPending(t *testing.T) {
 
 // TestTheStatesAreOrderedByProgress, so a caller can ask "at least delivered?".
 func TestTheStatesAreOrderedByProgress(t *testing.T) {
-	if !(Error < Pending && Pending < Sent && Sent < Delivered && Delivered < Read && Read < Played) {
+	if Error >= Pending || Pending >= Sent || Sent >= Delivered || Delivered >= Read || Read >= Played {
 		t.Fatal("the states are not ordered by progress, so comparisons are meaningless")
 	}
 	if Unknown != 0 {

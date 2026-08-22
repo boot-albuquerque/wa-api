@@ -9114,3 +9114,311 @@ a medição.
    `TestNoMatchesIsNotAnError` falha.
 
 **Status**: entregue e provado; `getChatsByLabelId` aberto com medição.
+
+## H115 — a contagem de lint subiu 267→418, e a maior parte não é desta sessão
+
+**Data**: 2026-08-22. **Contexto**: o `make check` imprimiu
+`418 issue(s) (informativo, baseline 267)` e eu fui apurar antes de continuar
+empilhando capacidades.
+
+**Onde**: `.golangci-baseline` (`count=267`), saída de `make lint`.
+
+### O que a apuração mostrou
+
+O portão que TRAVA é a complexidade máxima, e ela ficou **inalterada em 56**. A
+contagem é declaradamente informativa — o próprio arquivo de baseline explica
+por quê: *"Contagem de issues pune decomposição"*, já que quebrar uma função
+grande em cinco pequenas aumenta a contagem enquanto melhora o código.
+
+Atribuição por tipo, sobre os 418:
+
+```
+gocyclo      a esmagadora maioria
+gofmt        6
+errcheck     3
+staticcheck  3
+ineffassign  2
+unused       1
+goimports    1
+```
+
+**Erro meu na primeira leitura**: usei `9737944..HEAD` como "esta sessão" e
+concluí "149 avisos são meus". O intervalo tem **118 commits** — é o ramo
+inteiro, não a sessão. A atribuição por ARQUIVO também superconta: tocar uma
+função de `realspa_test.go` credita a mim os 20 avisos do arquivo.
+
+Dos não-`gocyclo`, exatamente **dois** nasceram hoje, e foram corrigidos:
+
+- `probe_msgorigin_test.go` — `gofmt`.
+- `capabilities/phone/phone_test.go:103` — `errcheck`: retorno de `p.eval`
+  ignorado ao primar o dublê. Agora falha o teste se a primagem falhar, o que é
+  o comportamento correto e não só o silenciamento do aviso.
+
+### O que NÃO foi corrigido, e por quê
+
+Os treze restantes são anteriores a esta sessão e ficam registrados em vez de
+consertados de graça (regra do CLAUDE.md):
+
+```
+engine/tab_test.go:35,50            errcheck  (ln.Close, c.Close)
+capabilities/call/call_test.go:102  gofmt
+capabilities/group/group.go:382     gofmt
+capabilities/group/metadata.go:10   gofmt
+capabilities/groupreq/groupreq.go:62 gofmt
+events/ingress.go:168               gofmt
+spa/confirmation_test.go:3          goimports
+capabilities/react/react.go:183,184 ineffassign (last, lastSum)
+capabilities/ack/ack_test.go:119    staticcheck QF1001
+capabilities/contacts/prime.go:191  staticcheck S1016
+capabilities/chatstate/chatstate.go:269  unused (const readResultScript)
+```
+
+Dois merecem atenção quando alguém tocar neles: o `ineffassign` duplo em
+`react.go` sugere que `last`/`lastSum` são calculados e descartados — pode ser
+lógica morta ou pode ser um bug de comparação. E `readResultScript` sem uso em
+`chatstate.go` é script de página que ninguém chama: ou falta um caminho, ou é
+resto.
+
+**Não investigados** — fora do escopo. Pergunta em aberto para o usuário: quer
+que eu limpe esta lista numa passagem própria?
+
+### Sobre atualizar `count=267`
+
+Não atualizei. A contagem só faz sentido como marco se for medida numa árvore
+estável, e este ramo está recebendo pacotes novos a cada bloco. Atualizá-la
+agora congelaria um número que muda na próxima hora. Fica para o fim da Fase 1.
+
+**Status**: parcialmente corrigido — os dois avisos nascidos hoje foram
+corrigidos; os treze anteriores seguem abertos e registrados acima.
+
+## H116 — `resetState`: o zero era do instrumento, e depois foi do instrumento outra vez
+
+**Data**: 2026-08-22. **Contexto**: `Client.resetState`.
+
+**Onde**: `internal/wa-headless/capabilities/liveness/reset.go` e
+`resetscript.go` (novos), `internal/wa-headless/probe_reset_test.go` (novo).
+
+### Primeira medição: zero transição
+
+`Client.resetState` chama `Socket.reconnect()` e **não devolve nada** — nem
+erro, nem estado. É o sucesso silencioso mais puro da superfície: quem chama não
+distingue "o socket foi reiniciado" de "o nome do módulo mudou e nada
+aconteceu".
+
+Para dar pós-condição a isso, o reconnect precisa ser observável. Amostrando
+`__x_state` a cada **500ms** depois do reconnect: **CONNECTED em 24 de 24**.
+Leitura natural: reconnect não faz nada, e a linha vai para `MISSING`.
+
+### O controle positivo, aplicado pela regra escrita uma hora antes
+
+A H114 tinha acabado de estabelecer: *medição que produz zero precisa de
+controle positivo*. Apliquei duas vezes:
+
+1. **O instrumento enxerga mudança?** Escrevi um valor sentinela em `__x_state`,
+   li de volta, restaurei. `sawSentinel: true, restored: true`. O leitor
+   funciona.
+2. **Amostrar mais rápido.** A 50ms: **OPENING em 9 de 100 amostras**.
+
+O reconnect TRANSITA, por cerca de 450ms, e o amostrador de 500ms passava por
+cima. **O zero era do instrumento, não do mundo.** Sem a regra da H114 esta
+linha teria sido enterrada com evidência falsa.
+
+### Segunda vez, e por isso a linha é `PARTIAL`
+
+A capacidade foi escrita amostrando pelo Go a 50ms. Ao vivo, três resets:
+
+```
+reset 1: settled=true sawOpening=false took=166ms
+reset 2: settled=true sawOpening=false took=156ms
+reset 3: settled=true sawOpening=false took=155ms
+the transition was caught in 0 of 3 resets
+```
+
+**0 de 3**, contra 9 de 100 dentro da página. Cada leitura do Go é um
+ida-e-volta do chromedp, então a taxa efetiva é muito mais grossa que a janela.
+
+A consequência está escrita no código em vez de escondida: **esta pós-condição
+prova que o socket está SAUDÁVEL depois da chamada, não que a chamada fez
+alguma coisa.** Provar a transição exigiria amostrar DENTRO da página e parquear
+para o Go colher — a forma store-and-poll que a invariante 6 já prescreve, mas
+com um intervalo de página que precisaria de entrada própria na lista de exceção
+da invariante 6. Isso é decisão a tomar, não descuido, e é por isso que a linha
+é `PARTIAL` e não `PROVEN`.
+
+### Um defeito meu, achado pelo meu próprio teste
+
+A primeira versão exigia um mínimo de **tempo de relógio** antes de aceitar
+`CONNECTED` (`time.Since(started) >= ResetTick*4`). Isso é exatamente a forma
+sensível a carga da F100: numa máquina ocupada, o mesmo código amostra MENOS
+vezes dentro da mesma janela, e a guarda enfraquece justamente quando o sistema
+está pior. Trocado por **contagem de leituras** (`minSettleReads = 4`), que não
+se move.
+
+O teste que pegou isso foi `TestAnImmediateConnectedDoesNotCertifyItself`,
+escrito para outra coisa: garantir que o verificador não certifique o estado de
+onde partiu.
+
+### Controles negativos EXECUTADOS
+
+1. Aceitar o primeiro `CONNECTED`:
+   `reset_test.go:139: the verifier accepted after 1 reads; it certified the state it started from`
+2. Aceitar qualquer resposta da página como sucesso: falha em `""` e em
+   `"no-reconnect"`.
+3. Fundir "nunca voltou" com "recusou": falha, porque as duas têm reparo
+   diferente — um socket que não volta deixa a sessão PIOR do que antes do
+   reset.
+
+**Status**: parcialmente entregue — a chamada e a saúde posterior estão
+provadas; a prova de EFEITO fica aberta com o caminho registrado.
+
+## H117 — os dois suspeitos da H115: `react.go` ineffassign e `chatstate.go` unused
+
+**Data**: 2026-08-22. **Contexto**: limpeza dos 13 achados de lint pré-existentes
+registrados na H115.
+
+### `react.go:183,184` — ineffassign em `last` e `lastSum`
+
+**Suspeita original**: `last` e `lastSum` recebem valor inicial que nunca é lido;
+pode ser lógica morta ou bug de comparação.
+
+**Veredito**: código morto (inicialização inútil), NÃO defeito. Evidência:
+
+1. `last` é inicializado com `!want` na linha 183. A única leitura é nas linhas
+   210 e 213, dentro do bloco de timeout. Mas a linha 205 (`last = got.Has`)
+   SEMPRE executa antes do timeout — o único salto anterior é `return` na linha
+   202 (`!got.Found`), que sai da função sem ler `last`. Logo, o valor
+   inicial nunca chega a ser observado.
+
+2. `lastSum` é inicializado com `-1` na linha 184. Mesma mecânica: a linha 204
+   (`lastSticky, lastSum = got.Sticky, got.Sum`) sempre executa antes da
+   leitura na linha 210.
+
+3. As variáveis SÃO usadas (na mensagem de erro de timeout) — só os valores
+   INICIAIS são mortos. A correção: trocar `last := !want` e
+   `lastSticky, lastSum := false, -1` por declarações `var` sem inicializador.
+
+4. Nenhuma mudança de comportamento: o zero value de `bool` (`false`) e de
+   `int` (`0`) nunca chega a ser lido — o loop sempre os sobrescreve na
+   primeira iteração antes de qualquer branch que os leia.
+
+**Correção**: declaração `var` sem valor inicial. Todos os testes existentes
+passam, incluindo `-race`.
+
+### `chatstate.go:269` — unused `readResultScript`
+
+**Suspeita original**: script de página sem uso; ou falta um caminho de código,
+ou é resto de refactor.
+
+**Veredito**: resto de refactor (código morto), NÃO caminho faltante. Evidência:
+
+1. `readResultScript` é definido na linha 269 e NÃO é referenciado em nenhum
+   outro lugar do pacote nem do repositório inteiro (`grep -rn` retorna só a
+   definição).
+
+2. `readKey` (que `readResultScript` usa) É referenciado — o teste
+   `chatstate_test.go:44,49` usa `readKey` diretamente para construir as mesmas
+   strings de roteamento no dublê. Ou seja, a CONSTANTE que dá nome ao slot de
+   página está viva, mas a constante que MONTA o script de leitura foi
+   substituída por uso inline no teste e nunca chamada de produção.
+
+3. O comentário na linha 264 diz "it is kept because the tests route on it" —
+   mas "it" é `readKey`, não `readResultScript`. O comentário justifica
+   `readKey`, que de fato é usado; `readResultScript` ficou ao lado sem
+   ninguém perceber que o teste construiu o mesmo padrão por conta própria.
+
+**Correção**: remoção de `readResultScript`. `readKey` permanece (é usado pelo
+teste e pela produção).
+
+### Validação do Chief — conferida na fonte, não aceita por relatório
+
+Confirmei os dois vereditos lendo o código, porque "nenhum era defeito real" é a
+conclusão conveniente e precisava de checagem independente:
+
+- `react.go`: as três atribuições (`lastSticky`, `lastSum`, `last`) de fato
+  SEMPRE executam antes de qualquer leitura, e as únicas saídas anteriores são
+  `return` que não as lê. Inicialização morta confirmada.
+- `chatstate.go`: `readResultScript` não aparece mais em lugar nenhum, e o
+  comentário da linha 264 é mesmo sobre `readKey`, que segue usado pelo teste.
+
+Aritmética do lint fecha: 418 → 405 avisos, exatamente 13 a menos, com
+complexidade máxima inalterada em 56. Os quatro avisos que sobram nos arquivos
+tocados são `gocyclo` pré-existente, não os alvos.
+
+### Achado incidental do Chief — NÃO corrigido, vai para triagem
+
+Com `readResultScript` removido, **nenhum script de produção emite `readKey`**.
+A constante sobrevive usada só pelo teste, e os dois ramos do dublê em
+`chatstate_test.go:44,49` — que roteiam em `readKey+'"] = null'` e em
+`JSON.stringify(window["readKey"])` — passam a ser **inalcançáveis**: a produção
+nunca produz aquelas strings.
+
+Isso não é defeito de comportamento, mas é cobertura falsa: dois ramos de dublê
+que nunca disparam dão impressão de exercitar um caminho que não existe. E o
+comentário da linha 264 diz que a constante é mantida porque "os testes roteiam
+nela" — o que agora é circular.
+
+**Não investigado nesta sessão** — a remoção estava no escopo, esta consequência
+não. Pergunta em aberto: apagar `readKey` e os dois ramos, ou restaurar o
+caminho de leitura assíncrona que eles pressupunham?
+
+**Status**: **corrigido** — os dois eram código morto; nenhum era defeito real. As
+correções não alteraram comportamento de produção e todos os testes passam. O
+achado incidental acima segue aberto.
+
+## H118 — a auditoria de fachada: 10 de 43 herdam, e 33 são trabalho de verdade
+
+**Data**: 2026-08-22. **Contexto**: generalizar a H109 (a família `Chat` era
+fachada) para todas as famílias do LEDGER-WWEBJS com linhas `MISSING`.
+
+**Onde**: `internal/wa-headless/AUDITORIA-FACHADA.md` (novo, produzido por
+worker sob o substrato `orca`), `LEDGER-WWEBJS.md`.
+
+### A hipótese, e o que a medição fez com ela
+
+A hipótese era minha: *"se `Chat` era fachada, outras famílias também serão"*.
+O packet do worker dizia explicitamente para MEDIR, não para confirmar — e que
+"não há mais fachada" seria resultado válido.
+
+Resultado sobre 43 linhas `MISSING` em 10 famílias:
+
+```
+(a) delegação pura .......... 18
+(b) delegação com lógica .....  6
+(c) implementação própria .... 19
+herdam de fato .............. 10   (as (a) cujo par no Client tem estado)
+```
+
+**A hipótese confirma-se apenas em parte, e isso é o achado.** `Broadcast` (2 de
+2) e `GroupNotification` (3 de 4) são fachada como `Chat` era. Mas `Message`
+(9 de 9) e `GroupChat` (3 de 3) são implementação própria: ali não há atalho, é
+trabalho. Oito das (a) não herdam porque o par no `Client` também está
+`MISSING` — herança não inventa estado.
+
+### Validação da saída do worker — não aceita por relatório
+
+Conferi na fonte, no upstream FIXADO, e não pelo que o worker disse:
+
+- As **8** linhas herdadas com número de linha (`GroupNotification.js:77–79,
+  85–87, 108–110`; `Broadcast.js:55–57, 63–65`; `Channel.js:239–241, 247–249,
+  380–382`) batem EXATAMENTE, e o código é delegação de uma linha.
+- As **6** classificadas `(b)` foram conferidas uma a uma: `Contact.getChat`
+  tem `if (this.isMe) return null`; `Message.getMentions` faz `Promise.all`
+  sobre `mentionedIds`; `Chat.addOrEditCustomerNote` tem
+  `if (this.isGroup || this.isChannel) return`. Classificação correta nas seis.
+
+Um detalhe que o worker registrou e eu teria perdido:
+`GroupNotification.getContact()` delega com `this.author`, **não** com o chat.
+Continua delegação pura, mas resolve pessoa diferente do que o nome sugere.
+
+### O que mudou no ledger
+
+10 linhas saem de `MISSING`: **3 para `PROVEN`** (`Contact.getProfilePicUrl`,
+`Contact.getCommonGroups`, `Channel.deleteChannel` — pares provados) e **7 para
+`PARTIAL`** (pares parciais). O placar vai de `PROVEN 82 / MISSING 79` para
+`PROVEN 85 / PARTIAL 60 / MISSING 69`.
+
+Vale a mesma ressalva da H109: **nenhuma prova nova foi produzida aqui.** A
+defesa é a auditabilidade — cada linha do `AUDITORIA-FACHADA.md` cita
+`arquivo:linha` da SHA fixada, e eu conferi 14 delas à mão.
+
+**Status**: entregue — auditoria completa e heranças aplicadas.

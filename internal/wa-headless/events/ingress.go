@@ -165,7 +165,7 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Ack     int    `json:"ack"`
 			BodyLen int    `json:"bodyLen"`
 
-			MsgT     int64  `json:"msgT"`
+			MsgT int64 `json:"msgT"`
 
 			Call     string `json:"call"`
 			Peer     string `json:"peer"`

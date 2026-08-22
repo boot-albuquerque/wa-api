@@ -1,8 +1,9 @@
 package spa
 
-import "strings"
-
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestTheClassifierOuterFunctionIsSynchronous. engine.Tab.Evaluate does not
 // await, so an async wrapper hands Go a Promise where it expects an answer —

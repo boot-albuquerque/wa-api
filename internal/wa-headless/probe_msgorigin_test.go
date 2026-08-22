@@ -179,7 +179,7 @@ func parseLoadedIDs(t *testing.T, raw string) loadedIDs {
 		Group        []string `json:"group"`
 		DirectCount  int      `json:"directCount"`
 		SampleDirect []string `json:"sampleDirect"`
-		Err         string   `json:"err"`
+		Err          string   `json:"err"`
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		t.Fatalf("collection payload: %v", err)

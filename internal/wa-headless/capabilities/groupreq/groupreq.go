@@ -59,7 +59,7 @@ var (
 )
 
 const (
-	stateKey  = "__waHeadlessGroupReq"
+	stateKey       = "__waHeadlessGroupReq"
 	groupJIDSuffix = "@g.us"
 )
 

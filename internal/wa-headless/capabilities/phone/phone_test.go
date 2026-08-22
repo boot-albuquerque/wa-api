@@ -100,7 +100,9 @@ func TestTheRefusalDoesNotQuoteTheNumber(t *testing.T) {
 func TestANonsenseAnswerIsItsOwnError(t *testing.T) {
 	p := &pageDouble{}
 	// Force the page to answer a non-numeric code for a well-formed input.
-	p.eval(context.Background(), "kick", new(string))
+	if err := p.eval(context.Background(), "kick", new(string)); err != nil {
+		t.Fatalf("priming the double: %v", err)
+	}
 	bad := &fixedDouble{answer: `{"ok":true,"formatted":"+55 41 9","cc":"not"}`}
 	_, err := New(engine.NewRunner(), bad.eval).Lookup(context.Background(), "5541999998888", "t")
 	if !errors.Is(err, ErrNonsenseAnswer) {
