@@ -5935,3 +5935,69 @@ mora.* Os transforms fizeram 19 de 26 e falharam em todas as sete restantes, cad
 uma por um motivo distinto — e três delas precisavam do OPOSTO do que o transform
 fazia. O tempo que economizaram foi real; o tempo que teriam custado se eu tivesse
 insistido também.
+
+---
+
+## H182 — a chamada em voo quando o navegador morre: medida, e o erro que ela devolve merece uma decisão
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "reconexão / recuperação determinística".
+
+**Onde**: `internal/wa-headless/runtime/inflight_test.go` (novo).
+
+**A lacuna**: o contrato do `Holder` para sessão morta está documentado e testado
+— `ErrSessionDied`, e ele recusa rebootar em vez de esconder um navegador que
+morre sempre. O que nada media é a chamada **já em voo** quando o processo some.
+Duas falhas são possíveis e só uma é aceitável: voltar classificada dentro do
+prazo, ou pendurar.
+
+**A escolha de fixture é parte do achado.** O teste usa perfil TEMPORÁRIO e página
+local, não o de laboratório: `SIGKILL` contra um perfil **pareado** arrisca
+corrompê-lo, e repareamento exige um humano com o telefone — custo que esta
+medição não tem direito de gastar. O mecanismo sob teste (`Runner.Do`, o
+transporte CDP, o prazo) é o mesmo; muda só a credencial em risco.
+
+**Medição**, com uma avaliação que ocupa a página por 120 s e o `SIGKILL` chegando
+aos 2 s:
+
+```
+a chamada em voo voltou em 2.027s com err=context canceled
+goroutines: 15 antes, 3 depois
+Session() seguinte: ErrSessionDied
+```
+
+**Não pendura, não vaza, e a sessão seguinte diz que morreu.** A recuperação é
+determinística. Esta é a linha de base do item.
+
+### O que sobra, e é decisão e não defeito
+
+O erro é **`context canceled`** — o vocabulário de um cancelamento pedido pelo
+CHAMADOR —, e o contexto do chamador aqui era `context.Background()`, que ninguém
+cancelou. Quem receber isso não tem, na mensagem, nada que diga "o navegador
+morreu".
+
+**E isso é consistente com um princípio já escrito no `Runner`**: *"o contexto é
+consultado, não o erro: um driver é livre para reportar um prazo estourado como o
+erro que quiser, e confiar na redação dele põe a classificação nas mãos de
+outro"*. O `Runner` deliberadamente NÃO interpreta erro de driver, e por isso o
+`context canceled` do chromedp passa cru.
+
+Um chamador PODE distinguir — se o próprio contexto não está encerrado e mesmo
+assim veio `context canceled`, não foi ele. Mas isso é implícito, e o módulo tem
+precedente para tornar explícito: o `TimeoutError` existe exatamente para que
+"não respondeu" não se confunda com "respondeu com erro".
+
+**Registrado como pergunta de desenho, não como defeito**, porque mexer nisso
+contraria uma razão que já está escrita — e trocar um princípio por outro é
+decisão de contrato. Opções: (a) deixar como está e documentar a discriminação
+implícita; (b) o `Runner` passar a classificar "alvo sumiu" quando o processo já
+não existe, o que exige consultar o PID e não a mensagem; (c) o `Holder` expor um
+sinal que o chamador consulta ao ver erro inesperado.
+
+**Status**: linha de base estabelecida, sem defeito encontrado. Uma pergunta de
+contrato aberta.
+
+**Lição**: *"não encontrei defeito" só é resultado se a medição podia tê-lo
+encontrado.* Este teste falha se a chamada pendurar, se voltar dizendo sucesso, se
+deixar goroutine, ou se a sessão seguinte rebootar em silêncio — quatro modos, e
+por isso o verde significa alguma coisa.
