@@ -573,3 +573,46 @@ concorrência dentro de uma.
    sinalizador `Verified` é **disponível mas não imposta**, e o contador de issues
    do lint saltou de 267 para 472 (issues pré-existentes).
 
+## Fase 3 — integração ampla no wa-api (decisão 71, 2026-08-22)
+
+Enunciado recebido, verbatim:
+
+> **Próximo foco é integração ampla no `wa-api`; fecha quando as 35 capabilities
+> forem alcançáveis pela fronteira correta, com seleção de engine, contratos
+> equivalentes e testes cross-adapter, sem capability órfã.**
+
+### O ponto de partida, MEDIDO
+
+**0 de 35.** Não "algumas faltando" — nenhuma:
+
+- `internal/wa-headless/main.go`, que é a FACHADA e o único caminho de import
+  permitido, tem **31 linhas e zero símbolos exportados**. O próprio doc dele diz
+  que a fachada ainda está vazia.
+- `pkg/infra/wa-headless/` tem três arquivos e **todos são `doc.go`**, inclusive
+  em `client/` e `registry/`.
+
+Eu havia relatado à orquestração que o `pkg/` "não expõe todas"; medi depois e
+corrigi o número com eles antes de começar. A diferença entre "algumas faltando"
+e "nenhuma" muda o tamanho do trabalho, e um enunciado dimensionado sobre o
+número errado seria pior que nenhum enunciado.
+
+### A regra que governa o trabalho, e ela já está escrita
+
+Do doc da fachada:
+
+> Nada fora desta árvore importa outra coisa senão este arquivo. Quando um
+> símbolo falta, a correção é **acrescentar a linha na fachada**, nunca alcançar
+> por trás dela.
+
+E do doc de `pkg/infra/wa-headless`:
+
+> O que vive aqui é esperado satisfazer os MESMOS ports que
+> `pkg/infra/wa-noise` satisfaz onde um caso de uso não deveria se importar com
+> qual transporte está atrás. Onde uma capacidade existe em só um dos dois, essa
+> assimetria é decisão de produto e pertence a um ADR, **não a uma diferença
+> silenciosa entre dois adaptadores**.
+
+Isso já responde três das cinco cláusulas do critério: *fronteira correta* é a
+fachada, *contratos equivalentes* são os ports do `wa-noise`, e *sem capability
+órfã* é a proibição de assimetria silenciosa.
+
