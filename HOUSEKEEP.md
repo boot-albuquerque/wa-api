@@ -5160,3 +5160,62 @@ sabidamente não existe.* Eu enumerei nove módulos e não incluí nenhum nome
 inventado como controle — se tivesse, `WAWebNaoExisteMesmo` teria aparecido
 "presente" na primeira leitura e o defeito do instrumento apareceria antes da
 conclusão errada.
+
+---
+
+## H168 — `AUTHENTICATION_FAILURE`: a classe da página passou a viajar, e o controle negativo achou o elo sem teste
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/core/session.go` (`BootFailure.PageClass`,
+`failClass`), `core/lifecycle.go` (`LifecycleFact.PageClass`),
+`runtime/lifecycle.go`, `events/events.go` (`Event.PageClass`,
+`PublishSessionStateWithClass`), `probe_authfail_test.go` (novo).
+
+**A objeção da linha era exata**: o evento carregava o ESTÁGIO do boot, e o
+estágio sozinho não distingue um boot que morre em `not_ready` contra uma tela de
+pareamento de um que morre contra página quebrada — os dois chegam ao mesmo
+lugar por motivos opostos, e o primeiro é o que o upstream chama de falha de
+autenticação. A classe existia, mas **dentro da mensagem de erro**, e mensagem de
+erro não entra neste barramento (H88) — regra certa, que deixava a informação
+inacessível.
+
+**Correção aplicada**: a classe viaja como campo próprio, de vocabulário FECHADO
+(`spa.PageClass`), por todo o caminho. `Event.PageClass` é campo SEPARADO do
+`Reason`: um diz até onde o boot foi, o outro diz o que o parou.
+
+`PublishSessionState` continua existindo e não inventa classe — quem não tem o
+que dizer sobre a página continua não dizendo, em vez de mandar um `"UNKNOWN"`
+que se leria como medição.
+
+**Duas correções minhas, e a segunda é a que ensina:**
+
+1. **`failClass` é variável, não parâmetro.** `fail()` tem uma dúzia de
+   chamadores e onze não têm classe alguma para passar; enfiar `""` em todos
+   poria ruído onde não há informação.
+
+2. **A asserção da prova estava errada, não o código.** Exigi `LOGIN_REQUIRED` de
+   um perfil vazio e recebi `PAIRING_LOADING`, em 2,9 s de um orçamento de 90 s —
+   o classificador reconhece a tela de pareamento e **não espera o QR renderizar**,
+   que é o comportamento certo. Os dois valores dizem *"esta página quer
+   autenticação"*. Exigir um deles seria medir o tempo de renderização do QR e
+   chamar isso de significado. A asserção passou a ser sobre a FAMÍLIA.
+
+**A prova é a DISTINÇÃO, não um valor**: perfil não pareado dá pareamento; página
+em branco dá `REDIRECT`. Se as duas dessem o mesmo, o campo não separaria nada, e
+o teste falha explicitamente nesse caso.
+
+**Status**: corrigido, linha para `PROVEN`. Quatro controles negativos, todos
+compilando e falhando.
+
+**O achado sobre método**: um dos controles — apagar o repasse no `runtime` —
+**compilou e não foi pego por nenhum teste unitário**. O elo `core → runtime →
+barramento` não tinha guarda. A asserção foi então acrescentada ao teste de
+`runtime` que já sobe navegador contra página em branco, e os dois controles que
+atravessam o caminho passaram a morder.
+
+**Lição**: *um controle negativo que não é pego revela um teste que falta, não um
+controle ruim.* A tentação é ajustar o controle até algo falhar; o certo foi
+perguntar POR QUE nada falhou — e a resposta foi um elo inteiro sem cobertura,
+que agora tem.

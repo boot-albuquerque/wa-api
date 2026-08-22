@@ -280,6 +280,18 @@ type Event struct {
 	// State is the lifecycle state for the session.* events: the liveness
 	// signal for SessionStateChanged, empty otherwise.
 	State string
+	// PageClass is what the PAGE looked like when a boot failed, from spa's own
+	// closed vocabulary — LOGIN_REQUIRED, SESSION_CONFLICT, UNRESPONSIVE and the
+	// rest. Empty for everything that is not a boot failure.
+	//
+	// IT IS A SEPARATE FIELD BECAUSE IT ANSWERS A DIFFERENT QUESTION. Reason
+	// carries the boot STAGE — how far the boot got — and the class carries what
+	// stopped it. A boot that dies at not_ready against a QR screen and one that
+	// dies at not_ready against an unresponsive page reach the same stage for
+	// opposite causes, and the upstream's AUTHENTICATION_FAILURE is exactly the
+	// first of those. Until this field existed, the distinction lived only in the
+	// error message, and error messages do not enter this bus (H88).
+	PageClass string
 	// Reason is why, for the session.* events — a boot stage, a StopVia, a
 	// page class. It is a CLOSED vocabulary from this module's own constants,
 	// never a formatted error: an error string is where a profile path or a
@@ -445,8 +457,15 @@ func (h *Hub) deliver(e Event) {
 //
 // Seq stays zero: see SourceLocal.
 func (h *Hub) PublishSessionState(t Type, state, reason string) {
+	h.PublishSessionStateWithClass(t, state, reason, "")
+}
+
+// PublishSessionStateWithClass is PublishSessionState carrying what the page
+// looked like. See Event.PageClass for why that is not folded into reason.
+func (h *Hub) PublishSessionStateWithClass(t Type, state, reason, pageClass string) {
 	h.deliver(Event{
-		Type: t,
+		PageClass: pageClass,
+		Type:      t,
 		// A LIFECYCLE FACT IS ALWAYS NEWS. This process observed it happening,
 		// in this process, just now — which is the strongest causal evidence
 		// anything on this bus has.

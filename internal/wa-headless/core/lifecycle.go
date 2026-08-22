@@ -50,6 +50,11 @@ type LifecycleFact struct {
 	// Reason is a BootStage for PhaseBootFailed, a StopVia for PhaseStopped,
 	// and empty for PhaseReady — there is only one way to be ready.
 	Reason string
+	// PageClass is what the page looked like, for PhaseBootFailed only, from
+	// spa's closed vocabulary. Empty when the failure happened before there was
+	// a page to classify — which is itself information, and the reason this is
+	// not defaulted to "UNKNOWN".
+	PageClass string
 	// WasSuspect records that this profile carried a suspect marker when the
 	// boot started. It is the one piece of history the phase alone cannot
 	// convey, and it changes what a ready MEANS: a verified recovery rather

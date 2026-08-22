@@ -433,7 +433,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | upstream | wa-headless | estado | nota |
 |---|---|---|---|
 | `AUTHENTICATED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — sem observável neste build: o boot chega a APP_READY verificado ou falha, sem degrau intermediário (H88) |
-| `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PARTIAL` | o evento carrega o ESTÁGIO do boot; um boot que morre em `not_ready` contra uma tela de QR é o caso do upstream, mas o MOTIVO (a classe da página) não viaja no evento — `BootFailure` o guarda na mensagem de erro, e mensagem de erro não entra no barramento (H88) |
+| `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PROVEN` | **H168: a classe da página passou a VIAJAR no evento.** A objeção era exata — o estágio sozinho não distingue um boot que morre em `not_ready` contra uma tela de pareamento de um que morre contra página quebrada, e a classe vivia só na mensagem de erro, que não entra no barramento (H88). Agora `BootFailure` → `LifecycleFact` → `Event.PageClass` carregam vocabulário FECHADO do `spa`. Provado com boot real de perfil NÃO PAREADO: `stage=not_ready class=PAIRING_LOADING`, contra `REDIRECT` de uma página em branco — se as duas dessem o mesmo, o campo não separaria nada. Quatro controles negativos, dois deles atravessando `core → runtime → barramento` |
 | `READY` | events.SessionReady | `PROVEN` | no barramento desde a H88, e distingue um ready ORDINÁRIO de um que recuperou um perfil suspeito — a quitação da invariante 2 fica contada em vez de inferida |
 | `CHAT_REMOVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — provar exigiria APAGAR uma conversa, destruindo a fixture de todos os outros testes (H66) |
 | `CHAT_ARCHIVED` | events.ChatChanged | `PARTIAL` | o nosso evento é grosso: diz que a conversa mudou, não QUAL campo (H87). **H150: o refinamento foi TENTADO e a página não o suporta.** A coleção não é Backbone — `model.changed` é nulo em 40 de 40 eventos —, mas o build tem contabilidade própria em `__fired`, que parecia a saída. Não é: medindo por ATO, arquivar e desarquivar disparam AMBOS `showUnreadInTitle` e nada mais, e marcar não-lida dispara `pendingAction`, enquanto `markedUnread` dispara durante um ENVIO. Os nomes são campos derivados de UI, não o campo semântico — não dá para classificar `archived` a partir deles |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 131 | 60% |
-| `PARTIAL` | 36 | 16% |
+| `PROVEN` | 132 | 60% |
+| `PARTIAL` | 35 | 16% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

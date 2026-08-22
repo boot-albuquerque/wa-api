@@ -123,6 +123,25 @@ func TestAttachHub_ABootThatFailsSaysWhichStage(t *testing.T) {
 	if got[0].Reason != string(core.StageNotReady) {
 		t.Fatalf("reason %q, want %q", got[0].Reason, core.StageNotReady)
 	}
+	// E DIZ CONTRA O QUE MORREU, nao so' onde parou.
+	//
+	// O estagio sozinho nao distingue um boot que morre contra uma tela de QR de
+	// um que morre contra pagina que nao responde — os dois chegam a not_ready,
+	// por motivos opostos, e o primeiro e' o que o upstream chama de falha de
+	// AUTENTICACAO. Ate' este campo existir, a classe vivia so' na mensagem de
+	// erro, e mensagem de erro nao entra neste barramento.
+	//
+	// A asserção e' aqui, e nao no pacote events, porque o elo que ela protege e'
+	// o repasse do fato ate' o hub: um controle negativo que apagou esse repasse
+	// COMPILOU e nao foi pego por nenhum teste unitario.
+	if got[0].PageClass == "" {
+		t.Fatal("the boot failure reached the bus with no page class, so a " +
+			"subscriber cannot tell an unauthenticated page from a broken one")
+	}
+	if got[0].PageClass == string(spa.ClassAppReady) {
+		t.Fatalf("a failed boot reported the ready class %q", got[0].PageClass)
+	}
+	t.Logf("blank page classified as %q", got[0].PageClass)
 }
 
 // THE FIRST VERDICT IS AN EVENT and a repeat is not.

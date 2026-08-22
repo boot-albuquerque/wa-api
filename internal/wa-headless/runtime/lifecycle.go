@@ -45,7 +45,7 @@ func (h *Holder) AttachHub(hub *events.Hub) bool {
 		case core.PhaseReady:
 			hub.PublishSessionState(events.SessionReady, string(f.Phase), readyReason(f.WasSuspect))
 		case core.PhaseBootFailed:
-			hub.PublishSessionState(events.SessionBootFailed, string(f.Phase), f.Reason)
+			hub.PublishSessionStateWithClass(events.SessionBootFailed, string(f.Phase), f.Reason, f.PageClass)
 		case core.PhaseStopped:
 			hub.PublishSessionState(events.SessionStopped, string(f.Phase), f.Reason)
 		}

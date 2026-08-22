@@ -126,6 +126,16 @@ type BootFailure struct {
 	Stage      BootStage
 	Cause      error
 	StoppedVia engine.StopVia
+	// PageClass is what the page looked like when the boot gave up, from spa's
+	// closed vocabulary, and it is EMPTY when the boot died before there was a
+	// page to classify.
+	//
+	// IT IS NOT DERIVABLE FROM Stage. A boot that dies at StageNotReady against a
+	// QR screen and one that dies at StageNotReady against an unresponsive page
+	// carry the same stage for opposite reasons — and the first is what the
+	// upstream calls an authentication failure. The class was inside Cause's
+	// message, where nothing structured could read it.
+	PageClass spa.PageClass
 	// WasSuspect records whether the profile's suspect marker was set before
 	// this boot attempt started.
 	WasSuspect bool
@@ -322,6 +332,7 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		var bf *BootFailure
 		if errors.As(err, &bf) {
 			f.Reason, f.WasSuspect = string(bf.Stage), bf.WasSuspect
+			f.PageClass = string(bf.PageClass)
 		}
 		emit(cfg.OnLifecycle, f)
 		return nil, err
@@ -394,6 +405,11 @@ func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	// MUST go through the same teardown: engine.CleanStop, which records
 	// StopVia and marks the profile suspect on a dirty stop. fail is the one
 	// place that happens, so no later branch can forget it.
+	// failClass is what the page looked like, set only where there IS a page to
+	// classify. It is a variable rather than a parameter because fail() has a
+	// dozen callers and eleven of them have no class to pass; threading an empty
+	// string through all of them would put the noise where the information is not.
+	var failClass spa.PageClass
 	fail := func(stage BootStage, cause error) (*Session, error) {
 		// Read before the stop for readability, NOT for correctness — and
 		// saying so is a correction. This comment first claimed the order was
@@ -406,7 +422,7 @@ func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		release()
 		return nil, &BootFailure{
 			Stage: stage, Cause: cause, StoppedVia: via,
-			WasSuspect: wasSuspect, PID: pid,
+			WasSuspect: wasSuspect, PID: pid, PageClass: failClass,
 		}
 	}
 
@@ -489,6 +505,7 @@ func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, settleBudget, "core/start/probe")
 	if class != spa.ClassAppReady {
 		tab.Close()
+		failClass = class
 		return failTab(StageNotReady, fmt.Errorf(
 			"core: page classified %q, want %q; this boot path is restoration-only — "+
 				"pairing is a separate, human-authorised slice (snapshot url=%q dom_nodes=%d)",

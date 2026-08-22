@@ -225,3 +225,52 @@ func TestTheClockIsThePagesOnlyForDiagnosis(t *testing.T) {
 		}
 	}
 }
+
+// THE PAGE CLASS TRAVELS, and this is the whole content of the
+// AUTHENTICATION_FAILURE row.
+//
+// A boot that dies at not_ready against a QR screen and one that dies at
+// not_ready against an unresponsive page carry the SAME stage. The upstream
+// emits AUTHENTICATION_FAILURE for the first and something else for the second,
+// and until the class rode on the event a subscriber here could not tell them
+// apart — the distinction lived in the error message, and error messages do not
+// enter this bus (H88).
+func TestABootFailureCarriesWhatThePageLookedLike(t *testing.T) {
+	h := NewHub()
+	var got []Event
+	unsub := h.Subscribe(func(e Event) { got = append(got, e) })
+	defer unsub()
+
+	h.PublishSessionStateWithClass(SessionBootFailed, "boot_failed", "not_ready", "LOGIN_REQUIRED")
+	h.PublishSessionStateWithClass(SessionBootFailed, "boot_failed", "not_ready", "UNRESPONSIVE")
+
+	if len(got) != 2 {
+		t.Fatalf("want 2 events, got %d", len(got))
+	}
+	// A FIXTURE E' CONFERIDA ANTES DA ASSERCAO: se os dois estagios diferissem,
+	// este teste passaria sem medir a distincao que afirma medir.
+	if got[0].Reason != got[1].Reason {
+		t.Fatal("the fixture is wrong: both failures must share a stage")
+	}
+	if got[0].PageClass == got[1].PageClass {
+		t.Fatalf("two failures at the same stage came through indistinguishable "+
+			"(%q both), which is the state this field exists to end", got[0].PageClass)
+	}
+	if got[0].PageClass != "LOGIN_REQUIRED" {
+		t.Fatalf("the class did not survive: %q", got[0].PageClass)
+	}
+}
+
+// THE OLD ENTRY POINT CARRIES NO CLASS. Every caller with nothing to say about
+// the page keeps saying nothing, rather than defaulting to a value that would
+// read as a measurement.
+func TestPublishingWithoutAClassLeavesItEmpty(t *testing.T) {
+	h := NewHub()
+	var got Event
+	unsub := h.Subscribe(func(e Event) { got = e })
+	defer unsub()
+	h.PublishSessionState(SessionStopped, "stopped", "browser.close")
+	if got.PageClass != "" {
+		t.Fatalf("a publish with no class invented one: %q", got.PageClass)
+	}
+}
