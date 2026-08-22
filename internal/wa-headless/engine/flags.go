@@ -130,9 +130,24 @@ func BuildFlags(cfg LaunchConfig) ([]string, error) {
 		return nil, fmt.Errorf("launch: ProfileDir is required; a browser without a "+
 			"persistent profile loses the paired session on every restart (%s)", flagUserDataDir)
 	}
-	if cfg.DebuggingPort <= 0 {
-		return nil, fmt.Errorf("launch: DebuggingPort is required; without it there is "+
-			"no CDP endpoint and no way to stop the browser cleanly (%s)", flagRemotePort)
+	// DebuggingPort ZERO is the normal case, not a missing value: Chromium
+	// picks an ephemeral port and writes it, with the browser ws path, into
+	// <ProfileDir>/DevToolsActivePort. That is where the launcher reads it.
+	//
+	// This used to be rejected, with the reason "without it there is no CDP
+	// endpoint and no way to stop the browser cleanly". That reason was wrong,
+	// and it was MEASURED wrong (F102): the endpoint exists, and reading it
+	// from the profile is STRONGER than asking for a port, because it ties the
+	// endpoint to the profile we launched instead of trusting whoever happens
+	// to answer on a number.
+	//
+	// A positive value is still honoured as an explicit override — the caller
+	// that needs a fixed port (an operator attaching a debugger) keeps it.
+	// Negative is neither, and stays an error.
+	if cfg.DebuggingPort < 0 {
+		return nil, fmt.Errorf("launch: DebuggingPort %d is negative; use 0 for an "+
+			"ephemeral port or a positive number to pin one (%s)",
+			cfg.DebuggingPort, flagRemotePort)
 	}
 
 	out := make([]string, 0, len(canonicalProfileV1)+6)

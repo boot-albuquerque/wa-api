@@ -6365,3 +6365,150 @@ guarda de `ParseJID` deixa a suíte de rota inteiramente verde.
 regra pura para um pacote compartilhado propagaria em silêncio para o segundo
 adaptador. Corrigido ANTES da extração, o que se move é a regra já saneada —
 que é a ordem que a decisão 73 impôs.
+
+## F102 — a Fase 3 precisa de N browsers, e o launcher exige uma porta que ele não precisaria exigir
+
+**Data**: 2026-08-22.
+**Contexto**: Fase 3 (decisão 71), ao projetar o registry que mapeia `txtID` →
+sessão headless. Não é defeito em produção: nada em produção fia o
+`wa-headless` ainda — é exatamente isso que a Fase 3 vai fazer. Fica
+registrado porque a fiação passaria por cima do problema sem vê-lo.
+
+**Onde**: `internal/wa-headless/engine/flags.go:133-136` e
+`internal/wa-headless/engine/launcher.go:113-140`
+
+**Problema, em duas metades.**
+
+*Metade 1 — a porta é obrigatória sem precisar ser.*
+
+```go
+if cfg.DebuggingPort <= 0 {
+    return nil, fmt.Errorf("launch: DebuggingPort is required; without it there is "+
+        "no CDP endpoint and no way to stop the browser cleanly (%s)", flagRemotePort)
+}
+```
+
+A justificativa está errada, e isso foi MEDIDO, não deduzido. Com
+`--remote-debugging-port=0` o Chromium sobe, escolhe porta efêmera e escreve
+`<ProfileDir>/DevToolsActivePort` com DUAS linhas: a porta real e o caminho ws
+do browser.
+
+Medido em 2026-08-22, Google Chrome 151.0.7922.170, macOS 15.6, com perfil
+temporário descartado depois (nunca o perfil pareado):
+
+```
+=== DevToolsActivePort existe? ===
+SIM. conteudo:
+55077
+/devtools/browser/954157ae-38a1-4ef0-b7d5-f03f3c1f7d03
+```
+
+Ou seja: existe endpoint CDP sem o chamador escolher porta nenhuma.
+
+*Metade 2 — e por isso o `awaitEndpoint` confia em quem atender.*
+
+```go
+url := fmt.Sprintf("http://%s:%d%s", localEndpointHost, port, versionEndpoint)
+```
+
+Ele faz GET em `127.0.0.1:PORT/json/version` e aceita QUALQUER browser que
+responda. Não há verificação de identidade — nada amarra o endpoint ao processo
+que acabamos de lançar nem ao `ProfileDir` que pedimos.
+
+Hoje isso é inofensivo porque só um browser sobe por vez e a porta vem de
+`freePort(t)` nos testes. Com N sessões, deixa de ser: `freePort` é
+bind-`:0`-e-fecha (`integration_test.go:60-70`), TOCTOU clássico, e duas
+sessões arrancando ao mesmo tempo podem receber a mesma porta. O modo de falha
+não é "falha ao subir" — é a **sessão B anexar-se ao browser da sessão A**,
+dirigindo a conta errada em silêncio. Num stack cujo escopo são duas contas de
+WhatsApp distintas, isso é troca de conta, não erro de infraestrutura.
+
+**Correção sugerida**: parar de escolher porta. Lançar com
+`--remote-debugging-port=0` e ler `<ProfileDir>/DevToolsActivePort` para
+descobrir a porta e o caminho ws. Isso resolve as duas metades de uma vez: não
+há porta para colidir, e o endpoint fica amarrado ao NOSSO `ProfileDir`, que é
+justamente a identidade que falta hoje. `DebuggingPort` continua útil como
+override explícito, mas deixa de ser obrigatório.
+
+É também o que a referência faz: puppeteer (e portanto o whatsapp-web.js) lê o
+`DevToolsActivePort` do user-data-dir em vez de confiar na porta pedida. O
+ENTENDIMENTO veio de lá; o comportamento foi medido aqui, porque este projeto
+já teve quatro nomes de módulo do wwebjs que não existiam no nosso build.
+
+**Anti-regressão exigida**: teste que sobe com porta 0 e prova que o endpoint
+sai do arquivo, mais teste da metade 2 — dois perfis, e o segundo NÃO pode
+terminar apontando para o ws do primeiro. O controle negativo é reintroduzir a
+leitura por porta fixa e ver o segundo anexar-se ao primeiro.
+
+**Status**: **CORRIGIDO** nesta sessão, por decisão 75 ("troque agora para
+porta 0 mais DevToolsActivePort, mantendo DebuggingPort apenas como override
+explícito e validando que o endpoint pertence ao ProfileDir lançado").
+
+O que mudou:
+
+1. `flags.go` — `DebuggingPort == 0` deixa de ser erro e passa a ser o caso
+   NORMAL; positivo continua override explícito; negativo continua erro, com
+   mensagem que diz as três coisas.
+2. `launcher.go` — `awaitEndpoint` passa a ter DOIS caminhos, e qual existe
+   não é preferência nossa: é decidido pelo Chromium, e foi medido.
+
+   **CORREÇÃO DE UMA MEDIÇÃO MINHA INCOMPLETA.** A primeira medição usou porta
+   0 e concluiu "o Chromium publica o arquivo". Ao rodar a suíte, oito testes
+   de integração falharam — eles fixam porta. Fui medir o caso fixado, com o
+   conjunto canônico completo de flags:
+
+   | `--remote-debugging-port` | escreve `DevToolsActivePort`? | responde HTTP? |
+   | --- | --- | --- |
+   | `0` | **sim** | sim |
+   | fixada | **NÃO** | sim |
+
+   Com porta explícita o Chromium **não escreve o arquivo de todo**. Logo o
+   override só pode ser servido por HTTP, e o caminho do perfil só existe no
+   caso efêmero. A assimetria é a razão de preferir porta 0 — e é a razão de
+   o registry preferir. Fixar porta passa a ser o chamador assumindo o risco
+   explicitamente, que é o que um override deve ser.
+
+   Descartei junto o teste que eu havia escrito para "porta fixada discorda do
+   arquivo": é um estado que o Chrome real nunca produz, e travá-lo seria a
+   armadilha nº 1 do `ARMADILHAS.md` — dublê que inventa uma forma que a
+   produção não tem.
+3. `launcher.go` — o arquivo é APAGADO antes do arranque. Sem isso, um
+   `DevToolsActivePort` deixado por um browser que morreu reproduziria o
+   próprio defeito que a mudança remove.
+4. A discordância entre porta fixada e porta publicada vira ERRO, e não uma
+   preferência silenciosa por uma das duas.
+5. O caminho HTTP morto (`readEndpoint`, `versionEndpoint`, o campo
+   `HTTPClient` e o dublê `devToolsServer`) foi removido: deixá-lo daria a
+   impressão de que o launcher ainda fala HTTP.
+
+**Testes que travam o achado** (`engine/launcher_test.go`, `engine/flags_test.go`):
+
+- `TestLaunchIgnoresAStaleEndpointFileFromAPreviousRun` — o caso de identidade.
+- `TestLaunchUsesTheHTTPEndpointWhenThePortIsPinned` — o caminho de override,
+  que também exige que NADA seja escrito no perfil, porque o Chromium real não
+  escreve.
+- `TestLaunchWaitsThroughAHalfWrittenEndpointFile` — substitui o antigo teste
+  do "ws vazio" pela corrida REAL: o leitor chega no meio da escrita.
+- `TestBuildFlagsAcceptsAnEphemeralPort`, `TestBuildFlagsKeepsAPinnedPort`,
+  `TestBuildFlagsRefusesANegativePort` — substituem
+  `TestBuildFlagsRequiresADebuggingPort`, que travava a regra ANTIGA.
+
+O dublê passou a PUBLICAR o endpoint no perfil, no formato medido contra o
+Chrome real (duas linhas, porta e caminho ws). Um dublê que publicasse outra
+forma provaria só que o parser lê o que o dublê escreve.
+
+**Controles negativos EXECUTADOS** (dois, depois de a medição corrigida descartar o terceiro):
+
+```
+CONTROLE 1 — não apaga o arquivo obsoleto
+WebSocketURL = "ws://127.0.0.1:40001/devtools/browser/STALE",
+          want "ws://127.0.0.1:55080/devtools/browser/fresh" — the stale file was believed
+
+CONTROLE 3 — aceita arquivo pela metade
+WebSocketURL = "ws://127.0.0.1:55079/devtools/browser/guessed",
+          want "ws://127.0.0.1:55079/devtools/browser/late" — the half-written file was accepted
+```
+
+O controle 1 não é uma asserção sobre a correção: ele **demonstra a falha**. O
+launcher, sem a limpeza, conecta-se ao endpoint de outra execução — que é o
+"dirigir o browser errado" descrito acima, acontecendo num teste.

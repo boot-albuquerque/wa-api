@@ -33,6 +33,55 @@ func fakeChromium(t *testing.T, startedMarker string) string {
 	return path
 }
 
+// publishingChromium is the fake browser that PUBLISHES its endpoint the way
+// the real one does: two lines in <ProfileDir>/DevToolsActivePort, the bound
+// port then the browser ws path.
+//
+// The format is not invented. It was measured against Google Chrome
+// 151.0.7922.170 on macOS 15.6 with a throwaway profile (F102):
+//
+//	55077
+//	/devtools/browser/954157ae-38a1-4ef0-b7d5-f03f3c1f7d03
+//
+// A double that published some other shape would prove only that the parser
+// reads what the double writes — the trap this repository has hit before.
+func publishingChromium(t *testing.T, startedMarker, profileDir string, port int, wsPath string) string {
+	t.Helper()
+	return writeFakeScript(t, "#!/bin/sh\ntouch "+startedMarker+"\n"+
+		publishLine(profileDir, port, wsPath)+"exec sleep 30\n")
+}
+
+// halfWrittenThenCompleteChromium writes the file INCOMPLETE first — only the
+// port line — and completes it a moment later.
+//
+// This is the real race, and it replaces the old "endpoint answers with an
+// empty ws URL" double: the browser writes the file in one go, but a reader can
+// still arrive mid-write. Treating that as a hard failure would turn an
+// ordinary race into a boot failure.
+func halfWrittenThenCompleteChromium(t *testing.T, profileDir string, port int, wsPath string) string {
+	t.Helper()
+	file := filepath.Join(profileDir, activePortFile)
+	return writeFakeScript(t, "#!/bin/sh\n"+
+		fmt.Sprintf("printf '%%d\\n' %d > %q\n", port, file)+
+		"sleep 0.4\n"+
+		publishLine(profileDir, port, wsPath)+
+		"exec sleep 30\n")
+}
+
+func publishLine(profileDir string, port int, wsPath string) string {
+	return fmt.Sprintf("printf '%%d\\n%%s\\n' %d %q > %q\n",
+		port, wsPath, filepath.Join(profileDir, activePortFile))
+}
+
+func writeFakeScript(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-chromium")
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake chromium: %v", err)
+	}
+	return path
+}
+
 // devToolsServer answers /json/version the way Chromium does.
 func devToolsServer(t *testing.T, wsURL func() string) (port int) {
 	t.Helper()
@@ -103,16 +152,20 @@ func reapBrowser(t *testing.T, b *Browser) {
 
 func TestLaunchReturnsABrowserOnceTheEndpointAnswers(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "started")
-	const wantWS = "ws://127.0.0.1:9222/devtools/browser/abc123"
-	port := devToolsServer(t, func() string { return wantWS })
+	profile := t.TempDir()
+	const wsPath = "/devtools/browser/abc123"
+	const port = 55077
+	wantWS := fmt.Sprintf("ws://127.0.0.1:%d%s", port, wsPath)
 
 	l := &Launcher{
-		BinaryPath: fakeChromium(t, marker),
+		BinaryPath: publishingChromium(t, marker, profile, port, wsPath),
 		Runner:     shortBootRunner(5 * time.Second),
 		Hostname:   testHost,
 	}
+	// DebuggingPort ZERO: the endpoint comes from the profile, which is the
+	// whole point of decision 75. No port is chosen, so none can collide.
 	b, err := l.Launch(context.Background(), LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: port,
+		ProfileDir: profile, DebuggingPort: 0,
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -134,15 +187,16 @@ func TestLaunchReturnsABrowserOnceTheEndpointAnswers(t *testing.T) {
 // launch set Setpgid. It is set at the one place that starts a browser so no
 // launch can be written without it — this asserts that place kept doing it.
 func TestLaunchStartsTheBrowserInItsOwnProcessGroup(t *testing.T) {
-	port := devToolsServer(t, func() string { return "ws://127.0.0.1:1/devtools/browser/x" })
+	profile := t.TempDir()
 
 	l := &Launcher{
-		BinaryPath: fakeChromium(t, filepath.Join(t.TempDir(), "started")),
-		Runner:     shortBootRunner(5 * time.Second),
-		Hostname:   testHost,
+		BinaryPath: publishingChromium(t, filepath.Join(t.TempDir(), "started"),
+			profile, 55078, "/devtools/browser/x"),
+		Runner:   shortBootRunner(5 * time.Second),
+		Hostname: testHost,
 	}
 	b, err := l.Launch(context.Background(), LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: port,
+		ProfileDir: profile, DebuggingPort: 0,
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -236,27 +290,23 @@ func TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers(t *testing.T) {
 	}
 }
 
-// The endpoint answers before the browser target exists, with an empty URL.
-// Accepting it would hand back a browser that cannot be addressed, and every
-// later CDP call would fail for a reason that looks unrelated.
-func TestLaunchWaitsThroughAnEmptyWebSocketURL(t *testing.T) {
-	var ready bool
-	const wantWS = "ws://127.0.0.1:9222/devtools/browser/late"
-	port := devToolsServer(t, func() string {
-		if !ready {
-			ready = true
-			return "" // the first answer is "not yet"
-		}
-		return wantWS
-	})
+// The file exists before it is COMPLETE: Chromium writes it in one go, but a
+// reader can arrive mid-write and see only the port line. Accepting that would
+// hand back a browser with no ws path, and every later CDP call would fail for
+// a reason that looks unrelated.
+func TestLaunchWaitsThroughAHalfWrittenEndpointFile(t *testing.T) {
+	profile := t.TempDir()
+	const wsPath = "/devtools/browser/late"
+	const port = 55079
+	wantWS := fmt.Sprintf("ws://127.0.0.1:%d%s", port, wsPath)
 
 	l := &Launcher{
-		BinaryPath: fakeChromium(t, filepath.Join(t.TempDir(), "started")),
+		BinaryPath: halfWrittenThenCompleteChromium(t, profile, port, wsPath),
 		Runner:     shortBootRunner(5 * time.Second),
 		Hostname:   testHost,
 	}
 	b, err := l.Launch(context.Background(), LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: port,
+		ProfileDir: profile, DebuggingPort: 0,
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -264,7 +314,7 @@ func TestLaunchWaitsThroughAnEmptyWebSocketURL(t *testing.T) {
 	reapBrowser(t, b)
 
 	if b.WebSocketURL() != wantWS {
-		t.Fatalf("WebSocketURL = %q, want %q — the empty first answer was accepted",
+		t.Fatalf("WebSocketURL = %q, want %q — the half-written file was accepted",
 			b.WebSocketURL(), wantWS)
 	}
 }
@@ -304,5 +354,79 @@ func TestLaunchRequiresABinary(t *testing.T) {
 		ProfileDir: t.TempDir(), DebuggingPort: 9222,
 	}); err == nil {
 		t.Fatal("Launch with no binary path succeeded")
+	}
+}
+
+// A leftover DevToolsActivePort is the one way reading the profile could
+// reproduce the failure it removes. Chromium deletes the file on a clean exit,
+// but a crashed browser leaves it behind — and a stale file points at a port
+// that is now free, or that another browser has since taken. That second case
+// is precisely "drive someone else's browser", which in this stack means
+// someone else's WhatsApp account.
+func TestLaunchIgnoresAStaleEndpointFileFromAPreviousRun(t *testing.T) {
+	profile := t.TempDir()
+	const stalePort = 40001
+	const wsPath = "/devtools/browser/fresh"
+	const freshPort = 55080
+
+	// The corpse of a previous run, pointing somewhere else entirely.
+	stale := fmt.Sprintf("%d\n/devtools/browser/STALE\n", stalePort)
+	if err := os.WriteFile(filepath.Join(profile, activePortFile), []byte(stale), 0o600); err != nil {
+		t.Fatalf("write stale endpoint file: %v", err)
+	}
+
+	l := &Launcher{
+		BinaryPath: publishingChromium(t, filepath.Join(t.TempDir(), "started"),
+			profile, freshPort, wsPath),
+		Runner:   shortBootRunner(5 * time.Second),
+		Hostname: testHost,
+	}
+	b, err := l.Launch(context.Background(), LaunchConfig{ProfileDir: profile})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	reapBrowser(t, b)
+
+	want := fmt.Sprintf("ws://127.0.0.1:%d%s", freshPort, wsPath)
+	if got := b.WebSocketURL(); got != want {
+		t.Fatalf("WebSocketURL = %q, want %q — the stale file was believed", got, want)
+	}
+}
+
+// The pinned-port route, which exists because Chromium leaves us nothing else.
+//
+// MEASURED (F102): with an explicit --remote-debugging-port, Chromium does NOT
+// write DevToolsActivePort at all — it only answers HTTP on the number it was
+// given. So an override cannot be served from the profile, and this test keeps
+// the other route honest rather than asserting a preference.
+//
+// The double is a real HTTP server answering /json/version the way Chromium
+// does, for the same reason the ephemeral double writes a real two-line file:
+// a double that invents its own shape proves only that the reader reads it.
+func TestLaunchUsesTheHTTPEndpointWhenThePortIsPinned(t *testing.T) {
+	profile := t.TempDir()
+	const wantWS = "ws://127.0.0.1:9222/devtools/browser/pinned"
+	port := devToolsServer(t, func() string { return wantWS })
+
+	l := &Launcher{
+		BinaryPath: fakeChromium(t, filepath.Join(t.TempDir(), "started")),
+		Runner:     shortBootRunner(5 * time.Second),
+		Hostname:   testHost,
+	}
+	b, err := l.Launch(context.Background(), LaunchConfig{
+		ProfileDir: profile, DebuggingPort: port,
+	})
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	reapBrowser(t, b)
+
+	if b.WebSocketURL() != wantWS {
+		t.Fatalf("WebSocketURL = %q, want %q", b.WebSocketURL(), wantWS)
+	}
+	// And nothing was invented in the profile: the pinned route must not depend
+	// on a file Chromium never writes.
+	if _, err := os.Stat(filepath.Join(profile, activePortFile)); err == nil {
+		t.Fatal("the pinned route wrote an endpoint file; real Chromium does not")
 	}
 }

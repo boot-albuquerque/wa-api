@@ -698,3 +698,93 @@ constantes REAIS de cada transporte** (`types.DefaultUserServer`,
 `types.LegacyUserServer`, `types.HiddenUserServer`), em vez de repetir as
 strings à mão. Repetir a string só provaria que sei copiar; ler a constante faz
 o teste acusar quando a produção mudar.
+
+## Decisão 75 — a Fase 3 precisa de N browsers, e medir isso contrariou o nosso próprio código
+
+O registry que mapeia `txtID` → sessão esbarra numa assimetria que o socket não
+tem: **cada sessão headless precisa do seu próprio `ProfileDir` e da sua própria
+porta de debug**. Dois browsers não compartilham nenhum dos dois.
+
+Antes de escrever o alocador de portas, fui medir. O `BuildFlags` exigia a
+porta, com a justificativa escrita ao lado:
+
+> `DebuggingPort is required; without it there is no CDP endpoint and no way to
+> stop the browser cleanly`
+
+**A justificativa estava errada.** Com `--remote-debugging-port=0` o Chromium
+sobe, escolhe porta efêmera e escreve `<ProfileDir>/DevToolsActivePort` com
+duas linhas. Medido em 2026-08-22, Chrome 151.0.7922.170, macOS 15.6, perfil
+temporário descartado depois:
+
+```
+55077
+/devtools/browser/954157ae-38a1-4ef0-b7d5-f03f3c1f7d03
+```
+
+### A medição estava INCOMPLETA, e a suíte é que disse
+
+A primeira medição usou porta 0 e concluiu "o Chromium publica o arquivo".
+Implementei em cima disso, e **oito testes de integração falharam** — eles
+fixam porta. Fui medir o caso fixado, com o conjunto canônico completo:
+
+| `--remote-debugging-port` | escreve `DevToolsActivePort`? | responde HTTP? |
+| --- | --- | --- |
+| `0` | **sim** | sim |
+| fixada | **NÃO** | sim |
+
+Com porta explícita o Chromium não escreve o arquivo de todo. Não é uma
+preferência de implementação: **qual caminho existe é decidido pelo Chromium**,
+e por isso o launcher tem dois. O do perfil só existe no caso efêmero — que é o
+caso que o registry vai usar, e é o único com garantia de identidade.
+
+Fixar porta passa a ser o chamador assumindo o risco explicitamente, que é o
+que um override deve ser.
+
+Isto também matou um teste MEU: eu havia escrito "porta fixada discorda do
+arquivo publicado", que é um estado que o Chrome real nunca produz. Travá-lo
+seria a armadilha nº 1 — dublê com uma forma que a produção não tem. A regra do
+projeto de que a medição derruba a hipótese vale inclusive quando a hipótese já
+virou código e teste verde.
+
+### E a segunda metade é pior que a primeira
+
+O `awaitEndpoint` fazia GET em `127.0.0.1:PORT/json/version` e **aceitava
+qualquer browser que respondesse**. Nada amarrava a resposta ao processo que
+lançamos nem ao perfil que pedimos.
+
+Com um browser por vez, inofensivo. Com N, o modo de falha não é "falha ao
+subir" — é a **sessão B anexar-se ao browser da sessão A**. Neste stack, isso é
+dirigir a conta de WhatsApp errada, em silêncio. O helper de porta dos testes é
+bind-`:0`-e-fecha, TOCTOU clássico: duas sessões arrancando juntas podem receber
+o mesmo número.
+
+A porta nunca foi a identidade. **O diretório de perfil é.**
+
+### O que a referência deu, e o que ela não deu
+
+O ENTENDIMENTO veio do puppeteer, que o whatsapp-web.js usa: ele lê o
+`DevToolsActivePort` do user-data-dir em vez de confiar na porta pedida. O
+COMPORTAMENTO foi medido aqui — pela mesma razão de sempre, a de que quatro
+nomes de módulo do wwebjs já não existiram no nosso build.
+
+### O buraco que a própria correção abriria
+
+Um `DevToolsActivePort` obsoleto reproduziria o defeito que a mudança remove: o
+Chromium apaga o arquivo ao sair limpo, mas um browser que morreu o deixa para
+trás, apontando para uma porta agora livre — ou pior, para uma que outro browser
+já tomou. Por isso o arquivo é **apagado antes do arranque**: o que se lê depois
+só pode ter sido escrito pelo processo que lançamos.
+
+É a Regra 4 do CLAUDE.md aplicada a si mesma — o conserto do conserto também é
+um mecanismo.
+
+### O controle negativo que demonstra em vez de afirmar
+
+Removida a limpeza, o teste não falha por uma asserção abstrata: ele mostra o
+launcher conectando-se a `ws://127.0.0.1:40001/devtools/browser/STALE`, o
+endpoint de outra execução. É o "browser errado" acontecendo dentro de um teste.
+
+O antigo teste do "ws vazio" foi substituído pela corrida REAL — o leitor que
+chega no meio da escrita e vê só a linha da porta. E o dublê passou a PUBLICAR o
+endpoint no perfil, no formato medido contra o Chrome real; um dublê com outra
+forma provaria apenas que o parser lê o que o dublê escreve.

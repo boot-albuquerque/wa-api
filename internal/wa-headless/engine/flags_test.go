@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -120,11 +121,40 @@ func TestBuildFlagsRequiresAProfileDir(t *testing.T) {
 	}
 }
 
-// Without a debugging port there is no CDP endpoint, and with no CDP endpoint
-// the clean shutdown of CAP-02 is unreachable — every stop would be a signal.
-func TestBuildFlagsRequiresADebuggingPort(t *testing.T) {
-	if _, err := BuildFlags(LaunchConfig{ProfileDir: "/session/acct"}); err == nil {
-		t.Fatal("a browser with no debugging port was accepted")
+// Port ZERO is the normal case, not a missing value (decision 75). Chromium
+// picks an ephemeral port and publishes it in the profile, so the caller never
+// has to choose one — and a port nobody chose is a port nobody can collide on.
+//
+// This used to be an error, and the reason written next to it ("without it
+// there is no CDP endpoint") was measured wrong in F102.
+func TestBuildFlagsAcceptsAnEphemeralPort(t *testing.T) {
+	flags, err := BuildFlags(LaunchConfig{ProfileDir: "/session/acct", DebuggingPort: 0})
+	if err != nil {
+		t.Fatalf("port 0 was rejected: %v", err)
+	}
+	if !slices.Contains(flags, flagRemotePort+"0") {
+		t.Fatalf("the ephemeral port was not passed to the browser: %v", flags)
+	}
+}
+
+// A positive port stays an explicit override, for the operator who needs to
+// attach a debugger to a known number.
+func TestBuildFlagsKeepsAPinnedPort(t *testing.T) {
+	flags, err := BuildFlags(LaunchConfig{ProfileDir: "/session/acct", DebuggingPort: 9222})
+	if err != nil {
+		t.Fatalf("pinned port rejected: %v", err)
+	}
+	if !slices.Contains(flags, flagRemotePort+"9222") {
+		t.Fatalf("the pinned port was not honoured: %v", flags)
+	}
+}
+
+// Negative is neither ephemeral nor pinned, so it stays an error: accepting it
+// would hand Chromium a flag it cannot satisfy and turn a caller's mistake into
+// a boot timeout.
+func TestBuildFlagsRefusesANegativePort(t *testing.T) {
+	if _, err := BuildFlags(LaunchConfig{ProfileDir: "/session/acct", DebuggingPort: -1}); err == nil {
+		t.Fatal("a negative debugging port was accepted")
 	}
 }
 
