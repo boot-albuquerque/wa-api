@@ -10608,3 +10608,67 @@ como tal, não como veredito.
 
 **Status**: entregue — duas linhas provadas, uma medida como não observável, e o
 harness fica para as próximas.
+
+## H136 — a cadeia de admin de canal: medir a corrente inteira antes de forjar cada elo
+
+**Data**: 2026-08-22. **Contexto**: cinco linhas que a H134 tinha classificado
+como travadas **só** por segundo participante. Com a sessão dupla da H135, elas
+deixaram de estar travadas.
+
+**Onde**: `internal/wa-headless/probe_chanadmin_test.go` (novo).
+
+### Por que uma sonda antes de cinco capacidades
+
+Os cinco verbos são SEQUENCIAIS: nada depois do passo dois pode ser medido se o
+passo dois falhar. Escrever cinco capacidades primeiro e descobrir isso seriam
+cinco pedaços de trabalho jogados fora. A sonda exercita as chamadas CRUAS em
+ordem e cada passo reporta o que fez.
+
+### Três coisas que eu errei antes de acertar
+
+**1. `Chat.find` está quebrado** — `this.findImpl is not a function`, o mesmo
+defeito que a H123 encontrou na coleção de newsletters. Não é específico de
+canais: é das coleções deste build.
+
+**2. Procurei o chat pelo jid de TELEFONE.** Nem `get` nem varredura acharam,
+porque este build arquiva sob LID. É a lição da H34 num lugar novo, e a correção
+foi usar `lookup.NumberID` — a resolução do próprio módulo, provada hoje na
+H127 — em vez de escrever uma segunda.
+
+**3. Testei a revogação DEPOIS do aceite**, e o servidor respondeu
+`Not Allowed`. Essa é a resposta CERTA para um convite já consumido e a medição
+ERRADA da capacidade. Revogar só faz sentido antes.
+
+### O que ficou provado, e por qual pós-condição
+
+```
+ordem A (aceitar):  invite OK -> accept ok  -> assinantes 0 -> 1
+ordem B (revogar):  invite OK -> revoke ok  -> accept "Not Found", assinantes 0
+```
+
+- **`sendChannelAdminInvite`**: a página responde `messageSendResult: OK`, e o
+  convite é ACEITÁVEL — provado pelo passo seguinte funcionar, não pelo retorno.
+- **`acceptChannelAdminInvite`**: o canal vai de **0 para 1 assinante**.
+- **`revokeChannelAdminInvite`**: o aceite seguinte **FALHA** com `Not Found` e
+  os assinantes ficam em 0.
+
+A revogação é provada pelo aceite falhar. Se eu tivesse aceitado "a chamada não
+lançou" como prova, teria aprovado uma revogação que na primeira ordem o próprio
+servidor recusou.
+
+A sonda guarda as DUAS ordens atrás de uma chave, porque uma execução só não
+prova as duas — e ela FALHA se o aceite funcionar depois de uma revogação, que é
+o sucesso silencioso que ela existe para pegar.
+
+### Duas que continuam abertas, com o motivo exato
+
+- **`demoteChannelAdmin`**: a cadeia foi exercitada e para aqui. Wid dá
+  `Data passed to getter must include an id property`; o MODELO da coleção vai
+  mais longe e morre em `Cannot read properties of undefined (reading 'isUser')`.
+  A forma do SEGUNDO argumento não foi resolvida — é trabalho, não impossibilidade.
+- **`transferChannelOwnership`**: a ação existe e **não foi executada de
+  propósito**. Transferir a posse faria conta-A deixar de ser dona e não
+  conseguir mais apagar o canal, deixando uma entidade real de pé. Recusa
+  deliberada, escrita como tal.
+
+**Status**: entregue — 3 de 5 provadas, 2 abertas com a causa isolada.
