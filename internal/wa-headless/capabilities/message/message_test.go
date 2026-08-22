@@ -600,3 +600,95 @@ func TestAnEmptyIDNeverReachesThePageForInfo(t *testing.T) {
 		t.Fatalf("an empty id reached the page %d times", d.kicks)
 	}
 }
+
+// THE KEY IS THE ID OBJECT. Measured side by side on a message carrying a
+// reaction: find(_serialized) threw "called find without an id" because
+// _serialized is null on this build, find(id.id) returned null, and find(id)
+// returned the record. Passing the reference's key here would fail on every
+// message forever, silently reporting that nothing has reactions.
+func TestTheReactionsScriptKeysByTheIdObject(t *testing.T) {
+	d := &double{answer: `{"ok":true,"groups":[]}`}
+	if _, err := rd(d).ReactionsOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("ReactionsOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if !strings.Contains(code, "Reactions.find(m.id)") {
+		t.Fatal("the script does not call Reactions.find with the id OBJECT, which " +
+			"is the only key that answers on this build")
+	}
+	if strings.Contains(code, "find(m.id._serialized)") || strings.Contains(code, "find(m.id.id)") {
+		t.Fatal("the script keys the lookup by a serialized id; _serialized is null " +
+			"here and the raw id returns null, so it would find nothing forever")
+	}
+}
+
+// THE MODELS ARRAY IS NOT THE SOURCE. Two findings measured it at zero after a
+// verified reaction and concluded this build cannot report them; the record
+// comes from the fetch and never lands there.
+func TestTheReactionsScriptDoesNotReadTheModelsArray(t *testing.T) {
+	d := &double{answer: `{"ok":true,"groups":[]}`}
+	if _, err := rd(d).ReactionsOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("ReactionsOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if strings.Contains(code, "Reactions.getModelsArray") {
+		t.Fatal("the script reads Reactions.getModelsArray, which stays at 0 even " +
+			"after a reaction this module verified")
+	}
+}
+
+func TestReactionsComeBackGroupedByEmoji(t *testing.T) {
+	d := &double{answer: `{"ok":true,"groups":[` +
+		`{"emoji":"A","byMe":true,"senders":["1@lid","2@lid"]},` +
+		`{"emoji":"B","byMe":false,"senders":["3@lid"]}]}`}
+	got, err := rd(d).ReactionsOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("ReactionsOf: %v", err)
+	}
+	if len(got.Groups) != 2 {
+		t.Fatalf("the grouping was lost: %#v", got.Groups)
+	}
+	if got.Total() != 3 {
+		t.Fatalf("Total counted %d senders across the groups, want 3", got.Total())
+	}
+	if !got.Groups[0].ByMe || got.Groups[1].ByMe {
+		t.Fatal("ByMe was not carried per group; it is the page's own flag and " +
+			"comparing jids to derive it is the comparison that has gone wrong here before")
+	}
+}
+
+// A MESSAGE NOBODY REACTED TO IS NOT AN ERROR.
+func TestAMessageWithNoReactionsIsNotAnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false,"groups":[]}`}
+	got, err := rd(d).ReactionsOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("a message with no reactions must not be an error: %v", err)
+	}
+	if got.Any() || got.Total() != 0 {
+		t.Fatalf("an empty read reported reactions: %s", got)
+	}
+}
+
+// The rendering carries counts, never the emoji and never a sender.
+func TestTheReactionsRenderingIsQuiet(t *testing.T) {
+	r := Reactions{Groups: []Reaction{{Emoji: "ZZZ", Senders: []string{"5516999999999@lid"}}}}
+	s := r.String()
+	for _, leak := range []string{"ZZZ", "5516", "999999999"} {
+		if strings.Contains(s, leak) {
+			t.Fatalf("the rendering leaks %q: %s", leak, s)
+		}
+	}
+	if !strings.Contains(s, "groups=1") || !strings.Contains(s, "senders=1") {
+		t.Fatalf("the rendering lost the counts: %s", s)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForReactions(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).ReactionsOf(context.Background(), "", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("want ErrNoMessage, got %v", err)
+	}
+	if d.kicks != 0 {
+		t.Fatalf("an empty id reached the page %d times", d.kicks)
+	}
+}

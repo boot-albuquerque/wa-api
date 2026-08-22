@@ -483,3 +483,90 @@ func (r *Reader) InfoOf(ctx context.Context, messageID, label string) (Info, err
 		PlayedRemaining: out.PlayRem, Answered: out.Answered,
 	}, nil
 }
+
+// Reaction is one emoji on a message, and everybody who put it there.
+type Reaction struct {
+	// Emoji is the reaction itself.
+	Emoji string
+	// ByMe says this account is among the senders. It comes from the page's own
+	// hasReactionByMe rather than being derived by comparing jids, because this
+	// build files under LID and "is my jid in this list" is precisely the
+	// comparison that has gone wrong here before (H136, H148).
+	ByMe bool
+	// Senders are the identities that reacted with this emoji.
+	Senders []string
+}
+
+// Reactions is every reaction on one message, grouped by emoji.
+//
+// GROUPED IS HOW THE PAGE HAS IT, and flattening would lose the grouping without
+// gaining anything: the caller who wants a flat list can make one, and the caller
+// who wants "how many liked it" cannot rebuild the groups from a flat list.
+type Reactions struct {
+	Groups []Reaction
+}
+
+// Total is how many people reacted, counting somebody twice if they used two
+// emoji — which is what the page allows.
+func (r Reactions) Total() int {
+	n := 0
+	for _, g := range r.Groups {
+		n += len(g.Senders)
+	}
+	return n
+}
+
+// Any says the message carries any reaction.
+func (r Reactions) Any() bool { return len(r.Groups) > 0 }
+
+// String reports shape. The emoji is NOT rendered: it is the content of somebody
+// else's act, and this module's renderings carry counts.
+func (r Reactions) String() string {
+	return fmt.Sprintf("message.Reactions(groups=%d senders=%d)", len(r.Groups), r.Total())
+}
+
+// ReactionsOf reports which reactions a message carries and who left them.
+//
+// It is the reference's Message.getReactions, and its ledger row was BLOCKED on
+// two honest measurements that both looked at the loaded collection. See
+// reactionsScript for what they missed: the record comes from an async fetch
+// keyed by the id OBJECT, not from the models array, and not by the serialized
+// id the reference passes — which is null on this build.
+//
+// A MESSAGE WITH NO REACTIONS IS NOT AN ERROR. It reports an empty Reactions,
+// because "nobody reacted" is the ordinary state of most messages and turning it
+// into a failure would make the healthy case indistinguishable from a broken read
+// — the same distinction block.List had to draw.
+func (r *Reader) ReactionsOf(ctx context.Context, messageID, label string) (Reactions, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return Reactions{}, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, reactionsScript(messageID), label+"/reactions")
+	if err != nil {
+		return Reactions{}, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK       bool   `json:"ok"`
+		Why      string `json:"why"`
+		NotFound bool   `json:"notFound"`
+		Groups   []struct {
+			Emoji   string   `json:"emoji"`
+			ByMe    bool     `json:"byMe"`
+			Senders []string `json:"senders"`
+		} `json:"groups"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return Reactions{}, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return Reactions{}, ErrNotFound
+	}
+	if !out.OK {
+		return Reactions{}, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	var res Reactions
+	for _, g := range out.Groups {
+		res.Groups = append(res.Groups, Reaction{Emoji: g.Emoji, ByMe: g.ByMe, Senders: g.Senders})
+	}
+	return res, nil
+}

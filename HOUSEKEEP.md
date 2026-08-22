@@ -4267,3 +4267,92 @@ no mesmo dia em que foi escrita).
 descobrir é perguntar como a REFERÊNCIA obtém o dado, não se ele está onde
 procuramos.* A H71 procurou no lugar plausível e o encontrou vazio; dez linhas do
 upstream diziam que o lugar plausível não é o lugar.
+
+---
+
+## H154 — `getReactions`: duas medições certas, duas conclusões erradas, e a causa era a CHAVE
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A pergunta que abriu esta entrada foi a
+mesma que fechou a H153 — *como a REFERÊNCIA obtém o dado?* — aplicada às
+reações porque três linhas dependiam da mesma resposta.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go` (`ReactionsOf`,
+`Reactions`, `Reaction`), `.../script.go` (`reactionsScript`),
+`internal/wa-headless/probe_reactread_test.go` (novo). Linhas `getReactions`,
+`sendReaction`, `react` e `MESSAGE_REACTION`.
+
+**A história das duas medições anteriores**, e ambas foram honestas:
+
+- **H83**: concluiu que o agregado *"não tem fonte neste build"*.
+- **H124**: remediu a H83 com instrumento melhor — `WAWebCollections.Reactions`
+  EXISTE, com `on` e `getModelsArray` —, mediu **0 mesmo depois de uma reação que
+  a capacidade tinha verificado**, e concluiu: *"não é falta de coleção — a
+  coleção não enche"*.
+
+**A H124 estava certa sobre o fato e errada sobre o que ele significa.** A
+coleção não enche mesmo — medida de novo hoje, `size: 0` depois de uma reação
+verificada. Mas `Reactions.find` **não é busca nos modelos carregados**: é um
+fetch assíncrono, que a referência aguarda (`wwebjs_message.js:848-853`), e cujo
+registro nunca aterrissa no `getModelsArray`. Medir o array era medir o lugar
+errado — exatamente a forma da H153, no mesmo dia.
+
+**E havia uma segunda camada, que é por que isto levou três tentativas: a CHAVE
+da referência não existe aqui.** Ela chama `find(msg.id._serialized)`, e
+`_serialized` é **nulo** neste build LID-first — a família de enquetes já tinha
+tido de pular a mesma conversão. Medidos lado a lado, sobre UMA mensagem que
+carrega uma reação:
+
+```
+find(m.id._serialized)  →  threw "called find without an id"
+find(m.id.id)           →  null
+find(m.id)              →  o registro, reactions=1
+```
+
+**O objeto `id` é a chave.** Essa linha é a diferença inteira entre *"este build
+não reporta reações"* e a função que agora existe.
+
+**Forma medida** antes de projetar o tipo:
+
+```
+entrada:   {aggregateEmoji, hasReactionByMe, id, senders}
+remetente: {ack, id, msgKey, orphan, parentMsgKey, reactionText,
+            read, senderUserJid, timestamp}
+```
+
+**Correção aplicada**: `Reader.ReactionsOf`, agrupado por emoji porque é assim
+que a página tem — achatar perderia o agrupamento sem ganhar nada, já que quem
+quer lista plana a constrói e quem quer "quantos curtiram" não reconstrói os
+grupos a partir dela. `ByMe` vem do `hasReactionByMe` da página e **não** de
+comparar jids: essa comparação é precisamente a que já deu errado aqui (H136,
+H148).
+
+**Status**: corrigido, `getReactions` de `BLOCKED` para `PROVEN`. Travado por
+quatro controles negativos, todos EXECUTADOS:
+- `TestTheReactionsScriptKeysByTheIdObject` — CN: chavear por `_serialized`,
+  a chave da referência. Falha.
+- `TestTheReactionsScriptDoesNotReadTheModelsArray` — CN: ler
+  `getModelsArray()[0]`. Falha.
+- `TestReactionsComeBackGroupedByEmoji` — CN: achatar os grupos num só. Falha.
+- `TestTheReactionsRenderingIsQuiet` — CN: imprimir `r.Groups`. Falha.
+
+Prova em SPA real **por transição**, porque uma leitura não-vazia sozinha é
+compatível com um leitor que devolve constante: `groups=1 senders=1` depois de
+reagir, `groups=0 senders=0` depois de retirar.
+
+**O que NÃO foi fechado por associação**: `sendReaction` e `react` continuam
+`PARTIAL` porque `react.Remove` ainda devolve `Verified:false`. A CAUSA disso
+caiu — havia como saber quais reações existem — mas usar a fonte para verificar o
+`Remove` é trabalho em outro pacote, com seus próprios testes e prova. Ficou
+registrado como **acionável**, que é a informação honesta, em vez de a linha ser
+movida porque uma vizinha andou. `MESSAGE_REACTION` idem: a afirmação *"o
+agregado não tem fonte neste build"* está refutada na nota, e enriquecer o evento
+segue pendente.
+
+**Lição**: *quando duas pessoas medem a mesma ausência e concluem coisas
+diferentes, a pergunta certa não é "quem mediu melhor" — é "o que a referência
+faz que nós não fazemos".* As duas mediram bem. Nenhuma perguntou pela CHAVE, e
+era ali que estava. E a chave é justamente o tipo de detalhe que só aparece
+comparando com a implementação que funciona — que é a razão de a regra deste
+repositório mandar consultar as referências ANTES de projetar, e não depois de
+concluir que algo é impossível.
