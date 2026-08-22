@@ -3,6 +3,7 @@ package user_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -469,5 +470,91 @@ func TestEditUser_SemCamposEhErroDoCliente(t *testing.T) {
 		if !errors.Is(err, domain.ErrNoFieldsToUpdate) {
 			t.Errorf("%+v: a causa deixou de ser alcançável por errors.Is", req)
 		}
+	}
+}
+
+// TestEditUser_S3ConfigEhPersistido trava comportamento que JÁ EXISTIA e não
+// tinha teste nenhum.
+//
+// Nasceu de um diagnóstico ERRADO da F210: eu tinha escrito que o use case
+// nunca preenchia `upd.S3`, e cheguei a acrescentar um bloco a fazer o que
+// `edit_user.go:95-109` já fazia. Quem apanhou a redundância foi o controlo
+// negativo — removi a minha atribuição e o teste ficou VERDE, porque a linha
+// 108 já a fazia. O bloco duplicado foi revertido; o teste ficou, porque a
+// propriedade é real e estava sem cobertura.
+//
+// O defeito verdadeiro da F210 é outro e não se vê daqui: o PUT LÊ `s3Config`
+// (camelCase) e a resposta DEVOLVE `s3_config` (snake_case), então o ciclo
+// ler-editar-reenviar é ignorado em silêncio com 200. Isso só aparece num
+// teste de round-trip pela rota, não neste nível.
+func TestEditUser_S3ConfigEhPersistido(t *testing.T) {
+	t.Parallel()
+
+	var recebido domain.UserUpdate
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		UpdateUserFunc: func(_ context.Context, _ string, upd domain.UserUpdate) error {
+			recebido = upd
+			return nil
+		},
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1",
+		S3Config: &domain.S3Config{
+			Enabled: true, Bucket: "meu-balde", Endpoint: "http://minio:9000",
+			Region: "us-east-1", AccessKey: "AK", SecretKey: "segredo-em-claro",
+		},
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+
+	if recebido.S3 == nil {
+		t.Fatal("o repositório não recebeu S3: a configuração não é persistida, " +
+			"morre no reinício e nunca aparece na listagem (F210)")
+	}
+	if recebido.S3.Bucket != "meu-balde" || !recebido.S3.Enabled {
+		t.Errorf("S3 persistido incompleto: %+v", *recebido.S3)
+	}
+
+	// A parte que um teste de persistência sozinho não pega, e que é onde a
+	// correção podia dar errado em silêncio: o segredo tem de ir CIFRADO.
+	// Gravar em claro passaria em todas as outras asserções deste teste.
+	if recebido.S3.SecretKey == "segredo-em-claro" {
+		t.Error("o segredo S3 foi persistido EM CLARO — o AddUser cifra (F163), " +
+			"e o EditUser tem de cifrar também")
+	}
+	if !strings.HasPrefix(recebido.S3.SecretKey, contractsfake.FakeS3EnvelopePrefix) {
+		t.Errorf("o segredo não passou pela cifra: %q", recebido.S3.SecretKey)
+	}
+}
+
+// E o limite: um PUT SEM `s3_config` não pode inventar um, senão apagaria a
+// configuração existente de quem só queria mudar o nome.
+func TestEditUser_SemS3ConfigNaoTocaNoS3(t *testing.T) {
+	t.Parallel()
+
+	var recebido domain.UserUpdate
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		UpdateUserFunc: func(_ context.Context, _ string, upd domain.UserUpdate) error {
+			recebido = upd
+			return nil
+		},
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", Name: "so-o-nome",
+	}); err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if recebido.S3 != nil {
+		t.Errorf("S3 = %+v num pedido que não o traz: isto sobrescreveria a "+
+			"configuração de quem só queria mudar o nome", *recebido.S3)
 	}
 }

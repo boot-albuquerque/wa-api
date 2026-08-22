@@ -1717,9 +1717,52 @@ explícita — quando já houver sessão viva. Alternativa mais conservadora:
 `Register` devolver a sessão anterior para que `Start` a encerre antes de
 substituir.
 
-**Status**: **não corrigido, e não verificado experimentalmente.** Antes de
-mexer, vale um teste controlado numa sessão descartável: chamar
-`/session/connect` duas vezes e observar se aparece `StreamReplaced`.
+### VERIFICADO EXPERIMENTALMENTE (2026-08-22) — e a leitura estava certa
+
+Sessão `aulapratica` (5516988263575), pareada de fresco para este fim, com
+autorização explícita do humano. `/session/connect` numa sessão **já
+conectada**:
+
+```
+GET /session/connect -> HTTP 200 {"status":"connecting"}
+  +1s  Received stream end frame
+       Received StreamReplaced event
+       Error reading from websocket: failed to get reader: ... EOF
+```
+
+**Não é no-op.** Cria um socket novo (`Successfully connected to WhatsApp
+attempt=1`), e o servidor do WhatsApp responde com `StreamReplaced` a matar o
+anterior. **Nenhuma linha de desligamento do cliente antigo** aparece no log —
+confirma a leitura de código: ele fica órfão, porque `Start` não o desconecta.
+
+### E a gravidade é MENOR do que esta entrada temia
+
+A entrada dizia que dois sockets são "a condição clássica de conflito 440". O
+conflito acontece — e é **resolvido pelo servidor em ~1 segundo, sem
+desvinculação e sem perda de função**:
+
+```
+depois do connect:  /session/status -> connected=true loggedIn=true
+                    /user/info      -> HTTP 200
+dois connect em rajada: 1 socket novo, 1 StreamReplaced, 0 sinais de desvinculação
+```
+
+Dois pedidos em rajada produziram **um só** socket novo, não dois: o segundo
+chegou enquanto o primeiro ainda estava a ligar.
+
+**O que fica**: o defeito é real (não-idempotente, agita a ligação, deixa
+cliente órfão e interrompe brevemente o fluxo de eventos), mas **não** é
+destrutivo. Isso muda a prioridade: não é urgente, e a correção sugerida —
+`Start` consultar `IsConnected()` e virar no-op — continua certa mas deixa de
+ser risco de perder sessão.
+
+**Revaloriza a F77**: o botão "Conectar" do painel fazia exatamente isto. O
+motivo original de não lhe tocar para observar eventos estava certo, e agora
+está medido.
+
+**Status**: **não corrigido, mas VERIFICADO.** A pergunta que a entrada deixava
+em aberto ("confirmar ou descartar") está respondida: confirmado, com gravidade
+revista para baixo.
 
 ### Revisitada (2026-08-21): a [[F192]] NÃO a fecha, e o experimento passou a ser possível
 
@@ -2726,6 +2769,38 @@ cobertura de log SUBIU de 747 para 749, porque o caminho de erro novo regista.
 **O que isto NÃO faz**: não corrige a F85. A causa continua por identificar, e
 a entrada fica aberta. O que muda é que a próxima ocorrência traz a sua própria
 prova em vez de gerar a quarta hipótese.
+
+### Quarta medição, esta EM CAMPO (2026-08-22): dois HistorySync reais, nada caiu
+
+O humano pareou **duas contas com histórico grande**, de propósito, com o painel
+de eventos aberto como consumidor — a condição exata da queda de 2026-08-10, e
+desta vez com a instrumentação no ar.
+
+```
+lotes gravados:   145, 1373, 949, 4393   (total 6.860 mensagens)
+escritas lentas:  0     <- nem UMA passou de 1 segundo
+quedas:           0
+websocket disconnected: 0
+```
+
+**Isto é informação, não ausência dela.** O limiar de registo é 1s, um quinto do
+prazo de escrita: se alguma escrita tivesse chegado sequer perto do perigo,
+haveria linha. Não houve nenhuma, com dois HistorySync em concorrência e um
+consumidor que faz `stringify` da carga inteira e força layout por mensagem.
+
+**A quarta hipótese que isto elimina**: "é preciso um HistorySync REAL, e os
+meus harnesses sintéticos não o eram". Era a objeção mais forte às três
+medições anteriores, e cai — o real também não derruba.
+
+**Ressalva honesta**: 6.860 contra as ~15.700 do caso de campo. Está na mesma
+ordem de grandeza mas é menos de metade, e a queda de campo veio depois do lote
+de 4.917, com quatro lotes acumulados. Não posso afirmar que 15.700 se
+comportaria igual — posso afirmar que 6.860 em duas contas simultâneas não
+produziu **um único** sinal de aproximação do prazo.
+
+**Onde a F85 fica**: quatro mecanismos excluídos, o último deles com dados
+reais. A entrada continua aberta e sem causa. O que existe agora é
+instrumentação que fala, e a próxima queda — se vier — trará os três números.
 
 **Consequência imediata para o plano**: se se confirmar, nem 1b, nem 2, nem
 sequer o item 3 (backpressure no broadcast) atacam a causa — todos tratam o
@@ -18102,66 +18177,84 @@ sempre um JID já qualificado — logo a guarda não o afeta. As rotas que passa
 telefone nu vão todas por `ResolveJID`, e portanto ficam cobertas. **Isto é
 leitura de código, não medição**: só `/user/block` foi medido em campo.
 
-## F210 — `PUT /admin/users/{id}` NUNCA persiste `s3_config`, e engole o erro de o inicializar
+## F210 — o PUT LÊ `s3Config` e a resposta DEVOLVE `s3_config`: o ciclo óbvio do cliente é ignorado em silêncio
 
-**Data / contexto**: 2026-08-22, ao medir a [[F206]]. Achado incidental: o caso
-"só `s3_config`" era um controlo da medição, não o alvo.
+**Data / contexto**: 2026-08-22, ao medir a [[F206]].
 
-**Onde**: `pkg/application/usecase/user/edit_user.go:139-158`
+> **DIAGNÓSTICO ANTERIOR ERRADO, e fica registado porque quase virou código.**
+> Esta entrada dizia: "o use case NUNCA preenche `upd.S3`; a fiação existe dos
+> dois lados e não está ligada". **Falso.** `edit_user.go:95-109` preenche
+> `upd.S3`, cifra o segredo e devolve erro se a cifra falhar — tudo o que eu
+> disse que faltava.
+>
+> Cheguei a escrever a "correção": um segundo bloco a fazer exatamente o que o
+> primeiro já fazia. **Quem a apanhou foi o controlo negativo**: removi a minha
+> atribuição e o teste continuou VERDE, porque a linha 108 já a fazia. Um
+> controlo negativo que não morde costuma significar teste fraco; desta vez
+> significou **correção redundante**. Revertida.
+
+**Onde**: `pkg/domain/user.go:32-33` contra `pkg/domain/session.go:66-67`.
 
 ```go
-// Update S3Manager if needed
-if req.S3Config != nil {
-    if req.S3Config.Enabled {
-        s3Config := &storage.S3Config{ ... }
-        _ = storage.GetS3Manager().InitializeS3Client(req.UserID, s3Config)
-    } else {
-        storage.GetS3Manager().RemoveClient(req.UserID)
-    }
-}
+// o que o PUT LÊ:                     // o que a resposta DEVOLVE:
+ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`   `json:"proxy_config"`
+S3Config    *S3Config    `json:"s3Config,omitempty"`      `json:"s3_config"`
 ```
 
-**Problema**: três defeitos no mesmo bloco.
-
-1. **Nada é persistido.** O bloco toca apenas no gestor em MEMÓRIA. A
-   configuração morre no reinício do processo e nunca aparece na listagem de
-   admin, que lê do banco. A fiação existe dos dois lados e não está ligada:
-   `UserUpdate` tem o campo `S3`, e `user_repository.go:154-165` escreve as dez
-   colunas (`s3_enabled`, `s3_endpoint`, `s3_bucket`, …). O use case
-   simplesmente **nunca preenche `upd.S3`**.
-2. **`s3_config` sozinho é recusado.** Como `upd` fica vazio, o pedido cai em
-   `ErrNoFieldsToUpdate` — hoje 400 pela F206, antes 500. Não há forma de
-   configurar S3 sem enviar junto um campo que não se quer mudar.
-3. **O erro de `InitializeS3Client` é descartado** (`_ =`). Uma configuração
-   inválida devolve 200 e o cliente acredita que ficou configurada.
-
-**Assimetria que torna isto bug e não "recurso por fazer"**: o `AddUser`
-PERSISTE o S3 (`add_user.go:135`, `s3ForRecord`). Criar utilizador com S3
-funciona; editar não. Quem criou sem S3 não consegue acrescentá-lo de forma que
-sobreviva a um reinício.
+**Problema**: a API **lê** em camelCase e **escreve** em snake_case, para os
+mesmos dois campos. O ciclo mais natural que existe — ler o utilizador, mudar
+um campo, reenviar — chega com `s3_config`, o binding não o reconhece,
+`req.S3Config` fica `nil` e **nada acontece, com 200**.
 
 **Medido em campo** (2026-08-22, servidor vivo, sessão `lucas`):
 
 ```
-PUT {"s3_config":{...}}                  -> 400 no_fields_to_update
-PUT {"name":"lucas","s3_config":{...}}   -> 200, e a listagem continua
-                                            {'bucket': '', 'enabled': False, 'endpoint': ''}
+PUT {"name":"lucas","s3_config":{"bucket":"snake-case",...}}  -> 200
+     listagem depois:  {'bucket': '', 'enabled': False}          <- ignorado
+PUT {"name":"lucas","s3Config":{"bucket":"camel-case",...}}   -> 200
+     listagem depois:  {'bucket': 'camel-case', ...}             <- persistiu
+
+PUT {"name":"lucas","proxy_config":{...}}  -> 200, proxy inalterado
+PUT {"name":"lucas","proxyConfig":{...}}   -> 200, proxy alterado
 ```
 
-O segundo é a prova: 200, e a configuração não ficou.
+**Os dois campos, o mesmo defeito.** E explica o que a F206 tinha medido sem
+perceber: `{"s3_config":{...}}` sozinho dava 400 `no_fields_to_update` — não
+porque S3 não conte como campo, mas porque o campo **nunca chegou**.
 
-**Correção sugerida**: preencher `upd.S3` a partir de `req.S3Config` antes do
-`UpdateUser`, para que a persistência use o caminho que já existe; e tratar o
-erro de `InitializeS3Client` em vez de o descartar. Atenção à ordem — o segredo
-S3 é cifrado (`s3Cipher`, F163), e o `AddUser` cifra antes de gravar; o
-`EditUser` teria de fazer o mesmo, senão grava o segredo em claro.
+**Por que é pior que um 500**: o 200 afirma sucesso. Um cliente que configure S3
+por esta rota fica convencido de que ficou configurado, e só descobre ao tentar
+enviar média — ou nunca, se ninguém enviar.
 
-**Anti-regressão**: teste que um PUT só com `s3_config` persiste e devolve 200,
-e um que prove a CIFRA do segredo — sem esse, a correção pode gravar em claro e
-passar em todos os outros testes.
+**Correção sugerida** — e é decisão de CONTRATO, porque muda o que a API aceita:
 
-**Status**: **não corrigido** — fora do escopo da F206, que era a taxonomia do
-500. Registado por CLAUDE.md; não corrigido de graça.
+1. **Aceitar ambos os nomes na leitura**, mantendo o snake_case na resposta.
+   Não parte cliente nenhum e conserta o ciclo. Custo: dois nomes para a mesma
+   coisa, e alguém terá de os manter alinhados.
+2. **Alinhar em snake_case dos dois lados.** Mais limpo e coerente com o resto
+   do corpo (`proxy_url`, `webhook_use_proxy`). Custo: **quebra** qualquer
+   cliente que hoje envie camelCase — e há pelo menos um, o painel, que é onde
+   isto tem de ser verificado antes.
+3. **Alinhar em camelCase dos dois lados.** Quebra quem lê a resposta, que é
+   toda a gente.
+
+**Anti-regressão**: teste de ROUND-TRIP — ler o utilizador, reenviar o corpo
+lido sem lhe tocar, e afirmar que nada mudou E que o campo foi de facto
+recebido. É o único formato que apanha assimetria de nome; asserções sobre
+cada lado em separado passam com os dois nomes divergentes.
+
+**Verificar antes de escolher**: o que o painel `devui` envia hoje. Se envia
+camelCase, a opção 2 parte-o.
+
+**Status**: **não corrigido** — diagnóstico refeito e medido; a correção é
+decisão de contrato, pendente do canal.
+
+### O irmão que continua verdadeiro: o erro de `InitializeS3Client` é descartado
+
+Isto sobrevive à correção do diagnóstico. `edit_user.go` e `add_user.go:177`
+fazem ambos `_ = storage.GetS3Manager().InitializeS3Client(...)`. Uma
+configuração que não inicializa devolve 200/201 e o cliente acredita que ficou
+boa. **Não corrigido**, e é independente da escolha de contrato acima.
 
 ## F211 — o próprio HOUSEKEEP deixou de ser consultável: não há forma mecânica de saber o que está aberto
 
