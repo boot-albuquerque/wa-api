@@ -6512,3 +6512,104 @@ WebSocketURL = "ws://127.0.0.1:55079/devtools/browser/guessed",
 O controle 1 não é uma asserção sobre a correção: ele **demonstra a falha**. O
 launcher, sem a limpeza, conecta-se ao endpoint de outra execução — que é o
 "dirigir o browser errado" descrito acima, acontecendo num teste.
+
+## F103 — a suíte vaza browsers, e o vazamento se auto-amplifica até derrubar o gate
+
+**Data**: 2026-08-22.
+**Contexto**: achado ao investigar uma falha do `make check` na decisão 77. Não
+é da decisão 77, e provavelmente não é de hoje.
+
+**Sintoma medido**: o gate falhou em
+
+```
+--- FAIL: TestHolder_ConcurrentFirstUseBootsExactlyOneSession (181.67s)
+    core: boot failed at open_tab (stopped_via=DIRTY_signal_close_refused pid=69278):
+    core: opening tab: Boot(open_tab/prime): deadline of 2m30s exceeded
+```
+
+O MESMO teste, isolado, passa em **2,4 s**. Fator de 75×, o que não é ruído.
+
+**Causa medida**: havia **28 processos Chrome órfãos** vivos na máquina, todos
+com perfil temporário de teste:
+
+```
+--user-data-dir=/var/folders/…/T/TestHolder_ConcurrentFirstUseBootsExactlyOneSession340446440/001
+--user-data-dir=/var/folders/…/T/TestLifecycle_ObserverMayCallBackIntoTheSession3814543593/001
+```
+
+**41 deles com mais de uma hora de idade, e dois com mais de um dia** — ou seja,
+sobreviventes de execuções anteriores, anteriores às mudanças desta sessão.
+`load average` estava em 9,25; após terminá-los, caiu para 3,88.
+
+**O mecanismo, e ele é o que torna isto grave.** Os testes FAZEM
+`defer h.Stop(...)` — não é esquecimento. O vazamento acontece no caminho de
+FALHA: quando o arranque estoura o prazo, o `CleanStop` sinaliza, o browser
+recusa fechar (`DIRTY_signal_close_refused`) e o processo sobrevive à execução.
+
+E daí em diante o defeito se **auto-amplifica**: cada browser vazado sobe a
+carga da máquina, o que torna o próximo arranque mais lento, o que torna o
+próximo estouro mais provável, o que vaza mais um. O gate fica
+progressivamente mais frágil a cada execução, sem que nada no repositório mude.
+
+**A CAUSA RAIZ, medida depois e mais grave que o vazamento.** Ao repetir o gate
+numa máquina limpa, medi durante a execução:
+
+```
+browsers de teste vivos ao mesmo tempo: 24
+binários de teste em execução:           4
+CPUs da máquina:                        10
+load average:                        59,58
+```
+
+O `go test` paraleliza PACOTES até ao número de CPUs, e vários pacotes desta
+árvore lançam browsers. **Ninguém coordena isso.** Vinte e quatro Chromes em dez
+CPUs é saturação, e um arranque de SPA sob saturação estoura o prazo de 2m30.
+
+Isto inverte o diagnóstico da primeira metade desta entrada: o vazamento não é a
+causa da saturação, é **consequência** dela. A cadeia é:
+
+1. o gate lança pacotes de browser em paralelo, sem teto;
+2. a máquina satura;
+3. um arranque estoura o prazo;
+4. o `CleanStop` sinaliza, o browser recusa fechar, e o processo VAZA;
+5. o vazado soma-se à carga da próxima execução — e aí sim, auto-amplifica.
+
+**Relação com a F100** (o gate é sensível à CARGA da máquina, quatro falsas
+falhas num dia): é quase certamente a MESMA causa. A F100 atribuiu as falhas a
+carga externa; o gate produz a sua própria carga, e depois deixa parte dela para
+trás. Vale reabrir a F100 com esta medição antes de continuar a tratar as falhas
+como ambientais.
+
+**Correção sugerida para a causa raiz**: os pacotes que lançam browser precisam
+de um teto GLOBAL, e não por pacote — `-p 1` para eles, ou um semáforo entre
+processos (trava de arquivo), porque o paralelismo do `go test` é entre
+processos e um semáforo em memória não o vê. Escolher o número exige medir, e a
+medição da decisão 76 já dá o ponto de partida: ~650 MB por browser, e o
+arranque só degrada quando a máquina satura.
+
+**Correção sugerida**, em duas partes:
+
+1. **Varredura antes do gate**: terminar processos Chrome cujo `--user-data-dir`
+   esteja sob `/var/folders/*/T/Test*`. O recorte é essencial — perfil de teste
+   é descartável, e `SIGKILL` contra um perfil PAREADO arrisca corrompê-lo, o
+   que exigiria um humano com o telefone para reparear.
+2. **Escalada no `CleanStop` para browser de teste**: um `DIRTY_signal_close_refused`
+   hoje termina em desistência. Para perfil temporário, desistir é deixar lixo;
+   escalar para `SIGKILL` no grupo de processos é seguro e é o que o próprio
+   `reapBrowser` dos testes do `engine` já faz.
+
+**Anti-regressão exigida**: teste que, após um arranque que estoure o prazo,
+exija que nenhum processo com aquele `ProfileDir` sobreviva. O controle negativo
+é remover a escalada e ver o processo sobreviver.
+
+**Dado que separa "sabemos" de "achamos"**: repetido o gate com a máquina limpa
+e SEM nenhuma outra mudança, ele passou (`exit=0`). Ou seja, a limpeza sozinha
+recupera — mas a carga voltou a 59,58 durante essa mesma execução, então passou
+perto. O teto do paralelismo é prevenção justificada, não teoria: sem ele, a
+aprovação depende de a máquina estar limpa naquele instante.
+
+**Status**: NÃO corrigido — achado fora do escopo da decisão 77, e mexer no
+`CleanStop` é mexer no caminho de desligamento, que tem invariantes próprias
+(invariante 3: nada de parada por sinal vinda de fora do caminho de shutdown).
+Os 28 órfãos foram terminados nesta sessão para desbloquear o gate, e isso está
+registrado aqui para que a limpeza não seja confundida com correção.

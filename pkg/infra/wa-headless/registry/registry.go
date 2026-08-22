@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
+	"time"
 
 	waheadless "wa-api/internal/wa-headless"
 )
@@ -23,6 +25,24 @@ import (
 // only honest way to raise it is to measure that host.
 const DefaultMaxSessions = 4
 
+// DefaultMaxPairing is the SEPARATE quota for sessions still waiting to be
+// paired, and it exists because of the holder inventory below (decision 77).
+//
+// It is deliberately smaller than the operational pool: pairing is rare and
+// human, operating is continuous. A pairing quota the size of the operational
+// pool would protect nothing — it would only move the starvation from one side
+// to the other.
+const DefaultMaxPairing = 2
+
+// DefaultPairingDeadline is how long a session may wait on a human before it
+// loses its slot.
+//
+// The number is not a promise about people: it is the point past which waiting
+// stops meaning "someone is reaching for their phone" and starts meaning
+// "nobody came". A WhatsApp QR code expires well before this, so a session past
+// it is holding a slot for a code that no longer works.
+const DefaultPairingDeadline = 5 * time.Minute
+
 // ErrAtCapacity is returned when a NEW session would exceed the ceiling.
 //
 // It is an error and not a wait, and that distinction is the whole design.
@@ -33,6 +53,36 @@ var ErrAtCapacity = errors.New("waheadless: at session capacity")
 
 // ErrUnknownSession is returned for a txtID this process does not hold.
 var ErrUnknownSession = errors.New("waheadless: session not held by this process")
+
+// ErrPairingAtCapacity is returned when a NEW pairing would exceed the pairing
+// quota. It is deliberately distinct from ErrAtCapacity: the two mean different
+// things to an operator — one says the host is busy serving, the other says too
+// many people are mid-pairing — and one error for both would hide which.
+var ErrPairingAtCapacity = errors.New("waheadless: at pairing capacity")
+
+// Kind says which quota a session is admitted against.
+//
+// It is EXPLICIT at Acquire and never inferred, and that is not fussiness. If
+// every new session entered through the pairing quota, restarting the process
+// with N already-paired sessions would restore them all through a deliberately
+// small quota — the protection would become the outage. That is regra 2 of
+// CLAUDE.md: the input that turns this guard into the problem is the restart,
+// so it is the input the design has to answer for.
+type Kind int
+
+const (
+	// KindOperational is a session restored from an already-paired profile.
+	KindOperational Kind = iota
+	// KindPairing is a session showing a QR code, waiting for a human.
+	KindPairing
+)
+
+func (k Kind) String() string {
+	if k == KindPairing {
+		return "pairing"
+	}
+	return "operational"
+}
 
 // Registry keeps track of which headless sessions this process holds.
 //
@@ -52,14 +102,41 @@ var ErrUnknownSession = errors.New("waheadless: session not held by this process
 // person. Four unpaired sessions would hold the whole pool indefinitely and
 // starve every paired one.
 //
-// This type does NOT solve that, and says so rather than pretending: it caps
-// what it can see, and the pairing case needs the SPA state, which means asking
-// the page. Until that lands, a deployment that pairs more than the ceiling
-// allows will starve, and that is a known limit rather than a surprise.
+// Decision 77 answers it: pairing sits OUTSIDE the operational pool, in a quota
+// of its own with an explicit deadline. Human waiting never occupies a
+// paired-session slot, which is the invariant restated in the only way that
+// binds — two counters instead of one.
+//
+// Two things about that answer are load-bearing, and both are tested:
+//
+// The Kind is EXPLICIT at Acquire, never inferred. If every new session entered
+// through the pairing quota, restarting with N already-paired sessions would
+// restore them all through a deliberately small quota, and the guard would
+// become the outage. That is the scenario where this mechanism CHARGES its
+// price (regra 2), so it is the one the design answers for.
+//
+// Expired REPORTS rather than acts. Stopping a browser speaks CDP and takes
+// seconds; doing it under this lock would make every other session's Acquire
+// wait on an unrelated shutdown — the same reason Release stops outside the
+// lock. Who stops the browser decides when.
 type Registry struct {
-	mu      sync.Mutex
-	max     int
-	holders map[string]*waheadless.Holder
+	mu       sync.Mutex
+	max      int
+	maxPair  int
+	deadline time.Duration
+	// now is injected so the deadline test measures the RULE and not the
+	// machine's clock. A test that sleeps to prove an expiry proves only that
+	// sleeping works.
+	now     func() time.Time
+	holders map[string]*entry
+}
+
+// entry is one held session plus the two things the quotas need to know about
+// it: which quota it counts against, and when it started waiting.
+type entry struct {
+	holder    *waheadless.Holder
+	kind      Kind
+	startedAt time.Time
 }
 
 // New builds a Registry with the given ceiling. Zero or negative uses
@@ -67,10 +144,41 @@ type Registry struct {
 // silently remove the protection, which is the failure mode a default exists to
 // prevent.
 func New(max int) *Registry {
+	return NewWithQuotas(max, DefaultMaxPairing, DefaultPairingDeadline, time.Now)
+}
+
+// NewWithQuotas is New with the pairing quota, the pairing deadline and the
+// clock spelled out. Zero or negative falls back to the default for each, for
+// the same reason New does: an accidental zero would silently remove the
+// protection.
+func NewWithQuotas(max, maxPairing int, deadline time.Duration, now func() time.Time) *Registry {
 	if max <= 0 {
 		max = DefaultMaxSessions
 	}
-	return &Registry{max: max, holders: make(map[string]*waheadless.Holder)}
+	if maxPairing <= 0 {
+		maxPairing = DefaultMaxPairing
+	}
+	if deadline <= 0 {
+		deadline = DefaultPairingDeadline
+	}
+	if now == nil {
+		now = time.Now
+	}
+	return &Registry{
+		max: max, maxPair: maxPairing, deadline: deadline, now: now,
+		holders: make(map[string]*entry),
+	}
+}
+
+// countLocked is how many entries count against each quota. The caller holds mu.
+func (r *Registry) countLocked(k Kind) int {
+	n := 0
+	for _, e := range r.holders {
+		if e.kind == k {
+			n++
+		}
+	}
+	return n
 }
 
 // Acquire returns the holder for txtID, creating it if this process does not
@@ -80,22 +188,75 @@ func New(max int) *Registry {
 // the ceiling bounds how many sessions exist, not how many times an existing one
 // may be used, and refusing a session this process already holds would break
 // working traffic to protect against a cost already paid.
-func (r *Registry) Acquire(txtID string, cfg waheadless.StartConfig) (*waheadless.Holder, error) {
+func (r *Registry) Acquire(txtID string, cfg waheadless.StartConfig, kind Kind) (*waheadless.Holder, error) {
 	if txtID == "" {
 		return nil, fmt.Errorf("waheadless: empty txtID")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if h, ok := r.holders[txtID]; ok {
-		return h, nil
+	if e, ok := r.holders[txtID]; ok {
+		return e.holder, nil
 	}
-	if len(r.holders) >= r.max {
-		return nil, fmt.Errorf("%w: %d of %d sessions held", ErrAtCapacity, len(r.holders), r.max)
+	if kind == KindPairing {
+		if n := r.countLocked(KindPairing); n >= r.maxPair {
+			return nil, fmt.Errorf("%w: %d of %d pairings in flight", ErrPairingAtCapacity, n, r.maxPair)
+		}
+	} else if n := r.countLocked(KindOperational); n >= r.max {
+		return nil, fmt.Errorf("%w: %d of %d sessions held", ErrAtCapacity, n, r.max)
 	}
-	h := waheadless.NewHolder(cfg)
-	r.holders[txtID] = h
-	return h, nil
+	e := &entry{holder: waheadless.NewHolder(cfg), kind: kind, startedAt: r.now()}
+	r.holders[txtID] = e
+	return e.holder, nil
+}
+
+// Promote moves a pairing session into the operational pool, which is what a
+// successful pairing means for capacity.
+//
+// The registry does NOT detect pairing itself: it does not talk to the page,
+// and a component that guesses at SPA state would be a second, divergent
+// answer to a question the page already answers. Whoever observes the pairing
+// succeed calls this.
+//
+// A full operational pool makes this FAIL, and the session stays in the pairing
+// quota rather than vanishing. A promotion that quietly dropped the entry would
+// leak a live browser with no slot accounting for it.
+func (r *Registry) Promote(txtID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	e, ok := r.holders[txtID]
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrUnknownSession, txtID)
+	}
+	if e.kind == KindOperational {
+		return nil
+	}
+	if n := r.countLocked(KindOperational); n >= r.max {
+		return fmt.Errorf("%w: %d of %d sessions held, %q stays in the pairing quota",
+			ErrAtCapacity, n, r.max, txtID)
+	}
+	e.kind = KindOperational
+	return nil
+}
+
+// Expired lists the pairing sessions past the deadline. It reports rather than
+// acts: stopping a browser takes seconds and talks over CDP, and doing that
+// under the registry lock would make every other session's Acquire wait on an
+// unrelated shutdown — the same reason Release stops outside the lock.
+func (r *Registry) Expired() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cutoff := r.now().Add(-r.deadline)
+	var out []string
+	for id, e := range r.holders {
+		if e.kind == KindPairing && e.startedAt.Before(cutoff) {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Holds answers the first half of the registry's job: does this process own
@@ -108,6 +269,13 @@ func (r *Registry) Holds(txtID string) bool {
 	defer r.mu.Unlock()
 	_, ok := r.holders[txtID]
 	return ok
+}
+
+// LenKind is how many sessions count against one quota.
+func (r *Registry) LenKind(k Kind) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.countLocked(k)
 }
 
 // Len is how many sessions are held, which is what the ceiling counts.
@@ -124,7 +292,7 @@ func (r *Registry) Len() int {
 // its slot would leak capacity on exactly the failures that need capacity most.
 func (r *Registry) Release(ctx context.Context, txtID string) (waheadless.StopVia, error) {
 	r.mu.Lock()
-	h, ok := r.holders[txtID]
+	e, ok := r.holders[txtID]
 	if ok {
 		delete(r.holders, txtID)
 	}
@@ -133,6 +301,7 @@ func (r *Registry) Release(ctx context.Context, txtID string) (waheadless.StopVi
 	if !ok {
 		return "", fmt.Errorf("%w: %q", ErrUnknownSession, txtID)
 	}
+	h := e.holder
 	// Stopping OUTSIDE the lock: a stop talks to a browser over CDP and can
 	// take seconds, and holding the registry lock across it would make every
 	// other session's Acquire wait on an unrelated shutdown.

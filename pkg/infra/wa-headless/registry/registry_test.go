@@ -28,13 +28,13 @@ func cfg() waheadless.StartConfig {
 func TestAcquireRecusaAcimaDoTetoEmVezDeEsperar(t *testing.T) {
 	r := New(2)
 	for _, id := range []string{"a", "b"} {
-		if _, err := r.Acquire(id, cfg()); err != nil {
+		if _, err := r.Acquire(id, cfg(), KindOperational); err != nil {
 			t.Fatalf("Acquire(%q): %v", id, err)
 		}
 	}
 
 	start := time.Now()
-	_, err := r.Acquire("c", cfg())
+	_, err := r.Acquire("c", cfg(), KindOperational)
 	elapsed := time.Since(start)
 
 	if !errors.Is(err, ErrAtCapacity) {
@@ -54,11 +54,11 @@ func TestAcquireRecusaAcimaDoTetoEmVezDeEsperar(t *testing.T) {
 // quebraria tráfego que funciona para proteger contra um custo já pago.
 func TestAcquireDevolveSessaoExistenteMesmoNoTeto(t *testing.T) {
 	r := New(1)
-	first, err := r.Acquire("a", cfg())
+	first, err := r.Acquire("a", cfg(), KindOperational)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
-	again, err := r.Acquire("a", cfg())
+	again, err := r.Acquire("a", cfg(), KindOperational)
 	if err != nil {
 		t.Fatalf("Acquire de sessão existente recusado com o pool cheio: %v", err)
 	}
@@ -71,10 +71,10 @@ func TestAcquireDevolveSessaoExistenteMesmoNoTeto(t *testing.T) {
 // Release devolve o slot, senão o teto vira uma contagem que só sobe.
 func TestReleaseDevolveOSlot(t *testing.T) {
 	r := New(1)
-	if _, err := r.Acquire("a", cfg()); err != nil {
+	if _, err := r.Acquire("a", cfg(), KindOperational); err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
-	if _, err := r.Acquire("b", cfg()); !errors.Is(err, ErrAtCapacity) {
+	if _, err := r.Acquire("b", cfg(), KindOperational); !errors.Is(err, ErrAtCapacity) {
 		t.Fatalf("esperava teto, veio %v", err)
 	}
 	if _, err := r.Release(context.Background(), "a"); err != nil {
@@ -83,7 +83,7 @@ func TestReleaseDevolveOSlot(t *testing.T) {
 	if r.Len() != 0 {
 		t.Fatalf("Len=%d depois do Release, quero 0", r.Len())
 	}
-	if _, err := r.Acquire("b", cfg()); err != nil {
+	if _, err := r.Acquire("b", cfg(), KindOperational); err != nil {
 		t.Fatalf("o slot não foi devolvido: %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestHoldsRespondePosseENaoProntidao(t *testing.T) {
 	if r.Holds("a") {
 		t.Fatal("Holds disse sim antes de qualquer Acquire")
 	}
-	if _, err := r.Acquire("a", cfg()); err != nil {
+	if _, err := r.Acquire("a", cfg(), KindOperational); err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
 	// Nenhum browser subiu — o Holder é preguiçoso. Holds continua verdadeiro,
@@ -121,11 +121,11 @@ func TestTetoZeroCaiNoPadraoENaoEmIlimitado(t *testing.T) {
 	for _, max := range []int{0, -1} {
 		r := New(max)
 		for i := 0; i < DefaultMaxSessions; i++ {
-			if _, err := r.Acquire(fmt.Sprintf("s%d", i), cfg()); err != nil {
+			if _, err := r.Acquire(fmt.Sprintf("s%d", i), cfg(), KindOperational); err != nil {
 				t.Fatalf("max=%d, Acquire %d: %v", max, i, err)
 			}
 		}
-		if _, err := r.Acquire("excedente", cfg()); !errors.Is(err, ErrAtCapacity) {
+		if _, err := r.Acquire("excedente", cfg(), KindOperational); !errors.Is(err, ErrAtCapacity) {
 			t.Fatalf("max=%d virou ILIMITADO: %v", max, err)
 		}
 	}
@@ -145,7 +145,7 @@ func TestOTetoValeSobConcorrencia(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			if _, err := r.Acquire(fmt.Sprintf("s%d", i), cfg()); err == nil {
+			if _, err := r.Acquire(fmt.Sprintf("s%d", i), cfg(), KindOperational); err == nil {
 				mu.Lock()
 				granted++
 				mu.Unlock()
@@ -166,7 +166,7 @@ func TestOTetoValeSobConcorrencia(t *testing.T) {
 // dono e devolveria essa mesma para qualquer chamador que também esquecesse o id.
 func TestTxtIDVazioERecusado(t *testing.T) {
 	r := New(2)
-	if _, err := r.Acquire("", cfg()); err == nil {
+	if _, err := r.Acquire("", cfg(), KindOperational); err == nil {
 		t.Fatal("txtID vazio foi aceito")
 	}
 	if r.Len() != 0 {

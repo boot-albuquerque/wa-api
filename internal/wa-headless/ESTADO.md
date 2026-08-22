@@ -911,3 +911,48 @@ já aceito para `clusterModeConfigurado` e `validarStackDoModo`.
 A fachada hoje importa `core`, `engine`, `runtime` e `spa`. **As 35 capabilities
 ainda NÃO estão no denominador** — medido: dos 169 sítios de operação rastreada
 da árvore, só 9 estão em pacotes medidos. Fiá-las traz o resto.
+
+## Decisão 77 — a invariante virou dois contadores
+
+O inventário da 76 expôs o detentor perigoso: uma sessão em QR espera por um
+**humano**, o que é pior que esperar por um relógio. Com teto 4, quatro sessões
+não pareadas seguram o pool inteiro e matam de fome as pareadas.
+
+A orquestração decidiu (**77**): pareamento fica **fora** do pool operacional,
+em quota própria com prazo explícito. Espera humana nunca ocupa slot de sessão
+pareada.
+
+O que isso muda de verdade: a invariante do projeto — *nada que espere por
+relógio ou por par morto pode ocupar slot limitado* — deixou de ser uma frase
+num documento e passou a ser **dois contadores**. Espera humana não tem como
+tocar num slot pareado porque não é contada no mesmo lugar.
+
+### A armadilha que só apareceu ao desenhar, e que é a Regra 2
+
+A quota de pareamento **não pode** ser o caminho por onde toda sessão nova
+passa. Reiniciar o processo com N sessões já pareadas restauraria todas por ali
+e bateria numa quota deliberadamente pequena — o teto protetor viraria a
+indisponibilidade.
+
+É literalmente a pergunta da Regra 2: *qual entrada faz esta proteção virar o
+problema?* Resposta: o restart. Por isso o `Kind` é **explícito** no `Acquire` e
+nunca inferido, e há um teste que falha exatamente nesse cenário.
+
+### Duas decisões menores que evitam vazamento
+
+`Promote` com o pool operacional cheio **falha e mantém a sessão** na quota de
+pareamento. Uma promoção que largasse a entrada em silêncio vazaria um browser
+vivo sem slot nenhum a contá-lo.
+
+`Expired` **relata, não age**. Parar um browser fala CDP e leva segundos; fazê-lo
+sob o lock faria todo `Acquire` esperar por um desligamento alheio — a mesma
+razão pela qual `Release` para fora do lock.
+
+### Controles negativos executados: quatro
+
+Um deles voltou a quebrar o build (`cutoff` declarado e não usado) e foi
+ajustado até compilar E falhar — a armadilha nº 3 pela segunda vez na mesma
+sessão. O mais informativo é o quarto: trocar o relógio injetado por
+`time.Now()` faz o teste do prazo falhar, o que prova que ele mede a REGRA e não
+o relógio da máquina. Um teste de expiração que dorme prova apenas que dormir
+funciona.

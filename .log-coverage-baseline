@@ -443,7 +443,27 @@ rules_frozen=true
 # capabilities ainda NAO estao no denominador (medido: dos 169 sitios de
 # operacao rastreada da arvore, so 9 estao em pacotes medidos). Fia-las traz
 # mais, e este pedagio nao acabou.
-min_func_coverage=617
+# justificativa: decisao 77 (2026-08-22), pareamento em quota propria com prazo.
+# min_eligible 660->665 (+5 elegiveis: NewWithQuotas, Registry.Acquire ja
+# existia, Registry.Promote, Registry.Expired, Registry.LenKind e
+# Registry.countLocked; Kind.String sai EXCLUDED por X4).
+#
+# errpath_coverage SOBE 817->818, ratchet-UP honesto: os caminhos de saida
+# novos de Promote e Acquire devolvem erro com a causa nomeada e distinta
+# (ErrAtCapacity vs ErrPairingAtCapacity), sem descartar contexto.
+#
+# func_coverage cai 617->612, e as seis foram conferidas com -list-uncovered,
+# nao deduzidas. O registry e' um ADAPTER e nao loga: quem transforma a recusa
+# em resposta HTTP e' o chamador, e e' ele que tem o contexto do pedido para
+# dizer QUAL sessao foi negada e a quem. E' o mesmo padrao aceito neste arquivo
+# desde 2026-08-06 ("adapter nao loga, use case loga").
+#
+# Registro a duvida em vez de a esconder: a recusa por capacidade E' uma
+# decisao, e a regra deste repo e' que loga quem decide. Se o consumidor do
+# registry vier a nao logar a recusa, isto passa a ser lacuna de verdade e nao
+# padrao — e a hora de a fechar e' quando o consumidor existir, nao agora, com
+# um logger injetado num tipo que ainda nao tem chamador.
+min_func_coverage=612
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -461,7 +481,8 @@ min_func_coverage=617
 # seria a terceira linha do MESMO evento, e o padrao deste repositorio e' que
 # loga quem decide, nao quem propaga.
 # ver a justificativa de min_func_coverage acima (decisao 78).
-min_errpath_coverage=817
+# +1 (817->818): ver a justificativa da decisao 77 acima.
+min_errpath_coverage=818
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -506,7 +527,8 @@ min_errpath_coverage=817
 # reescrita para sair do denominador.
 # +89 (571->660): a arvore internal/wa-headless inteira, pela fachada — ver a
 # justificativa de min_func_coverage acima.
-min_eligible=660
+# +5 (660->665): decisao 77 — ver a justificativa acima.
+min_eligible=665
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
