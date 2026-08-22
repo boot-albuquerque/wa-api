@@ -37,7 +37,7 @@ func (d *ownerDouble) eval(ctx context.Context, expr string, out *string) error 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}
@@ -214,7 +214,7 @@ func (d *stubbornDouble) eval(ctx context.Context, expr string, out *string) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}
@@ -290,7 +290,7 @@ func (d *followDouble) eval(ctx context.Context, expr string, out *string) error
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}
@@ -449,7 +449,7 @@ func (d *reactionDouble) eval(ctx context.Context, expr string, out *string) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}

@@ -72,7 +72,8 @@ func (m *Manager) Create(ctx context.Context, name, description, label string) (
 	if strings.TrimSpace(name) == "" {
 		return Created{}, ErrNoName
 	}
-	raw, err := m.parked(ctx, createScript(name, description), label+"/create")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, createScript(name, description, key), key, label+"/create")
 	if err != nil {
 		return Created{}, fmt.Errorf("%w: %v", ErrWrite, err)
 	}
@@ -138,7 +139,8 @@ func (m *Manager) edit(ctx context.Context, jid, code, field, value, label strin
 	if strings.TrimSpace(code) == "" {
 		return ErrNoCode
 	}
-	raw, err := m.parked(ctx, editScript(jid, field, value), label+"/edit")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, editScript(jid, field, value, key), key, label+"/edit")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
@@ -171,7 +173,8 @@ func (m *Manager) Delete(ctx context.Context, jid, code, label string) error {
 	if strings.TrimSpace(jid) == "" {
 		return ErrNoJID
 	}
-	raw, err := m.parked(ctx, deleteScript(jid), label+"/delete")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, deleteScript(jid, key), key, label+"/delete")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
@@ -197,7 +200,7 @@ func (m *Manager) Delete(ctx context.Context, jid, code, label string) error {
 	return nil
 }
 
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -208,11 +211,16 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/poll", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177).
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {
@@ -262,7 +270,8 @@ func (m *Manager) follow(ctx context.Context, jid string, subscribe bool, label 
 	if subscribe {
 		verb = "follow"
 	}
-	raw, err := m.parked(ctx, followScript(jid, subscribe), label+"/"+verb)
+	key := nextStateKey()
+	raw, err := m.parked(ctx, followScript(jid, subscribe, key), key, label+"/"+verb)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrWrite, err)
 	}
@@ -315,7 +324,8 @@ func (m *Manager) follow(ctx context.Context, jid string, subscribe bool, label 
 // serverAlive:false when asked by invite code. A caller that treats this list as
 // "what exists" will count channels that do not.
 func (m *Manager) Followed(ctx context.Context, label string) ([]DirectoryEntry, error) {
-	raw, err := m.parked(ctx, followedScript(), label+"/followed")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, followedScript(key), key, label+"/followed")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -410,7 +420,8 @@ func (m *Manager) SetReactionPolicy(ctx context.Context, jid, code string,
 	if strings.TrimSpace(code) == "" {
 		return -1, ErrNoCode
 	}
-	raw, err := m.parked(ctx, reactionScript(jid, wire), label+"/reaction")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, reactionScript(jid, wire, key), key, label+"/reaction")
 	if err != nil {
 		return -1, fmt.Errorf("%w: %v", ErrWrite, err)
 	}

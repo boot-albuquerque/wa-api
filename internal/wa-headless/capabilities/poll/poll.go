@@ -25,7 +25,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -69,7 +71,18 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessPoll"
+const stateKeyPrefix = "__waHeadlessPoll"
+
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer. The nonce comes from Go: a
+// page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Tally is who voted for what.
 //
@@ -112,7 +125,8 @@ func (m *Manager) Votes(ctx context.Context, messageID, label string) (Tally, er
 	if strings.TrimSpace(messageID) == "" {
 		return Tally{}, ErrNoMessage
 	}
-	raw, err := m.parked(ctx, votesScript(messageID), label+"/votes")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, votesScript(messageID, key), key, label+"/votes")
 	if err != nil {
 		return Tally{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -161,7 +175,8 @@ func (m *Manager) Vote(ctx context.Context, messageID string, options []string, 
 		// refuses rather than guessing which was meant.
 		return fmt.Errorf("%w: no options given; withdrawing a vote is not implemented", ErrUnknownOption)
 	}
-	raw, err := m.parked(ctx, voteScript(messageID, clean), label+"/vote")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, voteScript(messageID, clean, key), key, label+"/vote")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrVote, err)
 	}
@@ -196,7 +211,7 @@ func classify(why string, fallback error) error {
 	return fmt.Errorf("%w (%s)", fallback, why)
 }
 
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -207,11 +222,16 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/read", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177).
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

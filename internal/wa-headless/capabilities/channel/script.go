@@ -55,10 +55,10 @@ const (
 	fieldCreationTime = "__x_creationTime"   // number, 50/50
 )
 
-func byInviteScript(code string) string {
+func byInviteScript(code string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	const str = v => (typeof v === "string" ? v : "");
 	const num = v => (typeof v === "number" ? v : 0);
@@ -159,10 +159,10 @@ func byInviteScript(code string) string {
 //     fields for every channel — an empty result that looks like an empty
 //     directory rather than like a bug, which is the failure mode this whole
 //     family keeps producing.
-func searchScript(query, region string, skipSubscribed bool) string {
+func searchScript(query, region string, skipSubscribed bool, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	const str = v => (typeof v === "string" ? v : "");
 	const num = v => (typeof v === "number" ? v : 0);
@@ -245,10 +245,10 @@ const (
 // returns the string 'CreateChannelError: A channel creation is not enabled',
 // which a caller has to pattern-match; here it is a flag that becomes a distinct
 // Go error.
-func createScript(name, description string) string {
+func createScript(name, description string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	const str = v => (typeof v === "string" ? v : "");
 	const num = v => (typeof v === "number" ? v : 0);
@@ -304,10 +304,10 @@ const channelLookup = `
 		if (!ch) { park({ ok: false, why: "channel not loaded in this session" }); return; }
 `
 
-func editScript(jid, field, value string) string {
+func editScript(jid, field, value string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	(async () => {
 		try {
@@ -339,10 +339,10 @@ func fieldForFlag(flag string) string {
 	}
 }
 
-func deleteScript(jid string) string {
+func deleteScript(jid string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	(async () => {
 		try {
@@ -379,14 +379,14 @@ const (
 // OWNERSHIP IS REFUSED BEFORE THE CALL, like the reference does: subscribing to
 // a channel this account owns is meaningless, and the page answers it in a way
 // that looks like failure.
-func followScript(jid string, subscribe bool) string {
+func followScript(jid string, subscribe bool, key string) string {
 	action, mod := "unsubscribeFromNewsletterAction", modUnsubscribe
 	if subscribe {
 		action, mod = "subscribeToNewsletterAction", modSubscribe
 	}
 	return `(() => {` + `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	(async () => {
 		try {
@@ -433,10 +433,10 @@ func followScript(jid string, subscribe bool) string {
 }
 
 // followedScript lists the channels this account follows.
-func followedScript() string {
+func followedScript(key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 	const str = v => (typeof v === "string" ? v : "");
 	const num = v => (typeof v === "number" ? v : 0);
@@ -472,8 +472,8 @@ func followedScript() string {
 // is editReactionCodesSetting and the value key is reactionCodesSetting. Getting
 // that wrong reads as "the server ignored us", which is why one function owns
 // the pairing.
-func reactionScript(jid string, wire int) string {
-	return `(() => {` + preambleChannel + `
+func reactionScript(jid string, wire int, key string) string {
+	return `(() => {` + preambleChannel(key) + `
 	(async () => {
 		try {
 			const NC = window.require("` + modCollections + `").` + collNewsletters + `;
@@ -501,8 +501,15 @@ func reactionScript(jid string, wire int) string {
 }
 
 // preambleChannel is the parked-answer boilerplate these scripts share.
-const preambleChannel = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// preambleChannel parks on the key THIS call was given.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177): a const bakes ONE page global
+// into every script here, which is exactly the shared state two concurrent calls
+// overwrite.
+func preambleChannel(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
 `
+}

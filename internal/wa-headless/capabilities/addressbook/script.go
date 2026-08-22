@@ -13,9 +13,15 @@ const (
 	modContactColl = "WAWebContactCollection"
 )
 
-const prelude = `
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+// prelude parks on the key THIS call was given.
+//
+// IT WAS A const AND HAD TO STOP BEING ONE (H177): a const bakes ONE page global
+// into every script here, which is exactly the shared state two concurrent calls
+// overwrite.
+func prelude(key string) string {
+	return `
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const W = window.require("` + modWidFactory + `");
 	const CC = window.require("` + modContactColl + `").ContactCollection;
 	// A NAME IS A NAME WHEREVER IT LANDS. The record keeps several, and which
@@ -41,9 +47,10 @@ const prelude = `
 		return parts.join(" ");
 	};
 `
+}
 
-func saveScript(phone, first, last string, sync bool) string {
-	return `(() => {` + prelude + `
+func saveScript(phone, first, last string, sync bool, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			const had = named(find(` + strconv.Quote(phone) + `));
@@ -83,8 +90,8 @@ func saveScript(phone, first, last string, sync bool) string {
 	})()`
 }
 
-func deleteScript(phone string) string {
-	return `(() => {` + prelude + `
+func deleteScript(phone string, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			// THE SUFFIX IS REQUIRED HERE AND NOT IN THE SAVE, which is not a
@@ -104,8 +111,8 @@ func deleteScript(phone string) string {
 	})()`
 }
 
-func devicesScript(userJID string) string {
-	return `(() => {` + prelude + `
+func devicesScript(userJID string, key string) string {
+	return `(() => {` + prelude(key) + `
 	(async () => {
 		try {
 			const wid = W.createWid(` + strconv.Quote(userJID) + `);
@@ -132,8 +139,8 @@ func devicesScript(userJID string) string {
 // nameStateScript is the read Go polls after a save. Synchronous: it asks the
 // model what it holds right now and answers in one evaluation, which is what
 // keeps the clock on the Go side.
-func nameStateScript(phone string) string {
-	return `(() => {` + prelude + `
+func nameStateScript(phone string, key string) string {
+	return `(() => {` + prelude(key) + `
 	try {
 		return JSON.stringify({ ok: true, named: named(find(` + strconv.Quote(phone) + `)) });
 	} catch (e) {

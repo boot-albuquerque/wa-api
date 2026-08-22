@@ -23,7 +23,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -66,7 +68,18 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessAddressBook"
+const stateKeyPrefix = "__waHeadlessAddressBook"
+
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer. The nonce comes from Go: a
+// page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Saved is what one save did.
 //
@@ -120,7 +133,8 @@ func (m *Manager) Save(ctx context.Context, phone, first, last string, syncToPho
 		return Saved{}, ErrNoName
 	}
 	start := time.Now()
-	raw, err := m.parked(ctx, saveScript(phone, first, last, syncToPhone), label+"/save")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, saveScript(phone, first, last, syncToPhone, key), key, label+"/save")
 	if err != nil {
 		return Saved{}, fmt.Errorf("%w: %v", ErrSave, err)
 	}
@@ -166,12 +180,20 @@ func (m *Manager) Save(ctx context.Context, phone, first, last string, syncToPho
 
 // named asks the page whether the number carries a name right now.
 func (m *Manager) named(ctx context.Context, phone, label string) (bool, error) {
+	// ESTE SCRIPT NAO ESTACIONA — devolve o JSON direto —, mas usa o prelude
+	// pelos helpers, e o prelude CRIA o global. A chave e' gerada e liberada aqui
+	// para que a correcao da H177 nao deixe um global orfao por chamada.
+	key := nextStateKey()
 	var raw string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label, func(c context.Context) error {
-		return m.eval(c, nameStateScript(phone), &raw)
+		return m.eval(c, nameStateScript(phone, key), &raw)
 	}); err != nil {
 		return false, err
 	}
+	var ignored string
+	_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+		return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+	})
 	var out struct {
 		OK    bool   `json:"ok"`
 		Why   string `json:"why"`
@@ -192,7 +214,8 @@ func (m *Manager) Delete(ctx context.Context, phone, label string) error {
 	if phone == "" {
 		return ErrNoNumber
 	}
-	raw, err := m.parked(ctx, deleteScript(phone), label+"/delete")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, deleteScript(phone, key), key, label+"/delete")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDelete, err)
 	}
@@ -240,7 +263,8 @@ func (m *Manager) DeviceCount(ctx context.Context, userJID, label string) (int, 
 	if spa.IsUnresolvedIdentity(userJID) {
 		return 0, ErrUnresolvedIdentity
 	}
-	raw, err := m.parked(ctx, devicesScript(userJID), label+"/devices")
+	key := nextStateKey()
+	raw, err := m.parked(ctx, devicesScript(userJID, key), key, label+"/devices")
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrDevices, err)
 	}
@@ -282,7 +306,7 @@ func normalizeNumber(s string) string {
 	return b.String()
 }
 
-func (m *Manager) parked(ctx context.Context, kick, label string) (string, error) {
+func (m *Manager) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return m.eval(c, kick, &started)
@@ -293,11 +317,16 @@ func (m *Manager) parked(ctx context.Context, kick, label string) (string, error
 	for {
 		var raw string
 		if err := m.runner.Do(ctx, engine.OpStateProbe, label+"/read", func(c context.Context) error {
-			return m.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return m.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida (H177).
+			var ignored string
+			_ = m.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return m.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

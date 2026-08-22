@@ -5831,3 +5831,54 @@ severidade alta em aberto, e a decisão 65 exige zero.
 **Lição**: *um transform é uma hipótese sobre a forma, e como toda hipótese ele
 precisa de controle.* O controle aqui é o build depois de CADA pacote, não
 depois do lote — foi o que separou 16 corrigidas de 24 quebradas, duas vezes.
+
+---
+
+## H180 — 19 de 26, e a contagem original estava errada
+
+**Data**: 2026-08-22
+**Contexto**: continuação da H179.
+
+**Primeiro, uma correção de número**: a H177 disse "23 capacidades restantes" e a
+H179 disse "24 no total". **São 26.** A contagem original veio de um `grep` por
+`const stateKey = "` que não via as declarações dentro de blocos `const (...)` —
+o mesmo motivo que fez o `groupreq` escapar do primeiro transform. Um número
+errado num achado de severidade alta é pior que nenhum, porque dá a impressão de
+que o fim está mais perto do que está.
+
+**Corrigidas e travadas: 19 de 26.** Somam-se às 16 da H179: `poll`,
+`addressbook` e `channel`.
+
+- **`addressbook`** trouxe um caso novo: `nameStateScript` NÃO estaciona — devolve
+  o JSON direto — mas usa o `prelude` pelos helpers, e o prelude **cria o global
+  mesmo assim**. A chave é gerada e liberada ali, senão a correção deixaria um
+  órfão por chamada num caminho que nem consulta o estacionado.
+- **`channel`** tem DOIS laços de espera, em `channel.go` e `owner.go`, cada um
+  com o seu conjunto de chamadores.
+
+**Restam 7**: `media`, `messagemeta`, `pin`, `presence`, `react`, `revoke`,
+`star`.
+
+### Por que os 7 pararam, e o que aprendi ao insistir
+
+Tentei convertê-los com os transforms já validados e eles **colidiram entre si**:
+o de forma A já acrescentava `(key)` ao `resultScript`, e o de sítios extras
+acrescentava outro — `too many arguments`. Cada um desses pacotes tem chamadas de
+script FORA do sítio do kick, e o número e a forma delas variam.
+
+Revertidos os 7, o build voltou e os 35 pacotes de capacidade passam.
+
+**Um resíduo que quase escapou**: a reversão devolveu o código, mas os arquivos de
+guarda (`conckey_test.go`) que eu tinha criado ficaram para trás, referindo
+símbolos que já não existiam. **Dois pacotes ficaram sem compilar por causa da
+minha limpeza, não da minha mudança** — e o gate que eu rodei em cima disso falhou
+em `cmd/core` por essa razão, não por defeito real. Removidos os órfãos.
+
+**Status**: 19 de 26. **7 continuam com o defeito da H177** — achado acionável de
+severidade alta em aberto.
+
+**Lição**: *reverter não é desfazer.* Um `git checkout` devolve os arquivos
+rastreados e deixa os que você CRIOU, e o que sobra costuma referir o que sumiu.
+A verificação depois de reverter tem de ser a mesma que depois de mudar — build e
+teste —, e eu só a fiz porque o `go test` reclamou; se tivesse confiado no
+`checkout`, teria commitado uma árvore que não compila em dois pacotes.

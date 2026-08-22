@@ -28,7 +28,7 @@ func (d *double) eval(ctx context.Context, expr string, out *string) error {
 		return err
 	}
 	switch {
-	case strings.HasPrefix(expr, "window."+stateKey):
+	case strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix):
 		d.reads++
 		*out = d.saveAnswer
 		return nil
