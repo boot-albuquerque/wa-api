@@ -20254,8 +20254,44 @@ diretório do módulo. Antes de mexer, medir o custo: a cache existe porque a
 análise completa é lenta, e limpá-la a cada execução pode tornar o `make check`
 proibitivo — o que faria as pessoas deixarem de o correr, que é pior.
 
-**Status**: não corrigido — fora do escopo, e a correção tem custo de tempo que
-precisa de ser medido antes de ser escolhida.
+### Custo MEDIDO 2026-08-22 — a decisão deixou de depender de estimativa
+
+A entrada dizia que a correção "tem custo de tempo que precisa de ser medido".
+Medido, na mesma máquina, alternando só a variável:
+
+| | cache quente | cache limpa |
+|---|---|---|
+| tempo do alvo `lint` | **5 s** | **87 s** |
+| linhas de issue estrangeiras | **749** | **0** |
+| total reportado | 374 | 356 |
+| baseline declarada | 356 | 356 |
+
+Dois factos que a medição trouxe e que eu não teria adivinhado:
+
+1. **A contaminação REGRESSA sozinha.** A corrida quente apontava para
+   `orca/workspaces/wa-api/wa-f218-219` — uma worktree que eu tinha removido
+   MINUTOS antes. Basta uma worktree ser usada e apagada para o lint voltar a
+   reportar os ficheiros dela. Não é um estado antigo que se limpa uma vez; é
+   um estado que se reconstrói a cada onda de workers.
+
+2. **Com a cache suja, a contagem NÃO bate com a baseline** (374 contra 356),
+   e com a cache limpa bate exatamente. Ou seja: enquanto houver worktrees a
+   nascer e morrer, a contagem informativa deriva para cima para sempre, e a
+   baseline deixa de significar o que diz.
+
+**O custo é 82 segundos.** No contexto de um `make check` que leva mais de
+quinze minutos, é ruído. A troca — 82 s por uma medida verdadeira — é boa.
+
+**O risco que isto torna concreto**: `max_complexity` é a única TRAVA do gate.
+Nas duas corridas deu 50, porque as worktrees eram cópias do mesmo ramo. Uma
+worktree de OUTRA feature, com uma função mais complexa, faria o gate falhar
+aqui por código que não está sob teste — ou, pior, passar porque a baseline foi
+fixada com lixo lá dentro.
+
+**Correção sugerida, agora com número**: `golangci-lint cache clean` no início
+do alvo `lint` do `Makefile`. Custo declarado: +82 s.
+
+**Status**: não corrigido — mas já não falta medição, falta decisão.
 
 <!-- f-status: aberto -->
 
