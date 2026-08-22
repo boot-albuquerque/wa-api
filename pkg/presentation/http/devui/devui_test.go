@@ -789,23 +789,66 @@ func TestPainel_MostraOEstadoDoSocket(t *testing.T) {
 	js := servido(t, "sessions.js")
 	css := servido(t, "devui.css")
 
-	// Escopado a `pintar`, e não ao ficheiro: `abrirWS` também consulta
-	// `readyState` (na espera pela abertura), e uma busca no ficheiro inteiro
-	// passava por causa DESSA ocorrência mesmo com o indicador cravado em
-	// "ligados" — media a presença da palavra, não o indicador.
-	pintar := blocoDoIf(t, js, "function pintar(")
-
-	if !strings.Contains(pintar, "readyState === WebSocket.OPEN") {
-		t.Error("o cartão não lê o readyState ao repintar: o indicador não " +
-			"distingue socket vivo de morto, e abrir sozinho sem mostrar o estado " +
-			"é pior que não abrir — o operador julga observar quando a ligação caiu")
-	}
+	marcar := blocoDoIf(t, js, "function marcarWS(")
 	for _, marca := range []string{"eventos ligados", "sem eventos"} {
-		if !strings.Contains(pintar, marca) {
-			t.Errorf("falta o rótulo %q na repintura do cartão", marca)
+		if !strings.Contains(marcar, marca) {
+			t.Errorf("falta o rótulo %q no indicador", marca)
 		}
+	}
+	if !strings.Contains(js, "readyState === WebSocket.OPEN") {
+		t.Error("nada lê o readyState: o indicador não distingue socket vivo de morto")
 	}
 	if !strings.Contains(css, ".ws.off") {
 		t.Error("o estado 'sem eventos' não tem estilo próprio: fica indistinguível do resto")
+	}
+}
+
+// TestPainel_IndicadorNaoDependeDaRepintura trava o defeito que a medição em
+// campo de 2026-08-21 revelou NA PRÓPRIA correção da F77.
+//
+// `atualizar()` desiste cedo quando a listagem falha, e nesse caso `desenhar()`
+// — logo `pintar()` — nunca corre. Com o servidor abaixo, os cartões ficaram
+// congelados a anunciar "eventos ligados" e "pareada e conectada", sem aviso
+// visível, com zero sockets vivos. A falha que mata os sockets é a MESMA que
+// paralisa a repintura: um indicador que só se atualiza ao repintar mente
+// exatamente na hora em que serve.
+//
+// Por isso o indicador tem de ser escrito também pelos eventos do socket, que
+// chegam sem passar pelo poll REST.
+func TestPainel_IndicadorNaoDependeDaRepintura(t *testing.T) {
+	js := servido(t, "sessions.js")
+	abrir := blocoDoIf(t, js, "function abrirWS(")
+
+	for _, caso := range []struct{ gancho, porque string }{
+		{"onclose", "queda do outro lado — o caso medido em campo"},
+		{"onerror", "erro de socket sem close limpo"},
+		{"onopen", "sem isto o cartão só fica verde na repintura seguinte"},
+	} {
+		i := strings.Index(abrir, "ws."+caso.gancho)
+		if i < 0 {
+			t.Errorf("`abrirWS` não trata ws.%s (%s)", caso.gancho, caso.porque)
+			continue
+		}
+		// A janela é a LINHA do manipulador, não N caracteres a partir dele.
+		// Com uma janela por contagem, remover a marcação de `onclose` deixava o
+		// teste verde: os 140 caracteres seguintes alcançavam o `onerror`, que
+		// marca. Foi o terceiro caso do mesmo mecanismo nesta correção — janela
+		// mais grossa que a propriedade. Estes manipuladores são de uma linha.
+		linha := abrir[i:]
+		if fim := strings.IndexByte(linha, '\n'); fim >= 0 {
+			linha = linha[:fim]
+		}
+		if !strings.Contains(linha, "marcarWS") {
+			t.Errorf("ws.%s não escreve o indicador (%s): com a listagem em falha, "+
+				"`pintar` nunca corre e o cartão mente", caso.gancho, caso.porque)
+		}
+	}
+
+	// Fecho NOSSO: `fecharWS` anula `onclose` de propósito, então tem de marcar
+	// por sua conta — senão `desconectar` e `logout` deixam o cartão verde.
+	fechar := blocoDoIf(t, js, "function fecharWS(")
+	if !strings.Contains(fechar, "marcarWS") {
+		t.Error("`fecharWS` anula onclose e não marca o indicador: depois de " +
+			"desconectar ou de logout o cartão continua a dizer 'eventos ligados'")
 	}
 }

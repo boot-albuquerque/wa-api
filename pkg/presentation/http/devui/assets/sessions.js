@@ -150,6 +150,26 @@ function criarCard(s) {
 const cardSessao = (id) => sessoes.find((s) => s.id === id);
 const cardDe = (id) => $("grid").querySelector(`.card[data-id="${CSS.escape(id)}"]`);
 
+// marcarWS escreve o estado do socket no cartão de `id`.
+//
+// Vive à parte de `pintar` porque tem de correr SEM ele. `atualizar()` desiste
+// cedo quando a listagem falha (`sessions.js` acima, no ramo do aviso), e nesse
+// caso `desenhar()` — logo `pintar()` — nunca corre. Medido em campo a
+// 2026-08-21: com o servidor abaixo, os cartões congelavam a dizer "eventos
+// ligados" e "pareada e conectada", sem aviso visível, enquanto nada estava
+// ligado. A falha que mata os sockets é a MESMA que paralisa a repintura, por
+// isso um indicador que só se atualiza ao repintar mente exatamente quando
+// mais importa.
+//
+// Chamado também pelos eventos do próprio socket (`onopen`/`onclose`/
+// `onerror`), que chegam independentemente do poll REST.
+function marcarWS(id, vivo) {
+  const el = $("grid")?.querySelector(`.card[data-id="${CSS.escape(id)}"] .ws`);
+  if (!el) return;
+  el.textContent = vivo ? "eventos ligados" : "sem eventos";
+  el.className = "ws " + (vivo ? "on" : "off");
+}
+
 function pintar(card, s) {
   const cls = s.autenticado ? "on" : s.conectado ? "wait" : "off";
   const estado = s.autenticado ? "pareada e conectada"
@@ -164,10 +184,7 @@ function pintar(card, s) {
   // a ligação já caiu, e é precisamente durante a rajada de HistorySync que
   // ela cai (F85).
   const ws = sockets.get(s.id);
-  const vivo = ws && ws.readyState === WebSocket.OPEN;
-  const elWS = card.querySelector(".ws");
-  elWS.textContent = vivo ? "eventos ligados" : "sem eventos";
-  elWS.className = "ws " + (vivo ? "on" : "off");
+  marcarWS(s.id, !!ws && ws.readyState === WebSocket.OPEN);
   card.querySelector(".estado").textContent = estado;
   card.querySelector(".jid").textContent = s.jid;
   card.querySelector(".sem-token").hidden = s.temToken;
@@ -268,7 +285,11 @@ function abrirWS(s) {
     if (tipo === "qrtimeout") marcarExpirado(s);
     if (tipo.includes("pairsuccess") || tipo === "connected" || tipo === "loggedout") atualizar();
   };
-  ws.onclose = () => sockets.delete(s.id);
+  ws.onopen = () => marcarWS(s.id, true);
+  // Não religa (ver o comentário em `desenhar`), mas DIZ que caiu — e diz sem
+  // depender do poll, que pode estar morto pela mesma razão.
+  ws.onclose = () => { sockets.delete(s.id); marcarWS(s.id, false); };
+  ws.onerror = () => marcarWS(s.id, false);
 
   // Resolve em vez de rejeitar no erro e no tempo esgotado: o `connect` tem
   // de sair de qualquer maneira. Um socket que não abriu degrada para a
@@ -334,6 +355,12 @@ function falhouQR(s) {
 function fecharWS(id) {
   const ws = sockets.get(id);
   if (ws) { ws.onclose = null; ws.close(); sockets.delete(id); }
+  // Marca aqui porque o `onclose` foi anulado acima de propósito: um fecho
+  // NOSSO não deve disparar a mesma cadeia de um fecho do outro lado. Sem esta
+  // linha, `desconectar` e `logout` deixariam o cartão a dizer "eventos
+  // ligados" até à próxima repintura — e, se a listagem também falhar, para
+  // sempre.
+  marcarWS(id, false);
 }
 
 function marcarExpirado(s) {

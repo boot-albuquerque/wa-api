@@ -1624,6 +1624,66 @@ Os dois controlos que falharam são a armadilha nº1 do `ARMADILHAS.md` na sua
 forma mais barata: **um teste que passa mas não morde**. Ambos passariam por
 revisão — o defeito estava na asserção, não no assunto.
 
+**Verificado em campo** (2026-08-21, servidor vivo em `:8099`, sessões `lucas` e
+`filarapida` pareadas): recarregado o painel, o servidor registou **exatamente 2
+`websocket connected` e 0 chamadas a `/session/connect`** — que é o defeito da
+F77 desfeito, porque observar deixou de disparar `connect`. Passadas ~5
+repinturas, continuavam 2: nenhuma religação por repintura. O cartão sem token
+(`f78-descartavel`) ficou em "sem eventos", como manda a condição.
+
+### E a medição em campo encontrou um defeito NA PRÓPRIA correção
+
+Com o servidor **abaixo**, os três cartões continuaram a anunciar **"eventos
+ligados"** e "pareada e conectada", **sem aviso visível**, com zero sockets
+vivos. O indicador que existia para impedir o painel de mentir estava a mentir.
+
+A causa não é o indicador: é de onde ele era escrito. `atualizar()` desiste cedo
+quando a listagem falha (`sessions.js:56`), e nesse caso `desenhar()` — logo
+`pintar()` — nunca corre. **A falha que mata os sockets é a MESMA que paralisa a
+repintura.** Um indicador que só se atualiza ao repintar mente exatamente na
+hora em que serve, e este mentia de forma mais convincente que o silêncio
+anterior, porque agora havia um rótulo verde a afirmá-lo.
+
+Isto é a Regra 4 do `CLAUDE.md` a valer: *o conserto do conserto também é um
+mecanismo*. E é o caso em que a medição produziu um "eu não teria adivinhado" —
+o teste unitário estava verde, os três controlos negativos mordiam, e o `make
+check` passou.
+
+**Correção**: o indicador passou a ser escrito por `marcarWS(id, vivo)`, chamada
+pelos eventos do próprio socket — `onopen`, `onclose`, `onerror` — que chegam
+sem passar pelo poll REST; e por `fecharWS`, que anula `onclose` de propósito e
+por isso tem de marcar por sua conta (senão `desconectar` e `logout` deixariam o
+cartão verde). `pintar` continua a chamá-la, mas já não é a única fonte.
+
+**Antes e depois, mesma condição** (servidor derrubado, 6s de espera):
+
+```
+antes:  lucas "eventos ligados" | filarapida "eventos ligados"
+depois: lucas "sem eventos"     | filarapida "sem eventos"     | f78 "sem eventos"
+```
+
+**Teste**: `TestPainel_IndicadorNaoDependeDaRepintura`.
+
+**Controlos negativos**: CN-4 (`onclose` deixa de marcar) **passou verde à
+primeira** — pelo mesmo mecanismo dos outros dois, terceira vez na mesma
+correção: a janela de 140 caracteres a partir de `ws.onclose` alcançava o
+`ws.onerror` seguinte, que marca. Recortada à LINHA do manipulador, morde:
+
+```
+--- FAIL: TestPainel_IndicadorNaoDependeDaRepintura
+    ws.onclose não escreve o indicador (queda do outro lado — o caso medido em
+    campo): com a listagem em falha, `pintar` nunca corre e o cartão mente
+```
+
+CN-5 (`fecharWS` deixa de marcar) e CN-6 (`onopen` deixa de marcar) morderam à
+primeira.
+
+**Fica em aberto, e não é escopo da F77**: com a listagem em falha o painel
+mostra `mostrarAviso(...)`, mas na medição não havia aviso visível no DOM e os
+outros campos do cartão ("pareada e conectada") continuaram congelados a
+afirmar coisas falsas. O indicador de socket foi corrigido; **o resto do cartão
+ainda mente quando o poll morre**. Ver F208.
+
 ## F78 — `/session/connect` não é idempotente numa sessão já conectada
 
 **Data / contexto**: 2026-08-08, mesma sessão de teste. Foi o motivo de eu
@@ -2445,6 +2505,64 @@ teto de 2000 linhas já no lugar, o painel ainda estoura os 5s de `writeTimeout`
 numa rajada de HistorySync. A medição de 2026-08-10 é anterior à mudança de
 página. Sem repetir a medição contra o código atual, corrigir 1b/2/3 é agir
 sobre uma hipótese de agosto de 8 que já se sabe parcialmente falsa.
+
+### A medição (2026-08-21) REFUTA a causa que esta entrada assume
+
+Instrumento: servidor WS real (`coder/websocket`, `wsjson.Write`, o mesmo teto
+de 5s de `broadcast.go:27`), escrita sobre TCP real, e um consumidor que gasta
+um tempo fixo POR MENSAGEM — que é o custo do painel a fazer `JSON.stringify` +
+DOM. Evento de referência com 2.624 bytes, a forma e o tamanho de um `Message`
+com `Info` + `RawMessage`. Rajada de 15.700 eventos, a medida em campo. Três
+rodadas por ritmo, alternadas na mesma execução.
+
+```
+custo/msg    entregues   caiu?   duração
+0s           15690       false   127ms      (x3: 127ms, 105ms, 93ms)
+500µs        15078       false   9.17s      (x3: 9.17s, 9.02s, 9.08s)
+2ms          15092       false   34.6s      (x3: 34.6s, 34.7s, 34.4s)
+8ms          14967       false   2m16s      (x3: 2m16s, 2m29s, 2m29s)
+```
+
+**Nenhuma das doze rodadas derrubou a ligação.** Nem a 8 ms por mensagem — um
+consumidor 125 segundos mais lento que a rajada, absurdamente mais lento que
+qualquer painel real.
+
+**Porquê, e é este o "eu não teria adivinhado"**: o `writeTimeout` é POR
+ESCRITA, não acumulado. Um consumidor uniformemente lento faz cada escrita
+esperar ~8 ms — o tempo de drenar uma mensagem — e nunca 5 segundos. A duração
+total cresce (o produtor fica emparelhado com o consumidor), mas **nenhuma
+escrita individual chega perto do prazo**. O mecanismo só dispara com uma
+paragem de **>5 s de uma vez**, não com lentidão distribuída.
+
+**Consequência para o plano desta entrada**: as correções 1b (truncar a carga)
+e 2 (coalescer) atacam o **custo por mensagem**, e a medição diz que o custo
+por mensagem não é o que derruba a ligação. **Elas não teriam evitado a queda
+medida em campo.** Continuam defensáveis por outra razão — um painel de
+diagnóstico não precisa do payload inteiro, e 2.624 bytes por linha × 2.000
+linhas é DOM a mais —, mas deixam de ser correções da F85. São arrumação.
+
+**A hipótese que sobra, e que ainda não foi medida**: alguma coisa parou o
+consumidor por mais de 5 segundos de uma só vez. Candidatos, por ordem de
+plausibilidade:
+
+1. **Separador em segundo plano.** Os navegadores estrangulam temporizadores e
+   renderização em separadores não visíveis, e a queda de campo aconteceu com o
+   painel aberto mas — provavelmente — sem foco. Se for isto, NENHUMA correção
+   no formato da mensagem resolve, e o remédio é do lado do servidor.
+2. **Uma tarefa síncrona longa** no painel (um `JSON.stringify` de um payload
+   patológico, um reflow de 2.000 linhas de uma vez).
+3. **Suspensão da máquina**, que a entrada já menciona de passagem.
+
+**Próximo passo correto**: reproduzir com um separador em segundo plano antes
+de escrever qualquer código. Se confirmar, a decisão passa a ser sobre o lado
+do servidor (item 3, backpressure) — e aí valem as regras do inventário de
+detentores. Se não confirmar, é preciso um instrumento que produza paragens em
+rajada em vez de lentidão uniforme; o atual **mede lentidão distribuída e é
+por isso que nunca falha**.
+
+**Correção da entrada**: onde acima se lê que o painel "não consome nessa
+velocidade" e por isso a escrita bloqueia, leia-se que a velocidade média NÃO é
+suficiente para explicar a queda. A causa continua por identificar.
 
 ## F86 — rajada de eventos vira goroutines sem teto: não há backpressure nem circuit breaker em nenhum caminho de entrega
 
@@ -17249,10 +17367,56 @@ um erro tipado para esta família. Precisa de decisão, porque muda o contrato d
 `/user/block`, `/user/unblock` e provavelmente de toda a rota que consulte
 `info query`.
 
-**Não verificado ainda**: quais outras rotas exibem o mesmo. A medição cobre
-block e unblock.
+**Conjunto afetado, enumerado em 2026-08-21** (a entrada dizia "não verificado"):
+**66 chamadas de info query em 19 ficheiros** do `internal/wa-noise/`, incluindo
+`user_transport.go`, `group.go`/`group_transport.go`, `newsletter_transport.go`,
+`privacysettings.go`, `media_transport.go`, `broadcast.go`, `push.go`,
+`prekeys_transport.go`, `tctoken_transport.go`, `appstate_transport.go`. Ou
+seja: **praticamente toda rota que fala com o servidor do WhatsApp**, não
+apenas block/unblock. Isso decide a FORMA da correção — mapeamento único na
+fronteira, nunca rota a rota.
 
-**Status**: não corrigido, pendente de decisão do canal.
+**E a entrada estava errada sobre a fragilidade.** Ela diz que "o status vem no
+texto do erro, o que é frágil de casar". Não é preciso casar texto: a
+biblioteca já expõe **treze sentinelas tipadas** em
+`internal/wa-noise/core/errors.go:194-208` (`ErrIQBadRequest`,
+`ErrIQNotAuthorized`, `ErrIQForbidden`, `ErrIQNotFound`, `ErrIQNotAllowed`,
+`ErrIQNotAcceptable`, `ErrIQGone`, `ErrIQResourceLimit`, `ErrIQLocked`,
+`ErrIQRateOverLimit`, `ErrIQInternalServerError`, `ErrIQServiceUnavailable`,
+`ErrIQPartialServerError`), e `IQError.Is` casa por código e texto, não por
+string formatada. O `disappearing_timer.go:72` já usa
+`errors.Is(err, ErrIQBadRequest)`.
+
+O obstáculo real é OUTRO: a ADR-001 proíbe os adaptadores de importar
+`core/`, e as sentinelas vivem lá. Por isso a decisão 42=b (a fachada devolve
+erro tipado) é a forma certa — a fachada é o único sítio autorizado a ver as
+sentinelas, e é onde a tradução tem de acontecer.
+
+**Reproduzido em campo, 2026-08-21** (`POST /user/block`, sessão `lucas`):
+
+```
+{"Phone":"5511000000001"}  -> HTTP 500   log: info query returned status 400: bad-request
+{"Phone":"5511999999998"}  -> HTTP 500   log: info query returned status 400: bad-request
+{"Phone":""}               -> HTTP 400   {"code":"missing_phone_or_jid"}   <- a nossa validação funciona
+```
+
+**Duas perguntas que a medição abriu e que o canal tem de responder**, porque
+mudam o contrato:
+
+1. **O 400 de montante deve virar 400 nosso?** `CategoryValidation` responde
+   400 mas o corpo diz "corrija o payload" — e o payload está correto: é um
+   número bem formado que simplesmente não tem conta no WhatsApp. Os próprios
+   comentários de `apperr/codes.go` chamam a isto "activamente enganador".
+   `CategoryNotFound` (404) é mais verdadeiro para o caso medido, mas é NÓS a
+   reinterpretar o que o servidor disse.
+2. **Faltam duas categorias.** `apperr.Category` não tem equivalente para **403
+   forbidden** nem para **429 rate-overlimit** — e há sentinelas para ambos.
+   Sem elas, `ErrIQForbidden` e `ErrIQRateOverLimit` caem em 500 ou numa
+   categoria errada. `429` importa: é o único destes que o cliente DEVE repetir,
+   e mais tarde.
+
+**Status**: não corrigido. Conjunto enumerado e reproduzido; pendente das duas
+decisões acima.
 
 ---
 
@@ -17397,3 +17561,110 @@ audita.
 **Correção sugerida**: remover, ou documentar por que existe.
 
 **Status**: não corrigido — triagem.
+
+## F208 — com o poll REST em falha, o cartão inteiro congela a afirmar coisas falsas
+
+**Data / contexto**: 2026-08-21, ao verificar a F77 em campo. Achado incidental:
+apareceu ao derrubar o servidor de propósito para testar OUTRA coisa.
+
+**Onde**: `pkg/presentation/http/devui/assets/sessions.js:54-66` (`atualizar`)
+
+```js
+async function atualizar() {
+  const r = await listarSessoes();
+  if (!r.ok) {
+    mostrarAviso(...);
+    return;            // <- desiste; desenhar() e pintar() nunca correm
+  }
+```
+
+**Problema**: quando a listagem falha, a função retorna sem repintar. Os
+cartões já desenhados **ficam congelados no último estado conhecido** e
+continuam a afirmá-lo. Medido com o servidor derrubado: os cartões seguiam a
+dizer **"pareada e conectada"** e o JID, com o processo do servidor morto.
+
+Não é o mesmo defeito da F77 — aquele era o indicador de socket, e foi
+corrigido escrevendo-o a partir dos eventos do próprio socket. Este é o **resto
+do cartão**, cujo estado só pode vir do REST. E é a condição em que mais
+importa: a rede caiu, ou o servidor caiu, e o painel afirma que está tudo bem.
+
+**Evidência**, painel após o servidor ser derrubado (6s de espera):
+
+```
+corpo: "lucas / token local / sem eventos / pareada e conectada / 554192421234:39@s.whatsapp.net"
+        ^ indicador corrigido pela F77      ^ ainda mente
+aviso no DOM: (nenhum)
+```
+
+**E o aviso não apareceu.** `mostrarAviso(...)` foi chamado — o ramo é o de
+`r.ok === false` — mas nenhum elemento `.aviso`/`#aviso` estava no DOM na
+leitura. Ou o seletor da medição está errado, ou o aviso não está a ser
+renderizado; **não foi investigado**, e é a primeira coisa a verificar, porque
+se o aviso funcionasse o defeito seria bem menos grave.
+
+**Correção sugerida**, na ordem em que resolve mais:
+
+1. **Verificar primeiro se o aviso aparece de facto.** Se não aparece, é um bug
+   de uma linha e resolve a maior parte do dano — o operador passa a saber que
+   o que vê é velho.
+2. **Marcar o cartão como obsoleto** quando a listagem falha: uma classe que o
+   esmaeça e um rótulo com a idade do dado ("há 12s"). Congelar é aceitável;
+   congelar sem dizer que congelou não é.
+3. Não inventar estado: não marcar as sessões como desconectadas por falha de
+   poll — isso seria trocar uma mentira por outra.
+
+**Anti-regressão**: teste que o ramo de falha de `atualizar` marca os cartões,
+e não só chama `mostrarAviso`. Como a F77 mostrou, uma asserção sobre o
+ficheiro inteiro não serve: recortar o ramo do `if (!r.ok)`.
+
+**Status**: **não corrigido** — fora do escopo da F77, que era o socket.
+Registado por CLAUDE.md ("não corrija de graça o que está fora do escopo").
+Referência cruzada em F85, que descreve o mesmo sintoma ("o painel mente em
+silêncio") por outra causa.
+
+## F209 — telefone com lixo vira JID e o pedido pendura 75 segundos antes de devolver 500
+
+**Data / contexto**: 2026-08-21, ao medir a [[F204]] em campo. Achado
+incidental: era um caso de controlo da medição, não o alvo.
+
+**Onde**: a normalização de telefone para JID, no caminho de `/user/block`.
+`{"Phone":"abc"}` chegou ao transporte como `abc@s.whatsapp.net`.
+
+**Problema**: `abc` não é um número. Nós aceitamo-lo, colamos-lhe
+`@s.whatsapp.net`, e **enviamos ao servidor do WhatsApp**. Ele não responde
+coisa nenhuma, e o pedido fica pendurado até o info query esgotar o prazo.
+
+**Medido** (`POST /user/block`, sessão `lucas`, servidor vivo em `:8099`):
+
+```
+{"Phone":"abc"}  -> HTTP 500 após duration_ms=75003.445
+   log: ERR Failed to block user error="info query timed out" jid=abc@s.whatsapp.net
+```
+
+**75 segundos**, contra ~1 s para um número bem formado que não existe (esse
+devolve `400 bad-request` de montante — é a F204). A diferença importa: o
+número inexistente é RECUSADO pelo servidor, o lixo é IGNORADO por ele.
+
+**Por que é pior que a F204**: não é só o status errado. É um pedido do cliente
+a segurar uma ligação e um slot de tratamento durante 75 segundos, por entrada
+que **nós** podíamos ter rejeitado em microssegundos. Um cliente a repetir isto
+tem uma negação de serviço barata nas mãos, sem sequer tentar. E a validação
+que existe funciona para o caso vazio — `{"Phone":""}` devolve
+`400 missing_phone_or_jid` de imediato —, o que mostra que o ponto de validação
+já está lá; só não valida a FORMA.
+
+**Correção sugerida**: validar o telefone antes de o transformar em JID —
+apenas dígitos, com comprimento plausível — e devolver `CategoryValidation`
+(400) sem tocar na rede. É o caso em que 400 "corrija o payload" é literalmente
+verdade, ao contrário do da F204.
+
+Verificar também se a mesma normalização serve outras rotas: se for partilhada,
+o defeito é de todas elas, e a correção também. Não foi enumerado.
+
+**Anti-regressão**: teste pela ROTA REGISTRADA (não pelo handler cru) com
+`{"Phone":"abc"}`, esperando 400 e **nenhuma** chamada ao transporte — o dublê
+tem de falhar o teste se for chamado. Sem essa parte, um teste que só verifique
+o status passaria com a chamada de rede ainda a acontecer.
+
+**Status**: **não corrigido** — achado de lado durante a medição da F204,
+fora do escopo. Registado por CLAUDE.md; não corrigido de graça.
