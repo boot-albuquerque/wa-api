@@ -9422,3 +9422,92 @@ defesa é a auditabilidade — cada linha do `AUDITORIA-FACHADA.md` cita
 `arquivo:linha` da SHA fixada, e eu conferi 14 delas à mão.
 
 **Status**: entregue — auditoria completa e heranças aplicadas.
+
+## H119 — eventos de grupo: um portador, quatro eventos, e a H86 fica mais precisa
+
+**Data**: 2026-08-22. **Contexto**: decisão **40=a** da orquestração — atacar a
+família `Events`, a maior concentração de `MISSING` sem insumo externo.
+
+**Onde**: `internal/wa-headless/events/group.go` e `group_test.go` (novos),
+`events/ingress.go`, `events/events.go`, `probe_gp2_test.go` (novo).
+
+### O que a leitura da referência mostrou
+
+`GROUP_JOIN`, `GROUP_LEAVE`, `GROUP_ADMIN_CHANGED` e `GROUP_UPDATE` não são
+quatro fontes: são **uma**. O upstream fixado (`Client.js:585–645`) recebe uma
+mensagem comum de tipo `gp2` e a despacha em quatro eventos olhando o
+`subtype`. E o nosso ingress **já escuta** `MsgCollection.on('add')` — ou seja,
+essas mensagens já chegavam; faltava classificá-las.
+
+A classificação ficou em **Go**, não na página: decidir na página é o que a
+invariante 6 proíbe. Só o `subtype` viaja, num campo novo da projeção que já
+existia.
+
+### Medição antes de projetar
+
+395 mensagens carregadas, **1** de tipo `gp2`, subtipo `membership_approval_mode`.
+Campos presentes nela: `__x_subtype`, `__x_author`, `__x_recipients`, `__x_t`,
+`__x_type` — tudo que uma `GroupNotification` precisa. `__x_body` ausente.
+
+E `WAWebBatteryStore` **não existe** neste build, o que resolve `BATTERY_CHANGED`
+como `BLOCKED`: a própria referência marca o evento como depreciado e não
+enviado em multi-device, que é o que este build é.
+
+### A prova ao vivo precisou PRODUZIR o evento
+
+A primeira execução ligou o barramento e esperou: chegaram `chat.changed:4` e
+`contact.changed:7`, e **nenhuma `gp2`**. O motivo não é defeito — a única `gp2`
+da conta é histórica, e `MC.on('add')` só dispara para adições NOVAS.
+
+Então produzi uma: troquei o assunto do grupo de laboratório, que emite `gp2`
+com subtipo `subject`.
+
+```
+event types seen: map[chat.changed:15 contact.changed:8 group.updated:1]
+subtypes seen:    map[subject:1]
+the gp2 carrier was reclassified as group.updated
+```
+
+O assunto é restaurado por `defer` registrado antes de qualquer coisa que possa
+falhar — `t.Cleanup` rodaria depois do `defer` que para a sessão.
+
+### A H86 não caiu: ficou MAIS PRECISA
+
+A H86 tinha medido *"mudança de participante produz ZERO evento na sessão que a
+fez"*, e as três linhas de grupo estavam `MISSING` por causa disso.
+
+Eu mudei o **assunto**, não os participantes. O resultado prova que o portador
+`gp2` CHEGA a este barramento — o que estreita o achado da H86 em vez de
+contradizê-lo: o zero dela é dos subtipos de **participante**, **na sessão que
+agiu**. Uma sessão OBSERVADORA (conta-A vendo ação de conta-B) nunca foi
+testada, e é por aí que `GROUP_JOIN`/`LEAVE`/`ADMIN_CHANGED` poderiam fechar.
+
+Registro isto explicitamente porque a tentação era escrever "a H86 estava
+errada". Não estava; eu medi outra coisa.
+
+### Uma divergência deliberada da referência
+
+O upstream termina a cadeia de `if/else` com um `else` que transforma **qualquer**
+subtipo não reconhecido em `GROUP_UPDATE`. Isso significa que um subtipo que a
+Meta acrescente amanhã chegaria rotulado errado, em silêncio.
+
+Aqui a tabela é explícita e um subtipo não mapeado **permanece `MessageAdded`**,
+com o `subtype` intacto no evento — visível para quem assina, em vez de
+engolido num balde.
+
+### Controles negativos EXECUTADOS
+
+1. Reclassificar sem exigir o portador `gp2`:
+   `group_test.go:47: a chat message with subtype "add" became "group.joined"`
+2. Engolir subtipo desconhecido num default, como a referência faz:
+   `group_test.go:84: an unmapped subtype was relabelled "group.updated"`
+3. Não projetar o `subtype` na página:
+   `group_test.go:98: the page projection never reads m.subtype; every group message would arrive unclassifiable`
+
+O teste de completude do próprio pacote (`TestTypeListsAreDisjointAndComplete`)
+pegou sozinho o crescimento de `KnownTypes` e foi estendido para três listas em
+vez de ganhar exceção.
+
+**Status**: parcialmente entregue — `GROUP_UPDATE` provado ao vivo,
+`BATTERY_CHANGED` bloqueado com evidência, e os outros três com classificador
+provado em unidade e ao vivo pendente de uma sessão observadora.

@@ -421,17 +421,17 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
 | `MEDIA_UPLOADED` | — | `MISSING` | `send.SendMedia` o dispararia, e `message.added` com `Kind` PODE já cobrir a semântica — mas isso não foi medido, e "provavelmente coberto" não é um estado deste vocabulário (H88) |
 | `CONTACT_CHANGED` | events.ContactChanged | `PROVEN` | disparado sob demanda por `addressbook.Save`, sem segunda conta: 8 eventos ao nomear o par. Era o único tipo instalado e nunca provado (H90) |
-| `GROUP_JOIN` | — | `MISSING` | **medido impossível neste barramento**: mudança de participante produz ZERO evento na sessão que a fez (H86) |
-| `GROUP_LEAVE` | — | `MISSING` | idem GROUP_JOIN (H86) |
-| `GROUP_ADMIN_CHANGED` | — | `MISSING` | idem GROUP_JOIN (H86) |
+| `GROUP_JOIN` | events.GroupJoined | `PARTIAL` | classificador embarcado e provado em unidade (H119). A H86 continua valendo e fica MAIS PRECISA: o portador `gp2` chega ao barramento (provado via `subject`), então o zero da H86 é dos subtipos de PARTICIPANTE na sessão que agiu — uma sessão OBSERVADORA nunca foi testada |
+| `GROUP_LEAVE` | events.GroupLeft | `PARTIAL` | idem GROUP_JOIN (H86 + H119) |
+| `GROUP_ADMIN_CHANGED` | events.GroupAdminChanged | `PARTIAL` | idem GROUP_JOIN (H86 + H119) |
 | `GROUP_MEMBERSHIP_REQUEST` | events.ChatChanged | `PARTIAL` | a chegada MOVE o modelo nesta sessão e o barramento a vê — medida isolada: a saída de conta-B sozinha deu 5 `chat.changed`, o pedido sozinho deu **9** mais 1 `message.added` (H89). Não há tipo dedicado, e `chat.changed` é grosso demais para ser um: quem quer o pedido tem de chamar `groupreq.List`. Contraste com a H86, onde a sessão que MUDA participantes vê zero — quem recebe enxerga, quem age não |
-| `GROUP_UPDATE` | — | `MISSING` | sem equivalente |
+| `GROUP_UPDATE` | events.GroupUpdated | `PROVEN` | H119: o portador `gp2` É reclassificado neste barramento — assunto do grupo trocado de propósito, `group.updated:1` com subtipo `subject`, e o assunto restaurado |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
 | `CODE_RECEIVED` | — | `MISSING` | **depende de uma família que não existe**: o pareamento por código não é uma fatia deste módulo (H88) |
 | `LOADING_SCREEN` | — | `MISSING` | **sem observável neste build**: o loop de settle mede CLASSES de página, não progresso de carga (H88) |
 | `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
 | `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
-| `BATTERY_CHANGED` | — | `MISSING` | sem equivalente |
+| `BATTERY_CHANGED` | — | `BLOCKED` | H119: `WAWebBatteryStore` NÃO existe neste build (medido), e a própria referência marca o evento como depreciado e não enviado em multi-device — que é o que este build é |
 | `INCOMING_CALL` | events.CallIncoming | `BLOCKED` | ouvinte instalado por `CallCollection.on('add')` — a referência não achou ouvinte e patcheia um `Map` interno; aqui a porta limpa existe. **NUNCA visto disparar**, e agora com causa isolada: `startWAWebVoipCall` resolve `undefined` e **nada se move em lugar nenhum** — cada contêiner da coleção observado por nome, `pendingOutgoingCall` fica `null`. Classe NOTHING (H82), terceira ocorrência. SEIS hipóteses eliminadas (ambiente, pilha VOIP, ordem, aba de chamadas, leitor, e o próprio veredito do app: `showCallBlockedModalIfNeeded()` devolve **false**) em H93 e H95. Reabre com EVIDÊNCIA nova, não hipótese: qualquer coisa que faça `pendingOutgoingCall` deixar de ser `null` |
 | `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
 | `VOTE_UPDATE` | — | `MISSING` | sem equivalente |
@@ -440,9 +440,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 85 | 39% |
-| `PARTIAL` | 60 | 27% |
-| `BLOCKED` | 3 | 1% |
+| `PROVEN` | 86 | 39% |
+| `PARTIAL` | 63 | 29% |
+| `BLOCKED` | 4 | 2% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 69 | 31% |
+| `MISSING` | 64 | 29% |
 | **total** | **220** | |

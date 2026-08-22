@@ -165,7 +165,8 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 			Ack     int    `json:"ack"`
 			BodyLen int    `json:"bodyLen"`
 
-			MsgT int64 `json:"msgT"`
+			MsgT    int64  `json:"msgT"`
+			Subtype string `json:"subtype"`
 
 			Call     string `json:"call"`
 			Peer     string `json:"peer"`
@@ -210,8 +211,21 @@ func (p *Pump) drain(ctx context.Context) ([]Event, error) {
 		if !known {
 			continue
 		}
+		// A GROUP SYSTEM MESSAGE IS RECLASSIFIED HERE, IN GO.
+		//
+		// The page announces it as an ordinary added message of kind "gp2"; the
+		// reference turns that into one of four distinct events by looking at the
+		// subtype. Doing the same in the page would be deciding in the page,
+		// which invariant 6 forbids, so the subtype travels and the decision is
+		// made here.
+		if t == MessageAdded && r.Kind == kindGroupSystem {
+			if g, ok := GroupTypeFor(r.Subtype); ok {
+				t = g
+			}
+		}
 		evs = append(evs, Event{
 			Type: t, Origin: SourcePage, Seq: r.Seq, At: time.UnixMilli(r.At),
+			Subtype: r.Subtype,
 			ChatJID: r.Chat, MessageID: r.Msg, FromMe: r.FromMe,
 			Kind: r.Kind, Ack: r.Ack, BodyLen: r.BodyLen,
 			Aged:       r.MsgT > 0,
@@ -285,7 +299,17 @@ func installScript() string {
 				// It is the message's field, not a clock read for a decision —
 				// invariant 6 is about DECIDING in the page, and this only
 				// reports.
-				msgT: (m && typeof m.t === 'number') ? m.t : 0
+				msgT: (m && typeof m.t === 'number') ? m.t : 0,
+				// THE GROUP-NOTIFICATION SUBTYPE. A system message about a group
+				// arrives as an ordinary added message of kind "gp2"; what KIND of
+				// group event it is lives only in this field. It travels here
+				// because the classification belongs in Go — deciding in the page
+				// is what invariant 6 forbids — and because it costs one string on
+				// a row that already exists.
+				//
+				// Measured 2026-08-22: 1 gp2 message in a store of 395, subtype
+				// "membership_approval_mode". The field is present and populated.
+				subtype: (m && typeof m.subtype === 'string') ? m.subtype : ''
 			};
 		};
 

@@ -261,11 +261,6 @@ func setScript(jid string, k kind, want bool) string {
 	})())`
 }
 
-// readKey is where an async read would park its answer. It is kept because
-// the tests route on it, and because a future field that DOES lag will need
-// exactly this.
-const readKey = "__waHeadlessChatStateRead"
-
 const resultScript = `JSON.stringify((() => {
 	const s = window[` + `"` + stateKey + `"` + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }

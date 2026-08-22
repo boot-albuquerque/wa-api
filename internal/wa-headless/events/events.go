@@ -151,6 +151,11 @@ var PageTypes = []Type{
 	CallIncoming,
 }
 
+// GroupPageTypes is the four group events. They are SEPARATE from PageTypes
+// because the page installs no handler for them: they are reclassifications of
+// MessageAdded made in Go, and the page/Go agreement test would rightly fail if
+// it had to find an install for a name the page never emits.
+
 // LocalTypes is every type published from Go rather than from the page.
 //
 // THE SPLIT IS NOT BOOKKEEPING. The page/Go agreement test asserts that every
@@ -162,7 +167,7 @@ var LocalTypes = []Type{
 }
 
 // KnownTypes is every type this bus can deliver, from either origin.
-var KnownTypes = append(append([]Type{}, PageTypes...), LocalTypes...)
+var KnownTypes = append(append(append([]Type{}, PageTypes...), LocalTypes...), GroupTypes...)
 
 // EVERY TYPE HERE IS ONE THIS MODULE CAN TRIGGER AND HAS TRIGGERED. The upstream
 // has 31 events and it would be easy to declare 31 names, install 31 listeners,
@@ -220,6 +225,14 @@ type Event struct {
 	MessageID string
 	// FromMe says whose message it is, for the message events.
 	FromMe bool
+	// Subtype is the group notification's own word, carried verbatim for the
+	// group.* events and empty for everything else.
+	//
+	// IT SURVIVES EVEN WHEN THE MAPPING DOES NOT. An unmapped subtype leaves the
+	// event as MessageAdded, and this field is how a subscriber still sees what
+	// arrived — which is the point of not swallowing unknown subtypes into a
+	// default bucket.
+	Subtype string
 	// Kind is the message type ("chat", "image", …) for MessageAdded.
 	Kind string
 	// Ack is the delivery state for MessageAck, as the page's own number.

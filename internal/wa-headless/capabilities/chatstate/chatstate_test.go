@@ -26,29 +26,24 @@ type pageDouble struct {
 	value bool
 
 	kicks      int
-	verifies   int
 	lastScript string
-	lastVerify string
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// EXPLICIT, UNIQUE MARKERS. Four scripts run here and three of them share
-	// substrings — the set kick embeds ResolveIdentityExpr, which contains
-	// createWid(, and both read scripts carry the read key. Routing on anything
-	// less than a marker unique to one script has now broken this double twice,
-	// each time failing an assertion for a reason unrelated to the code.
+	// EXPLICIT, UNIQUE MARKERS. The scripts that run here share substrings — the
+	// set kick embeds ResolveIdentityExpr, which contains createWid( — so routing
+	// on anything less than a marker unique to one script has broken this double
+	// twice, each time failing an assertion for a reason unrelated to the code.
+	//
+	// TWO BRANCHES WERE REMOVED HERE (H119, decisão 42 da orquestração). They
+	// routed on readKey, a constant that production stopped emitting when the
+	// dead readResultScript was deleted in H117 — so they could never fire, and a
+	// double branch that never fires reads as coverage of a path that does not
+	// exist.
 	switch {
-	case strings.Contains(expr, readKey+`"] = null`):
-		p.verifies++
-		p.lastVerify = expr
-		*out = `"reading"`
-		return nil
-	case strings.Contains(expr, `JSON.stringify(window["`+readKey+`"])`):
-		*out = fmt.Sprintf(`{"found":true,"value":%t}`, p.value)
-		return nil
 	case strings.Contains(expr, "const s = window["):
 		if !p.ok {
 			stage := p.stage

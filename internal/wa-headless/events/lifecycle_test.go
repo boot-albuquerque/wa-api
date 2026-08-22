@@ -67,29 +67,73 @@ func TestLifecycleFactsDoNotCorruptTheGapCount(t *testing.T) {
 	}
 }
 
-// The two lists are disjoint and together are everything. A type in both would
-// mean the page can forge a fact only this process can know; a type in neither
-// is a name no producer will ever emit.
+// The THREE lists are disjoint and together are everything. A type in two of
+// them would mean the page can forge a fact only this process can know, or that
+// a reclassification competes with a real handler; a type in none is a name no
+// producer will ever emit.
+//
+// GroupTypes joined this test rather than being exempted from it: they are
+// produced in Go from a page message, which is a third origin and needs the same
+// arithmetic, not a special case.
 func TestTypeListsAreDisjointAndComplete(t *testing.T) {
-	page := map[Type]bool{}
-	for _, t2 := range PageTypes {
-		page[t2] = true
+	lists := map[string][]Type{
+		"PageTypes": PageTypes, "LocalTypes": LocalTypes, "GroupTypes": GroupTypes,
 	}
-	for _, t2 := range LocalTypes {
-		if page[t2] {
-			t.Errorf("%q is in both PageTypes and LocalTypes", t2)
+	seen := map[Type]string{}
+	for name, l := range lists {
+		for _, t2 := range l {
+			if other, dup := seen[t2]; dup {
+				t.Errorf("%q is in both %s and %s", t2, other, name)
+			}
+			seen[t2] = name
 		}
 	}
-	if len(KnownTypes) != len(PageTypes)+len(LocalTypes) {
-		t.Fatalf("KnownTypes has %d, want %d+%d", len(KnownTypes), len(PageTypes), len(LocalTypes))
+	if len(KnownTypes) != len(PageTypes)+len(LocalTypes)+len(GroupTypes) {
+		t.Fatalf("KnownTypes has %d, want %d+%d+%d", len(KnownTypes),
+			len(PageTypes), len(LocalTypes), len(GroupTypes))
 	}
 	known := map[Type]bool{}
 	for _, t2 := range KnownTypes {
 		known[t2] = true
 	}
-	for _, t2 := range append(append([]Type{}, PageTypes...), LocalTypes...) {
+	for t2 := range seen {
 		if !known[t2] {
 			t.Errorf("%q is in a producer list and not in KnownTypes", t2)
+		}
+	}
+}
+
+// EVERY MAPPED SUBTYPE LANDS ON A DECLARED GROUP TYPE. A typo in the table would
+// otherwise produce an event type nothing knows about, which the ingress would
+// then emit and no subscriber could match.
+func TestEveryMappedSubtypeIsADeclaredGroupType(t *testing.T) {
+	declared := map[Type]bool{}
+	for _, g := range GroupTypes {
+		declared[g] = true
+	}
+	if len(groupSubtypes) == 0 {
+		t.Fatal("the subtype table is empty")
+	}
+	for sub, typ := range groupSubtypes {
+		if !declared[typ] {
+			t.Errorf("subtype %q maps to %q, which is not in GroupTypes", sub, typ)
+		}
+	}
+	// AND THE ONE ACTUALLY OBSERVED must be mapped. Measured 2026-08-22 on the
+	// lab account: 1 gp2 message of 395, subtype "membership_approval_mode".
+	if got, ok := GroupTypeFor("membership_approval_mode"); !ok || got != GroupUpdated {
+		t.Fatalf("the only subtype ever observed here maps to %q/%t", got, ok)
+	}
+}
+
+// AN UNKNOWN SUBTYPE IS NOT SWALLOWED. The reference ends its chain with an
+// `else` that turns anything unrecognised into a group update, so a subtype Meta
+// adds tomorrow would arrive mislabelled. Here it stays unmapped.
+func TestAnUnknownSubtypeIsNotClassified(t *testing.T) {
+	for _, sub := range []string{"", "something_meta_adds_in_2027", "gp2"} {
+		if got, ok := GroupTypeFor(sub); ok {
+			t.Errorf("subtype %q was classified as %q; unmapped subtypes must stay "+
+				"unclassified so they remain visible as MessageAdded", sub, got)
 		}
 	}
 }
