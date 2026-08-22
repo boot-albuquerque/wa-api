@@ -19562,3 +19562,126 @@ existe na via Cloud API, que exige WABA.
 Payments API, ou (b) capturarmos um `buttonParamsJSON` REAL de um cliente que
 consiga enviar PIX — o esquema dos forks já está refutado por medição, e não
 vale a pena adivinhar variantes dele.
+
+---
+
+## F214 — retry receipt não pode ser honrado: a cache de reenvio é só RAM e nunca é ligada a durável
+
+<!-- f-status: aberto -->
+
+**Data**: 2026-08-22
+**Contexto**: achado de lado, ao investigar as mensagens "no session found for"
+durante a matriz de sondas de carrossel (F211). Não é escopo dessa tarefa.
+
+**Onde**: `internal/wa-noise/capabilities/retry/handle.go:112` (erro),
+`recent.go:103` (`GetForRetry`), `constants.go:51`
+(`RecentMessagesSize = 256`), `core/retry_transport.go:57`
+(`UseMessageStore() -> Client.UseRetryMessageStore`).
+
+**Evidência medida** (servidor vivo):
+
+```
+2026-08-22 11:26:44 ERROR Failed to handle retry receipt for
+  90937376170214@lid/3EB0CEC61952328597E4DC from 90937376170214:38@lid:
+  couldn't find message 3EB0CEC61952328597E4DC
+```
+
+Cronologia que estabelece a causa:
+
+| hora | evento |
+|---|---|
+| 11:15:15 | enviámos `3EB0CEC61952328597E4DC` |
+| ~11:19:30 | **reiniciei o servidor** (troca de binário de sonda) |
+| 11:26:44 | dispositivo `:38` do destinatário pediu reenvio -> falhou |
+
+**Problema**: a cache de mensagens recentes é um anel EM MEMÓRIA de 256
+entradas. Há um caminho durável — `AddRecent` grava no store quando
+`UseMessageStore()` é verdadeiro — mas:
+
+```
+$ grep -rn "UseRetryMessageStore" --include="*.go" pkg/ internal/ | grep -v _test
+internal/wa-noise/capabilities/retry/transport.go:53:  // comentário
+internal/wa-noise/capabilities/retry/constants.go:31:  // comentário
+```
+
+**Só comentários. O campo nunca é atribuído `true` em lado nenhum.** Confirmado
+no banco: `SELECT COUNT(*) FROM wanoise_event_buffer` devolve `0`.
+
+**Consequência**: qualquer reinício perde a capacidade de reenvio de TODAS as
+mensagens anteriores; e mesmo sem reinício, só as últimas 256 sobrevivem, em
+RAM. Quando um dispositivo do destinatário falha a decifrar — o que acontece
+por rotina em dispositivo recém-ligado ou sessão dessincronizada — ele pede
+reenvio, nós não conseguimos servir, e **a mensagem fica perdida para aquele
+dispositivo**, em silêncio para o utilizador e com um único ERROR no nosso log.
+
+Note-se o que NÃO é a causa: `GetForRetry` (recent.go:114-130) já tenta a JID
+alternativa LID<->PN. A hipótese "o retry veio pela LID e gravámos pela PN"
+foi verificada no código e **está refutada**.
+
+**Correção sugerida**: ligar `UseRetryMessageStore` na construção do cliente,
+para o caminho durável que já existe passar a ser usado. Antes disso, medir o
+custo: o store guarda o protobuf de cada mensagem enviada, e o `CLAUDE.md`
+manda inventariar quem passa a disputar um recurso limitado antes de o limitar
+— aqui o recurso é disco, e o expurgo (`DeleteOldOutgoingEvents`, throttled por
+`StoreClearInterval`) tem de ser medido junto.
+
+**Status**: não corrigido — fora do escopo da tarefa atual. Pergunta pendente
+ao utilizador.
+
+---
+
+## F215 — o nosso próprio eco não decifra e dispara `UndecryptableMessage` para o webhook
+
+<!-- f-status: aberto -->
+
+**Data**: 2026-08-22
+**Contexto**: mesma investigação da F214.
+
+**Onde**: `internal/wa-noise/capabilities/message/decrypt_session.go:102`
+(`DecryptDM`, ramo `isPreKey == false`, linha 142).
+
+**Evidência medida**. Em 11 envios da matriz de sondas, 5 falhas de decifragem
+sobre 3 ids — todos ids que NÓS enviámos:
+
+```
+Error decrypting message 3EB08136A4F6BE423D29F3 from 29343770251463:24@lid
+  in 29343770251463@lid: failed to decrypt normal message:
+  no session found for user 29343770251463_1:24
+Error decrypting message 3EB0EFB9C2196ECD17E623 from 202315172675834:8@lid
+  in 202315172675834@lid: failed to decrypt normal message: no valid sessions
+```
+
+São **duas** mensagens de erro distintas da libsignal, e as duas vêm de
+`<a nossa própria LID>:<o nosso próprio dispositivo>`.
+
+O mapeamento LID->PN e as sessões confirmam que a auto-sessão não existe — e
+nem podia:
+
+| conta | LID | dispositivo da API | sessões com a própria LID |
+|---|---|---|---|
+| filarapida | 29343770251463 | `:24` | `:0`, `:23` — **não `:24`** |
+| aulapratica | 202315172675834 | `:8` | `:0` — **não `:8`** |
+| lucas | 90937376170214 | `:39` | `:0`, `:38`, `:76` — **não `:39`** |
+
+Um dispositivo nunca tem sessão Signal consigo próprio. Recebemos uma cópia
+auto-endereçada e a decifragem não pode senão falhar. O `<enc>` vem como
+`type="msg"` (normal, exige sessão existente) e não `pkmsg` (que criaria uma).
+
+**O que NÃO consegui estabelecer**: por que é intermitente — 3 ids em 11
+envios, e não todos. Fica como pergunta aberta, e não invento explicação.
+
+**Impacto real, e é menor do que parece**: NÃO há perda de mensagem. O
+destinatário é outro dispositivo, com sessão própria; o carrossel renderizou
+nos dois telemóveis na mesma ronda em que estes erros apareceram. O que há é
+(a) ruído de ERROR/WARN no log e (b) **5 eventos `UndecryptableMessage`
+despachados**, que num ambiente com webhook configurado chegariam ao consumidor
+como mensagens ilegíveis inexistentes. Neste datadir o log diz "No webhook set
+for user", por isso não se propagou.
+
+**Correção sugerida**: reconhecer a cópia auto-endereçada (remetente == o nosso
+próprio dispositivo) antes de tentar decifrar, e descartá-la em silêncio em vez
+de a tratar como mensagem indecifrável. Não silenciar a categoria inteira: um
+`UndecryptableMessage` de um TERCEIRO é sinal legítimo e tem de continuar a
+subir.
+
+**Status**: não corrigido — fora do escopo. Depende de decisão junto com a F214.
