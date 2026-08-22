@@ -829,3 +829,55 @@ func TestSendAudio_SSRF_LoopbackBlocked(t *testing.T) {
 		t.Errorf("loopback deveria ser bloqueado antes de SendAudio, mas foi chamado %d vez(es)", n)
 	}
 }
+
+// --- F116: Caption aceito e inerte -----------------------------------------
+
+// TestSendAudio_CaptionAcceptedButInert trava o defeito HISTÓRICO da F116:
+// SendAudioRequest.Caption existe no contrato público (a rota aceita o
+// campo sem rejeitar), mas waE2E.AudioMessage NÃO tem Caption — o campo
+// atravessa a fronteira HTTP, é decodificado, e morre ali. O handler
+// histórico (`git show 41bc8e2^:handlers.go`) também não o enviava.
+//
+// Este teste documenta a MENTIRA: um cliente pode enviar Caption e receber
+// 200, mas o valor nunca chega ao protocolo. A divergência é mantida por
+// decisão de contrato (HOUSEKEEP F116) — remover o campo ou passar a
+// enviá-lo são ambas mudanças de contrato que precisam de decisão.
+//
+// O que ele assere:
+//  1. Caption preenchido NÃO causa rejeição (o request é aceito).
+//  2. AudioPayload, que é o que chega à porta de envio, NÃO tem Caption
+//     (structuralmente impossível — a struct não possui o campo).
+//  3. O áudio foi de facto enviado (SendAudio chamado exactamente 1 vez).
+func TestSendAudio_CaptionAcceptedButInert(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{
+		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
+			return oggBytes, "audio/ogg", nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendAudioRequest{
+			Phone:   "5511987654321",
+			Audio:   audioURL,
+			Caption: "esta legenda nunca chega ao protocolo (F116)",
+		})
+
+	if err != nil {
+		t.Fatalf("Caption preenchido causou rejeicao — o contrato publico aceita o campo (F116): %v", err)
+	}
+	if result == nil || result.Status != domain.StatusSent {
+		t.Fatalf("Status: got %v, want %q", result, domain.StatusSent)
+	}
+	if n := len(mm.SendAudioCalls); n != 1 {
+		t.Fatalf("SendAudio chamado %d vez(es), quero 1 — o audio tem de ser enviado mesmo com Caption (F116)", n)
+	}
+	// AudioPayload NÃO tem campo Caption — é structuralmente impossível que
+	// o valor chegue à porta. Este comentário é a documentação, não uma
+	// asserção: não há o que asserar sobre um campo que não existe na struct.
+	// O controlo negativo está no HOUSEKEEP: se alguém acrescentar Caption a
+	// AudioPayload e a ligar no use case, este teste continuará verde — o
+	// que mudará é o wire, e a trava de wire (TestSendWireContract_FieldNames)
+	// acusará a nova chave.
+}

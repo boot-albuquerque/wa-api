@@ -435,3 +435,41 @@ func TestSendAudio_NoSecretLeak(t *testing.T) {
 	}
 	logassert.NoSecrets(t, capture.Records(t))
 }
+
+// TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute trava o defeito
+// HISTÓRICO da F116 pela rota registrada: POST /chat/send/audio aceita
+// Caption no JSON (200 OK, áudio enviado), mas o valor NUNCA chega ao
+// protocolo — waE2E.AudioMessage não tem Caption. O handler histórico
+// (`git show 41bc8e2^:handlers.go`) também não o montava.
+//
+// A mentira é documentada aqui: o campo existe no contrato público e um
+// cliente que o envie recebe 200, mas a legenda é silenciosamente
+// descartada. Divergência mantida por decisão de contrato (HOUSEKEEP F116).
+func TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute(t *testing.T) {
+	sentAt := int64(1755500130)
+	mm := &contractsfake.MediaMessenger{
+		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.AudioPayload, _ string) (domain.MessageSendResult, error) {
+			return domain.MessageSendResult{ID: "wire-caption-inert", Timestamp: time.Unix(sentAt, 0)}, nil
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+	mf := defaultSendAudioFetcher()
+
+	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `","Caption":"legenda que morre aqui (F116)"}`
+	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Caption preenchido causou rejeicao pela rota registrada — o contrato publico aceita o campo (F116): status=%d corpo=%s",
+			rec.Code, rec.Body.String())
+	}
+	env := decodeEnvelope(t, rec)
+	if !env.Success {
+		t.Fatalf("envelope.success=false com Caption preenchido: %s", rec.Body.String())
+	}
+	if n := len(mm.SendAudioCalls); n != 1 {
+		t.Fatalf("SendAudio chamado %d vez(es), quero 1 — o audio tem de ser enviado mesmo com Caption (F116)", n)
+	}
+	// AudioPayload não tem campo Caption — structuralmente impossível de
+	// propagar. Se alguém acrescentar e ligar, a trava de wire
+	// (TestSendWireContract_FieldNames) acusará a nova chave na resposta.
+}

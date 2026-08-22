@@ -5881,10 +5881,28 @@ caminhos, nenhum trivial:
 **PROIBIDO**: inventar uma forma de "enviar caption em áudio" empurrando o
 texto para outro campo. Seria fabricar semântica que o protocolo não tem.
 
-**Status**: **NÃO CORRIGIDO** — registrado como dívida de contrato por decisão
-do ciclo. Não bloqueia nenhuma capability.
+**Status**: **CORRIGIDO** — divergência travada em teste por decisão de
+contrato (50=b): manter o campo no DTO, travar que é aceito e inerte.
 
-<!-- f-status: aberto -->
+Travado por `TestSendAudio_CaptionAcceptedButInert`
+(`pkg/application/usecase/message/send_audio_test.go`) e
+`TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute`
+(`pkg/presentation/http/handlers/handler_send_audio_test.go`): envio com
+Caption preenchido é aceito (200 OK, áudio enviado), mas o valor nunca
+chega ao protocolo — `AudioPayload` não tem campo `Caption`, e
+`waE2E.AudioMessage` também não. A mentira está documentada nos dois testes.
+
+Controlos negativos EXECUTADOS (mutação: acrescentar rejeição de Caption no
+use case):
+
+```
+--- FAIL: TestSendAudio_CaptionAcceptedButInert (0.00s)
+    send_audio_test.go:839: Caption preenchido causou rejeicao — o contrato publico aceita o campo (F116): Caption is not supported for audio
+--- FAIL: TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute (0.00s)
+    handler_send_audio_test.go:462: Caption preenchido causou rejeicao pela rota registrada — o contrato publico aceita o campo (F116): status=400 corpo=...
+```
+
+<!-- f-status: corrigido -->
 
 ## F117 — `Waveform` sumiu da superfície pública de áudio, mas o histórico a enviava
 
@@ -6239,13 +6257,36 @@ hoje é 400 passaria a ser aceito), por isso não foi decidida nem aplicada
 nesta sessão — fica para decisão consciente do usuário, com o trade-off
 registrado aqui.
 
-**Status**: **NÃO CORRIGIDO** — comportamento histórico preservado de
-propósito (fora do escopo autorizado do CAP-08A: corrigir contrato público
-não é decisão do executor). Pendente de decisão do usuário.
+**Status**: **CORRIGIDO** — divergência travada em teste por decisão de
+contrato (50=b): manter a validação `== 0` e travar que coordenada zero
+é rejeitada, com a mentira documentada nos próprios testes.
+
+Travado por `TestSendLocation_ZeroLatitudeRejected` e
+`TestSendLocation_ZeroLongitudeRejected`
+(`pkg/application/usecase/message/send_location_test.go`), e pela rota
+registrada `TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute`
+(`pkg/presentation/http/handlers/handler_send_location_test.go`): envio com
+Latitude=0 ou Longitude=0 é rejeitado com 400, mesmo sendo coordenada
+geográfica válida. Testes já existiam e já documentavam o comportamento
+histórico — a decisão (50=b) os reconhece como trava.
+
+Controlo negativo EXECUTADO (mutação: remover as guardas `== 0` do use case):
+
+```
+--- FAIL: TestSendLocation_ZeroLatitudeRejected (0.00s)
+    send_location_test.go:66: Latitude=0 (equador) foi aceita — defeito historico deixou de ser reproduzido
+--- FAIL: TestSendLocation_ZeroLongitudeRejected (0.00s)
+    send_location_test.go:83: Longitude=0 (meridiano de Greenwich) foi aceita — defeito historico deixou de ser reproduzido
+--- FAIL: TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute (0.00s)
+    --- FAIL: TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute/zero_latitude (0.00s)
+        handler_send_location_test.go:184: zero_latitude produziu 200 falso: {"code":200,"data":{"message_id":"sent-location-message-id","timestamp":-62135596800,"status":"sent"},"success":true}
+    --- FAIL: TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute/zero_longitude (0.00s)
+        handler_send_location_test.go:184: zero_longitude produziu 200 falso: {"code":200,"data":{"message_id":"sent-location-message-id","timestamp":-62135596800,"status":"sent"},"success":true}
+```
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F122 — a guarda `missing session id` de `SendContactHandler`/
 `SendLocationHandler` ficou sem NENHUM teste depois da migração CAP-08A/08B;
@@ -16504,7 +16545,7 @@ público, mantê-la exige que a divergência seja **declarada** em vez de herdad
 As duas são defensáveis; herdar sem decidir não é, e é o modo de falha que a
 própria F131 nomeia.
 
-**Status**: **PARCIALMENTE CORRIGIDO** — a trava existe, a divergência continua.
+**Status**: **CORRIGIDO** — trava completa, divergência eliminada.
 
 **O que foi feito** (decisão (b) do canal): `message_op_wire_contract_test.go`
 trava as três rotas, **cada uma contra o SEU vocabulário**. A `react` é travada
@@ -16566,16 +16607,37 @@ senão trava uma ficção. Medido contra o servidor a correr:
 `react`. É a Armadilha 1 verificada na direção que interessa: o dublê não é mais
 simples nem mais permissivo que o servidor — é igual.
 
-**Achado de lado, registado sem corrigir**: a resposta da `react` é construída
-como `map[string]interface{}` literal
-(`pkg/application/usecase/message/react.go:85-89`), enquanto as catorze irmãs
-usam um `*Result` tipado do domínio. É por isso que ela escapou à disciplina:
-não há tipo onde pendurar a tag, e portanto nada que uma revisão de DTO
-apanhasse.
+**Achado de lado, RESOLVIDO**: a resposta da `react` era construída como
+`map[string]interface{}` literal — foi isso que a fez escapar à disciplina.
+Nasceu `domain.SendReactionResult` com tags `json:"message_id"`,
+`json:"timestamp"`, `json:"status"`, e o use case passou a devolver um tipo
+em vez de um mapa. O "achado de lado" virou a CAUSA corrigida.
+
+Controlo negativo EXECUTADO da trava completa (mutação: reverter tags de
+`SendReactionResult` para a forma histórica `Id`/`Timestamp`/`Details`):
+
+```
+--- FAIL: TestMessageOpWireContract_FieldNames/react (0.00s)
+    message_op_wire_contract_test.go:161: POST /chat/react: a chave "message_id" SUMIU do wire. Presentes: [Details Id Timestamp].
+               Os nomes do wire sao contrato publico; renomear uma tag JSON quebra todo cliente.
+    message_op_wire_contract_test.go:161: POST /chat/react: a chave "timestamp" SUMIU do wire. Presentes: [Details Id Timestamp].
+               Os nomes do wire sao contrato publico; renomear uma tag JSON quebra todo cliente.
+    message_op_wire_contract_test.go:161: POST /chat/react: a chave "status" SUMIU do wire. Presentes: [Details Id Timestamp].
+               Os nomes do wire sao contrato publico; renomear uma tag JSON quebra todo cliente.
+    message_op_wire_contract_test.go:168: POST /chat/react: a chave "Details" APARECEU no wire, e e' de outro vocabulario.
+               Presentes: [Details Id Timestamp]
+    message_op_wire_contract_test.go:168: POST /chat/react: a chave "Id" APARECEU no wire, e e' de outro vocabulario.
+               Presentes: [Details Id Timestamp]
+    message_op_wire_contract_test.go:168: POST /chat/react: a chave "Timestamp" APARECEU no wire, e e' de outro vocabulario.
+               Presentes: [Details Id Timestamp]
+--- FAIL: TestMessageOpWireContract_TodasNaMesmaForma (0.00s)
+    message_op_wire_contract_test.go:210: edit devolve [message_id status timestamp] e react devolve [Details Id Timestamp]: as operacoes sobre mensagem divergem no wire.
+               Se a divergencia for deliberada, ela tem de estar REGISTADA — foi assim que a F190 nasceu.
+```
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F187 — verificação em produção: os MESMOS envios, uma hora depois
 
