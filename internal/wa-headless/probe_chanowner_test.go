@@ -104,6 +104,27 @@ func TestProbeChannelOwnership(t *testing.T) {
 		}
 	}
 
+	// REACTION POLICY, on a channel this account owns. The setter goes through
+	// the SAME edit action as the description, which H113 measured accepting and
+	// never storing — so this is also a test of whether that failure is specific
+	// to descriptions or general to the action.
+	for _, want := range []channel.ReactionPolicy{
+		channel.ReactionsNone, channel.ReactionsBasic, channel.ReactionsAll,
+	} {
+		wire, err := m.SetReactionPolicy(ctx, made.JID, made.InviteCode, want, "probe/chanowner")
+		switch {
+		case errors.Is(err, channel.ErrUnverifiable):
+			// MEASURED, not asserted away: a fresh channel's metadata carries no
+			// reaction mixin, so there is nothing to verify against. The write may
+			// well have landed; nobody can say.
+			t.Logf("reaction policy %d: unverifiable on a fresh channel (%v)", want, err)
+		case err != nil:
+			t.Errorf("SetReactionPolicy(%d): %v", want, err)
+		default:
+			t.Logf("reaction policy %d -> server wire %d", want, wire)
+		}
+	}
+
 	// RENAME, verified against the server rather than against the echo.
 	renamed := name + " (renamed)"
 	if err := m.SetName(ctx, made.JID, made.InviteCode, renamed, "probe/chanowner"); err != nil {

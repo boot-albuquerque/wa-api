@@ -289,3 +289,39 @@ func TestAnEmptyJidNeverReachesThePageForALookup(t *testing.T) {
 		t.Error("an empty jid reached the page")
 	}
 }
+
+// ASKING FOR THE CONVERSATION WITH ONESELF IS NOT "NO SUCH CHAT".
+//
+// The reference returns null there, and null means "that question does not
+// apply". A caller that read it as absence would conclude the account has no
+// conversation with a contact it plainly does — the two answers lead to
+// different repairs.
+func TestTheConversationWithOneselfIsItsOwnAnswer(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"total":1,"with_unread":0,"chats":[
+	 {"jid":"me@lid","title":"me","t":1700000000}]}`}
+	_, err := lister(p).OfContact(context.Background(), "me@lid", []string{"me@c.us", "me@lid"}, "t")
+	if !errors.Is(err, ErrIsSelf) {
+		t.Fatalf("err = %v, want ErrIsSelf", err)
+	}
+	if errors.Is(err, ErrNoChat) {
+		t.Error("asking about oneself is being reported as an absent conversation")
+	}
+}
+
+// AND THE GUARD MUST MATCH EITHER IDENTITY. This build gives the account a phone
+// jid and a lid, and a caller may hold either — the same reason contacts.ByJID
+// matches on both.
+func TestTheSelfGuardMatchesEitherIdentity(t *testing.T) {
+	p := &pageDouble{answer: `{"ok":true,"total":1,"with_unread":0,"chats":[
+	 {"jid":"other@lid","title":"o","t":1700000000}]}`}
+	for _, self := range []string{"me@c.us", "me@lid"} {
+		_, err := lister(p).OfContact(context.Background(), self, []string{"me@c.us", "me@lid"}, "t")
+		if !errors.Is(err, ErrIsSelf) {
+			t.Errorf("self identity %q was not recognised: %v", self, err)
+		}
+	}
+	// And somebody else still resolves normally.
+	if _, err := lister(p).OfContact(context.Background(), "other@lid", []string{"me@c.us"}, "t"); err != nil {
+		t.Fatalf("a normal contact was refused: %v", err)
+	}
+}

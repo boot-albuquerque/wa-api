@@ -74,6 +74,14 @@ type Channel struct {
 	Following bool
 	// HasPicture says the channel has one; the url is deliberately not carried.
 	HasPicture bool
+	// ReactionPolicyRaw is the page's OWN number for who may react, carried
+	// verbatim. -1 means the metadata did not include it.
+	//
+	// IT IS THE RAW VALUE, not the reference's code. The upstream API takes
+	// 0/1/2 and maps them to 3/1/0 before sending (Channel.js:184–197); carrying
+	// the page's number keeps the two vocabularies separable, so a build that
+	// changes the mapping is visible instead of silently reinterpreted.
+	ReactionPolicyRaw int
 }
 
 func (c Channel) String() string {
@@ -122,6 +130,7 @@ func (r *Reader) ByInviteCode(ctx context.Context, code, label string) (Channel,
 		Created  int64  `json:"createdAt"`
 		Member   bool   `json:"member"`
 		Picture  bool   `json:"picture"`
+		Reaction int    `json:"reactionRaw"`
 	}
 	if e := json.Unmarshal([]byte(raw), &out); e != nil {
 		return Channel{}, fmt.Errorf("channel: unexpected answer: %w", e)
@@ -136,6 +145,7 @@ func (r *Reader) ByInviteCode(ctx context.Context, code, label string) (Channel,
 		JID: out.JID, InviteCode: out.Code, Name: out.Name, Description: out.Desc,
 		Subscribers: out.Subs, State: out.State, Verification: out.Verif,
 		Following: out.Member, HasPicture: out.Picture,
+		ReactionPolicyRaw: out.Reaction,
 	}
 	if out.Created > 0 {
 		c.CreatedAt = time.Unix(out.Created, 0)

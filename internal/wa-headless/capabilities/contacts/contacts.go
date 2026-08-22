@@ -385,3 +385,49 @@ func (l *Lister) ByJID(ctx context.Context, jid, label string) (Contact, error) 
 	}
 	return Contact{}, fmt.Errorf("%w (%d in the roster)", ErrNoContact, len(roster.Contacts))
 }
+
+// Recipients resolves a group notification's recipient list to contacts.
+//
+// IT IS THE REFERENCE'S GroupNotification.getRecipients, which maps recipientIds
+// through getContactById (GroupNotification.js:93–99). The mapping is the easy
+// part; the interesting part is what happens to an id the roster does not have.
+//
+// AN UNKNOWN RECIPIENT IS REPORTED, NOT DROPPED. The reference's Promise.all
+// resolves each id independently and a miss becomes an undefined entry the
+// caller has to notice. Silently shortening the list would be worse: a caller
+// counting recipients would get a number smaller than the group event actually
+// named, and nothing would say why. So the misses come back by jid, separately.
+func (l *Lister) Recipients(ctx context.Context, jids []string, label string) ([]Contact, []string, error) {
+	if len(jids) == 0 {
+		return nil, nil, nil
+	}
+	// ONE ROSTER READ FOR ALL OF THEM. Calling ByJID per id would re-read the
+	// whole collection once per recipient — 945 rows times the group size — and
+	// would also let the roster change between two ids in the same answer.
+	roster, err := l.List(ctx, label+"/recipients")
+	if err != nil {
+		return nil, nil, err
+	}
+	index := make(map[string]Contact, len(roster.Contacts)*2)
+	for _, c := range roster.Contacts {
+		if c.PN != "" {
+			index[c.PN] = c
+		}
+		if c.LID != "" {
+			index[c.LID] = c
+		}
+	}
+	found := make([]Contact, 0, len(jids))
+	var missing []string
+	for _, jid := range jids {
+		if jid == "" {
+			continue
+		}
+		if c, ok := index[jid]; ok {
+			found = append(found, c)
+			continue
+		}
+		missing = append(missing, jid)
+	}
+	return found, missing, nil
+}

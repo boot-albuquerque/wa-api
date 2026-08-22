@@ -249,3 +249,34 @@ func (l *Lister) ByJID(ctx context.Context, jid, label string) (Chat, error) {
 // "unlimited": a number keeps the ceiling visible, and Truncated() still reports
 // if this build ever exceeds it.
 const allChats = 100000
+
+// ErrIsSelf is asking for the conversation of this account itself.
+//
+// THE REFERENCE RETURNS null HERE, and null is not "no such chat" — it is "that
+// question does not apply". Keeping them apart matters because a caller that
+// treated null as absence would conclude the account has no conversation with a
+// contact it plainly does; the two answers lead to different repairs.
+var ErrIsSelf = fmt.Errorf("chats: this account has no conversation with itself")
+
+// OfContact is the reference's Contact.getChat.
+//
+// IT IS ByJID PLUS ONE GUARD, and the guard is the whole difference:
+// Contact.getChat returns null when the contact IS this account
+// (Contact.js:144–148 of the pinned upstream). Delegating without it would hand
+// back whatever the collection happens to hold for the self jid, which is a
+// conversation that exists in the page and means nothing to a caller.
+//
+// The self identity is passed in rather than read here: this package reads
+// chats, and a second place that resolves "who am I" would be a second answer to
+// a question capabilities/owner already answers.
+func (l *Lister) OfContact(ctx context.Context, contactJID string, selfJIDs []string, label string) (Chat, error) {
+	if strings.TrimSpace(contactJID) == "" {
+		return Chat{}, ErrNoChat
+	}
+	for _, self := range selfJIDs {
+		if self != "" && self == contactJID {
+			return Chat{}, ErrIsSelf
+		}
+	}
+	return l.ByJID(ctx, contactJID, label+"/of-contact")
+}

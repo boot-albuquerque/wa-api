@@ -3,6 +3,7 @@ package channel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -428,5 +429,148 @@ func TestAnEmptyJIDNeverReachesThePageForAFollow(t *testing.T) {
 	}
 	if len(d.scripts) != 0 {
 		t.Error("an empty jid reached the page")
+	}
+}
+
+// reactionDouble keeps the server's WIRE value as its own state, so a test can
+// make the page accept the call and the server keep the old policy — the failure
+// the reference reports as success, since it computes its boolean from the
+// absence of an exception.
+type reactionDouble struct {
+	serverWire int
+	takes      bool
+
+	answer  string
+	scripts []string
+}
+
+func (d *reactionDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.HasPrefix(expr, "window."+stateKey) {
+		*out = d.answer
+		return nil
+	}
+	d.scripts = append(d.scripts, expr)
+	if strings.Contains(expr, "editReactionCodesSetting") {
+		if d.takes {
+			d.serverWire = digitAfter(expr, "reactionCodesSetting: ")
+		}
+		d.answer = `{"ok":true}`
+	} else {
+		d.answer = `{"ok":true,"notFound":false,"jid":"1@newsletter","code":"c",` +
+			`"name":"n","reactionRaw":` + itoa(d.serverWire) + `}`
+	}
+	*out = "kicked"
+	return nil
+}
+
+func digitAfter(s, marker string) int {
+	i := strings.Index(s, marker)
+	if i < 0 {
+		return -1
+	}
+	rest := s[i+len(marker):]
+	n := 0
+	seen := false
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+		seen = true
+	}
+	if !seen {
+		return -1
+	}
+	return n
+}
+
+func itoa(n int) string { return fmt.Sprintf("%d", n) }
+
+func reactor(d *reactionDouble) *Manager { return NewManager(engine.NewRunner(), d.eval) }
+
+// THE TWO VOCABULARIES MUST NOT BE COMPARED TO EACH OTHER.
+//
+// The reference's code and the page's wire value differ (0→3, 1→1, 2→0). A
+// verification that compared the CODE against what the server reports would pass
+// by accident for ReactionsBasic — where the two happen to coincide — and fail
+// for the other two. That is the worst kind of bug: right sometimes.
+func TestTheReactionPolicyIsVerifiedAgainstTheWireValue(t *testing.T) {
+	d := &reactionDouble{serverWire: 0, takes: true}
+	got, err := reactor(d).SetReactionPolicy(context.Background(), "1@newsletter", "c",
+		ReactionsAll, "t")
+	if err != nil {
+		t.Fatalf("SetReactionPolicy: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("the server holds %d; ReactionsAll maps to wire 3, not to its own code", got)
+	}
+}
+
+// A POLICY THE SERVER IGNORED IS NOT A SUCCESS.
+func TestAReactionPolicyTheServerIgnoredIsAnError(t *testing.T) {
+	d := &reactionDouble{serverWire: 0, takes: false}
+	_, err := reactor(d).SetReactionPolicy(context.Background(), "1@newsletter", "c",
+		ReactionsAll, "t")
+	if !errors.Is(err, ErrNotTaken) {
+		t.Fatalf("err = %v, want ErrNotTaken", err)
+	}
+	if !strings.Contains(err.Error(), "wire value") {
+		t.Errorf("the error does not name the vocabulary it compared: %v", err)
+	}
+}
+
+// A VALUE OUTSIDE THE THREE NEVER REACHES THE PAGE.
+func TestAnUnknownReactionPolicyIsRefusedBeforeThePage(t *testing.T) {
+	d := &reactionDouble{}
+	if _, err := reactor(d).SetReactionPolicy(context.Background(), "1@newsletter", "c",
+		ReactionPolicy(7), "t"); !errors.Is(err, ErrBadReactionPolicy) {
+		t.Fatalf("err = %v, want ErrBadReactionPolicy", err)
+	}
+	if len(d.scripts) != 0 {
+		t.Error("an unknown policy reached the page")
+	}
+}
+
+// THE FLAG AND THE VALUE KEY ARE BOTH RIGHT. They differ, and getting either
+// wrong reads as "the server ignored us".
+func TestTheReactionScriptUsesBothCorrectKeys(t *testing.T) {
+	d := &reactionDouble{takes: true}
+	_, _ = reactor(d).SetReactionPolicy(context.Background(), "1@newsletter", "c",
+		ReactionsNone, "t")
+	var script string
+	for _, s := range d.scripts {
+		if strings.Contains(s, "editReactionCodesSetting") {
+			script = s
+		}
+	}
+	if script == "" {
+		t.Fatal("no reaction script ran")
+	}
+	if !strings.Contains(script, "{ editReactionCodesSetting: true }") {
+		t.Error("the property flag is not set as its own object")
+	}
+	if !strings.Contains(script, "reactionCodesSetting: 0") {
+		t.Error("ReactionsNone must send wire 0")
+	}
+}
+
+// "THE FIELD IS ABSENT" IS NOT "THE WRITE FAILED".
+//
+// A freshly created channel's metadata carries no reaction mixin at all
+// (measured, H133). Reporting that as ErrNotTaken would claim the write failed
+// when nobody knows — the opposite of what invariant 14 is for. This module has
+// conflated absent with wrong twice before: acks (H108) and descriptions (H126).
+func TestAnAbsentReactionFieldIsUnverifiableAndNotAFailure(t *testing.T) {
+	d := &reactionDouble{serverWire: reactionAbsent, takes: false}
+	_, err := reactor(d).SetReactionPolicy(context.Background(), "1@newsletter", "c",
+		ReactionsAll, "t")
+	if !errors.Is(err, ErrUnverifiable) {
+		t.Fatalf("err = %v, want ErrUnverifiable", err)
+	}
+	if errors.Is(err, ErrNotTaken) {
+		t.Error("an unverifiable write is being reported as a failed one")
 	}
 }

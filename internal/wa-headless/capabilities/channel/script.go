@@ -30,6 +30,9 @@ const (
 	mixPicture     = "newsletterPictureMetadataMixin"
 	mixDescription = "newsletterDescriptionMetadataMixin"
 	mixMembership  = "newsletterMembershipMetadataMixin"
+	// mixReactionCodes carries the channel's reaction policy. Measured present
+	// on a real channel's metadata 2026-08-22 (H133).
+	mixReactionCodes = "newsletterReactionCodesSettingMetadataMixin"
 
 	// fieldNewsletterMetadata is where a DIRECTORY result keeps the mixins. A
 	// metadata query answers with the mixins at the top level; a directory result
@@ -117,6 +120,15 @@ func byInviteScript(code string) string {
 				// canal que esta conta nao segue, e foi exatamente isso que
 				// permitiu provar este leitor sem seguir nada.
 				member: !!mix("` + mixMembership + `"),
+				// A POLITICA DE REACAO, CRUA. O valor da pagina viaja como veio;
+				// o mapeamento para o vocabulario da referencia acontece em Go,
+				// onde da' para nomea-lo e testa-lo.
+				reactionRaw: (() => {
+					const rm = mix("` + mixReactionCodes + `");
+					if (!rm) { return -1; }
+					const v = rm.value !== undefined ? rm.value : rm.reactionCodesSetting;
+					return (typeof v === "number") ? v : -1;
+				})(),
 				// A URL DA FOTO NAO CRUZA: e grande, expira, e ninguem aqui
 				// precisa dela.
 				picture: !!(picM && picM.picture),
@@ -452,3 +464,45 @@ func followedScript() string {
 	return "kicked";
 	})()`
 }
+
+// reactionScript sets the channel's reaction policy through the same edit action
+// the name and description use.
+//
+// THE FLAG AND THE VALUE KEY DIFFER, as they do for the name: the property flag
+// is editReactionCodesSetting and the value key is reactionCodesSetting. Getting
+// that wrong reads as "the server ignored us", which is why one function owns
+// the pairing.
+func reactionScript(jid string, wire int) string {
+	return `(() => {` + preambleChannel + `
+	(async () => {
+		try {
+			const NC = window.require("` + modCollections + `").` + collNewsletters + `;
+			const JID = ` + strconv.Quote(jid) + `;
+			let ch = null;
+			try { ch = NC.get(JID); } catch (e) {}
+			if (!ch && typeof NC.find === "function") {
+				try {
+					const { createWid } = window.require("` + modWidFactory + `");
+					ch = await NC.find(createWid(JID));
+				} catch (e) {}
+			}
+			if (!ch) { park({ ok: false, why: "channel not reachable" }); return; }
+			await window.require("` + modEdit + `").editNewsletterMetadataAction(
+				ch,
+				{ editReactionCodesSetting: true },
+				{ reactionCodesSetting: ` + strconv.Itoa(wire) + ` });
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: safe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}
+
+// preambleChannel is the parked-answer boilerplate these scripts share.
+const preambleChannel = `
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+`

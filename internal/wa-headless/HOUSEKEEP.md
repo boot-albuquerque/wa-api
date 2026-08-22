@@ -10347,3 +10347,119 @@ como falha faria o caso comum parecer quebrado.
 
 **Status**: entregue e provado ao vivo. Era o último `PARTIAL` acionável que a
 varredura da H130 tinha identificado.
+
+## H132 — as duas que os pares provados destravaram
+
+**Data**: 2026-08-22. **Contexto**: a auditoria da H118 classificou
+`Contact.getChat` e `GroupNotification.getRecipients` como "(b) delegação com
+lógica extra — não herda". Isso estava certo NAQUELE momento: os pares no
+`Client` ainda não estavam provados. Depois da H127–H129 estão, e a lógica extra
+passou a ser a única coisa faltando.
+
+**Onde**: `capabilities/chats/chats.go` (`OfContact`),
+`capabilities/contacts/contacts.go` (`Recipients`).
+
+### `Contact.getChat` — a guarda É a diferença
+
+`ByJID` já existia e estava provado. O que a referência acrescenta é uma linha:
+devolver null quando o contato É esta conta (`Contact.js:144`).
+
+Delegar sem ela entregaria a conversa que a página guarda para o self — que
+EXISTE e não significa nada para quem chama. E `null` não é "não achei": é "essa
+pergunta não se aplica". Fundi-los faria um chamador concluir que a conta não
+tem conversa com alguém que ela plainly tem.
+
+A identidade própria é PASSADA, não lida aqui: `capabilities/owner` já responde
+"quem sou eu", e um segundo lugar que resolvesse isso seria uma segunda resposta
+à mesma pergunta.
+
+Ao vivo, a guarda dispara para as DUAS identidades da conta (pn e lid) — o que
+importa porque quem chama pode ter qualquer uma.
+
+### `getRecipients` — o desconhecido volta, não some
+
+A referência usa `Promise.all` sobre os ids, e uma falta vira uma entrada
+`undefined` que o chamador precisa notar. Aqui os desconhecidos voltam
+SEPARADAMENTE, por jid.
+
+Encurtar a lista em silêncio seria pior que a referência: quem contasse
+destinatários teria um número MENOR do que o evento de grupo nomeou, e nada
+diria por quê. Ao vivo: pediu 4, achou 3, faltou 1, e a soma bate.
+
+Uma decisão de custo: **uma leitura de roster para todos os ids**, não uma por
+id. Chamar `ByJID` por destinatário releria as 945 linhas vezes o tamanho do
+grupo, e — pior — deixaria o roster mudar entre dois ids da mesma resposta.
+
+### Controles negativos EXECUTADOS
+
+1. Remover a guarda de self: falha.
+2. Descartar destinatários desconhecidos em silêncio: falha.
+3. Indexar o roster só pelo `PN`: falha — uma pessoa nomeada por lid não
+   resolve, que é a classe de defeito da H34 outra vez.
+
+### O que isto diz sobre a auditoria
+
+A H118 não errou ao dizer "não herda". Ela mediu o estado de então. O que faltava
+era o par ficar provado — e quando ficou, a linha virou trabalho pequeno em vez
+de trabalho desconhecido. É o valor de um ledger que registra POR QUE algo está
+aberto: a resposta muda sozinha quando a dependência fecha.
+
+**Status**: entregue e provado ao vivo.
+
+## H133 — política de reação: uma terceira resposta que não é sim nem não
+
+**Data**: 2026-08-22. **Contexto**: `Channel.setReactionSetting`, atacável
+porque o usuário autorizou criar e apagar canal.
+
+**Onde**: `capabilities/channel/` (`SetReactionPolicy`, `reactionScript`,
+`ReactionPolicyRaw`), `probe_chanowner_test.go`.
+
+### Medi o oráculo ANTES de escrever a escrita
+
+A escrita passa pelo mesmo `editNewsletterMetadataAction` que a H113 mediu
+ACEITANDO uma descrição e nunca guardando. Escrever sem pós-condição repetiria
+aquilo, então a primeira pergunta foi: o campo é LEGÍVEL?
+
+Num canal estabelecido (o do usuário), a metadata traz
+`newsletterReactionCodesSettingMetadataMixin`. Oráculo existe — então vale
+escrever.
+
+### Dois vocabulários que não podem ser comparados entre si
+
+A referência aceita 0/1/2 e mapeia para 3/1/0 antes de enviar
+(`Channel.js:186–190`). São vocabulários DIFERENTES, e a verificação tem de
+comparar contra o valor de FIO, não contra o código.
+
+Comparar contra o código passaria por acidente em `ReactionsBasic`, onde os dois
+coincidem em 1, e falharia nos outros dois. **Certo às vezes é a pior espécie de
+errado**, e há teste que trava isso.
+
+### A terceira resposta
+
+Ao vivo, num canal recém-criado, o servidor devolveu `-1` nas três tentativas —
+que é o MEU sentinela para "o campo não veio", não um valor.
+
+A metadata de um canal novo **não carrega o mixin de reação**. A pós-condição
+não tem o que ler. A escrita pode ter chegado; ninguém pode dizer.
+
+Chamar isso de `ErrNotTaken` seria afirmar que a escrita falhou, quando o que se
+sabe é que não dá para saber. Criei `ErrUnverifiable` para exatamente isso — e a
+distinção é a terceira ocorrência da mesma classe neste módulo: ack ausente
+contra ack zero (H108), descrição ausente contra descrição velha (H126), e agora
+esta.
+
+**A regra vale a pena escrever de vez**: sempre que um leitor tem um sentinela
+para "não veio", quem o consome precisa tratá-lo ANTES de comparar valores.
+Comparar o sentinela é reportar a nossa própria ignorância como resposta do
+mundo.
+
+### Controles negativos EXECUTADOS
+
+1. Comparar o código em vez do valor de fio:
+   `asked for wire value 3 and the server reports 3` — falha exatamente onde
+   deveria, porque 3 é o fio e o código é 0.
+2. Confiar na chamada sem reler: falha.
+3. Tratar campo ausente como falha da escrita: falha.
+
+**Status**: parcialmente entregue — código escrito e provado em unidade,
+`BLOCKED` ao vivo por falta de oráculo num canal que este agente consegue criar.

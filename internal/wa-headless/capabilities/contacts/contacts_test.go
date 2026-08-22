@@ -389,3 +389,57 @@ func TestAnEmptyJidNeverReachesThePageForAContactLookup(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoContact", err)
 	}
 }
+
+// AN UNKNOWN RECIPIENT IS REPORTED, NOT DROPPED.
+//
+// The reference's Promise.all turns a miss into an undefined entry the caller
+// has to notice. Silently shortening the list is worse: a caller counting
+// recipients would get a number smaller than the group event named, with nothing
+// saying why.
+func TestUnknownRecipientsComeBackSeparatelyRatherThanVanishing(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON(
+		phoneRow("111", "Ana"),
+		lidRow("999", "111", ""),
+		phoneRow("222", "Bruno"),
+	)}
+	found, missing, err := lister(p).Recipients(context.Background(),
+		[]string{"111@c.us", "333@c.us", "222@c.us"}, "t")
+	if err != nil {
+		t.Fatalf("Recipients: %v", err)
+	}
+	if len(found) != 2 {
+		t.Fatalf("found %d contacts, want 2", len(found))
+	}
+	if len(missing) != 1 || missing[0] != "333@c.us" {
+		t.Fatalf("missing = %v; the unknown recipient must come back by jid", missing)
+	}
+	if len(found)+len(missing) != 3 {
+		t.Error("a recipient vanished: the counts do not add up to what was asked")
+	}
+}
+
+// A RECIPIENT NAMED BY EITHER IDENTITY RESOLVES. A group event may name people
+// by lid while the caller's roster knows them by phone, and vice versa.
+func TestRecipientsResolveUnderEitherIdentity(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON(
+		phoneRow("111", "Ana"),
+		lidRow("999", "111", ""),
+	)}
+	found, missing, err := lister(p).Recipients(context.Background(),
+		[]string{"999@lid"}, "t")
+	if err != nil {
+		t.Fatalf("Recipients: %v", err)
+	}
+	if len(found) != 1 || len(missing) != 0 {
+		t.Fatalf("a merged person named by lid did not resolve: found=%d missing=%v",
+			len(found), missing)
+	}
+}
+
+func TestAnEmptyRecipientListReadsNothing(t *testing.T) {
+	p := &pageDouble{answer: rowsJSON()}
+	found, missing, err := lister(p).Recipients(context.Background(), nil, "t")
+	if err != nil || len(found) != 0 || len(missing) != 0 {
+		t.Fatalf("an empty list did something: %v %v %v", found, missing, err)
+	}
+}

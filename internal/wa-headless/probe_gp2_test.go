@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -947,4 +948,87 @@ func TestProbeQuotedSurface(t *testing.T) {
 	}
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("quoted surface:\n%s", out)
+}
+
+// TestProbeChannelReactionSetting asks whether the reaction setting is READABLE
+// before anyone tries to write it.
+//
+// setReactionSetting goes through the same editNewsletterMetadataAction that
+// H113 measured ACCEPTING a description and never storing it. Writing without a
+// postcondition would repeat that, so the first question is whether the metadata
+// even carries the field.
+func TestProbeChannelReactionSetting(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_RX") == "" {
+		t.Skip("set WA_PROBE_RX=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	code := strings.TrimSpace(os.Getenv("WA_CHANNEL_CODE"))
+	if profile == "" || code == "" {
+		t.Skip("WA_SEND_FROM_PROFILE and WA_CHANNEL_CODE are required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	var ignored string
+	if err := eval(ctx, "window.__code = "+strconv.Quote(code)+"; \"set\"", &ignored); err != nil {
+		t.Fatalf("set code: %v", err)
+	}
+	script := `(() => {
+	window.__rx = null;
+	const safe = e => String((e && e.message) || e).slice(0, 130);
+	(async () => {
+	try {
+		const Q = window.require("WAWebNewsletterMetadataQueryJob");
+		const r = await Q.queryNewsletterMetadataByInviteCode(window.__code);
+		const out = {ok: !!r};
+		if (r) {
+			out.topKeys = Object.keys(r).sort();
+			out.reactionish = Object.keys(r).filter(k => /reaction|setting/i.test(k));
+			// Dentro dos mixins tambem.
+			const deep = [];
+			for (const k of Object.keys(r)) {
+				const v = r[k];
+				if (v && typeof v === "object") {
+					for (const kk of Object.keys(v)) {
+						if (/reaction|setting/i.test(kk)) { deep.push(k + "." + kk); }
+					}
+				}
+			}
+			out.reactionishDeep = deep;
+		}
+		window.__rx = JSON.stringify(out);
+	} catch (e) { window.__rx = JSON.stringify({err: safe(e)}); }
+	})();
+	return 'kicked';
+})()
+`
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__rx", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	t.Logf("reaction setting surface: %s", raw)
 }

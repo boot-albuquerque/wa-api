@@ -222,7 +222,7 @@ de laboratório sob autorização explícita:
 | `setSubject` | `PROVEN` | H113: renomear pega e é relido do servidor |
 | `setDescription` | `MISSING` | H113: a página aceita e o servidor NUNCA reporta a descrição nova, nem após 20s. Não é latência — mesmo padrão do grupo (H126) |
 | `setProfilePicture` | `MISSING` | — |
-| `setReactionSetting` | `MISSING` | — |
+| `setReactionSetting` | `BLOCKED` | H133: `channel.SetReactionPolicy` escrito e provado em unidade; ao vivo é **INVERIFICÁVEL**, não falho. A metadata de um canal recém-criado NÃO carrega o mixin de reação — ele existe num canal estabelecido e não num novo —, então a pós-condição não tem o que ler. A escrita pode ter chegado; ninguém pode dizer, e chamar isso de falha seria afirmar conhecimento que não existe |
 | `mute` | `MISSING` | — |
 | `unmute` | `MISSING` | — |
 | `sendMessage` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (Channel.js:240) |
@@ -291,7 +291,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H118: delegação literal para `Client.getProfilePicUrl` (Contact.js:119) |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
-| `getChat` | — | `MISSING` | — | — | — | não atacado |
+| `getChat` | chats.OfContact | `PROVEN` | sim | sim | sim | H132: é `ByJID` MAIS uma guarda, e a guarda é a diferença — `Contact.getChat` devolve null quando o contato É esta conta (Contact.js:144). Delegar sem ela entregaria a conversa que a página guarda para o self, que existe e não significa nada. Ao vivo: a guarda dispara para as DUAS identidades da conta |
 | `block` | capabilities/block | `PROVEN` | sim | sim | sim | H59: blocklist 0->1->0 |
 | `unblock` | capabilities/block | `PROVEN` | sim | sim | sim | — |
 | `getAbout` | contacts.AboutOf | `PARTIAL` | sim | parcial | sim | H70: o par tem recado VAZIO e em cache; a busca no servidor não foi exercitada |
@@ -332,7 +332,7 @@ nossa é fresca — não há campo velho para consertar.
 |---|---|---|
 | `getChat` | `PARTIAL` | H118: delegação literal para `Client.getChatById` (GroupNotification.js:78) |
 | `getContact` | `PARTIAL` | H118: delegação literal para `Client.getContactById` (GroupNotification.js:86) — usa `this.author`, não o chat |
-| `getRecipients` | `MISSING` | — |
+| `getRecipients` | `PROVEN` | H132: mapeia os jids por `contacts.Recipients`, que resolve por QUALQUER das duas identidades e devolve os desconhecidos SEPARADAMENTE. O `Promise.all` da referência transforma uma falta em entrada indefinida; encurtar a lista em silêncio seria pior — quem contasse destinatários teria número menor que o evento nomeou. Ao vivo: pediu 4, achou 3, faltou 1, e a soma bate |
 | `reply` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (GroupNotification.js:109); herda a linha do par, ENQUETE inclusa no que não sai |
 
 ## Label
@@ -469,9 +469,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 94 | 43% |
+| `PROVEN` | 96 | 44% |
 | `PARTIAL` | 58 | 26% |
-| `BLOCKED` | 19 | 9% |
+| `BLOCKED` | 20 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
-| `MISSING` | 45 | 20% |
+| `MISSING` | 42 | 19% |
 | **total** | **220** | |

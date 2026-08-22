@@ -11,6 +11,7 @@ import (
 	"wa-api/internal/wa-headless/capabilities/chats"
 	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
+	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	waruntime "wa-api/internal/wa-headless/runtime"
@@ -228,5 +229,65 @@ func TestProbeByIdLookups(t *testing.T) {
 
 	if _, err := co.ByJID(ctx, "000000000000000@c.us", "probe/byid"); err == nil {
 		t.Error("an impossible jid returned a contact")
+	}
+
+	// Contact.getChat: the same lookup PLUS the self guard.
+	self, err := owner.Refresh(ctx, runner, eval, "probe/byid")
+	if err != nil {
+		t.Fatalf("owner.Refresh: %v", err)
+	}
+	selfJIDs := []string{self.PN.Serialized, self.LID.Serialized}
+	t.Logf("self identities present: pn=%t lid=%t",
+		self.PN.Present(), self.LID.Present())
+
+	// Asking about THIS ACCOUNT must be its own answer, not "no such chat".
+	for _, s := range selfJIDs {
+		if s == "" {
+			continue
+		}
+		if _, err := cl.OfContact(ctx, s, selfJIDs, "probe/byid"); err == nil {
+			t.Error("asking for the conversation with this account returned one")
+		} else if !errors.Is(err, chats.ErrIsSelf) {
+			t.Errorf("self lookup gave %v, want ErrIsSelf — a caller cannot tell "+
+				"'does not apply' from 'not found'", err)
+		}
+	}
+	t.Log("the self guard fires for every identity this account has")
+
+	// And a real contact still resolves through the same path.
+	var someone string
+	for _, c := range roster.Contacts {
+		if c.PN != "" {
+			someone = c.PN
+			break
+		}
+	}
+	if someone != "" {
+		if _, err := cl.OfContact(ctx, someone, selfJIDs, "probe/byid"); err != nil {
+			t.Logf("a real contact has no conversation yet: %v (legitimate)", err)
+		} else {
+			t.Log("a real contact resolves through OfContact")
+		}
+	}
+
+	// GroupNotification.getRecipients: resolve a handful of REAL jids plus one
+	// that cannot exist, and check the counts add up.
+	var recipientJIDs []string
+	for _, c := range roster.Contacts {
+		if c.PN != "" && len(recipientJIDs) < 3 {
+			recipientJIDs = append(recipientJIDs, c.PN)
+		}
+	}
+	recipientJIDs = append(recipientJIDs, "000000000000000@c.us")
+	found, missing, err := co.Recipients(ctx, recipientJIDs, "probe/byid")
+	if err != nil {
+		t.Fatalf("Recipients: %v", err)
+	}
+	t.Logf("recipients: asked %d, found %d, missing %d", len(recipientJIDs), len(found), len(missing))
+	if len(found)+len(missing) != len(recipientJIDs) {
+		t.Error("a recipient vanished: the counts do not add up to what was asked")
+	}
+	if len(missing) != 1 {
+		t.Errorf("the impossible jid should be the only miss, got %d", len(missing))
 	}
 }

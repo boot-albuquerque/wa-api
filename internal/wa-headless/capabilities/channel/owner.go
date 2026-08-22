@@ -344,3 +344,97 @@ func (m *Manager) Followed(ctx context.Context, label string) ([]DirectoryEntry,
 	}
 	return found, nil
 }
+
+// ReactionPolicy is who may react to a channel's posts, in the REFERENCE's
+// vocabulary — the three values its API accepts.
+type ReactionPolicy int
+
+const (
+	// ReactionsAll lets anyone react with any emoji.
+	ReactionsAll ReactionPolicy = 0
+	// ReactionsBasic limits reactions to a basic set.
+	ReactionsBasic ReactionPolicy = 1
+	// ReactionsNone turns reactions off.
+	ReactionsNone ReactionPolicy = 2
+)
+
+// reactionWire maps the reference's code to the number the page actually wants.
+//
+// THE TWO VOCABULARIES ARE NOT THE SAME, and the mapping is not ours: it is
+// literally the reference's own table (Channel.js:186–190), where 0→3, 1→1 and
+// 2→0. Carrying it here rather than inventing one keeps parity honest, and
+// keeping it in ONE place is what stops a caller from passing a raw page number
+// by accident.
+var reactionWire = map[ReactionPolicy]int{
+	ReactionsAll:   3,
+	ReactionsBasic: 1,
+	ReactionsNone:  0,
+}
+
+// ErrBadReactionPolicy is a value outside the three the reference accepts.
+var ErrBadReactionPolicy = fmt.Errorf("channel: unknown reaction policy")
+
+// ErrUnverifiable is a write whose postcondition has nothing to read.
+//
+// IT IS NOT A FAILURE OF THE WRITE. The page may well have stored the value; we
+// simply cannot say. Reporting that as ErrNotTaken would claim knowledge nobody
+// has, which is the opposite of what invariant 14 is for.
+var ErrUnverifiable = fmt.Errorf("channel: the change cannot be verified on this channel")
+
+// reactionAbsent is what the reader returns when the metadata carries no
+// reaction mixin at all.
+const reactionAbsent = -1
+
+// SetReactionPolicy changes who may react, and PROVES the server took it.
+//
+// The reference returns a bare boolean computed from the absence of an
+// exception. Here the metadata is read back and compared against the WIRE value,
+// because that is what the server stores — comparing against the reference's
+// code would compare two different vocabularies and pass by accident.
+func (m *Manager) SetReactionPolicy(ctx context.Context, jid, code string,
+	policy ReactionPolicy, label string) (int, error) {
+	wire, ok := reactionWire[policy]
+	if !ok {
+		return -1, fmt.Errorf("%w: %d", ErrBadReactionPolicy, policy)
+	}
+	if strings.TrimSpace(jid) == "" {
+		return -1, ErrNoJID
+	}
+	if strings.TrimSpace(code) == "" {
+		return -1, ErrNoCode
+	}
+	raw, err := m.parked(ctx, reactionScript(jid, wire), label+"/reaction")
+	if err != nil {
+		return -1, fmt.Errorf("%w: %v", ErrWrite, err)
+	}
+	var out struct {
+		OK  bool   `json:"ok"`
+		Why string `json:"why"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return -1, fmt.Errorf("channel: unexpected answer: %w", e)
+	}
+	if !out.OK {
+		return -1, fmt.Errorf("%w (%s)", ErrWrite, out.Why)
+	}
+	got, err := m.reader.ByInviteCode(ctx, code, label+"/reaction-verify")
+	if err != nil {
+		return -1, fmt.Errorf("%w: the write was accepted and the channel could not "+
+			"be read back: %v", ErrNotTaken, err)
+	}
+	// ABSENT AND WRONG ARE DIFFERENT ANSWERS, and conflating them is the mistake
+	// this module has now made twice (H108 with acks, H126 with descriptions).
+	// A freshly created channel's metadata does NOT carry the reaction mixin at
+	// all — measured (H133) — so the postcondition cannot run there, and saying
+	// "the server reports -1" as if it were a value would be reporting our own
+	// sentinel back as the world's answer.
+	if got.ReactionPolicyRaw == reactionAbsent {
+		return got.ReactionPolicyRaw, fmt.Errorf("%w: the channel's metadata does not "+
+			"carry a reaction setting, so the write cannot be verified", ErrUnverifiable)
+	}
+	if got.ReactionPolicyRaw != wire {
+		return got.ReactionPolicyRaw, fmt.Errorf("%w: asked for wire value %d and the "+
+			"server reports %d", ErrNotTaken, wire, got.ReactionPolicyRaw)
+	}
+	return got.ReactionPolicyRaw, nil
+}
