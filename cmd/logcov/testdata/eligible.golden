@@ -1874,8 +1874,8 @@ pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/contracts/contractsfake.pareceTelefone	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:339);uncovered:L2(S-ret,orchestrator.go:412);uncovered:L2(S-ret,orchestrator.go:414)
-pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:356)
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:346);uncovered:L2(S-ret,orchestrator.go:419);uncovered:L2(S-ret,orchestrator.go:421)
+pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:363)
 pkg/application/session.Orchestrator.Start.func2	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
@@ -1885,7 +1885,7 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:454)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:461)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithClock	EXCLUDED	X1
 pkg/application/session.WithClock.func1	EXCLUDED	X6
@@ -2203,8 +2203,8 @@ pkg/bootstrap.UserEventHandler.handleNewsletterJoin	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleNewsletterLeave	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleNewsletterLiveUpdate	ELIGIBLE	uncovered:L3(zerolog,eventhandler_group.go:47)
 pkg/bootstrap.UserEventHandler.handleNewsletterMuteChange	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:278)
-pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:284)
+pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:288)
+pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:294)
 pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:290)
 pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:112)
 pkg/bootstrap.UserEventHandler.handlePicture	ELIGIBLE	covered
@@ -2414,6 +2414,7 @@ pkg/bootstrap.tamanhoDoPayload	EXCLUDED	X1
 pkg/bootstrap.templateText	EXCLUDED	X1
 pkg/bootstrap.tentarWebhook	ELIGIBLE	covered
 pkg/bootstrap.unhandledEventFields	ELIGIBLE	uncovered:L1
+pkg/bootstrap.unwrapFutureProof	EXCLUDED	X8:pure unwrap, no failure mode, on EVERY synced message
 pkg/bootstrap.updateAndGetUserSubscriptions	ELIGIBLE	covered
 pkg/bootstrap.updateUserInfo	ELIGIBLE	covered
 pkg/bootstrap.userIDHolderHandler	EXCLUDED	X1

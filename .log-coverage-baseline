@@ -1652,7 +1652,7 @@ min_eligible=626
 # Nota: esta anotacao so' e' contabilizada corretamente porque a F189 foi
 # corrigida hoje. Antes, o contador fazia strings.Count sobre o ficheiro inteiro
 # e teria contado tambem as mencoes ao token no comentario que a justifica.
-max_exempt_annotations=1
+max_exempt_annotations=2
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de
@@ -1683,3 +1683,16 @@ max_exempt_annotations=1
 # pre-existente de infraestrutura, timeout de 20m". Corrido isolado, ele falha
 # em 11 SEGUNDOS — e falha por causa das mudancas DELES (as duas funcoes novas
 # e a removida). Cada um descartou como alheia uma falha que era sua.
+
+# max_exempt_annotations 1 -> 2 (2026-08-22, F187/F188, decisao 53=a).
+#
+# A segunda isencao e' `unwrapFutureProof` (pkg/bootstrap/message_classify.go),
+# irma da que ja' existia em `classifyMessage`: desembrulho PURO, sem modo de
+# falha, no caminho de CADA mensagem sincronizada. Registar ali seria uma linha
+# por mensagem durante a rajada de HistorySync — o pior ruido possivel, no pior
+# momento possivel.
+#
+# O orcamento fez o que existe para fazer: a anotacao nao passou despercebida, o
+# gate parou, e a subida ficou deliberada em vez de silenciosa. Quem quiser
+# remover esta isencao responde a mesma pergunta que a primeira: o que e' que
+# este log diria que o operador pudesse USAR?
