@@ -161,14 +161,27 @@ func (r *Reactor) set(ctx context.Context, msgID, emoji string, want bool, label
 		return Result{}, fmt.Errorf("%w at %s (%s)", ErrReact, out.Stage, out.Why)
 	}
 
-	// ADDING IS VERIFIED; REMOVING IS NOT, and the asymmetry is measured.
+	// REMOVING IS NOW VERIFIED TOO, and the asymmetry that used to live here is
+	// gone because its CAUSE went (H154).
 	//
-	// Adding flips hasReaction false -> true within a second, so waiting for it
-	// is a real postcondition. Removing does not flip it back in the same
-	// session — see Remove's comment — so waiting would be waiting forever for
-	// something that already happened.
+	// The old reasoning was sound on the evidence it had: adding flips
+	// hasReaction false -> true within a second, removing does not flip it back
+	// in the same session, and polling a flag that never flips would have built a
+	// capability that always fails at something that always works.
+	//
+	// What changed is not the flag — it is still sticky — but that a real source
+	// exists: the reactions record, fetched by the id OBJECT, carries
+	// hasReactionByMe, and that DOES go false when the reaction is taken back.
+	// Measured by transition: one group with one sender before, zero after.
 	if !want {
-		return Result{Had: out.Had, Has: false, Verified: false, Waited: time.Since(start)}, nil
+		mine, err := r.mineOn(ctx, msgID, label)
+		if err != nil {
+			// A VERIFICACAO QUE FALHA NAO INVENTA UM VEREDITO. A remocao foi
+			// aceita pela pagina; o que nao se sabe e' o depois, e Verified
+			// falso e' exatamente como este tipo diz isso.
+			return Result{Had: out.Had, Has: false, Verified: false, Waited: time.Since(start)}, nil
+		}
+		return Result{Had: out.Had, Has: mine, Verified: true, Waited: time.Since(start)}, nil
 	}
 	has, err := r.waitFor(ctx, msgID, true, label)
 	if err != nil {

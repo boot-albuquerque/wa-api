@@ -1,6 +1,10 @@
 package message
 
-import "strconv"
+import (
+	"strconv"
+
+	"wa-api/internal/wa-headless/spa"
+)
 
 const modMsgCollection = "WAWebMsgCollection"
 
@@ -353,33 +357,23 @@ const modCollections = "WAWebCollections"
 // measured. H83 concluded the aggregate has no source; H124 remedied that with a
 // better instrument, found WAWebCollections.Reactions present with
 // on/getModelsArray, saw it read ZERO even after a reaction the capability had
-// verified, and concluded the collection does not fill.
+// verified, and concluded the collection does not fill. It does not — measured
+// again today. The record comes from an async fetch keyed by the id OBJECT, and
+// never lands in that array. See spa.ReactionsForMessageExpr for the full
+// measurement, including why the reference's key does not exist here.
 //
-// It does not — getModelsArray is still 0 here, measured again today. That is
-// not where the answer is. Reactions.find is not a lookup over loaded models: it
-// is an ASYNC FETCH, which the reference awaits (wwebjs_message.js:848-853), and
-// the record it returns never lands in the models array.
-//
-// THE REFERENCE'S KEY DOES NOT EXIST HERE, and that is the second half of why
-// this took three attempts. It calls find(msg.id._serialized), and on this
-// LID-first build _serialized is NULL — the poll family had to skip the same
-// conversion. Measured side by side on one message that carries a reaction:
-//
-//	find(_serialized)  threw "called find without an id"
-//	find(id.id)        null
-//	find(id)           the record, reactions=1
-//
-// So the id OBJECT is the key. That is the whole difference between "this build
-// cannot report reactions" and this function.
+// IT EMBEDS THE SHARED EXPRESSION rather than carrying its own copy, for the
+// reason capabilities/lookup embeds spa.ResolveIdentityExpr: capabilities/react
+// verifies its removals against the same fact, and a second copy here would let
+// the two drift into a removal that verifies and then reads back as present.
 func reactionsScript(messageID string) string {
 	return `(() => {
 	window.` + stateKey + ` = null;
 	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
-	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
+	const readReactions = ` + spa.ReactionsForMessageExpr + `;
 	(async () => {
 	try {
-		const C = window.require("` + modCollections + `");
 		const MC = window.require("` + modMsgCollection + `").MsgCollection;
 		let m = null;
 		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
@@ -390,32 +384,8 @@ func reactionsScript(messageID string) string {
 			}
 		}
 		if (!m) { park({ ok: true, notFound: true }); return; }
-
-		// A CHAVE E' O OBJETO id, nao o _serialized da referencia — que e' nulo
-		// aqui e faz o find lancar "called find without an id".
-		const rec = await C.Reactions.find(m.id);
-		if (!rec || !rec.reactions) { park({ ok: true, notFound: false, groups: [] }); return; }
-		const ser = (typeof rec.reactions.serialize === "function")
-			? rec.reactions.serialize() : rec.reactions;
-		if (!Array.isArray(ser)) { park({ ok: true, notFound: false, groups: [] }); return; }
-
-		const groups = [];
-		for (const g of ser) {
-			if (!g) { continue; }
-			const senders = [];
-			if (Array.isArray(g.senders)) {
-				for (const s of g.senders) {
-					const who = jid(s && s.senderUserJid);
-					if (who) { senders.push(who); }
-				}
-			}
-			groups.push({
-				emoji: (typeof g.aggregateEmoji === "string") ? g.aggregateEmoji : "",
-				byMe: !!g.hasReactionByMe,
-				senders: senders,
-			});
-		}
-		park({ ok: true, notFound: false, groups: groups });
+		const r = await readReactions(m);
+		park({ ok: !!r.ok, why: r.why || "", notFound: false, groups: r.groups || [] });
 	} catch (e) {
 		park({ ok: false, why: safe(e) });
 	}

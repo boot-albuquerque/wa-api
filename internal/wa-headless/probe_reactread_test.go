@@ -84,8 +84,19 @@ func TestProbeReactionRead(t *testing.T) {
 
 	// A TRANSICAO E' A PROVA. Uma leitura nao-vazia sozinha e' compativel com um
 	// leitor que devolve constante; retirar e reler e' o controle.
-	if _, err := react.New(runner, eval).Remove(ctx, sent.ID.ID, "probe/reactread/remove"); err != nil {
+	removed, err := react.New(runner, eval).Remove(ctx, sent.ID.ID, "probe/reactread/remove")
+	if err != nil {
 		t.Fatalf("react.Remove: %v", err)
+	}
+	t.Logf("react.Remove: %v", removed)
+	// A METADE QUE FALTAVA. O `Verified:false` da remocao era falta de FONTE, e
+	// a fonte existe agora; se ele voltar, e' regressao e nao contrato.
+	if !removed.Verified {
+		t.Fatal("react.Remove came back unverified, though the reactions record " +
+			"is the postcondition it now waits on")
+	}
+	if removed.Has {
+		t.Fatal("react.Remove reported the reaction still ours after taking it back")
 	}
 	time.Sleep(6 * time.Second)
 	gone, err := m.ReactionsOf(ctx, sent.ID.ID, "probe/reactread/gone")

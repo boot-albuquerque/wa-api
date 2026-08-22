@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
+	"wa-api/internal/wa-headless/spa"
 )
 
 type double struct {
@@ -690,5 +691,22 @@ func TestAnEmptyIDNeverReachesThePageForReactions(t *testing.T) {
 	}
 	if d.kicks != 0 {
 		t.Fatalf("an empty id reached the page %d times", d.kicks)
+	}
+}
+
+// THE SCRIPT EMBEDS THE SHARED EXPRESSION, it does not carry a copy.
+//
+// capabilities/react verifies its removals against the same fact. Two copies
+// would drift, and the drift would show as a removal that verified and then read
+// back as still present — which is the worst shape a bug can take here, because
+// both halves would look correct in isolation.
+func TestTheReactionsScriptEmbedsTheSharedExpression(t *testing.T) {
+	d := &double{answer: `{"ok":true,"groups":[]}`}
+	if _, err := rd(d).ReactionsOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("ReactionsOf: %v", err)
+	}
+	if !strings.Contains(d.lastScript, spa.ReactionsForMessageExpr) {
+		t.Fatal("the script no longer embeds spa.ReactionsForMessageExpr, so this " +
+			"package and capabilities/react now hold two copies of the same query")
 	}
 }

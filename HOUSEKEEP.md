@@ -4356,3 +4356,71 @@ era ali que estava. E a chave é justamente o tipo de detalhe que só aparece
 comparando com a implementação que funciona — que é a razão de a regra deste
 repositório mandar consultar as referências ANTES de projetar, e não depois de
 concluir que algo é impossível.
+
+---
+
+## H155 — `react.Remove` verifica: a assimetria era falta de FONTE, não de rigor
+
+**Data**: 2026-08-22
+**Contexto**: completar o que a H154 destravou. Registrei ali que usar a fonte
+para verificar o `Remove` era trabalho ACIONÁVEL e não impedimento; esta entrada
+é esse trabalho.
+
+**Onde**: `internal/wa-headless/spa/reactions.go` (novo,
+`ReactionsForMessageExpr`), `capabilities/react/mine.go` (novo, `mineOn`),
+`capabilities/react/react.go` (o ramo de remoção),
+`capabilities/message/script.go` (passa a embutir a expressão compartilhada).
+Linhas `sendReaction` e `react`.
+
+**Problema**: `Remove` devolvia `Verified:false` **por medição honesta** — a H53
+verificou em três sessões FRESCAS que a remoção funciona, e que na sessão que
+removeu `hasReaction` fica pegajoso por pelo menos 30 s. Esperar por uma flag que
+não vira produziria uma capacidade que sempre falha em algo que sempre funciona.
+O raciocínio estava certo; faltava um sinal.
+
+**Correção aplicada**: `mineOn`, que pergunta ao registro de reações se ESTA
+conta ainda tem reação na mensagem, e que o `Remove` passa a esperar.
+
+**A expressão foi para o `spa/` em vez de copiada**, seguindo o precedente do
+`capabilities/lookup` com o `ResolveIdentityExpr`. O motivo é concreto: o
+`capabilities/message` reporta o mesmo fato a quem chama, e duas cópias
+divergiriam **na única forma de defeito que se esconde** — uma remoção que
+verifica de um lado e relê como presente do outro, com as duas metades parecendo
+corretas isoladamente.
+
+**Os dois lados esperam por sinais DIFERENTES, e isso é desenho**: `Add` espera
+pela flag pegajosa (que vira em menos de um segundo ao adicionar), `Remove`
+espera pelo registro. O dublê do teste ganhou dois campos separados por isso — um
+dublê que respondesse aos dois a partir de um campo só deixaria um `Remove` que
+consultasse a flag parecer verificado.
+
+**Status**: corrigido. `sendReaction` e `react` para `PROVEN`. Travado por:
+- `TestBothAddingAndRemovingAreVerified` — CN1: voltar `Verified:false`. Falha.
+  CN2: trocar `mineOn` por `waitFor` (a flag pegajosa). Falha. Ambos compilam.
+- `TestARefusedVerificationLeavesRemoveUnverified` — CN: verificação que falha
+  virar `Verified:true`. Falha.
+- `TestTheMineScriptUsesThePagesOwnFlag`, `TestTheMineScriptEmbedsTheSharedExpression`.
+- Do lado do `message`: `TestTheReactionsScriptEmbedsTheSharedExpression`.
+
+Prova em SPA real: `react.Remove` devolveu `had=true has=false verified=true`, e o
+leitor independente confirmou `groups=0 senders=0`.
+
+**Dois controles negativos falharam como controles antes de morder, e os dois
+são as armadilhas do catálogo, encontradas de novo no mesmo dia:**
+
+1. **O controle não COMPILAVA.** Trocar `spa.ReactionsForMessageExpr` por uma
+   cópia inline deixava o import sem uso, e `[build failed]` não é falha de
+   teste — é armadilha nº 3 do `ARMADILHAS.md`. Corrigido acrescentando
+   `var _ = spa.ReactionsForMessageExpr` para manter o import vivo, e aí o teste
+   falhou com a mensagem certa. *Um controle que quebra o build passa por
+   "mordeu" numa leitura apressada da saída.*
+2. **A asserção media o parser.** O primeiro controle da regra do `byMe` mudou a
+   lógica do script e o teste continuou verde, porque o dublê responde `mine`
+   diretamente e o script nunca roda. A regra teve de ser afirmada sobre o
+   SCRIPT — a mesma correção que este módulo já fez seis vezes.
+
+**Lição**: *uma decisão registrada como "impossível" merece ser reexaminada quando
+a razão dela muda, e não quando a paciência acaba.* A H53 não errou: ela mediu, e
+recusou verificar o que não podia. O que mudou não foi o critério — foi o mundo
+disponível. O ledger só permite distinguir os dois casos porque a H53 escreveu
+POR QUE não verificava, em vez de apenas que não verificava.
