@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -572,5 +573,36 @@ func TestAnAbsentReactionFieldIsUnverifiableAndNotAFailure(t *testing.T) {
 	}
 	if errors.Is(err, ErrNotTaken) {
 		t.Error("an unverifiable write is being reported as a failed one")
+	}
+}
+
+// THE FOLLOW LIST IS THE CACHE, AND THE DOC MUST SAY SO.
+//
+// H139 measured six stale models across the two lab accounts, all reporting
+// serverAlive:false. A caller reading this list as "what exists on the server"
+// counts channels that do not, and the only defence a library has against that
+// is saying it where the caller looks.
+func TestTheFollowedDocWarnsThatItIsTheCache(t *testing.T) {
+	src, err := os.ReadFile("owner.go")
+	if err != nil {
+		t.Fatalf("reading owner.go: %v", err)
+	}
+	doc := string(src)
+	i := strings.Index(doc, "func (m *Manager) Followed(")
+	if i < 0 {
+		t.Fatal("Followed is gone")
+	}
+	// The doc comment is what precedes the declaration.
+	head := doc[:i]
+	j := strings.LastIndex(head, "// Followed lists")
+	if j < 0 {
+		t.Fatal("Followed has no doc comment")
+	}
+	block := head[j:]
+	for _, must := range []string{"CACHE", "serverAlive"} {
+		if !strings.Contains(block, must) {
+			t.Errorf("the Followed doc does not mention %q; a caller reading this "+
+				"list as the server's truth would count channels that do not exist", must)
+		}
 	}
 }

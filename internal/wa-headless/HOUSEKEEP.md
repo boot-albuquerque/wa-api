@@ -10781,3 +10781,67 @@ não existe nenhum.
 
 **Status**: entregue — causa isolada, duas linhas com veredito mais preciso, e
 uma confirmação que antes era ausência de evidência.
+
+## H139 — transferir a posse, e a limpeza que tem de mudar de mãos junto
+
+**Data**: 2026-08-22. **Contexto**: a H136 registrou que
+`transferChannelOwnership` **não foi executada de propósito**, porque transferir
+faria conta-A deixar de ser dona e não conseguir mais apagar o canal de teste.
+O usuário autorizou executá-la.
+
+**Onde**: `internal/wa-headless/probe_chantransfer_test.go` (novo).
+
+### A recusa da H136 não era do verbo, era do teardown
+
+O problema nunca foi a transferência: era que a limpeza estava presa a conta-A.
+A correção não é pular o passo, é **mover a limpeza para o novo dono**. conta-B
+apaga o que conta-B passou a possuir.
+
+O `defer` escolhe o lado pelo que ACONTECEU e não pelo que se pretendia — se a
+transferência pegou, B apaga; se não pegou, A ainda pode e apaga. E se o
+escolhido falhar, tenta o outro antes de desistir, porque um canal de pé é pior
+que uma mensagem de erro feia.
+
+### O que ficou provado
+
+```
+invite (A):   ok, result OK
+accept (B):   ok
+transfer (A): ok
+B's membership on the channel: "owner"
+channel deleted by B
+```
+
+A pós-condição é a **membership lida do lado de B**, não a chamada não ter
+lançado — que é a lição que a H133 e a H137 pagaram caro para escrever. As
+formas são as que a H137 estabeleceu para esta família: modelo do canal e modelo
+do contato.
+
+### O achado que a verificação de sobras produziu
+
+Fui conferir se alguma execução tinha deixado canal de pé, e achei **6 modelos**
+de sonda: 1 em conta-A e 5 em conta-B.
+
+Todos com `serverAlive: false` — os canais FORAM apagados do servidor. O que
+sobrou eram **modelos locais obsoletos** no cache de cada conta. Nada público
+existia, ninguém podia ver ou entrar.
+
+**Mas o fato por trás é preciso e importa**: quando VOCÊ apaga um canal, seu
+modelo some. Quando OUTRO apaga um canal do qual você é admin ou inscrito, o seu
+modelo **fica**. As execuções da cadeia de admin (H136) deixaram conta-B como
+admin de canais que conta-A apagou, e o cache de B guardou todos.
+
+Isso contamina `Followed`, que é o leitor com que a H123 provou `getChannels`:
+ele conta modelo obsoleto como canal seguido. A prova daquela linha continua
+válida — lá o mesmo dono criou e apagou, e a contagem foi 1 e depois 0 — mas
+quem usar `Followed` precisa saber que ele reflete o CACHE, não o servidor.
+
+Limpei os seis com `unsubscribeFromNewsletterAction(..., {deleteLocalModels:
+true})`, que é o que a referência oferece para exatamente isso: `before 1 ->
+after 0` em conta-A, `before 5 -> after 0` em conta-B.
+
+**Regra que sai daqui**: verificar sobra depois de um efeito para fora não é
+conferir se a chamada de limpeza retornou — é IR OLHAR, das duas pontas. A minha
+limpeza retornava sucesso e deixava lixo do outro lado.
+
+**Status**: entregue e provado; sobras encontradas e removidas das duas contas.

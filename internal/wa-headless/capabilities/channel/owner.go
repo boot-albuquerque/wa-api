@@ -307,6 +307,13 @@ func (m *Manager) follow(ctx context.Context, jid string, subscribe bool, label 
 // for the whole of Phase 1 until something was followed — which is exactly why
 // the ledger row for it sat open rather than being filled with a reader nobody
 // had seen return anything (H93).
+//
+// IT READS THE CLIENT'S CACHE, NOT THE SERVER, and that is a measured caveat
+// rather than an implementation detail (H139). When ANOTHER account deletes a
+// channel this one is an admin or subscriber of, the local model STAYS: six such
+// leftovers were found across the two lab accounts, every one of them reporting
+// serverAlive:false when asked by invite code. A caller that treats this list as
+// "what exists" will count channels that do not.
 func (m *Manager) Followed(ctx context.Context, label string) ([]DirectoryEntry, error) {
 	raw, err := m.parked(ctx, followedScript(), label+"/followed")
 	if err != nil {
