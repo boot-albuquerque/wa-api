@@ -156,14 +156,31 @@ func markScript(jid string) string {
 			}
 
 			stage = 'seen';
-			const Seen = window.require('` + string(spa.ModuleSendConversationSeen) + `');
-			// ONE OBJECT, and the key names WHAT is being acknowledged. Read
-			// from the app's own call.
-			await Seen.sendConversationSeen({
-				chat: chat,
-				key: chat.lastReceivedKey,
-				unreadDelta: before
-			});
+			// A PRIMITIVA FOI TROCADA POR MEDICAO, nao por preferencia (H160).
+			//
+			// Este ramo chamava sendConversationSeen, e o contador NAO se mexia:
+			// a pos-condicao falhava com "1 antes, 1 depois", que foi o que
+			// rebaixou esta linha na H82. Medido lado a lado no mesmo chat, o
+			// modulo que a REFERENCIA usa levou unreadCount de 1 para 0.
+			//
+			// O markAvailable/markUnavailable em volta e' da referencia tambem.
+			// Ele NAO faz o recibo chegar ao remetente — isso foi testado e
+			// refutado —, mas anunciar presenca antes de reconhecer leitura e'
+			// o que ela faz, e nao ha razao para divergir num detalhe que nao
+			// custa nada e que so' foi medido junto.
+			let Stream = null;
+			try { Stream = window.require('` + string(spa.ModuleStreamModel) + `').Stream; } catch (e) {}
+			if (Stream && typeof Stream.markAvailable === 'function') { Stream.markAvailable(); }
+			try {
+				const Seen = window.require('` + string(spa.ModuleUpdateUnreadChatAction) + `');
+				await Seen.sendSeen({ chat: chat, threadId: undefined });
+			} finally {
+				// A PRESENCA E' DESFEITA MESMO SE O RECONHECIMENTO FALHAR. Sair
+				// deste caminho anunciado como online e' um efeito colateral que
+				// nada aqui pediu, e um finally e a diferenca entre uma falha
+				// e uma falha que deixa lixo.
+				if (Stream && typeof Stream.markUnavailable === 'function') { Stream.markUnavailable(); }
+			}
 
 			stage = 'verify';
 			const after = (typeof chat.unreadCount === 'number' && chat.unreadCount > 0)

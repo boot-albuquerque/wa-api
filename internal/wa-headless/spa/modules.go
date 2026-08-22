@@ -286,6 +286,14 @@ const (
 	// Marking read without naming what was read is not something the protocol
 	// offers, which is why the key is looked up rather than omitted.
 	ModuleSendConversationSeen = Module("WAWebChatSendConversationSeen")
+	// ModuleUpdateUnreadChatAction is the module the REFERENCE uses to mark a
+	// conversation read, and the difference is measurable: bracketed by
+	// Stream.markAvailable, its sendSeen took unreadCount from 1 to 0 on a chat
+	// where sendConversationSeen left it at 1 (H160).
+	ModuleUpdateUnreadChatAction = Module("WAWebUpdateUnreadChatAction")
+	// ModuleStreamModel announces this client as present. The reference brackets
+	// its read receipt with markAvailable/markUnavailable.
+	ModuleStreamModel = Module("WAWebStreamModel")
 	// ModuleSendReactionMsgAction reacts to a message.
 	//
 	// sendReactionToMsg(msg, emoji) — the MESSAGE MODEL and a string, read from

@@ -4604,3 +4604,120 @@ pelo teste que ela sobrevive, e esta sobreviveu ao contrário: a suspeita era bo
 a evidência disse não, e o custo de descobrir foi uma sonda. **O que torna o
 resultado utilizável é ter medido com DOIS caminhos independentes** — se só a
 coleção tivesse respondido, o zero continuaria ambíguo.
+
+---
+
+## H159 — `sendSeen` medido pelo lado certo: o recibo não chega ao remetente
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A H82 rebaixou esta linha porque a
+pós-condição do `MarkRead` afirma que `unreadCount` mudou NA MESMA SESSÃO, e a
+H78 mediu esse contador como cross-session — *"se generaliza é pergunta em
+aberto"*.
+
+**Onde**: `internal/wa-headless/probe_seen_test.go` (novo).
+
+**O contador é a testemunha errada, de qualquer forma.** O que `sendSeen`
+produz que alguém pode observar é dizer ao REMETENTE que sua mensagem foi lida:
+ack 3 na cópia dele. Isso é fato sobre a outra sessão — exatamente o que nenhuma
+sessão sozinha checa, e para o que a sessão dupla (H135) existe.
+
+**Medição**: conta-B manda, conta-A marca lida, o ack em conta-B fica em **2** por
+60 s.
+
+**O confundidor foi atacado, não ignorado.** *"O recibo não saiu"* e *"esta conta
+tem recibo de leitura desligado"* produzem o mesmo ack. Tentei ler a
+configuração e os quatro nomes de módulo que chutei não existem neste build —
+armadilha da H137 de novo. Em vez de concluir com o confundidor de pé, inverti o
+experimento: **conta-A manda e conta-B marca lida**. Falha igual, ack em 2.
+
+Falhar simetricamente com DUAS contas torna a explicação de privacidade bem menos
+provável, mas — e isto fica dito — não a exclui: as duas são contas de laboratório
+configuradas do mesmo jeito.
+
+**Status**: não corrigido nesta entrada (ver H160 para o que FOI corrigido).
+
+**Lição**: *quando duas causas produzem a mesma observação e você não consegue
+medir uma delas, inverta o experimento.* Procurar a configuração custou uma sonda
+e quatro nomes errados; trocar os papéis das contas custou uma perna a mais no
+mesmo teste e respondeu.
+
+---
+
+## H160 — `MarkRead` usava a primitiva errada, e a pós-condição da H82 agora vale
+
+**Data**: 2026-08-22
+**Contexto**: continuação da H159. Depois de medir que o recibo não sai, li a
+referência para ver o que ela faz de diferente — que é a ordem correta: medir,
+depois comparar.
+
+**Onde**: `internal/wa-headless/capabilities/chats/markread.go`,
+`internal/wa-headless/spa/modules.go` (`ModuleUpdateUnreadChatAction`,
+`ModuleStreamModel`), `internal/wa-headless/probe_seenstream_test.go` (novo).
+
+**O que a referência faz** (`wwebjs_util.js:131-143`):
+
+```js
+Stream.markAvailable();
+await UpdateUnreadChatAction.sendSeen({chat, threadId: undefined});
+Stream.markUnavailable();
+```
+
+Duas diferenças: um MÓDULO diferente do nosso (`WAWebChatSendConversationSeen`) e
+o anúncio de presença em volta.
+
+**A hipótese testada primeiro foi a errada, e testá-la crua foi o que salvou.**
+Achei que o `markAvailable` fosse a chave — recibo de cliente offline não sai.
+Testei a sequência **crua na página**, sem tocar na capacidade, porque mudar a
+capacidade e remedir confundiria *"o bracketing ajudou"* com *"a repetição
+ajudou"*. Resultado:
+
+```
+unreadBefore: 1   →   unreadAfter: 0
+ack em conta-B:   2 (continuou 2)
+```
+
+**Hipótese do recibo REFUTADA. E, no mesmo experimento, um achado que eu não
+procurava**: o `unreadCount` foi de 1 a 0 — coisa que a nossa primitiva nunca
+fez. O módulo é que estava errado, não o bracketing.
+
+**Enumeração incidental**, do mesmo módulo: `markUnread`, `sendSeenDebounced`,
+`sendSeen`, `markSeen`, `markUnseen`, `updateUnreadCountMD`, `clearUnreadMentions`.
+O `markUnread` aí dentro é candidato direto para a linha `markChatUnread`, que
+está `BLOCKED` desde a H78 por *"duas primitivas medidas, nenhuma marca"* —
+**registrado como pista, não perseguido nesta sessão**.
+
+**Correção aplicada**: `MarkRead` passa a chamar
+`WAWebUpdateUnreadChatAction.sendSeen({chat, threadId})`, com o
+`markAvailable`/`markUnavailable` em volta. O bracketing ficou **mesmo tendo sido
+refutado** para o recibo: é o que a referência faz, não custa nada, e divergir
+sem motivo é o que o `CLAUDE.md` proíbe. O desfazer da presença está num
+`finally` — sair deste caminho anunciado como online é efeito colateral que nada
+pediu, e sobreviveria ao erro.
+
+**Status**: corrigido. `before=1 after=0 changed=true`, sem erro, **nas duas
+contas**. Travado por:
+- `TestTheAcknowledgementUsesThePrimitiveThatMoves` — CN: voltar a
+  `sendConversationSeen`. Falha. Substituiu
+  `TestTheAcknowledgementNamesWhatWasRead`, que era asserção correta sobre a
+  primitiva ERRADA: a nova chamada não recebe `lastReceivedKey`, e exigir uma
+  chave que ela não tem seria pedir o que não existe.
+- `TestThePresenceAnnouncementIsUndoneOnFailure` — CN: tirar o desfazer do
+  `finally`. Falha. É teste de ORDEM.
+
+**A linha continua `PARTIAL`, e agora por um motivo medido em vez de duvidoso**:
+o reconhecimento local está provado; o recibo ao remetente não foi observado.
+
+**Duas armadilhas minhas, registradas:**
+1. **Crases dentro de raw string.** Escrevi `` `finally` `` num comentário JS
+   dentro de uma raw string Go, e as crases a terminaram. O build acusou
+   `expected ';', found finally`.
+2. **A guarda casou com o próprio comentário** — décima primeira vez, segunda
+   hoje. A asserção de ORDEM sobre `markUnavailable` falhou contra o comentário
+   que EXPLICA a ordem. `withoutComments` acrescentado a este pacote também.
+
+**Lição**: *teste a hipótese crua antes de embuti-la.* A hipótese estava errada e
+o experimento estava certo — e foi justamente por rodá-lo cru, medindo tudo que
+mudou em vez de só o que eu esperava, que o achado verdadeiro apareceu. Se eu
+tivesse mudado a capacidade e olhado só o ack, teria concluído "não adiantou" e
+descartado a correção junto com a hipótese.

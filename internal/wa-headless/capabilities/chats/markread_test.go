@@ -92,22 +92,83 @@ func TestAcknowledgingReportsWhatItCleared(t *testing.T) {
 	}
 }
 
-// TestTheAcknowledgementNamesWhatWasRead. sendConversationSeen takes the chat's
-// lastReceivedKey; acknowledging without naming the message is not something
-// the protocol offers, so a call that dropped it would be asking for something
-// that does not exist.
-func TestTheAcknowledgementNamesWhatWasRead(t *testing.T) {
+// withoutComments strips // comments before a script is asserted against.
+//
+// IT EXISTS BECAUSE A GUARD MATCHED ITS OWN COMMENT — the eleventh time in this
+// repository, and the second today. The order assertion below failed against a
+// COMMENT explaining the order.
+func withoutComments(script string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(script, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// THE PRIMITIVE CHANGED, AND THE OLD ASSERTION WENT WITH IT.
+//
+// This test used to require lastReceivedKey in the call, because
+// sendConversationSeen takes it. That was a correct assertion about the wrong
+// primitive: measured side by side on the same chat, sendConversationSeen left
+// unreadCount at 1, and WAWebUpdateUnreadChatAction.sendSeen — which is what the
+// reference calls — took it from 1 to 0 (H160). The row was demoted in H82 for
+// exactly the counter that did not move.
+//
+// The new call names no message: sendSeen({chat, threadId}) acknowledges the
+// conversation, and requiring a key it does not take would be asking for
+// something that does not exist — the same reasoning the old comment gave, now
+// pointing at the call that works.
+func TestTheAcknowledgementUsesThePrimitiveThatMoves(t *testing.T) {
 	compressMarkClock(t)
 	p := &markDouble{ok: true, before: 3, after: 0}
 	if _, err := marker(p).MarkRead(context.Background(), "1@lid", "t/mark"); err != nil {
 		t.Fatalf("MarkRead: %v", err)
 	}
-	if !strings.Contains(p.lastScript, "lastReceivedKey") {
-		t.Fatal("the acknowledgement does not name the message it acknowledges")
+	code := withoutComments(p.lastScript)
+	if !strings.Contains(code, "WAWebUpdateUnreadChatAction") {
+		t.Fatal("the acknowledgement does not use WAWebUpdateUnreadChatAction, the " +
+			"only primitive measured to move unreadCount on this build")
 	}
-	if !strings.Contains(p.lastScript, "sendConversationSeen({") {
-		t.Fatal("sendConversationSeen is not called with a single object; the app's " +
-			"own call passes {chat, key, threadId, unreadDelta}")
+	if !strings.Contains(code, "sendSeen({") {
+		t.Fatal("sendSeen is not called with a single object; the reference passes " +
+			"{chat, threadId}")
+	}
+	if strings.Contains(code, "sendConversationSeen") {
+		t.Fatal("the old primitive is still called; it leaves unreadCount untouched " +
+			"and is what made this row's postcondition fail")
+	}
+}
+
+// THE PRESENCE ANNOUNCEMENT IS UNDONE EVEN WHEN THE ACKNOWLEDGEMENT THROWS.
+//
+// markAvailable announces this client as present. Leaving that on after a failed
+// call is an outward-facing side effect nothing here asked for, and it would
+// outlive the error — so the undo lives in a finally, not after the call.
+//
+// It is asserted on the SCRIPT because a double supplies the outcome either way,
+// and this is a rule about ORDER: inverting it passes every other test.
+func TestThePresenceAnnouncementIsUndoneOnFailure(t *testing.T) {
+	compressMarkClock(t)
+	p := &markDouble{ok: true, before: 3, after: 0}
+	if _, err := marker(p).MarkRead(context.Background(), "1@lid", "t/mark"); err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	code := withoutComments(p.lastScript)
+	if !strings.Contains(code, "markAvailable") || !strings.Contains(code, "markUnavailable") {
+		t.Fatal("the call is not bracketed by the stream presence the reference uses")
+	}
+	iFinally := strings.Index(code, "} finally {")
+	if iFinally < 0 {
+		t.Fatal("the presence undo is not in a finally, so a failed acknowledgement " +
+			"would leave this client announced as online")
+	}
+	if !strings.Contains(code[iFinally:], "markUnavailable") {
+		t.Fatal("markUnavailable is not inside the finally, so a failed " +
+			"acknowledgement would leave this client announced as online")
 	}
 }
 
