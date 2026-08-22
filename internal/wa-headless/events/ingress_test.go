@@ -510,3 +510,56 @@ func TestAReloadRestartsTheReplayWindow(t *testing.T) {
 			got[2], got[3], FreshnessReplay)
 	}
 }
+
+// rowFrom is `row` with fromMe under the caller's control.
+//
+// IT EXISTS BECAUSE row() HARDCODES true, and that hardcoding is why no unit
+// test in this package had ever seen an incoming message: every fixture was this
+// account's own. A field that only ever carries one value is a field no test is
+// actually checking.
+func rowFrom(typ string, seq int64, msg string, fromMe bool) string {
+	return fmt.Sprintf(`{"type":%q,"seq":%d,"at":%d,"chat":"1@c.us","msg":%q,"fromMe":%t,`+
+		`"kind":"chat","ack":1,"bodyLen":7,"msgT":0}`, typ, seq, 1700000000, msg, fromMe)
+}
+
+// BOTH VALUES OF FromMe MUST CROSS THE BOUNDARY, and this is the whole content
+// of the MESSAGE_CREATE / MESSAGE_RECEIVED distinction.
+//
+// The reference emits MESSAGE_CREATE for every message and then returns early on
+// `msg.id.fromMe` before emitting MESSAGE_RECEIVED (client.js:648-664). Its only
+// discriminator is that field. This module emits ONE event carrying it, which is
+// the same information — but only if the field actually varies, and until now
+// nothing proved it did.
+func TestBothDirectionsSurviveTheBoundary(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{{
+		rowFrom("message.added", 1, "A", true),
+		rowFrom("message.added", 2, "B", false),
+	}}}
+	h := NewHub()
+	var mine, theirs int
+	h.Subscribe(func(e Event) {
+		if e.Type != MessageAdded {
+			return
+		}
+		if e.FromMe {
+			mine++
+		} else {
+			theirs++
+		}
+	})
+	runPump(t, f, h, 1)
+	if mine != 1 || theirs != 1 {
+		t.Fatalf("the two directions did not arrive as two: fromMe=%d incoming=%d "+
+			"(a bus that cannot carry both cannot express MESSAGE_RECEIVED)", mine, theirs)
+	}
+}
+
+// THE PAGE MUST READ THE FIELD, not assume it. A script that omitted fromMe
+// would leave every message looking incoming, which is the failure that reads as
+// "this account receives its own messages".
+func TestTheIngressScriptReadsFromMe(t *testing.T) {
+	if !strings.Contains(installScriptForTest(), "id.fromMe") {
+		t.Fatal("the install script does not read id.fromMe, so every message " +
+			"would cross the boundary with the same direction")
+	}
+}

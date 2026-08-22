@@ -4126,3 +4126,64 @@ que ninguém tomou.* Cada um sozinho pareceria um conserto de uma linha; juntos
 mostram que o módulo nunca decidiu quem resolve identidade — o chamador ou a
 capacidade — e a ausência dessa decisão é o que produz três comportamentos
 diferentes para a mesma pergunta.
+
+---
+
+## H152 — `MESSAGE_CREATE`: a nota errava sobre a referência, e o teste unitário fixava o campo que decidia
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/probe_msgcreate_test.go` (novo),
+`internal/wa-headless/events/ingress_test.go` (`rowFrom`,
+`TestBothDirectionsSurviveTheBoundary`, `TestTheIngressScriptReadsFromMe`),
+linha `MESSAGE_CREATE` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"o mesmo evento cobre os dois; o upstream distingue
+criada de recebida e nós não"*. A segunda metade é falsa, e ler a referência
+resolve em dez linhas (`client.js:648-664`):
+
+```js
+this.emit(Events.MESSAGE_CREATE, message);
+if (msg.id.fromMe) return;
+this.emit(Events.MESSAGE_RECEIVED, message);
+```
+
+O único discriminador é `msg.id.fromMe` — **o mesmo campo que o nosso
+`message.added` já carrega**. Nosso evento não "cobre os dois" por imprecisão:
+ele É o `MESSAGE_CREATE`, um para um, e o `MESSAGE_RECEIVED` é ele filtrado por
+um campo que já viaja. A linha `MESSAGE_RECEIVED` já estava `PROVEN` com o mesmo
+mapeamento, o que torna a assimetria ainda mais claramente um erro de nota.
+
+**Mas corrigir a nota não bastava, e o que faltava é o achado desta entrada.**
+Para que a afirmação seja verdadeira, o campo tem de **variar** — e nada provava
+isso:
+
+- **Nenhum teste unitário jamais viu `fromMe:false`.** O helper `row()` deste
+  pacote fixa `"fromMe":true` em toda linha de fixture, então todo teste de
+  ingresso via mensagens desta conta. Um campo que só carrega um valor é um campo
+  que nenhum teste está conferindo.
+- **Nenhuma medição ao vivo tinha as duas direções**, porque até a sessão dupla
+  (H135) não havia como fazer o par falar enquanto observávamos.
+
+**Medição** (sessão dupla, barramento em conta-A, uma mensagem em cada direção):
+
+```
+baseline: fromMe=0 notFromMe=0
+PROVEN:   message.added carried BOTH values of FromMe (own=27, incoming=14)
+```
+
+**Status**: corrigido, linha para `PROVEN`. Travado por:
+- `TestBothDirectionsSurviveTheBoundary` — CN: marcar o campo `FromMe` do decode
+  como `json:"-"`. Falha com *"the two directions did not arrive as two:
+  fromMe=0 incoming=2"*.
+- `TestTheIngressScriptReadsFromMe` — CN: trocar `fromMe: !!(id && id.fromMe)`
+  por `fromMe: false` no script. Falha.
+- `rowFrom`, que existe para que o próximo teste deste pacote possa escolher a
+  direção em vez de herdar `true`.
+
+**Lição**: *um fixture que fixa um campo esconde o campo.* O `row()` deste pacote
+foi escrito para testar OUTRA coisa, e o `true` era uma escolha inocente de
+conveniência — que depois virou a razão de uma linha do ledger ficar `PARTIAL`
+por meses. Vale a pergunta em toda suíte: **que campo dos meus fixtures nunca
+mudou de valor?** Esse é o campo que ninguém está testando.

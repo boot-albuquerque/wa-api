@@ -440,7 +440,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `MESSAGE_RECEIVED` | events.MessageAdded | `PROVEN` | disparado ao vivo por um envio (H87) |
 | `MESSAGE_CIPHERTEXT` | — | `BLOCKED` | H140: reclassificado (decisão 60) — vive ABAIXO do modelo: é a mensagem antes de decifrar, e este barramento escuta COLEÇÕES, não o fio (H88) |
 | `MESSAGE_CIPHERTEXT_FAILED` | — | `BLOCKED` | H140: idem `MESSAGE_CIPHERTEXT` — abaixo do modelo (H88) |
-| `MESSAGE_CREATE` | events.MessageAdded | `PARTIAL` | o mesmo evento cobre os dois; o upstream distingue criada de recebida e nós não (H87) |
+| `MESSAGE_CREATE` | events.MessageAdded | `PROVEN` | H152: a nota estava errada sobre COMO o upstream distingue. Ele emite `MESSAGE_CREATE` para toda mensagem e então `if (msg.id.fromMe) return;` antes do `MESSAGE_RECEIVED` (`client.js:648-664`) — o único discriminador é `fromMe`, que é exatamente o campo que o nosso `message.added` carrega. Nosso evento **é** o `MESSAGE_CREATE`, um para um, e o `MESSAGE_RECEIVED` é ele filtrado. O que faltava era prova de que o campo VARIA: nenhum teste unitário jamais vira `fromMe:false` (o helper `row` o fixava em `true`) e nenhuma medição ao vivo tinha as duas direções. Provado com sessão dupla, `own=27 incoming=14` sobre linha de base zerada |
 | `MESSAGE_REVOKED_EVERYONE` | events.MessageRevoked | `PROVEN` | disparado ao vivo; reconhecido pelo predicado de TRÊS sinais que a capacidade de apagar mede (H87) |
 | `MESSAGE_REVOKED_ME` | events.MessageRemoved + revoke.ForMe | `PROVEN` | H143: o diagnóstico da H88 estava certo — era falta de MÉTODO. Fechado escrevendo os dois: `revoke.ForMe` (`Cmd.sendDeleteMsgs`, nome ENUMERADO no build, aridade 6) e o ouvinte `MsgCollection.on('remove')` filtrado por `isNewMsg`. Nomeado `message.removed` e não `revoked`: revogar é fato da CONVERSA, apagar local é fato deste APARELHO. Provado com linha de base (0 antes, 1 depois, nomeando a mensagem apagada) |
 | `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 112 | 51% |
-| `PARTIAL` | 53 | 24% |
+| `PROVEN` | 113 | 51% |
+| `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 49 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
