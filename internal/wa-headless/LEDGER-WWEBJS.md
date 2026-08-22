@@ -199,28 +199,42 @@ sem link.
 
 ## Chat
 
+**A diferença desta família, dita uma vez.** Em `Chat.js` do upstream fixado,
+quase todo método é uma delegação de UMA LINHA para o método homônimo do
+`Client`, passando `this.id._serialized`. Aqui não há objeto `Chat` vivo: quem
+chama passa o jid direto. Então o equivalente de `Chat.archive` **é** a
+capacidade já provada em `chats`, e não uma segunda coisa a construir.
+
+As linhas abaixo herdam o estado do seu par no `Client`, com a linha do upstream
+nomeada para que a herança seja auditável. Herdar estado é escrituração, não
+entrega: nenhuma delas ganhou código nesta passagem (H109).
+
+Uma diferença real: `Chat.mute`/`unmute` atualizam `isMuted`/`muteExpiration` no
+objeto em memória depois da chamada. Não temos esse cache, então toda leitura
+nossa é fresca — não há campo velho para consertar.
+
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
-| `sendMessage` | — | `MISSING` | — | — | — | não atacado |
-| `sendSeen` | — | `MISSING` | — | — | — | não atacado |
+| `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendMessage` (Chat.js:102); herda a linha dele, ENQUETE INCLUSA no que não sai |
+| `sendSeen` | chats.MarkRead | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendSeen` (Chat.js:110); herda o rebaixamento da H82 |
 | `clearMessages` | chats.Clear | `PARTIAL` | sim | NÃO (por desenho) | sim | H66: destruiria o fixture de todos os outros testes |
 | `delete` | chats.Delete | `PARTIAL` | sim | NÃO (por desenho) | sim | idem |
-| `archive` | — | `MISSING` | — | — | — | não atacado |
-| `unarchive` | — | `MISSING` | — | — | — | não atacado |
-| `pin` | — | `MISSING` | — | — | — | não atacado |
-| `unpin` | — | `MISSING` | — | — | — | não atacado |
-| `mute` | — | `MISSING` | — | — | — | não atacado |
-| `unmute` | — | `MISSING` | — | — | — | não atacado |
+| `archive` | chats (arquivar) | `PROVEN` | sim | sim | sim | delegação literal para `Client.archiveChat` (Chat.js:137); H55 |
+| `unarchive` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.unarchiveChat` (Chat.js:144) |
+| `pin` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.pinChat` (Chat.js:152). NÃO confundir com a H81, que é fixar MENSAGEM e continua falhando |
+| `unpin` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.unpinChat` (Chat.js:160) |
+| `mute` | capabilities/mute | `PROVEN` | sim | sim | sim | delegação para `Client.muteChat` (Chat.js:168); H62 |
+| `unmute` | capabilities/mute | `PROVEN` | sim | sim | sim | delegação para `Client.unmuteChat` (Chat.js:182) |
 | `markUnread` | chats.MarkUnread | `MISSING` | sim | falha (H78) | sim | duas primitivas medidas e nenhuma marca: `sendConversationSeen` com delta negativo e `Cmd.markChatUnread`. O `Cmd` é barramento de EVENTOS, e o ouvinte deste verbo vive num pedaço de UI que sessão headless não carrega |
 | `fetchMessages` | capabilities/fetchmessages | `PROVEN` | sim | sim | sim | — |
 | `sendStateTyping` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
 | `sendStateRecording` | presence.StateRecording | `PARTIAL` | sim | bloqueada (H50) | sim | **linha corrigida**: eu a marquei MISSING de memória e ela JÁ EXISTIA, mapeada para `markRecording`. A prova ao vivo esbarra no mesmo bloqueio da observação de presença |
 | `clearState` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
-| `getContact` | — | `MISSING` | — | — | — | não atacado |
-| `getLabels` | — | `MISSING` | — | — | — | não atacado |
-| `changeLabels` | — | `MISSING` | — | — | — | não atacado |
+| `getContact` | resolução interna | `PARTIAL` | sim | sim | sim | delegação literal para `Client.getContactById` (Chat.js:284); herda a linha dele |
+| `getLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | delegação literal para `Client.getChatLabels` (Chat.js:292); H72 |
+| `changeLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | delegação literal para `Client.addOrRemoveLabels` (Chat.js:301); H72 |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
-| `syncHistory` | — | `MISSING` | — | — | — | não atacado |
+| `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | delegação literal para `Client.syncHistory` (Chat.js:317); herda a linha dele — buscamos histórico de uma conversa, sincronizar não |
 | `addOrEditCustomerNote` | — | `MISSING` | — | — | — | não atacado |
 | `getCustomerNote` | — | `MISSING` | — | — | — | não atacado |
 
@@ -414,9 +428,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 59 | 27% |
-| `PARTIAL` | 48 | 22% |
+| `PROVEN` | 67 | 30% |
+| `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 107 | 49% |
+| `MISSING` | 95 | 43% |
 | **total** | **220** | |

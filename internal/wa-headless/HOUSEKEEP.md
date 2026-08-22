@@ -8587,3 +8587,66 @@ para decisão sobre reabrir a H81.
 
 **Status**: entregue e provado. O achado do `pinned_message` acima não faz parte
 desta entrega e segue para triagem.
+
+## H109 — a família `Chat` era fachada, e o ledger a contava como ausência
+
+**Data**: 2026-08-22. **Contexto**: atacar as 16 linhas `MISSING` da família
+`Chat` do LEDGER-WWEBJS.
+
+**Onde**: `internal/wa-headless/LEDGER-WWEBJS.md`, seção `## Chat`.
+
+### O que a leitura da referência mostrou
+
+Busquei `Chat.js` do upstream FIXADO (`f935b500…`, v1.34.7) antes de projetar
+qualquer coisa, e quase todo método é uma delegação de UMA LINHA:
+
+```
+Chat.js:102   sendMessage  -> this.client.sendMessage(this.id._serialized, …)
+Chat.js:110   sendSeen     -> this.client.sendSeen(…)
+Chat.js:137   archive      -> this.client.archiveChat(…)
+Chat.js:144   unarchive    -> this.client.unarchiveChat(…)
+Chat.js:152   pin          -> this.client.pinChat(…)
+Chat.js:160   unpin        -> this.client.unpinChat(…)
+Chat.js:168   mute         -> this.client.muteChat(…)
+Chat.js:182   unmute       -> this.client.unmuteChat(…)
+Chat.js:284   getContact   -> this.client.getContactById(…)
+Chat.js:292   getLabels    -> this.client.getChatLabels(…)
+Chat.js:301   changeLabels -> this.client.addOrRemoveLabels(…)
+Chat.js:317   syncHistory  -> this.client.syncHistory(…)
+```
+
+Todos esses pares no `Client` **já estavam provados ou parciais** neste ledger.
+`archiveChat` é `PROVEN` desde a H55; `muteChat` desde a H62; `getChatLabels` e
+`addOrRemoveLabels` desde a H72. As linhas da família `Chat` estavam
+`MISSING` — e um leitor do ledger concluiria que não sabemos arquivar uma
+conversa, o que é falso.
+
+### O que MUDOU e o que NÃO mudou
+
+**Não foi escrita uma linha de código.** Doze linhas passaram a herdar o estado
+do seu par no `Client`, cada uma nomeando o arquivo e a linha do upstream que
+justifica a herança, para que ela seja auditável em vez de assumida.
+
+Digo isto em voz alta porque é o tipo de movimento que pode ser
+auto-interessado: o placar sobe de 59 para 67 `PROVEN` sem nenhuma prova nova.
+A defesa é a auditabilidade — qualquer pessoa pode abrir `Chat.js` na SHA fixada
+e verificar cada delegação — e o fato de que o inverso seria pior: um ledger que
+conta fachada como ausência mede o tamanho da API da referência, não a nossa
+paridade.
+
+**As duas que continuam `MISSING`** são as que não têm par provado:
+`addOrEditCustomerNote` e `getCustomerNote`, cujos pares no `Client` também
+estão `MISSING`. Herança não inventa estado.
+
+### Diferença real registrada
+
+`Chat.mute`/`unmute` atualizam `isMuted`/`muteExpiration` no objeto em memória
+depois da chamada. Não temos objeto `Chat` vivo — quem chama passa o jid — então
+não há cache para envelhecer, e toda leitura nossa é fresca. Está escrito no
+cabeçalho da família em vez de repetido em dez notas.
+
+**Armadilha evitada**: `Chat.pin` delega para `Client.pinChat`, que é fixar
+CONVERSA e está provado. A H81, que falha, é fixar MENSAGEM. Os dois verbos têm
+o mesmo nome e resultados opostos; a nota da linha diz isso.
+
+**Status**: decidido e registrado. Sem código novo.
