@@ -8737,3 +8737,95 @@ resultado só mede o parser. Se a regra mora no script, o teste tem de olhar
 para o script.**
 
 **Status**: entregue e provado.
+
+## H111 — `findCC("notaphone")` devolve `"not"`: a página não recusa lixo
+
+**Data**: 2026-08-22. **Contexto**: `getFormattedNumber`, `getCountryCode` e
+`getWWebVersion` do LEDGER-WWEBJS (famílias `Client` e `Contact`).
+
+**Onde**: `internal/wa-headless/capabilities/phone/` (novo),
+`internal/wa-headless/spa/webversion.go` (novo),
+`internal/wa-headless/probe_settings_test.go`.
+
+### A medição que mudou o desenho
+
+Medi o que as funções ANSWER antes de embrulhá-las. Nenhum valor foi registrado
+— só forma, porque um número formatado É um número de telefone:
+
+```
+entrada real (jid)  -> cc "55",  formatado len 17, com "+", 2 espaços
+"notaphone"         -> cc "not", formatado len 11, com "+"
+""                  -> cc "",    formatado len 0
+"1"                 -> cc "1",   formatado len 3, com "+"
+```
+
+**`findCC("notaphone")` devolve `"not"`.** A função entrega os primeiros
+caracteres do que recebeu, sem validar nada, e a resposta tem exatamente a
+FORMA de um código de país de verdade. Um embrulho fino — que é o que a
+referência é — reportaria país `"not"` para lixo e quem chamasse acreditaria.
+
+Isto é o "eu não teria adivinhado" desta medição. Nenhuma leitura do código da
+referência sugeriria a necessidade de uma guarda, porque a referência não tem
+nenhuma.
+
+### O que foi entregue
+
+Guarda dos DOIS lados:
+
+1. **Entrada**: tem de ser dígitos depois de tirar decoração e sufixos de jid
+   (`@c.us`, `@lid`, `@s.whatsapp.net`, `@g.us`) — quem chama tem jid, não
+   número, e exigir que descasque só moveria esta função para cada chamador.
+2. **Resposta**: o código devolvido tem de ser dígitos, senão `ErrNonsenseAnswer`
+   — erro SEPARADO de `ErrNotANumber`, porque significa que a guarda de entrada
+   tem uma brecha, e isso é bug nosso, não erro de quem chamou.
+
+O teto de 15 dígitos vem do E.164 e está escrito no código como regra
+**emprestada**, não medida: a medição estabelece que a página não tem teto
+nenhum.
+
+`ErrNotANumber` **não cita a entrada**. Um erro é uma linha de log esperando
+para acontecer, e essa carregaria justamente o que não pode ser registrado.
+
+### As duas guardas são independentes, e o controle provou
+
+Ao remover só a guarda de ENTRADA, o teste falhou com
+`ErrNonsenseAnswer` em vez de `ErrNotANumber` — ou seja, a segunda guarda pegou
+o lixo sozinha. Isso não estava planejado; apareceu na saída do controle:
+
+```
+--- FAIL: TestGarbageNeverReachesThePage
+    phone_test.go:74: Lookup(junk) err = phone: the page answered something that is not a country code, want ErrNotANumber
+    phone_test.go:77: junk reached the page 1 time(s); findCC would have answered it
+```
+
+Outros dois controles: remover a validação da resposta
+(`TestANonsenseAnswerIsItsOwnError` falha) e fazer o erro citar a entrada
+(`TestTheRefusalDoesNotQuoteTheNumber` falha).
+
+### Prova ao vivo (2026-08-22, conta-A)
+
+```
+real jid -> phone.Number(formattedLen=17 cc="55")
+junk refused on all three inputs
+web version: 2.3000.1045798079
+```
+
+`Number.String()` reporta comprimento e código de país, nunca o número.
+
+### `getWWebVersion`
+
+Ficou em `spa/`, ao lado do inventário de módulos, porque é o complemento
+natural dele: a referência FIXA a versão da web com `initWebVersionCache`, nós
+não (linha `INTENTIONAL_DIFFERENCE`) e usamos o inventário como guarda. Ler a
+versão não muda essa decisão — torna-a reportável, e a versão é a coisa mais
+útil para pôr ao lado de uma lista de módulos ausentes.
+
+Página sem versão devolve `ErrNoWebVersion`, não string vazia: quem recebesse
+`""` não distinguiria "este build esconde" de "a leitura falhou".
+
+**Controle negativo que precisou de segunda tentativa**: a primeira mutação
+removeu a guarda e deixou `strings` sem uso — não compilou, e a ARMADILHA §3 diz
+que controle que não compila não prova nada. Refeito devolvendo
+`strings.TrimSpace(out.Version)` direto, que compila e falha nas três respostas.
+
+**Status**: entregue e provado.

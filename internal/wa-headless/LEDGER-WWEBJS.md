@@ -39,7 +39,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `initWebVersionCache` | — | `INTENTIONAL_DIFFERENCE` | — | — | — | não fixamos versão da web; o inventário de módulos é a nossa guarda |
 | `destroy` | core.Session.Stop | `PROVEN` | sim | sim | sim | stopped_via medido |
 | `logout` | — | `MISSING` | — | — | — | apagar credenciais da sessão nunca foi atacado |
-| `getWWebVersion` | — | `MISSING` | — | — | — | trivial, nunca feito |
+| `getWWebVersion` | spa.WebVersion | `PROVEN` | sim | sim | sim | H111: lido ao vivo (`2.3000.1045798079`); página sem versão é `ErrNoWebVersion`, não string vazia |
 | `setDeviceName` | — | `MISSING` | — | — | — | — |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | duvidosa | sim | **rebaixada em 2026-08-21 (H82)**: a pós-condição afirma que `chat.unreadCount` moveu NA MESMA SESSÃO, e a H78 mediu esse contador como CROSS_SESSION. A H52 provou contra um chat em que ele moveu; se generaliza é pergunta em aberto |
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento e figurinha OK. **ENQUETE NÃO SAI**: criada localmente como `poll_creation` com as opções intactas, `ack` fica em **0** e o par nunca recebe — medido no primeiro round trip que olhou o OUTRO lado (H98). A H69 provou o envio pela aparição LOCAL. O suspeito nomeado (`pollType` omitido) foi **perseguido e descartado**: o enum foi achado em `WAWebPollCreationUtils` (singular — uma letra é por que três buscas o perderam), `PollType.POLL` e `PollContentType.TEXT` foram aplicados de dentro da própria página, e o ack continua 0 (H101). Localização e vCard MISSING (H75) |
@@ -77,8 +77,8 @@ nem `PARTIAL` sem justificativa explícita.
 | `resetState` | — | `MISSING` | — | — | — | — |
 | `isRegisteredUser` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | é passo interno de todo envio; não exposto |
 | `getNumberId` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | idem |
-| `getFormattedNumber` | — | `MISSING` | — | — | — | — |
-| `getCountryCode` | — | `MISSING` | — | — | — | — |
+| `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
+| `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `createGroup` | group.Ensure | `PROVEN` | sim | sim | sim | idempotência é do fixture, não da capacidade |
 | `createChannel` | — | `MISSING` | — | — | — | não atacado |
 | `subscribeToChannel` | — | `MISSING` | — | — | — | não atacado |
@@ -251,8 +251,8 @@ nossa é fresca — não há campo velho para consertar.
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `getProfilePicUrl` | — | `MISSING` | — | — | — | não atacado |
-| `getFormattedNumber` | — | `MISSING` | — | — | — | não atacado |
-| `getCountryCode` | — | `MISSING` | — | — | — | não atacado |
+| `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
+| `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getChat` | — | `MISSING` | — | — | — | não atacado |
 | `block` | capabilities/block | `PROVEN` | sim | sim | sim | H59: blocklist 0->1->0 |
 | `unblock` | capabilities/block | `PROVEN` | sim | sim | sim | — |
@@ -428,9 +428,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 72 | 33% |
+| `PROVEN` | 77 | 35% |
 | `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 90 | 41% |
+| `MISSING` | 85 | 39% |
 | **total** | **220** | |
