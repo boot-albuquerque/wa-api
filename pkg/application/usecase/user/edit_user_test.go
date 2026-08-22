@@ -8,6 +8,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 func TestEditUserUseCase_Execute_Rejections(t *testing.T) {
@@ -74,7 +75,10 @@ func TestEditUserUseCase_Execute_UpdateErrors(t *testing.T) {
 			wantIs:    user.ErrDuplicateToken,
 		},
 		{
-			name:      "nada a atualizar sobe sem embrulho",
+			// O nome era "sobe sem embrulho" e passou a mentir com a F206: o
+			// erro AGORA é embrulhado em apperr, e é essa a correção. A causa
+			// continua alcançável por errors.Is — é isso que este caso trava.
+			name:      "nada a atualizar mantém a causa alcançável",
 			updateErr: domain.ErrNoFieldsToUpdate,
 			wantIs:    domain.ErrNoFieldsToUpdate,
 		},
@@ -413,5 +417,57 @@ func TestEditUser_RepublicaDEPOISDaEscritaENaoAntes(t *testing.T) {
 	if rep.EscritasAoSerChamado[0] != 1 {
 		t.Fatalf("republicou com %d escritas feitas, quero 1 — a republicação está ANTES da escrita",
 			rep.EscritasAoSerChamado[0])
+	}
+}
+
+// TestEditUser_SemCamposEhErroDoCliente trava a F206 (decisão 48=a do canal):
+// `token:""` significa CAMPO NÃO INFORMADO, e um pedido sem nenhum campo útil
+// é inválido — não avaria nossa.
+//
+// Medido em campo a 2026-08-22, antes da correção:
+//
+//	PUT /admin/users/{id} {"token":""}  -> 500 {"error":"internal server error"}
+//	PUT /admin/users/{id} {}           -> 500      <- o mesmo, pelo caminho mais banal
+//
+// 500 diz "avaria nossa, tente outra vez" para algo determinístico: por mais
+// que o cliente repita, a resposta nunca muda. Mesma família da F182 e da F204.
+func TestEditUser_SemCamposEhErroDoCliente(t *testing.T) {
+	t.Parallel()
+
+	for _, req := range []domain.EditUserRequest{
+		{UserID: "u1"},            // corpo vazio
+		{UserID: "u1", Token: ""}, // o caso da entrada
+		{UserID: "u1", Name: "", Webhook: ""},
+	} {
+		repo := &contractsfake.UserRepository{
+			UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+			UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error {
+				return domain.ErrNoFieldsToUpdate
+			},
+		}
+		uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+			&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+		err := uc.Execute(context.Background(), req)
+
+		var app *apperr.AppError
+		if !errors.As(err, &app) {
+			t.Fatalf("%+v: erro sem taxonomia (%T) — sobe cru e o RespondJSON cai no "+
+				"ramo genérico, devolvendo 500 para erro do cliente", req, err)
+		}
+		if app.Category != apperr.CategoryValidation {
+			t.Errorf("%+v: categoria = %q, quero validation (400)", req, app.Category)
+		}
+		if app.Code != "no_fields_to_update" {
+			t.Errorf("%+v: code = %q; o cliente precisa de um código legível por "+
+				"máquina, não de \"internal server error\"", req, app.Code)
+		}
+		if app.Retryable {
+			t.Errorf("%+v: marcado retryable; repetir o mesmo pedido dá o mesmo erro", req)
+		}
+		// A causa tem de continuar alcançável, senão o log perde o motivo.
+		if !errors.Is(err, domain.ErrNoFieldsToUpdate) {
+			t.Errorf("%+v: a causa deixou de ser alcançável por errors.Is", req)
+		}
 	}
 }

@@ -25,6 +25,11 @@ const (
 
 	invalidEventTypeCode   = "invalid_event_type"
 	invalidEventTypeMsgFmt = "invalid event type: %s"
+
+	// noFieldsToUpdateCode identifica um PUT que não traz campo algum a mudar.
+	// Constante nomeada, e não literal repetido, porque o teste de contrato o
+	// afirma e o cliente o lê (ADR-0004).
+	noFieldsToUpdateCode = "no_fields_to_update"
 )
 
 // AddUserUseCase adiciona um novo usuário

@@ -17823,7 +17823,37 @@ determinístico.
 **Correção sugerida**: decidir entre 400 e 200 idempotente — é escolha de
 contrato — e dar taxonomia ao `ErrNoFieldsToUpdate`.
 
-**Status**: não corrigido — triagem, pendente de decisão de contrato.
+### Medido em campo (2026-08-22), e o achado é MAIOR do que a entrada dizia
+
+A entrada veio de avaliação independente, por leitura. Contra o servidor vivo:
+
+```
+{"token":""}                    -> HTTP 500 {"error":"internal server error"}
+{}                              -> HTTP 500      <- o MESMO defeito, e é o engano
+                                                    mais provável de um cliente
+{"name":"lucas"}                -> HTTP 200      <- controlo: o caminho funciona
+{"token":"","name":"lucas"}     -> HTTP 200      <- e o token NÃO é limpo
+```
+
+**Duas coisas que a leitura não tinha visto:**
+
+1. **O corpo vazio `{}` cai no mesmo 500.** A entrada só falava de `token:""`,
+   mas o defeito é do ramo "nenhum campo a atualizar", e `{}` chega lá pelo
+   caminho mais banal que existe.
+
+2. **`token:""` acompanhado de outro campo devolve 200 e é ignorado em
+   silêncio.** Isto é pior que o 500 e não estava registado: um cliente que
+   queira LIMPAR o token recebe sucesso e não acontece nada. Verificado que o
+   token da sessão continuava a autenticar depois do 200, e que o `token=''` na
+   listagem de admin é a API a nunca devolver tokens — não uma limpeza.
+
+Isso muda a pergunta de contrato. Não é só "400 ou 200 para o caso vazio": é
+**o que `token:""` significa**. Hoje o código conflaciona "campo não informado"
+com "põe o campo a vazio", e as duas leituras dão respostas opostas — uma diz
+que o pedido é inválido, a outra que ele deveria limpar o token.
+
+**Status**: não corrigido — reproduzido em campo, pendente de decisão de
+contrato no canal.
 
 ---
 
@@ -18071,3 +18101,64 @@ testes (`resolver.go` ×2, `runtime/session/provider.go`), e o do provider receb
 sempre um JID já qualificado — logo a guarda não o afeta. As rotas que passam
 telefone nu vão todas por `ResolveJID`, e portanto ficam cobertas. **Isto é
 leitura de código, não medição**: só `/user/block` foi medido em campo.
+
+## F210 — `PUT /admin/users/{id}` NUNCA persiste `s3_config`, e engole o erro de o inicializar
+
+**Data / contexto**: 2026-08-22, ao medir a [[F206]]. Achado incidental: o caso
+"só `s3_config`" era um controlo da medição, não o alvo.
+
+**Onde**: `pkg/application/usecase/user/edit_user.go:139-158`
+
+```go
+// Update S3Manager if needed
+if req.S3Config != nil {
+    if req.S3Config.Enabled {
+        s3Config := &storage.S3Config{ ... }
+        _ = storage.GetS3Manager().InitializeS3Client(req.UserID, s3Config)
+    } else {
+        storage.GetS3Manager().RemoveClient(req.UserID)
+    }
+}
+```
+
+**Problema**: três defeitos no mesmo bloco.
+
+1. **Nada é persistido.** O bloco toca apenas no gestor em MEMÓRIA. A
+   configuração morre no reinício do processo e nunca aparece na listagem de
+   admin, que lê do banco. A fiação existe dos dois lados e não está ligada:
+   `UserUpdate` tem o campo `S3`, e `user_repository.go:154-165` escreve as dez
+   colunas (`s3_enabled`, `s3_endpoint`, `s3_bucket`, …). O use case
+   simplesmente **nunca preenche `upd.S3`**.
+2. **`s3_config` sozinho é recusado.** Como `upd` fica vazio, o pedido cai em
+   `ErrNoFieldsToUpdate` — hoje 400 pela F206, antes 500. Não há forma de
+   configurar S3 sem enviar junto um campo que não se quer mudar.
+3. **O erro de `InitializeS3Client` é descartado** (`_ =`). Uma configuração
+   inválida devolve 200 e o cliente acredita que ficou configurada.
+
+**Assimetria que torna isto bug e não "recurso por fazer"**: o `AddUser`
+PERSISTE o S3 (`add_user.go:135`, `s3ForRecord`). Criar utilizador com S3
+funciona; editar não. Quem criou sem S3 não consegue acrescentá-lo de forma que
+sobreviva a um reinício.
+
+**Medido em campo** (2026-08-22, servidor vivo, sessão `lucas`):
+
+```
+PUT {"s3_config":{...}}                  -> 400 no_fields_to_update
+PUT {"name":"lucas","s3_config":{...}}   -> 200, e a listagem continua
+                                            {'bucket': '', 'enabled': False, 'endpoint': ''}
+```
+
+O segundo é a prova: 200, e a configuração não ficou.
+
+**Correção sugerida**: preencher `upd.S3` a partir de `req.S3Config` antes do
+`UpdateUser`, para que a persistência use o caminho que já existe; e tratar o
+erro de `InitializeS3Client` em vez de o descartar. Atenção à ordem — o segredo
+S3 é cifrado (`s3Cipher`, F163), e o `AddUser` cifra antes de gravar; o
+`EditUser` teria de fazer o mesmo, senão grava o segredo em claro.
+
+**Anti-regressão**: teste que um PUT só com `s3_config` persiste e devolve 200,
+e um que prove a CIFRA do segredo — sem esse, a correção pode gravar em claro e
+passar em todos os outros testes.
+
+**Status**: **não corrigido** — fora do escopo da F206, que era a taxonomia do
+500. Registado por CLAUDE.md; não corrigido de graça.

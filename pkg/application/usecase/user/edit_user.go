@@ -117,7 +117,20 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 			return ErrDuplicateToken
 		}
 		if errors.Is(err, domain.ErrNoFieldsToUpdate) {
-			return err
+			// F206, decisão 48=a do canal: `token:""` significa CAMPO NÃO
+			// INFORMADO, e um pedido sem nenhum campo útil é inválido — não
+			// avaria nossa.
+			//
+			// Medido em campo a 2026-08-22: `{"token":""}` e `{}` devolviam
+			// ambos 500 "internal server error" para algo determinístico, que
+			// nunca muda de resposta por mais que o cliente repita. Mesma
+			// família da F182 e da F204.
+			//
+			// Sem taxonomia o erro subia cru e o `RespondJSON` caía no ramo
+			// genérico; com ela, o status vem da categoria e o cliente recebe
+			// um código legível por máquina em vez de "internal server error".
+			return apperr.New(noFieldsToUpdateCode, apperr.CategoryValidation,
+				"request has no field to update", false, err)
 		}
 		uc.logger.Error(ctx, "Failed to update user", "error", err)
 		return fmt.Errorf("database error: %w", err)
