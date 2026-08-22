@@ -149,6 +149,44 @@ func TestSessionProviderAdapter_NewSession_ReusesDeviceForKnownJID(t *testing.T)
 	}
 }
 
+// F214: both default-callback and logger-callback paths must set
+// UseRetryMessageStore so the durable retry store is always active.
+func TestNewSessionProviderAdapter_DefaultCallback_EnablesRetryStore(t *testing.T) {
+	container := &fakeDeviceContainer{
+		NewDeviceFn: func() *store.Device { return &store.Device{} },
+	}
+	p := NewSessionProviderAdapter(container, nil, nil)
+	sess, err := p.NewSession(context.Background(), appport.SessionSpec{UserID: "u1"})
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	cli := sess.(*wanoiseSession).WaNoiseClient()
+	if cli == nil {
+		t.Fatal("WaNoiseClient returned nil for default callback")
+	}
+	if !cli.UseRetryMessageStore {
+		t.Error("UseRetryMessageStore is false; the durable retry store must be enabled (F214)")
+	}
+}
+
+func TestNewSessionProviderWithLogger_EnablesRetryStore(t *testing.T) {
+	container := &fakeDeviceContainer{
+		NewDeviceFn: func() *store.Device { return &store.Device{} },
+	}
+	p := NewSessionProviderWithLogger(container, nil, nil)
+	sess, err := p.NewSession(context.Background(), appport.SessionSpec{UserID: "u1"})
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	cli := sess.(*wanoiseSession).WaNoiseClient()
+	if cli == nil {
+		t.Fatal("WaNoiseClient returned nil for logger callback")
+	}
+	if !cli.UseRetryMessageStore {
+		t.Error("UseRetryMessageStore is false; the durable retry store must be enabled (F214)")
+	}
+}
+
 var (
 	_ appport.SessionProvider = (*SessionProviderAdapter)(nil)
 	_ appport.Session         = (*wanoiseSession)(nil)

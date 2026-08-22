@@ -19640,16 +19640,71 @@ alternativa LID<->PN. A hipótese "o retry veio pela LID e gravámos pela PN"
 foi verificada no código e **está refutada**.
 
 **Correção sugerida**: ligar `UseRetryMessageStore` na construção do cliente,
-para o caminho durável que já existe passar a ser usado. Antes disso, medir o
-custo: o store guarda o protobuf de cada mensagem enviada, e o `CLAUDE.md`
-manda inventariar quem passa a disputar um recurso limitado antes de o limitar
-— aqui o recurso é disco, e o expurgo (`DeleteOldOutgoingEvents`, throttled por
-`StoreClearInterval`) tem de ser medido junto.
+para o caminho durável que já existe passar a ser usado.
 
-**Status**: não corrigido — fora do escopo da tarefa atual. Pergunta pendente
-ao utilizador.
+### Inventário de disputantes do recurso (Regra 1 — CLAUDE.md)
 
-<!-- f-status: aberto -->
+O recurso limitado é **disco** (tabela `wanoise_retry_buffer`). Disputantes:
+
+| Disputante | O que grava | Pior caso de ocupação |
+|---|---|---|
+| `retry.AddRecent` (via `UseMessageStore()`) | protobuf serializado de CADA mensagem enviada | 1 linha por mensagem, retida por `outgoingEventRetention = 7×24h` |
+| `retry.AddRecent` (expurgo) | `DeleteOldOutgoingEvents` throttled por `StoreClearInterval = 12h` | no máximo 12h de atraso entre apagamentos |
+
+### Medição de custo (Regra 2 — medir onde deveria PIORAR)
+
+Medição com protobuf realista (seis tipos de mensagem), serializado e medido:
+
+| Tipo de mensagem | Tamanho serializado |
+|---|---|
+| text curto | 17 bytes |
+| text longo (500 chars) | 503 bytes |
+| extended text com URL | 229 bytes |
+| imagem com thumbnail 5KB | 5.268 bytes |
+| documento com thumbnail 3KB | 3.251 bytes |
+| carrossel interativo 4 cards | 13.263 bytes |
+| **média** | **3.755 bytes** |
+
+Projeção semanal (retenção de 7 dias):
+
+| Volume diário | Custo médio 7d | Pior caso (todas imagem) |
+|---|---|---|
+| 100 msgs/dia | 2,51 MB | 3,52 MB |
+| 500 msgs/dia | 12,53 MB | 17,58 MB |
+| 1.000 msgs/dia | 25,07 MB | 35,17 MB |
+| 5.000 msgs/dia | 125,34 MB | 175,84 MB |
+
+**Onde deveria PIORAR**: envio massivo de média com thumbnails grandes (5KB+
+por thumbnail). No pior caso medido (todas as mensagens são imagens com
+thumbnail de 5KB), 5.000 msgs/dia custam ~176 MB em 7 dias. É aceitável para
+qualquer ambiente com banco de dados — o `DeleteOldOutgoingEvents` expurga
+tudo com mais de 7 dias, throttled a cada 12h.
+
+**Correção aplicada**: `UseRetryMessageStore = true` em ambos os callbacks de
+construção do cliente em `pkg/infra/wa-noise/runtime/session/provider.go`
+(linhas 64 e 78).
+
+**Testes que travam**:
+- `TestNewSessionProviderAdapter_DefaultCallback_EnablesRetryStore` — verifica
+  que o callback default (sem logger) liga o store.
+- `TestNewSessionProviderWithLogger_EnablesRetryStore` — verifica que o
+  callback com logger liga o store.
+
+**Controlo negativo executado** — com a correção revertida, ambos os testes
+falham:
+
+```
+=== RUN   TestNewSessionProviderAdapter_DefaultCallback_EnablesRetryStore
+    provider_test.go:168: UseRetryMessageStore is false; the durable retry store must be enabled (F214)
+--- FAIL: TestNewSessionProviderAdapter_DefaultCallback_EnablesRetryStore (0.00s)
+=== RUN   TestNewSessionProviderWithLogger_EnablesRetryStore
+    provider_test.go:186: UseRetryMessageStore is false; the durable retry store must be enabled (F214)
+--- FAIL: TestNewSessionProviderWithLogger_EnablesRetryStore (0.00s)
+```
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->
 
 ## F215 — o nosso próprio eco não decifra e dispara `UndecryptableMessage` para o webhook
 

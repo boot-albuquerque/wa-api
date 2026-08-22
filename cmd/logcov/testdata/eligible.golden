@@ -2980,7 +2980,7 @@ pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.EnsureSession	ELIGIBLE	un
 pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.Logout	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,guard.go:91);uncovered:L2(S-ret,guard.go:108);uncovered:L2(S-ret,guard.go:117)
 pkg/infra/wa-noise/runtime/session.SessionGuardAdapter.SessionStatus	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/runtime/session.SessionProviderAdapter.NewSession	ELIGIBLE	uncovered:L1
-pkg/infra/wa-noise/runtime/session.SessionProviderAdapter.resolveDevice	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,provider.go:118)
+pkg/infra/wa-noise/runtime/session.SessionProviderAdapter.resolveDevice	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,provider.go:122)
 pkg/infra/wa-noise/runtime/session.translateSessionEvent	EXCLUDED	X1
 pkg/infra/wa-noise/runtime/session.wanoiseSession.Connect	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,session.go:45)
 pkg/infra/wa-noise/runtime/session.wanoiseSession.Disconnect	EXCLUDED	X1

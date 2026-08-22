@@ -61,7 +61,9 @@ func NewSessionProviderAdapter(
 ) *SessionProviderAdapter {
 	if newClient == nil {
 		newClient = func(dev *store.Device) sessionClient {
-			return wanoise.NewClient(dev, nil)
+			cli := wanoise.NewClient(dev, nil)
+			cli.UseRetryMessageStore = true
+			return cli
 		}
 	}
 	return &SessionProviderAdapter{container: container, lookupJID: lookupJID, newClient: newClient}
@@ -74,7 +76,9 @@ func NewSessionProviderAdapter(
 // log, como wa-noise.NewClient(dev, nil).
 func NewSessionProviderWithLogger(container deviceContainer, lookupJID DeviceJIDLookup, logger waLog.Logger) *SessionProviderAdapter {
 	return NewSessionProviderAdapter(container, lookupJID, func(dev *store.Device) sessionClient {
-		return wanoise.NewClient(dev, logger)
+		cli := wanoise.NewClient(dev, logger)
+		cli.UseRetryMessageStore = true
+		return cli
 	})
 }
 
