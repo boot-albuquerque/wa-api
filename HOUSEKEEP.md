@@ -20143,7 +20143,59 @@ três propriedades: chamada, recusa em falha, e ordem.
 **Status**: corrigido (pela F200/F201, confirmado e travado em teste nesta
 sessão).
 
-<!-- f-status: corrigido -->
+
+### CORREÇÃO 2026-08-22 — as DUAS explicações estavam erradas, e o sintoma continua
+
+O diagnóstico acima (cache não invalidada) é **MEU e está REFUTADO**. E a
+conclusão que fechou este achado — "já corrigido pela F200/F201" — também não
+explica o sintoma. As duas coisas são verdade em separado e nenhuma responde ao
+que foi medido.
+
+**O que é verdade**: o `EditUser` JÁ invalida a cache. Recebe um
+`appport.UserInfoRepublisher` (`edit_user.go:19,32`) e o adapter
+(`pkg/bootstrap/user_republish_adapter.go:32`) faz `appCtx.UserInfoCache.Delete(userID)`
+mais a varredura das entradas de token. Isso foi feito na F200/F201, antes desta
+sessão. Eu não o vi porque procurei `UserInfoCache` dentro de `edit_user.go`, e
+a invalidação está atrás de uma PORTA — exatamente como a arquitetura hexagonal
+manda. **Procurar pelo nome concreto num use case é o erro; o use case fala com
+portas.**
+
+**A causa REAL do sintoma medido**, encontrada depois:
+
+```go
+// pkg/application/usecase/session/get_status.go:81
+return &domain.GetStatusResult{
+    ...
+    Webhook:   entry.Webhook,     // vem do entry
+    Events:    entry.Events,      // vem do entry
+    History:   "0",               // <- LITERAL FIXO
+```
+
+`/session/status` **nunca leu** o histórico. Devolve a string `"0"` para toda a
+gente, sempre, independentemente do banco e de qualquer cache. É por isso que
+na medição o `webhook` propagou e o `history` não: um vem do `entry`, o outro é
+constante.
+
+Introduzido em `670d01c` ("implementar GetQR/GetStatus com leitura real de
+persistencia") — ficou por converter quando os outros campos passaram a ser
+reais. Não é escolha deliberada, é implementação incompleta.
+
+**Por que isto NÃO se fecha como corrigido**: o `UserEntry` que o use case
+recebe não tem o campo. Corrigir exige passá-lo pela porta de persistência até
+ao `GetStatusResult` — não é uma linha, e não estava no escopo aprovado.
+
+**O que a onda ENTREGOU e vale**: três testes que travam a republicação e a sua
+ORDEM (`TestEditUser_RepublicaAposEscritaBemSucedida`,
+`TestEditUser_NaoRepublicaQuandoAEscritaFalha`,
+`TestEditUser_RepublicaDEPOISDaEscritaENaoAntes`), com controlo negativo
+executado. Esses testes são bons e ficam: a invariante existia sem estar
+travada. Mas travam a F200/F201, não isto.
+
+**Status**: NÃO corrigido. Causa real localizada em
+`get_status.go:81`. Escopo da correção: levar o histórico do
+repositório até ao `GetStatusResult`.
+
+<!-- f-status: aberto -->
 
 ## F220 — a cache do golangci-lint faz o gate reportar ficheiros de worktrees APAGADAS
 
