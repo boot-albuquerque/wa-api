@@ -218,12 +218,38 @@ func TestProbeChannelAdminChain(t *testing.T) {
 		(async () => {
 		try {
 			const W = window.require("WAWebWidFactory");
-			const NC = window.require("WAWebCollections").WAWebNewsletterCollection;
-			const ch = NC.get(` + strconv.Quote(made.JID) + `);
-			if (!ch) { window.__ca3 = JSON.stringify({ok:false, why:"own channel not in the collection"}); return; }
-			await window.require("WAWebDemoteNewsletterAdminAction")
-				.demoteNewsletterAdminAction(ch, [W.createWid(` + strconv.Quote(peerResolved) + `)]);
-			window.__ca3 = JSON.stringify({ok:true});
+			// O NOME E AS FORMAS SAO OS QUE A REFERENCIA CHAMA, lidos do codigo
+			// dela (Client.js:1896-1905), nao inferidos do nome do metodo:
+			// demoteNewsletterAdmin(channelId STRING, userWid WID). Eu tinha
+			// usado demoteNewsletterAdminAction(modelo, [wid]) — nome errado e
+			// duas formas erradas —, que e' exatamente a armadilha que a H134
+			// registrou e que eu repeti horas depois.
+			// ENUMERAR ANTES DE CHAMAR. Duas tentativas com nomes tirados da
+			// referencia falharam — demoteNewsletterAdminAction (forma errada) e
+			// demoteNewsletterAdmin (inexistente aqui). Adivinhar uma terceira
+			// seria repetir o erro; o modulo diz o que tem.
+			const M = window.require("WAWebDemoteNewsletterAdminAction");
+			const names = Object.keys(M);
+			const arity = {};
+			for (const k of names) { if (typeof M[k] === "function") { arity[k] = M[k].length; } }
+			const fn = names.find(k => typeof M[k] === "function");
+			if (!fn) { window.__ca3 = JSON.stringify({ok:false, why:"no callable in the module", names}); return; }
+			let called = null, callErr = null;
+			try {
+				await M[fn](` + strconv.Quote(made.JID) + `, W.createWid(` + strconv.Quote(peerResolved) + `));
+				called = "id+wid";
+			} catch (e) { callErr = safe(e); }
+			if (!called) {
+				try {
+					const NC = window.require("WAWebCollections").WAWebNewsletterCollection;
+					const ch = NC.get(` + strconv.Quote(made.JID) + `);
+					const CC = window.require("WAWebContactCollection").ContactCollection;
+					const contact = CC.get(W.createWid(` + strconv.Quote(peerResolved) + `));
+					await M[fn](ch, contact);
+					called = "model+contact";
+				} catch (e) { callErr = callErr + " | model+contact: " + safe(e); }
+			}
+			window.__ca3 = JSON.stringify({ok: !!called, via: called, names, arity, why: callErr});
 		} catch (e) { window.__ca3 = JSON.stringify({ok:false, why: safe(e)}); }
 		})();
 		return "kicked";

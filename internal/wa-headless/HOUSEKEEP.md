@@ -10672,3 +10672,52 @@ o sucesso silencioso que ela existe para pegar.
   deliberada, escrita como tal.
 
 **Status**: entregue — 3 de 5 provadas, 2 abertas com a causa isolada.
+
+## H137 — o demote: três nomes errados, e a única saída foi perguntar ao módulo
+
+**Data**: 2026-08-22. **Contexto**: `demoteChannelAdmin`, a linha que a H136
+deixou aberta com "a forma do segundo argumento não foi resolvida".
+
+**Onde**: `internal/wa-headless/probe_chanadmin_test.go`.
+
+### Três tentativas, três formas de errar o mesmo alvo
+
+1. `demoteNewsletterAdminAction(wid, [wid])` →
+   `Data passed to getter must include an id property`.
+2. `demoteNewsletterAdminAction(modelo, [wid])` →
+   `Cannot read properties of undefined (reading 'isUser')`.
+3. `demoteNewsletterAdmin(idString, wid)` — o nome que a **referência** chama
+   (`Client.js:1905`) → `is not a function`.
+
+A terceira dói mais que as outras duas: eu tinha escrito a regra da H134 há
+poucas horas — *"use o nome que a REFERÊNCIA chama, lido do código dela"* — e ela
+não bastou. A referência chama um nome que **este build não tem**.
+
+### A saída foi parar de adivinhar
+
+```
+names:  [demoteNewsletterAdminAction]
+arity:  {demoteNewsletterAdminAction: 2}
+via:    model+contact   ->  ok
+```
+
+O módulo tem **uma** função, com aridade 2, e as formas são o **modelo do canal**
+e o **modelo do contato** — nem id, nem Wid, nem array.
+
+**A regra da H134 fica corrigida, não descartada**: ler o nome na referência é o
+primeiro passo e não o último. Quando ele falha, o passo seguinte é ENUMERAR o
+módulo — `Object.keys` mais aridade — em vez de tentar uma quarta variação. Três
+tentativas custaram três execuções ao vivo; a enumeração custou uma.
+
+### E mesmo assim não é `PROVEN`
+
+A chamada responde ok. Verificar que o rebaixamento ACONTECEU exigiria ler a
+lista de administradores, e `WAWebMexFetchNewsletterSubscribersJob` — o módulo
+que a referência usa para isso — não existe neste build (H113).
+
+Então a linha fica `BLOCKED` com a forma resolvida e a pós-condição ausente. É a
+mesma situação da H133 com a política de reação: **a chamada funcionar não é a
+coisa acontecer**, e este módulo não assina a diferença.
+
+**Status**: parcialmente entregue — forma resolvida e registrada, prova
+impossível por falta de oráculo.
