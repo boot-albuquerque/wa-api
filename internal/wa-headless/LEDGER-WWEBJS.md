@@ -47,9 +47,9 @@ nem `PARTIAL` sem justificativa explícita.
 | `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `searchMessages` | — | `MISSING` | — | — | — | — |
 | `getChats` | chats.List | `PROVEN` | sim | sim | sim | — |
-| `getChannels` | — | `MISSING` | — | — | — | não atacado |
+| `getChannels` | — | `MISSING` | — | — | — | lista os canais SEGUIDOS, e esta conta não segue nenhum (`modelCount` 0). Não é falta de código: falta uma inscrição (H104) |
 | `getChatById` | resolução interna às capacidades | `PARTIAL` | sim | sim | sim | existe como passo interno, não como capacidade exposta |
-| `getChannelByInviteCode` | — | `MISSING` | — | — | — | não atacado |
+| `getChannelByInviteCode` | channel.ByInviteCode | `PROVEN` | sim | sim | sim | provado contra canal público real: jid `@newsletter`, nome, **45.460 assinantes**, `state=active`, `verification=verified`, e `following=false` — **nada foi seguido**. Aceita o link inteiro, não só o código (H104) |
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
 | `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
 | `getMessageById` | varredura da MsgCollection nas capacidades | `PARTIAL` | sim | sim | sim | idem |
@@ -163,11 +163,20 @@ módulos presentes com aridade batendo com a referência; só
 envio inteira existe (`sendNewsletterTextMsg`, `MediaMsg`, `PollCreationMsg`,
 `AlbumMsg`, `EditMsg`).
 
-O que trava a implementação não é código: `modelCount` é **0** porque a conta não
-segue canal nenhum, e o discovery do próprio app —
-`getRecommendedNewsletters` — **não responde nem ao seu próprio timeout de 8s**,
-medido em quatro execuções. Reabre com um link de canal público real:
-`queryNewsletterMetadataByInviteCode` tem aridade 2 e a inscrição é um passo.
+**E a família destravou sem tocar na conta** (H104). O plano era seguir um canal
+e devolver; acabou desnecessário: `queryNewsletterMetadataByInviteCode` responde
+para um canal que esta conta **não** segue e carrega a forma inteira. O mixin de
+membership volta `null`, que é precisamente o que diz "não sou membro" — a
+leitura prova a si mesma.
+
+A forma é de **MIXINS**, e a referência não a descreve. Não existe campo `name`
+no topo; existe `newsletterNameMetadataMixin.nameElementValue`. Ler o campo óbvio
+devolve `undefined` para sempre — quarta ocorrência dessa classe aqui.
+
+O discovery do próprio app (`getRecommendedNewsletters`) continua **sem
+responder nem ao próprio timeout de 8s**, medido em quatro execuções. Ele não é
+mais necessário para ler, mas continua sendo o que falta para DESCOBRIR um canal
+sem link.
 
 | upstream | estado |
 |---|---|
@@ -405,9 +414,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 52 | 24% |
+| `PROVEN` | 53 | 24% |
 | `PARTIAL` | 47 | 21% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 116 | 53% |
+| `MISSING` | 115 | 52% |
 | **total** | **220** | |

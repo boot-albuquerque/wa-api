@@ -8242,3 +8242,74 @@ próprio lugar onde a tentação existe.
 
 **Status**: entregue — leitura de catálogo provada ao vivo contra vendedor real,
 sem criar nada, com a forma e a assinatura corrigidas contra a referência.
+
+---
+
+## H104 — o canal lido de fora, e a inscrição que não foi precisa
+
+**Data**: 2026-08-21.
+**Contexto**: o humano forneceu um link de canal público, que era a única coisa
+que faltava e a única que nem eu nem a orquestração podíamos produzir sem
+adivinhar o canal de terceiro.
+
+### O plano era seguir e devolver. Não foi preciso nenhum dos dois
+
+`queryNewsletterMetadataByInviteCode` responde para um canal que esta conta
+**não** segue, e carrega a forma inteira. A família destravou **sem tocar na
+conta**.
+
+E a prova é interna: o `newsletterMembershipMetadataMixin` volta **`null`**, que é
+exatamente o que diz "não sou membro". A leitura prova a si mesma — não preciso
+afirmar que não segui, o dado afirma.
+
+Medido contra o canal real:
+
+```
+jid @newsletter · nome presente · 45.460 assinantes
+state=active · verification=verified · following=false · picture=true
+```
+
+### A forma é de MIXINS, e é a quarta vez que isto aparece
+
+Não existe campo `name` no topo. Existe:
+
+```
+newsletterNameMetadataMixin.nameElementValue
+newsletterSubscribersMetadataMixin.subscribersCount
+newsletterStateMetadataMixin.stateType
+newsletterVerificationMetadataMixin.verificationState
+newsletterCreationTimeMetadataMixin.creationTimeValue
+newsletterInviteLinkMetadataMixin.inviteCode
+newsletterDescriptionMetadataMixin.descriptionQueryDescriptionResponseMixin  <- mais um nivel
+newsletterMembershipMetadataMixin  -> null quando nao se e membro
+```
+
+A primeira leitura reportou `hasName: false` e `subscribersType: undefined`, e a
+tentação era concluir "o campo não vem". Vinha — uma camada abaixo. **Ler o campo
+óbvio devolveria `undefined` para sempre**, que é a mesma classe do
+`chatstate.type` (H94), do `products` em vez de `data` (H103) e do agregado de
+reações (H83). Quarta ocorrência.
+
+### O link inteiro é aceito, e isso não é conveniência
+
+Quem chama segura um **link**, não um código. Obrigá-lo a cortar é obrigá-lo a
+saber uma coisa que este pacote já sabe, e o link colado inteiro é a forma que de
+fato chega a um programa.
+
+### O que continua faltando, e agora está nomeado com precisão
+
+`getChannels` lista os canais **seguidos**, e a conta não segue nenhum. Não é
+falta de código: falta uma inscrição. E `getRecommendedNewsletters` continua sem
+responder **nem ao próprio timeout de 8 s** — não é mais necessário para LER, mas
+continua sendo o que falta para DESCOBRIR um canal sem link.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| ler `r.name` em vez do mixin | `TestTheReadGoesThroughTheMixins` | `the script does not read newsletterNameMetadataMixin` |
+| fixar `member: false` | `TestFollowingComesFromTheMembershipMixin` | `membership is hardcoded` |
+| tratar código desconhecido como falha de leitura | `TestAnUnknownCodeIsItsOwnError` | `err = …, want ErrNotFound` |
+
+**Status**: entregue — `getChannelByInviteCode` provado contra canal real, sem
+seguir nada e sem deixar rastro na conta.
