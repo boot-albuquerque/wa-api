@@ -39,6 +39,13 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	switch {
 	case strings.Contains(expr, "window."+stateKeyMine+" ||"):
 		if p.mineFails {
@@ -296,6 +303,13 @@ type stallingDouble struct{}
 func (p *stallingDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
 	}
 	if strings.Contains(expr, "const s = window[") {
 		*out = `{"stage":"pending","ok":false,"why":""}`

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -81,7 +82,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Starrer {
 	return &Starrer{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessStar"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other and each polled it
+// until it stopped saying "pending", so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessStar"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Star marks a message.
 func (s *Starrer) Star(ctx context.Context, msgID, label string) (Result, error) {
@@ -99,9 +111,10 @@ func (s *Starrer) set(ctx context.Context, msgID string, want bool, label string
 	}
 	start := time.Now()
 
+	key := nextStateKey()
 	var kicked string
 	if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return s.eval(ctx, starScript(msgID, want), &kicked)
+		return s.eval(ctx, starScript(msgID, want, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrStar, err)
 	}
@@ -118,7 +131,7 @@ func (s *Starrer) set(ctx context.Context, msgID string, want bool, label string
 	for {
 		var raw string
 		if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return s.eval(ctx, resultScript, &raw)
+			return s.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrStar, err)
 		}
@@ -126,6 +139,12 @@ func (s *Starrer) set(ctx context.Context, msgID string, want bool, label string
 			return Result{}, fmt.Errorf("star: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" && out.Stage != "settling" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = s.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return s.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -158,10 +177,10 @@ func (s *Starrer) set(ctx context.Context, msgID string, want bool, label string
 	return res, nil
 }
 
-func starScript(msgID string, want bool) string {
+func starScript(msgID string, want bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -217,8 +236,9 @@ func starScript(msgID string, want bool) string {
 // resultScript never serialises the parked message model — it reads one boolean
 // off it and builds the answer itself. Handing a page model to JSON.stringify is
 // how a probe finds out what a cyclic object graph costs.
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	if (s.stage === 'settling') {
 		const now = !!(s.msg && s.msg.star);
@@ -230,3 +250,4 @@ const resultScript = `JSON.stringify((() => {
 	}
 	return s;
 })())`
+}

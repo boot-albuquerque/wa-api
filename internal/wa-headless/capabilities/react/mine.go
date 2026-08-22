@@ -27,9 +27,11 @@ const stateKeyMine = "__waHeadlessReactMine"
 // that hides itself: a removal that verifies here and reads back as present
 // there, with both halves looking correct alone.
 func (r *Reactor) mineOn(ctx context.Context, msgID, label string) (bool, error) {
+	key := nextStateKey()
+
 	var kicked string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/mine-kick", func(ctx context.Context) error {
-		return r.eval(ctx, mineScript(msgID), &kicked)
+		return r.eval(ctx, mineScript(msgID, key), &kicked)
 	}); err != nil {
 		return false, fmt.Errorf("%w: %v", ErrReact, err)
 	}
@@ -70,7 +72,7 @@ func (r *Reactor) mineOn(ctx context.Context, msgID, label string) (bool, error)
 	}
 }
 
-func mineScript(msgID string) string {
+func mineScript(msgID string, key string) string {
 	return `(() => {
 	window.` + stateKeyMine + ` = null;
 	const park = v => { window.` + stateKeyMine + ` = JSON.stringify(v); };

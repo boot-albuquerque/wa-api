@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -85,7 +86,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Revoker {
 	return &Revoker{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessRevoke"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessRevoke"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // ForEveryone deletes a message from every participant's phone.
 //
@@ -99,9 +111,11 @@ func (r *Revoker) ForEveryone(ctx context.Context, msgID string, clearMedia bool
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return r.eval(ctx, revokeScript(msgID, clearMedia), &kicked)
+		return r.eval(ctx, revokeScript(msgID, clearMedia, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrRevoke, err)
 	}
@@ -117,7 +131,7 @@ func (r *Revoker) ForEveryone(ctx context.Context, msgID string, clearMedia bool
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return r.eval(ctx, resultScript, &raw)
+			return r.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrRevoke, err)
 		}
@@ -125,6 +139,12 @@ func (r *Revoker) ForEveryone(ctx context.Context, msgID string, clearMedia bool
 			return Result{}, fmt.Errorf("revoke: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -150,10 +170,10 @@ func (r *Revoker) ForEveryone(ctx context.Context, msgID string, clearMedia bool
 	return Result{As: out.As, Waited: time.Since(start)}, nil
 }
 
-func revokeScript(msgID string, clearMedia bool) string {
+func revokeScript(msgID string, clearMedia bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -197,11 +217,13 @@ func revokeScript(msgID string, clearMedia bool) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'revoke', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}
 
 // ForMe deletes a message from THIS DEVICE only.
 //
@@ -225,9 +247,11 @@ func (r *Revoker) ForMe(ctx context.Context, msgID string, clearMedia bool, labe
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return r.eval(ctx, deleteScript(msgID, clearMedia), &kicked)
+		return r.eval(ctx, deleteScript(msgID, clearMedia, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrRevoke, err)
 	}
@@ -242,7 +266,7 @@ func (r *Revoker) ForMe(ctx context.Context, msgID string, clearMedia bool, labe
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return r.eval(ctx, resultScript, &raw)
+			return r.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrRevoke, err)
 		}
@@ -250,6 +274,12 @@ func (r *Revoker) ForMe(ctx context.Context, msgID string, clearMedia bool, labe
 			return Result{}, fmt.Errorf("revoke: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -331,10 +361,10 @@ func loadedScript(msgID string) string {
 // compared by callers and two spellings would be two bugs.
 const asLocal = "local"
 
-func deleteScript(msgID string, clearMedia bool) string {
+func deleteScript(msgID string, clearMedia bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {

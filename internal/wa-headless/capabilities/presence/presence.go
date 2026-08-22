@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -136,7 +137,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Announcer {
 	return &Announcer{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessPresence"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessPresence"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Set announces a state in the chat with toJID.
 //
@@ -152,7 +164,7 @@ func (a *Announcer) Set(ctx context.Context, toJID string, s State, label string
 	if strings.TrimSpace(toJID) == "" {
 		return ErrNoChat
 	}
-	out, err := a.run(ctx, setScript(toJID, fn), label)
+	out, err := a.run(ctx, func(key string) string { return setScript(toJID, fn, key) }, label)
 	if err != nil {
 		return err
 	}
@@ -174,7 +186,7 @@ func (a *Announcer) SetOnline(ctx context.Context, available bool, label string)
 	if available {
 		fn = "sendPresenceAvailable"
 	}
-	out, err := a.run(ctx, onlineScript(fn), label)
+	out, err := a.run(ctx, func(key string) string { return onlineScript(fn, key) }, label)
 	if err != nil {
 		return err
 	}
@@ -206,7 +218,7 @@ func (a *Announcer) Observe(ctx context.Context, ofJID, label string) (Snapshot,
 	var out wireOut
 	for {
 		var err error
-		out, err = a.run(ctx, observeScript(ofJID), label)
+		out, err = a.run(ctx, func(key string) string { return observeScript(ofJID, key) }, label)
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -236,7 +248,17 @@ type wireOut struct {
 	ChatState  string `json:"chatstate"`
 }
 
-func (a *Announcer) run(ctx context.Context, script, label string) (wireOut, error) {
+// run takes a script BUILDER, not a script.
+//
+// A CHAVE SO' EXISTE AQUI DENTRO (H177): cada chamada estaciona a resposta na sua
+// propria global, e quem monta o script precisa dela. Receber a string pronta
+// obrigaria o chamador a gerar a chave e a passa-la duas vezes, o que e' convite
+// a passar chaves DIFERENTES — e ai o defeito volta numa forma mais dificil de
+// ver que a original.
+func (a *Announcer) run(ctx context.Context, build func(key string) string, label string) (wireOut, error) {
+	key := nextStateKey()
+	script := build(key)
+
 	var kicked string
 	if err := a.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
 		return a.eval(ctx, script, &kicked)
@@ -247,7 +269,7 @@ func (a *Announcer) run(ctx context.Context, script, label string) (wireOut, err
 	for {
 		var raw string
 		if err := a.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return a.eval(ctx, resultScript, &raw)
+			return a.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return wireOut{}, fmt.Errorf("%w: %v", ErrPresence, err)
 		}
@@ -285,10 +307,10 @@ const chatLookupExpr = `(async function (jidString) {
 	return { ok: true, wid: r.wid, jid: r.jid, chat: chat };
 })`
 
-func setScript(toJID, fn string) string {
+func setScript(toJID, fn string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		const lookup = ` + chatLookupExpr + `;
 		(async () => {
 		let stage = 'resolve';
@@ -309,10 +331,10 @@ func setScript(toJID, fn string) string {
 	})())`
 }
 
-func onlineScript(fn string) string {
+func onlineScript(fn string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'announce';
 		try {
@@ -327,10 +349,10 @@ func onlineScript(fn string) string {
 	})())`
 }
 
-func observeScript(ofJID string) string {
+func observeScript(ofJID string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		const lookup = ` + chatLookupExpr + `;
 		(async () => {
 		let stage = 'resolve';
@@ -383,11 +405,13 @@ func observeScript(ofJID string) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'announce', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}
 
 // SetSubscribeBudget changes how long Observe waits for a subscription to be
 // reflected.

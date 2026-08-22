@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -84,7 +85,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Reactor {
 	return &Reactor{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessReact"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessReact"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Add puts an emoji on a message and returns only after the page shows it.
 func (r *Reactor) Add(ctx context.Context, msgID, emoji, label string) (Result, error) {
@@ -119,9 +131,11 @@ func (r *Reactor) set(ctx context.Context, msgID, emoji string, want bool, label
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return r.eval(ctx, reactScript(msgID, emoji), &kicked)
+		return r.eval(ctx, reactScript(msgID, emoji, key), &kicked)
 	}); err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrReact, err)
 	}
@@ -136,7 +150,7 @@ func (r *Reactor) set(ctx context.Context, msgID, emoji string, want bool, label
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return r.eval(ctx, resultScript, &raw)
+			return r.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Result{}, fmt.Errorf("%w: %v", ErrReact, err)
 		}
@@ -144,6 +158,12 @@ func (r *Reactor) set(ctx context.Context, msgID, emoji string, want bool, label
 			return Result{}, fmt.Errorf("react: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -267,10 +287,10 @@ func readScript(msgID string) string {
 	})())`
 }
 
-func reactScript(msgID, emoji string) string {
+func reactScript(msgID, emoji string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -316,8 +336,10 @@ func reactScript(msgID, emoji string) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'react', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}

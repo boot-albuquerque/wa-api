@@ -31,6 +31,13 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		if !p.ok {
 			stage := p.stage
@@ -153,7 +160,7 @@ func TestTheCeilingIsCheckedBeforeDownloading(t *testing.T) {
 	// the refusal and the download, and a negative control that changed the
 	// condition to `if (false && ...)` PASSED — the refusal was still in the
 	// right place and no longer reachable. Position is not enforcement.
-	kick := downloadScript(msgID)
+	kick := downloadScript(msgID, "k")
 	if !strings.Contains(kick, "if (msg.size && Number(msg.size) > ") {
 		t.Fatal("the declared size is read but does not guard a refusal")
 	}
@@ -174,7 +181,7 @@ func TestNotMediaAndNotOnPhoneAreDistinct(t *testing.T) {
 	if _, err := downloader(np).Get(context.Background(), msgID, "t"); !errors.Is(err, ErrNotOnPhone) {
 		t.Fatalf("got %v, want ErrNotOnPhone", err)
 	}
-	if !strings.Contains(downloadScript(msgID), "!msg.directPath || !msg.mediaKey || !msg.filehash") {
+	if !strings.Contains(downloadScript(msgID, "k"), "!msg.directPath || !msg.mediaKey || !msg.filehash") {
 		t.Fatal("the script does not check the message carries an attachment at all")
 	}
 }

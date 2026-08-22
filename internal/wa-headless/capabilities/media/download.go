@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -105,7 +106,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Downloader {
 	return &Downloader{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessMediaDownload"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessMediaDownload"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Get downloads and decrypts the attachment of one message.
 func (d *Downloader) Get(ctx context.Context, msgID, label string) (Attachment, error) {
@@ -114,9 +126,11 @@ func (d *Downloader) Get(ctx context.Context, msgID, label string) (Attachment, 
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := d.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return d.eval(ctx, downloadScript(msgID), &kicked)
+		return d.eval(ctx, downloadScript(msgID, key), &kicked)
 	}); err != nil {
 		return Attachment{}, fmt.Errorf("%w: %v", ErrDownload, err)
 	}
@@ -135,7 +149,7 @@ func (d *Downloader) Get(ctx context.Context, msgID, label string) (Attachment, 
 	for {
 		var raw string
 		if err := d.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return d.eval(ctx, resultScript, &raw)
+			return d.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Attachment{}, fmt.Errorf("%w: %v", ErrDownload, err)
 		}
@@ -143,6 +157,12 @@ func (d *Downloader) Get(ctx context.Context, msgID, label string) (Attachment, 
 			return Attachment{}, fmt.Errorf("media: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = d.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return d.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -189,10 +209,10 @@ func (d *Downloader) Get(ctx context.Context, msgID, label string) (Attachment, 
 		Waited: time.Since(start)}, nil
 }
 
-func downloadScript(msgID string) string {
+func downloadScript(msgID string, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -265,8 +285,10 @@ func downloadScript(msgID string) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'download', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}

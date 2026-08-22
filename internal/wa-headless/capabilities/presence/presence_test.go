@@ -24,6 +24,13 @@ type pageDouble struct {
 }
 
 func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	// THE DOUBLE HONOURS ctx, because the production Evaluate does (H30).
 	if err := ctx.Err(); err != nil {
 		return err
@@ -273,6 +280,13 @@ func (p *lateSubscribeDouble) eval(ctx context.Context, expr string, out *string
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		p.reads++
 		if p.reads < p.flipAfter {
@@ -296,7 +310,7 @@ func (p *lateSubscribeDouble) eval(ctx context.Context, expr string, out *string
 // even throw — it just answers "" forever, which is indistinguishable from a
 // capability that was never wired (H94).
 func TestTheTypingStateIsReadFromTheListsThatMove(t *testing.T) {
-	script := observeScript("5541999999999@c.us")
+	script := observeScript("5541999999999@c.us", "k")
 	for _, want := range []string{"p.typingUserIds", "p.recordingUserIds"} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the observe script does not read %s", want)

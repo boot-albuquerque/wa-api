@@ -5882,3 +5882,56 @@ rastreados e deixa os que você CRIOU, e o que sobra costuma referir o que sumiu
 A verificação depois de reverter tem de ser a mesma que depois de mudar — build e
 teste —, e eu só a fiz porque o `go test` reclamou; se tivesse confiado no
 `checkout`, teria commitado uma árvore que não compila em dois pacotes.
+
+---
+
+## H181 — 25 de 26, e a 26ª está fora POR DESENHO
+
+**Data**: 2026-08-22
+**Contexto**: fechamento do defeito de severidade alta da H177.
+
+**Corrigidas e travadas: 25 de 26.** As sete últimas — `star`, `revoke`, `media`,
+`pin`, `presence`, `react` e `messagemeta` — feitas à mão, lendo cada arquivo,
+depois de os transforms terem falhado três vezes na cauda.
+
+### A 26ª não é dívida: `messagemeta` fica com chave única, de propósito
+
+**A diferença é O QUE A CHAVE GUARDA.** Nas 25, ela guarda a RESPOSTA de uma
+chamada, e duas chamadas concorrentes escreviam a mesma variável — 12 cruzamentos
+em 12 rodadas. No `messagemeta` ela guarda uma **ASSINATURA** de longa duração:
+`installScript` instala uma vez (e sai cedo se já estiver instalada) e
+`drainScript` esvazia o buffer. **Há uma assinatura por sessão por desenho**, e
+dar-lhe chave por chamada quebraria exatamente isso — o install escreveria uma
+chave e o drain leria outra.
+
+Registrado no próprio arquivo, para que a próxima varredura não o "conserte".
+
+### O que a cauda ensinou, caso por caso
+
+- **`revoke`**: o `loadedScript` — que eu mesmo escrevi na H143 — **não estaciona**,
+  devolve JSON direto. O transform deu-lhe chave só por casar `\w+Script`.
+  Assinatura revertida. Mesmo caso em `pin.pinnedInScript` e `react.readScript`.
+- **`presence`**: mesma forma do `settings` — `run` gerava a chave e o script vinha
+  pronto do chamador. Invertido para construtor.
+- **`addressbook`** (H180): script que não estaciona mas usa o `prelude` pelos
+  helpers, e o prelude cria o global mesmo assim.
+
+**Três dessas correções foram REVERSÕES de algo que o transform tinha feito.** Um
+nome terminado em `Script` não diz se a função estaciona; só o corpo diz.
+
+### Um dublê que escondia o erro em dois de três
+
+O `revoke` tem **três** dublês e o meu ajuste entrou só no primeiro. O
+`TestTheLocalDeleteDoesNotConsultTheRevokeEntitlement` falhou porque a liberação
+virou `lastScript` no `localDouble`. Corrigido para percorrer TODOS os dublês de
+cada arquivo.
+
+**Status**: `make check` verde, 35 pacotes de capacidade passam, e a sonda de
+concorrência contra o build real segue com **0 respostas trocadas**. O achado de
+severidade alta da H177 está **fechado**.
+
+**Lição**: *automação cobre o meio da distribuição e a cauda é onde a decisão
+mora.* Os transforms fizeram 19 de 26 e falharam em todas as sete restantes, cada
+uma por um motivo distinto — e três delas precisavam do OPOSTO do que o transform
+fazia. O tempo que economizaram foi real; o tempo que teriam custado se eu tivesse
+insistido também.

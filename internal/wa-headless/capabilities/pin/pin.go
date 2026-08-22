@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -95,7 +96,18 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Pinner {
 	return &Pinner{runner: runner, eval: eval}
 }
 
-const stateKey = "__waHeadlessPinMsg"
+// stateKeyPrefix is a PREFIX, not a key (H177). One shared page global meant two
+// concurrent calls on the same session overwrote each other, and each polled it
+// until it stopped saying "pending" — so one could take the other's answer. The
+// nonce comes from Go: a page-side Math.random or Date.now would put a decision
+// and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessPinMsg"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Message pins a message for the build's default duration.
 func (p *Pinner) Message(ctx context.Context, msgID, label string) (Pinned, error) {
@@ -113,9 +125,11 @@ func (p *Pinner) set(ctx context.Context, msgID string, on bool, label string) (
 	}
 	start := time.Now()
 
+	key := nextStateKey()
+
 	var kicked string
 	if err := p.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(ctx context.Context) error {
-		return p.eval(ctx, pinScript(msgID, on), &kicked)
+		return p.eval(ctx, pinScript(msgID, on, key), &kicked)
 	}); err != nil {
 		return Pinned{}, fmt.Errorf("%w: %v", ErrPin, err)
 	}
@@ -131,7 +145,7 @@ func (p *Pinner) set(ctx context.Context, msgID string, on bool, label string) (
 	for {
 		var raw string
 		if err := p.runner.Do(ctx, engine.OpStateProbe, label+"/result", func(ctx context.Context) error {
-			return p.eval(ctx, resultScript, &raw)
+			return p.eval(ctx, resultScript(key), &raw)
 		}); err != nil {
 			return Pinned{}, fmt.Errorf("%w: %v", ErrPin, err)
 		}
@@ -139,6 +153,12 @@ func (p *Pinner) set(ctx context.Context, msgID string, on bool, label string) (
 			return Pinned{}, fmt.Errorf("pin: unexpected answer: %w", err)
 		}
 		if out.Stage != "pending" {
+			// A CHAVE E' LIBERADA ao sair do laco (H177): sem isso a correcao
+			// troca uma resposta cruzada por um global de pagina POR CHAMADA.
+			var ignored string
+			_ = p.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return p.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			break
 		}
 		if !time.Now().Before(deadline) {
@@ -206,10 +226,10 @@ func (p *Pinner) PinnedIn(ctx context.Context, chatJID, label string) ([]string,
 	return out.IDs, nil
 }
 
-func pinScript(msgID string, on bool) string {
+func pinScript(msgID string, on bool, key string) string {
 	return `JSON.stringify((() => {
-		window[` + strconv.Quote(stateKey) + `] = { stage: 'pending', ok: false, why: '' };
-		const park = (v) => { window[` + strconv.Quote(stateKey) + `] = v; };
+		window[` + strconv.Quote(key) + `] = { stage: 'pending', ok: false, why: '' };
+		const park = (v) => { window[` + strconv.Quote(key) + `] = v; };
 		(async () => {
 		let stage = 'find';
 		try {
@@ -292,8 +312,10 @@ func pinnedInScript(chatJID string) string {
 	})())`
 }
 
-const resultScript = `JSON.stringify((() => {
-	const s = window[` + `"` + stateKey + `"` + `];
+func resultScript(key string) string {
+	return `JSON.stringify((() => {
+	const s = window[` + strconv.Quote(key) + `];
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+}

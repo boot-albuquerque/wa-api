@@ -32,6 +32,17 @@ import (
 )
 
 // stateKey is where the page keeps the subscription. Named, not spelled twice.
+//
+// IT CONTINUA SENDO UMA CHAVE ÚNICA, DE PROPÓSITO, e esta é a única capacidade
+// do módulo que não recebeu a chave por chamada da H177.
+//
+// A DIFERENÇA É O QUE A CHAVE GUARDA. Nas outras, ela guarda a RESPOSTA de uma
+// chamada, e duas chamadas concorrentes escreviam a mesma variável — medido a 12
+// cruzamentos em 12 rodadas. Aqui ela guarda uma ASSINATURA de longa duração:
+// `installScript` a instala uma vez (e sai cedo se já estiver instalada) e
+// `drainScript` esvazia o buffer dela. Há UMA assinatura por sessão por desenho,
+// e dar-lhe uma chave por chamada quebraria exatamente isso — o install
+// escreveria uma chave e o drain leria outra.
 const stateKey = "__waHeadlessMsgMeta"
 
 // DefaultBufferSize bounds the page-side queue.

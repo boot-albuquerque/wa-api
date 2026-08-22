@@ -26,6 +26,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		if !p.ok {
 			stage := p.stage
@@ -195,6 +201,13 @@ func (p *stallingDouble) eval(ctx context.Context, expr string, out *string) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		*out = `{"stage":"pending","ok":false,"why":""}`
 		return nil
@@ -222,6 +235,13 @@ type localDouble struct {
 func (p *localDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): caindo no ramo padrao ela vira
+	// lastScript e soma um kick, e todo teste que afirma sobre o script passa a
+	// inspecionar o de limpeza.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
 	}
 	// A PERGUNTA DA POS-CONDICAO E' UM SCRIPT SEPARADO, e o duble responde a ela
 	// separadamente de proposito: se as duas respostas viessem do mesmo campo, um

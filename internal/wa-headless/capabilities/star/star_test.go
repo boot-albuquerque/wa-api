@@ -31,6 +31,12 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A LIBERACAO NAO E' KICK NEM LEITURA (H177): ela roda depois de a resposta
+	// ser tomada, e caindo no ramo padrao ela vira lastScript e soma um kick.
+	if strings.Contains(expr, "delete window.") {
+		*out = "ok"
+		return nil
+	}
 	if strings.Contains(expr, "const s = window[") {
 		p.reads++
 		switch {
@@ -158,10 +164,10 @@ func TestTheClockStaysOnTheGoSide(t *testing.T) {
 // TestTheParkedModelIsNeverSerialised. The state holds a live page model; the
 // result script reads one boolean off it and builds its own answer.
 func TestTheParkedModelIsNeverSerialised(t *testing.T) {
-	if !strings.Contains(resultScript, "s.msg && s.msg.star") {
+	if !strings.Contains(resultScript("k"), "s.msg && s.msg.star") {
 		t.Fatal("the result script does not read the flag off the parked model")
 	}
-	if strings.Contains(resultScript, "JSON.stringify(s)") {
+	if strings.Contains(resultScript("k"), "JSON.stringify(s)") {
 		t.Fatal("the parked model is handed to JSON.stringify")
 	}
 }
