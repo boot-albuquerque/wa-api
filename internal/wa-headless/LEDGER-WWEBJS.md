@@ -464,6 +464,75 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `REMOTE_SESSION_SAVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — depende de uma família que não existe: não há store remoto de sessão neste módulo (H88) |
 | `VOTE_UPDATE` | events.VoteUpdated | `PROVEN` | H121: a referência NÃO tem ouvinte — ela remenda `pollVoteTableMode.bulkUpsert`. Aqui `WAWebCollections.PollVote` expõe `on`/`off` (medido), então a porta limpa foi usada e a página não é tocada (regra da H112). Provado ao vivo VOTANDO numa enquete do próprio store: `poll.vote:1`. Segunda vez que este build tem ouvinte onde a referência patcheia — `INCOMING_CALL` foi a primeira, e lá ainda não disparou |
 
+## Encerramento da Fase 1 — 2026-08-22
+
+Autorizado pela **decisão 64 (b)** da orquestração: *"reclassifique diferenças
+deliberadas e então encerre a Fase 1 com os BLOCKED devidamente justificados"*.
+
+### Onde chegou
+
+<!-- SEM CRASES NOS NOMES DE ESTADO: uma linha `| ESTADO | n |` e' lida pelo
+     gate do placar como linha do ledger, e esta tabela somava +1 a cada um. -->
+
+| estado | início do dia | encerramento |
+|---|---|---|
+| PROVEN | 41 (19%) | **134 (61%)** |
+| PARTIAL | 34 | 33 |
+| BLOCKED | 40 | 45 |
+| INTENTIONAL&#95;DIFFERENCE | 4 | 8 |
+| MISSING | **139 (63%)** | **0** |
+
+O critério das decisões 52/62 era **zero `MISSING` e zero `PARTIAL` ACIONÁVEL**.
+Os dois estão cumpridos, e o segundo com uma exigência que a varredura se impôs:
+**cada uma das 33 `PARTIAL` carrega causa medida e registrada**, não descrição de
+sintoma.
+
+### Por que as 33 `PARTIAL` não são trabalho parado
+
+| causa | o que significa |
+|---|---|
+| dependência humana | presença e estado de conversa exigem vínculo de agenda criado no TELEFONE (H144, H170); foto de perfil e status são visíveis a 944 contatos (decisão 61) |
+| sombra de linha `BLOCKED` | o leitor não tem produtor porque a escrita correspondente está bloqueada (`description`, H145/H163) |
+| mundo vazio | a coleção está comprovadamente sincronizada e ninguém postou (broadcasts/status, H158) |
+| limite do build | confirmação só entre sessões: participantes (H58/H65), `pin` (H162), `unpin` (H172) |
+| agregado | `attachEventListeners` é a conjunção das linhas de evento e não fecha sozinha (H171) |
+| herança de par aberto | delegações literais que herdam a enquete que não sai (H98) e o recibo de leitura não observado (H159) |
+
+### Os 45 `BLOCKED`, por natureza do impedimento
+
+| n | impedimento |
+|---|---|
+| 29 | **a página não expõe o caminho** — módulo ou função ausente neste build, medido |
+| 6 | **dado ausente na conta** — o módulo responde e não há o que ler (zero pedidos, zero pagamentos, rótulos vazios) |
+| 5 | **dependência humana** — exige o telefone, ou uma chamada real entrando |
+| 3 | **conta ou assinatura** — conta Business, ou recurso de canal por assinatura |
+| 2 | **o servidor aceita e não guarda** — `setDescription`, medido em canal e em grupo, e reconfirmado do lado do observador (H163) |
+
+Nenhum é trabalho pendente deste módulo. Todos citam a medição que os produziu.
+
+### Uma advertência sobre este número
+
+Uma linha `BLOCKED` vale o que valia a medição que a fechou, **e as medições
+envelhecem**. Só hoje, três vereditos caíram ao serem refeitos:
+
+- `pin` estava `BLOCKED` porque a H81 mediu do único lado que não podia ver (H162);
+- `unpin` herdava esse veredito com um `idem` (H172);
+- `CHAT_REMOVED` estava bloqueado por um custo de fixture que deixou de existir
+  quando se passou a CONSTRUIR fixture em vez de emprestar (H166/H173).
+
+As três só apareceram porque a decisão 64 exigiu justificativa, e a auditoria foi
+feita a sério em vez de por formalidade. **A regra que fica**: toda linha cujo
+motivo seja `idem X`, *"não dá para testar sem estragar Y"*, ou uma pós-condição
+que o próprio tipo diz não conseguir observar, é dívida esperando o contexto
+mudar — e deve ser reexaminada antes de qualquer encerramento futuro.
+
+### O que fica fora, e não é dívida técnica
+
+- **Ações que exigem um humano**: foto de perfil, status, pareamento por QR,
+  `logout`, salvar contato na agenda do telefone.
+- **`git push` e o merge para `feature/macbook-lucas`**.
+
+
 ## Placar
 
 | estado | itens | fração |
