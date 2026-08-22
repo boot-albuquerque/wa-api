@@ -61,7 +61,13 @@ max_complexity=50
 # 2026-08-21: 341 -> 346. Informativo, nao trava. As cinco issues novas sao dos
 # ficheiros acrescentados no ciclo de etiquetas/newsletter. A trava real e' a
 # complexidade maxima, que continua em 50.
-count=346
+#
+# 2026-08-22 (F155): 346 -> 359. Medido: golangci-lint run sobre ./... inteiro.
+# Crescimento de 13 issues vem dos ficheiros novos da onda W9. max_complexity
+# continua em 50. A NOTA do Makefile foi corrigida: agora so' dispara quando count
+# SOBE (catraca direcional), em vez de disparar em qualquer diferenca — o modo
+# anterior fazia o aviso aparecer em toda execucao, tornando-o ruido (F155).
+count=359
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

@@ -249,8 +249,10 @@ lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	 if [ "$$max" -lt "$$base_max" ]; then \
 	   echo "ATENCAO: a complexidade maxima caiu ($$max < $$base_max). Baixe max_complexity para $$max neste mesmo PR."; \
 	 fi; \
-	 if [ "$$found" -ne "$$base_count" ]; then \
-	   echo "NOTA: a contagem de issues mudou ($$base_count -> $$found). Informativo, nao trava. Atualize count no PR."; \
+	 if [ "$$found" -gt "$$base_count" ]; then \
+	   echo "ATENCAO: a contagem de issues SUBIU ($$base_count -> $$found). Atualize count em .golangci-baseline neste PR."; \
+	 elif [ "$$found" -lt "$$base_count" ]; then \
+	   echo "lint: contagem de issues caiu ($$base_count -> $$found). Baixe count em .golangci-baseline neste PR."; \
 	 fi
 
 lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` quando max_complexity chegar a 10
