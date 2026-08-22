@@ -19349,3 +19349,52 @@ ter sido rediagnosticada três vezes é histórico legítimo.
 **Status**: **CORRIGIDA**.
 
 <!-- f-status: corrigido -->
+
+---
+
+## F211 — carrossel: HSCROLL_CARDS renderiza, ALBUM_IMAGE não, e o remetente não vê o próprio
+
+<!-- f-status: aberto -->
+
+**Data**: 2026-08-22
+**Contexto**: implementação da superfície de mensagem interativa que faltava
+(pedido: "so faltaria realmente entender como funciona o HSCROLL_CARDS,
+ALBUM_IMAGE e PIXCARD").
+
+**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`
+(`SendCarousel`, `buildCarouselCard`), commit `6d4c050`.
+
+**Medição em campo** — sessão `aulapratica` (5516988263575) para 554192421234,
+sonda descartável desviando `/chat/send/buttons`. Duas mensagens, mesma
+estrutura, diferindo APENAS em `CarouselCardType`:
+
+| id | tipo | resultado no telemóvel do DESTINATÁRIO |
+|---|---|---|
+| `3EB0C101192480B874E881` | `HSCROLL_CARDS` | **renderiza**: 2 cartões lado a lado, cada um com imagem, título, corpo, rodapé e o botão "Quero este" |
+| `3EB00FB1FB8952B80F8AA1` | `ALBUM_IMAGE` | **NÃO renderiza**: "Você enviou uma mensagem, mas sua versão do WhatsApp não é compatível. Atualizar o WhatsApp" |
+
+As duas devolveram `200` com `message_id` e `status: sent`. **O 200 não
+distinguiu os dois casos** — só a fotografia distinguiu. É a armadilha #26
+outra vez, e é a razão de a medição em campo não ser opcional aqui.
+
+**Problema 1 — ALBUM_IMAGE é recusado pelo cliente.** Mesma árvore protobuf,
+mesmos cartões, mesmos botões; muda um enum e o cliente deixa de saber
+desenhar. A causa NÃO é conhecida: pode ser que o álbum proíba
+`nativeFlowMessage` nos cartões, exija `messageVersion` diferente, ou exija
+que o cartão só tenha header de imagem.
+
+**Problema 2 — o REMETENTE não vê o próprio carrossel.** No dispositivo que
+enviou, a mensagem aparece como incompatível; no destinatário, renderiza. Isto
+é sobre a cópia que volta para os próprios dispositivos, não sobre o envio.
+
+**Hipótese, a confirmar ou refutar**: as duas coisas são o mesmo mecanismo —
+os forks de Baileys embrulham `InteractiveMessage` dentro de
+`viewOnceMessage`/`viewOnceMessageV2` justamente para o eco próprio renderizar.
+Não confirmei em fonte oficial. **Se a medição discordar, a hipótese cai.**
+
+**Correção sugerida**: matriz de sondas variando UM eixo de cada vez
+(embrulho viewOnce; cartões sem botões; `messageVersion`; header só imagem),
+cada variante fotografada nos dois lados. Sem foto não há resultado.
+
+**Status**: não corrigido. `HSCROLL_CARDS` está provado e é o que vai para a
+rota; `ALBUM_IMAGE` fica fora da superfície pública até renderizar.
