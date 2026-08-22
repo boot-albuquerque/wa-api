@@ -227,3 +227,82 @@ func TestAPageThatNeverSettlesIsATimeout(t *testing.T) {
 		t.Fatalf("got %v, want a settle timeout", err)
 	}
 }
+
+// listDouble answers the LIST script only. It is a separate double from
+// pageDouble on purpose: the list is a plain read with no kick-and-park cycle,
+// and a double that answered both would let a List that accidentally ran the
+// block script look like it worked.
+type listDouble struct {
+	answer string
+	reads  int
+	last   string
+}
+
+func (d *listDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	d.reads++
+	d.last = expr
+	*out = d.answer
+	return nil
+}
+
+func TestTheListNamesWhoIsBlocked(t *testing.T) {
+	d := &listDouble{answer: `{"ok":true,"why":"","blocked":["1@lid","2@c.us"]}`}
+	got, err := New(engine.NewRunner(), d.eval).List(context.Background(), "t")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 2 || got[0] != "1@lid" || got[1] != "2@c.us" {
+		t.Fatalf("the list did not come back whole: %#v", got)
+	}
+}
+
+// AN EMPTY BLOCKLIST IS NOT AN ERROR. It is the normal state of most accounts —
+// this one included, measured at 0 — and reporting it as a failure would make
+// the healthy case indistinguishable from a broken read.
+func TestAnEmptyBlocklistIsNotAnError(t *testing.T) {
+	d := &listDouble{answer: `{"ok":true,"why":"","blocked":[]}`}
+	got, err := New(engine.NewRunner(), d.eval).List(context.Background(), "t")
+	if err != nil {
+		t.Fatalf("an empty blocklist must not be an error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want nothing, got %#v", got)
+	}
+}
+
+// A REFUSAL IS NOT AN EMPTY LIST, and this is the distinction that makes the
+// method usable: "nobody is blocked" and "the read failed" are the same shape
+// once an error is swallowed, and a caller acting on the first would unblock
+// nobody while believing it had checked.
+func TestARefusedReadIsNotAnEmptyBlocklist(t *testing.T) {
+	d := &listDouble{answer: `{"ok":false,"why":"BOOM","blocked":[]}`}
+	got, err := New(engine.NewRunner(), d.eval).List(context.Background(), "t")
+	if err == nil {
+		t.Fatalf("a refused read came back as a clean empty list: %#v", got)
+	}
+	if !errors.Is(err, ErrBlock) {
+		t.Fatalf("want ErrBlock, got %v", err)
+	}
+}
+
+// THE ROSTER IS NOT THE BLOCKLIST. Of 945 contacts on this account, ZERO carry
+// an isBlocked field (H146), so a version that filtered the roster would return
+// nothing forever and look healthy doing it.
+func TestTheListReadsTheBlocklistAndNotTheRoster(t *testing.T) {
+	d := &listDouble{answer: `{"ok":true,"why":"","blocked":[]}`}
+	if _, err := New(engine.NewRunner(), d.eval).List(context.Background(), "t"); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if !strings.Contains(d.last, "BlocklistCollection") {
+		t.Fatal("the script does not read BlocklistCollection")
+	}
+	for _, wrong := range []string{"ContactCollection", "isBlocked"} {
+		if strings.Contains(d.last, wrong) {
+			t.Errorf("the script reads %q; the roster carries no block state on "+
+				"this build, so filtering it returns nothing forever", wrong)
+		}
+	}
+}

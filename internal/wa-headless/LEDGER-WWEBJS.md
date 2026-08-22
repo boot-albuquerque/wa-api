@@ -100,7 +100,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H41 |
 | `getCommonGroups` | contacts.CommonGroupsWith | `PROVEN` | sim | sim | sim | H68: null significa "sou eu", não "nenhum" |
 | `resetState` | liveness.Reset | `PARTIAL` | sim | sim | sim | H116: a chamada é feita e o socket é provado SAUDÁVEL depois; provar que ela FEZ algo não passa pelo Go — a transição dura ~450ms e cada leitura é um ida-e-volta do chromedp (0 de 3 ao vivo, contra 9 de 100 amostrando DENTRO da página). A referência não devolve nada, nem erro |
-| `isRegisteredUser` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | é passo interno de todo envio; não exposto |
+| `isRegisteredUser` | lookup.NumberID | `PROVEN` | sim | sim | sim | H147: a nota estava METADE obsoleta e METADE certa por outro motivo. Obsoleta porque a H127 expôs a resolução como capacidade; certa porque toda prova ao vivo até hoje perguntara sobre um número que EXISTE — e uma capacidade só vista dizendo "sim" passa em qualquer teste que só pergunte por números reais. Exercitada a resposta NEGATIVA, com controle positivo na MESMA sessão: o par resolve, o número implausível volta em `ErrNotOnWhatsApp` e não num falso positivo. A referência define `isRegisteredUser` como `Boolean(await getNumberId(id))`, então é literalmente esta linha |
 | `getNumberId` | lookup.NumberID | `PROVEN` | sim | sim | sim | H127: deixou de ser passo interno e virou capacidade. A expressão de resolução é EMBUTIDA, não copiada — uma cópia divergiria da que o `send` usa. Provado com três casos: número real resolve para outra identidade, número impossível dá `ErrNotOnWhatsApp` definitivo, e grupo curto-circuita em vez de ser reportado ausente |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
@@ -118,7 +118,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `getLabelById` | contacts.LabelByID | `PROVEN` | sim | sim | sim | H128: filtra a lista provada (H72) em vez de consultar a página de novo. Rótulo com contagem ZERO continua sendo rótulo — os 3 desta conta têm zero itens (H114), e tratar zero como ausente encontraria nenhum |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
 | `getChatsByLabelId` | — | `BLOCKED` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
-| `getBlockedContacts` | capabilities/block | `PARTIAL` | sim | sim | sim | bloquear/desbloquear provados; LISTAR os bloqueados não é exposto |
+| `getBlockedContacts` | block.List | `PROVEN` | sim | sim | sim | H146: "não é exposto" era afirmação sobre a NOSSA superfície e nunca fora conferida contra a página. `WAWebCollections.Blocklist` responde `getModelsArray` — lia 0 porque ninguém está bloqueado. O caminho de trás é que NÃO existe: de 945 contatos, ZERO carregam `isBlocked`, então filtrar o roster devolveria vazio para sempre. Provado com restauração: 0 → 1 nomeando o par → 0 |
 | `setProfilePicture` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebSetPicture` e `WAWebProfilePicThumbBridge` ausentes |
 | `deleteProfilePicture` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — idem `setProfilePicture` |
 | `addOrRemoveLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | H72; forma medida pelo instrumento da H73 |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 109 | 50% |
-| `PARTIAL` | 56 | 25% |
+| `PROVEN` | 111 | 50% |
+| `PARTIAL` | 54 | 25% |
 | `BLOCKED` | 49 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

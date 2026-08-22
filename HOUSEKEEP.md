@@ -3821,3 +3821,101 @@ linha.* Varrer `PARTIAL` procurando o que ficou acionável só é honesto se
 também registrar o que ficou provado INACIONÁVEL — senão a mesma linha é
 reexaminada a cada varredura, e cada varredura paga de novo o custo de descobrir
 o mesmo bloqueio.
+
+---
+
+## H146 — `getBlockedContacts`: "não é exposto" era afirmação sobre a nossa superfície, não sobre a página
+
+**Data**: 2026-08-22
+**Contexto**: varredura sistemática dos 56 `PARTIAL` (continuação de H144/H145).
+
+**Onde**: `internal/wa-headless/capabilities/block/block.go` (`List`, `listScript`),
+linha `getBlockedContacts` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"bloquear/desbloquear provados; LISTAR os bloqueados
+não é exposto"*. Isso é verdade sobre o NOSSO módulo e nunca foi conferido contra
+a página. Enumerar — a técnica que achou o `sendDeleteMsgs` na H143 depois de três
+nomes inventados falharem — respondeu em uma chamada:
+
+```
+collections: {"Blocklist": 0}
+WAWebBlocklistCollection: ["BlocklistCollection"]
+WAWebBlockContactAction: ["blockContact","unblockContact","updatePSAUserBlockingStatus"]
+WAWebContactBlockStore: empty
+WAWebBlocklistStore: empty
+contactFlag: {contacts: 945, withIsBlocked: 0, blocked: 0}
+```
+
+**Dois achados, e o segundo é o que salva o leitor.** A coleção EXISTE e responde
+`getModelsArray` — lia 0 porque ninguém está bloqueado nesta conta, não porque
+esteja ausente. E o caminho que um implementador apressado tomaria — filtrar o
+roster por `isBlocked` — **não existe**: de 945 contatos, ZERO carregam o campo.
+Uma versão assim devolveria vazio para sempre e pareceria saudável fazendo isso.
+
+**Correção aplicada**: `Blocker.List`. É um alargamento deliberado do que o
+pacote emite: o `Result` sempre carregou `Before`/`After` como TAMANHOS, com um
+"nunca as entradas" escrito — narrowing correto quando a única pergunta era "a
+mudança pegou". Um número não diz a quem desbloquear.
+
+**Status**: corrigido. Travado por:
+- `TestARefusedReadIsNotAnEmptyBlocklist` — CN: remover a checagem de `out.OK`.
+  Falha. É a distinção que torna o método usável: "ninguém bloqueado" e "a
+  leitura falhou" têm a mesma forma depois que um erro é engolido, e quem agisse
+  sobre a primeira desbloquearia ninguém acreditando ter conferido.
+- `TestTheListReadsTheBlocklistAndNotTheRoster` — CN: trocar
+  `BlocklistCollection` por `ContactCollection`. Falha.
+- `TestAnEmptyBlocklistIsNotAnError` — CN: erro quando a lista é vazia. Falha.
+- `TestTheListNamesWhoIsBlocked`.
+
+Prova em SPA real (`TestProbeBlocklistNamed`), com restauração no padrão da H27:
+`0 → 1` nomeando o par → `0`. O desbloqueio é agendado ANTES de qualquer
+asserção — registrá-lo depois deixaria o par bloqueado justamente quando uma
+verificação falhasse, que é quando o fixture mais importa.
+
+**Lição**: *uma nota que diz "não é exposto" precisa dizer POR QUEM.* "Nós não
+expomos" e "a página não oferece" são fatos diferentes com custos diferentes, e
+a linha os fundia havia meses.
+
+---
+
+## H147 — `isRegisteredUser`: a nota estava metade obsoleta e metade certa por outro motivo
+
+**Data**: 2026-08-22
+**Contexto**: idem H146.
+
+**Onde**: `internal/wa-headless/probe_notreg_test.go` (novo), linha
+`isRegisteredUser` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"é passo interno de todo envio; não exposto"* e
+apontava para `spa.ResolveIdentityExpr`. A H127 criou `capabilities/lookup`
+exatamente para essa classe de nota — o doc do pacote diz, com todas as letras,
+que cinco linhas estavam `PARTIAL` pelo mesmo motivo. Esta ficou para trás.
+
+**Mas corrigir o mapeamento não bastava**, e é aqui que a linha ganhou algo que
+não tinha: a referência define `isRegisteredUser(id)` como
+`Boolean(await getNumberId(id))`, e toda prova ao vivo desta resolução até hoje
+perguntou sobre um número que **EXISTE**. Uma capacidade só vista dizendo "sim"
+passa em qualquer teste que só pergunte por números reais — inclusive uma que
+respondesse "sim" para tudo.
+
+**Medição**, com controle positivo na MESMA sessão (a regra da H114):
+
+```
+positive control:    lookup.Identity(jid=true group=false resolved=true)
+implausible number:  lookup.Identity(jid=false ...) err=lookup: that number is not on WhatsApp
+```
+
+O controle positivo não é cerimônia: sem ele, um "não existe" é compatível com a
+resolução inteira estar quebrada.
+
+**Sobre o alcance da consulta**: `queryWidExists` é a mesma pergunta que todo
+envio faz antes de despachar. Nenhuma mensagem sai, nenhuma conversa é aberta, e
+o número usado é sintaticamente válido e deliberadamente implausível — nenhuma
+pessoa real é implicada pela pergunta.
+
+**Status**: corrigido, linha para `PROVEN` apontando para `lookup.NumberID`.
+
+**Lição**: *quando uma capacidade tem duas respostas, provar uma prova metade.*
+Vale para toda linha que devolve booleano ou erro-como-resposta, e esta varredura
+deveria procurar outras: uma guarda só exercitada pelo caminho de recusa foi a
+armadilha nº 2 do `ARMADILHAS.md`; esta é a mesma armadilha com o sinal trocado.

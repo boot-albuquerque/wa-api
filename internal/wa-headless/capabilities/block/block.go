@@ -240,3 +240,61 @@ const resultScript = `JSON.stringify((() => {
 	if (!s) { return { stage: 'apply', ok: false, why: 'STATE_MISSING' }; }
 	return s;
 })())`
+
+// List reports WHO is blocked, which this package could count and not name.
+//
+// THE SIZE WAS ALWAYS HERE AND THE NAMES WERE NOT. Result carries Before and
+// After as blocklist SIZES with an explicit "never the entries" — a deliberate
+// narrowing when the only question was "did the change land". The ledger row for
+// getBlockedContacts sat at PARTIAL saying listing "não é exposto", which was
+// true about this surface and never checked against the page.
+//
+// The page does expose it: WAWebCollections.Blocklist answers getModelsArray,
+// measured 0 on this account because nobody is blocked (H146). What does NOT
+// exist is the path a caller might reach for instead — of 945 contacts, ZERO
+// carry an isBlocked field, so filtering the roster would silently return
+// nothing forever.
+//
+// IT RETURNS IDENTITIES, and that is a widening of what this package emits. It
+// is the point of the method: a count cannot tell a caller whom to unblock.
+func (b *Blocker) List(ctx context.Context, label string) ([]string, error) {
+	var raw string
+	if err := b.runner.Do(ctx, engine.OpStateProbe, label+"/list", func(ctx context.Context) error {
+		return b.eval(ctx, listScript, &raw)
+	}); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBlock, err)
+	}
+	var out struct {
+		OK      bool     `json:"ok"`
+		Why     string   `json:"why"`
+		Blocked []string `json:"blocked"`
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("block: unexpected answer: %w", err)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("%w (%s)", ErrBlock, out.Why)
+	}
+	return out.Blocked, nil
+}
+
+// listScript reads the blocklist's entries.
+//
+// A BLOCKLIST MODEL IS NOT A CONTACT. It is keyed by identity, so the id is read
+// the same way every other reader in this module reads one — through
+// _serialized when present — rather than assuming the model shape.
+const listScript = `JSON.stringify((() => {
+	try {
+		const BL = window.require('` + string(spa.ModuleBlocklistCollection) + `').BlocklistCollection;
+		const all = (typeof BL.getModelsArray === 'function') ? BL.getModelsArray() : [];
+		const jid = v => (v && v._serialized) ? v._serialized : (typeof v === 'string' ? v : '');
+		const blocked = [];
+		for (const m of all) {
+			const s = jid(m && m.id);
+			if (s) { blocked.push(s); }
+		}
+		return { ok: true, why: '', blocked: blocked };
+	} catch (e) {
+		return { ok: false, why: String((e && e.message) || e).slice(0, 140), blocked: [] };
+	}
+})())`
