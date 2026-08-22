@@ -18601,12 +18601,47 @@ desserializador é recursão infinita via zerolog. Conjunto muda, números não.
 
 **Status**: **CORRIGIDA**. O irmão do `InitializeS3Client` continua aberto.
 
-### O irmão que continua verdadeiro: o erro de `InitializeS3Client` é descartado
+### O "irmão" também estava mal diagnosticado — e o defeito real é maior
 
-Isto sobrevive à correção do diagnóstico. `edit_user.go` e `add_user.go:177`
-fazem ambos `_ = storage.GetS3Manager().InitializeS3Client(...)`. Uma
-configuração que não inicializa devolve 200/201 e o cliente acredita que ficou
-boa. **Não corrigido**, e é independente da escolha de contrato acima.
+Eu tinha escrito, e repetido três vezes, que `edit_user.go` e `add_user.go:177`
+"descartam o erro de `InitializeS3Client` com `_ =`, e uma configuração que não
+inicializa devolve 200/201". Cheguei a escrever a correção — registar o erro em
+vez de o descartar — e só ao ir escrever o TESTE fui ler a função.
+
+**`InitializeS3Client` nunca devolve erro.** `pkg/infra/storage/s3.go:141-175`
+tem dois `return nil` e mais nada: `s3.NewFromConfig` do SDK da AWS apenas
+CONSTRÓI o cliente, não contacta ninguém. O `_ =` não descartava coisa alguma,
+e o meu conserto teria sido um ramo que nunca executa. **Revertido.**
+
+**O defeito real, que é pior**: não há validação nenhuma. Uma configuração com
+endpoint inalcançável, credenciais erradas ou bucket inexistente é aceite,
+guardada e reportada como sucesso em TODAS as camadas. O primeiro sinal de
+problema é uma média que não sobe.
+
+E há um agravante a jusante: `EnsureClientFromDB` (`s3.go:81-138`) devolve
+`bool` e termina em
+
+```go
+return m.InitializeS3Client(userID, config) == nil   // sempre true
+```
+
+Os outros caminhos dela devolvem `false` de verdade (falha a ler do banco, a
+decifrar o segredo), mas **o caminho de sucesso não pode falhar** — e
+`EnsureS3ClientForUser`, o único chamador em produção, descarta o booleano de
+qualquer maneira (`s3_client_helper.go:4`, assinatura sem retorno).
+
+**Correção sugerida**: uma verificação real na configuração — um `HeadBucket`
+com prazo curto, por exemplo — e propagar o resultado. Isso muda o contrato de
+`PUT`/`POST` (passam a poder falhar por S3 inacessível) e acrescenta uma
+chamada de rede a um caminho que hoje não tem nenhuma, portanto é decisão, não
+implementação.
+
+**Anti-regressão**: teste que uma configuração inválida NÃO devolva sucesso. O
+teste tem de exercitar o caminho de sucesso também, senão passa a recusar
+configurações válidas — e num serviço de armazenamento isso é pior.
+
+**Status**: **não corrigido.** Diagnóstico refeito; era a QUARTA vez nesta
+sessão que ler o código com atenção mudou o achado.
 
 <!-- f-status: corrigido -->
 
