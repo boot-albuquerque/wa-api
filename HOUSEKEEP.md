@@ -7426,7 +7426,14 @@ capability nova: `TestSendWireContract_FieldNames`
 topo do arquivo. **Status real: CORRIGIDO** — decisão tomada e travada em
 teste; nenhuma capability nova pode divergir da forma sem derrubar o teste.
 
-<!-- f-status: aberto -->
+**Reconciliação W9 (2026-08-22)**: confirmado por leitura e execução do
+teste. `TestSendWireContract_FieldNames` passa verde para as 12
+capabilities, a forma `{message_id, timestamp, status}` está travada, e a
+forma histórica `{Details, Timestamp, Id}` é explicitamente proibida no
+vocabulário de `sendForeignWireKeys`. O tag da marca estava desalinhado com
+o texto — corrigido.
+
+<!-- f-status: corrigido -->
 
 ## F132
 
@@ -8809,7 +8816,35 @@ cliente é afetado — mas ela toca `handler_interactive.go`, que serve
 precisaria mudar (`handler_interactive.go`) é o dos dois stubs que ainda
 faltam recuperar — corrigir aqui criaria conflito com esse bloco.
 
-<!-- f-status: aberto -->
+**Correção W9 (2026-08-22)**: os três handlers em `handler_interactive.go`
+— SendContact (`:47`), SendLocation (`:92`), SendPoll (`:137`) — trocaram
+`Err(errDecodePayload)` por `Err(err)`, alinhando-se à forma canónica do
+resto da superfície de envio (12 handlers que já logavam o erro CRU do
+decoder). A superfície de envio fica homogénea: TODAS as 15 rotas de envio
+agora logam a causa real no campo `error`.
+
+Os testes de corpo malformado dos três handlers
+(`TestSendContact_MalformedBody_ViaRegisteredRoute`,
+`TestSendLocation_MalformedBody_ViaRegisteredRoute`,
+`TestSendPoll_MalformedBody_ViaRegisteredRoute`) foram actualizados para
+asseverar `"unexpected EOF"` em vez de `"could not decode payload"`.
+
+**Controlo negativo EXECUTADO**: reintroduzido `Err(errDecodePayload)` em
+`handler_interactive.go:47` (SendContact). Saída:
+
+```
+handler_send_contact_test.go:301: co-gate D: campo `error` ("could not decode payload") nao contem "unexpected EOF"
+--- FAIL: TestSendContact_MalformedBody_ViaRegisteredRoute (0.00s)
+```
+
+**Nota**: restam 9 pontos com `Err(errDecodePayload)` FORA da superfície
+de envio: `handler_reaction.go` (1), `handler_presence.go` (4),
+`handler_misc.go` (4). Estes são de escopo diferente (não-envio) e ficam
+como achado pendente.
+
+**Status**: CORRIGIDO para a superfície de envio (escopo da F141).
+
+<!-- f-status: corrigido -->
 
 ## F142
 
@@ -10822,7 +10857,30 @@ vêm dos arquivos novos do bloco de HMAC (porta, adapter de banco, adapters de
 bootstrap); `max_complexity` continua em **56**, sem se mover — a trava real
 não foi tocada. `count` segue como está, pelo motivo do Status acima.
 
-<!-- f-status: aberto -->
+**Correção W9 (2026-08-22)**: o problema era o MECANISMO, não o número. A
+NOTA do Makefile usava `-ne` (qualquer diferença), o que fazia o aviso
+disparar em TODA execução — incluindo crescimento normal de código novo.
+Um gate que avisa sempre é um gate que ninguém lê.
+
+Correcção em duas partes:
+
+1. **Makefile**: a condição do aviso de count mudou de `-ne` (qualquer
+   diferença) para `-gt`/`-lt` (direcional). Subida dispara ATENCAO e
+   pede actualização; descida dispara aviso positivo e pede que baixem o
+   baseline. Igualdade = silêncio. A catraca passa a ser direcional: avisa
+   só quando há DRIFT novo, não quando o baseline está desactualizado.
+
+2. **`.golangci-baseline`**: count actualizado para **359** (medido:
+   `golangci-lint run --issues-exit-code 0` sobre `./...`).
+   `max_complexity` inalterada em **50**.
+
+Verificação: `make lint` com count=359 e medição=359 → nenhum aviso.
+Teste manual do mecanismo: found=365 → ATENCAO; found=350 → aviso de
+descida; found=359 → silêncio.
+
+**Status**: CORRIGIDO.
+
+<!-- f-status: corrigido -->
 
 ## F156
 
