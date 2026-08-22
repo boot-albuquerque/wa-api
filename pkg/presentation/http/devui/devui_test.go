@@ -280,7 +280,7 @@ func TestPainel_OperacoesDeEnvioEChatNoCard(t *testing.T) {
 		"/chat/send/text", "/chat/send/image", "/chat/send/video", "/chat/send/audio",
 		"/chat/send/document", "/chat/send/sticker", "/chat/send/location",
 		"/chat/send/contact", "/chat/send/poll", "/chat/send/buttons",
-		"/chat/send/template", "/chat/send/list", "/chat/send/edit",
+		"/chat/send/carousel", "/chat/send/template", "/chat/send/list", "/chat/send/edit",
 		"/chat/list", "/chat/history", "/chat/react", "/chat/markread",
 		"/chat/presence", "/chat/delete/message",
 	} {

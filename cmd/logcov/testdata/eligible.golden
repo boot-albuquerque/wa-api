@@ -1757,6 +1757,7 @@ pkg/application/contracts/contractsfake.HmacKeyStore.DeleteHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyStore.LoadHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.HmacKeyStore.SaveHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.InteractiveMessenger.SendButtons	EXCLUDED	X5
+pkg/application/contracts/contractsfake.InteractiveMessenger.SendCarousel	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.JIDResolver.ResolveQualifiedJID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.LinkPreviewFetcher.FetchLinkPreview	EXCLUDED	X5
@@ -1965,6 +1966,7 @@ pkg/application/usecase/message.NewMarkReadUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewReactUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendAudioUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendButtonsUseCase	EXCLUDED	X1
+pkg/application/usecase/message.NewSendCarouselUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendContactUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendDocumentUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendEditMessageUseCase	EXCLUDED	X1
@@ -1983,6 +1985,8 @@ pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S
 pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
 pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:95);uncovered:L2(S-ret,send_buttons.go:119)
 pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes	ELIGIBLE	covered
+pkg/application/usecase/message.SendCarouselUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_carousel.go:50);uncovered:L2(S-ret,send_carousel.go:105)
+pkg/application/usecase/message.SendCarouselUseCase.cardImageBytes	ELIGIBLE	covered
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
@@ -2663,6 +2667,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendButtons	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendCarousel	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendContact	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	EXCLUDED	X5
@@ -2675,6 +2680,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.buildCarouselCard	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X5
@@ -3096,6 +3102,7 @@ pkg/presentation/http/handlers.NewRequestHistorySyncHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewRequestUnavailableMessageHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendAudioHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendButtonsHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewSendCarouselHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendContactHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendDocumentHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendEditMessageHandler	EXCLUDED	X1
@@ -3128,6 +3135,7 @@ pkg/presentation/http/handlers.RequestHistorySyncHandler.ServeHTTP	ELIGIBLE	cove
 pkg/presentation/http/handlers.RequestUnavailableMessageHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendAudioHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendButtonsHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.SendCarouselHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendContactHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendDocumentHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendEditMessageHandler.ServeHTTP	ELIGIBLE	covered

@@ -44,6 +44,7 @@ type MessageHandlers struct {
 	SendContact     *handlers.SendContactHandler
 	SendLocation    *handlers.SendLocationHandler
 	SendButtons     *handlers.SendButtonsHandler
+	SendCarousel    *handlers.SendCarouselHandler
 	SendList        *handlers.SendListHandler
 	SendPoll        *handlers.SendPollHandler
 	DeleteMessage   *handlers.DeleteMessageHandler
@@ -169,6 +170,7 @@ func initCustomHandlers(s *server) {
 	sendContactUC := message.NewSendContactUseCase(chatMessenger, jidResolver, logger)
 	sendLocationUC := message.NewSendLocationUseCase(chatMessenger, jidResolver, logger)
 	sendButtonsUC := message.NewSendButtonsUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	sendCarouselUC := message.NewSendCarouselUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendListUC := message.NewSendListUseCase(chatMessenger, jidResolver, logger)
 	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
@@ -191,6 +193,7 @@ func initCustomHandlers(s *server) {
 		SendContact:     handlers.NewSendContactHandler(sendContactUC),
 		SendLocation:    handlers.NewSendLocationHandler(sendLocationUC),
 		SendButtons:     handlers.NewSendButtonsHandler(sendButtonsUC),
+		SendCarousel:    handlers.NewSendCarouselHandler(sendCarouselUC),
 		SendList:        handlers.NewSendListHandler(sendListUC),
 		SendPoll:        handlers.NewSendPollHandler(sendPollUC),
 		DeleteMessage:   handlers.NewDeleteMessageHandler(deleteMessageUC),

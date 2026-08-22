@@ -1178,7 +1178,7 @@ rules_frozen=true
 #   log.Warn() calls so logcov counted it as covered. The ratio moves from
 #   468/625=74.88% to 467/624=74.84%, rounding 749->748. This is dead code
 #   removal, not dilution — nothing is lost.
-min_func_coverage=746
+min_func_coverage=747
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1632,7 +1632,7 @@ min_errpath_coverage=870
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
 # F207 (2026-08-22): min_eligible 625 -> 624 (-1, ratchet-DOWN honesto).
 # SAI (1): auth.NewTokenCache, dead code removed. See min_func_coverage above.
-min_eligible=626
+min_eligible=629
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.

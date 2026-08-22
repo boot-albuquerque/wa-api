@@ -67,7 +67,7 @@ max_complexity=50
 # continua em 50. A NOTA do Makefile foi corrigida: agora so' dispara quando count
 # SOBE (catraca direcional), em vez de disparar em qualquer diferenca — o modo
 # anterior fazia o aviso aparecer em toda execucao, tornando-o ruido (F155).
-count=352
+count=355
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

@@ -19354,8 +19354,6 @@ ter sido rediagnosticada três vezes é histórico legítimo.
 
 ## F211 — carrossel: HSCROLL_CARDS renderiza, ALBUM_IMAGE não, e o remetente não vê o próprio
 
-<!-- f-status: aberto -->
-
 **Data**: 2026-08-22
 **Contexto**: implementação da superfície de mensagem interativa que faltava
 (pedido: "so faltaria realmente entender como funciona o HSCROLL_CARDS,

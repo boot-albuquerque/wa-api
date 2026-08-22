@@ -707,3 +707,39 @@ type CarouselPayload struct {
 	CardType CarouselCardType
 	Cards    []CarouselCard
 }
+
+// SendCarouselRequest represents the HTTP payload for POST /chat/send/carousel.
+//
+// Cards carry the same button vocabulary as SendButtonsRequest.Buttons: each
+// card has its own Title, Body, Footer, Image and Buttons list. The use case
+// normalises every card's buttons with the same chain as SendButtonsUseCase
+// (title fallback -> truncate -> id fallback -> type lower -> discard unknown).
+//
+// Only HSCROLL_CARDS is exposed publicly; ALBUM_IMAGE does not render on
+// current WhatsApp clients and is intentionally excluded from this surface
+// (HOUSEKEEP F211).
+type SendCarouselRequest struct {
+	Phone string `json:"Phone"`
+	Body  string `json:"Body"`
+	// Footer is the carousel-level footer, below all cards.
+	Footer string                    `json:"Footer,omitempty"`
+	Cards  []SendCarouselCardRequest `json:"Cards"`
+	ID     string                    `json:"Id,omitempty"`
+}
+
+// SendCarouselCardRequest is one card in a SendCarouselRequest.
+type SendCarouselCardRequest struct {
+	Title   string              `json:"Title,omitempty"`
+	Body    string              `json:"Body"`
+	Footer  string              `json:"Footer,omitempty"`
+	Image   string              `json:"Image,omitempty"`
+	Buttons []InteractiveButton `json:"Buttons"`
+}
+
+// SendCarouselResult is the response for POST /chat/send/carousel.
+// Same shape as every other send capability: {message_id, timestamp, status}.
+type SendCarouselResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}

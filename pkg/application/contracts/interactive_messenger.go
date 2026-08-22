@@ -57,4 +57,14 @@ type InteractiveMessenger interface {
 	// botões seja preservada é contrato desta porta — é a ordem em que
 	// eles aparecem no aparelho de quem recebe.
 	SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, id string) (domain.MessageSendResult, error)
+
+	// SendCarousel mounts an InteractiveMessage whose oneof is
+	// CarouselMessage and sends it to target. Each card is itself a
+	// full InteractiveMessage with header, body, footer and native-flow
+	// buttons — the adapter handles the recursive nesting and the
+	// per-card image uploads.
+	//
+	// payload.Cards must arrive with buttons ALREADY NORMALISED by the
+	// use case, same discipline as SendButtons.
+	SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, id string) (domain.MessageSendResult, error)
 }
