@@ -174,6 +174,74 @@ func classifyMessage(msg *waE2E.Message) messageClassification {
 	return messageClassification{Type: messageTypeText}
 }
 
+// unwrapResult carries the flags that UnwrapRaw sets on events.Message.
+// The sync path needs these to populate the datajson correctly; the
+// real-time path gets them from events.Message fields directly.
+type unwrapResult struct {
+	Message               *waE2E.Message
+	IsEphemeral           bool
+	IsViewOnce            bool
+	IsViewOnceV2          bool
+	IsViewOnceV2Extension bool
+	IsDocumentWithCaption bool
+	IsLottieSticker       bool
+	IsBotInvoke           bool
+	IsEdit                bool
+}
+
+// unwrapFutureProof mirrors events.Message.UnwrapRaw
+// (internal/wa-noise/protocol/types/events/message.go:119-162) for a plain
+// *waE2E.Message that did NOT come through the event pipeline — i.e., the
+// history sync path, where msg.Message.GetMessage() returns the raw proto.
+//
+// The order and the wrappers are identical to UnwrapRaw; DeviceSentMessage
+// is omitted because it is not a FutureProofMessage and the history sync
+// path does not encounter it (the sender device is the device itself).
+//
+//log:exempt pure unwrap, no failure mode, on EVERY synced message
+func unwrapFutureProof(raw *waE2E.Message) unwrapResult {
+	r := unwrapResult{Message: raw}
+	if r.Message == nil {
+		return r
+	}
+	if r.Message.GetBotInvokeMessage().GetMessage() != nil {
+		r.Message = r.Message.GetBotInvokeMessage().GetMessage()
+		r.IsBotInvoke = true
+	}
+	if r.Message.GetEphemeralMessage().GetMessage() != nil {
+		r.Message = r.Message.GetEphemeralMessage().GetMessage()
+		r.IsEphemeral = true
+	}
+	if r.Message.GetViewOnceMessage().GetMessage() != nil {
+		r.Message = r.Message.GetViewOnceMessage().GetMessage()
+		r.IsViewOnce = true
+	}
+	if r.Message.GetViewOnceMessageV2().GetMessage() != nil {
+		r.Message = r.Message.GetViewOnceMessageV2().GetMessage()
+		r.IsViewOnce = true
+		r.IsViewOnceV2 = true
+	}
+	if r.Message.GetViewOnceMessageV2Extension().GetMessage() != nil {
+		r.Message = r.Message.GetViewOnceMessageV2Extension().GetMessage()
+		r.IsViewOnce = true
+		r.IsViewOnceV2 = true
+		r.IsViewOnceV2Extension = true
+	}
+	if r.Message.GetLottieStickerMessage().GetMessage() != nil {
+		r.Message = r.Message.GetLottieStickerMessage().GetMessage()
+		r.IsLottieSticker = true
+	}
+	if r.Message.GetDocumentWithCaptionMessage().GetMessage() != nil {
+		r.Message = r.Message.GetDocumentWithCaptionMessage().GetMessage()
+		r.IsDocumentWithCaption = true
+	}
+	if r.Message.GetEditedMessage().GetMessage() != nil {
+		r.Message = r.Message.GetEditedMessage().GetMessage()
+		r.IsEdit = true
+	}
+	return r
+}
+
 // comTexto aplica o marcador quando o tipo tem um e o texto veio vazio.
 //
 // O marcador é do TIPO, não do conteúdo: `:image:` diz "há uma imagem aqui, sem

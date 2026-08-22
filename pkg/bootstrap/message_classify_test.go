@@ -200,6 +200,156 @@ func TestClassificacao_ValoresLiterais(t *testing.T) {
 	}
 }
 
+// TestUnwrapFutureProof_DesembrulhaCadaInvolucro mirrors events.Message.UnwrapRaw
+// and verifies that unwrapFutureProof peels each FutureProofMessage wrapper,
+// setting the correct Is* flag and exposing the inner message to classifyMessage.
+//
+// HOUSEKEEP F188. The sync path receives raw proto from WebMessageInfo without
+// the library's UnwrapRaw pass. Without unwrapFutureProof, a wrapped message
+// would reach classifyMessage still inside the envelope, no branch would match,
+// and the message would be silently discarded.
+func TestUnwrapFutureProof_DesembrulhaCadaInvolucro(t *testing.T) {
+	inner := &waE2E.Message{Conversation: proto("inside")}
+
+	cases := []struct {
+		name    string
+		wrap    func(*waE2E.Message) *waE2E.Message
+		checkFn func(unwrapResult) bool
+		flag    string
+	}{
+		{
+			"ephemeral", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsEphemeral }, "IsEphemeral",
+		},
+		{
+			"viewOnce", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsViewOnce }, "IsViewOnce",
+		},
+		{
+			"viewOnceV2", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{ViewOnceMessageV2: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsViewOnce && r.IsViewOnceV2 }, "IsViewOnce+IsViewOnceV2",
+		},
+		{
+			"viewOnceV2Extension", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{ViewOnceMessageV2Extension: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsViewOnce && r.IsViewOnceV2 && r.IsViewOnceV2Extension }, "IsViewOnce+V2+Ext",
+		},
+		{
+			"documentWithCaption", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{DocumentWithCaptionMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsDocumentWithCaption }, "IsDocumentWithCaption",
+		},
+		{
+			"lottieSticker", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{LottieStickerMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsLottieSticker }, "IsLottieSticker",
+		},
+		{
+			"botInvoke", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{BotInvokeMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsBotInvoke }, "IsBotInvoke",
+		},
+		{
+			"editedMessage", func(m *waE2E.Message) *waE2E.Message {
+				return &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{Message: m}}
+			}, func(r unwrapResult) bool { return r.IsEdit }, "IsEdit",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			wrapped := c.wrap(inner)
+			r := unwrapFutureProof(wrapped)
+
+			if r.Message != inner {
+				t.Errorf("unwrapped message is not the inner message")
+			}
+			if !c.checkFn(r) {
+				t.Errorf("flag %s not set after unwrapping", c.flag)
+			}
+
+			got := classifyMessage(r.Message)
+			if got.Type != messageTypeText || got.Text != "inside" {
+				t.Errorf("classifyMessage after unwrap: Type=%q Text=%q, want text/inside", got.Type, got.Text)
+			}
+		})
+	}
+}
+
+// TestUnwrapFutureProof_SemInvolucroNaoMuda verifies that a plain message
+// passes through unwrapFutureProof unchanged, with all flags false.
+func TestUnwrapFutureProof_SemInvolucroNaoMuda(t *testing.T) {
+	plain := &waE2E.Message{Conversation: proto("plain")}
+	r := unwrapFutureProof(plain)
+	if r.Message != plain {
+		t.Error("plain message was modified by unwrapFutureProof")
+	}
+	if r.IsEphemeral || r.IsViewOnce || r.IsViewOnceV2 || r.IsViewOnceV2Extension ||
+		r.IsDocumentWithCaption || r.IsLottieSticker || r.IsBotInvoke || r.IsEdit {
+		t.Error("flags set on a plain message")
+	}
+}
+
+// TestUnwrapFutureProof_NilSeguro verifies nil input doesn't panic.
+func TestUnwrapFutureProof_NilSeguro(t *testing.T) {
+	r := unwrapFutureProof(nil)
+	if r.Message != nil {
+		t.Error("nil input produced non-nil message")
+	}
+}
+
+// TestUnwrapFutureProof_ConcordaComUnwrapRaw verifies that unwrapFutureProof
+// and the library's UnwrapRaw produce the same inner message and flags for
+// every wrapper type. This is the trava that prevents the two from diverging.
+func TestUnwrapFutureProof_ConcordaComUnwrapRaw(t *testing.T) {
+	inner := &waE2E.Message{Conversation: proto("concordancia")}
+
+	wrappers := map[string]func(*waE2E.Message) *waE2E.Message{
+		"ephemeral":           func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"viewOnce":            func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"viewOnceV2":          func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessageV2: &waE2E.FutureProofMessage{Message: m}} },
+		"viewOnceV2Ext":       func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{ViewOnceMessageV2Extension: &waE2E.FutureProofMessage{Message: m}} },
+		"docWithCaption":      func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{DocumentWithCaptionMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"lottieSticker":       func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{LottieStickerMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"botInvoke":           func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{BotInvokeMessage: &waE2E.FutureProofMessage{Message: m}} },
+		"edited":              func(m *waE2E.Message) *waE2E.Message { return &waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{Message: m}} },
+	}
+
+	for name, wrap := range wrappers {
+		t.Run(name, func(t *testing.T) {
+			wrapped := wrap(inner)
+
+			ours := unwrapFutureProof(wrapped)
+
+			lib := (&events.Message{RawMessage: wrap(inner)}).UnwrapRaw()
+
+			if classifyMessage(ours.Message).Type != classifyMessage(lib.Message).Type {
+				t.Errorf("classification diverges: ours=%q lib=%q",
+					classifyMessage(ours.Message).Type, classifyMessage(lib.Message).Type)
+			}
+			if classifyMessage(ours.Message).Text != classifyMessage(lib.Message).Text {
+				t.Errorf("text diverges: ours=%q lib=%q",
+					classifyMessage(ours.Message).Text, classifyMessage(lib.Message).Text)
+			}
+			if ours.IsEphemeral != lib.IsEphemeral {
+				t.Errorf("IsEphemeral: ours=%v lib=%v", ours.IsEphemeral, lib.IsEphemeral)
+			}
+			if ours.IsViewOnce != lib.IsViewOnce {
+				t.Errorf("IsViewOnce: ours=%v lib=%v", ours.IsViewOnce, lib.IsViewOnce)
+			}
+			if ours.IsDocumentWithCaption != lib.IsDocumentWithCaption {
+				t.Errorf("IsDocumentWithCaption: ours=%v lib=%v", ours.IsDocumentWithCaption, lib.IsDocumentWithCaption)
+			}
+			if ours.IsEdit != lib.IsEdit {
+				t.Errorf("IsEdit: ours=%v lib=%v", ours.IsEdit, lib.IsEdit)
+			}
+		})
+	}
+}
+
 // TestClassificacao_NenhumTipoConhecidoCaiNoDescarte é a asserção que fecha a
 // F184: para cada tipo que o classificador reconhece, o texto NUNCA sai vazio.
 //

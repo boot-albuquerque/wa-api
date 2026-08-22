@@ -10,6 +10,8 @@ import (
 
 	waCommon "wa-api/internal/wa-noise/protocol/proto/waCommon"
 	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
+	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
+	waWeb "wa-api/internal/wa-noise/protocol/proto/waWeb"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 	"wa-api/pkg/infra/db"
@@ -714,5 +716,108 @@ func TestHistorico_EnqueteEBotoesSaoGravadas(t *testing.T) {
 				t.Errorf("text_content = %q, quero %q — o conteúdo da mensagem foi perdido", texto, c.wantTexto)
 			}
 		})
+	}
+}
+
+// --- F187/F188: desembrulho no caminho de SYNC --------------------------------
+//
+// O caminho de tempo real recebe mensagens já desembrulhadas pela biblioteca
+// (events.Message.UnwrapRaw). O de sync recebe o proto cru de WebMessageInfo.
+// Antes do unwrapFutureProof, uma mensagem embrulhada em FutureProofMessage
+// — ephemeral, view-once, editada — chegava ao classificador com o invólucro,
+// nenhum ramo casava, e era descartada.
+
+// gravarViaSync exercita o caminho de persistência do HistorySync, que é o
+// que recebe o proto CRU (sem UnwrapRaw) e agora aplica unwrapFutureProof.
+func gravarViaSync(t *testing.T, evh *UserEventHandler, msgID string, rawMsg *waE2E.Message) {
+	t.Helper()
+	chatJID := types.NewJID("5511999999999", types.DefaultUserServer)
+	ownerJID := "5511888888888@s.whatsapp.net"
+	ts := uint64(1724300000)
+	syncMsg := &waHistorySync.HistorySyncMsg{
+		Message: &waWeb.WebMessageInfo{
+			Key: &waCommon.MessageKey{
+				RemoteJID: proto(chatJID.String()),
+				FromMe:    boolProto(false),
+				ID:        proto(msgID),
+			},
+			Message:          rawMsg,
+			MessageTimestamp: &ts,
+		},
+	}
+	evh.persistHistorySyncMessage(chatJID, ownerJID, syncMsg)
+}
+
+func boolProto(b bool) *bool { return &b }
+
+// TestSync_InvolucroDesembrulhadoGrava proves that the sync path unwraps
+// each FutureProofMessage wrapper and classifies the inner message correctly.
+// This is the test that would have caught the F188 loss if it had existed.
+func TestSync_InvolucroDesembrulhadoGrava(t *testing.T) {
+	cases := []struct {
+		name      string
+		raw       *waE2E.Message
+		wantType  string
+		wantText  string
+	}{
+		{
+			"ephemeral text",
+			&waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{
+				Message: &waE2E.Message{Conversation: proto("secret msg")},
+			}},
+			"text", "secret msg",
+		},
+		{
+			"viewOnce image",
+			&waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{
+				Message: &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: proto("once")}},
+			}},
+			"image", "once",
+		},
+		{
+			"docWithCaption list",
+			&waE2E.Message{DocumentWithCaptionMessage: &waE2E.FutureProofMessage{
+				Message: &waE2E.Message{ListMessage: &waE2E.ListMessage{Title: proto("Menu")}},
+			}},
+			"list", "Menu",
+		},
+		{
+			"edited message",
+			&waE2E.Message{EditedMessage: &waE2E.FutureProofMessage{
+				Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+					Type:          waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(),
+					Key:           &waCommon.MessageKey{ID: proto("ORIG-1")},
+					EditedMessage: &waE2E.Message{Conversation: proto("edited text")},
+				}},
+			}},
+			"edit", "edited text",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			evh := handlerComHistorico(t, "u-sync-unwrap-"+c.name)
+			msgID := "SYNC-" + c.name
+			gravarViaSync(t, evh, msgID, c.raw)
+
+			tipo, txt := lerLinha(t, evh, msgID)
+			if tipo != c.wantType {
+				t.Errorf("message_type = %q, quero %q", tipo, c.wantType)
+			}
+			if txt != c.wantText {
+				t.Errorf("text_content = %q, quero %q", txt, c.wantText)
+			}
+		})
+	}
+}
+
+// TestSync_SemInvolucroNaoMuda verifies that a plain (unwrapped) message
+// via sync still classifies correctly — the unwrap is a no-op.
+func TestSync_SemInvolucroNaoMuda(t *testing.T) {
+	evh := handlerComHistorico(t, "u-sync-plain")
+	gravarViaSync(t, evh, "SYNC-PLAIN", &waE2E.Message{Conversation: proto("hello")})
+	tipo, txt := lerLinha(t, evh, "SYNC-PLAIN")
+	if tipo != "text" || txt != "hello" {
+		t.Errorf("plain message via sync: type=%q text=%q, want text/hello", tipo, txt)
 	}
 }

@@ -15803,9 +15803,47 @@ que a etapa (b) da DECISÃO 21 vai tratar, com a causa certa desta vez.
 
 **Status**: ver a correção acima — a entrada original estava errada.
 
+### DESEMBRULHO NO CAMINHO DE SYNC (decisão 53=a, 2026-08-22)
+
+O caminho de sync (`eventhandler_history.go`) recebia o proto cru de
+`WebMessageInfo.GetMessage()` sem o desembrulho que `UnwrapRaw` faz no
+caminho de tempo real. Uma mensagem efémera, view-once, editada ou
+`documentWithCaption` que chegasse por sincronização ficava embrulhada,
+nenhum ramo de `classifyMessage` casava, e era descartada.
+
+**Correção**: `unwrapFutureProof()` em `message_classify.go` — espelha
+`UnwrapRaw` para um `*waE2E.Message` cru, com os 8 invólucros e as flags
+`Is*`. Aplicado antes de `classifyMessage` no caminho de sync.
+
+**Impacto em dados gravados**: as 689 linhas `unknown` em `message_history`
+incluem mensagens embrulhadas que chegaram por sync. Sem acesso à produção
+para medir quantas, o limite superior é 689. Nenhuma linha existente muda —
+a nova classificação aplica-se apenas a mensagens que entrem a partir daqui.
+
+**Testes**:
+- `TestUnwrapFutureProof_DesembrulhaCadaInvolucro` — 8 wrappers, tabela
+- `TestUnwrapFutureProof_SemInvolucroNaoMuda` — passthrough
+- `TestUnwrapFutureProof_NilSeguro` — nil safety
+- `TestUnwrapFutureProof_ConcordaComUnwrapRaw` — concordância com a biblioteca
+- `TestSync_InvolucroDesembrulhadoGrava` — 4 casos pelo caminho de sync
+- `TestSync_SemInvolucroNaoMuda` — mensagem sem invólucro pelo sync
+
+**CN-1 executado**: removido o `unwrapFutureProof` em `eventhandler_history.go`,
+os 4 casos de sync falharam com `message_type = "unknown"` e `text_content = ""`:
+
+```
+eventhandler_history_discard_test.go:805: message_type = "unknown", quero "text"
+eventhandler_history_discard_test.go:808: text_content = "", quero "secret msg"
+(idem para viewOnce, docWithCaption, edited)
+```
+
+Restaurado via cópia de backup (Armadilha 22).
+
+**Status**: **CORRIGIDO.** Desembrulho aplicado, testes e CN executados.
+
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F189 — o orçamento de isenções do logcov conta MENÇÕES, não anotações
 
@@ -16658,9 +16696,11 @@ informação chegar, foi ela deixar de ser deitada fora entre o ramo e a coluna.
 inventar um caso novo, é o que torna a comparação honesta. Um valor diferente
 mediria outra coisa e deixaria a dúvida de se o antes e o depois são comparáveis.
 
-**Status**: verificado em campo. Continuam abertos, e registados acima: a
-unificação dos dois classificadores num só, e o backfill das 41 linhas de
-`location` já gravadas com placeholder.
+**Status**: **CORRIGIDO.** A unificação dos dois classificadores foi feita
+(`message_classify.go`, documentada no primeiro bloco desta entrada). O backfill
+das linhas com `:location:` foi medido e descartado: só 2 registos sintéticos
+seriam afetados (documentado acima). O desembrulho de `FutureProofMessage` no
+caminho de sync foi adicionado na [[F188]], completando o alinhamento.
 
 ---
 
@@ -16718,7 +16758,7 @@ e agora quase todos os que o protocolo define também.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F191 — não consumimos os eventos de label que a biblioteca já emite
 

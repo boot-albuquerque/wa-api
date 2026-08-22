@@ -138,11 +138,21 @@ func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accoun
 		return false
 	}
 
-	// Get message content
-	message := msg.Message.GetMessage()
-	if message == nil {
+	// Get message content and unwrap FutureProofMessage wrappers (F188).
+	//
+	// The real-time path gets messages already unwrapped by the library's
+	// UnwrapRaw (events/message.go:119). The sync path receives raw proto
+	// from WebMessageInfo, so we unwrap here to match. Without this, an
+	// edited, ephemeral, or view-once message arriving via history sync
+	// would reach classifyMessage still wrapped, no branch would match,
+	// and the message would be discarded — the same loss the F188
+	// measured in the real-time path for edits.
+	rawMessage := msg.Message.GetMessage()
+	if rawMessage == nil {
 		return false
 	}
+	unwrapped := unwrapFutureProof(rawMessage)
+	message := unwrapped.Message
 
 	// A classificação vive em message_classify.go, PARTILHADA com o caminho de
 	// tempo real (F187). As duas cadeias divergiram nas DUAS direções ao longo
@@ -216,20 +226,20 @@ func (evh *UserEventHandler) persistHistorySyncMessage(chatJID types.JID, accoun
 		PushName:  pushName,
 	}
 
-	// Create events.Message-like structure for datajson
-	// This matches the format used in regular message events
-	// RawMessage should be the full waE2E.Message structure
+	// Create events.Message-like structure for datajson.
+	// The Is* flags come from unwrapFutureProof, matching what
+	// UnwrapRaw sets in the real-time path.
 	messageEvent := map[string]interface{}{
 		"Info":                  messageInfo,
 		"Message":               message,
-		"IsEphemeral":           false,
-		"IsViewOnce":            false,
-		"IsViewOnceV2":          false,
-		"IsViewOnceV2Extension": false,
-		"IsDocumentWithCaption": false,
-		"IsLottieSticker":       false,
-		"IsBotInvoke":           false,
-		"IsEdit":                false,
+		"IsEphemeral":           unwrapped.IsEphemeral,
+		"IsViewOnce":            unwrapped.IsViewOnce,
+		"IsViewOnceV2":          unwrapped.IsViewOnceV2,
+		"IsViewOnceV2Extension": unwrapped.IsViewOnceV2Extension,
+		"IsDocumentWithCaption": unwrapped.IsDocumentWithCaption,
+		"IsLottieSticker":       unwrapped.IsLottieSticker,
+		"IsBotInvoke":           unwrapped.IsBotInvoke,
+		"IsEdit":                unwrapped.IsEdit,
 		"SourceWebMsg":          nil,
 		"UnavailableRequestID":  "",
 		"RetryCount":            0,
