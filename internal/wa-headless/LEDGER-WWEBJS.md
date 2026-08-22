@@ -88,8 +88,8 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `setStatus` | capabilities/profile (parcial) | `BLOCKED` | — | — | — | H66: setMyTextStatus tem 5 primitivos e ZERO chamadores no bundle |
 | `setDisplayName` | profile.SetDisplayName | `BLOCKED` | sim | impossível | sim | H66: canSetMyPushname()=false — a conta é Business |
 | `getState` | capabilities/liveness | `PROVEN` | sim | sim | sim | pior latência 1ms em 5 amostras |
-| `sendPresenceAvailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50: observação não provada; exige as duas contas na agenda uma da outra |
-| `sendPresenceUnavailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50: observação não provada; exige as duas contas na agenda uma da outra. *(era `idem`, expandido na H130 — referência por posição de linha já produziu um `idem` pendurado)* |
+| `sendPresenceAvailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50 + **H144**: observação não provada, e a causa agora é MEDIDA em vez de suposta. Com as duas contas acordadas ao mesmo tempo (sessão dupla), `Observe` nunca chega a `subscribed` em 45 s. O par está na coleção com PN e LID fundidos, e os sinalizadores da agenda leem `isMyContact:false isAddressBookContact:false isWAContact:false` — a assinatura de presença exige o vínculo de agenda, que se cria no TELEFONE. Passa a ser dependência humana explícita, não pendência deste módulo |
+| `sendPresenceUnavailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50 + **H144**: idem `sendPresenceAvailable` — a sessão dupla mediu `isMyContact:false isAddressBookContact:false` e a assinatura nunca chega. Dependência humana (salvar o contato no telefone), não pendência do módulo. *(era `idem`, expandido na H130 — referência por posição de linha já produziu um `idem` pendurado)* |
 | `archiveChat` | chats (arquivar) | `PROVEN` | sim | sim | sim | H55: causa era pedido REDUNDANTE |
 | `unarchiveChat` | chats | `PROVEN` | sim | sim | sim | — |
 | `pinChat` | chats | `PROVEN` | sim | sim | sim | — |

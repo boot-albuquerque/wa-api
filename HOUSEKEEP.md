@@ -3708,3 +3708,68 @@ nomeando exatamente a mensagem apagada (`total 1, was 0`).
 invariante 6 é normalmente enunciada como "não decida na página"; este caso
 mostra a outra metade — **não VERIFIQUE na página**, porque verificar cedo demais
 é decidir com a informação errada.
+
+---
+
+## H144 — a sessão dupla não destravou a presença, e o que ela produziu foi melhor: a causa medida
+
+**Data**: 2026-08-22
+**Contexto**: reauditar os 56 `PARTIAL` procurando os que ficaram acionáveis por
+causa das capacidades novas de hoje.
+
+**Onde**: `internal/wa-headless/probe_presence2_test.go` (novo),
+linhas `sendPresenceAvailable` e `sendPresenceUnavailable` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: as duas linhas estavam `PARTIAL` desde a H50 com a nota
+*"observação não provada; exige as duas contas na agenda uma da outra"*. Aquilo
+era uma SUPOSIÇÃO sobre a causa — plausível, nunca medida —, escrita quando não
+havia como acordar as duas contas ao mesmo tempo. A sessão dupla (H135) parecia
+ser exatamente a peça que faltava.
+
+**Não era.** Com conta-A e conta-B acordadas simultaneamente, conta-B anunciando
+disponível e conta-A observando, `Observe` nunca chega a `subscribed` em 45 s de
+tentativa.
+
+**A medição que valeu a rodada** foi a que perguntou POR QUÊ, em vez de concluir
+a partir da falha:
+
+```
+conta-B in conta-A's address book: found=true
+record: contacts.Contact(identity=<redacted> pn=true lid=true merged=true)
+address-book flags: {"inCollection":true, "isMyContact":false,
+                     "isAddressBookContact":false, "isWAContact":false}
+```
+
+O par ESTÁ na coleção, com PN e LID fundidos — a identidade está resolvida e
+correta. O que falta é o vínculo de AGENDA, e `isMyContact` e
+`isAddressBookContact` leem `false` nos dois. A assinatura de presença exige esse
+vínculo, e ele se cria no TELEFONE, salvando o contato.
+
+**O `Contact` deste módulo não carrega esses sinalizadores**, e foi por isso que
+a leitura teve de ser crua: `contacts.ByJID` respondeu `found=true`, que é
+resposta a *"existe no WhatsApp"* — pergunta diferente de *"está na agenda"*.
+Ler a primeira como a segunda é o erro que teria mantido a hipótese viva.
+
+**Correção aplicada**: nenhuma no código. As duas linhas continuam `PARTIAL`, mas
+a nota deixou de ser hipótese e virou medição, e a pendência mudou de categoria:
+é **dependência humana** (salvar o contato no telefone), não trabalho parado
+deste módulo. Fica na lista de dependências humanas junto com foto de perfil e
+status.
+
+**Status**: não corrigido — e o "não corrigido" agora tem causa em vez de
+suspeita.
+
+**Lição**: *uma capacidade nova não destrava o que ela não toca, e descobrir isso
+depressa vale a rodada.* A tentação era registrar "a sessão dupla não resolveu" e
+seguir. O que fez a rodada valer foi a segunda pergunta — POR QUE não —, que
+transformou uma nota de três meses em fato verificável. A H142 é o mesmo
+movimento com o sinal trocado: lá, perguntar por que o zero era zero abriu a
+linha; aqui, fechou a dúvida.
+
+**Achado incidental**: `contacts.Contact` não expõe `isMyContact` /
+`isAddressBookContact`, e a distinção entre "existe no WhatsApp" e "está na minha
+agenda" é real e útil — o `isMyContact` da referência existe exatamente para
+isso. **Correção sugerida, não aplicada**: acrescentar os dois campos ao
+`Contact`, medindo antes a distribuição deles sobre as 944 entradas desta conta
+(um campo que lê `false` em 944 de 944 não é campo, é ruído). Fora do escopo da
+tarefa atual.
