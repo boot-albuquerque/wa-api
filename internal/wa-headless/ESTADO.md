@@ -487,3 +487,51 @@ soarem bem.
 10. **`MISSING` mente por inércia** (H141). Depois que a evidência é colhida, o
     rótulo tem de acompanhar — senão o ledger conta itens em vez de orientar
     trabalho.
+
+## Fase 2 — endurecimento de produção (decisão 65, 2026-08-22)
+
+Enunciado recebido da orquestração, verbatim:
+
+> **Fase 2 é ENDURECIMENTO DE PRODUÇÃO do `wa-headless`**: fechar primeiro as
+> dívidas internas acionáveis e depois provar reconexão, perfil sujo,
+> long-running, concorrência/multi-sessão, carga, limites de CPU/RAM, teardown,
+> event-bus, recuperação e observabilidade sem sucesso silencioso; **não inclui
+> HTTP, que pertence ao `wa-api`**.
+>
+> Ela **encerra quando** todas as invariantes operacionais críticas estiverem
+> provadas **sob falha e carga**, sem leaks/orphans/races, com recursos
+> *bounded*, recuperação determinística e **nenhum achado acionável de
+> severidade alta aberto**. Só depois disso o foco passa para integração ampla no
+> `wa-api` ou para `wa-noise`.
+
+### O que isso muda no método
+
+A Fase 1 foi medida contra uma REFERÊNCIA — o ledger de paridade. A Fase 2 é
+medida contra **falha e carga**, e o `CLAUDE.md` já tem a regra que governa isso,
+escrita depois do pool de despacho da F86: *meça o cenário em que o mecanismo
+COBRA o preço, não só aquele em que ele paga*. A pergunta de cada item passa a
+ser **qual entrada faz esta proteção virar o problema**.
+
+A invariante que o projeto já enunciou continua valendo e agora é o centro:
+
+> Nada que espere por relógio ou por par morto pode ocupar slot limitado.
+
+### Primeira parada: as dívidas internas acionáveis
+
+São as escaladas durante a Fase 1 e ainda não decididas:
+
+1. **Identidade crua na superfície (H151)** — três capacidades dão resposta bem
+   formada e ERRADA para jid de telefone num build LID-first, cada uma de um
+   jeito. Não é bug em três lugares: é uma decisão que ninguém tomou sobre quem
+   resolve identidade, o chamador ou a capacidade. Três opções com custos
+   diferentes estão registradas na H151.
+2. **`chats.Clear` sem pós-condição (H166)** — `Emptied` carrega `MessagesBefore`
+   e nenhum "depois", então um `Clear` que não apagasse nada devolveria o mesmo
+   valor de sucesso. Mudar de "nunca falha" para "pode falhar" é mudança de
+   contrato.
+3. **`addressbook.DeviceCount` aceita jid não resolvido (H148)** — caso
+   particular do item 1, registrado antes de o padrão ser visto.
+
+A assimetria de portas da `ChatCollection` — só `change`, sem `remove` — **já foi
+fechada** na H173.
+
