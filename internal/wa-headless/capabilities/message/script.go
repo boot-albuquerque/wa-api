@@ -152,3 +152,63 @@ func currentScript(messageID string) string {
 	return "kicked";
 	})()`
 }
+
+// quotedScript reads WHICH message a message quotes.
+//
+// THE FIELD IS NOT WHERE THE MODEL SUGGESTS. A message model carries
+// __x_fromQuotedMsg, __x_isQuotedMsgAvailable and __x_questionReplyQuotedMessage
+// on EVERY row — measured on all 110 of a hydration — and all three hold a lazy
+// sentinel, not data. Reading them as truth counts every message as quoting
+// something, which is exactly what a first, wrong instrument reported (H131).
+//
+// The field that carries the reference is quotedStanzaID, which is the same one
+// capabilities/send uses to PROVE a reply carried its quote. Using the same
+// field is deliberate: two ways of asking "does this quote something" would
+// drift, and the drift would show as a reply that verified and then could not be
+// read back.
+func quotedScript(messageID string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
+	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
+	try {
+		const MC = window.require("` + modMsgCollection + `").MsgCollection;
+		let m = null;
+		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
+		if (!m) {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				try { if (c.id && c.id.id === ` + strconv.Quote(messageID) + `) { m = c; break; } } catch (e) {}
+			}
+		}
+		if (!m) { park({ ok: true, notFound: true }); return "kicked"; }
+
+		const sid = (typeof m.quotedStanzaID === "string") ? m.quotedStanzaID : "";
+		if (!sid) { park({ ok: true, notFound: false, quotes: false }); return "kicked"; }
+
+		// O ALVO E' PROCURADO NA COLECAO, e o resultado diz se ele esta' aqui.
+		// "Cita a mensagem X" e "X esta carregada" sao fatos diferentes, e um
+		// leitor que os fundisse diria que nao ha citacao quando o alvo apenas
+		// nao foi hidratado.
+		let loaded = false;
+		try {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				if (c.id && c.id.id === sid) { loaded = true; break; }
+			}
+		} catch (e) {}
+
+		park({
+			ok: true, notFound: false, quotes: true,
+			quotedId: sid,
+			quotedLoaded: loaded,
+			quotedChat: jid(m.quotedRemoteJid),
+			quotedSender: jid(m.quotedParticipant),
+		});
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
+	return "kicked";
+	})()`
+}

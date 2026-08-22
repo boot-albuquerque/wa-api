@@ -303,3 +303,87 @@ func TestAnEmptyIDNeverReachesThePageForAReload(t *testing.T) {
 		t.Error("an empty id reached the page")
 	}
 }
+
+// A MESSAGE THAT QUOTES NOTHING IS NOT AN ERROR. Most messages quote nothing —
+// measured: 336 loaded messages, ZERO with a quoted id — so treating the absence
+// as a failure would make the common case look broken.
+func TestAMessageThatQuotesNothingIsNotAnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":false,"quotes":false}`}
+	got, err := rd(d).QuotedOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("QuotedOf: %v", err)
+	}
+	if got.Quotes {
+		t.Error("a message with no quoted id reported a quote")
+	}
+	if got.MessageID != "" {
+		t.Error("an id came back for a message that quotes nothing")
+	}
+}
+
+// "QUOTES X" AND "X IS LOADED" ARE DIFFERENT FACTS.
+//
+// Merging them would say "no quote" about a reply whose target simply has not
+// hydrated — a lie about the MESSAGE rather than about the session. The
+// distinction is the same one H108 had to make between an absent ack and an ack
+// of zero.
+func TestQuotingAndBeingLoadedAreSeparateFacts(t *testing.T) {
+	d := &double{answer: `{"ok":true,"quotes":true,"quotedId":"ORIG1","quotedLoaded":false}`}
+	got, err := rd(d).QuotedOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("QuotedOf: %v", err)
+	}
+	if !got.Quotes {
+		t.Fatal("a message with a quoted id reported no quote")
+	}
+	if got.Loaded {
+		t.Error("an unloaded target was reported as loaded")
+	}
+	if got.MessageID != "ORIG1" {
+		t.Errorf("the quoted id was lost: %q", got.MessageID)
+	}
+}
+
+// THE SCRIPT MUST READ quotedStanzaID, and MUST NOT read the sentinel fields.
+//
+// Every message model carries __x_fromQuotedMsg, __x_isQuotedMsgAvailable and
+// __x_questionReplyQuotedMessage, and all three hold a LAZY SENTINEL rather than
+// data — measured on all 110 of a hydration. A reader that trusted them would
+// report every message as quoting something, which is exactly what a first,
+// wrong instrument reported (H131).
+func TestTheQuotedScriptReadsTheFieldThatCarriesTheReference(t *testing.T) {
+	d := &double{answer: `{"ok":true,"quotes":false}`}
+	if _, err := rd(d).QuotedOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("QuotedOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if !strings.Contains(code, "quotedStanzaID") {
+		t.Fatal("the script does not read quotedStanzaID, which is the field that " +
+			"actually carries the reference and the one send uses to prove a reply")
+	}
+	for _, sentinel := range []string{
+		"fromQuotedMsg", "isQuotedMsgAvailable", "questionReplyQuotedMessage",
+	} {
+		if strings.Contains(code, sentinel) {
+			t.Errorf("the script reads %q, which holds a lazy sentinel on every "+
+				"message and would count them all as quoting", sentinel)
+		}
+	}
+}
+
+func TestAQuotedLookupOfAnUnloadedMessageIsErrNotFound(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":true}`}
+	if _, err := rd(d).QuotedOf(context.Background(), "3EB0", "t"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForAQuote(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).QuotedOf(context.Background(), " ", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("err = %v, want ErrNoMessage", err)
+	}
+	if d.kicks != 0 {
+		t.Error("an empty id reached the page")
+	}
+}

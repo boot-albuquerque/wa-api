@@ -356,7 +356,7 @@ código — é falta de dado.
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
 | `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
 | `getGroupMentions` | — | `MISSING` | — | medido | — | idem |
-| `getQuotedMessage` | send.Reply (verificação da citação) | `PARTIAL` | sim | sim | sim | H130: **o mapeamento anterior estava ERRADO** — dizia "metadados em messagemeta", e `messagemeta.Meta` não tem campo de citação nenhum (jid, id, direção, tipo, timestamp e nada mais, por invariante 12). O que existe de verdade: `send.Reply` lê `quotedStanzaID` da página para provar que a citação foi anexada. O que falta é RESOLVER a mensagem citada, e isso é ACIONÁVEL — `message.OriginOf` poderia carregar o id citado |
+| `getQuotedMessage` | message.QuotedOf | `PROVEN` | sim | sim | sim | H131: PRODUZI a citação para poder prová-la — 336 mensagens carregadas e ZERO com id citado, então esperar era a armadilha H93. Mensagem comum diz `quotes=false`, resposta diz `quotes=true` apontando para a mensagem certa, e o id devolvido é usável por `OriginOf`. Lê `quotedStanzaID`, o mesmo campo que o `send` usa para provar a citação — os campos `__x_*QuotedMsg*` existem em TODA mensagem e guardam sentinela preguiçosa, não dado |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
 | `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53 |
 | `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
@@ -469,8 +469,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 93 | 42% |
-| `PARTIAL` | 59 | 27% |
+| `PROVEN` | 94 | 43% |
+| `PARTIAL` | 58 | 26% |
 | `BLOCKED` | 19 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
 | `MISSING` | 45 | 20% |

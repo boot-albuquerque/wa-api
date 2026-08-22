@@ -10281,3 +10281,69 @@ linha a linha, e não mais uma impressão.
 
 **Status**: entregue. Nenhum código de produção mudou; o que mudou é que o
 ledger passou a poder responder à pergunta que a Fase 1 faz.
+
+## H131 — `getQuotedMessage`: o instrumento errado contou 110 de 110
+
+**Data**: 2026-08-22. **Contexto**: o único `PARTIAL` que a varredura da H130
+classificou como ACIONÁVEL — a linha estava mapeada para algo que não carrega
+citação nenhuma.
+
+**Onde**: `capabilities/message/` (`QuotedOf`, `quotedScript`),
+`probe_quoted_test.go` (novo).
+
+### O instrumento errado, e por que ele mentiu convincentemente
+
+A primeira sonda procurou campos com "quoted" ou "contextInfo" no nome e contou
+os que não fossem nulos. Resultado: **110 de 110 mensagens com citação**.
+
+Isso é falso. Todo modelo de mensagem carrega `__x_fromQuotedMsg`,
+`__x_isQuotedMsgAvailable` e `__x_questionReplyQuotedMessage`, e os três guardam
+uma **sentinela de getter preguiçoso** — um objeto marcador, não dado. Meu teste
+de "não é nulo/vazio" passava na sentinela.
+
+O número era convincente porque era redondo e alto. Se eu tivesse escrito o
+leitor em cima dele, ele reportaria que toda mensagem cita alguma coisa, e o
+defeito só apareceria quando alguém confiasse na resposta.
+
+Com o campo certo — `quotedStanzaID`, que é o MESMO que o `send` usa para provar
+que uma resposta levou a citação:
+
+```
+336 mensagens · withQuotedStanzaID: 0 · withQuotedMsg: 0
+```
+
+**Zero.** Nenhuma mensagem desta conta cita outra.
+
+### A saída não foi desistir
+
+Zero é a armadilha H93 — embarcar leitor nunca visto devolvendo algo. A saída é
+a mesma que fechou `GROUP_UPDATE` (H119) e `VOTE_UPDATE` (H121): **produzir o
+fato**. `send.Reply` está provado, então mandei uma resposta e li de volta.
+
+```
+plain message -> Quoted(quotes=false ...)
+reply         -> Quoted(quotes=true id=true loaded=true sender=true)
+quoted message resolved: Origin(chat=true fromMe=true at=true)
+```
+
+A perna da mensagem COMUM existe porque sem ela um leitor que dissesse
+"quotes=true" para tudo passaria na perna da resposta.
+
+### Duas distinções que o tipo carrega
+
+**"Cita X" e "X está carregada" são fatos diferentes.** Fundi-los diria "não há
+citação" sobre uma resposta cujo alvo apenas não hidratou — mentira sobre a
+MENSAGEM, não sobre a sessão. É a mesma distinção que a H108 teve de fazer entre
+ack ausente e ack zero.
+
+**Não citar nada não é erro.** É a maioria absoluta dos casos aqui, e tratá-lo
+como falha faria o caso comum parecer quebrado.
+
+### Controles negativos EXECUTADOS
+
+1. Ler os campos sentinela em vez de `quotedStanzaID`: falha, nomeando os três.
+2. Fundir "cita" com "alvo carregado": falha.
+3. Tratar "não cita" como erro: falha.
+
+**Status**: entregue e provado ao vivo. Era o último `PARTIAL` acionável que a
+varredura da H130 tinha identificado.

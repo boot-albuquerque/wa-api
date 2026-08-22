@@ -245,3 +245,66 @@ func (r *Reader) CurrentOf(ctx context.Context, messageID, label string) (Curren
 	}
 	return Current{HasAck: out.HasAck, Ack: out.Ack, Starred: out.Starred, Type: out.Type}, nil
 }
+
+// Quoted is the message a message replies to.
+type Quoted struct {
+	// Quotes says this message references another at all.
+	Quotes bool
+	// MessageID is the quoted message's raw id, empty when Quotes is false.
+	MessageID string
+	// Loaded says the quoted message is IN this session.
+	//
+	// IT IS A SEPARATE FACT FROM Quotes, and merging them would say "no quote"
+	// about a reply whose target simply has not hydrated — which is a lie about
+	// the message rather than about the session.
+	Loaded bool
+	// ChatJID and SenderJID are where the quoted message lived. Empty when the
+	// page does not carry them, which it does not for a quote inside the same
+	// one-to-one conversation.
+	ChatJID   string
+	SenderJID string
+}
+
+func (q Quoted) String() string {
+	return fmt.Sprintf("message.Quoted(quotes=%t id=%t loaded=%t chat=%t sender=%t)",
+		q.Quotes, q.MessageID != "", q.Loaded, q.ChatJID != "", q.SenderJID != "")
+}
+
+// QuotedOf reports which message a message quotes.
+//
+// It is the reference's Message.getQuotedMessage, narrowed honestly: it answers
+// WHICH message is quoted and whether this session holds it, and does not return
+// the quoted message's content — reading that is what OriginOf and CurrentOf are
+// for, on the id this returns.
+func (r *Reader) QuotedOf(ctx context.Context, messageID, label string) (Quoted, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return Quoted{}, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, quotedScript(messageID), label+"/quoted")
+	if err != nil {
+		return Quoted{}, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK       bool   `json:"ok"`
+		Why      string `json:"why"`
+		NotFound bool   `json:"notFound"`
+		Quotes   bool   `json:"quotes"`
+		QuotedID string `json:"quotedId"`
+		Loaded   bool   `json:"quotedLoaded"`
+		Chat     string `json:"quotedChat"`
+		Sender   string `json:"quotedSender"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return Quoted{}, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return Quoted{}, ErrNotFound
+	}
+	if !out.OK {
+		return Quoted{}, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	return Quoted{
+		Quotes: out.Quotes, MessageID: out.QuotedID, Loaded: out.Loaded,
+		ChatJID: out.Chat, SenderJID: out.Sender,
+	}, nil
+}
