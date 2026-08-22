@@ -3773,3 +3773,51 @@ isso. **Correção sugerida, não aplicada**: acrescentar os dois campos ao
 `Contact`, medindo antes a distribuição deles sobre as 944 entradas desta conta
 (um campo que lê `false` em 944 de 944 não é campo, é ruído). Fora do escopo da
 tarefa atual.
+
+---
+
+## H145 — `description`: a metade aberta do leitor não é trabalho parado, é consequência de escrita bloqueada
+
+**Data**: 2026-08-22
+**Contexto**: continuação da reauditoria dos `PARTIAL` (H144).
+
+**Onde**: `internal/wa-headless/probe_gdesc2_test.go` (novo), linha `description`
+do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a linha `description` diz que o leitor está entregue e **nunca foi
+observado não-vazio** — no grupo de laboratório `desc` e `displayedDesc` leem
+`undefined`, o que é compatível com *"o grupo não tem descrição"* E com *"o
+leitor olha o campo errado"*. Era candidata natural à manobra da H142: produzir o
+dado com `group.SetDescription` (H126) e observar o leitor.
+
+**Medição**:
+
+```
+BEFORE: descLen=0 source="none"
+SetDescription: group: the description did not take:
+                asked for 35 bytes and the server reports 0
+```
+
+A escrita reproduziu, pela **terceira vez independente**, o bloqueio já medido em
+canal (H113) e em grupo (H126): a página ACEITA a chamada e o servidor nunca
+armazena. A pós-condição do `SetDescription` mordeu corretamente e recusou
+declarar sucesso — invariante 14 funcionando.
+
+**O que isto estabelece, e o ledger não dizia**: não existe, dentro deste módulo,
+produtor para o dado que o leitor precisaria observar. A metade aberta da linha
+`description` não é trabalho pendente — é consequência de uma linha `BLOCKED`.
+
+Isso muda a classificação prática de *"PARTIAL, talvez acionável"* para
+*"PARTIAL, comprovadamente não acionável aqui"*, que é exatamente a distinção que
+o critério de encerramento da Fase 1 (decisão 52/62) pede e que não estava
+registrada.
+
+**Status**: não corrigido, por não haver o que corrigir. A sonda ficou no repo e
+faz `Skip` com a mensagem do bloqueio em vez de falhar: se o servidor um dia
+passar a armazenar, ela deixa de pular e a linha volta a ser acionável sozinha.
+
+**Lição**: *nem toda metade aberta é trabalho; algumas são sombra de outra
+linha.* Varrer `PARTIAL` procurando o que ficou acionável só é honesto se
+também registrar o que ficou provado INACIONÁVEL — senão a mesma linha é
+reexaminada a cada varredura, e cada varredura paga de novo o custo de descobrir
+o mesmo bloqueio.
