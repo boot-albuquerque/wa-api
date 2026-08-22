@@ -563,3 +563,58 @@ func TestTheIngressScriptReadsFromMe(t *testing.T) {
 			"would cross the boundary with the same direction")
 	}
 }
+
+// A CONVERSATION LEAVING IS NOT A CONVERSATION CHANGING.
+//
+// Deleting a throwaway group produced 14 chat.changed for that conversation and
+// nothing saying it was GONE (H173). A subscriber watching chat.changed sees the
+// same event for an unread count moving and for the chat ceasing to exist — and
+// the second invalidates every id it holds.
+func TestAChatLeavingIsItsOwnEvent(t *testing.T) {
+	f := &fakePage{freshAt: map[int]bool{1: true}, rows: [][]string{{
+		`{"type":"chat.changed","seq":1,"at":1700000000,"chat":"1@g.us","msg":"","fromMe":false,"kind":"","ack":0,"bodyLen":0}`,
+		`{"type":"chat.removed","seq":2,"at":1700000000,"chat":"1@g.us","msg":"","fromMe":false,"kind":"","ack":0,"bodyLen":0}`,
+	}}}
+	h := NewHub()
+	var changed, removed int
+	h.Subscribe(func(e Event) {
+		switch e.Type {
+		case ChatChanged:
+			changed++
+		case ChatRemoved:
+			removed++
+		}
+	})
+	runPump(t, f, h, 1)
+	if changed != 1 || removed != 1 {
+		t.Fatalf("the two facts did not arrive as two: changed=%d removed=%d", changed, removed)
+	}
+}
+
+// THE PAGE OPENS BOTH DOORS ON THE CHAT COLLECTION. Only 'change' was installed,
+// which is why a deletion arrived as more changes.
+func TestTheIngressListensForChatRemoval(t *testing.T) {
+	code := installScriptForTest()
+	if !strings.Contains(code, "CC.on('remove'") {
+		t.Fatal("the install script does not listen for 'remove' on the chat " +
+			"collection, so a deleted conversation arrives only as more changes")
+	}
+	if !strings.Contains(code, "CC.on('change'") {
+		t.Fatal("the change listener disappeared")
+	}
+	// E O QUE ELE EMITE E' AFIRMADO SOBRE O SCRIPT, porque o duble alimenta
+	// linhas prontas: um controle negativo que trocou o tipo emitido por
+	// chat.changed passou, e passou porque a asserção media o parser.
+	i := strings.Index(code, "const onChatRemove")
+	if i < 0 {
+		t.Fatal("the removal handler is gone")
+	}
+	body := code[i:]
+	if j := strings.Index(body, "};"); j > 0 {
+		body = body[:j]
+	}
+	if !strings.Contains(body, string(ChatRemoved)) {
+		t.Fatalf("the removal handler does not emit %s; a deletion would arrive "+
+			"under another name", ChatRemoved)
+	}
+}

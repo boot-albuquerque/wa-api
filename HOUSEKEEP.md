@@ -5367,3 +5367,76 @@ reclassificação muda o placar — é decisão de critério, não medição, e 
 **Lição**: *uma varredura termina quando toda linha sabe por que está onde está,
 não quando não há mais linhas.* O valor do dia não foi só as linhas fechadas —
 foi que nenhuma das restantes precisa ser reinvestigada do zero.
+
+---
+
+## H172 / H173 — a decisão 64 chegou, e a condição dela pegou duas justificativas podres
+
+**Data**: 2026-08-22
+**Contexto**: a orquestração respondeu a decisão 64 — *"Escolha b, reclassifique
+diferenças deliberadas e então encerre a Fase 1 com os BLOCKED devidamente
+justificados"*. A segunda metade dessa frase é que produziu esta entrada.
+
+### Primeiro: por que a 64 demorou, e não era demora dela
+
+O pedido foi ao mailbox do ORCA e **nunca chegou**. Conferido o inbox: em quatro
+runs independentes, **toda** mensagem substantiva está com `delivered_at` nulo;
+só os heartbeats `alive` entregam. Aberta a thread do ChatGPT, a última mensagem
+era a resposta 60–63 — a pergunta nunca tinha sido feita ali. Reenviada pelo
+canal que funciona, a resposta veio em segundos.
+
+**Registrado como fato operacional**: o mailbox do ORCA não é o canal de decisão;
+a thread do ChatGPT é. Um `orchestration send` que retorna `ok` com
+`delivered_at: null` **não** entregou.
+
+### A reclassificação (64 b)
+
+`DISCONNECTED` e `STATE_CHANGED` foram para `INTENTIONAL_DIFFERENCE`: a
+capacidade É entregue, por desenho próprio e registrado — transição de liveness
+com a classe da página anexada, vocabulário nosso, e o motivo escrito
+("repetir 'ainda vivo' a cada tique é heartbeat vestido de evento").
+
+**`MEDIA_UPLOADED` e `vote` NÃO foram movidos**, e a recusa é o conteúdo da
+decisão: o primeiro é limite do build (não existe momento distinto de "upload
+concluído"), o segundo herda a enquete que não sai. Nenhum dos dois é escolha
+nossa, e alargar a categoria para caber neles a esvaziaria.
+
+### A auditoria dos `BLOCKED` — e as duas que não sobreviveram
+
+Dos 47, **duas tinham justificativa refutada pelo trabalho desta mesma semana**:
+
+**H172 — `unpin`.** Dizia *"idem `pin` — chamada aceita, nada desfixado (H81)"*,
+e a H162 mostrou que a H81 media o pin do lado cego. Remedido, e o resultado é
+uma assimetria fina:
+
+```
+conta-A fixa    → conta-B (aberta) VÊ            0 → 1
+conta-A desfixa → conta-B (aberta) continua vendo por 5 MINUTOS
+                → conta-B RECÉM-ABERTA lê 0 logo depois
+```
+
+O unpin chega ao **servidor** e não ao modelo de sessão já aberta. Sai de
+`BLOCKED` para `PARTIAL`, pela convenção do `addParticipants`/`pin`.
+
+**Uma correção minha no caminho**: a primeira medição deu 60 s e concluiu
+bloqueio; minutos depois uma leitura independente mostrou 0. **O prazo era o
+instrumento**, e um prazo curto demais produz o mesmo texto que um bloqueio de
+verdade. Foi preciso separar "não propagou" de "não propagou AINDA", e o que
+separou foi a sessão fresca.
+
+**H173 — `CHAT_REMOVED`.** Dizia que provar exigiria apagar uma conversa e
+destruir o fixture — e a H166 apagou uma, num grupo descartável. Remedido: o
+apagamento produzia **14 `chat.changed`** e nada dizendo que a conversa sumiu,
+porque o ingresso abria só a porta `change` da `ChatCollection`. Aberta a porta
+`remove` — o mesmo que a H143 fez para mensagens — o apagamento emite
+`chat.removed` uma vez. Linha para `PROVEN`.
+
+**Status**: `PROVEN 134 (61%)`, `PARTIAL 33`, `BLOCKED 45`,
+`INTENTIONAL_DIFFERENCE 8`, `MISSING 0`.
+
+**Lição**: *"devidamente justificados" é uma condição com dentes.* A tentação era
+ler a frase como formalidade e declarar o encerramento. Auditar de verdade custou
+duas remedições — e as duas justificativas podres eram podres **por causa do
+trabalho de hoje**, o que significa que um dia produtivo envelhece as próprias
+notas mais depressa do que se atualiza. Toda linha que herda veredito de outra
+("idem X") é dívida esperando o X mudar.

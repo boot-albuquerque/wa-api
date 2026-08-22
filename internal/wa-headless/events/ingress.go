@@ -385,12 +385,23 @@ func installScript() string {
 				group: !!c.isGroup,
 			});
 		};
+		// A COLECAO DE CONVERSAS TEM DUAS PORTAS, e so' uma estava aberta.
+		// 'change' diz que a conversa mexeu; 'remove' diz que ela SUMIU, e sem o
+		// segundo um apagamento chegava como mais quatorze 'change' (H173).
+		const onChatRemove = (c) => {
+			try {
+				push({ type: '` + string(ChatRemoved) + `',
+					chat: (c && c.id && c.id._serialized) || '',
+					msg: '', fromMe: false, kind: '', ack: 0, bodyLen: 0 });
+			} catch (e) { s.dropped++; }
+		};
 		CC.on('change', onChat);
+		CC.on('remove', onChatRemove);
 		s.handlers = [[MC, 'add', onAdd], [MC, 'change:ack', onAck],
 			[MC, 'change:isRevokedMsg', onRevoke], [MC, 'change:revokeSender', onRevoke],
 			[MC, 'change:type', onRevoke], [MC, 'change:latestEditMsgKey', onEdit],
 			[MC, 'change:hasReaction', onReaction],
-			[CC, 'change', onChat]];
+			[CC, 'change', onChat], [CC, 'remove', onChatRemove]];
 
 		// The contact collection is optional: a build without it should give a
 		// bus with five types, not a boot failure.

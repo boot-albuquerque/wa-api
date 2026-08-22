@@ -46,6 +46,18 @@ const (
 	ChatChanged Type = "chat.changed"
 	// MessageRevoked is a message deleted for everyone, seen from either side.
 	MessageRevoked Type = "message.revoked"
+	// ChatRemoved is a CONVERSATION leaving this session's collection, which is
+	// what deleting a chat looks like from here.
+	//
+	// IT IS NOT ChatChanged, and the measurement is why it exists: deleting a
+	// throwaway group produced 14 chat.changed for that conversation and nothing
+	// that said it was GONE (H173). A subscriber watching chat.changed sees the
+	// same event for an unread count moving and for the conversation ceasing to
+	// exist, and the second is the one that invalidates every id it holds.
+	//
+	// It is LOCAL, like MessageRemoved: the conversation left this device's
+	// store. Nobody else is told.
+	ChatRemoved Type = "chat.removed"
 	// MessageRemoved is a message LEAVING this session's collection, which is
 	// what "deleted for me" looks like from here.
 	//
@@ -162,7 +174,7 @@ const (
 var PageTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
 	MessageRevoked, MessageRemoved, MessageEdited, ContactChanged, MessageReaction,
-	CallIncoming, VoteUpdated,
+	CallIncoming, VoteUpdated, ChatRemoved,
 }
 
 // GroupPageTypes is the four group events. They are SEPARATE from PageTypes
