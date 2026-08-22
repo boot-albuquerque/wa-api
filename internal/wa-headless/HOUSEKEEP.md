@@ -8313,3 +8313,58 @@ continua sendo o que falta para DESCOBRIR um canal sem link.
 
 **Status**: entregue — `getChannelByInviteCode` provado contra canal real, sem
 seguir nada e sem deixar rastro na conta.
+
+---
+
+## H105 — os quatro fatos que um grupo conta sobre si, e a quinta vez do mesmo esconderijo
+
+**Data**: 2026-08-21.
+**Contexto**: bloco escolhido por ser o mais coeso sem insumo externo —
+`owner`, `createdAt`, `description` e `participants` são PROPRIEDADES na
+referência, populadas de uma metadata que este módulo já busca por outros
+motivos.
+
+### Medido antes de projetar, e a medição pagou
+
+| campo | onde está |
+|---|---|
+| `md.owner` | objeto, com `_serialized` |
+| `md.creation` | número, em segundos |
+| `md.participants` | coleção com `getModelsArray` |
+| participante | `id` (**LID**), `isAdmin`, `isSuperAdmin`, `joinTime` |
+| `md.desc` | **`undefined`** |
+| `md.displayedDesc` | **`undefined`** — mas `__x_displayedDesc` existe no armazenamento cru |
+| `md.descTime` | número |
+
+### O campo que não dá para decidir com um grupo só
+
+Os dois candidatos de descrição leem `undefined`, e `descTime` é um número. Isso
+é compatível com **duas** coisas: o grupo não tem descrição, ou o leitor olha o
+campo errado. **Um grupo não separa as duas.**
+
+A saída fácil seria escolher um campo e seguir. Seria a quinta ocorrência da
+mesma classe — `chatstate.type` (H94), `products` em vez de `data` (H103),
+mixins de canal (H104), agregado de reações (H83) — em que ler o campo óbvio
+devolve vazio para sempre e ninguém percebe.
+
+Então os dois são consultados e o **vencedor é nomeado**: `DescriptionSource`
+viaja junto do texto. `none` diz *"nada veio"*, não *"nada existe"*. Não é
+fallback que engole — é a dúvida entregue a quem chama, como o `PollTypeSource`
+e o `Fields` do `groupreq` já fazem.
+
+### A pós-condição que separa flags coladas
+
+Ao vivo: 2 participantes, 1 admin, e esse mesmo é super admin. O teste exige
+**exatamente um** super admin e que ele seja admin também — um criador que não
+fosse admin significaria que as duas flags saem do mesmo lugar, que é como um
+leitor de duas coisas vira um leitor de uma.
+
+**Controles negativos executados**:
+
+| mutação | teste | saída |
+|---|---|---|
+| ler só `md.desc`, sem reportar fonte | `TestTheDescriptionCarriesItsSource` | `the script does not consult/report md.displayedDesc` |
+| refrescar DEPOIS de ler | `TestMetadataRefreshesFirst` | `the refresh runs AFTER the read; it would answer with boot-time metadata` |
+
+**Status**: entregue — três linhas `PROVEN` e uma `PARTIAL` cuja parcialidade é a
+única leitura honesta com um grupo só.

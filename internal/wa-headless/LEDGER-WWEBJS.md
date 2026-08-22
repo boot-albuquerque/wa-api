@@ -250,10 +250,10 @@ sem link.
 
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
-| `owner` | — | `MISSING` | — | — | — | não atacado |
-| `createdAt` | — | `MISSING` | — | — | — | não atacado |
-| `description` | — | `MISSING` | — | — | — | não atacado |
-| `participants` | — | `MISSING` | — | — | — | não atacado |
+| `owner` | group.Metadata | `PROVEN` | sim | sim | sim | provado no grupo de laboratório; o participante que é super admin também é admin — as duas flags são distintas, não a mesma lida duas vezes (H105) |
+| `createdAt` | group.Metadata | `PROVEN` | sim | sim | sim | `md.creation`, em segundos; zero fica zero em vez de virar a época (H105) |
+| `description` | group.Metadata | `PARTIAL` | sim | sim | sim | leitor entregue e **nunca observado não-vazio**: no grupo de laboratório `desc` E `displayedDesc` leem `undefined`, compatível com "não tem descrição" E com "campo errado". Por isso `DescriptionSource` viaja junto — `none` diz que nada veio, não que nada existe. Quinta ocorrência da classe (H105) |
+| `participants` | group.Metadata | `PROVEN` | sim | sim | sim | lista com `admin`, `superAdmin` e `joinedAt`; identidades chegam como **LID**. Exatamente um super admin, travado por teste (H105) |
 | `addParticipants` | group.AddParticipant | `PARTIAL` | sim | entre sessões | sim | H58: este build não confirma na MESMA sessão |
 | `removeParticipants` | group.RemoveParticipant | `PARTIAL` | sim | entre sessões | sim | idem |
 | `promoteParticipants` | group.Promote | `PARTIAL` | sim | entre sessões | sim | H65 |
@@ -414,9 +414,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 53 | 24% |
-| `PARTIAL` | 47 | 21% |
+| `PROVEN` | 56 | 25% |
+| `PARTIAL` | 48 | 22% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 2 | 0% |
-| `MISSING` | 115 | 52% |
+| `MISSING` | 111 | 50% |
 | **total** | **220** | |
