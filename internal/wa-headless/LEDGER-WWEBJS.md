@@ -131,7 +131,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `setAutoDownloadVideos` | settings.SetAutoDownload(KindVideos) | `PROVEN` | sim | sim | sim | H110 |
 | `setBackgroundSync` | settings.SetBackgroundSync | `PROVEN` | sim | sim | sim | H110: o valor guardado é lido de volta na hora; a referência avisa que o EFEITO só vale após reiniciar, e nada aqui afirma que a sessão viva mudou |
 | `getContactDeviceCount` | addressbook.DeviceCount | `PROVEN` | sim | sim | sim | H148: o registro SEMPRE esteve lá — sob a identidade RESOLVIDA. Medidos os dois jids lado a lado na mesma sessão: pelo LID, **5 dispositivos**; pelo jid de telefone, "sem registro". A H90 mediu contra o telefone num build LID-first, antes de a H136 nomear essa armadilha. A decisão de manter "sem registro" fora do número 0 continua certa e agora tem os dois lados observados |
-| `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | buscamos histórico de uma conversa; sincronizar não |
+| `syncHistory` | fetchmessages.SyncHistory | `PROVEN` | sim | sim | sim | **H167: a nota estava certa sobre a diferença e calada sobre o módulo.** Buscar o histórico local (`Fetch`) e PEDIR ao telefone que mande mais são atos diferentes, e o segundo existe: `WAWebSendNonMessageDataRequest.sendPeerDataOperationRequest(3, {chatId})`, guardado por `endOfHistoryTransferType === 0`. Medido no roster: 378 de 389 chats em 0, 5 em outro valor, 6 sem o campo. Provado com AS DUAS respostas — pede num elegível (`requested=true type=0`) e recusa num já transferido (`requested=false type=1`) |
 | `createCallLink` | call.CreateLink | `PROVEN` | sim | sim | sim | provado ao vivo para `voice` e `video`; o link é credencial e nunca é renderizado. Usa `WAWebGenerateEventCallLink` como a referência — o `WAWebVoipCreateCallLink` deste build **TRAVA** na primeira chamada, medido em 40s (H92) |
 | `sendResponseToScheduledEvent` | — | `BLOCKED` | — | medido | — | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebScheduledEventResponseAction` ausente, coerente com a H125 |
 | `saveOrEditAddressbookContact` | addressbook.Save | `PROVEN` | sim | sim | sim | verifica lendo de volta, com o relógio no Go; `syncToAddressbook` é parâmetro sem padrão porque `true` escreve na agenda do TELEFONE pareado (H90) |
@@ -271,7 +271,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | delegação literal para `Client.getChatLabels` (Chat.js:292); H72 |
 | `changeLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | delegação literal para `Client.addOrRemoveLabels` (Chat.js:301); H72 |
 | `getPinnedMessages` | pin.PinnedIn | `PROVEN` | sim | sim | sim | **H162: provado NÃO-VAZIO.** A premissa da nota antiga — "provar não-vazio exigiria fixar, que está bloqueado" — caiu junto com o bloqueio: fixar funciona, só não é visível a quem fixa. conta-A fixou no grupo de laboratório e o leitor, rodando em conta-B, devolveu a lista com o item (0 → 1). O leitor não depende de sessão dupla; a sessão dupla foi o que produziu o DADO |
-| `syncHistory` | capabilities/fetchmessages | `PARTIAL` | sim | sim | sim | delegação literal para `Client.syncHistory` (Chat.js:317); herda a linha dele — buscamos histórico de uma conversa, sincronizar não |
+| `syncHistory` | fetchmessages.SyncHistory | `PROVEN` | sim | sim | sim | delegação literal para `Client.syncHistory` (Chat.js:317); herda a linha dele, que a **H167** fechou |
 | `addOrEditCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 | `getCustomerNote` | — | `BLOCKED` | — | medido | — | H134: **as ações EXISTEM** — `noteAddAction` e `retrieveOnlyNoteForChatJid`, exatamente as que a referência chama. O que falta é `WAWebBizGatingUtils`, o módulo do PORTÃO (`smbNotesV1Enabled`), ausente neste build: dá para chamar a ação e não dá para saber se o recurso deveria estar ligado |
 
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 129 | 59% |
-| `PARTIAL` | 38 | 17% |
+| `PROVEN` | 131 | 60% |
+| `PARTIAL` | 36 | 16% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

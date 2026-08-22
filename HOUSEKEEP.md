@@ -5083,3 +5083,80 @@ quando foram tomadas, e continuaram escritas como se fossem propriedades da
 capacidade. O que mudou não foi o julgamento sobre o risco — foi a existência de
 uma alternativa que ninguém tinha procurado. **Toda linha cujo motivo comece com
 "não dá para" merece a pergunta: não dá para QUEM, e sob quais condições?**
+
+---
+
+## H167 — `syncHistory` fecha, e o `require` deste build mente sobre módulos ausentes
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Duas linhas foram escolhidas juntas porque
+pediam a mesma técnica — enumerar e ler a assinatura, que já pagou quatro vezes
+hoje.
+
+**Onde**: `internal/wa-headless/capabilities/fetchmessages/synchistory.go` (novo),
+`internal/wa-headless/probe_synchist_test.go` (novo). Linhas `syncHistory` (duas)
+e `reject` (chamada).
+
+### `syncHistory`: a nota estava certa sobre a diferença e calada sobre o módulo
+
+*"Buscamos histórico de uma conversa; sincronizar não"* descreve corretamente
+dois atos diferentes — ler o que esta sessão já tem (`Fetch`) e PEDIR ao telefone
+pareado que mande mais. O que a nota não dizia é se o segundo era possível aqui.
+
+A referência faz algo pequeno e específico (`wwebjs_client.js:3173-3189`):
+guarda em `chat.endOfHistoryTransferType === 0` e chama
+`WAWebSendNonMessageDataRequest.sendPeerDataOperationRequest(3, {chatId})`.
+
+**Medido**: o módulo existe, a função tem aridade 3, e o campo da guarda está em
+383 dos 389 chats — **378 em 0** (há o que pedir), 5 em outro valor, 6 sem o
+campo.
+
+**Correção aplicada**: `Fetcher.SyncHistory`, devolvendo `SyncRequest{Requested,
+TransferType, HasTransferType}`. Três decisões:
+
+1. **O tipo se chama `SyncRequest`, não `SyncResult`.** O histórico chega depois,
+   pelo socket; não há nada para reler que prove que funcionou. Um nome que
+   prometesse resultado convidaria o sucesso silencioso que a invariante 14
+   proíbe, então o tipo reporta o que FOI FEITO.
+2. **A guarda vem antes do pedido**, e é teste de ORDEM: invertida, passa em todos
+   os outros. Pedir a uma conversa que já entregou tudo devolveria "sucesso"
+   indistinguível de um pedido útil.
+3. **Ausente não é zero** — 6 de 389 chats não têm o campo, e zero é justamente o
+   valor que significa "peça". Fundi-los reportaria pedido possível sobre
+   conversa que a página nunca descreveu.
+
+**Provado com AS DUAS respostas** (regra da H147), e as duas existem no mesmo
+roster: `requested=true type=0` num elegível, `requested=false type=1` num já
+transferido. Quatro controles negativos, todos compilando e falhando.
+
+### `reject` (chamada): a H130 está certa, e a minha lista estava errada
+
+A H130 mediu quatro módulos de ação de chamada como ausentes. Quatro nomes é
+amostra, não censo, então reenumerei nove. O primeiro relatório disse **todos
+presentes** — e estava errado, por defeito do meu próprio predicado.
+
+**O `require` deste build NÃO LANÇA para um módulo inexistente: devolve objeto
+VAZIO.** Separando `require lançou` de `require devolveu {}`:
+
+```
+WAWebCallCollection    → 8 exports reais
+WAWebCallModel         → 2 exports
+WAWebApiCall, WAWebCallActions, WAWebRejectCallAction,
+WAWebEndCallAction, WAWebOfferCallAction, WAWebCallSignaling,
+WAWebCallState         → require OK, ZERO exports
+```
+
+A H130 está confirmada. **E isto é um fato sobre o INSTRUMENTO que vale para toda
+enumeração deste repositório**: `try { require(m) } catch` classifica módulos
+inexistentes como presentes. Só listar as CHAVES distingue. As enumerações
+anteriores (H143, H146, H160) escaparam por listarem chaves; a regra passa a ser
+explícita.
+
+**Status**: `syncHistory` (duas linhas) para `PROVEN`; `reject` continua
+`PARTIAL` com a medição confirmada por um censo maior.
+
+**Lição**: *um predicado de existência precisa ser testado contra algo que
+sabidamente não existe.* Eu enumerei nove módulos e não incluí nenhum nome
+inventado como controle — se tivesse, `WAWebNaoExisteMesmo` teria aparecido
+"presente" na primeira leitura e o defeito do instrumento apareceria antes da
+conclusão errada.
