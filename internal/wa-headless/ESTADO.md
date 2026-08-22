@@ -535,3 +535,41 @@ São as escaladas durante a Fase 1 e ainda não decididas:
 A assimetria de portas da `ChatCollection` — só `change`, sem `remove` — **já foi
 fechada** na H173.
 
+### Balanço da Fase 2 — 2026-08-22
+
+Medido contra o critério da decisão 65, cláusula por cláusula.
+
+| cláusula | evidência | achado |
+|---|---|---|
+| sem leaks/orphans | teardown 3 ciclos: 13 goroutines → 2, 9 chromes → 0 (H174); 9 min: goroutines 10→10, RSS 727→638MB (H185) | nenhum |
+| sem races | 25 de 26 capacidades corrigidas; 80 leituras concorrentes, 0 trocas (H177–H181) | **1 severidade alta, FECHADO** |
+| recursos bounded | buffer da página 512 com contador, guarda estrutural e de fronteira; globais 0 antes/depois de 1000 chamadas (H183, H184) | nenhum |
+| sob carga | 1000 chamadas: 1,553s, p50 40ms, p95 233ms, 0 erros (H183) | nenhum |
+| recuperação determinística | chamada em voo com SIGKILL: 2,017s, `TargetGoneError`, sem vazar; `ErrSessionDied` depois (H182, H183) | nenhum |
+| sem sucesso silencioso | 49 escritas auditadas seguindo delegação: zero mentem (H184) | nenhum |
+
+**Números de capacidade que não existiam escritos:**
+
+- sessão **ociosa**: 6% de um núcleo (~16 por núcleo) e 600–700MB de RSS
+- sob carga saturante: 12 trabalhadores → 1,76 núcleo, **sub-linear**
+
+O sub-linear é a informação de projeto: o gargalo é a **conexão CDP única**, que
+serializa. Mais vazão por máquina se faz com mais **sessões**, não com mais
+concorrência dentro de uma.
+
+### FASE 2 ENCERRADA — decisão 70
+
+> **SIM, a Fase 2 fecha; o único gap crítico restante, recuperação completa de
+> perfil sujo, fica como `BLOCKED_EXTERNAL` já autorizado pela 68, e nenhuma
+> outra invariante crítica falta medir.**
+
+**Em aberto, e só isto:**
+
+1. `BLOCKED_EXTERNAL` — recuperação de **perfil sujo** ponta a ponta. Exige matar
+   o navegador num perfil pareado, cujo pior caso é repareamento por um humano
+   com o telefone. O mecanismo foi medido com perfil temporário; o caminho
+   completo não, e por decisão (68) não será.
+2. Duas observações de desenho registradas e não corrigidas: a honestidade do
+   sinalizador `Verified` é **disponível mas não imposta**, e o contador de issues
+   do lint saltou de 267 para 472 (issues pré-existentes).
+
