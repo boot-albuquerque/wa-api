@@ -304,8 +304,8 @@ func TestSendLocation_NoSecretLeak(t *testing.T) {
 // A segunda requisição trava a CAUSA, não só o sintoma: o envelope de erro
 // é o genérico "bad request", e o payload truncado também produziria 400 se
 // o decode fosse ignorado (o use case rejeitaria por missing_phone). Só o
-// registro de saída distingue os dois — tem de dizer "could not decode
-// payload".
+// registro de saída distingue os dois — o campo error carrega a causa CRU
+// do decoder (F141).
 func TestSendLocation_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 	const malformed = `{"Phone":"5511`
 
@@ -327,7 +327,7 @@ func TestSendLocation_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 	if logRec.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want 400 (corpo: %s)", logRec.Code, logRec.Body.String())
 	}
-	logassert.OutcomeLogged(t, capture.Records(t), "could not decode payload")
+	logassert.OutcomeLogged(t, capture.Records(t), "unexpected EOF")
 	if n := len(smLog.SendLocationCalls); n != 0 {
 		t.Fatalf("corpo malformado alcancou SendLocation %d vez(es)", n)
 	}

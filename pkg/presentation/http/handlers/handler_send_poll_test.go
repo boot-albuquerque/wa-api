@@ -300,7 +300,7 @@ func TestSendPoll_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 	if logRec.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want 400 (corpo: %s)", logRec.Code, logRec.Body.String())
 	}
-	logassert.OutcomeLogged(t, capture.Records(t), "could not decode payload")
+	logassert.OutcomeLogged(t, capture.Records(t), "unexpected EOF")
 	if n := len(smLog.SendPollCalls); n != 0 {
 		t.Fatalf("corpo malformado alcancou SendPoll %d vez(es)", n)
 	}
