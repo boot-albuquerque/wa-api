@@ -463,7 +463,31 @@ rules_frozen=true
 # registry vier a nao logar a recusa, isto passa a ser lacuna de verdade e nao
 # padrao — e a hora de a fechar e' quando o consumidor existir, nao agora, com
 # um logger injetado num tipo que ainda nao tem chamador.
-min_func_coverage=612
+# justificativa: decisao 80 (2026-08-22), a PRIMEIRA capability atravessando a
+# fronteira — chat-state, pelo adaptador ChatArchiver. min_eligible 665->671,
+# func 612->608, errpath 818->815.
+#
+# E' o pedagio anunciado na justificativa da decisao 78, agora cobrado: fiar UMA
+# capability arrasta o pacote dela inteiro para o denominador. As 34 restantes
+# farao o mesmo, uma de cada vez, e isso e' visibilidade e nao regressao.
+#
+# As entradas novas foram conferidas no golden, nao deduzidas. A maior parte sai
+# EXCLUDED por X1/X4 (construtores e acessores puros). Ficam elegiveis e
+# descobertas Setter.SetArchived, Setter.SetPinned e Setter.set.
+#
+# Setter.set NAO esta sem observabilidade: ela corre atraves do rastreador
+# (runner.Do com OpKind e rotulo), que a regra L1-d2 reconhece. O que ela nao
+# satisfaz e' L2, e isso e' POR DESENHO — a L1-d2 conta como Info, porque
+# rastrear prova que a operacao ACONTECEU e nao que alguem classificou uma
+# falha. Contar o rastro como Warn faria toda funcao que chama o rastreador
+# parecer ter coberto os seus caminhos de erro, que e' a confianca falsa que
+# esta metrica existe para nao dar. A queda de errpath e' portanto o preco
+# honesto da regra, e nao uma lacuna nova.
+#
+# Do lado do adaptador (pkg/infra/wa-headless/chat), vale a mesma justificativa
+# da decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
+# registrada la' continua valida e aplica-se aqui tambem.
+min_func_coverage=608
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -482,7 +506,8 @@ min_func_coverage=612
 # loga quem decide, nao quem propaga.
 # ver a justificativa de min_func_coverage acima (decisao 78).
 # +1 (817->818): ver a justificativa da decisao 77 acima.
-min_errpath_coverage=818
+# 818->815: ver a justificativa da decisao 80 acima.
+min_errpath_coverage=815
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -528,7 +553,9 @@ min_errpath_coverage=818
 # +89 (571->660): a arvore internal/wa-headless inteira, pela fachada — ver a
 # justificativa de min_func_coverage acima.
 # +5 (660->665): decisao 77 — ver a justificativa acima.
-min_eligible=665
+# +6 (665->671): o pacote capabilities/chatstate, pela primeira capability
+# fiada — ver a justificativa acima.
+min_eligible=671
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

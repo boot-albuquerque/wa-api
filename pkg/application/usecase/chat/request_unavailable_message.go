@@ -10,13 +10,13 @@ import (
 
 // RequestUnavailableMessageUseCase requests an unavailable message
 type RequestUnavailableMessageUseCase struct {
-	chats  appport.ChatOperations
+	chats  appport.UnavailableMessageRequester
 	jids   appport.JIDResolver
 	logger appport.Logger
 }
 
 // NewRequestUnavailableMessageUseCase creates a new instance
-func NewRequestUnavailableMessageUseCase(co appport.ChatOperations, jr appport.JIDResolver, logger appport.Logger) *RequestUnavailableMessageUseCase {
+func NewRequestUnavailableMessageUseCase(co appport.UnavailableMessageRequester, jr appport.JIDResolver, logger appport.Logger) *RequestUnavailableMessageUseCase {
 	return &RequestUnavailableMessageUseCase{chats: co, jids: jr, logger: logger}
 }
 

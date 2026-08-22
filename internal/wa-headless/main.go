@@ -31,6 +31,7 @@
 package waheadless
 
 import (
+	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/runtime"
@@ -98,3 +99,37 @@ var (
 // NewHolder prepares a Holder for cfg. It does not boot; the first Session
 // call does.
 func NewHolder(cfg StartConfig) *Holder { return runtime.NewHolder(cfg) }
+
+// Operating a session: the pieces every capability is built from.
+//
+// A capability takes a Runner (which carries the deadline policy and the
+// operation log) and an Evaluator (which is how anything reaches the page).
+// Both come from here rather than from engine/ and spa/ directly, because an
+// adapter that imported those would be reaching past this file.
+type (
+	// Runner bounds every operation by its class budget and records it.
+	Runner = engine.Runner
+	// Tab is the page a session drives.
+	Tab = engine.Tab
+	// Evaluator runs an expression in the page. It does NOT await promises —
+	// invariant 6 — so a capability that needs an answer parks it on a global
+	// and polls from Go.
+	Evaluator = spa.Evaluator
+)
+
+// NewRunner builds a Runner with the default deadline policy.
+func NewRunner() *Runner { return engine.NewRunner() }
+
+// Chat state: archive, pin and mute, which the page exposes as one family.
+type (
+	// ChatStateSetter changes archive, pin and mute state.
+	ChatStateSetter = chatstate.Setter
+	// ChatStateChange is what a set actually did, read back. Invariant 14: no
+	// silent success — every write is followed by a postcondition read.
+	ChatStateChange = chatstate.Change
+)
+
+// NewChatState builds the chat-state capability over a session's page.
+func NewChatState(runner *Runner, eval Evaluator) *ChatStateSetter {
+	return chatstate.New(runner, eval)
+}

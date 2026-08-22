@@ -10,13 +10,13 @@ import (
 
 // RejectCallUseCase rejects an incoming call
 type RejectCallUseCase struct {
-	chats  appport.ChatOperations
+	chats  appport.CallRejecter
 	jids   appport.JIDResolver
 	logger appport.Logger
 }
 
 // NewRejectCallUseCase creates a new instance
-func NewRejectCallUseCase(co appport.ChatOperations, jr appport.JIDResolver, logger appport.Logger) *RejectCallUseCase {
+func NewRejectCallUseCase(co appport.CallRejecter, jr appport.JIDResolver, logger appport.Logger) *RejectCallUseCase {
 	return &RejectCallUseCase{chats: co, jids: jr, logger: logger}
 }
 
