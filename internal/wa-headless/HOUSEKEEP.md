@@ -10218,3 +10218,66 @@ coisa divergem sempre nos campos que ninguém reconfere — a mescla, o arquivad
 o mudo — e a divergência só aparece quando alguém confia nela.
 
 **Status**: entregue e provado. O padrão está fechado.
+
+## H130 — a varredura dos `PARTIAL`: um `idem` pendurado, um mapeamento errado, e 28 linhas que não podiam carregar evidência
+
+**Data**: 2026-08-22. **Contexto**: o critério da Fase 1 exige que todo `PARTIAL`
+sobrevivente tenha veredito MEDIDO registrado. Varrer para verificar isso achou
+três problemas de naturezas diferentes.
+
+**Onde**: `LEDGER-WWEBJS.md`.
+
+### Problema 1 — 28 linhas em tabelas que não têm coluna de nota
+
+Nove famílias usavam tabela de DUAS colunas (`upstream | estado`). Nelas o
+critério era **inverificável por construção**: não havia onde escrever o
+veredito. Pior, eu já tinha medido várias delas (H113, H118, H126) e a evidência
+foi para o HOUSEKEEP porque o ledger não a comportava.
+
+Convertidas para três colunas, com as notas que eu já tinha preenchidas de
+volta. 28 linhas.
+
+### Problema 2 — um `idem` PENDURADO
+
+`UNREAD_COUNT` dizia `idem`, e a linha imediatamente acima era `MESSAGE_EDIT`,
+`PROVEN`, com nota "disparado ao vivo por uma edição". Isso não explica por que
+`UNREAD_COUNT` é `PARTIAL` — a referência apontava para o lugar errado.
+
+O veredito real: `chat.changed` DISPARA (H87, e as sondas de hoje o viram às
+dezenas), mas é um evento genérico de "campos da conversa se moveram", não o
+evento dedicado que o upstream entrega COM a contagem. E o contador em si é
+`CROSS_SESSION` (H78).
+
+**A causa é o estilo `idem`**: ele referencia por POSIÇÃO DE LINHA. Reordenar
+uma tabela muda silenciosamente o significado de toda nota `idem` abaixo. As
+outras três (`sendPresenceUnavailable`, `Chat.delete`, `removeParticipants`)
+apontavam para o lugar certo, e mesmo assim foram expandidas para serem
+autocontidas — uma referência frágil que hoje está certa é um defeito que ainda
+não aconteceu.
+
+### Problema 3 — um mapeamento simplesmente ERRADO
+
+`getQuotedMessage` estava mapeado para "metadados em messagemeta". Fui conferir:
+`messagemeta.Meta` tem jid, id, direção, tipo e timestamp, **e nada mais** — por
+invariante 12, que proíbe corpo. Não há campo de citação nenhum. A linha
+afirmava uma implementação que não existe.
+
+O que existe de verdade: `send.Reply` lê `quotedStanzaID` da página para provar
+que a citação foi anexada. O que falta é RESOLVER a mensagem citada — e isso é
+**acionável**, não impossível: `message.OriginOf` poderia carregar o id citado.
+
+Uma linha com mapeamento errado é pior que uma `MISSING`: ela consome a atenção
+de quem procura trabalho e devolve uma falsa sensação de cobertura.
+
+### Resultado
+
+```
+PARTIAL 59 | sem veredito registrado: 0
+```
+
+Todas as 59 carregam agora a razão de serem parciais. A distinção que o critério
+pede — impossibilidade medida contra trabalho pendente — passou a ser legível
+linha a linha, e não mais uma impressão.
+
+**Status**: entregue. Nenhum código de produção mudou; o que mudou é que o
+ledger passou a poder responder à pergunta que a Fase 1 faz.

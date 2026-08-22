@@ -856,3 +856,95 @@ func TestProbeGroupDescriptionSurface(t *testing.T) {
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("group description surface:\n%s", out)
 }
+
+// TestProbeQuotedSurface asks whether the quoted message is REACHABLE.
+//
+// H130 found that the getQuotedMessage row was mapped to something that does not
+// carry a quote at all. Before writing a reader, the question is the one this
+// repository always asks first: does this account HAVE quoted messages, and
+// under which field does the page keep the reference?
+func TestProbeQuotedSurface(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_QUOTED") == "" {
+		t.Skip("set WA_PROBE_QUOTED=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__qt = null;
+	const safe = e => String((e && e.message) || e).slice(0, 130);
+	const out = {};
+	try {
+		const ms = window.require("WAWebCollections").Msg.getModelsArray();
+		out.total = ms.length;
+		// O caminho que o send/reply.go usa para PROVAR citacao e' quotedStanzaID.
+		let withStanzaID = 0, withQuotedMsg = 0, gettersThrew = 0;
+		const shapes = [];
+		for (const m of ms) {
+			try {
+				const sid = m.quotedStanzaID;
+				if (typeof sid === "string" && sid !== "") {
+					withStanzaID++;
+					if (shapes.length < 3) {
+						shapes.push({
+							stanzaIdLen: sid.length,
+							hasQuotedParticipant: !!m.quotedParticipant,
+							hasQuotedRemoteJid: !!m.quotedRemoteJid,
+							// O getter resolvido devolve o modelo citado?
+							quotedMsgType: (() => { try { const q = m.quotedMsg; return q === null ? "null" : typeof q; } catch(e){ return "threw"; } })(),
+						});
+					}
+				}
+				const qm = m.quotedMsg;
+				if (qm && typeof qm === "object") { withQuotedMsg++; }
+			} catch (e) { gettersThrew++; }
+		}
+		out.withQuotedStanzaID = withStanzaID;
+		out.withQuotedMsg = withQuotedMsg;
+		out.gettersThrew = gettersThrew;
+		out.shapes = shapes;
+	} catch (e) { out.err = safe(e); }
+	window.__qt = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__qt", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("quoted surface:\n%s", out)
+}

@@ -90,7 +90,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `setDisplayName` | profile.SetDisplayName | `BLOCKED` | sim | impossível | sim | H66: canSetMyPushname()=false — a conta é Business |
 | `getState` | capabilities/liveness | `PROVEN` | sim | sim | sim | pior latência 1ms em 5 amostras |
 | `sendPresenceAvailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50: observação não provada; exige as duas contas na agenda uma da outra |
-| `sendPresenceUnavailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | idem |
+| `sendPresenceUnavailable` | capabilities/presence | `PARTIAL` | sim | parcial | sim | H50: observação não provada; exige as duas contas na agenda uma da outra. *(era `idem`, expandido na H130 — referência por posição de linha já produziu um `idem` pendurado)* |
 | `archiveChat` | chats (arquivar) | `PROVEN` | sim | sim | sim | H55: causa era pedido REDUNDANTE |
 | `unarchiveChat` | chats | `PROVEN` | sim | sim | sim | — |
 | `pinChat` | chats | `PROVEN` | sim | sim | sim | — |
@@ -154,10 +154,10 @@ estrutura carrega `msgs`, `totalCount` e `unreadCount` por CONTATO (H100).
 isso **não está ligado**: um status é visível a toda a agenda, medida em 944
 contatos nesta conta.
 
-| upstream | estado |
-|---|---|
-| `getChat` | `PARTIAL` |
-| `getContact` | `PARTIAL` |
+| upstream | estado | nota |
+|---|---|---|
+| `getChat` | `PARTIAL` | H118: delegação literal para `Client.getChatById` (Broadcast.js:56); herda a linha do par |
+| `getContact` | `PARTIAL` | H118: delegação literal para `Client.getContactById` (Broadcast.js:64); herda a linha do par |
 
 ## Call
 
@@ -169,9 +169,9 @@ Achado que a referência não tem: este build expõe uma superfície VOIP inteir
 `WAWebVoipCreateCallLink` cria link próprio (e trava). O `whatsapp-web.js` não
 tem equivalente para nenhum dos três.
 
-| upstream | estado |
-|---|---|
-| `reject` | `PARTIAL` |
+| upstream | estado | nota |
+|---|---|---|
+| `reject` | `PARTIAL` | H130: este build **não exporta ação de rejeitar** — `WAWebRejectCallAction`, `WAWebEndCallAction`, `WAWebCallActions` e `WAWebOfferCallAction` estão todos ausentes (medido). A stanza montada à mão é a única porta, e ela não é improviso: é o que sobrou. Fica `PARTIAL` porque não há chamada entrando para rejeitar — `INCOMING_CALL` está `BLOCKED` |
 
 `reject` está implementado com a estranha exata que o protocolo pede — este
 build **não exporta ação de recusa nenhuma** (`WAWebRejectCallAction`,
@@ -216,24 +216,24 @@ de laboratório sob autorização explícita:
   `WAWebMexFetchNewsletterSubscribersJob`, o módulo que a referência usa, **não
   existe neste build**.
 
-| upstream | estado |
-|---|---|
-| `getSubscribers` | `MISSING` |
-| `setSubject` | `PROVEN` |
-| `setDescription` | `MISSING` |
-| `setProfilePicture` | `MISSING` |
-| `setReactionSetting` | `MISSING` |
-| `mute` | `MISSING` |
-| `unmute` | `MISSING` |
-| `sendMessage` | `PARTIAL` |
-| `sendSeen` | `PARTIAL` |
-| `sendChannelAdminInvite` | `MISSING` |
-| `acceptChannelAdminInvite` | `MISSING` |
-| `revokeChannelAdminInvite` | `MISSING` |
-| `demoteChannelAdmin` | `MISSING` |
-| `transferChannelOwnership` | `MISSING` |
-| `fetchMessages` | `MISSING` |
-| `deleteChannel` | `PROVEN` |
+| upstream | estado | nota |
+|---|---|---|
+| `getSubscribers` | `MISSING` | H113: `WAWebMexFetchNewsletterSubscribersJob`, o módulo que a referência usa, NÃO existe neste build |
+| `setSubject` | `PROVEN` | H113: renomear pega e é relido do servidor |
+| `setDescription` | `MISSING` | H113: a página aceita e o servidor NUNCA reporta a descrição nova, nem após 20s. Não é latência — mesmo padrão do grupo (H126) |
+| `setProfilePicture` | `MISSING` | — |
+| `setReactionSetting` | `MISSING` | — |
+| `mute` | `MISSING` | — |
+| `unmute` | `MISSING` | — |
+| `sendMessage` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (Channel.js:240) |
+| `sendSeen` | `PARTIAL` | H118: delegação literal para `Client.sendSeen` (Channel.js:248) |
+| `sendChannelAdminInvite` | `MISSING` | — |
+| `acceptChannelAdminInvite` | `MISSING` | — |
+| `revokeChannelAdminInvite` | `MISSING` | — |
+| `demoteChannelAdmin` | `MISSING` | — |
+| `transferChannelOwnership` | `MISSING` | — |
+| `fetchMessages` | `MISSING` | — |
+| `deleteChannel` | `PROVEN` | H113: pós-condição é o canal deixar de ser legível |
 
 ## Chat
 
@@ -256,7 +256,7 @@ nossa é fresca — não há campo velho para consertar.
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendMessage` (Chat.js:102); herda a linha dele, ENQUETE INCLUSA no que não sai |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendSeen` (Chat.js:110); herda o rebaixamento da H82 |
 | `clearMessages` | chats.Clear | `PARTIAL` | sim | NÃO (por desenho) | sim | H66: destruiria o fixture de todos os outros testes |
-| `delete` | chats.Delete | `PARTIAL` | sim | NÃO (por desenho) | sim | idem |
+| `delete` | chats.Delete | `PARTIAL` | sim | NÃO (por desenho) | sim | H66: provar destruiria o fixture de todos os outros testes. É recusa DELIBERADA, não pendência. *(era `idem`, expandido na H130)* |
 | `archive` | chats (arquivar) | `PROVEN` | sim | sim | sim | delegação literal para `Client.archiveChat` (Chat.js:137); H55 |
 | `unarchive` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.unarchiveChat` (Chat.js:144) |
 | `pin` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.pinChat` (Chat.js:152). NÃO confundir com a H81, que é fixar MENSAGEM e continua falhando |
@@ -280,9 +280,9 @@ nossa é fresca — não há campo velho para consertar.
 
 **Família inteira `MISSING`** — informação de bateria/plataforma — não atacada.
 
-| upstream | estado |
-|---|---|
-| `getBatteryStatus` | `BLOCKED` |
+| upstream | estado | nota |
+|---|---|---|
+| `getBatteryStatus` | `BLOCKED` | H126: `WAWebBatteryStore` não existe neste build (medido na H119) |
 
 ## Contact
 
@@ -307,7 +307,7 @@ nossa é fresca — não há campo velho para consertar.
 | `description` | group.Metadata | `PARTIAL` | sim | sim | sim | leitor entregue e **nunca observado não-vazio**: no grupo de laboratório `desc` E `displayedDesc` leem `undefined`, compatível com "não tem descrição" E com "campo errado". Por isso `DescriptionSource` viaja junto — `none` diz que nada veio, não que nada existe. Quinta ocorrência da classe (H105) |
 | `participants` | group.Metadata | `PROVEN` | sim | sim | sim | lista com `admin`, `superAdmin` e `joinedAt`; identidades chegam como **LID**. Exatamente um super admin, travado por teste (H105) |
 | `addParticipants` | group.AddParticipant | `PARTIAL` | sim | entre sessões | sim | H58: este build não confirma na MESMA sessão |
-| `removeParticipants` | group.RemoveParticipant | `PARTIAL` | sim | entre sessões | sim | idem |
+| `removeParticipants` | group.RemoveParticipant | `PARTIAL` | sim | entre sessões | sim | H58: este build não confirma na MESMA sessão — a mudança chega ao servidor e a sessão que agiu não a vê. *(era `idem`, expandido na H130)* |
 | `promoteParticipants` | group.Promote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `demoteParticipants` | group.Demote | `PARTIAL` | sim | entre sessões | sim | H65 |
 | `setSubject` | group.SetSubject | `PROVEN` | sim | sim | sim | H64: o assunto vive em chat.formattedTitle |
@@ -328,12 +328,12 @@ nossa é fresca — não há campo velho para consertar.
 
 **Família inteira `MISSING`** — notificações de grupo como objeto — não atacada.
 
-| upstream | estado |
-|---|---|
-| `getChat` | `PARTIAL` |
-| `getContact` | `PARTIAL` |
-| `getRecipients` | `MISSING` |
-| `reply` | `PARTIAL` |
+| upstream | estado | nota |
+|---|---|---|
+| `getChat` | `PARTIAL` | H118: delegação literal para `Client.getChatById` (GroupNotification.js:78) |
+| `getContact` | `PARTIAL` | H118: delegação literal para `Client.getContactById` (GroupNotification.js:86) — usa `this.author`, não o chat |
+| `getRecipients` | `MISSING` | — |
+| `reply` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (GroupNotification.js:109); herda a linha do par, ENQUETE inclusa no que não sai |
 
 ## Label
 
@@ -342,9 +342,9 @@ nossa é fresca — não há campo velho para consertar.
 leitor nunca seria visto devolvendo nada (armadilha H93). Não é falta de
 código — é falta de dado.
 
-| upstream | estado |
-|---|---|
-| `getChats` | `BLOCKED` |
+| upstream | estado | nota |
+|---|---|---|
+| `getChats` | `BLOCKED` | H126: mesma medição do `getChatsByLabelId` (H114) — os 3 rótulos desta conta têm ZERO itens |
 
 ## Message
 
@@ -356,7 +356,7 @@ código — é falta de dado.
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
 | `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
 | `getGroupMentions` | — | `MISSING` | — | medido | — | idem |
-| `getQuotedMessage` | metadados em messagemeta | `PARTIAL` | sim | sim | sim | — |
+| `getQuotedMessage` | send.Reply (verificação da citação) | `PARTIAL` | sim | sim | sim | H130: **o mapeamento anterior estava ERRADO** — dizia "metadados em messagemeta", e `messagemeta.Meta` não tem campo de citação nenhum (jid, id, direção, tipo, timestamp e nada mais, por invariante 12). O que existe de verdade: `send.Reply` lê `quotedStanzaID` da página para provar que a citação foi anexada. O que falta é RESOLVER a mensagem citada, e isso é ACIONÁVEL — `message.OriginOf` poderia carregar o id citado |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
 | `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53 |
 | `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
@@ -380,10 +380,10 @@ código — é falta de dado.
 
 **Família inteira `MISSING`** — construtores de mídia — nós passamos bytes direto.
 
-| upstream | estado |
-|---|---|
-| `fromFilePath` | `MISSING` |
-| `fromUrl` | `MISSING` |
+| upstream | estado | nota |
+|---|---|---|
+| `fromFilePath` | `MISSING` | construtor de mídia; nós passamos bytes direto |
+| `fromUrl` | `MISSING` | construtor de mídia; nós passamos bytes direto |
 
 ## Product
 
@@ -409,9 +409,9 @@ produto individual. No vendedor observado, `catalog_id`, `catalog_name` e o pre�
 vieram **vazios**, e isso está reportado em vez de assumido: uma observação não
 separa "sempre vazio" de "esta loja".
 
-| upstream | estado |
-|---|---|
-| `getData` | `PARTIAL` |
+| upstream | estado | nota |
+|---|---|---|
+| `getData` | `PARTIAL` | H130: `capabilities/catalog` lê a vitrine de um vendedor e foi provado ao vivo SEM criar nada (H103). Fica `PARTIAL` porque provar o caminho do produto PRÓPRIO exigiria acrescentar um item real ao perfil comercial desta conta, visível a quem abrisse o perfil — recusa deliberada, não pendência |
 
 ## Events
 
@@ -446,7 +446,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `MESSAGE_REVOKED_ME` | — | `MISSING` | não temos "apagar para mim"; `revoke.ForEveryone` é o único caminho implementado. É falta de MÉTODO antes de ser falta de evento (H88) |
 | `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
 | `MESSAGE_EDIT` | events.MessageEdited | `PROVEN` | disparado ao vivo por uma edição (H87) |
-| `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | idem |
+| `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | H130: o `idem` daqui estava PENDURADO — apontava para a nota do `MESSAGE_EDIT`, que é sobre outra coisa. O veredito de verdade: `chat.changed` DISPARA ao vivo (H87, e as sondas de hoje o viram às dezenas), mas é um evento genérico de "campos da conversa se moveram", não o evento dedicado que o upstream entrega COM a contagem. E o contador em si é `CROSS_SESSION` (H78): chega ao servidor e esta sessão não o vê mudar |
 | `MESSAGE_REACTION` | events.MessageReaction | `PARTIAL` | disparado ao vivo (H87); diz que as reações se moveram e NÃO quais são — o agregado não tem fonte neste build (H83) |
 | `MEDIA_UPLOADED` | events.MessageAdded (`Kind`) | `PARTIAL` | **agora MEDIDO** (H120), fechando o que a H88 deixou aberto: um envio de mídia real produziu 12 eventos — `chat.changed:9`, `message.ack:2`, `message.added:1` — com `kind=image` em 3 deles. A mensagem de mídia CHEGA ao barramento e progride pelos acks. O que NÃO existe é um momento distinto de "upload concluído": não dá para separar "subiu" de "mensagem criada", e por isso é PARTIAL e não PROVEN |
 | `CONTACT_CHANGED` | events.ContactChanged | `PROVEN` | disparado sob demanda por `addressbook.Save`, sem segunda conta: 8 eventos ao nomear o par. Era o único tipo instalado e nunca provado (H90) |
