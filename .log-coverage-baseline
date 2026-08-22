@@ -1178,7 +1178,7 @@ rules_frozen=true
 #   log.Warn() calls so logcov counted it as covered. The ratio moves from
 #   468/625=74.88% to 467/624=74.84%, rounding 749->748. This is dead code
 #   removal, not dilution — nothing is lost.
-min_func_coverage=748
+min_func_coverage=746
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1632,7 +1632,7 @@ min_errpath_coverage=870
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
 # F207 (2026-08-22): min_eligible 625 -> 624 (-1, ratchet-DOWN honesto).
 # SAI (1): auth.NewTokenCache, dead code removed. See min_func_coverage above.
-min_eligible=624
+min_eligible=626
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
@@ -1662,3 +1662,24 @@ max_exempt_annotations=1
 #     entao os fakes promovidos de _test.go a pacote nao entram no denominador.
 #   min_func_coverage 707 -> 710 e min_errpath_coverage 856 -> 862: efeito
 #     aritmetico da mesma consolidacao — os helpers removidos nao logavam.
+
+# --- 2026-08-22, onda de workers sobre os achados abertos ---
+#
+# min_eligible 625 -> 624 -> 626, e min_func_coverage 749 -> 748 -> 746, em dois
+# passos de causas OPOSTAS:
+#
+#   -1 elegivel   F207 removeu `auth.NewTokenCache`, codigo morto. Denominador
+#                 que encolhe porque o CODIGO encolheu nao e' afrouxamento.
+#   +2 elegiveis  F113 acrescentou `Fetcher.cacheGet` e `Fetcher.cachePut` ao
+#                 cache do link preview.
+#
+# Os dois acessores novos DILUEM func_coverage em 0,2pp e nao devem registar:
+# sao quatro e tres statements sob mutex, sem caminho de erro. Uma linha de log
+# por acesso a cache seria ruido, e o chamador ja' regista o que interessa.
+# Nada que registava deixou de registar — e' diluicao, nao regressao.
+#
+# COMO ISTO FOI DESCOBERTO, e vale mais que o numero: QUATRO workers em
+# worktrees isolados reportaram que o TestGoldenBate falhava por "problema
+# pre-existente de infraestrutura, timeout de 20m". Corrido isolado, ele falha
+# em 11 SEGUNDOS — e falha por causa das mudancas DELES (as duas funcoes novas
+# e a removida). Cada um descartou como alheia uma falha que era sua.

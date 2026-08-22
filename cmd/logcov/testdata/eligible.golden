@@ -1986,7 +1986,7 @@ pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes	ELIGIBLE	cov
 pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_contact.go:36);uncovered:L2(S-ret,send_contact.go:39);uncovered:L2(S-ret,send_contact.go:42)
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
-pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:50);uncovered:L2(S-ret,send_edit_message.go:53);uncovered:L2(S-ret,send_edit_message.go:68)
+pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:45);uncovered:L2(S-ret,send_edit_message.go:48);uncovered:L2(S-ret,send_edit_message.go:63)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:92)
@@ -1994,16 +1994,16 @@ pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
-pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:67);uncovered:L2(S-ret,send_sticker.go:70)
+pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:60);uncovered:L2(S-ret,send_sticker.go:63)
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:58);uncovered:L2(S-ret,send_template.go:61);uncovered:L2(S-ret,send_template.go:64);uncovered:L2(S-ret,send_template.go:67)
-pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:129);uncovered:L2(S-ret,send_video.go:134)
+pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:83);uncovered:L2(S-ret,send_video.go:86);uncovered:L2(S-ret,send_video.go:122);uncovered:L2(S-ret,send_video.go:127)
 pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covered
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
 pkg/application/usecase/message.acceptedButtonTypes	EXCLUDED	X1
-pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:206)
+pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:199)
 pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
-pkg/application/usecase/message.decodeVideoDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_video.go:214);uncovered:L2(S-ret,send_video.go:226)
+pkg/application/usecase/message.decodeVideoDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_video.go:199);uncovered:L2(S-ret,send_video.go:211)
 pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
 pkg/application/usecase/message.isDataSticker	EXCLUDED	X1
 pkg/application/usecase/message.isDataURI	EXCLUDED	X1
@@ -2013,7 +2013,7 @@ pkg/application/usecase/message.isDataVideo	EXCLUDED	X1
 pkg/application/usecase/message.isHTTPAudioURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_audio.go:258)
 pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_document.go:243)
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
-pkg/application/usecase/message.isHTTPVideoURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_video.go:238)
+pkg/application/usecase/message.isHTTPVideoURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_video.go:223)
 pkg/application/usecase/message.mediaDownloadFlow.execute	ELIGIBLE	uncovered:L2(S-ret,download_media.go:40)
 pkg/application/usecase/message.normalizeInteractiveButtons	ELIGIBLE	uncovered:L1
 pkg/application/usecase/message.normalizeListSections	ELIGIBLE	uncovered:L1
@@ -2465,7 +2465,6 @@ pkg/infra/auth.GetOrSetCache	ELIGIBLE	covered
 pkg/infra/auth.LookupUser	ELIGIBLE	covered
 pkg/infra/auth.LookupUser.func1	ELIGIBLE	covered
 pkg/infra/auth.NewAdminValidator	EXCLUDED	X1
-pkg/infra/auth.NewTokenCache	ELIGIBLE	covered
 pkg/infra/auth.ValidateAdminToken	ELIGIBLE	covered
 pkg/infra/auth.WithUserInfo	EXCLUDED	X1
 pkg/infra/constants.IsValidEventType	EXCLUDED	X1
@@ -2563,6 +2562,10 @@ pkg/infra/media/opengraph.FetchOpenGraphImage	ELIGIBLE	covered
 pkg/infra/media/opengraph.FetchURLBytes	ELIGIBLE	covered
 pkg/infra/media/opengraph.FetchURLBytes.func1	ELIGIBLE	covered
 pkg/infra/media/opengraph.Fetcher.FetchLinkPreview	ELIGIBLE	uncovered:L1
+pkg/infra/media/opengraph.Fetcher.FetchLinkPreview.func1	EXCLUDED	X6
+pkg/infra/media/opengraph.Fetcher.FetchLinkPreview.func2	EXCLUDED	X1
+pkg/infra/media/opengraph.Fetcher.cacheGet	ELIGIBLE	uncovered:L1
+pkg/infra/media/opengraph.Fetcher.cachePut	ELIGIBLE	uncovered:L1
 pkg/infra/media/opengraph.NewFetcher	EXCLUDED	X1
 pkg/infra/media/opengraph.NewURLFetcher	EXCLUDED	X1
 pkg/infra/media/opengraph.URLFetcher.FetchBytes	ELIGIBLE	uncovered:L1
