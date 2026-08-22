@@ -19396,8 +19396,53 @@ Não confirmei em fonte oficial. **Se a medição discordar, a hipótese cai.**
 (embrulho viewOnce; cartões sem botões; `messageVersion`; header só imagem),
 cada variante fotografada nos dois lados. Sem foto não há resultado.
 
-**Status**: não corrigido. `HSCROLL_CARDS` está provado e é o que vai para a
-rota; `ALBUM_IMAGE` fica fora da superfície pública até renderizar.
+### CORREÇÃO 2026-08-22 — o "Problema 2" acima está REFUTADO
+
+O enunciado original dizia que o remetente não vê o próprio carrossel. **Está
+errado, e a culpa é minha**: li a bolha "não é compatível" no telemóvel do
+remetente como sendo do carrossel, quando os relógios dizem outra coisa —
+o carrossel chegou às 10:51 **com os cartões desenhados**, e a bolha
+incompatível é das 10:52, que é o `ALBUM_IMAGE`. O remetente sempre viu o
+carrossel. Havia UM defeito, não dois.
+
+Fica registado porque um achado com diagnóstico errado é pior que nenhum: ele
+parece resolvido, e neste caso teria mandado um worker perseguir um embrulho
+que, medido, PIORA as coisas.
+
+### Segunda ronda de medição — 5 sondas, ambos os telemóveis
+
+Remetente: Android (`aulapratica`). Destinatário: iPhone (554192421234).
+
+| sonda | o que varia | REMETENTE | DESTINATÁRIO |
+|---|---|---|---|
+| 1 | botões simples (baseline) | renderiza | renderiza |
+| 2 | lista, já com `DocumentWithCaptionMessage` | renderiza | renderiza |
+| 3 | carrossel HSCROLL **embrulhado** | renderiza (cartões) | **só o texto do corpo; os cartões DESAPARECEM** |
+| 4 | `ALBUM_IMAGE` **sem** `nativeFlowMessage` nos cartões | incompatível | incompatível |
+| 5 | `ALBUM_IMAGE` com `messageVersion=2` | incompatível | incompatível |
+
+**Conclusão 1 — não embrulhar.** O `DocumentWithCaptionMessage` não corrige
+nada e ATIVAMENTE quebra o destinatário: a sonda 3 perdeu os cartões e ficou só
+com o corpo. O carrossel SEM embrulho (medição de 10:51) renderiza nos dois
+lados. A hipótese do embrulho está **REFUTADA por medição**.
+
+**Conclusão 2 — `ALBUM_IMAGE` não é questão de detalhe de montagem.** Foi
+testado com botões, sem botões e com `messageVersion=2`: as três recusadas nos
+dois lados. As hipóteses H1 (proíbe `nativeFlowMessage`) e H2 (`messageVersion`)
+estão **REFUTADAS**. A pista que resta é a do relatório do worker: no Baileys o
+álbum é `MessageAssociation` com `MEDIA_ALBUM` e `albumParentKey` — mensagens
+separadas ligadas por chave de pai, **um mecanismo diferente**, não um enum do
+carrossel.
+
+**Confundidor a declarar**: remetente é Android e destinatário é iPhone, logo
+"destinatário" e "iOS" não estão separados na sonda 3. Não o separei porque não
+muda a ação — o carrossel sem embrulho funciona nos dois, e a decisão é não
+embrulhar de qualquer modo.
+
+**Status**: `HSCROLL_CARDS` **sem embrulho** está provado nos dois lados e é o
+que vai para a rota. `ALBUM_IMAGE` fica fora da superfície pública: não é
+suportado como enum de carrossel, e o caminho real (`MessageAssociation`) é
+outra tarefa.
 
 ---
 
