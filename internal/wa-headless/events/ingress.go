@@ -327,6 +327,14 @@ func installScript() string {
 			try { if (looksRevoked(m)) { push(msgRow('` + string(MessageRevoked) + `', m)); } }
 			catch (e) { s.dropped++; }
 		};
+		// A REMOCAO E' FILTRADA POR isNewMsg, e o filtro nao e' cosmetico: a
+		// colecao remove modelos por conta propria quando descarrega conversa
+		// antiga, e sem o filtro cada despejo viraria "alguem apagou isto".
+		// A referencia filtra no mesmo ponto, pelo mesmo motivo.
+		const onRemove = (m) => {
+			try { if (m && m.isNewMsg) { push(msgRow('` + string(MessageRemoved) + `', m)); } }
+			catch (e) { s.dropped++; }
+		};
 		const onEdit = (m) => { try { push(msgRow('` + string(MessageEdited) + `', m)); } catch (e) { s.dropped++; } };
 		const onReaction = (m) => { try { push(msgRow('` + string(MessageReaction) + `', m)); } catch (e) { s.dropped++; } };
 		const onContact = (c) => {
@@ -359,6 +367,7 @@ func installScript() string {
 		MC.on('change:isRevokedMsg', onRevoke);
 		MC.on('change:revokeSender', onRevoke);
 		MC.on('change:type', onRevoke);
+		MC.on('remove', onRemove);
 		MC.on('change:latestEditMsgKey', onEdit);
 		// hasReaction is STICKY (H53), so this fires when a reaction is ADDED
 		// and, on the same session, may not fire again when it is taken back.

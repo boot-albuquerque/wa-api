@@ -387,3 +387,105 @@ func TestAnEmptyIDNeverReachesThePageForAQuote(t *testing.T) {
 		t.Error("an empty id reached the page")
 	}
 }
+
+// THE SENTINEL IS NOT READ. This is the assertion that would have caught H131
+// the first time, and it is asserted on the SCRIPT rather than on the result
+// because the double supplies whatever the parser is asked to parse — a result
+// assertion here would measure the double's honesty, not the rule.
+func TestTheMentionsScriptDoesNotReadTheSentinelField(t *testing.T) {
+	d := &double{answer: `{"ok":true,"people":[],"groups":[]}`}
+	if _, err := rd(d).MentionsOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("MentionsOf: %v", err)
+	}
+	code := withoutComments(d.lastScript)
+	if strings.Contains(code, "nonJidMentions") {
+		t.Fatal("the script reads nonJidMentions, which is not an array and was " +
+			"measured as present on 46 of 62 messages including ones that mention " +
+			"nobody; reading it counts every message as mentioning somebody")
+	}
+	for _, field := range []string{"mentionedJidList", "groupMentions"} {
+		if !strings.Contains(code, field) {
+			t.Errorf("the script does not read %q, which is one of the two fields "+
+				"measured to actually carry a mention", field)
+		}
+	}
+}
+
+// A NON-ARRAY IS NOT A MENTION. The shape guard has to live in the page, since
+// that is the only side that ever sees the sentinel — by the time a value has
+// crossed into Go it is already JSON and already an array or not.
+func TestTheMentionsScriptTakesOnlyArrays(t *testing.T) {
+	d := &double{answer: `{"ok":true,"people":[],"groups":[]}`}
+	if _, err := rd(d).MentionsOf(context.Background(), "3EB0", "t"); err != nil {
+		t.Fatalf("MentionsOf: %v", err)
+	}
+	if !strings.Contains(withoutComments(d.lastScript), "Array.isArray") {
+		t.Fatal("the script does not check Array.isArray before iterating, so a " +
+			"lazy sentinel would be walked as if it were a list of mentions")
+	}
+}
+
+// People and groups are separate facts with separate shapes.
+func TestPeopleAndGroupsDoNotShareAList(t *testing.T) {
+	d := &double{answer: `{"ok":true,"people":["1@lid"],` +
+		`"groups":[{"jid":"9@g.us","subject":"lab"}]}`}
+	m, err := rd(d).MentionsOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("MentionsOf: %v", err)
+	}
+	if len(m.People) != 1 || m.People[0] != "1@lid" {
+		t.Fatalf("people: %#v", m.People)
+	}
+	if len(m.Groups) != 1 || m.Groups[0].JID != "9@g.us" || m.Groups[0].Subject != "lab" {
+		t.Fatalf("groups: %#v", m.Groups)
+	}
+	if !m.Any() {
+		t.Fatal("Any() said nothing was mentioned about a message with both")
+	}
+}
+
+// A message mentioning nobody is not an error, and Any() says so.
+func TestMentioningNobodyIsNotAnError(t *testing.T) {
+	d := &double{answer: `{"ok":true,"people":[],"groups":[]}`}
+	m, err := rd(d).MentionsOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("a message with no mentions must not be an error: %v", err)
+	}
+	if m.Any() {
+		t.Fatal("Any() claimed a mention on a message that carries none")
+	}
+}
+
+// The rendering carries counts, never an identity and never a group name.
+func TestTheMentionsRenderingIsQuiet(t *testing.T) {
+	m := Mentions{
+		People: []string{"5516999999999@lid"},
+		Groups: []GroupMention{{JID: "120363@g.us", Subject: "familia"}},
+	}
+	s := m.String()
+	for _, leak := range []string{"5516", "999999999", "120363", "familia"} {
+		if strings.Contains(s, leak) {
+			t.Fatalf("the rendering leaks %q: %s", leak, s)
+		}
+	}
+	if !strings.Contains(s, "people=1") || !strings.Contains(s, "groups=1") {
+		t.Fatalf("the rendering lost the counts: %s", s)
+	}
+}
+
+func TestAnUnloadedMessageHasNoMentionsAnswer(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":true}`}
+	if _, err := rd(d).MentionsOf(context.Background(), "3EB0", "t"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForMentions(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).MentionsOf(context.Background(), "  ", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("want ErrNoMessage, got %v", err)
+	}
+	if d.kicks != 0 {
+		t.Fatalf("an empty id reached the page %d times", d.kicks)
+	}
+}

@@ -353,8 +353,8 @@ código — é falta de dado.
 | `rawData` | message.ShapeOf | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | H107: devolvemos os NOMES dos campos, nunca os valores — a medição achou 598 nomes no modelo cru, entre eles `body` e `caption`; devolver rawData como é derrubaria a invariante 12 em vez de entregar funcionalidade |
 | `getChat` | message.OriginOf (.ChatJID) | `PROVEN` | sim | sim | sim | H106 |
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
-| `getMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos; leitor não embarcado (armadilha H93) |
-| `getGroupMentions` | — | `MISSING` | — | medido | — | H106: 395 mensagens carregadas, ZERO com menção sob nenhum de cinco nomes de campo candidatos — a mesma medição do `getMentions`. Embarcar leitor nunca visto devolvendo algo é a armadilha H93. *(era `idem`, expandido na H134)* |
+| `getMentions` | message.MentionsOf | `PROVEN` | sim | sim | sim | H142: a H106 estava certa em recusar e errada sobre a causa — o zero era da DADO, não da página. Ninguém nesta conta jamais mencionara ninguém. Produzida uma menção no grupo de laboratório, `mentionedJidList` apareceu: lista de Wid `{_serialized, server, user}`, idêntica pelo getter e pelo `__x_`. Lida de volta pelo capability, a identidade bate com a resolvida por `lookup.NumberID` |
+| `getGroupMentions` | message.MentionsOf | `PROVEN` | sim | sim | sim | H142: campo SEPARADO, com forma própria — `groupMentions` é lista de `{groupJid, groupSubject}`, não jids com sufixo de grupo. O assunto vem congelado na mensagem, não do grupo de hoje. Provado na mesma mensagem que provou o `getMentions`: 1 pessoa e 1 grupo, ambos lidos de volta |
 | `getQuotedMessage` | message.QuotedOf | `PROVEN` | sim | sim | sim | H131: PRODUZI a citação para poder prová-la — 336 mensagens carregadas e ZERO com id citado, então esperar era a armadilha H93. Mensagem comum diz `quotes=false`, resposta diz `quotes=true` apontando para a mensagem certa, e o id devolvido é usável por `OriginOf`. Lê `quotedStanzaID`, o mesmo campo que o `send` usa para provar a citação — os campos `__x_*QuotedMsg*` existem em TODA mensagem e guardam sentinela preguiçosa, não dado |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
 | `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53: as duas metades NÃO são iguais — `Add` verifica a pós-condição e `Remove` não, e o `Result` diz qual foi qual em vez de fingir simetria. *(era só a referência `H53`, expandido na H134)* |
@@ -442,7 +442,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `MESSAGE_CIPHERTEXT_FAILED` | — | `BLOCKED` | H140: idem `MESSAGE_CIPHERTEXT` — abaixo do modelo (H88) |
 | `MESSAGE_CREATE` | events.MessageAdded | `PARTIAL` | o mesmo evento cobre os dois; o upstream distingue criada de recebida e nós não (H87) |
 | `MESSAGE_REVOKED_EVERYONE` | events.MessageRevoked | `PROVEN` | disparado ao vivo; reconhecido pelo predicado de TRÊS sinais que a capacidade de apagar mede (H87) |
-| `MESSAGE_REVOKED_ME` | — | `MISSING` | não temos "apagar para mim"; `revoke.ForEveryone` é o único caminho implementado. É falta de MÉTODO antes de ser falta de evento (H88) |
+| `MESSAGE_REVOKED_ME` | events.MessageRemoved + revoke.ForMe | `PROVEN` | H143: o diagnóstico da H88 estava certo — era falta de MÉTODO. Fechado escrevendo os dois: `revoke.ForMe` (`Cmd.sendDeleteMsgs`, nome ENUMERADO no build, aridade 6) e o ouvinte `MsgCollection.on('remove')` filtrado por `isNewMsg`. Nomeado `message.removed` e não `revoked`: revogar é fato da CONVERSA, apagar local é fato deste APARELHO. Provado com linha de base (0 antes, 1 depois, nomeando a mensagem apagada) |
 | `MESSAGE_ACK` | events.MessageAck | `PROVEN` | disparado ao vivo (H87) |
 | `MESSAGE_EDIT` | events.MessageEdited | `PROVEN` | disparado ao vivo por uma edição (H87) |
 | `UNREAD_COUNT` | events.ChatChanged | `PARTIAL` | H130: o `idem` daqui estava PENDURADO — apontava para a nota do `MESSAGE_EDIT`, que é sobre outra coisa. O veredito de verdade: `chat.changed` DISPARA ao vivo (H87, e as sondas de hoje o viram às dezenas), mas é um evento genérico de "campos da conversa se moveram", não o evento dedicado que o upstream entrega COM a contagem. E o contador em si é `CROSS_SESSION` (H78): chega ao servidor e esta sessão não o vê mudar |
@@ -468,9 +468,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 106 | 48% |
+| `PROVEN` | 109 | 50% |
 | `PARTIAL` | 56 | 25% |
 | `BLOCKED` | 49 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
-| `MISSING` | 3 | 1% |
+| `MISSING` | 0 | 0% |
 | **total** | **220** | |

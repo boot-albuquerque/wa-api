@@ -8,11 +8,17 @@
 // of a group message is NOT the chat it arrived in — conflating the two is how a
 // group message gets attributed to the group instead of to a person.
 //
-// WHY NOT MENTIONS. getMentions was the obvious neighbour and it was measured
-// first: 395 loaded messages, ZERO carrying a mention under any of five
-// candidate field names. Shipping a reader never seen returning anything is the
-// trap this repository catalogued in H93, so it was left alone and the
-// measurement written down instead (H106).
+// MENTIONS TOOK TWO PASSES, and the first one was right to refuse. getMentions
+// was measured before it was written: 395 loaded messages, ZERO carrying a
+// mention under any of five candidate field names, so shipping a reader never
+// seen returning anything would have been the trap catalogued in H93, and it was
+// left alone with the measurement written down (H106).
+//
+// What unblocked it was not a better guess at the field name. It was noticing
+// the zero was about the DATA, not about the page: nobody in this account had
+// ever mentioned anybody. Producing one mention in the lab group made both
+// fields appear at once (H142) — the same manoeuvre that closed the quote, the
+// vote and the group events.
 package message
 
 import (
@@ -307,4 +313,81 @@ func (r *Reader) QuotedOf(ctx context.Context, messageID, label string) (Quoted,
 		Quotes: out.Quotes, MessageID: out.QuotedID, Loaded: out.Loaded,
 		ChatJID: out.Chat, SenderJID: out.Sender,
 	}, nil
+}
+
+// GroupMention is a group named inside a message.
+type GroupMention struct {
+	// JID is the mentioned group.
+	JID string
+	// Subject is the group's name AS IT WAS when the message was written. The
+	// page carries it on the message rather than resolving it, so a group renamed
+	// afterwards still shows here under its old name — which is the honest answer
+	// about what was said, not a staleness bug.
+	Subject string
+}
+
+// Mentions is who and what a message names.
+type Mentions struct {
+	// People are the mentioned identities, serialized. On this LID-first build
+	// they arrive under whichever namespace the sender used, exactly as the page
+	// holds them — no conversion, because converting would invent an identity the
+	// message never carried.
+	People []string
+	// Groups are mentioned groups. A SEPARATE FIELD, not people with a group
+	// suffix: the page carries them in a different field with a different shape,
+	// and merging them would lose the subject and lie about the kind.
+	Groups []GroupMention
+}
+
+// Any says the message mentions anything at all.
+func (m Mentions) Any() bool { return len(m.People) > 0 || len(m.Groups) > 0 }
+
+func (m Mentions) String() string {
+	return fmt.Sprintf("message.Mentions(people=%d groups=%d)", len(m.People), len(m.Groups))
+}
+
+// MentionsOf reports who and which groups a message names.
+//
+// It is the reference's Message.getMentions and Message.getGroupMentions in one
+// read, for the reason OriginOf gives: two calls for one message model cost two
+// round trips and may answer from two different moments.
+//
+// IT RETURNS IDENTITIES, NOT CONTACTS. The reference maps each id through
+// getContactById and hands back Contact objects. Resolving a list of jids to
+// contacts already exists here as capabilities/contacts.Recipients, which
+// reports found and missing SEPARATELY — and that distinction is worth keeping,
+// because a mention of somebody this session has no contact for is a normal
+// thing that the reference's version silently turns into a half-empty object.
+func (r *Reader) MentionsOf(ctx context.Context, messageID, label string) (Mentions, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return Mentions{}, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, mentionsScript(messageID), label+"/mentions")
+	if err != nil {
+		return Mentions{}, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK       bool     `json:"ok"`
+		Why      string   `json:"why"`
+		NotFound bool     `json:"notFound"`
+		People   []string `json:"people"`
+		Groups   []struct {
+			JID     string `json:"jid"`
+			Subject string `json:"subject"`
+		} `json:"groups"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return Mentions{}, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return Mentions{}, ErrNotFound
+	}
+	if !out.OK {
+		return Mentions{}, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	m := Mentions{People: out.People}
+	for _, g := range out.Groups {
+		m.Groups = append(m.Groups, GroupMention{JID: g.JID, Subject: g.Subject})
+	}
+	return m, nil
 }

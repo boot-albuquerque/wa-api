@@ -3551,3 +3551,160 @@ integração deveriam vir do mesmo `harnessBootBudget`, para que exista UM núme
 ajustar. Fica registrado em vez de emendado agora, porque mexer nos prazos de
 dois testes que acabaram de falhar é o momento errado para decidir qual é o valor
 certo.
+
+---
+
+## H142 — o zero da H106 era do DADO, não da página: menções fechadas produzindo uma
+
+**Data**: 2026-08-22
+**Contexto**: fechar as três últimas linhas `MISSING` do `LEDGER-WWEBJS.md`
+(`getMentions`, `getGroupMentions`, `MESSAGE_REVOKED_ME`).
+
+**Onde**: `internal/wa-headless/capabilities/message/script.go` (`mentionsScript`),
+`internal/wa-headless/capabilities/message/message.go` (`MentionsOf`).
+
+**Problema**: a H106 mediu 395 mensagens carregadas e achou ZERO menções sob
+cinco nomes de campo candidatos, e concluiu — corretamente — que embarcar um
+leitor nunca visto devolvendo algo seria a armadilha H93. A entrada ficou
+`MISSING` com essa medição anexada e parecia encerrada.
+
+**O que estava errado não era a medição, era a leitura dela.** O zero não dizia
+"a página não expõe menções". Dizia "ninguém nesta conta jamais mencionou
+ninguém" — e essas são afirmações diferentes, com remédios diferentes. A
+primeira é um beco; a segunda é falta de fixture.
+
+**Evidência**: produzida UMA menção no grupo de laboratório, mencionando o par
+resolvido por `lookup.NumberID` e o próprio grupo. A varredura seguinte, sobre
+62 mensagens:
+
+```
+mentionedJidList  viaGetter 2  viaUnderscore 2
+                  entrada: object, keys [_serialized, server, user]
+groupMentions     viaGetter 2  viaUnderscore 2
+                  entrada: object, keys [groupJid, groupSubject]
+```
+
+Os dois campos respondem igual pelo getter e pelo `__x_`, o que torna o getter o
+caminho estável.
+
+**A armadilha da H131 apareceu de novo, e o primeiro instrumento caiu nela.**
+A varredura inicial listou NOMES de campo e reportou `__x_nonJidMentions` como
+"preenchido" em **46 de 62** mensagens — inclusive em mensagens que não mencionam
+ninguém. O campo não é array: é sentinela preguiçosa. Um leitor construído sobre
+aquela varredura diria que quase toda mensagem menciona alguém. O conserto foi
+medir a FORMA em vez do nome, e a regra virou código: `mentionsScript` só itera
+o que passa em `Array.isArray`.
+
+**Correção aplicada**: `Reader.MentionsOf` devolve `Mentions{People, Groups}`.
+Pessoas e grupos são campos separados porque a página os carrega em campos
+separados com formas diferentes — fundi-los perderia o assunto e mentiria sobre
+a espécie. O assunto do grupo vem **congelado na mensagem**, não resolvido do
+grupo de hoje: é o que foi dito na hora.
+
+**Divergência consciente da referência**: o `getMentions` de lá mapeia cada id
+por `getContactById` e devolve `Contact`. Aqui devolve identidades, porque
+`contacts.Recipients` (H132) já resolve lista de jids reportando encontrados e
+ausentes SEPARADAMENTE — distinção que a versão da referência transforma em
+objeto meio vazio.
+
+**Status**: corrigido. Travado por:
+- `TestTheMentionsScriptDoesNotReadTheSentinelField` — CN: trocar
+  `m.mentionedJidList` por `m.nonJidMentions`. Falha com *"the script reads
+  nonJidMentions, which is not an array and was measured as present on 46 of 62
+  messages including ones that mention nobody"*.
+- `TestTheMentionsScriptTakesOnlyArrays` — CN: `const list = v => v || []`.
+  Falha com *"the script does not check Array.isArray before iterating"*.
+- `TestPeopleAndGroupsDoNotShareAList` — CN: `m.People = append(m.People, g.JID)`.
+  Falha.
+- `TestTheMentionsRenderingIsQuiet` — CN: imprimir `m.Groups`. Falha com
+  *"the rendering leaks \"120363\""*.
+- `TestAnUnloadedMessageHasNoMentionsAnswer`,
+  `TestAnEmptyIDNeverReachesThePageForMentions`.
+
+Prova em SPA real: `TestProbeProduceMention` envia 1 pessoa + 1 grupo e lê de
+volta por `MentionsOf` — `people=1 groups=1`, identidade batendo com a resolvida
+e assunto não vazio.
+
+**Lição, e é a terceira vez que ela cobra**: *uma ausência medida precisa dizer
+se é ausência de CAPACIDADE ou ausência de DADO.* A H114 já tinha ensinado que
+um zero precisa de controle positivo; aqui o controle positivo era produzir o
+fato. As linhas ficaram três meses `MISSING` por uma medição correta lida como
+conclusão errada.
+
+---
+
+## H143 — `MESSAGE_REVOKED_ME`: o diagnóstico estava certo, e a pós-condição estava no lugar errado
+
+**Data**: 2026-08-22
+**Contexto**: idem H142 — última linha `MISSING`.
+
+**Onde**: `internal/wa-headless/capabilities/revoke/revoke.go` (`ForMe`,
+`waitGone`, `loadedScript`), `internal/wa-headless/events/events.go`
+(`MessageRemoved`), `internal/wa-headless/events/ingress.go` (`onRemove`).
+
+**Problema**: a nota da H88 dizia *"não temos 'apagar para mim'; é falta de
+MÉTODO antes de ser falta de evento"* — e estava certa. O `revoke` só oferecia
+`ForEveryone`, apesar de o próprio `ErrNotRevocable` já dizer ao chamador
+*"apague localmente"*: o pacote nomeava um remédio que não vendia.
+
+**Nome enumerado, não adivinhado.** Três nomes de função inventados a partir da
+referência não existiam neste build esta semana (H134, H137). Desta vez o módulo
+foi enumerado antes:
+
+```
+Cmd delete surface: clearChat, clearCurrentChatConversationHistory,
+clearSelectedChats, deleteOrExitChat, deleteOrExitChatFromEntryPoint,
+newsletterDeleteDrawer, sendDeleteMsgs
+sendDeleteMsgs: aridade 6   (a referência passa 3; o resto tem padrão)
+```
+
+**A medição que eu não teria adivinhado**: a primeira versão verificava a
+pós-condição DENTRO da página, imediatamente depois do `await sendDeleteMsgs`.
+Contra produção, falhou:
+
+```
+sent: send.Result(id=3EB0078A0EE0866F6826CC ack=1 waited=1ms)
+ForMe: revoke: the page accepted the local deletion and the message is still loaded
+```
+
+`sendDeleteMsgs` **resolve antes de a coleção soltar o modelo**. Movida a espera
+para o Go — que é onde a invariante 6 manda o relógio ficar —, o tempo real
+medido foi **4,539 s**. A verificação na página estava garantida a falhar; um
+`sleep` na página teria "consertado" o sintoma violando a invariante.
+
+Por isso o script deixou de responder `loaded`: uma página que reportasse a
+pós-condição a reportaria no único instante em que ela está garantidamente
+errada.
+
+**O evento é `message.removed`, não `message.revoked`, e a distinção é o motivo
+de ele existir.** Revogar é fato da CONVERSA — some do telefone de todo mundo e
+os dois lados veem. Apagar local é fato deste APARELHO — ninguém mais percebe.
+Emitir um pelo outro diria ao assinante que uma mensagem sumiu para todos quando
+sumiu só aqui. O ouvinte é `MsgCollection.on('remove')` filtrado por `isNewMsg`,
+o mesmo filtro da referência e pelo mesmo motivo: sem ele, cada despejo de
+conversa antiga viraria "alguém apagou isto".
+
+**`ForMe` não consulta `canSenderRevokeMsg`**, e isso é decisão: aquela pergunta
+é sobre as cópias DE OUTRAS PESSOAS. Consultá-la aqui recusaria — em nome delas —
+um ato que nunca sai deste aparelho.
+
+**Status**: corrigido. Travado por:
+- `TestALocallyDeletedMessageStillLoadedIsAFailure` — CN: remover a chamada a
+  `waitGone`. Falha.
+- `TestTheLocalDeleteDoesNotConsultTheRevokeEntitlement` — CN: introduzir
+  `canSenderRevokeMsg` no script. Falha.
+- `TestTheLocalDeleteVerifiesAgainstTheCollection` — CN: idem `waitGone`. Falha
+  com *"the postcondition never asked the collection whether the message is still
+  there"*.
+- `TestALocalDeleteThatLandsReportsItself`,
+  `TestAnEmptyIDNeverReachesThePageForALocalDelete`,
+  `TestAMessageNotLoadedCannotBeDeletedLocally`.
+
+Prova em SPA real: `TestProbeDeleteForMe` envia, mede a LINHA DE BASE
+(`message.removed before the delete: 0`), apaga, e observa `message.removed`
+nomeando exatamente a mensagem apagada (`total 1, was 0`).
+
+**Lição**: *a pós-condição tem de ser lida no relógio de quem espera.* A
+invariante 6 é normalmente enunciada como "não decida na página"; este caso
+mostra a outra metade — **não VERIFIQUE na página**, porque verificar cedo demais
+é decidir com a informação errada.

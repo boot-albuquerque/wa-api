@@ -46,6 +46,20 @@ const (
 	ChatChanged Type = "chat.changed"
 	// MessageRevoked is a message deleted for everyone, seen from either side.
 	MessageRevoked Type = "message.revoked"
+	// MessageRemoved is a message LEAVING this session's collection, which is
+	// what "deleted for me" looks like from here.
+	//
+	// IT IS NOT MessageRevoked WITH A DIFFERENT NAME, and the distinction is the
+	// whole reason it exists. A revoke is a fact about the CONVERSATION: the
+	// message is gone from every participant's phone and both sides see it.
+	// A removal is a fact about THIS DEVICE: the message left the local store and
+	// nobody else can tell. Emitting one for the other would tell a subscriber
+	// that a message vanished for everyone when it vanished only here.
+	//
+	// It rides the collection's 'remove', filtered by isNewMsg the way the
+	// reference filters it — without that filter the collection's own eviction
+	// of old messages would be reported as a deletion the user never performed.
+	MessageRemoved Type = "message.removed"
 	// MessageEdited is a message whose text was replaced.
 	MessageEdited Type = "message.edited"
 	// ContactChanged is a contact record moving — a name, a picture, a
@@ -147,7 +161,7 @@ const (
 // subscription for an event never installed.
 var PageTypes = []Type{
 	MessageAdded, MessageAck, ChatChanged,
-	MessageRevoked, MessageEdited, ContactChanged, MessageReaction,
+	MessageRevoked, MessageRemoved, MessageEdited, ContactChanged, MessageReaction,
 	CallIncoming, VoteUpdated,
 }
 

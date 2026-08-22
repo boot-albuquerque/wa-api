@@ -202,3 +202,130 @@ func (p *stallingDouble) eval(ctx context.Context, expr string, out *string) err
 	*out = `{"started":true}`
 	return nil
 }
+
+// localDouble answers ForMe's postcondition field, which pageDouble does not
+// carry — and that is deliberate rather than laziness. A double that answered
+// both `revoked` and `loaded` would let a ForMe test pass while the script asked
+// the revoked question, which is exactly the confusion ErrStillLoaded exists to
+// prevent.
+type localDouble struct {
+	ok     bool
+	stage  string
+	why    string
+	loaded bool
+
+	kicks       int
+	loadedReads int
+	lastScript  string
+}
+
+func (p *localDouble) eval(ctx context.Context, expr string, out *string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// A PERGUNTA DA POS-CONDICAO E' UM SCRIPT SEPARADO, e o duble responde a ela
+	// separadamente de proposito: se as duas respostas viessem do mesmo campo, um
+	// ForMe que nunca perguntasse passaria.
+	if strings.Contains(expr, "return { loaded: true }") {
+		p.loadedReads++
+		*out = fmt.Sprintf(`{"loaded":%t}`, p.loaded)
+		return nil
+	}
+	if strings.Contains(expr, "const s = window[") {
+		if !p.ok {
+			stage := p.stage
+			if stage == "" {
+				stage = "delete"
+			}
+			*out = fmt.Sprintf(`{"stage":%q,"ok":false,"why":%q}`, stage, p.why)
+			return nil
+		}
+		*out = `{"stage":"done","ok":true,"why":""}`
+		return nil
+	}
+	p.kicks++
+	p.lastScript = expr
+	*out = `{"started":true}`
+	return nil
+}
+
+func localRevoker(p *localDouble) *Revoker { return New(engine.NewRunner(), p.eval) }
+
+// THE POSTCONDITION. A local delete that leaves the message in the collection
+// did not happen, and saying otherwise is the silent success invariant 14 exists
+// to forbid.
+func TestALocallyDeletedMessageStillLoadedIsAFailure(t *testing.T) {
+	compressClock(t)
+	p := &localDouble{ok: true, loaded: true}
+	if _, err := localRevoker(p).ForMe(context.Background(), "3EB0", false, "t"); !errors.Is(err, ErrStillLoaded) {
+		t.Fatalf("want ErrStillLoaded, got %v", err)
+	}
+}
+
+func TestALocalDeleteThatLandsReportsItself(t *testing.T) {
+	compressClock(t)
+	p := &localDouble{ok: true, loaded: false}
+	res, err := localRevoker(p).ForMe(context.Background(), "3EB0", false, "t")
+	if err != nil {
+		t.Fatalf("ForMe: %v", err)
+	}
+	if res.As != asLocal {
+		t.Fatalf("a local delete claimed entitlement %q; it uses none", res.As)
+	}
+}
+
+// THE LOCAL DELETE MUST NOT ASK PERMISSION. canSenderRevokeMsg answers a
+// question about OTHER PEOPLE's copies, and consulting it here would refuse —
+// on their behalf — an act that never leaves this device. It is asserted on the
+// script because the double supplies the outcome either way.
+func TestTheLocalDeleteDoesNotConsultTheRevokeEntitlement(t *testing.T) {
+	compressClock(t)
+	p := &localDouble{ok: true, loaded: false}
+	if _, err := localRevoker(p).ForMe(context.Background(), "3EB0", false, "t"); err != nil {
+		t.Fatalf("ForMe: %v", err)
+	}
+	for _, cap := range []string{"canSenderRevokeMsg", "canAdminRevokeMsg", "sendRevoke"} {
+		if strings.Contains(p.lastScript, cap) {
+			t.Errorf("the local delete script uses %q, which belongs to the "+
+				"for-everyone path and would refuse a purely local act", cap)
+		}
+	}
+	if !strings.Contains(p.lastScript, "sendDeleteMsgs") {
+		t.Fatal("the script does not call sendDeleteMsgs, which is the name this " +
+			"build actually exports for a local delete")
+	}
+}
+
+// THE COLLECTION IS RE-READ, not the model in hand. A removed model stays a
+// perfectly valid object in the variable that holds it, so asking IT whether it
+// is gone answers "no" forever.
+func TestTheLocalDeleteVerifiesAgainstTheCollection(t *testing.T) {
+	compressClock(t)
+	p := &localDouble{ok: true, loaded: false}
+	if _, err := localRevoker(p).ForMe(context.Background(), "3EB0", false, "t"); err != nil {
+		t.Fatalf("ForMe: %v", err)
+	}
+	if p.loadedReads == 0 {
+		t.Fatal("the postcondition never asked the collection whether the message " +
+			"is still there, so it would confirm the deletion against the very " +
+			"object it just deleted")
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForALocalDelete(t *testing.T) {
+	p := &localDouble{ok: true}
+	if _, err := localRevoker(p).ForMe(context.Background(), "  ", false, "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("want ErrNoMessage, got %v", err)
+	}
+	if p.kicks != 0 {
+		t.Fatalf("an empty id reached the page %d times", p.kicks)
+	}
+}
+
+func TestAMessageNotLoadedCannotBeDeletedLocally(t *testing.T) {
+	compressClock(t)
+	p := &localDouble{ok: false, stage: "find", why: "NOT_LOADED"}
+	if _, err := localRevoker(p).ForMe(context.Background(), "3EB0", false, "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("want ErrNoMessage, got %v", err)
+	}
+}

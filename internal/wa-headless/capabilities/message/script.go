@@ -212,3 +212,65 @@ func quotedScript(messageID string) string {
 	return "kicked";
 	})()`
 }
+
+// mentionsScript reads WHO and WHICH GROUPS a message names.
+//
+// THE FIELD NAMES WERE MEASURED, NOT GUESSED. H106 looked for mentions across
+// 395 loaded messages, found ZERO under five candidate names, and correctly
+// refused to ship a reader nobody had seen return anything. The way out was not
+// a better guess: it was PRODUCING a mention in the lab group and reading what
+// the page then held (H142). Two fields answered, and both answer identically
+// through the getter and through the __x_ backing field:
+//
+//	mentionedJidList  array of Wid   {_serialized, server, user}
+//	groupMentions     array of pairs {groupJid, groupSubject}
+//
+// __x_nonJidMentions IS NOT READ, and that is the H131 lesson paid a second
+// time. The first instrument here listed field NAMES and reported that field as
+// "populated" on 46 of 62 messages — including messages nobody had mentioned
+// anything in. It is not an array; it is a lazy sentinel, and counting it as
+// data would have shipped a reader that says every message mentions somebody.
+// So this script asks for the SHAPE and takes only arrays.
+func mentionsScript(messageID string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
+	const jid = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
+	// SO' ARRAY CONTA. Um valor que nao e' lista e' sentinela, nao mencao.
+	const list = v => Array.isArray(v) ? v : [];
+	try {
+		const MC = window.require("` + modMsgCollection + `").MsgCollection;
+		let m = null;
+		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
+		if (!m) {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				try { if (c.id && c.id.id === ` + strconv.Quote(messageID) + `) { m = c; break; } } catch (e) {}
+			}
+		}
+		if (!m) { park({ ok: true, notFound: true }); return "kicked"; }
+
+		const people = [];
+		for (const w of list(m.mentionedJidList)) {
+			const s = jid(w);
+			if (s) { people.push(s); }
+		}
+
+		const groups = [];
+		for (const g of list(m.groupMentions)) {
+			if (!g) { continue; }
+			const s = jid(g.groupJid);
+			// O ASSUNTO VEM CONGELADO NA MENSAGEM, nao do grupo de hoje. Sao
+			// fatos diferentes assim que alguem renomear o grupo, e o que a
+			// mensagem diz e' o que foi mencionado na hora.
+			if (s) { groups.push({ jid: s, subject: (typeof g.groupSubject === "string") ? g.groupSubject : "" }); }
+		}
+
+		park({ ok: true, notFound: false, people: people, groups: groups });
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
+	return "kicked";
+	})()`
+}
