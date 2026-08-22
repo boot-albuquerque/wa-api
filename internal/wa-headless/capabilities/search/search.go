@@ -26,7 +26,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -46,7 +48,21 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessSearch"
+// stateKeyPrefix names the page global a call parks its answer on.
+//
+// IT IS A PREFIX, NOT A KEY (H177). One shared global meant two concurrent
+// calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer — measured in
+// capabilities/message at 12 crossings in 12 rounds. The nonce comes from Go:
+// a page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessSearch"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Hit is where a matching message lives. No body, ever.
 type Hit struct {
@@ -101,7 +117,8 @@ func (s *Searcher) Messages(ctx context.Context, query string, page int, label s
 	if page < 1 {
 		page = 1
 	}
-	raw, err := s.parked(ctx, searchScript(query, page), label+"/search")
+	key := nextStateKey()
+	raw, err := s.parked(ctx, searchScript(query, page, key), key, label+"/search")
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -137,7 +154,7 @@ func (s *Searcher) Messages(ctx context.Context, query string, page int, label s
 	return res, nil
 }
 
-func (s *Searcher) parked(ctx context.Context, kick, label string) (string, error) {
+func (s *Searcher) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return s.eval(c, kick, &started)
@@ -148,11 +165,17 @@ func (s *Searcher) parked(ctx context.Context, kick, label string) (string, erro
 	for {
 		var raw string
 		if err := s.runner.Do(ctx, engine.OpStateProbe, label+"/poll", func(c context.Context) error {
-			return s.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return s.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida: sem isso a correcao troca uma
+			// resposta cruzada por um global de pagina POR CHAMADA (H177).
+			var ignored string
+			_ = s.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return s.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

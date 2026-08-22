@@ -58,7 +58,8 @@ func (r *Resolver) LidAndPhone(ctx context.Context, jid, label string) (Pair, er
 	if strings.TrimSpace(jid) == "" {
 		return Pair{}, ErrNoJID
 	}
-	raw, err := r.parked(ctx, pairScript(jid), label+"/pair")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, pairScript(jid, key), key, label+"/pair")
 	if err != nil {
 		return Pair{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -81,10 +82,10 @@ func (r *Resolver) LidAndPhone(ctx context.Context, jid, label string) (Pair, er
 	return Pair{LID: out.LID, PN: out.PN, Queried: out.Queried}, nil
 }
 
-func pairScript(jid string) string {
+func pairScript(jid, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const ser = v => (v && v._serialized) ? v._serialized : (typeof v === "string" ? v : "");
 	const resolve = ` + spa.ResolveIdentityExpr + `;

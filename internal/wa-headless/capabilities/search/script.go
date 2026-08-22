@@ -17,10 +17,10 @@ const (
 // cannot reach Go even by accident. Serialising the message and filtering in Go
 // would put the body in the answer first, which is the same mistake H107
 // refused for rawData.
-func searchScript(query string, page int) string {
+func searchScript(query string, page int, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const str = v => (typeof v === "string" ? v : "");
 	(async () => {

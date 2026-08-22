@@ -22,7 +22,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -52,7 +54,21 @@ var (
 	Tick   = 150 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessPhone"
+// stateKeyPrefix names the page global a call parks its answer on.
+//
+// IT IS A PREFIX, NOT A KEY (H177). One shared global meant two concurrent
+// calls on the same session overwrote each other and each polled until
+// non-empty, so one could take the other's answer — measured in
+// capabilities/message at 12 crossings in 12 rounds. The nonce comes from Go:
+// a page-side Math.random or Date.now would put a decision and a clock where
+// invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessPhone"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // maxDigits is E.164's ceiling for a full international number. It is a
 // BORROWED rule, not one measured here, and it is written down as such: the
@@ -90,7 +106,8 @@ func (r *Reader) Lookup(ctx context.Context, number, label string) (Number, erro
 	if !ok {
 		return Number{}, ErrNotANumber
 	}
-	raw, err := r.parked(ctx, lookupScript(digits), label+"/phone")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, lookupScript(digits, key), key, label+"/phone")
 	if err != nil {
 		return Number{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -158,7 +175,7 @@ func allDigits(s string) bool {
 	return s != ""
 }
 
-func (r *Reader) parked(ctx context.Context, kick, label string) (string, error) {
+func (r *Reader) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/kick", func(c context.Context) error {
 		return r.eval(c, kick, &started)
@@ -169,11 +186,17 @@ func (r *Reader) parked(ctx context.Context, kick, label string) (string, error)
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpStateProbe, label+"/poll", func(c context.Context) error {
-			return r.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return r.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida: sem isso a correcao troca uma
+			// resposta cruzada por um global de pagina POR CHAMADA (H177).
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {

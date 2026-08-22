@@ -12,10 +12,10 @@ const (
 	jidSuffix = "@s.whatsapp.net"
 )
 
-func lookupScript(digits string) string {
+func lookupScript(digits string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 120);
 	try {
 		const d = ` + strconv.Quote(digits) + `;

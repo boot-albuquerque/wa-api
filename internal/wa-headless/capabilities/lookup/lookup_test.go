@@ -20,6 +20,7 @@ type pageDouble struct {
 	answer     string
 	lastScript string
 	kicks      int
+	releases   int
 }
 
 func (d *pageDouble) eval(ctx context.Context, expr string, out *string) error {
@@ -27,7 +28,13 @@ func (d *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	// A LIBERACAO NAO E' LEITURA (H178): ela roda depois de a resposta ser tomada.
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) {
+		d.releases++
+		*out = "ok"
+		return nil
+	}
+	if strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = d.answer
 		return nil
 	}
@@ -302,5 +309,46 @@ func TestThePairRenderingIsQuiet(t *testing.T) {
 	}
 	if !strings.Contains(s, "lid=true") || !strings.Contains(s, "pn=true") {
 		t.Fatalf("the rendering lost the shape: %s", s)
+	}
+}
+
+// TWO RESOLUTIONS MUST NOT SHARE A PAGE GLOBAL (H178).
+//
+// This package is the one most exposed to the crossing measured in H177,
+// because it runs INSIDE other capabilities: a send resolving an identity while
+// a reader polls is the ordinary production shape, not a contrived race.
+func TestTwoResolutionsDoNotShareAKey(t *testing.T) {
+	a, b := nextStateKey(), nextStateKey()
+	if a == b {
+		t.Fatalf("two resolutions got the same key %q; concurrent callers would "+
+			"overwrite each other's answers", a)
+	}
+	if !strings.HasPrefix(a, stateKeyPrefix) {
+		t.Fatalf("the key left the module's namespace: %q", a)
+	}
+}
+
+func TestTheResolveScriptParksOnTheGivenKey(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"jid":"1@lid"}`}
+	if _, err := res(d).NumberID(context.Background(), "55@c.us", "t"); err != nil {
+		t.Fatalf("NumberID: %v", err)
+	}
+	if strings.Contains(d.lastScript, "window."+stateKeyPrefix+" =") {
+		t.Fatal("the script writes the shared global directly; two concurrent " +
+			"resolutions would overwrite each other again")
+	}
+	if !strings.Contains(d.lastScript, stateKeyPrefix+"_") {
+		t.Fatal("the script does not park on a per-call key")
+	}
+}
+
+func TestTheResolutionKeyIsReleased(t *testing.T) {
+	d := &pageDouble{answer: `{"ok":true,"jid":"1@lid"}`}
+	if _, err := res(d).NumberID(context.Background(), "55@c.us", "t"); err != nil {
+		t.Fatalf("NumberID: %v", err)
+	}
+	if d.releases == 0 {
+		t.Fatal("the per-call key was never released; this package resolves inside " +
+			"others, so a long session would accumulate one global per resolution")
 	}
 }

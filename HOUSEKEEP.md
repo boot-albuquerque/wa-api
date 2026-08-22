@@ -5715,3 +5715,59 @@ compartilhado — testa a ausência de concorrência.* O padrão estacionar-e-co
 foi escrito para respeitar a invariante 6 (o relógio fica no Go) e resolveu esse
 problema bem; ninguém perguntou o que ele faz quando há dois. A pergunta da Fase
 2 — *qual entrada faz esta proteção virar o problema?* — respondeu em uma sonda.
+
+---
+
+## H178 — a correção da H177 estendida a mais três, e a varredura mecânica REVERTIDA
+
+**Data**: 2026-08-22
+**Contexto**: propagar a correção da H177 (chave por chamada) para as 23
+capacidades restantes.
+
+**Onde**: `capabilities/lookup`, `capabilities/catalog`, `capabilities/phone`,
+`capabilities/search`.
+
+**Corrigidas e provadas: 5 de 24** — `message` (H177), mais `lookup`, `catalog`,
+`phone` e `search`.
+
+`lookup` foi primeiro por um motivo registrado na H177: ele roda **dentro** de
+outras capacidades, então uma resolução de identidade concorrente com uma leitura
+é o padrão de produção mais provável, não uma corrida artificial. Três controles
+negativos, todos compilando e falhando.
+
+### A varredura mecânica foi tentada e revertida — e isso é o achado
+
+Os 23 restantes parecem uniformes: `window.` + stateKey para estacionar, um
+`parked(ctx, kick, label)` para consultar. Escrevi um transform e apliquei a sete
+de uma vez. **Quatro quebraram o build**, e as causas foram todas de forma:
+
+- `call` e `settings` têm um `const prelude` que embute a chave; um `const` não
+  pode receber parâmetro, então ele tem de virar função — e com ele todos os
+  `const xxxScript` que o usam.
+- `status` tem a mesma forma.
+- `groupreq` declara a chave dentro de um bloco `const (...)`, que o meu regex
+  não via.
+
+Revertidos os quatro, o build voltou. **Mantive apenas o que está verde e
+verificado**, porque meia-correção espalhada por sete pacotes é pior que nenhuma:
+o build quebrado é visível, mas um pacote parcialmente convertido que compila não
+é.
+
+**Dois erros meus no caminho, os dois de ferramenta:**
+
+1. **`zsh` não divide `$var` em palavras.** O `set -- $spec` passou
+   `"addressbook m"` como argumento único, e os transforms falharam sem tocar
+   arquivo nenhum — barulho, não dano, e só porque olhei a saída.
+2. **Ordem de substituição no meu próprio script**: um `replace` genérico rodou
+   depois de um específico e produziu `stateKeyPrefixPrefix`. O compilador pegou.
+
+**Status**: 5 de 24 corrigidas. **19 continuam com o defeito da H177**, que segue
+sendo achado acionável de severidade alta em aberto — o critério de encerramento
+da Fase 2 exige zero.
+
+**Lição**: *"os arquivos parecem iguais" é uma hipótese sobre a forma, e forma se
+mede lendo, não olhando.* Cinco pacotes seguiram o molde e quatro não, com quatro
+motivos diferentes. O transform economizou tempo nos cinco e o teria custado com
+juros se eu tivesse confiado nele sem construir depois de cada um — que é a mesma
+regra que este repositório aplica a dublês e a controles negativos, agora aplicada
+à ferramenta que escreve o código.

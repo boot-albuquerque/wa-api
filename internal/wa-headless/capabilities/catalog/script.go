@@ -9,10 +9,10 @@ const (
 	modWidFactory    = "WAWebWidFactory"
 )
 
-func catalogScript(sellerJID string) string {
+func catalogScript(sellerJID string, key string) string {
 	return `(() => {
-	window.` + stateKey + ` = null;
-	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	window[` + strconv.Quote(key) + `] = null;
+	const park = v => { window[` + strconv.Quote(key) + `] = JSON.stringify(v); };
 	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
 	const num = v => (typeof v === "number" ? v : 0);
 	const str = v => (typeof v === "string" ? v : "");

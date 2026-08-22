@@ -32,7 +32,7 @@ func (p *pageDouble) eval(ctx context.Context, expr string, out *string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = p.answer
 		return nil
 	}
@@ -119,7 +119,7 @@ func (p *fixedDouble) eval(ctx context.Context, expr string, out *string) error 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(expr, "window."+stateKey) {
+	if strings.Contains(expr, "delete window."+stateKeyPrefix) || strings.HasPrefix(expr, "window."+stateKeyPrefix) {
 		*out = p.answer
 		return nil
 	}

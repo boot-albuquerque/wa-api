@@ -19,7 +19,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wa-api/internal/wa-headless/engine"
@@ -45,7 +47,24 @@ var (
 	Tick   = 200 * time.Millisecond
 )
 
-const stateKey = "__waHeadlessLookup"
+// stateKeyPrefix names the page global a resolution parks its answer on.
+//
+// IT IS A PREFIX, NOT A KEY (H177/H178). One shared global meant two concurrent
+// resolutions on the same session overwrote each other, and each polled until
+// non-empty — so one could take the other's answer. Measured in
+// capabilities/message at 12 crossings in 12 rounds; the shape here is
+// identical, and this package is the one most likely to hit it, because it runs
+// INSIDE other capabilities rather than only from a caller.
+//
+// The nonce comes from Go: a page-side Math.random or Date.now would put a
+// decision and a clock where invariant 6 forbids them.
+const stateKeyPrefix = "__waHeadlessLookup"
+
+var stateKeySeq atomic.Uint64
+
+func nextStateKey() string {
+	return stateKeyPrefix + "_" + strconv.FormatUint(stateKeySeq.Add(1), 10)
+}
 
 // Identity is who the server says a jid is.
 type Identity struct {
@@ -92,7 +111,8 @@ func (r *Resolver) NumberID(ctx context.Context, jid, label string) (Identity, e
 	if strings.TrimSpace(jid) == "" {
 		return Identity{}, ErrNoJID
 	}
-	raw, err := r.parked(ctx, resolveScript(jid), label+"/number-id")
+	key := nextStateKey()
+	raw, err := r.parked(ctx, resolveScript(jid, key), key, label+"/number-id")
 	if err != nil {
 		return Identity{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
@@ -117,7 +137,7 @@ func (r *Resolver) NumberID(ctx context.Context, jid, label string) (Identity, e
 	}, nil
 }
 
-func (r *Resolver) parked(ctx context.Context, kick, label string) (string, error) {
+func (r *Resolver) parked(ctx context.Context, kick, key, label string) (string, error) {
 	var started string
 	if err := r.runner.Do(ctx, engine.OpQuery, label+"/kick", func(c context.Context) error {
 		return r.eval(c, kick, &started)
@@ -128,11 +148,18 @@ func (r *Resolver) parked(ctx context.Context, kick, label string) (string, erro
 	for {
 		var raw string
 		if err := r.runner.Do(ctx, engine.OpQuery, label+"/poll", func(c context.Context) error {
-			return r.eval(c, `window.`+stateKey+` || ""`, &raw)
+			return r.eval(c, `window.`+key+` || ""`, &raw)
 		}); err != nil {
 			return "", err
 		}
 		if raw != "" {
+			// A CHAVE E' LIBERADA ao ser lida: sem isso, a correcao troca uma
+			// resposta cruzada por um global de pagina POR RESOLUCAO, e este
+			// pacote resolve dentro de outros — acumularia depressa.
+			var ignored string
+			_ = r.runner.Do(ctx, engine.OpStateProbe, label+"/release", func(c context.Context) error {
+				return r.eval(c, `(() => { try { delete window.`+key+`; } catch (e) { window.`+key+` = null; } return "ok"; })()`, &ignored)
+			})
 			return raw, nil
 		}
 		if !time.Now().Before(deadline) {
