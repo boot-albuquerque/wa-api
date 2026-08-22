@@ -45,7 +45,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | texto, mídia, documento e figurinha OK. **ENQUETE NÃO SAI**: criada localmente como `poll_creation` com as opções intactas, `ack` fica em **0** e o par nunca recebe — medido no primeiro round trip que olhou o OUTRO lado (H98). A H69 provou o envio pela aparição LOCAL. O suspeito nomeado (`pollType` omitido) foi **perseguido e descartado**: o enum foi achado em `WAWebPollCreationUtils` (singular — uma letra é por que três buscas o perderam), `PollType.POLL` e `PollContentType.TEXT` foram aplicados de dentro da própria página, e o ack continua 0 (H101). Localização e vCard MISSING (H75) |
 | `sendReaction` | capabilities/react | `PARTIAL` | sim | sim | sim | H53: adicionar provado; remover devolve Verified:false |
 | `sendChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
-| `searchMessages` | — | `MISSING` | — | — | — | — |
+| `searchMessages` | search.Messages | `PROVEN` | sim | sim | sim | H114: o resultado é ENDEREÇO, nunca corpo — a projeção acontece na página. Sem escopo por conversa: passar o jid como quarto argumento (o que a referência faz com `options.chatId`) mediu 0 resultados com `eof`, contra 20 sem escopo |
 | `getChats` | chats.List | `PROVEN` | sim | sim | sim | — |
 | `getChannels` | — | `MISSING` | — | — | — | lista os canais SEGUIDOS, e esta conta não segue nenhum (`modelCount` 0). Não é falta de código: falta uma inscrição (H104) |
 | `getChatById` | resolução interna às capacidades | `PARTIAL` | sim | sim | sim | existe como passo interno, não como capacidade exposta |
@@ -92,7 +92,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `revokeStatusMessage` | — | `MISSING` | — | — | — | — |
 | `getLabelById` | contacts.ListLabels + filtro | `PARTIAL` | sim | sim | sim | — |
 | `getChatLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | — |
-| `getChatsByLabelId` | — | `MISSING` | — | — | — | — |
+| `getChatsByLabelId` | — | `MISSING` | — | medido | — | H114: os 3 rótulos desta conta têm ZERO itens (`chatLabelItems: 0`), então um leitor nunca seria visto devolvendo nada — armadilha H93 |
 | `getBlockedContacts` | capabilities/block | `PARTIAL` | sim | sim | sim | bloquear/desbloquear provados; LISTAR os bloqueados não é exposto |
 | `setProfilePicture` | — | `MISSING` | — | — | — | — |
 | `deleteProfilePicture` | — | `MISSING` | — | — | — | — |
@@ -440,9 +440,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 81 | 37% |
+| `PROVEN` | 82 | 37% |
 | `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 81 | 37% |
+| `MISSING` | 80 | 36% |
 | **total** | **220** | |

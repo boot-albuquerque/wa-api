@@ -9034,3 +9034,83 @@ sexto nome vindo da lista do wwebjs que falta aqui.
 
 **Status**: entregue e provado, com `setDescription` e `getSubscribers` abertos
 com evidência.
+
+## H114 — busca: o termo curto acha nada, e o escopo por conversa quebra
+
+**Data**: 2026-08-22. **Contexto**: `Client.searchMessages` e
+`Client.getChatsByLabelId`.
+
+**Onde**: `internal/wa-headless/capabilities/search/` (novo),
+`internal/wa-headless/probe_search_test.go` (novo).
+
+### A primeira medição quase enterrou a capacidade
+
+Buscar `"a"` sobre 395 mensagens carregadas — um store cheio da letra a —
+devolveu **0 resultados**. A leitura natural seria "a busca não funciona neste
+build", e a linha teria ido para `MISSING` com evidência FALSA.
+
+O que faltava era a segunda medição: pegar um termo REAL de dentro do próprio
+store. Com uma palavra de 4 letras tirada de uma mensagem, **20 resultados**. A
+página tem um comprimento mínimo que este pacote não conhece.
+
+**Lição**: uma medição que produz zero precisa de um controle POSITIVO antes de
+virar conclusão. Zero pode ser "não funciona" ou "perguntei errado", e as duas
+se parecem exatamente.
+
+### O escopo por conversa mede zero
+
+Quatro formas testadas com o mesmo termo real:
+
+```
+global-1arg  -> 20 hits
+global-4arg  -> 20 hits
+global-5arg  -> 20 hits
+scoped       ->  0 hits, eof=true
+```
+
+Passar o jid da conversa como quarto argumento é **exatamente o que a referência
+faz** com `options.chatId`. Aqui devolve zero. Então este pacote **não oferece
+escopo por conversa**: uma opção que mede zero é pior que uma ausente, porque a
+resposta vazia lê como "não há resultados" em vez de "a opção não funciona".
+
+`Msg.search` declara aridade **5**; a referência passa 4. O quinto argumento não
+foi identificado e não é necessário — as três formas dão o mesmo.
+
+### O corpo não sai da página
+
+Buscar é a única capacidade cujo propósito É conteúdo, o que a torna a mais
+provável de contrabandear um corpo para Go. A projeção acontece **dentro da
+página**: só chat, id, direção, tipo e instante são copiados de cada resultado.
+Filtrar em Go teria posto o corpo na resposta primeiro — o mesmo erro que a H107
+recusou no `rawData`.
+
+O termo da sonda é escolhido DENTRO da página e só o comprimento é registrado.
+
+### Prova ao vivo (2026-08-22, conta-A)
+
+```
+term picked inside the page: {"len":15}
+search: 16 hits (eof=false); chat=16 id=16 type=16 fromMe=16
+nonsense term: 0 hits (eof=true)
+```
+
+Os 16 resultados trazem endereço completo, e o termo sem sentido devolve zero
+SEM erro — porque zero é resultado normal, e tratá-lo como falha faria a busca
+reportar fracasso para o caso mais comum.
+
+### `getChatsByLabelId` não é atacável
+
+A conta tem **3 rótulos, todos com ZERO itens** (`chatLabelItems: 0`). Um leitor
+nunca seria visto devolvendo nada, que é a armadilha da H93. Fica `MISSING` com
+a medição.
+
+### Controles negativos EXECUTADOS
+
+1. Serializar a mensagem em vez de projetar:
+   `TestNoBodyCanCrossFromThePage` falha em `"serialize()"`.
+2. Reintroduzir o escopo por conversa:
+   `TestTheSearchIsNotScopedToAChat` falha.
+3. Tratar zero resultados como erro:
+   `TestNoMatchesIsNotAnError` falha.
+
+**Status**: entregue e provado; `getChatsByLabelId` aberto com medição.
