@@ -4,7 +4,7 @@ Consolidação de 2026-08-19, pedida pela orquestração depois de a matriz de
 paridade fechar. É um retrato: o que existe, o que está PROVADO, o que está
 aberto e por quê, e o que depende de decisão humana.
 
-Números vieram do repositório, não de memória. **Atualizados em 2026-08-21 (fim
+Números vieram do repositório, não de memória. **Atualizados em 2026-08-22 (fim
 do dia)**, porque um documento de estado que envelhece em silêncio vira citação
 errada — que é o defeito registrado no H29.
 
@@ -16,13 +16,29 @@ errada — que é o defeito registrado no H29.
 > registrado aqui em vez de apagado: um retrato que envelheceu é evidência de
 > como ele envelhece.
 
-| | 19/08 | 20/08 | **21/08 (agora)** |
-|---|---:|---:|---:|
-| testes | 254 | 263 | **843** |
-| pacotes | 12 | 12 | **35** |
-| capacidades | 6 | 6 | **28** |
-| achados no HOUSEKEEP | 29 | 33 | **105** |
-| commits tocando o módulo | — | — | **202** (61 só em 21/08) |
+| | 19/08 | 20/08 | 21/08 | **22/08 (agora)** |
+|---|---:|---:|---:|---:|
+| testes | 254 | 263 | 843 | **1043** |
+| pacotes | 12 | 12 | 35 | **42** |
+| capacidades | 6 | 6 | 28 | **35** |
+| achados no HOUSEKEEP | 29 | 33 | 105 | **145** |
+| commits tocando o módulo | — | — | 202 | **338** (136 só em 22/08) |
+
+### O placar da paridade, que é o número que importa
+
+| estado | 21/08 | **22/08** |
+|---|---:|---:|
+| `PROVEN` | 41 (19%) | **106 (48%)** |
+| `PARTIAL` | 52 | 56 |
+| `BLOCKED` | 3 | **49** |
+| `INTENTIONAL_DIFFERENCE` | 2 | 6 |
+| `MISSING` | **139 (63%)** | **3 (1%)** |
+
+**O salto de `BLOCKED` não é derrota: é o oposto.** Em 21/08 a maioria das
+linhas dizia `MISSING` — "não atacado" —, que é honesto enquanto ninguém olhou
+e vira mentira depois. Hoje cada linha aberta diz POR QUE está aberta, com
+medição. `MISSING` só sobrevive onde o caminho existe e não foi percorrido:
+três linhas.
 
 O salto não é inflação de contagem: entre 20/08 e 21/08 a iniciativa mudou de
 alvo. Deixou de ser "as seis capacidades do piso" e passou a ser o **contrato de
@@ -347,13 +363,25 @@ WhatsApp invalidar um. Precisa de duas contas, e isso é decisão do humano.
 
 ## 5. Depende do humano
 
-1. **Merge para `feature/macbook-lucas`** — 34 conflitos, **21 implementações
+**Revisto em 22/08.** Quatro dos itens antigos saíram porque a sessão dupla
+conta-A/conta-B (H135) os resolveu sozinha: o par agora acorda junto, então
+provar a direção `in`, observar evento de participante e exercitar convite de
+admin deixaram de precisar de gente.
+
+O que resta é o que exige mesmo um humano:
+
+1. **`git push`** — commits parados no worktree.
+2. **Merge para `feature/macbook-lucas`** — 34 conflitos, **21 implementações
    RIVAIS** de `lease`/`dispatch`/`cluster`. Escolher errado apaga trabalho.
-2. **Reset do perfil de laboratório** — pareado; trava 3 testes de QR.
-3. **`git push`** — 45 commits parados.
-4. **Alguém de outro número enviar** — prova a direção `in` ao vivo.
-5. **Conta de volume real** — calibra o H25.
-6. **CAP-07 `sendText`** — fora da matriz; decisão de produto.
+3. **Trocar a foto de perfil da conta-A** — visível a 944 contatos de uma conta
+   comercial real. Trava `setProfilePicture` e `deleteProfilePicture`. A
+   orquestração foi consultada em 22/08 (decisão 61) e concordou que é
+   escalação legítima: *"foto e status têm alcance externo real"*.
+4. **Postar um status** — mesmo alcance, mesma decisão. Trava
+   `revokeStatusMessage`, que só pode revogar o que existe.
+5. **Reset do perfil de laboratório** — pareado; trava os testes de QR.
+6. **Conta de volume real** — calibra o H25.
+7. **CAP-07 `sendText`** — fora da matriz; decisão de produto.
 
 ## 5.1 A ordem de descoberta importa mais que uma bateria a mais
 
@@ -415,3 +443,47 @@ todos os zeros medidos seriam ilegíveis.
 - **A verdura da suíte não distingue "coberto" de "coberto onde importa".** A
   auditoria achou a lacuna na capacidade nº 1.
 - **Medir e depois ler a medição com a hipótese na cabeça é não ter medido.**
+
+## 7. O que 22/08 ensinou
+
+Um dia inteiro numa frase cada, escolhidas por terem MUDADO decisão, não por
+soarem bem.
+
+1. **Uma medição que dá zero precisa de controle positivo antes de virar
+   conclusão** (H114). Buscar `"a"` em 395 mensagens deu zero e quase virou "a
+   busca não funciona"; um termo real deu 20.
+
+2. **Quando a regra mora no script, o teste tem de olhar para o script.** Quatro
+   controles negativos não morderam num só dia porque o dublê fornecia o valor
+   que a asserção examinava — o teste media o parser, não a regra.
+
+3. **Ler o nome na referência é o primeiro passo, não o último** (H134, H137).
+   Ela chama nomes que este build não tem. Quando falha, ENUMERE o módulo: três
+   tentativas custaram três execuções ao vivo, a enumeração custou uma.
+
+4. **A resposta pode estar certa e a pergunta errada** (H140). As treze
+   ausências registradas eram todas verdadeiras; meus erros foram escolher o
+   módulo errado para perguntar.
+
+5. **Produzir o fato é a saída do impasse "nunca visto acontecer"** (H119, H121,
+   H131, H135). Trocar o assunto do grupo, votar numa enquete, responder uma
+   mensagem, fazer a outra conta sair — quatro linhas fecharam assim.
+
+6. **"A chamada não lançou" nunca é a prova** (H133, H136, H137, H139). A
+   revogação de convite foi provada pelo ACEITE FALHAR; a transferência de posse,
+   pela membership lida do outro lado.
+
+7. **Existe uma terceira resposta entre sim e não** (H133). Quando o oráculo não
+   existe, `ErrUnverifiable` diz "não dá para saber" em vez de afirmar falha —
+   que seria inventar conhecimento.
+
+8. **Verificar sobra é IR OLHAR, das duas pontas** (H139). Minha limpeza
+   retornava sucesso e deixava seis modelos obsoletos do outro lado.
+
+9. **Uma causa costuma estar por baixo de várias linhas** (H138). `findImpl` e
+   `markFetchStart` ausentes explicam assinar, silenciar e buscar mensagens de
+   canal: um método voltando destrava cinco linhas.
+
+10. **`MISSING` mente por inércia** (H141). Depois que a evidência é colhida, o
+    rótulo tem de acompanhar — senão o ledger conta itens em vez de orientar
+    trabalho.

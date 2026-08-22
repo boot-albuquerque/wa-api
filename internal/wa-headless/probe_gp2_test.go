@@ -1142,37 +1142,27 @@ func TestProbeEnumerateModules(t *testing.T) {
 	}
 	eval := sess.Tab().Evaluate
 	script := `(() => {
-	window.__lo = null;
-	const safe = e => String((e && e.message) || e).slice(0,120);
-	(async () => {
-	try {
-		const NC = window.require("WAWebCollections").WAWebNewsletterCollection;
-		const U = window.require("WAWebNewsletterUnsubscribeAction");
-		const out = {before: 0, cleared: 0, failed: [], after: 0};
-		const stale = [];
-		for (const c of NC.getModelsArray()) {
-			const md = c.__x_newsletterMetadata || c;
-			const nm = String(md.__x_name || c.__x_name || "");
-			if (nm.indexOf("wa-headless") === 0) { stale.push(c); }
-		}
-		out.before = stale.length;
-		for (const c of stale) {
-			try {
-				// deleteLocalModels: true e' o que a referencia oferece para
-				// exatamente isto — tirar o modelo do cliente, nao so' a inscricao.
-				await U.unsubscribeFromNewsletterAction(c, {eventSurface: 3, deleteLocalModels: true});
-				out.cleared++;
-			} catch (e) { out.failed.push(safe(e)); }
-		}
-		let left = 0;
-		for (const c of NC.getModelsArray()) {
-			const md = c.__x_newsletterMetadata || c;
-			if (String(md.__x_name || c.__x_name || "").indexOf("wa-headless") === 0) { left++; }
-		}
-		out.after = left;
-		window.__lo = JSON.stringify(out);
-	} catch (e) { window.__lo = JSON.stringify({err: safe(e)}); }
-	})();
+	window.__ra = null;
+	const out = {absent: [], present: {}};
+	const names = [
+		"WAWebBatteryStore","WAWebBizGatingUtils","WAWebCallActions","WAWebEndCallAction",
+		"WAWebMexFetchNewsletterSubscribersJob","WAWebMuteChatAction","WAWebOfferCallAction",
+		"WAWebProfilePicThumbBridge","WAWebRejectCallAction","WAWebScheduledEventCreateAction",
+		"WAWebScheduledEventEditAction","WAWebScheduledEventResponseAction","WAWebSetPicture",
+		"WAWebVoipCancelOutgoingCall","WAWebVoipCreateCallLink","WAWebVoipStartCall",
+		"WAWebGenerateEventCallLink","WAWebPollCreationUtils","WAWebAltDeviceLinkingApi",
+		"WAWebRevokeStatusAction",
+	];
+	for (const n of names) {
+		try {
+			const m = window.require(n);
+			if (!m) { out.absent.push(n + " (falsy)"); continue; }
+			const fns = {};
+			for (const k of Object.keys(m)) { if (typeof m[k] === "function") { fns[k] = m[k].length; } }
+			out.present[n] = fns;
+		} catch (e) { out.absent.push(n); }
+	}
+	window.__ra = JSON.stringify(out);
 	return 'kicked';
 })()
 `
@@ -1183,7 +1173,7 @@ func TestProbeEnumerateModules(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	var raw string
 	for {
-		if err := eval(ctx, "window.__lo", &raw); err != nil {
+		if err := eval(ctx, "window.__ra", &raw); err != nil {
 			t.Fatalf("read: %v", err)
 		}
 		if raw != "" && raw != "null" {

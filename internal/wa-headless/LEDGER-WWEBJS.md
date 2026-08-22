@@ -19,17 +19,16 @@ nem `PARTIAL` sem justificativa explícita.
 
 ## Critério de encerramento da Fase 1
 
-**Decidido pela orquestração em 2026-08-22 (decisão 52).** O texto recebido foi:
+**Decidido pela orquestração em 2026-08-22 (decisão 52), e CONFIRMADO por ela na
+decisão 62.**
 
-> Fase 1 fecha com zero MISSING e zero PARTIAL acion…
+O texto original chegou truncado em *"Fase 1 fecha com zero MISSING e zero
+PARTIAL acion…"* — a quarta truncagem seguida daquele canal —, e eu completei
+uma única palavra por inferência, registrando aqui que era inferência minha.
+Perguntei de volta em vez de tratar como definitivo, e a resposta foi
+literal: *"Confirmo, o termo era PARTIAL acionável."*
 
-**A resposta chegou TRUNCADA**, cortada nesse ponto — a quarta truncagem
-seguida daquele canal. Completei uma única palavra, `acion` → **acionável**,
-porque é a única continuação plausível na frase. Está registrado como inferência
-minha, não como texto recebido, e vale confirmação humana antes de ser tratado
-como definitivo.
-
-Lido assim, o critério é:
+A ressalva sai. O critério é:
 
 - **`MISSING` tem de chegar a zero.** Nenhuma linha pode continuar dizendo "não
   atacado" — ou vira `PROVEN`, ou ganha veredito medido (`BLOCKED`,
@@ -97,7 +96,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 | `unpinChat` | chats | `PROVEN` | sim | sim | sim | — |
 | `muteChat` | capabilities/mute | `PROVEN` | sim | sim | sim | H62: sendDevice:true é o que faz o efeito sair do dispositivo |
 | `unmuteChat` | capabilities/mute | `PROVEN` | sim | sim | sim | — |
-| `markChatUnread` | — | `MISSING` | — | — | — | temos marcar-como-LIDA, não o inverso |
+| `markChatUnread` | — | `BLOCKED` | sim | falha (H78) | sim | H140: reclassificado de `MISSING` para `BLOCKED` (decisão 60). A H78 mediu DUAS primitivas e nenhuma marca; o ouvinte do verbo vive num pedaço de UI que sessão headless não carrega. Está fora do alcance deste módulo, não por fazer |
 | `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H41 |
 | `getCommonGroups` | contacts.CommonGroupsWith | `PROVEN` | sim | sim | sim | H68: null significa "sou eu", não "nenhum" |
 | `resetState` | liveness.Reset | `PARTIAL` | sim | sim | sim | H116: a chamada é feita e o socket é provado SAUDÁVEL depois; provar que ela FEZ algo não passa pelo Go — a transição dura ~450ms e cada leitura é um ida-e-volta do chromedp (0 de 3 ao vivo, contra 9 de 100 amostrando DENTRO da página). A referência não devolve nada, nem erro |
@@ -218,9 +217,9 @@ de laboratório sob autorização explícita:
 
 | upstream | estado | nota |
 |---|---|---|
-| `getSubscribers` | `MISSING` | H113: `WAWebMexFetchNewsletterSubscribersJob`, o módulo que a referência usa, NÃO existe neste build |
+| `getSubscribers` | `BLOCKED` | H140: reclassificado (decisão 60) — `WAWebMexFetchNewsletterSubscribersJob` confirmado ausente na re-auditoria da H140 |
 | `setSubject` | `PROVEN` | H113: renomear pega e é relido do servidor |
-| `setDescription` | `MISSING` | H113: a página aceita e o servidor NUNCA reporta a descrição nova, nem após 20s. Não é latência — mesmo padrão do grupo (H126) |
+| `setDescription` | `BLOCKED` | H140: reclassificado (decisão 60). A página ACEITA e o servidor nunca armazena — medido em canal (H113) e, independentemente, em grupo (H126). Duas superfícies, mesma falha: é comportamento da página, não trabalho pendente |
 | `setProfilePicture` | `BLOCKED` | H134: o módulo que a referência usa **não existe neste build** (medido) — `WAWebSetPicture` e `WAWebProfilePicThumbBridge` ausentes |
 | `setReactionSetting` | `BLOCKED` | H133: `channel.SetReactionPolicy` escrito e provado em unidade; ao vivo é **INVERIFICÁVEL**, não falho. A metadata de um canal recém-criado NÃO carrega o mixin de reação — ele existe num canal estabelecido e não num novo —, então a pós-condição não tem o que ler. A escrita pode ter chegado; ninguém pode dizer, e chamar isso de falha seria afirmar conhecimento que não existe |
 | `mute` | `BLOCKED` | H134: **corrigi uma medição minha**. Testei `WAWebMuteChatAction` (ausente) e quase concluí bloqueio; a referência usa `WAWebNewsletterUpdateUserSettingJob.updateNewsletterUserSetting`, que **EXISTE**. O bloqueio real é de assinatura: silenciar canal exige segui-lo, e seguir é impossível (H123) |
@@ -263,7 +262,7 @@ nossa é fresca — não há campo velho para consertar.
 | `unpin` | chats | `PROVEN` | sim | sim | sim | delegação literal para `Client.unpinChat` (Chat.js:160) |
 | `mute` | capabilities/mute | `PROVEN` | sim | sim | sim | delegação para `Client.muteChat` (Chat.js:168); H62 |
 | `unmute` | capabilities/mute | `PROVEN` | sim | sim | sim | delegação para `Client.unmuteChat` (Chat.js:182) |
-| `markUnread` | chats.MarkUnread | `MISSING` | sim | falha (H78) | sim | duas primitivas medidas e nenhuma marca: `sendConversationSeen` com delta negativo e `Cmd.markChatUnread`. O `Cmd` é barramento de EVENTOS, e o ouvinte deste verbo vive num pedaço de UI que sessão headless não carrega |
+| `markUnread` | chats.MarkUnread | `BLOCKED` | sim | falha (H78) | sim | H140: idem `Client.markChatUnread` — duas primitivas medidas, nenhuma marca, ouvinte em UI que não carregamos |
 | `fetchMessages` | capabilities/fetchmessages | `PROVEN` | sim | sim | sim | — |
 | `sendStateTyping` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
 | `sendStateRecording` | presence.StateRecording | `PARTIAL` | sim | bloqueada (H50) | sim | **linha corrigida**: eu a marquei MISSING de memória e ela JÁ EXISTIA, mapeada para `markRecording`. A prova ao vivo esbarra no mesmo bloqueio da observação de presença |
@@ -315,8 +314,8 @@ nossa é fresca — não há campo velho para consertar.
 | `setAddMembersAdminsOnly` | group.SetPolicy(PolicyJoinNeedsApproval) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setMessagesAdminsOnly` | group.SetPolicy(PolicyMessagesAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
 | `setInfoAdminsOnly` | group.SetPolicy(PolicyInfoAdminsOnly) | `PROVEN` | sim | sim | sim | H79 mediu o nome pelo oráculo do app; **H85** corrigiu a classificação: é visível NA MESMA sessão em ~1s, e a pós-condição é real |
-| `deletePicture` | — | `MISSING` | — | medido | — | H134: idem `setPicture` — módulos de foto ausentes |
-| `setPicture` | — | `MISSING` | — | medido | — | H134: `WAWebSetPicture` e `WAWebProfilePicThumbBridge`, os módulos que a referência usa, **não existem neste build** (medido) |
+| `deletePicture` | — | `BLOCKED` | — | medido | — | H140: idem `setPicture` — módulos de foto confirmados ausentes |
+| `setPicture` | — | `BLOCKED` | — | medido | — | H140: reclassificado (decisão 60) — `WAWebSetPicture` e `WAWebProfilePicThumbBridge` confirmados ausentes na re-auditoria |
 | `getInviteCode` | group.InviteCode | `PROVEN` | sim | sim | sim | H57: a chamada popula o MODELO; o retorno é undefined |
 | `revokeInvite` | group.RevokeInvite | `PROVEN` | sim | sim | sim | H57 |
 | `getGroupMembershipRequests` | groupreq.List | `PROVEN` | sim | sim | sim | refresca a metadata antes de ler; campos do registro medidos ao vivo: `id t addedBy requestMethod parentGroupId` (H89) |
@@ -365,8 +364,8 @@ código — é falta de dado.
 | `delete` | capabilities/revoke | `PROVEN` | sim | sim | sim | direito consultado na página |
 | `star` | capabilities/star | `PROVEN` | sim | sim | sim | H61: o await não é a conclusão — 696ms |
 | `unstar` | capabilities/star | `PROVEN` | sim | sim | sim | — |
-| `pin` | pin.Message | `MISSING` | sim | falha (H81) | sim | chamada aceita e nada é fixado; vocabulário, duração e forma do modelo medidos |
-| `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | H81: idem `pin` — chamada aceita e nada é desfixado; vocabulário, duração e forma do modelo medidos |
+| `pin` | pin.Message | `BLOCKED` | sim | falha (H81) | sim | H140: reclassificado (decisão 60) — a H81 mediu chamada aceita e nada fixado, com vocabulário, duração e forma do modelo medidos. É comportamento da página |
+| `unpin` | pin.Unpin | `BLOCKED` | sim | falha (H81) | sim | H140: idem `pin` — chamada aceita, nada desfixado (H81) |
 | `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
 | `getOrder` | — | `BLOCKED` | — | medido | — | H125: `WAWebBizOrderBridge.queryOrder` EXISTE. O bloqueio é de DADO: a conta tem **zero** mensagens de pedido. Exercitar exigiria atividade comercial real, que não é produzível por agente |
 | `getPayment` | — | `BLOCKED` | — | medido | — | H125: idem `getOrder` — módulo presente, **zero** pagamentos na conta |
@@ -382,8 +381,8 @@ código — é falta de dado.
 
 | upstream | estado | nota |
 |---|---|---|
-| `fromFilePath` | `MISSING` | construtor de mídia; nós passamos bytes direto |
-| `fromUrl` | `MISSING` | construtor de mídia; nós passamos bytes direto |
+| `fromFilePath` | `INTENTIONAL_DIFFERENCE` | H140: reclassificado (decisão 60) — construtor de mídia da referência. Nós passamos BYTES direto para `send.SendMedia`, que é a mesma capacidade sem o intermediário. Diferença deliberada |
+| `fromUrl` | `INTENTIONAL_DIFFERENCE` | H140: idem `fromFilePath` — passamos bytes direto, sem construtor |
 
 ## Product
 
@@ -433,14 +432,14 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | upstream | wa-headless | estado | nota |
 |---|---|---|---|
-| `AUTHENTICATED` | — | `MISSING` | **sem observável neste build**: o boot ou chega a APP_READY verificado ou falha; não há um degrau "credenciais aceitas, app ainda montando" que este módulo consiga distinguir (H88) |
+| `AUTHENTICATED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — sem observável neste build: o boot chega a APP_READY verificado ou falha, sem degrau intermediário (H88) |
 | `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PARTIAL` | o evento carrega o ESTÁGIO do boot; um boot que morre em `not_ready` contra uma tela de QR é o caso do upstream, mas o MOTIVO (a classe da página) não viaja no evento — `BootFailure` o guarda na mensagem de erro, e mensagem de erro não entra no barramento (H88) |
 | `READY` | events.SessionReady | `PROVEN` | no barramento desde a H88, e distingue um ready ORDINÁRIO de um que recuperou um perfil suspeito — a quitação da invariante 2 fica contada em vez de inferida |
-| `CHAT_REMOVED` | — | `MISSING` | o método correspondente não existe (não apagamos conversa), e provar o evento exigiria destruir a fixture — a regra do barramento é que um tipo entra quando um teste o dispara SOB DEMANDA (H88) |
+| `CHAT_REMOVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — provar exigiria APAGAR uma conversa, destruindo a fixture de todos os outros testes (H66) |
 | `CHAT_ARCHIVED` | events.ChatChanged | `PARTIAL` | o nosso evento é grosso: diz que a conversa mudou, não QUAL campo (H87) |
 | `MESSAGE_RECEIVED` | events.MessageAdded | `PROVEN` | disparado ao vivo por um envio (H87) |
-| `MESSAGE_CIPHERTEXT` | — | `MISSING` | **vive abaixo do modelo**: é a mensagem antes de decifrar, e este barramento escuta COLEÇÕES, não o fio. É a linha concreta que autorizaria descer ao decodificador de stanzas, quando for atacada (H88) |
-| `MESSAGE_CIPHERTEXT_FAILED` | — | `MISSING` | idem `MESSAGE_CIPHERTEXT` (H88) |
+| `MESSAGE_CIPHERTEXT` | — | `BLOCKED` | H140: reclassificado (decisão 60) — vive ABAIXO do modelo: é a mensagem antes de decifrar, e este barramento escuta COLEÇÕES, não o fio (H88) |
+| `MESSAGE_CIPHERTEXT_FAILED` | — | `BLOCKED` | H140: idem `MESSAGE_CIPHERTEXT` — abaixo do modelo (H88) |
 | `MESSAGE_CREATE` | events.MessageAdded | `PARTIAL` | o mesmo evento cobre os dois; o upstream distingue criada de recebida e nós não (H87) |
 | `MESSAGE_REVOKED_EVERYONE` | events.MessageRevoked | `PROVEN` | disparado ao vivo; reconhecido pelo predicado de TRÊS sinais que a capacidade de apagar mede (H87) |
 | `MESSAGE_REVOKED_ME` | — | `MISSING` | não temos "apagar para mim"; `revoke.ForEveryone` é o único caminho implementado. É falta de MÉTODO antes de ser falta de evento (H88) |
@@ -456,13 +455,13 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `GROUP_MEMBERSHIP_REQUEST` | events.ChatChanged | `PARTIAL` | a chegada MOVE o modelo nesta sessão e o barramento a vê — medida isolada: a saída de conta-B sozinha deu 5 `chat.changed`, o pedido sozinho deu **9** mais 1 `message.added` (H89). Não há tipo dedicado, e `chat.changed` é grosso demais para ser um: quem quer o pedido tem de chamar `groupreq.List`. Contraste com a H86, onde a sessão que MUDA participantes vê zero — quem recebe enxerga, quem age não |
 | `GROUP_UPDATE` | events.GroupUpdated | `PROVEN` | H119: o portador `gp2` É reclassificado neste barramento — assunto do grupo trocado de propósito, `group.updated:1` com subtipo `subject`, e o assunto restaurado |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
-| `CODE_RECEIVED` | — | `MISSING` | **depende de uma família que não existe**: o pareamento por código não é uma fatia deste módulo (H88) |
-| `LOADING_SCREEN` | — | `MISSING` | **sem observável neste build**: o loop de settle mede CLASSES de página, não progresso de carga (H88) |
+| `CODE_RECEIVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — depende do pareamento por código, cujo fluxo exige socket `UNPAIRED` e portanto um humano com o telefone (H122) |
+| `LOADING_SCREEN` | — | `BLOCKED` | H140: reclassificado (decisão 60) — sem observável: o laço de settle mede CLASSES de página, não progresso de carga (H88) |
 | `DISCONNECTED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88 — antes só detectávamos. Continua parcial porque o nosso é uma TRANSIÇÃO de liveness com a classe da página anexada, não o motivo de desligamento que o upstream entrega |
 | `STATE_CHANGED` | events.SessionStateChanged | `PARTIAL` | emitimos desde a H88, e só na TRANSIÇÃO: repetir "ainda vivo" a cada tique é heartbeat vestido de evento. Parcial porque o vocabulário é o nosso (`ALIVE`, `PROCESS_GONE`, `APP_ABSENT`, …) e não o estado do socket do upstream — os dois não foram medidos um contra o outro |
 | `BATTERY_CHANGED` | — | `BLOCKED` | H119: `WAWebBatteryStore` NÃO existe neste build (medido), e a própria referência marca o evento como depreciado e não enviado em multi-device — que é o que este build é |
 | `INCOMING_CALL` | events.CallIncoming | `BLOCKED` | ouvinte instalado por `CallCollection.on('add')` — a referência não achou ouvinte e patcheia um `Map` interno; aqui a porta limpa existe. **NUNCA visto disparar**, e agora com causa isolada: `startWAWebVoipCall` resolve `undefined` e **nada se move em lugar nenhum** — cada contêiner da coleção observado por nome, `pendingOutgoingCall` fica `null`. Classe NOTHING (H82), terceira ocorrência. SEIS hipóteses eliminadas (ambiente, pilha VOIP, ordem, aba de chamadas, leitor, e o próprio veredito do app: `showCallBlockedModalIfNeeded()` devolve **false**) em H93 e H95. Reabre com EVIDÊNCIA nova, não hipótese: qualquer coisa que faça `pendingOutgoingCall` deixar de ser `null` |
-| `REMOTE_SESSION_SAVED` | — | `MISSING` | **depende de uma família que não existe**: não há store remoto de sessão neste módulo, e nada a salvar em lugar nenhum (H88) |
+| `REMOTE_SESSION_SAVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — depende de uma família que não existe: não há store remoto de sessão neste módulo (H88) |
 | `VOTE_UPDATE` | events.VoteUpdated | `PROVEN` | H121: a referência NÃO tem ouvinte — ela remenda `pollVoteTableMode.bulkUpsert`. Aqui `WAWebCollections.PollVote` expõe `on`/`off` (medido), então a porta limpa foi usada e a página não é tocada (regra da H112). Provado ao vivo VOTANDO numa enquete do próprio store: `poll.vote:1`. Segunda vez que este build tem ouvinte onde a referência patcheia — `INCOMING_CALL` foi a primeira, e lá ainda não disparou |
 
 ## Placar
@@ -471,7 +470,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 |---|---|---|
 | `PROVEN` | 106 | 48% |
 | `PARTIAL` | 56 | 25% |
-| `BLOCKED` | 34 | 15% |
-| `INTENTIONAL_DIFFERENCE` | 4 | 2% |
-| `MISSING` | 20 | 9% |
+| `BLOCKED` | 49 | 22% |
+| `INTENTIONAL_DIFFERENCE` | 6 | 3% |
+| `MISSING` | 3 | 1% |
 | **total** | **220** | |

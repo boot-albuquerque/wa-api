@@ -10845,3 +10845,113 @@ conferir se a chamada de limpeza retornou — é IR OLHAR, das duas pontas. A mi
 limpeza retornava sucesso e deixava lixo do outro lado.
 
 **Status**: entregue e provado; sobras encontradas e removidas das duas contas.
+
+## H140 — a re-auditoria das ausências: treze de treze confirmadas
+
+**Data**: 2026-08-22. **Contexto**: decisão **63** da orquestração — *"reaudite
+os dez com enumeração; falso ausente é risco alto demais"*.
+
+**Onde**: `internal/wa-headless/probe_gp2_test.go`.
+
+### Por que a orquestração pediu, e ela tem razão
+
+Um "módulo ausente" no ledger ENCERRA a investigação. Se estiver errado, a linha
+fica fechada para sempre por um motivo que nunca existiu — e a H134 e a H137
+mostraram que eu tinha errado ao escolher O QUE testar duas vezes no mesmo dia.
+
+### O resultado
+
+Enumerei todos os módulos que o ledger declara ausentes, pedindo ao
+`window.require` cada um e listando o que exportam quando existem:
+
+```
+absent (falsy): WAWebBatteryStore · WAWebBizGatingUtils · WAWebCallActions ·
+  WAWebEndCallAction · WAWebMexFetchNewsletterSubscribersJob ·
+  WAWebMuteChatAction · WAWebOfferCallAction · WAWebProfilePicThumbBridge ·
+  WAWebRejectCallAction · WAWebScheduledEventCreateAction ·
+  WAWebScheduledEventEditAction · WAWebScheduledEventResponseAction ·
+  WAWebSetPicture
+```
+
+**Treze de treze confirmadas.** Nenhum falso ausente.
+
+### A distinção que isso esclarece
+
+Meus dois erros (H134) e o terceiro (H137) nunca foram sobre a AUSÊNCIA estar
+errada. Foram sobre eu ter escolhido o módulo ou a função ERRADA para perguntar:
+
+- `WAWebMuteChatAction` está mesmo ausente — mas silenciar canal não passa por
+  ele, e sim por `WAWebNewsletterUpdateUserSettingJob`, que existe.
+- `addOrEditNote`/`getNote` não existem — mas as funções reais
+  (`noteAddAction`, `retrieveOnlyNoteForChatJid`) existem, e eu tinha inventado
+  os nomes.
+- `demoteNewsletterAdmin` não existe — mas `demoteNewsletterAdminAction` existe,
+  e só a enumeração revelou.
+
+Ou seja: **as respostas eram corretas; as perguntas é que estavam erradas.** O
+registro de ausência do ledger é confiável; o que precisava de disciplina era o
+passo anterior, escolher o que perguntar.
+
+De passagem a enumeração confirmou também que `WAWebRevokeStatusAction` e a
+família de VoIP existem com os nomes que o ledger cita.
+
+**Status**: entregue — nenhuma linha muda de estado, e treze vereditos ficam
+mais firmes do que estavam.
+
+## H141 — a reclassificação dos 20: `MISSING` cai para 3, e os 3 são trabalho de verdade
+
+**Data**: 2026-08-22. **Contexto**: decisão **60** da orquestração —
+*"consolide agora e reclassifique os 20 MISSING com evidência antes de nova
+caça"*.
+
+**Onde**: `LEDGER-WWEBJS.md`.
+
+### O que estava errado no ledger
+
+`MISSING` significa **"não atacado"**. Depois da varredura da H130, os 20
+restantes TODOS carregavam medição — logo, nenhum deles era "não atacado". O
+estado estava mentindo por inércia: a evidência tinha sido colhida e o rótulo
+não tinha acompanhado.
+
+### O critério que usei, e onde ele recusa promover
+
+`BLOCKED` é *"atacado, medido, e impedido por algo fora do nosso alcance"*. A
+segunda metade é a que faz trabalho:
+
+- **17 foram para `BLOCKED`** porque o impedimento é mesmo externo: módulo que a
+  Meta não entrega, comportamento da página que aceita e não guarda, evento que
+  vive abaixo do modelo, ou prova que destruiria a fixture.
+- **2 foram para `INTENTIONAL_DIFFERENCE`** (`MessageMedia.fromFilePath` e
+  `fromUrl`): não são falta, são construtores que substituímos passando bytes
+  direto.
+- **3 CONTINUAM `MISSING`**, e esse é o ponto do exercício.
+
+### Os três que sobram, e por que não os promovi
+
+```
+Message.getMentions        Message.getGroupMentions        Events.MESSAGE_REVOKED_ME
+```
+
+Nenhum está fora do alcance:
+
+- As menções faltam por **DADO** — 395 mensagens, zero com menção. Mas eu
+  produzi citação (H131), evento de grupo (H135) e voto (H121) exatamente para
+  sair desse impasse. Produzir uma menção é a mesma manobra e está disponível:
+  a sessão dupla existe e o grupo de laboratório também.
+- `MESSAGE_REVOKED_ME` falta o MÉTODO antes do evento — "apagar para mim" não
+  está implementado, e implementá-lo é trabalho comum.
+
+Promovê-los a `BLOCKED` seria confortável e falso. Ficam `MISSING` com o caminho
+escrito, que é a única forma do ledger continuar orientando trabalho em vez de
+só contabilizá-lo.
+
+### O placar
+
+```
+PROVEN 106 (48%) · PARTIAL 56 · BLOCKED 49 · INTENTIONAL_DIFFERENCE 6 · MISSING 3 (1%)
+```
+
+Começou o dia em `PROVEN 41 (19%) / MISSING 139 (63%)`.
+
+**Status**: entregue — 17 linhas reclassificadas com evidência, 2 declaradas
+diferença deliberada, 3 mantidas abertas de propósito.
