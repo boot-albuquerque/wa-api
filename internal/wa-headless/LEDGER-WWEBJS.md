@@ -267,7 +267,7 @@ nossa é fresca — não há campo velho para consertar.
 | `sendStateTyping` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
 | `sendStateRecording` | presence.StateRecording | `PARTIAL` | sim | bloqueada (H50) | sim | **linha corrigida**: eu a marquei MISSING de memória e ela JÁ EXISTIA, mapeada para `markRecording`. A prova ao vivo esbarra no mesmo bloqueio da observação de presença |
 | `clearState` | capabilities/chatstate | `PROVEN` | sim | sim | sim | — |
-| `getContact` | resolução interna | `PARTIAL` | sim | sim | sim | delegação literal para `Client.getContactById` (Chat.js:284); herda a linha dele |
+| `getContact` | resolução interna | `PROVEN` | sim | sim | sim | delegação literal para `Client.getContactById` (Chat.js:284); herda a linha dele **H156: provado no PONTO DE CHAMADA, não por herança.** O par `getContactById` está `PROVEN`, mas "a capacidade funciona" e "funciona neste jid" já se separaram três vezes neste build (H136, H148, H151). Exercitado com a contraparte real de uma conversa um-para-um: resolve |
 | `getLabels` | contacts.LabelsOfChat | `PROVEN` | sim | sim | sim | delegação literal para `Client.getChatLabels` (Chat.js:292); H72 |
 | `changeLabels` | contacts.AddLabel / RemoveLabel | `PROVEN` | sim | sim | sim | delegação literal para `Client.addOrRemoveLabels` (Chat.js:301); H72 |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
@@ -329,8 +329,8 @@ nossa é fresca — não há campo velho para consertar.
 
 | upstream | estado | nota |
 |---|---|---|
-| `getChat` | `PARTIAL` | H118: delegação literal para `Client.getChatById` (GroupNotification.js:78) |
-| `getContact` | `PARTIAL` | H118: delegação literal para `Client.getContactById` (GroupNotification.js:86) — usa `this.author`, não o chat |
+| `getChat` | `PROVEN` | H118: delegação literal para `Client.getChatById` (GroupNotification.js:78) **H156: provado no ponto de chamada** com o jid do grupo de laboratório: resolve para um chat |
+| `getContact` | `PROVEN` | H118: delegação literal para `Client.getContactById` (GroupNotification.js:86) — usa `this.author`, não o chat **H156: provado no ponto de chamada, e este era o que precisava de fato ser medido** — passa `author`, que é um PARTICIPANTE e não o chat. Nenhuma notificação gp2 carregava autor, então uma foi PRODUZIDA renomeando o grupo (e o nome restaurado): o autor resolve para um contato |
 | `getRecipients` | `PROVEN` | H132: mapeia os jids por `contacts.Recipients`, que resolve por QUALQUER das duas identidades e devolve os desconhecidos SEPARADAMENTE. O `Promise.all` da referência transforma uma falta em entrada indefinida; encurtar a lista em silêncio seria pior — quem contasse destinatários teria número menor que o evento nomeou. Ao vivo: pediu 4, achou 3, faltou 1, e a soma bate |
 | `reply` | `PARTIAL` | H118: delegação literal para `Client.sendMessage` (GroupNotification.js:109); herda a linha do par, ENQUETE inclusa no que não sai |
 
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 117 | 53% |
-| `PARTIAL` | 49 | 22% |
+| `PROVEN` | 120 | 55% |
+| `PARTIAL` | 46 | 21% |
 | `BLOCKED` | 48 | 22% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |

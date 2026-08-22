@@ -4424,3 +4424,57 @@ a razão dela muda, e não quando a paciência acaba.* A H53 não errou: ela med
 recusou verificar o que não podia. O que mudou não foi o critério — foi o mundo
 disponível. O ledger só permite distinguir os dois casos porque a H53 escreveu
 POR QUE não verificava, em vez de apenas que não verificava.
+
+---
+
+## H156 — linhas de "delegação literal": provadas no PONTO DE CHAMADA, e duas deliberadamente NÃO movidas
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Dez linhas do ledger dizem *"delegação
+literal"* — o upstream não tem lógica própria ali, apenas encaminha para um
+método do `Client`.
+
+**Onde**: `internal/wa-headless/probe_delegation_test.go` (novo). Linhas
+`Chat.getContact`, `GroupNotification.getChat`, `GroupNotification.getContact`.
+
+**A tentação, e por que ela é errada**: `getChatById` e `getContactById` estão
+`PROVEN`. Como as linhas de delegação apenas encaminham para eles, movê-las
+pareceria papelada — atualizar o estado porque o par mudou.
+
+**Não é papelada, e a razão é a lição mais cara deste dia**: uma delegação está
+provada quando a capacidade funciona **NA ENTRADA QUE AQUELE PONTO DE CHAMADA
+PASSA**, e as entradas são diferentes. `GroupNotification.getContact` passa
+`author` — um PARTICIPANTE de grupo, não o chat. Neste build LID-first, *"a
+capacidade funciona"* e *"a capacidade funciona neste jid"* já se separaram três
+vezes (H136, H148, H151). Fechar por herança é exatamente onde essa separação
+passaria despercebida.
+
+**Medição**, cada ponto de chamada com a entrada que ele realmente usa:
+
+```
+GroupNotification.getChat    jid do grupo          → resolve
+GroupNotification.getContact author de gp2         → resolve
+Chat.getContact              contraparte 1:1       → resolve
+```
+
+**O terceiro exigiu produzir o fato.** Nenhuma notificação `gp2` carregava autor
+(a única no store era `membership_approval_mode`, sem autor), então uma foi
+produzida renomeando o grupo de laboratório — e o nome restaurado em `defer`,
+verificado pela pós-condição do próprio `SetSubject`. A primeira tentativa usou
+`nome + " "` e a página recusou com *"Could not perform action"*: aparado, o
+assunto era o mesmo, e um rename que não renomeia é recusado.
+
+**Status**: corrigido — três linhas para `PROVEN`.
+
+**Duas linhas foram deliberadamente NÃO movidas**, e isto é o conteúdo real da
+entrada: `Broadcast.getChat` e `Broadcast.getContact` também delegam para os
+mesmos dois métodos provados, e continuam `PARTIAL`. Elas passam um id de
+**STATUS**, não de conversa, e as linhas de identidade de broadcast são `PARTIAL`
+pela medição delas mesmas (H100). Movê-las seria fechar por associação — o mesmo
+que recusei fazer com `sendReaction` na H154, no dia em que a associação teria
+acertado por sorte.
+
+**Lição**: *"delegação literal" descreve o upstream, não prova o nosso lado.* A
+anotação é útil porque diz onde NÃO procurar lógica; ela não diz que a entrada
+daquele ponto de chamada já foi exercitada. Toda linha de delegação restante
+merece a mesma pergunta: **que jid, exatamente, esse ponto de chamada passa?**
