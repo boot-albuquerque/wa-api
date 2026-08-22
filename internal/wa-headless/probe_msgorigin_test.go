@@ -94,6 +94,30 @@ func TestProbeMessageOrigin(t *testing.T) {
 		}
 	}
 
+	// THE RE-READ, over a sample. A reload that reported the same thing about
+	// every message would be a constant wearing a function's name, so the probe
+	// asserts that it DISTINGUISHES: the measurement found ack spread over four
+	// values and absent on five messages (H108).
+	sample := ids.group
+	sample = append(sample, ids.sampleDirect...)
+	seen := map[string]int{}
+	for _, id := range sample {
+		c, err := r.CurrentOf(ctx, id, "probe/msgorigin")
+		if err != nil {
+			t.Logf("current: %v", err)
+			continue
+		}
+		seen[c.String()]++
+	}
+	t.Logf("re-read %d messages, %d distinct states", len(sample), len(seen))
+	for state, n := range seen {
+		t.Logf("  %s x%d", state, n)
+	}
+	if len(sample) > 1 && len(seen) < 2 {
+		t.Errorf("every message re-read identically: CurrentOf is not reporting " +
+			"anything that varies")
+	}
+
 	// A raw id that was never loaded must be its own error, not a read failure.
 	if _, err := r.OriginOf(ctx, "0000000000000000000000000000000000", "probe/msgorigin"); err == nil {
 		t.Error("an id that cannot exist read back successfully")
@@ -103,8 +127,9 @@ func TestProbeMessageOrigin(t *testing.T) {
 }
 
 type loadedIDs struct {
-	group  []string
-	direct int
+	group        []string
+	direct       int
+	sampleDirect []string
 }
 
 func loadedMessageIDs(ctx context.Context, t *testing.T, runner *engine.Runner,
@@ -121,7 +146,8 @@ func loadedMessageIDs(ctx context.Context, t *testing.T, runner *engine.Runner,
 				const chat = String(id.remote || "");
 				(chat.indexOf("@g.us") >= 0 ? group : direct).push(id.id);
 			}
-			window.__mo = JSON.stringify({group: group.slice(0, 12), directCount: direct.length});
+			window.__mo = JSON.stringify({group: group.slice(0, 12), directCount: direct.length,
+				sampleDirect: direct.slice(0, 30)});
 		} catch (e) {
 			window.__mo = JSON.stringify({err: String((e && e.message) || e).slice(0, 120)});
 		}
@@ -150,8 +176,9 @@ func loadedMessageIDs(ctx context.Context, t *testing.T, runner *engine.Runner,
 func parseLoadedIDs(t *testing.T, raw string) loadedIDs {
 	t.Helper()
 	var v struct {
-		Group       []string `json:"group"`
-		DirectCount int      `json:"directCount"`
+		Group        []string `json:"group"`
+		DirectCount  int      `json:"directCount"`
+		SampleDirect []string `json:"sampleDirect"`
 		Err         string   `json:"err"`
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
@@ -160,7 +187,7 @@ func parseLoadedIDs(t *testing.T, raw string) loadedIDs {
 	if v.Err != "" {
 		t.Fatalf("collection: %s", v.Err)
 	}
-	return loadedIDs{group: v.Group, direct: v.DirectCount}
+	return loadedIDs{group: v.Group, direct: v.DirectCount, sampleDirect: v.SampleDirect}
 }
 
 func hasName(hay []string, needle string) bool {

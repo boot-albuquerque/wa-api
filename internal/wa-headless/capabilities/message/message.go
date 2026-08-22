@@ -188,3 +188,60 @@ func (r *Reader) ShapeOf(ctx context.Context, messageID, label string) ([]string
 	}
 	return out.Keys, nil
 }
+
+// Current is the part of a message that changes after it exists.
+type Current struct {
+	// Ack is the delivery state the page currently reports. Meaningless unless
+	// HasAck.
+	Ack int
+	// HasAck separates "the page says ack 0" from "the page says nothing".
+	//
+	// NOT COSMETIC: of 395 loaded messages, 25 read ack 0 and 5 had no ack field
+	// at all (H108). Merging them would report "never left" about a message the
+	// page never spoke about.
+	HasAck bool
+	// Starred is the current star state.
+	Starred bool
+	// Type is the page's own type string, raw. A revoked message shows up here
+	// as the page names it; this package does not own that vocabulary.
+	Type string
+}
+
+func (c Current) String() string {
+	return fmt.Sprintf("message.Current(hasAck=%t ack=%d starred=%t type=%q)",
+		c.HasAck, c.Ack, c.Starred, c.Type)
+}
+
+// CurrentOf re-reads one message and reports what may have changed since the
+// caller last looked. It is this module's Message.reload.
+//
+// A message that is gone reports ErrNotFound, which is the same answer OriginOf
+// gives and the same one the reference expresses by returning null.
+func (r *Reader) CurrentOf(ctx context.Context, messageID, label string) (Current, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return Current{}, ErrNoMessage
+	}
+	raw, err := r.parked(ctx, currentScript(messageID), label+"/current")
+	if err != nil {
+		return Current{}, fmt.Errorf("%w: %v", ErrRead, err)
+	}
+	var out struct {
+		OK       bool   `json:"ok"`
+		Why      string `json:"why"`
+		NotFound bool   `json:"notFound"`
+		HasAck   bool   `json:"hasAck"`
+		Ack      int    `json:"ack"`
+		Starred  bool   `json:"starred"`
+		Type     string `json:"type"`
+	}
+	if e := json.Unmarshal([]byte(raw), &out); e != nil {
+		return Current{}, fmt.Errorf("message: unexpected answer: %w", e)
+	}
+	if out.NotFound {
+		return Current{}, ErrNotFound
+	}
+	if !out.OK {
+		return Current{}, fmt.Errorf("%w (%s)", ErrRead, out.Why)
+	}
+	return Current{HasAck: out.HasAck, Ack: out.Ack, Starred: out.Starred, Type: out.Type}, nil
+}

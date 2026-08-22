@@ -104,3 +104,51 @@ func shapeScript(messageID string) string {
 	return "kicked";
 	})()`
 }
+
+// currentScript re-reads the fields of a message that CHANGE after it exists.
+//
+// It is the equivalent of Message.reload, and what it reports was chosen from a
+// measurement rather than from the reference's field list (H108): over the 395
+// messages this account had loaded, ack took all four values (0:25, 1:19, 2:205,
+// 3:141) and was ABSENT on 5, star was false on all 395, and type took eleven
+// values. So ack earns a re-read, and "absent" earns being distinguishable from
+// zero — merging them is the mistake H90 and the event-freshness work each made
+// once already.
+//
+// IT DOES NOT ANSWER "WAS THIS REVOKED". That vocabulary — isRevokedMsg,
+// type === 'revoked', revokeSender — is owned by capabilities/revoke, and a
+// second copy here would be two lists free to drift. The type is reported raw,
+// so a caller sees 'revoked' when the page says it.
+func currentScript(messageID string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 140);
+	try {
+		const MC = window.require("` + modMsgCollection + `").MsgCollection;
+		let m = null;
+		try { m = MC.get(` + strconv.Quote(messageID) + `); } catch (e) {}
+		if (!m) {
+			const all = typeof MC.getModelsArray === "function" ? MC.getModelsArray() : [];
+			for (const c of all) {
+				try { if (c.id && c.id.id === ` + strconv.Quote(messageID) + `) { m = c; break; } } catch (e) {}
+			}
+		}
+		if (!m) { park({ ok: true, notFound: true }); return "kicked"; }
+
+		// AUSENTE E ZERO SAO RESPOSTAS DIFERENTES, e 5 das 395 mensagens medidas
+		// nao tinham ack nenhum. Fundi-las em 0 diria "nao saiu" sobre uma
+		// mensagem sobre a qual a pagina nao disse nada.
+		const hasAck = (typeof m.ack === "number");
+		park({
+			ok: true, notFound: false,
+			hasAck: hasAck, ack: hasAck ? m.ack : 0,
+			starred: !!m.star,
+			type: (typeof m.type === "string") ? m.type : "",
+		});
+	} catch (e) {
+		park({ ok: false, why: safe(e) });
+	}
+	return "kicked";
+	})()`
+}

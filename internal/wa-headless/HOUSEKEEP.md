@@ -8515,3 +8515,75 @@ Estado no ledger: `INTENTIONAL_DIFFERENCE`, que é o vocabulário exato para
    ```
 
 **Status**: entregue nesta sessão.
+
+## H108 — `reload`: o que muda depois que a mensagem existe
+
+**Data**: 2026-08-21. **Contexto**: `Message.reload` do LEDGER-WWEBJS.
+
+**Onde**: `internal/wa-headless/capabilities/message/` (`currentScript`,
+`Reader.CurrentOf`), `internal/wa-headless/probe_msgmutable_test.go` (novo).
+
+### A medição veio antes do desenho
+
+Sobre as 395 mensagens carregadas da conta-A:
+
+```json
+{"total": 395,
+ "acks": {"0": 25, "1": 19, "2": 205, "3": 141, "absent": 5},
+ "starred": {"yes": 0, "no": 395},
+ "revokedByFlag": 0, "revokedByType": 0, "revokedBySender": 0,
+ "types": {"chat": 378, "poll_creation": 4, "pinned_message": 3,
+           "interactive": 2, "notification_template": 2, "audio": 1,
+           "call_log": 1, "ciphertext": 1, "gp2": 1, "image": 1, "ptt": 1}}
+```
+
+Três coisas que eu não teria adivinhado:
+
+1. **`ack` está AUSENTE em 5 mensagens**, não em zero delas. "Ausente" e "0" são
+   respostas diferentes — fundi-las diria "não saiu" sobre uma mensagem sobre a
+   qual a página não disse nada. É o mesmo erro que a H90 cometeu com contagem
+   de dispositivos e que a frescura de eventos cometeu com `AgeSeconds`. Daí o
+   campo `HasAck`.
+2. **ZERO mensagens revogadas** por qualquer dos três vocabulários. O ramo
+   "revogada" do `reload` não tem como ser provado ao vivo aqui, então este
+   pacote **não o implementa**: `capabilities/revoke` já é dono dessa
+   decisão, e uma segunda cópia seriam duas listas livres para divergir. O
+   `type` sai cru.
+3. **25 mensagens em ack 0.** É a H98 outra vez, agora em repouso: mensagens
+   criadas que não saíram, sentadas no store.
+
+### Prova ao vivo (2026-08-21, conta-A)
+
+32 mensagens re-lidas, **11 estados distintos**, incluindo os dois casos de
+`hasAck=false` (`gp2` x1, `pinned_message` x3) — a distinção não é teórica. A
+sonda **falha** se todas re-lerem idênticas, porque aí `CurrentOf` seria uma
+constante com nome de função.
+
+### Controles negativos EXECUTADOS
+
+1. Fundir ausente e zero (`hasAck: true, ack: m.ack || 0`):
+   ```
+   --- FAIL: TestAnAbsentAckIsNotAZeroAck
+       message_test.go:262: the script does not test for the ack's presence, so absent and zero collapse before Go ever sees them
+   ```
+2. Duplicar o vocabulário de revogação aqui:
+   ```
+   --- FAIL: TestTheRevokedVocabularyIsNotDuplicatedHere
+       message_test.go:285: this script names "isRevokedMsg", which capabilities/revoke owns
+       message_test.go:285: this script names "revokeSender", which capabilities/revoke owns
+   ```
+
+### Achado incidental — NÃO corrigido, vai para triagem
+
+`type: "pinned_message"` aparece **3 vezes** no store desta conta, enquanto a
+H81 registra que `pin`/`unpin` são aceitos e não fixam nada. As duas coisas
+podem conviver (as três podem ter vindo do par, ou serem mensagens de sistema
+sobre fixação alheia), mas isso não foi verificado. É informação que a H81 não
+tinha: existe `pinned_message` neste build, e a H81 concluiu apenas que a NOSSA
+chamada não produz um.
+
+**Não investigado nesta sessão** — fora do escopo da tarefa. Fica registrado
+para decisão sobre reabrir a H81.
+
+**Status**: entregue e provado. O achado do `pinned_message` acima não faz parte
+desta entrega e segue para triagem.

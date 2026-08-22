@@ -226,3 +226,80 @@ func TestAnEmptyIDNeverReachesThePageForAShape(t *testing.T) {
 		t.Error("an empty id reached the page")
 	}
 }
+
+// ABSENT AND ZERO ARE DIFFERENT ANSWERS.
+//
+// Measured: of 395 loaded messages, 25 read ack 0 and 5 carried no ack field at
+// all (H108). A reader that merged them would say "this message never left"
+// about a message the page never spoke about — which is the same mistake the
+// event freshness work made once with AgeSeconds, and H90 made with device
+// counts.
+func TestAnAbsentAckIsNotAZeroAck(t *testing.T) {
+	absent := &double{answer: `{"ok":true,"hasAck":false,"ack":0}`}
+	gotAbsent, err := rd(absent).CurrentOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("CurrentOf: %v", err)
+	}
+	zero := &double{answer: `{"ok":true,"hasAck":true,"ack":0}`}
+	gotZero, err := rd(zero).CurrentOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("CurrentOf: %v", err)
+	}
+	if gotAbsent == gotZero {
+		t.Fatal("a message with no ack reads identically to one the page says is at " +
+			"ack 0; the two cannot be told apart by a caller")
+	}
+	if gotAbsent.HasAck {
+		t.Error("HasAck is true when the page reported no ack")
+	}
+	if !gotZero.HasAck || gotZero.Ack != 0 {
+		t.Error("a real ack 0 lost either its value or its presence")
+	}
+
+	// And the SCRIPT must be what makes the distinction, which the check above
+	// cannot see: the double supplies hasAck ready-made.
+	if !strings.Contains(withoutComments(absent.lastScript), `typeof m.ack === "number"`) {
+		t.Error("the script does not test for the ack's presence, so absent and zero " +
+			"collapse before Go ever sees them")
+	}
+}
+
+// THIS PACKAGE DOES NOT OWN THE REVOKED VOCABULARY.
+//
+// capabilities/revoke already decides what revoked means (isRevokedMsg,
+// type === 'revoked', revokeSender). A second copy here would be two lists free
+// to drift, which ADR-0004 and this repo's string-literal rule both exist to
+// prevent. The type is passed through raw instead.
+func TestTheRevokedVocabularyIsNotDuplicatedHere(t *testing.T) {
+	d := &double{answer: `{"ok":true,"type":"revoked"}`}
+	got, err := rd(d).CurrentOf(context.Background(), "3EB0", "t")
+	if err != nil {
+		t.Fatalf("CurrentOf: %v", err)
+	}
+	if got.Type != "revoked" {
+		t.Fatalf("type = %q; the page's own word must survive the trip", got.Type)
+	}
+	code := withoutComments(d.lastScript)
+	for _, owned := range []string{"isRevokedMsg", "revokeSender"} {
+		if strings.Contains(code, owned) {
+			t.Errorf("this script names %q, which capabilities/revoke owns", owned)
+		}
+	}
+}
+
+func TestAReloadOfAGoneMessageIsErrNotFound(t *testing.T) {
+	d := &double{answer: `{"ok":true,"notFound":true}`}
+	if _, err := rd(d).CurrentOf(context.Background(), "3EB0", "t"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAnEmptyIDNeverReachesThePageForAReload(t *testing.T) {
+	d := &double{answer: `{"ok":true}`}
+	if _, err := rd(d).CurrentOf(context.Background(), " ", "t"); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("err = %v, want ErrNoMessage", err)
+	}
+	if d.kicks != 0 {
+		t.Error("an empty id reached the page")
+	}
+}

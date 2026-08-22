@@ -295,7 +295,7 @@ sem link.
 
 | upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
-| `reload` | — | `MISSING` | — | — | — | — |
+| `reload` | message.CurrentOf | `PROVEN` | sim | sim | sim | H108: 32 mensagens re-lidas ao vivo deram 11 estados distintos; `hasAck` separa "ack 0" de "sem ack", medido em 5 de 395 |
 | `rawData` | message.ShapeOf | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | H107: devolvemos os NOMES dos campos, nunca os valores — a medição achou 598 nomes no modelo cru, entre eles `body` e `caption`; devolver rawData como é derrubaria a invariante 12 em vez de entregar funcionalidade |
 | `getChat` | message.OriginOf (.ChatJID) | `PROVEN` | sim | sim | sim | H106 |
 | `getContact` | message.OriginOf (.SenderJID) | `PROVEN` | sim | sim | sim | H106: 2 de 2 mensagens de grupo com remetente ≠ chat; grupo é PERGUNTADO à página (getIsGroup), não inferido do sufixo |
@@ -414,9 +414,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 58 | 26% |
+| `PROVEN` | 59 | 27% |
 | `PARTIAL` | 48 | 22% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 108 | 49% |
+| `MISSING` | 107 | 49% |
 | **total** | **220** | |
