@@ -219,3 +219,85 @@ func TestProbeChannelSearchCapability(t *testing.T) {
 			len(narrow), same)
 	}
 }
+
+// TestProbeChannelOwnerModules measures whether the modules the OWNER-side
+// channel operations need exist on this build, and their arities.
+//
+// Arity is measured because this project has been wrong about it before: the
+// metadata query declares 2 and resolves with 1 (H104).
+func TestProbeChannelOwnerModules(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_CHANMOD") == "" {
+		t.Skip("set WA_PROBE_CHANMOD=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__cm = null;
+	const out = {modules: {}, funcs: {}, arity: {}};
+	const load = name => {
+		try { const m = window.require(name); out.modules[name] = !!m; return m; }
+		catch (e) { out.modules[name] = false; return null; }
+	};
+	const pairs = [
+		["WAWebNewsletterCreateQueryJob", ["createNewsletterQuery"]],
+		["WAWebNewsletterDeleteAction", ["deleteNewsletterAction"]],
+		["WAWebEditNewsletterMetadataAction", ["editNewsletterMetadataAction"]],
+		["WAWebMexFetchNewsletterSubscribersJob", ["mexFetchNewsletterSubscribers"]],
+		["WAWebNewsletterGatingUtils", ["getMaxSubscriberNumber","isNewsletterCreationEnabled"]],
+		["WAWebJidToWid", ["newsletterJidToWid"]],
+		["WAWebChatCollection", ["ChatCollection"]],
+	];
+	for (const [name, fns] of pairs) {
+		const m = load(name);
+		if (!m) { continue; }
+		for (const f of fns) {
+			const v = m[f];
+			out.funcs[f] = (typeof v === "function") || (typeof v === "object" && v !== null);
+			if (typeof v === "function") { out.arity[f] = v.length; }
+		}
+	}
+	window.__cm = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__cm", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("channel owner modules:\n%s", out)
+}

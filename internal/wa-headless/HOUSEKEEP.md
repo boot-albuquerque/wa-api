@@ -8936,3 +8936,101 @@ registrado porque a política do projeto proíbe justamente essa classe de coman
 e eu a usei por reflexo.
 
 **Status**: entregue e provado.
+
+## H113 — posse de canal: criado, renomeado e apagado; a descrição não pega
+
+**Data**: 2026-08-22. **Contexto**: as 15 linhas da família `Channel` que exigem
+POSSUIR um canal, mais `Client.createChannel` e `Client.deleteChannel`.
+
+**Autorização**: criar canal é ato para fora numa conta real. Foi pedida e
+concedida explicitamente, com a condição de o canal ser apagado ao final. O
+delete não é um passo de teste que possa ser pulado: é a condição sob a qual
+isto rodou.
+
+**Onde**: `internal/wa-headless/capabilities/channel/owner.go` e `script.go`
+(novos), `internal/wa-headless/probe_chanowner_test.go` (novo).
+
+### O erro que deixou um canal de pé, e como foi resolvido
+
+A primeira execução criou o canal com sucesso e **falhou em tudo depois**, com
+`channel not loaded in this session`. A busca usava `WAWebChatCollection`,
+copiada do lugar errado. Medido: essa coleção tem **384 conversas e ZERO
+newsletters**.
+
+Resultado: um canal real ficou de pé na conta, e a sonda registrava só FORMAS
+(por disciplina de PII), então nem o jid nem o código de convite estavam no log
+para apagá-lo.
+
+A recuperação veio da referência, no arquivo certo: `Utils.js:928` mostra que a
+coleção é `window.require("WAWebCollections").WAWebNewsletterCollection` — **não
+é módulo próprio**; requerê-la pelo nome devolve `undefined`. Com isso, enumerei,
+identifiquei pelo prefixo do nome (`wa-headless probe`) e apaguei. Confirmado
+`total: 0` numa segunda passagem.
+
+**Lição**: uma sonda que registra só formas não consegue limpar o que criou. Para
+efeitos que CRIAM coisa, o identificador tem de ser recuperável — aqui foi o
+prefixo do NOME, que não é PII e serviu de alça. Isso passa a ser requisito de
+qualquer sonda que crie entidade.
+
+### O que ficou provado
+
+```
+created: channel.Created(jid=true code=true at=true)
+rename took and was read back from the server
+deleted and confirmed gone (channel: no channel for that invite code)
+```
+
+`Create` verifica relendo pelo código de convite — o leitor da H104, provado
+contra um canal que a conta NÃO segue, o que o torna oráculo e não segunda
+opinião do mesmo caminho. `Delete` sem código devolve erro dizendo que **não deu
+para verificar**, em vez de sucesso.
+
+O gate desabilitado virou erro próprio: a referência devolve a string
+`'CreateChannelError: A channel creation is not enabled'` para o chamador casar
+com padrão.
+
+### O que NÃO pega: a descrição
+
+```
+SetDescription immediate verdict: channel: the change did not take
+MEASURED: the description never appeared within 20s, while the rename was
+readable back immediately. This is not latency.
+```
+
+A página aceita a chamada e o servidor nunca reporta a descrição nova. A
+descrição passada na CRIAÇÃO também não fica. É exatamente o sucesso silencioso
+que a invariante 14 existe para pegar, e a pós-condição pegou — a referência
+devolveria `true`.
+
+`setDescription` fica `MISSING` **por medição, não por omissão**.
+
+### O sucesso que passou pelo motivo errado
+
+Na primeira execução, `SetDescription("")` **passou**. Não porque limpar
+funcione: porque o servidor já estava vazio, já que a descrição nunca tinha sido
+gravada. A asserção comparava o lido com o pedido, e vazio == vazio.
+
+Isto é da mesma família da escrita redundante da H110, e a sonda foi corrigida
+para só exercitar a limpeza **depois** de uma descrição existir de fato —
+pulando o passo, com a razão dita em voz alta, quando ela não existe.
+
+### `getSubscribers` não é atacável
+
+`WAWebMexFetchNewsletterSubscribersJob` **não existe neste build** (medido) —
+sexto nome vindo da lista do wwebjs que falta aqui.
+
+### Controles negativos EXECUTADOS
+
+1. Confiar na escrita sem reler: `TestARenameTheServerIgnoredIsAnError` falha.
+2. Usar o flag como chave do valor (`editName` em vez de `name`): falha com "the
+   server still reports the old value" — que é exatamente como o defeito real
+   apareceria.
+3. Não verificar a criação: `TestACreateThatCannotBeReadBackIsAnError` falha.
+4. Voltar a busca para `ChatCollection`:
+   ```
+   owner_test.go:260: the script does not look in WAWebNewsletterCollection
+   owner_test.go:263: the script looks in ChatCollection, which holds no newsletters
+   ```
+
+**Status**: entregue e provado, com `setDescription` e `getSubscribers` abertos
+com evidência.

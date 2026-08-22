@@ -199,3 +199,145 @@ func searchScript(query, region string, skipSubscribed bool) string {
 	return "kicked";
 	})()`
 }
+
+// The owner-side page modules and the edit flags. Measured present on this build
+// 2026-08-22 with the arities noted; getMaxSubscriberNumber exists but the job
+// that would USE it does not, which is why there is no subscriber reader here.
+const (
+	modCreate = "WAWebNewsletterCreateQueryJob" // createNewsletterQuery, arity 1
+	modDelete = "WAWebNewsletterDeleteAction"   // deleteNewsletterAction, arity 1
+	modEdit   = "WAWebEditNewsletterMetadataAction"
+	modGating = "WAWebNewsletterGatingUtils"
+	// modCollections is where the newsletter collection LIVES. It is not its own
+	// module: WAWebNewsletterCollection is a member of WAWebCollections, and
+	// requiring it by name returns undefined. Measured 2026-08-22 the hard way —
+	// the first version asked WAWebChatCollection, which holds 384 chats and ZERO
+	// newsletters, so every owner operation failed with "channel not loaded" on a
+	// channel that had just been created successfully (H113).
+	modCollections  = "WAWebCollections"
+	collNewsletters = "WAWebNewsletterCollection"
+
+	// editName and editDescription are the property flags the edit action takes.
+	// They are constants because they are two halves of one vocabulary and a typo
+	// in either would read as "the server ignored us".
+	editName        = "editName"
+	editDescription = "editDescription"
+)
+
+// createScript makes a channel and parks what the server said.
+//
+// THE GATE IS CHECKED FIRST AND REPORTED AS ITS OWN ANSWER. The reference
+// returns the string 'CreateChannelError: A channel creation is not enabled',
+// which a caller has to pattern-match; here it is a flag that becomes a distinct
+// Go error.
+func createScript(name, description string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+	const str = v => (typeof v === "string" ? v : "");
+	const num = v => (typeof v === "number" ? v : 0);
+	(async () => {
+		try {
+			if (!window.require("` + modGating + `").isNewsletterCreationEnabled()) {
+				park({ ok: false, disabled: true });
+				return;
+			}
+			const r = await window.require("` + modCreate + `").createNewsletterQuery({
+				name: ` + strconv.Quote(name) + `,
+				description: ` + strconv.Quote(description) + `,
+				picture: null,
+			});
+			// A RESPOSTA DA CRIACAO USA OS MIXINS, nao os campos __x_ do
+			// diretorio: e' uma resposta de consulta, nao um modelo vivo.
+			const inviteM = (r && r["` + mixInvite + `"]) || null;
+			const timeM = (r && r["` + mixTime + `"]) || null;
+			const jid = r && r.idJid;
+			park({
+				ok: true, disabled: false,
+				jid: (jid && jid._serialized) ? jid._serialized : str(jid),
+				code: str(inviteM && inviteM.inviteCode),
+				at: num(timeM && timeM.creationTimeValue),
+			});
+		} catch (e) {
+			park({ ok: false, disabled: false, why: safe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}
+
+// channelLookup finds the live chat model for a channel jid.
+//
+// The reference uses its own injected window.WWebJS.getChat helper; this stack
+// does not inject anything (that row is an INTENTIONAL_DIFFERENCE), so the
+// collection is asked directly.
+const channelLookup = `
+		const NC = window.require("` + modCollections + `").` + collNewsletters + `;
+		let ch = null;
+		try { ch = NC.get(JID); } catch (e) {}
+		if (!ch) {
+			const all = typeof NC.getModelsArray === "function" ? NC.getModelsArray() : [];
+			for (const c of all) {
+				try {
+					const id = c.id;
+					const s = (id && id._serialized) ? id._serialized : String(id);
+					if (s === JID) { ch = c; break; }
+				} catch (e) {}
+			}
+		}
+		if (!ch) { park({ ok: false, why: "channel not loaded in this session" }); return; }
+`
+
+func editScript(jid, field, value string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+	(async () => {
+		try {
+			const JID = ` + strconv.Quote(jid) + `;` + channelLookup + `
+			const property = {}; property[` + strconv.Quote(field) + `] = true;
+			const value = {};
+			value[` + strconv.Quote(fieldForFlag(field)) + `] = ` + strconv.Quote(value) + `;
+			await window.require("` + modEdit + `").editNewsletterMetadataAction(ch, property, value);
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: safe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}
+
+// fieldForFlag maps an edit FLAG to the value KEY it goes with. They differ —
+// the flag is editName and the value key is name — and keeping the mapping in
+// one function is what stops the two halves from drifting apart at a call site.
+func fieldForFlag(flag string) string {
+	switch flag {
+	case editName:
+		return "name"
+	case editDescription:
+		return "description"
+	default:
+		return flag
+	}
+}
+
+func deleteScript(jid string) string {
+	return `(() => {
+	window.` + stateKey + ` = null;
+	const park = v => { window.` + stateKey + ` = JSON.stringify(v); };
+	const safe = e => String((e && e.message) || e).replace(/\d{4,}/g, "<redacted>").slice(0, 150);
+	(async () => {
+		try {
+			const JID = ` + strconv.Quote(jid) + `;` + channelLookup + `
+			await window.require("` + modDelete + `").deleteNewsletterAction(ch);
+			park({ ok: true });
+		} catch (e) {
+			park({ ok: false, why: safe(e) });
+		}
+	})();
+	return "kicked";
+	})()`
+}

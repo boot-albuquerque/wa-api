@@ -80,12 +80,12 @@ nem `PARTIAL` sem justificativa explícita.
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `createGroup` | group.Ensure | `PROVEN` | sim | sim | sim | idempotência é do fixture, não da capacidade |
-| `createChannel` | — | `MISSING` | — | — | — | não atacado |
+| `createChannel` | channel.Create | `PROVEN` | sim | sim | sim | H113: canal real criado e apagado na conta de laboratório, com autorização explícita. Verificado relendo pelo código de convite, não pelo eco da própria chamada; gate desabilitado é erro PRÓPRIO (a referência devolve a mensagem como STRING) |
 | `subscribeToChannel` | — | `MISSING` | — | — | — | não atacado |
 | `unsubscribeFromChannel` | — | `MISSING` | — | — | — | não atacado |
 | `transferChannelOwnership` | — | `MISSING` | — | — | — | não atacado |
 | `searchChannels` | channel.Search | `PROVEN` | sim | sim | sim | H112: o diretório RESPONDE (50 resultados) — ao contrário de `getRecommendedNewsletters`, que trava. Sem assinatura. Tipo próprio `DirectoryEntry`: um resultado de diretório é um MODELO com campos `__x_`, não o saco de mixins da consulta de metadados, e `__x_state` não existe. Sem opção `limit`: a referência a implementa remendando uma função da página que não existe neste build |
-| `deleteChannel` | — | `MISSING` | — | — | — | não atacado |
+| `deleteChannel` | channel.Delete | `PROVEN` | sim | sim | sim | H113: pós-condição é o canal deixar de ser legível; apagar sem código de convite devolve erro dizendo que NÃO deu para verificar, em vez de sucesso |
 | `getLabels` | contacts.ListLabels | `PROVEN` | sim | sim | sim | H72; só mensurável por a conta ser Business |
 | `getBroadcasts` | status.List | `PARTIAL` | sim | sim | sim | **NÃO é lista de transmissão** — o upstream chama de Broadcast o STATUS (stories): `getBroadcasts` é `Status.getModelsArray`. Nossa nota descrevia a coisa errada, e três linhas iam ser feitas contra a ideia errada (H100). Caminho provado ao vivo, com **zero** feeds; provar um não-vazio exige POSTAR status, visível aos 944 contatos da conta |
 | `getBroadcastById` | status.ByContact | `PARTIAL` | sim | sim | sim | tenta as duas formas de identidade; feed ausente é erro próprio e não um feed de zeros, que um chamador leria como "essa pessoa não postou nada" (H100) |
@@ -178,10 +178,22 @@ responder nem ao próprio timeout de 8s**, medido em quatro execuções. Ele nã
 mais necessário para ler, mas continua sendo o que falta para DESCOBRIR um canal
 sem link.
 
+**Atualizado em 2026-08-22 (H113)**, com um canal real criado e apagado na conta
+de laboratório sob autorização explícita:
+
+- `setSubject` passa a `PROVEN`: renomear pega e é relido do servidor.
+- `setDescription` continua `MISSING` **por medição, não por omissão**: a página
+  aceita a chamada e o servidor nunca reporta a descrição nova — nem depois de
+  20s, enquanto o rename é legível na hora. Não é latência. A descrição passada
+  na CRIAÇÃO também não fica.
+- `getSubscribers` continua `MISSING` porque
+  `WAWebMexFetchNewsletterSubscribersJob`, o módulo que a referência usa, **não
+  existe neste build**.
+
 | upstream | estado |
 |---|---|
 | `getSubscribers` | `MISSING` |
-| `setSubject` | `MISSING` |
+| `setSubject` | `PROVEN` |
 | `setDescription` | `MISSING` |
 | `setProfilePicture` | `MISSING` |
 | `setReactionSetting` | `MISSING` |
@@ -428,9 +440,9 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 78 | 35% |
+| `PROVEN` | 81 | 37% |
 | `PARTIAL` | 52 | 24% |
 | `BLOCKED` | 3 | 1% |
 | `INTENTIONAL_DIFFERENCE` | 3 | 1% |
-| `MISSING` | 84 | 38% |
+| `MISSING` | 81 | 37% |
 | **total** | **220** | |
