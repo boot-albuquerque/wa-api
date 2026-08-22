@@ -4988,13 +4988,30 @@ configuração, é **migração de dados**. As sessões pareadas e o
 `message_history` de produção estão no SQLite daquele volume. Qualquer caminho
 para multi-pod passa por essa migração, e ela não existe.
 
-**Status**: **não corrigido** — registrado. As opções (1) e (2) são aditivas e
-podem entrar sem decisão; a (3) muda comportamento de arranque e é decisão do
-dono do repositório.
+**Status**: **corrigido (2026-08-22)** — opções (1) e (2) já implementadas no
+commit `3dbdba3`. O D7 existe em `pkg/bootstrap/capabilities.go`:
+`publishCapabilities` é chamada em `main.go:332`, antes de abrir o banco, e
+produz a linha de log com todos os campos (`cluster_mode`, `database`,
+`multi_pod`, `session_ownership`, `durable_retry`). A mesma informação aparece
+no corpo do `/health/ready` (opção 2), dentro do campo `capabilities`.
+
+**Testes que travam** (7, no `capabilities_test.go`):
+
+- `TestCapacidades_SQLiteEmSingleNaoSuportaMultiPod` — a distinção central
+- `TestCapacidades_PostgresEmSingleFicaDisponivel` — "dá, mas não está ligado"
+- `TestCapacidades_MultiAtivaPosseEMultiPod` — o trio ativo
+- `TestCapacidades_RelatorioSaiNoLogComTodosOsCampos` — o D7 em si
+- `TestCapacidades_PublicarTornaORelatorioLegivel` — ida e volta
+- `TestProntidao_CorpoCarregaAsCapacidades` — opção 2, /health/ready
+- `TestProntidao_CapacidadesSaoLidasEmTempoDeRequisicao` — contra o defeito
+  do lease (captura em tempo de montagem)
+
+A opção (3) — tornar `DB_*` parcial um erro fatal — continua pendente de
+decisão do dono do repositório.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F105 — produção está 5 migrações atrás, e o próximo deploy roda a irreversível
 
@@ -5248,8 +5265,16 @@ não temos).
 para o usuário, e verifica que o pod B assume dentro de um prazo. Hoje esse
 teste falharia, e é a prova de que o comportamento não existe.
 
-**Status**: **não corrigido** — é lacuna de desenho do D2/D5, não defeito de
-implementação. Precisa de decisão antes de código.
+**Status**: **limitação aceite (2026-08-22, decisão 52=b)** — não será
+implementado nesta fase. O failover automático (varredura periódica de leases
+expirados) é trabalho do D5/roteamento por dono, e decidir o intervalo e o
+modelo de disputa (todo pod varre vs. eleição) antes de ter o D5 desenhado
+seria desenhar o roteamento por acidente. O cenário é real e medido, mas o
+custo de o resolver mal (interação entre a varredura e o `connectOnStartup`
+que existe) é maior que o custo de o adiar até o roteamento existir. A
+sessão órfã fica órfã até restart — que é a mesma garantia que o modo `single`
+oferece, e o modo `multi` está explicitamente em WARN de que "a posse por
+lease ainda não existe" (D1, `cluster.go`).
 
 ---
 
