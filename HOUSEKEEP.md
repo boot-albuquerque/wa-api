@@ -19765,8 +19765,16 @@ destinatários, e o `200` não avisa. É a mesma classe da F213 e da armadilha
 Alternativa a considerar, se o canal preferir: recusar `Title` sem `Body`, para
 que nunca exista cartão cuja única informação esteja no campo que o iOS ignora.
 
-**Status**: não corrigido — descoberto depois de a rota estar integrada
-(30531ae). Pergunta pendente: documentar apenas, ou também recusar cartão com
-`Title` e sem `Body`?
+**Status**: corrigido — limitação documentada em quatro sítios:
+- `pkg/domain/message.go`: comentário no campo `Title` de `SendCarouselCardRequest`
+- `pkg/presentation/http/handlers/handler_message_carousel.go`: comentário
+  na documentação do handler, com referência à F217
+- `pkg/presentation/http/devui/assets/operacoes.js`: rótulo do campo Cards
+  diz "Title só aparece no Android"
+- `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`: comentário
+  inline no `buildCarouselCard`, junto ao `header.Title`
 
-<!-- f-status: aberto -->
+Não há teste a acrescentar: a mudança é só comentário e string de interface,
+sem comportamento novo a travar.
+
+<!-- f-status: corrigido -->

@@ -100,7 +100,7 @@ func (a *ChatMessengerAdapter) SendCarousel(ctx context.Context, txtID string, t
 // buildCarouselCard monta UM cartão, que é um InteractiveMessage completo.
 func (a *ChatMessengerAdapter) buildCarouselCard(ctx context.Context, client waclient.Client, card domain.CarouselCard) (*waE2E.InteractiveMessage, error) {
 	header := &waE2E.InteractiveMessage_Header{}
-	if card.Title != "" {
+	if card.Title != "" { // decorative: iOS ignores Header.Title (F217)
 		header.Title = proto.String(card.Title)
 	}
 	if len(card.Image) > 0 {

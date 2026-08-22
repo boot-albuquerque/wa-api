@@ -77,7 +77,7 @@ export const ENVIO = [
   { id: "carousel", rotulo: "Carrossel", rota: "/chat/send/carousel",
     campos: [telefone, { nome: "Body", rotulo: "corpo do carrossel", req: true },
              { nome: "Footer", rotulo: "rodapé" },
-             { nome: "Cards", rotulo: "cartões (JSON)", tipo: "textarea", req: true,
+             { nome: "Cards", rotulo: "cartões (JSON — Title só aparece no Android)", tipo: "textarea", req: true,
                valor: '[{"Title":"Cartão 1","Body":"Descrição","Buttons":[{"type":"reply","title":"Sim"}]},{"Title":"Cartão 2","Body":"Descrição","Buttons":[{"type":"reply","title":"Não"}]}]',
                pre: JSON.parse }] },
 

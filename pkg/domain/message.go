@@ -729,6 +729,8 @@ type SendCarouselRequest struct {
 
 // SendCarouselCardRequest is one card in a SendCarouselRequest.
 type SendCarouselCardRequest struct {
+	// Title is decorative: iOS does not render it; only Android shows it (F217).
+	// Put required information in Body, not here.
 	Title   string              `json:"Title,omitempty"`
 	Body    string              `json:"Body"`
 	Footer  string              `json:"Footer,omitempty"`

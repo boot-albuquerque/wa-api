@@ -22,6 +22,10 @@ import (
 // the use case hardcodes HSCROLL_CARDS, and this handler does not offer a way
 // to override it. If ALBUM_IMAGE starts rendering in the future, add the
 // field here — do not silently enable it by removing this guard.
+//
+// Card Title is decorative: iOS ignores it entirely; only Android renders it.
+// Put required information in Body, not Title. See HOUSEKEEP F217 for the
+// measured evidence across six matrix directions and two business accounts.
 type SendCarouselHandler struct {
 	usecase *message.SendCarouselUseCase
 }
