@@ -29,3 +29,30 @@
 // comment used to only ask for: the driver stays inside engine/, no wait keeps
 // its clock in the page, and priming never happens inside a bounded operation.
 package waheadless
+
+import "wa-api/internal/wa-headless/spa"
+
+// The server suffixes this build files identities under.
+//
+// These are the facade's first symbols, and they are here for the reason the
+// doc above states: the adapter in pkg/infra/wa-headless has to materialise
+// THIS transport's canonical form, and the canonical form is not shared.
+// Decision 74 measured why — the socket spells a phone identity
+// s.whatsapp.net while this build spells it c.us, and the vendored socket
+// types call c.us "legacy" even though it is what the page uses now. Each
+// adapter owns its own suffix; only the vocabulary is shared.
+//
+// Re-exported rather than reachable: an adapter that imported spa/ directly
+// would be reaching past the facade, which is the one thing this file exists
+// to prevent.
+const (
+	ServerLID   = spa.ServerLID
+	ServerPhone = spa.ServerPhone
+	ServerGroup = spa.ServerGroup
+)
+
+// IsUnresolvedIdentity reports whether a jid names a PERSON in the phone
+// namespace, which this build does not index people by. It is decision 66's
+// single rule, and the adapter needs it to refuse explicitly instead of
+// answering wrongly.
+func IsUnresolvedIdentity(jid string) bool { return spa.IsUnresolvedIdentity(jid) }

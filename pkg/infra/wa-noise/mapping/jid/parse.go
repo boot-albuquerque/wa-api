@@ -10,6 +10,12 @@ import (
 
 // ParseJID parses a phone number or JID string into a WhatsApp JID
 func ParseJID(arg string) (types.JID, bool) {
+	// An empty string used to panic here on arg[0] (F101): the port promises
+	// (JID, error) and delivered a crash instead. The guard belongs at the
+	// source of the rule, not in each of the eleven callers.
+	if arg == "" {
+		return types.JID{}, false
+	}
 	if arg[0] == '+' {
 		arg = arg[1:]
 	}

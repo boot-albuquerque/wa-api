@@ -389,7 +389,25 @@ rules_frozen=true
 # Main para baixar a complexidade maxima de 57 para 56 (o gate de lint trava o
 # TETO, nao a contagem — decompor sobe a contagem e melhora o repo). Ela nasce
 # coberta: loga o Fatal da configuracao invalida de posse.
-min_func_coverage=698
+# justificativa: decisao 74 (2026-08-22), vocabulario de namespace de JID
+# compartilhado entre os dois transportes (pkg/domain/jid_namespace.go).
+# func_coverage cai 698->697 por UMA funcao: JID.Server, elegivel e sem log.
+#
+# Ela e' um acessor PURO de string — acha o ultimo "@" e devolve o que vem
+# depois. Nao toca porta nenhuma, nao tem caminho de erro, e um log ali sairia
+# a cada classificacao de JID. E' o mesmo caso de atrasoDaTentativa (F88) e de
+# ownedSessions/forget (ADR-0005 D2), ja aceitos acima.
+#
+# REGISTRO DELIBERADO: ela escapa de X1 por UM statement — o corpo tem tres
+# (atribuicao, if, return) e X1 exige <=2. Reescreve-la sem a variavel
+# intermediaria a excluiria do denominador e manteria o numero em 698. NAO foi
+# feito: moldar o codigo a metrica e' exatamente o que o topo deste arquivo
+# proibe ao explicar por que min_eligible existe. A queda de um decimo fica
+# registrada em vez de escondida.
+#
+# As outras duas funcoes novas do arquivo (JID.Namespace, NormalizeIdentityInput)
+# saem EXCLUDED por X1 no golden, como firstEmpty.
+min_func_coverage=697
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -436,7 +454,20 @@ min_errpath_coverage=858
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-min_eligible=569
+# justificativa: F101 (2026-08-22), o panic de ParseJID("") e a validacao de
+# ELEMENTO vazio nas duas rotas de lista de grupo. min_eligible 569->570 (+1:
+# rejectEmptyElement). A outra funcao nova, firstEmpty, sai como EXCLUDED por
+# X1 no golden — e' aritmetica pura sobre um slice, sem porta e sem caminho de
+# erro, exatamente o caso ja justificado para atrasoDaTentativa acima.
+#
+# As DUAS razoes ficam INALTERADAS (func 698, errpath 858) e `covered` sobe
+# 397->398: rejectEmptyElement nasce coberta, logando em Warn a recusa com o
+# INDICE da entrada reprovada antes de responder 400. Numerador e denominador
+# sobem juntos. Nenhum site que logava deixou de logar.
+# +1 (570->571): JID.Server, da decisao 74 — ver a justificativa de
+# min_func_coverage acima, inclusive o registro de por que ela nao foi
+# reescrita para sair do denominador.
+min_eligible=571
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

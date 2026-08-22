@@ -6248,3 +6248,120 @@ o que foi medido.
 quanto o número.* 1,76 núcleo para doze trabalhadores parece bom até se perguntar
 por quê — e a resposta (uma conexão serializa) muda a recomendação de capacidade
 de "adicione concorrência" para "adicione sessões".
+
+## F101 — `ParseJID("")` faz panic, e a lista de participantes chega até ele sem validação de elemento
+
+**Data**: 2026-08-22.
+**Contexto**: achado incidental na Fase 3 do `internal/wa-headless` (decisão 72),
+ao medir o comportamento do `JIDResolver` do `wa-noise` antes de extrair a regra
+pura para um pacote compartilhado. Não faz parte do escopo da Fase 3.
+
+**Onde**: `pkg/infra/wa-noise/mapping/jid/parse.go:12-13`
+
+```go
+func ParseJID(arg string) (types.JID, bool) {
+	if arg[0] == '+' {      // <-- index out of range quando arg == ""
+```
+
+**Problema**: `arg[0]` numa string vazia entra em pânico. O porto
+`appport.JIDResolver` expõe isso: `JIDResolverAdapter.ResolveJID(ctx, "")`
+morre em vez de devolver erro — apesar de a assinatura prometer `(domain.JID, error)`.
+
+Evidência MEDIDA (sonda descartável, removida após a medição):
+
+```
+panic: runtime error: index out of range [0] with length 0
+wa-api/pkg/infra/wa-noise/mapping/jid.ParseJID(...)
+	pkg/infra/wa-noise/mapping/jid/parse.go:13
+wa-api/pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveJID(...)
+	pkg/infra/wa-noise/mapping/jid/resolver.go:22
+```
+
+Alcançabilidade — os 11 chamadores de `ResolveJID` foram enumerados um a um:
+
+| chamador | protegido por |
+| --- | --- |
+| `get_avatar.go:35` | `len(req.Phone) < 1` |
+| `get_group_info.go:36`, `get_group_invite_link.go:36` | validação de campo |
+| `subscribe_presence.go:34`, `chat_presence.go:38`, `react.go:40` | validação de campo |
+| `mark_read.go:35,49` | `len(...) > 0` / `!= ""` |
+| `react.go:65` | `req.Participant != ""` |
+| `get_user_profile.go:85` | **nada no use case** — protegido pela FORMA da rota (`/user/profile/{jid}`: segmento vazio não casa) |
+| `group_management.go:37` (via `parseJIDs`, linha 48) | **nada** |
+
+O caminho aberto, LIDO no código (não medido ponta a ponta):
+`handler_group_mgmt.go:95` valida `len(req.Participants) < 1` — o TAMANHO da
+lista, não os ELEMENTOS. Então `POST /group/create` com
+`{"name":"x","participants":[""]}` desce por `CreateGroup → parseJIDs →
+parseJID → ResolveJID → ParseJID("")` e entra em pânico. O middleware de
+`recover` (`pkg/bootstrap/router.go:149,184`) transforma isso em 500, então o
+processo não morre — mas o erro é 500 onde deveria ser 400, e a rota
+`/group/updateparticipants` tem a mesma forma de validação.
+
+**Correção sugerida**: guardar na origem da regra, não em cada chamador —
+`if arg == "" { return types.JID{}, false }` no topo de `ParseJID`. Isso já
+transforma o panic no erro que o porto promete. Separadamente, validar
+elemento vazio em `parseJIDs` com o índice (a mensagem de log ali já expõe
+`index`, então a informação existe) para que a resposta seja 400 com a posição.
+
+**Anti-regressão exigida** (política do projeto): teste que chama
+`ResolveJID(ctx, "")` e exige `error` (hoje ele entra em pânico — o controle
+negativo é remover a guarda e ver o panic voltar), mais teste pela ROTA
+registrada `/group/create` com `participants:[""]` exigindo 400.
+
+**Status**: **CORRIGIDO** nesta sessão, por decisão 73 da orquestração
+("corrija o F101 antes da extração, com erro explícito para JID vazio e teste
+da rota exigindo 400, depois mova a regra já saneada"). A correção precede a
+extração da decisão 72 justamente para não dar duas casas ao mesmo defeito.
+
+Três guardas, e a primeira é a que trava a CAUSA:
+
+1. `pkg/infra/wa-noise/mapping/jid/parse.go` — `if arg == "" { return types.JID{}, false }`
+   no topo de `ParseJID`, na ORIGEM da regra e não nos onze chamadores.
+2. `handler_group_mgmt.go` — `firstEmpty()` + `rejectEmptyElement()` nas duas
+   rotas com lista (`/group/create`, `/group/updateparticipants`), com o ÍNDICE
+   da entrada reprovada, para que a resposta seja 400 e diga qual falhou.
+3. `handler_group_mgmt.go` — `req.GroupJID == ""` em
+   `handleUpdateGroupParticipants`, que nunca validou esse campo.
+
+**Testes que travam o achado**:
+
+- `pkg/infra/wa-noise/mapping/jid/parse_empty_test.go` — a CAUSA, pelo
+  adaptador REAL: `TestParseJIDRejectsEmptyInsteadOfPanicking`,
+  `TestResolveJIDOnEmptyReturnsErrorNotPanic` e
+  `TestResolveJIDStillAcceptsBareNumber` (o caminho de SUCESSO, para que a
+  guarda não atropele o número nu que `/user/profile` promete aceitar).
+- `pkg/presentation/http/handlers/handler_group_mgmt_test.go` — o SINTOMA,
+  pela rota, em 4 casos novos na tabela `missing`. Um deles põe o vazio na
+  SEGUNDA posição (`"empty participants at index 1"`), porque um índice
+  constante zero passaria no caso trivial.
+
+**Controles negativos EXECUTADOS** (três, um por guarda):
+
+```
+CONTROLE 1 — guarda removida do ParseJID
+--- FAIL: TestParseJIDRejectsEmptyInsteadOfPanicking (0.00s)
+panic: runtime error: index out of range [0] with length 0 [recovered, repanicked]
+	pkg/infra/wa-noise/mapping/jid/parse.go:16
+
+CONTROLE 2 — guardas do handler removidas
+--- FAIL: .../CreateGroup/participante_vazio: status: got 200, want 400
+--- FAIL: .../CreateGroup/participante_vazio_no_meio: status: got 200, want 400
+--- FAIL: .../UpdateGroupParticipants/sem_GroupJID: status: got 200, want 400
+
+CONTROLE 3 — guarda de elemento de Phone removida
+--- FAIL: .../UpdateGroupParticipants/phone_vazio: status: got 200, want 400
+```
+
+**O que o controle 2 revelou, e vale mais que o próprio teste**: sem a guarda o
+handler responde **200**, não 500. O `contractsfake.JIDResolver` aceita a
+string vazia de bom grado, então o teste de fronteira NUNCA veria o panic —
+é a armadilha nº 1 do `ARMADILHAS.md` (dublê mais permissivo que a produção)
+acontecendo outra vez, e é a prova de que o teste no porto real não era
+redundante com o teste de rota. Os dois travam coisas diferentes: remover a
+guarda de `ParseJID` deixa a suíte de rota inteiramente verde.
+
+**Relação com a decisão 72**: este defeito é exatamente o que a extração da
+regra pura para um pacote compartilhado propagaria em silêncio para o segundo
+adaptador. Corrigido ANTES da extração, o que se move é a regra já saneada —
+que é a ordem que a decisão 73 impôs.

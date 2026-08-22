@@ -2241,6 +2241,9 @@ pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
+pkg/domain.JID.Namespace	EXCLUDED	X1
+pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
+pkg/domain.NormalizeIdentityInput	EXCLUDED	X1
 pkg/domain.Secret.GoString	EXCLUDED	X1
 pkg/domain.Secret.MarshalJSON	EXCLUDED	X4
 pkg/domain.Secret.MarshalZerologObject	EXCLUDED	X1
@@ -2812,6 +2815,7 @@ pkg/presentation/http/handlers.UserHandlers.UnblockUser	EXCLUDED	X1
 pkg/presentation/http/handlers.UserHandlers.UnblockUser.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.WSHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session_ws.go:71)
 pkg/presentation/http/handlers.decodeAndRespond	ELIGIBLE	covered
+pkg/presentation/http/handlers.firstEmpty	EXCLUDED	X1
 pkg/presentation/http/handlers.groupHandler.ServeHTTP	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.handleCreateGroup	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleGroupJoin	ELIGIBLE	covered
@@ -2827,6 +2831,7 @@ pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	covered
 pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:373)
 pkg/presentation/http/handlers.isClientCausedSessionError	EXCLUDED	X1
 pkg/presentation/http/handlers.newGroupHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.rejectEmptyElement	ELIGIBLE	covered
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered
 pkg/presentation/http/handlers.simpleErr.Error	EXCLUDED	X4

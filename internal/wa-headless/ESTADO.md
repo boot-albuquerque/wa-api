@@ -616,3 +616,85 @@ Isso já responde três das cinco cláusulas do critério: *fronteira correta* �
 fachada, *contratos equivalentes* são os ports do `wa-noise`, e *sem capability
 órfã* é a proibição de assimetria silenciosa.
 
+
+## A primeira fatia da Fase 3 não foi código: foi descobrir que "equivalente" não é "de nome parecido"
+
+O plano era provar o padrão ponta a ponta pelo menor port, `JIDResolver`. O
+mapeamento óbvio seria `JIDResolver → capabilities/lookup.NumberID`, que
+resolve identidade perguntando à página.
+
+Fui ler o adaptador do `wa-noise` antes de escrever, e ele **ignora o
+contexto**: `ResolveJID(_ context.Context, raw string)` é parsing puro, sem E/S.
+Implementar o headless com `lookup` teria posto **rede atrás de um contrato
+puro**, fazendo todo chamador pagar ida-e-volta — exatamente o que a decisão 66
+recusou ao proibir rede oculta dentro de leitor.
+
+Fica a regra, porque ela vale para os 35: **contrato equivalente é sobre a
+NATUREZA do contrato — puro ou de transporte — e não sobre a capability de nome
+parecido.** Dos adaptadores do `wa-noise`, 10 ignoram o contexto e 166 o usam;
+a fronteira entre os dois grupos é onde o mapeamento mecânico erra.
+
+### Decisão 72, e a premissa que eu tinha errada
+
+Levei à orquestração a pergunta de onde mora uma regra que não é de transporte,
+com três opções. A resposta foi **(b): extrair para um pacote compartilhado
+independente de transporte, migrando os dois adaptadores em commit isolado**.
+
+Eu havia relatado que o parser era o `types.ParseJID` vendorizado. **Estava
+errado**: `ResolveJID` usa um `ParseJID` LOCAL e nosso, em
+`pkg/infra/wa-noise/mapping/jid/parse.go`. A regra pura já era código wa-api.
+Corrigi a premissa com a orquestração antes de seguir — a escolha não mudou,
+o custo sim.
+
+### O que a medição achou de lado: F101
+
+Medir o comportamento real antes de reescrevê-lo produziu um panic:
+`ParseJID("")` morre em `arg[0]`, e a porta que promete `(JID, error)` entrega
+um crash. Enumerei os 11 chamadores um a um, e um está aberto de fora
+(`participants:[""]` em `/group/create`). Está no `HOUSEKEEP.md` da raiz como
+**F101, corrigido**, por decisão 73 — que mandou sanear ANTES de extrair,
+justamente para o defeito não ganhar duas casas.
+
+O controle negativo ensinou mais que o teste: sem a guarda o handler responde
+**200**, não 500, porque o dublê `JIDResolver` aceita a string vazia de bom
+grado. A suíte de rota inteira fica verde com o defeito no lugar. É a armadilha
+nº 1 do `ARMADILHAS.md` outra vez, e é a prova de que o teste no porto real não
+era redundante com o teste de rota.
+
+## Decisão 74 — não existe forma canônica compartilhada, e isso muda a Fase 3
+
+Ao procurar o que extrair, medi o que cada transporte chama de canônico. **Eles
+não concordam**, e não de um jeito cosmético:
+
+| | número nu vira | identidade de pessoa |
+| --- | --- | --- |
+| socket (`wa-noise`) | `5511…@s.whatsapp.net` | `s.whatsapp.net` / `lid` |
+| página (`wa-headless`) | — | `c.us` / `lid` |
+
+O `types` vendorizado do socket chama `c.us` de **`LegacyUserServer`** — o que
+o socket considera legado é o namespace **corrente** da SPA que dirigimos. E
+`c.us` não está morto no socket: é o sufixo de consulta do USync
+(`capabilities/user/info.go:46`) e o blocklist normaliza por ele.
+
+A consequência atinge a decisão 71 inteira: `ResolveJID("5511999999999")` deve
+devolver `…@s.whatsapp.net` num adaptador e `…@c.us` no outro para ser
+utilizável. **Mesma porta, mesma entrada, saída corretamente DIFERENTE** — e um
+`domain.JID` produzido por um adaptador está silenciosamente errado se consumido
+pelo outro. Hoje isso não explode porque só existe um adaptador; a Fase 3 cria
+o segundo.
+
+Isso derrubou a minha própria proposta de extrair um PARSER compartilhado: não
+há canonicalização a compartilhar. A orquestração decidiu (**74**): `domain.JID`
+passa a **carregar o namespace explicitamente**, compartilhando só normalização
+de entrada e vocabulário, com **cada adaptador dono do próprio sufixo canônico**.
+
+Implementado em `pkg/domain/jid_namespace.go` como MÉTODOS sobre o tipo
+nomeado, e não como struct: `domain.JID` aparece em 221 sítios não-teste de 31
+arquivos, e a versão aditiva é subconjunto estrito — se depois se quiser a
+struct, o vocabulário já está lá.
+
+O teste que importa não é o do vocabulário: é o que **amarra o vocabulário às
+constantes REAIS de cada transporte** (`types.DefaultUserServer`,
+`types.LegacyUserServer`, `types.HiddenUserServer`), em vez de repetir as
+strings à mão. Repetir a string só provaria que sei copiar; ler a constante faz
+o teste acusar quando a produção mudar.
