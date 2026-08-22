@@ -44,6 +44,13 @@ var (
 var (
 	// ErrLifecycle is the page refusing or throwing.
 	ErrLifecycle = fmt.Errorf("chats: the page refused")
+	// ErrNotEmptied is Clear's postcondition failing: the page accepted and
+	// messages the clear could have removed are still there.
+	//
+	// IT IS NOT "the conversation is not empty". A clear always leaves one system
+	// notification behind (see residualKind), and treating that as failure would
+	// make every correct clear report one.
+	ErrNotEmptied = fmt.Errorf("chats: the page accepted the clear and it did not empty")
 	// ErrNoSuchChat is declared in markread.go and reused here on purpose: a
 	// jid with no loaded chat is the same condition whichever capability meets
 	// it, and two errors for one condition make callers write two branches.
@@ -57,13 +64,18 @@ type Emptied struct {
 	// two thousand.
 	MessagesBefore int
 	// KeptStarred says whether starred messages were spared.
-	KeptStarred bool
-	Waited      time.Duration
+	// MessagesAfter is what the conversation still holds. It is NOT expected to
+	// be zero: a clear provably leaves one system notification behind, measured
+	// three times (see residualKind). Reporting it lets a caller see the residue
+	// instead of wondering why the count did not reach zero.
+	MessagesAfter int
+	KeptStarred   bool
+	Waited        time.Duration
 }
 
 func (e Emptied) String() string {
-	return fmt.Sprintf("chats.Emptied(messagesBefore=%d keptStarred=%t waited=%s)",
-		e.MessagesBefore, e.KeptStarred, e.Waited.Round(time.Millisecond))
+	return fmt.Sprintf("chats.Emptied(messagesBefore=%d messagesAfter=%d keptStarred=%t waited=%s)",
+		e.MessagesBefore, e.MessagesAfter, e.KeptStarred, e.Waited.Round(time.Millisecond))
 }
 
 const lifecycleStateKey = "__waHeadlessChatLifecycle"
@@ -82,8 +94,19 @@ func (l *Lister) Clear(ctx context.Context, chatJID string, keepStarred bool, la
 	if err != nil {
 		return Emptied{}, err
 	}
-	return Emptied{MessagesBefore: out.Count, KeptStarred: keepStarred,
-		Waited: time.Since(start)}, nil
+	// A POS-CONDICAO, e ela FALHA (decisao 67). Ate' hoje esta capacidade
+	// devolvia o mesmo valor de sucesso tivesse apagado tudo ou nada, o que e' o
+	// sucesso silencioso que a invariante 14 proibe.
+	//
+	// O criterio e' "nao sobrou nada limpavel", nao "diminuiu": limpar um chat ja'
+	// limpo remove zero, corretamente, e a regra ingenua chamaria isso de falha
+	// (H175).
+	if out.Clearable > 0 {
+		return Emptied{}, fmt.Errorf("%w: %d message(s) the clear could have removed are still there",
+			ErrNotEmptied, out.Clearable)
+	}
+	return Emptied{MessagesBefore: out.Count, MessagesAfter: out.After,
+		KeptStarred: keepStarred, Waited: time.Since(start)}, nil
 }
 
 // Delete removes the conversation itself.
@@ -106,6 +129,10 @@ type lifecycleOut struct {
 	OK    bool   `json:"ok"`
 	Why   string `json:"why"`
 	Count int    `json:"count"`
+	After int    `json:"after"`
+	// Clearable is how many messages the clear could still have removed and did
+	// not. -1 means the step did not run (Delete never verifies this way).
+	Clearable int `json:"clearable"`
 }
 
 func (l *Lister) lifecycle(ctx context.Context, kick, label string) (lifecycleOut, error) {
@@ -144,26 +171,63 @@ func (l *Lister) lifecycle(ctx context.Context, kick, label string) (lifecycleOu
 	return out, nil
 }
 
+// residualKind is the message type a clear provably CANNOT remove.
+//
+// MEASURED, NOT ASSUMED (H175). Three clears on a throwaway group, and the
+// residue was the same every time:
+//
+//	grupo virgem      2 (e2e_notification, gp2)  ->  1 (e2e_notification)
+//	com 2 mensagens   3 (e2e_notification, chat) ->  1 (e2e_notification)
+//	já limpo          1 (e2e_notification)       ->  1 (e2e_notification)
+//
+// The gp2 IS cleared; only this one survives. That third line is why the
+// postcondition cannot be "after < before": clearing an already-clear chat
+// removes nothing, correctly, and a naive rule would call that a failure.
+//
+// IF A FUTURE BUILD LEAVES ANOTHER TYPE BEHIND, this fails loudly rather than
+// passing quietly — which is the direction that gets it re-measured.
+const residualKind = "e2e_notification"
+
 func clearScript(chatJID string, keepStarred bool) string {
 	return lifecycleScript(chatJID, `
 			stage = 'apply';
 			const A = window.require('`+string(spa.ModuleSendClearChatAction)+`');
 			// TWO POSITIONAL, and the second is keepStarred — named from the UI
 			// checkbox that calls it.
-			await A.sendClear(chat, `+strconv.FormatBool(keepStarred)+`);`)
+			await A.sendClear(chat, `+strconv.FormatBool(keepStarred)+`);`,
+		`
+			// A POS-CONDICAO E' A AUSENCIA DO QUE E' LIMPAVEL, nao a reducao.
+			// Ver residualKind para as tres medicoes que descartaram "after <
+			// before" — a terceira, limpar o que ja' esta limpo, e' um no-op
+			// correto que a regra ingenua reportaria como falha.
+			after = 0; clearable = 0;
+			try {
+				const MC2 = window.require('`+string(spa.ModuleMsgCollection)+`').MsgCollection;
+				const key2 = chat.id.toString();
+				for (const m of MC2.getModelsArray()) {
+					try {
+						if (!(m.id && m.id.remote && m.id.remote.toString() === key2)) { continue; }
+						after++;
+						if (String(m.type || '') !== `+strconv.Quote(residualKind)+`) { clearable++; }
+					} catch (e) {}
+				}
+			} catch (e) {}`)
 }
 
 func deleteScript(chatJID string) string {
+	// SEM PASSO DE VERIFICACAO AQUI: o Delete tira a conversa inteira, entao
+	// recontar mensagens dela nao tem o que ler. A pos-condicao do Delete e' o
+	// chat sumir da colecao, provada por `chats.ByJID` na H166.
 	return lifecycleScript(chatJID, `
 			stage = 'apply';
 			const A = window.require('`+string(spa.ModuleDeleteChatAction)+`');
 			// The second argument defaults to true in the app's own body; it is
 			// passed explicitly so a future default change cannot silently alter
 			// what this does.
-			await A.sendDelete(chat, true);`)
+			await A.sendDelete(chat, true);`, "")
 }
 
-func lifecycleScript(chatJID, apply string) string {
+func lifecycleScript(chatJID, apply, verify string) string {
 	return `JSON.stringify((() => {
 		window[` + strconv.Quote(lifecycleStateKey) + `] = { stage: 'pending', ok: false, why: '' };
 		const park = (v) => { window[` + strconv.Quote(lifecycleStateKey) + `] = v; };
@@ -174,9 +238,14 @@ func lifecycleScript(chatJID, apply string) string {
 			const chat = CC.get(` + strconv.Quote(chatJID) + `);
 			if (!chat) { park({ stage, ok: false, why: 'NO_CHAT' }); return; }
 
-			// COUNTED BEFORE, because after is meaningless: the point of both
-			// acts is that there is nothing left to count.
-			let count = 0;
+			// CONTADO ANTES, e — para o Clear — TAMBEM DEPOIS.
+			//
+			// O comentario antigo aqui dizia que "after is meaningless: the point
+			// of both acts is that there is nothing left to count". Isso e' falso
+			// e foi medido (H175): um clear SEMPRE deixa uma notificacao de
+			// sistema. Foi essa frase que manteve a capacidade sem pos-condicao,
+			// e um Clear que nao apagasse nada devolvia o mesmo valor de sucesso.
+			let count = 0, after = -1, clearable = -1;
 			try {
 				const MC = window.require('` + string(spa.ModuleMsgCollection) + `').MsgCollection;
 				const key = chat.id.toString();
@@ -187,7 +256,8 @@ func lifecycleScript(chatJID, apply string) string {
 				}
 			} catch (e) {}
 ` + apply + `
-			park({ stage: 'done', ok: true, why: '', count: count });
+` + verify + `
+			park({ stage: 'done', ok: true, why: '', count: count, after: after, clearable: clearable });
 		} catch (e) {
 			park({ stage, ok: false, why: String((e && e.message) || e).slice(0, 160) });
 		}

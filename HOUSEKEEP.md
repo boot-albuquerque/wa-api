@@ -5514,3 +5514,68 @@ identidade em cada leitor. Aplica-se a `addressbook.DeviceCount`, `chats.ByJID` 
 `chats.Clear` ganha `MessagesAfter` e recusa quando não diminuir — com a
 notificação de sistema (`e2e_notification`) tratada como sobrevivente legítima,
 senão a nova pós-condição falharia sempre (H166).
+
+---
+
+## H175 — decisão 67 aplicada: `Clear` prova redução, e a borda foi MEDIDA antes de virar regra
+
+**Data**: 2026-08-22
+**Contexto**: primeira dívida interna da Fase 2, decidida pela orquestração
+(*"67: Escolha a; Clear deve provar redução e falhar quando a pós-condição não
+ocorrer"*).
+
+**Onde**: `internal/wa-headless/capabilities/chats/lifecycle.go`
+(`Emptied.MessagesAfter`, `ErrNotEmptied`, `residualKind`, o passo de verificação
+do `lifecycleScript`), `probe_clearedge_test.go` (novo).
+
+**O comentário que segurava o defeito**, no próprio script:
+
+> COUNTED BEFORE, because after is meaningless: the point of both acts is that
+> there is nothing left to count.
+
+É **falso**, e foi essa frase que manteve a capacidade sem pós-condição por
+meses — um `Clear` que não apagasse nada devolvia exatamente o mesmo valor de
+sucesso.
+
+**A regra óbvia — `after < before` — está errada, e medir mostrou por quê.** Três
+clears no mesmo grupo descartável:
+
+```
+A) grupo virgem     2 (e2e_notification, gp2)   -> 1 (e2e_notification)
+B) com 2 mensagens  3 (e2e_notification, chat)  -> 1 (e2e_notification)
+C) já limpo         1 (e2e_notification)        -> 1 (e2e_notification)
+```
+
+O caso **C** é a borda: limpar o que já está limpo remove zero, **corretamente**,
+e `after < before` chamaria isso de falha. A decisão 67 teria virado um defeito.
+
+O caso **A** matou a outra hipótese que eu carregava: eu esperava que um chat só
+com sistema não reduzisse — reduziu, porque o `gp2` **é** limpo. Só o
+`e2e_notification` sobrevive, nos três.
+
+**A regra encodada**: *não sobrou nada LIMPÁVEL*, com `residualKind` nomeando o
+tipo medido. Se um build futuro deixar outro tipo para trás, isto **falha alto**
+em vez de passar quieto — a direção que faz alguém remedir.
+
+**Assimetria deliberada**: `Delete` **não** ganha essa verificação. Ele remove a
+conversa, então recontar mensagens dela não tem o que ler; a pós-condição dele é
+o chat sair da coleção, provada na H166. Um teste trava a assimetria.
+
+**Status**: corrigido. Cinco controles negativos, todos compilando e falhando:
+remover a pós-condição; exigir zero total (o resíduo viraria falha); usar
+"diminuiu" em vez de "não sobrou limpável" (quebra o caso C); verificar ANTES de
+aplicar (teste de ORDEM); e fazer o `Delete` verificar também.
+
+Prova em SPA real: os três casos passam pela capacidade — `2->1`, `3->1`, `1->1`.
+
+**Um detalhe do dublê que virou comentário**: os testes antigos de `Clear`
+continuaram verdes porque o dublê não declarava `clearable`, e zero é o caso de
+sucesso. Isso é correto para eles e seria armadilha se não estivesse dito — o
+campo agora tem comentário avisando que **um teste que quer exercitar a
+pós-condição TEM de declará-lo**.
+
+**Lição**: *a borda decide a forma da regra, e só a medição conhece a borda.* Eu
+tinha DUAS hipóteses sobre o caso difícil — "chat só com sistema não reduz" e
+"limpar duas vezes não reduz" — e a medição derrubou a primeira e confirmou a
+segunda. Encodar qualquer uma delas sem medir teria produzido uma pós-condição
+que falha em uso normal, que é pior que não ter pós-condição nenhuma.
