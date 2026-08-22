@@ -102,3 +102,72 @@ func TestGetStatus_FalhaDeBancoNaoViraEstadoVazio(t *testing.T) {
 		t.Fatalf("resultado = %+v, quero nil", res)
 	}
 }
+
+// --- F219: o `history` da resposta era um LITERAL FIXO -----------------------
+//
+// `get_status.go:81` devolvia `History: "0"` enquanto todos os campos vizinhos
+// vinham do `entry`. Medido em campo a 2026-08-22: com 9999 no banco, o
+// `/session/status` respondia `0`. A coluna JÁ era lida pelo `ListUsers` e
+// escaneada para `row.History`; nunca chegava ao `domain.UserListEntry`.
+//
+// O dublê aqui devolve o valor no `UserListEntry` porque é ISSO que o
+// repositório real faz depois da correção (`user_repository.go`, campo
+// `History: int(row.History.Int64)`). Um dublê que devolvesse sempre zero
+// abençoaria o defeito.
+
+func registoComHistorico(id string, history int) *contractsfake.UserRepository {
+	return &contractsfake.UserRepository{
+		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
+			return []domain.UserListEntry{{
+				ID: id, Name: "sessao", JID: "5511@s.whatsapp.net", History: history,
+			}}, nil
+		},
+	}
+}
+
+func statusCom(t *testing.T, history int) *domain.GetStatusResult {
+	t.Helper()
+	ligada := &contractsfake.SessionStatusReader{
+		SessionStatusFunc: func(context.Context, string) (bool, bool) { return true, true },
+	}
+	res, err := session.NewGetStatusUseCase(ligada, registoComHistorico("u1", history), &contractsfake.Logger{}).
+		Execute(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("Execute devolveu erro: %v", err)
+	}
+	return res
+}
+
+// TestGetStatus_HistoryVemDoRegistoENaoDeUmLiteral é o teste do DEFEITO, com o
+// valor exato medido em campo.
+func TestGetStatus_HistoryVemDoRegistoENaoDeUmLiteral(t *testing.T) {
+	if got := statusCom(t, 9999).History; got != "9999" {
+		t.Errorf("History = %q, quero \"9999\" — o valor do registo não chegou à resposta (F219)", got)
+	}
+}
+
+// TestGetStatus_HistoryZeroContinuaAResponderZero: o zero LEGÍTIMO (limite
+// desligado) tem de continuar a sair como "0".
+//
+// Sem este, trocar o literal por um valor lido passaria a ser indistinguível
+// do defeito antigo sempre que o limite estivesse desligado — que é o caso mais
+// comum em produção, e portanto o que menos denunciaria a regressão.
+func TestGetStatus_HistoryZeroContinuaAResponderZero(t *testing.T) {
+	if got := statusCom(t, 0).History; got != "0" {
+		t.Errorf("History = %q, quero \"0\" para limite desligado", got)
+	}
+}
+
+// TestGetStatus_HistoryDistingueValoresDiferentes trava a propriedade que o
+// literal violava: valores diferentes no registo produzem respostas
+// diferentes. Um literal passa nos dois testes acima se for por acaso igual ao
+// esperado; não passa neste.
+func TestGetStatus_HistoryDistingueValoresDiferentes(t *testing.T) {
+	a, b := statusCom(t, 7).History, statusCom(t, 300).History
+	if a == b {
+		t.Errorf("History deu %q para 7 e %q para 300 — a resposta não depende do registo", a, b)
+	}
+	if a != "7" || b != "300" {
+		t.Errorf("History = %q e %q, quero \"7\" e \"300\"", a, b)
+	}
+}

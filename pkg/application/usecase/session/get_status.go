@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -78,7 +79,7 @@ func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.
 		Events:    entry.Events,
 		ProxyURL:  entry.ProxyURL,
 		Qrcode:    entry.QRCode,
-		History:   "0",
+		History:   strconv.Itoa(entry.History),
 		ProxyConfig: map[string]interface{}{
 			"enabled":  entry.HasProxyURL,
 			"proxyUrl": entry.ProxyURL,

@@ -250,6 +250,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			HasProxyURL:     row.ProxyURL.Valid && row.ProxyURL.String != "",
 			WebhookUseProxy: row.WebhookUseProxy,
 			Events:          row.Events,
+			History:         int(row.History.Int64),
 		}
 
 		// A configuração de S3 vem numa segunda consulta, como antes. Falha

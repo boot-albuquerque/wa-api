@@ -20256,7 +20256,68 @@ travada. Mas travam a F200/F201, não isto.
 `get_status.go:81`. Escopo da correção: levar o histórico do
 repositório até ao `GetStatusResult`.
 
-<!-- f-status: aberto -->
+
+### CORRIGIDO 2026-08-22
+
+O dado **já era lido**: `ListUsers` (`user_repository.go:195-197`) sempre
+selecionou `history` e o `StructScan` sempre o pôs em `row.History`. O que
+faltava era copiá-lo para o `domain.UserListEntry`, que não tinha o campo — e
+por isso o use case não tinha de onde o tirar e devolvia o literal.
+
+Três alterações:
+
+| ficheiro | mudança |
+|---|---|
+| `pkg/domain/user_record.go` | campo `History int` no `UserListEntry` |
+| `pkg/infra/db/user_repository.go` | `History: int(row.History.Int64)` na construção do entry |
+| `pkg/application/usecase/session/get_status.go:81` | `strconv.Itoa(entry.History)` em vez de `"0"` |
+
+**Testes que travam** (`get_status_test.go`):
+
+- `TestGetStatus_HistoryVemDoRegistoENaoDeUmLiteral` — o valor exato medido em
+  campo (9999) tem de chegar à resposta.
+- `TestGetStatus_HistoryZeroContinuaAResponderZero` — o zero LEGÍTIMO (limite
+  desligado) continua a sair como `"0"`. Sem este, a correção seria
+  indistinguível do defeito no caso MAIS COMUM em produção, que é justamente o
+  que menos denunciaria uma regressão.
+- `TestGetStatus_HistoryDistingueValoresDiferentes` — trava a propriedade que o
+  literal violava: valores diferentes no registo produzem respostas diferentes.
+  Um literal passa nos dois primeiros por acaso se o número calhar; não passa
+  neste.
+
+**Nota sobre o dublê**: `registoComHistorico` devolve o valor no
+`UserListEntry` porque é isso que o repositório REAL faz depois da correção. Um
+dublê que devolvesse sempre zero abençoaria o defeito — armadilha #1.
+
+**Controlo negativo EXECUTADO** — reintroduzido o literal como
+`strconv.Itoa(0)` (para o import continuar usado e o build não quebrar, que é a
+armadilha #3):
+
+```
+--- FAIL: TestGetStatus_HistoryVemDoRegistoENaoDeUmLiteral (0.00s)
+    get_status_test.go:145: History = "0", quero "9999" — o valor do registo não chegou à resposta (F219)
+--- FAIL: TestGetStatus_HistoryDistingueValoresDiferentes (0.00s)
+    get_status_test.go:171: History = "0" e "0", quero "7" e "300"
+```
+
+Dois dos três falham. O terceiro (`ZeroContinuaAResponderZero`) passa, e tinha
+de passar: um literal `"0"` satisfá-lo por construção. É por isso que ele
+sozinho não chegaria.
+
+**Verificação em campo** (servidor reiniciado com o binário corrigido):
+
+```
+PUT 0     -> banco=0     status=0     OK
+PUT 9999  -> banco=9999  status=9999  OK      (ANTES: status=0)
+PUT 42    -> banco=42    status=42    OK
+```
+
+De passagem, isto prova que a invalidação de cache da F200/F201 funciona: os
+valores propagaram SEM reinício entre os PUTs.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->
 
 ## F220 — a cache do golangci-lint faz o gate reportar ficheiros de worktrees APAGADAS
 
