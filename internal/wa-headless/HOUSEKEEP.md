@@ -10027,3 +10027,76 @@ A prosa da família `Label` dizia "não atacado" e estava velha; foi corrigida.
 
 **Status**: parcialmente entregue — código escrito, provado em unidade, e
 bloqueado ao vivo por comportamento medido da página.
+
+## H127 — a varredura dos `PARTIAL`, e o que ela achou de errado no meu próprio número
+
+**Data**: 2026-08-22. **Contexto**: o critério da Fase 1 (decisão 52) diz que
+`PARTIAL` **acionável** tem de chegar a zero. Isso torna a varredura obrigatória:
+sem separar impossibilidade de trabalho pendente, não há como saber o que falta.
+
+**Onde**: `internal/wa-headless/capabilities/lookup/` (novo),
+`probe_lookup_test.go` (novo), `LEDGER-WWEBJS.md`.
+
+### O número que eu tinha dado estava errado
+
+Reportei "22 `PARTIAL` com nota curta ou vazia" como estimativa dos acionáveis.
+Ao varrer um a um, **7 eram falso positivo do meu próprio contador**: vivem em
+tabelas de DUAS colunas, que não têm coluna de nota, e o script leu a coluna de
+estado como se fosse a nota. Mais 1 era a própria linha do Placar.
+
+Candidatos reais: **14**. E desses, vários diziam `idem <linha>`, que é
+REFERÊNCIA a uma nota vizinha e não ausência de nota.
+
+Registro o erro porque o número circulou antes de ser verificado, e um número
+errado sobre "quanto falta" é pior que nenhum — ele vira plano.
+
+### O padrão que a varredura revelou
+
+Cinco linhas compartilhavam a MESMA nota, e ela é a definição de acionável:
+
+> existe como passo interno, não como capacidade exposta
+
+`getChatById`, `getContactById`, `getMessageById`, `getNumberId`,
+`getLabelById`. O trabalho estava feito e **inalcançável**: o `send` resolve uma
+identidade antes de despachar, e nenhum chamador conseguia fazer a mesma pergunta
+sem enviar alguma coisa.
+
+### O que foi entregue
+
+**`getNumberId` → `PROVEN`**, via `capabilities/lookup`. A decisão de desenho que
+importa: a expressão de resolução é **EMBUTIDA**, não copiada.
+`spa.ResolveIdentityExpr` é o mesmo texto que o `send` executa; colar uma cópia
+criaria duas resoluções livres para divergir, e a divergência apareceria como um
+envio falhando para um número que este pacote acabara de aprovar. Há teste que
+falha se a cópia voltar.
+
+Prova ao vivo com **três** casos, porque um só não distingue o que importa:
+
+```
+real peer -> Identity(jid=true group=false resolved=true)
+impossible number -> ErrNotOnWhatsApp, as a definite answer
+group -> Identity(jid=true group=true resolved=false)
+```
+
+O terceiro caso existe porque a resolução responde PESSOAS: sem o curto-circuito,
+um grupo real seria reportado como inexistente.
+
+**`getMessageById` → `PROVEN`** sem código novo: `capabilities/message`
+(`OriginOf`, `CurrentOf`, `ShapeOf`) recebe o id cru e foi provado ao vivo hoje
+(H106, H107, H108). A linha estava desatualizada, não pendente.
+
+### Controles negativos EXECUTADOS
+
+1. Copiar a resolução em vez de embutir a compartilhada:
+   `lookup_test.go:122: the script does not embed spa.ResolveIdentityExpr`
+   — **precisou de segunda tentativa**: a primeira mutação deixou o import sem
+   uso e não compilou, e pela ARMADILHA §3 controle que não compila não prova
+   nada.
+2. Fundir "não está no WhatsApp" com falha de leitura: falha, porque os reparos
+   diferem — um é decisão do chamador, o outro é página quebrada.
+3. Ecoar a entrada como se fosse resolução: falha, porque num build LID-first
+   receber de volta o que se perguntou significa que o servidor não falou.
+
+**Status**: parcialmente entregue — 2 das 5 linhas do padrão fechadas;
+`getChatById`, `getContactById` e `getLabelById` seguem `PARTIAL` acionáveis,
+com o caminho agora óbvio.

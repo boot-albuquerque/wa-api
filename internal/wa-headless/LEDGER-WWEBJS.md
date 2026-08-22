@@ -17,6 +17,32 @@ Item que não implementarmos tem de ter linha aqui dizendo POR QUÊ e qual
 evidência impede o fechamento. A Fase 1 só fecha quando não houver `MISSING`
 nem `PARTIAL` sem justificativa explícita.
 
+## Critério de encerramento da Fase 1
+
+**Decidido pela orquestração em 2026-08-22 (decisão 52).** O texto recebido foi:
+
+> Fase 1 fecha com zero MISSING e zero PARTIAL acion…
+
+**A resposta chegou TRUNCADA**, cortada nesse ponto — a quarta truncagem
+seguida daquele canal. Completei uma única palavra, `acion` → **acionável**,
+porque é a única continuação plausível na frase. Está registrado como inferência
+minha, não como texto recebido, e vale confirmação humana antes de ser tratado
+como definitivo.
+
+Lido assim, o critério é:
+
+- **`MISSING` tem de chegar a zero.** Nenhuma linha pode continuar dizendo "não
+  atacado" — ou vira `PROVEN`, ou ganha veredito medido (`BLOCKED`,
+  `INTENTIONAL_DIFFERENCE`, `PARTIAL`).
+- **`PARTIAL` acionável tem de chegar a zero.** Um `PARTIAL` só sobrevive se a
+  metade que falta for impossível por MEDIÇÃO, com a evidência na nota. `PARTIAL`
+  por trabalho não feito não fecha a fase.
+
+Isto substitui a leitura literal anterior ("0 MISSING e 0 PARTIAL"), que era
+inatingível: linhas como `MEDIA_UPLOADED` (não existe momento de upload nesta
+página) e `resetState` (a transição de ~450ms não é observável pelo Go) são
+`PARTIAL` por impossibilidade, não por preguiça.
+
 ## Vocabulário de estado
 
 | estado | significa |
@@ -52,7 +78,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getChannelByInviteCode` | channel.ByInviteCode | `PROVEN` | sim | sim | sim | provado contra canal público real: jid `@newsletter`, nome, **45.460 assinantes**, `state=active`, `verification=verified`, e `following=false` — **nada foi seguido**. Aceita o link inteiro, não só o código (H104) |
 | `getContacts` | contacts.List | `PROVEN` | sim | sim | sim | 944 -> 544 após dedup |
 | `getContactById` | resolução interna | `PARTIAL` | sim | sim | sim | idem getChatById |
-| `getMessageById` | varredura da MsgCollection nas capacidades | `PARTIAL` | sim | sim | sim | idem |
+| `getMessageById` | capabilities/message | `PROVEN` | sim | sim | sim | H127: deixou de ser varredura interna — `message.OriginOf`, `CurrentOf` e `ShapeOf` recebem o id cru e foram provados ao vivo (H106, H107, H108) |
 | `getPinnedMessages` | pin.PinnedIn | `PARTIAL` | sim | vazia | sim | o leitor funciona e a conta não tem NADA fixado; provar não-vazio exigiria fixar, que está bloqueado (H81) |
 | `getInviteInfo` | group.InviteInfo | `PROVEN` | sim | sim | sim | lê o grupo atrás de um link SEM entrar; provado ao vivo reportando `approval=true` no grupo armado (H89) |
 | `acceptInvite` | group.JoinByInvite | `PARTIAL` | sim | sim | sim | provado ao vivo o caminho de APROVAÇÃO: o page REJEITA com `UnexpectedJoinGroupViaInviteResponse` carregando `gid` e `membershipApprovalMode`, e isso É a criação do pedido. O caminho de entrada direta (grupo sem aprovação) não foi exercitado (H89) |
@@ -76,7 +102,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `getCommonGroups` | contacts.CommonGroupsWith | `PROVEN` | sim | sim | sim | H68: null significa "sou eu", não "nenhum" |
 | `resetState` | liveness.Reset | `PARTIAL` | sim | sim | sim | H116: a chamada é feita e o socket é provado SAUDÁVEL depois; provar que ela FEZ algo não passa pelo Go — a transição dura ~450ms e cada leitura é um ida-e-volta do chromedp (0 de 3 ao vivo, contra 9 de 100 amostrando DENTRO da página). A referência não devolve nada, nem erro |
 | `isRegisteredUser` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | é passo interno de todo envio; não exposto |
-| `getNumberId` | spa.ResolveIdentityExpr | `PARTIAL` | sim | sim | sim | idem |
+| `getNumberId` | lookup.NumberID | `PROVEN` | sim | sim | sim | H127: deixou de ser passo interno e virou capacidade. A expressão de resolução é EMBUTIDA, não copiada — uma cópia divergiria da que o `send` usa. Provado com três casos: número real resolve para outra identidade, número impossível dá `ErrNotOnWhatsApp` definitivo, e grupo curto-circuita em vez de ser reportado ausente |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `getCountryCode` | phone.Lookup (.CountryCode) | `PROVEN` | sim | sim | sim | H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
 | `createGroup` | group.Ensure | `PROVEN` | sim | sim | sim | idempotência é do fixture, não da capacidade |
@@ -443,8 +469,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 88 | 40% |
-| `PARTIAL` | 64 | 29% |
+| `PROVEN` | 90 | 41% |
+| `PARTIAL` | 62 | 28% |
 | `BLOCKED` | 19 | 9% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
 | `MISSING` | 45 | 20% |
