@@ -5278,3 +5278,43 @@ você olhou, não sobre os que chegaram junto.* A H89 tinha o `message.added` na
 mãos, contado e registrado, e a pergunta seguinte — *o que ele diz?* — ficou por
 fazer por meses. Toda medição que termina em "não dá para distinguir" merece uma
 última passada pelos campos que ela já coletou.
+
+---
+
+## H170 — `sendStateRecording`: o bloqueio confirmado por um caminho que não é a assinatura
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/probe_chatstate_test.go` (novo), linha
+`sendStateRecording`.
+
+**A hipótese**: a linha diz que a prova ao vivo esbarra no bloqueio da observação
+de presença, e a H144 transformou esse bloqueio em causa medida — a assinatura
+exige vínculo de AGENDA, que se cria no telefone, e o par de laboratório não o
+tem (`isMyContact:false` nos dois).
+
+Mas isso é afirmação sobre `presence.Observe`, **não necessariamente sobre o
+estado de conversa**. A H150 mediu `typing` disparando no modelo da própria
+sessão que age, o que diz que o campo existe e se move. Se o estado chegasse ao
+modelo do PAR por outro caminho, a linha fecharia sem depender da assinatura.
+
+**Medição**, conta-A anuncia gravação e conta-B lê o modelo de presença cru:
+
+```
+BEFORE: {found:true, hasChatstate:true, type:"",  typing:-1}
+AFTER : {found:true, hasChatstate:true, type:"",  typing:-1}   (45s)
+```
+
+Nada se moveu. O `type:""` é coerente com a H94, que já tinha medido
+`chatstate.type` como indefinido neste build.
+
+**Status**: não corrigido. A linha continua `PARTIAL`, e a causa passa de
+*"esbarra no bloqueio de presença"* — que era referência a outra linha — para
+**dependência de agenda medida por dois caminhos independentes**: a assinatura
+(H144) e o modelo cru (aqui).
+
+**Lição**: *herdar um bloqueio de uma linha vizinha é uma hipótese, não um
+diagnóstico.* Custou uma sonda descobrir que a herança estava certa — e teria
+custado o mesmo descobrir que estava errada, que foi o que aconteceu com o `pin`
+na H162. A diferença entre as duas é só a medição.
